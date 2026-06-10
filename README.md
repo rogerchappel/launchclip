@@ -18,12 +18,18 @@ launchclip run ./my-oss-tool \
 
 That creates the full dry-run packet, validates it for social review, and writes `REVIEW.md`.
 
+To create an uploadable video from that packet:
+
+```bash
+launchclip render .launchclip/my-oss-tool --provider local-ffmpeg
+```
+
 You can also run each stage by hand:
 
 ```bash
 launchclip init ./my-oss-tool --out .launchclip/my-oss-tool
 launchclip demo ./my-oss-tool --out .launchclip/my-oss-tool --demo-cmd "npm run smoke" --capture terminal
-launchclip plan .launchclip/my-oss-tool --format short-30 --renderer none
+launchclip plan .launchclip/my-oss-tool --format short-15 --renderer none
 launchclip captions .launchclip/my-oss-tool --platforms x,linkedin,tiktok,bluesky
 launchclip render .launchclip/my-oss-tool --provider product-videogen --dry-run
 launchclip render .launchclip/my-oss-tool --provider local-ffmpeg
@@ -62,7 +68,7 @@ Expected packet:
 
 ## How It Works
 
-`launchclip run` executes the full dry-run workflow. `init` inspects a repo for README and package metadata, then creates a workspace manifest. `demo` runs only the command you explicitly provide and stores terminal evidence. `plan` writes a video-skillkit-compatible `video.json`, a human brief, and a renderer handoff plan. `captions` writes deterministic platform drafts with claim status and optional `--angle`, `--audience`, and `--cta-url` context; it does not call an LLM. `render --provider product-videogen --dry-run` creates a dry-run product-videogen payload. `render --provider local-ffmpeg` creates an uploadable vertical MP4 at `video/launchclip.mp4` plus `video/thumbnail.png`. `submit-review` creates the dry-run product-videogen review payload. `validate` checks required artifacts, stage status, caption presence, claim status, media presence when locally rendered, and X/Bluesky/LinkedIn/TikTok length limits. `review` rolls the packet into one human-readable file.
+`launchclip run` executes the full dry-run workflow. `init` inspects a repo for README and package metadata, then creates a workspace manifest. `demo` runs only the command you explicitly provide and stores terminal evidence. `plan` writes a video-skillkit-compatible `video.json`, a human brief, and a renderer handoff plan; the default plan is a tight `short-15` flow with usage, terminal proof, generated artifacts, and CTA beats. `captions` writes deterministic platform drafts with claim status and optional `--angle`, `--audience`, and `--cta-url` context; it does not call an LLM. `render --provider product-videogen --dry-run` creates a dry-run product-videogen payload. `render --provider local-ffmpeg` creates an uploadable vertical MP4 at `video/launchclip.mp4` plus `video/thumbnail.png` using animated terminal-style frames that show example commands, captured output, and generated files. `submit-review` creates the dry-run product-videogen review payload. `validate` checks required artifacts, stage status, caption presence, claim status, media presence when locally rendered, and X/Bluesky/LinkedIn/TikTok length limits. `review` rolls the packet into one human-readable file.
 
 ## Product-Videogen Handoff
 
@@ -76,7 +82,7 @@ The dry-run payload uses `approval_status: "pending"`, `metadata_json` for sourc
 
 ## Limitations
 
-- Local ffmpeg rendering is intentionally simple: it creates a text-forward vertical demo clip from repo facts, captions, and captured terminal evidence.
+- Local ffmpeg rendering is intentionally simple: it creates a short animated terminal-style demo clip from repo facts, usage commands, captions, and captured terminal evidence.
 - Live product-videogen submission is intentionally disabled.
 - Claims are grounded in local repo files and captured demo output; no unsupported performance or adoption claims are generated.
 - Demo commands can have side effects inside the target repo, so agents should ask before running non-trivial commands.
