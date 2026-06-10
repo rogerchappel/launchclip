@@ -70,7 +70,7 @@ function help() {
 Usage:
   launchclip init <repo> --out <workspace>
   launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal
-  launchclip plan <workspace> --format short-30 --renderer none
+  launchclip plan <workspace> --format short-15 --renderer none
   launchclip captions <workspace> --platforms x,linkedin,tiktok,bluesky
   launchclip render <workspace> --provider product-videogen --dry-run
   launchclip render <workspace> --provider local-ffmpeg

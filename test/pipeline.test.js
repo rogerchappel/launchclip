@@ -51,9 +51,13 @@ test("runs and validates a social-ready packet in one command", async () => {
     });
     const readiness = await validateWorkspace(out);
     const xCaption = await readFile(path.join(out, "captions/x.md"), "utf8");
+    const video = JSON.parse(await readFile(path.join(out, "video/video.json"), "utf8"));
 
     assert.equal(result.status, "ready");
     assert.equal(readiness.status, "ready");
+    assert.equal(video.format, "short-15");
+    assert.equal(video.duration_seconds, 15);
+    assert.match(video.structure.map((beat) => beat.beat).join(","), /usage/);
     assert.ok(xCaption.length <= 280);
     assert.match(xCaption, /Claim status:/);
     assert.doesNotMatch(xCaption, /wit\./);

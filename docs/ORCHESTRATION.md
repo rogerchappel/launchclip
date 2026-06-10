@@ -19,7 +19,7 @@ For repeatable social workflows, `run` executes the whole dry-run sequence:
 launchclip run <repo> --out <workspace> --demo-cmd "npm run smoke" --angle "..." --audience "..."
 ```
 
-The optional `--angle`, `--audience`, and `--cta-url` flags tune platform captions without changing the safety boundary.
+The optional `--angle`, `--audience`, and `--cta-url` flags tune platform captions without changing the safety boundary. The default video plan is `short-15`, not `short-30`, so CLI tools get a concise command-led demo instead of a padded slide deck.
 
 To create an uploadable local video after the packet exists:
 
@@ -27,7 +27,7 @@ To create an uploadable local video after the packet exists:
 launchclip render <workspace> --provider local-ffmpeg
 ```
 
-This writes `video/launchclip.mp4` and `video/thumbnail.png` from the repo facts, caption draft, and captured terminal evidence. Caption generation is deterministic template logic; it does not call an LLM.
+This writes `video/launchclip.mp4` and `video/thumbnail.png` from the repo facts, example `launchclip` commands, caption draft, and captured terminal evidence. The local renderer uses animated terminal-style frames with command reveal, output reveal, generated artifact checklist, progress motion, and CTA. Caption generation is deterministic template logic; it does not call an LLM.
 
 ## Boundaries
 
