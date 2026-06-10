@@ -1,0 +1,33 @@
+{
+  "name": "launchclip",
+  "version": "0.1.0",
+  "description": "Local-first OSS promotion packet orchestrator.",
+  "type": "module",
+  "bin": {
+    "launchclip": "./bin/launchclip.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "smoke": "node ./scripts/smoke.js",
+    "check": "npm test && npm run smoke"
+  },
+  "keywords": [
+    "oss",
+    "promotion",
+    "video",
+    "captions",
+    "product-videogen"
+  ],
+  "author": "Roger Chappel",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "bin",
+    "src",
+    "docs",
+    "SKILL.md",
+    "README.md"
+  ]
+}
