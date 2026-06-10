@@ -42,7 +42,7 @@ test("runs and validates a social-ready packet in one command", async () => {
       out,
       "demo-cmd": "npm run smoke",
       angle: "turns demo proof into launch content",
-      audience: "developers shipping small OSS tools",
+      audience: "maintainers who want trustworthy docs without CI drama",
       "cta-url": "https://github.com/rogerchappel/sample-tool"
     });
     const readiness = await validateWorkspace(out);
@@ -52,6 +52,7 @@ test("runs and validates a social-ready packet in one command", async () => {
     assert.equal(readiness.status, "ready");
     assert.ok(xCaption.length <= 280);
     assert.match(xCaption, /Claim status:/);
+    assert.doesNotMatch(xCaption, /wit\./);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

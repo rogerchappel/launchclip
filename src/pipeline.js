@@ -481,5 +481,8 @@ function visibleCaption(text) {
 
 function shorten(text, max) {
   if (text.length <= max) return text;
-  return `${text.slice(0, Math.max(0, max - 1)).trimEnd()}.`;
+  const raw = text.slice(0, max).trimEnd();
+  const boundary = raw.lastIndexOf(" ");
+  const candidate = boundary >= Math.floor(max * 0.6) ? raw.slice(0, boundary) : raw;
+  return candidate.replace(/[.,;:!?]+$/u, "");
 }
