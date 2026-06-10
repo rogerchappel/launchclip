@@ -69,14 +69,14 @@ function help() {
 
 Usage:
   launchclip init <repo> --out <workspace>
-  launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal
-  launchclip plan <workspace> --format short-30 --renderer none
+  launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]
+  launchclip plan <workspace> --format short-15 --renderer none
   launchclip captions <workspace> --platforms x,linkedin,tiktok,bluesky
   launchclip render <workspace> --provider product-videogen --dry-run
   launchclip render <workspace> --provider local-ffmpeg
   launchclip submit-review <workspace> --provider product-videogen --dry-run
   launchclip review <workspace>
   launchclip validate <workspace>
-  launchclip run <repo> --out <workspace> --demo-cmd "npm run smoke" --angle "..." --audience "..."
+  launchclip run <repo> --out <workspace> --demo-cmd "npm run smoke" --demo-media path/to/demo.mp4 --angle "..." --audience "..."
 `;
 }
