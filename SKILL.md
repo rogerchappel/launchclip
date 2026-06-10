@@ -5,14 +5,15 @@ Use this skill when Roger wants to promote a local OSS repo with a reviewable pa
 ## Workflow
 
 1. Identify the repo path, intended audience, and approved demo command.
-2. Run `launchclip init <repo> --out .launchclip/<repo-name>`.
-3. Ask before running non-trivial or state-changing demo commands.
-4. Run `launchclip demo <repo> --out .launchclip/<repo-name> --demo-cmd "<command>" --capture terminal`.
-5. Run `launchclip plan .launchclip/<repo-name> --format short-30 --renderer none`.
-6. Run `launchclip captions .launchclip/<repo-name> --platforms x,linkedin,tiktok,bluesky`.
-7. Run `launchclip render .launchclip/<repo-name> --provider product-videogen --dry-run`.
-8. Run `launchclip submit-review .launchclip/<repo-name> --provider product-videogen --dry-run`.
-9. Run `launchclip review .launchclip/<repo-name>` and present `REVIEW.md` for human review.
+2. Ask before running non-trivial or state-changing demo commands.
+3. Prefer the one-command dry-run workflow:
+
+   ```bash
+   launchclip run <repo> --out .launchclip/<repo-name> --demo-cmd "<command>" --angle "<social angle>" --audience "<target audience>"
+   ```
+
+4. For manual staging, run `init`, `demo`, `plan`, `captions`, `render --dry-run`, `submit-review --dry-run`, `validate`, and `review`.
+5. Present `REVIEW.md` and `review/social-readiness.json` for human review.
 
 ## Side-Effect Boundaries
 
@@ -23,7 +24,7 @@ Use this skill when Roger wants to promote a local OSS repo with a reviewable pa
 
 ## Validation
 
-Run `npm test`, `npm run smoke`, or `npm run check` before handing off a repo change.
+Run `launchclip validate <workspace>` before using a generated packet. Run `npm test`, `npm run smoke`, or `npm run check` before handing off a launchclip repo change.
 
 ## Approval Checkpoints
 

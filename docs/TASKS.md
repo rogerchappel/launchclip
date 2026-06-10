@@ -9,6 +9,8 @@
 - [x] Add fixture-backed unit tests.
 - [x] Add real CLI smoke flow.
 - [x] Add agent skill, orchestration docs, and README quickstart.
+- [x] Add one-command dry-run workflow for repeat social packet generation.
+- [x] Add social-readiness validation for required artifacts, stages, claim status, and caption length limits.
 
 ## Follow-Up
 
@@ -17,3 +19,4 @@
 - [ ] Add Remotion and Hyperframes adapter contracts.
 - [ ] Add richer repo discovery for non-Node projects.
 - [ ] Add configurable claim templates and evidence linting.
+- [ ] Add real platform-specific media specs once product-videogen exposes final queue requirements.
