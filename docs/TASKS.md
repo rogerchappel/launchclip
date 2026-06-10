@@ -11,6 +11,7 @@
 - [x] Add agent skill, orchestration docs, and README quickstart.
 - [x] Add one-command dry-run workflow for repeat social packet generation.
 - [x] Add social-readiness validation for required artifacts, stages, claim status, and caption length limits.
+- [x] Add `local-ffmpeg` render provider for uploadable vertical MP4 and thumbnail output.
 
 ## Follow-Up
 

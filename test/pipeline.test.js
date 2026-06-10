@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, access } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { initWorkspace, planVideo, renderDryRun, runDemo, runPacket, submitReview, validateWorkspace, writeCaptions, writeReview } from "../src/pipeline.js";
+import { promisify } from "node:util";
+import { initWorkspace, planVideo, renderDryRun, renderVideo, runDemo, runPacket, submitReview, validateWorkspace, writeCaptions, writeReview } from "../src/pipeline.js";
+
+const execFileAsync = promisify(execFile);
 
 const fixtureRepo = path.resolve("test/fixtures/sample-tool");
 
@@ -71,3 +75,37 @@ test("rejects live submit in V1", async () => {
     await rm(temp, { recursive: true, force: true });
   }
 });
+
+test("renders a local uploadable video when ffmpeg is available", async (t) => {
+  if (!(await hasCommand("ffmpeg"))) {
+    t.skip("ffmpeg is not installed");
+    return;
+  }
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
+  const out = path.join(temp, "packet");
+  try {
+    await initWorkspace(fixtureRepo, { out });
+    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
+    await planVideo(out, { format: "short-15", renderer: "local-ffmpeg" });
+    await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
+    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
+    await submitReview(out, { provider: "product-videogen", "dry-run": true });
+    const result = await renderVideo(out, { provider: "local-ffmpeg", duration: "6" });
+    const readiness = await validateWorkspace(out);
+
+    await access(result.video);
+    await access(result.thumbnail);
+    assert.equal(readiness.status, "ready");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+async function hasCommand(command) {
+  try {
+    await execFileAsync("which", [command]);
+    return true;
+  } catch {
+    return false;
+  }
+}
