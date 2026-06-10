@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -151,8 +151,13 @@ export async function writeCaptions(workspacePath, flags = {}) {
 }
 
 export async function renderDryRun(workspacePath, flags = {}) {
+  return renderVideo(workspacePath, { ...flags, provider: flags.provider ?? "product-videogen", "dry-run": true });
+}
+
+export async function renderVideo(workspacePath, flags = {}) {
   const out = path.resolve(workspacePath);
   const provider = flags.provider ?? "product-videogen";
+  if (provider === "local-ffmpeg") return renderLocalFfmpeg(out, flags);
   if (provider !== "product-videogen") throw new Error(`Unsupported render provider: ${provider}`);
   const payload = await productVideogenPayload(out, "render");
   const filePath = path.join(out, "video", "product-videogen.dry-run.json");
@@ -161,6 +166,83 @@ export async function renderDryRun(workspacePath, flags = {}) {
     manifest.stages.render = { status: "dry-run", provider };
   });
   return { stage: "render", mode: "dry-run", provider, payload: filePath };
+}
+
+async function renderLocalFfmpeg(out, flags = {}) {
+  if (flags["dry-run"]) {
+    throw new Error("local-ffmpeg renders a real media file; omit --dry-run to create video/launchclip.mp4");
+  }
+  const manifest = await readJson(path.join(out, "launchclip.json"));
+  const video = await readJson(path.join(out, "video", "video.json"));
+  const terminal = await optionalText(path.join(out, "demo", "terminal.txt"));
+  const captions = await readCaptions(out);
+  const duration = Number(flags.duration ?? video.duration_seconds ?? 30);
+  const width = Number(flags.width ?? 1080);
+  const height = Number(flags.height ?? 1920);
+  const fps = Number(flags.fps ?? 30);
+  const renderDir = path.join(out, "video", "render-assets");
+  await ensureDirs(out, ["video", "video/render-assets"]);
+
+  const scenes = buildRenderScenes(manifest, video, terminal, captions);
+  const sceneDuration = duration / scenes.length;
+  for (const [index, scene] of scenes.entries()) {
+    const filePath = path.join(renderDir, `scene-${index + 1}.ppm`);
+    await writeFile(filePath, renderScenePpm(scene, { width, height, accent: index === 0 }));
+  }
+
+  const output = path.join(out, "video", flags.output ?? "launchclip.mp4");
+  const thumbnail = path.join(out, "video", "thumbnail.png");
+  const concatPath = path.join(renderDir, "frames.txt");
+  const concatLines = scenes.flatMap((_, index) => [
+    `file '${path.join(renderDir, `scene-${index + 1}.ppm`).replace(/'/g, "'\\''")}'`,
+    `duration ${round(sceneDuration)}`
+  ]);
+  concatLines.push(`file '${path.join(renderDir, `scene-${scenes.length}.ppm`).replace(/'/g, "'\\''")}'`);
+  await writeFile(concatPath, `${concatLines.join("\n")}\n`);
+
+  await execFileAsync("ffmpeg", [
+    "-y",
+    "-f",
+    "concat",
+    "-safe",
+    "0",
+    "-i",
+    concatPath,
+    "-f",
+    "lavfi",
+    "-i",
+    "anullsrc=channel_layout=stereo:sample_rate=44100",
+    "-r",
+    String(fps),
+    "-t",
+    String(duration),
+    "-shortest",
+    "-c:v",
+    "libx264",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
+    "-movflags",
+    "+faststart",
+    output
+  ], { maxBuffer: 1024 * 1024 * 8 });
+
+  await execFileAsync("ffmpeg", [
+    "-y",
+    "-ss",
+    "1",
+    "-i",
+    output,
+    "-frames:v",
+    "1",
+    thumbnail
+  ], { maxBuffer: 1024 * 1024 * 8 });
+
+  await updateManifest(out, (manifest) => {
+    manifest.stages.render = { status: "passed", provider: "local-ffmpeg", media: "video/launchclip.mp4", thumbnail: "video/thumbnail.png" };
+  });
+  return { stage: "render", mode: "local", provider: "local-ffmpeg", video: output, thumbnail };
 }
 
 export async function submitReview(workspacePath, flags = {}) {
@@ -202,6 +284,7 @@ export async function writeReview(workspacePath) {
 Source repo: ${manifest.source_repo.name}
 Source path: ${manifest.source_repo.path}
 Source URL: ${manifest.source_repo.url ?? "not detected"}
+Rendered video: ${manifest.stages.render?.media ?? "not rendered"}
 
 ## Status
 - Demo: ${manifest.stages.demo?.status ?? "missing"}
@@ -218,6 +301,8 @@ Source URL: ${manifest.source_repo.url ?? "not detected"}
 - video/video.json
 - video/brief.md
 - video/render-plan.json
+- ${manifest.stages.render?.media ?? "video/launchclip.mp4"}
+- ${manifest.stages.render?.thumbnail ?? "video/thumbnail.png"}
 - video/product-videogen.dry-run.json
 - captions/*.md
 - review/product-videogen-review.dry-run.json
@@ -270,9 +355,14 @@ export async function validateWorkspace(workspacePath, flags = {}) {
   for (const file of requiredFiles) {
     if (!(await optionalText(path.join(out, file)))) issues.push(`Missing artifact: ${file}`);
   }
-  for (const [stage, expected] of Object.entries({ demo: "passed", plan: "passed", captions: "passed", render: "dry-run", submit_review: "dry-run" })) {
-    if (manifest.stages?.[stage]?.status !== expected) {
-      issues.push(`Stage ${stage} is ${manifest.stages?.[stage]?.status ?? "missing"}, expected ${expected}`);
+  for (const [stage, expected] of Object.entries({ demo: ["passed"], plan: ["passed"], captions: ["passed"], render: ["dry-run", "passed"], submit_review: ["dry-run"] })) {
+    if (!expected.includes(manifest.stages?.[stage]?.status)) {
+      issues.push(`Stage ${stage} is ${manifest.stages?.[stage]?.status ?? "missing"}, expected ${expected.join(" or ")}`);
+    }
+  }
+  if (manifest.stages?.render?.status === "passed") {
+    for (const file of [manifest.stages.render.media, manifest.stages.render.thumbnail].filter(Boolean)) {
+      if (!(await fileExists(path.join(out, file)))) issues.push(`Missing rendered media artifact: ${file}`);
     }
   }
   const captions = await readCaptions(out);
@@ -392,6 +482,24 @@ function captionFor(platform, manifest, flags = {}) {
   return `${(lines[platform] ?? lines.x).join("\n")}\n`;
 }
 
+function buildRenderScenes(manifest, video, terminal, captions) {
+  const repo = manifest.source_repo;
+  const command = (terminal?.match(/^\$ .+$/m)?.[0] ?? "$ demo command").slice(0, 86);
+  const proof = terminal
+    ? terminal.split("\n").filter((line) => line.trim() && !line.startsWith("$ ")).slice(-5).join(" ")
+    : "Demo evidence captured locally.";
+  const cta = repo.url ?? repo.path;
+  const caption = captions.x ?? captions.linkedin ?? `${repo.name} is ready to try.`;
+  const summary = stripMarkdown(repo.summary).replace(new RegExp(`^${escapeRegExp(repo.name)}\\s*`, "i"), "").trim();
+  return [
+    wrapLines(`${repo.name}\n${summary || "OSS demo packet"}`, 18, 5),
+    wrapLines(`A local demo passed.\n${command}`, 20, 6),
+    wrapLines(`Proof from terminal:\n${proof}`, 20, 9),
+    wrapLines(`What to share:\n${caption.replace(/Claim status:.*/is, "").trim()}`, 20, 8),
+    wrapLines(`Try it:\n${cta}\n\nClaim status: evidence-backed.`, 20, 7)
+  ];
+}
+
 async function readCaptions(out) {
   const result = {};
   for (const platform of ["x", "linkedin", "tiktok", "bluesky"]) {
@@ -435,6 +543,15 @@ async function optionalText(filePath) {
     return await readFile(filePath, "utf8");
   } catch {
     return null;
+  }
+}
+
+async function fileExists(filePath) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -486,3 +603,140 @@ function shorten(text, max) {
   const candidate = boundary >= Math.floor(max * 0.6) ? raw.slice(0, boundary) : raw;
   return candidate.replace(/[.,;:!?]+$/u, "");
 }
+
+function wrapLines(text, width, maxLines) {
+  const lines = [];
+  for (const part of stripMarkdown(text).split(/\n+/)) {
+    const words = part.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+    let line = "";
+    for (const word of words) {
+      if (`${line} ${word}`.trim().length > width) {
+        if (line) lines.push(line);
+        line = word;
+      } else {
+        line = `${line} ${word}`.trim();
+      }
+      if (lines.length >= maxLines) break;
+    }
+    if (line && lines.length < maxLines) lines.push(line);
+    if (lines.length >= maxLines) break;
+  }
+  return lines.join("\n");
+}
+
+function stripMarkdown(text) {
+  return String(text ?? "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[#*_>~-]/g, " ")
+    .trim();
+}
+
+function round(value) {
+  return Math.round(value * 100) / 100;
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function renderScenePpm(text, options) {
+  const { width, height, accent } = options;
+  const pixels = Buffer.alloc(width * height * 3);
+  fillRect(pixels, width, 0, 0, width, height, [16, 24, 32]);
+  fillRect(pixels, width, 70, 80, width - 140, height - 160, [23, 32, 45]);
+  fillRect(pixels, width, 70, 80, width - 140, 14, accent ? [72, 213, 151] : [82, 151, 255]);
+  fillRect(pixels, width, 120, 1320, width - 240, 2, [72, 213, 151]);
+  drawText(pixels, width, height, "LAUNCHCLIP", 120, 1420, 7, [72, 213, 151]);
+  drawText(pixels, width, height, text.toUpperCase(), 120, 260, accent ? 7 : 6, [245, 248, 255]);
+  return Buffer.concat([Buffer.from(`P6\n${width} ${height}\n255\n`), pixels]);
+}
+
+function fillRect(pixels, width, x, y, rectWidth, rectHeight, color) {
+  const height = pixels.length / width / 3;
+  for (let row = Math.max(0, y); row < Math.min(height, y + rectHeight); row += 1) {
+    for (let col = Math.max(0, x); col < Math.min(width, x + rectWidth); col += 1) {
+      const offset = (row * width + col) * 3;
+      pixels[offset] = color[0];
+      pixels[offset + 1] = color[1];
+      pixels[offset + 2] = color[2];
+    }
+  }
+}
+
+function drawText(pixels, width, height, text, x, y, scale, color) {
+  let cursorX = x;
+  let cursorY = y;
+  const letterWidth = 5 * scale;
+  const letterHeight = 7 * scale;
+  for (const char of text) {
+    if (char === "\n") {
+      cursorX = x;
+      cursorY += letterHeight + 3 * scale;
+      continue;
+    }
+    const pattern = FONT[char] ?? FONT[" "];
+    if (cursorX + letterWidth > width - x) continue;
+    for (let row = 0; row < pattern.length; row += 1) {
+      for (let col = 0; col < pattern[row].length; col += 1) {
+        if (pattern[row][col] !== "1") continue;
+        fillRect(pixels, width, cursorX + col * scale, cursorY + row * scale, scale, scale, color);
+      }
+    }
+    cursorX += letterWidth + 2 * scale;
+    if (cursorY + letterHeight > height - 220) break;
+  }
+}
+
+const FONT = {
+  " ": ["00000", "00000", "00000", "00000", "00000", "00000", "00000"],
+  A: ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+  B: ["11110", "10001", "10001", "11110", "10001", "10001", "11110"],
+  C: ["01111", "10000", "10000", "10000", "10000", "10000", "01111"],
+  D: ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
+  E: ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
+  F: ["11111", "10000", "10000", "11110", "10000", "10000", "10000"],
+  G: ["01111", "10000", "10000", "10011", "10001", "10001", "01111"],
+  H: ["10001", "10001", "10001", "11111", "10001", "10001", "10001"],
+  I: ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+  J: ["00111", "00010", "00010", "00010", "10010", "10010", "01100"],
+  K: ["10001", "10010", "10100", "11000", "10100", "10010", "10001"],
+  L: ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+  M: ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
+  N: ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
+  O: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+  P: ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+  Q: ["01110", "10001", "10001", "10001", "10101", "10010", "01101"],
+  R: ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
+  S: ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
+  T: ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
+  U: ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
+  V: ["10001", "10001", "10001", "10001", "10001", "01010", "00100"],
+  W: ["10001", "10001", "10001", "10101", "10101", "10101", "01010"],
+  X: ["10001", "10001", "01010", "00100", "01010", "10001", "10001"],
+  Y: ["10001", "10001", "01010", "00100", "00100", "00100", "00100"],
+  Z: ["11111", "00001", "00010", "00100", "01000", "10000", "11111"],
+  "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
+  "1": ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
+  "2": ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
+  "3": ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
+  "4": ["10010", "10010", "10010", "11111", "00010", "00010", "00010"],
+  "5": ["11111", "10000", "10000", "11110", "00001", "00001", "11110"],
+  "6": ["01110", "10000", "10000", "11110", "10001", "10001", "01110"],
+  "7": ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
+  "8": ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
+  "9": ["01110", "10001", "10001", "01111", "00001", "00001", "01110"],
+  ".": ["00000", "00000", "00000", "00000", "00000", "01100", "01100"],
+  ":": ["00000", "01100", "01100", "00000", "01100", "01100", "00000"],
+  "/": ["00001", "00010", "00010", "00100", "01000", "01000", "10000"],
+  "-": ["00000", "00000", "00000", "11111", "00000", "00000", "00000"],
+  "_": ["00000", "00000", "00000", "00000", "00000", "00000", "11111"],
+  "$": ["00100", "01111", "10100", "01110", "00101", "11110", "00100"],
+  "?": ["01110", "10001", "00001", "00010", "00100", "00000", "00100"],
+  "!": ["00100", "00100", "00100", "00100", "00100", "00000", "00100"],
+  "'": ["01100", "01100", "00100", "00000", "00000", "00000", "00000"],
+  "\"": ["01010", "01010", "01010", "00000", "00000", "00000", "00000"],
+  "(": ["00010", "00100", "01000", "01000", "01000", "00100", "00010"],
+  ")": ["01000", "00100", "00010", "00010", "00010", "00100", "01000"]
+};

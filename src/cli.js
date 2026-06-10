@@ -1,4 +1,4 @@
-import { initWorkspace, runDemo, planVideo, writeCaptions, renderDryRun, submitReview, writeReview, runPacket, validateWorkspace } from "./pipeline.js";
+import { initWorkspace, runDemo, planVideo, writeCaptions, renderVideo, submitReview, writeReview, runPacket, validateWorkspace } from "./pipeline.js";
 
 const COMMANDS = new Set(["init", "demo", "plan", "captions", "render", "submit-review", "review", "validate", "run"]);
 
@@ -24,7 +24,7 @@ export async function runCli(argv, io = {}) {
   } else if (command === "captions") {
     result = await writeCaptions(required(firstArg, "workspace path"), flags);
   } else if (command === "render") {
-    result = await renderDryRun(required(firstArg, "workspace path"), flags);
+    result = await renderVideo(required(firstArg, "workspace path"), flags);
   } else if (command === "submit-review") {
     result = await submitReview(required(firstArg, "workspace path"), flags);
   } else if (command === "review") {
@@ -73,6 +73,7 @@ Usage:
   launchclip plan <workspace> --format short-30 --renderer none
   launchclip captions <workspace> --platforms x,linkedin,tiktok,bluesky
   launchclip render <workspace> --provider product-videogen --dry-run
+  launchclip render <workspace> --provider local-ffmpeg
   launchclip submit-review <workspace> --provider product-videogen --dry-run
   launchclip review <workspace>
   launchclip validate <workspace>

@@ -8,7 +8,7 @@
 2. `demo` captures an explicitly approved terminal command and writes a receipt.
 3. `plan` emits a video-skillkit-compatible manifest and brief.
 4. `captions` writes editable, platform-specific, evidence-backed drafts.
-5. `render` creates a product-videogen dry-run render/review payload.
+5. `render` creates either a product-videogen dry-run render/review payload or a local ffmpeg MP4.
 6. `submit-review` creates a pending Review Feed intake payload in dry-run form.
 7. `validate` checks required artifacts, stage status, caption claim status, and platform length limits.
 8. `review` creates `REVIEW.md` for human approval.
@@ -21,10 +21,19 @@ launchclip run <repo> --out <workspace> --demo-cmd "npm run smoke" --angle "..."
 
 The optional `--angle`, `--audience`, and `--cta-url` flags tune platform captions without changing the safety boundary.
 
+To create an uploadable local video after the packet exists:
+
+```bash
+launchclip render <workspace> --provider local-ffmpeg
+```
+
+This writes `video/launchclip.mp4` and `video/thumbnail.png` from the repo facts, caption draft, and captured terminal evidence. Caption generation is deterministic template logic; it does not call an LLM.
+
 ## Boundaries
 
 - `video-skillkit`: manifest and grounded video brief semantics.
-- `cutpilot`: future optional EDL and ffmpeg render handoff.
+- `local-ffmpeg`: built-in text-forward vertical MP4 render for immediate upload.
+- `cutpilot`: future optional EDL and advanced ffmpeg handoff.
 - `postmaker`: caption grounding and claim-status inspiration.
 - `product-videogen`: Review Feed approval lane and downstream social queue sync.
 - Clutch Cut: reachable only through product-videogen after approval, never directly in V1.
@@ -59,6 +68,7 @@ A release candidate is ready when `npm test`, `npm run smoke`, and `npm run chec
 
 - Required packet artifacts exist.
 - Pipeline stages have the expected dry-run statuses.
+- A locally rendered packet has its MP4 and thumbnail present.
 - Captions exist for generated platforms.
 - Captions include `Claim status:`.
 - X and Bluesky drafts fit their platform limits.
