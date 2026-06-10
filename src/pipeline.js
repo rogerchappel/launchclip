@@ -139,7 +139,7 @@ export async function writeCaptions(workspacePath, flags = {}) {
   await ensureDirs(out, ["captions"]);
   const paths = {};
   for (const platform of platforms) {
-    const caption = captionFor(platform, manifest);
+    const caption = captionFor(platform, manifest, flags);
     const filePath = path.join(out, "captions", `${platform}.md`);
     await writeFile(filePath, caption);
     paths[platform] = filePath;
@@ -196,6 +196,7 @@ export async function writeReview(workspacePath) {
   const out = path.resolve(workspacePath);
   const manifest = await readJson(path.join(out, "launchclip.json"));
   const receipt = await optionalJson(path.join(out, "review", "receipt.json"));
+  const readiness = await validateWorkspace(out, { write: true });
   const review = `# Launchclip Review Packet
 
 Source repo: ${manifest.source_repo.name}
@@ -208,6 +209,7 @@ Source URL: ${manifest.source_repo.url ?? "not detected"}
 - Captions: ${manifest.stages.captions?.status ?? "missing"}
 - Product-videogen review: ${manifest.stages.submit_review?.status ?? "missing"}
 - Approval status: ${receipt?.approval_status ?? "not submitted"}
+- Social readiness: ${readiness.status}
 
 ## Artifacts
 - launchclip.json
@@ -224,12 +226,78 @@ Source URL: ${manifest.source_repo.url ?? "not detected"}
 ## Safety
 This packet is dry-run by default. Launchclip does not post to social platforms, publish media, or write to Clutch Cut directly. Product-videogen remains the approval lane.
 
+## Social Readiness
+${readiness.issues.length ? readiness.issues.map((issue) => `- ${issue}`).join("\n") : "- Ready for human review."}
+
 ## Product-Videogen Follow-Up
 ${receipt?.product_videogen_api_gap ?? "Run submit-review --provider product-videogen --dry-run to create the dry-run payload."}
 `;
   const reviewPath = path.join(out, "REVIEW.md");
   await writeFile(reviewPath, review);
   return { stage: "review", review: reviewPath };
+}
+
+export async function runPacket(repoPath, flags = {}) {
+  const repo = path.resolve(repoPath);
+  const out = path.resolve(flags.out ?? defaultWorkspace(repo));
+  const platforms = flags.platforms ?? "x,linkedin,tiktok,bluesky";
+  await initWorkspace(repo, { out });
+  await runDemo(repo, { out, "demo-cmd": required(flags["demo-cmd"], "--demo-cmd"), capture: flags.capture ?? "terminal", timeout: flags.timeout });
+  await planVideo(out, { format: flags.format ?? "short-30", renderer: flags.renderer ?? "none" });
+  await writeCaptions(out, { platforms, angle: flags.angle, audience: flags.audience, "cta-url": flags["cta-url"] });
+  await renderDryRun(out, { provider: flags.provider ?? "product-videogen", "dry-run": true });
+  await submitReview(out, { provider: flags.provider ?? "product-videogen", "dry-run": true });
+  await writeReview(out);
+  const readiness = await validateWorkspace(out, { write: true });
+  return { stage: "run", workspace: out, status: readiness.status, issues: readiness.issues };
+}
+
+export async function validateWorkspace(workspacePath, flags = {}) {
+  const out = path.resolve(workspacePath);
+  const manifest = await readJson(path.join(out, "launchclip.json"));
+  const requiredFiles = [
+    "launchclip.json",
+    "demo/terminal.txt",
+    "demo/command-receipt.json",
+    "video/video.json",
+    "video/brief.md",
+    "video/render-plan.json",
+    "video/product-videogen.dry-run.json",
+    "review/product-videogen-review.dry-run.json",
+    "review/product-videogen-review.receipt.json"
+  ];
+  const issues = [];
+  for (const file of requiredFiles) {
+    if (!(await optionalText(path.join(out, file)))) issues.push(`Missing artifact: ${file}`);
+  }
+  for (const [stage, expected] of Object.entries({ demo: "passed", plan: "passed", captions: "passed", render: "dry-run", submit_review: "dry-run" })) {
+    if (manifest.stages?.[stage]?.status !== expected) {
+      issues.push(`Stage ${stage} is ${manifest.stages?.[stage]?.status ?? "missing"}, expected ${expected}`);
+    }
+  }
+  const captions = await readCaptions(out);
+  if (!Object.keys(captions).length) issues.push("No captions found.");
+  for (const [platform, caption] of Object.entries(captions)) {
+    const rule = PLATFORM_RULES[platform];
+    if (!rule) continue;
+    const count = visibleCaption(caption).length;
+    if (count > rule.max) issues.push(`${platform} caption is ${count} characters; max is ${rule.max}`);
+    if (count < rule.min) issues.push(`${platform} caption is ${count} characters; add more context`);
+    if (!/Claim status:/i.test(caption)) issues.push(`${platform} caption is missing claim status`);
+  }
+  const result = {
+    stage: "validate",
+    status: issues.length ? "needs-work" : "ready",
+    issues,
+    checked_at: new Date().toISOString(),
+    workspace: out,
+    source_repo: manifest.source_repo.name,
+    platform_targets: Object.keys(captions)
+  };
+  if (flags.write) {
+    await writeJson(path.join(out, "review", "social-readiness.json"), result);
+  }
+  return result;
 }
 
 async function inspectRepo(repo) {
@@ -283,19 +351,23 @@ async function productVideogenPayload(out, purpose) {
   };
 }
 
-function captionFor(platform, manifest) {
+function captionFor(platform, manifest, flags = {}) {
   const repo = manifest.source_repo;
-  const url = repo.url ?? repo.path;
+  const url = flags["cta-url"] ?? repo.url ?? repo.path;
+  const angle = flags.angle ?? "turns a working local demo into a reviewable promo packet";
+  const audience = flags.audience ?? "OSS builders";
   const lines = {
     x: [
-      `${repo.name} turns a local OSS repo demo into a reviewable promo packet.`,
-      `Evidence: captured demo output plus dry-run product-videogen review payload.`,
+      `${repo.name}: ${shorten(angle, 58)}.`,
+      `For ${shorten(audience, 42)}: demo proof, video brief, captions, review handoff.`,
       `Try it: ${url}`,
       "",
-      "Claim status: evidence-backed from local repo artifacts."
+      "Claim status: evidence-backed."
     ],
     linkedin: [
       `I built a grounded launch packet for ${repo.name}: demo evidence, a short-form video plan, platform captions, and a pending product-videogen review payload.`,
+      "",
+      `The angle: ${angle}. The audience: ${audience}.`,
       "",
       "The useful bit is the approval boundary: launchclip prepares the packet, while product-videogen owns review and downstream social queueing.",
       "",
@@ -304,13 +376,16 @@ function captionFor(platform, manifest) {
     ],
     tiktok: [
       `POV: your OSS tool finally gets a launch clip packet before anyone posts anything.`,
-      `${repo.name}: demo proof, edit plan, captions, product-videogen review handoff.`,
+      `${repo.name}: ${angle}.`,
+      `For ${audience}: demo proof, edit plan, captions, product-videogen review handoff.`,
       `GitHub: ${url}`,
       "Claim status: evidence-backed."
     ],
     bluesky: [
-      `${repo.name} now has a dry-run launch packet: demo artifact, video brief, captions, and a product-videogen review payload.`,
-      `No direct posting in V1; approval stays in product-videogen.`,
+      `${repo.name} now has a dry-run launch packet: demo proof, video brief, captions, and product-videogen review payload.`,
+      `Angle: ${shorten(angle, 78)}.`,
+      `Approval stays in product-videogen.`,
+      "Claim status: evidence-backed.",
       url
     ]
   };
@@ -391,4 +466,23 @@ function required(value, label) {
 
 function rel(base, target) {
   return path.relative(base, target).split(path.sep).join("/");
+}
+
+const PLATFORM_RULES = {
+  x: { min: 60, max: 280 },
+  bluesky: { min: 60, max: 300 },
+  tiktok: { min: 60, max: 2200 },
+  linkedin: { min: 120, max: 3000 }
+};
+
+function visibleCaption(text) {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function shorten(text, max) {
+  if (text.length <= max) return text;
+  const raw = text.slice(0, max).trimEnd();
+  const boundary = raw.lastIndexOf(" ");
+  const candidate = boundary >= Math.floor(max * 0.6) ? raw.slice(0, boundary) : raw;
+  return candidate.replace(/[.,;:!?]+$/u, "");
 }

@@ -1,6 +1,6 @@
-import { initWorkspace, runDemo, planVideo, writeCaptions, renderDryRun, submitReview, writeReview } from "./pipeline.js";
+import { initWorkspace, runDemo, planVideo, writeCaptions, renderDryRun, submitReview, writeReview, runPacket, validateWorkspace } from "./pipeline.js";
 
-const COMMANDS = new Set(["init", "demo", "plan", "captions", "render", "submit-review", "review"]);
+const COMMANDS = new Set(["init", "demo", "plan", "captions", "render", "submit-review", "review", "validate", "run"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout } = io;
@@ -29,6 +29,10 @@ export async function runCli(argv, io = {}) {
     result = await submitReview(required(firstArg, "workspace path"), flags);
   } else if (command === "review") {
     result = await writeReview(required(firstArg, "workspace path"), flags);
+  } else if (command === "validate") {
+    result = await validateWorkspace(required(firstArg, "workspace path"), { ...flags, write: true });
+  } else if (command === "run") {
+    result = await runPacket(required(firstArg, "repo path"), flags);
   }
   stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
@@ -71,5 +75,7 @@ Usage:
   launchclip render <workspace> --provider product-videogen --dry-run
   launchclip submit-review <workspace> --provider product-videogen --dry-run
   launchclip review <workspace>
+  launchclip validate <workspace>
+  launchclip run <repo> --out <workspace> --demo-cmd "npm run smoke" --angle "..." --audience "..."
 `;
 }

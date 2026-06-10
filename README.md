@@ -9,6 +9,18 @@ It is local-first and dry-run-first. V1 does not post to social platforms, queue
 ```bash
 npm install
 
+launchclip run ./my-oss-tool \
+  --out .launchclip/my-oss-tool \
+  --demo-cmd "npm run smoke" \
+  --angle "turns demo proof into launch content" \
+  --audience "developers shipping small OSS tools"
+```
+
+That creates the full dry-run packet, validates it for social review, and writes `REVIEW.md`.
+
+You can also run each stage by hand:
+
+```bash
 launchclip init ./my-oss-tool --out .launchclip/my-oss-tool
 launchclip demo ./my-oss-tool --out .launchclip/my-oss-tool --demo-cmd "npm run smoke" --capture terminal
 launchclip plan .launchclip/my-oss-tool --format short-30 --renderer none
@@ -16,6 +28,7 @@ launchclip captions .launchclip/my-oss-tool --platforms x,linkedin,tiktok,bluesk
 launchclip render .launchclip/my-oss-tool --provider product-videogen --dry-run
 launchclip submit-review .launchclip/my-oss-tool --provider product-videogen --dry-run
 launchclip review .launchclip/my-oss-tool
+launchclip validate .launchclip/my-oss-tool
 ```
 
 Expected packet:
@@ -39,13 +52,14 @@ Expected packet:
   review/
     product-videogen-review.dry-run.json
     product-videogen-review.receipt.json
+    social-readiness.json
     receipt.json
   REVIEW.md
 ```
 
 ## How It Works
 
-`launchclip init` inspects a repo for README and package metadata, then creates a workspace manifest. `demo` runs only the command you explicitly provide and stores terminal evidence. `plan` writes a video-skillkit-compatible `video.json`, a human brief, and a renderer handoff plan. `captions` writes platform drafts with claim status. `render` and `submit-review` create dry-run product-videogen payloads. `review` rolls the packet into one human-readable file.
+`launchclip run` executes the full dry-run workflow. `init` inspects a repo for README and package metadata, then creates a workspace manifest. `demo` runs only the command you explicitly provide and stores terminal evidence. `plan` writes a video-skillkit-compatible `video.json`, a human brief, and a renderer handoff plan. `captions` writes platform drafts with claim status and optional `--angle`, `--audience`, and `--cta-url` context. `render` and `submit-review` create dry-run product-videogen payloads. `validate` checks required artifacts, stage status, caption presence, claim status, and X/Bluesky/LinkedIn/TikTok length limits. `review` rolls the packet into one human-readable file.
 
 ## Product-Videogen Handoff
 

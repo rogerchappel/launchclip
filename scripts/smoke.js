@@ -8,17 +8,28 @@ const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-smoke-"));
 const out = path.join(temp, "sample-tool");
 
 try {
-  await runCli(["init", fixtureRepo, "--out", out], quietIo());
-  await runCli(["demo", fixtureRepo, "--out", out, "--demo-cmd", "npm run smoke", "--capture", "terminal"], quietIo());
-  await runCli(["plan", out, "--format", "short-30", "--renderer", "none"], quietIo());
-  await runCli(["captions", out, "--platforms", "x,linkedin,tiktok,bluesky"], quietIo());
-  await runCli(["render", out, "--provider", "product-videogen", "--dry-run"], quietIo());
-  await runCli(["submit-review", out, "--provider", "product-videogen", "--dry-run"], quietIo());
-  await runCli(["review", out], quietIo());
+  await runCli([
+    "run",
+    fixtureRepo,
+    "--out",
+    out,
+    "--demo-cmd",
+    "npm run smoke",
+    "--angle",
+    "turns demo proof into launch content",
+    "--audience",
+    "developers shipping small OSS tools",
+    "--cta-url",
+    "https://github.com/rogerchappel/sample-tool"
+  ], quietIo());
+  await runCli(["validate", out], quietIo());
 
   const review = await readFile(path.join(out, "REVIEW.md"), "utf8");
   if (!review.includes("Product-Videogen Follow-Up")) {
     throw new Error("Smoke review packet missing product-videogen follow-up");
+  }
+  if (!review.includes("Social readiness: ready")) {
+    throw new Error("Smoke review packet is not social-ready");
   }
   console.log(`smoke ok: ${out}`);
 } finally {

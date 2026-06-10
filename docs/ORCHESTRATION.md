@@ -10,7 +10,16 @@
 4. `captions` writes editable, platform-specific, evidence-backed drafts.
 5. `render` creates a product-videogen dry-run render/review payload.
 6. `submit-review` creates a pending Review Feed intake payload in dry-run form.
-7. `review` creates `REVIEW.md` for human approval.
+7. `validate` checks required artifacts, stage status, caption claim status, and platform length limits.
+8. `review` creates `REVIEW.md` for human approval.
+
+For repeatable social workflows, `run` executes the whole dry-run sequence:
+
+```bash
+launchclip run <repo> --out <workspace> --demo-cmd "npm run smoke" --angle "..." --audience "..."
+```
+
+The optional `--angle`, `--audience`, and `--cta-url` flags tune platform captions without changing the safety boundary.
 
 ## Boundaries
 
@@ -43,3 +52,13 @@ Required fields:
 ## Release Readiness
 
 A release candidate is ready when `npm test`, `npm run smoke`, and `npm run check` pass and a human reviews the generated packet from the smoke fixture or a real target repo.
+
+## Social Readiness
+
+`launchclip validate <workspace>` writes `review/social-readiness.json` and returns `ready` only when:
+
+- Required packet artifacts exist.
+- Pipeline stages have the expected dry-run statuses.
+- Captions exist for generated platforms.
+- Captions include `Claim status:`.
+- X and Bluesky drafts fit their platform limits.
