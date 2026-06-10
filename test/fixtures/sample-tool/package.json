@@ -1,0 +1,9 @@
+{
+  "name": "sample-tool",
+  "version": "0.0.0",
+  "description": "A tiny fixture CLI for launchclip tests.",
+  "type": "module",
+  "scripts": {
+    "smoke": "node -e \"console.log('sample-tool smoke passed')\""
+  }
+}
