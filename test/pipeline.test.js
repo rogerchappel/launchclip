@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, access } from "node:fs/promises";
+import { mkdtemp, readFile, rm, access, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
@@ -14,9 +14,11 @@ const fixtureRepo = path.resolve("test/fixtures/sample-tool");
 test("creates a complete dry-run promotion packet", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
   const out = path.join(temp, "packet");
+  const screenshot = path.join(temp, "demo.png");
   try {
+    await writeFile(screenshot, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lwq3GQAAAABJRU5ErkJggg==", "base64"));
     await initWorkspace(fixtureRepo, { out });
-    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
+    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal", "demo-media": screenshot });
     await planVideo(out, { format: "short-30", renderer: "none" });
     await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
     await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
@@ -66,6 +68,24 @@ test("runs and validates a social-ready packet in one command", async () => {
   }
 });
 
+test("copies optional UI demo media into the packet receipt", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
+  const out = path.join(temp, "packet");
+  const screenshot = path.join(temp, "demo.png");
+  try {
+    await writeFile(screenshot, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lwq3GQAAAABJRU5ErkJggg==", "base64"));
+    await initWorkspace(fixtureRepo, { out });
+    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal", "demo-media": screenshot });
+
+    const receipt = JSON.parse(await readFile(path.join(out, "demo/command-receipt.json"), "utf8"));
+
+    assert.deepEqual(receipt.artifacts.map((artifact) => artifact.type), ["terminal", "screenshot"]);
+    await access(path.join(out, "demo/media.png"));
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("rejects live submit in V1", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
   const out = path.join(temp, "packet");
@@ -87,9 +107,11 @@ test("renders a local uploadable video when ffmpeg is available", async (t) => {
   }
   const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
   const out = path.join(temp, "packet");
+  const screenshot = path.join(temp, "demo.png");
   try {
+    await writeFile(screenshot, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lwq3GQAAAABJRU5ErkJggg==", "base64"));
     await initWorkspace(fixtureRepo, { out });
-    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
+    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal", "demo-media": screenshot });
     await planVideo(out, { format: "short-15", renderer: "local-ffmpeg" });
     await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
     await renderDryRun(out, { provider: "product-videogen", "dry-run": true });

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -35,6 +35,7 @@ export async function runDemo(repoPath, flags = {}) {
   const shell = process.env.SHELL || "/bin/sh";
   const receiptPath = path.join(out, "demo", "command-receipt.json");
   const terminalPath = path.join(out, "demo", "terminal.txt");
+  const artifacts = [{ type: "terminal", path: rel(out, terminalPath) }];
   let status = "passed";
   let stdout = "";
   let stderr = "";
@@ -55,6 +56,14 @@ export async function runDemo(repoPath, flags = {}) {
   }
   const terminal = [`$ ${command}`, stdout.trimEnd(), stderr.trimEnd()].filter(Boolean).join("\n\n");
   await writeFile(terminalPath, `${terminal}\n`);
+  const demoMedia = flags["demo-media"] ?? flags.media;
+  if (demoMedia) {
+    const mediaPath = path.resolve(repo, demoMedia);
+    const mediaType = mediaArtifactType(mediaPath);
+    const mediaTarget = path.join(out, "demo", `media${path.extname(mediaPath).toLowerCase()}`);
+    await copyFile(mediaPath, mediaTarget);
+    artifacts.push({ type: mediaType, path: rel(out, mediaTarget), source: mediaPath });
+  }
   const receipt = {
     command,
     capture: flags.capture ?? "terminal",
@@ -63,7 +72,7 @@ export async function runDemo(repoPath, flags = {}) {
     finished_at: new Date().toISOString(),
     status,
     exit_code: exitCode,
-    artifacts: [{ type: "terminal", path: rel(out, terminalPath) }]
+    artifacts
   };
   await writeJson(receiptPath, receipt);
   await updateManifest(out, (manifest) => {
@@ -176,22 +185,35 @@ async function renderLocalFfmpeg(out, flags = {}) {
   const manifest = await readJson(path.join(out, "launchclip.json"));
   const video = await readJson(path.join(out, "video", "video.json"));
   const terminal = await optionalText(path.join(out, "demo", "terminal.txt"));
+  const receipt = await optionalJson(path.join(out, "demo", "command-receipt.json"));
   const captions = await readCaptions(out);
   const duration = Number(flags.duration ?? Math.min(video.duration_seconds ?? 15, 15));
   const width = Number(flags.width ?? 720);
   const height = Number(flags.height ?? 1280);
   const fps = Number(flags.fps ?? 12);
   const renderDir = path.join(out, "video", "render-assets");
+  await rm(renderDir, { recursive: true, force: true });
   await ensureDirs(out, ["video", "video/render-assets"]);
 
   const output = path.join(out, "video", flags.output ?? "launchclip.mp4");
   const thumbnail = path.join(out, "video", "thumbnail.png");
-  const renderAssets = await buildRenderAssets(manifest, terminal, captions);
+  const demoMedia = demoMediaArtifact(receipt, out);
+  const renderAssets = await buildRenderAssets(manifest, terminal, captions, demoMedia);
   const frameCount = Math.max(1, Math.ceil(duration * fps));
+  const mediaFrames = demoMedia
+    ? await prepareDemoMediaFrames(demoMedia, renderDir, { width, height, duration, fps })
+    : [];
   for (let index = 0; index < frameCount; index += 1) {
     const time = index / fps;
     const framePath = path.join(renderDir, `frame-${String(index + 1).padStart(4, "0")}.ppm`);
-    await writeFile(framePath, renderMotionFrame(renderAssets, { width, height, time, duration }));
+    const scene = sceneForTime(time, duration, Boolean(demoMedia));
+    const mediaIndex = Math.min(mediaFrames.length - 1, Math.floor(scene.local * mediaFrames.length));
+    const mediaFrame = scene.name === "media" ? mediaFrames[mediaIndex] : null;
+    if (mediaFrame) {
+      await copyFile(mediaFrame, framePath);
+    } else {
+      await writeFile(framePath, renderMotionFrame(renderAssets, { width, height, time, duration, scene }));
+    }
   }
 
   await execFileAsync("ffmpeg", [
@@ -319,7 +341,7 @@ export async function runPacket(repoPath, flags = {}) {
   const out = path.resolve(flags.out ?? defaultWorkspace(repo));
   const platforms = flags.platforms ?? "x,linkedin,tiktok,bluesky";
   await initWorkspace(repo, { out });
-  await runDemo(repo, { out, "demo-cmd": required(flags["demo-cmd"], "--demo-cmd"), capture: flags.capture ?? "terminal", timeout: flags.timeout });
+  await runDemo(repo, { out, "demo-cmd": required(flags["demo-cmd"], "--demo-cmd"), capture: flags.capture ?? "terminal", timeout: flags.timeout, "demo-media": flags["demo-media"] ?? flags.media });
   await planVideo(out, { format: flags.format ?? "short-15", renderer: flags.renderer ?? "none" });
   await writeCaptions(out, { platforms, angle: flags.angle, audience: flags.audience, "cta-url": flags["cta-url"] });
   await renderDryRun(out, { provider: flags.provider ?? "product-videogen", "dry-run": true });
@@ -487,7 +509,7 @@ function terminalOutput(terminal) {
     .join("\n");
 }
 
-async function buildRenderAssets(manifest, terminal, captions) {
+async function buildRenderAssets(manifest, terminal, captions, demoMedia = null) {
   const repo = manifest.source_repo;
   const command = terminalCommand(terminal);
   const output = terminalOutput(terminal);
@@ -506,6 +528,7 @@ async function buildRenderAssets(manifest, terminal, captions) {
     ].join("\n"),
     command,
     output: wrapPlainLines(output || "Demo completed and evidence was captured locally.", 26, 6),
+    demoMediaLabel: demoMedia ? `${demoMedia.type.toUpperCase()} DEMO` : "TERMINAL PROOF",
     artifacts: "CREATES\nvideo/launchclip.mp4\nvideo/thumbnail.png\ncaptions/*.md\nREVIEW.md",
     cta: wrapLines(caption.replace(/Claim status:.*/is, "").trim() || `Try ${repo.name} from the README quickstart.`, 25, 4),
     url: wrapLines(cta, 25, 2)
@@ -513,7 +536,7 @@ async function buildRenderAssets(manifest, terminal, captions) {
 }
 
 function renderMotionFrame(content, options) {
-  const { width, height, time, duration } = options;
+  const { width, height, time, duration, scene = sceneForTime(time, duration, false) } = options;
   const pixels = Buffer.alloc(width * height * 3);
   const progress = Math.min(1, time / duration);
   const margin = Math.round(width * 0.07);
@@ -536,11 +559,35 @@ function renderMotionFrame(content, options) {
 
   drawText(pixels, width, height, "LAUNCHCLIP", margin + 24, cardY + 44, smallScale, [72, 213, 151]);
 
-  if (time < duration * 0.2) {
+  if (scene.name === "hook") {
     drawText(pixels, width, height, content.title.toUpperCase(), margin + 24, Math.round(height * 0.22), titleScale, [245, 248, 255]);
     drawText(pixels, width, height, content.summary.toUpperCase(), margin + 28, Math.round(height * 0.4), bodyScale, [220, 231, 255]);
     drawText(pixels, width, height, "LOCAL REPO -> SOCIAL PACKET", margin + 28, Math.round(height * 0.68), bodyScale, [72, 213, 151]);
-  } else {
+  }
+
+  if (scene.name === "usage") {
+    const open = normalized(scene.local, 0, 0.18);
+    const terminal = {
+      x: margin + 24,
+      y: terminalY,
+      width: cardW - 48,
+      height: Math.max(44, Math.round(terminalH * open)),
+      scale: bodyScale
+    };
+    drawText(pixels, width, height, "HOW TO USE IT", margin + 28, Math.round(height * 0.16), bodyScale, [72, 213, 151]);
+    drawTerminalWindow(pixels, width, height, terminal);
+    if (open >= 1) {
+      drawText(pixels, width, height, reveal(content.usage, normalized(scene.local, 0.22, 1)).toUpperCase(), margin + 44, terminalY + 80, smallScale, [245, 248, 255]);
+    }
+  }
+
+  if (scene.name === "media-intro") {
+    drawText(pixels, width, height, content.demoMediaLabel, margin + 28, Math.round(height * 0.18), bodyScale, [72, 213, 151]);
+    drawText(pixels, width, height, "SCREEN CAPTURE BECOMES\nA FULL-SCREEN SCENE", margin + 28, Math.round(height * 0.36), titleScale, [245, 248, 255]);
+    drawText(pixels, width, height, "NOT JUST A TERMINAL SLIDE", margin + 28, Math.round(height * 0.68), bodyScale, [220, 231, 255]);
+  }
+
+  if (scene.name === "proof") {
     drawTerminalWindow(pixels, width, height, {
       x: margin + 24,
       y: terminalY,
@@ -548,31 +595,19 @@ function renderMotionFrame(content, options) {
       height: terminalH,
       scale: bodyScale
     });
-  }
-
-  if (time >= duration * 0.16 && time < duration * 0.5) {
-    const phase = normalized(time, duration * 0.16, duration * 0.5);
-    drawText(pixels, width, height, "HOW TO USE IT", margin + 28, Math.round(height * 0.16), bodyScale, [72, 213, 151]);
-    drawText(pixels, width, height, reveal(content.usage, phase).toUpperCase(), margin + 44, terminalY + 80, smallScale, [245, 248, 255]);
-  }
-
-  if (time >= duration * 0.45 && time < duration * 0.72) {
-    const phase = normalized(time, duration * 0.45, duration * 0.72);
     drawText(pixels, width, height, "PROOF FROM THE DEMO", margin + 28, Math.round(height * 0.16), bodyScale, [72, 213, 151]);
     drawText(pixels, width, height, content.command.toUpperCase(), margin + 44, terminalY + 80, smallScale, [72, 213, 151]);
-    drawText(pixels, width, height, reveal(content.output, phase).toUpperCase(), margin + 44, terminalY + 168, smallScale, [245, 248, 255]);
+    drawText(pixels, width, height, reveal(content.output, normalized(scene.local, 0.1, 1)).toUpperCase(), margin + 44, terminalY + 168, smallScale, [245, 248, 255]);
   }
 
-  if (time >= duration * 0.68 && time < duration * 0.9) {
-    const phase = normalized(time, duration * 0.68, duration * 0.9);
+  if (scene.name === "artifacts") {
     drawText(pixels, width, height, "WHAT IT DOES", margin + 28, Math.round(height * 0.16), bodyScale, [72, 213, 151]);
-    drawText(pixels, width, height, reveal(content.artifacts, phase).toUpperCase(), margin + 36, Math.round(height * 0.66), bodyScale, [245, 248, 255]);
+    drawText(pixels, width, height, reveal(content.artifacts, normalized(scene.local, 0, 1)).toUpperCase(), margin + 36, Math.round(height * 0.36), bodyScale, [245, 248, 255]);
   }
 
-  if (time >= duration * 0.86) {
-    const phase = normalized(time, duration * 0.86, duration);
+  if (scene.name === "cta") {
     drawText(pixels, width, height, "UPLOAD-READY OUTPUT", margin + 28, Math.round(height * 0.18), bodyScale, [72, 213, 151]);
-    drawText(pixels, width, height, reveal(`${content.cta}\n\n${content.url}`, phase).toUpperCase(), margin + 28, Math.round(height * 0.34), bodyScale, [245, 248, 255]);
+    drawText(pixels, width, height, reveal(`${content.cta}\n\n${content.url}`, normalized(scene.local, 0, 1)).toUpperCase(), margin + 28, Math.round(height * 0.34), bodyScale, [245, 248, 255]);
   }
 
   const dotX = margin + Math.round((cardW - 28) * ((time * 0.7) % 1));
@@ -587,6 +622,79 @@ function drawTerminalWindow(pixels, width, height, terminal) {
   fillRect(pixels, width, terminal.x + 48, terminal.y + 16, 12, 12, [255, 209, 102]);
   fillRect(pixels, width, terminal.x + 72, terminal.y + 16, 12, 12, [72, 213, 151]);
   drawText(pixels, width, height, "TERMINAL", terminal.x + 110, terminal.y + 12, terminal.scale, [157, 171, 190]);
+}
+
+function sceneForTime(time, duration, hasDemoMedia) {
+  const points = hasDemoMedia
+    ? [
+        ["hook", 0, 0.16],
+        ["usage", 0.16, 0.36],
+        ["media-intro", 0.36, 0.44],
+        ["media", 0.44, 0.68],
+        ["proof", 0.68, 0.82],
+        ["artifacts", 0.82, 0.92],
+        ["cta", 0.92, 1.01]
+      ]
+    : [
+        ["hook", 0, 0.16],
+        ["usage", 0.16, 0.42],
+        ["proof", 0.42, 0.66],
+        ["artifacts", 0.66, 0.86],
+        ["cta", 0.86, 1.01]
+      ];
+  const progress = Math.min(0.999, Math.max(0, time / duration));
+  const entry = points.find(([, start, end]) => progress >= start && progress < end) ?? points[points.length - 1];
+  const [, start, end] = entry;
+  const local = normalized(progress, start, end);
+  return {
+    name: entry[0],
+    local
+  };
+}
+
+function mediaArtifactType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if ([".png", ".jpg", ".jpeg", ".webp"].includes(ext)) return "screenshot";
+  if ([".mp4", ".mov", ".webm", ".mkv"].includes(ext)) return "video";
+  throw new Error(`Unsupported demo media type: ${ext || "unknown"}`);
+}
+
+function demoMediaArtifact(receipt, out) {
+  const artifact = receipt?.artifacts?.find((item) => ["screenshot", "video"].includes(item.type));
+  if (!artifact) return null;
+  return {
+    type: artifact.type,
+    path: path.join(out, artifact.path)
+  };
+}
+
+async function prepareDemoMediaFrames(demoMedia, renderDir, options) {
+  const { width, height, duration, fps } = options;
+  const mediaDuration = Math.max(1, duration * 0.24);
+  const framePattern = path.join(renderDir, "media-%04d.ppm");
+  const inputArgs = demoMedia.type === "screenshot" ? ["-loop", "1", "-i", demoMedia.path] : ["-stream_loop", "-1", "-i", demoMedia.path];
+  try {
+    await execFileAsync("ffmpeg", [
+      "-y",
+      ...inputArgs,
+      "-t",
+      String(mediaDuration),
+      "-r",
+      String(fps),
+      "-vf",
+      `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=0x101820`,
+      framePattern
+    ], { maxBuffer: 1024 * 1024 * 8 });
+  } catch {
+    return [];
+  }
+  const count = Math.max(1, Math.ceil(mediaDuration * fps));
+  const frames = [];
+  for (let index = 1; index <= count; index += 1) {
+    const framePath = path.join(renderDir, `media-${String(index).padStart(4, "0")}.ppm`);
+    if (await fileExists(framePath)) frames.push(framePath);
+  }
+  return frames;
 }
 
 function normalized(value, start, end) {
@@ -778,7 +886,7 @@ function drawText(pixels, width, height, text, x, y, scale, color) {
       continue;
     }
     const pattern = FONT[char] ?? FONT[" "];
-    if (cursorX + letterWidth > width - x) continue;
+    if (cursorX + letterWidth > width - 24) continue;
     for (let row = 0; row < pattern.length; row += 1) {
       for (let col = 0; col < pattern[row].length; col += 1) {
         if (pattern[row][col] !== "1") continue;
