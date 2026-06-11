@@ -1,298 +1,517 @@
 import React from "react";
 import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 
-const palette = {
-  ink: "#10151f",
-  paper: "#f8fafc",
-  mint: "#35d0a3",
-  coral: "#ff5964",
-  amber: "#ffca3a",
-  blue: "#4f7cff",
-  violet: "#805ad5",
-  line: "rgba(16, 21, 31, 0.14)"
+const colors = {
+  ink: "#121417",
+  charcoal: "#1f242b",
+  paper: "#f5f1e8",
+  white: "#fbfbf8",
+  mist: "#dce6ea",
+  green: "#22c55e",
+  blue: "#3b82f6",
+  coral: "#f9736b",
+  amber: "#f5b84b",
+  plum: "#8057c7",
+  line: "rgba(18,20,23,0.14)",
+  softLine: "rgba(255,255,255,0.18)"
 };
 
 export function LaunchclipSocial(props) {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const timeline = normalizedTimeline(props.timeline, props.durationSeconds ?? durationInFrames / fps);
-  const beatIndex = activeBeatIndex(timeline, frame / fps);
-  const beat = timeline[beatIndex] ?? fallbackBeat(props.repo?.name);
-  const localSeconds = frame / fps - beat.start;
-  const localFrames = Math.max(0, localSeconds * fps);
-  const beatProgress = clamp(localSeconds / Math.max(0.1, beat.duration));
+  const scenes = normalizeStoryboard(props.storyboard, timeline);
+  const now = frame / fps;
+  const activeIndex = activeSceneIndex(timeline, now);
+  const beat = timeline[activeIndex] ?? fallbackBeat(props.repo?.name);
+  const scene = scenes[activeIndex] ?? fallbackScene(beat, activeIndex);
+  const localSeconds = Math.max(0, now - beat.start);
+  const localFrame = localSeconds * fps;
+  const progress = clamp(localSeconds / Math.max(0.1, beat.duration));
+  const entrance = spring({ frame: localFrame, fps, config: { damping: 20, stiffness: 150 } });
+  const cutEnergy = spring({ frame: Math.max(0, localFrame - 5), fps, config: { damping: 13, stiffness: 220 } });
   const totalProgress = clamp(frame / Math.max(1, durationInFrames - 1));
-  const intro = spring({ frame: localFrames, fps, config: { damping: 18, stiffness: 140 } });
-  const captionPop = spring({ frame: Math.max(0, localFrames - 4), fps, config: { damping: 12, stiffness: 200 } });
-  const paletteShift = interpolate(beatIndex % 4, [0, 1, 2, 3], [0, 1, 2, 3]);
+  const context = { props, beat, scene, activeIndex, progress, entrance, cutEnergy, fps, localFrame, totalProgress };
 
   return (
-    <AbsoluteFill style={{ backgroundColor: palette.paper, fontFamily: "Inter, Arial, sans-serif", color: palette.ink, overflow: "hidden" }}>
-      <MovingBackdrop frame={frame} paletteShift={paletteShift} />
-      <TopChrome repo={props.repo} beat={beat} beatIndex={beatIndex} total={timeline.length || 1} progress={totalProgress} />
-      <Scene beat={beat} beatIndex={beatIndex} localFrames={localFrames} intro={intro} progress={beatProgress} props={props} />
-      <KineticCaption beat={beat} progress={captionPop} />
-      <BottomRail timeline={timeline} active={beatIndex} />
+    <AbsoluteFill style={{ backgroundColor: colors.paper, color: colors.ink, fontFamily: "Inter, Arial, Helvetica, sans-serif", overflow: "hidden" }}>
+      <EditorialBackdrop frame={frame} scene={scene} />
+      <SceneSwitch context={context} />
+      <BrandBar repo={props.repo} progress={totalProgress} scene={scene} />
+      <CaptionStack beat={beat} progress={cutEnergy} scene={scene} />
+      <StoryboardRail timeline={timeline} activeIndex={activeIndex} />
     </AbsoluteFill>
   );
 }
 
-function MovingBackdrop({ frame, paletteShift }) {
-  const drift = Math.sin(frame / 36) * 42;
-  const driftB = Math.cos(frame / 44) * 58;
-  const colors = [
-    ["#f8fafc", "#d7fff1", "#ffe3e6"],
-    ["#f9fbff", "#dbe8ff", "#fff0bf"],
-    ["#fffdf7", "#e8ddff", "#d7fff1"],
-    ["#f8fbff", "#ffe4b8", "#dbe8ff"]
-  ][Math.round(paletteShift) % 4];
+function SceneSwitch({ context }) {
+  const id = context.scene.id || context.beat.beat;
+  if (id === "cold-open" || id === "hook") return <ColdOpen {...context} />;
+  if (id === "friction") return <FrictionMontage {...context} />;
+  if (id === "demo-trigger" || id === "split-screen-proof") return <DemoEvidence {...context} />;
+  if (id === "proof") return <ProofTimeline {...context} />;
+  if (id === "transformation" || id === "steps") return <PacketAssembly {...context} />;
+  if (id === "artifact-reveal" || id === "artifacts") return <ArtifactBarrage {...context} />;
+  return <CtaLockup {...context} />;
+}
+
+function EditorialBackdrop({ frame, scene }) {
+  const palette = scenePalette(scene.id);
+  const shift = Math.sin(frame / 48) * 16;
   return (
     <AbsoluteFill>
-      <div style={{ position: "absolute", inset: 0, background: `linear-gradient(135deg, ${colors[0]} 0%, ${colors[1]} 48%, ${colors[2]} 100%)` }} />
-      <div style={{ position: "absolute", left: -160 + drift, top: 80, width: 520, height: 520, borderRadius: "50%", background: "rgba(53, 208, 163, 0.34)", filter: "blur(18px)" }} />
-      <div style={{ position: "absolute", right: -190 + driftB, bottom: 170, width: 560, height: 560, borderRadius: "50%", background: "rgba(79, 124, 255, 0.28)", filter: "blur(20px)" }} />
-      <div style={{ position: "absolute", inset: 0, opacity: 0.18, backgroundImage: "linear-gradient(rgba(16,21,31,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(16,21,31,0.12) 1px, transparent 1px)", backgroundSize: "48px 48px", transform: `translate(${frame % 48}px, ${frame % 48}px)` }} />
+      <div style={{ position: "absolute", inset: 0, background: palette.background }} />
+      <div style={{ position: "absolute", inset: 0, opacity: 0.62, backgroundImage: "linear-gradient(90deg, rgba(18,20,23,0.05) 1px, transparent 1px), linear-gradient(rgba(18,20,23,0.05) 1px, transparent 1px)", backgroundSize: "72px 72px", transform: `translate(${shift}px, ${-shift}px)` }} />
+      <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: 180, background: palette.topWash }} />
     </AbsoluteFill>
   );
 }
 
-function TopChrome({ repo, beat, beatIndex, total, progress }) {
+function ColdOpen({ props, beat, scene, progress, entrance }) {
+  const palette = scenePalette(scene.id);
+  const receiptScale = 0.92 + entrance * 0.08;
   return (
-    <div style={{ position: "absolute", left: 42, right: 42, top: 38, display: "flex", alignItems: "center", justifyContent: "space-between", zIndex: 20 }}>
-      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <div style={{ width: 38, height: 38, borderRadius: 10, background: palette.ink, color: palette.paper, display: "grid", placeItems: "center", fontWeight: 900 }}>LC</div>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 900, lineHeight: 1 }}>{repo?.name ?? "repo"}</div>
-          <div style={{ fontSize: 13, fontWeight: 800, opacity: 0.62, textTransform: "uppercase", letterSpacing: 0 }}>{beat.beat}</div>
+    <Stage>
+      <div style={{ position: "absolute", left: 34, right: 34, top: 74 }}>
+        <div style={{ transform: `translateY(${(1 - entrance) * 46}px) scale(${0.94 + entrance * 0.06})`, transformOrigin: "left top" }}>
+          <Eyebrow color={palette.accent}>first frame proof</Eyebrow>
+          <div style={{ marginTop: 18, fontSize: 78, lineHeight: 0.92, fontWeight: 900, maxWidth: 610 }}>
+            This repo made its own launch Short.
+          </div>
+          <div style={{ marginTop: 22, fontSize: 25, lineHeight: 1.22, fontWeight: 760, maxWidth: 335, color: "rgba(18,20,23,0.72)" }}>
+            {shorten(props.repo?.summary || beat.voiceover, 118)}
+          </div>
         </div>
       </div>
-      <div style={{ minWidth: 92, border: `2px solid ${palette.ink}`, borderRadius: 999, padding: "8px 12px", background: "rgba(248,250,252,0.72)", textAlign: "center", fontSize: 15, fontWeight: 900 }}>
-        {beatIndex + 1}/{total}
-      </div>
-      <div style={{ position: "absolute", left: 0, right: 0, top: 56, height: 6, borderRadius: 999, background: "rgba(16,21,31,0.12)", overflow: "hidden" }}>
-        <div style={{ width: `${progress * 100}%`, height: "100%", background: palette.ink }} />
-      </div>
-    </div>
+      <CreatorFrame x={410} y={438} width={210} height={272} label="host" progress={progress} />
+      <ReceiptStrip
+        x={54}
+        y={720}
+        width={590}
+        label={props.repo?.name || "repo"}
+        items={["demo proof", "script", "captions", "review packet"]}
+        progress={progress}
+        scale={receiptScale}
+      />
+      <ThumbnailPreview x={78} y={875} width={520} height={190} progress={progress} label={scene.composition} />
+    </Stage>
   );
 }
 
-function Scene({ beat, beatIndex, localFrames, intro, progress, props }) {
-  if (beat.beat === "cold-open") return <ColdOpen beat={beat} repo={props.repo} intro={intro} progress={progress} />;
-  if (beat.beat === "friction") return <Friction beat={beat} intro={intro} progress={progress} />;
-  if (beat.beat === "demo-trigger") return <DemoTrigger beat={beat} terminal={props.terminal} intro={intro} progress={progress} localFrames={localFrames} />;
-  if (beat.beat === "proof") return <Proof beat={beat} timeline={props.timeline} intro={intro} progress={progress} localFrames={localFrames} />;
-  if (beat.beat === "transformation") return <Transformation beat={beat} intro={intro} progress={progress} />;
-  if (beat.beat === "artifact-reveal") return <ArtifactReveal beat={beat} artifacts={props.artifacts} intro={intro} progress={progress} localFrames={localFrames} />;
-  return <Cta beat={beat} repo={props.repo} intro={intro} progress={progress} beatIndex={beatIndex} />;
-}
-
-function ColdOpen({ repo, intro, progress }) {
-  const scale = 0.88 + intro * 0.12 + progress * 0.04;
+function FrictionMontage({ beat, progress, entrance }) {
+  const tasks = ["script", "record", "edit", "caption", "review"];
   return (
-    <div style={{ position: "absolute", left: 44, right: 44, top: 148, bottom: 296, display: "grid", placeItems: "center", zIndex: 5 }}>
-      <div style={{ transform: `scale(${scale}) rotate(${interpolate(progress, [0, 1], [-1.2, 0.6])}deg)`, textAlign: "center" }}>
-        <div style={{ display: "inline-block", padding: "12px 18px", borderRadius: 999, background: palette.coral, color: "white", fontSize: 24, fontWeight: 950, marginBottom: 28, boxShadow: "0 20px 60px rgba(255,89,100,0.35)" }}>NEW RECEIPT</div>
-        <div style={{ fontSize: 90, lineHeight: 0.92, fontWeight: 950, maxWidth: 620 }}>This repo made its own launch Short.</div>
-        <div style={{ marginTop: 32, fontSize: 26, lineHeight: 1.18, fontWeight: 800, opacity: 0.72 }}>{repo?.summary ?? "proof to packet"}</div>
-      </div>
-      <PresenterOrb side="right" progress={progress} />
-    </div>
-  );
-}
-
-function Friction({ progress }) {
-  const items = ["script", "record", "edit", "captions", "review"];
-  return (
-    <MainStage>
-      <BigLabel label="The boring part" />
-      <div style={{ display: "grid", gap: 18, marginTop: 36 }}>
-        {items.map((item, index) => {
-          const visible = clamp((progress * items.length - index) * 1.7);
-          return <TaskCard key={item} label={item} index={index + 1} visible={visible} crossed={visible > 0.72} />;
+    <Stage>
+      <TwoColumnHeader eyebrow="manual launch work" title={beat.caption || "The boring part"} copy={beat.voiceover} entrance={entrance} />
+      <div style={{ position: "absolute", left: 52, right: 52, top: 330, height: 525 }}>
+        <TimelineBoard progress={progress} />
+        {tasks.map((task, index) => {
+          const visible = clamp((progress * 5.6 - index) * 1.4);
+          const collapsed = clamp((progress - 0.58 - index * 0.035) / 0.16);
+          return (
+            <TaskChip
+              key={task}
+              label={task}
+              index={index}
+              visible={visible}
+              collapsed={collapsed}
+              x={34 + (index % 2) * 258}
+              y={52 + index * 78}
+            />
+          );
         })}
       </div>
-      <TimerPill progress={progress} label="manual launch work" />
-    </MainStage>
+      <CursorPath progress={progress} />
+    </Stage>
   );
 }
 
-function DemoTrigger({ terminal, progress, localFrames }) {
-  const lines = String(terminal ?? "").split("\n").filter(Boolean).slice(0, 5);
+function DemoEvidence({ props, beat, scene, progress, entrance, localFrame }) {
+  const lines = String(props.terminal || "$ npm run smoke\n\nSmoke OK").split("\n").filter(Boolean).slice(0, 6);
+  const command = lines.find((line) => line.startsWith("$ ")) || lines[0] || "$ npm run smoke";
+  const output = lines.filter((line) => line !== command).join("\n") || "Demo completed and evidence was captured.";
   return (
-    <MainStage>
-      <BigLabel label="Run the demo" />
-      <div style={{ marginTop: 46, borderRadius: 28, background: "#111827", color: "#f8fafc", padding: 28, minHeight: 390, boxShadow: "0 28px 70px rgba(17,24,39,0.34)", transform: `translateY(${(1 - progress) * 22}px)` }}>
-        <div style={{ display: "flex", gap: 9, marginBottom: 24 }}>
-          <Dot color="#ff5964" /><Dot color="#ffca3a" /><Dot color="#35d0a3" />
+    <Stage>
+      <DeviceFrame x={56} y={178} width={442} height={650} entrance={entrance}>
+        <TerminalSurface command={command} output={output} progress={progress} localFrame={localFrame} />
+      </DeviceFrame>
+      <CreatorFrame x={434} y={540} width={202} height={270} label="guide" progress={progress} compact />
+      <ProofStamp x={72} y={865} label="real demo captured" progress={progress} />
+      <SideNote x={526} y={228} title={beat.caption || "Run the demo"} body={scene.composition || beat.visual} color={colors.green} />
+    </Stage>
+  );
+}
+
+function ProofTimeline({ props, beat, scene, progress, entrance }) {
+  const rows = (props.timeline || []).slice(0, 5);
+  return (
+    <Stage>
+      <TwoColumnHeader eyebrow="edit proof" title={beat.caption || "Script + visuals align"} copy={scene.composition || beat.voiceover} entrance={entrance} />
+      <EditorPanel x={48} y={300} width={624} height={520} progress={progress} rows={rows} />
+      <div style={{ position: "absolute", left: 74, right: 74, bottom: 250, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+        {["script lane", "visual lane", "playhead"].map((item, index) => (
+          <StatusPill key={item} label={item} active={progress > 0.18 + index * 0.2} />
+        ))}
+      </div>
+    </Stage>
+  );
+}
+
+function PacketAssembly({ props, beat, progress, entrance }) {
+  const cards = ["demo proof", "script", "captions", "thumbnail", "review"];
+  return (
+    <Stage>
+      <TwoColumnHeader eyebrow="output assembly" title={beat.caption || "One packet"} copy={beat.voiceover} entrance={entrance} />
+      <div style={{ position: "absolute", left: 58, right: 58, top: 310, bottom: 238 }}>
+        {cards.map((card, index) => {
+          const p = clamp((progress * 5.2 - index) * 1.2);
+          const targetX = 142 + (index % 2) * 185;
+          const targetY = 110 + Math.floor(index / 2) * 140;
+          return (
+            <OutputCard
+              key={card}
+              label={card}
+              index={index + 1}
+              x={interpolate(p, [0, 1], [index % 2 ? 450 : -170, targetX])}
+              y={interpolate(p, [0, 1], [targetY + 80, targetY])}
+              rotate={interpolate(p, [0, 1], [index % 2 ? 8 : -8, 0])}
+              active={p > 0.94}
+            />
+          );
+        })}
+        <PacketFolder progress={progress} repoName={props.repo?.name} />
+      </div>
+    </Stage>
+  );
+}
+
+function ArtifactBarrage({ props, beat, scene, progress, entrance, localFrame }) {
+  const artifacts = props.artifacts?.length ? props.artifacts : ["video/brief.md", "render-plan.json", "captions/*.md", "REVIEW.md", "dry-run.json"];
+  const active = Math.floor(localFrame / 14) % artifacts.length;
+  return (
+    <Stage>
+      <TwoColumnHeader eyebrow="inspectable receipts" title={beat.caption || "Receipts before posting"} copy={scene.composition || beat.voiceover} entrance={entrance} />
+      <div style={{ position: "absolute", left: 44, right: 44, top: 304, height: 595 }}>
+        {artifacts.slice(0, 6).map((artifact, index) => {
+          const p = clamp((progress * 7 - index) * 1.1);
+          const isActive = index === active;
+          return (
+            <ArtifactCard
+              key={`${artifact}-${index}`}
+              label={artifact}
+              x={index % 2 ? 332 : 22}
+              y={36 + index * 76}
+              active={isActive}
+              visible={p}
+            />
+          );
+        })}
+      </div>
+      <ProofStamp x={82} y={905} label="review before posting" progress={progress} color={colors.amber} />
+    </Stage>
+  );
+}
+
+function CtaLockup({ props, beat, progress, entrance }) {
+  return (
+    <Stage>
+      <CreatorFrame x={64} y={198} width={244} height={330} label="host" progress={progress} />
+      <div style={{ position: "absolute", left: 342, right: 54, top: 210, transform: `translateY(${(1 - entrance) * 36}px)` }}>
+        <Eyebrow color={colors.green}>approval boundary</Eyebrow>
+        <div style={{ marginTop: 18, fontSize: 56, lineHeight: 0.96, fontWeight: 900 }}>{beat.caption || "Review, then approve"}</div>
+      </div>
+      <div style={{ position: "absolute", left: 58, right: 58, top: 625, display: "grid", gap: 14 }}>
+        {["claims grounded", "visuals aligned", "packet ready"].map((item, index) => (
+          <ChecklistRow key={item} label={item} checked={progress > 0.18 + index * 0.18} />
+        ))}
+      </div>
+      <div style={{ position: "absolute", left: 58, right: 58, bottom: 230, padding: "24px 28px", borderRadius: 24, background: colors.ink, color: colors.white, boxShadow: "0 28px 60px rgba(18,20,23,0.22)" }}>
+        <div style={{ fontSize: 16, fontWeight: 850, textTransform: "uppercase" }}>repo</div>
+        <div style={{ marginTop: 8, fontSize: 22, lineHeight: 1.18, fontWeight: 760 }}>{props.repo?.url || props.repo?.name || "launchclip workspace"}</div>
+      </div>
+    </Stage>
+  );
+}
+
+function Stage({ children }) {
+  return <div style={{ position: "absolute", inset: 0, zIndex: 2 }}>{children}</div>;
+}
+
+function BrandBar({ repo, progress, scene }) {
+  const palette = scenePalette(scene.id);
+  return (
+    <div style={{ position: "absolute", left: 34, right: 34, top: 32, zIndex: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 9, background: colors.ink, color: colors.paper, display: "grid", placeItems: "center", fontSize: 14, fontWeight: 900 }}>LC</div>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 900, lineHeight: 1 }}>{repo?.name || "repo"}</div>
+            <div style={{ marginTop: 3, fontSize: 11, fontWeight: 800, textTransform: "uppercase", color: "rgba(18,20,23,0.58)" }}>social preview</div>
+          </div>
         </div>
-        {lines.map((line, index) => (
-          <div key={`${line}-${index}`} style={{ fontFamily: "SFMono-Regular, Menlo, Consolas, monospace", fontSize: index === 0 ? 24 : 20, lineHeight: 1.45, opacity: clamp((localFrames - index * 8) / 10), color: index === 0 ? palette.mint : "#d9e4f2" }}>
-            {line}
+        <div style={{ padding: "8px 12px", borderRadius: 999, background: palette.accent, color: palette.accentText, fontSize: 13, fontWeight: 900 }}>dry-run</div>
+      </div>
+      <div style={{ marginTop: 16, height: 5, borderRadius: 999, background: "rgba(18,20,23,0.12)", overflow: "hidden" }}>
+        <div style={{ width: `${progress * 100}%`, height: "100%", borderRadius: 999, background: colors.ink }} />
+      </div>
+    </div>
+  );
+}
+
+function CaptionStack({ beat, progress, scene }) {
+  const words = splitCaption(beat.caption || scene.hook || beat.beat);
+  const palette = scenePalette(scene.id);
+  return (
+    <div style={{ position: "absolute", left: 38, right: 38, bottom: 86, minHeight: 132, zIndex: 30, display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 10 }}>
+      {words.map((word, index) => {
+        const p = clamp(progress - index * 0.04);
+        return (
+          <span key={`${word}-${index}`} style={{ display: "inline-block", padding: "10px 15px 12px", borderRadius: 10, background: index % 3 === 1 ? palette.accent : colors.ink, color: index % 3 === 1 ? palette.accentText : colors.white, fontSize: Math.max(34, 56 - words.length * 2), lineHeight: 0.96, fontWeight: 900, boxShadow: "0 18px 40px rgba(18,20,23,0.18)", transform: `translateY(${(1 - p) * 28}px) scale(${0.92 + p * 0.08})`, opacity: p }}>
+            {word}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function StoryboardRail({ timeline, activeIndex }) {
+  return (
+    <div style={{ position: "absolute", left: 44, right: 44, bottom: 34, display: "grid", gridTemplateColumns: `repeat(${Math.max(1, timeline.length)}, 1fr)`, gap: 7, zIndex: 24 }}>
+      {timeline.map((beat, index) => (
+        <div key={`${beat.beat}-${index}`} style={{ height: 8, borderRadius: 999, background: index <= activeIndex ? colors.ink : "rgba(18,20,23,0.14)" }} />
+      ))}
+    </div>
+  );
+}
+
+function TwoColumnHeader({ eyebrow, title, copy, entrance }) {
+  return (
+    <div style={{ position: "absolute", left: 48, right: 48, top: 140, display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 24, alignItems: "end", transform: `translateY(${(1 - entrance) * 34}px)`, opacity: entrance }}>
+      <div>
+        <Eyebrow color={colors.ink}>{eyebrow}</Eyebrow>
+        <div style={{ marginTop: 16, fontSize: 58, lineHeight: 0.96, fontWeight: 900 }}>{title}</div>
+      </div>
+      <div style={{ fontSize: 18, lineHeight: 1.24, fontWeight: 700, color: "rgba(18,20,23,0.66)" }}>{shorten(copy, 118)}</div>
+    </div>
+  );
+}
+
+function Eyebrow({ children, color }) {
+  return <div style={{ display: "inline-block", padding: "8px 11px", borderRadius: 8, background: color, color: color === colors.ink ? colors.white : colors.ink, fontSize: 13, lineHeight: 1, fontWeight: 900, textTransform: "uppercase" }}>{children}</div>;
+}
+
+function CreatorFrame({ x, y, width, height, label, progress, compact = false }) {
+  const wave = Math.sin(progress * Math.PI * 4);
+  return (
+    <div style={{ position: "absolute", left: x, top: y, width, height, borderRadius: 26, overflow: "hidden", background: colors.charcoal, boxShadow: "0 28px 70px rgba(18,20,23,0.24)", transform: `translateY(${(1 - progress) * 22}px)` }}>
+      <div style={{ position: "absolute", inset: 10, borderRadius: 20, background: `linear-gradient(160deg, ${colors.mist}, ${colors.paper} 45%, #b8d8d2)` }} />
+      <div style={{ position: "absolute", left: width * 0.25, top: height * 0.12, width: width * 0.48, height: height * 0.25, borderRadius: "48% 48% 44% 44%", background: "rgba(18,20,23,0.82)" }} />
+      <div style={{ position: "absolute", left: width * 0.17, right: width * 0.17, bottom: compact ? height * 0.2 : height * 0.18, height: height * 0.34, borderRadius: "46px 46px 18px 18px", background: colors.ink }} />
+      <div style={{ position: "absolute", left: 16, right: 16, bottom: 14, display: "flex", alignItems: "end", justifyContent: "center", gap: 5 }}>
+        {[0, 1, 2, 3, 4, 5].map((index) => (
+          <div key={index} style={{ width: 8, height: 14 + index * 3 + wave * (index % 2 ? 5 : -3), borderRadius: 999, background: index % 2 ? colors.green : colors.white, opacity: 0.9 }} />
+        ))}
+      </div>
+      <div style={{ position: "absolute", left: 14, top: 14, padding: "5px 8px", borderRadius: 999, background: "rgba(255,255,255,0.76)", fontSize: 11, fontWeight: 900, textTransform: "uppercase" }}>{label}</div>
+    </div>
+  );
+}
+
+function ReceiptStrip({ x, y, width, label, items, progress, scale }) {
+  return (
+    <div style={{ position: "absolute", left: x, top: y, width, transform: `scale(${scale})`, transformOrigin: "left top", padding: 18, borderRadius: 22, background: colors.white, boxShadow: "0 24px 54px rgba(18,20,23,0.16)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontSize: 18, fontWeight: 900 }}>{label}</div>
+        <div style={{ fontSize: 12, fontWeight: 900, color: colors.green, textTransform: "uppercase" }}>receipt</div>
+      </div>
+      <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: `repeat(${items.length}, 1fr)`, gap: 8 }}>
+        {items.map((item, index) => (
+          <div key={item} style={{ height: 42, borderRadius: 10, background: progress > index / items.length ? colors.ink : "rgba(18,20,23,0.08)", color: progress > index / items.length ? colors.white : colors.ink, display: "grid", placeItems: "center", fontSize: 12, fontWeight: 850 }}>
+            {item}
           </div>
         ))}
       </div>
-      <ProofBadge progress={progress} />
-    </MainStage>
+    </div>
   );
 }
 
-function Proof({ timeline, progress, localFrames }) {
-  const visible = Math.min(4, Math.max(1, Math.floor(progress * 5)));
-  const rows = (timeline ?? []).slice(0, 4);
+function ThumbnailPreview({ x, y, width, height, progress, label }) {
   return (
-    <MainStage>
-      <BigLabel label="Script + visuals align" />
-      <div style={{ marginTop: 42, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-        {rows.map((row, index) => (
-          <React.Fragment key={row.beat ?? index}>
-            <MiniPanel title={row.caption ?? row.beat} text={row.voiceover ?? ""} active={index < visible} side="script" />
-            <MiniPanel title={row.beat ?? "visual"} text={row.visual ?? ""} active={index < visible} side="visual" />
-          </React.Fragment>
-        ))}
+    <div style={{ position: "absolute", left: x, top: y, width, height, borderRadius: 24, overflow: "hidden", background: colors.ink, boxShadow: "0 28px 70px rgba(18,20,23,0.2)", transform: `translateY(${(1 - progress) * 28}px)` }}>
+      <div style={{ position: "absolute", inset: 18, borderRadius: 16, background: colors.paper }} />
+      <div style={{ position: "absolute", left: 42, top: 45, width: 210, height: 24, borderRadius: 999, background: colors.green }} />
+      <div style={{ position: "absolute", left: 42, top: 86, right: 42, height: 18, borderRadius: 999, background: "rgba(18,20,23,0.18)" }} />
+      <div style={{ position: "absolute", left: 42, top: 118, right: 132, height: 18, borderRadius: 999, background: "rgba(18,20,23,0.12)" }} />
+      <div style={{ position: "absolute", right: 36, top: 40, width: 94, height: 112, borderRadius: 16, background: colors.charcoal }} />
+      <div style={{ position: "absolute", left: 42, bottom: 24, right: 42, fontSize: 11, lineHeight: 1.2, fontWeight: 750, color: "rgba(251,251,248,0.76)" }}>{shorten(label, 94)}</div>
+    </div>
+  );
+}
+
+function TimelineBoard({ progress }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, borderRadius: 28, background: colors.white, border: `1px solid ${colors.line}`, boxShadow: "0 28px 60px rgba(18,20,23,0.12)", overflow: "hidden" }}>
+      <div style={{ height: 58, background: colors.ink, display: "flex", alignItems: "center", gap: 8, paddingLeft: 22 }}>
+        {[colors.coral, colors.amber, colors.green].map((color) => <div key={color} style={{ width: 12, height: 12, borderRadius: 999, background: color }} />)}
       </div>
-      <div style={{ position: "absolute", left: 330, top: 260, bottom: 190, width: 7, borderRadius: 999, background: palette.ink, transform: `scaleY(${clamp(localFrames / 42)})`, transformOrigin: "top" }} />
-    </MainStage>
+      <div style={{ position: "absolute", left: 44, right: 44, bottom: 54, height: 12, borderRadius: 999, background: "rgba(18,20,23,0.1)" }}>
+        <div style={{ width: `${progress * 100}%`, height: "100%", borderRadius: 999, background: colors.coral }} />
+      </div>
+    </div>
   );
 }
 
-function Transformation({ progress }) {
-  const tiles = ["clip plan", "captions", "thumbnail", "review packet"];
+function TaskChip({ label, index, visible, collapsed, x, y }) {
+  const finalY = 372;
+  const finalX = 70 + index * 90;
   return (
-    <MainStage>
-      <BigLabel label="One packet" />
-      <div style={{ position: "relative", height: 610, marginTop: 52 }}>
-        {tiles.map((tile, index) => {
-          const enter = clamp((progress * 4.5 - index) * 1.4);
+    <div style={{ position: "absolute", left: interpolate(collapsed, [0, 1], [x, finalX]), top: interpolate(collapsed, [0, 1], [y, finalY]), minWidth: collapsed > 0.85 ? 70 : 190, height: 58, borderRadius: 14, background: collapsed > 0.85 ? colors.ink : colors.paper, color: collapsed > 0.85 ? colors.white : colors.ink, display: "flex", alignItems: "center", justifyContent: "center", fontSize: collapsed > 0.85 ? 12 : 20, fontWeight: 900, opacity: visible, boxShadow: "0 16px 32px rgba(18,20,23,0.14)", transform: `scale(${0.92 + visible * 0.08})` }}>
+      {label}
+    </div>
+  );
+}
+
+function CursorPath({ progress }) {
+  return (
+    <div style={{ position: "absolute", left: 126 + progress * 410, top: 430 + Math.sin(progress * Math.PI * 2) * 85, width: 0, height: 0, borderLeft: "18px solid white", borderTop: "26px solid transparent", borderBottom: "8px solid transparent", filter: "drop-shadow(0 8px 14px rgba(18,20,23,0.22))" }} />
+  );
+}
+
+function DeviceFrame({ x, y, width, height, entrance, children }) {
+  return (
+    <div style={{ position: "absolute", left: x, top: y, width, height, borderRadius: 38, background: colors.ink, padding: 14, boxShadow: "0 34px 80px rgba(18,20,23,0.27)", transform: `translateY(${(1 - entrance) * 42}px) rotate(${-2 + entrance * 2}deg)` }}>
+      <div style={{ position: "absolute", left: "50%", top: 10, width: 96, height: 16, transform: "translateX(-50%)", borderRadius: 999, background: "#050608", zIndex: 3 }} />
+      <div style={{ position: "relative", width: "100%", height: "100%", borderRadius: 28, overflow: "hidden", background: "#0a111a" }}>{children}</div>
+    </div>
+  );
+}
+
+function TerminalSurface({ command, output, progress, localFrame }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, padding: "54px 26px 24px", color: colors.white }}>
+      <div style={{ fontSize: 12, fontWeight: 900, textTransform: "uppercase", color: colors.green }}>live capture</div>
+      <div style={{ marginTop: 22, fontFamily: "Menlo, Consolas, monospace", fontSize: 18, lineHeight: 1.45, color: colors.green }}>{reveal(command, clamp((localFrame - 4) / 28))}</div>
+      <div style={{ marginTop: 28, fontFamily: "Menlo, Consolas, monospace", fontSize: 15, lineHeight: 1.42, color: "rgba(251,251,248,0.76)", whiteSpace: "pre-wrap" }}>{reveal(shorten(output, 210), clamp((progress - 0.35) / 0.5))}</div>
+      <div style={{ position: "absolute", left: 26, right: 26, bottom: 26, height: 8, borderRadius: 999, background: "rgba(255,255,255,0.14)" }}>
+        <div style={{ width: `${progress * 100}%`, height: "100%", borderRadius: 999, background: colors.green }} />
+      </div>
+    </div>
+  );
+}
+
+function ProofStamp({ x, y, label, progress, color = colors.green }) {
+  return (
+    <div style={{ position: "absolute", left: x, top: y, padding: "16px 20px", borderRadius: 18, background: color, color: colors.ink, fontSize: 24, lineHeight: 1, fontWeight: 900, boxShadow: "0 20px 48px rgba(18,20,23,0.18)", transform: `rotate(-3deg) scale(${0.82 + progress * 0.18})` }}>
+      {label}
+    </div>
+  );
+}
+
+function SideNote({ x, y, title, body, color }) {
+  return (
+    <div style={{ position: "absolute", left: x, top: y, width: 138 }}>
+      <div style={{ width: 44, height: 5, borderRadius: 999, background: color, marginBottom: 12 }} />
+      <div style={{ fontSize: 22, lineHeight: 1.02, fontWeight: 900 }}>{title}</div>
+      <div style={{ marginTop: 12, fontSize: 13, lineHeight: 1.24, fontWeight: 700, color: "rgba(18,20,23,0.62)" }}>{shorten(body, 82)}</div>
+    </div>
+  );
+}
+
+function EditorPanel({ x, y, width, height, progress, rows }) {
+  return (
+    <div style={{ position: "absolute", left: x, top: y, width, height, borderRadius: 28, overflow: "hidden", background: colors.charcoal, boxShadow: "0 30px 70px rgba(18,20,23,0.2)" }}>
+      <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: 54, background: "#161a20", display: "flex", alignItems: "center", padding: "0 20px", gap: 8 }}>
+        {[colors.coral, colors.amber, colors.green].map((color) => <div key={color} style={{ width: 11, height: 11, borderRadius: 999, background: color }} />)}
+      </div>
+      <div style={{ position: "absolute", left: 26, right: 26, top: 86, bottom: 34 }}>
+        <div style={{ position: "absolute", top: 0, bottom: 0, left: `${8 + progress * 82}%`, width: 4, borderRadius: 999, background: colors.blue, boxShadow: "0 0 28px rgba(59,130,246,0.58)" }} />
+        {(rows.length ? rows : [fallbackBeat("repo")]).map((row, index) => {
+          const active = progress > index / Math.max(1, rows.length);
           return (
-            <div key={tile} style={{ position: "absolute", left: 34 + index * 34, top: 60 + index * 82, width: 470, height: 126, borderRadius: 24, background: ["#10151f", "#35d0a3", "#4f7cff", "#ffca3a"][index], color: index === 3 ? palette.ink : "white", padding: 24, fontSize: 34, fontWeight: 950, boxShadow: "0 24px 58px rgba(16,21,31,0.22)", transform: `translateX(${(1 - enter) * 420}px) rotate(${(1 - enter) * 8}deg)`, opacity: enter }}>
-              {index + 1}. {tile}
+            <div key={`${row.beat}-${index}`} style={{ height: 67, marginBottom: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, opacity: active ? 1 : 0.42 }}>
+              <LaneCard title={row.caption || row.beat} body={row.voiceover} color={active ? colors.blue : "rgba(255,255,255,0.14)"} />
+              <LaneCard title={row.beat} body={row.visual} color={active ? colors.green : "rgba(255,255,255,0.14)"} />
             </div>
           );
         })}
       </div>
-    </MainStage>
-  );
-}
-
-function ArtifactReveal({ artifacts = [], progress, localFrames }) {
-  const current = Math.floor(localFrames / 18) % Math.max(1, artifacts.length);
-  return (
-    <MainStage>
-      <BigLabel label="Receipts before posting" />
-      <div style={{ position: "relative", height: 620, marginTop: 44 }}>
-        {artifacts.slice(0, 6).map((artifact, index) => {
-          const active = index === current;
-          const angle = [-6, 5, -3, 7, -4, 3][index] ?? 0;
-          return (
-            <div key={`${artifact}-${index}`} style={{ position: "absolute", left: 42 + (index % 2) * 210, top: 30 + index * 86, width: 390, minHeight: 116, borderRadius: 22, background: active ? palette.ink : "rgba(255,255,255,0.82)", border: `3px solid ${active ? palette.ink : palette.line}`, color: active ? "white" : palette.ink, padding: 22, fontSize: 30, fontWeight: 950, boxShadow: active ? "0 28px 70px rgba(16,21,31,0.34)" : "0 14px 42px rgba(16,21,31,0.12)", transform: `rotate(${angle}deg) scale(${active ? 1.08 : 0.94})`, transition: "none" }}>
-              {artifact}
-            </div>
-          );
-        })}
-      </div>
-      <TimerPill progress={progress} label="approval-ready evidence" />
-    </MainStage>
-  );
-}
-
-function Cta({ repo, progress }) {
-  return (
-    <MainStage>
-      <div style={{ marginTop: 80, fontSize: 78, lineHeight: 0.95, fontWeight: 950, maxWidth: 600 }}>Review it. Then approve it.</div>
-      <div style={{ marginTop: 30, fontSize: 27, lineHeight: 1.25, fontWeight: 800, opacity: 0.72 }}>Claims, captions, visuals, and review payload stay visible before anything posts.</div>
-      <div style={{ marginTop: 48, padding: "22px 24px", borderRadius: 24, background: palette.ink, color: "white", fontSize: 26, fontWeight: 900, maxWidth: 610, transform: `translateY(${(1 - progress) * 40}px)` }}>{repo?.url || repo?.name || "launchclip workspace"}</div>
-      <PresenterOrb side="left" progress={progress} />
-    </MainStage>
-  );
-}
-
-function MainStage({ children }) {
-  return <div style={{ position: "absolute", left: 44, right: 44, top: 150, bottom: 292, zIndex: 5 }}>{children}</div>;
-}
-
-function BigLabel({ label }) {
-  return <div style={{ display: "inline-block", borderRadius: 999, background: palette.ink, color: "white", padding: "12px 18px", fontSize: 24, fontWeight: 950, boxShadow: "0 20px 50px rgba(16,21,31,0.22)" }}>{label}</div>;
-}
-
-function TaskCard({ label, index, visible, crossed }) {
-  return (
-    <div style={{ height: 84, borderRadius: 22, background: "rgba(255,255,255,0.82)", border: `3px solid ${palette.ink}`, display: "flex", alignItems: "center", padding: "0 24px", fontSize: 34, fontWeight: 950, opacity: visible, transform: `translateX(${(1 - visible) * -180}px) scale(${0.96 + visible * 0.04})`, boxShadow: "0 18px 48px rgba(16,21,31,0.12)" }}>
-      <span style={{ color: palette.coral, marginRight: 16 }}>{index}</span>
-      <span style={{ position: "relative" }}>
-        {label}
-        {crossed ? <span style={{ position: "absolute", left: -4, right: -4, top: "50%", height: 6, borderRadius: 999, background: palette.coral }} /> : null}
-      </span>
     </div>
   );
 }
 
-function Dot({ color }) {
-  return <div style={{ width: 14, height: 14, borderRadius: 999, background: color }} />;
-}
-
-function ProofBadge({ progress }) {
+function LaneCard({ title, body, color }) {
   return (
-    <div style={{ position: "absolute", right: 8, bottom: 112, borderRadius: 26, background: palette.mint, border: `4px solid ${palette.ink}`, padding: "18px 22px", fontSize: 30, fontWeight: 950, transform: `rotate(-4deg) scale(${0.8 + progress * 0.24})`, boxShadow: "0 22px 54px rgba(16,21,31,0.22)" }}>
-      proof captured
+    <div style={{ borderRadius: 14, background: "rgba(255,255,255,0.08)", borderLeft: `5px solid ${color}`, padding: "10px 12px", color: colors.white, overflow: "hidden" }}>
+      <div style={{ fontSize: 12, fontWeight: 900 }}>{shorten(title, 22)}</div>
+      <div style={{ marginTop: 5, fontSize: 10, lineHeight: 1.18, fontWeight: 650, color: "rgba(251,251,248,0.64)" }}>{shorten(body, 72)}</div>
     </div>
   );
 }
 
-function TimerPill({ progress, label }) {
+function StatusPill({ label, active }) {
+  return <div style={{ height: 38, borderRadius: 999, background: active ? colors.ink : "rgba(18,20,23,0.1)", color: active ? colors.white : colors.ink, display: "grid", placeItems: "center", fontSize: 13, fontWeight: 900 }}>{label}</div>;
+}
+
+function OutputCard({ label, index, x, y, rotate, active }) {
   return (
-    <div style={{ position: "absolute", left: 0, right: 0, bottom: 70, height: 70, borderRadius: 999, background: "rgba(255,255,255,0.82)", border: `3px solid ${palette.ink}`, overflow: "hidden" }}>
-      <div style={{ position: "absolute", inset: 0, width: `${progress * 100}%`, background: palette.amber }} />
-      <div style={{ position: "relative", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 950 }}>{label}</div>
+    <div style={{ position: "absolute", left: x, top: y, width: 168, height: 116, borderRadius: 18, background: active ? colors.white : colors.paper, boxShadow: "0 20px 46px rgba(18,20,23,0.16)", padding: 18, transform: `rotate(${rotate}deg)` }}>
+      <div style={{ width: 34, height: 28, borderRadius: 9, background: [colors.blue, colors.green, colors.coral, colors.amber, colors.plum][index - 1] }} />
+      <div style={{ marginTop: 13, fontSize: 12, fontWeight: 900, color: "rgba(18,20,23,0.48)" }}>0{index}</div>
+      <div style={{ marginTop: 2, fontSize: 18, lineHeight: 1.03, fontWeight: 900 }}>{label}</div>
     </div>
   );
 }
 
-function MiniPanel({ title, text, active, side }) {
+function PacketFolder({ progress, repoName }) {
   return (
-    <div style={{ minHeight: 124, borderRadius: 22, background: active ? (side === "script" ? palette.ink : palette.blue) : "rgba(255,255,255,0.72)", color: active ? "white" : palette.ink, border: `3px solid ${active ? "transparent" : palette.line}`, padding: 18, opacity: active ? 1 : 0.38, boxShadow: active ? "0 18px 46px rgba(16,21,31,0.18)" : "none" }}>
-      <div style={{ fontSize: 21, fontWeight: 950, marginBottom: 8 }}>{title}</div>
-      <div style={{ fontSize: 15, lineHeight: 1.22, fontWeight: 750 }}>{shorten(text, 118)}</div>
+    <div style={{ position: "absolute", left: 102, bottom: 0, width: 386, height: 150, borderRadius: 24, background: colors.ink, color: colors.white, padding: 24, boxShadow: "0 30px 70px rgba(18,20,23,0.22)", transform: `translateY(${(1 - progress) * 64}px)` }}>
+      <div style={{ fontSize: 13, fontWeight: 900, textTransform: "uppercase", color: colors.green }}>launch packet</div>
+      <div style={{ marginTop: 12, fontSize: 32, lineHeight: 1.02, fontWeight: 900 }}>{repoName || "repo"} ready for review</div>
     </div>
   );
 }
 
-function PresenterOrb({ side, progress }) {
-  const x = side === "right" ? 420 : -22;
+function ArtifactCard({ label, x, y, active, visible }) {
   return (
-    <div style={{ position: "absolute", [side]: 0, bottom: side === "right" ? 22 : 88, width: 230, height: 300, borderRadius: 30, background: "rgba(255,255,255,0.72)", border: `4px solid ${palette.ink}`, boxShadow: "0 28px 80px rgba(16,21,31,0.24)", overflow: "hidden", transform: `translateX(${(1 - progress) * x}px) scale(${0.92 + progress * 0.1})` }}>
-      <div style={{ position: "absolute", inset: 12, borderRadius: 22, background: `linear-gradient(145deg, ${palette.blue}, ${palette.mint} 52%, ${palette.amber})` }} />
-      <div style={{ position: "absolute", left: 38, right: 38, top: 42, height: 122, borderRadius: "50% 50% 42% 42%", background: "rgba(255,255,255,0.76)", border: `3px solid ${palette.ink}` }} />
-      <div style={{ position: "absolute", left: 26, right: 26, bottom: 28, height: 94, borderRadius: "44px 44px 18px 18px", background: "rgba(16,21,31,0.88)" }} />
-      <div style={{ position: "absolute", left: 24, right: 24, bottom: 12, display: "flex", alignItems: "end", justifyContent: "center", gap: 7 }}>
-        {[0, 1, 2, 3, 4, 5].map((index) => (
-          <div key={index} style={{ width: 12, height: 18 + Math.sin(progress * 6 + index) * 12 + index * 4, borderRadius: 999, background: index % 2 ? palette.mint : "white", opacity: 0.82 }} />
-        ))}
-      </div>
+    <div style={{ position: "absolute", left: x, top: y, width: active ? 302 : 280, minHeight: active ? 108 : 88, borderRadius: 18, background: active ? colors.ink : colors.white, color: active ? colors.white : colors.ink, padding: 18, opacity: visible, boxShadow: active ? "0 28px 64px rgba(18,20,23,0.28)" : "0 18px 36px rgba(18,20,23,0.12)", transform: `translateY(${(1 - visible) * 28}px) scale(${active ? 1.04 : 0.96})` }}>
+      <div style={{ fontSize: 11, fontWeight: 900, textTransform: "uppercase", color: active ? colors.amber : "rgba(18,20,23,0.46)" }}>artifact</div>
+      <div style={{ marginTop: 8, fontSize: active ? 22 : 18, lineHeight: 1.05, fontWeight: 900 }}>{label}</div>
+      {active ? <div style={{ marginTop: 12, height: 6, borderRadius: 999, background: colors.amber }} /> : null}
     </div>
   );
 }
 
-function KineticCaption({ beat, progress }) {
-  const words = String(beat.caption ?? beat.beat ?? "").split(/\s+/).filter(Boolean);
+function ChecklistRow({ label, checked }) {
   return (
-    <div style={{ position: "absolute", left: 36, right: 36, bottom: 114, minHeight: 148, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, flexWrap: "wrap", zIndex: 30, transform: `scale(${0.86 + progress * 0.14})` }}>
-      {words.map((word, index) => (
-        <span key={`${word}-${index}`} style={{ display: "inline-block", padding: "12px 16px", borderRadius: 16, background: index % 2 ? palette.paper : palette.ink, color: index % 2 ? palette.ink : "white", border: `3px solid ${palette.ink}`, boxShadow: "0 16px 42px rgba(16,21,31,0.20)", fontSize: Math.max(34, 58 - words.length * 3), lineHeight: 1, fontWeight: 950, transform: `translateY(${(1 - progress) * (index % 2 ? 34 : -34)}px) rotate(${(1 - progress) * (index % 2 ? 5 : -5)}deg)`, opacity: progress }}>
-          {word}
-        </span>
-      ))}
+    <div style={{ height: 70, borderRadius: 18, background: colors.white, display: "flex", alignItems: "center", gap: 16, padding: "0 20px", boxShadow: "0 16px 36px rgba(18,20,23,0.1)" }}>
+      <div style={{ width: 34, height: 34, borderRadius: 10, background: checked ? colors.green : "rgba(18,20,23,0.12)", color: colors.ink, display: "grid", placeItems: "center", fontSize: 12, fontWeight: 900 }}>{checked ? "OK" : ""}</div>
+      <div style={{ fontSize: 24, fontWeight: 900 }}>{label}</div>
     </div>
   );
 }
 
-function BottomRail({ timeline, active }) {
-  return (
-    <div style={{ position: "absolute", left: 42, right: 42, bottom: 42, display: "grid", gridTemplateColumns: `repeat(${Math.max(1, timeline.length)}, 1fr)`, gap: 8, zIndex: 22 }}>
-      {(timeline.length ? timeline : [fallbackBeat("repo")]).map((beat, index) => (
-        <div key={`${beat.beat}-${index}`} style={{ height: 12, borderRadius: 999, background: index <= active ? palette.ink : "rgba(16,21,31,0.16)" }} />
-      ))}
-    </div>
-  );
+function scenePalette(id) {
+  const palettes = {
+    "cold-open": { background: `linear-gradient(180deg, ${colors.paper} 0%, #e8eee9 100%)`, topWash: "rgba(34,197,94,0.12)", accent: colors.green, accentText: colors.ink },
+    hook: { background: `linear-gradient(180deg, ${colors.paper} 0%, #e8eee9 100%)`, topWash: "rgba(34,197,94,0.12)", accent: colors.green, accentText: colors.ink },
+    friction: { background: `linear-gradient(180deg, #f6efe9 0%, #e9eef3 100%)`, topWash: "rgba(249,115,107,0.12)", accent: colors.coral, accentText: colors.ink },
+    "demo-trigger": { background: `linear-gradient(180deg, #edf5f4 0%, #f5f1e8 100%)`, topWash: "rgba(34,197,94,0.10)", accent: colors.green, accentText: colors.ink },
+    "split-screen-proof": { background: `linear-gradient(180deg, #edf5f4 0%, #f5f1e8 100%)`, topWash: "rgba(34,197,94,0.10)", accent: colors.green, accentText: colors.ink },
+    proof: { background: `linear-gradient(180deg, #eef3fb 0%, #f5f1e8 100%)`, topWash: "rgba(59,130,246,0.12)", accent: colors.blue, accentText: colors.white },
+    transformation: { background: `linear-gradient(180deg, #f7f1df 0%, #ecf3ef 100%)`, topWash: "rgba(245,184,75,0.14)", accent: colors.amber, accentText: colors.ink },
+    steps: { background: `linear-gradient(180deg, #f7f1df 0%, #ecf3ef 100%)`, topWash: "rgba(245,184,75,0.14)", accent: colors.amber, accentText: colors.ink },
+    "artifact-reveal": { background: `linear-gradient(180deg, #eeeef7 0%, #f5f1e8 100%)`, topWash: "rgba(128,87,199,0.13)", accent: colors.plum, accentText: colors.white },
+    artifacts: { background: `linear-gradient(180deg, #eeeef7 0%, #f5f1e8 100%)`, topWash: "rgba(128,87,199,0.13)", accent: colors.plum, accentText: colors.white },
+    cta: { background: `linear-gradient(180deg, #eff5ef 0%, #f5f1e8 100%)`, topWash: "rgba(34,197,94,0.12)", accent: colors.green, accentText: colors.ink }
+  };
+  return palettes[id] || palettes.cta;
+}
+
+function normalizeStoryboard(storyboard, timeline) {
+  const scenes = Array.isArray(storyboard?.scenes) ? storyboard.scenes : [];
+  if (scenes.length) return scenes;
+  return timeline.map((beat, index) => fallbackScene(beat, index));
 }
 
 function normalizedTimeline(timeline = [], durationSeconds = 30) {
@@ -307,7 +526,7 @@ function normalizedTimeline(timeline = [], durationSeconds = 30) {
   });
 }
 
-function activeBeatIndex(timeline, time) {
+function activeSceneIndex(timeline, time) {
   const index = timeline.findIndex((beat, itemIndex) => time >= beat.start && (time < beat.end || itemIndex === timeline.length - 1));
   return index === -1 ? Math.max(0, timeline.length - 1) : index;
 }
@@ -329,10 +548,39 @@ function fallbackBeat(repoName = "repo", duration = 30) {
   };
 }
 
+function fallbackScene(beat, index = 0) {
+  return {
+    id: beat.beat || "cta",
+    order: index + 1,
+    hook: beat.caption || beat.beat,
+    composition: beat.visual || beat.voiceover || "",
+    media_slots: ["script", "visual", "evidence"],
+    motion_grammar: ["cut", "push", "highlight"],
+    typography: "large captions",
+    color_grade: "neutral"
+  };
+}
+
+function splitCaption(value) {
+  const words = String(value || "")
+    .replace(/->/g, "to")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length <= 4) return words;
+  return words.slice(0, 5);
+}
+
+function reveal(text, progress) {
+  const value = String(text || "");
+  return value.slice(0, Math.max(0, Math.ceil(value.length * progress)));
+}
+
 function shorten(value, max) {
-  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  const text = String(value || "").replace(/\s+/g, " ").trim();
   if (text.length <= max) return text;
-  return `${text.slice(0, Math.max(0, max - 1)).trim()}…`;
+  const raw = text.slice(0, max).trimEnd();
+  const boundary = raw.lastIndexOf(" ");
+  return `${raw.slice(0, boundary > max * 0.62 ? boundary : max - 1)}...`;
 }
 
 function clamp(value) {

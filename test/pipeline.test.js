@@ -85,6 +85,10 @@ test("plans ugc split-screen creative recipe for product-videogen handoff", asyn
     assert.equal(video.style, "ugc-split");
     assert.equal(video.duration_seconds, 30);
     assert.equal(video.creative_recipe.preset, "ugc-split");
+    assert.equal(video.creative_storyboard.schema_version, "launchclip.storyboard.v1");
+    assert.equal(video.creative_storyboard.scenes.length, 5);
+    assert.match(video.creative_storyboard.non_goals.join("\n"), /retro terminal art/);
+    assert.deepEqual(video.creative_storyboard.renderer_priority.slice(0, 2), ["remotion", "hyperframes"]);
     assert.equal(video.talking_head.provider, "heygen");
     assert.equal(video.talking_head.avatar_id, "avatar_launchclip_demo");
     assert.equal(video.talking_head.adapter_contract, "launchclip.talking-head.v1");
@@ -99,6 +103,7 @@ test("plans ugc split-screen creative recipe for product-videogen handoff", asyn
     assert.equal(renderPlan.script_visual_alignment.length, 5);
     assert.equal(renderPlan.creative_recipe.visual_language.pacing, "scene change every 1-3 seconds; avoid long static terminal shots");
     assert.equal(payload.recipe_json.creative_recipe.preset, "ugc-split");
+    assert.equal(payload.recipe_json.creative_storyboard.scenes[0].layout, "full-screen editorial hook with creator picture-in-picture and repo receipt");
     assert.equal(payload.recipe_json.talking_head.provider, "heygen");
     assert.equal(payload.recipe_json.script_visual_alignment[2].caption, "Demo -> plan -> captions -> review");
   } finally {
@@ -128,6 +133,9 @@ test("plans and renders punchy social-ready UGC preview", async (t) => {
     await access(result.thumbnail);
     assert.equal(video.style, "ugc-demo-punchy");
     assert.equal(video.creative_recipe.renderer_contract.adapter, "launchclip.remotion-render.v1");
+    assert.equal(video.creative_storyboard.scenes.length, 7);
+    assert.match(video.creative_storyboard.quality_gates.join("\n"), /terminal evidence is treated as proof/);
+    assert.equal(video.creative_storyboard.scenes[2].layout, "device capture with command evidence");
     assert.equal(video.script_visual_alignment.length, 7);
     assert.equal(video.script_visual_alignment[0].beat, "cold-open");
     assert.equal(video.script_visual_alignment[0].caption, "Repo -> Short");
@@ -162,6 +170,7 @@ test("renders punchy social-ready UGC preview with Remotion", async (t) => {
     assert.equal(manifest.stages.render.provider, "remotion");
     assert.equal(props.schema_version, "launchclip.remotion-props.v1");
     assert.equal(props.timeline.length, 7);
+    assert.equal(props.storyboard.scenes[3].layout, "editor timeline proof");
     assert.equal(props.fps, 15);
   } finally {
     await rm(temp, { recursive: true, force: true });

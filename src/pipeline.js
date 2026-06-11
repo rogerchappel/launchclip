@@ -96,6 +96,7 @@ export async function planVideo(workspacePath, flags = {}) {
   const talkingHead = talkingHeadAdapter(flags, style);
   const stylePreset = videoStylePreset(style, manifest, talkingHead);
   const script = buildScriptPlan(style, manifest, stylePreset, talkingHead);
+  const creativeStoryboard = buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHead);
   const video = {
     schema_version: "video-skillkit.compat.v1",
     title: `${manifest.source_repo.name} OSS launch clip`,
@@ -106,6 +107,7 @@ export async function planVideo(workspacePath, flags = {}) {
     structure: stylePreset.structure,
     script,
     script_visual_alignment: script.timeline,
+    creative_storyboard: creativeStoryboard,
     creative_recipe: stylePreset.recipe,
     talking_head: talkingHead,
     evidence: ["demo/terminal.txt", "demo/command-receipt.json"],
@@ -137,6 +139,7 @@ ${script.timeline.map((segment) => `- ${segment.time_range} ${segment.beat}: "${
     style,
     script,
     script_visual_alignment: script.timeline,
+    creative_storyboard: creativeStoryboard,
     creative_recipe: stylePreset.recipe,
     talking_head: talkingHead,
     product_videogen_boundary: "Use product-videogen only through dry-run review payloads unless config, approval, and --submit are present.",
@@ -463,6 +466,7 @@ export async function validateWorkspace(workspacePath, flags = {}) {
   if (!Object.keys(captions).length) issues.push("No captions found.");
   const video = await optionalJson(path.join(out, "video", "video.json"));
   issues.push(...scriptAlignmentIssues(video));
+  issues.push(...creativeStoryboardIssues(video));
   for (const [platform, caption] of Object.entries(captions)) {
     const rule = PLATFORM_RULES[platform];
     if (!rule) continue;
@@ -532,6 +536,7 @@ async function productVideogenPayload(out, purpose) {
       video_manifest: video,
       script: video?.script,
       script_visual_alignment: video?.script_visual_alignment,
+      creative_storyboard: video?.creative_storyboard,
       creative_recipe: video?.creative_recipe,
       talking_head: video?.talking_head,
       demo_artifacts: receipt?.artifacts ?? [],
@@ -609,8 +614,175 @@ function scriptAlignmentIssues(video) {
   return issues;
 }
 
+function creativeStoryboardIssues(video) {
+  if (!video || !isSocialReadyStyle(video.style)) return [];
+  const issues = [];
+  const storyboard = video.creative_storyboard;
+  if (!storyboard) return ["Social-ready video is missing creative_storyboard."];
+  if (storyboard.schema_version !== "launchclip.storyboard.v1") {
+    issues.push("Creative storyboard schema_version must be launchclip.storyboard.v1.");
+  }
+  if (!Array.isArray(storyboard.quality_gates) || storyboard.quality_gates.length < 5) {
+    issues.push("Creative storyboard needs at least five quality gates.");
+  }
+  const scenes = storyboard.scenes;
+  const timeline = video.script_visual_alignment ?? video.script?.timeline ?? [];
+  if (!Array.isArray(scenes) || scenes.length !== timeline.length) {
+    issues.push("Creative storyboard scenes must match the script visual alignment timeline.");
+    return issues;
+  }
+  for (const scene of scenes) {
+    const label = scene.id ?? "unknown";
+    for (const field of ["layout", "composition", "media_slots", "motion_grammar", "typography", "color_grade", "success_criteria"]) {
+      if (!scene[field] || (Array.isArray(scene[field]) && !scene[field].length)) {
+        issues.push(`Creative storyboard scene ${label} is missing ${field}.`);
+      }
+    }
+  }
+  return issues;
+}
+
 function isSocialReadyStyle(style) {
   return style === "ugc-split" || style === "ugc-demo-punchy";
+}
+
+function buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHead = { enabled: false, provider: "none" }) {
+  if (!isSocialReadyStyle(style)) {
+    return {
+      schema_version: "launchclip.storyboard.v1",
+      intent: "Simple proof-led local preview.",
+      quality_gates: ["show local evidence", "keep claims grounded", "include review-safe CTA"],
+      scenes: []
+    };
+  }
+  const repoName = stripMarkdown(manifest.source_repo.name);
+  const timeline = script.timeline ?? [];
+  const sceneOverrides = {
+    "cold-open": {
+      layout: "full-screen editorial hook with creator picture-in-picture and repo receipt",
+      composition: "large human-readable claim, animated repo receipt strip, creator window as a real video slot placeholder",
+      media_slots: ["creator_closeup", "repo_receipt", "generated_thumbnail"],
+      motion_grammar: ["match-cut title slam", "camera push", "receipt flicker"],
+      typography: "oversized mixed-case caption, two lines max, not pixel art",
+      color_grade: "warm paper, ink text, electric green proof accent"
+    },
+    hook: {
+      layout: "full-screen editorial hook with creator picture-in-picture and repo receipt",
+      composition: "large human-readable claim, animated repo receipt strip, creator window as a real video slot placeholder",
+      media_slots: ["creator_closeup", "repo_receipt", "generated_thumbnail"],
+      motion_grammar: ["match-cut title slam", "camera push", "receipt flicker"],
+      typography: "oversized mixed-case caption, two lines max, not pixel art",
+      color_grade: "warm paper, ink text, electric green proof accent"
+    },
+    friction: {
+      layout: "fast creator-workflow montage",
+      composition: "desktop timeline, floating capture cards, cursor path, crossed-off manual tasks",
+      media_slots: ["screen_recording", "timeline_strip", "task_cards"],
+      motion_grammar: ["whip pan", "speed ramp", "task cards collapse into one timeline"],
+      typography: "compact labels with one large pain caption",
+      color_grade: "neutral studio UI with coral warning accent"
+    },
+    "demo-trigger": {
+      layout: "device capture with command evidence",
+      composition: "phone-framed terminal or UI capture, command highlight, live timer, pass receipt",
+      media_slots: ["demo_capture", "terminal_evidence", "receipt_badge"],
+      motion_grammar: ["typed command", "timer sweep", "receipt stamp"],
+      typography: "caption beside the device, not over the evidence",
+      color_grade: "dark device surface with green success accent"
+    },
+    "split-screen-proof": {
+      layout: "device capture with command evidence",
+      composition: "phone-framed terminal or UI capture, command highlight, live timer, pass receipt",
+      media_slots: ["demo_capture", "terminal_evidence", "receipt_badge"],
+      motion_grammar: ["typed command", "timer sweep", "receipt stamp"],
+      typography: "caption beside the device, not over the evidence",
+      color_grade: "dark device surface with green success accent"
+    },
+    proof: {
+      layout: "editor timeline proof",
+      composition: "script lane, visual lane, audio waveform, connected playhead, highlighted active beat",
+      media_slots: ["script_lane", "visual_lane", "waveform", "playhead"],
+      motion_grammar: ["playhead sweep", "lane highlights", "connector draw"],
+      typography: "small dense evidence labels plus one bold caption",
+      color_grade: "clean production-suite UI with blue proof accent"
+    },
+    transformation: {
+      layout: "assembly line to launch packet",
+      composition: "demo evidence, script, captions, thumbnail, review packet converge into a single packet",
+      media_slots: ["demo_evidence", "script_card", "caption_card", "thumbnail_card", "review_packet"],
+      motion_grammar: ["cards converge", "stack snap", "progress lock"],
+      typography: "numbered output labels with short nouns only",
+      color_grade: "white workspace, black text, amber assembly accent"
+    },
+    steps: {
+      layout: "assembly line to launch packet",
+      composition: "demo evidence, script, captions, thumbnail, review packet converge into a single packet",
+      media_slots: ["demo_evidence", "script_card", "caption_card", "thumbnail_card", "review_packet"],
+      motion_grammar: ["cards converge", "stack snap", "progress lock"],
+      typography: "numbered output labels with short nouns only",
+      color_grade: "white workspace, black text, amber assembly accent"
+    },
+    "artifact-reveal": {
+      layout: "artifact proof barrage",
+      composition: "real generated filenames, file previews, dry-run payload, and review status shown as inspectable receipts",
+      media_slots: ["brief_md", "render_plan_json", "captions", "review_md", "dry_run_payload"],
+      motion_grammar: ["file flip", "zoom punch", "inspect highlight"],
+      typography: "filename-first cards with evidence status chips",
+      color_grade: "dark review desk with yellow inspection accent"
+    },
+    cta: {
+      layout: "creator plus review-safe product lockup",
+      composition: "creator returns, repo URL, approval boundary, final packet checklist",
+      media_slots: ["creator_closeup", "repo_url", "approval_boundary", "packet_checklist"],
+      motion_grammar: ["clean punch-in", "checklist tick", "CTA hold"],
+      typography: "one CTA, one boundary, no extra slogans",
+      color_grade: "quiet confidence: ink, paper, green approval accent"
+    }
+  };
+  return {
+    schema_version: "launchclip.storyboard.v1",
+    intent: `${repoName} should feel like a modern creator-led product short, with proof and motion designed before rendering starts.`,
+    creative_positioning: stylePreset.angle,
+    renderer_priority: ["remotion", "hyperframes", "heygen", "product-videogen", "local-ffmpeg"],
+    non_goals: [
+      "Do not make retro terminal art the main visual language.",
+      "Do not render static text cards for consecutive beats.",
+      "Do not invent unsupported adoption, speed, revenue, or performance claims.",
+      "Do not use reference footage, copied creator likenesses, or stock-like filler."
+    ],
+    quality_gates: [
+      "first frame communicates the payoff without audio",
+      "every 0.7-1.5 seconds changes layout, camera, caption, or evidence focus",
+      "at least three scenes show product/workspace evidence",
+      "captions are large, mixed-case, and timed to clauses",
+      "terminal evidence is treated as proof, not the whole visual",
+      "CTA includes review-before-posting boundary"
+    ],
+    presenter_direction: talkingHead.enabled
+      ? `${talkingHead.provider} presenter footage is hero in hook/CTA and a smaller guide during proof scenes.`
+      : "Presenter slot is reserved so HeyGen or another provider can replace the placeholder without changing edit timing.",
+    scenes: timeline.map((segment, index) => {
+      const override = sceneOverrides[segment.beat] ?? sceneOverrides.cta;
+      return {
+        id: segment.beat,
+        order: index + 1,
+        time_range: segment.time_range,
+        target_seconds: segment.target_seconds,
+        hook: segment.caption,
+        voiceover: segment.voiceover,
+        evidence_source: segment.evidence_source,
+        adapter_target: segment.adapter_target,
+        ...override,
+        caption_emphasis: segment.caption_emphasis ?? [],
+        transition: segment.transition,
+        success_criteria: [
+          "viewer understands the beat while muted",
+          "visual proves or dramatizes the spoken line",
+          "scene has at least one animated foreground element"
+        ]
+      };
+    })
+  };
 }
 
 function ugcSplitStructure(manifest) {
@@ -1059,6 +1231,7 @@ async function buildRemotionProps(out, renderOptions) {
     style: video.style,
     format: video.format,
     timeline: video.script_visual_alignment ?? video.script?.timeline ?? [],
+    storyboard: video.creative_storyboard ?? null,
     creativeRecipe: video.creative_recipe,
     talkingHead: video.talking_head,
     terminal: terminal || "$ npm run smoke\n\nDemo completed and evidence was captured locally.",
