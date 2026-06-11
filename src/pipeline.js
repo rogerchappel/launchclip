@@ -54,7 +54,8 @@ export async function runDemo(repoPath, flags = {}) {
     stderr = error.stderr ?? error.message;
     exitCode = error.code ?? 1;
   }
-  const terminal = [`$ ${command}`, stdout.trimEnd(), stderr.trimEnd()].filter(Boolean).join("\n\n");
+  const redactedCommand = redactSecrets(command);
+  const terminal = [`$ ${redactedCommand}`, redactSecrets(stdout.trimEnd()), redactSecrets(stderr.trimEnd())].filter(Boolean).join("\n\n");
   await writeFile(terminalPath, `${terminal}\n`);
   const demoMedia = flags["demo-media"] ?? flags.media;
   if (demoMedia) {
@@ -65,7 +66,7 @@ export async function runDemo(repoPath, flags = {}) {
     artifacts.push({ type: mediaType, path: rel(out, mediaTarget), source: mediaPath });
   }
   const receipt = {
-    command,
+    command: redactedCommand,
     capture: flags.capture ?? "terminal",
     cwd: repo,
     started_at: startedAt,
@@ -496,6 +497,13 @@ function captionFor(platform, manifest, flags = {}) {
   return `${(lines[platform] ?? lines.x).join("\n")}\n`;
 }
 
+function redactSecrets(text) {
+  return String(text ?? "")
+    .replace(/\b(sk-[A-Za-z0-9_-]{12,})\b/g, "[REDACTED_SECRET]")
+    .replace(/\b(gh[pousr]_[A-Za-z0-9_]{12,})\b/g, "[REDACTED_SECRET]")
+    .replace(/\b((?:api[_-]?key|token|secret|password|passwd)\s*[:=]\s*)([^\s'"`]+)/gi, "$1[REDACTED_SECRET]");
+}
+
 function terminalCommand(terminal) {
   return terminal?.match(/^\$ .+$/m)?.[0] ?? "$ npm run smoke";
 }
@@ -517,8 +525,8 @@ async function buildRenderAssets(manifest, terminal, captions, demoMedia = null)
   const caption = captions.x ?? captions.linkedin ?? "";
   const summary = stripMarkdown(repo.summary).replace(new RegExp(`^${escapeRegExp(repo.name)}\\s*`, "i"), "").trim();
   return {
-    title: wrapLines(repo.name, 24, 1),
-    summary: wrapLines(summary || "turn a local repo into upload-ready launch assets", 24, 3),
+    title: stripMarkdown(repo.name),
+    summary: summary || "turn a local repo into upload-ready launch assets",
     usage: [
       "$ launchclip run .",
       "  --demo-cmd \"npm run smoke\"",
@@ -527,11 +535,11 @@ async function buildRenderAssets(manifest, terminal, captions, demoMedia = null)
       "  --provider local-ffmpeg"
     ].join("\n"),
     command,
-    output: wrapPlainLines(output || "Demo completed and evidence was captured locally.", 26, 6),
+    output: output || "Demo completed and evidence was captured locally.",
     demoMediaLabel: demoMedia ? `${demoMedia.type.toUpperCase()} DEMO` : "TERMINAL PROOF",
     artifacts: "CREATES\nvideo/launchclip.mp4\nvideo/thumbnail.png\ncaptions/*.md\nREVIEW.md",
-    cta: wrapLines(caption.replace(/Claim status:.*/is, "").trim() || `Try ${repo.name} from the README quickstart.`, 25, 4),
-    url: wrapLines(cta, 25, 2)
+    cta: stripMarkdown(caption.replace(/Claim status:.*/is, "").trim() || `Try ${repo.name} from the README quickstart.`),
+    url: cta
   };
 }
 
@@ -548,7 +556,7 @@ function renderMotionFrame(content, options) {
   const terminalH = Math.round(height * 0.36);
   const bodyScale = Math.max(2, Math.round(width / 230));
   const titleScale = Math.max(4, Math.round(width / 120));
-  const smallScale = Math.max(2, Math.round(width / 280));
+  const smallScale = Math.max(2, Math.round(width / 360));
 
   fillRect(pixels, width, 0, 0, width, height, [16, 24, 32]);
   fillRect(pixels, width, cardX, cardY, cardW, cardH, [23, 32, 45]);
@@ -560,9 +568,9 @@ function renderMotionFrame(content, options) {
   drawText(pixels, width, height, "LAUNCHCLIP", margin + 24, cardY + 44, smallScale, [72, 213, 151]);
 
   if (scene.name === "hook") {
-    drawText(pixels, width, height, content.title.toUpperCase(), margin + 24, Math.round(height * 0.22), titleScale, [245, 248, 255]);
-    drawText(pixels, width, height, content.summary.toUpperCase(), margin + 28, Math.round(height * 0.4), bodyScale, [220, 231, 255]);
-    drawText(pixels, width, height, "LOCAL REPO -> SOCIAL PACKET", margin + 28, Math.round(height * 0.68), bodyScale, [72, 213, 151]);
+    drawTextBox(pixels, width, height, content.title, margin + 24, Math.round(height * 0.22), cardW - 48, Math.round(height * 0.14), titleScale, [245, 248, 255], { maxLines: 2 });
+    drawTextBox(pixels, width, height, content.summary, margin + 28, Math.round(height * 0.4), cardW - 56, Math.round(height * 0.18), bodyScale, [220, 231, 255], { maxLines: 4 });
+    drawTextBox(pixels, width, height, "LOCAL REPO -> SOCIAL PACKET", margin + 28, Math.round(height * 0.68), cardW - 56, Math.round(height * 0.08), bodyScale, [72, 213, 151], { maxLines: 2 });
   }
 
   if (scene.name === "usage") {
@@ -574,40 +582,41 @@ function renderMotionFrame(content, options) {
       height: Math.max(44, Math.round(terminalH * open)),
       scale: bodyScale
     };
-    drawText(pixels, width, height, "HOW TO USE IT", margin + 28, Math.round(height * 0.16), bodyScale, [72, 213, 151]);
+    drawTextBox(pixels, width, height, "HOW TO USE IT", margin + 28, Math.round(height * 0.16), cardW - 56, Math.round(height * 0.08), bodyScale, [72, 213, 151], { maxLines: 1 });
     drawTerminalWindow(pixels, width, height, terminal);
     if (open >= 1) {
-      drawText(pixels, width, height, reveal(content.usage, normalized(scene.local, 0.22, 1)).toUpperCase(), margin + 44, terminalY + 80, smallScale, [245, 248, 255]);
+      drawTextBox(pixels, width, height, reveal(content.usage, normalized(scene.local, 0.22, 1)), margin + 44, terminalY + 80, terminal.width - 40, terminal.height - 104, smallScale, [245, 248, 255], { preserveLines: true });
     }
   }
 
   if (scene.name === "media-intro") {
-    drawText(pixels, width, height, content.demoMediaLabel, margin + 28, Math.round(height * 0.18), bodyScale, [72, 213, 151]);
-    drawText(pixels, width, height, "SCREEN CAPTURE BECOMES\nA FULL-SCREEN SCENE", margin + 28, Math.round(height * 0.36), titleScale, [245, 248, 255]);
-    drawText(pixels, width, height, "NOT JUST A TERMINAL SLIDE", margin + 28, Math.round(height * 0.68), bodyScale, [220, 231, 255]);
+    drawTextBox(pixels, width, height, content.demoMediaLabel, margin + 28, Math.round(height * 0.18), cardW - 56, Math.round(height * 0.08), bodyScale, [72, 213, 151], { maxLines: 1 });
+    drawTextBox(pixels, width, height, "SCREEN CAPTURE BECOMES\nA FULL-SCREEN SCENE", margin + 28, Math.round(height * 0.36), cardW - 56, Math.round(height * 0.2), titleScale, [245, 248, 255], { preserveLines: true, maxLines: 3 });
+    drawTextBox(pixels, width, height, "NOT JUST A TERMINAL SLIDE", margin + 28, Math.round(height * 0.68), cardW - 56, Math.round(height * 0.08), bodyScale, [220, 231, 255], { maxLines: 2 });
   }
 
   if (scene.name === "proof") {
-    drawTerminalWindow(pixels, width, height, {
+    const terminal = {
       x: margin + 24,
       y: terminalY,
       width: cardW - 48,
       height: terminalH,
       scale: bodyScale
-    });
-    drawText(pixels, width, height, "PROOF FROM THE DEMO", margin + 28, Math.round(height * 0.16), bodyScale, [72, 213, 151]);
-    drawText(pixels, width, height, content.command.toUpperCase(), margin + 44, terminalY + 80, smallScale, [72, 213, 151]);
-    drawText(pixels, width, height, reveal(content.output, normalized(scene.local, 0.1, 1)).toUpperCase(), margin + 44, terminalY + 168, smallScale, [245, 248, 255]);
+    };
+    drawTerminalWindow(pixels, width, height, terminal);
+    drawTextBox(pixels, width, height, "PROOF FROM THE DEMO", margin + 28, Math.round(height * 0.16), cardW - 56, Math.round(height * 0.08), bodyScale, [72, 213, 151], { maxLines: 1 });
+    drawTextBox(pixels, width, height, content.command, margin + 44, terminalY + 80, terminal.width - 40, Math.round(terminal.height * 0.22), smallScale, [72, 213, 151], { preserveLines: true, maxLines: 3 });
+    drawTextBox(pixels, width, height, reveal(content.output, normalized(scene.local, 0.1, 1)), margin + 44, terminalY + 158, terminal.width - 40, terminal.height - 182, smallScale, [245, 248, 255], { preserveLines: true });
   }
 
   if (scene.name === "artifacts") {
-    drawText(pixels, width, height, "WHAT IT DOES", margin + 28, Math.round(height * 0.16), bodyScale, [72, 213, 151]);
-    drawText(pixels, width, height, reveal(content.artifacts, normalized(scene.local, 0, 1)).toUpperCase(), margin + 36, Math.round(height * 0.36), bodyScale, [245, 248, 255]);
+    drawTextBox(pixels, width, height, "WHAT IT DOES", margin + 28, Math.round(height * 0.16), cardW - 56, Math.round(height * 0.08), bodyScale, [72, 213, 151], { maxLines: 1 });
+    drawTextBox(pixels, width, height, reveal(content.artifacts, normalized(scene.local, 0, 1)), margin + 36, Math.round(height * 0.36), cardW - 72, Math.round(height * 0.32), bodyScale, [245, 248, 255], { preserveLines: true });
   }
 
   if (scene.name === "cta") {
-    drawText(pixels, width, height, "UPLOAD-READY OUTPUT", margin + 28, Math.round(height * 0.18), bodyScale, [72, 213, 151]);
-    drawText(pixels, width, height, reveal(`${content.cta}\n\n${content.url}`, normalized(scene.local, 0, 1)).toUpperCase(), margin + 28, Math.round(height * 0.34), bodyScale, [245, 248, 255]);
+    drawTextBox(pixels, width, height, "UPLOAD-READY OUTPUT", margin + 28, Math.round(height * 0.18), cardW - 56, Math.round(height * 0.08), bodyScale, [72, 213, 151], { maxLines: 1 });
+    drawTextBox(pixels, width, height, reveal(`${content.cta}\n\n${content.url}`, normalized(scene.local, 0, 1)), margin + 28, Math.round(height * 0.34), cardW - 56, Math.round(height * 0.38), smallScale, [245, 248, 255], { maxLines: 8 });
   }
 
   const dotX = margin + Math.round((cardW - 28) * ((time * 0.7) % 1));
@@ -874,19 +883,87 @@ function fillRect(pixels, width, x, y, rectWidth, rectHeight, color) {
   }
 }
 
-function drawText(pixels, width, height, text, x, y, scale, color) {
+function drawTextBox(pixels, width, height, text, x, y, boxWidth, boxHeight, scale, color, options = {}) {
+  const maxChars = charsForWidth(boxWidth, scale);
+  const maxLines = Math.max(1, Math.min(options.maxLines ?? Number.POSITIVE_INFINITY, linesForHeight(boxHeight, scale)));
+  const fitted = fitTextForBox(text, maxChars, maxLines, options);
+  drawText(pixels, width, height, fitted.toUpperCase(), x, y, scale, color, { maxWidth: boxWidth, maxHeight: boxHeight });
+}
+
+function fitTextForBox(text, maxChars, maxLines, options = {}) {
+  const lines = [];
+  const rawParts = String(text ?? "")
+    .split(/\n/)
+    .map((part) => part.replace(/\s+/g, " ").trimEnd());
+  for (const rawPart of rawParts) {
+    const part = options.preserveLines ? rawPart : rawPart.trim();
+    const wrapped = wrapLineForChars(part, maxChars, options.preserveLines);
+    for (const line of wrapped) {
+      lines.push(line);
+      if (lines.length >= maxLines) return lines.join("\n");
+    }
+  }
+  return lines.join("\n");
+}
+
+function wrapLineForChars(line, maxChars, preserveIndent = false) {
+  if (!line) return [""];
+  if (line.length <= maxChars) return [line];
+  const indent = preserveIndent ? line.match(/^\s*/u)?.[0] ?? "" : "";
+  const words = line.trim().split(/\s+/).filter(Boolean);
+  const lines = [];
+  let current = indent;
+  for (const word of words) {
+    const prefix = current.trim() ? " " : "";
+    const candidate = `${current}${prefix}${word}`;
+    if (candidate.length <= maxChars) {
+      current = candidate;
+      continue;
+    }
+    if (current.trim()) lines.push(current);
+    if (`${indent}${word}`.length <= maxChars) {
+      current = `${indent}${word}`;
+    } else {
+      lines.push(truncateToChars(`${indent}${word}`, maxChars));
+      current = indent;
+    }
+  }
+  if (current.trim()) lines.push(current);
+  return lines.length ? lines : [truncateToChars(line, maxChars)];
+}
+
+function truncateToChars(text, maxChars) {
+  if (text.length <= maxChars) return text;
+  if (maxChars <= 3) return text.slice(0, maxChars);
+  return `${text.slice(0, maxChars - 3)}...`;
+}
+
+function charsForWidth(boxWidth, scale) {
+  const glyphAdvance = 7 * scale;
+  return Math.max(1, Math.floor((boxWidth + 2 * scale) / glyphAdvance));
+}
+
+function linesForHeight(boxHeight, scale) {
+  const lineHeight = 10 * scale;
+  return Math.max(1, Math.floor((boxHeight + 3 * scale) / lineHeight));
+}
+
+function drawText(pixels, width, height, text, x, y, scale, color, options = {}) {
   let cursorX = x;
   let cursorY = y;
   const letterWidth = 5 * scale;
   const letterHeight = 7 * scale;
+  const clipRight = Math.min(width - 24, x + (options.maxWidth ?? width));
+  const clipBottom = Math.min(height - 24, y + (options.maxHeight ?? height));
   for (const char of text) {
     if (char === "\n") {
       cursorX = x;
       cursorY += letterHeight + 3 * scale;
       continue;
     }
+    if (cursorY + letterHeight > clipBottom) break;
     const pattern = FONT[char] ?? FONT[" "];
-    if (cursorX + letterWidth > width - 24) continue;
+    if (cursorX + letterWidth > clipRight) continue;
     for (let row = 0; row < pattern.length; row += 1) {
       for (let col = 0; col < pattern[row].length; col += 1) {
         if (pattern[row][col] !== "1") continue;
@@ -894,7 +971,6 @@ function drawText(pixels, width, height, text, x, y, scale, color) {
       }
     }
     cursorX += letterWidth + 2 * scale;
-    if (cursorY + letterHeight > height - 220) break;
   }
 }
 

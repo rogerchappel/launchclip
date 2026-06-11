@@ -70,7 +70,7 @@ Expected packet:
 
 ## How It Works
 
-`launchclip run` executes the full dry-run workflow. `init` inspects a repo for README and package metadata, then creates a workspace manifest. `demo` runs only the command you explicitly provide and stores terminal evidence; `--demo-media` can also copy a UI screenshot or short demo video into the packet. `plan` writes a video-skillkit-compatible `video.json`, a human brief, and a renderer handoff plan; the default plan is a tight `short-15` flow with usage, terminal proof, generated artifacts, and CTA beats. `captions` writes deterministic platform drafts with claim status and optional `--angle`, `--audience`, and `--cta-url` context; it does not call an LLM. `render --provider product-videogen --dry-run` creates a dry-run product-videogen payload. `render --provider local-ffmpeg` creates an uploadable vertical MP4 at `video/launchclip.mp4` plus `video/thumbnail.png` using discrete full-screen scenes for the hook, commands, demo media or terminal proof, generated artifacts, and CTA. `submit-review` creates the dry-run product-videogen review payload. `validate` checks required artifacts, stage status, caption presence, claim status, media presence when locally rendered, and X/Bluesky/LinkedIn/TikTok length limits. `review` rolls the packet into one human-readable file.
+`launchclip run` executes the full dry-run workflow. `init` inspects a repo for README and package metadata, then creates a workspace manifest. `demo` runs only the command you explicitly provide and stores terminal evidence with obvious API keys, tokens, passwords, and GitHub tokens redacted; `--demo-media` can also copy a UI screenshot or short demo video into the packet. `plan` writes a video-skillkit-compatible `video.json`, a human brief, and a renderer handoff plan; the default plan is a tight `short-15` flow with usage, terminal proof, generated artifacts, and CTA beats. `captions` writes deterministic platform drafts with claim status and optional `--angle`, `--audience`, and `--cta-url` context; it does not call an LLM. `render --provider product-videogen --dry-run` creates a dry-run product-videogen payload. `render --provider local-ffmpeg` creates an uploadable vertical MP4 at `video/launchclip.mp4` plus `video/thumbnail.png` using discrete full-screen scenes for the hook, commands, demo media or terminal proof, generated artifacts, and CTA. `submit-review` creates the dry-run product-videogen review payload. `validate` checks required artifacts, stage status, caption presence, claim status, media presence when locally rendered, and X/Bluesky/LinkedIn/TikTok length limits. `review` rolls the packet into one human-readable file.
 
 ## Product-Videogen Handoff
 
@@ -88,6 +88,7 @@ The dry-run payload uses `approval_status: "pending"`, `metadata_json` for sourc
 - Live product-videogen submission is intentionally disabled.
 - Claims are grounded in local repo files and captured demo output; no unsupported performance or adoption claims are generated.
 - Demo commands can have side effects inside the target repo, so agents should ask before running non-trivial commands.
+- Redaction catches obvious secret patterns in command receipts and terminal output, but it is not a substitute for running safe demo commands.
 
 ## Safety Notes
 
@@ -95,6 +96,7 @@ The dry-run payload uses `approval_status: "pending"`, `metadata_json` for sourc
 - No social posting or Clutch Cut queue writes.
 - No secrets are required.
 - Receipts store command, status, paths, and API shape, not credentials.
+- Terminal evidence and stored demo commands redact common token, API key, secret, and password patterns.
 
 ## Verification
 
