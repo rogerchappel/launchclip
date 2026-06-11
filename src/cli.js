@@ -73,8 +73,8 @@ Usage:
   launchclip plan <workspace> --format short-15 --renderer none [--style proof-card|ugc-split|ugc-demo-punchy] [--talking-head heygen --avatar-id avatar_123]
   launchclip captions <workspace> --platforms x,linkedin,tiktok,bluesky
   launchclip render <workspace> --provider product-videogen --dry-run
-  launchclip render <workspace> --provider remotion
-  launchclip render <workspace> --provider local-ffmpeg
+  launchclip render <workspace> --provider remotion [--voiceover local-say]
+  launchclip render <workspace> --provider local-ffmpeg [--voiceover local-say]
   launchclip submit-review <workspace> --provider product-videogen --dry-run
   launchclip review <workspace>
   launchclip validate <workspace>
