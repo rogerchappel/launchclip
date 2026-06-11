@@ -70,13 +70,13 @@ function help() {
 Usage:
   launchclip init <repo> --out <workspace>
   launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]
-  launchclip plan <workspace> --format short-15 --renderer none
+  launchclip plan <workspace> --format short-15 --renderer none [--style proof-card|ugc-split] [--talking-head heygen --avatar-id avatar_123]
   launchclip captions <workspace> --platforms x,linkedin,tiktok,bluesky
   launchclip render <workspace> --provider product-videogen --dry-run
   launchclip render <workspace> --provider local-ffmpeg
   launchclip submit-review <workspace> --provider product-videogen --dry-run
   launchclip review <workspace>
   launchclip validate <workspace>
-  launchclip run <repo> --out <workspace> --demo-cmd "npm run smoke" --demo-media path/to/demo.mp4 --angle "..." --audience "..."
+  launchclip run <repo> --out <workspace> --demo-cmd "npm run smoke" --demo-media path/to/demo.mp4 --angle "..." --audience "..." [--style ugc-split --talking-head heygen]
 `;
 }
