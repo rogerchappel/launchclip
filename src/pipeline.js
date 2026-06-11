@@ -987,13 +987,13 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         beat: "cta",
         time_range: "27-30s",
         target_seconds: 3,
-        voiceover: `Review the packet. Approve it only when the claims and visuals line up.`,
-        caption: "Review, then approve",
-        visual: "Presenter returns beside repo URL and approval-safe status badge.",
+        voiceover: `Open the review packet. Approve only when the claims and visuals line up.`,
+        caption: "Review first",
+        visual: "Clean end card: presenter, two approval checks, short repo URL, no progress bar.",
         evidence_source: "review/product-videogen-review.dry-run.json",
         adapter_target: talkingHead.enabled ? talkingHead.provider : "talking-head",
         caption_emphasis: ["review", "approve"],
-        motion: "presenter punch-in, CTA lockup, final progress tick",
+        motion: "presenter punch-in, two checks tick, clean CTA hold",
         transition: "clean cut"
       }
     ] : [
@@ -1347,7 +1347,9 @@ function renderSocialFrame(content, options) {
 
   fillRect(pixels, width, 0, 0, width, height, palette.bg);
   fillRect(pixels, width, 0, 0, width, Math.round(height * 0.015), palette.accent);
-  fillRect(pixels, width, 0, height - Math.round(height * 0.015), Math.round(width * progress), Math.round(height * 0.015), palette.accent);
+  if (scene.name !== "cta") {
+    fillRect(pixels, width, 0, height - Math.round(height * 0.015), Math.round(width * progress), Math.round(height * 0.015), palette.accent);
+  }
   drawText(pixels, width, height, "LAUNCHCLIP", margin, Math.round(height * 0.035), smallScale, palette.muted);
   drawText(pixels, width, height, `${Math.ceil(Math.max(0, duration - time))}S`, width - margin - 72, Math.round(height * 0.035), smallScale, palette.accent);
 
@@ -1413,10 +1415,10 @@ function renderSocialFrame(content, options) {
     });
     drawProofBadge(pixels, width, height, margin, Math.round(height * 0.82), safeW, Math.round(height * 0.08), palette, "REAL WORKSPACE FILES");
   } else {
-    drawTextBox(pixels, width, height, beat.caption ?? "Review, then approve", margin, Math.round(height * 0.13), safeW, Math.round(height * 0.17), titleScale, palette.text, { maxLines: 2 });
+    drawTextBox(pixels, width, height, beat.caption ?? "Review first", margin, Math.round(height * 0.13), safeW, Math.round(height * 0.15), titleScale, palette.text, { maxLines: 2 });
     drawPresenterBadge(pixels, width, height, margin, Math.round(height * 0.37), safeW, Math.round(height * 0.2), palette, "APPROVAL SAFE");
-    drawTextBox(pixels, width, height, content.url, margin, Math.round(height * 0.66), safeW, Math.round(height * 0.08), smallScale, palette.accent, { maxLines: 2 });
-    drawTextBox(pixels, width, height, beat.voiceover ?? content.cta, margin, Math.round(height * 0.76), safeW, Math.round(height * 0.12), smallScale, palette.text, { maxLines: 3 });
+    drawTextBox(pixels, width, height, "Open the review packet", margin, Math.round(height * 0.66), safeW, Math.round(height * 0.08), bodyScale, palette.accent, { maxLines: 1 });
+    drawTextBox(pixels, width, height, content.url, margin, Math.round(height * 0.77), safeW, Math.round(height * 0.08), smallScale, palette.text, { maxLines: 2 });
   }
 
   return Buffer.concat([Buffer.from(`P6\n${width} ${height}\n255\n`), pixels]);
