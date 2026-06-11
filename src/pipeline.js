@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -97,6 +97,7 @@ export async function planVideo(workspacePath, flags = {}) {
   const stylePreset = videoStylePreset(style, manifest, talkingHead);
   const script = buildScriptPlan(style, manifest, stylePreset, talkingHead);
   const creativeStoryboard = buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHead);
+  const voiceover = buildVoiceoverPlan(script, talkingHead);
   const video = {
     schema_version: "video-skillkit.compat.v1",
     title: `${manifest.source_repo.name} OSS launch clip`,
@@ -107,6 +108,7 @@ export async function planVideo(workspacePath, flags = {}) {
     structure: stylePreset.structure,
     script,
     script_visual_alignment: script.timeline,
+    voiceover,
     creative_storyboard: creativeStoryboard,
     creative_recipe: stylePreset.recipe,
     talking_head: talkingHead,
@@ -129,6 +131,12 @@ ${stylePreset.briefBeats.map((beat) => `- ${beat}`).join("\n")}
 ## Script
 ${script.timeline.map((segment) => `- ${segment.time_range} ${segment.beat}: "${segment.voiceover}" [visual: ${segment.visual}]`).join("\n")}
 
+## Voice Over
+Provider: ${voiceover.provider}
+Delivery: ${voiceover.delivery}
+
+${voiceover.full_text}
+
 ## Evidence
 - demo/terminal.txt
 - demo/command-receipt.json
@@ -139,6 +147,7 @@ ${script.timeline.map((segment) => `- ${segment.time_range} ${segment.beat}: "${
     style,
     script,
     script_visual_alignment: script.timeline,
+    voiceover,
     creative_storyboard: creativeStoryboard,
     creative_recipe: stylePreset.recipe,
     talking_head: talkingHead,
@@ -153,12 +162,13 @@ ${script.timeline.map((segment) => `- ${segment.time_range} ${segment.beat}: "${
     }
   };
   await writeJson(path.join(out, "video", "video.json"), video);
+  await writeJson(path.join(out, "video", "voiceover.json"), voiceover);
   await writeFile(path.join(out, "video", "brief.md"), brief);
   await writeJson(path.join(out, "video", "render-plan.json"), renderPlan);
   await updateManifest(out, (existing) => {
     existing.stages.plan = { status: "passed", format, renderer: video.renderer, style, talking_head: talkingHead.provider };
   });
-  return { stage: "plan", video: path.join(out, "video", "video.json"), brief: path.join(out, "video", "brief.md") };
+  return { stage: "plan", video: path.join(out, "video", "video.json"), brief: path.join(out, "video", "brief.md"), voiceover: path.join(out, "video", "voiceover.json") };
 }
 
 export async function writeCaptions(workspacePath, flags = {}) {
@@ -227,6 +237,7 @@ async function renderRemotion(out, flags = {}) {
     "--log",
     "warn"
   ], { cwd: PACKAGE_ROOT, maxBuffer: 1024 * 1024 * 16 });
+  const voiceoverAudio = await applyVoiceoverIfRequested(out, output, flags);
   await execFileAsync("ffmpeg", [
     "-y",
     "-ss",
@@ -243,10 +254,11 @@ async function renderRemotion(out, flags = {}) {
       provider: "remotion",
       media: "video/launchclip.mp4",
       thumbnail: "video/thumbnail.png",
-      props: "video/remotion-props.json"
+      props: "video/remotion-props.json",
+      voiceover_audio: voiceoverAudio
     };
   });
-  return { stage: "render", mode: "local", provider: "remotion", video: output, thumbnail, props: propsPath };
+  return { stage: "render", mode: "local", provider: "remotion", video: output, thumbnail, props: propsPath, voiceoverAudio };
 }
 
 async function renderLocalFfmpeg(out, flags = {}) {
@@ -317,6 +329,7 @@ async function renderLocalFfmpeg(out, flags = {}) {
     "+faststart",
     output
   ], { maxBuffer: 1024 * 1024 * 8 });
+  const voiceoverAudio = await applyVoiceoverIfRequested(out, output, flags);
 
   await execFileAsync("ffmpeg", [
     "-y",
@@ -330,9 +343,104 @@ async function renderLocalFfmpeg(out, flags = {}) {
   ], { maxBuffer: 1024 * 1024 * 8 });
 
   await updateManifest(out, (manifest) => {
-    manifest.stages.render = { status: "passed", provider: "local-ffmpeg", media: "video/launchclip.mp4", thumbnail: "video/thumbnail.png" };
+    manifest.stages.render = { status: "passed", provider: "local-ffmpeg", media: "video/launchclip.mp4", thumbnail: "video/thumbnail.png", voiceover_audio: voiceoverAudio };
   });
-  return { stage: "render", mode: "local", provider: "local-ffmpeg", video: output, thumbnail };
+  return { stage: "render", mode: "local", provider: "local-ffmpeg", video: output, thumbnail, voiceoverAudio };
+}
+
+async function applyVoiceoverIfRequested(out, videoPath, flags = {}) {
+  const mode = flags.voiceover ?? flags["voice-over"];
+  if (!mode || mode === "none" || mode === "off") return null;
+  if (mode !== "local-say" && mode !== "say") {
+    throw new Error(`Unsupported voiceover provider: ${mode}. Supported: local-say`);
+  }
+  const voiceover = await readJson(path.join(out, "video", "voiceover.json"));
+  const audioPath = path.join(out, "video", "voiceover.aiff");
+  const rawAudioPath = path.join(out, "video", "voiceover.raw.aiff");
+  const voicedPath = path.join(out, "video", "launchclip.voiced.mp4");
+  const videoDuration = await mediaDurationSeconds(videoPath);
+  const targetAudioDuration = Math.max(1, videoDuration - 0.85);
+  const voiceArgs = flags.voice ? ["-v", flags.voice] : [];
+  try {
+    await execFileAsync("say", [
+      ...voiceArgs,
+      "-o",
+      rawAudioPath,
+      voiceover.full_text
+    ], { maxBuffer: 1024 * 1024 * 2 });
+  } catch (error) {
+    throw new Error(`Could not generate local voiceover with macOS say: ${error.message}`);
+  }
+  await fitVoiceoverAudio(rawAudioPath, audioPath, targetAudioDuration);
+  await rm(rawAudioPath, { force: true });
+  await execFileAsync("ffmpeg", [
+    "-y",
+    "-i",
+    videoPath,
+    "-i",
+    audioPath,
+    "-filter_complex",
+    "[1:a]apad[a]",
+    "-map",
+    "0:v:0",
+    "-map",
+    "[a]",
+    "-c:v",
+    "copy",
+    "-c:a",
+    "aac",
+    "-shortest",
+    "-movflags",
+    "+faststart",
+    voicedPath
+  ], { maxBuffer: 1024 * 1024 * 8 });
+  await rename(voicedPath, videoPath);
+  return "video/voiceover.aiff";
+}
+
+async function fitVoiceoverAudio(inputPath, outputPath, targetDuration) {
+  const duration = await mediaDurationSeconds(inputPath);
+  if (duration <= targetDuration) {
+    await rename(inputPath, outputPath);
+    return;
+  }
+  const speed = duration / targetDuration;
+  await execFileAsync("ffmpeg", [
+    "-y",
+    "-i",
+    inputPath,
+    "-filter:a",
+    atempoFilter(speed),
+    outputPath
+  ], { maxBuffer: 1024 * 1024 * 8 });
+}
+
+async function mediaDurationSeconds(filePath) {
+  const { stdout } = await execFileAsync("ffprobe", [
+    "-v",
+    "error",
+    "-show_entries",
+    "format=duration",
+    "-of",
+    "default=nw=1:nk=1",
+    filePath
+  ], { maxBuffer: 1024 * 128 });
+  const duration = Number(stdout.trim());
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error(`Could not determine media duration for ${filePath}`);
+  }
+  return duration;
+}
+
+function atempoFilter(speed) {
+  const filters = [];
+  let remaining = speed;
+  while (remaining > 2) {
+    filters.push("atempo=2");
+    remaining /= 2;
+  }
+  filters.push(`atempo=${remaining.toFixed(4)}`);
+  return filters.join(",");
 }
 
 export async function submitReview(workspacePath, flags = {}) {
@@ -442,6 +550,7 @@ export async function validateWorkspace(workspacePath, flags = {}) {
     "demo/terminal.txt",
     "demo/command-receipt.json",
     "video/video.json",
+    "video/voiceover.json",
     "video/brief.md",
     "video/render-plan.json",
     "video/product-videogen.dry-run.json",
@@ -466,6 +575,7 @@ export async function validateWorkspace(workspacePath, flags = {}) {
   if (!Object.keys(captions).length) issues.push("No captions found.");
   const video = await optionalJson(path.join(out, "video", "video.json"));
   issues.push(...scriptAlignmentIssues(video));
+  issues.push(...voiceoverIssues(video));
   issues.push(...creativeStoryboardIssues(video));
   for (const [platform, caption] of Object.entries(captions)) {
     const rule = PLATFORM_RULES[platform];
@@ -508,6 +618,7 @@ async function inspectRepo(repo) {
 async function productVideogenPayload(out, purpose) {
   const manifest = await readJson(path.join(out, "launchclip.json"));
   const video = await optionalJson(path.join(out, "video", "video.json"));
+  const voiceover = await optionalJson(path.join(out, "video", "voiceover.json"));
   const receipt = await optionalJson(path.join(out, "demo", "command-receipt.json"));
   const captions = await readCaptions(out);
   const socialCaption = captions.x ?? captions.linkedin ?? "";
@@ -536,6 +647,7 @@ async function productVideogenPayload(out, purpose) {
       video_manifest: video,
       script: video?.script,
       script_visual_alignment: video?.script_visual_alignment,
+      voiceover: voiceover ?? video?.voiceover,
       creative_storyboard: video?.creative_storyboard,
       creative_recipe: video?.creative_recipe,
       talking_head: video?.talking_head,
@@ -590,6 +702,65 @@ function talkingHeadAdapter(flags = {}, style = "proof-card") {
   return adapter;
 }
 
+function buildVoiceoverPlan(script, talkingHead = { enabled: false, provider: "none" }) {
+  const segments = (script.timeline ?? []).map((segment, index) => {
+    const range = parseTimeRange(segment.time_range);
+    const text = cleanVoiceoverLine(segment.voiceover);
+    return {
+      index: index + 1,
+      beat: segment.beat,
+      time_range: segment.time_range,
+      start_seconds: range.start,
+      end_seconds: range.end,
+      target_seconds: segment.target_seconds,
+      text,
+      caption: segment.caption,
+      emphasis: segment.caption_emphasis ?? [],
+      delivery: deliveryForBeat(segment.beat),
+      pause_after_ms: segment.beat === "cta" ? 0 : 120
+    };
+  });
+  const provider = talkingHead.enabled && talkingHead.provider !== "none" ? talkingHead.provider : "local-say-ready";
+  return {
+    schema_version: "launchclip.voiceover.v1",
+    provider,
+    voice_id: talkingHead.voice_id ?? null,
+    delivery: script.voice?.delivery ?? "confident, concise, proof-led narration",
+    pacing: "Match the segment timing; do not read on-screen filenames one by one.",
+    full_text: segments.map((segment) => segment.text).join(" "),
+    segments,
+    renderer_notes: [
+      "Use this narration as the primary information layer; visuals should reduce text instead of duplicating every sentence.",
+      "Keep captions to 2-5 word emphasis phrases while voice-over carries the detail.",
+      "If using a synthetic voice provider, generate one continuous take and preserve these segment timings for edit alignment."
+    ]
+  };
+}
+
+function cleanVoiceoverLine(value) {
+  return String(value ?? "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.!?])/g, "$1")
+    .trim();
+}
+
+function deliveryForBeat(beat) {
+  if (beat === "cold-open" || beat === "hook") return "fast hook, one breath, direct to camera";
+  if (beat === "friction") return "slightly compressed pace, list rhythm";
+  if (beat === "demo-trigger" || beat === "split-screen-proof") return "clear proof tone, slow enough for the command to land";
+  if (beat === "artifact-reveal" || beat === "artifacts") return "confident payoff, do not over-read filenames";
+  if (beat === "cta") return "calm, short, leave a clean final hold";
+  return "natural product explainer pace";
+}
+
+function parseTimeRange(range) {
+  const match = String(range ?? "").match(/([\d.]+)\s*-\s*([\d.]+)/);
+  return {
+    start: match ? Number(match[1]) : null,
+    end: match ? Number(match[2]) : null
+  };
+}
+
 function scriptAlignmentIssues(video) {
   if (!video) return [];
   const issues = [];
@@ -610,6 +781,27 @@ function scriptAlignmentIssues(video) {
         if (!segment[field]) issues.push(`Social script beat ${label} is missing ${field}.`);
       }
     }
+  }
+  return issues;
+}
+
+function voiceoverIssues(video) {
+  if (!video) return [];
+  const issues = [];
+  const timeline = video.script_visual_alignment ?? video.script?.timeline ?? [];
+  const voiceover = video.voiceover;
+  if (!voiceover) return ["Video plan is missing voiceover."];
+  if (voiceover.schema_version !== "launchclip.voiceover.v1") {
+    issues.push("Voiceover schema_version must be launchclip.voiceover.v1.");
+  }
+  if (!voiceover.full_text) issues.push("Voiceover is missing full_text.");
+  if (!Array.isArray(voiceover.segments) || voiceover.segments.length !== timeline.length) {
+    issues.push("Voiceover segments must match the script visual alignment timeline.");
+    return issues;
+  }
+  for (const segment of voiceover.segments) {
+    if (!segment.text) issues.push(`Voiceover beat ${segment.beat ?? "unknown"} is missing text.`);
+    if (!segment.delivery) issues.push(`Voiceover beat ${segment.beat ?? "unknown"} is missing delivery.`);
   }
   return issues;
 }
@@ -1213,6 +1405,7 @@ async function buildRenderAssets(manifest, terminal, captions, demoMedia = null,
 async function buildRemotionProps(out, renderOptions) {
   const manifest = await readJson(path.join(out, "launchclip.json"));
   const video = await readJson(path.join(out, "video", "video.json"));
+  const voiceover = await optionalJson(path.join(out, "video", "voiceover.json"));
   const terminal = await optionalText(path.join(out, "demo", "terminal.txt"));
   const receipt = await optionalJson(path.join(out, "demo", "command-receipt.json"));
   const captions = await readCaptions(out);
@@ -1230,6 +1423,7 @@ async function buildRemotionProps(out, renderOptions) {
     },
     style: video.style,
     format: video.format,
+    voiceover: voiceover ?? video.voiceover ?? null,
     timeline: video.script_visual_alignment ?? video.script?.timeline ?? [],
     storyboard: video.creative_storyboard ?? null,
     creativeRecipe: video.creative_recipe,
@@ -1335,7 +1529,6 @@ function renderMotionFrame(content, options) {
 function renderSocialFrame(content, options) {
   const { width, height, time, duration, scene } = options;
   const pixels = Buffer.alloc(width * height * 3);
-  const progress = Math.min(1, time / duration);
   const beat = scene.segment ?? {};
   const local = scene.local ?? 0;
   const margin = Math.round(width * 0.06);
@@ -1346,12 +1539,7 @@ function renderSocialFrame(content, options) {
   const palette = socialPalette(scene.name, Math.floor(time * 2) % 2);
 
   fillRect(pixels, width, 0, 0, width, height, palette.bg);
-  fillRect(pixels, width, 0, 0, width, Math.round(height * 0.015), palette.accent);
-  if (scene.name !== "cta") {
-    fillRect(pixels, width, 0, height - Math.round(height * 0.015), Math.round(width * progress), Math.round(height * 0.015), palette.accent);
-  }
   drawText(pixels, width, height, "LAUNCHCLIP", margin, Math.round(height * 0.035), smallScale, palette.muted);
-  drawText(pixels, width, height, `${Math.ceil(Math.max(0, duration - time))}S`, width - margin - 72, Math.round(height * 0.035), smallScale, palette.accent);
 
   if (scene.name === "cold-open" || scene.name === "hook") {
     const punch = Math.round(24 * normalized(local, 0, 0.45));
@@ -1417,8 +1605,8 @@ function renderSocialFrame(content, options) {
   } else {
     drawTextBox(pixels, width, height, beat.caption ?? "Review first", margin, Math.round(height * 0.13), safeW, Math.round(height * 0.15), titleScale, palette.text, { maxLines: 2 });
     drawPresenterBadge(pixels, width, height, margin, Math.round(height * 0.37), safeW, Math.round(height * 0.2), palette, "APPROVAL SAFE");
-    drawTextBox(pixels, width, height, "Open the review packet", margin, Math.round(height * 0.66), safeW, Math.round(height * 0.08), bodyScale, palette.accent, { maxLines: 1 });
-    drawTextBox(pixels, width, height, content.url, margin, Math.round(height * 0.77), safeW, Math.round(height * 0.08), smallScale, palette.text, { maxLines: 2 });
+    drawTextBox(pixels, width, height, "Open packet", margin, Math.round(height * 0.66), safeW, Math.round(height * 0.08), bodyScale, palette.accent, { maxLines: 1 });
+    drawTextBox(pixels, width, height, shorten(content.url, 54), margin, Math.round(height * 0.77), safeW, Math.round(height * 0.06), smallScale, palette.text, { maxLines: 1 });
   }
 
   return Buffer.concat([Buffer.from(`P6\n${width} ${height}\n255\n`), pixels]);

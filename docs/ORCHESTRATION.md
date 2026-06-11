@@ -27,7 +27,15 @@ To create an uploadable local video after the packet exists:
 launchclip render <workspace> --provider remotion
 ```
 
-This writes `video/launchclip.mp4`, `video/thumbnail.png`, and `video/remotion-props.json` from the repo facts, script alignment, caption draft, and captured terminal evidence. The Remotion renderer uses frame-based motion graphics with kinetic captions, animated proof panels, output cards, progress motion, and CTA. Caption generation is deterministic template logic; it does not call an LLM.
+This writes `video/launchclip.mp4`, `video/thumbnail.png`, and `video/remotion-props.json` from the repo facts, script alignment, voice-over plan, caption draft, and captured terminal evidence. The Remotion renderer uses frame-based motion graphics with animated proof panels, output cards, and a clean CTA without duplicate scene rails or global progress bars. Caption generation is deterministic template logic; it does not call an LLM.
+
+To generate a narrated local preview on macOS:
+
+```bash
+launchclip render <workspace> --provider remotion --voiceover local-say
+```
+
+The plan stage always writes `video/voiceover.json` with timed narration segments. `--voiceover local-say` turns that script into `video/voiceover.aiff` and muxes it into the MP4 when the host has the macOS `say` command.
 
 For constrained environments, `launchclip render <workspace> --provider local-ffmpeg` remains available as a dependency-light text-forward fallback.
 
