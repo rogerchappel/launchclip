@@ -8,7 +8,7 @@
 2. `demo` captures an explicitly approved terminal command and writes a receipt.
 3. `plan` emits a video-skillkit-compatible manifest and brief.
 4. `captions` writes editable, platform-specific, evidence-backed drafts.
-5. `render` creates either a product-videogen dry-run render/review payload or a local ffmpeg MP4.
+5. `render` creates either a product-videogen dry-run render/review payload, a Remotion MP4, or a local ffmpeg fallback MP4.
 6. `submit-review` creates a pending Review Feed intake payload in dry-run form.
 7. `validate` checks required artifacts, stage status, caption claim status, and platform length limits.
 8. `review` creates `REVIEW.md` for human approval.
@@ -24,15 +24,18 @@ The optional `--angle`, `--audience`, and `--cta-url` flags tune platform captio
 To create an uploadable local video after the packet exists:
 
 ```bash
-launchclip render <workspace> --provider local-ffmpeg
+launchclip render <workspace> --provider remotion
 ```
 
-This writes `video/launchclip.mp4` and `video/thumbnail.png` from the repo facts, example `launchclip` commands, caption draft, and captured terminal evidence. The local renderer uses animated terminal-style frames with command reveal, output reveal, generated artifact checklist, progress motion, and CTA. Caption generation is deterministic template logic; it does not call an LLM.
+This writes `video/launchclip.mp4`, `video/thumbnail.png`, and `video/remotion-props.json` from the repo facts, script alignment, caption draft, and captured terminal evidence. The Remotion renderer uses frame-based motion graphics with kinetic captions, animated proof panels, output cards, progress motion, and CTA. Caption generation is deterministic template logic; it does not call an LLM.
+
+For constrained environments, `launchclip render <workspace> --provider local-ffmpeg` remains available as a dependency-light text-forward fallback.
 
 ## Boundaries
 
 - `video-skillkit`: manifest and grounded video brief semantics.
-- `local-ffmpeg`: built-in text-forward vertical MP4 render for immediate upload.
+- `remotion`: primary local motion-graphics vertical MP4 render for social preview.
+- `local-ffmpeg`: built-in text-forward vertical MP4 fallback.
 - `cutpilot`: future optional EDL and advanced ffmpeg handoff.
 - `postmaker`: caption grounding and claim-status inspiration.
 - `product-videogen`: Review Feed approval lane and downstream social queue sync.

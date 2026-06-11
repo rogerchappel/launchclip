@@ -16,13 +16,14 @@
 - [x] Add a `ugc-split` planning preset for automated creator-led product shorts.
 - [x] Add a provider-neutral talking-head contract with HeyGen as the first adapter target.
 - [x] Add a deterministic script and script-to-visual alignment timeline for UGC-style clips.
+- [x] Add Remotion renderer for social-ready motion-graphics previews.
 
 ## Follow-Up
 
 - [ ] Add product-videogen `POST /api/v1/review-items` endpoint or compatible ingestion path.
 - [ ] Add optional `cutpilot` adapter when local footage exists.
-- [ ] Add Remotion and Hyperframes adapter contracts.
-- [ ] Add a real presenter/B-roll renderer for `ugc-split` using product-videogen, Remotion, or another approved generation backend.
+- [ ] Add Hyperframes adapter contract.
+- [ ] Add real presenter/B-roll rendering for `ugc-split` using product-videogen, HeyGen, or another approved generation backend.
 - [ ] Add live HeyGen API integration once credentials, avatar defaults, and approval flow are configured.
 - [ ] Add richer repo discovery for non-Node projects.
 - [ ] Add configurable claim templates and evidence linting.
