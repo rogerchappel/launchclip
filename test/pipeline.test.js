@@ -106,6 +106,39 @@ test("plans ugc split-screen creative recipe for product-videogen handoff", asyn
   }
 });
 
+test("plans and renders punchy social-ready UGC preview", async (t) => {
+  if (!(await hasCommand("ffmpeg"))) {
+    t.skip("ffmpeg is not installed");
+    return;
+  }
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
+  const out = path.join(temp, "packet");
+  try {
+    await initWorkspace(fixtureRepo, { out });
+    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
+    await planVideo(out, { format: "short-30", renderer: "local-ffmpeg", style: "ugc-demo-punchy", "talking-head": "heygen" });
+    await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
+    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
+    await submitReview(out, { provider: "product-videogen", "dry-run": true });
+    const result = await renderVideo(out, { provider: "local-ffmpeg", duration: "4", fps: "6" });
+    const readiness = await validateWorkspace(out);
+
+    const video = JSON.parse(await readFile(path.join(out, "video/video.json"), "utf8"));
+    await access(result.video);
+    await access(result.thumbnail);
+    assert.equal(video.style, "ugc-demo-punchy");
+    assert.equal(video.creative_recipe.renderer_contract.adapter, "launchclip.social-render.v1");
+    assert.equal(video.script_visual_alignment.length, 7);
+    assert.equal(video.script_visual_alignment[0].beat, "cold-open");
+    assert.equal(video.script_visual_alignment[0].caption, "Repo -> Short");
+    assert.match(video.script_visual_alignment[3].visual, /Split-screen/i);
+    assert.match(video.script_visual_alignment[5].motion, /file cards flash/i);
+    assert.equal(readiness.status, "ready");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("validation catches missing script and visual alignment fields", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
   const out = path.join(temp, "packet");
