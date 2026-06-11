@@ -54,7 +54,8 @@ export async function runDemo(repoPath, flags = {}) {
     stderr = error.stderr ?? error.message;
     exitCode = error.code ?? 1;
   }
-  const terminal = [`$ ${command}`, stdout.trimEnd(), stderr.trimEnd()].filter(Boolean).join("\n\n");
+  const redactedCommand = redactSecrets(command);
+  const terminal = [`$ ${redactedCommand}`, redactSecrets(stdout.trimEnd()), redactSecrets(stderr.trimEnd())].filter(Boolean).join("\n\n");
   await writeFile(terminalPath, `${terminal}\n`);
   const demoMedia = flags["demo-media"] ?? flags.media;
   if (demoMedia) {
@@ -65,7 +66,7 @@ export async function runDemo(repoPath, flags = {}) {
     artifacts.push({ type: mediaType, path: rel(out, mediaTarget), source: mediaPath });
   }
   const receipt = {
-    command,
+    command: redactedCommand,
     capture: flags.capture ?? "terminal",
     cwd: repo,
     started_at: startedAt,
@@ -772,6 +773,13 @@ function captionFor(platform, manifest, flags = {}) {
     ]
   };
   return `${(lines[platform] ?? lines.x).join("\n")}\n`;
+}
+
+function redactSecrets(text) {
+  return String(text ?? "")
+    .replace(/\b(sk-[A-Za-z0-9_-]{12,})\b/g, "[REDACTED_SECRET]")
+    .replace(/\b(gh[pousr]_[A-Za-z0-9_]{12,})\b/g, "[REDACTED_SECRET]")
+    .replace(/\b((?:api[_-]?key|token|secret|password|passwd)\s*[:=]\s*)([^\s'"`]+)/gi, "$1[REDACTED_SECRET]");
 }
 
 function terminalCommand(terminal) {

@@ -150,6 +150,29 @@ test("copies optional UI demo media into the packet receipt", async () => {
   }
 });
 
+test("redacts obvious secrets from demo evidence", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
+  const out = path.join(temp, "packet");
+  try {
+    await initWorkspace(fixtureRepo, { out });
+    await runDemo(fixtureRepo, {
+      out,
+      "demo-cmd": "node -e \"console.log('API_KEY=sk-testsecret1234567890'); console.error('token=ghp_abcdefghijklmnop')\"",
+      capture: "terminal"
+    });
+
+    const terminal = await readFile(path.join(out, "demo/terminal.txt"), "utf8");
+    const receipt = JSON.parse(await readFile(path.join(out, "demo/command-receipt.json"), "utf8"));
+
+    assert.doesNotMatch(terminal, /sk-testsecret/);
+    assert.doesNotMatch(terminal, /ghp_abcdefghijklmnop/);
+    assert.doesNotMatch(receipt.command, /sk-testsecret/);
+    assert.match(terminal, /\[REDACTED_SECRET\]/);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("rejects live submit in V1", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
   const out = path.join(temp, "packet");

@@ -17,6 +17,7 @@ npm run check
 - Live product-videogen submission is disabled.
 - Renderer adapters are contract placeholders.
 - Repo discovery is intentionally conservative.
+- Secret redaction covers common token/key/password patterns, but reviewers should still inspect generated artifacts before sharing.
 
 ## Product-Videogen Follow-Up
 

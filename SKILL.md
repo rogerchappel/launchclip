@@ -13,7 +13,8 @@ Use this skill when Roger wants to promote a local OSS repo with a reviewable pa
    ```
 
 4. For manual staging, run `init`, `demo`, `plan`, `captions`, `render --dry-run`, `submit-review --dry-run`, `validate`, and `review`.
-5. Present `REVIEW.md` and `review/social-readiness.json` for human review.
+5. Inspect `demo/terminal.txt` and `demo/command-receipt.json`; launchclip redacts common secret patterns, but agents should still verify no sensitive values are present.
+6. Present `REVIEW.md` and `review/social-readiness.json` for human review.
 
 ## Side-Effect Boundaries
 
@@ -21,6 +22,7 @@ Use this skill when Roger wants to promote a local OSS repo with a reviewable pa
 - Do not submit live product-videogen or Clutch Cut requests unless local config, explicit approval, and a future supported submission path are present.
 - Do not publish packages, tag releases, merge PRs, or create GitHub Releases.
 - Treat generated captions as drafts.
+- Treat redacted receipts as review artifacts, not permission to run commands that print secrets.
 
 ## Validation
 
