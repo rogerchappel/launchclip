@@ -269,6 +269,30 @@ test("rejects live submit in V1", async () => {
   }
 });
 
+test("fits local-say voiceover before the video ends", async (t) => {
+  if (!(await hasCommand("ffmpeg")) || !(await hasCommand("ffprobe")) || !(await hasCommand("say"))) {
+    t.skip("ffmpeg, ffprobe, or say is not installed");
+    return;
+  }
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
+  const out = path.join(temp, "packet");
+  try {
+    await initWorkspace(fixtureRepo, { out });
+    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
+    await planVideo(out, { format: "short-30", renderer: "local-ffmpeg", style: "ugc-demo-punchy", "talking-head": "heygen" });
+    await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
+
+    const result = await renderVideo(out, { provider: "local-ffmpeg", duration: "8", fps: "6", voiceover: "local-say" });
+    const videoDuration = await mediaDuration(path.join(out, "video/launchclip.mp4"));
+    const audioDuration = await mediaDuration(path.join(out, result.voiceoverAudio));
+
+    assert.equal(result.voiceoverAudio, "video/voiceover.aiff");
+    assert.ok(audioDuration < videoDuration - 0.2, `expected voiceover ${audioDuration}s to finish before video ${videoDuration}s`);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("renders a local uploadable video when ffmpeg is available", async (t) => {
   if (!(await hasCommand("ffmpeg"))) {
     t.skip("ffmpeg is not installed");
@@ -303,4 +327,17 @@ async function hasCommand(command) {
   } catch {
     return false;
   }
+}
+
+async function mediaDuration(filePath) {
+  const { stdout } = await execFileAsync("ffprobe", [
+    "-v",
+    "error",
+    "-show_entries",
+    "format=duration",
+    "-of",
+    "default=nw=1:nk=1",
+    filePath
+  ]);
+  return Number(stdout.trim());
 }

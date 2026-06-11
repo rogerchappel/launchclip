@@ -356,18 +356,23 @@ async function applyVoiceoverIfRequested(out, videoPath, flags = {}) {
   }
   const voiceover = await readJson(path.join(out, "video", "voiceover.json"));
   const audioPath = path.join(out, "video", "voiceover.aiff");
+  const rawAudioPath = path.join(out, "video", "voiceover.raw.aiff");
   const voicedPath = path.join(out, "video", "launchclip.voiced.mp4");
+  const videoDuration = await mediaDurationSeconds(videoPath);
+  const targetAudioDuration = Math.max(1, videoDuration - 0.85);
   const voiceArgs = flags.voice ? ["-v", flags.voice] : [];
   try {
     await execFileAsync("say", [
       ...voiceArgs,
       "-o",
-      audioPath,
+      rawAudioPath,
       voiceover.full_text
     ], { maxBuffer: 1024 * 1024 * 2 });
   } catch (error) {
     throw new Error(`Could not generate local voiceover with macOS say: ${error.message}`);
   }
+  await fitVoiceoverAudio(rawAudioPath, audioPath, targetAudioDuration);
+  await rm(rawAudioPath, { force: true });
   await execFileAsync("ffmpeg", [
     "-y",
     "-i",
@@ -391,6 +396,51 @@ async function applyVoiceoverIfRequested(out, videoPath, flags = {}) {
   ], { maxBuffer: 1024 * 1024 * 8 });
   await rename(voicedPath, videoPath);
   return "video/voiceover.aiff";
+}
+
+async function fitVoiceoverAudio(inputPath, outputPath, targetDuration) {
+  const duration = await mediaDurationSeconds(inputPath);
+  if (duration <= targetDuration) {
+    await rename(inputPath, outputPath);
+    return;
+  }
+  const speed = duration / targetDuration;
+  await execFileAsync("ffmpeg", [
+    "-y",
+    "-i",
+    inputPath,
+    "-filter:a",
+    atempoFilter(speed),
+    outputPath
+  ], { maxBuffer: 1024 * 1024 * 8 });
+}
+
+async function mediaDurationSeconds(filePath) {
+  const { stdout } = await execFileAsync("ffprobe", [
+    "-v",
+    "error",
+    "-show_entries",
+    "format=duration",
+    "-of",
+    "default=nw=1:nk=1",
+    filePath
+  ], { maxBuffer: 1024 * 128 });
+  const duration = Number(stdout.trim());
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error(`Could not determine media duration for ${filePath}`);
+  }
+  return duration;
+}
+
+function atempoFilter(speed) {
+  const filters = [];
+  let remaining = speed;
+  while (remaining > 2) {
+    filters.push("atempo=2");
+    remaining /= 2;
+  }
+  filters.push(`atempo=${remaining.toFixed(4)}`);
+  return filters.join(",");
 }
 
 export async function submitReview(workspacePath, flags = {}) {
