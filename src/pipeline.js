@@ -201,7 +201,10 @@ async function renderLocalFfmpeg(out, flags = {}) {
   const terminal = await optionalText(path.join(out, "demo", "terminal.txt"));
   const receipt = await optionalJson(path.join(out, "demo", "command-receipt.json"));
   const captions = await readCaptions(out);
-  const duration = Number(flags.duration ?? Math.min(video.duration_seconds ?? 15, 15));
+  const defaultDuration = isSocialReadyStyle(video.style)
+    ? Math.min(video.duration_seconds ?? 30, 30)
+    : Math.min(video.duration_seconds ?? 15, 15);
+  const duration = Number(flags.duration ?? defaultDuration);
   const width = Number(flags.width ?? 720);
   const height = Number(flags.height ?? 1280);
   const fps = Number(flags.fps ?? 12);
@@ -212,7 +215,7 @@ async function renderLocalFfmpeg(out, flags = {}) {
   const output = path.join(out, "video", flags.output ?? "launchclip.mp4");
   const thumbnail = path.join(out, "video", "thumbnail.png");
   const demoMedia = demoMediaArtifact(receipt, out);
-  const renderAssets = await buildRenderAssets(manifest, terminal, captions, demoMedia);
+  const renderAssets = await buildRenderAssets(manifest, terminal, captions, demoMedia, video);
   const frameCount = Math.max(1, Math.ceil(duration * fps));
   const mediaFrames = demoMedia
     ? await prepareDemoMediaFrames(demoMedia, renderDir, { width, height, duration, fps })
@@ -220,7 +223,9 @@ async function renderLocalFfmpeg(out, flags = {}) {
   for (let index = 0; index < frameCount; index += 1) {
     const time = index / fps;
     const framePath = path.join(renderDir, `frame-${String(index + 1).padStart(4, "0")}.ppm`);
-    const scene = sceneForTime(time, duration, Boolean(demoMedia));
+    const scene = isSocialReadyStyle(video.style)
+      ? socialSceneForTime(video.script_visual_alignment, time, duration)
+      : sceneForTime(time, duration, Boolean(demoMedia));
     const mediaIndex = Math.min(mediaFrames.length - 1, Math.floor(scene.local * mediaFrames.length));
     const mediaFrame = scene.name === "media" ? mediaFrames[mediaIndex] : null;
     if (mediaFrame) {
@@ -484,7 +489,7 @@ async function productVideogenPayload(out, purpose) {
 
 function talkingHeadAdapter(flags = {}, style = "proof-card") {
   const requested = flags["talking-head"] ?? flags.talkingHead;
-  const provider = requested ?? (style === "ugc-split" ? "heygen" : "none");
+  const provider = requested ?? (isSocialReadyStyle(style) ? "heygen" : "none");
   if (provider === "none" || provider === "off" || provider === false) {
     return { enabled: false, provider: "none" };
   }
@@ -541,52 +546,91 @@ function scriptAlignmentIssues(video) {
     for (const field of ["voiceover", "caption", "visual", "evidence_source", "adapter_target"]) {
       if (!segment[field]) issues.push(`Script beat ${label} is missing ${field}.`);
     }
+    if (isSocialReadyStyle(video.style)) {
+      for (const field of ["motion", "transition", "caption_emphasis"]) {
+        if (!segment[field]) issues.push(`Social script beat ${label} is missing ${field}.`);
+      }
+    }
   }
   return issues;
 }
 
+function isSocialReadyStyle(style) {
+  return style === "ugc-split" || style === "ugc-demo-punchy";
+}
+
+function ugcSplitStructure(manifest) {
+  return [
+    { beat: "hook", seconds: 3, instruction: `Open with a presenter-led claim: ${manifest.source_repo.name} turns a repo demo into launch-ready short-form assets.` },
+    { beat: "split-screen-proof", seconds: 5, instruction: "Use a vertical split-screen: generated/demo B-roll above and presenter/talking-head below, with large centered captions." },
+    { beat: "steps", seconds: 8, instruction: "Show 3-5 numbered workflow steps with minimal words, light progress bars, and quick scene changes." },
+    { beat: "artifact-reveal", seconds: 8, instruction: "Reveal the actual artifacts: rendered MP4, thumbnail, captions, review packet, and product-videogen dry-run payload." },
+    { beat: "cta", seconds: 6, instruction: "Return to the presenter or a clean product screen with the repo URL and approval boundary." }
+  ];
+}
+
+function socialPunchyStructure(manifest) {
+  return [
+    { beat: "cold-open", seconds: 1.5, instruction: `Open with a full-screen pattern interrupt: ${manifest.source_repo.name} just made its own launch Short.` },
+    { beat: "friction", seconds: 3.5, instruction: "Show the manual launch tasks as fast cards: script, recording, edit, captions, review." },
+    { beat: "demo-trigger", seconds: 4, instruction: "Show the real demo command, timer, and passing receipt." },
+    { beat: "proof", seconds: 5, instruction: "Show script-to-visual alignment as proof that the edit follows the spoken line." },
+    { beat: "transformation", seconds: 6, instruction: "Assemble the launch packet outputs into one visible stack." },
+    { beat: "artifact-reveal", seconds: 7, instruction: "Flash real workspace files: brief, render plan, captions, review packet, product-videogen dry run." },
+    { beat: "cta", seconds: 3, instruction: "End on review-first approval CTA with repo URL." }
+  ];
+}
+
 function videoStylePreset(style, manifest, talkingHead = { enabled: false, provider: "none" }) {
-  if (style === "ugc-split") {
+  if (isSocialReadyStyle(style)) {
+    const punchy = style === "ugc-demo-punchy";
     return {
-      angle: "Make the repo feel like a fast creator-led product discovery clip: a human explains the outcome while generated or captured B-roll proves the workflow.",
+      angle: punchy
+        ? "Make the repo feel like a social-ready product discovery clip: fast hook, visible friction, proof-driven demo, artifact payoff, and one review-safe CTA."
+        : "Make the repo feel like a fast creator-led product discovery clip: a human explains the outcome while generated or captured B-roll proves the workflow.",
       briefBeats: [
-        "Hook: open on a direct creator claim about what the tool can now make or automate.",
-        "Context: cut between presenter and product/demo B-roll so the viewer understands the before/after quickly.",
-        "Steps: show two to five numbered micro-steps with sparse text and motion, not a dense terminal wall.",
-        "Proof: include captured demo output, generated assets, or UI footage as evidence-backed B-roll.",
-        "CTA: end with one plain next action: try the repo, inspect the packet, or approve the review item."
+        "Cold open: make a concrete claim in the first 1.5 seconds.",
+        "Friction: show the boring manual work the viewer wants to avoid.",
+        "Demo trigger: show the command or capture that starts the transformation.",
+        "Proof: show local demo evidence, not abstract stock footage.",
+        "Transformation: connect script, captions, visuals, and review packet as one flow.",
+        "Artifact reveal: flash the real output files quickly and repeatedly.",
+        "CTA: end with one plain approval-safe action."
       ],
-      structure: [
-        { beat: "hook", seconds: 3, instruction: `Open with a presenter-led claim: ${manifest.source_repo.name} turns a repo demo into launch-ready short-form assets.` },
-        { beat: "split-screen-proof", seconds: 5, instruction: "Use a vertical split-screen: generated/demo B-roll above and presenter/talking-head below, with large centered captions." },
-        { beat: "steps", seconds: 8, instruction: "Show 3-5 numbered workflow steps with minimal words, light progress bars, and quick scene changes." },
-        { beat: "artifact-reveal", seconds: 8, instruction: "Reveal the actual artifacts: rendered MP4, thumbnail, captions, review packet, and product-videogen dry-run payload." },
-        { beat: "cta", seconds: 6, instruction: "Return to the presenter or a clean product screen with the repo URL and approval boundary." }
-      ],
+      structure: punchy ? socialPunchyStructure(manifest) : ugcSplitStructure(manifest),
       recipe: {
-        preset: "ugc-split",
+        preset: style,
         aspect_ratio: "9:16",
         duration_seconds: 30,
         layout: [
-          "0-4s: split-screen, B-roll/demo scene top, presenter bottom.",
-          "4-18s: alternate full-screen presenter punches with clean numbered step screens.",
-          "18-26s: fast artifact montage from real launchclip workspace outputs.",
-          "26-30s: presenter or product CTA with repo URL."
+          "0-1.5s: full-screen hard hook with presenter punch-in and one giant caption.",
+          "1.5-5s: friction montage: script, screen recording, captions, edit timeline.",
+          "5-12s: command/demo trigger with timer, cursor motion, and proof receipt.",
+          "12-20s: split-screen proof: avatar host plus terminal/demo evidence and step cards.",
+          "20-27s: artifact barrage from real workspace outputs with quick zooms.",
+          "27-30s: clean CTA, repo URL, and human approval boundary."
         ],
         visual_language: {
-          presenter: talkingHead.enabled ? `${talkingHead.provider} avatar presenter, centered, direct eye contact, clean background, natural hand movement` : "casual creator/talking-head, centered, direct eye contact, shallow background, natural hand movement",
+          presenter: talkingHead.enabled ? `${talkingHead.provider} avatar presenter, direct eye contact, energetic but natural, used larger for hook and CTA and smaller during proof` : "casual creator/talking-head, direct eye contact, energetic but natural",
           b_roll: "generated product/lifestyle scenes, UI captures, terminal snippets, and output files; all original to the target repo",
-          captions: "large burned-in captions, 2-5 words per caption, high contrast, centered near lower third",
-          step_cards: "plain numbered micro-steps with thin progress line, warm neutral or high-contrast solid backgrounds",
-          pacing: "scene change every 1-3 seconds; avoid long static terminal shots"
+          captions: "large kinetic burned-in captions, 2-5 words per caption, high contrast, timed to each clause",
+          step_cards: "numbered micro-steps with progress timer, proof badges, and quick zoom transitions",
+          pacing: punchy ? "pattern interrupt or layout change every 0.7-1.5 seconds; no static terminal shots" : "scene change every 1-3 seconds; avoid long static terminal shots",
+          transitions: ["jump cut", "zoom punch", "caption slam", "receipt flash", "artifact whip"],
+          social_readiness: ["first-frame hook", "caption on every beat", "visible proof", "artifact payoff", "approval-safe CTA"]
         },
         script_formula: [
-          "Pattern interrupt: 'Claude/agents can now make the launch video too.'",
-          "Problem: 'Most OSS tools never get promoted because the launch work is manual.'",
-          "Mechanism: 'Launchclip runs the demo, captures proof, writes captions, and creates a review packet.'",
+          "Pattern interrupt: 'This repo just made its own launch Short.'",
+          "Problem: 'Normally the launch work is scripting, recording, editing, captions, review.'",
+          "Mechanism: 'Launchclip runs the demo, captures proof, writes the script, aligns the visuals, and packages review.'",
           "Proof: 'Here are the generated files from this repo.'",
-          "CTA: 'Review it before anything posts.'"
+          "CTA: 'Review the packet before anything posts.'"
         ],
+        renderer_contract: {
+          adapter: "launchclip.social-render.v1",
+          local_preview: "local-ffmpeg should render script beat cards, kinetic captions, proof panels, progress motion, artifact flashes, and CTA.",
+          future_adapters: ["remotion", "hyperframes", "product-videogen"]
+        },
         generation_notes: [
           "Do not reuse downloaded reference footage or creator likeness.",
           "Generate original presenter, voiceover, B-roll, and captions from the repo facts.",
@@ -631,8 +675,101 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
     .replace(new RegExp(`^${escapeRegExp(repoName)}\\s*`, "i"), "")
     .replace(/\s+/g, " ")
     .trim();
-  if (style === "ugc-split") {
-    const timeline = [
+  if (isSocialReadyStyle(style)) {
+    const punchy = style === "ugc-demo-punchy";
+    const timeline = punchy ? [
+      {
+        beat: "cold-open",
+        time_range: "0-1.5s",
+        target_seconds: 1.5,
+        voiceover: `This repo just made its own launch Short.`,
+        caption: "Repo -> Short",
+        visual: "Full-screen caption slam over presenter punch-in; flash repo name as a receipt.",
+        evidence_source: "launchclip workspace metadata",
+        adapter_target: talkingHead.enabled ? talkingHead.provider : "talking-head",
+        caption_emphasis: ["repo", "launch Short"],
+        motion: "caption slam, 8 percent zoom-in, quick repo-name flash",
+        transition: "hard jump cut"
+      },
+      {
+        beat: "friction",
+        time_range: "1.5-5s",
+        target_seconds: 3.5,
+        voiceover: `Usually that means scripting, screen recording, editing, captions, and review.`,
+        caption: "The boring part",
+        visual: "Rapid stacked cards for script, recording, edit, captions, review; each card gets crossed off.",
+        evidence_source: "launchclip generated stages",
+        adapter_target: "composition",
+        caption_emphasis: ["scripting", "editing", "captions"],
+        motion: "four fast cards, strike-through animation, timer ticking",
+        transition: "zoom punch"
+      },
+      {
+        beat: "demo-trigger",
+        time_range: "5-9s",
+        target_seconds: 4,
+        voiceover: `Launchclip starts with a real demo command and captures proof from the run.`,
+        caption: "Run the demo",
+        visual: "Terminal command appears with a timer and green proof badge when the receipt passes.",
+        evidence_source: "demo/terminal.txt and demo/command-receipt.json",
+        adapter_target: "b-roll",
+        caption_emphasis: ["real demo", "proof"],
+        motion: "typing reveal, progress sweep, receipt flash",
+        transition: "receipt flash"
+      },
+      {
+        beat: "proof",
+        time_range: "9-14s",
+        target_seconds: 5,
+        voiceover: `Then it writes the script and maps every visual to the line being spoken.`,
+        caption: "Script + visuals align",
+        visual: "Split-screen: script beats on one side, matching visual cards on the other, connected by animated lines.",
+        evidence_source: "video/video.json script_visual_alignment",
+        adapter_target: "composition",
+        caption_emphasis: ["script", "visuals"],
+        motion: "split-screen slide, connector lines, beat-by-beat highlights",
+        transition: "side swipe"
+      },
+      {
+        beat: "transformation",
+        time_range: "14-20s",
+        target_seconds: 6,
+        voiceover: `The output is not one file. It is the clip plan, captions, thumbnail, and review packet together.`,
+        caption: "One packet",
+        visual: "Four numbered output tiles assemble into one launch packet stack.",
+        evidence_source: "generated workspace files",
+        adapter_target: "b-roll",
+        caption_emphasis: ["clip plan", "captions", "review"],
+        motion: "numbered tiles snap into stack, progress bar completes",
+        transition: "artifact whip"
+      },
+      {
+        beat: "artifact-reveal",
+        time_range: "20-27s",
+        target_seconds: 7,
+        voiceover: `For ${repoName}, you can inspect the brief, render plan, captions, and product-videogen dry run before posting.`,
+        caption: "Receipts before posting",
+        visual: "Fast artifact montage of video/brief.md, render-plan.json, captions/*.md, REVIEW.md, and product-videogen.dry-run.json.",
+        evidence_source: "generated workspace files",
+        adapter_target: "b-roll",
+        caption_emphasis: ["inspect", "before posting"],
+        motion: "file cards flash every 0.8s with zoom punches",
+        transition: "jump cuts"
+      },
+      {
+        beat: "cta",
+        time_range: "27-30s",
+        target_seconds: 3,
+        voiceover: `Review the packet. Approve it only when the claims and visuals line up.`,
+        caption: "Review, then approve",
+        visual: "Presenter returns beside repo URL and approval-safe status badge.",
+        evidence_source: "review/product-videogen-review.dry-run.json",
+        adapter_target: talkingHead.enabled ? talkingHead.provider : "talking-head",
+        caption_emphasis: ["review", "approve"],
+        motion: "presenter punch-in, CTA lockup, final progress tick",
+        transition: "clean cut"
+      }
+    ] : [
       {
         beat: "hook",
         time_range: "0-3s",
@@ -641,7 +778,10 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         caption: "Repo to launch clip",
         visual: "HeyGen presenter opens in the lower half while fast B-roll shows the repo and generated packet.",
         evidence_source: "README.md and launchclip workspace metadata",
-        adapter_target: talkingHead.enabled ? talkingHead.provider : "talking-head"
+        adapter_target: talkingHead.enabled ? talkingHead.provider : "talking-head",
+        caption_emphasis: ["repo", "launch clip"],
+        motion: "presenter punch-in with repo flash",
+        transition: "jump cut"
       },
       {
         beat: "split-screen-proof",
@@ -651,7 +791,10 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         caption: "Proof, not guesses",
         visual: "Vertical split-screen with presenter below and terminal/demo evidence above; highlight the passing command receipt.",
         evidence_source: "demo/terminal.txt and demo/command-receipt.json",
-        adapter_target: "composition"
+        adapter_target: "composition",
+        caption_emphasis: ["proof"],
+        motion: "split-screen slide with receipt highlight",
+        transition: "zoom punch"
       },
       {
         beat: "steps",
@@ -661,7 +804,10 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         caption: "Demo -> plan -> captions -> review",
         visual: "Four numbered micro-step cards appear in sync with each clause, with a thin progress line between them.",
         evidence_source: "launchclip stages in launchclip.json",
-        adapter_target: "b-roll"
+        adapter_target: "b-roll",
+        caption_emphasis: ["demo", "plan", "captions", "review"],
+        motion: "numbered cards with progress line",
+        transition: "side swipe"
       },
       {
         beat: "artifact-reveal",
@@ -671,7 +817,10 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         caption: "Review packet ready",
         visual: "Fast artifact montage of video/brief.md, render-plan.json, captions/*.md, and product-videogen.dry-run.json.",
         evidence_source: "generated workspace files",
-        adapter_target: "b-roll"
+        adapter_target: "b-roll",
+        caption_emphasis: ["review packet"],
+        motion: "artifact montage with file-card zooms",
+        transition: "artifact whip"
       },
       {
         beat: "cta",
@@ -681,18 +830,23 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         caption: "Review before posting",
         visual: "Presenter returns beside a clean product screen with repo URL and approval boundary.",
         evidence_source: "review/product-videogen-review.dry-run.json",
-        adapter_target: talkingHead.enabled ? talkingHead.provider : "talking-head"
+        adapter_target: talkingHead.enabled ? talkingHead.provider : "talking-head",
+        caption_emphasis: ["review", "posting"],
+        motion: "presenter return with CTA lockup",
+        transition: "clean cut"
       }
     ];
     return {
       schema_version: "launchclip.script.v1",
       style,
-      strategy: "consistent creator-led script with one visual proof point per spoken beat",
+      strategy: punchy
+        ? "social-ready creator script with fast pattern interrupts, captions on every beat, and proof-matched visuals"
+        : "consistent creator-led script with one visual proof point per spoken beat",
       duration_seconds: 30,
       voice: {
         provider: talkingHead.enabled ? talkingHead.provider : "none",
         avatar_id: talkingHead.avatar_id ?? null,
-        delivery: "fast, plain-spoken, confident, no hype claims beyond local evidence"
+        delivery: punchy ? "fast, direct, creator-native, no hype claims beyond local evidence" : "fast, plain-spoken, confident, no hype claims beyond local evidence"
       },
       summary_line: summary || "turns local demo evidence into a reviewable launch packet",
       timeline,
@@ -700,6 +854,7 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         "Every voiceover segment must have a matching visual, caption, evidence_source, and adapter_target.",
         "Captions should paraphrase the spoken line in 2-6 words instead of duplicating a long sentence.",
         "Do not show abstract stock footage when local demo evidence or generated packet artifacts exist.",
+        "For social-ready styles, every beat must include motion and transition guidance.",
         "If a visual cannot be produced, rewrite the corresponding script segment before rendering."
       ]
     };
@@ -795,7 +950,7 @@ function terminalOutput(terminal) {
     .join("\n");
 }
 
-async function buildRenderAssets(manifest, terminal, captions, demoMedia = null) {
+async function buildRenderAssets(manifest, terminal, captions, demoMedia = null, video = null) {
   const repo = manifest.source_repo;
   const command = terminalCommand(terminal);
   const output = terminalOutput(terminal);
@@ -817,12 +972,22 @@ async function buildRenderAssets(manifest, terminal, captions, demoMedia = null)
     demoMediaLabel: demoMedia ? `${demoMedia.type.toUpperCase()} DEMO` : "TERMINAL PROOF",
     artifacts: "CREATES\nvideo/launchclip.mp4\nvideo/thumbnail.png\ncaptions/*.md\nREVIEW.md",
     cta: stripMarkdown(caption.replace(/Claim status:.*/is, "").trim() || `Try ${repo.name} from the README quickstart.`),
-    url: cta
+    url: cta,
+    socialReady: isSocialReadyStyle(video?.style),
+    style: video?.style ?? "proof-card",
+    timeline: video?.script_visual_alignment ?? [],
+    summaryLine: video?.script?.summary_line ?? "",
+    scriptStrategy: video?.script?.strategy ?? "",
+    proofCommand: command.replace(/^\$ /, ""),
+    outputTiles: ["brief.md", "render-plan.json", "captions/*.md", "REVIEW.md", "dry-run.json"]
   };
 }
 
 function renderMotionFrame(content, options) {
   const { width, height, time, duration, scene = sceneForTime(time, duration, false) } = options;
+  if (content.socialReady) {
+    return renderSocialFrame(content, { width, height, time, duration, scene });
+  }
   const pixels = Buffer.alloc(width * height * 3);
   const progress = Math.min(1, time / duration);
   const margin = Math.round(width * 0.07);
@@ -902,6 +1067,128 @@ function renderMotionFrame(content, options) {
   return Buffer.concat([Buffer.from(`P6\n${width} ${height}\n255\n`), pixels]);
 }
 
+function renderSocialFrame(content, options) {
+  const { width, height, time, duration, scene } = options;
+  const pixels = Buffer.alloc(width * height * 3);
+  const progress = Math.min(1, time / duration);
+  const beat = scene.segment ?? {};
+  const local = scene.local ?? 0;
+  const margin = Math.round(width * 0.06);
+  const safeW = width - margin * 2;
+  const titleScale = Math.max(5, Math.round(width / 105));
+  const bodyScale = Math.max(3, Math.round(width / 190));
+  const smallScale = Math.max(2, Math.round(width / 310));
+  const palette = socialPalette(scene.name, Math.floor(time * 2) % 2);
+
+  fillRect(pixels, width, 0, 0, width, height, palette.bg);
+  fillRect(pixels, width, 0, 0, width, Math.round(height * 0.015), palette.accent);
+  fillRect(pixels, width, 0, height - Math.round(height * 0.015), Math.round(width * progress), Math.round(height * 0.015), palette.accent);
+  drawText(pixels, width, height, "LAUNCHCLIP", margin, Math.round(height * 0.035), smallScale, palette.muted);
+  drawText(pixels, width, height, `${Math.ceil(Math.max(0, duration - time))}S`, width - margin - 72, Math.round(height * 0.035), smallScale, palette.accent);
+
+  if (scene.name === "cold-open" || scene.name === "hook") {
+    const punch = Math.round(24 * normalized(local, 0, 0.45));
+    drawTextBox(pixels, width, height, content.title, margin, Math.round(height * 0.17) - punch, safeW, Math.round(height * 0.09), bodyScale, palette.accent, { maxLines: 1 });
+    drawTextBox(pixels, width, height, beat.caption ?? "Repo -> Short", margin, Math.round(height * 0.28) - punch, safeW, Math.round(height * 0.22), titleScale, palette.text, { maxLines: 2 });
+    drawPresenterBadge(pixels, width, height, margin, Math.round(height * 0.58), safeW, Math.round(height * 0.23), palette, "HOST");
+    drawTextBox(pixels, width, height, reveal(beat.voiceover ?? content.summary, normalized(local, 0.15, 1)), margin + 24, Math.round(height * 0.84), safeW - 48, Math.round(height * 0.08), smallScale, palette.text, { maxLines: 2 });
+  } else if (scene.name === "friction") {
+    drawTextBox(pixels, width, height, beat.caption ?? "The boring part", margin, Math.round(height * 0.12), safeW, Math.round(height * 0.13), titleScale, palette.text, { maxLines: 2 });
+    ["SCRIPT", "RECORD", "EDIT", "CAPTIONS", "REVIEW"].forEach((label, index) => {
+      const y = Math.round(height * 0.31) + index * Math.round(height * 0.095);
+      const shown = local > index * 0.12;
+      fillRect(pixels, width, margin, y, safeW, Math.round(height * 0.07), shown ? palette.panel : palette.shadow);
+      drawText(pixels, width, height, label, margin + 28, y + 18, bodyScale, shown ? palette.text : palette.muted);
+      if (local > 0.48 + index * 0.06) fillRect(pixels, width, margin + 24, y + Math.round(height * 0.035), safeW - 48, 6, palette.accent);
+    });
+  } else if (scene.name === "demo-trigger" || scene.name === "split-screen-proof") {
+    drawTextBox(pixels, width, height, beat.caption ?? "Run the demo", margin, Math.round(height * 0.11), safeW, Math.round(height * 0.1), titleScale, palette.text, { maxLines: 2 });
+    drawTerminalWindow(pixels, width, height, {
+      x: margin,
+      y: Math.round(height * 0.28),
+      width: safeW,
+      height: Math.round(height * 0.34),
+      scale: smallScale
+    });
+    drawTextBox(pixels, width, height, reveal(content.command, normalized(local, 0.05, 0.55)), margin + 28, Math.round(height * 0.35), safeW - 56, Math.round(height * 0.08), smallScale, palette.accent, { preserveLines: true, maxLines: 2 });
+    drawTextBox(pixels, width, height, reveal(content.output, normalized(local, 0.35, 1)), margin + 28, Math.round(height * 0.44), safeW - 56, Math.round(height * 0.14), smallScale, palette.text, { preserveLines: true, maxLines: 4 });
+    drawProofBadge(pixels, width, height, margin, Math.round(height * 0.69), safeW, Math.round(height * 0.12), palette, "PROOF FROM DEMO");
+  } else if (scene.name === "proof") {
+    drawTextBox(pixels, width, height, beat.caption ?? "Script + visuals align", margin, Math.round(height * 0.11), safeW, Math.round(height * 0.1), titleScale, palette.text, { maxLines: 2 });
+    const panelY = Math.round(height * 0.27);
+    const panelH = Math.round(height * 0.42);
+    fillRect(pixels, width, margin, panelY, Math.round(safeW * 0.47), panelH, palette.panel);
+    fillRect(pixels, width, margin + Math.round(safeW * 0.53), panelY, Math.round(safeW * 0.47), panelH, palette.panel);
+    drawTextBox(pixels, width, height, "SCRIPT\nBEATS", margin + 24, panelY + 28, Math.round(safeW * 0.37), Math.round(panelH * 0.32), bodyScale, palette.accent, { preserveLines: true });
+    drawTextBox(pixels, width, height, "VISUAL\nMATCH", margin + Math.round(safeW * 0.58), panelY + 28, Math.round(safeW * 0.34), Math.round(panelH * 0.32), bodyScale, palette.accent, { preserveLines: true });
+    for (let i = 0; i < 4; i += 1) {
+      const y = panelY + Math.round(panelH * (0.45 + i * 0.12));
+      fillRect(pixels, width, margin + Math.round(safeW * 0.43), y, Math.round(safeW * 0.14 * normalized(local, i * 0.15, 0.6 + i * 0.1)), 5, palette.accent);
+    }
+    drawTextBox(pixels, width, height, beat.motion ?? "beat-by-beat highlights", margin, Math.round(height * 0.76), safeW, Math.round(height * 0.08), smallScale, palette.muted, { maxLines: 2 });
+  } else if (scene.name === "transformation" || scene.name === "steps") {
+    drawTextBox(pixels, width, height, beat.caption ?? "One packet", margin, Math.round(height * 0.11), safeW, Math.round(height * 0.1), titleScale, palette.text, { maxLines: 2 });
+    content.outputTiles.slice(0, 4).forEach((label, index) => {
+      const x = margin + (index % 2) * Math.round(safeW * 0.52);
+      const y = Math.round(height * 0.31) + Math.floor(index / 2) * Math.round(height * 0.18);
+      const visible = normalized(local, index * 0.12, 0.42 + index * 0.12);
+      fillRect(pixels, width, x, y + Math.round((1 - visible) * 40), Math.round(safeW * 0.46), Math.round(height * 0.13), palette.panel);
+      drawText(pixels, width, height, `0${index + 1}`, x + 20, y + 20, smallScale, palette.accent);
+      drawTextBox(pixels, width, height, label, x + 20, y + 56, Math.round(safeW * 0.38), Math.round(height * 0.05), smallScale, palette.text, { maxLines: 1 });
+    });
+    drawTextBox(pixels, width, height, beat.voiceover ?? content.scriptStrategy, margin, Math.round(height * 0.75), safeW, Math.round(height * 0.11), smallScale, palette.text, { maxLines: 3 });
+  } else if (scene.name === "artifact-reveal" || scene.name === "artifacts") {
+    const active = Math.min(content.outputTiles.length - 1, Math.floor(local * content.outputTiles.length * 1.2));
+    drawTextBox(pixels, width, height, beat.caption ?? "Receipts before posting", margin, Math.round(height * 0.11), safeW, Math.round(height * 0.12), titleScale, palette.text, { maxLines: 2 });
+    content.outputTiles.forEach((label, index) => {
+      const y = Math.round(height * 0.29) + index * Math.round(height * 0.095);
+      const isActive = index === active;
+      fillRect(pixels, width, margin + (isActive ? -10 : 0), y, safeW + (isActive ? 20 : 0), Math.round(height * 0.07), isActive ? palette.accent : palette.panel);
+      drawTextBox(pixels, width, height, label, margin + 28, y + 18, safeW - 56, Math.round(height * 0.04), smallScale, isActive ? palette.bg : palette.text, { maxLines: 1 });
+    });
+    drawProofBadge(pixels, width, height, margin, Math.round(height * 0.82), safeW, Math.round(height * 0.08), palette, "REAL WORKSPACE FILES");
+  } else {
+    drawTextBox(pixels, width, height, beat.caption ?? "Review, then approve", margin, Math.round(height * 0.13), safeW, Math.round(height * 0.17), titleScale, palette.text, { maxLines: 2 });
+    drawPresenterBadge(pixels, width, height, margin, Math.round(height * 0.37), safeW, Math.round(height * 0.2), palette, "APPROVAL SAFE");
+    drawTextBox(pixels, width, height, content.url, margin, Math.round(height * 0.66), safeW, Math.round(height * 0.08), smallScale, palette.accent, { maxLines: 2 });
+    drawTextBox(pixels, width, height, beat.voiceover ?? content.cta, margin, Math.round(height * 0.76), safeW, Math.round(height * 0.12), smallScale, palette.text, { maxLines: 3 });
+  }
+
+  return Buffer.concat([Buffer.from(`P6\n${width} ${height}\n255\n`), pixels]);
+}
+
+function socialPalette(name, alternate = 0) {
+  const palettes = {
+    "cold-open": { bg: [12, 17, 22], panel: [246, 242, 231], shadow: [32, 38, 47], text: [248, 250, 252], muted: [154, 166, 180], accent: [255, 209, 102] },
+    hook: { bg: [12, 17, 22], panel: [246, 242, 231], shadow: [32, 38, 47], text: [248, 250, 252], muted: [154, 166, 180], accent: [255, 209, 102] },
+    friction: { bg: [24, 28, 36], panel: [52, 62, 75], shadow: [33, 39, 49], text: [245, 248, 255], muted: [169, 181, 197], accent: [255, 107, 107] },
+    "demo-trigger": { bg: [10, 21, 29], panel: [20, 48, 61], shadow: [13, 30, 40], text: [245, 248, 255], muted: [154, 190, 203], accent: [72, 213, 151] },
+    "split-screen-proof": { bg: [10, 21, 29], panel: [20, 48, 61], shadow: [13, 30, 40], text: [245, 248, 255], muted: [154, 190, 203], accent: [72, 213, 151] },
+    proof: { bg: [18, 20, 35], panel: [37, 42, 72], shadow: [25, 28, 48], text: [245, 248, 255], muted: [174, 180, 210], accent: [132, 180, 255] },
+    transformation: { bg: [18, 31, 28], panel: [34, 57, 51], shadow: [20, 39, 35], text: [245, 248, 255], muted: [166, 196, 187], accent: [244, 162, 97] },
+    steps: { bg: [18, 31, 28], panel: [34, 57, 51], shadow: [20, 39, 35], text: [245, 248, 255], muted: [166, 196, 187], accent: [244, 162, 97] },
+    "artifact-reveal": { bg: alternate ? [24, 24, 30] : [14, 23, 34], panel: [39, 50, 64], shadow: [26, 33, 43], text: [245, 248, 255], muted: [168, 181, 198], accent: [255, 232, 111] },
+    artifacts: { bg: alternate ? [24, 24, 30] : [14, 23, 34], panel: [39, 50, 64], shadow: [26, 33, 43], text: [245, 248, 255], muted: [168, 181, 198], accent: [255, 232, 111] },
+    cta: { bg: [13, 18, 28], panel: [32, 43, 58], shadow: [22, 29, 40], text: [245, 248, 255], muted: [162, 174, 191], accent: [72, 213, 151] }
+  };
+  return palettes[name] ?? palettes.cta;
+}
+
+function drawPresenterBadge(pixels, width, height, x, y, boxWidth, boxHeight, palette, label) {
+  fillRect(pixels, width, x, y, boxWidth, boxHeight, palette.panel);
+  const head = Math.round(boxHeight * 0.32);
+  fillRect(pixels, width, x + Math.round(boxWidth * 0.08), y + Math.round(boxHeight * 0.18), head, head, palette.accent);
+  fillRect(pixels, width, x + Math.round(boxWidth * 0.1), y + Math.round(boxHeight * 0.56), Math.round(boxWidth * 0.22), Math.round(boxHeight * 0.18), palette.accent);
+  drawText(pixels, width, height, label, x + Math.round(boxWidth * 0.42), y + Math.round(boxHeight * 0.22), Math.max(2, Math.round(width / 260)), palette.text);
+  drawTextBox(pixels, width, height, "TALKING HEAD + DEMO PROOF", x + Math.round(boxWidth * 0.42), y + Math.round(boxHeight * 0.48), Math.round(boxWidth * 0.48), Math.round(boxHeight * 0.22), Math.max(2, Math.round(width / 350)), palette.muted, { maxLines: 2 });
+}
+
+function drawProofBadge(pixels, width, height, x, y, boxWidth, boxHeight, palette, label) {
+  fillRect(pixels, width, x, y, boxWidth, boxHeight, palette.panel);
+  fillRect(pixels, width, x + 18, y + 18, Math.round(boxHeight * 0.45), Math.round(boxHeight * 0.45), palette.accent);
+  drawTextBox(pixels, width, height, label, x + 88, y + 24, boxWidth - 112, boxHeight - 36, Math.max(2, Math.round(width / 300)), palette.text, { maxLines: 2 });
+}
+
 function drawTerminalWindow(pixels, width, height, terminal) {
   fillRect(pixels, width, terminal.x, terminal.y, terminal.width, terminal.height, [9, 15, 22]);
   fillRect(pixels, width, terminal.x, terminal.y, terminal.width, 44, [36, 48, 64]);
@@ -937,6 +1224,35 @@ function sceneForTime(time, duration, hasDemoMedia) {
     name: entry[0],
     local
   };
+}
+
+function socialSceneForTime(timeline = [], time, duration) {
+  const fallback = [
+    { beat: "cold-open", target_seconds: 1.5 },
+    { beat: "friction", target_seconds: 3.5 },
+    { beat: "demo-trigger", target_seconds: 4 },
+    { beat: "proof", target_seconds: 5 },
+    { beat: "transformation", target_seconds: 6 },
+    { beat: "artifact-reveal", target_seconds: 7 },
+    { beat: "cta", target_seconds: 3 }
+  ];
+  const segments = Array.isArray(timeline) && timeline.length ? timeline : fallback;
+  const total = segments.reduce((sum, segment) => sum + Number(segment.target_seconds ?? 1), 0) || duration;
+  const scaledTime = Math.min(total - 0.001, Math.max(0, time / duration * total));
+  let cursor = 0;
+  for (const segment of segments) {
+    const seconds = Number(segment.target_seconds ?? 1);
+    if (scaledTime >= cursor && scaledTime < cursor + seconds) {
+      return {
+        name: segment.beat,
+        local: normalized(scaledTime, cursor, cursor + seconds),
+        segment
+      };
+    }
+    cursor += seconds;
+  }
+  const segment = segments[segments.length - 1];
+  return { name: segment.beat, local: 1, segment };
 }
 
 function mediaArtifactType(filePath) {
