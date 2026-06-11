@@ -1,9 +1,11 @@
 import { execFile } from "node:child_process";
 import { access, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export async function initWorkspace(repoPath, flags = {}) {
   const repo = path.resolve(repoPath);
@@ -182,6 +184,7 @@ export async function renderVideo(workspacePath, flags = {}) {
   const out = path.resolve(workspacePath);
   const provider = flags.provider ?? "product-videogen";
   if (provider === "local-ffmpeg") return renderLocalFfmpeg(out, flags);
+  if (provider === "remotion") return renderRemotion(out, flags);
   if (provider !== "product-videogen") throw new Error(`Unsupported render provider: ${provider}`);
   const payload = await productVideogenPayload(out, "render");
   const filePath = path.join(out, "video", "product-videogen.dry-run.json");
@@ -190,6 +193,57 @@ export async function renderVideo(workspacePath, flags = {}) {
     manifest.stages.render = { status: "dry-run", provider };
   });
   return { stage: "render", mode: "dry-run", provider, payload: filePath };
+}
+
+async function renderRemotion(out, flags = {}) {
+  if (flags["dry-run"]) {
+    throw new Error("remotion renders a real media file; omit --dry-run to create video/launchclip.mp4");
+  }
+  const video = await readJson(path.join(out, "video", "video.json"));
+  const fps = Number(flags.fps ?? 30);
+  const duration = Number(flags.duration ?? Math.min(video.duration_seconds ?? 30, 30));
+  const width = Number(flags.width ?? 720);
+  const height = Number(flags.height ?? 1280);
+  const output = path.join(out, "video", flags.output ?? "launchclip.mp4");
+  const thumbnail = path.join(out, "video", "thumbnail.png");
+  const propsPath = path.join(out, "video", "remotion-props.json");
+  const entryPoint = path.join(PACKAGE_ROOT, "remotion", "index.jsx");
+  const props = await buildRemotionProps(out, { width, height, fps, durationSeconds: duration });
+  await writeJson(propsPath, props);
+  await execFileAsync("npx", [
+    "remotion",
+    "render",
+    entryPoint,
+    "LaunchclipSocial",
+    output,
+    "--props",
+    propsPath,
+    "--overwrite",
+    "--codec",
+    "h264",
+    "--log",
+    "warn"
+  ], { cwd: PACKAGE_ROOT, maxBuffer: 1024 * 1024 * 16 });
+  await execFileAsync("ffmpeg", [
+    "-y",
+    "-ss",
+    "1",
+    "-i",
+    output,
+    "-frames:v",
+    "1",
+    thumbnail
+  ], { maxBuffer: 1024 * 1024 * 8 });
+  await updateManifest(out, (manifest) => {
+    manifest.stages.render = {
+      status: "passed",
+      provider: "remotion",
+      media: "video/launchclip.mp4",
+      thumbnail: "video/thumbnail.png",
+      props: "video/remotion-props.json"
+    };
+  });
+  return { stage: "render", mode: "local", provider: "remotion", video: output, thumbnail, props: propsPath };
 }
 
 async function renderLocalFfmpeg(out, flags = {}) {
@@ -627,9 +681,10 @@ function videoStylePreset(style, manifest, talkingHead = { enabled: false, provi
           "CTA: 'Review the packet before anything posts.'"
         ],
         renderer_contract: {
-          adapter: "launchclip.social-render.v1",
+          adapter: "launchclip.remotion-render.v1",
           local_preview: "local-ffmpeg should render script beat cards, kinetic captions, proof panels, progress motion, artifact flashes, and CTA.",
-          future_adapters: ["remotion", "hyperframes", "product-videogen"]
+          remotion: "Render the social-ready composition from video/remotion-props.json with frame-based motion graphics, kinetic captions, animated proof panels, and artifact cards.",
+          fallback_adapters: ["local-ffmpeg", "hyperframes", "product-videogen"]
         },
         generation_notes: [
           "Do not reuse downloaded reference footage or creator likeness.",
@@ -980,6 +1035,43 @@ async function buildRenderAssets(manifest, terminal, captions, demoMedia = null,
     scriptStrategy: video?.script?.strategy ?? "",
     proofCommand: command.replace(/^\$ /, ""),
     outputTiles: ["brief.md", "render-plan.json", "captions/*.md", "REVIEW.md", "dry-run.json"]
+  };
+}
+
+async function buildRemotionProps(out, renderOptions) {
+  const manifest = await readJson(path.join(out, "launchclip.json"));
+  const video = await readJson(path.join(out, "video", "video.json"));
+  const terminal = await optionalText(path.join(out, "demo", "terminal.txt"));
+  const receipt = await optionalJson(path.join(out, "demo", "command-receipt.json"));
+  const captions = await readCaptions(out);
+  const repo = manifest.source_repo;
+  return {
+    schema_version: "launchclip.remotion-props.v1",
+    width: renderOptions.width,
+    height: renderOptions.height,
+    fps: renderOptions.fps,
+    durationSeconds: renderOptions.durationSeconds,
+    repo: {
+      name: stripMarkdown(repo.name),
+      summary: stripMarkdown(repo.summary).replace(new RegExp(`^${escapeRegExp(repo.name)}\\s*`, "i"), "").trim(),
+      url: repo.url ?? repo.path
+    },
+    style: video.style,
+    format: video.format,
+    timeline: video.script_visual_alignment ?? video.script?.timeline ?? [],
+    creativeRecipe: video.creative_recipe,
+    talkingHead: video.talking_head,
+    terminal: terminal || "$ npm run smoke\n\nDemo completed and evidence was captured locally.",
+    receipt: receipt ?? null,
+    captions,
+    artifacts: [
+      "video/brief.md",
+      "video/render-plan.json",
+      "captions/*.md",
+      "REVIEW.md",
+      "product-videogen.dry-run.json"
+    ],
+    approvalBoundary: "Review before posting. External submission stays behind human approval."
   };
 }
 

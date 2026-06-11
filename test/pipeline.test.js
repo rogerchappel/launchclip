@@ -127,13 +127,42 @@ test("plans and renders punchy social-ready UGC preview", async (t) => {
     await access(result.video);
     await access(result.thumbnail);
     assert.equal(video.style, "ugc-demo-punchy");
-    assert.equal(video.creative_recipe.renderer_contract.adapter, "launchclip.social-render.v1");
+    assert.equal(video.creative_recipe.renderer_contract.adapter, "launchclip.remotion-render.v1");
     assert.equal(video.script_visual_alignment.length, 7);
     assert.equal(video.script_visual_alignment[0].beat, "cold-open");
     assert.equal(video.script_visual_alignment[0].caption, "Repo -> Short");
     assert.match(video.script_visual_alignment[3].visual, /Split-screen/i);
     assert.match(video.script_visual_alignment[5].motion, /file cards flash/i);
     assert.equal(readiness.status, "ready");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("renders punchy social-ready UGC preview with Remotion", async (t) => {
+  if (!(await hasCommand("ffmpeg")) || !(await hasCommand("npx"))) {
+    t.skip("ffmpeg or npx is not installed");
+    return;
+  }
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
+  const out = path.join(temp, "packet");
+  try {
+    await initWorkspace(fixtureRepo, { out });
+    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
+    await planVideo(out, { format: "short-30", renderer: "remotion", style: "ugc-demo-punchy", "talking-head": "heygen" });
+    await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
+    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
+    await submitReview(out, { provider: "product-videogen", "dry-run": true });
+    const result = await renderVideo(out, { provider: "remotion", duration: "2", fps: "15" });
+    const manifest = JSON.parse(await readFile(path.join(out, "launchclip.json"), "utf8"));
+    const props = JSON.parse(await readFile(path.join(out, "video/remotion-props.json"), "utf8"));
+
+    await access(result.video);
+    await access(result.thumbnail);
+    assert.equal(manifest.stages.render.provider, "remotion");
+    assert.equal(props.schema_version, "launchclip.remotion-props.v1");
+    assert.equal(props.timeline.length, 7);
+    assert.equal(props.fps, 15);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
