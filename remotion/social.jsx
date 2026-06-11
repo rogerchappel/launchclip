@@ -38,8 +38,8 @@ export function LaunchclipSocial(props) {
       <EditorialBackdrop frame={frame} scene={scene} />
       <SceneSwitch context={context} />
       <BrandBar repo={props.repo} progress={totalProgress} scene={scene} />
-      <CaptionStack beat={beat} progress={cutEnergy} scene={scene} />
-      <StoryboardRail timeline={timeline} activeIndex={activeIndex} />
+      {!isCtaScene(scene) ? <CaptionStack beat={beat} progress={cutEnergy} scene={scene} /> : null}
+      {!isCtaScene(scene) ? <StoryboardRail timeline={timeline} activeIndex={activeIndex} /> : null}
     </AbsoluteFill>
   );
 }
@@ -213,21 +213,23 @@ function ArtifactBarrage({ props, beat, scene, progress, entrance, localFrame })
 }
 
 function CtaLockup({ props, beat, progress, entrance }) {
+  const repoLabel = shorten(props.repo?.url || props.repo?.name || "launchclip workspace", 54);
   return (
     <Stage>
-      <CreatorFrame x={64} y={198} width={244} height={330} label="host" progress={progress} />
-      <div style={{ position: "absolute", left: 342, right: 54, top: 210, transform: `translateY(${(1 - entrance) * 36}px)` }}>
+      <CreatorFrame x={62} y={210} width={222} height={302} label="host" progress={progress} />
+      <div style={{ position: "absolute", left: 330, right: 54, top: 216, transform: `translateY(${(1 - entrance) * 36}px)` }}>
         <Eyebrow color={colors.green}>approval boundary</Eyebrow>
-        <div style={{ marginTop: 18, fontSize: 56, lineHeight: 0.96, fontWeight: 900 }}>{beat.caption || "Review, then approve"}</div>
+        <div style={{ marginTop: 18, fontSize: 64, lineHeight: 0.92, fontWeight: 900 }}>{beat.caption || "Review, then approve"}</div>
       </div>
-      <div style={{ position: "absolute", left: 58, right: 58, top: 625, display: "grid", gap: 14 }}>
-        {["claims grounded", "visuals aligned", "packet ready"].map((item, index) => (
-          <ChecklistRow key={item} label={item} checked={progress > 0.18 + index * 0.18} />
+      <div style={{ position: "absolute", left: 58, right: 58, top: 608, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        {["claims grounded", "visuals aligned"].map((item, index) => (
+          <ChecklistRow key={item} label={item} checked={progress > 0.18 + index * 0.22} compact />
         ))}
       </div>
-      <div style={{ position: "absolute", left: 58, right: 58, bottom: 230, padding: "24px 28px", borderRadius: 24, background: colors.ink, color: colors.white, boxShadow: "0 28px 60px rgba(18,20,23,0.22)" }}>
-        <div style={{ fontSize: 16, fontWeight: 850, textTransform: "uppercase" }}>repo</div>
-        <div style={{ marginTop: 8, fontSize: 22, lineHeight: 1.18, fontWeight: 760 }}>{props.repo?.url || props.repo?.name || "launchclip workspace"}</div>
+      <div style={{ position: "absolute", left: 58, right: 58, top: 760, padding: "28px 30px 30px", borderRadius: 26, background: colors.ink, color: colors.white, boxShadow: "0 28px 60px rgba(18,20,23,0.22)" }}>
+        <div style={{ fontSize: 14, fontWeight: 850, textTransform: "uppercase", color: colors.green }}>next step</div>
+        <div style={{ marginTop: 10, fontSize: 38, lineHeight: 0.98, fontWeight: 900 }}>Open the review packet.</div>
+        <div style={{ marginTop: 18, fontSize: 20, lineHeight: 1.16, fontWeight: 760, color: "rgba(251,251,248,0.76)" }}>{repoLabel}</div>
       </div>
     </Stage>
   );
@@ -239,6 +241,7 @@ function Stage({ children }) {
 
 function BrandBar({ repo, progress, scene }) {
   const palette = scenePalette(scene.id);
+  const cta = isCtaScene(scene);
   return (
     <div style={{ position: "absolute", left: 34, right: 34, top: 32, zIndex: 20 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -249,11 +252,13 @@ function BrandBar({ repo, progress, scene }) {
             <div style={{ marginTop: 3, fontSize: 11, fontWeight: 800, textTransform: "uppercase", color: "rgba(18,20,23,0.58)" }}>social preview</div>
           </div>
         </div>
-        <div style={{ padding: "8px 12px", borderRadius: 999, background: palette.accent, color: palette.accentText, fontSize: 13, fontWeight: 900 }}>dry-run</div>
+        <div style={{ padding: "8px 12px", borderRadius: 999, background: palette.accent, color: palette.accentText, fontSize: 13, fontWeight: 900 }}>{cta ? "review gate" : "dry-run"}</div>
       </div>
-      <div style={{ marginTop: 16, height: 5, borderRadius: 999, background: "rgba(18,20,23,0.12)", overflow: "hidden" }}>
-        <div style={{ width: `${progress * 100}%`, height: "100%", borderRadius: 999, background: colors.ink }} />
-      </div>
+      {!cta ? (
+        <div style={{ marginTop: 16, height: 5, borderRadius: 999, background: "rgba(18,20,23,0.12)", overflow: "hidden" }}>
+          <div style={{ width: `${progress * 100}%`, height: "100%", borderRadius: 999, background: colors.ink }} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -482,13 +487,17 @@ function ArtifactCard({ label, x, y, active, visible }) {
   );
 }
 
-function ChecklistRow({ label, checked }) {
+function ChecklistRow({ label, checked, compact = false }) {
   return (
-    <div style={{ height: 70, borderRadius: 18, background: colors.white, display: "flex", alignItems: "center", gap: 16, padding: "0 20px", boxShadow: "0 16px 36px rgba(18,20,23,0.1)" }}>
-      <div style={{ width: 34, height: 34, borderRadius: 10, background: checked ? colors.green : "rgba(18,20,23,0.12)", color: colors.ink, display: "grid", placeItems: "center", fontSize: 12, fontWeight: 900 }}>{checked ? "OK" : ""}</div>
-      <div style={{ fontSize: 24, fontWeight: 900 }}>{label}</div>
+    <div style={{ height: compact ? 82 : 70, borderRadius: 18, background: colors.white, display: "flex", alignItems: "center", gap: 14, padding: "0 18px", boxShadow: "0 16px 36px rgba(18,20,23,0.1)" }}>
+      <div style={{ width: 32, height: 32, borderRadius: 10, background: checked ? colors.green : "rgba(18,20,23,0.12)", color: colors.ink, display: "grid", placeItems: "center", fontSize: 11, fontWeight: 900 }}>{checked ? "OK" : ""}</div>
+      <div style={{ fontSize: compact ? 19 : 24, lineHeight: 1, fontWeight: 900 }}>{label}</div>
     </div>
   );
+}
+
+function isCtaScene(scene) {
+  return (scene.id || "").toLowerCase() === "cta";
 }
 
 function scenePalette(id) {

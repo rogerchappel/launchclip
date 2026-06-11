@@ -141,6 +141,8 @@ test("plans and renders punchy social-ready UGC preview", async (t) => {
     assert.equal(video.script_visual_alignment[0].caption, "Repo -> Short");
     assert.match(video.script_visual_alignment[3].visual, /Split-screen/i);
     assert.match(video.script_visual_alignment[5].motion, /file cards flash/i);
+    assert.equal(video.script_visual_alignment[6].caption, "Review first");
+    assert.match(video.script_visual_alignment[6].visual, /no progress bar/i);
     assert.equal(readiness.status, "ready");
   } finally {
     await rm(temp, { recursive: true, force: true });
