@@ -98,6 +98,7 @@ export async function planVideo(workspacePath, flags = {}) {
   const script = buildScriptPlan(style, manifest, stylePreset, talkingHead);
   const creativeStoryboard = buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHead);
   const voiceover = buildVoiceoverPlan(script, talkingHead);
+  const soundDesign = buildSoundDesignPlan(script, stylePreset);
   const video = {
     schema_version: "video-skillkit.compat.v1",
     title: `${manifest.source_repo.name} OSS launch clip`,
@@ -109,6 +110,7 @@ export async function planVideo(workspacePath, flags = {}) {
     script,
     script_visual_alignment: script.timeline,
     voiceover,
+    sound_design: soundDesign,
     creative_storyboard: creativeStoryboard,
     creative_recipe: stylePreset.recipe,
     talking_head: talkingHead,
@@ -137,6 +139,9 @@ Delivery: ${voiceover.delivery}
 
 ${voiceover.full_text}
 
+## Sound Design
+${soundDesign.cues.map((cue) => `- ${cue.time_range} ${cue.beat}: ${cue.sound} (${cue.trigger})`).join("\n")}
+
 ## Evidence
 - demo/terminal.txt
 - demo/command-receipt.json
@@ -148,14 +153,15 @@ ${voiceover.full_text}
     script,
     script_visual_alignment: script.timeline,
     voiceover,
+    sound_design: soundDesign,
     creative_storyboard: creativeStoryboard,
     creative_recipe: stylePreset.recipe,
     talking_head: talkingHead,
     product_videogen_boundary: "Use product-videogen only through dry-run review payloads unless config, approval, and --submit are present.",
     adapters: {
       cutpilot: "Future optional local EDL/ffmpeg handoff.",
-      remotion: "Future composition props handoff.",
-      hyperframes: "Future scene/frame handoff.",
+      remotion: "Render frame-accurate motion, camera pushes, kinetic captions, and local sound-design cues from the plan.",
+      hyperframes: "Future scene/frame handoff with camera, asset, caption, and sound-design lanes.",
       "ugc-split": "Product-videogen or a future renderer should compose presenter footage, generated/demo B-roll, subtitles, and voiceover timing from creative_recipe.",
       heygen: "First talking-head adapter target for ugc-split. Generate original avatar footage from the script beats, then composite with B-roll and captions.",
       talking_head: "Provider-neutral adapter contract. Add new providers by mapping talking_head.script_segments, b_roll_slots, captions, and consent/safety fields."
@@ -576,6 +582,7 @@ export async function validateWorkspace(workspacePath, flags = {}) {
   const video = await optionalJson(path.join(out, "video", "video.json"));
   issues.push(...scriptAlignmentIssues(video));
   issues.push(...voiceoverIssues(video));
+  issues.push(...soundDesignIssues(video));
   issues.push(...creativeStoryboardIssues(video));
   for (const [platform, caption] of Object.entries(captions)) {
     const rule = PLATFORM_RULES[platform];
@@ -648,6 +655,7 @@ async function productVideogenPayload(out, purpose) {
       script: video?.script,
       script_visual_alignment: video?.script_visual_alignment,
       voiceover: voiceover ?? video?.voiceover,
+      sound_design: video?.sound_design,
       creative_storyboard: video?.creative_storyboard,
       creative_recipe: video?.creative_recipe,
       talking_head: video?.talking_head,
@@ -737,6 +745,36 @@ function buildVoiceoverPlan(script, talkingHead = { enabled: false, provider: "n
   };
 }
 
+function buildSoundDesignPlan(script, stylePreset) {
+  const cues = (script.timeline ?? []).map((segment, index) => {
+    const direction = beatProductionDirection(segment.beat);
+    return {
+      index: index + 1,
+      beat: segment.beat,
+      time_range: segment.time_range,
+      trigger: direction.soundTrigger,
+      sound: direction.sound,
+      intensity: direction.intensity,
+      mix_level: direction.mixLevel,
+      duck_voiceover: true,
+      provider_prompt: `${direction.sound} for ${segment.caption || segment.beat}; tight creator-product short timing, no music bed required`
+    };
+  });
+  return {
+    schema_version: "launchclip.sound-design.v1",
+    provider: "remotion-synthetic-ready",
+    music_bed: "none by default; leave space for voiceover and product proof sounds",
+    mix_notes: [
+      "Use short whooshes only at visual layout changes.",
+      "Use soft ticks for typing, cursor, checklist, and file-card events.",
+      "Duck SFX under voiceover and keep proof audio intelligible.",
+      "Future ElevenLabs or SFX provider output should replace these cues without changing scene timing."
+    ],
+    cue_density: stylePreset.recipe?.visual_language?.pacing ?? "scene change every 1-3 seconds",
+    cues
+  };
+}
+
 function cleanVoiceoverLine(value) {
   return String(value ?? "")
     .replace(/\s+/g, " ")
@@ -806,6 +844,121 @@ function voiceoverIssues(video) {
   return issues;
 }
 
+function soundDesignIssues(video) {
+  if (!video || !isSocialReadyStyle(video.style)) return [];
+  const issues = [];
+  const timeline = video.script_visual_alignment ?? video.script?.timeline ?? [];
+  const soundDesign = video.sound_design;
+  if (!soundDesign) return ["Social-ready video is missing sound_design."];
+  if (soundDesign.schema_version !== "launchclip.sound-design.v1") {
+    issues.push("Sound design schema_version must be launchclip.sound-design.v1.");
+  }
+  if (!Array.isArray(soundDesign.cues) || soundDesign.cues.length !== timeline.length) {
+    issues.push("Sound design cues must match the script visual alignment timeline.");
+    return issues;
+  }
+  for (const cue of soundDesign.cues) {
+    if (!cue.sound) issues.push(`Sound design cue ${cue.beat ?? "unknown"} is missing sound.`);
+    if (!cue.trigger) issues.push(`Sound design cue ${cue.beat ?? "unknown"} is missing trigger.`);
+    if (!cue.provider_prompt) issues.push(`Sound design cue ${cue.beat ?? "unknown"} is missing provider_prompt.`);
+  }
+  return issues;
+}
+
+function beatProductionDirection(beat) {
+  const directions = {
+    "cold-open": {
+      editDensity: "0.4-0.7s micro-cuts inside the first 1.5s",
+      cameraDirection: "fast 8 percent punch-in with a tiny settle after the title slam",
+      sound: "low whoosh into caption hit",
+      soundTrigger: "title slam and repo receipt flash",
+      intensity: "high",
+      mixLevel: -14
+    },
+    hook: {
+      editDensity: "0.4-0.7s micro-cuts inside the first 3s",
+      cameraDirection: "presenter punch-in, repo flash, then steady proof frame",
+      sound: "low whoosh into caption hit",
+      soundTrigger: "presenter punch-in and repo flash",
+      intensity: "high",
+      mixLevel: -14
+    },
+    friction: {
+      editDensity: "task card or cursor event every 0.45-0.8s",
+      cameraDirection: "left-to-right whip pan across stacked workflow cards",
+      sound: "dry ticks and soft strike-through swipes",
+      soundTrigger: "each manual task card entering or crossing off",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "demo-trigger": {
+      editDensity: "typed command ticks, progress sweep, receipt stamp",
+      cameraDirection: "slow device push while terminal text types in",
+      sound: "keyboard ticks with a success ding",
+      soundTrigger: "command typing and receipt badge landing",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "split-screen-proof": {
+      editDensity: "proof highlight every 0.8-1.2s",
+      cameraDirection: "split-screen slide with a small zoom on the proof pane",
+      sound: "keyboard ticks with a success ding",
+      soundTrigger: "receipt highlight and proof pane zoom",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    proof: {
+      editDensity: "playhead or connector movement every 0.7-1.0s",
+      cameraDirection: "editor-panel push with active lane highlight snaps",
+      sound: "playhead ticks and connector pops",
+      soundTrigger: "script-to-visual connector highlights",
+      intensity: "medium",
+      mixLevel: -20
+    },
+    transformation: {
+      editDensity: "tile arrival every 0.5-0.9s, then one stack snap",
+      cameraDirection: "orbiting card stack feel using alternating scale and rotation",
+      sound: "stack snaps and soft paper hits",
+      soundTrigger: "each output tile snapping into the launch packet",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    steps: {
+      editDensity: "step card every 0.8-1.2s",
+      cameraDirection: "numbered card push with progress line follow",
+      sound: "stack snaps and soft paper hits",
+      soundTrigger: "each step card entering",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "artifact-reveal": {
+      editDensity: "file flash every 0.6-0.9s with quick inspection holds",
+      cameraDirection: "zoom punches on active artifacts, then quick return to the grid",
+      sound: "file flips, camera ticks, and inspection pops",
+      soundTrigger: "active file card flips and zoom punches",
+      intensity: "high",
+      mixLevel: -16
+    },
+    artifacts: {
+      editDensity: "file flash every 0.8-1.1s",
+      cameraDirection: "zoom punches on active artifacts, then quick return to the grid",
+      sound: "file flips, camera ticks, and inspection pops",
+      soundTrigger: "active file card flips",
+      intensity: "high",
+      mixLevel: -16
+    },
+    cta: {
+      editDensity: "one clean punch-in, two check ticks, then final hold",
+      cameraDirection: "calm final push to approval boundary and repo URL",
+      sound: "two checklist ticks into a quiet final hold",
+      soundTrigger: "approval checks ticking on",
+      intensity: "low-medium",
+      mixLevel: -21
+    }
+  };
+  return directions[beat] ?? directions.cta;
+}
+
 function creativeStoryboardIssues(video) {
   if (!video || !isSocialReadyStyle(video.style)) return [];
   const issues = [];
@@ -825,7 +978,7 @@ function creativeStoryboardIssues(video) {
   }
   for (const scene of scenes) {
     const label = scene.id ?? "unknown";
-    for (const field of ["layout", "composition", "media_slots", "motion_grammar", "typography", "color_grade", "success_criteria"]) {
+    for (const field of ["layout", "composition", "media_slots", "motion_grammar", "typography", "color_grade", "edit_density", "camera_direction", "sound_design", "success_criteria"]) {
       if (!scene[field] || (Array.isArray(scene[field]) && !scene[field].length)) {
         issues.push(`Creative storyboard scene ${label} is missing ${field}.`);
       }
@@ -955,6 +1108,7 @@ function buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHe
       : "Presenter slot is reserved so HeyGen or another provider can replace the placeholder without changing edit timing.",
     scenes: timeline.map((segment, index) => {
       const override = sceneOverrides[segment.beat] ?? sceneOverrides.cta;
+      const direction = beatProductionDirection(segment.beat);
       return {
         id: segment.beat,
         order: index + 1,
@@ -967,6 +1121,9 @@ function buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHe
         ...override,
         caption_emphasis: segment.caption_emphasis ?? [],
         transition: segment.transition,
+        edit_density: direction.editDensity,
+        camera_direction: direction.cameraDirection,
+        sound_design: direction.sound,
         success_criteria: [
           "viewer understands the beat while muted",
           "visual proves or dramatizes the spoken line",
@@ -1034,8 +1191,11 @@ function videoStylePreset(style, manifest, talkingHead = { enabled: false, provi
           captions: "large kinetic burned-in captions, 2-5 words per caption, high contrast, timed to each clause",
           step_cards: "numbered micro-steps with progress timer, proof badges, and quick zoom transitions",
           pacing: punchy ? "pattern interrupt or layout change every 0.7-1.5 seconds; no static terminal shots" : "scene change every 1-3 seconds; avoid long static terminal shots",
+          camera: punchy ? "constant subtle push, whip-pan transitions, and zoom punches on proof or artifact changes" : "presenter-led push-ins with restrained proof-pane zooms",
+          sound_design: "short whooshes for layout changes, soft ticks for typing/checks/files, no loud meme sounds, duck under voiceover",
           transitions: ["jump cut", "zoom punch", "caption slam", "receipt flash", "artifact whip"],
-          social_readiness: ["first-frame hook", "caption on every beat", "visible proof", "artifact payoff", "approval-safe CTA"]
+          social_readiness: ["first-frame hook", "caption on every beat", "visible proof", "artifact payoff", "approval-safe CTA"],
+          production_layers: ["voiceover", "kinetic captions", "camera movement", "proof graphics", "sound effects"]
         },
         script_formula: [
           "Pattern interrupt: 'This repo just made its own launch Short.'",
@@ -1047,7 +1207,7 @@ function videoStylePreset(style, manifest, talkingHead = { enabled: false, provi
         renderer_contract: {
           adapter: "launchclip.remotion-render.v1",
           local_preview: "local-ffmpeg should render script beat cards, kinetic captions, proof panels, progress motion, artifact flashes, and CTA.",
-          remotion: "Render the social-ready composition from video/remotion-props.json with frame-based motion graphics, kinetic captions, animated proof panels, and artifact cards.",
+          remotion: "Render the social-ready composition from video/remotion-props.json with frame-based motion graphics, kinetic captions, dynamic camera motion, local SFX cues, animated proof panels, and artifact cards.",
           fallback_adapters: ["local-ffmpeg", "hyperframes", "product-videogen"]
         },
         generation_notes: [
@@ -1424,6 +1584,7 @@ async function buildRemotionProps(out, renderOptions) {
     style: video.style,
     format: video.format,
     voiceover: voiceover ?? video.voiceover ?? null,
+    soundDesign: video.sound_design ?? null,
     timeline: video.script_visual_alignment ?? video.script?.timeline ?? [],
     storyboard: video.creative_storyboard ?? null,
     creativeRecipe: video.creative_recipe,
