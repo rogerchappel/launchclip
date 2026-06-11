@@ -89,19 +89,22 @@ export async function planVideo(workspacePath, flags = {}) {
   const manifest = await readJson(path.join(out, "launchclip.json"));
   const format = flags.format ?? "short-15";
   const duration = format === "short-15" ? 15 : 30;
+  const style = flags.style ?? "proof-card";
+  const talkingHead = talkingHeadAdapter(flags, style);
+  const stylePreset = videoStylePreset(style, manifest, talkingHead);
+  const script = buildScriptPlan(style, manifest, stylePreset, talkingHead);
   const video = {
     schema_version: "video-skillkit.compat.v1",
     title: `${manifest.source_repo.name} OSS launch clip`,
     format,
     duration_seconds: duration,
+    style,
     source: "launchclip",
-    structure: [
-      { beat: "hook", seconds: 2, instruction: `Open with what ${manifest.source_repo.name} does in one concrete line.` },
-      { beat: "usage", seconds: 5, instruction: "Show the command someone runs, including the approved demo command when available." },
-      { beat: "proof", seconds: 4, instruction: "Show captured terminal output as evidence, not abstract claims." },
-      { beat: "payoff", seconds: 3, instruction: "Show the generated artifacts people can use: MP4, captions, review packet." },
-      { beat: "cta", seconds: 1, instruction: "Point viewers to the repo or README quickstart." }
-    ],
+    structure: stylePreset.structure,
+    script,
+    script_visual_alignment: script.timeline,
+    creative_recipe: stylePreset.recipe,
+    talking_head: talkingHead,
     evidence: ["demo/terminal.txt", "demo/command-receipt.json"],
     renderer: flags.renderer ?? "none"
   };
@@ -109,15 +112,17 @@ export async function planVideo(workspacePath, flags = {}) {
 
 Format: ${format}
 Renderer: ${video.renderer}
+Style: ${style}
+Talking head: ${talkingHead.enabled ? `${talkingHead.provider}${talkingHead.avatar_id ? ` (${talkingHead.avatar_id})` : ""}` : "none"}
 
 ## Angle
-Turn a working local demo into proof that the OSS tool is real and easy to try.
+${stylePreset.angle}
 
 ## Beats
-- Hook: name the painful manual workflow.
-- Proof: show the demo command and captured output.
-- Payoff: explain what changed after the command.
-- CTA: send viewers to GitHub.
+${stylePreset.briefBeats.map((beat) => `- ${beat}`).join("\n")}
+
+## Script
+${script.timeline.map((segment) => `- ${segment.time_range} ${segment.beat}: "${segment.voiceover}" [visual: ${segment.visual}]`).join("\n")}
 
 ## Evidence
 - demo/terminal.txt
@@ -126,18 +131,26 @@ Turn a working local demo into proof that the OSS tool is real and easy to try.
   const renderPlan = {
     provider: video.renderer,
     mode: video.renderer === "none" ? "planning-only" : "adapter-handoff",
+    style,
+    script,
+    script_visual_alignment: script.timeline,
+    creative_recipe: stylePreset.recipe,
+    talking_head: talkingHead,
     product_videogen_boundary: "Use product-videogen only through dry-run review payloads unless config, approval, and --submit are present.",
     adapters: {
       cutpilot: "Future optional local EDL/ffmpeg handoff.",
       remotion: "Future composition props handoff.",
-      hyperframes: "Future scene/frame handoff."
+      hyperframes: "Future scene/frame handoff.",
+      "ugc-split": "Product-videogen or a future renderer should compose presenter footage, generated/demo B-roll, subtitles, and voiceover timing from creative_recipe.",
+      heygen: "First talking-head adapter target for ugc-split. Generate original avatar footage from the script beats, then composite with B-roll and captions.",
+      talking_head: "Provider-neutral adapter contract. Add new providers by mapping talking_head.script_segments, b_roll_slots, captions, and consent/safety fields."
     }
   };
   await writeJson(path.join(out, "video", "video.json"), video);
   await writeFile(path.join(out, "video", "brief.md"), brief);
   await writeJson(path.join(out, "video", "render-plan.json"), renderPlan);
   await updateManifest(out, (existing) => {
-    existing.stages.plan = { status: "passed", format, renderer: video.renderer };
+    existing.stages.plan = { status: "passed", format, renderer: video.renderer, style, talking_head: talkingHead.provider };
   });
   return { stage: "plan", video: path.join(out, "video", "video.json"), brief: path.join(out, "video", "brief.md") };
 }
@@ -342,7 +355,14 @@ export async function runPacket(repoPath, flags = {}) {
   const platforms = flags.platforms ?? "x,linkedin,tiktok,bluesky";
   await initWorkspace(repo, { out });
   await runDemo(repo, { out, "demo-cmd": required(flags["demo-cmd"], "--demo-cmd"), capture: flags.capture ?? "terminal", timeout: flags.timeout, "demo-media": flags["demo-media"] ?? flags.media });
-  await planVideo(out, { format: flags.format ?? "short-15", renderer: flags.renderer ?? "none" });
+  await planVideo(out, {
+    format: flags.format ?? "short-15",
+    renderer: flags.renderer ?? "none",
+    style: flags.style,
+    "talking-head": flags["talking-head"],
+    "avatar-id": flags["avatar-id"],
+    "voice-id": flags["voice-id"]
+  });
   await writeCaptions(out, { platforms, angle: flags.angle, audience: flags.audience, "cta-url": flags["cta-url"] });
   await renderDryRun(out, { provider: flags.provider ?? "product-videogen", "dry-run": true });
   await submitReview(out, { provider: flags.provider ?? "product-videogen", "dry-run": true });
@@ -381,6 +401,8 @@ export async function validateWorkspace(workspacePath, flags = {}) {
   }
   const captions = await readCaptions(out);
   if (!Object.keys(captions).length) issues.push("No captions found.");
+  const video = await optionalJson(path.join(out, "video", "video.json"));
+  issues.push(...scriptAlignmentIssues(video));
   for (const [platform, caption] of Object.entries(captions)) {
     const rule = PLATFORM_RULES[platform];
     if (!rule) continue;
@@ -448,10 +470,266 @@ async function productVideogenPayload(out, purpose) {
     recipe_json: {
       source: "launchclip",
       video_manifest: video,
+      script: video?.script,
+      script_visual_alignment: video?.script_visual_alignment,
+      creative_recipe: video?.creative_recipe,
+      talking_head: video?.talking_head,
       demo_artifacts: receipt?.artifacts ?? [],
       captions,
       provenance: manifest.source_repo.evidence
     }
+  };
+}
+
+function talkingHeadAdapter(flags = {}, style = "proof-card") {
+  const requested = flags["talking-head"] ?? flags.talkingHead;
+  const provider = requested ?? (style === "ugc-split" ? "heygen" : "none");
+  if (provider === "none" || provider === "off" || provider === false) {
+    return { enabled: false, provider: "none" };
+  }
+  const adapter = {
+    enabled: true,
+    provider,
+    adapter_contract: "launchclip.talking-head.v1",
+    role: "presenter",
+    avatar_id: flags["avatar-id"] ?? flags.avatarId ?? null,
+    voice_id: flags["voice-id"] ?? flags.voiceId ?? null,
+    script_segments: [
+      { beat: "hook", target_seconds: 3, delivery: "fast, direct, pattern-interrupt opener" },
+      { beat: "mechanism", target_seconds: 7, delivery: "explain the before/after in plain language" },
+      { beat: "proof", target_seconds: 10, delivery: "point to generated artifacts and demo evidence" },
+      { beat: "cta", target_seconds: 4, delivery: "clear review-before-posting CTA" }
+    ],
+    b_roll_slots: [
+      { beat: "split-screen-proof", source: "demo artifacts and generated workspace outputs" },
+      { beat: "steps", source: "numbered workflow cards and terminal/UI captures" },
+      { beat: "artifact-reveal", source: "video, thumbnail, captions, review packet, dry-run payload" }
+    ],
+    safety: {
+      require_owned_or_licensed_avatar: true,
+      clone_real_person_only_with_consent: true,
+      dry_run_default: true,
+      publish_requires_human_approval: true
+    }
+  };
+  if (provider === "heygen") {
+    return {
+      ...adapter,
+      adapter_notes: [
+        "Use HeyGen as the talking-head generator for presenter footage.",
+        "Pass avatar_id when a specific approved avatar should be used; otherwise the adapter must choose a configured default avatar.",
+        "Keep HeyGen credentials in the host vault or environment, never in video.json or review payloads."
+      ]
+    };
+  }
+  return adapter;
+}
+
+function scriptAlignmentIssues(video) {
+  if (!video) return [];
+  const issues = [];
+  const timeline = video.script_visual_alignment ?? video.script?.timeline;
+  if (!Array.isArray(timeline) || !timeline.length) {
+    issues.push("Video plan is missing script_visual_alignment timeline.");
+    return issues;
+  }
+  const structureBeats = new Set((video.structure ?? []).map((segment) => segment.beat));
+  for (const segment of timeline) {
+    const label = segment.beat ?? "unknown";
+    if (structureBeats.size && !structureBeats.has(label)) issues.push(`Script beat ${label} has no matching visual structure beat.`);
+    for (const field of ["voiceover", "caption", "visual", "evidence_source", "adapter_target"]) {
+      if (!segment[field]) issues.push(`Script beat ${label} is missing ${field}.`);
+    }
+  }
+  return issues;
+}
+
+function videoStylePreset(style, manifest, talkingHead = { enabled: false, provider: "none" }) {
+  if (style === "ugc-split") {
+    return {
+      angle: "Make the repo feel like a fast creator-led product discovery clip: a human explains the outcome while generated or captured B-roll proves the workflow.",
+      briefBeats: [
+        "Hook: open on a direct creator claim about what the tool can now make or automate.",
+        "Context: cut between presenter and product/demo B-roll so the viewer understands the before/after quickly.",
+        "Steps: show two to five numbered micro-steps with sparse text and motion, not a dense terminal wall.",
+        "Proof: include captured demo output, generated assets, or UI footage as evidence-backed B-roll.",
+        "CTA: end with one plain next action: try the repo, inspect the packet, or approve the review item."
+      ],
+      structure: [
+        { beat: "hook", seconds: 3, instruction: `Open with a presenter-led claim: ${manifest.source_repo.name} turns a repo demo into launch-ready short-form assets.` },
+        { beat: "split-screen-proof", seconds: 5, instruction: "Use a vertical split-screen: generated/demo B-roll above and presenter/talking-head below, with large centered captions." },
+        { beat: "steps", seconds: 8, instruction: "Show 3-5 numbered workflow steps with minimal words, light progress bars, and quick scene changes." },
+        { beat: "artifact-reveal", seconds: 8, instruction: "Reveal the actual artifacts: rendered MP4, thumbnail, captions, review packet, and product-videogen dry-run payload." },
+        { beat: "cta", seconds: 6, instruction: "Return to the presenter or a clean product screen with the repo URL and approval boundary." }
+      ],
+      recipe: {
+        preset: "ugc-split",
+        aspect_ratio: "9:16",
+        duration_seconds: 30,
+        layout: [
+          "0-4s: split-screen, B-roll/demo scene top, presenter bottom.",
+          "4-18s: alternate full-screen presenter punches with clean numbered step screens.",
+          "18-26s: fast artifact montage from real launchclip workspace outputs.",
+          "26-30s: presenter or product CTA with repo URL."
+        ],
+        visual_language: {
+          presenter: talkingHead.enabled ? `${talkingHead.provider} avatar presenter, centered, direct eye contact, clean background, natural hand movement` : "casual creator/talking-head, centered, direct eye contact, shallow background, natural hand movement",
+          b_roll: "generated product/lifestyle scenes, UI captures, terminal snippets, and output files; all original to the target repo",
+          captions: "large burned-in captions, 2-5 words per caption, high contrast, centered near lower third",
+          step_cards: "plain numbered micro-steps with thin progress line, warm neutral or high-contrast solid backgrounds",
+          pacing: "scene change every 1-3 seconds; avoid long static terminal shots"
+        },
+        script_formula: [
+          "Pattern interrupt: 'Claude/agents can now make the launch video too.'",
+          "Problem: 'Most OSS tools never get promoted because the launch work is manual.'",
+          "Mechanism: 'Launchclip runs the demo, captures proof, writes captions, and creates a review packet.'",
+          "Proof: 'Here are the generated files from this repo.'",
+          "CTA: 'Review it before anything posts.'"
+        ],
+        generation_notes: [
+          "Do not reuse downloaded reference footage or creator likeness.",
+          "Generate original presenter, voiceover, B-roll, and captions from the repo facts.",
+          talkingHead.enabled ? `Route presenter generation through the ${talkingHead.provider} talking-head adapter contract.` : "Use the talking-head adapter contract when presenter generation is enabled.",
+          "Ground every product claim in README, package metadata, demo output, or generated artifacts.",
+          "Keep external publishing and product-videogen submission behind human approval."
+        ]
+      }
+    };
+  }
+
+  return {
+    angle: "Turn a working local demo into proof that the OSS tool is real and easy to try.",
+    briefBeats: [
+      "Hook: name the painful manual workflow.",
+      "Proof: show the demo command and captured output.",
+      "Payoff: explain what changed after the command.",
+      "CTA: send viewers to GitHub."
+    ],
+    structure: [
+      { beat: "hook", seconds: 2, instruction: `Open with what ${manifest.source_repo.name} does in one concrete line.` },
+      { beat: "usage", seconds: 5, instruction: "Show the command someone runs, including the approved demo command when available." },
+      { beat: "proof", seconds: 4, instruction: "Show captured terminal output as evidence, not abstract claims." },
+      { beat: "payoff", seconds: 3, instruction: "Show the generated artifacts people can use: MP4, captions, review packet." },
+      { beat: "cta", seconds: 1, instruction: "Point viewers to the repo or README quickstart." }
+    ],
+    recipe: {
+      preset: "proof-card",
+      aspect_ratio: "9:16",
+      visual_language: {
+        layout: "full-screen product cards, terminal proof, artifact reveal, CTA",
+        pacing: "simple local-render-friendly motion"
+      }
+    }
+  };
+}
+
+function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: false, provider: "none" }) {
+  const repo = manifest.source_repo;
+  const repoName = String(repo.name ?? "this repo").trim();
+  const summary = stripMarkdown(repo.summary)
+    .replace(new RegExp(`^${escapeRegExp(repoName)}\\s*`, "i"), "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (style === "ugc-split") {
+    const timeline = [
+      {
+        beat: "hook",
+        time_range: "0-3s",
+        target_seconds: 3,
+        voiceover: `${repoName} turns a working repo demo into a launch-ready short.`,
+        caption: "Repo to launch clip",
+        visual: "HeyGen presenter opens in the lower half while fast B-roll shows the repo and generated packet.",
+        evidence_source: "README.md and launchclip workspace metadata",
+        adapter_target: talkingHead.enabled ? talkingHead.provider : "talking-head"
+      },
+      {
+        beat: "split-screen-proof",
+        time_range: "3-8s",
+        target_seconds: 5,
+        voiceover: `Instead of guessing what to post, it captures proof from the actual demo run.`,
+        caption: "Proof, not guesses",
+        visual: "Vertical split-screen with presenter below and terminal/demo evidence above; highlight the passing command receipt.",
+        evidence_source: "demo/terminal.txt and demo/command-receipt.json",
+        adapter_target: "composition"
+      },
+      {
+        beat: "steps",
+        time_range: "8-16s",
+        target_seconds: 8,
+        voiceover: `Run the demo, write the video plan, draft the captions, then send the packet for review.`,
+        caption: "Demo -> plan -> captions -> review",
+        visual: "Four numbered micro-step cards appear in sync with each clause, with a thin progress line between them.",
+        evidence_source: "launchclip stages in launchclip.json",
+        adapter_target: "b-roll"
+      },
+      {
+        beat: "artifact-reveal",
+        time_range: "16-24s",
+        target_seconds: 8,
+        voiceover: `For ${repoName}, the packet includes the brief, render plan, captions, and product-videogen dry run.`,
+        caption: "Review packet ready",
+        visual: "Fast artifact montage of video/brief.md, render-plan.json, captions/*.md, and product-videogen.dry-run.json.",
+        evidence_source: "generated workspace files",
+        adapter_target: "b-roll"
+      },
+      {
+        beat: "cta",
+        time_range: "24-30s",
+        target_seconds: 6,
+        voiceover: `Review it first, then approve the clip when the claims and visuals line up.`,
+        caption: "Review before posting",
+        visual: "Presenter returns beside a clean product screen with repo URL and approval boundary.",
+        evidence_source: "review/product-videogen-review.dry-run.json",
+        adapter_target: talkingHead.enabled ? talkingHead.provider : "talking-head"
+      }
+    ];
+    return {
+      schema_version: "launchclip.script.v1",
+      style,
+      strategy: "consistent creator-led script with one visual proof point per spoken beat",
+      duration_seconds: 30,
+      voice: {
+        provider: talkingHead.enabled ? talkingHead.provider : "none",
+        avatar_id: talkingHead.avatar_id ?? null,
+        delivery: "fast, plain-spoken, confident, no hype claims beyond local evidence"
+      },
+      summary_line: summary || "turns local demo evidence into a reviewable launch packet",
+      timeline,
+      alignment_rules: [
+        "Every voiceover segment must have a matching visual, caption, evidence_source, and adapter_target.",
+        "Captions should paraphrase the spoken line in 2-6 words instead of duplicating a long sentence.",
+        "Do not show abstract stock footage when local demo evidence or generated packet artifacts exist.",
+        "If a visual cannot be produced, rewrite the corresponding script segment before rendering."
+      ]
+    };
+  }
+  let elapsed = 0;
+  const timeline = stylePreset.structure.map((segment) => {
+    const start = elapsed;
+    elapsed += segment.seconds;
+    return {
+      beat: segment.beat,
+      time_range: `${start}-${elapsed}s`,
+      target_seconds: segment.seconds,
+      voiceover: segment.instruction,
+      caption: titleCase(segment.beat.replace(/-/g, " ")),
+      visual: segment.instruction,
+      evidence_source: segment.beat === "proof" ? "demo/terminal.txt" : "launchclip.json",
+      adapter_target: "local-ffmpeg"
+    };
+  });
+  return {
+    schema_version: "launchclip.script.v1",
+    style,
+    strategy: "simple proof-led script where each scene maps to one local-render visual",
+    duration_seconds: stylePreset.structure.reduce((sum, segment) => sum + segment.seconds, 0),
+    voice: { provider: "none", avatar_id: null, delivery: "optional voiceover or text-only proof cards" },
+    summary_line: summary || "turns local demo evidence into launch assets",
+    timeline,
+    alignment_rules: [
+      "Every scene needs a caption and visual tied to a local artifact.",
+      "Keep proof claims grounded in demo/terminal.txt and command-receipt.json."
+    ]
   };
 }
 
@@ -808,6 +1086,14 @@ function shorten(text, max) {
   const boundary = raw.lastIndexOf(" ");
   const candidate = boundary >= Math.floor(max * 0.6) ? raw.slice(0, boundary) : raw;
   return candidate.replace(/[.,;:!?]+$/u, "");
+}
+
+function titleCase(text) {
+  return String(text ?? "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`)
+    .join(" ");
 }
 
 function wrapLines(text, width, maxLines) {

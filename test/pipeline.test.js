@@ -68,6 +68,70 @@ test("runs and validates a social-ready packet in one command", async () => {
   }
 });
 
+test("plans ugc split-screen creative recipe for product-videogen handoff", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
+  const out = path.join(temp, "packet");
+  try {
+    await initWorkspace(fixtureRepo, { out });
+    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
+    await planVideo(out, { format: "short-30", renderer: "product-videogen", style: "ugc-split", "talking-head": "heygen", "avatar-id": "avatar_launchclip_demo" });
+    await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
+    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
+
+    const video = JSON.parse(await readFile(path.join(out, "video/video.json"), "utf8"));
+    const renderPlan = JSON.parse(await readFile(path.join(out, "video/render-plan.json"), "utf8"));
+    const payload = JSON.parse(await readFile(path.join(out, "video/product-videogen.dry-run.json"), "utf8"));
+
+    assert.equal(video.style, "ugc-split");
+    assert.equal(video.duration_seconds, 30);
+    assert.equal(video.creative_recipe.preset, "ugc-split");
+    assert.equal(video.talking_head.provider, "heygen");
+    assert.equal(video.talking_head.avatar_id, "avatar_launchclip_demo");
+    assert.equal(video.talking_head.adapter_contract, "launchclip.talking-head.v1");
+    assert.equal(video.script.schema_version, "launchclip.script.v1");
+    assert.equal(video.script_visual_alignment.length, 5);
+    assert.equal(video.script_visual_alignment[0].beat, "hook");
+    assert.match(video.script_visual_alignment[0].voiceover, /sample-tool/);
+    assert.match(video.script_visual_alignment[1].visual, /split-screen/i);
+    assert.equal(video.script_visual_alignment[4].caption, "Review before posting");
+    assert.match(video.structure.map((beat) => beat.beat).join(","), /split-screen-proof/);
+    assert.match(renderPlan.adapters.heygen, /First talking-head adapter target/);
+    assert.equal(renderPlan.script_visual_alignment.length, 5);
+    assert.equal(renderPlan.creative_recipe.visual_language.pacing, "scene change every 1-3 seconds; avoid long static terminal shots");
+    assert.equal(payload.recipe_json.creative_recipe.preset, "ugc-split");
+    assert.equal(payload.recipe_json.talking_head.provider, "heygen");
+    assert.equal(payload.recipe_json.script_visual_alignment[2].caption, "Demo -> plan -> captions -> review");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("validation catches missing script and visual alignment fields", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
+  const out = path.join(temp, "packet");
+  try {
+    await initWorkspace(fixtureRepo, { out });
+    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
+    await planVideo(out, { format: "short-30", renderer: "product-videogen", style: "ugc-split", "talking-head": "heygen" });
+    await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
+    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
+    await submitReview(out, { provider: "product-videogen", "dry-run": true });
+
+    const videoPath = path.join(out, "video/video.json");
+    const video = JSON.parse(await readFile(videoPath, "utf8"));
+    delete video.script_visual_alignment[0].visual;
+    video.script_visual_alignment[1].beat = "unmapped";
+    await writeFile(videoPath, `${JSON.stringify(video, null, 2)}\n`);
+
+    const readiness = await validateWorkspace(out);
+    assert.equal(readiness.status, "needs-work");
+    assert.match(readiness.issues.join("\n"), /missing visual/);
+    assert.match(readiness.issues.join("\n"), /no matching visual structure beat/);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("copies optional UI demo media into the packet receipt", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
   const out = path.join(temp, "packet");
