@@ -20,7 +20,7 @@ export const SCENE_CATALOG = [
     use_for: "Real screen recordings of the product doing the thing, shown in a big card on the paper.",
     avoid_when: "No real recording exists. Never longer than ~5s without a cut or zoom.",
     params: '{ "type": "screen", "start", "end", "src": "<real recording path>", "offset?": seconds_into_source }',
-    density: "Footage is continuously alive; pair with a punch_zoom on the key moment.",
+    density: "Footage is continuously alive, and the card itself pushes in slowly with a gentle pan; pair with a punch_zoom on the key moment.",
     example: { type: "screen", start: 8.4, end: 12.0, src: "assets/demo-recording.mp4", offset: 14 }
   },
   {
@@ -37,7 +37,7 @@ export const SCENE_CATALOG = [
     use_for: "The exact command or AI prompt the subject runs, typing onto a dark chat-input card with a mint glow. For CLI tools and AI products the prompt IS the demo.",
     avoid_when: "The text is invented — only real commands/prompts. Longer than ~90 characters.",
     params: '{ "type": "prompt_card", "start", "end", "text": "<the real command or prompt>" }',
-    density: "Typing animation + typing SFX run for the scene duration; continuously alive.",
+    density: "Typing animation + typing SFX run for the scene duration; the card pushes in slowly and wears a travelling glow border — continuously alive.",
     example: { type: "prompt_card", start: 5.9, end: 8.4, text: "launchclip run ./my-oss-tool" }
   },
   {
@@ -54,7 +54,7 @@ export const SCENE_CATALOG = [
     use_for: "Pipelines, integrations, before→after chains: brand-icon cards connected by dotted lines, building vertically as each node is spoken. Final node may be the payoff (mint).",
     avoid_when: "More than 4 nodes. Node labels longer than ~4 words.",
     params: '{ "type": "icon_flow", "start", "end", "items": [{"text": "label", "at", "src?": "<icon image>", "color?"}] }',
-    density: "Node + connector per item; arrive by zoom-from-depth. When no brand asset fits, use the generic icons (icons/globe.svg, browser, server, database, document, gear, magnifier, clock, check, lightning, laptop, cloud) — real shapes beat text-only nodes.",
+    density: "Node + connector per item; arrive by zoom-from-depth while earlier nodes glide up to make room. When no brand asset fits, use the generic icons (icons/globe.svg, browser, server, database, document, gear, magnifier, clock, check, lightning, laptop, cloud) — real shapes beat text-only nodes.",
     example: { type: "icon_flow", start: 11.1, end: 15.0, items: [{ text: "your demo", at: 11.2, src: "logos/terminal.svg" }, { text: "ready to post", at: 14.0, color: "mint" }] }
   },
   {
@@ -62,7 +62,7 @@ export const SCENE_CATALOG = [
     use_for: "Numbered how-to beats, checklists, 'N things' structures: white chips with mint numerals stacking as each is spoken.",
     avoid_when: "More than 5 items (split into two scenes); item text longer than ~6 words.",
     params: '{ "type": "card_steps", "start", "end", "title?": "script-italic kicker", "items": [{"text", "at"}] }',
-    density: "One chip + click SFX per item.",
+    density: "One chip + click SFX per item; chips already on screen glide apart to make room as each lands.",
     example: { type: "card_steps", start: 8.4, end: 11.1, items: [{ text: "Script with timing", at: 8.45 }, { text: "Matched visuals", at: 9.4 }] }
   }
 ,

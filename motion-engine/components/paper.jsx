@@ -1,6 +1,6 @@
 import React from "react";
-import { AbsoluteFill } from "remotion";
-import { CARD, PAPER } from "../theme.js";
+import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
+import { CARD, PAPER, SEMANTIC } from "../theme.js";
 
 // The world: warm paper with a faint drawn grid. Behind every scene, always.
 // offsetX parallaxes the grid during camera swipes so the table travels too.
@@ -20,6 +20,39 @@ export function PaperGround({ offsetX = 0 }) {
       />
       <AbsoluteFill style={{ background: PAPER.vignette }} />
     </AbsoluteFill>
+  );
+}
+
+// The living border for dark focal cards (ART_DIRECTION 4d.3): a bright
+// gradient sweep travelling the card edge, with a soft glow trailing it.
+// Wrap the Card; the sweep hugs whatever radius the card uses.
+export function GlowBorder({ radius = CARD.radius, color = SEMANTIC.mint, thickness = 4, sweepDegreesPerSecond = 70, style, children }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const angle = ((frame / fps) * sweepDegreesPerSecond) % 360;
+  const ring = `conic-gradient(from ${angle}deg, transparent 0deg, ${color} 30deg, #CFF5E4 42deg, ${color} 54deg, transparent 86deg)`;
+  const edge = {
+    position: "absolute",
+    inset: -thickness,
+    borderRadius: radius + thickness,
+    background: ring
+  };
+  return (
+    <div style={{ position: "relative", ...style }}>
+      <div style={{ ...edge, inset: -thickness * 2, borderRadius: radius + thickness * 2, filter: `blur(${thickness * 5}px)`, opacity: 0.8 }} />
+      <div
+        style={{
+          ...edge,
+          padding: thickness,
+          WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+          WebkitMaskComposite: "xor",
+          maskComposite: "exclude"
+        }}
+      />
+      {/* Positioned so the card paints above the glow layers, which would
+          otherwise overlay it (statics paint below positioned siblings). */}
+      <div style={{ position: "relative" }}>{children}</div>
+    </div>
   );
 }
 

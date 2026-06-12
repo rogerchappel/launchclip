@@ -1,0 +1,88 @@
+{
+  "version": "motion.timeline.v1",
+  "duration_seconds": 19,
+  "words": [],
+  "events": [
+    { "id": "zoom-prompt", "type": "punch_zoom", "start": 4.0, "end": 5.2, "scale": 1.08, "origin_y": 0.5, "sfx": null }
+  ],
+  "chapters": [
+    { "title": "Hook", "at": 0 },
+    { "title": "Prompt", "at": 2.8 },
+    { "title": "Steps", "at": 6.2 },
+    { "title": "Flow", "at": 10.4 },
+    { "title": "Payoff", "at": 14.0 }
+  ],
+  "audio": {
+    "music": "music/golden-bed.mp3",
+    "music_volume": 0.08
+  },
+  "scenes": [
+    {
+      "id": "hook",
+      "type": "typography",
+      "start": 0,
+      "end": 2.8,
+      "items": [
+        { "text": "Fluid,", "at": 0.1 },
+        { "text": "not", "at": 0.8 },
+        { "text": "bouncy", "at": 1.4, "emphasis": true, "color": "mint" }
+      ]
+    },
+    {
+      "id": "prompt",
+      "type": "prompt_card",
+      "start": 2.8,
+      "end": 6.2,
+      "transition": "zoom_into",
+      "text": "launchclip render --motion phase3"
+    },
+    {
+      "id": "changes",
+      "type": "card_steps",
+      "start": 6.2,
+      "end": 10.4,
+      "transition": "swipe_left",
+      "title": "What changed",
+      "items": [
+        { "text": "Springs glide, never pop", "at": 6.3 },
+        { "text": "Chips make room", "at": 7.2 },
+        { "text": "Focal cards drift", "at": 8.1 },
+        { "text": "Borders come alive", "at": 9.0 }
+      ]
+    },
+    {
+      "id": "flow",
+      "type": "icon_flow",
+      "start": 10.4,
+      "end": 14.0,
+      "transition": "swipe_left",
+      "items": [
+        { "text": "the engine", "at": 10.5, "src": "icons/gear.svg" },
+        { "text": "reflow", "at": 11.6, "src": "icons/lightning.svg" },
+        { "text": "shipped", "at": 12.7, "src": "icons/check.svg", "color": "mint" }
+      ]
+    },
+    {
+      "id": "proof",
+      "type": "stat_counter",
+      "start": 14.0,
+      "end": 16.4,
+      "transition": "zoom_into",
+      "value": "46",
+      "label": "tests green",
+      "color": "mint",
+      "at": 14.2
+    },
+    {
+      "id": "cta",
+      "type": "typography",
+      "start": 16.4,
+      "end": 19,
+      "items": [
+        { "text": "Phase 3", "at": 16.5, "emphasis": true, "color": "coral" },
+        { "text": "is in", "at": 17.2 },
+        { "text": "the engine", "at": 17.9 }
+      ]
+    }
+  ]
+}

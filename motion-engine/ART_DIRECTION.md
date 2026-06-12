@@ -81,20 +81,26 @@ Compared against our own exports, three gaps define Phase 3 motion work:
    tune by eye from here, never back toward bounce.
 2. **Elements make room for each other.** New components don't just land —
    existing ones SLIDE up/down/sideways with acceleration/deceleration to open
-   space, like a living layout being scrolled. This needs a reflow primitive:
-   scene children share a layout that re-solves when an item enters, every
-   element animating to its new slot. The single biggest remaining feel gap.
+   space, like a living layout being scrolled. BUILT (`reflow.js`): a
+   presence-weighted stack solver — each item's slot grows with its entrance
+   spring, so neighbours glide to their new positions on the same curve.
+   Drives `card_steps` and `icon_flow`; typography instead stages its collage
+   once and words pop into reserved slots (the reference type compositions
+   are pre-designed, they don't shove each other).
 3. **Micro-motion on focal objects.** Reference text inputs zoom in slowly,
    pan right-to-left, and wear an ANIMATED glowing border (a gradient sweep
-   travelling the card edge). Focal cards should never be statically framed:
-   slow drift + pan + a living border for dark cards.
+   travelling the card edge). BUILT: `focalDrift` (slow eased push-in +
+   right-to-left pan) on prompt/screen scenes, gentler on stat/quote cards;
+   `GlowBorder` (conic sweep hugging the radius + blurred trail) on the
+   prompt card. Focal cards are never statically framed.
 
-OSS to lift from (both MIT, copy-in philosophy):
-- remotion-ui ("shadcn for Remotion"): Stagger/Stack layout primitives (path
-  to the reflow engine), 70+ icons/shapes to extend our 12, LowerThird/
-  StatBlock patterns.
+OSS verdicts (both MIT, copy-in philosophy):
+- remotion-ui ("shadcn for Remotion"): inspected for the reflow engine — its
+  Stagger/Stack are fixed-delay entrance helpers, not a re-solving layout, so
+  the reflow was built in-house instead. Still worth lifting from for the
+  70+ icons/shapes (extends our 12) and LowerThird/StatBlock patterns.
 - remotion-bits: particle systems, gradient transitions, animated text
-  effects, charts (explainer diagrams).
+  effects, charts (explainer diagrams) — still on the lift list.
 - remotion-kit: skip — unlicensed, early dev, duplicates what we have.
 
 ## 5. Sound

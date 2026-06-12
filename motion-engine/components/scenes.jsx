@@ -1,9 +1,10 @@
 import React from "react";
 import { AbsoluteFill, Freeze, Img, OffthreadVideo, Sequence, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
-import { Card } from "./paper.jsx";
+import { Card, GlowBorder } from "./paper.jsx";
 import { FONTS, INK, SEMANTIC, SPRINGS } from "../theme.js";
 import { TRAVEL_SECONDS } from "../schema.js";
 import { travelProgress } from "../travel.js";
+import { focalDrift, stackLayout } from "../reflow.js";
 
 // Scene track on a continuous canvas. Scenes whose transition is a travel
 // move (swipe/zoom) fly in while the previous scene flies out — the camera
@@ -178,17 +179,21 @@ function TalkingHeadScene({ scene, width, height }) {
 }
 
 function ScreenScene({ scene, width, height }) {
+  const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const drift = focalDrift({ frame, fps, seconds: scene.end - scene.start, zoom: 0.045 });
   return (
     <AbsoluteFill style={{ display: "grid", placeItems: "center", padding: `${height * 0.1}px ${width * 0.06}px` }}>
-      <Card elevation="high" style={{ width: "100%", aspectRatio: "9 / 14", maxHeight: "100%" }}>
-        <OffthreadVideo
-          muted
-          src={resolveSrc(scene.src)}
-          trimBefore={Math.round((scene.offset ?? 0) * fps)}
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-        />
-      </Card>
+      <div style={{ width: "100%", maxHeight: "100%", transform: `translateX(${drift.panX * width}px) scale(${drift.scale})` }}>
+        <Card elevation="high" style={{ width: "100%", aspectRatio: "9 / 14", maxHeight: "100%" }}>
+          <OffthreadVideo
+            muted
+            src={resolveSrc(scene.src)}
+            trimBefore={Math.round((scene.offset ?? 0) * fps)}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        </Card>
+      </div>
     </AbsoluteFill>
   );
 }
@@ -221,10 +226,13 @@ function WordBuild({ scene, width, height, region, onDark = false }) {
       }}
     >
       {scene.items.map((item, index) => {
+        // Words render from frame 0 at zero opacity so the collage's layout is
+        // staged once and never rewraps — each word pops into its reserved
+        // slot on its beat instead of shoving the others around.
         const localFrame = frame - (item.at - scene.start) * fps;
-        if (localFrame < 0) return null;
-        const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
-        const motionBlur = entranceBlur(enter, spring({ frame: localFrame - 1, fps, config: SPRINGS.enter }));
+        const enter = localFrame < 0 ? 0 : spring({ frame: localFrame, fps, config: SPRINGS.enter });
+        const enterPrev = localFrame < 1 ? 0 : spring({ frame: localFrame - 1, fps, config: SPRINGS.enter });
+        const motionBlur = entranceBlur(enter, enterPrev);
         const emphasised = Boolean(item.emphasis);
         const size = emphasised ? base * 1.9 : base;
         return (
@@ -275,24 +283,35 @@ function PromptCardScene({ scene, width, height, travelled = false }) {
   const typeProgress = clamp((seconds - 0.35) / Math.max(0.6, sceneLength - 1.1));
   const text = scene.text.slice(0, Math.ceil(scene.text.length * typeProgress));
   const fontSize = Math.round(height * 0.026);
+  // The prompt is the focal object: it pushes in slowly, pans right-to-left,
+  // and wears the travelling glow — never statically framed.
+  const drift = focalDrift({ frame, fps, seconds: sceneLength });
   return (
     <AbsoluteFill style={{ display: "grid", placeItems: "center", padding: `0 ${width * 0.07}px` }}>
-      <div style={{ width: "100%", transform: `translateY(${(1 - enter) * height * 0.06}px)`, opacity: Math.min(1, enter * 1.4) }}>
-        <Card
-          dark
-          radius={36}
-          elevation="high"
-          style={{ width: "100%", padding: `${fontSize * 1.3}px ${fontSize * 1.5}px`, boxShadow: "0 30px 70px rgba(26,26,24,0.3), 0 0 70px rgba(79,174,133,0.35)" }}
-        >
-          <div style={{ fontFamily: FONTS.sans, fontWeight: 600, fontSize, lineHeight: 1.5, color: SEMANTIC.mint, minHeight: fontSize * 4.5 }}>
-            &ldquo;{text}
-            <Caret fontSize={fontSize} />
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: fontSize * 0.9 }}>
-            <div style={{ color: INK.onDarkMuted, fontSize: fontSize * 1.4, fontWeight: 300, lineHeight: 1 }}>+</div>
-            <Mic size={fontSize} />
-          </div>
-        </Card>
+      <div
+        style={{
+          width: "100%",
+          transform: `translate(${drift.panX * width}px, ${(1 - enter) * height * 0.06}px) scale(${drift.scale})`,
+          opacity: Math.min(1, enter * 1.4)
+        }}
+      >
+        <GlowBorder radius={36}>
+          <Card
+            dark
+            radius={36}
+            elevation="high"
+            style={{ width: "100%", padding: `${fontSize * 1.3}px ${fontSize * 1.5}px`, boxShadow: "0 30px 70px rgba(26,26,24,0.3), 0 0 50px rgba(79,174,133,0.2)" }}
+          >
+            <div style={{ fontFamily: FONTS.sans, fontWeight: 600, fontSize, lineHeight: 1.5, color: SEMANTIC.mint, minHeight: fontSize * 4.5 }}>
+              &ldquo;{text}
+              <Caret fontSize={fontSize} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: fontSize * 0.9 }}>
+              <div style={{ color: INK.onDarkMuted, fontSize: fontSize * 1.4, fontWeight: 300, lineHeight: 1 }}>+</div>
+              <Mic size={fontSize} />
+            </div>
+          </Card>
+        </GlowBorder>
       </div>
     </AbsoluteFill>
   );
@@ -315,89 +334,164 @@ function Mic({ size }) {
 }
 
 // Brand icons as characters, arriving from depth: near-zero scale flying
-// toward the camera, blurred while small and fast.
+// toward the camera, blurred while small and fast. The flow reflows: each
+// node's slot (connector included) grows with its spring, so earlier nodes
+// glide up to make room as the chain extends downward.
 function IconFlowScene({ scene, width, height }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const iconSize = Math.round(width * 0.24);
   const labelSize = Math.round(height * 0.034);
+  const connectorHeight = height * 0.045;
+  const sizes = scene.items.map((item, index) => {
+    const node = (item.src ? iconSize + labelSize * 0.4 : 0) + labelSize * 1.2;
+    return (index > 0 ? connectorHeight : 0) + node;
+  });
+  const presences = scene.items.map((item) => {
+    const localFrame = frame - (item.at - scene.start) * fps;
+    return localFrame < 0 ? 0 : spring({ frame: localFrame, fps, config: SPRINGS.enter });
+  });
+  const { centers } = stackLayout({ sizes, presences });
   return (
-    <AbsoluteFill style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
-      {scene.items.map((item, index) => {
-        const localFrame = frame - (item.at - scene.start) * fps;
-        if (localFrame < 0) return null;
-        const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
-        const depthBlur = enter < 0.75 ? (1 - enter) * 6 : 0;
-        return (
-          <React.Fragment key={index}>
-            {index > 0 ? (
-              <div
-                style={{
-                  width: 0,
-                  height: height * 0.045,
-                  borderLeft: `3.5px dashed ${INK.primary}`,
-                  opacity: Math.min(1, enter * 1.4),
-                  transform: `scaleY(${enter})`,
-                  transformOrigin: "top"
-                }}
-              />
-            ) : null}
+    <AbsoluteFill style={{ display: "grid", placeItems: "center" }}>
+      <div style={{ position: "relative", width: "100%", height: 0 }}>
+        {scene.items.map((item, index) => {
+          const enter = presences[index];
+          if (enter <= 0) return null;
+          const depthBlur = enter < 0.75 ? (1 - enter) * 6 : 0;
+          return (
             <div
+              key={index}
               style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: centers[index],
+                transform: "translateY(-50%)",
                 display: "flex",
                 flexDirection: "column",
-                alignItems: "center",
-                gap: labelSize * 0.4,
-                transform: `scale(${0.06 + enter * 0.94})`,
-                opacity: Math.min(1, enter * 2),
-                filter: depthBlur > 0.4 ? `blur(${depthBlur.toFixed(1)}px)` : undefined
+                alignItems: "center"
               }}
             >
-              {item.src ? (
-                <Card dark radius={iconSize * 0.24} elevation="mid" style={{ width: iconSize, height: iconSize, display: "grid", placeItems: "center", padding: iconSize * 0.2 }}>
-                  <Img src={resolveSrc(item.src)} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                </Card>
+              {index > 0 ? (
+                <div
+                  style={{
+                    width: 0,
+                    height: connectorHeight,
+                    borderLeft: `3.5px dashed ${INK.primary}`,
+                    opacity: Math.min(1, enter * 1.4),
+                    transform: `scaleY(${enter})`,
+                    transformOrigin: "top"
+                  }}
+                />
               ) : null}
-              <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: labelSize, color: item.color ? semanticColor(item.color) : INK.primary, transform: `rotate(${WORD_ROTATIONS[index % WORD_ROTATIONS.length] * 0.6}deg)` }}>
-                {item.text}
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: labelSize * 0.4,
+                  transform: `scale(${0.06 + enter * 0.94})`,
+                  opacity: Math.min(1, enter * 2),
+                  filter: depthBlur > 0.4 ? `blur(${depthBlur.toFixed(1)}px)` : undefined
+                }}
+              >
+                {item.src ? (
+                  <Card dark radius={iconSize * 0.24} elevation="mid" style={{ width: iconSize, height: iconSize, display: "grid", placeItems: "center", padding: iconSize * 0.2 }}>
+                    <Img src={resolveSrc(item.src)} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                  </Card>
+                ) : null}
+                <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: labelSize, color: item.color ? semanticColor(item.color) : INK.primary, transform: `rotate(${WORD_ROTATIONS[index % WORD_ROTATIONS.length] * 0.6}deg)` }}>
+                  {item.text}
+                </div>
               </div>
             </div>
-          </React.Fragment>
-        );
-      })}
+          );
+        })}
+      </div>
     </AbsoluteFill>
   );
 }
 
-// Numbered chips with drawn thickness, stacking as each is spoken.
+// Numbered chips with drawn thickness, stacking as each is spoken. The stack
+// reflows: every chip's slot grows with its entrance spring, so chips already
+// on screen glide apart to make room instead of jumping when one lands.
 function CardStepsScene({ scene, width, height }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const fontSize = Math.round(height * 0.028);
+  const gap = height * 0.022;
+  // Slot heights are computed, not measured: padding + the taller of the
+  // numeral and the (estimated) wrapped text. Long items get a second line.
+  const chipHeight = (text) => fontSize * 1.5 + (text.length > 26 ? fontSize * 2.4 : fontSize * 1.5);
+  const entries = [];
+  if (scene.title) {
+    entries.push({ kind: "title", size: fontSize * 1.5 * 1.2 + height * 0.012, at: scene.start });
+  }
+  scene.items.forEach((item, index) => {
+    entries.push({ kind: "chip", item, index, size: chipHeight(item.text), at: item.at });
+  });
+  const presences = entries.map((entry) => {
+    const localFrame = frame - (entry.at - scene.start) * fps;
+    return localFrame < 0 ? 0 : spring({ frame: localFrame, fps, config: SPRINGS.enter });
+  });
+  const { centers } = stackLayout({ sizes: entries.map((entry) => entry.size), presences, gap });
   return (
-    <AbsoluteFill style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: height * 0.022, padding: `0 ${width * 0.1}px` }}>
-      {scene.title ? (
-        <div style={{ fontFamily: FONTS.script, fontStyle: "italic", fontWeight: 900, fontSize: fontSize * 1.5, color: INK.primary, marginBottom: height * 0.012, transform: "rotate(-2deg)" }}>
-          {scene.title}
-        </div>
-      ) : null}
-      {scene.items.map((item, index) => {
-        const localFrame = frame - (item.at - scene.start) * fps;
-        if (localFrame < 0) return null;
-        const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
-        const tilt = WORD_ROTATIONS[index % WORD_ROTATIONS.length] * 0.4;
-        const motionBlur = entranceBlur(enter, spring({ frame: localFrame - 1, fps, config: SPRINGS.enter }));
-        return (
-          <div key={index} style={{ width: "100%", transform: `translateY(${(1 - enter) * height * 0.05}px) rotate(${tilt}deg)`, opacity: Math.min(1, enter * 1.5), filter: motionBlur }}>
-            <Card chip elevation="low" radius={20} style={{ display: "flex", alignItems: "center", gap: fontSize, padding: `${fontSize * 0.75}px ${fontSize * 1.1}px` }}>
-              <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: fontSize * 1.5, color: SEMANTIC.mint, minWidth: fontSize * 1.4, lineHeight: 1 }}>
-                {index + 1}
+    <AbsoluteFill style={{ display: "grid", placeItems: "center", padding: `0 ${width * 0.1}px` }}>
+      <div style={{ position: "relative", width: "100%", height: 0 }}>
+        {entries.map((entry, position) => {
+          const enter = presences[position];
+          if (enter <= 0) return null;
+          const localFrame = frame - (entry.at - scene.start) * fps;
+          const motionBlur = entranceBlur(enter, localFrame < 1 ? 0 : spring({ frame: localFrame - 1, fps, config: SPRINGS.enter }));
+          if (entry.kind === "title") {
+            return (
+              <div
+                key="title"
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  top: centers[position],
+                  textAlign: "center",
+                  fontFamily: FONTS.script,
+                  fontStyle: "italic",
+                  fontWeight: 900,
+                  fontSize: fontSize * 1.5,
+                  color: INK.primary,
+                  transform: `translateY(-50%) translateY(${(1 - enter) * height * 0.04}px) rotate(-2deg)`,
+                  opacity: Math.min(1, enter * 1.5),
+                  filter: motionBlur
+                }}
+              >
+                {scene.title}
               </div>
-              <div style={{ fontFamily: FONTS.sans, fontWeight: 800, fontSize, lineHeight: 1.2, color: INK.primary }}>{item.text}</div>
-            </Card>
-          </div>
-        );
-      })}
+            );
+          }
+          const tilt = WORD_ROTATIONS[entry.index % WORD_ROTATIONS.length] * 0.4;
+          return (
+            <div
+              key={entry.index}
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: centers[position],
+                transform: `translateY(-50%) translateY(${(1 - enter) * height * 0.05}px) rotate(${tilt}deg)`,
+                opacity: Math.min(1, enter * 1.5),
+                filter: motionBlur
+              }}
+            >
+              <Card chip elevation="low" radius={20} style={{ display: "flex", alignItems: "center", gap: fontSize, padding: `${fontSize * 0.75}px ${fontSize * 1.1}px` }}>
+                <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: fontSize * 1.5, color: SEMANTIC.mint, minWidth: fontSize * 1.4, lineHeight: 1 }}>
+                  {entry.index + 1}
+                </div>
+                <div style={{ fontFamily: FONTS.sans, fontWeight: 800, fontSize, lineHeight: 1.2, color: INK.primary }}>{entry.item.text}</div>
+              </Card>
+            </div>
+          );
+        })}
+      </div>
     </AbsoluteFill>
   );
 }
@@ -504,8 +598,19 @@ function StatCounterScene({ scene, width, height }) {
     }
   }
   const valueSize = Math.round(height * 0.11);
+  const drift = focalDrift({ frame, fps, seconds: scene.end - scene.start, zoom: 0.03, pan: 0.006 });
   return (
-    <AbsoluteFill style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: height * 0.02, padding: `0 ${width * 0.1}px` }}>
+    <AbsoluteFill
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        alignItems: "center",
+        gap: height * 0.02,
+        padding: `0 ${width * 0.1}px`,
+        transform: `translateX(${drift.panX * width}px) scale(${drift.scale})`
+      }}
+    >
       <div style={{ fontFamily: FONTS.script, fontStyle: "italic", fontWeight: 900, fontSize: valueSize, lineHeight: 1, color: semanticColor(scene.color), transform: `scale(${0.6 + enter * 0.4}) rotate(-2deg)`, opacity: Math.min(1, enter * 1.5) }}>
         {display}
       </div>
@@ -526,9 +631,17 @@ function QuoteCardScene({ scene, width, height }) {
   if (localFrame < 0) return null;
   const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
   const fontSize = Math.round(height * 0.034);
+  const drift = focalDrift({ frame, fps, seconds: scene.end - scene.start, zoom: 0.03, pan: 0.006 });
   return (
     <AbsoluteFill style={{ display: "grid", placeItems: "center", padding: `0 ${width * 0.09}px` }}>
-      <div style={{ width: "100%", transform: `translateY(${(1 - enter) * height * 0.05}px) rotate(-1deg)`, opacity: Math.min(1, enter * 1.4), filter: entranceBlur(enter, spring({ frame: localFrame - 1, fps, config: SPRINGS.enter })) }}>
+      <div
+        style={{
+          width: "100%",
+          transform: `translate(${drift.panX * width}px, ${(1 - enter) * height * 0.05}px) rotate(-1deg) scale(${drift.scale})`,
+          opacity: Math.min(1, enter * 1.4),
+          filter: entranceBlur(enter, spring({ frame: localFrame - 1, fps, config: SPRINGS.enter }))
+        }}
+      >
         <Card elevation="high" radius={26} style={{ padding: `${fontSize * 1.4}px ${fontSize * 1.3}px` }}>
           <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize, lineHeight: 1.25, color: INK.primary }}>
             “{scene.text}”
