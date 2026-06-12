@@ -45,75 +45,6 @@ vision transforms constantly.
 9. HOOK IN THE FIRST 3 SECONDS; the CTA gets its own final scene with the
    emphasised payoff word.`;
 
-// Loosened mirror of motion.timeline.v1 for structured outputs (the real
-// authority is validateTimeline). All objects: additionalProperties false.
-const ITEM_SCHEMA = {
-  type: "object",
-  properties: {
-    text: { type: "string" },
-    at: { type: "number" },
-    emphasis: { type: "boolean" },
-    color: { type: "string" },
-    src: { type: "string" }
-  },
-  required: ["at"],
-  additionalProperties: false
-};
-
-const TIMELINE_OUTPUT_SCHEMA = {
-  type: "object",
-  properties: {
-    scenes: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          id: { type: "string" },
-          type: { type: "string" },
-          start: { type: "number" },
-          end: { type: "number" },
-          transition: { type: "string" },
-          src: { type: "string" },
-          layout: { type: "string" },
-          offset: { type: "number" },
-          text: { type: "string" },
-          title: { type: "string" },
-          mode: { type: "string" },
-          items: { type: "array", items: ITEM_SCHEMA }
-        },
-        required: ["id", "type", "start", "end", "transition"],
-        additionalProperties: false
-      }
-    },
-    events: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          id: { type: "string" },
-          type: { type: "string" },
-          start: { type: "number" },
-          end: { type: "number" },
-          scale: { type: "number" },
-          origin_x: { type: "number" },
-          origin_y: { type: "number" },
-          src: { type: "string" },
-          label: { type: "string" },
-          x: { type: "number" },
-          y: { type: "number" },
-          size: { type: "number" },
-          sfx: { type: "string" }
-        },
-        required: ["id", "type", "start", "end"],
-        additionalProperties: false
-      }
-    },
-    rationale: { type: "string" }
-  },
-  required: ["scenes", "events"],
-  additionalProperties: false
-};
-
 const DIRECTION_SCHEMA = {
   type: "object",
   properties: {
@@ -162,10 +93,38 @@ export function buildSystemPrompt(presetName) {
   ].join("\n\n");
 }
 
+async function createWithSchemaRetry(client, params, { retries = 3, log = () => {} } = {}) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await client.messages.create(params);
+    } catch (error) {
+      const message = String(error?.message ?? "");
+      const compileTimeout = error?.status === 400 && /grammar compilation/i.test(message);
+      if (!compileTimeout || attempt >= retries) throw error;
+      log(`schema grammar compiling — retry ${attempt + 1}/${retries} in 4s`);
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+    }
+  }
+}
+
 function firstText(response) {
   const block = response.content.find((entry) => entry.type === "text");
   if (!block) throw new Error("model returned no text block");
   return block.text;
+}
+
+// Tolerant JSON extraction for calls that skip structured outputs.
+function parseJsonLoose(text) {
+  let candidate = text.trim();
+  if (candidate.startsWith("```")) candidate = candidate.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    const start = candidate.indexOf("{");
+    const end = candidate.lastIndexOf("}");
+    if (start < 0 || end <= start) throw new Error("no JSON object in response");
+    return JSON.parse(candidate.slice(start, end + 1));
+  }
 }
 
 // Free-text creative direction -> structured contract the linter can verify.
@@ -173,11 +132,11 @@ export async function parseDirection(client, promptText, assetPaths = []) {
   if (!promptText || !promptText.trim()) {
     return { must_include: [], asset_refs: [], chapters: [], energy: "high", emphasis_moments: [], cta_text: null };
   }
-  const response = await client.messages.create({
+  const response = await createWithSchemaRetry(client, {
     model: MODEL,
     max_tokens: 4000,
     system:
-      "Parse a video creative-direction prompt into the requested JSON. Only list asset_refs for assets the prompt explicitly references (match against the provided asset paths). Steps/lines the video MUST contain go in must_include.",
+      "Parse a video creative-direction prompt into the requested JSON. must_include is ONLY literal content the video must contain: step lists, exact lines, names, numbers — written as the content itself, never as instructions about visuals. Component/visual choices (use a stat counter, use an icon flow, chapter rail on) are NOT must_include — capture chapter names in chapters and key moments in emphasis_moments instead. Only list asset_refs for assets the prompt explicitly references (match against the provided asset paths).",
     messages: [
       {
         role: "user",
@@ -187,6 +146,36 @@ export async function parseDirection(client, promptText, assetPaths = []) {
     output_config: { format: { type: "json_schema", schema: DIRECTION_SCHEMA } }
   });
   return JSON.parse(firstText(response));
+}
+
+// ElevenLabs TTS + scribe alignment: a fully autonomous voice path. Returns
+// { voicePath (renderer-relative), words } with REAL timings to align to.
+export async function synthesizeVoice(scriptText, { log = () => {} } = {}) {
+  const key = process.env.ELEVENLABS_API_KEY;
+  if (!key) throw new Error("ELEVENLABS_API_KEY is required for --voice tts");
+  const voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
+  log("tts: synthesizing voiceover");
+  const ttsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
+    method: "POST",
+    headers: { "xi-api-key": key, "Content-Type": "application/json" },
+    body: JSON.stringify({ text: scriptText, model_id: "eleven_multilingual_v2" })
+  });
+  if (!ttsResponse.ok) throw new Error(`ElevenLabs TTS failed (${ttsResponse.status}): ${(await ttsResponse.text()).slice(0, 200)}`);
+  const audio = Buffer.from(await ttsResponse.arrayBuffer());
+  const voiceDir = path.join(PACKAGE_ROOT, "public", "voice");
+  await mkdir(voiceDir, { recursive: true });
+  const fileName = `tts-${Date.now()}.mp3`;
+  await writeFile(path.join(voiceDir, fileName), audio);
+  log("tts: transcribing for word timings");
+  const form = new FormData();
+  form.append("file", new Blob([audio], { type: "audio/mpeg" }), "voice.mp3");
+  form.append("model_id", "scribe_v1");
+  const sttResponse = await fetch("https://api.elevenlabs.io/v1/speech-to-text", { method: "POST", headers: { "xi-api-key": key }, body: form });
+  if (!sttResponse.ok) throw new Error(`scribe failed (${sttResponse.status})`);
+  const transcript = await sttResponse.json();
+  const words = (transcript.words ?? []).filter((entry) => entry.type === "word").map((entry) => ({ word: entry.text, start: entry.start, end: entry.end }));
+  if (!words.length) throw new Error("scribe returned no words");
+  return { voicePath: `voice/${fileName}`, words };
 }
 
 // Deterministic word-timing estimator for --voice none (no recorded speech).
@@ -204,7 +193,7 @@ export function estimateWords(script) {
     });
 }
 
-export async function directTimeline({ client, words, durationSeconds, assets, direction, preset, scriptText, baseSrc, voiceoverSrc, musicSrc, log = () => {} }) {
+export async function directTimeline({ client, words, durationSeconds, assets, direction, preset, scriptText, baseSrc, voiceoverSrc, musicSrc, priorDraft = null, priorIssues = "", log = () => {} }) {
   const system = [{ type: "text", text: buildSystemPrompt(preset), cache_control: { type: "ephemeral" } }];
   const manifest = assets.map((asset) => `- ${asset.path} (${asset.kind})`).join("\n") || "(no assets — graphic scenes only)";
   const baseInput = [
@@ -214,22 +203,24 @@ export async function directTimeline({ client, words, durationSeconds, assets, d
     `ASSET MANIFEST (the only media paths you may reference):\n${manifest}`,
     baseSrc ? `PRESENTER FOOTAGE: ${baseSrc} (continuous take aligned to t=0; talking_head scenes use this src)` : "PRESENTER FOOTAGE: none — do not use talking_head scenes.",
     `CREATIVE DIRECTION (must be honored):\n${JSON.stringify(direction)}`,
-    'Return the timeline JSON now: {"scenes": [...], "events": [...], "rationale": "one paragraph"}.'
-  ].join("\n\n");
+    priorDraft
+      ? `STARTING DRAFT (authored per-scene; repair the listed issues, keep everything that works):\n${JSON.stringify(priorDraft)}\n\nISSUES TO FIX:\n${priorIssues}`
+      : "",
+    'Return ONLY a JSON object, no other text: {"scenes": [...], "events": [...], "chapters": [...or empty...], "rationale": "one paragraph"}.'
+  ].filter(Boolean).join("\n\n");
 
   let feedback = "";
   let lastReport = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     log(`director attempt ${attempt}/${MAX_ATTEMPTS}`);
-    const response = await client.messages.create({
+    const response = await createWithSchemaRetry(client, {
       model: MODEL,
       max_tokens: 16000,
       thinking: { type: "adaptive" },
       system,
       messages: [{ role: "user", content: feedback ? `${baseInput}\n\nYOUR PREVIOUS ATTEMPT FAILED. Fix ALL of these and return the corrected full timeline:\n${feedback}` : baseInput }],
-      output_config: { format: { type: "json_schema", schema: TIMELINE_OUTPUT_SCHEMA } }
     });
-    const draft = JSON.parse(firstText(response));
+    const draft = parseJsonLoose(firstText(response));
     const candidate = {
       version: MOTION_TIMELINE_VERSION,
       duration_seconds: durationSeconds,
@@ -237,10 +228,11 @@ export async function directTimeline({ client, words, durationSeconds, assets, d
       audio: { voiceover: voiceoverSrc ?? "", music: musicSrc ?? "", music_volume: voiceoverSrc ? 0.16 : 0.3 },
       words,
       scenes: draft.scenes,
+      chapters: draft.chapters ?? [],
       events: draft.events
     };
     const validation = validateTimeline(candidate);
-    const lint = validation.ok ? lintTimeline(validation.timeline, { direction, assets }) : { ok: false, failures: [], advisories: [] };
+    const lint = validation.ok ? lintTimeline(validation.timeline, { direction, assets, presenterSrc: baseSrc }) : { ok: false, failures: [], advisories: [] };
     lastReport = { attempt, validation: validation.errors, lint: lint.failures, advisories: [...validation.warnings, ...lint.advisories], rationale: draft.rationale };
     if (validation.ok && lint.ok) {
       log(`director: valid + lint-clean on attempt ${attempt}`);
@@ -252,6 +244,163 @@ export async function directTimeline({ client, words, durationSeconds, assets, d
   throw new Error(`Director failed after ${MAX_ATTEMPTS} attempts. Last issues:\n${feedback}`);
 }
 
+const STRUCTURE_SCHEMA = {
+  type: "object",
+  properties: {
+    scenes: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          type: { type: "string" },
+          start: { type: "number" },
+          end: { type: "number" },
+          transition: { type: "string" },
+          intent: { type: "string" }
+        },
+        required: ["id", "type", "start", "end", "transition", "intent"],
+        additionalProperties: false
+      }
+    },
+    chapters: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { title: { type: "string" }, at: { type: "number" } },
+        required: ["title", "at"],
+        additionalProperties: false
+      }
+    },
+    rationale: { type: "string" }
+  },
+  required: ["scenes", "chapters"],
+  additionalProperties: false
+};
+
+const CRITIC_SCHEMA = {
+  type: "object",
+  properties: {
+    verdict: { type: "string", enum: ["ship", "revise"] },
+    findings: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          scene_id: { type: "string" },
+          issue: { type: "string" },
+          fix: { type: "string" }
+        },
+        required: ["issue", "fix"],
+        additionalProperties: false
+      }
+    }
+  },
+  required: ["verdict", "findings"],
+  additionalProperties: false
+};
+
+const CRITIC_CHECKLIST = `A render is disqualified by any of: a scene over 6s or sitting visually idle;
+two focal elements fighting; accent color in more than one place at a time; builds that ignore the
+voice; a hook that doesn't grab in 3s; a CTA without a payoff word; repetitive scene types back to
+back saying the same thing; chapter rail entries that don't match the actual beats; any fabricated
+media reference. Also judge: does the sequence FLOW (each scene answers the previous), and does the
+creative direction actually shape the result?`;
+
+// --quality high: structure pass -> parallel per-scene authors -> stitch ->
+// adversarial critic -> one full repair round if needed. Each author gets a
+// 3-second canvas instead of sixty, which is where per-scene craft comes from.
+export async function directHighTimeline(ctx) {
+  const { client, words, durationSeconds, assets, direction, preset, scriptText, baseSrc, log = () => {} } = ctx;
+  const system = [{ type: "text", text: buildSystemPrompt(preset), cache_control: { type: "ephemeral" } }];
+  const manifest = assets.map((asset) => `- ${asset.path} (${asset.kind})`).join("\n") || "(no assets)";
+
+  log("structure pass");
+  const structureResponse = await createWithSchemaRetry(client, {
+    model: MODEL,
+    max_tokens: 8000,
+    thinking: { type: "adaptive" },
+    system,
+    messages: [{
+      role: "user",
+      content: `Plan ONLY the beat sheet (no items yet): scene skeletons {id,type,start,end,transition,intent} covering 0 to ${durationSeconds}s exactly, plus chapters [] (2-6 short titles, or empty if a rail doesn't fit). "intent" is one sentence the scene's author will execute.\n\nSCRIPT:\n${scriptText}\n\nWORD TIMINGS:\n${JSON.stringify(words)}\n\nASSETS:\n${manifest}\n\nPRESENTER FOOTAGE: ${baseSrc ?? "none"}\n\nCREATIVE DIRECTION:\n${JSON.stringify(direction)}`
+    }],
+    output_config: { format: { type: "json_schema", schema: STRUCTURE_SCHEMA } }
+  });
+  const structure = JSON.parse(firstText(structureResponse));
+  log(`structure: ${structure.scenes.length} scenes, ${structure.chapters.length} chapters`);
+
+  log(`authoring ${structure.scenes.length} scenes in parallel`);
+  const authorScene = async (skeleton, index) => {
+      const sliceStart = Math.max(0, skeleton.start - 0.4);
+      const sliceEnd = skeleton.end + 0.4;
+      const slice = words.filter((word) => word.start >= sliceStart && word.start <= sliceEnd);
+      const neighbors = [structure.scenes[index - 1], structure.scenes[index + 1]]
+        .filter(Boolean)
+        .map((scene) => `${scene.id} (${scene.type}): ${scene.intent}`)
+        .join("\n");
+      const response = await createWithSchemaRetry(client, {
+        model: MODEL,
+        max_tokens: 6000,
+        system,
+        messages: [{
+          role: "user",
+          content: `Author ONE scene in full detail. Return ONLY a JSON object {"scene": {...}, "events": [...]} with no other text. Keep id/type/start/end/transition EXACTLY as given; fill everything else (items word-timed from the slice, layout/src/text/value as the type needs). You may add at most one punch_zoom event inside this scene's time range, and a logo_pop only if an asset demands it. events may be [].\n\nSCENE SKELETON:\n${JSON.stringify(skeleton)}\n\nWORDS SPOKEN DURING THIS SCENE:\n${JSON.stringify(slice)}\n\nNEIGHBOR INTENTS:\n${neighbors}\n\nASSETS:\n${manifest}\n\nPRESENTER FOOTAGE: ${baseSrc ?? "none"}\n\nCREATIVE DIRECTION:\n${JSON.stringify(direction)}`
+        }],
+      }, { log });
+      return parseJsonLoose(firstText(response));
+  };
+  // Warm the author grammar once (compilation is cached), then fan out.
+  const first = await authorScene(structure.scenes[0], 0);
+  const rest = await Promise.all(structure.scenes.slice(1).map((skeleton, index) => authorScene(skeleton, index + 1)));
+  const authored = [first, ...rest];
+
+  const draft = {
+    scenes: authored.map((entry) => entry.scene),
+    events: authored.flatMap((entry, index) => entry.events.map((event, eventIndex) => ({ ...event, id: `${event.id || "ev"}-s${index}-${eventIndex}` }))),
+    chapters: structure.chapters
+  };
+
+  log("critic pass");
+  const criticResponse = await createWithSchemaRetry(client, {
+    model: MODEL,
+    max_tokens: 4000,
+    thinking: { type: "adaptive" },
+    system: [{ type: "text", text: `You are an adversarial reviewer of motion-graphics timelines. ${CRITIC_CHECKLIST}` }],
+    messages: [{ role: "user", content: `SCRIPT:\n${scriptText}\n\nCREATIVE DIRECTION:\n${JSON.stringify(direction)}\n\nTIMELINE:\n${JSON.stringify(draft)}\n\nVerdict?` }],
+    output_config: { format: { type: "json_schema", schema: CRITIC_SCHEMA } }
+  });
+  const critique = JSON.parse(firstText(criticResponse));
+  log(`critic: ${critique.verdict} (${critique.findings.length} findings)`);
+
+  // Stitch + check; on any issue (mechanical or critical), one full repair
+  // round via the single-pass director seeded with this draft.
+  const candidate = {
+    version: MOTION_TIMELINE_VERSION,
+    duration_seconds: ctx.durationSeconds,
+    base: { type: baseSrc ? "video" : "placeholder", src: baseSrc ?? "" },
+    audio: { voiceover: ctx.voiceoverSrc ?? "", music: ctx.musicSrc ?? "", music_volume: ctx.voiceoverSrc ? 0.16 : 0.3 },
+    words,
+    scenes: draft.scenes,
+    chapters: draft.chapters,
+    events: draft.events
+  };
+  const validation = validateTimeline(candidate);
+  const lint = validation.ok ? lintTimeline(validation.timeline, { direction, assets, presenterSrc: baseSrc }) : { ok: false, failures: [], advisories: [] };
+  const criticIssues = critique.verdict === "revise" ? critique.findings.map((finding) => `CRITIC (${finding.scene_id ?? "global"}): ${finding.issue} — fix: ${finding.fix}`) : [];
+  const issues = [...validation.errors.map((error) => `SCHEMA: ${error}`), ...lint.failures.map((failure) => `LINT: ${failure}`), ...criticIssues];
+
+  if (!issues.length) {
+    log("high path: clean on first stitch");
+    return { timeline: validation.timeline, report: { mode: "high", scenes: draft.scenes.length, critic: critique, attempt: 1, advisories: [...validation.warnings, ...lint.advisories] } };
+  }
+  log(`high path: ${issues.length} issues -> repair round`);
+  const repaired = await directTimeline({ ...ctx, priorDraft: draft, priorIssues: issues.join("\n") });
+  repaired.report.mode = "high+repair";
+  repaired.report.critic = critique;
+  return repaired;
+}
+
 // Scan known public/ dirs + an optional assets dir into a manifest of
 // renderer-resolvable paths.
 export function scanAssets(extraDir = null) {
@@ -260,10 +409,12 @@ export function scanAssets(extraDir = null) {
     const full = path.join(PACKAGE_ROOT, "public", dir);
     if (!existsSync(full)) return;
     for (const file of readdirSync(full)) {
+      if (file === "talking-head.mp4") continue; // generated stand-in, never directable
       if (/\.(png|jpe?g|svg|webp|mp4|mov)$/i.test(file)) assets.push({ path: `${prefix}/${file}`, kind });
     }
   };
   add("logos", "icon", "logos");
+  add("icons", "generic-icon", "icons");
   add("shots", "screenshot", "shots");
   add("base", "footage", "base");
   if (extraDir) {
@@ -300,6 +451,10 @@ export async function runDirect(out, flags = {}) {
   if (flags.words) {
     words = JSON.parse(await readFile(flags.words, "utf8"));
     scriptText = scriptText ?? words.map((word) => word.word).join(" ");
+  } else if (scriptText && flags.voice === "tts") {
+    const synthesized = await synthesizeVoice(scriptText, { log });
+    words = synthesized.words;
+    flags["voice-src"] = synthesized.voicePath;
   } else if (scriptText) {
     words = estimateWords(scriptText);
   } else {
@@ -311,7 +466,7 @@ export async function runDirect(out, flags = {}) {
   const durationSeconds = Number(flags.duration ?? Math.ceil((words[words.length - 1].end + 0.4) * 10) / 10);
 
   const baseSrc = flags.take ?? null;
-  const voiceoverSrc = baseSrc;
+  const voiceoverSrc = flags["voice-src"] ?? baseSrc;
   const musicSrc = flags.music ?? (existsSync(path.join(PACKAGE_ROOT, "public", "music", "golden-bed.mp3")) ? "music/golden-bed.mp3" : "");
 
   const assets = scanAssets(flags.assets ?? null);
@@ -320,7 +475,9 @@ export async function runDirect(out, flags = {}) {
   const direction = await parseDirection(client, flags.prompt ?? "", assets.map((asset) => asset.path));
   log(`direction: ${direction.must_include.length} must-include, ${direction.asset_refs.length} asset refs`);
 
-  const { timeline, report } = await directTimeline({
+  const quality = String(flags.quality ?? "fast");
+  const directFn = quality === "high" ? directHighTimeline : directTimeline;
+  const { timeline, report } = await directFn({
     client, words, durationSeconds, assets, direction, preset, scriptText, baseSrc, voiceoverSrc, musicSrc, log
   });
 

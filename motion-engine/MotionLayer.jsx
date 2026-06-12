@@ -4,6 +4,7 @@ import { cameraAt } from "./camera.js";
 import { LogoPop } from "./components/LogoPop.jsx";
 import { PaperGround } from "./components/paper.jsx";
 import { SceneTrack } from "./components/scenes.jsx";
+import { ChapterRail } from "./components/ChapterRail.jsx";
 import { FONTS, INK } from "./theme.js";
 import { paperOffsetAt } from "./travel.js";
 import { SCENE_SFX } from "./schema.js";
@@ -33,6 +34,8 @@ export function MotionLayer({ timeline, enableSfx = true }) {
           <BaseLayer base={timeline.base} width={width} height={height} />
         )}
       </AbsoluteFill>
+
+      {timeline.chapters?.length ? <ChapterRail chapters={timeline.chapters} width={width} height={height} /> : null}
 
       {timeline.events
         .filter((event) => event.type === "logo_pop")
@@ -103,27 +106,27 @@ function SfxLayer({ events, scenes, fps }) {
   const sounds = [];
   for (const event of events) {
     if (!event.sfx) continue;
-    sounds.push({ key: `sfx-${event.id}`, at: event.start, sfx: event.sfx, volume: 0.3 });
+    sounds.push({ key: `sfx-${event.id}`, at: event.start, sfx: event.sfx, volume: 0.18 });
   }
   scenes.forEach((scene, index) => {
     // Whoosh only when the camera actually travels — hard cuts stay silent,
     // and the level sits well under the voice.
     if (index > 0 && scene.transition !== "cut") {
-      sounds.push({ key: `cut-${scene.id}`, at: scene.start - 0.18, sfx: SCENE_SFX.cut, volume: 0.22 });
+      sounds.push({ key: `cut-${scene.id}`, at: scene.start - 0.18, sfx: SCENE_SFX.cut, volume: 0.12 });
     }
     if (scene.type === "prompt_card") {
       const typingSeconds = Math.max(0.6, scene.end - scene.start - 1.1);
-      sounds.push({ key: `type-${scene.id}`, at: scene.start + 0.35, sfx: SCENE_SFX.prompt_typing, volume: 0.35, holdSeconds: typingSeconds });
+      sounds.push({ key: `type-${scene.id}`, at: scene.start + 0.35, sfx: SCENE_SFX.prompt_typing, volume: 0.2, holdSeconds: typingSeconds });
     }
     if (scene.type === "card_steps") {
       scene.items.forEach((item, itemIndex) => {
-        sounds.push({ key: `step-${scene.id}-${itemIndex}`, at: item.at, sfx: SCENE_SFX.step_item, volume: 0.4 });
+        sounds.push({ key: `step-${scene.id}-${itemIndex}`, at: item.at, sfx: SCENE_SFX.step_item, volume: 0.22 });
       });
     }
     if (scene.type === "icon_flow") {
       scene.items.forEach((item, itemIndex) => {
         const last = itemIndex === scene.items.length - 1;
-        sounds.push({ key: `icon-${scene.id}-${itemIndex}`, at: item.at, sfx: last ? SCENE_SFX.icon_final : SCENE_SFX.icon_item, volume: last ? 0.45 : 0.4 });
+        sounds.push({ key: `icon-${scene.id}-${itemIndex}`, at: item.at, sfx: last ? SCENE_SFX.icon_final : SCENE_SFX.icon_item, volume: last ? 0.3 : 0.22 });
       });
     }
   });

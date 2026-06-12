@@ -10,7 +10,7 @@ const WORD_SNAP_TOLERANCE = 0.12;
 // types, feeds scroll) vs. those alive only when an item lands.
 const CONTINUOUS_SCENES = new Set(["talking_head", "screen", "prompt_card"]);
 
-export function lintTimeline(timeline, { direction = null, assets = [] } = {}) {
+export function lintTimeline(timeline, { direction = null, assets = [], presenterSrc = null } = {}) {
   const failures = [];
   const advisories = [];
 
@@ -20,6 +20,13 @@ export function lintTimeline(timeline, { direction = null, assets = [] } = {}) {
   checkBudgets(timeline, failures, advisories);
   if (direction) checkDirectionHonored(timeline, direction, failures);
   if (assets.length) checkAssetsExist(timeline, assets, failures);
+  if (presenterSrc) {
+    for (const scene of timeline.scenes ?? []) {
+      if (scene.type === "talking_head" && scene.src !== presenterSrc) {
+        failures.push(`scene "${scene.id}" uses "${scene.src}" — talking_head scenes must use the presenter take "${presenterSrc}"`);
+      }
+    }
+  }
 
   return { ok: failures.length === 0, failures, advisories };
 }
@@ -27,6 +34,9 @@ export function lintTimeline(timeline, { direction = null, assets = [] } = {}) {
 function sceneActivityTimes(scene) {
   const times = [scene.start];
   for (const item of scene.items ?? []) times.push(item.at);
+  if (scene.type === "stat_counter" || scene.type === "quote_card") {
+    times.push(scene.at, scene.at + 1.0);
+  }
   return times;
 }
 
@@ -127,6 +137,9 @@ function checkDirectionHonored(timeline, direction, failures) {
       const present = tokens.length ? tokens.filter((token) => haystack.includes(token)).length / tokens.length >= 0.5 : haystack.includes(needle);
       if (!present) failures.push(`direction not honored: "${text}" does not appear in any scene`);
     }
+  }
+  if ((direction.chapters ?? []).length >= 2 && !(timeline.chapters ?? []).length) {
+    failures.push("direction not honored: chapters were requested but the timeline has no chapter rail");
   }
   for (const ref of direction.asset_refs ?? []) {
     const base = String(ref.path).split("/").pop();
