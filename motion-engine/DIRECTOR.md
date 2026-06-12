@@ -160,6 +160,28 @@ Schema = "is it renderable"; linter = "is it good"; repair loop = "make the mode
 
 **Cost per video** (opus-4-8 at $5/$25 per MTok): SCRIPT ~$0.05; DIRECT ~12K in / ~5K out ≈ $0.19 per attempt, ×2 average attempts with cached prefix ≈ **$0.40–0.60 total**. Negligible against the value; no need to downgrade models.
 
+## 7b. Multi-agent quality tiers
+
+Single-pass + repair is the baseline, not the ceiling. The DIRECT stage scales to a multi-agent harness behind one flag — all plain orchestration code over parallel API calls, no framework:
+
+```
+--quality fast      single director + repair loop            (~$0.50,  ~1 min)
+--quality high      structure → parallel scene authors →
+                    stitcher → adversarial critic → repair   (~$1.50,  ~2 min)
+--quality max       3-lens director tournament → judge →
+                    winner through the `high` path           (~$3–4,   ~4 min)
+```
+
+**Where agents genuinely help:**
+
+1. **Structure / detail split (`high`).** One agent writes the *beat sheet* (scenes, boundaries, transitions, chapter names — the hard global decisions over word timings); then **one agent per scene in parallel** authors that scene's items and builds with full attention on 3 seconds instead of 60. A deterministic stitcher merges and the usual validate→lint runs on the whole. Density and per-scene craft improve precisely because each author has a small canvas — this attacks the fluidity gap directly.
+2. **Adversarial critic (`high`).** Self-repair fixes what the validator names; a *separate* critic call — prompted only with the disqualifier checklist and the timeline — catches what no lint encodes yet ("scene 4 restates scene 3", "the CTA emphasis word is weak"). Models critique others better than themselves. Critic findings feed one more author round; findings that recur across videos graduate into lint rules.
+3. **Creative tournament (`max`).** Three directors with forced lenses (typography-led / diagram-led / footage-led), a judge scores against direction.json + the lint report, winner advances. This replaces the variance that sampling temperature used to provide — useful when the user says "surprise me" rather than giving tight direction.
+4. **Parallel workers regardless of tier:** asset classification (one vision call per ambiguous asset), logo fetching, and — for education topics — a **claims-verifier agent with web search** that checks every `model_knowledge` claim in the script and annotates the REVIEW packet with sources. That last one upgrades §9 from "flag for human" to "pre-verified with citations, human confirms".
+5. **Vision QA (phase 4)** is itself an agent: sample 8–10 rendered frames, critique against the checklist, emit re-direct instructions.
+
+**Where multi-agent is deliberately NOT used:** the schema/lint layer (deterministic code beats a judge for hard rules), word alignment, rendering, and anything in the per-scene hot path that code can do. The prompt-cached catalog prefix is shared across all agent calls, so the marginal cost of fan-out is mostly output tokens.
+
 ## 8. Asset resolution
 
 Priority order — provided beats fetched beats generated:
@@ -202,9 +224,9 @@ No repo, no product, no screenshots — the grammar still works because the refe
 
 | Phase | Scope | Outcome |
 |---|---|---|
-| **1. Director core** | catalog.js, presets.js (software_demo + explainer), direction parsing, DIRECT loop with structured outputs + repair, `direct` command wiring existing stages | Scenarios 1–3 work end to end |
-| **2. Density + structure components** | chapter_rail, stat_counter, quote_card, words_on_footage + density linter tightening | Fluidity gap closes; education videos look structured |
-| **3. Assets + breadth** | resolver (manifest, Brandfetch, vision classify), compare_split, chat_thread, icon_orbit, listicle/announcement/comparison presets, approval-gated image gen | Scenarios 4–5; logos auto-appear |
+| **1. Director core** | catalog.js, presets.js (software_demo + explainer), direction parsing, DIRECT loop with structured outputs + repair (`--quality fast`), `direct` command wiring existing stages | Scenarios 1–3 work end to end |
+| **2. Density + structure components** | chapter_rail, stat_counter, quote_card, words_on_footage + density linter tightening; `--quality high` (scene fan-out + critic) | Fluidity gap closes; education videos look structured |
+| **3. Assets + breadth** | resolver (manifest, Brandfetch, vision classify), compare_split, chat_thread, icon_orbit, listicle/announcement/comparison presets, approval-gated image gen, claims-verifier agent, `--quality max` tournament | Scenarios 4–5; logos auto-appear; education claims pre-verified |
 | **4. QA loop + character** | frame-sampling QA critic (vision call against the disqualifier checklist) → re-direct; mascot pose system | Self-correcting quality; the OpenClaw charm tier |
 | **Port** | schema, catalog, presets, lint, director prompts → product-videogen; product-videogen supplies its own ingest (media library), voice (existing ElevenLabs), and review UI | The product |
 
