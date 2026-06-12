@@ -72,6 +72,31 @@ A 12fps strip study of transitions and the long cut-free stretches confirms the 
 - **The grid fades radially** — visible in the center of the frame, dissolving to clean paper at the edges.
 - **Density rule confirmed harder**: something is mid-animation in virtually every 1s frame sample. Stillness simply does not occur.
 
+## 4d. Fluidity pass (fourth watch-through — the next level)
+
+Compared against our own exports, three gaps define Phase 3 motion work:
+
+1. **Fluid, not bouncy.** Reference springs glide with barely-visible overshoot
+   (~2-3%); ours popped. Entrance springs are now damping 17 / stiffness 175 —
+   tune by eye from here, never back toward bounce.
+2. **Elements make room for each other.** New components don't just land —
+   existing ones SLIDE up/down/sideways with acceleration/deceleration to open
+   space, like a living layout being scrolled. This needs a reflow primitive:
+   scene children share a layout that re-solves when an item enters, every
+   element animating to its new slot. The single biggest remaining feel gap.
+3. **Micro-motion on focal objects.** Reference text inputs zoom in slowly,
+   pan right-to-left, and wear an ANIMATED glowing border (a gradient sweep
+   travelling the card edge). Focal cards should never be statically framed:
+   slow drift + pan + a living border for dark cards.
+
+OSS to lift from (both MIT, copy-in philosophy):
+- remotion-ui ("shadcn for Remotion"): Stagger/Stack layout primitives (path
+  to the reflow engine), 70+ icons/shapes to extend our 12, LowerThird/
+  StatBlock patterns.
+- remotion-bits: particle systems, gradient transitions, animated text
+  effects, charts (explainer diagrams).
+- remotion-kit: skip — unlicensed, early dev, duplicates what we have.
+
 ## 5. Sound
 
 (Largely as v1 — the reference confirms it.) Whoosh/pop on entrances, typing tick under prompt cards, ding on reveals; everything ducked under continuous VO. Music bed low. SFX variants rotate so repeats don't machine-gun.
