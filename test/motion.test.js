@@ -36,7 +36,7 @@ test("validateTimeline accepts a well-formed timeline and fills defaults", () =>
   );
   assert.equal(result.ok, true, result.errors.join("; "));
   assert.equal(result.timeline.events[0].scale, 1.08);
-  assert.equal(result.timeline.events[0].sfx, "whoosh.wav");
+  assert.equal(result.timeline.events[0].sfx, "fast_whoosh.wav");
   assert.equal(result.timeline.audio.music_volume, 0.08);
 });
 

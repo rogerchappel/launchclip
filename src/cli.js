@@ -1,7 +1,8 @@
 import { initWorkspace, runDemo, planVideo, writeCaptions, renderVideo, submitReview, writeReview, runPacket, validateWorkspace } from "./pipeline.js";
 import { writeTeleprompter, alignRecording, renderMotion } from "./talking_head.js";
+import { generateMusic } from "./music.js";
 
-const COMMANDS = new Set(["init", "demo", "plan", "captions", "render", "submit-review", "review", "validate", "run", "script", "align", "motion-render"]);
+const COMMANDS = new Set(["init", "demo", "plan", "captions", "render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout } = io;
@@ -40,6 +41,8 @@ export async function runCli(argv, io = {}) {
     result = await alignRecording(required(firstArg, "workspace path"), flags);
   } else if (command === "motion-render") {
     result = await renderMotion(required(firstArg, "workspace path"), flags);
+  } else if (command === "music") {
+    result = await generateMusic(required(firstArg, "workspace path"), flags);
   }
   stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
@@ -92,5 +95,6 @@ Talking-head motion workflow:
   launchclip align <workspace> --media take.mp4        # whisper word timings + heuristic motion timeline
   launchclip align <workspace> --media take.mp4 --words words.json
   launchclip motion-render <workspace>                 # render video/motion.mp4 via the motion engine
+  launchclip music <workspace> [--prompt "..."] [--duration 18] [--output music/bed.mp3] [--force]
 `;
 }

@@ -139,8 +139,8 @@
   ],
   "audio": {
     "voiceover": "",
-    "music": "",
-    "music_volume": 0.08
+    "music": "music/golden-bed.mp3",
+    "music_volume": 0.16
   },
   "words": [
     {

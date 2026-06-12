@@ -29,9 +29,20 @@ export const TRAVEL_SECONDS = 0.45;
 export const TALKING_HEAD_LAYOUTS = new Set(["split", "card", "full"]);
 
 export const DEFAULT_SFX = {
-  punch_zoom: "whoosh.wav",
+  punch_zoom: "fast_whoosh.wav",
   logo_pop: "pop.wav",
   caption_chunk: "tick.wav"
+};
+
+// Scene-level sound design, bound automatically by the renderer:
+// travel/cuts whoosh, prompt cards type, step chips click, the final icon
+// node lands with a retro success hit.
+export const SCENE_SFX = {
+  cut: "fast_whoosh.wav",
+  prompt_typing: "writing_prompt.wav",
+  step_item: "single_type.wav",
+  icon_item: "pop.wav",
+  icon_final: "retro_success.wav"
 };
 
 // Hard constraints enforced in code, not prompts.

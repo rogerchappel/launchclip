@@ -6,6 +6,7 @@ import { PaperGround } from "./components/paper.jsx";
 import { SceneTrack } from "./components/scenes.jsx";
 import { FONTS, INK } from "./theme.js";
 import { paperOffsetAt } from "./travel.js";
+import { SCENE_SFX } from "./schema.js";
 
 // Renders a motion.timeline.v1 document in the paper-world grammar: warm
 // paper ground, scenes as physical objects on it, a gentle camera, and a
@@ -41,7 +42,11 @@ export function MotionLayer({ timeline, enableSfx = true }) {
 
       {timeline.audio?.voiceover ? <Html5Audio src={resolveSrc(timeline.audio.voiceover)} /> : null}
       {timeline.audio?.music ? (
-        <Html5Audio src={resolveSrc(timeline.audio.music)} volume={timeline.audio.music_volume ?? 0.08} />
+        <MusicBed
+          src={resolveSrc(timeline.audio.music)}
+          baseVolume={timeline.audio.music_volume ?? 0.08}
+          durationSeconds={timeline.duration_seconds}
+        />
       ) : null}
       {enableSfx ? <SfxLayer events={timeline.events} scenes={timeline.scenes ?? []} fps={fps} /> : null}
     </AbsoluteFill>
@@ -73,21 +78,60 @@ function BaseLayer({ base, width, height }) {
   );
 }
 
-// Every event fires its sound at its start frame, and every scene cut after
-// the first fires a whoosh — bound automatically, never authored per-scene.
+// The music bed eases in, sits under the voice, and drops out entirely for
+// the final beat so the CTA lands in (relative) silence.
+function MusicBed({ src, baseVolume, durationSeconds }) {
+  const { fps } = useVideoConfig();
+  return (
+    <Html5Audio
+      src={src}
+      volume={(frame) => {
+        const seconds = frame / fps;
+        const fadeIn = Math.min(1, seconds / 0.6);
+        const tail = durationSeconds - seconds;
+        const fadeOut = tail < 1.2 ? Math.max(0, tail / 1.2) : 1;
+        return baseVolume * fadeIn * fadeOut;
+      }}
+    />
+  );
+}
+
+// Sound design, bound automatically — never authored per-scene:
+// every travel/cut whooshes, prompt cards type while their text types,
+// step chips click as they land, the final icon node hits a retro success.
 function SfxLayer({ events, scenes, fps }) {
+  const sounds = [];
+  for (const event of events) {
+    if (!event.sfx) continue;
+    sounds.push({ key: `sfx-${event.id}`, at: event.start, sfx: event.sfx, volume: 0.5 });
+  }
+  scenes.forEach((scene, index) => {
+    if (index > 0) sounds.push({ key: `cut-${scene.id}`, at: scene.start, sfx: SCENE_SFX.cut, volume: 0.45 });
+    if (scene.type === "prompt_card") {
+      const typingSeconds = Math.max(0.6, scene.end - scene.start - 1.1);
+      sounds.push({ key: `type-${scene.id}`, at: scene.start + 0.35, sfx: SCENE_SFX.prompt_typing, volume: 0.4, holdSeconds: typingSeconds });
+    }
+    if (scene.type === "card_steps") {
+      scene.items.forEach((item, itemIndex) => {
+        sounds.push({ key: `step-${scene.id}-${itemIndex}`, at: item.at, sfx: SCENE_SFX.step_item, volume: 0.45 });
+      });
+    }
+    if (scene.type === "icon_flow") {
+      scene.items.forEach((item, itemIndex) => {
+        const last = itemIndex === scene.items.length - 1;
+        sounds.push({ key: `icon-${scene.id}-${itemIndex}`, at: item.at, sfx: last ? SCENE_SFX.icon_final : SCENE_SFX.icon_item, volume: last ? 0.5 : 0.45 });
+      });
+    }
+  });
   return (
     <>
-      {events
-        .filter((event) => event.sfx)
-        .map((event) => (
-          <Sequence key={`sfx-${event.id}`} from={Math.round(event.start * fps)} durationInFrames={Math.round(fps * 1.5)}>
-            <Html5Audio src={staticFile(`sfx/${event.sfx}`)} volume={0.5} />
-          </Sequence>
-        ))}
-      {scenes.slice(1).map((scene) => (
-        <Sequence key={`cut-${scene.id}`} from={Math.round(scene.start * fps)} durationInFrames={Math.round(fps * 1.5)}>
-          <Html5Audio src={staticFile("sfx/whoosh.wav")} volume={0.45} />
+      {sounds.map((sound) => (
+        <Sequence
+          key={sound.key}
+          from={Math.round(sound.at * fps)}
+          durationInFrames={Math.round(fps * (sound.holdSeconds ?? 1.5))}
+        >
+          <Html5Audio src={staticFile(`sfx/${sound.sfx}`)} volume={sound.volume} />
         </Sequence>
       ))}
     </>
