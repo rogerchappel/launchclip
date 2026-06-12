@@ -11,14 +11,33 @@
       "type": "talking_head",
       "start": 0,
       "end": 3.29,
+      "transition": "cut",
       "src": "base/talking-head.mp4",
-      "offset": 0
+      "offset": 0,
+      "layout": "split",
+      "items": [
+        {
+          "text": "I stopped",
+          "at": 0.4
+        },
+        {
+          "text": "hand-editing",
+          "at": 1.14,
+          "emphasis": true,
+          "color": "coral"
+        },
+        {
+          "text": "my launch videos.",
+          "at": 1.82
+        }
+      ]
     },
     {
       "id": "thesis",
       "type": "typography",
       "start": 3.29,
       "end": 5.99,
+      "transition": "swipe_left",
       "title": "",
       "items": [
         {
@@ -47,6 +66,7 @@
       "type": "prompt_card",
       "start": 5.99,
       "end": 8.45,
+      "transition": "zoom_into",
       "text": "launchclip run ./my-oss-tool"
     },
     {
@@ -54,6 +74,7 @@
       "type": "card_steps",
       "start": 8.45,
       "end": 11.65,
+      "transition": "swipe_left",
       "title": "",
       "items": [
         {
@@ -75,6 +96,7 @@
       "type": "icon_flow",
       "start": 11.65,
       "end": 16.06,
+      "transition": "cut",
       "title": "",
       "items": [
         {
@@ -99,6 +121,7 @@
       "type": "typography",
       "start": 16.06,
       "end": 17.95,
+      "transition": "zoom_into",
       "title": "",
       "items": [
         {
@@ -357,24 +380,14 @@
   ],
   "events": [
     {
-      "id": "zoom-hook",
-      "type": "punch_zoom",
-      "start": 0.66,
-      "end": 1.8599999999999999,
-      "sfx": "whoosh.wav",
-      "scale": 1.1,
-      "origin_x": 0.5,
-      "origin_y": 0.42
-    },
-    {
       "id": "logo-hook",
       "type": "logo_pop",
       "start": 2.12,
-      "end": 3.42,
+      "end": 3.19,
       "sfx": "pop.wav",
       "src": "logos/launchclip.svg",
-      "x": 0.74,
-      "y": 0.26,
+      "x": 0.72,
+      "y": 0.3,
       "size": 0.2,
       "label": "launchclip"
     }

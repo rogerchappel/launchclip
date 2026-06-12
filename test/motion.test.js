@@ -150,12 +150,42 @@ test("golden timeline example validates", async () => {
   const result = validateTimeline(raw);
   assert.equal(result.ok, true, result.errors.join("; "));
   assert.equal(result.warnings.length, 0, result.warnings.join("; "));
-  assert.ok(result.timeline.events.length >= 2);
+  assert.ok(result.timeline.events.length >= 1);
   assert.ok(result.timeline.scenes.length >= 5, "golden timeline must exercise the scene track");
   const types = new Set(result.timeline.scenes.map((scene) => scene.type));
   for (const required of ["talking_head", "typography", "prompt_card", "card_steps", "icon_flow"]) {
     assert.ok(types.has(required), `golden timeline missing scene type ${required}`);
   }
+  const transitions = new Set(result.timeline.scenes.map((scene) => scene.transition));
+  for (const required of ["swipe_left", "zoom_into", "cut"]) {
+    assert.ok(transitions.has(required), `golden timeline missing transition ${required}`);
+  }
+});
+
+test("scene transitions and talking_head layouts validate", () => {
+  const result = validateTimeline({
+    ...baseTimeline([]),
+    scenes: [
+      { id: "a", type: "talking_head", start: 0, end: 4, src: "base/take.mp4", layout: "teleport" },
+      { id: "b", type: "typography", start: 4, end: 8, transition: "warp", items: [{ text: "hi" }] },
+      { id: "c", type: "talking_head", start: 8, end: 10, src: "base/take.mp4", layout: "card", transition: "swipe_left" }
+    ]
+  });
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => error.includes("unknown layout")));
+  assert.ok(result.errors.some((error) => error.includes("unknown transition")));
+  const valid = validateTimeline({
+    ...baseTimeline([]),
+    scenes: [
+      { id: "a", type: "talking_head", start: 0, end: 4, src: "base/take.mp4", transition: "swipe_left", items: [{ text: "yo", at: 1 }] },
+      { id: "b", type: "screenshot_pile", start: 4, end: 8, mode: "scroll", transition: "zoom_into", items: [{ src: "shots/a.png" }] },
+      { id: "c", type: "talking_head", start: 8, end: 10, src: "base/take.mp4", layout: "full" }
+    ]
+  });
+  assert.equal(valid.ok, true, valid.errors.join("; "));
+  assert.equal(valid.timeline.scenes[0].transition, "cut", "first scene is forced to cut");
+  assert.equal(valid.timeline.scenes[0].layout, "split");
+  assert.equal(valid.timeline.scenes[1].mode, "scroll");
 });
 
 test("parseWords accepts plain arrays and whisper output", () => {
