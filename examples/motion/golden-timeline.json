@@ -1,0 +1,461 @@
+{
+  "version": "motion.timeline.v1",
+  "duration_seconds": 17.3,
+  "base": {
+    "type": "video",
+    "src": "base/talking-head-roger.mp4"
+  },
+  "scenes": [
+    {
+      "id": "hook",
+      "type": "talking_head",
+      "start": 0,
+      "end": 3.189,
+      "transition": "cut",
+      "src": "base/talking-head-roger.mp4",
+      "offset": 0,
+      "layout": "split",
+      "items": [
+        {
+          "text": "I stopped",
+          "at": 0.329
+        },
+        {
+          "text": "hand-editing",
+          "at": 0.749,
+          "emphasis": true,
+          "color": "coral"
+        },
+        {
+          "text": "my launch videos.",
+          "at": 1.609
+        }
+      ]
+    },
+    {
+      "id": "thesis",
+      "type": "typography",
+      "start": 3.189,
+      "end": 5.869,
+      "transition": "swipe_left",
+      "title": "",
+      "items": [
+        {
+          "text": "Now my",
+          "at": 3.189
+        },
+        {
+          "text": "repo",
+          "at": 3.97,
+          "emphasis": true,
+          "color": "mint"
+        },
+        {
+          "text": "makes them",
+          "at": 4.389
+        },
+        {
+          "text": "for me.",
+          "at": 4.889,
+          "emphasis": true
+        }
+      ]
+    },
+    {
+      "id": "command",
+      "type": "prompt_card",
+      "start": 5.869,
+      "end": 8.449,
+      "transition": "zoom_into",
+      "text": "launchclip run ./my-oss-tool"
+    },
+    {
+      "id": "writes",
+      "type": "card_steps",
+      "start": 8.449,
+      "end": 11.05,
+      "transition": "swipe_left",
+      "title": "",
+      "items": [
+        {
+          "text": "Script with timing",
+          "at": 8.449
+        },
+        {
+          "text": "Matched visuals",
+          "at": 9.009
+        },
+        {
+          "text": "Rendered 9:16 short",
+          "at": 9.569
+        }
+      ]
+    },
+    {
+      "id": "packet",
+      "type": "icon_flow",
+      "start": 11.05,
+      "end": 15.01,
+      "transition": "cut",
+      "title": "",
+      "items": [
+        {
+          "text": "your demo",
+          "at": 11.15,
+          "src": "logos/terminal.svg"
+        },
+        {
+          "text": "launchclip",
+          "at": 12.009,
+          "src": "logos/launchclip.svg"
+        },
+        {
+          "text": "ready to post",
+          "at": 13.07,
+          "color": "mint"
+        }
+      ]
+    },
+    {
+      "id": "cta",
+      "type": "typography",
+      "start": 15.01,
+      "end": 17.3,
+      "transition": "zoom_into",
+      "title": "",
+      "items": [
+        {
+          "text": "Check it out",
+          "at": 15.01
+        },
+        {
+          "text": "link",
+          "at": 15.709,
+          "emphasis": true,
+          "color": "mint"
+        },
+        {
+          "text": "in my",
+          "at": 15.959
+        },
+        {
+          "text": "bio.",
+          "at": 16.129,
+          "emphasis": true,
+          "color": "coral"
+        }
+      ]
+    }
+  ],
+  "audio": {
+    "voiceover": "base/talking-head-roger.mp4",
+    "music": "music/golden-bed.mp3",
+    "music_volume": 0.18
+  },
+  "words": [
+    {
+      "word": "I",
+      "start": 0.329,
+      "end": 0.349,
+      "emphasis": false
+    },
+    {
+      "word": "stopped",
+      "start": 0.349,
+      "end": 0.709,
+      "emphasis": false
+    },
+    {
+      "word": "hand-editing",
+      "start": 0.749,
+      "end": 1.589,
+      "emphasis": false
+    },
+    {
+      "word": "my",
+      "start": 1.609,
+      "end": 1.709,
+      "emphasis": false
+    },
+    {
+      "word": "launch",
+      "start": 1.79,
+      "end": 2.05,
+      "emphasis": false
+    },
+    {
+      "word": "videos.",
+      "start": 2.129,
+      "end": 3.03,
+      "emphasis": false
+    },
+    {
+      "word": "Now,",
+      "start": 3.189,
+      "end": 3.689,
+      "emphasis": false
+    },
+    {
+      "word": "my",
+      "start": 3.749,
+      "end": 3.91,
+      "emphasis": false
+    },
+    {
+      "word": "repo",
+      "start": 3.97,
+      "end": 4.329,
+      "emphasis": false
+    },
+    {
+      "word": "makes",
+      "start": 4.389,
+      "end": 4.609,
+      "emphasis": false
+    },
+    {
+      "word": "them",
+      "start": 4.649,
+      "end": 4.849,
+      "emphasis": false
+    },
+    {
+      "word": "for",
+      "start": 4.889,
+      "end": 5.069,
+      "emphasis": false
+    },
+    {
+      "word": "me.",
+      "start": 5.089,
+      "end": 5.309,
+      "emphasis": false
+    },
+    {
+      "word": "One",
+      "start": 5.869,
+      "end": 6.109,
+      "emphasis": false
+    },
+    {
+      "word": "command",
+      "start": 6.169,
+      "end": 6.629,
+      "emphasis": false
+    },
+    {
+      "word": "captures",
+      "start": 6.669,
+      "end": 7.109,
+      "emphasis": false
+    },
+    {
+      "word": "a",
+      "start": 7.189,
+      "end": 7.349,
+      "emphasis": false
+    },
+    {
+      "word": "real",
+      "start": 7.409,
+      "end": 7.649,
+      "emphasis": false
+    },
+    {
+      "word": "demo,",
+      "start": 7.709,
+      "end": 8.01,
+      "emphasis": false
+    },
+    {
+      "word": "writes",
+      "start": 8.449,
+      "end": 8.69,
+      "emphasis": false
+    },
+    {
+      "word": "the",
+      "start": 8.749,
+      "end": 8.85,
+      "emphasis": false
+    },
+    {
+      "word": "script,",
+      "start": 8.89,
+      "end": 9.289,
+      "emphasis": false
+    },
+    {
+      "word": "and",
+      "start": 9.329,
+      "end": 9.45,
+      "emphasis": false
+    },
+    {
+      "word": "renders",
+      "start": 9.569,
+      "end": 9.989,
+      "emphasis": false
+    },
+    {
+      "word": "the",
+      "start": 10.05,
+      "end": 10.089,
+      "emphasis": false
+    },
+    {
+      "word": "short.",
+      "start": 10.249,
+      "end": 10.97,
+      "emphasis": false
+    },
+    {
+      "word": "And",
+      "start": 11.05,
+      "end": 11.15,
+      "emphasis": false
+    },
+    {
+      "word": "the",
+      "start": 11.189,
+      "end": 11.309,
+      "emphasis": false
+    },
+    {
+      "word": "whole",
+      "start": 11.369,
+      "end": 11.669,
+      "emphasis": false
+    },
+    {
+      "word": "packet",
+      "start": 11.709,
+      "end": 12.07,
+      "emphasis": false
+    },
+    {
+      "word": "is",
+      "start": 12.089,
+      "end": 12.23,
+      "emphasis": false
+    },
+    {
+      "word": "reviewable",
+      "start": 12.269,
+      "end": 12.93,
+      "emphasis": false
+    },
+    {
+      "word": "before",
+      "start": 12.97,
+      "end": 13.369,
+      "emphasis": false
+    },
+    {
+      "word": "anything",
+      "start": 13.43,
+      "end": 13.89,
+      "emphasis": false
+    },
+    {
+      "word": "goes",
+      "start": 13.909,
+      "end": 14.129,
+      "emphasis": false
+    },
+    {
+      "word": "live.",
+      "start": 14.209,
+      "end": 14.55,
+      "emphasis": false
+    },
+    {
+      "word": "Check",
+      "start": 15.01,
+      "end": 15.169,
+      "emphasis": false
+    },
+    {
+      "word": "it",
+      "start": 15.189,
+      "end": 15.27,
+      "emphasis": false
+    },
+    {
+      "word": "out",
+      "start": 15.329,
+      "end": 15.47,
+      "emphasis": false
+    },
+    {
+      "word": "in",
+      "start": 15.489,
+      "end": 15.57,
+      "emphasis": false
+    },
+    {
+      "word": "the",
+      "start": 15.589,
+      "end": 15.669,
+      "emphasis": false
+    },
+    {
+      "word": "link",
+      "start": 15.709,
+      "end": 15.829,
+      "emphasis": false
+    },
+    {
+      "word": "in",
+      "start": 15.869,
+      "end": 15.949,
+      "emphasis": false
+    },
+    {
+      "word": "my",
+      "start": 15.97,
+      "end": 16.109,
+      "emphasis": false
+    },
+    {
+      "word": "bio.",
+      "start": 16.129,
+      "end": 16.55,
+      "emphasis": false
+    }
+  ],
+  "events": [
+    {
+      "id": "logo-hook",
+      "type": "logo_pop",
+      "start": 1.609,
+      "end": 3.089,
+      "sfx": "pop.wav",
+      "src": "logos/launchclip.svg",
+      "x": 0.72,
+      "y": 0.3,
+      "size": 0.2,
+      "label": "launchclip"
+    },
+    {
+      "id": "zoom-prompt",
+      "type": "punch_zoom",
+      "start": 6.569,
+      "end": 7.899,
+      "sfx": null,
+      "scale": 1.07,
+      "origin_x": 0.5,
+      "origin_y": 0.5
+    },
+    {
+      "id": "zoom-ready",
+      "type": "punch_zoom",
+      "start": 13.120000000000001,
+      "end": 14.32,
+      "sfx": null,
+      "scale": 1.08,
+      "origin_x": 0.5,
+      "origin_y": 0.55
+    }
+  ]
+}

@@ -2,6 +2,8 @@ import React from "react";
 import { Composition, registerRoot } from "remotion";
 import { LaunchclipPremiumShort } from "./premium.jsx";
 import { LaunchclipSocial } from "./social.jsx";
+import { MotionLayer } from "../motion-engine/MotionLayer.jsx";
+import goldenTimeline from "../examples/motion/golden-timeline.json";
 
 const defaultProps = {
   width: 720,
@@ -40,6 +42,18 @@ const Root = () => {
         height={1280}
         defaultProps={{ ...defaultProps, durationSeconds: 48, style: "premium-product-short" }}
         calculateMetadata={metadataFromProps}
+      />
+      <Composition
+        id="MotionGolden"
+        component={MotionLayer}
+        durationInFrames={Math.ceil(goldenTimeline.duration_seconds * 30)}
+        fps={30}
+        width={720}
+        height={1280}
+        defaultProps={{ timeline: goldenTimeline, enableSfx: true }}
+        calculateMetadata={({ props }) => ({
+          durationInFrames: Math.max(1, Math.ceil(Number(props.timeline?.duration_seconds ?? 30) * 30))
+        })}
       />
     </>
   );
