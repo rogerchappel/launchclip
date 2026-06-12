@@ -5,6 +5,7 @@ import { LogoPop } from "./components/LogoPop.jsx";
 import { PaperGround } from "./components/paper.jsx";
 import { SceneTrack } from "./components/scenes.jsx";
 import { FONTS, INK } from "./theme.js";
+import { paperOffsetAt } from "./travel.js";
 
 // Renders a motion.timeline.v1 document in the paper-world grammar: warm
 // paper ground, scenes as physical objects on it, a gentle camera, and a
@@ -14,10 +15,11 @@ export function MotionLayer({ timeline, enableSfx = true }) {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const camera = cameraAt({ events: timeline.events, frame, fps });
+  const paperOffset = paperOffsetAt({ scenes: timeline.scenes ?? [], frame, fps, width });
 
   return (
     <AbsoluteFill style={{ overflow: "hidden" }}>
-      <PaperGround />
+      <PaperGround offsetX={paperOffset} />
       <AbsoluteFill
         style={{
           transform: `scale(${camera.scale})`,

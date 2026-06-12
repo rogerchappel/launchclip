@@ -21,6 +21,13 @@ export const SCENE_TYPES = new Set([
 export const MAX_SCENE_SECONDS = 6;
 export const MIN_SCENE_SECONDS = 0.8;
 
+// How a scene enters: hard cuts are chapter breaks; travel (swipe/zoom) keeps
+// the viewer on one continuous canvas. The camera spends this long in motion.
+export const SCENE_TRANSITIONS = new Set(["cut", "swipe_left", "swipe_right", "zoom_into"]);
+export const TRAVEL_SECONDS = 0.45;
+
+export const TALKING_HEAD_LAYOUTS = new Set(["split", "card", "full"]);
+
 export const DEFAULT_SFX = {
   punch_zoom: "whoosh.wav",
   logo_pop: "pop.wav",
@@ -116,16 +123,39 @@ function normalizeScene(scene, index, errors) {
     errors.push(`scenes[${index}] (${type}) has invalid timing`);
     return null;
   }
-  const base = { id: String(scene?.id ?? `${type}-${index}`), type, start, end };
+  const transitionRaw = String(scene?.transition ?? "cut");
+  if (!SCENE_TRANSITIONS.has(transitionRaw)) {
+    errors.push(`scenes[${index}] has unknown transition "${transitionRaw}"`);
+  }
+  // The first scene has nothing to travel from.
+  const transition = index === 0 ? "cut" : transitionRaw;
+  const base = { id: String(scene?.id ?? `${type}-${index}`), type, start, end, transition };
   if (type === "talking_head" || type === "screen") {
     if (!scene?.src) errors.push(`scenes[${index}] (${type}) requires src — footage scenes must be real recordings`);
-    return {
+    const layout = String(scene?.layout ?? "split");
+    if (type === "talking_head" && !TALKING_HEAD_LAYOUTS.has(layout)) {
+      errors.push(`scenes[${index}] (talking_head) has unknown layout "${layout}"`);
+    }
+    const footage = {
       ...base,
       src: String(scene?.src ?? ""),
       // Footage offset within the source file; talking_head defaults to the
       // global clock so one continuous take stays in sync with its own audio.
       offset: scene?.offset === undefined ? (type === "talking_head" ? start : 0) : Number(scene.offset)
     };
+    if (type === "talking_head") {
+      footage.layout = layout;
+      // Optional word builds staged on the paper above a split-layout face.
+      footage.items = Array.isArray(scene?.items)
+        ? scene.items.map((item, itemIndex) => ({
+            text: String(item?.text ?? ""),
+            at: clampNumber(item?.at, start, end, start + itemIndex * 0.8),
+            ...(item?.emphasis ? { emphasis: true } : {}),
+            ...(item?.color ? { color: String(item.color) } : {})
+          }))
+        : [];
+    }
+    return footage;
   }
   if (type === "prompt_card") {
     if (!scene?.text) errors.push(`scenes[${index}] (prompt_card) requires text — the real prompt, never invented`);
@@ -148,6 +178,9 @@ function normalizeScene(scene, index, errors) {
       items.forEach((item, itemIndex) => {
         if (!item.src) errors.push(`scenes[${index}] (screenshot_pile) items[${itemIndex}] requires src — real screenshots only`);
       });
+      const mode = String(scene?.mode ?? "pile");
+      if (mode !== "pile" && mode !== "scroll") errors.push(`scenes[${index}] (screenshot_pile) has unknown mode "${mode}"`);
+      return { ...base, title: String(scene?.title ?? ""), mode, items };
     }
     return { ...base, title: String(scene?.title ?? ""), items };
   }

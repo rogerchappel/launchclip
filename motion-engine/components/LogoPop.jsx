@@ -17,7 +17,8 @@ export function LogoPop({ event, width, height }) {
   if (exit > 0.98) return null;
 
   const size = Math.round(width * event.size);
-  const scale = (0.3 + enter * 0.7) * (1 - exit * 0.4);
+  // Zoom-from-depth: the card flies in from near-zero toward the camera.
+  const scale = (0.05 + enter * 0.95) * (1 - exit * 0.4);
   // 3D flip-in from 70deg, then a shallow idle float so the card never sits dead.
   const seconds = (frame - startFrame) / fps;
   const rotateY = (1 - enter) * -70 + Math.sin(seconds * 1.1) * 4 + exit * 30;
