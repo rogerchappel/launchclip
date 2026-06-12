@@ -11,7 +11,11 @@ export function PaperGround({ offsetX = 0 }) {
         style={{
           backgroundImage: `linear-gradient(${PAPER.grid} 1px, transparent 1px), linear-gradient(90deg, ${PAPER.grid} 1px, transparent 1px)`,
           backgroundSize: `${PAPER.gridSize}px ${PAPER.gridSize}px`,
-          backgroundPosition: `${offsetX}px 0px`
+          backgroundPosition: `${offsetX}px 0px`,
+          // Reference: the grid lives in the middle of the frame and fades to
+          // clean paper at the edges.
+          WebkitMaskImage: "radial-gradient(90% 75% at 50% 45%, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 100%)",
+          maskImage: "radial-gradient(90% 75% at 50% 45%, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 100%)"
         }}
       />
       <AbsoluteFill style={{ background: PAPER.vignette }} />

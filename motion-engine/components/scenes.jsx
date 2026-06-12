@@ -211,6 +211,7 @@ function WordBuild({ scene, width, height, region }) {
         const localFrame = frame - (item.at - scene.start) * fps;
         if (localFrame < 0) return null;
         const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
+        const motionBlur = entranceBlur(enter, spring({ frame: localFrame - 1, fps, config: SPRINGS.enter }));
         const emphasised = Boolean(item.emphasis);
         const size = emphasised ? base * 1.9 : base;
         return (
@@ -229,7 +230,8 @@ function WordBuild({ scene, width, height, region }) {
                 `translateY(${WORD_OFFSETS[index % WORD_OFFSETS.length] * base + (1 - enter) * base * 0.6}px)`,
                 `scale(${0.7 + enter * 0.3})`
               ].join(" "),
-              opacity: Math.min(1, enter * 1.5)
+              opacity: Math.min(1, enter * 1.5),
+              filter: motionBlur
             }}
           >
             {item.text}
@@ -370,8 +372,9 @@ function CardStepsScene({ scene, width, height }) {
         if (localFrame < 0) return null;
         const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
         const tilt = WORD_ROTATIONS[index % WORD_ROTATIONS.length] * 0.4;
+        const motionBlur = entranceBlur(enter, spring({ frame: localFrame - 1, fps, config: SPRINGS.enter }));
         return (
-          <div key={index} style={{ width: "100%", transform: `translateY(${(1 - enter) * height * 0.05}px) rotate(${tilt}deg)`, opacity: Math.min(1, enter * 1.5) }}>
+          <div key={index} style={{ width: "100%", transform: `translateY(${(1 - enter) * height * 0.05}px) rotate(${tilt}deg)`, opacity: Math.min(1, enter * 1.5), filter: motionBlur }}>
             <Card chip elevation="low" radius={20} style={{ display: "flex", alignItems: "center", gap: fontSize, padding: `${fontSize * 0.75}px ${fontSize * 1.1}px` }}>
               <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: fontSize * 1.5, color: SEMANTIC.mint, minWidth: fontSize * 1.4, lineHeight: 1 }}>
                 {index + 1}
@@ -431,6 +434,7 @@ function ScreenshotPileScene({ scene, width, height }) {
           const localFrame = frame - (item.at - scene.start) * fps;
           if (localFrame < 0) return null;
           const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
+          const motionBlur = entranceBlur(enter, spring({ frame: localFrame - 1, fps, config: SPRINGS.enter }));
           return (
             <div
               key={index}
@@ -438,6 +442,7 @@ function ScreenshotPileScene({ scene, width, height }) {
                 position: "absolute",
                 inset: 0,
                 zIndex: 100 - index,
+                filter: motionBlur,
                 transform: [
                   `translate(${slot.x * cardWidth * enter}px, ${slot.y * cardWidth * enter + (1 - enter) * height * 0.06}px)`,
                   `rotate(${slot.rot * enter}deg)`,
@@ -455,6 +460,12 @@ function ScreenshotPileScene({ scene, width, height }) {
       </div>
     </AbsoluteFill>
   );
+}
+
+// Anything moving fast enough to streak gets a touch of blur; at rest, none.
+function entranceBlur(enterNow, enterPrev) {
+  const blur = Math.min(5, Math.max(0, enterNow - enterPrev) * 30);
+  return blur > 0.4 ? `blur(${blur.toFixed(1)}px)` : undefined;
 }
 
 function semanticColor(name) {

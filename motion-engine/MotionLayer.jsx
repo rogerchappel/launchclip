@@ -103,23 +103,27 @@ function SfxLayer({ events, scenes, fps }) {
   const sounds = [];
   for (const event of events) {
     if (!event.sfx) continue;
-    sounds.push({ key: `sfx-${event.id}`, at: event.start, sfx: event.sfx, volume: 0.5 });
+    sounds.push({ key: `sfx-${event.id}`, at: event.start, sfx: event.sfx, volume: 0.3 });
   }
   scenes.forEach((scene, index) => {
-    if (index > 0) sounds.push({ key: `cut-${scene.id}`, at: scene.start, sfx: SCENE_SFX.cut, volume: 0.45 });
+    // Whoosh only when the camera actually travels — hard cuts stay silent,
+    // and the level sits well under the voice.
+    if (index > 0 && scene.transition !== "cut") {
+      sounds.push({ key: `cut-${scene.id}`, at: scene.start - 0.18, sfx: SCENE_SFX.cut, volume: 0.22 });
+    }
     if (scene.type === "prompt_card") {
       const typingSeconds = Math.max(0.6, scene.end - scene.start - 1.1);
-      sounds.push({ key: `type-${scene.id}`, at: scene.start + 0.35, sfx: SCENE_SFX.prompt_typing, volume: 0.4, holdSeconds: typingSeconds });
+      sounds.push({ key: `type-${scene.id}`, at: scene.start + 0.35, sfx: SCENE_SFX.prompt_typing, volume: 0.35, holdSeconds: typingSeconds });
     }
     if (scene.type === "card_steps") {
       scene.items.forEach((item, itemIndex) => {
-        sounds.push({ key: `step-${scene.id}-${itemIndex}`, at: item.at, sfx: SCENE_SFX.step_item, volume: 0.45 });
+        sounds.push({ key: `step-${scene.id}-${itemIndex}`, at: item.at, sfx: SCENE_SFX.step_item, volume: 0.4 });
       });
     }
     if (scene.type === "icon_flow") {
       scene.items.forEach((item, itemIndex) => {
         const last = itemIndex === scene.items.length - 1;
-        sounds.push({ key: `icon-${scene.id}-${itemIndex}`, at: item.at, sfx: last ? SCENE_SFX.icon_final : SCENE_SFX.icon_item, volume: last ? 0.5 : 0.45 });
+        sounds.push({ key: `icon-${scene.id}-${itemIndex}`, at: item.at, sfx: last ? SCENE_SFX.icon_final : SCENE_SFX.icon_item, volume: last ? 0.45 : 0.4 });
       });
     }
   });
@@ -128,7 +132,7 @@ function SfxLayer({ events, scenes, fps }) {
       {sounds.map((sound) => (
         <Sequence
           key={sound.key}
-          from={Math.round(sound.at * fps)}
+          from={Math.max(0, Math.round(sound.at * fps))}
           durationInFrames={Math.round(fps * (sound.holdSeconds ?? 1.5))}
         >
           <Html5Audio src={staticFile(`sfx/${sound.sfx}`)} volume={sound.volume} />

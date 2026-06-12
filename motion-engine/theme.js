@@ -39,9 +39,11 @@ export const CARD = {
   light: "#FFFFFF",
   dark: "#121210",
   radius: 28,
-  shadow: "0 22px 55px rgba(26,26,24,0.22)",
-  shadowLow: "0 12px 30px rgba(26,26,24,0.16)",
-  shadowHigh: "0 30px 70px rgba(26,26,24,0.3)"
+  // Deep two-layer shadows: a tight contact shadow plus a long soft throw,
+  // so elements pop off the paper instead of sitting printed on it.
+  shadow: "0 6px 14px rgba(26,26,24,0.18), 0 28px 65px rgba(26,26,24,0.32)",
+  shadowLow: "0 4px 10px rgba(26,26,24,0.16), 0 16px 38px rgba(26,26,24,0.24)",
+  shadowHigh: "0 8px 18px rgba(26,26,24,0.2), 0 40px 90px rgba(26,26,24,0.4)"
 };
 
 export const SPRINGS = {

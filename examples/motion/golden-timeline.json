@@ -1,6 +1,6 @@
 {
   "version": "motion.timeline.v1",
-  "duration_seconds": 19.1,
+  "duration_seconds": 17.3,
   "base": {
     "type": "video",
     "src": "base/talking-head-roger.mp4"
@@ -10,7 +10,7 @@
       "id": "hook",
       "type": "talking_head",
       "start": 0,
-      "end": 3.639,
+      "end": 3.189,
       "transition": "cut",
       "src": "base/talking-head-roger.mp4",
       "offset": 0,
@@ -18,45 +18,45 @@
       "items": [
         {
           "text": "I stopped",
-          "at": 0.779
+          "at": 0.329
         },
         {
           "text": "hand-editing",
-          "at": 1.199,
+          "at": 0.749,
           "emphasis": true,
           "color": "coral"
         },
         {
           "text": "my launch videos.",
-          "at": 2.059
+          "at": 1.609
         }
       ]
     },
     {
       "id": "thesis",
       "type": "typography",
-      "start": 3.639,
-      "end": 6.319,
+      "start": 3.189,
+      "end": 5.869,
       "transition": "swipe_left",
       "title": "",
       "items": [
         {
           "text": "Now my",
-          "at": 3.639
+          "at": 3.189
         },
         {
           "text": "repo",
-          "at": 4.42,
+          "at": 3.97,
           "emphasis": true,
           "color": "mint"
         },
         {
           "text": "makes them",
-          "at": 4.839
+          "at": 4.389
         },
         {
           "text": "for me.",
-          "at": 5.339,
+          "at": 4.889,
           "emphasis": true
         }
       ]
@@ -64,54 +64,54 @@
     {
       "id": "command",
       "type": "prompt_card",
-      "start": 6.319,
-      "end": 8.899,
+      "start": 5.869,
+      "end": 8.449,
       "transition": "zoom_into",
       "text": "launchclip run ./my-oss-tool"
     },
     {
       "id": "writes",
       "type": "card_steps",
-      "start": 8.899,
-      "end": 11.5,
+      "start": 8.449,
+      "end": 11.05,
       "transition": "swipe_left",
       "title": "",
       "items": [
         {
           "text": "Script with timing",
-          "at": 8.899
+          "at": 8.449
         },
         {
           "text": "Matched visuals",
-          "at": 9.459
+          "at": 9.009
         },
         {
           "text": "Rendered 9:16 short",
-          "at": 10.019
+          "at": 9.569
         }
       ]
     },
     {
       "id": "packet",
       "type": "icon_flow",
-      "start": 11.5,
-      "end": 15.46,
+      "start": 11.05,
+      "end": 15.01,
       "transition": "cut",
       "title": "",
       "items": [
         {
           "text": "your demo",
-          "at": 11.6,
+          "at": 11.15,
           "src": "logos/terminal.svg"
         },
         {
           "text": "launchclip",
-          "at": 12.459000000000001,
+          "at": 12.009,
           "src": "logos/launchclip.svg"
         },
         {
           "text": "ready to post",
-          "at": 13.52,
+          "at": 13.07,
           "color": "mint"
         }
       ]
@@ -119,28 +119,28 @@
     {
       "id": "cta",
       "type": "typography",
-      "start": 15.46,
-      "end": 19.1,
+      "start": 15.01,
+      "end": 17.3,
       "transition": "zoom_into",
       "title": "",
       "items": [
         {
           "text": "Check it out",
-          "at": 15.46
+          "at": 15.01
         },
         {
           "text": "link",
-          "at": 16.159,
+          "at": 15.709,
           "emphasis": true,
           "color": "mint"
         },
         {
           "text": "in my",
-          "at": 16.409
+          "at": 15.959
         },
         {
           "text": "bio.",
-          "at": 16.579,
+          "at": 16.129,
           "emphasis": true,
           "color": "coral"
         }
@@ -150,277 +150,277 @@
   "audio": {
     "voiceover": "base/talking-head-roger.mp4",
     "music": "music/golden-bed.mp3",
-    "music_volume": 0.1
+    "music_volume": 0.18
   },
   "words": [
     {
       "word": "I",
-      "start": 0.779,
-      "end": 0.799,
+      "start": 0.329,
+      "end": 0.349,
       "emphasis": false
     },
     {
       "word": "stopped",
-      "start": 0.799,
-      "end": 1.159,
+      "start": 0.349,
+      "end": 0.709,
       "emphasis": false
     },
     {
       "word": "hand-editing",
-      "start": 1.199,
-      "end": 2.039,
+      "start": 0.749,
+      "end": 1.589,
       "emphasis": false
     },
     {
       "word": "my",
-      "start": 2.059,
-      "end": 2.159,
+      "start": 1.609,
+      "end": 1.709,
       "emphasis": false
     },
     {
       "word": "launch",
-      "start": 2.24,
-      "end": 2.5,
+      "start": 1.79,
+      "end": 2.05,
       "emphasis": false
     },
     {
       "word": "videos.",
-      "start": 2.579,
-      "end": 3.48,
+      "start": 2.129,
+      "end": 3.03,
       "emphasis": false
     },
     {
       "word": "Now,",
-      "start": 3.639,
-      "end": 4.139,
+      "start": 3.189,
+      "end": 3.689,
       "emphasis": false
     },
     {
       "word": "my",
-      "start": 4.199,
-      "end": 4.36,
+      "start": 3.749,
+      "end": 3.91,
       "emphasis": false
     },
     {
       "word": "repo",
-      "start": 4.42,
-      "end": 4.779,
+      "start": 3.97,
+      "end": 4.329,
       "emphasis": false
     },
     {
       "word": "makes",
-      "start": 4.839,
-      "end": 5.059,
+      "start": 4.389,
+      "end": 4.609,
       "emphasis": false
     },
     {
       "word": "them",
-      "start": 5.099,
-      "end": 5.299,
+      "start": 4.649,
+      "end": 4.849,
       "emphasis": false
     },
     {
       "word": "for",
-      "start": 5.339,
-      "end": 5.519,
+      "start": 4.889,
+      "end": 5.069,
       "emphasis": false
     },
     {
       "word": "me.",
-      "start": 5.539,
-      "end": 5.759,
+      "start": 5.089,
+      "end": 5.309,
       "emphasis": false
     },
     {
       "word": "One",
-      "start": 6.319,
-      "end": 6.559,
+      "start": 5.869,
+      "end": 6.109,
       "emphasis": false
     },
     {
       "word": "command",
-      "start": 6.619,
-      "end": 7.079,
+      "start": 6.169,
+      "end": 6.629,
       "emphasis": false
     },
     {
       "word": "captures",
-      "start": 7.119,
-      "end": 7.559,
+      "start": 6.669,
+      "end": 7.109,
       "emphasis": false
     },
     {
       "word": "a",
-      "start": 7.639,
-      "end": 7.799,
+      "start": 7.189,
+      "end": 7.349,
       "emphasis": false
     },
     {
       "word": "real",
-      "start": 7.859,
-      "end": 8.099,
+      "start": 7.409,
+      "end": 7.649,
       "emphasis": false
     },
     {
       "word": "demo,",
-      "start": 8.159,
-      "end": 8.46,
+      "start": 7.709,
+      "end": 8.01,
       "emphasis": false
     },
     {
       "word": "writes",
-      "start": 8.899,
-      "end": 9.14,
+      "start": 8.449,
+      "end": 8.69,
       "emphasis": false
     },
     {
       "word": "the",
-      "start": 9.199,
-      "end": 9.3,
+      "start": 8.749,
+      "end": 8.85,
       "emphasis": false
     },
     {
       "word": "script,",
-      "start": 9.34,
-      "end": 9.739,
+      "start": 8.89,
+      "end": 9.289,
       "emphasis": false
     },
     {
       "word": "and",
-      "start": 9.779,
-      "end": 9.9,
+      "start": 9.329,
+      "end": 9.45,
       "emphasis": false
     },
     {
       "word": "renders",
-      "start": 10.019,
-      "end": 10.439,
+      "start": 9.569,
+      "end": 9.989,
       "emphasis": false
     },
     {
       "word": "the",
-      "start": 10.5,
-      "end": 10.539,
+      "start": 10.05,
+      "end": 10.089,
       "emphasis": false
     },
     {
       "word": "short.",
-      "start": 10.699,
-      "end": 11.42,
+      "start": 10.249,
+      "end": 10.97,
       "emphasis": false
     },
     {
       "word": "And",
-      "start": 11.5,
-      "end": 11.6,
+      "start": 11.05,
+      "end": 11.15,
       "emphasis": false
     },
     {
       "word": "the",
-      "start": 11.639,
-      "end": 11.759,
+      "start": 11.189,
+      "end": 11.309,
       "emphasis": false
     },
     {
       "word": "whole",
-      "start": 11.819,
-      "end": 12.119,
+      "start": 11.369,
+      "end": 11.669,
       "emphasis": false
     },
     {
       "word": "packet",
-      "start": 12.159,
-      "end": 12.52,
+      "start": 11.709,
+      "end": 12.07,
       "emphasis": false
     },
     {
       "word": "is",
-      "start": 12.539,
-      "end": 12.68,
+      "start": 12.089,
+      "end": 12.23,
       "emphasis": false
     },
     {
       "word": "reviewable",
-      "start": 12.719,
-      "end": 13.38,
+      "start": 12.269,
+      "end": 12.93,
       "emphasis": false
     },
     {
       "word": "before",
-      "start": 13.42,
-      "end": 13.819,
+      "start": 12.97,
+      "end": 13.369,
       "emphasis": false
     },
     {
       "word": "anything",
-      "start": 13.88,
-      "end": 14.34,
+      "start": 13.43,
+      "end": 13.89,
       "emphasis": false
     },
     {
       "word": "goes",
-      "start": 14.359,
-      "end": 14.579,
+      "start": 13.909,
+      "end": 14.129,
       "emphasis": false
     },
     {
       "word": "live.",
-      "start": 14.659,
-      "end": 15,
+      "start": 14.209,
+      "end": 14.55,
       "emphasis": false
     },
     {
       "word": "Check",
-      "start": 15.46,
-      "end": 15.619,
+      "start": 15.01,
+      "end": 15.169,
       "emphasis": false
     },
     {
       "word": "it",
-      "start": 15.639,
-      "end": 15.72,
+      "start": 15.189,
+      "end": 15.27,
       "emphasis": false
     },
     {
       "word": "out",
-      "start": 15.779,
-      "end": 15.92,
+      "start": 15.329,
+      "end": 15.47,
       "emphasis": false
     },
     {
       "word": "in",
-      "start": 15.939,
-      "end": 16.02,
+      "start": 15.489,
+      "end": 15.57,
       "emphasis": false
     },
     {
       "word": "the",
-      "start": 16.039,
-      "end": 16.119,
+      "start": 15.589,
+      "end": 15.669,
       "emphasis": false
     },
     {
       "word": "link",
-      "start": 16.159,
-      "end": 16.279,
+      "start": 15.709,
+      "end": 15.829,
       "emphasis": false
     },
     {
       "word": "in",
-      "start": 16.319,
-      "end": 16.399,
+      "start": 15.869,
+      "end": 15.949,
       "emphasis": false
     },
     {
       "word": "my",
-      "start": 16.42,
-      "end": 16.559,
+      "start": 15.97,
+      "end": 16.109,
       "emphasis": false
     },
     {
       "word": "bio.",
-      "start": 16.579,
-      "end": 17,
+      "start": 16.129,
+      "end": 16.55,
       "emphasis": false
     }
   ],
@@ -428,14 +428,34 @@
     {
       "id": "logo-hook",
       "type": "logo_pop",
-      "start": 2.059,
-      "end": 3.5389999999999997,
+      "start": 1.609,
+      "end": 3.089,
       "sfx": "pop.wav",
       "src": "logos/launchclip.svg",
       "x": 0.72,
       "y": 0.3,
       "size": 0.2,
       "label": "launchclip"
+    },
+    {
+      "id": "zoom-prompt",
+      "type": "punch_zoom",
+      "start": 6.569,
+      "end": 7.899,
+      "sfx": null,
+      "scale": 1.07,
+      "origin_x": 0.5,
+      "origin_y": 0.5
+    },
+    {
+      "id": "zoom-ready",
+      "type": "punch_zoom",
+      "start": 13.120000000000001,
+      "end": 14.32,
+      "sfx": null,
+      "scale": 1.08,
+      "origin_x": 0.5,
+      "origin_y": 0.55
     }
   ]
 }

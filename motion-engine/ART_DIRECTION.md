@@ -62,6 +62,16 @@ A 12fps strip study of transitions and the long cut-free stretches confirms the 
 - **Talking head splits the frame.** The dominant face layout is **bottom ~50–55% of frame, graphics unfolding on the paper above**. Second layout: face in a shadowed rounded card (~50% width) beside typography. Full-bleed face appears only at the hook. The graphics are the protagonist; the face is the narrator.
 - **Word-cadence is absolute.** "There" → "are" land as separate frames; "output" *gains its green script styling on the beat it's spoken*; funnel chips land one per beat. Nothing pre-exists its word.
 
+## 4c. Third reference pass (OpenClaw video) — structure and character
+
+- **Persistent chapter rail.** A thin progress rail across the top ("Intro · Docs · Setup · Split · Skills · Access" with numbered dots) lives through the ENTIRE video — a table of contents that tracks where the viewer is. Strong retention device; needs a `chapter_rail` component fed by the timeline's chapter names.
+- **The brand mascot is the protagonist.** The OpenClaw red creature is a per-brand animated character: it appears inside an illustrated retro monitor, leaps out with extreme squash-and-stretch, holds props, reacts to errors. This is the artisanal tier upgraded to a *character system* — provided brand asset + a set of canned character moves.
+- **Typography lands ON footage.** Words overlay the talking head directly (white/mint serif on the video), building per word — the face does not pause for type.
+- **Chapter numerals**: oversized black circled "1 / 2 / 3" beats mark sections alongside the rail.
+- **Chat-UI mockup cards** (Telegram-style bubbles) recreate real conversations as a scene type.
+- **The grid fades radially** — visible in the center of the frame, dissolving to clean paper at the edges.
+- **Density rule confirmed harder**: something is mid-animation in virtually every 1s frame sample. Stillness simply does not occur.
+
 ## 5. Sound
 
 (Largely as v1 — the reference confirms it.) Whoosh/pop on entrances, typing tick under prompt cards, ding on reveals; everything ducked under continuous VO. Music bed low. SFX variants rotate so repeats don't machine-gun.
