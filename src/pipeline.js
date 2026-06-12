@@ -6,6 +6,11 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const PREMIUM_PRODUCT_STYLE = "premium-product-short";
+const ASSET_MANIFEST_SCHEMA = "launchclip.assets.v1";
+const ASSET_MANIFEST_FILE = "launchclip-assets.json";
+const PREMIUM_REQUIRED_ASSET_ALIASES = ["claude-code", "github", "obsidian", "prompt-example", "terminal-demo"];
+const PREMIUM_OPTIONAL_ASSET_ALIASES = ["brand-font", "presenter-cutaway", "product-logo", "repo-logo", "sfx-type", "sfx-whoosh"];
 
 export async function initWorkspace(repoPath, flags = {}) {
   const repo = path.resolve(repoPath);
@@ -91,13 +96,15 @@ export async function planVideo(workspacePath, flags = {}) {
   const out = path.resolve(workspacePath);
   const manifest = await readJson(path.join(out, "launchclip.json"));
   const format = flags.format ?? "short-15";
-  const duration = format === "short-15" ? 15 : 30;
   const style = flags.style ?? "proof-card";
   const talkingHead = talkingHeadAdapter(flags, style);
   const stylePreset = videoStylePreset(style, manifest, talkingHead);
+  const duration = Number(flags.duration ?? stylePreset.duration_seconds ?? stylePreset.recipe?.duration_seconds ?? (format === "short-15" ? 15 : 30));
+  const assets = await buildAssetPlan(style, flags);
   const script = buildScriptPlan(style, manifest, stylePreset, talkingHead);
   const creativeStoryboard = buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHead);
   const voiceover = buildVoiceoverPlan(script, talkingHead);
+  const soundDesign = buildSoundDesignPlan(script, stylePreset);
   const video = {
     schema_version: "video-skillkit.compat.v1",
     title: `${manifest.source_repo.name} OSS launch clip`,
@@ -109,9 +116,11 @@ export async function planVideo(workspacePath, flags = {}) {
     script,
     script_visual_alignment: script.timeline,
     voiceover,
+    sound_design: soundDesign,
     creative_storyboard: creativeStoryboard,
     creative_recipe: stylePreset.recipe,
     talking_head: talkingHead,
+    assets,
     evidence: ["demo/terminal.txt", "demo/command-receipt.json"],
     renderer: flags.renderer ?? "none"
   };
@@ -137,6 +146,14 @@ Delivery: ${voiceover.delivery}
 
 ${voiceover.full_text}
 
+## Sound Design
+${soundDesign.cues.map((cue) => `- ${cue.time_range} ${cue.beat}: ${cue.sound} (${cue.trigger})`).join("\n")}
+
+## Assets
+Mode: ${assets.mode}
+Provided aliases: ${assets.provided_aliases.length ? assets.provided_aliases.join(", ") : "none"}
+Missing aliases: ${assets.missing_aliases.length ? assets.missing_aliases.join(", ") : "none"}
+
 ## Evidence
 - demo/terminal.txt
 - demo/command-receipt.json
@@ -148,14 +165,16 @@ ${voiceover.full_text}
     script,
     script_visual_alignment: script.timeline,
     voiceover,
+    sound_design: soundDesign,
     creative_storyboard: creativeStoryboard,
     creative_recipe: stylePreset.recipe,
     talking_head: talkingHead,
+    assets,
     product_videogen_boundary: "Use product-videogen only through dry-run review payloads unless config, approval, and --submit are present.",
     adapters: {
       cutpilot: "Future optional local EDL/ffmpeg handoff.",
-      remotion: "Future composition props handoff.",
-      hyperframes: "Future scene/frame handoff.",
+      remotion: "Render frame-accurate motion, camera pushes, kinetic captions, and local sound-design cues from the plan.",
+      hyperframes: "Future scene/frame handoff with camera, asset, caption, and sound-design lanes.",
       "ugc-split": "Product-videogen or a future renderer should compose presenter footage, generated/demo B-roll, subtitles, and voiceover timing from creative_recipe.",
       heygen: "First talking-head adapter target for ugc-split. Generate original avatar footage from the script beats, then composite with B-roll and captions.",
       talking_head: "Provider-neutral adapter contract. Add new providers by mapping talking_head.script_segments, b_roll_slots, captions, and consent/safety fields."
@@ -214,20 +233,23 @@ async function renderRemotion(out, flags = {}) {
   }
   const video = await readJson(path.join(out, "video", "video.json"));
   const fps = Number(flags.fps ?? 30);
-  const duration = Number(flags.duration ?? Math.min(video.duration_seconds ?? 30, 30));
+  const defaultDuration = isPremiumStyle(video.style) ? video.duration_seconds ?? 48 : Math.min(video.duration_seconds ?? 30, 30);
+  const duration = Number(flags.duration ?? defaultDuration);
   const width = Number(flags.width ?? 720);
   const height = Number(flags.height ?? 1280);
   const output = path.join(out, "video", flags.output ?? "launchclip.mp4");
   const thumbnail = path.join(out, "video", "thumbnail.png");
   const propsPath = path.join(out, "video", "remotion-props.json");
   const entryPoint = path.join(PACKAGE_ROOT, "remotion", "index.jsx");
-  const props = await buildRemotionProps(out, { width, height, fps, durationSeconds: duration });
+  const publicAssets = await prepareRenderPublicAssets(out, flags, video);
+  const props = await buildRemotionProps(out, { width, height, fps, durationSeconds: duration, publicAssets });
   await writeJson(propsPath, props);
-  await execFileAsync("npx", [
+  const compositionId = isPremiumStyle(video.style) ? "LaunchclipPremiumShort" : "LaunchclipSocial";
+  const renderArgs = [
     "remotion",
     "render",
     entryPoint,
-    "LaunchclipSocial",
+    compositionId,
     output,
     "--props",
     propsPath,
@@ -236,7 +258,11 @@ async function renderRemotion(out, flags = {}) {
     "h264",
     "--log",
     "warn"
-  ], { cwd: PACKAGE_ROOT, maxBuffer: 1024 * 1024 * 16 });
+  ];
+  if (publicAssets?.public_dir) {
+    renderArgs.push("--public-dir", publicAssets.public_dir);
+  }
+  await execFileAsync("npx", renderArgs, { cwd: PACKAGE_ROOT, maxBuffer: 1024 * 1024 * 16 });
   const voiceoverAudio = await applyVoiceoverIfRequested(out, output, flags);
   await execFileAsync("ffmpeg", [
     "-y",
@@ -255,10 +281,13 @@ async function renderRemotion(out, flags = {}) {
       media: "video/launchclip.mp4",
       thumbnail: "video/thumbnail.png",
       props: "video/remotion-props.json",
+      composition: compositionId,
+      public_dir: publicAssets?.public_dir ? rel(out, publicAssets.public_dir) : null,
+      missing_asset_aliases: publicAssets?.missing_aliases ?? [],
       voiceover_audio: voiceoverAudio
     };
   });
-  return { stage: "render", mode: "local", provider: "remotion", video: output, thumbnail, props: propsPath, voiceoverAudio };
+  return { stage: "render", mode: "local", provider: "remotion", video: output, thumbnail, props: propsPath, publicDir: publicAssets?.public_dir ?? null, voiceoverAudio };
 }
 
 async function renderLocalFfmpeg(out, flags = {}) {
@@ -270,7 +299,9 @@ async function renderLocalFfmpeg(out, flags = {}) {
   const terminal = await optionalText(path.join(out, "demo", "terminal.txt"));
   const receipt = await optionalJson(path.join(out, "demo", "command-receipt.json"));
   const captions = await readCaptions(out);
-  const defaultDuration = isSocialReadyStyle(video.style)
+  const defaultDuration = isPremiumStyle(video.style)
+    ? Math.min(video.duration_seconds ?? 48, 48)
+    : isSocialReadyStyle(video.style)
     ? Math.min(video.duration_seconds ?? 30, 30)
     : Math.min(video.duration_seconds ?? 15, 15);
   const duration = Number(flags.duration ?? defaultDuration);
@@ -511,6 +542,7 @@ This packet is dry-run by default. Launchclip does not post to social platforms,
 
 ## Social Readiness
 ${readiness.issues.length ? readiness.issues.map((issue) => `- ${issue}`).join("\n") : "- Ready for human review."}
+${readiness.warnings?.length ? `\nWarnings:\n${readiness.warnings.map((warning) => `- ${warning}`).join("\n")}` : ""}
 
 ## Product-Videogen Follow-Up
 ${receipt?.product_videogen_api_gap ?? "Run submit-review --provider product-videogen --dry-run to create the dry-run payload."}
@@ -530,6 +562,8 @@ export async function runPacket(repoPath, flags = {}) {
     format: flags.format ?? "short-15",
     renderer: flags.renderer ?? "none",
     style: flags.style,
+    duration: flags.duration,
+    "assets-dir": flags["assets-dir"] ?? flags.assetsDir,
     "talking-head": flags["talking-head"],
     "avatar-id": flags["avatar-id"],
     "voice-id": flags["voice-id"]
@@ -539,7 +573,7 @@ export async function runPacket(repoPath, flags = {}) {
   await submitReview(out, { provider: flags.provider ?? "product-videogen", "dry-run": true });
   await writeReview(out);
   const readiness = await validateWorkspace(out, { write: true });
-  return { stage: "run", workspace: out, status: readiness.status, issues: readiness.issues };
+  return { stage: "run", workspace: out, status: readiness.status, issues: readiness.issues, warnings: readiness.warnings };
 }
 
 export async function validateWorkspace(workspacePath, flags = {}) {
@@ -576,7 +610,9 @@ export async function validateWorkspace(workspacePath, flags = {}) {
   const video = await optionalJson(path.join(out, "video", "video.json"));
   issues.push(...scriptAlignmentIssues(video));
   issues.push(...voiceoverIssues(video));
+  issues.push(...soundDesignIssues(video));
   issues.push(...creativeStoryboardIssues(video));
+  const warnings = assetWarnings(video);
   for (const [platform, caption] of Object.entries(captions)) {
     const rule = PLATFORM_RULES[platform];
     if (!rule) continue;
@@ -589,6 +625,7 @@ export async function validateWorkspace(workspacePath, flags = {}) {
     stage: "validate",
     status: issues.length ? "needs-work" : "ready",
     issues,
+    warnings,
     checked_at: new Date().toISOString(),
     workspace: out,
     source_repo: manifest.source_repo.name,
@@ -648,14 +685,128 @@ async function productVideogenPayload(out, purpose) {
       script: video?.script,
       script_visual_alignment: video?.script_visual_alignment,
       voiceover: voiceover ?? video?.voiceover,
+      sound_design: video?.sound_design,
       creative_storyboard: video?.creative_storyboard,
       creative_recipe: video?.creative_recipe,
       talking_head: video?.talking_head,
+      assets: video?.assets,
       demo_artifacts: receipt?.artifacts ?? [],
       captions,
       provenance: manifest.source_repo.evidence
     }
   };
+}
+
+async function buildAssetPlan(style, flags = {}) {
+  const assetsDir = flags["assets-dir"] ?? flags.assetsDir ?? null;
+  const resolvedDir = assetsDir ? path.resolve(assetsDir) : null;
+  const manifestPath = resolvedDir ? path.join(resolvedDir, ASSET_MANIFEST_FILE) : null;
+  const manifest = manifestPath ? await optionalJson(manifestPath) : null;
+  const aliases = normalizeAssetManifest(manifest, resolvedDir);
+  const requiredAliases = isPremiumStyle(style) ? [...PREMIUM_REQUIRED_ASSET_ALIASES] : [];
+  const missingAliases = requiredAliases.filter((alias) => !aliases[alias]).sort();
+  const warnings = [];
+  if (resolvedDir && !manifest) {
+    warnings.push(`Missing asset manifest: ${manifestPath}`);
+  }
+  return {
+    schema_version: ASSET_MANIFEST_SCHEMA,
+    mode: "local-manifest",
+    manifest_file: ASSET_MANIFEST_FILE,
+    assets_dir: resolvedDir,
+    manifest_path: manifestPath,
+    required_aliases: requiredAliases,
+    optional_aliases: isPremiumStyle(style) ? [...PREMIUM_OPTIONAL_ASSET_ALIASES] : [],
+    provided_aliases: Object.keys(aliases).sort(),
+    missing_aliases: missingAliases,
+    warnings,
+    aliases
+  };
+}
+
+async function prepareRenderPublicAssets(out, flags = {}, video = {}) {
+  const assetsDir = flags["assets-dir"] ?? flags.assetsDir ?? video.assets?.assets_dir ?? null;
+  if (!isPremiumStyle(video.style) && !assetsDir) return null;
+  const renderPublic = path.join(out, "video", "render-public");
+  await rm(renderPublic, { recursive: true, force: true });
+  await mkdir(path.join(renderPublic, "assets"), { recursive: true });
+  const assetPlan = await buildAssetPlan(video.style, { ...flags, "assets-dir": assetsDir });
+  const aliases = {};
+  const missing = new Set(assetPlan.missing_aliases);
+  for (const entry of Object.values(assetPlan.aliases)) {
+    if (!(await fileExists(entry.source_path))) {
+      if (assetPlan.required_aliases.includes(entry.alias)) missing.add(entry.alias);
+      continue;
+    }
+    const extension = path.extname(entry.source_path).toLowerCase() || ".asset";
+    const filename = `${entry.alias}${extension}`;
+    await copyFile(entry.source_path, path.join(renderPublic, "assets", filename));
+    aliases[entry.alias] = {
+      alias: entry.alias,
+      label: entry.label,
+      type: entry.type,
+      src: `assets/${filename}`
+    };
+  }
+  return {
+    schema_version: ASSET_MANIFEST_SCHEMA,
+    mode: "render-public",
+    public_dir: renderPublic,
+    required_aliases: assetPlan.required_aliases,
+    optional_aliases: assetPlan.optional_aliases,
+    provided_aliases: Object.keys(aliases).sort(),
+    missing_aliases: [...missing].filter((alias) => !aliases[alias]).sort(),
+    warnings: assetPlan.warnings,
+    aliases
+  };
+}
+
+function normalizeAssetManifest(manifest, assetsDir) {
+  if (!manifest || !assetsDir) return {};
+  const rawAliases = manifest.assets ?? manifest.aliases ?? {};
+  const aliases = {};
+  for (const [rawAlias, rawValue] of Object.entries(rawAliases)) {
+    const alias = normalizeAssetAlias(rawAlias);
+    if (!alias) continue;
+    const value = typeof rawValue === "string" ? { path: rawValue } : rawValue ?? {};
+    const assetPath = value.path ?? value.src ?? value.file;
+    if (!assetPath) continue;
+    aliases[alias] = {
+      alias,
+      label: value.label ?? titleCase(alias.replace(/-/g, " ")),
+      type: value.type ?? assetTypeForPath(assetPath),
+      manifest_path: assetPath,
+      source_path: path.resolve(assetsDir, assetPath)
+    };
+  }
+  return Object.fromEntries(Object.entries(aliases).sort(([left], [right]) => left.localeCompare(right)));
+}
+
+function normalizeAssetAlias(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function assetTypeForPath(filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+  if ([".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"].includes(extension)) return "image";
+  if ([".mp4", ".mov", ".webm"].includes(extension)) return "video";
+  if ([".wav", ".mp3", ".m4a", ".aac", ".aiff"].includes(extension)) return "audio";
+  if ([".otf", ".ttf", ".woff", ".woff2"].includes(extension)) return "font";
+  if ([".txt", ".md", ".json"].includes(extension)) return "text";
+  return "asset";
+}
+
+function assetWarnings(video) {
+  const assets = video?.assets;
+  if (!assets) return [];
+  return [
+    ...(Array.isArray(assets.warnings) ? assets.warnings : []),
+    ...(Array.isArray(assets.missing_aliases) ? assets.missing_aliases.map((alias) => `Missing asset alias: ${alias}`) : [])
+  ].filter(Boolean).sort();
 }
 
 function talkingHeadAdapter(flags = {}, style = "proof-card") {
@@ -737,6 +888,36 @@ function buildVoiceoverPlan(script, talkingHead = { enabled: false, provider: "n
   };
 }
 
+function buildSoundDesignPlan(script, stylePreset) {
+  const cues = (script.timeline ?? []).map((segment, index) => {
+    const direction = beatProductionDirection(segment.beat);
+    return {
+      index: index + 1,
+      beat: segment.beat,
+      time_range: segment.time_range,
+      trigger: direction.soundTrigger,
+      sound: direction.sound,
+      intensity: direction.intensity,
+      mix_level: direction.mixLevel,
+      duck_voiceover: true,
+      provider_prompt: `${direction.sound} for ${segment.caption || segment.beat}; tight creator-product short timing, no music bed required`
+    };
+  });
+  return {
+    schema_version: "launchclip.sound-design.v1",
+    provider: "remotion-synthetic-ready",
+    music_bed: "none by default; leave space for voiceover and product proof sounds",
+    mix_notes: [
+      "Use short whooshes only at visual layout changes.",
+      "Use soft ticks for typing, cursor, checklist, and file-card events.",
+      "Duck SFX under voiceover and keep proof audio intelligible.",
+      "Future ElevenLabs or SFX provider output should replace these cues without changing scene timing."
+    ],
+    cue_density: stylePreset.recipe?.visual_language?.pacing ?? "scene change every 1-3 seconds",
+    cues
+  };
+}
+
 function cleanVoiceoverLine(value) {
   return String(value ?? "")
     .replace(/\s+/g, " ")
@@ -748,6 +929,9 @@ function deliveryForBeat(beat) {
   if (beat === "cold-open" || beat === "hook") return "fast hook, one breath, direct to camera";
   if (beat === "friction") return "slightly compressed pace, list rhythm";
   if (beat === "demo-trigger" || beat === "split-screen-proof") return "clear proof tone, slow enough for the command to land";
+  if (["retro-terminal", "asset-orbit", "prompt-compose", "collage-proof", "folder-stack", "type-demo"].includes(beat)) {
+    return "premium product-demo cadence with space for motion hits and typing cues";
+  }
   if (beat === "artifact-reveal" || beat === "artifacts") return "confident payoff, do not over-read filenames";
   if (beat === "cta") return "calm, short, leave a clean final hold";
   return "natural product explainer pace";
@@ -806,6 +990,169 @@ function voiceoverIssues(video) {
   return issues;
 }
 
+function soundDesignIssues(video) {
+  if (!video || !isSocialReadyStyle(video.style)) return [];
+  const issues = [];
+  const timeline = video.script_visual_alignment ?? video.script?.timeline ?? [];
+  const soundDesign = video.sound_design;
+  if (!soundDesign) return ["Social-ready video is missing sound_design."];
+  if (soundDesign.schema_version !== "launchclip.sound-design.v1") {
+    issues.push("Sound design schema_version must be launchclip.sound-design.v1.");
+  }
+  if (!Array.isArray(soundDesign.cues) || soundDesign.cues.length !== timeline.length) {
+    issues.push("Sound design cues must match the script visual alignment timeline.");
+    return issues;
+  }
+  for (const cue of soundDesign.cues) {
+    if (!cue.sound) issues.push(`Sound design cue ${cue.beat ?? "unknown"} is missing sound.`);
+    if (!cue.trigger) issues.push(`Sound design cue ${cue.beat ?? "unknown"} is missing trigger.`);
+    if (!cue.provider_prompt) issues.push(`Sound design cue ${cue.beat ?? "unknown"} is missing provider_prompt.`);
+  }
+  return issues;
+}
+
+function beatProductionDirection(beat) {
+  const directions = {
+    "cold-open": {
+      editDensity: "0.4-0.7s micro-cuts inside the first 1.5s",
+      cameraDirection: "fast 8 percent punch-in with a tiny settle after the title slam",
+      sound: "low whoosh into caption hit",
+      soundTrigger: "title slam and repo receipt flash",
+      intensity: "high",
+      mixLevel: -14
+    },
+    hook: {
+      editDensity: "0.4-0.7s micro-cuts inside the first 3s",
+      cameraDirection: "presenter punch-in, repo flash, then steady proof frame",
+      sound: "low whoosh into caption hit",
+      soundTrigger: "presenter punch-in and repo flash",
+      intensity: "high",
+      mixLevel: -14
+    },
+    friction: {
+      editDensity: "task card or cursor event every 0.45-0.8s",
+      cameraDirection: "left-to-right whip pan across stacked workflow cards",
+      sound: "dry ticks and soft strike-through swipes",
+      soundTrigger: "each manual task card entering or crossing off",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "demo-trigger": {
+      editDensity: "typed command ticks, progress sweep, receipt stamp",
+      cameraDirection: "slow device push while terminal text types in",
+      sound: "keyboard ticks with a success ding",
+      soundTrigger: "command typing and receipt badge landing",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "retro-terminal": {
+      editDensity: "terminal glow, command burst, cursor tick, or receipt event every 0.4-0.9s",
+      cameraDirection: "soft dolly into retro terminal, tiny parallax drift, then receipt punch",
+      sound: "keyboard ticks, screen hum, and soft success ding",
+      soundTrigger: "typed command bursts and proof receipt stamp",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "asset-orbit": {
+      editDensity: "logo token orbit, connector draw, or snap event every 0.4-0.8s",
+      cameraDirection: "orbiting push through tool tokens with depth focus rack",
+      sound: "logo whooshes, connector pops, and snap clicks",
+      soundTrigger: "each branded token throw and connector snap",
+      intensity: "high",
+      mixLevel: -16
+    },
+    "prompt-compose": {
+      editDensity: "typing, cursor, chip drop, or panel zoom every 0.35-0.8s",
+      cameraDirection: "close prompt-panel push with cursor-led focus changes",
+      sound: "typing ticks, chip drops, and panel zoom whoosh",
+      soundTrigger: "prompt typing, asset chip drops, and final cursor jump",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "collage-proof": {
+      editDensity: "card flip, inspection zoom, focus rack, or board shuffle every 0.5-1.0s",
+      cameraDirection: "collage board drift with punch-ins on proof artifacts",
+      sound: "paper flips, camera ticks, and inspection pops",
+      soundTrigger: "artifact card flips and inspection zoom hits",
+      intensity: "high",
+      mixLevel: -16
+    },
+    "folder-stack": {
+      editDensity: "3D folder rotation, file throw, blur streak, or stack settle every 0.4-0.9s",
+      cameraDirection: "foreground folder stack orbit with overshoot and parallax depth",
+      sound: "folder whoosh, paper hits, and stack thump",
+      soundTrigger: "folder rotation peak, file-card throws, and final stack landing",
+      intensity: "high",
+      mixLevel: -16
+    },
+    "type-demo": {
+      editDensity: "prompt typing, terminal wipe, cursor teleport, or badge hit every 0.35-0.8s",
+      cameraDirection: "tight alternating close-ups between prompt and terminal panels",
+      sound: "typing ticks, terminal wipe, and badge hit",
+      soundTrigger: "typed prompt, terminal proof reveal, and review badge landing",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "split-screen-proof": {
+      editDensity: "proof highlight every 0.8-1.2s",
+      cameraDirection: "split-screen slide with a small zoom on the proof pane",
+      sound: "keyboard ticks with a success ding",
+      soundTrigger: "receipt highlight and proof pane zoom",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    proof: {
+      editDensity: "playhead or connector movement every 0.7-1.0s",
+      cameraDirection: "editor-panel push with active lane highlight snaps",
+      sound: "playhead ticks and connector pops",
+      soundTrigger: "script-to-visual connector highlights",
+      intensity: "medium",
+      mixLevel: -20
+    },
+    transformation: {
+      editDensity: "tile arrival every 0.5-0.9s, then one stack snap",
+      cameraDirection: "orbiting card stack feel using alternating scale and rotation",
+      sound: "stack snaps and soft paper hits",
+      soundTrigger: "each output tile snapping into the launch packet",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    steps: {
+      editDensity: "step card every 0.8-1.2s",
+      cameraDirection: "numbered card push with progress line follow",
+      sound: "stack snaps and soft paper hits",
+      soundTrigger: "each step card entering",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "artifact-reveal": {
+      editDensity: "file flash every 0.6-0.9s with quick inspection holds",
+      cameraDirection: "zoom punches on active artifacts, then quick return to the grid",
+      sound: "file flips, camera ticks, and inspection pops",
+      soundTrigger: "active file card flips and zoom punches",
+      intensity: "high",
+      mixLevel: -16
+    },
+    artifacts: {
+      editDensity: "file flash every 0.8-1.1s",
+      cameraDirection: "zoom punches on active artifacts, then quick return to the grid",
+      sound: "file flips, camera ticks, and inspection pops",
+      soundTrigger: "active file card flips",
+      intensity: "high",
+      mixLevel: -16
+    },
+    cta: {
+      editDensity: "one clean punch-in, two check ticks, then final hold",
+      cameraDirection: "calm final push to approval boundary and repo URL",
+      sound: "two checklist ticks into a quiet final hold",
+      soundTrigger: "approval checks ticking on",
+      intensity: "low-medium",
+      mixLevel: -21
+    }
+  };
+  return directions[beat] ?? directions.cta;
+}
+
 function creativeStoryboardIssues(video) {
   if (!video || !isSocialReadyStyle(video.style)) return [];
   const issues = [];
@@ -825,20 +1172,39 @@ function creativeStoryboardIssues(video) {
   }
   for (const scene of scenes) {
     const label = scene.id ?? "unknown";
-    for (const field of ["layout", "composition", "media_slots", "motion_grammar", "typography", "color_grade", "success_criteria"]) {
+    for (const field of ["layout", "composition", "media_slots", "motion_grammar", "typography", "color_grade", "edit_density", "camera_direction", "sound_design", "success_criteria"]) {
       if (!scene[field] || (Array.isArray(scene[field]) && !scene[field].length)) {
         issues.push(`Creative storyboard scene ${label} is missing ${field}.`);
+      }
+    }
+    if (isPremiumStyle(video.style)) {
+      for (const field of ["asset_aliases", "micro_events", "camera_path", "sfx_cues", "brand_moments"]) {
+        if (!scene[field] || (Array.isArray(scene[field]) && !scene[field].length)) {
+          issues.push(`Premium storyboard scene ${label} is missing ${field}.`);
+        }
+      }
+      for (const field of ["motion_blur", "depth_layer", "type_sequences"]) {
+        if (!(field in scene)) {
+          issues.push(`Premium storyboard scene ${label} is missing ${field}.`);
+        }
       }
     }
   }
   return issues;
 }
 
+function isPremiumStyle(style) {
+  return style === PREMIUM_PRODUCT_STYLE;
+}
+
 function isSocialReadyStyle(style) {
-  return style === "ugc-split" || style === "ugc-demo-punchy";
+  return style === "ugc-split" || style === "ugc-demo-punchy" || isPremiumStyle(style);
 }
 
 function buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHead = { enabled: false, provider: "none" }) {
+  if (isPremiumStyle(style)) {
+    return buildPremiumCreativeStoryboard(manifest, script, stylePreset, talkingHead);
+  }
   if (!isSocialReadyStyle(style)) {
     return {
       schema_version: "launchclip.storyboard.v1",
@@ -955,6 +1321,7 @@ function buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHe
       : "Presenter slot is reserved so HeyGen or another provider can replace the placeholder without changing edit timing.",
     scenes: timeline.map((segment, index) => {
       const override = sceneOverrides[segment.beat] ?? sceneOverrides.cta;
+      const direction = beatProductionDirection(segment.beat);
       return {
         id: segment.beat,
         order: index + 1,
@@ -967,6 +1334,9 @@ function buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHe
         ...override,
         caption_emphasis: segment.caption_emphasis ?? [],
         transition: segment.transition,
+        edit_density: direction.editDensity,
+        camera_direction: direction.cameraDirection,
+        sound_design: direction.sound,
         success_criteria: [
           "viewer understands the beat while muted",
           "visual proves or dramatizes the spoken line",
@@ -975,6 +1345,268 @@ function buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHe
       };
     })
   };
+}
+
+function buildPremiumCreativeStoryboard(manifest, script, stylePreset, talkingHead = { enabled: false, provider: "none" }) {
+  const repoName = stripMarkdown(manifest.source_repo.name);
+  const timeline = script.timeline ?? [];
+  return {
+    schema_version: "launchclip.storyboard.v1",
+    intent: `${repoName} should feel like a reference-grade vertical product Short: fluid product proof, branded assets, physical object motion, prompt typing, and dense SFX cues.`,
+    creative_positioning: stylePreset.angle,
+    renderer_priority: ["remotion", "hyperframes", "product-videogen", "local-ffmpeg"],
+    asset_manifest: {
+      schema_version: ASSET_MANIFEST_SCHEMA,
+      expected_file: ASSET_MANIFEST_FILE,
+      required_aliases: [...PREMIUM_REQUIRED_ASSET_ALIASES],
+      optional_aliases: [...PREMIUM_OPTIONAL_ASSET_ALIASES]
+    },
+    non_goals: [
+      "Do not auto-fetch logos or media from the web.",
+      "Do not call external voice, SFX, video, or social posting APIs.",
+      "Do not use static text-card-only sections longer than 1.2 seconds.",
+      "Do not replace LaunchclipSocial; premium is a separate renderer path."
+    ],
+    quality_gates: [
+      "every 0.4-1.2 seconds changes camera, object, focus, text, asset, or SFX",
+      "at least three scenes use depth, motion blur, or physical card/file choreography",
+      "at least three branded/product assets appear when supplied in the manifest",
+      "at least one prompt or terminal sequence types with cursor timing",
+      "SFX cues exist for throws, typing, card settles, and transition hits",
+      "missing assets render as fallback tokens while validation reports exact aliases"
+    ],
+    presenter_direction: talkingHead.enabled
+      ? `${talkingHead.provider} presenter footage is an adapter-ready cutaway layer, never required for the local renderer.`
+      : "Presenter cutaways render as stylized placeholders until a talking-head provider supplies footage.",
+    scenes: timeline.map((segment, index) => {
+      const profile = premiumSceneProfile(segment.beat);
+      const direction = beatProductionDirection(segment.beat);
+      return {
+        id: segment.beat,
+        order: index + 1,
+        time_range: segment.time_range,
+        target_seconds: segment.target_seconds,
+        hook: segment.caption,
+        voiceover: segment.voiceover,
+        evidence_source: segment.evidence_source,
+        adapter_target: segment.adapter_target,
+        layout: profile.layout,
+        composition: profile.composition,
+        media_slots: profile.mediaSlots,
+        motion_grammar: profile.motionGrammar,
+        typography: profile.typography,
+        color_grade: profile.colorGrade,
+        caption_emphasis: segment.caption_emphasis ?? [],
+        transition: segment.transition,
+        edit_density: direction.editDensity,
+        camera_direction: direction.cameraDirection,
+        sound_design: direction.sound,
+        asset_aliases: profile.assetAliases,
+        micro_events: profile.microEvents,
+        camera_path: profile.cameraPath,
+        motion_blur: profile.motionBlur,
+        depth_layer: profile.depthLayer,
+        type_sequences: profile.typeSequences,
+        sfx_cues: profile.sfxCues,
+        brand_moments: profile.brandMoments,
+        success_criteria: [
+          "beat reads clearly while muted",
+          "foreground object moves continuously or settles physically",
+          "audio cue can be replaced by a future SFX adapter without changing timing"
+        ]
+      };
+    })
+  };
+}
+
+function premiumSceneProfile(beat) {
+  const common = {
+    typography: "dense but readable mixed-case captions, compact labels, monospace only inside typed prompt or terminal panels",
+    colorGrade: "soft off-white, black, deep green, muted grey, and sparse brand accents from supplied assets",
+    motionBlur: {
+      method: "synthetic ghost layers plus directional CSS blur while velocity is high",
+      frames: [0, 8, 18],
+      settle: "blur decays during spring settle and overshoot"
+    },
+    depthLayer: {
+      foreground: "physical cards/files, logos, cursor, presenter cutaway",
+      midground: "prompt panels, collage board, terminal, proof cards",
+      background: "soft grid, paper plane, depth shadows, focus wash"
+    }
+  };
+  const profiles = {
+    "cold-open": {
+      layout: "full-frame premium product hook with floating asset tokens and presenter cutaway",
+      composition: "repo lockup, large payoff caption, logo tokens, and proof cards already in motion on frame one",
+      mediaSlots: ["repo-logo", "presenter-cutaway", "claude-code", "obsidian", "github"],
+      motionGrammar: ["camera push", "logo orbit", "card settle", "caption slam"],
+      assetAliases: ["claude-code", "obsidian", "github", "repo-logo"],
+      microEvents: [
+        "0.0s logo tokens already drifting in depth",
+        "0.4s caption slams with blur ghost",
+        "0.8s repo proof card flips forward",
+        "1.2s presenter window pops then recedes"
+      ],
+      cameraPath: [
+        { t: 0, scale: 1.08, x: -18, y: 22, rotate: -1.4 },
+        { t: 0.55, scale: 1.0, x: 0, y: 0, rotate: 0 },
+        { t: 1, scale: 1.05, x: 10, y: -16, rotate: 0.5 }
+      ],
+      typeSequences: [],
+      sfxCues: ["whoosh-in", "caption-hit", "card-paper-settle"],
+      brandMoments: ["claude-code token", "obsidian token", "github token"]
+    },
+    "retro-terminal": {
+      layout: "retro computer terminal hero with glowing display and typed command",
+      composition: "terminal device floats above a paper desk while proof text types with cursor ticks",
+      mediaSlots: ["terminal-demo", "github"],
+      motionGrammar: ["screen glow pulse", "cursor typing", "camera dolly", "scanline sweep"],
+      assetAliases: ["terminal-demo", "github"],
+      microEvents: [
+        "terminal rises from blur",
+        "command types in three bursts",
+        "receipt badge stamps",
+        "screen glow pulses on pass state"
+      ],
+      cameraPath: [
+        { t: 0, scale: 0.96, x: 24, y: -10, rotate: 1.2 },
+        { t: 0.45, scale: 1.04, x: -6, y: 8, rotate: -0.4 },
+        { t: 1, scale: 1.02, x: 0, y: -12, rotate: 0 }
+      ],
+      typeSequences: [{ source_alias: "terminal-demo", start: 0.18, cursor: "block", sfx: "typing-ticks" }],
+      sfxCues: ["keyboard-ticks", "soft-success-ding", "screen-power-hum"],
+      brandMoments: ["github proof chip"]
+    },
+    "asset-orbit": {
+      layout: "branded tool constellation with connected cards and depth shadows",
+      composition: "Claude Code, Obsidian, and GitHub tokens orbit prompt and file cards before snapping into a workflow line",
+      mediaSlots: ["claude-code", "obsidian", "github"],
+      motionGrammar: ["3D-ish token orbit", "connector draw", "depth focus rack", "snap settle"],
+      assetAliases: ["claude-code", "obsidian", "github"],
+      microEvents: [
+        "Claude Code token throws in from left",
+        "Obsidian token rotates through foreground",
+        "GitHub token snaps to proof card",
+        "connectors draw between tools"
+      ],
+      cameraPath: [
+        { t: 0, scale: 1.03, x: -34, y: 0, rotate: -1 },
+        { t: 0.5, scale: 1.08, x: 14, y: -20, rotate: 0.8 },
+        { t: 1, scale: 1.0, x: 0, y: 10, rotate: 0 }
+      ],
+      typeSequences: [],
+      sfxCues: ["logo-whip", "connector-pop", "snap-click"],
+      brandMoments: ["Claude Code", "Obsidian", "GitHub"]
+    },
+    "prompt-compose": {
+      layout: "prompt composer with typed instructions, asset pills, and cursor-led edits",
+      composition: "a large prompt card types exact instructions while asset tokens become chips in the prompt",
+      mediaSlots: ["prompt-example", "claude-code", "obsidian"],
+      motionGrammar: ["typewriter reveal", "cursor blink", "asset chip drop", "panel zoom"],
+      assetAliases: ["prompt-example", "claude-code", "obsidian"],
+      microEvents: [
+        "prompt panel throws in with blur",
+        "first line types",
+        "asset chips drop into prompt",
+        "cursor jumps to final instruction"
+      ],
+      cameraPath: [
+        { t: 0, scale: 0.94, x: 0, y: 38, rotate: 0 },
+        { t: 0.35, scale: 1.07, x: -12, y: -14, rotate: -0.4 },
+        { t: 1, scale: 1.02, x: 8, y: -26, rotate: 0.2 }
+      ],
+      typeSequences: [{ source_alias: "prompt-example", start: 0.1, cursor: "thin", sfx: "typing-ticks" }],
+      sfxCues: ["keyboard-ticks", "chip-drop", "panel-zoom-whoosh"],
+      brandMoments: ["Claude Code chip", "Obsidian chip"]
+    },
+    "collage-proof": {
+      layout: "collage board of generated assets and review artifacts",
+      composition: "cards, thumbnails, captions, and receipt panels fill a board, each with quick inspection zooms",
+      mediaSlots: ["terminal-demo", "prompt-example", "repo-logo"],
+      motionGrammar: ["grid shuffle", "inspection punch", "paper flip", "focus rack"],
+      assetAliases: ["terminal-demo", "prompt-example", "repo-logo"],
+      microEvents: [
+        "board slides into depth",
+        "caption card flips active",
+        "terminal receipt punches forward",
+        "thumbnail tile glints"
+      ],
+      cameraPath: [
+        { t: 0, scale: 1.1, x: 28, y: 10, rotate: 1.5 },
+        { t: 0.55, scale: 0.98, x: -16, y: -18, rotate: -0.8 },
+        { t: 1, scale: 1.04, x: 6, y: -6, rotate: 0.3 }
+      ],
+      typeSequences: [],
+      sfxCues: ["paper-flip", "camera-tick", "inspection-pop"],
+      brandMoments: ["repo lockup if supplied"]
+    },
+    "folder-stack": {
+      layout: "soft 3D folder/file stack rotating through foreground",
+      composition: "a physical launch packet folder rotates and throws files toward the viewer before snapping into a stack",
+      mediaSlots: ["repo-logo", "github"],
+      motionGrammar: ["3D folder rotate", "blurred throw", "file stack settle", "shadow sweep"],
+      assetAliases: ["repo-logo", "github"],
+      microEvents: [
+        "folder stack rotates in 3D",
+        "file cards throw outward with blur",
+        "GitHub proof chip sticks to folder",
+        "stack lands with overshoot"
+      ],
+      cameraPath: [
+        { t: 0, scale: 0.9, x: 40, y: 46, rotate: 2 },
+        { t: 0.5, scale: 1.12, x: -18, y: -34, rotate: -1.2 },
+        { t: 1, scale: 1.03, x: 0, y: 0, rotate: 0 }
+      ],
+      typeSequences: [],
+      sfxCues: ["folder-whoosh", "paper-hit", "stack-thump"],
+      brandMoments: ["repo/product logo", "GitHub chip"]
+    },
+    "type-demo": {
+      layout: "close prompt and terminal demo with cursor timing and SFX hits",
+      composition: "typed prompt line transforms into terminal proof and review-ready output badges",
+      mediaSlots: ["prompt-example", "terminal-demo"],
+      motionGrammar: ["prompt typing", "terminal wipe", "cursor teleport", "badge hit"],
+      assetAliases: ["prompt-example", "terminal-demo"],
+      microEvents: [
+        "prompt types with audible ticks",
+        "cursor selects asset alias",
+        "terminal line wipes in",
+        "review badge lands"
+      ],
+      cameraPath: [
+        { t: 0, scale: 1.05, x: -20, y: -24, rotate: -0.6 },
+        { t: 0.42, scale: 1.0, x: 16, y: 12, rotate: 0.4 },
+        { t: 1, scale: 1.08, x: -4, y: -18, rotate: 0 }
+      ],
+      typeSequences: [
+        { source_alias: "prompt-example", start: 0.05, cursor: "thin", sfx: "typing-ticks" },
+        { source_alias: "terminal-demo", start: 0.52, cursor: "block", sfx: "terminal-ticks" }
+      ],
+      sfxCues: ["typing-ticks", "terminal-wipe", "badge-hit"],
+      brandMoments: ["prompt asset alias", "terminal demo asset"]
+    },
+    cta: {
+      layout: "premium review-safe CTA with calm camera push and asset lockup",
+      composition: "all key tokens settle around final approval boundary, repo URL, and generated packet summary",
+      mediaSlots: ["repo-logo", "claude-code", "obsidian", "github"],
+      motionGrammar: ["final camera push", "check ticks", "asset settle", "soft hold"],
+      assetAliases: ["claude-code", "obsidian", "github", "repo-logo"],
+      microEvents: [
+        "approval checks tick on",
+        "tokens settle into lockup",
+        "repo URL comes into focus",
+        "final hold breathes"
+      ],
+      cameraPath: [
+        { t: 0, scale: 1.02, x: 0, y: 16, rotate: 0 },
+        { t: 1, scale: 1.08, x: 0, y: -12, rotate: 0 }
+      ],
+      typeSequences: [],
+      sfxCues: ["check-tick", "check-tick", "quiet-final-hit"],
+      brandMoments: ["final brand lockup", "repo logo if supplied"]
+    }
+  };
+  return { ...common, ...(profiles[beat] ?? profiles.cta) };
 }
 
 function ugcSplitStructure(manifest) {
@@ -999,7 +1631,75 @@ function socialPunchyStructure(manifest) {
   ];
 }
 
+function premiumProductStructure(manifest) {
+  return [
+    { beat: "cold-open", seconds: 2.5, instruction: `Open already in motion: ${manifest.source_repo.name} becomes a premium product Short.` },
+    { beat: "retro-terminal", seconds: 5.5, instruction: "Show a retro terminal/device proof moment with typed command, glow, timer, and receipt stamp." },
+    { beat: "asset-orbit", seconds: 6, instruction: "Orbit branded tool assets, snapping Claude Code, Obsidian, and GitHub into one workflow." },
+    { beat: "prompt-compose", seconds: 7, instruction: "Type a precise prompt panel with asset chips, cursor timing, and satisfying keystroke SFX." },
+    { beat: "collage-proof", seconds: 8, instruction: "Reveal a collage board of generated assets, captions, thumbnails, and review receipts." },
+    { beat: "folder-stack", seconds: 7, instruction: "Rotate and throw a soft 3D folder/file stack through the foreground with motion blur." },
+    { beat: "type-demo", seconds: 7, instruction: "Cut close to prompt and terminal typing that proves the demo and renderer can follow exact instructions." },
+    { beat: "cta", seconds: 5, instruction: "End with a calm premium lockup: review the packet before anything posts." }
+  ];
+}
+
 function videoStylePreset(style, manifest, talkingHead = { enabled: false, provider: "none" }) {
+  if (isPremiumStyle(style)) {
+    return {
+      duration_seconds: 48,
+      angle: "Make the repo feel like a polished creator-grade product Short: fluid motion, physical cards/files, branded assets, typed prompt proof, dense SFX cues, and review-safe Launchclip evidence.",
+      briefBeats: [
+        "Open in motion; no static title card.",
+        "Use a retro terminal proof moment with typed command and cursor sounds.",
+        "Bring named product assets into the edit through the local manifest.",
+        "Type the prompt or demo instructions on-screen with believable timing.",
+        "Use physical object choreography: cards slide, rotate, blur, settle, and throw away.",
+        "Finish with review-before-posting, not live social submission."
+      ],
+      structure: premiumProductStructure(manifest),
+      recipe: {
+        preset: PREMIUM_PRODUCT_STYLE,
+        aspect_ratio: "9:16",
+        duration_seconds: 48,
+        resolution: { width: 720, height: 1280, fps: 30 },
+        layout: [
+          "0-2.5s: moving premium hook with branded tokens and presenter cutaway.",
+          "2.5-8s: retro terminal/device proof with typed command, glow, and receipt stamp.",
+          "8-14s: branded asset orbit and connector choreography.",
+          "14-21s: prompt composer with cursor timing and chip drops.",
+          "21-29s: collage proof board with inspection punches.",
+          "29-36s: soft 3D folder/file stack rotating and throwing cards.",
+          "36-43s: close prompt/terminal type demo with badge hits.",
+          "43-48s: calm review-safe CTA lockup."
+        ],
+        visual_language: {
+          palette: "soft off-white, deep black, Launchclip green, muted graphite, and sparse brand accents from supplied assets",
+          motion: "continuous camera/object movement; visible change every 0.4-1.2 seconds",
+          depth: "foreground physical objects, midground prompt/terminal surfaces, soft background grid and focus washes",
+          motion_blur: "synthetic ghost layers, directional CSS blur, overshoot, and spring settle",
+          assets: "local manifest only; missing aliases become fallback tokens",
+          captions: "short kinetic emphasis captions, not full paragraph cards",
+          sound_design: "whooshes, ticks, paper hits, terminal typing, check ticks, and quiet final hit",
+          production_layers: ["camera_path", "depth_layer", "micro_events", "type_sequences", "brand_moments", "sfx_cues"]
+        },
+        renderer_contract: {
+          adapter: "launchclip.premium-remotion-render.v1",
+          composition_id: "LaunchclipPremiumShort",
+          public_dir: "video/render-public",
+          required_asset_aliases: [...PREMIUM_REQUIRED_ASSET_ALIASES],
+          fallback_composition_id: "LaunchclipSocial",
+          external_api_policy: "No ElevenLabs, HyperFrames, SFX provider, product-videogen live submit, or social posting calls in this renderer."
+        },
+        generation_notes: [
+          "Do not auto-fetch logos; only use launchclip-assets.json.",
+          "Store SFX as adapter-ready cues and local synthetic sounds.",
+          talkingHead.enabled ? `Presenter generation can map to ${talkingHead.provider}, but local render uses a placeholder until media is supplied.` : "Presenter slot remains adapter-ready.",
+          "Every claim must trace to repo metadata, demo evidence, or Launchclip-generated artifacts."
+        ]
+      }
+    };
+  }
   if (isSocialReadyStyle(style)) {
     const punchy = style === "ugc-demo-punchy";
     return {
@@ -1034,8 +1734,11 @@ function videoStylePreset(style, manifest, talkingHead = { enabled: false, provi
           captions: "large kinetic burned-in captions, 2-5 words per caption, high contrast, timed to each clause",
           step_cards: "numbered micro-steps with progress timer, proof badges, and quick zoom transitions",
           pacing: punchy ? "pattern interrupt or layout change every 0.7-1.5 seconds; no static terminal shots" : "scene change every 1-3 seconds; avoid long static terminal shots",
+          camera: punchy ? "constant subtle push, whip-pan transitions, and zoom punches on proof or artifact changes" : "presenter-led push-ins with restrained proof-pane zooms",
+          sound_design: "short whooshes for layout changes, soft ticks for typing/checks/files, no loud meme sounds, duck under voiceover",
           transitions: ["jump cut", "zoom punch", "caption slam", "receipt flash", "artifact whip"],
-          social_readiness: ["first-frame hook", "caption on every beat", "visible proof", "artifact payoff", "approval-safe CTA"]
+          social_readiness: ["first-frame hook", "caption on every beat", "visible proof", "artifact payoff", "approval-safe CTA"],
+          production_layers: ["voiceover", "kinetic captions", "camera movement", "proof graphics", "sound effects"]
         },
         script_formula: [
           "Pattern interrupt: 'This repo just made its own launch Short.'",
@@ -1047,7 +1750,7 @@ function videoStylePreset(style, manifest, talkingHead = { enabled: false, provi
         renderer_contract: {
           adapter: "launchclip.remotion-render.v1",
           local_preview: "local-ffmpeg should render script beat cards, kinetic captions, proof panels, progress motion, artifact flashes, and CTA.",
-          remotion: "Render the social-ready composition from video/remotion-props.json with frame-based motion graphics, kinetic captions, animated proof panels, and artifact cards.",
+          remotion: "Render the social-ready composition from video/remotion-props.json with frame-based motion graphics, kinetic captions, dynamic camera motion, local SFX cues, animated proof panels, and artifact cards.",
           fallback_adapters: ["local-ffmpeg", "hyperframes", "product-videogen"]
         },
         generation_notes: [
@@ -1094,6 +1797,134 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
     .replace(new RegExp(`^${escapeRegExp(repoName)}\\s*`, "i"), "")
     .replace(/\s+/g, " ")
     .trim();
+  if (isPremiumStyle(style)) {
+    const timeline = [
+      {
+        beat: "cold-open",
+        time_range: "0-2.5s",
+        target_seconds: 2.5,
+        voiceover: `${repoName} can start from real repo proof and turn it into a premium product Short.`,
+        caption: "Repo proof to premium Short",
+        visual: "Floating branded tokens, repo lockup, presenter cutaway, and proof cards move before the first spoken word lands.",
+        evidence_source: "launchclip workspace metadata",
+        adapter_target: "remotion",
+        caption_emphasis: ["repo proof", "premium Short"],
+        motion: "logo orbit, camera push, caption slam, blurred proof card settle",
+        transition: "blurred object throw"
+      },
+      {
+        beat: "retro-terminal",
+        time_range: "2.5-8s",
+        target_seconds: 5.5,
+        voiceover: `The edit starts with the actual demo run, typed like a product moment instead of a static terminal dump.`,
+        caption: "Proof that types",
+        visual: "Retro terminal/device floats in depth; command types, timer sweeps, receipt stamps green.",
+        evidence_source: "demo/terminal.txt and demo/command-receipt.json",
+        adapter_target: "remotion",
+        caption_emphasis: ["actual demo", "typed"],
+        motion: "terminal rise, screen glow, cursor typing, receipt stamp",
+        transition: "screen glow wipe"
+      },
+      {
+        beat: "asset-orbit",
+        time_range: "8-14s",
+        target_seconds: 6,
+        voiceover: `When the script names Claude Code, Obsidian, or GitHub, the renderer can pull the matching local asset.`,
+        caption: "Named tools show up",
+        visual: "Claude Code, Obsidian, and GitHub logo tokens orbit prompt cards, then snap into a connected workflow.",
+        evidence_source: "local launchclip-assets.json manifest",
+        adapter_target: "remotion",
+        caption_emphasis: ["Claude Code", "Obsidian", "GitHub"],
+        motion: "token orbit, connector draw, focus rack, snap settle",
+        transition: "logo whip pan"
+      },
+      {
+        beat: "prompt-compose",
+        time_range: "14-21s",
+        target_seconds: 7,
+        voiceover: `The prompt can be art-directed second by second: what to type, when the cursor moves, and which assets drop in.`,
+        caption: "Art direct every second",
+        visual: "Prompt composer types exact instructions while asset chips drop into the line with cursor ticks.",
+        evidence_source: "video/video.json premium storyboard type_sequences",
+        adapter_target: "remotion",
+        caption_emphasis: ["prompt", "cursor", "assets"],
+        motion: "typewriter reveal, chip drops, panel zoom, cursor blink",
+        transition: "panel zoom punch"
+      },
+      {
+        beat: "collage-proof",
+        time_range: "21-29s",
+        target_seconds: 8,
+        voiceover: `Then the outputs become a moving proof board: captions, thumbnail, render plan, and review packet in one place.`,
+        caption: "The proof board",
+        visual: "Collage board of generated artifacts shuffles in; cards punch forward for brief inspection moments.",
+        evidence_source: "generated workspace files",
+        adapter_target: "remotion",
+        caption_emphasis: ["captions", "thumbnail", "review"],
+        motion: "paper flips, grid shuffle, inspection zoom, focus rack",
+        transition: "paper flip wipe"
+      },
+      {
+        beat: "folder-stack",
+        time_range: "29-36s",
+        target_seconds: 7,
+        voiceover: `The launch packet should feel physical, with folders and files sliding, rotating, blurring, and landing on beat.`,
+        caption: "Make it physical",
+        visual: "Soft 3D folder stack rotates through foreground, throws files outward, then snaps into one launch packet.",
+        evidence_source: "video/render-plan.json and generated packet artifacts",
+        adapter_target: "remotion-three",
+        caption_emphasis: ["physical", "folders", "files"],
+        motion: "3D stack rotate, blurred throw, overshoot settle, shadow sweep",
+        transition: "3D folder throw"
+      },
+      {
+        beat: "type-demo",
+        time_range: "36-43s",
+        target_seconds: 7,
+        voiceover: `And the type moments stay editable: prompt text, terminal text, cursor timing, and sound cues are all in the plan.`,
+        caption: "Typing stays editable",
+        visual: "Prompt and terminal panels alternate close-up typing, cursor jumps, and review-ready badge hits.",
+        evidence_source: "video/video.json type_sequences and sfx_cues",
+        adapter_target: "remotion",
+        caption_emphasis: ["typing", "cursor", "sound cues"],
+        motion: "typed prompt, terminal wipe, cursor teleport, badge hit",
+        transition: "typed match cut"
+      },
+      {
+        beat: "cta",
+        time_range: "43-48s",
+        target_seconds: 5,
+        voiceover: `Review the packet, swap in better assets, then approve only when the claims and visuals line up.`,
+        caption: "Review. Swap. Approve.",
+        visual: "Final product lockup with asset tokens settled around review-safe approval checks and repo URL.",
+        evidence_source: "review/product-videogen-review.dry-run.json",
+        adapter_target: "remotion",
+        caption_emphasis: ["review", "swap", "approve"],
+        motion: "asset settle, check ticks, calm camera push, final hold",
+        transition: "soft final hold"
+      }
+    ];
+    return {
+      schema_version: "launchclip.script.v1",
+      style,
+      strategy: "premium creator-product script with branded asset choreography, typed proof moments, physical depth, and adapter-ready SFX cues",
+      duration_seconds: 48,
+      voice: {
+        provider: talkingHead.enabled ? talkingHead.provider : "none",
+        avatar_id: talkingHead.avatar_id ?? null,
+        delivery: "confident, precise, premium product-demo narration with room for SFX and typing beats"
+      },
+      summary_line: summary || "turns local demo evidence into a premium launch packet short",
+      timeline,
+      alignment_rules: [
+        "Every beat must include motion and transition guidance.",
+        "Every storyboard scene must declare asset_aliases, micro_events, camera_path, motion_blur, depth_layer, type_sequences, sfx_cues, and brand_moments.",
+        "Use only local manifest assets and render fallbacks for missing aliases.",
+        "No static text-card-only sequence may last longer than 1.2 seconds.",
+        "External providers receive adapter-ready cues only; local rendering must not call them."
+      ]
+    };
+  }
   if (isSocialReadyStyle(style)) {
     const punchy = style === "ugc-demo-punchy";
     const timeline = punchy ? [
@@ -1424,10 +2255,13 @@ async function buildRemotionProps(out, renderOptions) {
     style: video.style,
     format: video.format,
     voiceover: voiceover ?? video.voiceover ?? null,
+    soundDesign: video.sound_design ?? null,
     timeline: video.script_visual_alignment ?? video.script?.timeline ?? [],
     storyboard: video.creative_storyboard ?? null,
     creativeRecipe: video.creative_recipe,
     talkingHead: video.talking_head,
+    assets: video.assets ?? null,
+    publicAssets: renderOptions.publicAssets ?? null,
     terminal: terminal || "$ npm run smoke\n\nDemo completed and evidence was captured locally.",
     receipt: receipt ?? null,
     captions,

@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Easing, interpolate, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
 
 const colors = {
   ink: "#121417",
@@ -14,6 +14,12 @@ const colors = {
   plum: "#8057c7",
   line: "rgba(18,20,23,0.14)",
   softLine: "rgba(255,255,255,0.18)"
+};
+
+const sfxSources = {
+  click: "data:audio/wav;base64,UklGRlQCAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YTACAAAAADsAjABEAFT/kv7+/p4AKwISAgAAev3E/N3+UwI7BKYChv4y+7H7AAC+BNUF+gEV/BL5xvtOAlYHcwYAACP5sfc5/W8Ffgm5Ber8RvaI9wAA3AijCocDJvkd9OH40AP0C1kKAABM9Tbzx/soCBYOZwiF+wTy8fMAAGEMvQ7ZBKr27+9y9hQFzg+WDQAAIvKJ75n6XwrPEZAKZvqd7hbxAAAoD/QR4AW99LXslfQLBrkSBxAAAMfv0ey7+f0LgRQdDJn5NewV7wAAEREmFJMGc/OR6lvzrAaZFJMRAABS7inrNvnyDBMWAQ0m+eHqAO4AAA4SQRXqBtbylOnP8vAGXhUvEgAAzu2c6g35Nw16FjUNEPmp6tztAAAaEkEV5gbn8sDp8vLaBgsV3REAADjuJus++dEMvxW+DFL5g+ui7gAAPhEyFIkGn/MG67rzbQauE6oQAACB77XsxPnMC/UTqQvo+VvtPfAAAI8PKxLdBe30TO0W9bIFZBGuDgAAj/Eq75T6Ogo+EQsKxfoO8JHyAAArDVIP7QS89mjw8Pa2BFQOCwwAAED0XPKg+zYIyQ3+B9z7b/N39QAAOArTC8gD7fgq9Cn5iQOvCuwIAABp9xn22fzgBckJoQUb/Uz3xPgAAOMG5QeAAmD7Wfih+zsCqQZ9BQAA3for+iz+WQN5BRcDcv5s+0n8AABcA74DJgHy/br8Nf7gAHwC8AEAAGv+Wf6I/8QAFQGCAM3/l//T/w==",
+  tick: "data:audio/wav;base64,UklGRuQDAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YcADAAAAABMAQABkAF4AGwCp/zL/7/4N/5f/aQA7AbkBoQHnALz/gv6x/aL9cv7q/44ByQIcA1QCpACX/uX8MvzR/KD+CwE8A2gEEQRDAoz/2vwj+xD7vvyp/9UCJAW8BVIEUgG7/cz6l/mZ+o39egEGBewGcgawA4r/a/vI+Jn4A/tB/+EDRwc3CEwGHQIV/fD4Kvdy+Gf8uAGPBjgJtgglBbL/O/qr9kv2Tfm4/rEEJgl+CjMI/wKm/Fr3+vRp9jf7xgHUB0EL0AqXBgAATvnX9DL0qPcU/kUFugqHDP0J7wNt/A/2EfOL9Ab6qQHRCP4Msgz7B24ApPhS81ryHvZe/ZwF/gtGDp0L4wRl/BH1ePHj8uD4ZgGECWYOUw5GCfQAO/gi8s3wvPSe/LwF7wyzDwgN0gWK/GP0NvB88c73BAHvCXYPqQ9uCosBEvhK8ZPvjPPc+6gFiw3HEDUOswbV/AP0T+9e8Nr2igAUCisQrRBpCysCI/jL8LLulfIi+2YF1A1/ERwPfAc//e7zxe6Q7w32AAD5CYQQWhEvDMkCaPij8Czu4PF5+v8EzQ3YEbcPJQjA/SD0me4X72/1b/+jCYIQrBG5DF8D2/jP8AXuc/Ho+XkEfA3UEQEQpghQ/pH0yO717gb14P4bCSsQoxECDeMDcvlJ8TruUPF5+d0D5gx1EfkP+Qjl/jr1Tu8r79j0W/5oCIUPQBEFDU8EJPoJ8sjufPEv+TUDFQzAEJ0PGQl4/xH2JPC27+j05/2UB5YOhxDCDJsE6voH86rv9PES+YoCEgu8D/EOAQkAAA/3QvGU8Dn1jP2oBmgNfQ83DMIEuPs69Nnwt/Il+eIB5wlxDvgNsAh2ACf4nvK+8cn1Tv2vBQYMKg5oC8EEh/yV9UvywfNq+UgBngjpDLcMJgjUAFD5LvQs85f2NP2yBHsKlwxZCpMETv0P9/fzDfXi+cAAQwcxCzgLZAcVAX/65vXW9KD3P/25A9IIzwoOCTkEBv6c+NL1kvaL+lEA4QVSCYIJbgY1Aaz7uvex9t74cv3NAhcH3AiPB7MDqP4w+s73SPhk+wAAgARbB6AHSAUxAcz8nfmx+Ev6zP32AVYFywblBQIDL//A++D5Jfpn/ND/LANXBZ4F+QMJAdr9hPvL+t77Tv44AZoDqgQZBCoClv9E/fr7HfyP/cL/7AFTA4cDiAK8AMz+Y/3x/I798/6aAO4BhAI2AjEB3P+x/hH+Jf7W/tb/yABbAWgB/QBNAJ//L/8X/1H/uP8dAFsAZQBHABwA//8=",
+  whoosh: "data:audio/wav;base64,UklGRgQHAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YeAGAAAAAAMACgAXACgAPQBVAG8AiQCiALkAzQDcAOUA5wDhANIAugCZAG8APQADAMP/fv83//D+qv5p/i/+/v3Z/cL9u/3F/eH9D/5P/qH+A/9x/+v/bADwAHQB8gFnAs4CIgNfA4MDiwN1A0AD7AJ7AvABTgGaANr/FP9O/pH95PxN/NT7fvtQ+037d/vP+1P8//zP/br+uv/EAM4BzgK3A4EEIQWPBcUFvwV6BfgEPARNAzMC+QCt/1v+Ff3o++P6E/qF+T/5SPmh+Ur6O/ts/M/9Vf/sAIAC/QNPBWQGLAecB6sHVQedBooFJwSFAroA3P4F/U770fmj+Nf3e/eX9yz4NPmj+mj8aP6JAKoCrQRyBt0H1QhLCTMJiwhcB7UFrQNjAfn+l/xj+oL4Ffc19vP1WPZg9/34F/uL/TMA4AJlBZQHRglbCrwKXgpGCYMHMgV7Ao7/n/zm+ZX32/Xb9Kr0UfXG9vH4q/vB/vkBFAXUBwAKawv0C44LPAoWCEQF/gGF/iL7G/iy9Rz0f/Ps8131t/fM+ln+FAKrBc4INAumDP8MNAxSCoAH+wMSAB78evh/9XLzivLe8m30FPeY+qb+3wLaBjcKnwzUDbQNPAyOCeoFpwEy/fv4cPXu8rrx+PGm8532kfod/8sDGwiaC+YNvQ4DDscLRAjVA/P+Jfrz9dXyJfEY8bTy0PUX+hH/LgTaCIsM0Q5lDzIOVQsgBw4Ctvy596/zGPFH8FnxM/SA+L79SwN5CKMMQg/+D7oOnAsBB30BwfuG9nzyKfDg767xXPV0+k4AJgY0C8wObxDgDywNrgj8Atr8H/eV8t/vYe8y8Rb1hvrCAOoGHgygD+kQyA9gDCoH5AB1+s/0x/D57q3vz/Lr90L+4gTOChwPJBGSEHUNRQjIAf/69/Sg8K3uce/S8kv4A//qBeQL+w+DETcQSQxWBlX/a/i68jbvd+6k8GP17fssA+gJ+w6GERYRuA38B9sAj/lc81nvPe498Ab1w/tFAzcKWg/BEfgQHw3jBmP/+/cG8p7uaO5y8TH3l/5EBskM6xDeEXAPEwrHAvD6DvR07wruGvBC9YT8eASPC2MQ/BEFEN4KigN9+1X0hO8G7izwjPUP/S8FQgzQEOcRRw95Ca8BiPm78rjuWu678SX4PgBMCJQOuRELEawMigUx/XT1BvAb7iTwsPWH/e0FAQ0sEXoR1w0SB7H+nPaq8Dzu4u8/9Rn9nwXYDBIRThF6DXsG8/3o9UPwXe6t8Kr25P5jBxgOYxFzEIALvgMR+5zzNu/37vPyLvrcAtEKDxBAERcOXQfF/n/2qPDA7kbxl/cTAIgIxA4mEQwPAQmbAA74nPH97uPwz/Yv/8QHQA7jEPYO+wiSAAX4qPE772vxnvcfAJQIpA6eEPMNYgfB/n327fCj7//yDPrJArUKjA/nD6wLEwRQ++7zFfDl8CL2Qv7gBnINBBDUDYcH/v7J9lzxW/AS9GL7FASDC2oPmQ5QCS4BtfiD8oLwUfMR+qUCXwrTDpoOxwniAWr5EfPb8HzzHPqaAjsKiA4gDiQJNQHo+PTySvF29Gr72gP9CnQOGw1mBz//YPdu8hLyaPb3/S8GRQwmDjILbAQq/EP1FvK885/5sgEkCV4N5gzqBywAaPhc88/y8PZF/i4G2As9DeAJ+gIK+/D04PKX9RT89wNbCusMuAqWBMv8PPZV8yj1AvuxAlIJagzSCikFlf349tLzVPXk+l8C5gj3C2kK2gR1/Rj3O/T49Zv77AILCZILiAm/A4X8uvao9B33Gf0yBJAJDAsUCOAB9vok9lz16vhU//cFGwoRCuMFUf8V+cT1uPaG+ycC0wctCjwI2wJR/GX3KPYa+fP+MQUpCS0JQwUg/2z5nfbj96j81QK3BzAJogY0AU37h/eG90L7DQFRBrgIOAeEAr78fvio95X66v85BRwISQcqA6f9R/kH+HH6Yf+KBIsHBwdFAwz+zPl9+LT6XP9BBBYHjQbwAv39EPoB+Uj7xf9NBLcG4QU9ApT9KPqa+Sb8hACRBFUG/AQ7AfD8N/pg+k39gAHjBM0F0wP8/zn8avpt+7T+kgISBfoEYAKh/qf78PrO/EIAggPmBMEDtwBg/XX77ft8/sQBDgQwBCQCCP+B/N37aP1EAOkC9APjAlMAqv1Q/PX8M//NAV0DFQMpAa7+/Pz4/Jb+6QCpAuoClAFv/679Qf1X/ksAAQKMAqwB6v9I/qv9X/7w/3cBGwKMASkAwv4g/pP+yv8NAaUBSAE6AB3/lP7i/sr/vgAzAfEALgBk/wX/Pv/d/30AwwCTABcAof90/53/9f8/AFQANQADAOT/5P/2/w=="
 };
 
 export function LaunchclipSocial(props) {
@@ -32,12 +38,19 @@ export function LaunchclipSocial(props) {
   const cutEnergy = spring({ frame: Math.max(0, localFrame - 5), fps, config: { damping: 13, stiffness: 220 } });
   const totalProgress = clamp(frame / Math.max(1, durationInFrames - 1));
   const context = { props, beat, scene, activeIndex, progress, entrance, cutEnergy, fps, localFrame, totalProgress };
+  const camera = cameraMotion(scene, progress, localFrame, activeIndex);
 
   return (
     <AbsoluteFill style={{ backgroundColor: colors.paper, color: colors.ink, fontFamily: "Inter, Arial, Helvetica, sans-serif", overflow: "hidden" }}>
       <EditorialBackdrop frame={frame} scene={scene} />
-      <SceneSwitch context={context} />
+      <MotionAccentLayer scene={scene} progress={progress} localFrame={localFrame} activeIndex={activeIndex} />
+      <div style={{ position: "absolute", inset: 0, zIndex: 2, transform: `translate3d(${camera.x}px, ${camera.y}px, 0) scale(${camera.scale})`, transformOrigin: camera.origin }}>
+        <SceneSwitch context={context} />
+      </div>
+      {!isCtaScene(scene) ? <CaptionStack beat={beat} progress={cutEnergy} scene={scene} localFrame={localFrame} /> : null}
+      <StoryboardRail timeline={timeline} activeIndex={activeIndex} />
       <BrandBar repo={props.repo} scene={scene} />
+      <SoundDesignLayer timeline={timeline} soundDesign={props.soundDesign} fps={fps} />
     </AbsoluteFill>
   );
 }
@@ -63,6 +76,89 @@ function EditorialBackdrop({ frame, scene }) {
       <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: 180, background: palette.topWash }} />
     </AbsoluteFill>
   );
+}
+
+function cameraMotion(scene, progress, localFrame, activeIndex) {
+  const id = scene.id || "cta";
+  const ease = interpolate(progress, [0, 1], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  const pulse = Math.sin(localFrame / 7) * 0.004;
+  const punch = id === "cold-open" || id === "hook" || id === "artifact-reveal" ? 0.058 : 0.036;
+  const calm = id === "cta" ? 0.018 : punch;
+  const direction = activeIndex % 2 === 0 ? 1 : -1;
+  const x = direction * interpolate(ease, [0, 1], [8, -8]);
+  const y = interpolate(ease, [0, 1], [6, -10]);
+  return {
+    x: id === "cta" ? 0 : x,
+    y: id === "cta" ? interpolate(ease, [0, 1], [5, -4]) : y,
+    scale: 1 + calm * ease + pulse,
+    origin: id === "demo-trigger" || id === "split-screen-proof" ? "42% 45%" : id === "artifact-reveal" ? "50% 62%" : "50% 50%"
+  };
+}
+
+function MotionAccentLayer({ scene, progress, localFrame, activeIndex }) {
+  const palette = scenePalette(scene.id);
+  const scan = (localFrame * 9) % 720;
+  const burst = clamp(Math.sin(progress * Math.PI) * 1.2);
+  return (
+    <div style={{ position: "absolute", inset: 0, zIndex: 1, pointerEvents: "none", overflow: "hidden" }}>
+      <div style={{ position: "absolute", left: 26, right: 26, top: 116, height: 2, background: palette.accent, opacity: 0.16 + burst * 0.16, transform: `translateX(${Math.sin(localFrame / 10) * 18}px)` }} />
+      <div style={{ position: "absolute", left: scan - 160, top: 0, width: 160, bottom: 0, background: `linear-gradient(90deg, transparent, ${palette.accent}33, transparent)`, transform: "skewX(-16deg)", opacity: 0.18 }} />
+      {[0, 1, 2, 3, 4].map((item) => {
+        const y = 250 + item * 132 + ((localFrame * (item + 2)) % 34);
+        const side = item % 2 ? "right" : "left";
+        return (
+          <div
+            key={item}
+            style={{
+              position: "absolute",
+              [side]: 0,
+              top: y,
+              width: 110 + item * 16,
+              height: 4,
+              borderRadius: 999,
+              background: item === activeIndex % 5 ? palette.accent : colors.ink,
+              opacity: 0.08 + burst * 0.08
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function SoundDesignLayer({ timeline, soundDesign, fps }) {
+  const cues = Array.isArray(soundDesign?.cues) && soundDesign.cues.length ? soundDesign.cues : timeline.map((beat) => ({ beat: beat.beat, intensity: "medium" }));
+  return (
+    <>
+      {timeline.map((beat, index) => {
+        const cue = cues[index] ?? {};
+        const from = Math.max(0, Math.round((beat.start + 0.02) * fps));
+        return (
+          <Sequence key={`${beat.beat}-sfx-${index}`} from={from}>
+            <Audio src={sfxSourceForBeat(beat.beat, cue)} volume={sfxVolume(cue)} />
+          </Sequence>
+        );
+      })}
+    </>
+  );
+}
+
+function sfxSourceForBeat(beat, cue = {}) {
+  const text = `${beat} ${cue.sound || ""}`.toLowerCase();
+  if (text.includes("whoosh") || text.includes("whip") || text.includes("punch")) return sfxSources.whoosh;
+  if (text.includes("tick") || text.includes("typing") || text.includes("keyboard") || text.includes("check")) return sfxSources.tick;
+  return sfxSources.click;
+}
+
+function sfxVolume(cue = {}) {
+  if (cue.intensity === "high") return 0.2;
+  if (cue.intensity === "medium-high") return 0.16;
+  if (cue.intensity === "low-medium") return 0.08;
+  return 0.12;
 }
 
 function ColdOpen({ props, beat, scene, progress, entrance }) {
@@ -255,15 +351,17 @@ function BrandBar({ repo, scene }) {
   );
 }
 
-function CaptionStack({ beat, progress, scene }) {
+function CaptionStack({ beat, progress, scene, localFrame }) {
   const words = splitCaption(beat.caption || scene.hook || beat.beat);
   const palette = scenePalette(scene.id);
   return (
     <div style={{ position: "absolute", left: 38, right: 38, bottom: 86, minHeight: 132, zIndex: 30, display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 10 }}>
       {words.map((word, index) => {
         const p = clamp(progress - index * 0.04);
+        const hit = clamp((localFrame - index * 3) / 6);
+        const tilt = Math.sin((localFrame + index * 9) / 8) * 1.4;
         return (
-          <span key={`${word}-${index}`} style={{ display: "inline-block", padding: "10px 15px 12px", borderRadius: 10, background: index % 3 === 1 ? palette.accent : colors.ink, color: index % 3 === 1 ? palette.accentText : colors.white, fontSize: Math.max(34, 56 - words.length * 2), lineHeight: 0.96, fontWeight: 900, boxShadow: "0 18px 40px rgba(18,20,23,0.18)", transform: `translateY(${(1 - p) * 28}px) scale(${0.92 + p * 0.08})`, opacity: p }}>
+          <span key={`${word}-${index}`} style={{ display: "inline-block", padding: "10px 15px 12px", borderRadius: 10, background: index % 3 === 1 ? palette.accent : colors.ink, color: index % 3 === 1 ? palette.accentText : colors.white, fontSize: Math.max(34, 56 - words.length * 2), lineHeight: 0.96, fontWeight: 900, boxShadow: "0 18px 40px rgba(18,20,23,0.18)", transform: `translateY(${(1 - p) * 30}px) rotate(${tilt}deg) scale(${0.86 + p * 0.1 + hit * 0.05})`, opacity: p }}>
             {word}
           </span>
         );
@@ -364,6 +462,7 @@ function TaskChip({ label, index, visible, collapsed, x, y }) {
   const finalX = 70 + index * 90;
   return (
     <div style={{ position: "absolute", left: interpolate(collapsed, [0, 1], [x, finalX]), top: interpolate(collapsed, [0, 1], [y, finalY]), minWidth: collapsed > 0.85 ? 70 : 190, height: 58, borderRadius: 14, background: collapsed > 0.85 ? colors.ink : colors.paper, color: collapsed > 0.85 ? colors.white : colors.ink, display: "flex", alignItems: "center", justifyContent: "center", fontSize: collapsed > 0.85 ? 12 : 20, fontWeight: 900, opacity: visible, boxShadow: "0 16px 32px rgba(18,20,23,0.14)", transform: `scale(${0.92 + visible * 0.08})` }}>
+      <div style={{ position: "absolute", left: 18, right: 18, top: 29, height: 4, borderRadius: 999, background: colors.coral, transformOrigin: "left center", transform: `scaleX(${collapsed})`, opacity: collapsed > 0.15 ? 1 : 0 }} />
       {label}
     </div>
   );
@@ -385,11 +484,19 @@ function DeviceFrame({ x, y, width, height, entrance, children }) {
 }
 
 function TerminalSurface({ command, output, progress, localFrame }) {
+  const typedCommand = reveal(command, clamp((localFrame - 4) / 28));
+  const typedOutput = reveal(shorten(output, 210), clamp((progress - 0.35) / 0.5));
+  const cursorOn = Math.floor(localFrame / 8) % 2 === 0;
+  const scanY = 64 + ((localFrame * 5) % 430);
   return (
     <div style={{ position: "absolute", inset: 0, padding: "54px 26px 24px", color: colors.white }}>
+      <div style={{ position: "absolute", left: 0, right: 0, top: scanY, height: 18, background: "linear-gradient(180deg, transparent, rgba(34,197,94,0.12), transparent)", opacity: 0.6 }} />
       <div style={{ fontSize: 12, fontWeight: 900, textTransform: "uppercase", color: colors.green }}>live capture</div>
-      <div style={{ marginTop: 22, fontFamily: "Menlo, Consolas, monospace", fontSize: 18, lineHeight: 1.45, color: colors.green }}>{reveal(command, clamp((localFrame - 4) / 28))}</div>
-      <div style={{ marginTop: 28, fontFamily: "Menlo, Consolas, monospace", fontSize: 15, lineHeight: 1.42, color: "rgba(251,251,248,0.76)", whiteSpace: "pre-wrap" }}>{reveal(shorten(output, 210), clamp((progress - 0.35) / 0.5))}</div>
+      <div style={{ marginTop: 22, fontFamily: "Menlo, Consolas, monospace", fontSize: 18, lineHeight: 1.45, color: colors.green }}>
+        {typedCommand}
+        <span style={{ display: "inline-block", width: 9, height: 21, marginLeft: 5, transform: "translateY(4px)", background: colors.green, opacity: cursorOn ? 1 : 0.15 }} />
+      </div>
+      <div style={{ marginTop: 28, fontFamily: "Menlo, Consolas, monospace", fontSize: 15, lineHeight: 1.42, color: "rgba(251,251,248,0.76)", whiteSpace: "pre-wrap" }}>{typedOutput}</div>
       <div style={{ position: "absolute", left: 26, right: 26, bottom: 26, height: 8, borderRadius: 999, background: "rgba(255,255,255,0.14)" }}>
         <div style={{ width: `${progress * 100}%`, height: "100%", borderRadius: 999, background: colors.green }} />
       </div>
@@ -423,6 +530,7 @@ function EditorPanel({ x, y, width, height, progress, rows }) {
       </div>
       <div style={{ position: "absolute", left: 26, right: 26, top: 86, bottom: 34 }}>
         <div style={{ position: "absolute", top: 0, bottom: 0, left: `${8 + progress * 82}%`, width: 4, borderRadius: 999, background: colors.blue, boxShadow: "0 0 28px rgba(59,130,246,0.58)" }} />
+        <AudioWaveform progress={progress} />
         {(rows.length ? rows : [fallbackBeat("repo")]).map((row, index) => {
           const active = progress > index / Math.max(1, rows.length);
           return (
@@ -433,6 +541,29 @@ function EditorPanel({ x, y, width, height, progress, rows }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function AudioWaveform({ progress }) {
+  return (
+    <div style={{ position: "absolute", left: 0, right: 0, bottom: 2, height: 46, display: "flex", alignItems: "center", gap: 5, opacity: 0.9 }}>
+      {Array.from({ length: 38 }).map((_, index) => {
+        const active = progress > index / 38;
+        const height = 8 + ((index * 17) % 30);
+        return (
+          <div
+            key={index}
+            style={{
+              width: 7,
+              height,
+              borderRadius: 999,
+              background: active ? colors.green : "rgba(255,255,255,0.14)",
+              boxShadow: active && index % 7 === 0 ? "0 0 18px rgba(34,197,94,0.45)" : "none"
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -470,8 +601,9 @@ function PacketFolder({ progress, repoName }) {
 }
 
 function ArtifactCard({ label, x, y, active, visible }) {
+  const lift = active ? -8 : 0;
   return (
-    <div style={{ position: "absolute", left: x, top: y, width: active ? 302 : 280, minHeight: active ? 108 : 88, borderRadius: 18, background: active ? colors.ink : colors.white, color: active ? colors.white : colors.ink, padding: 18, opacity: visible, boxShadow: active ? "0 28px 64px rgba(18,20,23,0.28)" : "0 18px 36px rgba(18,20,23,0.12)", transform: `translateY(${(1 - visible) * 28}px) scale(${active ? 1.04 : 0.96})` }}>
+    <div style={{ position: "absolute", left: x, top: y + lift, width: active ? 302 : 280, minHeight: active ? 108 : 88, borderRadius: 18, background: active ? colors.ink : colors.white, color: active ? colors.white : colors.ink, padding: 18, opacity: visible, boxShadow: active ? "0 28px 64px rgba(18,20,23,0.28)" : "0 18px 36px rgba(18,20,23,0.12)", transform: `translateY(${(1 - visible) * 28}px) rotate(${active ? -1.5 : 0}deg) scale(${active ? 1.06 : 0.96})` }}>
       <div style={{ fontSize: 11, fontWeight: 900, textTransform: "uppercase", color: active ? colors.amber : "rgba(18,20,23,0.46)" }}>artifact</div>
       <div style={{ marginTop: 8, fontSize: active ? 22 : 18, lineHeight: 1.05, fontWeight: 900 }}>{label}</div>
       {active ? <div style={{ marginTop: 12, height: 6, borderRadius: 999, background: colors.amber }} /> : null}

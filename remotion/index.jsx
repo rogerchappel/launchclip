@@ -1,5 +1,6 @@
 import React from "react";
 import { Composition, registerRoot } from "remotion";
+import { LaunchclipPremiumShort } from "./premium.jsx";
 import { LaunchclipSocial } from "./social.jsx";
 import { MotionLayer } from "../motion-engine/MotionLayer.jsx";
 import goldenTimeline from "../examples/motion/golden-timeline.json";
@@ -22,24 +23,26 @@ const defaultProps = {
 const Root = () => {
   return (
     <>
-    <Composition
-      id="LaunchclipSocial"
-      component={LaunchclipSocial}
-      durationInFrames={900}
-      fps={30}
-      width={720}
-      height={1280}
-      defaultProps={defaultProps}
-      calculateMetadata={({ props }) => {
-        const fps = Number(props.fps ?? 30);
-        return {
-          fps,
-          width: Number(props.width ?? 720),
-          height: Number(props.height ?? 1280),
-          durationInFrames: Math.max(1, Math.ceil(Number(props.durationSeconds ?? 30) * fps))
-        };
-      }}
-    />
+      <Composition
+        id="LaunchclipSocial"
+        component={LaunchclipSocial}
+        durationInFrames={900}
+        fps={30}
+        width={720}
+        height={1280}
+        defaultProps={defaultProps}
+        calculateMetadata={metadataFromProps}
+      />
+      <Composition
+        id="LaunchclipPremiumShort"
+        component={LaunchclipPremiumShort}
+        durationInFrames={1440}
+        fps={30}
+        width={720}
+        height={1280}
+        defaultProps={{ ...defaultProps, durationSeconds: 48, style: "premium-product-short" }}
+        calculateMetadata={metadataFromProps}
+      />
       <Composition
         id="MotionGolden"
         component={MotionLayer}
@@ -54,6 +57,16 @@ const Root = () => {
       />
     </>
   );
+};
+
+const metadataFromProps = ({ props }) => {
+  const fps = Number(props.fps ?? 30);
+  return {
+    fps,
+    width: Number(props.width ?? 720),
+    height: Number(props.height ?? 1280),
+    durationInFrames: Math.max(1, Math.ceil(Number(props.durationSeconds ?? 30) * fps))
+  };
 };
 
 registerRoot(Root);

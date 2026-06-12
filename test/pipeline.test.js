@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, access, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, access, writeFile, mkdir } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
@@ -95,6 +95,8 @@ test("plans ugc split-screen creative recipe for product-videogen handoff", asyn
     assert.equal(video.script.schema_version, "launchclip.script.v1");
     assert.equal(video.voiceover.schema_version, "launchclip.voiceover.v1");
     assert.equal(video.voiceover.segments.length, 5);
+    assert.equal(video.sound_design.schema_version, "launchclip.sound-design.v1");
+    assert.equal(video.sound_design.cues.length, 5);
     assert.equal(video.script_visual_alignment.length, 5);
     assert.equal(video.script_visual_alignment[0].beat, "hook");
     assert.match(video.script_visual_alignment[0].voiceover, /sample-tool/);
@@ -103,12 +105,61 @@ test("plans ugc split-screen creative recipe for product-videogen handoff", asyn
     assert.match(video.structure.map((beat) => beat.beat).join(","), /split-screen-proof/);
     assert.match(renderPlan.adapters.heygen, /First talking-head adapter target/);
     assert.equal(renderPlan.script_visual_alignment.length, 5);
+    assert.equal(renderPlan.sound_design.cues[0].duck_voiceover, true);
     assert.equal(renderPlan.creative_recipe.visual_language.pacing, "scene change every 1-3 seconds; avoid long static terminal shots");
     assert.equal(payload.recipe_json.creative_recipe.preset, "ugc-split");
     assert.equal(payload.recipe_json.voiceover.schema_version, "launchclip.voiceover.v1");
+    assert.equal(payload.recipe_json.sound_design.schema_version, "launchclip.sound-design.v1");
     assert.equal(payload.recipe_json.creative_storyboard.scenes[0].layout, "full-screen editorial hook with creator picture-in-picture and repo receipt");
     assert.equal(payload.recipe_json.talking_head.provider, "heygen");
     assert.equal(payload.recipe_json.script_visual_alignment[2].caption, "Demo -> plan -> captions -> review");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("plans premium product short contract with deterministic asset warnings", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
+  const out = path.join(temp, "packet");
+  const assetsDir = path.join(temp, "assets");
+  try {
+    await writePremiumAssetManifest(assetsDir, {
+      "claude-code": "claude-code.png",
+      "prompt-example": { path: "prompt-example.txt", type: "text", label: "Launch prompt" }
+    });
+    await initWorkspace(fixtureRepo, { out });
+    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
+    await planVideo(out, { format: "short-30", renderer: "product-videogen", style: "premium-product-short", "assets-dir": assetsDir });
+    await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
+    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
+    await submitReview(out, { provider: "product-videogen", "dry-run": true });
+
+    const video = JSON.parse(await readFile(path.join(out, "video/video.json"), "utf8"));
+    const payload = JSON.parse(await readFile(path.join(out, "video/product-videogen.dry-run.json"), "utf8"));
+    const readiness = await validateWorkspace(out);
+
+    assert.equal(video.style, "premium-product-short");
+    assert.equal(video.duration_seconds, 48);
+    assert.equal(video.creative_recipe.renderer_contract.composition_id, "LaunchclipPremiumShort");
+    assert.deepEqual(video.assets.provided_aliases, ["claude-code", "prompt-example"]);
+    assert.deepEqual(video.assets.missing_aliases, ["github", "obsidian", "terminal-demo"]);
+    assert.equal(video.creative_storyboard.asset_manifest.expected_file, "launchclip-assets.json");
+    assert.equal(video.creative_storyboard.scenes.length, 8);
+    assert.deepEqual(video.creative_storyboard.scenes[2].asset_aliases, ["claude-code", "obsidian", "github"]);
+    assert.ok(video.creative_storyboard.scenes[3].type_sequences.length >= 1);
+    assert.ok(video.creative_storyboard.scenes[5].motion_blur.method.includes("ghost layers"));
+    assert.ok(video.creative_storyboard.scenes[5].depth_layer.foreground.includes("cards"));
+    assert.ok(video.creative_storyboard.scenes[6].sfx_cues.includes("typing-ticks"));
+    assert.ok(video.creative_storyboard.scenes[7].brand_moments.length >= 1);
+    assert.equal(payload.recipe_json.video_manifest.style, "premium-product-short");
+    assert.equal(payload.recipe_json.assets.schema_version, "launchclip.assets.v1");
+    assert.equal(payload.recipe_json.creative_storyboard.scenes[3].type_sequences[0].source_alias, "prompt-example");
+    assert.equal(readiness.status, "ready");
+    assert.deepEqual(readiness.warnings, [
+      "Missing asset alias: github",
+      "Missing asset alias: obsidian",
+      "Missing asset alias: terminal-demo"
+    ]);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
@@ -136,11 +187,16 @@ test("plans and renders punchy social-ready UGC preview", async (t) => {
     await access(result.thumbnail);
     assert.equal(video.style, "ugc-demo-punchy");
     assert.equal(video.creative_recipe.renderer_contract.adapter, "launchclip.remotion-render.v1");
+    assert.match(video.creative_recipe.visual_language.sound_design, /whooshes/);
     assert.equal(video.creative_storyboard.scenes.length, 7);
     assert.match(video.creative_storyboard.quality_gates.join("\n"), /terminal evidence is treated as proof/);
     assert.equal(video.creative_storyboard.scenes[2].layout, "device capture with command evidence");
+    assert.match(video.creative_storyboard.scenes[2].camera_direction, /terminal text types/i);
+    assert.match(video.creative_storyboard.scenes[5].sound_design, /file flips/i);
     assert.equal(video.script_visual_alignment.length, 7);
     assert.equal(video.voiceover.segments.length, 7);
+    assert.equal(video.sound_design.cues.length, 7);
+    assert.match(video.sound_design.cues[0].sound, /whoosh/i);
     assert.match(video.voiceover.full_text, /launch Short/);
     assert.equal(video.script_visual_alignment[0].beat, "cold-open");
     assert.equal(video.script_visual_alignment[0].caption, "Repo -> Short");
@@ -179,10 +235,62 @@ test("renders punchy social-ready UGC preview with Remotion", async (t) => {
     assert.equal(manifest.stages.render.provider, "remotion");
     assert.equal(props.schema_version, "launchclip.remotion-props.v1");
     assert.equal(props.voiceover.schema_version, "launchclip.voiceover.v1");
+    assert.equal(props.soundDesign.schema_version, "launchclip.sound-design.v1");
     assert.equal(voiceover.segments[6].beat, "cta");
     assert.equal(props.timeline.length, 7);
     assert.equal(props.storyboard.scenes[3].layout, "editor timeline proof");
     assert.equal(props.fps, 15);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("renders premium product short sample with local manifest assets", async (t) => {
+  if (!(await hasCommand("ffmpeg")) || !(await hasCommand("npx"))) {
+    t.skip("ffmpeg or npx is not installed");
+    return;
+  }
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
+  const out = path.join(temp, "packet");
+  const assetsDir = path.join(temp, "assets");
+  try {
+    await writePremiumAssetManifest(assetsDir, {
+      "claude-code": "claude-code.png",
+      github: "github.png",
+      obsidian: "obsidian.png",
+      "terminal-demo": "terminal-demo.png",
+      "prompt-example": { path: "prompt-example.txt", type: "text", label: "Prompt Example" }
+    });
+    await initWorkspace(fixtureRepo, { out });
+    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
+    await planVideo(out, { format: "short-30", renderer: "remotion", style: "premium-product-short", "assets-dir": assetsDir });
+    await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
+    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
+    await submitReview(out, { provider: "product-videogen", "dry-run": true });
+    const result = await renderVideo(out, { provider: "remotion", duration: "6", fps: "15", "assets-dir": assetsDir });
+
+    const manifest = JSON.parse(await readFile(path.join(out, "launchclip.json"), "utf8"));
+    const props = JSON.parse(await readFile(path.join(out, "video/remotion-props.json"), "utf8"));
+    const readiness = await validateWorkspace(out);
+    const stills = [1, 3, 5].map((second) => path.join(out, "video", `premium-still-${second}s.png`));
+    for (const [index, still] of stills.entries()) {
+      await execFileAsync("ffmpeg", ["-y", "-ss", String([1, 3, 5][index]), "-i", result.video, "-frames:v", "1", still], { maxBuffer: 1024 * 1024 * 8 });
+      await access(still);
+    }
+
+    await access(result.video);
+    await access(result.thumbnail);
+    await access(path.join(out, "video/render-public/assets/claude-code.png"));
+    await access(path.join(out, "video/render-public/assets/github.png"));
+    await access(path.join(out, "video/render-public/assets/obsidian.png"));
+    assert.equal(manifest.stages.render.composition, "LaunchclipPremiumShort");
+    assert.equal(props.publicAssets.schema_version, "launchclip.assets.v1");
+    assert.equal(props.publicAssets.missing_aliases.length, 0);
+    assert.equal(Object.keys(props.publicAssets.aliases).length, 5);
+    assert.equal(props.timeline.length, 8);
+    assert.equal(props.storyboard.scenes[3].type_sequences[0].source_alias, "prompt-example");
+    assert.equal(readiness.status, "ready");
+    assert.deepEqual(readiness.warnings, []);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
@@ -340,4 +448,18 @@ async function mediaDuration(filePath) {
     filePath
   ]);
   return Number(stdout.trim());
+}
+
+async function writePremiumAssetManifest(assetsDir, aliases) {
+  await mkdir(assetsDir, { recursive: true });
+  for (const value of Object.values(aliases)) {
+    const assetPath = typeof value === "string" ? value : value.path;
+    const target = path.join(assetsDir, assetPath);
+    if (assetPath.endsWith(".txt")) {
+      await writeFile(target, "Create a premium product short with Claude Code, Obsidian, GitHub, typing, and review-safe proof.\n");
+    } else {
+      await writeFile(target, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lwq3GQAAAABJRU5ErkJggg==", "base64"));
+    }
+  }
+  await writeFile(path.join(assetsDir, "launchclip-assets.json"), `${JSON.stringify({ schema_version: "launchclip.assets.v1", assets: aliases }, null, 2)}\n`);
 }
