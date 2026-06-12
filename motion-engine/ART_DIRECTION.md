@@ -51,6 +51,17 @@ Content honesty unchanged: screenshots and footage are real; prompt text is the 
 - 2.5D: cards tilt a few degrees and carry believable shadows. v1's §3D rules survive with the same restraint caps.
 - The connective tissue between scenes is often a shared element that persists and transforms (the icon card travels; the prompt bar shrinks into a corner) — when in doubt, morph the anchor rather than cutting.
 
+## 4b. Tactility and the camera (second frame-pass, confirmed)
+
+A 12fps strip study of transitions and the long cut-free stretches confirms the canvas is *travelled*, not cut between:
+
+- **The canvas is continuous.** Video 2 runs 18 seconds (8.7s→26.5s) without a single hard cut: the screenshot wall slides left to reveal the next composition, feeds scroll vertically, the funnel stack shifts up as new chips land. Transitions are **swipes and zooms across one big tabletop**; hard cuts are chapter breaks only.
+- **Real motion blur during travel.** Mid-transition frames show the *entire moving region* streaked — including the talking-head footage while it slides into place. Blur is transition-scoped: heavy during travel, perfectly crisp at rest.
+- **Zoom-from-depth entrances.** Icon cards arrive by scaling from near-zero at a distant anchor toward final size — reads as flying in from depth. Pair with blur while small/fast.
+- **Pseudo-3D chips.** The funnel/step cards have drawn thickness (darker bottom edge, like extruded plastic chips) plus the soft drop shadow. Flat cards are for screenshots; chips are for diagram nodes.
+- **Talking head splits the frame.** The dominant face layout is **bottom ~50–55% of frame, graphics unfolding on the paper above**. Second layout: face in a shadowed rounded card (~50% width) beside typography. Full-bleed face appears only at the hook. The graphics are the protagonist; the face is the narrator.
+- **Word-cadence is absolute.** "There" → "are" land as separate frames; "output" *gains its green script styling on the beat it's spoken*; funnel chips land one per beat. Nothing pre-exists its word.
+
 ## 5. Sound
 
 (Largely as v1 — the reference confirms it.) Whoosh/pop on entrances, typing tick under prompt cards, ding on reveals; everything ducked under continuous VO. Music bed low. SFX variants rotate so repeats don't machine-gun.
