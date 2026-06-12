@@ -32,6 +32,7 @@
     "README.md"
   ],
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
     "@react-three/fiber": "9.6.1",
     "@remotion/cli": "4.0.475",
     "@remotion/google-fonts": "^4.0.475",

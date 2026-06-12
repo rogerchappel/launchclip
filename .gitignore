@@ -7,3 +7,4 @@ reference/
 examples/readmesmoke-local/
 examples/**/motion-golden-preview*.mp4
 examples/motion-golden-preview*.mp4
+.launchclip/
