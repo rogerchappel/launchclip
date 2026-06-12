@@ -34,7 +34,7 @@ export function LogoPop({ event, width, height }) {
         transform: `perspective(1100px) rotateY(${rotateY}deg) rotateX(${rotateX}deg) scale(${scale})`,
         opacity: Math.min(1, enter * 1.5) * (1 - exit),
         borderRadius: size * 0.22,
-        background: "#ffffff",
+        background: "#121210",
         // Light follows tilt: shadow slides opposite the rotation.
         boxShadow: `${-rotateY * 0.9}px ${18 + rotateX * 2}px 50px rgba(0,0,0,0.38)`,
         display: "grid",

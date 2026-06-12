@@ -1,20 +1,23 @@
 import React from "react";
 import { AbsoluteFill, Html5Audio, OffthreadVideo, Sequence, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { cameraAt } from "./camera.js";
-import { KineticCaption } from "./components/KineticCaption.jsx";
 import { LogoPop } from "./components/LogoPop.jsx";
+import { PaperGround } from "./components/paper.jsx";
 import { SceneTrack } from "./components/scenes.jsx";
+import { FONTS, INK } from "./theme.js";
 
-// Renders a motion.timeline.v1 document: real base footage, whole-canvas
-// punch-zoom camera, word-timed captions, asset pop-ins, and an SFX layer.
-// The base layer is footage or nothing — this engine never draws fake media.
+// Renders a motion.timeline.v1 document in the paper-world grammar: warm
+// paper ground, scenes as physical objects on it, a gentle camera, and a
+// continuous voice with SFX bound to events and cuts. There is no caption
+// track — spoken words are staged by typography scenes.
 export function MotionLayer({ timeline, enableSfx = true }) {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const camera = cameraAt({ events: timeline.events, frame, fps });
 
   return (
-    <AbsoluteFill style={{ backgroundColor: "#08090c", overflow: "hidden" }}>
+    <AbsoluteFill style={{ overflow: "hidden" }}>
+      <PaperGround />
       <AbsoluteFill
         style={{
           transform: `scale(${camera.scale})`,
@@ -34,8 +37,6 @@ export function MotionLayer({ timeline, enableSfx = true }) {
           <LogoPop key={event.id} event={event} width={width} height={height} />
         ))}
 
-      <KineticCaption words={timeline.words} scenes={timeline.scenes ?? []} width={width} height={height} />
-
       {timeline.audio?.voiceover ? <Html5Audio src={resolveSrc(timeline.audio.voiceover)} /> : null}
       {timeline.audio?.music ? (
         <Html5Audio src={resolveSrc(timeline.audio.music)} volume={timeline.audio.music_volume ?? 0.08} />
@@ -50,27 +51,21 @@ function BaseLayer({ base, width, height }) {
     return <OffthreadVideo src={resolveSrc(base.src)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />;
   }
   return (
-    <AbsoluteFill
-      style={{
-        background: "radial-gradient(120% 90% at 50% 20%, #1c2433 0%, #0b0e14 70%)",
-        display: "grid",
-        placeItems: "center"
-      }}
-    >
+    <AbsoluteFill style={{ display: "grid", placeItems: "center" }}>
       <div
         style={{
           maxWidth: width * 0.7,
           textAlign: "center",
-          fontFamily: "Inter, Arial, sans-serif",
-          color: "rgba(255,255,255,0.55)",
-          fontWeight: 800,
-          fontSize: Math.round(height * 0.024),
-          lineHeight: 1.4
+          fontFamily: FONTS.sans,
+          color: INK.muted,
+          fontWeight: 600,
+          fontSize: Math.round(height * 0.022),
+          lineHeight: 1.5
         }}
       >
-        No base footage.
+        No scenes and no base footage.
         <br />
-        Drop your talking-head clip into public/base/ and set base.src in the timeline.
+        Author scenes[] in the timeline, or drop a clip into public/base/.
       </div>
     </AbsoluteFill>
   );
@@ -90,7 +85,7 @@ function SfxLayer({ events, scenes, fps }) {
         ))}
       {scenes.slice(1).map((scene) => (
         <Sequence key={`cut-${scene.id}`} from={Math.round(scene.start * fps)} durationInFrames={Math.round(fps * 1.5)}>
-          <Html5Audio src={staticFile("sfx/whoosh.wav")} volume={0.5} />
+          <Html5Audio src={staticFile("sfx/whoosh.wav")} volume={0.45} />
         </Sequence>
       ))}
     </>

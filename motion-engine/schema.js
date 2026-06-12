@@ -6,10 +6,19 @@ export const MOTION_TIMELINE_VERSION = "motion.timeline.v1";
 
 export const EVENT_TYPES = new Set(["punch_zoom", "logo_pop"]);
 
-export const SCENE_TYPES = new Set(["talking_head", "screen", "console", "steps", "flow"]);
+export const SCENE_TYPES = new Set([
+  "talking_head",
+  "screen",
+  "typography",
+  "prompt_card",
+  "screenshot_pile",
+  "icon_flow",
+  "card_steps"
+]);
 
-// Art direction: no scene may sit on screen longer than this.
-export const MAX_SCENE_SECONDS = 5;
+// Art direction: scenes persist while builds run inside them, but nothing
+// should sit past this without transforming.
+export const MAX_SCENE_SECONDS = 6;
 export const MIN_SCENE_SECONDS = 0.8;
 
 export const DEFAULT_SFX = {
@@ -118,18 +127,28 @@ function normalizeScene(scene, index, errors) {
       offset: scene?.offset === undefined ? (type === "talking_head" ? start : 0) : Number(scene.offset)
     };
   }
-  if (type === "console") {
-    const lines = Array.isArray(scene?.lines) ? scene.lines.map((line) => String(line)) : [];
-    if (!lines.length) errors.push(`scenes[${index}] (console) requires lines — captured output, never invented`);
-    return { ...base, title: String(scene?.title ?? ""), lines };
+  if (type === "prompt_card") {
+    if (!scene?.text) errors.push(`scenes[${index}] (prompt_card) requires text — the real prompt, never invented`);
+    return { ...base, text: String(scene?.text ?? "") };
   }
-  if (type === "steps" || type === "flow") {
-    const raw = Array.isArray(scene?.items) ? scene.items : Array.isArray(scene?.nodes) ? scene.nodes : [];
+  if (type === "typography" || type === "icon_flow" || type === "card_steps" || type === "screenshot_pile") {
+    const raw = Array.isArray(scene?.items) ? scene.items : [];
     if (!raw.length) errors.push(`scenes[${index}] (${type}) requires items`);
-    const items = raw.map((item, itemIndex) => ({
-      text: String(item?.text ?? item?.label ?? ""),
-      at: clampNumber(item?.at, start, end, start + itemIndex * 0.8)
-    }));
+    const items = raw.map((item, itemIndex) => {
+      const entry = {
+        text: String(item?.text ?? item?.label ?? ""),
+        at: clampNumber(item?.at, start, end, start + itemIndex * 0.8)
+      };
+      if (item?.emphasis) entry.emphasis = true;
+      if (item?.color) entry.color = String(item.color);
+      if (item?.src) entry.src = String(item.src);
+      return entry;
+    });
+    if (type === "screenshot_pile") {
+      items.forEach((item, itemIndex) => {
+        if (!item.src) errors.push(`scenes[${index}] (screenshot_pile) items[${itemIndex}] requires src — real screenshots only`);
+      });
+    }
     return { ...base, title: String(scene?.title ?? ""), items };
   }
   return base;

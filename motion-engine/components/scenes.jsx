@@ -1,20 +1,16 @@
 import React from "react";
-import { AbsoluteFill, OffthreadVideo, Sequence, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Img, OffthreadVideo, Sequence, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { Card } from "./paper.jsx";
+import { CARD, FONTS, INK, SEMANTIC, SPRINGS } from "../theme.js";
 
-const INK = "#fafafa";
-const MUTED = "rgba(255,255,255,0.64)";
-const ACCENT = "#ffd60a";
-const GREEN = "#22c55e";
-const GROUND = "radial-gradient(120% 90% at 50% 20%, #10141c 0%, #0b0e14 70%)";
-const CUT_SETTLE = { damping: 13, stiffness: 240, mass: 0.8 };
-const BUILD_IN = { damping: 12, stiffness: 250, mass: 0.7 };
-
-// The visual base: scenes butt-joined on the global clock, each entering with
-// a hard cut + scale settle. Voice runs underneath, unbroken.
+// Scene track for the paper-world grammar: scenes butt-joined on the global
+// clock; the paper ground persists underneath (rendered by MotionLayer).
+// Hard cuts are rare in this grammar — most life comes from builds inside
+// each scene, so the shell settle is gentler than a punch.
 export function SceneTrack({ scenes, width, height }) {
   const { fps } = useVideoConfig();
   return (
-    <AbsoluteFill style={{ background: GROUND }}>
+    <AbsoluteFill>
       {scenes.map((scene, index) => (
         <Sequence
           key={scene.id}
@@ -31,80 +27,87 @@ export function SceneTrack({ scenes, width, height }) {
 }
 
 function Scene({ scene, width, height }) {
-  if (scene.type === "talking_head" || scene.type === "screen") {
-    return <FootageScene scene={scene} />;
-  }
-  if (scene.type === "console") return <ConsoleScene scene={scene} width={width} height={height} />;
-  if (scene.type === "steps") return <StepsScene scene={scene} width={width} height={height} />;
-  if (scene.type === "flow") return <FlowScene scene={scene} width={width} height={height} />;
+  if (scene.type === "talking_head" || scene.type === "screen") return <FootageScene scene={scene} width={width} height={height} />;
+  if (scene.type === "typography") return <TypographyScene scene={scene} width={width} height={height} />;
+  if (scene.type === "prompt_card") return <PromptCardScene scene={scene} width={width} height={height} />;
+  if (scene.type === "icon_flow") return <IconFlowScene scene={scene} width={width} height={height} />;
+  if (scene.type === "card_steps") return <CardStepsScene scene={scene} width={width} height={height} />;
+  if (scene.type === "screenshot_pile") return <ScreenshotPileScene scene={scene} width={width} height={height} />;
   return null;
 }
 
-// Hard cut + settle: incoming scene starts at 107% with a breath of rotateX
-// and springs to rest. Subliminal depth, not architecture.
 function SceneShell({ settle, children }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const enter = settle ? spring({ frame, fps, config: CUT_SETTLE }) : 1;
+  const enter = settle ? spring({ frame, fps, config: SPRINGS.settle }) : 1;
   return (
-    <AbsoluteFill
-      style={{
-        transform: `perspective(1200px) rotateX(${(1 - enter) * 2.5}deg) scale(${1.07 - enter * 0.07})`,
-        transformOrigin: "50% 45%"
-      }}
-    >
+    <AbsoluteFill style={{ transform: `scale(${1.04 - enter * 0.04})`, transformOrigin: "50% 45%" }}>
       {children}
     </AbsoluteFill>
   );
 }
 
-// Footage is always muted here — the continuous voice track owns the audio.
-function FootageScene({ scene }) {
-  const frame = useCurrentFrame();
+// Talking head plays full-bleed (the hook/CTA pattern); screen recordings sit
+// in a big card on the paper like every other object.
+function FootageScene({ scene, width, height }) {
   const { fps } = useVideoConfig();
-  const drift = scene.type === "screen" ? 1 + Math.min(frame / fps, 5) * 0.006 : 1;
-  return (
+  const video = (
     <OffthreadVideo
       muted
       src={resolveSrc(scene.src)}
       trimBefore={Math.round((scene.offset ?? 0) * fps)}
-      style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${drift})` }}
+      style={{ width: "100%", height: "100%", objectFit: "cover" }}
     />
+  );
+  if (scene.type === "talking_head") {
+    return <AbsoluteFill>{video}</AbsoluteFill>;
+  }
+  return (
+    <AbsoluteFill style={{ display: "grid", placeItems: "center", padding: `${height * 0.1}px ${width * 0.06}px` }}>
+      <Card elevation="high" style={{ width: "100%", aspectRatio: "9 / 14", maxHeight: "100%" }}>{video}</Card>
+    </AbsoluteFill>
   );
 }
 
-// Real captured output, restyled: type-on lines, blinking block cursor.
-function ConsoleScene({ scene, width, height }) {
+const WORD_ROTATIONS = [-3, 2, -2, 3, -1, 2.5];
+const WORD_OFFSETS = [0, 0.06, -0.04, 0.08, -0.06, 0.03];
+
+// Spoken phrases staged center-frame: chunky serif statements, script-italic
+// emotional words, staggered baselines, key word oversized and colored.
+function TypographyScene({ scene, width, height }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const seconds = frame / fps;
-  const sceneLength = scene.end - scene.start;
-  const lineBudget = Math.max(0.5, (sceneLength - 0.6) / scene.lines.length);
-  const fontSize = Math.round(height * 0.026);
+  const base = Math.round(height * 0.045);
   return (
-    <AbsoluteFill style={{ background: GROUND, padding: `${height * 0.14}px ${width * 0.07}px` }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: height * 0.03 }}>
-        {["#f9736b", "#f5b84b", GREEN].map((color) => (
-          <div key={color} style={{ width: 13, height: 13, borderRadius: 999, background: color }} />
-        ))}
-        {scene.title ? (
-          <div style={{ marginLeft: 10, fontFamily: "Inter, Arial, sans-serif", fontSize: height * 0.016, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: MUTED }}>
-            {scene.title}
-          </div>
-        ) : null}
-      </div>
-      <div style={{ fontFamily: "Menlo, Consolas, monospace", fontSize, lineHeight: 1.7 }}>
-        {scene.lines.map((line, index) => {
-          const lineStart = 0.3 + index * lineBudget;
-          const progress = clamp((seconds - lineStart) / Math.max(0.25, lineBudget * 0.7));
-          if (progress <= 0) return null;
-          const isCommand = line.startsWith("$");
-          const visible = line.slice(0, Math.ceil(line.length * progress));
+    <AbsoluteFill style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", padding: `0 ${width * 0.1}px` }}>
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", alignItems: "baseline", rowGap: base * 0.1, columnGap: base * 0.45, maxWidth: width * 0.84 }}>
+        {scene.items.map((item, index) => {
+          const localFrame = frame - (item.at - scene.start) * fps;
+          if (localFrame < 0) return null;
+          const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
+          const emphasised = Boolean(item.emphasis);
+          const size = emphasised ? base * 1.9 : base;
           return (
-            <div key={index} style={{ color: isCommand ? GREEN : MUTED, fontWeight: isCommand ? 700 : 500, whiteSpace: "pre-wrap" }}>
-              {visible}
-              {progress < 1 ? <Cursor fontSize={fontSize} /> : null}
-            </div>
+            <span
+              key={index}
+              style={{
+                display: "inline-block",
+                fontFamily: emphasised ? FONTS.script : FONTS.serif,
+                fontStyle: emphasised ? "italic" : "normal",
+                fontWeight: 900,
+                fontSize: size,
+                lineHeight: 1.04,
+                color: item.color ? semanticColor(item.color) : INK.primary,
+                transform: [
+                  `rotate(${WORD_ROTATIONS[index % WORD_ROTATIONS.length]}deg)`,
+                  `translateY(${WORD_OFFSETS[index % WORD_OFFSETS.length] * base + (1 - enter) * base * 0.6}px)`,
+                  `scale(${0.7 + enter * 0.3})`
+                ].join(" "),
+                opacity: Math.min(1, enter * 1.5)
+              }}
+            >
+              {item.text}
+            </span>
           );
         })}
       </div>
@@ -112,93 +115,92 @@ function ConsoleScene({ scene, width, height }) {
   );
 }
 
-function Cursor({ fontSize }) {
+// Dark chat-input card with the real prompt typing on. For AI tools the
+// prompt IS the console.
+function PromptCardScene({ scene, width, height }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const on = Math.floor((frame / fps) * 3) % 2 === 0;
+  const seconds = frame / fps;
+  const sceneLength = scene.end - scene.start;
+  const enter = spring({ frame, fps, config: SPRINGS.enter });
+  const typeProgress = clamp((seconds - 0.35) / Math.max(0.6, sceneLength - 1.1));
+  const text = scene.text.slice(0, Math.ceil(scene.text.length * typeProgress));
+  const fontSize = Math.round(height * 0.026);
   return (
-    <span style={{ display: "inline-block", width: fontSize * 0.55, height: fontSize * 1.1, marginLeft: 2, verticalAlign: "text-bottom", background: on ? GREEN : "transparent" }} />
-  );
-}
-
-// Numbered cards landing on the spoken word that names them.
-function StepsScene({ scene, width, height }) {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const fontSize = Math.round(height * 0.032);
-  return (
-    <AbsoluteFill style={{ background: GROUND, padding: `${height * 0.14}px ${width * 0.08}px`, display: "flex", flexDirection: "column", justifyContent: "center", gap: height * 0.03 }}>
-      {scene.title ? <SceneTitle title={scene.title} height={height} /> : null}
-      {scene.items.map((item, index) => {
-        const localFrame = frame - (item.at - scene.start) * fps;
-        if (localFrame < 0) return null;
-        const enter = spring({ frame: localFrame, fps, config: BUILD_IN });
-        return (
-          <div
-            key={index}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: width * 0.045,
-              // Tilt in from the top edge, settle flat.
-              transform: `perspective(1000px) rotateX(${(1 - enter) * 55}deg) translateX(${(1 - enter) * width * 0.08}px)`,
-              transformOrigin: "50% 0%",
-              opacity: Math.min(1, enter * 1.4)
-            }}
-          >
-            <div style={{ fontFamily: "Inter, Arial, sans-serif", fontWeight: 900, fontSize: fontSize * 2.2, lineHeight: 1, color: ACCENT, minWidth: fontSize * 2.4 }}>
-              {index + 1}
-            </div>
-            <div style={{ fontFamily: "Inter, Arial, sans-serif", fontWeight: 850, fontSize, lineHeight: 1.15, color: INK }}>
-              {item.text}
-            </div>
+    <AbsoluteFill style={{ display: "grid", placeItems: "center", padding: `0 ${width * 0.07}px` }}>
+      <div style={{ width: "100%", transform: `translateY(${(1 - enter) * height * 0.06}px)`, opacity: Math.min(1, enter * 1.4) }}>
+        <Card
+          dark
+          radius={36}
+          elevation="high"
+          style={{ width: "100%", padding: `${fontSize * 1.3}px ${fontSize * 1.5}px`, boxShadow: `${CARD.shadowHigh}, 0 0 70px rgba(79,174,133,0.35)` }}
+        >
+          <div style={{ fontFamily: FONTS.sans, fontWeight: 600, fontSize, lineHeight: 1.5, color: SEMANTIC.mint, minHeight: fontSize * 4.5 }}>
+            &ldquo;{text}
+            <Caret fontSize={fontSize} />
           </div>
-        );
-      })}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: fontSize * 0.9 }}>
+            <div style={{ color: INK.onDarkMuted, fontSize: fontSize * 1.4, fontWeight: 300, lineHeight: 1 }}>+</div>
+            <Mic size={fontSize} />
+          </div>
+        </Card>
+      </div>
     </AbsoluteFill>
   );
 }
 
-// Vertical pipeline: node, arrow, node — each springing in on its word.
-function FlowScene({ scene, width, height }) {
+function Caret({ fontSize }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const fontSize = Math.round(height * 0.028);
-  const lastIndex = scene.items.length - 1;
+  const on = Math.floor((frame / fps) * 2.6) % 2 === 0;
+  return <span style={{ display: "inline-block", width: 2.5, height: fontSize, marginLeft: 3, verticalAlign: "text-bottom", background: on ? SEMANTIC.mint : "transparent" }} />;
+}
+
+function Mic({ size }) {
   return (
-    <AbsoluteFill style={{ background: GROUND, padding: `${height * 0.13}px ${width * 0.1}px`, display: "flex", flexDirection: "column", justifyContent: "center", gap: height * 0.012 }}>
-      {scene.title ? <SceneTitle title={scene.title} height={height} /> : null}
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+      <div style={{ width: size * 0.55, height: size * 0.9, borderRadius: 999, border: `2px solid ${INK.onDarkMuted}` }} />
+      <div style={{ width: size * 0.9, height: size * 0.35, borderBottom: `2px solid ${INK.onDarkMuted}`, borderLeft: `2px solid ${INK.onDarkMuted}`, borderRight: `2px solid ${INK.onDarkMuted}`, borderRadius: "0 0 999px 999px" }} />
+    </div>
+  );
+}
+
+// Brand icons as characters: black rounded squares with the glyph, connected
+// by a dotted line that draws in as each node lands.
+function IconFlowScene({ scene, width, height }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const iconSize = Math.round(width * 0.24);
+  const labelSize = Math.round(height * 0.034);
+  return (
+    <AbsoluteFill style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: 0 }}>
       {scene.items.map((item, index) => {
         const localFrame = frame - (item.at - scene.start) * fps;
         if (localFrame < 0) return null;
-        const enter = spring({ frame: localFrame, fps, config: BUILD_IN });
-        const isLast = index === lastIndex;
+        const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
         return (
           <React.Fragment key={index}>
             {index > 0 ? (
-              <div style={{ alignSelf: "center", color: MUTED, fontSize: fontSize * 0.9, fontWeight: 900, opacity: Math.min(1, enter * 1.4), transform: `scaleY(${enter})` }}>
-                ↓
-              </div>
+              <div
+                style={{
+                  width: 0,
+                  height: height * 0.045,
+                  borderLeft: `3.5px dashed ${INK.primary}`,
+                  opacity: Math.min(1, enter * 1.4),
+                  transform: `scaleY(${enter})`,
+                  transformOrigin: "top"
+                }}
+              />
             ) : null}
-            <div
-              style={{
-                alignSelf: "center",
-                minWidth: width * 0.5,
-                textAlign: "center",
-                padding: `${fontSize * 0.55}px ${fontSize * 1.1}px`,
-                borderRadius: 16,
-                border: `3px solid ${isLast ? ACCENT : "rgba(255,255,255,0.22)"}`,
-                background: isLast ? "rgba(255,214,10,0.12)" : "rgba(255,255,255,0.05)",
-                fontFamily: "Inter, Arial, sans-serif",
-                fontWeight: 850,
-                fontSize,
-                color: isLast ? ACCENT : INK,
-                transform: `perspective(1000px) rotateX(${(1 - enter) * 40}deg) scale(${0.7 + enter * 0.3})`,
-                transformOrigin: "50% 100%",
-                opacity: Math.min(1, enter * 1.4)
-              }}
-            >
-              {item.text}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: labelSize * 0.4, transform: `scale(${0.6 + enter * 0.4})`, opacity: Math.min(1, enter * 1.5) }}>
+              {item.src ? (
+                <Card dark radius={iconSize * 0.24} elevation="mid" style={{ width: iconSize, height: iconSize, display: "grid", placeItems: "center", padding: iconSize * 0.2 }}>
+                  <Img src={resolveSrc(item.src)} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                </Card>
+              ) : null}
+              <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: labelSize, color: item.color ? semanticColor(item.color) : INK.primary, transform: `rotate(${WORD_ROTATIONS[index % WORD_ROTATIONS.length] * 0.6}deg)` }}>
+                {item.text}
+              </div>
             </div>
           </React.Fragment>
         );
@@ -207,22 +209,88 @@ function FlowScene({ scene, width, height }) {
   );
 }
 
-function SceneTitle({ title, height }) {
+// Small white cards with mint indices stacking into a list/funnel.
+function CardStepsScene({ scene, width, height }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const fontSize = Math.round(height * 0.028);
   return (
-    <div
-      style={{
-        fontFamily: "Inter, Arial, sans-serif",
-        fontWeight: 900,
-        fontSize: Math.round(height * 0.02),
-        textTransform: "uppercase",
-        letterSpacing: "0.12em",
-        color: MUTED,
-        marginBottom: height * 0.015
-      }}
-    >
-      {title}
-    </div>
+    <AbsoluteFill style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: height * 0.022, padding: `0 ${width * 0.1}px` }}>
+      {scene.title ? (
+        <div style={{ fontFamily: FONTS.script, fontStyle: "italic", fontWeight: 900, fontSize: fontSize * 1.5, color: INK.primary, marginBottom: height * 0.012, transform: "rotate(-2deg)" }}>
+          {scene.title}
+        </div>
+      ) : null}
+      {scene.items.map((item, index) => {
+        const localFrame = frame - (item.at - scene.start) * fps;
+        if (localFrame < 0) return null;
+        const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
+        const tilt = WORD_ROTATIONS[index % WORD_ROTATIONS.length] * 0.4;
+        return (
+          <div key={index} style={{ width: "100%", transform: `translateY(${(1 - enter) * height * 0.05}px) rotate(${tilt}deg)`, opacity: Math.min(1, enter * 1.5) }}>
+            <Card elevation="low" radius={20} style={{ display: "flex", alignItems: "center", gap: fontSize, padding: `${fontSize * 0.75}px ${fontSize * 1.1}px` }}>
+              <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: fontSize * 1.5, color: SEMANTIC.mint, minWidth: fontSize * 1.4, lineHeight: 1 }}>
+                {index + 1}
+              </div>
+              <div style={{ fontFamily: FONTS.sans, fontWeight: 800, fontSize, lineHeight: 1.2, color: INK.primary }}>{item.text}</div>
+            </Card>
+          </div>
+        );
+      })}
+    </AbsoluteFill>
   );
+}
+
+const PILE_SLOTS = [
+  { x: 0, y: 0, rot: 0, scale: 1 },
+  { x: -0.18, y: -0.08, rot: -7, scale: 0.82 },
+  { x: 0.19, y: 0.07, rot: 6, scale: 0.86 },
+  { x: 0.14, y: -0.16, rot: 4, scale: 0.74 },
+  { x: -0.16, y: 0.15, rot: -5, scale: 0.78 },
+  { x: 0.02, y: 0.2, rot: 2, scale: 0.7 }
+];
+
+// One real screenshot lands, then copies fan out behind and around it.
+function ScreenshotPileScene({ scene, width, height }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const cardWidth = width * 0.62;
+  return (
+    <AbsoluteFill style={{ display: "grid", placeItems: "center" }}>
+      <div style={{ position: "relative", width: cardWidth, height: cardWidth * 1.4 }}>
+        {scene.items.map((item, index) => {
+          const slot = PILE_SLOTS[index % PILE_SLOTS.length];
+          const localFrame = frame - (item.at - scene.start) * fps;
+          if (localFrame < 0) return null;
+          const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
+          return (
+            <div
+              key={index}
+              style={{
+                position: "absolute",
+                inset: 0,
+                zIndex: 100 - index,
+                transform: [
+                  `translate(${slot.x * cardWidth * enter}px, ${slot.y * cardWidth * enter + (1 - enter) * height * 0.06}px)`,
+                  `rotate(${slot.rot * enter}deg)`,
+                  `scale(${slot.scale * (0.8 + enter * 0.2)})`
+                ].join(" "),
+                opacity: Math.min(1, enter * 1.5)
+              }}
+            >
+              <Card elevation={index === 0 ? "high" : "mid"} radius={18} style={{ width: "100%", height: "100%" }}>
+                <Img src={resolveSrc(item.src)} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }} />
+              </Card>
+            </div>
+          );
+        })}
+      </div>
+    </AbsoluteFill>
+  );
+}
+
+function semanticColor(name) {
+  return SEMANTIC[name] ?? name;
 }
 
 function resolveSrc(src) {
