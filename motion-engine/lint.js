@@ -27,6 +27,9 @@ export function lintTimeline(timeline, { direction = null, assets = [] } = {}) {
 function sceneActivityTimes(scene) {
   const times = [scene.start];
   for (const item of scene.items ?? []) times.push(item.at);
+  if (scene.type === "stat_counter" || scene.type === "quote_card") {
+    times.push(scene.at, scene.at + 1.0);
+  }
   return times;
 }
 
@@ -127,6 +130,9 @@ function checkDirectionHonored(timeline, direction, failures) {
       const present = tokens.length ? tokens.filter((token) => haystack.includes(token)).length / tokens.length >= 0.5 : haystack.includes(needle);
       if (!present) failures.push(`direction not honored: "${text}" does not appear in any scene`);
     }
+  }
+  if ((direction.chapters ?? []).length >= 2 && !(timeline.chapters ?? []).length) {
+    failures.push("direction not honored: chapters were requested but the timeline has no chapter rail");
   }
   for (const ref of direction.asset_refs ?? []) {
     const base = String(ref.path).split("/").pop();

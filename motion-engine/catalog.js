@@ -8,7 +8,7 @@ export const SCENE_CATALOG = [
   {
     type: "talking_head",
     use_for:
-      "The hook (first scene) and credibility/CTA beats when real presenter footage exists. Default layout 'split' puts the face in the bottom half with word builds staging on the paper above; 'full' is full-bleed (hook only); 'card' parks the face in a tilted card beside content.",
+      "The hook (first scene) and credibility/CTA beats when real presenter footage exists. Default layout 'split' puts the face in the bottom half with word builds staging on the paper above; 'full' is full-bleed (hook only); 'card' parks the face in a tilted card beside content; 'overlay' is full-bleed footage with word builds landing directly ON it in white serif (words-on-footage).",
     avoid_when: "No real footage is available — never fabricate footage. Don't let face scenes dominate; the graphics are the protagonist.",
     params:
       '{ "type": "talking_head", "start", "end", "src": "<real footage path>", "layout": "split|card|full", "items": [{"text", "at", "emphasis?", "color?"}] }',
@@ -65,6 +65,23 @@ export const SCENE_CATALOG = [
     density: "One chip + click SFX per item.",
     example: { type: "card_steps", start: 8.4, end: 11.1, items: [{ text: "Script with timing", at: 8.45 }, { text: "Matched visuals", at: 9.4 }] }
   }
+,
+  {
+    type: "stat_counter",
+    use_for: "One oversized number rolling up to its value (87%, 10x, $2,000) with a short label beneath. Magnitudes, social proof, payoffs. The number is the only thing on screen.",
+    avoid_when: "The number is invented - only numbers stated in the script/subject. More than one stat (that is two scenes).",
+    params: '{ "type": "stat_counter", "start", "end", "value": "87%", "label": "short context line", "color?": "mint|coral|purple", "at": word_start_of_the_number }',
+    density: "Roll-up animates ~1s from at; keep the scene 2-3s.",
+    example: { type: "stat_counter", start: 12, end: 14.5, value: "10x", label: "faster than editing by hand", color: "mint", at: 12.3 }
+  },
+  {
+    type: "quote_card",
+    use_for: "A principle, rule, or testimonial staged as a white card with a serif quote and muted attribution. Education takeaways, personal-brand maxims.",
+    avoid_when: "Quotes longer than ~16 words; fabricated attributions.",
+    params: '{ "type": "quote_card", "start", "end", "text": "the quote", "attribution?": "who said it", "at": word_start }',
+    density: "Single landing; keep the scene 2.5-4s and pair with a punch_zoom if it runs long.",
+    example: { type: "quote_card", start: 30, end: 33, text: "Ship the proof, not the promise.", attribution: "every good launch", at: 30.2 }
+  }
 ];
 
 export const EVENT_CATALOG = [
@@ -95,5 +112,5 @@ export function renderCatalog() {
   ).join("\n\n");
   const events = EVENT_CATALOG.map((entry) => `### ${entry.type}\nUSE FOR: ${entry.use_for}\nPARAMS: ${entry.params}`).join("\n\n");
   const transitions = TRANSITION_CATALOG.map((entry) => `- ${entry.type}: ${entry.use_for}`).join("\n");
-  return `## Scene types\n\n${scenes}\n\n## Overlay events\n\n${events}\n\n## Transitions (scene.transition = how a scene ENTERS)\n${transitions}`;
+  return `## Scene types\n\n${scenes}\n\n## Overlay events\n\n${events}\n\n## Transitions (scene.transition = how a scene ENTERS)\n${transitions}\n\n## Timeline-level: chapters\nOptional persistent progress rail across the top: "chapters": [{"title": "Intro", "at": 0}, ...] (2-6 entries, short titles, at = chapter start time). Use for listicles, multi-step education, and any video with named sections. Omit for single-thought videos.`;
 }

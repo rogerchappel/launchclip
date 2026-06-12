@@ -127,6 +127,8 @@ function Scene({ scene, width, height, travelled = false }) {
   if (scene.type === "icon_flow") return <IconFlowScene scene={scene} width={width} height={height} />;
   if (scene.type === "card_steps") return <CardStepsScene scene={scene} width={width} height={height} />;
   if (scene.type === "screenshot_pile") return <ScreenshotPileScene scene={scene} width={width} height={height} />;
+  if (scene.type === "stat_counter") return <StatCounterScene scene={scene} width={width} height={height} />;
+  if (scene.type === "quote_card") return <QuoteCardScene scene={scene} width={width} height={height} />;
   return null;
 }
 
@@ -144,6 +146,17 @@ function TalkingHeadScene({ scene, width, height }) {
   );
   if (scene.layout === "full") {
     return <AbsoluteFill>{video}</AbsoluteFill>;
+  }
+  if (scene.layout === "overlay") {
+    // Words land directly on the footage (the OpenClaw pattern) — white serif
+    // with mint emphasis; a soft scrim keeps them legible.
+    return (
+      <AbsoluteFill>
+        {video}
+        <AbsoluteFill style={{ background: "radial-gradient(100% 60% at 50% 38%, rgba(10,10,8,0.34) 0%, rgba(10,10,8,0) 70%)" }} />
+        <WordBuild scene={scene} width={width} height={height} region={{ top: 0.18, height: 0.45 }} onDark />
+      </AbsoluteFill>
+    );
   }
   if (scene.layout === "card") {
     return (
@@ -185,7 +198,7 @@ const WORD_OFFSETS = [0, 0.06, -0.04, 0.08, -0.06, 0.03];
 
 // Shared word-cadenced type build; TypographyScene centers it full-frame,
 // talking-head layouts stage it in the region above the face.
-function WordBuild({ scene, width, height, region }) {
+function WordBuild({ scene, width, height, region, onDark = false }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   if (!scene.items?.length) return null;
@@ -224,7 +237,8 @@ function WordBuild({ scene, width, height, region }) {
               fontWeight: 900,
               fontSize: size,
               lineHeight: 1.04,
-              color: item.color ? semanticColor(item.color) : INK.primary,
+              color: item.color ? semanticColor(item.color) : onDark ? INK.onDark : INK.primary,
+              textShadow: onDark ? "0 4px 18px rgba(10,10,8,0.55)" : undefined,
               transform: [
                 `rotate(${WORD_ROTATIONS[index % WORD_ROTATIONS.length]}deg)`,
                 `translateY(${WORD_OFFSETS[index % WORD_OFFSETS.length] * base + (1 - enter) * base * 0.6}px)`,
@@ -466,6 +480,68 @@ function ScreenshotPileScene({ scene, width, height }) {
 function entranceBlur(enterNow, enterPrev) {
   const blur = Math.min(5, Math.max(0, enterNow - enterPrev) * 30);
   return blur > 0.4 ? `blur(${blur.toFixed(1)}px)` : undefined;
+}
+
+// One oversized number rolling up to its value, label beneath. The number is
+// the focal element; nothing else shares the frame.
+function StatCounterScene({ scene, width, height }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const localFrame = frame - (scene.at - scene.start) * fps;
+  if (localFrame < 0) return null;
+  const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
+  const roll = spring({ frame: localFrame, fps, config: { damping: 30, stiffness: 60, mass: 1.2 } });
+  const match = scene.value.match(/([\d.,]+)/);
+  let display = scene.value;
+  if (match) {
+    const target = Number(match[1].replace(/,/g, ""));
+    if (Number.isFinite(target)) {
+      const current = target * roll;
+      const rendered = Number.isInteger(target) && target < 1000
+        ? String(Math.round(current))
+        : Math.round(current).toLocaleString("en-US");
+      display = scene.value.replace(match[1], rendered);
+    }
+  }
+  const valueSize = Math.round(height * 0.11);
+  return (
+    <AbsoluteFill style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", gap: height * 0.02, padding: `0 ${width * 0.1}px` }}>
+      <div style={{ fontFamily: FONTS.script, fontStyle: "italic", fontWeight: 900, fontSize: valueSize, lineHeight: 1, color: semanticColor(scene.color), transform: `scale(${0.6 + enter * 0.4}) rotate(-2deg)`, opacity: Math.min(1, enter * 1.5) }}>
+        {display}
+      </div>
+      {scene.label ? (
+        <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: Math.round(height * 0.032), lineHeight: 1.15, color: INK.primary, textAlign: "center", maxWidth: width * 0.8, transform: `translateY(${(1 - enter) * height * 0.02}px)`, opacity: Math.min(1, enter * 1.3) }}>
+          {scene.label}
+        </div>
+      ) : null}
+    </AbsoluteFill>
+  );
+}
+
+// A principle or testimonial on a white card: serif quote, muted attribution.
+function QuoteCardScene({ scene, width, height }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const localFrame = frame - (scene.at - scene.start) * fps;
+  if (localFrame < 0) return null;
+  const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
+  const fontSize = Math.round(height * 0.034);
+  return (
+    <AbsoluteFill style={{ display: "grid", placeItems: "center", padding: `0 ${width * 0.09}px` }}>
+      <div style={{ width: "100%", transform: `translateY(${(1 - enter) * height * 0.05}px) rotate(-1deg)`, opacity: Math.min(1, enter * 1.4), filter: entranceBlur(enter, spring({ frame: localFrame - 1, fps, config: SPRINGS.enter })) }}>
+        <Card elevation="high" radius={26} style={{ padding: `${fontSize * 1.4}px ${fontSize * 1.3}px` }}>
+          <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize, lineHeight: 1.25, color: INK.primary }}>
+            “{scene.text}”
+          </div>
+          {scene.attribution ? (
+            <div style={{ marginTop: fontSize * 0.8, fontFamily: FONTS.sans, fontWeight: 600, fontSize: fontSize * 0.62, color: INK.muted }}>
+              — {scene.attribution}
+            </div>
+          ) : null}
+        </Card>
+      </div>
+    </AbsoluteFill>
+  );
 }
 
 function semanticColor(name) {

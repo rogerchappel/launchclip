@@ -4,6 +4,7 @@ import { cameraAt } from "./camera.js";
 import { LogoPop } from "./components/LogoPop.jsx";
 import { PaperGround } from "./components/paper.jsx";
 import { SceneTrack } from "./components/scenes.jsx";
+import { ChapterRail } from "./components/ChapterRail.jsx";
 import { FONTS, INK } from "./theme.js";
 import { paperOffsetAt } from "./travel.js";
 import { SCENE_SFX } from "./schema.js";
@@ -33,6 +34,8 @@ export function MotionLayer({ timeline, enableSfx = true }) {
           <BaseLayer base={timeline.base} width={width} height={height} />
         )}
       </AbsoluteFill>
+
+      {timeline.chapters?.length ? <ChapterRail chapters={timeline.chapters} width={width} height={height} /> : null}
 
       {timeline.events
         .filter((event) => event.type === "logo_pop")
