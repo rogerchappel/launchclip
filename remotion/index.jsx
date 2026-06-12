@@ -1,6 +1,8 @@
 import React from "react";
 import { Composition, registerRoot } from "remotion";
 import { LaunchclipSocial } from "./social.jsx";
+import { MotionLayer } from "../motion-engine/MotionLayer.jsx";
+import goldenTimeline from "../examples/motion/golden-timeline.json";
 
 const defaultProps = {
   width: 720,
@@ -19,6 +21,7 @@ const defaultProps = {
 
 const Root = () => {
   return (
+    <>
     <Composition
       id="LaunchclipSocial"
       component={LaunchclipSocial}
@@ -37,6 +40,19 @@ const Root = () => {
         };
       }}
     />
+      <Composition
+        id="MotionGolden"
+        component={MotionLayer}
+        durationInFrames={Math.ceil(goldenTimeline.duration_seconds * 30)}
+        fps={30}
+        width={720}
+        height={1280}
+        defaultProps={{ timeline: goldenTimeline, enableSfx: true }}
+        calculateMetadata={({ props }) => ({
+          durationInFrames: Math.max(1, Math.ceil(Number(props.timeline?.duration_seconds ?? 30) * 30))
+        })}
+      />
+    </>
   );
 };
 

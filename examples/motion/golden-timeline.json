@@ -1,0 +1,315 @@
+{
+  "version": "motion.timeline.v1",
+  "duration_seconds": 17.95,
+  "base": {
+    "type": "video",
+    "src": "base/talking-head.mp4"
+  },
+  "audio": {
+    "voiceover": "",
+    "music": "",
+    "music_volume": 0.08
+  },
+  "words": [
+    {
+      "word": "I",
+      "start": 0.4,
+      "end": 0.6,
+      "emphasis": false
+    },
+    {
+      "word": "stopped",
+      "start": 0.66,
+      "end": 1.08,
+      "emphasis": true
+    },
+    {
+      "word": "hand-editing",
+      "start": 1.14,
+      "end": 1.76,
+      "emphasis": false
+    },
+    {
+      "word": "my",
+      "start": 1.82,
+      "end": 2.06,
+      "emphasis": false
+    },
+    {
+      "word": "launch",
+      "start": 2.12,
+      "end": 2.5,
+      "emphasis": false
+    },
+    {
+      "word": "videos.",
+      "start": 2.56,
+      "end": 2.95,
+      "emphasis": false
+    },
+    {
+      "word": "Now",
+      "start": 3.29,
+      "end": 3.57,
+      "emphasis": false
+    },
+    {
+      "word": "my",
+      "start": 3.63,
+      "end": 3.86,
+      "emphasis": false
+    },
+    {
+      "word": "repo",
+      "start": 3.92,
+      "end": 4.23,
+      "emphasis": true
+    },
+    {
+      "word": "makes",
+      "start": 4.29,
+      "end": 4.64,
+      "emphasis": false
+    },
+    {
+      "word": "them",
+      "start": 4.7,
+      "end": 5.02,
+      "emphasis": false
+    },
+    {
+      "word": "for",
+      "start": 5.08,
+      "end": 5.35,
+      "emphasis": false
+    },
+    {
+      "word": "me.",
+      "start": 5.41,
+      "end": 5.65,
+      "emphasis": false
+    },
+    {
+      "word": "One",
+      "start": 5.99,
+      "end": 6.26,
+      "emphasis": true
+    },
+    {
+      "word": "command",
+      "start": 6.32,
+      "end": 6.75,
+      "emphasis": true
+    },
+    {
+      "word": "captures",
+      "start": 6.81,
+      "end": 7.27,
+      "emphasis": false
+    },
+    {
+      "word": "a",
+      "start": 7.33,
+      "end": 7.53,
+      "emphasis": false
+    },
+    {
+      "word": "real",
+      "start": 7.59,
+      "end": 7.9,
+      "emphasis": false
+    },
+    {
+      "word": "demo,",
+      "start": 7.96,
+      "end": 8.27,
+      "emphasis": true
+    },
+    {
+      "word": "writes",
+      "start": 8.45,
+      "end": 8.84,
+      "emphasis": false
+    },
+    {
+      "word": "the",
+      "start": 8.9,
+      "end": 9.17,
+      "emphasis": false
+    },
+    {
+      "word": "script,",
+      "start": 9.23,
+      "end": 9.62,
+      "emphasis": true
+    },
+    {
+      "word": "and",
+      "start": 9.8,
+      "end": 10.08,
+      "emphasis": false
+    },
+    {
+      "word": "renders",
+      "start": 10.14,
+      "end": 10.56,
+      "emphasis": false
+    },
+    {
+      "word": "the",
+      "start": 10.62,
+      "end": 10.9,
+      "emphasis": false
+    },
+    {
+      "word": "short.",
+      "start": 10.96,
+      "end": 11.31,
+      "emphasis": true
+    },
+    {
+      "word": "And",
+      "start": 11.65,
+      "end": 11.92,
+      "emphasis": false
+    },
+    {
+      "word": "the",
+      "start": 11.98,
+      "end": 12.25,
+      "emphasis": false
+    },
+    {
+      "word": "whole",
+      "start": 12.31,
+      "end": 12.66,
+      "emphasis": false
+    },
+    {
+      "word": "packet",
+      "start": 12.72,
+      "end": 13.11,
+      "emphasis": true
+    },
+    {
+      "word": "is",
+      "start": 13.17,
+      "end": 13.41,
+      "emphasis": false
+    },
+    {
+      "word": "reviewable",
+      "start": 13.47,
+      "end": 14.01,
+      "emphasis": true
+    },
+    {
+      "word": "before",
+      "start": 14.07,
+      "end": 14.46,
+      "emphasis": false
+    },
+    {
+      "word": "anything",
+      "start": 14.52,
+      "end": 14.98,
+      "emphasis": false
+    },
+    {
+      "word": "goes",
+      "start": 15.04,
+      "end": 15.35,
+      "emphasis": false
+    },
+    {
+      "word": "live.",
+      "start": 15.41,
+      "end": 15.72,
+      "emphasis": true
+    },
+    {
+      "word": "Link",
+      "start": 16.06,
+      "end": 16.38,
+      "emphasis": false
+    },
+    {
+      "word": "in",
+      "start": 16.44,
+      "end": 16.67,
+      "emphasis": false
+    },
+    {
+      "word": "bio.",
+      "start": 16.73,
+      "end": 17.01,
+      "emphasis": true
+    }
+  ],
+  "events": [
+    {
+      "id": "zoom-hook",
+      "type": "punch_zoom",
+      "start": 0.66,
+      "end": 1.8599999999999999,
+      "sfx": "whoosh.wav",
+      "scale": 1.1,
+      "origin_x": 0.5,
+      "origin_y": 0.42
+    },
+    {
+      "id": "zoom-command",
+      "type": "punch_zoom",
+      "start": 5.99,
+      "end": 7.19,
+      "sfx": "whoosh.wav",
+      "scale": 1.12,
+      "origin_x": 0.44,
+      "origin_y": 0.42
+    },
+    {
+      "id": "logo-demo",
+      "type": "logo_pop",
+      "start": 6.81,
+      "end": 9.01,
+      "sfx": "pop.wav",
+      "src": "logos/terminal.svg",
+      "x": 0.74,
+      "y": 0.27,
+      "size": 0.24,
+      "label": "real demo"
+    },
+    {
+      "id": "logo-render",
+      "type": "logo_pop",
+      "start": 10.14,
+      "end": 12.14,
+      "sfx": "pop.wav",
+      "src": "logos/launchclip.svg",
+      "x": 0.26,
+      "y": 0.27,
+      "size": 0.24,
+      "label": "launchclip"
+    },
+    {
+      "id": "zoom-packet",
+      "type": "punch_zoom",
+      "start": 12.31,
+      "end": 13.41,
+      "sfx": "whoosh.wav",
+      "scale": 1.08,
+      "origin_x": 0.5,
+      "origin_y": 0.42
+    },
+    {
+      "id": "zoom-cta",
+      "type": "punch_zoom",
+      "start": 16.06,
+      "end": 17.459999999999997,
+      "sfx": "whoosh.wav",
+      "scale": 1.14,
+      "origin_x": 0.5,
+      "origin_y": 0.38
+    }
+  ]
+}
