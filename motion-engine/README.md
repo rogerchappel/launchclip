@@ -13,6 +13,10 @@ Event-timeline motion graphics over real footage. This package is the lab for th
 4. **Every event makes a sound.** SFX are bound to event types (`DEFAULT_SFX`), ducked under voiceover.
 5. **One focal element at a time.** Density caps are enforced in the schema, not the prompt.
 
+## Structure
+
+The visual base is a **scene track** (`scenes[]`): talking_head, screen, console, steps, flow — voice continuous, vision cutting every 2–5s. Events overlay scenes. See [ART_DIRECTION.md](ART_DIRECTION.md) for the full grammar, layout, color, motion, and sound rules; the schema enforces the hard ones (scene length caps, footage-requires-src, zoom-near-cut warnings).
+
 ## Event types (v1)
 
 | type | params | feel |

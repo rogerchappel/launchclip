@@ -3,6 +3,7 @@ import { AbsoluteFill, Html5Audio, OffthreadVideo, Sequence, staticFile, useCurr
 import { cameraAt } from "./camera.js";
 import { KineticCaption } from "./components/KineticCaption.jsx";
 import { LogoPop } from "./components/LogoPop.jsx";
+import { SceneTrack } from "./components/scenes.jsx";
 
 // Renders a motion.timeline.v1 document: real base footage, whole-canvas
 // punch-zoom camera, word-timed captions, asset pop-ins, and an SFX layer.
@@ -20,7 +21,11 @@ export function MotionLayer({ timeline, enableSfx = true }) {
           transformOrigin: `${camera.originX * 100}% ${camera.originY * 100}%`
         }}
       >
-        <BaseLayer base={timeline.base} width={width} height={height} />
+        {timeline.scenes?.length ? (
+          <SceneTrack scenes={timeline.scenes} width={width} height={height} />
+        ) : (
+          <BaseLayer base={timeline.base} width={width} height={height} />
+        )}
       </AbsoluteFill>
 
       {timeline.events
@@ -29,13 +34,13 @@ export function MotionLayer({ timeline, enableSfx = true }) {
           <LogoPop key={event.id} event={event} width={width} height={height} />
         ))}
 
-      <KineticCaption words={timeline.words} width={width} height={height} />
+      <KineticCaption words={timeline.words} scenes={timeline.scenes ?? []} width={width} height={height} />
 
       {timeline.audio?.voiceover ? <Html5Audio src={resolveSrc(timeline.audio.voiceover)} /> : null}
       {timeline.audio?.music ? (
         <Html5Audio src={resolveSrc(timeline.audio.music)} volume={timeline.audio.music_volume ?? 0.08} />
       ) : null}
-      {enableSfx ? <SfxLayer events={timeline.events} fps={fps} /> : null}
+      {enableSfx ? <SfxLayer events={timeline.events} scenes={timeline.scenes ?? []} fps={fps} /> : null}
     </AbsoluteFill>
   );
 }
@@ -71,8 +76,9 @@ function BaseLayer({ base, width, height }) {
   );
 }
 
-// Every event fires its sound at its start frame, ducked under the voiceover.
-function SfxLayer({ events, fps }) {
+// Every event fires its sound at its start frame, and every scene cut after
+// the first fires a whoosh — bound automatically, never authored per-scene.
+function SfxLayer({ events, scenes, fps }) {
   return (
     <>
       {events
@@ -82,6 +88,11 @@ function SfxLayer({ events, fps }) {
             <Html5Audio src={staticFile(`sfx/${event.sfx}`)} volume={0.5} />
           </Sequence>
         ))}
+      {scenes.slice(1).map((scene) => (
+        <Sequence key={`cut-${scene.id}`} from={Math.round(scene.start * fps)} durationInFrames={Math.round(fps * 1.5)}>
+          <Html5Audio src={staticFile("sfx/whoosh.wav")} volume={0.5} />
+        </Sequence>
+      ))}
     </>
   );
 }

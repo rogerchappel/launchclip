@@ -5,12 +5,20 @@ import { chunkWords } from "../schema.js";
 const ACCENT = "#ffd60a";
 const WORD_IN = { damping: 12, stiffness: 260, mass: 0.6 };
 
+const GRAPHIC_SCENES = new Set(["console", "steps", "flow"]);
+
 // One chunk (1-3 words) on screen at a time, each word springing in exactly
 // on its spoken start. Sized for phone legibility: ~6% of height per line.
-export function KineticCaption({ words, width, height }) {
+// Captions exist to caption footage; graphic scenes are the text, so the
+// caption track goes dark while one is on screen.
+export function KineticCaption({ words, scenes = [], width, height }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const now = frame / fps;
+  const inGraphicScene = scenes.some(
+    (scene) => GRAPHIC_SCENES.has(scene.type) && now >= scene.start && now < scene.end
+  );
+  if (inGraphicScene) return null;
   const chunks = chunkWords(words);
   const chunk = chunks.find((entry) => now >= entry.start && now < entry.end + 0.12);
   if (!chunk) return null;

@@ -6,6 +6,12 @@ export const MOTION_TIMELINE_VERSION = "motion.timeline.v1";
 
 export const EVENT_TYPES = new Set(["punch_zoom", "logo_pop"]);
 
+export const SCENE_TYPES = new Set(["talking_head", "screen", "console", "steps", "flow"]);
+
+// Art direction: no scene may sit on screen longer than this.
+export const MAX_SCENE_SECONDS = 5;
+export const MIN_SCENE_SECONDS = 0.8;
+
 export const DEFAULT_SFX = {
   punch_zoom: "whoosh.wav",
   logo_pop: "pop.wav",
@@ -36,15 +42,110 @@ export function validateTimeline(input) {
   checkOverlaps(events, errors);
 
   const base = normalizeBase(input.base);
+  const scenes = normalizeScenes(input.scenes, duration, errors, warnings);
+  checkZoomsNearCuts(events, scenes, warnings);
   const timeline = {
     version: MOTION_TIMELINE_VERSION,
     duration_seconds: duration,
     base,
+    scenes,
     audio: normalizeAudio(input.audio),
     words,
     events
   };
   return { ok: errors.length === 0, errors, warnings, timeline };
+}
+
+// The visual base is a track of scenes; voice runs continuously underneath.
+// When scenes are absent the renderer falls back to `base` for the full run.
+function normalizeScenes(scenes, duration, errors, warnings) {
+  if (scenes === undefined || scenes === null) return [];
+  if (!Array.isArray(scenes)) {
+    errors.push("scenes must be an array");
+    return [];
+  }
+  const normalized = scenes
+    .map((scene, index) => normalizeScene(scene, index, errors))
+    .filter(Boolean)
+    .sort((a, b) => a.start - b.start);
+
+  normalized.forEach((scene, index) => {
+    const length = scene.end - scene.start;
+    if (length > MAX_SCENE_SECONDS) {
+      warnings.push(`scene "${scene.id}" runs ${length.toFixed(1)}s — art direction caps scenes at ${MAX_SCENE_SECONDS}s; split it`);
+    }
+    if (length < MIN_SCENE_SECONDS) {
+      warnings.push(`scene "${scene.id}" is under ${MIN_SCENE_SECONDS}s — too quick to read`);
+    }
+    const next = normalized[index + 1];
+    if (next && next.start < scene.end - 0.001) {
+      errors.push(`scene "${next.id}" overlaps "${scene.id}"`);
+    }
+    if (next && next.start > scene.end + 0.05) {
+      warnings.push(`gap between scenes "${scene.id}" and "${next.id}" — the placeholder backdrop will show`);
+    }
+  });
+  if (normalized.length) {
+    if (normalized[0].start > 0.05) warnings.push("first scene starts late — placeholder will show at t=0");
+    const last = normalized[normalized.length - 1];
+    if (Number.isFinite(duration) && last.end < duration - 0.25) {
+      warnings.push("scenes end before the video does — placeholder will show at the tail");
+    }
+  }
+  return normalized;
+}
+
+function normalizeScene(scene, index, errors) {
+  const type = String(scene?.type ?? "");
+  if (!SCENE_TYPES.has(type)) {
+    errors.push(`scenes[${index}] has unknown type "${type}"`);
+    return null;
+  }
+  const start = Number(scene?.start);
+  const end = Number(scene?.end);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    errors.push(`scenes[${index}] (${type}) has invalid timing`);
+    return null;
+  }
+  const base = { id: String(scene?.id ?? `${type}-${index}`), type, start, end };
+  if (type === "talking_head" || type === "screen") {
+    if (!scene?.src) errors.push(`scenes[${index}] (${type}) requires src — footage scenes must be real recordings`);
+    return {
+      ...base,
+      src: String(scene?.src ?? ""),
+      // Footage offset within the source file; talking_head defaults to the
+      // global clock so one continuous take stays in sync with its own audio.
+      offset: scene?.offset === undefined ? (type === "talking_head" ? start : 0) : Number(scene.offset)
+    };
+  }
+  if (type === "console") {
+    const lines = Array.isArray(scene?.lines) ? scene.lines.map((line) => String(line)) : [];
+    if (!lines.length) errors.push(`scenes[${index}] (console) requires lines — captured output, never invented`);
+    return { ...base, title: String(scene?.title ?? ""), lines };
+  }
+  if (type === "steps" || type === "flow") {
+    const raw = Array.isArray(scene?.items) ? scene.items : Array.isArray(scene?.nodes) ? scene.nodes : [];
+    if (!raw.length) errors.push(`scenes[${index}] (${type}) requires items`);
+    const items = raw.map((item, itemIndex) => ({
+      text: String(item?.text ?? item?.label ?? ""),
+      at: clampNumber(item?.at, start, end, start + itemIndex * 0.8)
+    }));
+    return { ...base, title: String(scene?.title ?? ""), items };
+  }
+  return base;
+}
+
+// The cut is already the accent — zooms hugging a boundary double-hit.
+function checkZoomsNearCuts(events, scenes, warnings) {
+  if (!scenes.length) return;
+  for (const event of events) {
+    if (event.type !== "punch_zoom") continue;
+    for (const scene of scenes) {
+      if (Math.abs(event.start - scene.start) < 0.5 && event.start !== scene.start) {
+        warnings.push(`punch_zoom "${event.id}" lands within 0.5s of the cut into "${scene.id}" — move it or drop it`);
+      }
+    }
+  }
 }
 
 function normalizeBase(base) {
