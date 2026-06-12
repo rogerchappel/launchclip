@@ -2,7 +2,6 @@
 // contract enforced in code — schema (validateTimeline), taste (lintTimeline),
 // and a repair loop that feeds failures back. See motion-engine/DIRECTOR.md.
 
-import Anthropic from "@anthropic-ai/sdk";
 import { existsSync, readdirSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -286,6 +285,9 @@ export function scanAssets(extraDir = null) {
 // [--duration 45] [--music music/bed.mp3] [--no-render]
 export async function runDirect(out, flags = {}) {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
+  // Lazy import keeps the SDK an optional dependency: the linter, catalog,
+  // and estimator stay usable (and testable) without it installed.
+  const { default: Anthropic } = await import("@anthropic-ai/sdk");
   const client = new Anthropic();
   const log = (message) => process.stderr.write(`[direct] ${message}\n`);
 
