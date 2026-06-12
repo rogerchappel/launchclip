@@ -57,14 +57,24 @@ Rules of content honesty: `screen` and `talking_head` are footage and must be re
 - Sequenced builds (steps, flow nodes) land **on the spoken word** that names them, not on even intervals.
 - Idle is forbidden: any scene older than 1.5s must have something alive — type-on cursor, progress fill, subtle 1.5% drift on screen recordings. Imperceptible drift beats visible stillness.
 
-## 7. Sound
+## 7. 3D depth
+
+Depth sells the grade, but it's seasoning, not structure. v1 is CSS perspective only (no WebGL); `@remotion/three` is the escalation path if we ever need a true product spin.
+
+- **Perspective 1000–1200px** on any container whose children rotate in 3D. Flat rotation without perspective reads as a squash — never ship it.
+- **Entrances may be steep, rests must be shallow.** Elements can flip in from up to 75° (logo cards rotateY, step cards rotateX from their top edge) but settle to ≤4° resting tilt. Resting elements may idle-float (±3–4° slow oscillation) — this also satisfies the no-idle rule.
+- **Light follows tilt.** Any 3D rotation shifts the element's shadow in the opposite direction; a tilt with a static shadow looks pasted on.
+- **Cuts get a breath of depth**: the scene-enter settle may add ≤3° of rotateX falling to 0 alongside the scale settle. Subliminal, not architectural.
+- Banned: continuous logo spins, extruded 3D text, elements orbiting the canvas, anything that would feel at home on a DVD screensaver. If the viewer *notices* the 3D, it's too much.
+
+## 8. Sound
 
 Three layers, mixed in this order of priority:
 1. **Voice** — full level, always intelligible.
 2. **SFX** — whoosh on every cut, pop on every element entrance, tick on caption emphasis (sparingly). −12dB under voice. Placeholders are synthesized; a real pack (e.g. one whoosh family + one pop family, 3–4 variants each to avoid machine-gun repetition) is the single cheapest quality upgrade.
 3. **Music** — optional bed at −24dB. Drops out entirely for the final CTA second.
 
-## 8. Pacing template (30s reference cut)
+## 9. Pacing template (30s reference cut)
 
 | t | scene | why |
 |---|---|---|
@@ -79,7 +89,7 @@ Three layers, mixed in this order of priority:
 
 The 10–12s re-hook on the face is deliberate — retention dips there; a human re-grabs it.
 
-## 9. What disqualifies a render
+## 10. What disqualifies a render
 
 - A scene over 5s, or a talking head sitting behind graphics the whole video
 - Any invented "screenshot," fake cursor, or fabricated terminal text

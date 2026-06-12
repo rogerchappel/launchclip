@@ -18,7 +18,10 @@ export function LogoPop({ event, width, height }) {
 
   const size = Math.round(width * event.size);
   const scale = (0.3 + enter * 0.7) * (1 - exit * 0.4);
-  const rotation = (1 - enter) * -14 + exit * 8;
+  // 3D flip-in from 70deg, then a shallow idle float so the card never sits dead.
+  const seconds = (frame - startFrame) / fps;
+  const rotateY = (1 - enter) * -70 + Math.sin(seconds * 1.1) * 4 + exit * 30;
+  const rotateX = Math.cos(seconds * 0.9) * 3;
   const card = (
     <div
       style={{
@@ -28,11 +31,12 @@ export function LogoPop({ event, width, height }) {
         width: size,
         height: size,
         zIndex: 20,
-        transform: `scale(${scale}) rotate(${rotation}deg)`,
+        transform: `perspective(1100px) rotateY(${rotateY}deg) rotateX(${rotateX}deg) scale(${scale})`,
         opacity: Math.min(1, enter * 1.5) * (1 - exit),
         borderRadius: size * 0.22,
         background: "#ffffff",
-        boxShadow: "0 18px 50px rgba(0,0,0,0.38)",
+        // Light follows tilt: shadow slides opposite the rotation.
+        boxShadow: `${-rotateY * 0.9}px ${18 + rotateX * 2}px 50px rgba(0,0,0,0.38)`,
         display: "grid",
         placeItems: "center",
         padding: size * 0.14

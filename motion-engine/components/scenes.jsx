@@ -40,13 +40,19 @@ function Scene({ scene, width, height }) {
   return null;
 }
 
-// Hard cut + settle: incoming scene starts at 107% and springs to rest.
+// Hard cut + settle: incoming scene starts at 107% with a breath of rotateX
+// and springs to rest. Subliminal depth, not architecture.
 function SceneShell({ settle, children }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const enter = settle ? spring({ frame, fps, config: CUT_SETTLE }) : 1;
   return (
-    <AbsoluteFill style={{ transform: `scale(${1.07 - enter * 0.07})`, transformOrigin: "50% 45%" }}>
+    <AbsoluteFill
+      style={{
+        transform: `perspective(1200px) rotateX(${(1 - enter) * 2.5}deg) scale(${1.07 - enter * 0.07})`,
+        transformOrigin: "50% 45%"
+      }}
+    >
       {children}
     </AbsoluteFill>
   );
@@ -134,7 +140,9 @@ function StepsScene({ scene, width, height }) {
               display: "flex",
               alignItems: "center",
               gap: width * 0.045,
-              transform: `translateX(${(1 - enter) * width * 0.12}px)`,
+              // Tilt in from the top edge, settle flat.
+              transform: `perspective(1000px) rotateX(${(1 - enter) * 55}deg) translateX(${(1 - enter) * width * 0.08}px)`,
+              transformOrigin: "50% 0%",
               opacity: Math.min(1, enter * 1.4)
             }}
           >
@@ -185,7 +193,8 @@ function FlowScene({ scene, width, height }) {
                 fontWeight: 850,
                 fontSize,
                 color: isLast ? ACCENT : INK,
-                transform: `scale(${0.7 + enter * 0.3})`,
+                transform: `perspective(1000px) rotateX(${(1 - enter) * 40}deg) scale(${0.7 + enter * 0.3})`,
+                transformOrigin: "50% 100%",
                 opacity: Math.min(1, enter * 1.4)
               }}
             >
