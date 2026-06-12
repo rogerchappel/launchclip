@@ -1,6 +1,7 @@
 import { initWorkspace, runDemo, planVideo, writeCaptions, renderVideo, submitReview, writeReview, runPacket, validateWorkspace } from "./pipeline.js";
+import { writeTeleprompter, alignRecording, renderMotion } from "./talking_head.js";
 
-const COMMANDS = new Set(["init", "demo", "plan", "captions", "render", "submit-review", "review", "validate", "run"]);
+const COMMANDS = new Set(["init", "demo", "plan", "captions", "render", "submit-review", "review", "validate", "run", "script", "align", "motion-render"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout } = io;
@@ -33,6 +34,12 @@ export async function runCli(argv, io = {}) {
     result = await validateWorkspace(required(firstArg, "workspace path"), { ...flags, write: true });
   } else if (command === "run") {
     result = await runPacket(required(firstArg, "repo path"), flags);
+  } else if (command === "script") {
+    result = await writeTeleprompter(required(firstArg, "workspace path"), flags);
+  } else if (command === "align") {
+    result = await alignRecording(required(firstArg, "workspace path"), flags);
+  } else if (command === "motion-render") {
+    result = await renderMotion(required(firstArg, "workspace path"), flags);
   }
   stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
@@ -79,5 +86,11 @@ Usage:
   launchclip review <workspace>
   launchclip validate <workspace>
   launchclip run <repo> --out <workspace> --demo-cmd "npm run smoke" --demo-media path/to/demo.mp4 --angle "..." --audience "..." [--style ugc-demo-punchy --talking-head heygen]
+
+Talking-head motion workflow:
+  launchclip script <workspace> [--wpm 150]            # teleprompter from the planned voiceover
+  launchclip align <workspace> --media take.mp4        # whisper word timings + heuristic motion timeline
+  launchclip align <workspace> --media take.mp4 --words words.json
+  launchclip motion-render <workspace>                 # render video/motion.mp4 via the motion engine
 `;
 }
