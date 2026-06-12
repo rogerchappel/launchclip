@@ -70,14 +70,14 @@ function help() {
 Usage:
   launchclip init <repo> --out <workspace>
   launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]
-  launchclip plan <workspace> --format short-15 --renderer none [--style proof-card|ugc-split|ugc-demo-punchy] [--talking-head heygen --avatar-id avatar_123]
+  launchclip plan <workspace> --format short-15 --renderer none [--style proof-card|ugc-split|ugc-demo-punchy|premium-product-short] [--assets-dir path/to/assets] [--talking-head heygen --avatar-id avatar_123]
   launchclip captions <workspace> --platforms x,linkedin,tiktok,bluesky
   launchclip render <workspace> --provider product-videogen --dry-run
-  launchclip render <workspace> --provider remotion [--voiceover local-say]
+  launchclip render <workspace> --provider remotion [--assets-dir path/to/assets] [--voiceover local-say]
   launchclip render <workspace> --provider local-ffmpeg [--voiceover local-say]
   launchclip submit-review <workspace> --provider product-videogen --dry-run
   launchclip review <workspace>
   launchclip validate <workspace>
-  launchclip run <repo> --out <workspace> --demo-cmd "npm run smoke" --demo-media path/to/demo.mp4 --angle "..." --audience "..." [--style ugc-demo-punchy --talking-head heygen]
+  launchclip run <repo> --out <workspace> --demo-cmd "npm run smoke" --demo-media path/to/demo.mp4 --angle "..." --audience "..." [--style premium-product-short --assets-dir path/to/assets --talking-head heygen]
 `;
 }

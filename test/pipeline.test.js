@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, access, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, access, writeFile, mkdir } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
@@ -113,6 +113,53 @@ test("plans ugc split-screen creative recipe for product-videogen handoff", asyn
     assert.equal(payload.recipe_json.creative_storyboard.scenes[0].layout, "full-screen editorial hook with creator picture-in-picture and repo receipt");
     assert.equal(payload.recipe_json.talking_head.provider, "heygen");
     assert.equal(payload.recipe_json.script_visual_alignment[2].caption, "Demo -> plan -> captions -> review");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("plans premium product short contract with deterministic asset warnings", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
+  const out = path.join(temp, "packet");
+  const assetsDir = path.join(temp, "assets");
+  try {
+    await writePremiumAssetManifest(assetsDir, {
+      "claude-code": "claude-code.png",
+      "prompt-example": { path: "prompt-example.txt", type: "text", label: "Launch prompt" }
+    });
+    await initWorkspace(fixtureRepo, { out });
+    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
+    await planVideo(out, { format: "short-30", renderer: "product-videogen", style: "premium-product-short", "assets-dir": assetsDir });
+    await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
+    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
+    await submitReview(out, { provider: "product-videogen", "dry-run": true });
+
+    const video = JSON.parse(await readFile(path.join(out, "video/video.json"), "utf8"));
+    const payload = JSON.parse(await readFile(path.join(out, "video/product-videogen.dry-run.json"), "utf8"));
+    const readiness = await validateWorkspace(out);
+
+    assert.equal(video.style, "premium-product-short");
+    assert.equal(video.duration_seconds, 48);
+    assert.equal(video.creative_recipe.renderer_contract.composition_id, "LaunchclipPremiumShort");
+    assert.deepEqual(video.assets.provided_aliases, ["claude-code", "prompt-example"]);
+    assert.deepEqual(video.assets.missing_aliases, ["github", "obsidian", "terminal-demo"]);
+    assert.equal(video.creative_storyboard.asset_manifest.expected_file, "launchclip-assets.json");
+    assert.equal(video.creative_storyboard.scenes.length, 8);
+    assert.deepEqual(video.creative_storyboard.scenes[2].asset_aliases, ["claude-code", "obsidian", "github"]);
+    assert.ok(video.creative_storyboard.scenes[3].type_sequences.length >= 1);
+    assert.ok(video.creative_storyboard.scenes[5].motion_blur.method.includes("ghost layers"));
+    assert.ok(video.creative_storyboard.scenes[5].depth_layer.foreground.includes("cards"));
+    assert.ok(video.creative_storyboard.scenes[6].sfx_cues.includes("typing-ticks"));
+    assert.ok(video.creative_storyboard.scenes[7].brand_moments.length >= 1);
+    assert.equal(payload.recipe_json.video_manifest.style, "premium-product-short");
+    assert.equal(payload.recipe_json.assets.schema_version, "launchclip.assets.v1");
+    assert.equal(payload.recipe_json.creative_storyboard.scenes[3].type_sequences[0].source_alias, "prompt-example");
+    assert.equal(readiness.status, "ready");
+    assert.deepEqual(readiness.warnings, [
+      "Missing asset alias: github",
+      "Missing asset alias: obsidian",
+      "Missing asset alias: terminal-demo"
+    ]);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
@@ -350,4 +397,18 @@ async function mediaDuration(filePath) {
     filePath
   ]);
   return Number(stdout.trim());
+}
+
+async function writePremiumAssetManifest(assetsDir, aliases) {
+  await mkdir(assetsDir, { recursive: true });
+  for (const value of Object.values(aliases)) {
+    const assetPath = typeof value === "string" ? value : value.path;
+    const target = path.join(assetsDir, assetPath);
+    if (assetPath.endsWith(".txt")) {
+      await writeFile(target, "Create a premium product short with Claude Code, Obsidian, GitHub, typing, and review-safe proof.\n");
+    } else {
+      await writeFile(target, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lwq3GQAAAABJRU5ErkJggg==", "base64"));
+    }
+  }
+  await writeFile(path.join(assetsDir, "launchclip-assets.json"), `${JSON.stringify({ schema_version: "launchclip.assets.v1", assets: aliases }, null, 2)}\n`);
 }
