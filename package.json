@@ -20,6 +20,10 @@
   ],
   "author": "Roger Chappel",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rogerchappel/launchclip.git"
+  },
   "engines": {
     "node": ">=20"
   },
