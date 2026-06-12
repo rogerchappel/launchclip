@@ -96,6 +96,49 @@ test("estimateWords produces monotonic plausible timings", () => {
   assert.ok(estimated[estimated.length - 1].end < 10);
 });
 
+test("stat_counter, quote_card, chapters validate and lint", () => {
+  const timeline = makeTimeline([
+    { id: "a", type: "stat_counter", start: 0, end: 2.5, transition: "cut", value: "10x", label: "faster", at: 0.3 },
+    { id: "b", type: "quote_card", start: 2.5, end: 4.5, transition: "swipe_left", text: "Ship the proof.", at: 4.0 },
+    { id: "c", type: "typography", start: 4.5, end: 6, transition: "zoom_into", items: [{ text: "now", at: 4.6 }] }
+  ]);
+  assert.ok(timeline.scenes[0].value === "10x");
+  assert.equal(timeline.scenes[1].attribution, "");
+  const result = lintTimeline(timeline);
+  assert.equal(result.failures.length, 0, result.failures.join("; "));
+});
+
+test("chapters validate: bounds and count", () => {
+  const good = validateTimeline({
+    version: MOTION_TIMELINE_VERSION, duration_seconds: 10, base: { type: "placeholder", src: "" }, words,
+    scenes: [{ id: "a", type: "typography", start: 0, end: 10, items: [{ text: "x", at: 0.3 }, { text: "y", at: 0.9 }, { text: "z", at: 1.5 }, { text: "w", at: 4.0 }, { text: "v", at: 4.6 }] }],
+    chapters: [{ title: "Intro", at: 0 }, { title: "Deep dive into everything", at: 5 }], events: []
+  });
+  assert.equal(good.ok, true, good.errors.join("; "));
+  assert.equal(good.timeline.chapters[1].title.length <= 18, true);
+  const bad = validateTimeline({
+    version: MOTION_TIMELINE_VERSION, duration_seconds: 10, base: { type: "placeholder", src: "" }, words,
+    scenes: [], chapters: [{ title: "Solo", at: 0 }], events: []
+  });
+  assert.ok(bad.errors.some((error) => error.includes("at least 2")));
+});
+
+test("lint requires requested chapters to exist", () => {
+  const timeline = makeTimeline([
+    { id: "a", type: "typography", start: 0, end: 6, transition: "cut", items: [{ text: "x", at: 0.3 }, { text: "y", at: 0.9 }, { text: "z", at: 1.5 }, { text: "w", at: 4.0 }, { text: "v", at: 4.6 }] }
+  ]);
+  const result = lintTimeline(timeline, { direction: { must_include: [], asset_refs: [], chapters: ["One", "Two", "Three"] } });
+  assert.ok(result.failures.some((failure) => failure.includes("chapter rail")));
+});
+
+test("overlay layout validates for talking_head", () => {
+  const result = validateTimeline({
+    version: MOTION_TIMELINE_VERSION, duration_seconds: 5, base: { type: "placeholder", src: "" }, words,
+    scenes: [{ id: "a", type: "talking_head", start: 0, end: 5, src: "base/take.mp4", layout: "overlay", items: [{ text: "yo", at: 0.3 }, { text: "hey", at: 0.9 }, { text: "go", at: 1.5 }, { text: "do", at: 4.0 }] }], events: []
+  });
+  assert.equal(result.ok, true, result.errors.join("; "));
+});
+
 test("golden timeline passes the linter", async () => {
   const raw = JSON.parse(await readFile(new URL("../examples/motion/golden-timeline.json", import.meta.url), "utf8"));
   const validated = validateTimeline(raw);

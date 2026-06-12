@@ -13,7 +13,9 @@ export const SCENE_TYPES = new Set([
   "prompt_card",
   "screenshot_pile",
   "icon_flow",
-  "card_steps"
+  "card_steps",
+  "stat_counter",
+  "quote_card"
 ]);
 
 // Art direction: scenes persist while builds run inside them, but nothing
@@ -26,7 +28,7 @@ export const MIN_SCENE_SECONDS = 0.8;
 export const SCENE_TRANSITIONS = new Set(["cut", "swipe_left", "swipe_right", "zoom_into"]);
 export const TRAVEL_SECONDS = 0.45;
 
-export const TALKING_HEAD_LAYOUTS = new Set(["split", "card", "full"]);
+export const TALKING_HEAD_LAYOUTS = new Set(["split", "card", "full", "overlay"]);
 
 export const DEFAULT_SFX = {
   punch_zoom: "fast_whoosh.wav",
@@ -70,17 +72,44 @@ export function validateTimeline(input) {
 
   const base = normalizeBase(input.base);
   const scenes = normalizeScenes(input.scenes, duration, errors, warnings);
+  const chapters = normalizeChapters(input.chapters, duration, errors);
   checkZoomsNearCuts(events, scenes, warnings);
   const timeline = {
     version: MOTION_TIMELINE_VERSION,
     duration_seconds: duration,
     base,
     scenes,
+    chapters,
     audio: normalizeAudio(input.audio),
     words,
     events
   };
   return { ok: errors.length === 0, errors, warnings, timeline };
+}
+
+// Optional persistent chapter rail: 2-6 titled markers across the video.
+function normalizeChapters(chapters, duration, errors) {
+  if (chapters === undefined || chapters === null) return [];
+  if (!Array.isArray(chapters)) {
+    errors.push("chapters must be an array of {title, at}");
+    return [];
+  }
+  const normalized = chapters
+    .map((chapter, index) => {
+      const title = String(chapter?.title ?? "").trim();
+      const at = Number(chapter?.at);
+      if (!title) errors.push(`chapters[${index}] missing title`);
+      if (!Number.isFinite(at) || at < 0 || (Number.isFinite(duration) && at >= duration)) {
+        errors.push(`chapters[${index}] has invalid at`);
+        return null;
+      }
+      return { title: title.slice(0, 18), at };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.at - b.at);
+  if (normalized.length === 1) errors.push("chapters needs at least 2 entries (or none)");
+  if (normalized.length > 6) errors.push("chapters: at most 6");
+  return normalized;
 }
 
 // The visual base is a track of scenes; voice runs continuously underneath.
@@ -167,6 +196,25 @@ function normalizeScene(scene, index, errors) {
         : [];
     }
     return footage;
+  }
+  if (type === "stat_counter") {
+    if (!scene?.value) errors.push(`scenes[${index}] (stat_counter) requires value (e.g. "87%", "10x", "$2,000")`);
+    return {
+      ...base,
+      value: String(scene?.value ?? ""),
+      label: String(scene?.label ?? ""),
+      color: scene?.color ? String(scene.color) : "mint",
+      at: clampNumber(scene?.at, start, end, start + 0.3)
+    };
+  }
+  if (type === "quote_card") {
+    if (!scene?.text) errors.push(`scenes[${index}] (quote_card) requires text`);
+    return {
+      ...base,
+      text: String(scene?.text ?? ""),
+      attribution: String(scene?.attribution ?? ""),
+      at: clampNumber(scene?.at, start, end, start + 0.2)
+    };
   }
   if (type === "prompt_card") {
     if (!scene?.text) errors.push(`scenes[${index}] (prompt_card) requires text — the real prompt, never invented`);
