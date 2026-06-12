@@ -5,6 +5,90 @@
     "type": "video",
     "src": "base/talking-head.mp4"
   },
+  "scenes": [
+    {
+      "id": "hook-a",
+      "type": "talking_head",
+      "start": 0,
+      "end": 3.29,
+      "src": "base/talking-head.mp4",
+      "offset": 0
+    },
+    {
+      "id": "hook-b",
+      "type": "talking_head",
+      "start": 3.29,
+      "end": 5.99,
+      "src": "base/talking-head.mp4",
+      "offset": 3.29
+    },
+    {
+      "id": "demo-console",
+      "type": "console",
+      "start": 5.99,
+      "end": 8.45,
+      "title": "one command",
+      "lines": [
+        "$ launchclip run ./my-oss-tool",
+        "demo captured: npm run smoke",
+        "evidence stored: demo/terminal.txt"
+      ]
+    },
+    {
+      "id": "make-steps",
+      "type": "steps",
+      "start": 8.45,
+      "end": 11.65,
+      "title": "what it writes",
+      "items": [
+        {
+          "text": "Script with timing",
+          "at": 8.45
+        },
+        {
+          "text": "Matched visuals",
+          "at": 9.45
+        },
+        {
+          "text": "Rendered 9:16 short",
+          "at": 10.14
+        }
+      ]
+    },
+    {
+      "id": "packet-flow",
+      "type": "flow",
+      "start": 11.65,
+      "end": 16.06,
+      "title": "the launch packet",
+      "items": [
+        {
+          "text": "demo proof",
+          "at": 11.75
+        },
+        {
+          "text": "script + visuals",
+          "at": 12.91
+        },
+        {
+          "text": "platform captions",
+          "at": 13.47
+        },
+        {
+          "text": "REVIEW.md — you approve",
+          "at": 14.47
+        }
+      ]
+    },
+    {
+      "id": "cta",
+      "type": "talking_head",
+      "start": 16.06,
+      "end": 17.95,
+      "src": "base/talking-head.mp4",
+      "offset": 16.06
+    }
+  ],
   "audio": {
     "voiceover": "",
     "music": "",
@@ -258,54 +342,32 @@
       "origin_y": 0.42
     },
     {
-      "id": "zoom-command",
-      "type": "punch_zoom",
-      "start": 5.99,
-      "end": 7.19,
-      "sfx": "whoosh.wav",
-      "scale": 1.12,
-      "origin_x": 0.44,
-      "origin_y": 0.42
-    },
-    {
-      "id": "logo-demo",
+      "id": "logo-hook",
       "type": "logo_pop",
-      "start": 6.81,
-      "end": 9.01,
-      "sfx": "pop.wav",
-      "src": "logos/terminal.svg",
-      "x": 0.74,
-      "y": 0.27,
-      "size": 0.24,
-      "label": "real demo"
-    },
-    {
-      "id": "logo-render",
-      "type": "logo_pop",
-      "start": 10.14,
-      "end": 12.14,
+      "start": 2.12,
+      "end": 3.42,
       "sfx": "pop.wav",
       "src": "logos/launchclip.svg",
-      "x": 0.26,
-      "y": 0.27,
-      "size": 0.24,
+      "x": 0.74,
+      "y": 0.26,
+      "size": 0.2,
       "label": "launchclip"
     },
     {
-      "id": "zoom-packet",
+      "id": "zoom-repo",
       "type": "punch_zoom",
-      "start": 12.31,
-      "end": 13.41,
+      "start": 3.92,
+      "end": 5.02,
       "sfx": "whoosh.wav",
-      "scale": 1.08,
+      "scale": 1.1,
       "origin_x": 0.5,
       "origin_y": 0.42
     },
     {
       "id": "zoom-cta",
       "type": "punch_zoom",
-      "start": 16.06,
-      "end": 17.459999999999997,
+      "start": 16.73,
+      "end": 17.93,
       "sfx": "whoosh.wav",
       "scale": 1.14,
       "origin_x": 0.5,

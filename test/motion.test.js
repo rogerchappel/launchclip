@@ -98,11 +98,64 @@ test("buildHeuristicTimeline produces a valid timeline", () => {
   assert.equal(result.timeline.base.type, "video");
 });
 
+test("scenes validate: types, footage src, overlap, and length caps", () => {
+  const result = validateTimeline(
+    baseTimeline([]) && {
+      ...baseTimeline([]),
+      scenes: [
+        { id: "a", type: "talking_head", start: 0, end: 6.2, src: "base/take.mp4" },
+        { id: "b", type: "screen", start: 6, end: 7.5 },
+        { id: "c", type: "hologram", start: 7.5, end: 8 },
+        { id: "d", type: "console", start: 8, end: 9.5, lines: [] }
+      ]
+    }
+  );
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => error.includes("requires src")));
+  assert.ok(result.errors.some((error) => error.includes("unknown type")));
+  assert.ok(result.errors.some((error) => error.includes("overlaps")));
+  assert.ok(result.errors.some((error) => error.includes("requires lines")));
+  assert.ok(result.warnings.some((warning) => warning.includes("caps scenes")));
+});
+
+test("steps and flow items default their build times inside the scene", () => {
+  const result = validateTimeline({
+    ...baseTimeline([]),
+    scenes: [
+      { id: "s", type: "steps", start: 0, end: 4, items: [{ text: "one" }, { text: "two" }] },
+      { id: "f", type: "flow", start: 4, end: 8, nodes: [{ label: "in" }, { label: "out", at: 5 }] },
+      { id: "t", type: "talking_head", start: 8, end: 10, src: "base/take.mp4" }
+    ]
+  });
+  assert.equal(result.ok, true, result.errors.join("; "));
+  const [steps, flow] = result.timeline.scenes;
+  assert.equal(steps.items[1].at, 0.8);
+  assert.equal(flow.items[0].text, "in");
+  assert.equal(flow.items[1].at, 5);
+});
+
+test("zooms hugging a scene cut produce a warning", () => {
+  const result = validateTimeline({
+    ...baseTimeline([{ id: "z", type: "punch_zoom", start: 3.8, end: 4.8 }]),
+    scenes: [
+      { id: "a", type: "talking_head", start: 0, end: 4, src: "base/take.mp4" },
+      { id: "b", type: "talking_head", start: 4, end: 8, src: "base/take.mp4" }
+    ]
+  });
+  assert.ok(result.warnings.some((warning) => warning.includes("cut into")));
+});
+
 test("golden timeline example validates", async () => {
   const raw = JSON.parse(await readFile(new URL("../examples/motion/golden-timeline.json", import.meta.url), "utf8"));
   const result = validateTimeline(raw);
   assert.equal(result.ok, true, result.errors.join("; "));
-  assert.ok(result.timeline.events.length >= 5);
+  assert.equal(result.warnings.length, 0, result.warnings.join("; "));
+  assert.ok(result.timeline.events.length >= 3);
+  assert.ok(result.timeline.scenes.length >= 5, "golden timeline must exercise the scene track");
+  const types = new Set(result.timeline.scenes.map((scene) => scene.type));
+  for (const required of ["talking_head", "console", "steps", "flow"]) {
+    assert.ok(types.has(required), `golden timeline missing scene type ${required}`);
+  }
 });
 
 test("parseWords accepts plain arrays and whisper output", () => {
