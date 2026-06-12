@@ -7,7 +7,7 @@
   },
   "scenes": [
     {
-      "id": "hook-a",
+      "id": "hook",
       "type": "talking_head",
       "start": 0,
       "end": 3.29,
@@ -15,31 +15,46 @@
       "offset": 0
     },
     {
-      "id": "hook-b",
-      "type": "talking_head",
+      "id": "thesis",
+      "type": "typography",
       "start": 3.29,
       "end": 5.99,
-      "src": "base/talking-head.mp4",
-      "offset": 3.29
-    },
-    {
-      "id": "demo-console",
-      "type": "console",
-      "start": 5.99,
-      "end": 8.45,
-      "title": "one command",
-      "lines": [
-        "$ launchclip run ./my-oss-tool",
-        "demo captured: npm run smoke",
-        "evidence stored: demo/terminal.txt"
+      "title": "",
+      "items": [
+        {
+          "text": "Now my",
+          "at": 3.29
+        },
+        {
+          "text": "repo",
+          "at": 3.92,
+          "emphasis": true,
+          "color": "mint"
+        },
+        {
+          "text": "makes them",
+          "at": 4.29
+        },
+        {
+          "text": "for me.",
+          "at": 5.08,
+          "emphasis": true
+        }
       ]
     },
     {
-      "id": "make-steps",
-      "type": "steps",
+      "id": "command",
+      "type": "prompt_card",
+      "start": 5.99,
+      "end": 8.45,
+      "text": "launchclip run ./my-oss-tool"
+    },
+    {
+      "id": "writes",
+      "type": "card_steps",
       "start": 8.45,
       "end": 11.65,
-      "title": "what it writes",
+      "title": "",
       "items": [
         {
           "text": "Script with timing",
@@ -56,37 +71,47 @@
       ]
     },
     {
-      "id": "packet-flow",
-      "type": "flow",
+      "id": "packet",
+      "type": "icon_flow",
       "start": 11.65,
       "end": 16.06,
-      "title": "the launch packet",
+      "title": "",
       "items": [
         {
-          "text": "demo proof",
-          "at": 11.75
+          "text": "your demo",
+          "at": 11.75,
+          "src": "logos/terminal.svg"
         },
         {
-          "text": "script + visuals",
-          "at": 12.91
+          "text": "launchclip",
+          "at": 13.120000000000001,
+          "src": "logos/launchclip.svg"
         },
         {
-          "text": "platform captions",
-          "at": 13.47
-        },
-        {
-          "text": "REVIEW.md — you approve",
-          "at": 14.47
+          "text": "ready to post",
+          "at": 14.27,
+          "color": "mint"
         }
       ]
     },
     {
       "id": "cta",
-      "type": "talking_head",
+      "type": "typography",
       "start": 16.06,
       "end": 17.95,
-      "src": "base/talking-head.mp4",
-      "offset": 16.06
+      "title": "",
+      "items": [
+        {
+          "text": "Link in",
+          "at": 16.06
+        },
+        {
+          "text": "bio.",
+          "at": 16.73,
+          "emphasis": true,
+          "color": "coral"
+        }
+      ]
     }
   ],
   "audio": {
@@ -105,7 +130,7 @@
       "word": "stopped",
       "start": 0.66,
       "end": 1.08,
-      "emphasis": true
+      "emphasis": false
     },
     {
       "word": "hand-editing",
@@ -147,7 +172,7 @@
       "word": "repo",
       "start": 3.92,
       "end": 4.23,
-      "emphasis": true
+      "emphasis": false
     },
     {
       "word": "makes",
@@ -177,13 +202,13 @@
       "word": "One",
       "start": 5.99,
       "end": 6.26,
-      "emphasis": true
+      "emphasis": false
     },
     {
       "word": "command",
       "start": 6.32,
       "end": 6.75,
-      "emphasis": true
+      "emphasis": false
     },
     {
       "word": "captures",
@@ -207,7 +232,7 @@
       "word": "demo,",
       "start": 7.96,
       "end": 8.27,
-      "emphasis": true
+      "emphasis": false
     },
     {
       "word": "writes",
@@ -225,7 +250,7 @@
       "word": "script,",
       "start": 9.23,
       "end": 9.62,
-      "emphasis": true
+      "emphasis": false
     },
     {
       "word": "and",
@@ -249,7 +274,7 @@
       "word": "short.",
       "start": 10.96,
       "end": 11.31,
-      "emphasis": true
+      "emphasis": false
     },
     {
       "word": "And",
@@ -273,7 +298,7 @@
       "word": "packet",
       "start": 12.72,
       "end": 13.11,
-      "emphasis": true
+      "emphasis": false
     },
     {
       "word": "is",
@@ -285,7 +310,7 @@
       "word": "reviewable",
       "start": 13.47,
       "end": 14.01,
-      "emphasis": true
+      "emphasis": false
     },
     {
       "word": "before",
@@ -309,7 +334,7 @@
       "word": "live.",
       "start": 15.41,
       "end": 15.72,
-      "emphasis": true
+      "emphasis": false
     },
     {
       "word": "Link",
@@ -327,7 +352,7 @@
       "word": "bio.",
       "start": 16.73,
       "end": 17.01,
-      "emphasis": true
+      "emphasis": false
     }
   ],
   "events": [
@@ -352,26 +377,6 @@
       "y": 0.26,
       "size": 0.2,
       "label": "launchclip"
-    },
-    {
-      "id": "zoom-repo",
-      "type": "punch_zoom",
-      "start": 3.92,
-      "end": 5.02,
-      "sfx": "whoosh.wav",
-      "scale": 1.1,
-      "origin_x": 0.5,
-      "origin_y": 0.42
-    },
-    {
-      "id": "zoom-cta",
-      "type": "punch_zoom",
-      "start": 16.73,
-      "end": 17.93,
-      "sfx": "whoosh.wav",
-      "scale": 1.14,
-      "origin_x": 0.5,
-      "origin_y": 0.38
     }
   ]
 }

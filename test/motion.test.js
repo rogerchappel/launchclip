@@ -103,10 +103,10 @@ test("scenes validate: types, footage src, overlap, and length caps", () => {
     baseTimeline([]) && {
       ...baseTimeline([]),
       scenes: [
-        { id: "a", type: "talking_head", start: 0, end: 6.2, src: "base/take.mp4" },
+        { id: "a", type: "talking_head", start: 0, end: 6.4, src: "base/take.mp4" },
         { id: "b", type: "screen", start: 6, end: 7.5 },
         { id: "c", type: "hologram", start: 7.5, end: 8 },
-        { id: "d", type: "console", start: 8, end: 9.5, lines: [] }
+        { id: "d", type: "prompt_card", start: 8, end: 9.5 }
       ]
     }
   );
@@ -114,7 +114,7 @@ test("scenes validate: types, footage src, overlap, and length caps", () => {
   assert.ok(result.errors.some((error) => error.includes("requires src")));
   assert.ok(result.errors.some((error) => error.includes("unknown type")));
   assert.ok(result.errors.some((error) => error.includes("overlaps")));
-  assert.ok(result.errors.some((error) => error.includes("requires lines")));
+  assert.ok(result.errors.some((error) => error.includes("requires text")));
   assert.ok(result.warnings.some((warning) => warning.includes("caps scenes")));
 });
 
@@ -122,8 +122,8 @@ test("steps and flow items default their build times inside the scene", () => {
   const result = validateTimeline({
     ...baseTimeline([]),
     scenes: [
-      { id: "s", type: "steps", start: 0, end: 4, items: [{ text: "one" }, { text: "two" }] },
-      { id: "f", type: "flow", start: 4, end: 8, nodes: [{ label: "in" }, { label: "out", at: 5 }] },
+      { id: "s", type: "card_steps", start: 0, end: 4, items: [{ text: "one" }, { text: "two" }] },
+      { id: "f", type: "icon_flow", start: 4, end: 8, items: [{ label: "in" }, { label: "out", at: 5 }] },
       { id: "t", type: "talking_head", start: 8, end: 10, src: "base/take.mp4" }
     ]
   });
@@ -150,10 +150,10 @@ test("golden timeline example validates", async () => {
   const result = validateTimeline(raw);
   assert.equal(result.ok, true, result.errors.join("; "));
   assert.equal(result.warnings.length, 0, result.warnings.join("; "));
-  assert.ok(result.timeline.events.length >= 3);
+  assert.ok(result.timeline.events.length >= 2);
   assert.ok(result.timeline.scenes.length >= 5, "golden timeline must exercise the scene track");
   const types = new Set(result.timeline.scenes.map((scene) => scene.type));
-  for (const required of ["talking_head", "console", "steps", "flow"]) {
+  for (const required of ["talking_head", "typography", "prompt_card", "card_steps", "icon_flow"]) {
     assert.ok(types.has(required), `golden timeline missing scene type ${required}`);
   }
 });
