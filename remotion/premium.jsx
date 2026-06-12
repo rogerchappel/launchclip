@@ -375,10 +375,12 @@ function PresenterWindow({ x, y, width, height, progress }) {
 }
 
 function HeaderLockup({ eyebrow, title, copy, entrance, compact = false }) {
+  const titleWidth = compact ? 520 : 430;
+  const titleSize = compact ? 54 : 66;
   return (
     <div style={{ position: "absolute", left: 48, right: 48, top: compact ? 106 : 94, transform: `translateY(${(1 - entrance) * 38}px)`, opacity: entrance }}>
       <div style={{ display: "inline-block", padding: "8px 11px", borderRadius: 8, background: colors.green, color: colors.ink, fontSize: 12, lineHeight: 1, fontWeight: 900, textTransform: "uppercase" }}>{eyebrow}</div>
-      <div style={{ marginTop: 16, fontSize: compact ? 54 : 72, lineHeight: 0.92, fontWeight: 900, maxWidth: compact ? 520 : 600 }}>{title}</div>
+      <div style={{ marginTop: 16, fontSize: titleSize, lineHeight: 0.92, fontWeight: 900, maxWidth: titleWidth }}>{title}</div>
       <div style={{ marginTop: 16, fontSize: compact ? 17 : 20, lineHeight: 1.18, fontWeight: 760, maxWidth: compact ? 510 : 455, color: "rgba(17,20,17,0.68)" }}>{shorten(copy, compact ? 136 : 126)}</div>
     </div>
   );

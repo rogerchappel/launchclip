@@ -1804,7 +1804,7 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         time_range: "0-2.5s",
         target_seconds: 2.5,
         voiceover: `${repoName} can start from real repo proof and turn it into a premium product Short.`,
-        caption: "Repo proof -> premium Short",
+        caption: "Repo proof to premium Short",
         visual: "Floating branded tokens, repo lockup, presenter cutaway, and proof cards move before the first spoken word lands.",
         evidence_source: "launchclip workspace metadata",
         adapter_target: "remotion",
