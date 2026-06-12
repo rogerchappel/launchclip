@@ -33,6 +33,7 @@
   ],
   "dependencies": {
     "@remotion/cli": "4.0.475",
+    "@remotion/google-fonts": "^4.0.475",
     "@remotion/motion-blur": "^4.0.475",
     "react": "19.1.0",
     "react-dom": "19.1.0",
