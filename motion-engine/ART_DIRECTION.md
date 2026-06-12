@@ -1,98 +1,93 @@
-# Art Direction — motion-engine
+# Art Direction — motion-engine (v2, evidence-based)
 
-The target grade is creator-led product shorts in the Greg Isenberg style: a real person and a real product, cut dense, designed like editorial, sounding tactile. This document is the spec; components implement it. When a render looks wrong, the fix is here first, then in code.
+Rewritten after frame-by-frame deconstruction of the two reference shorts (Greg Isenberg: "How to use Obsidian with Claude in 61 seconds" and the lead-gen agents short — local copies + contact sheets in `reference/`). v1 of this document was written from description and got the fundamentals wrong. Everything below is observed, not assumed.
 
-## 1. The structural rule: voice is continuous, vision is not
+## 0. What v1 got wrong (kept as a warning)
 
-The voiceover (talking-head audio or TTS) runs unbroken start to finish. The **visual base switches scenes every 2–5 seconds**. The talking head is *one scene type among five* — it is NOT the chassis of the video.
+- **Wrong ground.** v1 specced near-black. The reference is a warm off-white paper ground (~#ECE8E1) with a faint drawn grid, on screen ~90% of the time. Dark exists only as *cards sitting on* the light ground.
+- **Wrong text system.** v1 specced bottom-bar uppercase stroke captions (Hormozi style). The reference has NO bottom captions anywhere. Typography is staged *in the middle of the frame as the scene itself* — word groups building in place as they're spoken.
+- **Wrong rhythm mechanism.** v1 specced hard cuts every 2–5s. Measured: only ~15 hard cuts in 61s (≈1 per 4s). The relentless motion comes from **continuous builds and transforms inside scenes** — something enters, multiplies, stacks, or morphs almost every second, but the scene itself persists.
+- **Wrong assumption about the face.** The Obsidian video contains *no talking head at all*. The second video weaves the face in as one card among many. The face is optional garnish, not the foundation — which is excellent news for SaaS brands without a face.
 
-Where the face belongs:
-- **Hook (first 1–3s)** — a human opening earns trust and stops the scroll.
-- **Credibility beats** — opinions, claims, "here's the thing" moments.
-- **CTA (last 2–3s)** — people follow people.
+## 1. The world model: everything is a physical object on paper
 
-Everything else cuts away to full-screen evidence: the tool actually running, the console actually outputting, the workflow actually drawn. If a sentence describes something visible, the screen must show that thing, not the person saying it.
+The video is a tabletop. The ground is warm paper with a faint grid; every piece of content — screenshot, prompt bar, app icon, diagram node, even the talking head — is a **rounded physical card with a soft, large drop shadow**, placed, stacked, fanned, and slid around on that paper. Nothing is ever a naked flat layer.
 
-Scene-length law: **no scene longer than 5 seconds, ever** (schema warns past 5). A 20-second short has 5–8 scenes. If a demo needs longer, split it into multiple scenes with different zoom/crop so it *feels* like a cut.
+- Ground: ~#ECE8E1 warm gray-beige, faint grid lines (~6% opacity ink), subtle paper grain. Slight vignette acceptability; never pure white.
+- Ink: near-black charcoal #1A1A18.
+- Cards: white or near-black (#111), radius ~24–32px at 720w, shadow `0 18-30px 40-70px rgba(0,0,0,0.18-0.30)` — soft and believable, like the card hovers 2cm above the paper.
+- Brand/semantic accents *replace* a fixed accent color: mint green (#62BD93-ish) for highlights/success, plus each referenced brand's own color (Obsidian purple, Claude coral) used on its name in type and its icon card. Color belongs to meaning, not to decoration.
 
-## 2. Scene vocabulary (v1)
+## 2. Typography IS the captioning system
 
-| type | content | role |
+Spoken phrases appear as staged type compositions, center-frame, words/word-groups landing as spoken, then the whole composition leaves and the next phrase stages elsewhere.
+
+- Two voices: a **chunky soft serif** for statements (reference resembles Cooper Black / Recoleta; closest Google Fonts: Fraunces Black) and a **swashy italic/script accent** for the emotional word (reference resembles Cooper Black Italic; Fraunces Black Italic works).
+- Compositions are collaged: staggered baselines, mixed sizes within one phrase, ±2–4° rotation on individual words, the key word 1.5–2× larger and in its semantic color.
+- Scale: phrase blocks occupy roughly the middle third; biggest word ~7–9% of height, support words 3–4%.
+- Dark ink on paper. On dark cards, type is white or mint.
+- Never more than ~7 words on screen in a type scene; the phrase builds word-group by word-group on the VO timing.
+
+## 3. Scene vocabulary (v2)
+
+| type | what it is | replaces/maps to |
 |---|---|---|
-| `talking_head` | real footage, continuous take, trimmed to the global clock | hook, opinion, CTA |
-| `screen` | real screen recording, full-bleed | the tool doing the thing |
-| `console` | real captured terminal output, restyled chrome, type-on | CLI proof, "one command" |
-| `steps` | numbered cards building in sequence | how-to, listicle beats |
-| `flow` | nodes + arrows building in sequence (vertical in 9:16) | pipelines, workflows, before→after |
+| `typography` | staged word-build composition on paper | the caption track (primary connective tissue) |
+| `prompt_card` | dark rounded chat-input card, text typing on, mic/plus glyphs, soft glow | console (for AI tools, the prompt IS the console) |
+| `screenshot_pile` | real screenshots in cards: enter one → multiply into fans/grids/stacks | screen scene, evidence beats |
+| `icon_flow` | brand-icon cards (black rounded squares with glyph) connected by dotted lines, building vertically | flow |
+| `card_steps` | small rounded cards with icon + short label stacking into lists/funnels | steps |
+| `talking_head` | real footage, either full-frame beat or a rounded card inserted beside content | talking_head (now optional) |
+| `prop` | bespoke illustrated objects (magnifying glass over a screenshot, retro computer, character) | none — the artisanal tier, added per-video |
 
-Rules of content honesty: `screen` and `talking_head` are footage and must be real. `console` renders *captured* output — restyle the chrome, never invent the text. `steps`/`flow` are designed graphics and should look proudly graphic — big type on dark editorial ground, not fake screenshots.
+Content honesty unchanged: screenshots and footage are real; prompt text is the real prompt; diagrams are proudly graphic.
 
-## 3. Cuts and transitions
+## 4. Motion grammar: builds, not cuts
 
-- Every scene change is a **hard cut + settle**: the incoming scene starts at 106–108% scale and springs to 100% in ~8 frames. No crossfades, no slides, no wipes — they read as template software.
-- Every cut fires a **whoosh** (auto-bound, not authored per-scene).
-- Punch-zooms (`punch_zoom` events) live *inside* scenes for emphasis words. Never schedule a zoom within 0.5s of a scene boundary — the cut is already the accent.
+- Hard cuts are rare (~1 per 4s) and reserved for chapter turns. Within a scene, **something must change every ~1s**: a card lands, a screenshot duplicates, a word arrives, a connector draws, the pile fans wider.
+- Entrances are springy and physical: cards drop/slide in with overshoot and a shadow that grows as they "land." Same spring configs as v1 (damping 11–14, stiffness 220–260 in; 16–18/130–180 out).
+- Multiplication is a signature move: one card → three → a 3×3 grid fan, each copy offset and slightly rotated, arriving in rapid stagger (~80–120ms apart).
+- The camera drifts and punches gently over the tabletop (our punch_zoom survives), but the table does the work, not the lens.
+- 2.5D: cards tilt a few degrees and carry believable shadows. v1's §3D rules survive with the same restraint caps.
+- The connective tissue between scenes is often a shared element that persists and transforms (the icon card travels; the prompt bar shrinks into a corner) — when in doubt, morph the anchor rather than cutting.
 
-## 4. Layout and typography
+## 5. Sound
 
-- Canvas 720×1280 design space. Safe margins: 6% sides, 12% top (platform UI), 20% bottom (captions + platform UI).
-- **One focal element per moment.** A scene shows the demo OR a step build OR a stat — never a dashboard of widgets. If two things matter, that's two scenes.
-- Captions: Inter Black, ~5.2% of height, uppercase, white with dark stroke; emphasis words 12% larger in accent color. Captions sit at 68% height, centered. 1–3 words on screen at a time.
-- **Captions only over footage.** During `console`/`steps`/`flow` scenes the caption track goes dark — the scene's own type carries the words. Captions over a graphic scene is a disqualifying collision.
-- Graphic scenes (console/steps/flow): type is the design. Headlines ≥ 4.5% of height. Body never below 2.2% — if it's not legible on a phone at arm's length, it doesn't ship.
-- Numbers get outsized treatment: step indices, counts, and stats render 2–3× body size.
+(Largely as v1 — the reference confirms it.) Whoosh/pop on entrances, typing tick under prompt cards, ding on reveals; everything ducked under continuous VO. Music bed low. SFX variants rotate so repeats don't machine-gun.
 
-## 5. Color
+## 6. The talking head, when there is one
 
-- Ground: near-black blue (#0b0e14 → #10141c radial), not pure black.
-- Ink: #fafafa. Muted: rgba(255,255,255,0.64).
-- Accent (default #ffd60a yellow) is rationed: emphasis caption words, step indices, active flow nodes, the CTA. If accent appears in two places at once, one of them is wrong.
-- Success/console green #22c55e reserved for terminal prompts and "it worked" moments.
-- Per-brand skinning swaps accent + logo only. Ground, ink, and type scale are the engine's signature and stay fixed.
+- Full-frame face for the hook and big opinions (video 2's pattern), warm real environment, no chrome.
+- Elsewhere the face rides in a rounded card (~28–35% width) parked beside the content it's reacting to.
+- A video can have zero face (video 1) and still hit the grade — the SaaS path.
 
-## 6. Motion
+## 7. Pacing template (reference-measured, ~60s)
 
-- Springs only. Entrances: damping 11–14, stiffness 220–260 (fast, slight overshoot). Exits: damping 16–18, stiffness 130–180 (quicker settle, no bounce).
-- Motion blur (`Trail`) on any element travelling more than ~10% of canvas in under 0.3s.
-- Sequenced builds (steps, flow nodes) land **on the spoken word** that names them, not on even intervals.
-- Idle is forbidden: any scene older than 1.5s must have something alive — type-on cursor, progress fill, subtle 1.5% drift on screen recordings. Imperceptible drift beats visible stillness.
+| beat | scenes |
+|---|---|
+| 0–4s hook | prop/illustrated moment or face full-frame; the brand objects introduced as characters |
+| 4–10s problem | screenshot_pile multiplying (the overwhelm visualized) |
+| 10–13s thesis | typography ("There are 3 levels to this.") |
+| 13–25s level 1 | icon_flow connecting the tools, then prompt_card typing the first real prompt |
+| 25–40s level 2 | screenshot_pile of results + typography interleaved, face insert if available |
+| 40–52s level 3 | card_steps building the workflow/funnel |
+| 52–60s payoff | typography with the emotional line, brand icons resting, CTA |
 
-## 7. 3D depth
+## 8. What disqualifies a render (v2)
 
-Depth sells the grade, but it's seasoning, not structure. v1 is CSS perspective only (no WebGL); `@remotion/three` is the escalation path if we ever need a true product spin.
+- A dark full-bleed background (the paper ground is the brand of this grammar)
+- Bottom-bar captions of any kind
+- A naked layer — any content not sitting in a shadowed card on the paper
+- Two seconds with nothing entering, multiplying, or transforming
+- A fixed accent color applied without meaning; a brand word not in its brand color
+- Hard cuts as the default transition; uniform type (no serif/script mix, no size contrast)
+- Fake screenshots, invented prompt text, fabricated metrics
 
-- **Perspective 1000–1200px** on any container whose children rotate in 3D. Flat rotation without perspective reads as a squash — never ship it.
-- **Entrances may be steep, rests must be shallow.** Elements can flip in from up to 75° (logo cards rotateY, step cards rotateX from their top edge) but settle to ≤4° resting tilt. Resting elements may idle-float (±3–4° slow oscillation) — this also satisfies the no-idle rule.
-- **Light follows tilt.** Any 3D rotation shifts the element's shadow in the opposite direction; a tilt with a static shadow looks pasted on.
-- **Cuts get a breath of depth**: the scene-enter settle may add ≤3° of rotateX falling to 0 alongside the scale settle. Subliminal, not architectural.
-- Banned: continuous logo spins, extruded 3D text, elements orbiting the canvas, anything that would feel at home on a DVD screensaver. If the viewer *notices* the 3D, it's too much.
+## 9. Asset implications (build list)
 
-## 8. Sound
-
-Three layers, mixed in this order of priority:
-1. **Voice** — full level, always intelligible.
-2. **SFX** — whoosh on every cut, pop on every element entrance, tick on caption emphasis (sparingly). −12dB under voice. Placeholders are synthesized; a real pack (e.g. one whoosh family + one pop family, 3–4 variants each to avoid machine-gun repetition) is the single cheapest quality upgrade.
-3. **Music** — optional bed at −24dB. Drops out entirely for the final CTA second.
-
-## 9. Pacing template (30s reference cut)
-
-| t | scene | why |
-|---|---|---|
-| 0–2.5 | talking_head | hook, eye contact |
-| 2.5–6 | console or screen | show the claim immediately |
-| 6–10 | screen | the demo, zoomed to the action |
-| 10–12 | talking_head | re-hook: "but here's the part nobody does" |
-| 12–17 | steps | the how, building per word |
-| 17–22 | screen | result reveal |
-| 22–26 | flow | the system view / before→after |
-| 26–30 | talking_head | CTA, face, accent-colored payoff line |
-
-The 10–12s re-hook on the face is deliberate — retention dips there; a human re-grabs it.
-
-## 10. What disqualifies a render
-
-- A scene over 5s, or a talking head sitting behind graphics the whole video
-- Any invented "screenshot," fake cursor, or fabricated terminal text
-- Caption text smaller than 4.5% height, or two focal elements fighting
-- A cut without a sound, an entrance without a spring, accent in two places
-- Even-interval builds that ignore the voice
+1. **Fonts**: Fraunces Black + Black Italic (Google Fonts) as the Cooper/Recoleta stand-in; swap candidates later.
+2. **Paper ground component**: color + grid + grain, shared by every scene.
+3. **Card primitive**: one component (radius/shadow/tilt presets) that screenshots, prompts, icons, steps, and face-inserts all reuse.
+4. **Icon-card library**: brand glyph on black rounded square — generated per brand from logo assets.
+5. **Screenshot harvesting**: real product screenshots are now a *primary input* (Roger: this is what product-videogen's media library already does well).
+6. Illustrated props: out of scope for the engine; per-video artisanal assets, possibly AI-generated and approved by a human.
