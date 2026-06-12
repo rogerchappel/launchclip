@@ -245,6 +245,57 @@ test("renders punchy social-ready UGC preview with Remotion", async (t) => {
   }
 });
 
+test("renders premium product short sample with local manifest assets", async (t) => {
+  if (!(await hasCommand("ffmpeg")) || !(await hasCommand("npx"))) {
+    t.skip("ffmpeg or npx is not installed");
+    return;
+  }
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
+  const out = path.join(temp, "packet");
+  const assetsDir = path.join(temp, "assets");
+  try {
+    await writePremiumAssetManifest(assetsDir, {
+      "claude-code": "claude-code.png",
+      github: "github.png",
+      obsidian: "obsidian.png",
+      "terminal-demo": "terminal-demo.png",
+      "prompt-example": { path: "prompt-example.txt", type: "text", label: "Prompt Example" }
+    });
+    await initWorkspace(fixtureRepo, { out });
+    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
+    await planVideo(out, { format: "short-30", renderer: "remotion", style: "premium-product-short", "assets-dir": assetsDir });
+    await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
+    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
+    await submitReview(out, { provider: "product-videogen", "dry-run": true });
+    const result = await renderVideo(out, { provider: "remotion", duration: "6", fps: "15", "assets-dir": assetsDir });
+
+    const manifest = JSON.parse(await readFile(path.join(out, "launchclip.json"), "utf8"));
+    const props = JSON.parse(await readFile(path.join(out, "video/remotion-props.json"), "utf8"));
+    const readiness = await validateWorkspace(out);
+    const stills = [1, 3, 5].map((second) => path.join(out, "video", `premium-still-${second}s.png`));
+    for (const [index, still] of stills.entries()) {
+      await execFileAsync("ffmpeg", ["-y", "-ss", String([1, 3, 5][index]), "-i", result.video, "-frames:v", "1", still], { maxBuffer: 1024 * 1024 * 8 });
+      await access(still);
+    }
+
+    await access(result.video);
+    await access(result.thumbnail);
+    await access(path.join(out, "video/render-public/assets/claude-code.png"));
+    await access(path.join(out, "video/render-public/assets/github.png"));
+    await access(path.join(out, "video/render-public/assets/obsidian.png"));
+    assert.equal(manifest.stages.render.composition, "LaunchclipPremiumShort");
+    assert.equal(props.publicAssets.schema_version, "launchclip.assets.v1");
+    assert.equal(props.publicAssets.missing_aliases.length, 0);
+    assert.equal(Object.keys(props.publicAssets.aliases).length, 5);
+    assert.equal(props.timeline.length, 8);
+    assert.equal(props.storyboard.scenes[3].type_sequences[0].source_alias, "prompt-example");
+    assert.equal(readiness.status, "ready");
+    assert.deepEqual(readiness.warnings, []);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("validation catches missing script and visual alignment fields", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
   const out = path.join(temp, "packet");
