@@ -47,7 +47,7 @@ export const CARD = {
 };
 
 export const SPRINGS = {
-  enter: { damping: 12, stiffness: 240, mass: 0.7 },
-  settle: { damping: 14, stiffness: 220, mass: 0.8 },
+  enter: { damping: 17, stiffness: 175, mass: 0.9 },
+  settle: { damping: 18, stiffness: 160, mass: 0.9 },
   exit: { damping: 17, stiffness: 150, mass: 0.85 }
 };
