@@ -148,6 +148,36 @@ export async function parseDirection(client, promptText, assetPaths = []) {
   return JSON.parse(firstText(response));
 }
 
+// ElevenLabs TTS + scribe alignment: a fully autonomous voice path. Returns
+// { voicePath (renderer-relative), words } with REAL timings to align to.
+export async function synthesizeVoice(scriptText, { log = () => {} } = {}) {
+  const key = process.env.ELEVENLABS_API_KEY;
+  if (!key) throw new Error("ELEVENLABS_API_KEY is required for --voice tts");
+  const voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
+  log("tts: synthesizing voiceover");
+  const ttsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
+    method: "POST",
+    headers: { "xi-api-key": key, "Content-Type": "application/json" },
+    body: JSON.stringify({ text: scriptText, model_id: "eleven_multilingual_v2" })
+  });
+  if (!ttsResponse.ok) throw new Error(`ElevenLabs TTS failed (${ttsResponse.status}): ${(await ttsResponse.text()).slice(0, 200)}`);
+  const audio = Buffer.from(await ttsResponse.arrayBuffer());
+  const voiceDir = path.join(PACKAGE_ROOT, "public", "voice");
+  await mkdir(voiceDir, { recursive: true });
+  const fileName = `tts-${Date.now()}.mp3`;
+  await writeFile(path.join(voiceDir, fileName), audio);
+  log("tts: transcribing for word timings");
+  const form = new FormData();
+  form.append("file", new Blob([audio], { type: "audio/mpeg" }), "voice.mp3");
+  form.append("model_id", "scribe_v1");
+  const sttResponse = await fetch("https://api.elevenlabs.io/v1/speech-to-text", { method: "POST", headers: { "xi-api-key": key }, body: form });
+  if (!sttResponse.ok) throw new Error(`scribe failed (${sttResponse.status})`);
+  const transcript = await sttResponse.json();
+  const words = (transcript.words ?? []).filter((entry) => entry.type === "word").map((entry) => ({ word: entry.text, start: entry.start, end: entry.end }));
+  if (!words.length) throw new Error("scribe returned no words");
+  return { voicePath: `voice/${fileName}`, words };
+}
+
 // Deterministic word-timing estimator for --voice none (no recorded speech).
 export function estimateWords(script) {
   let t = 0.4;
@@ -202,7 +232,7 @@ export async function directTimeline({ client, words, durationSeconds, assets, d
       events: draft.events
     };
     const validation = validateTimeline(candidate);
-    const lint = validation.ok ? lintTimeline(validation.timeline, { direction, assets }) : { ok: false, failures: [], advisories: [] };
+    const lint = validation.ok ? lintTimeline(validation.timeline, { direction, assets, presenterSrc: baseSrc }) : { ok: false, failures: [], advisories: [] };
     lastReport = { attempt, validation: validation.errors, lint: lint.failures, advisories: [...validation.warnings, ...lint.advisories], rationale: draft.rationale };
     if (validation.ok && lint.ok) {
       log(`director: valid + lint-clean on attempt ${attempt}`);
@@ -356,7 +386,7 @@ export async function directHighTimeline(ctx) {
     events: draft.events
   };
   const validation = validateTimeline(candidate);
-  const lint = validation.ok ? lintTimeline(validation.timeline, { direction, assets }) : { ok: false, failures: [], advisories: [] };
+  const lint = validation.ok ? lintTimeline(validation.timeline, { direction, assets, presenterSrc: baseSrc }) : { ok: false, failures: [], advisories: [] };
   const criticIssues = critique.verdict === "revise" ? critique.findings.map((finding) => `CRITIC (${finding.scene_id ?? "global"}): ${finding.issue} — fix: ${finding.fix}`) : [];
   const issues = [...validation.errors.map((error) => `SCHEMA: ${error}`), ...lint.failures.map((failure) => `LINT: ${failure}`), ...criticIssues];
 
@@ -379,10 +409,12 @@ export function scanAssets(extraDir = null) {
     const full = path.join(PACKAGE_ROOT, "public", dir);
     if (!existsSync(full)) return;
     for (const file of readdirSync(full)) {
+      if (file === "talking-head.mp4") continue; // generated stand-in, never directable
       if (/\.(png|jpe?g|svg|webp|mp4|mov)$/i.test(file)) assets.push({ path: `${prefix}/${file}`, kind });
     }
   };
   add("logos", "icon", "logos");
+  add("icons", "generic-icon", "icons");
   add("shots", "screenshot", "shots");
   add("base", "footage", "base");
   if (extraDir) {
@@ -419,6 +451,10 @@ export async function runDirect(out, flags = {}) {
   if (flags.words) {
     words = JSON.parse(await readFile(flags.words, "utf8"));
     scriptText = scriptText ?? words.map((word) => word.word).join(" ");
+  } else if (scriptText && flags.voice === "tts") {
+    const synthesized = await synthesizeVoice(scriptText, { log });
+    words = synthesized.words;
+    flags["voice-src"] = synthesized.voicePath;
   } else if (scriptText) {
     words = estimateWords(scriptText);
   } else {
@@ -430,7 +466,7 @@ export async function runDirect(out, flags = {}) {
   const durationSeconds = Number(flags.duration ?? Math.ceil((words[words.length - 1].end + 0.4) * 10) / 10);
 
   const baseSrc = flags.take ?? null;
-  const voiceoverSrc = baseSrc;
+  const voiceoverSrc = flags["voice-src"] ?? baseSrc;
   const musicSrc = flags.music ?? (existsSync(path.join(PACKAGE_ROOT, "public", "music", "golden-bed.mp3")) ? "music/golden-bed.mp3" : "");
 
   const assets = scanAssets(flags.assets ?? null);

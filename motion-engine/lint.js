@@ -10,7 +10,7 @@ const WORD_SNAP_TOLERANCE = 0.12;
 // types, feeds scroll) vs. those alive only when an item lands.
 const CONTINUOUS_SCENES = new Set(["talking_head", "screen", "prompt_card"]);
 
-export function lintTimeline(timeline, { direction = null, assets = [] } = {}) {
+export function lintTimeline(timeline, { direction = null, assets = [], presenterSrc = null } = {}) {
   const failures = [];
   const advisories = [];
 
@@ -20,6 +20,13 @@ export function lintTimeline(timeline, { direction = null, assets = [] } = {}) {
   checkBudgets(timeline, failures, advisories);
   if (direction) checkDirectionHonored(timeline, direction, failures);
   if (assets.length) checkAssetsExist(timeline, assets, failures);
+  if (presenterSrc) {
+    for (const scene of timeline.scenes ?? []) {
+      if (scene.type === "talking_head" && scene.src !== presenterSrc) {
+        failures.push(`scene "${scene.id}" uses "${scene.src}" — talking_head scenes must use the presenter take "${presenterSrc}"`);
+      }
+    }
+  }
 
   return { ok: failures.length === 0, failures, advisories };
 }

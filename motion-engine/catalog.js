@@ -54,7 +54,7 @@ export const SCENE_CATALOG = [
     use_for: "Pipelines, integrations, before→after chains: brand-icon cards connected by dotted lines, building vertically as each node is spoken. Final node may be the payoff (mint).",
     avoid_when: "More than 4 nodes. Node labels longer than ~4 words.",
     params: '{ "type": "icon_flow", "start", "end", "items": [{"text": "label", "at", "src?": "<icon image>", "color?"}] }',
-    density: "Node + connector per item; arrive by zoom-from-depth.",
+    density: "Node + connector per item; arrive by zoom-from-depth. When no brand asset fits, use the generic icons (icons/globe.svg, browser, server, database, document, gear, magnifier, clock, check, lightning, laptop, cloud) — real shapes beat text-only nodes.",
     example: { type: "icon_flow", start: 11.1, end: 15.0, items: [{ text: "your demo", at: 11.2, src: "logos/terminal.svg" }, { text: "ready to post", at: 14.0, color: "mint" }] }
   },
   {
