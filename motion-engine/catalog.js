@@ -82,6 +82,34 @@ export const SCENE_CATALOG = [
     params: '{ "type": "quote_card", "start", "end", "text": "the quote", "attribution?": "who said it", "at": word_start }',
     density: "Single landing; keep the scene 2.5-4s and pair with a punch_zoom if it runs long.",
     example: { type: "quote_card", start: 30, end: 33, text: "Ship the proof, not the promise.", attribution: "every good launch", at: 30.2 }
+  },
+  {
+    type: "funnel",
+    use_for:
+      "A process or sales funnel as numbered step cards that taper into a funnel silhouette, threaded by a centre dotted spine and landing one per beat. Use for pipelines, multi-stage flows, 'here's how it works' sequences. One step can be coloured (mint = success); an optional branch card (coral) loops off the side via a curved dotted line for a failure/alternate path.",
+    avoid_when: "More than 6 steps (split it); step labels longer than ~4 words. Icons that aren't real assets from the manifest.",
+    params:
+      '{ "type": "funnel", "start", "end", "title?": "script kicker", "items": [{"text", "at", "icon?": "icons/...svg", "color?": "mint", "badge?": "1"}], "branch?": {"fromIndex": 3, "at", "text": "No Reply", "color": "coral"} }',
+    density: "One card + step chip per beat; the spine and any branch connector draw on as cards land.",
+    example: { type: "funnel", start: 8, end: 13, title: "the pipeline", items: [{ text: "Prospect Found", at: 8.1, icon: "icons/magnifier.svg" }, { text: "Email Sent", at: 9.0, icon: "icons/document.svg" }, { text: "Reply Received", at: 10.0, icon: "icons/check.svg", color: "mint" }] }
+  },
+  {
+    type: "profile_cards",
+    use_for:
+      "Real people/clients as cards. mode 'cascade': 2-4 cards (avatar + name + role + optional pill) staggered diagonally, landing per beat — good for 'we hire for X, Y, Z' or testimonials. mode 'grid': many compact client cards multiply into a grid, with an optional total card that counts up ('Total Monthly Revenue $6,000') — good for scale/social proof.",
+    avoid_when: "Fabricated people or avatars. Cascade with more than 4 (use grid). Grid total value that isn't real.",
+    params:
+      '{ "type": "profile_cards", "start", "end", "mode": "cascade|grid", "items": [{"name", "role?", "avatar?", "pill?", "value?", "at"}], "total?": {"label", "value": "$6,000", "at"} }',
+    density: "One card per beat (cascade) or rapid stagger (grid); the total card lands last and rolls up.",
+    example: { type: "profile_cards", start: 14, end: 18, mode: "cascade", items: [{ name: "Maya Chen", role: "Head of Growth", at: 14.2, pill: "Hiring" }, { name: "Sofia Patel", role: "Performance Marketer", at: 15.1 }] }
+  },
+  {
+    type: "magnifier",
+    use_for: "Inspecting a detail in a real screenshot: a glass magnifying lens glides across the screenshot and reveals a key phrase in prism/rainbow text inside the lens. Use to call out one line in a job post, dashboard, or UI.",
+    avoid_when: "No real screenshot. The phrase is invented. More than one phrase (that's two scenes).",
+    params: '{ "type": "magnifier", "start", "end", "src": "<real screenshot>", "text": "the phrase the lens reveals", "from?": {"x":0-1,"y":0-1}, "to?": {"x":0-1,"y":0-1} }',
+    density: "The lens glides for the whole scene (continuous motion); keep it 2.5-4s.",
+    example: { type: "magnifier", start: 4, end: 7.5, src: "shots/job-post.png", text: "Meta/Google ad management", from: { x: 0.3, y: 0.25 }, to: { x: 0.6, y: 0.7 } }
   }
 ];
 

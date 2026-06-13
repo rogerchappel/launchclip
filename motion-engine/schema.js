@@ -15,7 +15,10 @@ export const SCENE_TYPES = new Set([
   "icon_flow",
   "card_steps",
   "stat_counter",
-  "quote_card"
+  "quote_card",
+  "funnel",
+  "profile_cards",
+  "magnifier"
 ]);
 
 // Art direction: scenes persist while builds run inside them, but nothing
@@ -244,6 +247,75 @@ function normalizeScene(scene, index, errors) {
       return { ...base, title: String(scene?.title ?? ""), mode, items };
     }
     return { ...base, title: String(scene?.title ?? ""), items };
+  }
+  if (type === "funnel") {
+    const raw = Array.isArray(scene?.items) ? scene.items : [];
+    if (!raw.length) errors.push(`scenes[${index}] (funnel) requires items`);
+    const items = raw.map((item, itemIndex) => {
+      const entry = {
+        text: String(item?.text ?? item?.label ?? ""),
+        at: clampNumber(item?.at, start, end, start + itemIndex * 0.7)
+      };
+      if (item?.icon) entry.icon = String(item.icon);
+      if (item?.color) entry.color = String(item.color);
+      if (item?.badge !== undefined) entry.badge = String(item.badge);
+      return entry;
+    });
+    const funnel = { ...base, title: String(scene?.title ?? ""), items };
+    if (scene?.branch && typeof scene.branch === "object") {
+      const fromIndex = Number(scene.branch.fromIndex);
+      if (Number.isInteger(fromIndex) && fromIndex >= 0 && fromIndex < items.length) {
+        funnel.branch = {
+          fromIndex,
+          text: String(scene.branch.text ?? ""),
+          color: scene.branch.color ? String(scene.branch.color) : "coral",
+          at: clampNumber(scene.branch.at, start, end, items[fromIndex].at)
+        };
+      } else {
+        errors.push(`scenes[${index}] (funnel) branch.fromIndex is out of range`);
+      }
+    }
+    return funnel;
+  }
+  if (type === "profile_cards") {
+    const raw = Array.isArray(scene?.items) ? scene.items : [];
+    if (!raw.length) errors.push(`scenes[${index}] (profile_cards) requires items`);
+    const mode = String(scene?.mode ?? "cascade");
+    if (mode !== "cascade" && mode !== "grid") errors.push(`scenes[${index}] (profile_cards) has unknown mode "${mode}"`);
+    const items = raw.map((item, itemIndex) => {
+      const entry = {
+        name: String(item?.name ?? item?.text ?? ""),
+        at: clampNumber(item?.at, start, end, start + itemIndex * 0.5)
+      };
+      if (item?.role) entry.role = String(item.role);
+      if (item?.avatar) entry.avatar = String(item.avatar);
+      if (item?.pill) entry.pill = String(item.pill);
+      if (item?.value) entry.value = String(item.value);
+      return entry;
+    });
+    const profile = { ...base, mode, items };
+    if (scene?.total && typeof scene.total === "object" && scene.total.value !== undefined) {
+      profile.total = {
+        label: String(scene.total.label ?? ""),
+        value: String(scene.total.value),
+        at: clampNumber(scene.total.at, start, end, end - 1.2)
+      };
+    }
+    return profile;
+  }
+  if (type === "magnifier") {
+    if (!scene?.src) errors.push(`scenes[${index}] (magnifier) requires src — a real screenshot`);
+    const point = (p, dx, dy) => ({
+      x: clampNumber(p?.x, 0, 1, dx),
+      y: clampNumber(p?.y, 0, 1, dy)
+    });
+    return {
+      ...base,
+      src: String(scene?.src ?? ""),
+      text: String(scene?.text ?? ""),
+      from: point(scene?.from, 0.3, 0.3),
+      to: point(scene?.to, 0.65, 0.65)
+    };
   }
   return base;
 }
