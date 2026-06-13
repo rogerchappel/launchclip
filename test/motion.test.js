@@ -146,6 +146,59 @@ test("prompt_card icons normalize to at most 3 string paths", () => {
   assert.deepEqual(result.timeline.scenes[0].icons, ["logos/a.svg", "logos/b.svg", "logos/c.svg"]);
 });
 
+test("funnel, profile_cards, and magnifier normalize their fields", () => {
+  const result = validateTimeline({
+    ...baseTimeline([]),
+    scenes: [
+      {
+        id: "f",
+        type: "funnel",
+        start: 0,
+        end: 4,
+        title: "the pipeline",
+        items: [
+          { text: "Prospect", at: 0.2, icon: "icons/magnifier.svg" },
+          { text: "Reply", at: 1.0, color: "mint", badge: "1" }
+        ],
+        branch: { fromIndex: 1, at: 2.0, text: "No Reply", color: "coral" }
+      },
+      {
+        id: "p",
+        type: "profile_cards",
+        start: 4,
+        end: 8,
+        mode: "grid",
+        items: [{ name: "Maya", value: "$300/mo", at: 4.2 }],
+        total: { label: "Total", value: "$6,000", at: 6.5 }
+      },
+      { id: "m", type: "magnifier", start: 8, end: 10, src: "shots/x.svg", text: "hi", from: { x: 0.2, y: 0.1 }, to: { x: 0.9, y: 0.8 } }
+    ]
+  });
+  assert.equal(result.ok, true, result.errors.join("; "));
+  const [funnel, profile, mag] = result.timeline.scenes;
+  assert.equal(funnel.items[0].icon, "icons/magnifier.svg");
+  assert.equal(funnel.items[1].color, "mint");
+  assert.equal(funnel.branch.fromIndex, 1);
+  assert.equal(funnel.branch.color, "coral");
+  assert.equal(profile.mode, "grid");
+  assert.equal(profile.total.value, "$6,000");
+  assert.equal(mag.src, "shots/x.svg");
+  assert.equal(mag.to.x, 0.9);
+});
+
+test("funnel rejects an out-of-range branch and magnifier requires src", () => {
+  const result = validateTimeline({
+    ...baseTimeline([]),
+    scenes: [
+      { id: "f", type: "funnel", start: 0, end: 4, items: [{ text: "a", at: 0.2 }], branch: { fromIndex: 9, at: 1, text: "x" } },
+      { id: "m", type: "magnifier", start: 4, end: 6, text: "no src here" }
+    ]
+  });
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((e) => e.includes("branch.fromIndex is out of range")));
+  assert.ok(result.errors.some((e) => e.includes("(magnifier) requires src")));
+});
+
 test("zooms hugging a scene cut produce a warning", () => {
   const result = validateTimeline({
     ...baseTimeline([{ id: "z", type: "punch_zoom", start: 3.8, end: 4.8 }]),

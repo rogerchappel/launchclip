@@ -157,21 +157,26 @@ What it taught us, by status:
 - **Composer**: white circular ↵ send, paperclip; accent words snap to colour
   on the beat.
 
-**Banked for the vocabulary pass (Stage 3) — what ours still lacks:**
-- **Funnel layout**: trapezoidal step cards tapering into a funnel (t17/t20),
-  numbered, each with a content-specific icon in a circular badge, a centre
-  dotted spine, one card green (success) and a red branch on a curved dotted
-  loop-back path. Plus a straight-stack variant with a green "output" card
-  (t31).
-- **Profile/person cards**: avatar + name + role pill (t13), sliding in and
-  cascading; real screenshot cards tilted in depth.
-- **Grid-multiply → total**: one card multiplies into a 4×4 grid, then a sum
-  card lands ("Total… $6,000", t43). Price chips ($300/mo) as pills.
-- **Magnifier prop**: a glass lens with chromatic fringing and prism text,
-  gliding over a screenshot (t4.5).
-- **Long-content card** with a bottom fade gradient gated by a price/lock
-  (t39); a persistent anchor (the composer) that morphs across scenes; a
-  camera pull-back that reveals two elements at once; brand mascot character.
+**Shipped in the Stage 3 vocabulary pass (new scene types):**
+- **`funnel`**: numbered step cards tapering into a funnel silhouette
+  (t17/t20), each with a content-specific icon in a circular badge, a centre
+  dotted spine, semantic card colour (mint = success), and an optional coral
+  branch card on a curved dotted loop-back path. (Branch needs narrower cards
+  / short labels to clear the side margin — wide-card timelines should omit
+  it.) `motion-engine/components/FunnelScene.jsx`.
+- **`profile_cards`**: real people/clients. mode `cascade` = avatar + name +
+  role + pill cards staggered diagonally (t13); mode `grid` = compact client
+  cards multiplying into a grid with an optional **count-up total** card
+  ("Total Monthly Revenue $6,000", t43). Initials fallback when no avatar.
+  `motion-engine/components/ProfileCards.jsx`.
+- **`magnifier`**: a glass lens (metallic rim, chromatic fringing, handle)
+  gliding over a real screenshot, revealing a key phrase in prism/rainbow
+  text (t4.5). `motion-engine/components/Magnifier.jsx`.
+
+**Still banked (future passes):** long-content card with a bottom fade gated
+by a price/lock (t39); a persistent anchor (the composer) that morphs across
+scenes; a camera pull-back that reveals two elements at once; brand mascot
+character; real screenshot cards cascading in depth.
 
 ## 5. Sound
 

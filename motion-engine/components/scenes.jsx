@@ -3,6 +3,9 @@ import { AbsoluteFill, Img, OffthreadVideo, Sequence, spring, staticFile, useCur
 import { Card, GlowBorder } from "./paper.jsx";
 import { CARD, FONTS, INK, SEMANTIC, SPRINGS, TYPE_SHADOW } from "../theme.js";
 import { focalDrift, stackLayout } from "../reflow.js";
+import { FunnelScene } from "./FunnelScene.jsx";
+import { ProfileCards } from "./ProfileCards.jsx";
+import { MagnifierScene } from "./Magnifier.jsx";
 
 // Scene track (ART_DIRECTION 4e): scene changes are hard cuts — the next
 // composition is on screen immediately and its builds start at once. The
@@ -48,6 +51,9 @@ function Scene({ scene, width, height }) {
   if (scene.type === "screenshot_pile") return <ScreenshotPileScene scene={scene} width={width} height={height} />;
   if (scene.type === "stat_counter") return <StatCounterScene scene={scene} width={width} height={height} />;
   if (scene.type === "quote_card") return <QuoteCardScene scene={scene} width={width} height={height} />;
+  if (scene.type === "funnel") return <FunnelScene scene={scene} width={width} height={height} />;
+  if (scene.type === "profile_cards") return <ProfileCards scene={scene} width={width} height={height} />;
+  if (scene.type === "magnifier") return <MagnifierScene scene={scene} width={width} height={height} />;
   return null;
 }
 
