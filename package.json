@@ -47,5 +47,9 @@
     "react-dom": "19.1.0",
     "remotion": "4.0.475",
     "three": "0.184.0"
-  }
+  },
+  "bugs": {
+    "url": "https://github.com/rogerchappel/launchclip/issues"
+  },
+  "homepage": "https://github.com/rogerchappel/launchclip#readme"
 }
