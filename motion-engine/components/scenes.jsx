@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Img, OffthreadVideo, Sequence, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { Card, GlowBorder } from "./paper.jsx";
-import { FONTS, INK, SEMANTIC, SPRINGS, TYPE_SHADOW } from "../theme.js";
+import { CARD, FONTS, INK, SEMANTIC, SPRINGS, TYPE_SHADOW } from "../theme.js";
 import { focalDrift, stackLayout } from "../reflow.js";
 
 // Scene track (ART_DIRECTION 4e): scene changes are hard cuts — the next
@@ -153,6 +153,18 @@ function WordBuild({ scene, width, height, region, onDark = false }) {
         const motionBlur = entranceBlur(enter, enterPrev);
         const emphasised = Boolean(item.emphasis);
         const size = emphasised ? base * 1.9 : base;
+        // The accent word lands in ink, then SNAPS into its colour a beat later
+        // with a small pulse — the reference's "gains its colour on the word"
+        // (P4 teardown). Plain words just use their colour from the start.
+        const colorDelay = Math.round(0.12 * fps);
+        const colored = !item.color || !emphasised || localFrame >= colorDelay;
+        const wordColor = item.color
+          ? colored
+            ? semanticColor(item.color)
+            : onDark ? INK.onDark : INK.primary
+          : onDark ? INK.onDark : INK.primary;
+        const pulseP = item.color && emphasised ? clamp(spring({ frame: localFrame - colorDelay, fps, config: SPRINGS.enter })) : 0;
+        const pulse = 1 + 0.09 * Math.sin(pulseP * Math.PI);
         return (
           <span
             key={index}
@@ -163,12 +175,12 @@ function WordBuild({ scene, width, height, region, onDark = false }) {
               fontWeight: 900,
               fontSize: size,
               lineHeight: 1.04,
-              color: item.color ? semanticColor(item.color) : onDark ? INK.onDark : INK.primary,
+              color: wordColor,
               textShadow: onDark ? "0 4px 18px rgba(10,10,8,0.55)" : TYPE_SHADOW,
               transform: [
                 `rotate(${WORD_ROTATIONS[index % WORD_ROTATIONS.length]}deg)`,
                 `translateY(${WORD_OFFSETS[index % WORD_OFFSETS.length] * base + (1 - enter) * base * 0.6}px)`,
-                `scale(${0.7 + enter * 0.3})`
+                `scale(${(0.7 + enter * 0.3) * pulse})`
               ].join(" "),
               opacity: Math.min(1, enter * 1.5),
               filter: motionBlur
@@ -247,17 +259,22 @@ function PromptCardScene({ scene, width, height }) {
               ))}
               <div style={{ flex: 1 }} />
               <Mic size={fontSize} />
+              <Paperclip size={fontSize} />
+              {/* Send: a white filled circle with a dark enter glyph, like the
+                  reference composer (t23). It presses on prompt completion. */}
               <div
                 style={{
-                  fontFamily: FONTS.sans,
-                  fontWeight: 800,
-                  fontSize: fontSize * 1.5,
-                  lineHeight: 1,
-                  color: INK.onDark,
-                  transform: `scale(${arrowScale})`
+                  width: fontSize * 1.9,
+                  height: fontSize * 1.9,
+                  borderRadius: "50%",
+                  background: INK.onDark,
+                  display: "grid",
+                  placeItems: "center",
+                  transform: `scale(${arrowScale})`,
+                  flexShrink: 0
                 }}
               >
-                ↑
+                <span style={{ fontFamily: FONTS.sans, fontWeight: 700, fontSize: fontSize * 1.15, lineHeight: 1, color: CARD.dark }}>↵</span>
               </div>
             </div>
           </Card>
@@ -280,6 +297,22 @@ function Mic({ size }) {
       <div style={{ width: size * 0.55, height: size * 0.9, borderRadius: 999, border: `2px solid ${INK.onDarkMuted}` }} />
       <div style={{ width: size * 0.9, height: size * 0.35, borderBottom: `2px solid ${INK.onDarkMuted}`, borderLeft: `2px solid ${INK.onDarkMuted}`, borderRight: `2px solid ${INK.onDarkMuted}`, borderRadius: "0 0 999px 999px" }} />
     </div>
+  );
+}
+
+// Simple attachment glyph for the composer row, matching the reference (t23).
+function Paperclip({ size }) {
+  return (
+    <div
+      style={{
+        width: size * 0.62,
+        height: size * 1.05,
+        borderRadius: 999,
+        border: `2px solid ${INK.onDarkMuted}`,
+        borderBottom: "none",
+        transform: "rotate(35deg)"
+      }}
+    />
   );
 }
 

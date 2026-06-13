@@ -23,13 +23,16 @@ export function PaperGround() {
 
 // The living border for dark focal cards (ART_DIRECTION 4d.3, tuned in 4e):
 // a long, bright rim-light sweep travelling the card edge — reference reads
-// as a light source hugging the card, ~half the perimeter lit, with a wide
-// bloom falling onto the paper. Wrap the Card; the sweep hugs its radius.
-export function GlowBorder({ radius = CARD.radius, color = SEMANTIC.mint, thickness = 5, sweepDegreesPerSecond = 70, style, children }) {
+// the reference reads as a light catching ONE edge of the card, not a halo
+// around the whole thing: a thin, bright rim that travels the border with
+// only a small bloom falling just past the edge. Wrap the Card; the sweep
+// hugs its radius. (Tuned in the P4 teardown — was a wide diffuse 210° bloom,
+// which read as mush; now a tight ~110° arc with a crisp rim line.)
+export function GlowBorder({ radius = CARD.radius, color = SEMANTIC.mint, thickness = 3, sweepDegreesPerSecond = 80, style, children }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const angle = ((frame / fps) * sweepDegreesPerSecond) % 360;
-  const ring = `conic-gradient(from ${angle}deg, transparent 0deg, ${color} 40deg, #9FE8C6 80deg, #E4FFF2 105deg, #9FE8C6 130deg, ${color} 170deg, transparent 210deg)`;
+  const ring = `conic-gradient(from ${angle}deg, transparent 0deg, ${color} 34deg, #E4FFF2 55deg, ${color} 76deg, transparent 110deg)`;
   const edge = {
     position: "absolute",
     inset: -thickness,
@@ -38,7 +41,7 @@ export function GlowBorder({ radius = CARD.radius, color = SEMANTIC.mint, thickn
   };
   return (
     <div style={{ position: "relative", ...style }}>
-      <div style={{ ...edge, inset: -thickness * 3, borderRadius: radius + thickness * 3, filter: `blur(${thickness * 7}px)`, opacity: 0.95 }} />
+      <div style={{ ...edge, inset: -thickness * 1.5, borderRadius: radius + thickness * 1.5, filter: `blur(${thickness * 3}px)`, opacity: 0.55 }} />
       <div
         style={{
           ...edge,

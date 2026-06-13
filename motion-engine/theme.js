@@ -39,12 +39,13 @@ export const CARD = {
   light: "#FFFFFF",
   dark: "#121210",
   radius: 28,
-  // Client feedback pass (ART_DIRECTION 4e): the light source sits top-left,
-  // so every shadow falls to the BOTTOM-RIGHT and stays sharp — a tight
-  // contact edge plus a moderate directional throw, like a print shadow.
-  shadow: "3px 4px 6px rgba(26,26,24,0.2), 10px 14px 24px rgba(26,26,24,0.26)",
-  shadowLow: "2px 3px 4px rgba(26,26,24,0.18), 6px 8px 14px rgba(26,26,24,0.22)",
-  shadowHigh: "4px 6px 8px rgba(26,26,24,0.22), 16px 22px 38px rgba(26,26,24,0.3)"
+  // Light source sits top-left, so every shadow falls to the BOTTOM-RIGHT.
+  // P4 teardown (reference t48): the shadows are crisper, darker and tighter
+  // than a soft hover — a hard-light print shadow. Smaller blur radii, higher
+  // opacity, a touch more directional offset.
+  shadow: "4px 5px 5px rgba(26,26,24,0.26), 9px 12px 16px rgba(26,26,24,0.2)",
+  shadowLow: "3px 4px 4px rgba(26,26,24,0.22), 6px 7px 10px rgba(26,26,24,0.16)",
+  shadowHigh: "5px 7px 7px rgba(26,26,24,0.3), 14px 18px 26px rgba(26,26,24,0.24)"
 };
 
 // Staged type carries the same bottom-right light: a hard offset print
