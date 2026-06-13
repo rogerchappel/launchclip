@@ -99,8 +99,11 @@ Talking-head motion workflow:
   launchclip align <workspace> --media take.mp4 --words words.json
   launchclip motion-render <workspace>                 # render video/motion.mp4 via the motion engine
   launchclip music <workspace> [--prompt "..."] [--duration 18] [--output music/bed.mp3] [--force]
+  launchclip direct <workspace> --voice record --prompt "creative direction"       # writes script + teleprompter, waits for take
+  launchclip direct <workspace> --voice record --take take.mp4 [--words w.json]    # aligns take, directs, renders
+  launchclip direct <workspace> --voice tts --prompt "creative direction"          # generates voice + timings, directs, renders
   launchclip direct <workspace> --prompt "creative direction" [--format software_demo|explainer]
-            [--words w.json --take base/take.mp4 | --script-text "..."] [--duration 45] [--no-render]
+            [--words w.json --take base/take.mp4 | --script-text "..."] [--duration 45] [--no-render] [--quality fast|high]
             [--provider anthropic|openai] [--model <id>]   # LLM: ANTHROPIC_API_KEY (default) or OPENAI_API_KEY
 `;
 }
