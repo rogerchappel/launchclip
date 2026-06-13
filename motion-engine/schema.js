@@ -45,10 +45,21 @@ export const DEFAULT_SFX = {
 // cards type, step chips click, the final icon node lands with a retro
 // success hit. Scene changes are silent — no boundary whoosh (4e).
 export const SCENE_SFX = {
+  scene_settle: "soft_thump.wav",
   prompt_typing: "writing_prompt.wav",
   step_item: "single_type.wav",
   icon_item: "pop.wav",
-  icon_final: "retro_success.wav"
+  icon_final: "retro_success.wav",
+  funnel_item: "paper_flip.wav",
+  funnel_branch: "paper_hit.wav",
+  profile_card: "chip_drop.wav",
+  profile_total: "success_ding.wav",
+  magnifier_start: "camera_tick.wav",
+  magnifier_focus: "inspection_pop.wav",
+  artifact_item: "paper_hit.wav",
+  artifact_final: "success_ding.wav",
+  terminal_type: "single_type.wav",
+  terminal_status: "success_ding.wav"
 };
 
 // Hard constraints enforced in code, not prompts.
