@@ -18,7 +18,9 @@ export const SCENE_TYPES = new Set([
   "quote_card",
   "funnel",
   "profile_cards",
-  "magnifier"
+  "magnifier",
+  "artifact_grid",
+  "terminal_receipt"
 ]);
 
 // Art direction: scenes persist while builds run inside them, but nothing
@@ -315,6 +317,28 @@ function normalizeScene(scene, index, errors) {
       text: String(scene?.text ?? ""),
       from: point(scene?.from, 0.3, 0.3),
       to: point(scene?.to, 0.65, 0.65)
+    };
+  }
+  if (type === "artifact_grid") {
+    const raw = Array.isArray(scene?.items) ? scene.items : [];
+    if (!raw.length) errors.push(`scenes[${index}] (artifact_grid) requires items`);
+    const items = raw.map((item, itemIndex) => ({
+      label: String(item?.label ?? item?.text ?? item?.path ?? ""),
+      path: String(item?.path ?? ""),
+      at: clampNumber(item?.at, start, end, start + itemIndex * 0.55),
+      ...(item?.src ? { src: String(item.src) } : {}),
+      ...(item?.status ? { status: String(item.status) } : {})
+    }));
+    return { ...base, title: String(scene?.title ?? ""), items };
+  }
+  if (type === "terminal_receipt") {
+    if (!scene?.command) errors.push(`scenes[${index}] (terminal_receipt) requires command`);
+    return {
+      ...base,
+      command: String(scene?.command ?? ""),
+      output: String(scene?.output ?? ""),
+      status: String(scene?.status ?? "passed"),
+      at: clampNumber(scene?.at, start, end, start + 0.4)
     };
   }
   return base;

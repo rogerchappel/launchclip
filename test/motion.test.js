@@ -199,6 +199,33 @@ test("funnel rejects an out-of-range branch and magnifier requires src", () => {
   assert.ok(result.errors.some((e) => e.includes("(magnifier) requires src")));
 });
 
+test("artifact_grid and terminal_receipt normalize proof fields", () => {
+  const result = validateTimeline({
+    ...baseTimeline([]),
+    scenes: [
+      {
+        id: "a",
+        type: "artifact_grid",
+        start: 0,
+        end: 4,
+        title: "receipts",
+        items: [
+          { label: "script", path: "video/script.json", at: 0.2 },
+          { text: "review", path: "REVIEW.md", status: "ready", at: 0.76 }
+        ]
+      },
+      { id: "t", type: "terminal_receipt", start: 4, end: 7, command: "npm run smoke", output: "Smoke OK", status: "passed", at: 4.2 },
+      { id: "c", type: "typography", start: 7, end: 10, items: [{ text: "Now", at: 7.2 }, { text: "done", at: 8.2 }] }
+    ]
+  });
+  assert.equal(result.ok, true, result.errors.join("; "));
+  const [grid, terminal] = result.timeline.scenes;
+  assert.equal(grid.items[1].label, "review");
+  assert.equal(grid.items[1].status, "ready");
+  assert.equal(terminal.command, "npm run smoke");
+  assert.equal(terminal.status, "passed");
+});
+
 test("zooms hugging a scene cut produce a warning", () => {
   const result = validateTimeline({
     ...baseTimeline([{ id: "z", type: "punch_zoom", start: 3.8, end: 4.8 }]),
