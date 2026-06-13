@@ -110,6 +110,24 @@ export const SCENE_CATALOG = [
     params: '{ "type": "magnifier", "start", "end", "src": "<real screenshot>", "text": "the phrase the lens reveals", "from?": {"x":0-1,"y":0-1}, "to?": {"x":0-1,"y":0-1} }',
     density: "The lens glides for the whole scene (continuous motion); keep it 2.5-4s.",
     example: { type: "magnifier", start: 4, end: 7.5, src: "shots/job-post.png", text: "Meta/Google ad management", from: { x: 0.3, y: 0.25 }, to: { x: 0.6, y: 0.7 } }
+  },
+  {
+    type: "artifact_grid",
+    use_for:
+      "Launchclip proof board: generated MP4, thumbnail, captions, review packet, render plan, dry-run payload, or other real workspace artifacts. Use when the script says the output is a packet or receipts before posting.",
+    avoid_when: "The artifact path is not generated or expected by Launchclip. More than 6 items; split into a second proof scene.",
+    params: '{ "type": "artifact_grid", "start", "end", "title?": "proof board", "items": [{"label", "path", "at", "status?": "ready", "src?": "<optional real preview image>"}] }',
+    density: "One artifact card lands every 0.4-0.8s; final card can be mint/success via status.",
+    example: { type: "artifact_grid", start: 18, end: 23, title: "receipts", items: [{ label: "script", path: "video/script.json", at: 18.2 }, { label: "captions", path: "captions/*.md", at: 19.0 }, { label: "review", path: "REVIEW.md", at: 20.0, status: "ready" }] }
+  },
+  {
+    type: "terminal_receipt",
+    use_for:
+      "Real demo command proof: command text, short terminal output, and pass/fail receipt badge. Use for the first concrete proof beat after the hook.",
+    avoid_when: "No real demo command/output exists. Do not invent terminal text.",
+    params: '{ "type": "terminal_receipt", "start", "end", "command": "npm run smoke", "output?": "short real output", "status?": "passed|failed", "at": word_start }',
+    density: "Command types for the whole scene; receipt badge lands on at and terminal output wipes in after it.",
+    example: { type: "terminal_receipt", start: 5, end: 8.5, command: "npm run smoke", output: "Smoke OK", status: "passed", at: 5.2 }
   }
 ];
 
