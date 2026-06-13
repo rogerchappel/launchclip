@@ -89,6 +89,27 @@ test("lint passes a dense, grounded, covered timeline", () => {
   assert.equal(result.failures.length, 0, result.failures.join("; "));
 });
 
+test("reference-grade lint requires proof, variety, and tighter density", () => {
+  const weak = makeTimeline([
+    { id: "a", type: "typography", start: 0, end: 1.8, transition: "cut", items: [{ text: "One", at: 0.3 }, { text: "two", at: 0.9 }, { text: "three", at: 1.5 }] },
+    { id: "b", type: "typography", start: 1.8, end: 3.1, transition: "cut", items: [{ text: "Done", at: 4.0 }] },
+    { id: "c", type: "typography", start: 3.1, end: 6, transition: "cut", items: [{ text: "now", at: 4.6 }] }
+  ]);
+  const weakResult = lintTimeline(weak, { referenceGrade: true });
+  assert.ok(weakResult.failures.some((failure) => failure.includes("at least 4")));
+  assert.ok(weakResult.failures.some((failure) => failure.includes("include artifact_grid or terminal_receipt")));
+  assert.ok(weakResult.failures.some((failure) => failure.includes("repeats")));
+
+  const strong = makeTimeline([
+    { id: "a", type: "typography", start: 0, end: 1.8, transition: "cut", items: [{ text: "One", at: 0.3 }, { text: "two", at: 0.9 }, { text: "three", at: 1.5 }] },
+    { id: "b", type: "prompt_card", start: 1.8, end: 3.0, transition: "cut", text: "launchclip direct . --voice tts" },
+    { id: "c", type: "terminal_receipt", start: 3.0, end: 4.3, transition: "cut", command: "npm run smoke", output: "Smoke OK", status: "passed", at: 4.0 },
+    { id: "d", type: "quote_card", start: 4.3, end: 6, transition: "cut", text: "Ship the proof.", at: 4.6 }
+  ]);
+  const strongResult = lintTimeline(strong, { referenceGrade: true });
+  assert.equal(strongResult.failures.length, 0, strongResult.failures.join("; "));
+});
+
 test("estimateWords produces monotonic plausible timings", () => {
   const estimated = estimateWords("Ship the launch video today. No editor needed.");
   assert.ok(estimated.length === 8);

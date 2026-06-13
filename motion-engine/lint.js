@@ -4,20 +4,22 @@
 // Every recurring critic/human finding should graduate into a rule here.
 
 const MAX_DEAD_AIR_SECONDS = 1.5;
+const MAX_REFERENCE_IDLE_SECONDS = 1.2;
 const WORD_SNAP_TOLERANCE = 0.12;
 
 // Scene types whose surface is continuously alive (footage plays, typing
 // types, feeds scroll) vs. those alive only when an item lands.
-const CONTINUOUS_SCENES = new Set(["talking_head", "screen", "prompt_card", "magnifier"]);
+const CONTINUOUS_SCENES = new Set(["talking_head", "screen", "prompt_card", "magnifier", "terminal_receipt"]);
 
-export function lintTimeline(timeline, { direction = null, assets = [], presenterSrc = null } = {}) {
+export function lintTimeline(timeline, { direction = null, assets = [], presenterSrc = null, referenceGrade = false } = {}) {
   const failures = [];
   const advisories = [];
 
   checkCoverage(timeline, failures);
-  checkDensity(timeline, failures);
+  checkDensity(timeline, failures, { maxDeadAirSeconds: referenceGrade ? MAX_REFERENCE_IDLE_SECONDS : MAX_DEAD_AIR_SECONDS });
   checkWordGrounding(timeline, failures, advisories);
   checkBudgets(timeline, failures);
+  if (referenceGrade) checkReferenceGrade(timeline, failures);
   if (direction) checkDirectionHonored(timeline, direction, failures);
   if (assets.length) checkAssetsExist(timeline, assets, failures);
   if (presenterSrc) {
@@ -58,7 +60,7 @@ function checkCoverage(timeline, failures) {
 
 // Nothing may sit dead longer than MAX_DEAD_AIR_SECONDS: in a non-continuous
 // scene, something must land at least that often.
-function checkDensity(timeline, failures) {
+function checkDensity(timeline, failures, { maxDeadAirSeconds }) {
   for (const scene of timeline.scenes ?? []) {
     if (CONTINUOUS_SCENES.has(scene.type) && scene.type !== "talking_head") continue;
     if (scene.type === "screenshot_pile" && scene.mode === "scroll") continue;
@@ -73,7 +75,7 @@ function checkDensity(timeline, failures) {
     let previous = scene.start;
     for (const mark of [...marks, scene.end]) {
       const gap = mark - previous;
-      const limit = isSplitFace ? MAX_DEAD_AIR_SECONDS * 2 : MAX_DEAD_AIR_SECONDS;
+      const limit = isSplitFace ? maxDeadAirSeconds * 2 : maxDeadAirSeconds;
       if (gap > limit) {
         failures.push(
           `scene "${scene.id}" (${scene.type}) is idle for ${gap.toFixed(1)}s after t=${previous.toFixed(1)} — add an item, event, or split the scene (max ${limit}s)`
@@ -81,6 +83,36 @@ function checkDensity(timeline, failures) {
         break;
       }
       previous = Math.max(previous, mark);
+    }
+  }
+}
+
+function checkReferenceGrade(timeline, failures) {
+  const scenes = timeline.scenes ?? [];
+  const sceneTypes = new Set(scenes.map((scene) => scene.type));
+  if (sceneTypes.size < 4) {
+    failures.push(`reference-grade timeline uses ${sceneTypes.size} scene types — use at least 4 for visual range`);
+  }
+  if (!scenes.some((scene) => scene.type === "artifact_grid" || scene.type === "terminal_receipt")) {
+    failures.push("reference-grade timeline needs proof: include artifact_grid or terminal_receipt");
+  }
+
+  let repeated = 1;
+  for (let index = 1; index < scenes.length; index += 1) {
+    repeated = scenes[index].type === scenes[index - 1].type ? repeated + 1 : 1;
+    if (repeated >= 3) {
+      failures.push(`scene type "${scenes[index].type}" repeats ${repeated} times in a row — vary the visual grammar`);
+      break;
+    }
+  }
+
+  for (const scene of scenes) {
+    if (scene.type === "artifact_grid") {
+      const missing = (scene.items ?? []).filter((item) => !item.path && !item.src).length;
+      if (missing) failures.push(`artifact_grid "${scene.id}" has ${missing} item(s) without a path or src proof reference`);
+    }
+    if (scene.type === "terminal_receipt" && !String(scene.output ?? "").trim()) {
+      failures.push(`terminal_receipt "${scene.id}" needs real output text, not just a command`);
     }
   }
 }
