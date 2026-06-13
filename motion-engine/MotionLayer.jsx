@@ -12,6 +12,16 @@ import { SCENE_SFX } from "./schema.js";
 // paper ground, scenes as physical objects on it, a gentle camera, and a
 // continuous voice with SFX bound to events and cuts. There is no caption
 // track — spoken words are staged by typography scenes.
+// The tabletop is viewed from slightly above (ART_DIRECTION 4f, P4 teardown):
+// the whole world — grid and every scene — sits on one plane tilted back a
+// few degrees, so cards higher on the table recede into depth and shadows
+// fall onto the angled surface. A gentle rotateX with a soft perspective; a
+// small rotateY adds the "looking from the side" feel seen in the reference.
+// The plane is scaled up so the receded top edge still fills the frame.
+// Tune by eye here; the lens and chapter rail stay screen-aligned (UI lives
+// in front of the glass, not on the table).
+const WORLD = { perspective: 2000, tiltX: 6, tiltY: -2.5, fill: 1.1, originY: 40 };
+
 export function MotionLayer({ timeline, enableSfx = true }) {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
@@ -19,18 +29,27 @@ export function MotionLayer({ timeline, enableSfx = true }) {
 
   return (
     <AbsoluteFill style={{ overflow: "hidden" }}>
-      <PaperGround />
-      <AbsoluteFill
-        style={{
-          transform: `scale(${camera.scale})`,
-          transformOrigin: `${camera.originX * 100}% ${camera.originY * 100}%`
-        }}
-      >
-        {timeline.scenes?.length ? (
-          <SceneTrack scenes={timeline.scenes} width={width} height={height} />
-        ) : (
-          <BaseLayer base={timeline.base} width={width} height={height} />
-        )}
+      <AbsoluteFill style={{ perspective: `${WORLD.perspective}px`, perspectiveOrigin: `50% ${WORLD.originY}%` }}>
+        <AbsoluteFill
+          style={{
+            transform: `rotateX(${WORLD.tiltX}deg) rotateY(${WORLD.tiltY}deg) scale(${WORLD.fill})`,
+            transformOrigin: "50% 50%"
+          }}
+        >
+          <PaperGround />
+          <AbsoluteFill
+            style={{
+              transform: `scale(${camera.scale})`,
+              transformOrigin: `${camera.originX * 100}% ${camera.originY * 100}%`
+            }}
+          >
+            {timeline.scenes?.length ? (
+              <SceneTrack scenes={timeline.scenes} width={width} height={height} />
+            ) : (
+              <BaseLayer base={timeline.base} width={width} height={height} />
+            )}
+          </AbsoluteFill>
+        </AbsoluteFill>
       </AbsoluteFill>
 
       <LensEdge />
