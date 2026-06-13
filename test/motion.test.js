@@ -2,13 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
+  DEFAULT_SFX,
   MOTION_TIMELINE_VERSION,
+  SCENE_SFX,
   validateTimeline,
   snapEventsToWords,
   chunkWords
 } from "../motion-engine/schema.js";
 import { buildHeuristicTimeline, flagEmphasis, zoomEvents } from "../motion-engine/heuristics.js";
 import { buildTeleprompterMarkdown, parseWords } from "../src/talking_head.js";
+import { REQUIRED_SFX_FILES } from "../src/sfx.js";
 
 const words = [
   { word: "I", start: 0.2, end: 0.32 },
@@ -38,6 +41,17 @@ test("validateTimeline accepts a well-formed timeline and fills defaults", () =>
   assert.equal(result.timeline.events[0].scale, 1.08);
   assert.equal(result.timeline.events[0].sfx, "fast_whoosh.wav");
   assert.equal(result.timeline.audio.music_volume, 0.08);
+});
+
+test("SFX role map references only required named pack files", () => {
+  const required = new Set(REQUIRED_SFX_FILES);
+  const used = [...Object.values(DEFAULT_SFX), ...Object.values(SCENE_SFX)];
+  for (const file of used) {
+    assert.ok(required.has(file), `${file} is not in the required SFX pack`);
+  }
+  for (const role of ["funnel_item", "profile_card", "magnifier_focus", "artifact_item", "terminal_status"]) {
+    assert.ok(SCENE_SFX[role], `missing scene SFX role ${role}`);
+  }
 });
 
 test("validateTimeline rejects unknown types, bad timing, and overlapping zooms", () => {

@@ -197,6 +197,37 @@ function SfxLayer({ events, scenes, fps }) {
         sounds.push({ key: `icon-${scene.id}-${itemIndex}`, at: item.at, sfx: last ? SCENE_SFX.icon_final : SCENE_SFX.icon_item, volume: last ? 0.3 : 0.22 });
       });
     }
+    if (scene.type === "funnel") {
+      scene.items.forEach((item, itemIndex) => {
+        sounds.push({ key: `funnel-${scene.id}-${itemIndex}`, at: item.at, sfx: SCENE_SFX.funnel_item, volume: 0.18 });
+      });
+      if (scene.branch?.at !== undefined) {
+        sounds.push({ key: `funnel-branch-${scene.id}`, at: scene.branch.at, sfx: SCENE_SFX.funnel_branch, volume: 0.24 });
+      }
+    }
+    if (scene.type === "profile_cards") {
+      scene.items.forEach((item, itemIndex) => {
+        sounds.push({ key: `profile-${scene.id}-${itemIndex}`, at: item.at, sfx: SCENE_SFX.profile_card, volume: 0.18 });
+      });
+      if (scene.total?.at !== undefined) {
+        sounds.push({ key: `profile-total-${scene.id}`, at: scene.total.at, sfx: SCENE_SFX.profile_total, volume: 0.28 });
+      }
+    }
+    if (scene.type === "magnifier") {
+      const focusAt = scene.start + (scene.end - scene.start) * 0.58;
+      sounds.push({ key: `magnifier-start-${scene.id}`, at: scene.start + 0.2, sfx: SCENE_SFX.magnifier_start, volume: 0.16 });
+      sounds.push({ key: `magnifier-focus-${scene.id}`, at: focusAt, sfx: SCENE_SFX.magnifier_focus, volume: 0.22 });
+    }
+    if (scene.type === "artifact_grid") {
+      scene.items.forEach((item, itemIndex) => {
+        const last = itemIndex === scene.items.length - 1;
+        sounds.push({ key: `artifact-${scene.id}-${itemIndex}`, at: item.at, sfx: last ? SCENE_SFX.artifact_final : SCENE_SFX.artifact_item, volume: last ? 0.28 : 0.2 });
+      });
+    }
+    if (scene.type === "terminal_receipt") {
+      sounds.push({ key: `terminal-type-${scene.id}`, at: scene.start + 0.2, sfx: SCENE_SFX.terminal_type, volume: 0.18, holdSeconds: Math.min(1.4, Math.max(0.5, scene.end - scene.start - 0.8)) });
+      sounds.push({ key: `terminal-status-${scene.id}`, at: scene.at, sfx: SCENE_SFX.terminal_status, volume: 0.28 });
+    }
   });
   return (
     <>
