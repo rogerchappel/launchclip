@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Img, OffthreadVideo, Sequence, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, Img, OffthreadVideo, Sequence, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { Card, GlowBorder } from "./paper.jsx";
 import { CARD, FONTS, INK, SEMANTIC, SPRINGS, TYPE_SHADOW } from "../theme.js";
 import { focalDrift, stackLayout } from "../reflow.js";
@@ -75,6 +75,8 @@ function Scene({ scene, width, height }) {
   if (scene.type === "funnel") return <FunnelScene scene={scene} width={width} height={height} />;
   if (scene.type === "profile_cards") return <ProfileCards scene={scene} width={width} height={height} />;
   if (scene.type === "magnifier") return <MagnifierScene scene={scene} width={width} height={height} />;
+  if (scene.type === "artifact_grid") return <ArtifactGridScene scene={scene} width={width} height={height} />;
+  if (scene.type === "terminal_receipt") return <TerminalReceiptScene scene={scene} width={width} height={height} />;
   return null;
 }
 
@@ -665,6 +667,203 @@ function QuoteCardScene({ scene, width, height }) {
       </div>
     </AbsoluteFill>
   );
+}
+
+function ArtifactGridScene({ scene, width, height }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const sceneFrames = Math.max(1, (scene.end - scene.start) * fps);
+  const drift = interpolate(frame, [0, sceneFrames], [-0.012, 0.014], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: Easing.bezier(0.22, 0.8, 0.24, 1)
+  });
+  const titleSize = Math.round(height * 0.035);
+  const labelSize = Math.round(height * 0.021);
+  const columns = scene.items.length <= 3 ? 1 : 2;
+  const gap = height * 0.02;
+  const cardWidth = columns === 1 ? width * 0.72 : width * 0.38;
+  const cardHeight = height * 0.132;
+  const rows = Math.ceil(scene.items.length / columns);
+  const boardWidth = columns * cardWidth + (columns - 1) * gap;
+  const boardHeight = rows * cardHeight + (rows - 1) * gap;
+  const titleEnter = spring({ frame, fps, config: SPRINGS.settle });
+
+  return (
+    <AbsoluteFill style={{ display: "grid", placeItems: "center", padding: `0 ${width * 0.07}px` }}>
+      <div
+        style={{
+          width: boardWidth,
+          height: boardHeight + (scene.title ? titleSize * 1.7 : 0),
+          transform: `translate(${drift * width}px, 0) rotate(-0.6deg)`
+        }}
+      >
+        {scene.title ? (
+          <div
+            style={{
+              height: titleSize * 1.7,
+              display: "grid",
+              placeItems: "center",
+              fontFamily: FONTS.script,
+              fontStyle: "italic",
+              fontWeight: 900,
+              fontSize: titleSize,
+              color: INK.primary,
+              opacity: Math.min(1, titleEnter * 1.4),
+              transform: `translateY(${(1 - titleEnter) * height * 0.035}px) rotate(-2deg)`
+            }}
+          >
+            {scene.title}
+          </div>
+        ) : null}
+        <div style={{ position: "relative", width: boardWidth, height: boardHeight }}>
+          {scene.items.map((item, index) => {
+            const col = index % columns;
+            const row = Math.floor(index / columns);
+            const localFrame = frame - (item.at - scene.start) * fps;
+            if (localFrame < 0) return null;
+            const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
+            const enterPrev = localFrame < 1 ? 0 : spring({ frame: localFrame - 1, fps, config: SPRINGS.enter });
+            const accent = index % 3 === 0 ? SEMANTIC.mint : index % 3 === 1 ? SEMANTIC.coral : SEMANTIC.purple;
+            const stamp = item.status || artifactKind(item.path || item.label);
+            return (
+              <div
+                key={`${item.label}-${index}`}
+                style={{
+                  position: "absolute",
+                  left: col * (cardWidth + gap),
+                  top: row * (cardHeight + gap),
+                  width: cardWidth,
+                  height: cardHeight,
+                  transform: [
+                    `translateY(${(1 - enter) * height * 0.045}px)`,
+                    `rotate(${WORD_ROTATIONS[index % WORD_ROTATIONS.length] * 0.25 * enter}deg)`,
+                    `scale(${0.86 + enter * 0.14})`
+                  ].join(" "),
+                  opacity: Math.min(1, enter * 1.5),
+                  filter: entranceBlur(enter, enterPrev)
+                }}
+              >
+                <Card elevation="mid" radius={18} style={{ height: "100%", padding: `${labelSize * 0.75}px ${labelSize}px`, display: "flex", alignItems: "center", gap: labelSize * 0.72 }}>
+                  <div style={{ width: labelSize * 2.35, height: labelSize * 2.35, borderRadius: 12, background: accent, color: INK.onDark, display: "grid", placeItems: "center", flexShrink: 0, fontFamily: FONTS.sans, fontSize: labelSize * 0.62, fontWeight: 800, letterSpacing: 0 }}>
+                    {artifactKind(item.path || item.label)}
+                  </div>
+                  {item.src ? (
+                    <div style={{ width: labelSize * 2.35, height: labelSize * 2.35, borderRadius: 10, overflow: "hidden", flexShrink: 0, boxShadow: "inset 0 0 0 1px rgba(26,26,24,0.12)" }}>
+                      <Img src={resolveSrc(item.src)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    </div>
+                  ) : null}
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: labelSize * 1.04, lineHeight: 1.08, color: INK.primary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {item.label}
+                    </div>
+                    <div style={{ marginTop: labelSize * 0.24, fontFamily: FONTS.sans, fontWeight: 600, fontSize: labelSize * 0.62, lineHeight: 1.2, color: INK.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {item.path || stamp}
+                    </div>
+                  </div>
+                  <div style={{ alignSelf: "flex-start", borderRadius: 999, padding: `${labelSize * 0.16}px ${labelSize * 0.45}px`, background: "rgba(79,174,133,0.14)", color: SEMANTIC.mint, fontFamily: FONTS.sans, fontSize: labelSize * 0.55, fontWeight: 800, textTransform: "uppercase" }}>
+                    {stamp}
+                  </div>
+                </Card>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </AbsoluteFill>
+  );
+}
+
+function TerminalReceiptScene({ scene, width, height }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const seconds = frame / fps;
+  const sceneLength = scene.end - scene.start;
+  const sceneFrames = Math.max(1, sceneLength * fps);
+  const enter = spring({ frame, fps, config: SPRINGS.enter });
+  const drift = interpolate(frame, [0, sceneFrames], [0.02, -0.016], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: Easing.bezier(0.33, 0, 0.17, 1)
+  });
+  const typeSpan = Math.max(0.5, Math.min(1.35, sceneLength * 0.38));
+  const commandProgress = clamp((seconds - 0.2) / typeSpan);
+  const typedCommand = scene.command.slice(0, Math.ceil(scene.command.length * commandProgress));
+  const outputLines = String(scene.output ?? "").split(/\r?\n/).filter(Boolean).slice(0, 5);
+  const outputProgress = clamp((seconds - 0.75) / Math.max(0.8, sceneLength * 0.42));
+  const visibleLines = outputLines.slice(0, Math.ceil(outputLines.length * outputProgress));
+  const statusFrame = frame - (scene.at - scene.start) * fps;
+  const statusEnter = statusFrame < 0 ? 0 : spring({ frame: statusFrame, fps, config: SPRINGS.enter });
+  const fontSize = Math.round(height * 0.022);
+  const titleSize = Math.round(height * 0.03);
+
+  return (
+    <AbsoluteFill style={{ display: "grid", placeItems: "center", padding: `0 ${width * 0.07}px` }}>
+      <div
+        style={{
+          width: "100%",
+          transform: `translate(${drift * width}px, ${(1 - enter) * height * 0.045}px) scale(${0.92 + enter * 0.08}) rotate(0.8deg)`,
+          opacity: Math.min(1, enter * 1.5),
+          filter: entranceBlur(enter, spring({ frame: frame - 1, fps, config: SPRINGS.enter }))
+        }}
+      >
+        <GlowBorder radius={24}>
+          <Card dark radius={24} elevation="high" style={{ width: "100%", padding: `${fontSize * 1.25}px ${fontSize * 1.35}px`, minHeight: height * 0.42 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: fontSize * 0.48, marginBottom: fontSize * 1.1 }}>
+              {[SEMANTIC.coral, SEMANTIC.mint, SEMANTIC.purple].map((color) => (
+                <span key={color} style={{ width: fontSize * 0.7, height: fontSize * 0.7, borderRadius: "50%", background: color, display: "inline-block" }} />
+              ))}
+              <div style={{ flex: 1 }} />
+              <div style={{ fontFamily: FONTS.sans, fontWeight: 800, fontSize: fontSize * 0.68, color: INK.onDarkMuted, textTransform: "uppercase" }}>
+                terminal receipt
+              </div>
+            </div>
+            <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: titleSize, lineHeight: 1.05, color: INK.onDark, marginBottom: fontSize * 0.9 }}>
+              Real command, real output
+            </div>
+            <div style={{ fontFamily: "SFMono-Regular, Menlo, Consolas, monospace", fontSize, lineHeight: 1.45, color: SEMANTIC.mint, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+              <span style={{ color: SEMANTIC.purple }}>$ </span>
+              {typedCommand}
+              {commandProgress < 1 ? <Caret fontSize={fontSize} /> : null}
+            </div>
+            <div style={{ marginTop: fontSize * 0.8, minHeight: fontSize * 5.9, fontFamily: "SFMono-Regular, Menlo, Consolas, monospace", fontSize: fontSize * 0.82, lineHeight: 1.45, color: INK.onDarkMuted, whiteSpace: "pre-wrap", overflow: "hidden" }}>
+              {visibleLines.map((line, index) => (
+                <div key={index} style={{ opacity: 0.55 + outputProgress * 0.45 }}>{line}</div>
+              ))}
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <div
+                style={{
+                  borderRadius: 999,
+                  padding: `${fontSize * 0.34}px ${fontSize * 0.8}px`,
+                  background: "rgba(79,174,133,0.18)",
+                  color: SEMANTIC.mint,
+                  fontFamily: FONTS.sans,
+                  fontWeight: 800,
+                  fontSize: fontSize * 0.72,
+                  textTransform: "uppercase",
+                  transform: `translateY(${(1 - statusEnter) * fontSize * 1.4}px) scale(${0.7 + statusEnter * 0.3})`,
+                  opacity: Math.min(1, statusEnter * 1.5)
+                }}
+              >
+                {scene.status}
+              </div>
+            </div>
+          </Card>
+        </GlowBorder>
+      </div>
+    </AbsoluteFill>
+  );
+}
+
+function artifactKind(text) {
+  const value = String(text || "").toLowerCase();
+  if (value.endsWith(".mp4") || value.includes("video")) return "MP4";
+  if (value.includes("thumb") || value.endsWith(".png") || value.endsWith(".jpg") || value.endsWith(".jpeg")) return "IMG";
+  if (value.includes("caption") || value.endsWith(".srt") || value.endsWith(".vtt")) return "TXT";
+  if (value.includes("plan") || value.endsWith(".json")) return "JSON";
+  if (value.includes("review") || value.endsWith(".md")) return "MD";
+  return "FILE";
 }
 
 function semanticColor(name) {
