@@ -16,6 +16,87 @@ const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const MODEL = "claude-opus-4-8";
 const MAX_ATTEMPTS = 4;
 
+// Provider abstraction. The Director was built against the Anthropic messages
+// API; this lets it also run on an OpenAI key. The shim exposes the same
+// `.messages.create(params)` surface the Director uses and translates it to
+// the OpenAI chat-completions REST API (no SDK dependency — plain fetch),
+// shaping the reply back into Anthropic's `{ content: [{ type, text }] }`.
+// Anthropic-only params (output_config, thinking, cache_control) are ignored
+// by the shim; every Director call wants a single JSON object, so JSON mode
+// is always on. Anthropic stays the default when its key is present.
+function openAiMessagesShim({ apiKey, model }) {
+  return {
+    messages: {
+      create: async (params) => {
+        const systemText = Array.isArray(params.system)
+          ? params.system.map((block) => (typeof block === "string" ? block : block.text ?? "")).join("\n\n")
+          : String(params.system ?? "");
+        const messages = [
+          { role: "system", content: `${systemText}\n\nAlways respond with a single valid JSON object and nothing else.` }
+        ];
+        for (const message of params.messages ?? []) {
+          const content = typeof message.content === "string"
+            ? message.content
+            : (message.content ?? []).map((part) => (typeof part === "string" ? part : part.text ?? "")).join("\n");
+          messages.push({ role: message.role, content });
+        }
+        // Reasoning models (o-series, gpt-5*) use max_completion_tokens and
+        // reject max_tokens/temperature; they also need extra budget for the
+        // hidden reasoning tokens. Chat models accept max_completion_tokens too.
+        const reasoning = /^(o\d|gpt-5)/.test(model);
+        const body = {
+          model,
+          messages,
+          max_completion_tokens: (params.max_tokens ?? 8000) + (reasoning ? 12000 : 0),
+          response_format: { type: "json_object" }
+        };
+        if (reasoning) body.reasoning_effort = "medium";
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        if (!response.ok) {
+          const detail = (await response.text()).slice(0, 400);
+          throw Object.assign(new Error(`OpenAI ${response.status}: ${detail}`), { status: response.status });
+        }
+        const data = await response.json();
+        const text = data.choices?.[0]?.message?.content ?? "";
+        if (!text) throw new Error("OpenAI returned empty content");
+        return { content: [{ type: "text", text }] };
+      }
+    }
+  };
+}
+
+// Pick the LLM provider: an explicit --provider flag wins; otherwise prefer
+// Anthropic (project default) and fall back to OpenAI when only its key is set.
+async function makeDirectorClient(flags = {}, log = () => {}) {
+  const choice = flags.provider
+    ? String(flags.provider)
+    : process.env.ANTHROPIC_API_KEY
+      ? "anthropic"
+      : process.env.OPENAI_API_KEY
+        ? "openai"
+        : null;
+  if (choice === "anthropic") {
+    if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    log(`provider: anthropic (${MODEL})`);
+    return new Anthropic();
+  }
+  if (choice === "openai") {
+    if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not set.");
+    // Default to a reasoning model: the strict density/word-grounding linter
+    // needs it (gpt-4o/gpt-4.1 rarely pass in the repair budget). Override via
+    // --model or OPENAI_MODEL.
+    const model = flags.model || process.env.OPENAI_MODEL || "o4-mini";
+    log(`provider: openai (${model})`);
+    return openAiMessagesShim({ apiKey: process.env.OPENAI_API_KEY, model });
+  }
+  throw new Error("No LLM key set. Set ANTHROPIC_API_KEY (preferred) or OPENAI_API_KEY, or pass --provider.");
+}
+
 // Condensed hard rules from ART_DIRECTION.md — the part of the spec the
 // Director must internalize. The validator and linter enforce the rest.
 const ART_DIGEST = `## Art direction (hard rules)
@@ -437,12 +518,10 @@ export function scanAssets(extraDir = null) {
 // [--take base/x.mp4] [--script-text "..."] [--format explainer]
 // [--duration 45] [--music music/bed.mp3] [--no-render]
 export async function runDirect(out, flags = {}) {
-  if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set.");
-  // Lazy import keeps the SDK an optional dependency: the linter, catalog,
-  // and estimator stay usable (and testable) without it installed.
-  const { default: Anthropic } = await import("@anthropic-ai/sdk");
-  const client = new Anthropic();
   const log = (message) => process.stderr.write(`[direct] ${message}\n`);
+  // Anthropic (default) or OpenAI, by key/flag. Lazy: the linter, catalog,
+  // and estimator stay usable (and testable) without any SDK installed.
+  const client = await makeDirectorClient(flags, log);
 
   const preset = String(flags.format ?? "software_demo");
   if (!PRESETS[preset]) throw new Error(`Unknown format "${preset}". Available: ${Object.keys(PRESETS).join(", ")}`);

@@ -101,5 +101,6 @@ Talking-head motion workflow:
   launchclip music <workspace> [--prompt "..."] [--duration 18] [--output music/bed.mp3] [--force]
   launchclip direct <workspace> --prompt "creative direction" [--format software_demo|explainer]
             [--words w.json --take base/take.mp4 | --script-text "..."] [--duration 45] [--no-render]
+            [--provider anthropic|openai] [--model <id>]   # LLM: ANTHROPIC_API_KEY (default) or OPENAI_API_KEY
 `;
 }
