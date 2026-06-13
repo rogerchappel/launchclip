@@ -18,14 +18,12 @@ import { MagnifierScene } from "./Magnifier.jsx";
 // underneath (z-index below) while the incoming builds on top, so the frame
 // is never blank and the previous content "just leaves" once the new one has
 // arrived — no whoosh, no zoom, no fade.
+// Cross-hold (ART_DIRECTION 4g): a hard cut to an empty scene leaves a blank
+// frame while the new scene's first build springs in. Instead each scene
+// LINGERS a few frames into the next (z-index below it) so the outgoing
+// composition holds while the incoming builds on top — never blank, and the
+// old content just leaves once the new has arrived. No whoosh/zoom/fade.
 const CROSS_HOLD_SECONDS = 0.2;
-
-// Scenes that already carry their own continuous motion (typing, video, lens
-// glide, count-up, internal drift). Everything else is a composition that
-// freezes once its items land, so it gets a slow scene-level drift — the
-// reference's gentle push/pan over a held composition, so nothing is ever
-// truly frozen (ART_DIRECTION 4g).
-const SELF_DRIVEN = new Set(["prompt_card", "screen", "magnifier", "stat_counter", "quote_card", "talking_head"]);
 
 export function SceneTrack({ scenes, width, height }) {
   const { fps } = useVideoConfig();
@@ -35,8 +33,6 @@ export function SceneTrack({ scenes, width, height }) {
       {scenes.map((scene, index) => {
         const contentFrames = Math.max(1, Math.round((scene.end - scene.start) * fps));
         const hasNext = index < scenes.length - 1;
-        const drifts = !SELF_DRIVEN.has(scene.type);
-        const content = <Scene scene={scene} width={width} height={height} />;
         return (
           <Sequence
             key={scene.id}
@@ -45,32 +41,12 @@ export function SceneTrack({ scenes, width, height }) {
           >
             <AbsoluteFill style={{ zIndex: index }}>
               <SettleShell settle={index > 0}>
-                {drifts ? (
-                  <SceneDrift seconds={scene.end - scene.start} width={width}>
-                    {content}
-                  </SceneDrift>
-                ) : (
-                  content
-                )}
+                <Scene scene={scene} width={width} height={height} />
               </SettleShell>
             </AbsoluteFill>
           </Sequence>
         );
       })}
-    </AbsoluteFill>
-  );
-}
-
-// A slow push-in + pan across a scene's life, so a settled composition keeps
-// breathing instead of freezing. Imperceptible frame-to-frame, felt over the
-// scene — never a "zoom-in" entrance (it spans the whole scene, gently).
-function SceneDrift({ seconds, width, children }) {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const d = focalDrift({ frame, fps, seconds, zoom: 0.045, pan: 0.012 });
-  return (
-    <AbsoluteFill style={{ transform: `translateX(${d.panX * width}px) scale(${d.scale})`, transformOrigin: "50% 45%" }}>
-      {children}
     </AbsoluteFill>
   );
 }

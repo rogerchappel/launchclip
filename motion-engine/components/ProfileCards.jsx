@@ -266,9 +266,10 @@ function GridMode({ scene, items, width, height, frame, fps, presenceOf, presenc
   const total = scene.total;
   const hasTotal = total && total.value != null;
 
-  // Reserve bottom band for the summary card when present.
-  const topPad = height * 0.06;
-  const sidePad = width * 0.05;
+  // Reserve bottom band for the summary card when present, and a top band so
+  // the first grid row clears the chapter rail.
+  const topPad = height * 0.14;
+  const sidePad = width * 0.06;
   const summaryBand = hasTotal ? height * 0.22 : 0;
   const gridAreaW = width - sidePad * 2;
   const gridAreaH = height - topPad * 2 - summaryBand;

@@ -20,37 +20,41 @@ import { SCENE_SFX } from "./schema.js";
 // The plane is scaled up so the receded top edge still fills the frame.
 // Tune by eye here; the lens and chapter rail stay screen-aligned (UI lives
 // in front of the glass, not on the table).
-const WORLD = { perspective: 2000, tiltX: 6, tiltY: -2.5, fill: 1.12, originY: 40 };
+// Gentle tabletop tilt. The CONTENT plane is NOT scaled up (scaling it cropped
+// every edge — the P4-fit bug); instead the paper is oversized to cover the
+// thin gap the tilt opens at the top, so content keeps its true frame and
+// nothing bleeds off-screen.
+const WORLD = { perspective: 2400, tiltX: 5, tiltY: -1.5, originY: 44 };
 
-// Ambient drift (ART_DIRECTION 4g): the reference canvas is NEVER frozen — a
-// slow camera breath plays under everything for the whole video, so even a
-// settled composition keeps living. Deterministic (sin of the clock), tiny
-// amplitude — felt, not seen. Periods are coprime so it never visibly loops.
-function ambientDrift(frame, fps, width, height) {
+// Ambient drift: a barely-there scale breath so the canvas is never bit-for-
+// bit frozen. Sub-pixel per frame — a slow living stillness, NOT a visible
+// zoom or pan (the perceptible per-scene drift read as an aimless zoom over
+// content that was itself being cropped, so it was removed).
+function ambientDrift(frame, fps) {
   const t = frame / fps;
-  return {
-    x: (Math.sin(t * 0.37) * 0.55 + Math.sin(t * 0.111) * 0.3) * 0.01 * width,
-    y: (Math.cos(t * 0.29) * 0.45 + Math.sin(t * 0.083) * 0.25) * 0.01 * height,
-    scale: 1 + 0.008 * (0.5 + 0.5 * Math.sin(t * 0.21))
-  };
+  return { scale: 1 + 0.004 * (0.5 + 0.5 * Math.sin(t * 0.2)) };
 }
 
 export function MotionLayer({ timeline, enableSfx = true }) {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const camera = cameraAt({ events: timeline.events, frame, fps });
-  const drift = ambientDrift(frame, fps, width, height);
+  const drift = ambientDrift(frame, fps);
 
   return (
     <AbsoluteFill style={{ overflow: "hidden" }}>
       <AbsoluteFill style={{ perspective: `${WORLD.perspective}px`, perspectiveOrigin: `50% ${WORLD.originY}%` }}>
         <AbsoluteFill
           style={{
-            transform: `translate(${drift.x}px, ${drift.y}px) rotateX(${WORLD.tiltX}deg) rotateY(${WORLD.tiltY}deg) scale(${WORLD.fill * drift.scale})`,
+            transform: `rotateX(${WORLD.tiltX}deg) rotateY(${WORLD.tiltY}deg) scale(${drift.scale})`,
             transformOrigin: "50% 50%"
           }}
         >
-          <PaperGround />
+          {/* Oversized so the tilt never opens a paper gap, while content below
+              keeps its true 100% frame and never crops. */}
+          <div style={{ position: "absolute", inset: "-10%" }}>
+            <PaperGround />
+          </div>
           <AbsoluteFill
             style={{
               transform: `scale(${camera.scale})`,
