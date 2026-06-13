@@ -10,6 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateTimeline } from "../motion-engine/schema.js";
 import { buildHeuristicTimeline } from "../motion-engine/heuristics.js";
+import { prepareSfxPack } from "./sfx.js";
 
 const execFileAsync = promisify(execFile);
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -103,8 +104,16 @@ export async function renderMotion(out, flags = {}) {
   const result = validateTimeline(timeline);
   if (!result.ok) throw new Error(`Timeline invalid: ${result.errors.join("; ")}`);
 
+  const enableSfx = flags.sfx !== "off";
+  const sfx = enableSfx
+    ? await prepareSfxPack({
+        sfxDir: flags["sfx-dir"],
+        allowPlaceholder: Boolean(flags["allow-placeholder-sfx"])
+      })
+    : null;
+
   const propsPath = path.join(out, "video", "motion-props.json");
-  await writeFile(propsPath, `${JSON.stringify({ timeline: result.timeline, enableSfx: flags.sfx !== "off" }, null, 2)}\n`);
+  await writeFile(propsPath, `${JSON.stringify({ timeline: result.timeline, enableSfx }, null, 2)}\n`);
   const output = path.join(out, "video", flags.output ?? "motion.mp4");
   const entryPoint = path.join(PACKAGE_ROOT, "remotion", "index.jsx");
   await execFileAsync(
@@ -112,7 +121,7 @@ export async function renderMotion(out, flags = {}) {
     ["remotion", "render", entryPoint, "MotionGolden", output, "--props", propsPath, "--overwrite", "--codec", "h264", "--log", "warn"],
     { cwd: PACKAGE_ROOT, maxBuffer: 1024 * 1024 * 16 }
   );
-  return { stage: "motion-render", video: output, props: propsPath, warnings: result.warnings };
+  return { stage: "motion-render", video: output, props: propsPath, sfx, warnings: result.warnings };
 }
 
 // Accepts either a plain [{word,start,end}] array or raw whisper JSON output.
