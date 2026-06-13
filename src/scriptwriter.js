@@ -76,11 +76,19 @@ export async function writeScriptDraft(out, flags = {}) {
   const audience = flags.audience ?? "people who'd use this tool";
   const duration = Number(flags.duration ?? 45);
 
+  // Scale the word budget to the duration (a fast read is ~150 wpm). Lean
+  // short: a script that reads long is the common failure.
+  const targetWords = Math.round((duration / 60) * 150);
+  const loWords = Math.max(60, targetWords - 15);
+  const hiWords = targetWords + 8;
+
   const client = await makeDirectorClient(flags, log);
   const userPrompt = [
     topic ? `TOPIC: ${topic}` : "",
     `AUDIENCE: ${audience}`,
-    `TARGET LENGTH: ~${duration}s (${Math.round((duration / 60) * 150)} words at 150 wpm; stay 130-165 words).`,
+    `TARGET LENGTH: ~${duration}s — about ${targetWords} words, stay ${loWords}-${hiWords}. Prefer FEWER words; a tight script beats a complete one.`,
+    `STYLE: keep it plain and punchy. Short sentences. Minimal jargon — translate technical mechanics into plain outcomes (what the viewer GETS, not the internal pipeline). 3-4 steps max.`,
+    flags.cta ? `CLOSING: the final "cta" beat MUST be exactly this, verbatim, unchanged: "${flags.cta}"` : "",
     `BRIEF — the ONLY facts/names/numbers you may use (never invent others):\n${brief}`,
     `Write the script now as the JSON object specified.`
   ].filter(Boolean).join("\n\n");
