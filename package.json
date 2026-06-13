@@ -33,7 +33,8 @@
     "src",
     "docs",
     "SKILL.md",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
