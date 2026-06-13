@@ -8,7 +8,7 @@ const WORD_SNAP_TOLERANCE = 0.12;
 
 // Scene types whose surface is continuously alive (footage plays, typing
 // types, feeds scroll) vs. those alive only when an item lands.
-const CONTINUOUS_SCENES = new Set(["talking_head", "screen", "prompt_card"]);
+const CONTINUOUS_SCENES = new Set(["talking_head", "screen", "prompt_card", "magnifier"]);
 
 export function lintTimeline(timeline, { direction = null, assets = [], presenterSrc = null } = {}) {
   const failures = [];
@@ -37,6 +37,9 @@ function sceneActivityTimes(scene) {
   if (scene.type === "stat_counter" || scene.type === "quote_card") {
     times.push(scene.at, scene.at + 1.0);
   }
+  // A funnel branch and a profile_cards total are each a landing transform.
+  if (scene.branch?.at !== undefined) times.push(scene.branch.at);
+  if (scene.total?.at !== undefined) times.push(scene.total.at, scene.total.at + 1.0);
   return times;
 }
 
@@ -149,7 +152,11 @@ function checkAssetsExist(timeline, assets, failures) {
   const srcs = [];
   for (const scene of timeline.scenes ?? []) {
     if (scene.src) srcs.push(scene.src);
-    for (const item of scene.items ?? []) if (item.src) srcs.push(item.src);
+    for (const item of scene.items ?? []) {
+      if (item.src) srcs.push(item.src);
+      if (item.icon) srcs.push(item.icon);
+      if (item.avatar) srcs.push(item.avatar);
+    }
     for (const icon of scene.icons ?? []) srcs.push(icon);
   }
   for (const event of timeline.events ?? []) if (event.src) srcs.push(event.src);
