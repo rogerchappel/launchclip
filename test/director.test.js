@@ -1,12 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { lintTimeline } from "../motion-engine/lint.js";
 import { validateTimeline, MOTION_TIMELINE_VERSION } from "../motion-engine/schema.js";
 import { SCENE_CATALOG, EVENT_CATALOG, renderCatalog } from "../motion-engine/catalog.js";
 import { SCENE_TYPES, EVENT_TYPES } from "../motion-engine/schema.js";
 import { PRESETS, renderPreset } from "../motion-engine/presets.js";
-import { buildSystemPrompt, estimateWords } from "../src/director.js";
+import { buildSystemPrompt, estimateWords, runDirect } from "../src/director.js";
 
 const words = [
   { word: "One", start: 0.3, end: 0.5 },
@@ -146,3 +148,40 @@ test("golden timeline passes the linter", async () => {
   const result = lintTimeline(validated.timeline);
   assert.equal(result.failures.length, 0, result.failures.join("; "));
 });
+
+test("direct record mode writes script and waits for a take without an LLM key", async () => {
+  const temp = await makeDirectWorkspace();
+  try {
+    const result = await runDirect(temp, { voice: "record", prompt: "your demo passes", "no-render": true });
+    assert.equal(result.status, "awaiting_take");
+    assert.match(result.next, /--take/);
+    const script = JSON.parse(await readFile(result.script, "utf8"));
+    const voiceover = JSON.parse(await readFile(result.voiceover, "utf8"));
+    const teleprompter = await readFile(result.teleprompter, "utf8");
+    assert.ok(script.word_count >= 130);
+    assert.equal(voiceover.segments[0].beat, "hook");
+    assert.match(teleprompter, /Teleprompter/);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+async function makeDirectWorkspace() {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-direct-"));
+  await mkdir(path.join(temp, "demo"), { recursive: true });
+  await writeFile(
+    path.join(temp, "launchclip.json"),
+    `${JSON.stringify({
+      source_repo: {
+        name: "sample-tool",
+        summary: "proves launchclip can create a grounded launch packet from a local OSS repo"
+      }
+    })}\n`
+  );
+  await writeFile(path.join(temp, "demo", "terminal.txt"), "$ npm run smoke\n\nsample-tool smoke passed\n");
+  await writeFile(
+    path.join(temp, "demo", "command-receipt.json"),
+    `${JSON.stringify({ command: "npm run smoke", status: "passed", artifacts: [{ type: "terminal", path: "demo/terminal.txt" }] })}\n`
+  );
+  return temp;
+}

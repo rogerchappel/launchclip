@@ -10,7 +10,8 @@ import { validateTimeline, MOTION_TIMELINE_VERSION } from "../motion-engine/sche
 import { lintTimeline } from "../motion-engine/lint.js";
 import { renderCatalog } from "../motion-engine/catalog.js";
 import { PRESETS, renderPreset } from "../motion-engine/presets.js";
-import { renderMotion } from "./talking_head.js";
+import { alignRecording, renderMotion } from "./talking_head.js";
+import { writeViralScript } from "./script_writer.js";
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MODEL = "claude-opus-4-8";
@@ -515,30 +516,73 @@ export function scanAssets(extraDir = null) {
   return assets;
 }
 
+function isPublicAssetPath(value) {
+  return /^(base|voice|music|shots|logos|icons|assets)\//.test(String(value ?? ""));
+}
+
 // CLI: launchclip direct <workspace> --prompt "..." [--words w.json]
 // [--take base/x.mp4] [--script-text "..."] [--format explainer]
 // [--duration 45] [--music music/bed.mp3] [--no-render]
 export async function runDirect(out, flags = {}) {
   const log = (message) => process.stderr.write(`[direct] ${message}\n`);
-  // Anthropic (default) or OpenAI, by key/flag. Lazy: the linter, catalog,
-  // and estimator stay usable (and testable) without any SDK installed.
-  const client = await makeDirectorClient(flags, log);
+  out = path.resolve(out);
 
   const preset = String(flags.format ?? "software_demo");
   if (!PRESETS[preset]) throw new Error(`Unknown format "${preset}". Available: ${Object.keys(PRESETS).join(", ")}`);
 
-  // Voice + words: recorded take (words from align/STT) or estimated TTS-less timing.
+  let scriptResult = null;
   let words = null;
   let scriptText = flags["script-text"] ?? null;
+  const voice = String(flags.voice ?? (flags.take ? "record" : scriptText || flags.words ? "none" : "record"));
+  if (!new Set(["record", "tts", "none"]).has(voice)) {
+    throw new Error(`Unsupported --voice "${voice}". Supported: record, tts, none`);
+  }
+
+  if (!scriptText && !flags.words) {
+    scriptResult = await writeViralScript(out, flags);
+    const script = JSON.parse(await readFile(scriptResult.script, "utf8"));
+    scriptText = script.full_text;
+    log(`script: ${script.word_count} words, ${script.target_seconds}s`);
+  }
+
+  if (voice === "record" && !flags.take && !flags.words) {
+    return {
+      stage: "direct",
+      status: "awaiting_take",
+      script: scriptResult?.script ?? path.join(out, "video", "script.json"),
+      voiceover: scriptResult?.voiceover ?? path.join(out, "video", "voiceover.json"),
+      teleprompter: scriptResult?.teleprompter ?? path.join(out, "video", "teleprompter.md"),
+      next: "Record one 9:16 presenter take, then rerun with --voice record --take path/to/take.mp4"
+    };
+  }
+
+  let baseSrc = null;
+  let voiceoverSrc = null;
   if (flags.words) {
     words = JSON.parse(await readFile(flags.words, "utf8"));
     scriptText = scriptText ?? words.map((word) => word.word).join(" ");
-  } else if (scriptText && flags.voice === "tts") {
+  } else if (voice === "record" && flags.take) {
+    if (isPublicAssetPath(flags.take)) {
+      const wordsPath = path.join(out, "video", "words.json");
+      if (!existsSync(wordsPath)) throw new Error("Need --words <file> or video/words.json when --take is already a public asset path.");
+      words = JSON.parse(await readFile(wordsPath, "utf8"));
+      baseSrc = flags.take;
+    } else {
+      const aligned = await alignRecording(out, { media: flags.take });
+      words = JSON.parse(await readFile(aligned.words, "utf8"));
+      baseSrc = aligned.base;
+      log(`aligned take: ${baseSrc}`);
+    }
+  } else if (scriptText && voice === "tts") {
     const synthesized = await synthesizeVoice(scriptText, { log });
     words = synthesized.words;
     flags["voice-src"] = synthesized.voicePath;
+    await mkdir(path.join(out, "video"), { recursive: true });
+    await writeFile(path.join(out, "video", "words.json"), `${JSON.stringify(words, null, 2)}\n`);
   } else if (scriptText) {
     words = estimateWords(scriptText);
+    await mkdir(path.join(out, "video"), { recursive: true });
+    await writeFile(path.join(out, "video", "words.json"), `${JSON.stringify(words, null, 2)}\n`);
   } else {
     const wordsPath = path.join(out, "video", "words.json");
     if (!existsSync(wordsPath)) throw new Error("Need --words <file>, --script-text, or a prior `launchclip align` (video/words.json).");
@@ -547,12 +591,17 @@ export async function runDirect(out, flags = {}) {
   }
   const durationSeconds = Number(flags.duration ?? Math.ceil((words[words.length - 1].end + 0.4) * 10) / 10);
 
-  const baseSrc = flags.take ?? null;
-  const voiceoverSrc = flags["voice-src"] ?? baseSrc;
+  baseSrc = baseSrc ?? (isPublicAssetPath(flags.take) ? flags.take : null);
+  voiceoverSrc = flags["voice-src"] ?? baseSrc;
   const musicSrc = flags.music ?? (existsSync(path.join(PACKAGE_ROOT, "public", "music", "golden-bed.mp3")) ? "music/golden-bed.mp3" : "");
 
   const assets = scanAssets(flags.assets ?? null);
   log(`assets: ${assets.length} | words: ${words.length} | duration: ${durationSeconds}s | preset: ${preset}`);
+
+  // Anthropic (default) or OpenAI, by key/flag. It is intentionally created
+  // after the script/take gate so record mode can emit a teleprompter without
+  // requiring an LLM key.
+  const client = await makeDirectorClient(flags, log);
 
   const direction = await parseDirection(client, flags.prompt ?? "", assets.map((asset) => asset.path));
   log(`direction: ${direction.must_include.length} must-include, ${direction.asset_refs.length} asset refs`);
