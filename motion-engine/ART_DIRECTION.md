@@ -178,6 +178,32 @@ by a price/lock (t39); a persistent anchor (the composer) that morphs across
 scenes; a camera pull-back that reveals two elements at once; brand mascot
 character; real screenshot cards cascading in depth.
 
+## 4g. Flow pass — kill the freeze and the blank (frame-diff teardown of our own output)
+
+A frame-by-frame diff of our own render exposed the motion was choppy:
+build → **freeze** → **blank** → build. Three bugs, all fixed:
+
+1. **Blank frames at every cut.** A hard cut to a scene whose first build
+   hadn't sprung in yet showed empty paper for ~0.2s. Fixed with a
+   **cross-hold**: each scene lingers `CROSS_HOLD_SECONDS` into the next
+   (z-index below it), so the outgoing composition holds underneath while the
+   incoming builds on top — never blank, and the old content "just leaves"
+   once the new has arrived (no whoosh, no zoom, no fade).
+2. **Frozen holds.** Once a composition's items landed it sat pixel-static
+   until the cut. Fixed two ways: a tiny **ambient world drift** (a slow
+   camera breath under everything, `ambientDrift` in MotionLayer) and, more
+   importantly, a **per-scene slow drift** (`SceneDrift`) on every scene that
+   isn't already self-animating — the reference's gentle push/pan over a held
+   composition. Nothing is ever truly frozen now.
+3. **Long dead tails.** Scenes sat composed with nothing new for >1s. The
+   director should end a scene ~0.3-0.8s after its last build and let the
+   cross-hold bridge to the next; the demo timeline was retimed to match.
+
+Lesson for verifying motion: single stills lie. Diff consecutive frames
+(`ffmpeg tblend=difference`) — solid-black blocks are freezes, blank frames
+are gaps. Slow drift is sub-pixel per frame (won't show in the diff) but is
+felt over a second; verify it by diffing frames ~0.5s apart (ghosting = alive).
+
 ## 5. Sound
 
 (Largely as v1 — the reference confirms it.) Whoosh/pop on entrances, typing tick under prompt cards, ding on reveals; everything ducked under continuous VO. Music bed low. SFX variants rotate so repeats don't machine-gun.

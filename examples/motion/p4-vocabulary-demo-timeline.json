@@ -1,13 +1,13 @@
 {
   "version": "motion.timeline.v1",
-  "duration_seconds": 17.1,
+  "duration_seconds": 14.6,
   "words": [],
   "events": [],
   "chapters": [
     { "title": "Find", "at": 0 },
     { "title": "Pipeline", "at": 4.0 },
-    { "title": "Clients", "at": 8.8 },
-    { "title": "Scale", "at": 12.3 }
+    { "title": "Clients", "at": 7.8 },
+    { "title": "Scale", "at": 10.4 }
   ],
   "audio": { "music": "music/golden-bed.mp3", "music_volume": 0.07 },
   "scenes": [
@@ -25,53 +25,53 @@
       "id": "pipeline",
       "type": "funnel",
       "start": 4.0,
-      "end": 8.8,
+      "end": 7.8,
       "title": "the pipeline",
       "items": [
-        { "text": "Prospect Found", "at": 4.2, "icon": "icons/magnifier.svg" },
-        { "text": "Email Sent", "at": 5.0, "icon": "icons/document.svg" },
-        { "text": "Reply Received", "at": 5.8, "icon": "icons/check.svg", "color": "mint" },
-        { "text": "Call Scheduled", "at": 6.6, "icon": "icons/clock.svg" },
-        { "text": "Deal Closed", "at": 7.4, "icon": "icons/lightning.svg" }
+        { "text": "Prospect Found", "at": 4.0, "icon": "icons/magnifier.svg" },
+        { "text": "Email Sent", "at": 4.75, "icon": "icons/document.svg" },
+        { "text": "Reply Received", "at": 5.5, "icon": "icons/check.svg", "color": "mint" },
+        { "text": "Call Scheduled", "at": 6.25, "icon": "icons/clock.svg" },
+        { "text": "Deal Closed", "at": 7.0, "icon": "icons/lightning.svg" }
       ]
     },
     {
       "id": "clients",
       "type": "profile_cards",
-      "start": 8.8,
-      "end": 12.3,
+      "start": 7.8,
+      "end": 10.4,
       "mode": "cascade",
       "items": [
-        { "name": "Maya Chen", "role": "Head of Growth", "at": 9.0, "pill": "Client" },
-        { "name": "Sofia Patel", "role": "Performance Marketer", "at": 9.9, "pill": "Client" },
-        { "name": "Daniel Brooks", "role": "Customer Success", "at": 10.8, "pill": "Client" }
+        { "name": "Maya Chen", "role": "Head of Growth", "at": 7.8, "pill": "Client" },
+        { "name": "Sofia Patel", "role": "Performance Marketer", "at": 8.6, "pill": "Client" },
+        { "name": "Daniel Brooks", "role": "Customer Success", "at": 9.4, "pill": "Client" }
       ]
     },
     {
       "id": "scale",
       "type": "profile_cards",
-      "start": 12.3,
-      "end": 17.1,
+      "start": 10.4,
+      "end": 14.6,
       "mode": "grid",
       "items": [
-        { "name": "Maya", "value": "$300/mo", "at": 12.5 },
-        { "name": "Sofia", "value": "$300/mo", "at": 12.63 },
-        { "name": "Daniel", "value": "$300/mo", "at": 12.76 },
-        { "name": "Liam", "value": "$300/mo", "at": 12.89 },
-        { "name": "Ava", "value": "$300/mo", "at": 13.02 },
-        { "name": "Noah", "value": "$300/mo", "at": 13.15 },
-        { "name": "Emma", "value": "$300/mo", "at": 13.28 },
-        { "name": "Lucas", "value": "$300/mo", "at": 13.41 },
-        { "name": "Zoe", "value": "$300/mo", "at": 13.54 },
-        { "name": "Ryan", "value": "$300/mo", "at": 13.67 },
-        { "name": "Mia", "value": "$300/mo", "at": 13.8 },
-        { "name": "Owen", "value": "$300/mo", "at": 13.93 },
-        { "name": "Ella", "value": "$300/mo", "at": 14.06 },
-        { "name": "Jack", "value": "$300/mo", "at": 14.19 },
-        { "name": "Nora", "value": "$300/mo", "at": 14.32 },
-        { "name": "Leo", "value": "$300/mo", "at": 14.45 }
+        { "name": "Maya", "value": "$300/mo", "at": 10.5 },
+        { "name": "Sofia", "value": "$300/mo", "at": 10.62 },
+        { "name": "Daniel", "value": "$300/mo", "at": 10.74 },
+        { "name": "Liam", "value": "$300/mo", "at": 10.86 },
+        { "name": "Ava", "value": "$300/mo", "at": 10.98 },
+        { "name": "Noah", "value": "$300/mo", "at": 11.1 },
+        { "name": "Emma", "value": "$300/mo", "at": 11.22 },
+        { "name": "Lucas", "value": "$300/mo", "at": 11.34 },
+        { "name": "Zoe", "value": "$300/mo", "at": 11.46 },
+        { "name": "Ryan", "value": "$300/mo", "at": 11.58 },
+        { "name": "Mia", "value": "$300/mo", "at": 11.7 },
+        { "name": "Owen", "value": "$300/mo", "at": 11.82 },
+        { "name": "Ella", "value": "$300/mo", "at": 11.94 },
+        { "name": "Jack", "value": "$300/mo", "at": 12.06 },
+        { "name": "Nora", "value": "$300/mo", "at": 12.18 },
+        { "name": "Leo", "value": "$300/mo", "at": 12.3 }
       ],
-      "total": { "label": "Total Monthly Revenue", "value": "$4,800", "at": 15.7 }
+      "total": { "label": "Total Monthly Revenue", "value": "$4,800", "at": 13.3 }
     }
   ]
 }
