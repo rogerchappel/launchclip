@@ -1,83 +1,66 @@
 import React from "react";
-import {
-  AbsoluteFill,
-  Img,
-  spring,
-  staticFile,
-  useCurrentFrame,
-  useVideoConfig
-} from "remotion";
-import { FONTS, SPRINGS } from "../theme.js";
+import { AbsoluteFill, Img, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { Card } from "./paper.jsx";
+import { FONTS, SPRINGS } from "../theme.js";
 
-// A magnifying glass gliding over a product screenshot. The lens reveals a
-// "magnified detail": the key phrase rendered in prism/rainbow text, with a
-// believable glass body, chromatic fringing at the rim, and a metal handle.
-//
-// The travel uses smoothstep over scene progress (NOT a spring) so the glide
-// reads as one continuous, eased pass rather than a settle-and-stop.
+// A magnifying glass gliding over a real screenshot. The lens shows a TRUE
+// magnified copy of the content beneath it (a scaled copy of the same
+// screenshot, aligned so the point under the lens centre is what's enlarged) —
+// not fixed text glued to the glass. A metal handle joins the rim; a faint
+// chromatic fringe rides the edge. The card fits within the frame.
+const MAG = 2.0; // magnification factor inside the lens
+
 export function MagnifierScene({ scene, width, height }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  // --- helpers -------------------------------------------------------------
   const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
   const lerp = (a, b, t) => a + (b - a) * t;
   const ease = (t) => t * t * (3 - 2 * t); // smoothstep
   const resolveSrc = (s) => (/^https?:\/\//.test(s) ? s : staticFile(s));
 
-  // --- scene config (robust to missing values) ----------------------------
-  const start = scene && typeof scene.start === "number" ? scene.start : 0;
-  const end = scene && typeof scene.end === "number" ? scene.end : start + 4;
+  const start = typeof scene?.start === "number" ? scene.start : 0;
+  const end = typeof scene?.end === "number" ? scene.end : start + 4;
   const sceneFrames = Math.max(1, Math.round((end - start) * fps));
+  const from = scene?.from || { x: 0.3, y: 0.3 };
+  const to = scene?.to || { x: 0.65, y: 0.65 };
+  const src = scene?.src;
 
-  const from = (scene && scene.from) || { x: 0.3, y: 0.3 };
-  const to = (scene && scene.to) || { x: 0.65, y: 0.65 };
-  const text = (scene && scene.text) || "";
-  const src = scene && scene.src;
-
-  // --- card geometry -------------------------------------------------------
-  const cardW = width * 0.86;
-  const cardH = Math.min(height * 0.8, cardW * (16 / 9));
+  // Card geometry — fits below the chapter rail and inside the frame.
+  const cardW = width * 0.82;
+  const cardH = Math.min(height * 0.68, cardW * 1.4);
   const cardX = (width - cardW) / 2;
-  const cardY = (height - cardH) / 2;
+  const cardY = height * 0.15;
 
-  // --- entrance ------------------------------------------------------------
-  const intro = spring({ frame, fps, config: SPRINGS.enter });
-  const cardOpacity = clamp(intro);
-  const cardScale = lerp(0.92, 1, clamp(intro));
+  // Entrance: card and lens settle in.
+  const intro = clamp(spring({ frame, fps, config: SPRINGS.enter }));
+  const lensIn = clamp(spring({ frame: frame - Math.round(fps * 0.2), fps, config: SPRINGS.enter }));
 
-  // --- lens travel (continuous smoothstep) --------------------------------
-  const progress = clamp(frame / sceneFrames);
-  const p = ease(progress);
+  // Lens travel — continuous smoothstep across the card (not a spring).
+  const p = ease(clamp(frame / sceneFrames));
   const cxFrac = lerp(from.x, to.x, p);
   const cyFrac = lerp(from.y, to.y, p);
 
-  // Lens center in absolute frame px, clamped so the lens stays over the card.
-  const lensD = width * 0.34;
-  const lensR = lensD / 2;
-  const lensCx = clamp(
-    cardX + cxFrac * cardW,
-    cardX + lensR * 0.6,
-    cardX + cardW - lensR * 0.6
-  );
-  const lensCy = clamp(
-    cardY + cyFrac * cardH,
-    cardY + lensR * 0.6,
-    cardY + cardH - lensR * 0.6
-  );
+  const lensD = width * 0.32;
+  const R = lensD / 2;
+  // Lens centre in frame px, kept fully over the card.
+  const cx = cardX + clamp(cxFrac, R / cardW, 1 - R / cardW) * cardW;
+  const cy = cardY + clamp(cyFrac, R / cardH, 1 - R / cardH) * cardH;
+  // Point of the card under the lens centre (card-local), for the magnified copy.
+  const px = cx - cardX;
+  const py = cy - cardY;
 
-  // Lens fades in just after the card lands.
-  const lensIn = clamp(spring({ frame: frame - Math.round(fps * 0.25), fps, config: SPRINGS.enter }));
+  const RIM = Math.round(lensD * 0.035);
+  const handleLen = lensD * 0.5;
+  const handleW = lensD * 0.12;
 
-  // --- rim / glass styling -------------------------------------------------
-  const RIM = 7; // metallic ring thickness
-  const handleLen = lensD * 0.62;
-  const handleW = lensD * 0.13;
+  const placeholder = (
+    <div style={{ width: "100%", height: "100%", background: "linear-gradient(135deg,#EDEBE6,#E2DFD8)" }} />
+  );
 
   return (
     <AbsoluteFill style={{ fontFamily: FONTS.sans }}>
-      {/* The screenshot card */}
+      {/* The screenshot card. */}
       <div
         style={{
           position: "absolute",
@@ -85,46 +68,22 @@ export function MagnifierScene({ scene, width, height }) {
           top: cardY,
           width: cardW,
           height: cardH,
-          opacity: cardOpacity,
-          transform: `scale(${cardScale})`,
+          opacity: intro,
+          transform: `scale(${lerp(0.94, 1, intro)})`,
           transformOrigin: "center"
         }}
       >
-        <Card
-          elevation="high"
-          radius={24}
-          style={{ width: "100%", height: "100%", background: "#F1EFEA" }}
-        >
-          {src ? (
-            <Img
-              src={resolveSrc(src)}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                objectPosition: "top"
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                width: "100%",
-                height: "100%",
-                background:
-                  "linear-gradient(135deg, #EDEBE6 0%, #E2DFD8 100%)"
-              }}
-            />
-          )}
+        <Card elevation="high" radius={24} style={{ width: "100%", height: "100%", background: "#FFFFFF" }}>
+          {src ? <Img src={resolveSrc(src)} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }} /> : placeholder}
         </Card>
       </div>
 
-      {/* The lens. Absolutely positioned by its top-left; centered on the
-          travel point. Rendered above the card so it never gets clipped. */}
+      {/* The lens, above the card so it is never clipped. */}
       <div
         style={{
           position: "absolute",
-          left: lensCx - lensR,
-          top: lensCy - lensR,
+          left: cx - R,
+          top: cy - R,
           width: lensD,
           height: lensD,
           opacity: lensIn,
@@ -132,171 +91,61 @@ export function MagnifierScene({ scene, width, height }) {
           transformOrigin: "center"
         }}
       >
-        {/* Handle — sticks out lower-right at ~135° from center, drawn first
-            so the lens body overlaps its inner end. */}
+        {/* Handle — drawn first, from the lens centre outward at 45°, so the
+            glass body covers its inner end and it reads as joined to the rim. */}
         <div
           style={{
             position: "absolute",
-            left: "50%",
-            top: "50%",
-            width: handleLen,
+            left: R,
+            top: R,
+            width: R + handleLen,
             height: handleW,
+            marginTop: -handleW / 2,
             borderRadius: handleW,
-            transformOrigin: "left center",
-            // 45° below horizontal, pointing to lower-right (≈135° clock-style).
-            transform: `translate(${lensR * 0.62}px, ${-handleW / 2}px) rotate(45deg)`,
-            background:
-              "linear-gradient(180deg, #5A5A56 0%, #2B2B28 45%, #44443F 100%)",
-            boxShadow:
-              "3px 4px 6px rgba(26,26,24,0.32), inset 0 1px 0 rgba(255,255,255,0.25)"
+            transformOrigin: "0 50%",
+            transform: "rotate(45deg)",
+            background: "linear-gradient(180deg,#5A5A56,#2B2B28 55%,#44443F)",
+            boxShadow: "2px 3px 5px rgba(26,26,24,0.34)"
           }}
         />
 
-        {/* Drop shadow under the glass (bottom-right). */}
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            borderRadius: "50%",
-            boxShadow: "5px 8px 18px rgba(26,26,24,0.34)"
-          }}
-        />
-
-        {/* Glass body — clips the magnified content to the circle. */}
+        {/* Glass: a circular window showing the magnified screenshot beneath. */}
         <div
           style={{
             position: "absolute",
             inset: 0,
             borderRadius: "50%",
             overflow: "hidden",
-            background:
-              "radial-gradient(120% 120% at 30% 25%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.12) 28%, rgba(255,255,255,0.04) 55%, rgba(180,200,220,0.10) 100%)",
-            backdropFilter: "saturate(1.05)"
+            boxShadow: "4px 7px 16px rgba(26,26,24,0.32)",
+            background: "#FFFFFF"
           }}
         >
-          {/* Faint scaled-up copy of the screenshot for depth. */}
           {src ? (
             <Img
               src={resolveSrc(src)}
               style={{
                 position: "absolute",
-                left: "50%",
-                top: "50%",
-                width: lensD * 1.6,
-                height: lensD * 1.6,
-                transform: "translate(-50%, -50%) scale(1.5)",
+                left: R - px * MAG,
+                top: R - py * MAG,
+                width: cardW * MAG,
+                height: cardH * MAG,
                 objectFit: "cover",
-                objectPosition: "top",
-                opacity: 0.28,
-                filter: "saturate(1.15)"
+                objectPosition: "top"
               }}
             />
-          ) : null}
-
-          {/* Prism / rainbow key phrase — the hero magnified detail. */}
-          {text ? (
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: lensD * 0.12,
-                textAlign: "center",
-                transform: "scale(1.12)"
-              }}
-            >
-              <span
-                style={{
-                  fontFamily: FONTS.sans,
-                  fontWeight: 800,
-                  fontSize: lensD * 0.13,
-                  lineHeight: 1.05,
-                  letterSpacing: "-0.01em",
-                  background:
-                    "linear-gradient(95deg, #E0453B 0%, #E89B2E 18%, #E7D540 34%, #46B36A 52%, #3CA6D6 70%, #6E62D8 86%, #B85FD0 100%)",
-                  WebkitBackgroundClip: "text",
-                  backgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  color: "transparent",
-                  textShadow: "0 1px 0 rgba(255,255,255,0.25)"
-                }}
-              >
-                {text}
-              </span>
-            </div>
-          ) : null}
-
-          {/* Top-left glass highlight streak. */}
-          <div
-            style={{
-              position: "absolute",
-              top: "8%",
-              left: "12%",
-              width: "46%",
-              height: "30%",
-              borderRadius: "50%",
-              background:
-                "linear-gradient(135deg, rgba(255,255,255,0.75) 0%, rgba(255,255,255,0) 70%)",
-              filter: "blur(2px)",
-              pointerEvents: "none"
-            }}
-          />
-
-          {/* Edge vignette / inner shadow — sells the curved glass. */}
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              borderRadius: "50%",
-              boxShadow:
-                "inset 0 0 36px rgba(26,26,24,0.22), inset 6px 8px 22px rgba(26,26,24,0.18)",
-              pointerEvents: "none"
-            }}
-          />
+          ) : (
+            placeholder
+          )}
+          {/* Curved-glass sheen + edge vignette. */}
+          <div style={{ position: "absolute", top: "8%", left: "12%", width: "46%", height: "30%", borderRadius: "50%", background: "linear-gradient(135deg,rgba(255,255,255,0.7),rgba(255,255,255,0))", filter: "blur(2px)" }} />
+          <div style={{ position: "absolute", inset: 0, borderRadius: "50%", boxShadow: "inset 0 0 30px rgba(26,26,24,0.18)" }} />
         </div>
 
-        {/* Chromatic fringing — a thin conic R→G→B ring just inside the rim. */}
-        <div
-          style={{
-            position: "absolute",
-            inset: RIM,
-            borderRadius: "50%",
-            padding: 2,
-            background:
-              "conic-gradient(from 0deg, #ff0040, #00ff66, #2da8ff, #ff0040)",
-            WebkitMask:
-              "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-            WebkitMaskComposite: "xor",
-            maskComposite: "exclude",
-            opacity: 0.45,
-            pointerEvents: "none"
-          }}
-        />
-        {/* Offset cyan/red fringe outlines for a subtle aberration shimmer. */}
-        <div
-          style={{
-            position: "absolute",
-            inset: RIM,
-            borderRadius: "50%",
-            border: "1px solid rgba(0,200,255,0.5)",
-            transform: "translate(-1px, -1px)",
-            pointerEvents: "none"
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            inset: RIM,
-            borderRadius: "50%",
-            border: "1px solid rgba(255,40,40,0.5)",
-            transform: "translate(1px, 1px)",
-            pointerEvents: "none"
-          }}
-        />
+        {/* Chromatic fringe: faint cyan/red offset ring outlines at the rim. */}
+        <div style={{ position: "absolute", inset: RIM, borderRadius: "50%", border: "1px solid rgba(0,190,255,0.45)", transform: "translate(-1px,-1px)" }} />
+        <div style={{ position: "absolute", inset: RIM, borderRadius: "50%", border: "1px solid rgba(255,50,50,0.45)", transform: "translate(1px,1px)" }} />
 
-        {/* Metallic rim ring. */}
+        {/* Metal rim ring. */}
         <div
           style={{
             position: "absolute",
@@ -304,14 +153,11 @@ export function MagnifierScene({ scene, width, height }) {
             borderRadius: "50%",
             border: `${RIM}px solid transparent`,
             background:
-              "conic-gradient(from 220deg, #B9B9B2, #6E6E68 18%, #3A3A36 38%, #8C8C85 55%, #5A5A55 72%, #C7C7BF 90%, #B9B9B2 100%) border-box",
-            WebkitMask:
-              "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+              "conic-gradient(from 220deg,#B9B9B2,#6E6E68 18%,#3A3A36 38%,#8C8C85 55%,#5A5A55 72%,#C7C7BF 90%,#B9B9B2) border-box",
+            WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
             WebkitMaskComposite: "xor",
             maskComposite: "exclude",
-            boxShadow:
-              "inset 0 1px 1px rgba(255,255,255,0.4), inset 0 -2px 3px rgba(0,0,0,0.4)",
-            pointerEvents: "none"
+            boxShadow: "inset 0 1px 1px rgba(255,255,255,0.4), inset 0 -2px 3px rgba(0,0,0,0.4)"
           }}
         />
       </div>
