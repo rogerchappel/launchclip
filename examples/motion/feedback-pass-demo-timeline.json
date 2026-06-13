@@ -1,0 +1,87 @@
+{
+  "version": "motion.timeline.v1",
+  "duration_seconds": 19,
+  "words": [],
+  "events": [
+    { "id": "zoom-prompt", "type": "punch_zoom", "start": 4.0, "end": 5.4, "scale": 1.2, "origin_y": 0.5, "sfx": null }
+  ],
+  "chapters": [
+    { "title": "Hook", "at": 0 },
+    { "title": "Prompt", "at": 2.8 },
+    { "title": "Steps", "at": 6.2 },
+    { "title": "Flow", "at": 10.4 },
+    { "title": "Payoff", "at": 14.0 }
+  ],
+  "audio": {
+    "music": "music/golden-bed.mp3",
+    "music_volume": 0.08
+  },
+  "scenes": [
+    {
+      "id": "hook",
+      "type": "typography",
+      "start": 0,
+      "end": 2.8,
+      "items": [
+        { "text": "Sharper", "at": 0.1 },
+        { "text": "shadows,", "at": 0.7 },
+        { "text": "brighter", "at": 1.3 },
+        { "text": "glow", "at": 1.9, "emphasis": true, "color": "mint" }
+      ]
+    },
+    {
+      "id": "prompt",
+      "type": "prompt_card",
+      "start": 2.8,
+      "end": 6.2,
+      "text": "launchclip render --motion feedback-pass",
+      "icons": ["logos/launchclip.svg", "logos/terminal.svg"]
+    },
+    {
+      "id": "changes",
+      "type": "card_steps",
+      "start": 6.2,
+      "end": 10.4,
+      "title": "What changed",
+      "items": [
+        { "text": "Composer opens line by line", "at": 6.3 },
+        { "text": "Glow sweeps longer and brighter", "at": 7.2 },
+        { "text": "Shadows fall bottom-right", "at": 8.1 },
+        { "text": "Edges blur like a lens", "at": 9.0 }
+      ]
+    },
+    {
+      "id": "flow",
+      "type": "icon_flow",
+      "start": 10.4,
+      "end": 14.0,
+      "items": [
+        { "text": "the feedback", "at": 10.5, "src": "icons/document.svg" },
+        { "text": "the engine", "at": 11.6, "src": "icons/gear.svg" },
+        { "text": "shipped", "at": 12.7, "src": "icons/check.svg", "color": "mint" }
+      ]
+    },
+    {
+      "id": "proof",
+      "type": "stat_counter",
+      "start": 14.0,
+      "end": 16.4,
+      "value": "47",
+      "label": "tests green",
+      "color": "mint",
+      "at": 14.2
+    },
+    {
+      "id": "cta",
+      "type": "typography",
+      "start": 16.4,
+      "end": 19,
+      "items": [
+        { "text": "Motion", "at": 16.5 },
+        { "text": "lives", "at": 17.1 },
+        { "text": "inside", "at": 17.6, "emphasis": true, "color": "coral" },
+        { "text": "scenes", "at": 18.2 }
+      ]
+    }
+  ]
+}

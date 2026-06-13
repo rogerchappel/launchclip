@@ -134,6 +134,18 @@ test("steps and flow items default their build times inside the scene", () => {
   assert.equal(flow.items[1].at, 5);
 });
 
+test("prompt_card icons normalize to at most 3 string paths", () => {
+  const result = validateTimeline({
+    ...baseTimeline([]),
+    scenes: [
+      { id: "p", type: "prompt_card", start: 0, end: 4, text: "run it", icons: ["logos/a.svg", "logos/b.svg", "", "logos/c.svg", "logos/d.svg"] },
+      { id: "t", type: "talking_head", start: 4, end: 10, src: "base/take.mp4", items: [{ text: "yo", at: 5 }, { text: "hey", at: 7 }] }
+    ]
+  });
+  assert.equal(result.ok, true, result.errors.join("; "));
+  assert.deepEqual(result.timeline.scenes[0].icons, ["logos/a.svg", "logos/b.svg", "logos/c.svg"]);
+});
+
 test("zooms hugging a scene cut produce a warning", () => {
   const result = validateTimeline({
     ...baseTimeline([{ id: "z", type: "punch_zoom", start: 3.8, end: 4.8 }]),

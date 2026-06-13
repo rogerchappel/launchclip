@@ -39,12 +39,17 @@ export const CARD = {
   light: "#FFFFFF",
   dark: "#121210",
   radius: 28,
-  // Deep two-layer shadows: a tight contact shadow plus a long soft throw,
-  // so elements pop off the paper instead of sitting printed on it.
-  shadow: "0 6px 14px rgba(26,26,24,0.18), 0 28px 65px rgba(26,26,24,0.32)",
-  shadowLow: "0 4px 10px rgba(26,26,24,0.16), 0 16px 38px rgba(26,26,24,0.24)",
-  shadowHigh: "0 8px 18px rgba(26,26,24,0.2), 0 40px 90px rgba(26,26,24,0.4)"
+  // Client feedback pass (ART_DIRECTION 4e): the light source sits top-left,
+  // so every shadow falls to the BOTTOM-RIGHT and stays sharp — a tight
+  // contact edge plus a moderate directional throw, like a print shadow.
+  shadow: "3px 4px 6px rgba(26,26,24,0.2), 10px 14px 24px rgba(26,26,24,0.26)",
+  shadowLow: "2px 3px 4px rgba(26,26,24,0.18), 6px 8px 14px rgba(26,26,24,0.22)",
+  shadowHigh: "4px 6px 8px rgba(26,26,24,0.22), 16px 22px 38px rgba(26,26,24,0.3)"
 };
+
+// Staged type carries the same bottom-right light: a hard offset print
+// shadow, em-based so it scales with the word.
+export const TYPE_SHADOW = "0.045em 0.06em 0px rgba(26,26,24,0.22)";
 
 export const SPRINGS = {
   enter: { damping: 17, stiffness: 175, mass: 0.9 },
