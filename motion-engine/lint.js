@@ -17,7 +17,7 @@ export function lintTimeline(timeline, { direction = null, assets = [], presente
   checkCoverage(timeline, failures);
   checkDensity(timeline, failures);
   checkWordGrounding(timeline, failures, advisories);
-  checkBudgets(timeline, failures, advisories);
+  checkBudgets(timeline, failures);
   if (direction) checkDirectionHonored(timeline, direction, failures);
   if (assets.length) checkAssetsExist(timeline, assets, failures);
   if (presenterSrc) {
@@ -102,7 +102,7 @@ function checkWordGrounding(timeline, failures, advisories) {
   }
 }
 
-function checkBudgets(timeline, failures, advisories) {
+function checkBudgets(timeline, failures) {
   const scenes = timeline.scenes ?? [];
   const zooms = (timeline.events ?? []).filter((event) => event.type === "punch_zoom");
   for (const scene of scenes) {
@@ -110,12 +110,6 @@ function checkBudgets(timeline, failures, advisories) {
     if (inScene.length > 1) {
       failures.push(`scene "${scene.id}" has ${inScene.length} punch_zooms — at most one per scene`);
     }
-  }
-  if (scenes.length > 2) {
-    const travels = scenes.slice(1).filter((scene) => scene.transition !== "cut").length;
-    const share = travels / (scenes.length - 1);
-    if (share === 0) failures.push("every transition is a hard cut — the camera must travel (swipe/zoom) for most moves");
-    else if (share < 0.4 || share > 0.9) advisories.push(`travel-transition share is ${(share * 100).toFixed(0)}% — reference sits around 40-80%`);
   }
   // Emphasis-color ration: at most one emphasised word per typography scene.
   for (const scene of scenes) {
@@ -156,6 +150,7 @@ function checkAssetsExist(timeline, assets, failures) {
   for (const scene of timeline.scenes ?? []) {
     if (scene.src) srcs.push(scene.src);
     for (const item of scene.items ?? []) if (item.src) srcs.push(item.src);
+    for (const icon of scene.icons ?? []) srcs.push(icon);
   }
   for (const event of timeline.events ?? []) if (event.src) srcs.push(event.src);
   for (const src of srcs) {

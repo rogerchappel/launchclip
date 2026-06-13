@@ -34,11 +34,12 @@ export const SCENE_CATALOG = [
   },
   {
     type: "prompt_card",
-    use_for: "The exact command or AI prompt the subject runs, typing onto a dark chat-input card with a mint glow. For CLI tools and AI products the prompt IS the demo.",
-    avoid_when: "The text is invented — only real commands/prompts. Longer than ~90 characters.",
-    params: '{ "type": "prompt_card", "start", "end", "text": "<the real command or prompt>" }',
-    density: "Typing animation + typing SFX run for the scene duration; the card pushes in slowly and wears a travelling glow border — continuously alive.",
-    example: { type: "prompt_card", start: 5.9, end: 8.4, text: "launchclip run ./my-oss-tool" }
+    use_for:
+      "The exact command or AI prompt the subject runs, typed into a dark chat composer pill. Starts minimized (icon row only) and springs open line by line as the prompt types; mic + up-arrow send sit right, and the arrow presses when typing completes. For CLI tools and AI products the prompt IS the demo.",
+    avoid_when: "The text is invented — only real commands/prompts. Longer than ~140 characters. Icons that aren't real brand assets from the manifest.",
+    params: '{ "type": "prompt_card", "start", "end", "text": "<the real command or prompt>", "icons?": ["<brand icon path>", "max 3"] }',
+    density: "Typing animation + typing SFX run for the scene duration; the pill grows per line, pushes in close, pans while typing, and wears a bright travelling rim glow — continuously alive.",
+    example: { type: "prompt_card", start: 5.9, end: 8.4, text: "launchclip run ./my-oss-tool", icons: ["logos/launchclip.svg"] }
   },
   {
     type: "screenshot_pile",
@@ -87,8 +88,8 @@ export const SCENE_CATALOG = [
 export const EVENT_CATALOG = [
   {
     type: "punch_zoom",
-    use_for: "Camera focus on the key element while it works (the prompt typing, the payoff node). At most one per scene; never within 0.5s of a scene boundary — the cut is already the accent.",
-    params: '{ "type": "punch_zoom", "start", "end", "scale": 1.05-1.14, "origin_x?", "origin_y?", "sfx?": null_to_silence }'
+    use_for: "Camera focus on the key element while it works (the prompt typing, the payoff node). Go close on focal cards — 1.15-1.25 when the element fills the frame, 1.06-1.12 for a gentle lean-in. At most one per scene; never within 0.5s of a scene boundary — the cut is already the accent.",
+    params: '{ "type": "punch_zoom", "start", "end", "scale": 1.05-1.25, "origin_x?", "origin_y?", "sfx?": null_to_silence }'
   },
   {
     type: "logo_pop",
@@ -97,11 +98,12 @@ export const EVENT_CATALOG = [
   }
 ];
 
+// Travel transitions were retired in the 4e feedback pass: every scene cuts
+// in immediately (silent, with a gentle settle) and the next composition's
+// builds start at once. The "transition" field is still accepted for legacy
+// timelines but the renderer ignores it.
 export const TRANSITION_CATALOG = [
-  { type: "cut", use_for: "Chapter breaks — a new line of thought. Silent, with a gentle settle." },
-  { type: "swipe_left", use_for: "The default forward move: camera travels right across the tabletop; paper parallaxes; whoosh." },
-  { type: "swipe_right", use_for: "Going back / contrast (use sparingly)." },
-  { type: "zoom_into", use_for: "Focusing in on a detail or artifact: dolly-through with blur. Good into prompt_card and CTA scenes." }
+  { type: "cut", use_for: "Every scene change: instant and silent — the new composition is on screen immediately and its builds carry the motion. (Travel swipes/zooms and the boundary whoosh are retired; don't author them.)" }
 ];
 
 // Compact text rendering for the Director's system prompt.
@@ -112,5 +114,5 @@ export function renderCatalog() {
   ).join("\n\n");
   const events = EVENT_CATALOG.map((entry) => `### ${entry.type}\nUSE FOR: ${entry.use_for}\nPARAMS: ${entry.params}`).join("\n\n");
   const transitions = TRANSITION_CATALOG.map((entry) => `- ${entry.type}: ${entry.use_for}`).join("\n");
-  return `## Scene types\n\n${scenes}\n\n## Overlay events\n\n${events}\n\n## Transitions (scene.transition = how a scene ENTERS)\n${transitions}\n\n## Timeline-level: chapters\nOptional persistent progress rail across the top: "chapters": [{"title": "Intro", "at": 0}, ...] (2-6 entries, short titles, at = chapter start time). Use for listicles, multi-step education, and any video with named sections. Omit for single-thought videos.`;
+  return `## Scene types\n\n${scenes}\n\n## Overlay events\n\n${events}\n\n## Transitions\n${transitions}\n\n## Timeline-level: chapters\nOptional persistent progress rail across the top: "chapters": [{"title": "Intro", "at": 0}, ...] (2-6 entries, short titles, at = chapter start time). Use for listicles, multi-step education, and any video with named sections. Omit for single-thought videos.`;
 }

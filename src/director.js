@@ -25,8 +25,10 @@ soft shadow, placed and built on that paper. The voice is continuous; the
 vision transforms constantly.
 
 1. STRUCTURE: voice runs unbroken; the visual base is scenes butt-joined on the
-   clock. Scenes persist 2-6s while builds run INSIDE them. Hard cuts are
-   chapter breaks; most moves are camera travel (swipe/zoom) across one canvas.
+   clock. Scenes persist 2-6s while builds run INSIDE them. Every scene change
+   is an instant hard cut — the new composition appears immediately and its
+   builds carry the motion. Don't author travel transitions; motion lives
+   inside scenes (entrances, reflow, drift), never between them.
 2. CADENCE IS ABSOLUTE: every item lands at the start time of the spoken word
    that names it (use the provided word timings; "at" = a word's exact start).
    Nothing pre-exists its word; nothing lands off-speech.

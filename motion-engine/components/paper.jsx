@@ -3,15 +3,13 @@ import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 import { CARD, PAPER, SEMANTIC } from "../theme.js";
 
 // The world: warm paper with a faint drawn grid. Behind every scene, always.
-// offsetX parallaxes the grid during camera swipes so the table travels too.
-export function PaperGround({ offsetX = 0 }) {
+export function PaperGround() {
   return (
     <AbsoluteFill style={{ background: PAPER.ground }}>
       <AbsoluteFill
         style={{
           backgroundImage: `linear-gradient(${PAPER.grid} 1px, transparent 1px), linear-gradient(90deg, ${PAPER.grid} 1px, transparent 1px)`,
           backgroundSize: `${PAPER.gridSize}px ${PAPER.gridSize}px`,
-          backgroundPosition: `${offsetX}px 0px`,
           // Reference: the grid lives in the middle of the frame and fades to
           // clean paper at the edges.
           WebkitMaskImage: "radial-gradient(90% 75% at 50% 45%, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 100%)",
@@ -23,14 +21,15 @@ export function PaperGround({ offsetX = 0 }) {
   );
 }
 
-// The living border for dark focal cards (ART_DIRECTION 4d.3): a bright
-// gradient sweep travelling the card edge, with a soft glow trailing it.
-// Wrap the Card; the sweep hugs whatever radius the card uses.
-export function GlowBorder({ radius = CARD.radius, color = SEMANTIC.mint, thickness = 4, sweepDegreesPerSecond = 70, style, children }) {
+// The living border for dark focal cards (ART_DIRECTION 4d.3, tuned in 4e):
+// a long, bright rim-light sweep travelling the card edge — reference reads
+// as a light source hugging the card, ~half the perimeter lit, with a wide
+// bloom falling onto the paper. Wrap the Card; the sweep hugs its radius.
+export function GlowBorder({ radius = CARD.radius, color = SEMANTIC.mint, thickness = 5, sweepDegreesPerSecond = 70, style, children }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const angle = ((frame / fps) * sweepDegreesPerSecond) % 360;
-  const ring = `conic-gradient(from ${angle}deg, transparent 0deg, ${color} 30deg, #CFF5E4 42deg, ${color} 54deg, transparent 86deg)`;
+  const ring = `conic-gradient(from ${angle}deg, transparent 0deg, ${color} 40deg, #9FE8C6 80deg, #E4FFF2 105deg, #9FE8C6 130deg, ${color} 170deg, transparent 210deg)`;
   const edge = {
     position: "absolute",
     inset: -thickness,
@@ -39,7 +38,7 @@ export function GlowBorder({ radius = CARD.radius, color = SEMANTIC.mint, thickn
   };
   return (
     <div style={{ position: "relative", ...style }}>
-      <div style={{ ...edge, inset: -thickness * 2, borderRadius: radius + thickness * 2, filter: `blur(${thickness * 5}px)`, opacity: 0.8 }} />
+      <div style={{ ...edge, inset: -thickness * 3, borderRadius: radius + thickness * 3, filter: `blur(${thickness * 7}px)`, opacity: 0.95 }} />
       <div
         style={{
           ...edge,

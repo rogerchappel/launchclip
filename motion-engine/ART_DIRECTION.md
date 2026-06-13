@@ -103,6 +103,42 @@ OSS verdicts (both MIT, copy-in philosophy):
   effects, charts (explainer diagrams) — still on the lift list.
 - remotion-kit: skip — unlicensed, early dev, duplicates what we have.
 
+## 4e. Client feedback pass (first production review, 2026-06-13) — all BUILT
+
+Roger reviewed our output against the reference (frame study in
+`reference/feedback-pass/`, key frame: the 34s composer close-up). Verdicts,
+each now in the renderer:
+
+1. **The composer glow was too shy.** Reference reads as a light source
+   hugging the card: ~half the perimeter lit, bright mint core (near-white at
+   the hot spot), wide bloom falling onto the paper. GlowBorder now sweeps a
+   210° band with a #E4FFF2 core and a 3× bloom.
+2. **The composer is a real input.** Pill starts MINIMIZED (icon row only:
+   +, brand icon chips, mic, up-arrow send) and springs open line by line as
+   the prompt types; the arrow presses when typing completes. `prompt_card`
+   gained `icons?: [paths]` (max 3, manifest assets only).
+3. **Shadows have a light source.** Top-left light → every shadow falls
+   bottom-right and stays sharp (tight contact edge + moderate throw — a
+   print shadow, not a soft hover). Staged type carries a hard offset
+   print shadow too (`TYPE_SHADOW`).
+4. **The frame is a lens.** Outer edges fall off into progressive gaussian
+   blur (three masked backdrop-filter rings); anything travelling into the
+   edge zone blurs with it. Focus belongs to the middle of the table.
+5. **Travels and the boundary whoosh are retired.** Every scene change is a
+   silent hard cut; the next composition's builds start immediately; text
+   scenes just leave — no zoom-out/fade. Motion lives INSIDE scenes
+   (entrances, reflow, drift, builds), not between them. The lint
+   travel-share rule died with it; `transition` is legacy, ignored.
+6. **Punch closer.** Reference punches in until the focal card crops at the
+   frame (the 34s composer fills the width). punch_zoom guidance now
+   1.15–1.25 on focal cards; the composer's own drift is 10% push + 3% pan
+   while it types.
+
+Spotted in the same study, banked for later: the pill morphs height
+mid-scene as content grows (built for prompt_card; generalise?); a dark
+circular "hub" scene with label chips popping in around it; feed-row stacks
+where new rows slide in from the bottom edge.
+
 ## 5. Sound
 
 (Largely as v1 — the reference confirms it.) Whoosh/pop on entrances, typing tick under prompt cards, ding on reveals; everything ducked under continuous VO. Music bed low. SFX variants rotate so repeats don't machine-gun.

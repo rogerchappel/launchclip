@@ -1,49 +1,25 @@
 import React from "react";
-import { AbsoluteFill, Freeze, Img, OffthreadVideo, Sequence, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Img, OffthreadVideo, Sequence, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { Card, GlowBorder } from "./paper.jsx";
-import { FONTS, INK, SEMANTIC, SPRINGS } from "../theme.js";
-import { TRAVEL_SECONDS } from "../schema.js";
-import { travelProgress } from "../travel.js";
+import { FONTS, INK, SEMANTIC, SPRINGS, TYPE_SHADOW } from "../theme.js";
 import { focalDrift, stackLayout } from "../reflow.js";
 
-// Scene track on a continuous canvas. Scenes whose transition is a travel
-// move (swipe/zoom) fly in while the previous scene flies out — the camera
-// crosses one tabletop. Hard cuts are chapter breaks. Blur is scoped to the
-// motion: heavy while travelling, crisp at rest.
+// Scene track (ART_DIRECTION 4e): scene changes are hard cuts — the next
+// composition is on screen immediately and its builds start at once. The
+// motion lives INSIDE scenes (entrances, reflow, drift), not between them;
+// travel transitions and the per-beat whoosh are retired. A gentle settle
+// keeps the cut physical.
 export function SceneTrack({ scenes, width, height }) {
   const { fps } = useVideoConfig();
-  const travelFrames = Math.round(TRAVEL_SECONDS * fps);
   return (
     <AbsoluteFill>
       {scenes.map((scene, index) => {
-        const enterTravel = scene.transition !== "cut";
-        const exitTransition = scenes[index + 1] ? scenes[index + 1].transition : "cut";
         const contentFrames = Math.max(1, Math.round((scene.end - scene.start) * fps));
-        const enterOffset = enterTravel ? travelFrames : 0;
-        const from = Math.round(scene.start * fps) - enterOffset;
-        // The camera move is shared: the incoming scene travels during the
-        // outgoing scene's LAST travelFrames — one move, two passengers.
-        const exitStartFrame = Math.max(enterOffset, enterOffset + contentFrames - (exitTransition !== "cut" ? travelFrames : 0));
-        const content = <Scene scene={scene} width={width} height={height} travelled={enterTravel} />;
         return (
-          <Sequence key={scene.id} from={from} durationInFrames={enterOffset + contentFrames}>
-            <TravelShell
-              transition={scene.transition}
-              exitTransition={exitTransition}
-              exitStartFrame={exitStartFrame}
-              settle={index > 0 && !enterTravel}
-              width={width}
-              sceneId={scene.id}
-            >
-              {enterTravel ? (
-                <Sequence from={0} durationInFrames={travelFrames}>
-                  <Freeze frame={0}>{content}</Freeze>
-                </Sequence>
-              ) : null}
-              <Sequence from={enterOffset} durationInFrames={contentFrames}>
-                {content}
-              </Sequence>
-            </TravelShell>
+          <Sequence key={scene.id} from={Math.round(scene.start * fps)} durationInFrames={contentFrames}>
+            <SettleShell settle={index > 0}>
+              <Scene scene={scene} width={width} height={height} />
+            </SettleShell>
           </Sequence>
         );
       })}
@@ -51,80 +27,22 @@ export function SceneTrack({ scenes, width, height }) {
   );
 }
 
-// Applies the camera-travel transform for a scene's entrance and exit, with
-// motion blur proportional to velocity — directional for swipes, isotropic
-// for zooms. Cut entrances keep the gentle scale settle.
-function TravelShell({ transition, exitTransition, exitStartFrame, settle, width, sceneId, children }) {
+function SettleShell({ settle, children }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-
-  const hasEnter = transition !== "cut";
-  const enterP = hasEnter ? travelProgress(frame, fps) : 1;
-  const enterV = hasEnter ? enterP - travelProgress(frame - 1, fps) : 0;
-  const exitFrame = frame - exitStartFrame;
-  const hasExit = exitTransition !== "cut" && exitFrame >= 0;
-  const exitP = hasExit ? travelProgress(exitFrame, fps) : 0;
-  const exitV = hasExit ? exitP - travelProgress(exitFrame - 1, fps) : 0;
-
-  let translateX = 0;
-  let scale = 1;
-  let opacity = 1;
-  if (transition === "swipe_left") translateX += (1 - enterP) * width;
-  if (transition === "swipe_right") translateX += -(1 - enterP) * width;
-  if (transition === "zoom_into") {
-    scale *= 0.4 + 0.6 * enterP;
-    opacity *= Math.min(1, enterP * 1.6);
-  }
-  if (exitTransition === "swipe_left") translateX += -exitP * width;
-  if (exitTransition === "swipe_right") translateX += exitP * width;
-  if (exitTransition === "zoom_into") {
-    scale *= 1 + exitP * 1.5;
-    opacity *= 1 - exitP;
-  }
-
   const settleP = settle ? spring({ frame, fps, config: SPRINGS.settle }) : 1;
-  scale *= settle ? 1.04 - settleP * 0.04 : 1;
-
-  // Blur follows each phase's own move: swipes smear horizontally, zooms
-  // blur isotropically — even when a scene swipes in and zooms out.
-  const swipeSpeed = (transition.startsWith("swipe") ? Math.abs(enterV) : 0) + (exitTransition.startsWith("swipe") ? Math.abs(exitV) : 0);
-  const zoomSpeed = (transition === "zoom_into" ? Math.abs(enterV) : 0) + (exitTransition === "zoom_into" ? Math.abs(exitV) : 0);
-  const directionalBlur = Math.min(34, swipeSpeed * width * 0.55);
-  const isotropicBlur = directionalBlur > 0.5 ? 0 : Math.min(16, zoomSpeed * 90);
-  const filterId = `mb-${sceneId}`;
-  const filter =
-    directionalBlur > 0.5 ? `url(#${filterId})` : isotropicBlur > 0.5 ? `blur(${isotropicBlur.toFixed(1)}px)` : undefined;
-
   return (
-    <>
-      {directionalBlur > 0.5 ? (
-        <svg style={{ position: "absolute", width: 0, height: 0 }}>
-          <defs>
-            <filter id={filterId} x="-30%" y="-30%" width="160%" height="160%">
-              <feGaussianBlur stdDeviation={`${directionalBlur.toFixed(1)},0`} edgeMode="duplicate" />
-            </filter>
-          </defs>
-        </svg>
-      ) : null}
-      <AbsoluteFill
-        style={{
-          transform: `translateX(${translateX}px) scale(${scale})`,
-          transformOrigin: "50% 45%",
-          opacity,
-          filter
-        }}
-      >
-        {children}
-      </AbsoluteFill>
-    </>
+    <AbsoluteFill style={{ transform: `scale(${settle ? 1.04 - settleP * 0.04 : 1})`, transformOrigin: "50% 45%" }}>
+      {children}
+    </AbsoluteFill>
   );
 }
 
-function Scene({ scene, width, height, travelled = false }) {
+function Scene({ scene, width, height }) {
   if (scene.type === "talking_head") return <TalkingHeadScene scene={scene} width={width} height={height} />;
   if (scene.type === "screen") return <ScreenScene scene={scene} width={width} height={height} />;
   if (scene.type === "typography") return <TypographyScene scene={scene} width={width} height={height} />;
-  if (scene.type === "prompt_card") return <PromptCardScene scene={scene} width={width} height={height} travelled={travelled} />;
+  if (scene.type === "prompt_card") return <PromptCardScene scene={scene} width={width} height={height} />;
   if (scene.type === "icon_flow") return <IconFlowScene scene={scene} width={width} height={height} />;
   if (scene.type === "card_steps") return <CardStepsScene scene={scene} width={width} height={height} />;
   if (scene.type === "screenshot_pile") return <ScreenshotPileScene scene={scene} width={width} height={height} />;
@@ -246,7 +164,7 @@ function WordBuild({ scene, width, height, region, onDark = false }) {
               fontSize: size,
               lineHeight: 1.04,
               color: item.color ? semanticColor(item.color) : onDark ? INK.onDark : INK.primary,
-              textShadow: onDark ? "0 4px 18px rgba(10,10,8,0.55)" : undefined,
+              textShadow: onDark ? "0 4px 18px rgba(10,10,8,0.55)" : TYPE_SHADOW,
               transform: [
                 `rotate(${WORD_ROTATIONS[index % WORD_ROTATIONS.length]}deg)`,
                 `translateY(${WORD_OFFSETS[index % WORD_OFFSETS.length] * base + (1 - enter) * base * 0.6}px)`,
@@ -272,20 +190,39 @@ function TypographyScene({ scene, width, height }) {
   );
 }
 
-// Dark chat-input card with the real prompt typing on. When the scene arrives
-// by camera travel, the card comes fully formed — the travel IS its entrance.
-function PromptCardScene({ scene, width, height, travelled = false }) {
+// The chat composer (ART_DIRECTION 4e): a dark pill that starts MINIMIZED —
+// just the icon row, like a real input at rest — and springs open line by
+// line as the prompt types. Brand icon chips sit left with the +, mic and an
+// up-arrow send sit right; the arrow presses when typing completes. The pill
+// is the focal object: a close push-in, a pan while it types, and the bright
+// travelling rim glow.
+function PromptCardScene({ scene, width, height }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const seconds = frame / fps;
   const sceneLength = scene.end - scene.start;
-  const enter = travelled ? 1 : spring({ frame, fps, config: SPRINGS.enter });
-  const typeProgress = clamp((seconds - 0.35) / Math.max(0.6, sceneLength - 1.1));
+  const enter = spring({ frame, fps, config: SPRINGS.enter });
+  const typeStart = 0.35;
+  const typeSpan = Math.max(0.6, sceneLength - 1.1);
+  const typeProgress = clamp((seconds - typeStart) / typeSpan);
   const text = scene.text.slice(0, Math.ceil(scene.text.length * typeProgress));
   const fontSize = Math.round(height * 0.026);
-  // The prompt is the focal object: it pushes in slowly, pans right-to-left,
-  // and wears the travelling glow — never statically framed.
-  const drift = focalDrift({ frame, fps, seconds: sceneLength });
+  const lineHeight = fontSize * 1.5;
+  // Deterministic wrap estimate so the pill's height needs no DOM measuring.
+  const charsPerLine = Math.max(10, Math.floor((width * 0.86 - fontSize * 3.4) / (fontSize * 0.54)));
+  const totalLines = Math.max(1, Math.ceil(scene.text.length / charsPerLine));
+  // Each line opens on its own spring the moment its first character types.
+  let textArea = 0;
+  for (let line = 0; line < totalLines; line += 1) {
+    const at = typeStart + ((line * charsPerLine) / scene.text.length) * typeSpan;
+    const local = frame - at * fps;
+    if (local >= 0) textArea += lineHeight * spring({ frame: local, fps, config: SPRINGS.settle });
+  }
+  // The send press: the arrow dips and rebounds the moment the prompt is done.
+  const pressP = spring({ frame: frame - (typeStart + typeSpan + 0.12) * fps, fps, config: SPRINGS.enter });
+  const arrowScale = 1 - 0.35 * Math.sin(clamp(pressP) * Math.PI);
+  const radius = fontSize * 2.3;
+  const drift = focalDrift({ frame, fps, seconds: sceneLength, zoom: 0.1, pan: 0.03 });
   return (
     <AbsoluteFill style={{ display: "grid", placeItems: "center", padding: `0 ${width * 0.07}px` }}>
       <div
@@ -295,20 +232,33 @@ function PromptCardScene({ scene, width, height, travelled = false }) {
           opacity: Math.min(1, enter * 1.4)
         }}
       >
-        <GlowBorder radius={36}>
-          <Card
-            dark
-            radius={36}
-            elevation="high"
-            style={{ width: "100%", padding: `${fontSize * 1.3}px ${fontSize * 1.5}px`, boxShadow: "0 30px 70px rgba(26,26,24,0.3), 0 0 50px rgba(79,174,133,0.2)" }}
-          >
-            <div style={{ fontFamily: FONTS.sans, fontWeight: 600, fontSize, lineHeight: 1.5, color: SEMANTIC.mint, minHeight: fontSize * 4.5 }}>
-              &ldquo;{text}
-              <Caret fontSize={fontSize} />
+        <GlowBorder radius={radius}>
+          <Card dark radius={radius} elevation="high" style={{ width: "100%", padding: `${fontSize * 0.9}px ${fontSize * 1.4}px` }}>
+            <div style={{ height: textArea, overflow: "hidden", display: "flex", alignItems: "flex-end" }}>
+              <div style={{ fontFamily: FONTS.sans, fontWeight: 600, fontSize, lineHeight: `${lineHeight}px`, color: SEMANTIC.mint, paddingBottom: textArea > 0 ? fontSize * 0.2 : 0 }}>
+                {text}
+                {text.length ? <Caret fontSize={fontSize} /> : null}
+              </div>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: fontSize * 0.9 }}>
-              <div style={{ color: INK.onDarkMuted, fontSize: fontSize * 1.4, fontWeight: 300, lineHeight: 1 }}>+</div>
+            <div style={{ display: "flex", alignItems: "center", gap: fontSize * 0.9, height: fontSize * 2.2 }}>
+              <div style={{ color: INK.onDarkMuted, fontSize: fontSize * 1.5, fontWeight: 300, lineHeight: 1 }}>+</div>
+              {(scene.icons ?? []).map((src, index) => (
+                <Img key={index} src={resolveSrc(src)} style={{ width: fontSize * 1.6, height: fontSize * 1.6, objectFit: "contain" }} />
+              ))}
+              <div style={{ flex: 1 }} />
               <Mic size={fontSize} />
+              <div
+                style={{
+                  fontFamily: FONTS.sans,
+                  fontWeight: 800,
+                  fontSize: fontSize * 1.5,
+                  lineHeight: 1,
+                  color: INK.onDark,
+                  transform: `scale(${arrowScale})`
+                }}
+              >
+                ↑
+              </div>
             </div>
           </Card>
         </GlowBorder>

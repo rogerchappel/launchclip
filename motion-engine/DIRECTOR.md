@@ -153,7 +153,7 @@ render
 - **Density:** no gap > 1.5s without something entering/building/transforming (the #1 fluidity gap vs the reference)
 - **Coverage:** scenes span the full duration; every `must_include` item appears; every `asset_ref` is placed
 - **Word grounding:** every `at` matches a word start ±0.1s; key spoken nouns with available assets actually use them
-- **Budget rules:** accent-color budget, ≤1 punch_zoom per scene, travel-transition share (40–80% of transitions, not 0%, not 100%)
+- **Budget rules:** accent-color budget, ≤1 punch_zoom per scene (the travel-transition share rule retired with travels in the 4e pass — scene changes are cuts)
 - **Chapter rail consistency** when chapters are declared
 
 Schema = "is it renderable"; linter = "is it good"; repair loop = "make the model fix it, don't fix it for the model."

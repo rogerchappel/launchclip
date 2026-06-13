@@ -6,7 +6,6 @@ import { PaperGround } from "./components/paper.jsx";
 import { SceneTrack } from "./components/scenes.jsx";
 import { ChapterRail } from "./components/ChapterRail.jsx";
 import { FONTS, INK } from "./theme.js";
-import { paperOffsetAt } from "./travel.js";
 import { SCENE_SFX } from "./schema.js";
 
 // Renders a motion.timeline.v1 document in the paper-world grammar: warm
@@ -17,11 +16,10 @@ export function MotionLayer({ timeline, enableSfx = true }) {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const camera = cameraAt({ events: timeline.events, frame, fps });
-  const paperOffset = paperOffsetAt({ scenes: timeline.scenes ?? [], frame, fps, width });
 
   return (
     <AbsoluteFill style={{ overflow: "hidden" }}>
-      <PaperGround offsetX={paperOffset} />
+      <PaperGround />
       <AbsoluteFill
         style={{
           transform: `scale(${camera.scale})`,
@@ -34,6 +32,8 @@ export function MotionLayer({ timeline, enableSfx = true }) {
           <BaseLayer base={timeline.base} width={width} height={height} />
         )}
       </AbsoluteFill>
+
+      <LensEdge />
 
       {timeline.chapters?.length ? <ChapterRail chapters={timeline.chapters} width={width} height={height} /> : null}
 
@@ -53,6 +53,38 @@ export function MotionLayer({ timeline, enableSfx = true }) {
       ) : null}
       {enableSfx ? <SfxLayer events={timeline.events} scenes={timeline.scenes ?? []} fps={fps} /> : null}
     </AbsoluteFill>
+  );
+}
+
+// The lens (ART_DIRECTION 4e): the frame behaves like a macro lens focused on
+// the middle of the table — the whole perimeter (sides and corners) falls off
+// into a progressive gaussian blur, and ANY element travelling into that zone
+// blurs with it. Three stacked backdrop-filter rings build the gradual
+// falloff; each ring blurs the already-blurred output of the one behind it, so
+// the strength compounds outward. The ellipse is kept fairly round so the
+// left/right edges blur too, not only the top/bottom of the tall frame.
+const LENS_RINGS = [
+  { blur: 3, mask: "radial-gradient(62% 60% at 50% 46%, rgba(0,0,0,0) 42%, #000 68%)" },
+  { blur: 7, mask: "radial-gradient(62% 60% at 50% 46%, rgba(0,0,0,0) 60%, #000 84%)" },
+  { blur: 14, mask: "radial-gradient(62% 60% at 50% 46%, rgba(0,0,0,0) 78%, #000 100%)" }
+];
+
+function LensEdge() {
+  return (
+    <>
+      {LENS_RINGS.map((ring, index) => (
+        <AbsoluteFill
+          key={index}
+          style={{
+            backdropFilter: `blur(${ring.blur}px)`,
+            WebkitBackdropFilter: `blur(${ring.blur}px)`,
+            maskImage: ring.mask,
+            WebkitMaskImage: ring.mask,
+            pointerEvents: "none"
+          }}
+        />
+      ))}
+    </>
   );
 }
 
@@ -108,12 +140,9 @@ function SfxLayer({ events, scenes, fps }) {
     if (!event.sfx) continue;
     sounds.push({ key: `sfx-${event.id}`, at: event.start, sfx: event.sfx, volume: 0.18 });
   }
-  scenes.forEach((scene, index) => {
-    // Whoosh only when the camera actually travels — hard cuts stay silent,
-    // and the level sits well under the voice.
-    if (index > 0 && scene.transition !== "cut") {
-      sounds.push({ key: `cut-${scene.id}`, at: scene.start - 0.18, sfx: SCENE_SFX.cut, volume: 0.12 });
-    }
+  scenes.forEach((scene) => {
+    // No transition sound: the per-beat whoosh is retired (4e) — scene
+    // changes are silent cuts; SFX belong to builds, not boundaries.
     if (scene.type === "prompt_card") {
       const typingSeconds = Math.max(0.6, scene.end - scene.start - 1.1);
       sounds.push({ key: `type-${scene.id}`, at: scene.start + 0.35, sfx: SCENE_SFX.prompt_typing, volume: 0.2, holdSeconds: typingSeconds });

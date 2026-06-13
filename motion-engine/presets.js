@@ -9,7 +9,7 @@ export const PRESETS = {
     skeleton: [
       "hook: talking_head split (if footage) or typography — the pain or the claim, first 3s",
       "problem/promise: typography thesis with ONE emphasised word",
-      "the command: prompt_card (zoom_into) showing the real invocation",
+      "the command: prompt_card showing the real invocation, with a close punch_zoom",
       "what it does: card_steps, one chip per capability as spoken",
       "how it fits: icon_flow from the user's world to the payoff",
       "cta: typography, emphasised word in coral"

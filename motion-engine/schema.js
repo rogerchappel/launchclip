@@ -23,10 +23,10 @@ export const SCENE_TYPES = new Set([
 export const MAX_SCENE_SECONDS = 6;
 export const MIN_SCENE_SECONDS = 0.8;
 
-// How a scene enters: hard cuts are chapter breaks; travel (swipe/zoom) keeps
-// the viewer on one continuous canvas. The camera spends this long in motion.
+// Legacy field, still validated so older timelines load: travel transitions
+// were retired in the 4e feedback pass — the renderer cuts every scene in
+// immediately and the motion lives inside the scene.
 export const SCENE_TRANSITIONS = new Set(["cut", "swipe_left", "swipe_right", "zoom_into"]);
-export const TRAVEL_SECONDS = 0.45;
 
 export const TALKING_HEAD_LAYOUTS = new Set(["split", "card", "full", "overlay"]);
 
@@ -36,11 +36,10 @@ export const DEFAULT_SFX = {
   caption_chunk: "tick.wav"
 };
 
-// Scene-level sound design, bound automatically by the renderer:
-// travel/cuts whoosh, prompt cards type, step chips click, the final icon
-// node lands with a retro success hit.
+// Scene-level sound design, bound automatically by the renderer: prompt
+// cards type, step chips click, the final icon node lands with a retro
+// success hit. Scene changes are silent — no boundary whoosh (4e).
 export const SCENE_SFX = {
-  cut: "fast_whoosh.wav",
   prompt_typing: "writing_prompt.wav",
   step_item: "single_type.wav",
   icon_item: "pop.wav",
@@ -218,7 +217,10 @@ function normalizeScene(scene, index, errors) {
   }
   if (type === "prompt_card") {
     if (!scene?.text) errors.push(`scenes[${index}] (prompt_card) requires text — the real prompt, never invented`);
-    return { ...base, text: String(scene?.text ?? "") };
+    // Optional brand icon chips shown in the composer's icon row (real
+    // assets only, max 3 — the bar is small).
+    const icons = Array.isArray(scene?.icons) ? scene.icons.map((icon) => String(icon)).filter(Boolean).slice(0, 3) : [];
+    return { ...base, text: String(scene?.text ?? ""), icons };
   }
   if (type === "typography" || type === "icon_flow" || type === "card_steps" || type === "screenshot_pile") {
     const raw = Array.isArray(scene?.items) ? scene.items : [];
