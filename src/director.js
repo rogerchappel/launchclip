@@ -317,7 +317,7 @@ export async function directTimeline({ client, words, durationSeconds, assets, d
       events: draft.events
     };
     const validation = validateTimeline(candidate);
-    const lint = validation.ok ? lintTimeline(validation.timeline, { direction, assets, presenterSrc: baseSrc }) : { ok: false, failures: [], advisories: [] };
+    const lint = validation.ok ? lintTimeline(validation.timeline, { direction, assets, presenterSrc: baseSrc, referenceGrade: true }) : { ok: false, failures: [], advisories: [] };
     lastReport = { attempt, validation: validation.errors, lint: lint.failures, advisories: [...validation.warnings, ...lint.advisories], rationale: draft.rationale };
     if (validation.ok && lint.ok) {
       log(`director: valid + lint-clean on attempt ${attempt}`);
@@ -471,7 +471,7 @@ export async function directHighTimeline(ctx) {
     events: draft.events
   };
   const validation = validateTimeline(candidate);
-  const lint = validation.ok ? lintTimeline(validation.timeline, { direction, assets, presenterSrc: baseSrc }) : { ok: false, failures: [], advisories: [] };
+  const lint = validation.ok ? lintTimeline(validation.timeline, { direction, assets, presenterSrc: baseSrc, referenceGrade: true }) : { ok: false, failures: [], advisories: [] };
   const criticIssues = critique.verdict === "revise" ? critique.findings.map((finding) => `CRITIC (${finding.scene_id ?? "global"}): ${finding.issue} — fix: ${finding.fix}`) : [];
   const issues = [...validation.errors.map((error) => `SCHEMA: ${error}`), ...lint.failures.map((failure) => `LINT: ${failure}`), ...criticIssues];
 
