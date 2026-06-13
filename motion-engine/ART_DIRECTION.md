@@ -204,6 +204,36 @@ Lesson for verifying motion: single stills lie. Diff consecutive frames
 are gaps. Slow drift is sub-pixel per frame (won't show in the diff) but is
 felt over a second; verify it by diffing frames ~0.5s apart (ghosting = alive).
 
+## 4h. Fit pass — things must work across the frame, not just in a still
+
+Client feedback on the vocabulary render exposed problems that single stills
+hid; fixed at the root, not patched:
+
+- **Nothing bleeds off-screen.** The world's content plane was scaled up
+  (`fill` 1.12) to hide the tilt's top gap — which cropped all four edges
+  (cards, the screenshot, grid columns ran past the frame). Now the content
+  plane is NOT scaled; the paper alone is oversized to cover the gap, so every
+  scene keeps its true frame. Design scenes within ~8–92% width regardless.
+- **Chapter rail gets its own band.** Scenes lay out below ~`TOP_SAFE`
+  (0.13–0.15h); the funnel title and the grid's first row were colliding with
+  the rail dots.
+- **Funnel is a real funnel.** Cards are centred and narrow symmetrically
+  (both edges step in) — the old one-sided clip-path read as a skewed
+  rectangle. No clip-path; just decreasing centred widths + the dotted spine.
+- **The magnifier actually magnifies.** It renders a 2× copy of the same
+  screenshot, offset so the point under the lens centre is what's enlarged —
+  moving the lens reveals different real content. The earlier fixed prism-text
+  label glued to the glass (which overlapped everything as it moved) is gone;
+  only a faint chromatic rim remains, and the handle is drawn from the centre
+  so it joins the rim.
+- **No aimless drift.** The perceptible per-scene zoom/pan was removed (it read
+  as a broken pan, made worse by the edge-cropping it panned across). A
+  sub-pixel ambient scale-breath is the only always-on motion; the cross-hold
+  still bridges cuts.
+
+Principle: a fix has to hold for *any* content at *any* point in the scene,
+not just look right in one exported frame.
+
 ## 5. Sound
 
 (Largely as v1 — the reference confirms it.) Whoosh/pop on entrances, typing tick under prompt cards, ding on reveals; everything ducked under continuous VO. Music bed low. SFX variants rotate so repeats don't machine-gun.
