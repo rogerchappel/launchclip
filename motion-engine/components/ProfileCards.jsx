@@ -266,25 +266,28 @@ function GridMode({ scene, items, width, height, frame, fps, presenceOf, presenc
   const total = scene.total;
   const hasTotal = total && total.value != null;
 
-  // Reserve bottom band for the summary card when present, and a top band so
-  // the first grid row clears the chapter rail.
-  const topPad = height * 0.14;
+  // Reserve a top band so the first row clears the chapter rail and a bottom
+  // band for the summary card. Tighter than before so cells are tall enough
+  // for avatar + name + value without clipping the name.
+  const topPad = height * 0.12;
   const sidePad = width * 0.06;
-  const summaryBand = hasTotal ? height * 0.22 : 0;
+  const summaryBand = hasTotal ? height * 0.18 : 0;
   const gridAreaW = width - sidePad * 2;
-  const gridAreaH = height - topPad * 2 - summaryBand;
+  const gridAreaH = height - topPad - height * 0.04 - summaryBand;
 
-  const colGap = gridAreaW * 0.04;
+  const colGap = gridAreaW * 0.045;
   const rowGap = colGap;
   const cellW = (gridAreaW - colGap * (cols - 1)) / cols;
-  const cellH = Math.min((gridAreaH - rowGap * (rows - 1)) / rows, cellW * 1.35);
+  const cellH = Math.min((gridAreaH - rowGap * (rows - 1)) / rows, cellW * 1.5);
 
   // If items lack distinct `at` beats (or there are many), rapid auto-stagger.
   const autoStaggerSec = 0.06;
 
-  const avatarSize = cellW * 0.42;
-  const nameSize = Math.min(cellW * 0.16, 26);
-  const valueSize = Math.min(cellW * 0.2, 34);
+  // Sized so all three (avatar, name, value) fit the cell — the name was being
+  // clipped when the avatar+value ate the height.
+  const avatarSize = Math.min(cellW * 0.34, cellH * 0.34);
+  const nameSize = Math.min(cellW * 0.15, 22);
+  const valueSize = Math.min(cellW * 0.17, 26);
 
   // Grid block is vertically centered in its area.
   const gridBlockH = rows * cellH + (rows - 1) * rowGap;
