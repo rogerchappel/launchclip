@@ -558,7 +558,13 @@ export async function runDirect(out, flags = {}) {
 
   let baseSrc = null;
   let voiceoverSrc = null;
-  if (flags.words) {
+  if (voice === "record" && flags.take && !isPublicAssetPath(flags.take)) {
+    const aligned = await alignRecording(out, { media: flags.take, ...(flags.words ? { words: flags.words } : {}) });
+    words = JSON.parse(await readFile(aligned.words, "utf8"));
+    baseSrc = aligned.base;
+    scriptText = scriptText ?? words.map((word) => word.word).join(" ");
+    log(`aligned take: ${baseSrc}`);
+  } else if (flags.words) {
     words = JSON.parse(await readFile(flags.words, "utf8"));
     scriptText = scriptText ?? words.map((word) => word.word).join(" ");
   } else if (voice === "record" && flags.take) {
@@ -567,11 +573,6 @@ export async function runDirect(out, flags = {}) {
       if (!existsSync(wordsPath)) throw new Error("Need --words <file> or video/words.json when --take is already a public asset path.");
       words = JSON.parse(await readFile(wordsPath, "utf8"));
       baseSrc = flags.take;
-    } else {
-      const aligned = await alignRecording(out, { media: flags.take });
-      words = JSON.parse(await readFile(aligned.words, "utf8"));
-      baseSrc = aligned.base;
-      log(`aligned take: ${baseSrc}`);
     }
   } else if (scriptText && voice === "tts") {
     const synthesized = await synthesizeVoice(scriptText, { log });
@@ -621,7 +622,7 @@ export async function runDirect(out, flags = {}) {
   let rendered = null;
   if (!flags["no-render"]) {
     log("rendering...");
-    rendered = await renderMotion(out, {});
+    rendered = await renderMotion(out, flags);
   }
   return {
     stage: "direct",
