@@ -61,12 +61,14 @@ export function MotionLayer({ timeline, enableSfx = true }) {
 // into a progressive gaussian blur, and ANY element travelling into that zone
 // blurs with it. Three stacked backdrop-filter rings build the gradual
 // falloff; each ring blurs the already-blurred output of the one behind it, so
-// the strength compounds outward. The ellipse is kept fairly round so the
-// left/right edges blur too, not only the top/bottom of the tall frame.
+// the strength compounds outward. The focus ellipse is WIDE so the left/right
+// margins — where cards and text sit — stay crisp; the blur concentrates at
+// the top/bottom and into the corners, like a tall lens. Only the very
+// corners reach full strength.
 const LENS_RINGS = [
-  { blur: 3, mask: "radial-gradient(62% 60% at 50% 46%, rgba(0,0,0,0) 42%, #000 68%)" },
-  { blur: 7, mask: "radial-gradient(62% 60% at 50% 46%, rgba(0,0,0,0) 60%, #000 84%)" },
-  { blur: 14, mask: "radial-gradient(62% 60% at 50% 46%, rgba(0,0,0,0) 78%, #000 100%)" }
+  { blur: 2, mask: "radial-gradient(86% 58% at 50% 46%, rgba(0,0,0,0) 54%, #000 80%)" },
+  { blur: 5, mask: "radial-gradient(86% 58% at 50% 46%, rgba(0,0,0,0) 72%, #000 92%)" },
+  { blur: 9, mask: "radial-gradient(86% 58% at 50% 46%, rgba(0,0,0,0) 90%, #000 100%)" }
 ];
 
 function LensEdge() {
