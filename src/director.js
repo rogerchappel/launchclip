@@ -88,9 +88,10 @@ async function makeDirectorClient(flags = {}, log = () => {}) {
   if (choice === "openai") {
     if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not set.");
     // Default to a reasoning model: the strict density/word-grounding linter
-    // needs it (gpt-4o/gpt-4.1 rarely pass in the repair budget). Override via
-    // --model or OPENAI_MODEL.
-    const model = flags.model || process.env.OPENAI_MODEL || "o4-mini";
+    // needs it (gpt-4o/gpt-4.1 rarely pass in the repair budget). gpt-5.5
+    // lands valid, lint-clean AND gap-free; o4-mini works as a cheaper
+    // fallback. Override via --model or OPENAI_MODEL.
+    const model = flags.model || process.env.OPENAI_MODEL || "gpt-5.5";
     log(`provider: openai (${model})`);
     return openAiMessagesShim({ apiKey: process.env.OPENAI_API_KEY, model });
   }
