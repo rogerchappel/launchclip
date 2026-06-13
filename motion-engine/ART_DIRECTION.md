@@ -139,6 +139,40 @@ mid-scene as content grows (built for prompt_card; generalise?); a dark
 circular "hub" scene with label chips popping in around it; feed-row stacks
 where new rows slide in from the bottom edge.
 
+## 4f. Second-reference teardown (srIaywtgV40) — the immersion gap
+
+A denser, more advanced reference (sales-funnel explainer; frames in
+`reference/feedback-pass-2/`). Same paper-world DNA, several tiers deeper.
+What it taught us, by status:
+
+**Shipped in the P4 quick-win + perspective passes:**
+- **3D tabletop.** The whole world sits on ONE plane tilted back a few degrees
+  (grid lines visibly converge). Cards higher on the table recede; shadows
+  fall onto the angled surface. Built as a perspective+rotateX/Y wrapper in
+  `MotionLayer` (`WORLD`); the lens and chapter rail stay screen-aligned. This
+  was the single biggest "feel" gap and lifts every scene at once.
+- **Glow = a travelling rim**, not a halo: a tight ~110° bright arc catching
+  one edge (reference t23/t36), not a wide diffuse bloom.
+- **Shadows** crisper/darker/tighter, hard bottom-right (t48).
+- **Composer**: white circular ↵ send, paperclip; accent words snap to colour
+  on the beat.
+
+**Banked for the vocabulary pass (Stage 3) — what ours still lacks:**
+- **Funnel layout**: trapezoidal step cards tapering into a funnel (t17/t20),
+  numbered, each with a content-specific icon in a circular badge, a centre
+  dotted spine, one card green (success) and a red branch on a curved dotted
+  loop-back path. Plus a straight-stack variant with a green "output" card
+  (t31).
+- **Profile/person cards**: avatar + name + role pill (t13), sliding in and
+  cascading; real screenshot cards tilted in depth.
+- **Grid-multiply → total**: one card multiplies into a 4×4 grid, then a sum
+  card lands ("Total… $6,000", t43). Price chips ($300/mo) as pills.
+- **Magnifier prop**: a glass lens with chromatic fringing and prism text,
+  gliding over a screenshot (t4.5).
+- **Long-content card** with a bottom fade gradient gated by a price/lock
+  (t39); a persistent anchor (the composer) that morphs across scenes; a
+  camera pull-back that reveals two elements at once; brand mascot character.
+
 ## 5. Sound
 
 (Largely as v1 — the reference confirms it.) Whoosh/pop on entrances, typing tick under prompt cards, ding on reveals; everything ducked under continuous VO. Music bed low. SFX variants rotate so repeats don't machine-gun.
