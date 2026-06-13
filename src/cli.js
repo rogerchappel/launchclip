@@ -2,8 +2,9 @@ import { initWorkspace, runDemo, planVideo, writeCaptions, renderVideo, submitRe
 import { writeTeleprompter, alignRecording, renderMotion } from "./talking_head.js";
 import { generateMusic } from "./music.js";
 import { runDirect } from "./director.js";
+import { writeScriptDraft } from "./scriptwriter.js";
 
-const COMMANDS = new Set(["init", "demo", "plan", "captions", "render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct"]);
+const COMMANDS = new Set(["init", "demo", "plan", "captions", "render", "submit-review", "review", "validate", "run", "script", "write-script", "align", "motion-render", "music", "direct"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout } = io;
@@ -38,6 +39,8 @@ export async function runCli(argv, io = {}) {
     result = await runPacket(required(firstArg, "repo path"), flags);
   } else if (command === "script") {
     result = await writeTeleprompter(required(firstArg, "workspace path"), flags);
+  } else if (command === "write-script") {
+    result = await writeScriptDraft(required(firstArg, "workspace path"), flags);
   } else if (command === "align") {
     result = await alignRecording(required(firstArg, "workspace path"), flags);
   } else if (command === "motion-render") {
@@ -94,7 +97,9 @@ Usage:
   launchclip run <repo> --out <workspace> --demo-cmd "npm run smoke" --demo-media path/to/demo.mp4 --angle "..." --audience "..." [--style premium-product-short --assets-dir path/to/assets --talking-head heygen]
 
 Talking-head motion workflow:
-  launchclip script <workspace> [--wpm 150]            # teleprompter from the planned voiceover
+  launchclip write-script <workspace> --brief "facts/names/numbers" [--topic "..."] [--audience "..."] [--duration 45]
+            [--provider anthropic|openai] [--model <id>]   # LLM drafts a viral-style voiceover (uses real facts only)
+  launchclip script <workspace> [--wpm 150]            # teleprompter from the planned/written voiceover
   launchclip align <workspace> --media take.mp4        # whisper word timings + heuristic motion timeline
   launchclip align <workspace> --media take.mp4 --words words.json
   launchclip motion-render <workspace>                 # render video/motion.mp4 via the motion engine

@@ -71,7 +71,7 @@ function openAiMessagesShim({ apiKey, model }) {
 
 // Pick the LLM provider: an explicit --provider flag wins; otherwise prefer
 // Anthropic (project default) and fall back to OpenAI when only its key is set.
-async function makeDirectorClient(flags = {}, log = () => {}) {
+export async function makeDirectorClient(flags = {}, log = () => {}) {
   const choice = flags.provider
     ? String(flags.provider)
     : process.env.ANTHROPIC_API_KEY
