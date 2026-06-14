@@ -12,6 +12,7 @@ import { renderCatalog } from "../motion-engine/catalog.js";
 import { PRESETS, renderPreset } from "../motion-engine/presets.js";
 import { alignRecording, renderMotion } from "./talking_head.js";
 import { writeViralScript } from "./script_writer.js";
+import { generateMusic, resolveMusicPrompt, shouldAutoGenerateMusic } from "./music.js";
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MODEL = "claude-opus-4-8";
@@ -531,6 +532,7 @@ export async function runDirect(out, flags = {}) {
   if (!PRESETS[preset]) throw new Error(`Unknown format "${preset}". Available: ${Object.keys(PRESETS).join(", ")}`);
 
   let scriptResult = null;
+  let script = null;
   let words = null;
   let scriptText = flags["script-text"] ?? null;
   const voice = String(flags.voice ?? (flags.take ? "record" : scriptText || flags.words ? "none" : "record"));
@@ -540,9 +542,12 @@ export async function runDirect(out, flags = {}) {
 
   if (!scriptText && !flags.words) {
     scriptResult = await writeViralScript(out, flags);
-    const script = JSON.parse(await readFile(scriptResult.script, "utf8"));
+    script = JSON.parse(await readFile(scriptResult.script, "utf8"));
     scriptText = script.full_text;
     log(`script: ${script.word_count} words, ${script.target_seconds}s`);
+  } else {
+    const scriptPath = path.join(out, "video", "script.json");
+    if (existsSync(scriptPath)) script = JSON.parse(await readFile(scriptPath, "utf8"));
   }
 
   if (voice === "record" && !flags.take && !flags.words) {
@@ -619,6 +624,25 @@ export async function runDirect(out, flags = {}) {
   await writeFile(path.join(out, "video", "direction.json"), `${JSON.stringify(direction, null, 2)}\n`);
   await writeFile(path.join(out, "video", "director-report.json"), `${JSON.stringify(report, null, 2)}\n`);
 
+  let music = null;
+  if (!flags.music && flags.music !== "off" && !flags["no-music"]) {
+    if (shouldAutoGenerateMusic(flags)) {
+      log("music: generating ElevenLabs bed...");
+      music = await generateMusic(out, {
+        timeline: timelinePath,
+        prompt: resolveMusicPrompt({ override: flags["music-prompt"], script }),
+        output: flags["music-output"] ?? "music/direct-bed.mp3",
+        volume: flags["music-volume"] ?? 0.12,
+        force: flags.force
+      });
+      log(`music: ${music.music}`);
+    } else if (flags["music-prompt"]) {
+      throw new Error("ELEVENLABS_API_KEY is not set, but --music-prompt was provided.");
+    } else {
+      log("music: skipped (ELEVENLABS_API_KEY not set)");
+    }
+  }
+
   let rendered = null;
   if (!flags["no-render"]) {
     log("rendering...");
@@ -630,6 +654,7 @@ export async function runDirect(out, flags = {}) {
     attempts: report.attempt,
     advisories: report.advisories,
     rationale: report.rationale,
+    music,
     video: rendered?.video ?? null
   };
 }
