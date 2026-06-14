@@ -3,10 +3,11 @@ import test from "node:test";
 import { parseFlags } from "../src/cli.js";
 
 test("parses boolean and value flags", () => {
-  assert.deepEqual(parseFlags(["--provider", "product-videogen", "--dry-run", "--allow-placeholder-sfx"]), {
+  assert.deepEqual(parseFlags(["--provider", "product-videogen", "--dry-run", "--allow-placeholder-sfx", "--no-music"]), {
     provider: "product-videogen",
     "dry-run": true,
-    "allow-placeholder-sfx": true
+    "allow-placeholder-sfx": true,
+    "no-music": true
   });
 });
 
