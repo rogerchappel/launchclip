@@ -2,8 +2,9 @@ import { initWorkspace, runDemo, planVideo, writeCaptions, renderVideo, submitRe
 import { writeTeleprompter, alignRecording, renderMotion } from "./talking_head.js";
 import { generateMusic } from "./music.js";
 import { runDirect } from "./director.js";
+import { preprocessPresenter } from "./presenter_preprocess.js";
 
-const COMMANDS = new Set(["init", "demo", "plan", "captions", "render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct"]);
+const COMMANDS = new Set(["init", "demo", "plan", "captions", "render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout } = io;
@@ -46,6 +47,8 @@ export async function runCli(argv, io = {}) {
     result = await generateMusic(required(firstArg, "workspace path"), flags);
   } else if (command === "direct") {
     result = await runDirect(required(firstArg, "workspace path"), flags);
+  } else if (command === "preprocess-presenter") {
+    result = await preprocessPresenter(required(firstArg, "presenter media path"), flags);
   }
   stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
@@ -58,7 +61,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "allow-placeholder-sfx" || name === "no-music") {
+    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "allow-placeholder-sfx" || name === "no-music" || name === "no-trim-silence") {
       flags[name] = true;
       continue;
     }
@@ -99,6 +102,7 @@ Talking-head motion workflow:
   launchclip align <workspace> --media take.mp4 --words words.json
   launchclip motion-render <workspace>                 # render video/motion.mp4 via the motion engine
   launchclip music <workspace> [--prompt "..."] [--duration 18] [--output music/bed.mp3] [--force]
+  launchclip preprocess-presenter public/base/presenter.mp4 [--out public/base/presenter-prepped.mp4] [--speed 1.08] [--crop-x center]
   launchclip direct <workspace> --voice record --prompt "creative direction"       # writes script + teleprompter, waits for take
   launchclip direct <workspace> --voice record --take take.mp4 [--words w.json]    # aligns take, directs, renders
   launchclip direct <workspace> --voice tts --prompt "creative direction"          # generates voice + timings, directs, renders
