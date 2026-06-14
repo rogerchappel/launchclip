@@ -29,6 +29,11 @@ test("buildViralScript follows the reference short-form structure", () => {
   assert.deepEqual(script.warnings, []);
   assert.match(script.full_text, /npm run smoke/);
   assert.doesNotMatch(script.full_text, /\$6,000|10x|30 minutes/);
+  assert.equal(script.visual_beats.length, script.beats.length);
+  assert.ok(script.visual_beats.some((beat) => beat.scene_hint === "terminal_receipt or prompt_card"));
+  assert.ok(script.visual_beats.every((beat) => beat.fallback_visual));
+  assert.match(script.music_prompt, /Retro 80s synthwave/);
+  assert.match(script.music_prompt, /computer-game/);
 });
 
 test("buildVoiceoverFromViralScript creates teleprompter-compatible segments", () => {
@@ -43,7 +48,7 @@ test("buildVoiceoverFromViralScript creates teleprompter-compatible segments", (
   assert.equal(voiceover.schema_version, "launchclip.voiceover.v1");
   assert.equal(voiceover.segments.length, script.beats.length);
   assert.equal(voiceover.segments[0].beat, "hook");
-  assert.match(voiceover.full_text, /launch proof build itself/);
+  assert.match(voiceover.full_text, /proof-led launch content/);
 });
 
 test("writeViralScript reads workspace evidence and writes script artifacts", async () => {
