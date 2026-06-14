@@ -58,7 +58,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "allow-placeholder-sfx") {
+    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "allow-placeholder-sfx" || name === "no-music") {
       flags[name] = true;
       continue;
     }
@@ -104,6 +104,7 @@ Talking-head motion workflow:
   launchclip direct <workspace> --voice tts --prompt "creative direction"          # generates voice + timings, directs, renders
   launchclip direct <workspace> --prompt "creative direction" [--format software_demo|explainer]
             [--words w.json --take base/take.mp4 | --script-text "..."] [--duration 45] [--no-render] [--quality fast|high]
-            [--sfx-dir path/to/sfx] [--allow-placeholder-sfx] [--provider anthropic|openai] [--model <id>]   # LLM: ANTHROPIC_API_KEY (default) or OPENAI_API_KEY
+            [--music-prompt "..."] [--no-music] [--sfx-dir path/to/sfx] [--allow-placeholder-sfx]
+            [--provider anthropic|openai] [--model <id>]   # LLM: ANTHROPIC_API_KEY (default) or OPENAI_API_KEY
 `;
 }
