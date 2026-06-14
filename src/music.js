@@ -13,11 +13,18 @@ export const DEFAULT_MUSIC_PROMPT =
   "analog synth arpeggios, warm driving bassline, punchy drum machine, steady upbeat groove. " +
   "Instrumental only, no vocals. Works as a background bed under a voiceover for a tech product video.";
 
+export function resolveMusicPrompt({ override = "", script = null } = {}) {
+  const prompt = String(override || script?.music_prompt || DEFAULT_MUSIC_PROMPT).trim();
+  return prompt || DEFAULT_MUSIC_PROMPT;
+}
+
+export function shouldAutoGenerateMusic(flags = {}, env = process.env) {
+  if (flags.music || flags["no-music"] || flags.music === "off") return false;
+  return Boolean(env.ELEVENLABS_API_KEY);
+}
+
 export async function generateMusic(out, flags = {}) {
   const apiKey = process.env.ELEVENLABS_API_KEY;
-  if (!apiKey) {
-    throw new Error("ELEVENLABS_API_KEY is not set. Export it (or source your .env) before running launchclip music.");
-  }
 
   const timelinePath = flags.timeline ?? path.join(out, "video", "motion-timeline.json");
   let timeline = null;
@@ -35,7 +42,11 @@ export async function generateMusic(out, flags = {}) {
   const fileName = String(flags.output ?? "music/bed.mp3");
   const target = path.join(PACKAGE_ROOT, "public", fileName);
   if (existsSync(target) && !flags.force) {
-    return { stage: "music", music: target, skipped: "exists (use --force to regenerate)" };
+    const wired = await wireMusicTimeline({ timeline, timelinePath, fileName, flags });
+    return { stage: "music", music: target, skipped: "exists (use --force to regenerate)", prompt, timeline: wired ? timelinePath : null };
+  }
+  if (!apiKey) {
+    throw new Error("ELEVENLABS_API_KEY is not set. Export it (or source your .env) before running launchclip music.");
   }
 
   const response = await fetch("https://api.elevenlabs.io/v1/music?output_format=mp3_44100_128", {
@@ -56,14 +67,7 @@ export async function generateMusic(out, flags = {}) {
   await mkdir(path.dirname(target), { recursive: true });
   await writeFile(target, audio);
 
-  let wired = false;
-  if (timeline && !flags["no-wire"]) {
-    timeline.audio = timeline.audio ?? {};
-    timeline.audio.music = fileName;
-    if (flags.volume !== undefined) timeline.audio.music_volume = Number(flags.volume);
-    await writeFile(timelinePath, `${JSON.stringify(timeline, null, 2)}\n`);
-    wired = true;
-  }
+  const wired = await wireMusicTimeline({ timeline, timelinePath, fileName, flags });
   return {
     stage: "music",
     music: target,
@@ -72,4 +76,13 @@ export async function generateMusic(out, flags = {}) {
     prompt,
     timeline: wired ? timelinePath : null
   };
+}
+
+async function wireMusicTimeline({ timeline, timelinePath, fileName, flags }) {
+  if (!timeline || flags["no-wire"]) return false;
+  timeline.audio = timeline.audio ?? {};
+  timeline.audio.music = fileName;
+  if (flags.volume !== undefined) timeline.audio.music_volume = Number(flags.volume);
+  await writeFile(timelinePath, `${JSON.stringify(timeline, null, 2)}\n`);
+  return true;
 }
