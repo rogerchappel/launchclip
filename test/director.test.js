@@ -100,6 +100,7 @@ test("reference-grade lint requires proof, variety, and tighter density", () => 
   assert.ok(weakResult.failures.some((failure) => failure.includes("at least 4")));
   assert.ok(weakResult.failures.some((failure) => failure.includes("include artifact_grid or terminal_receipt")));
   assert.ok(weakResult.failures.some((failure) => failure.includes("repeats")));
+  assert.ok(weakResult.failures.some((failure) => failure.includes("visual families")));
 
   const strong = makeTimeline([
     { id: "a", type: "typography", start: 0, end: 1.8, transition: "cut", items: [{ text: "One", at: 0.3 }, { text: "two", at: 0.9 }, { text: "three", at: 1.5 }] },
@@ -109,6 +110,33 @@ test("reference-grade lint requires proof, variety, and tighter density", () => 
   ]);
   const strongResult = lintTimeline(strong, { referenceGrade: true });
   assert.equal(strongResult.failures.length, 0, strongResult.failures.join("; "));
+});
+
+test("reference-grade lint rejects caption fragments in numbered steps", () => {
+  const stepWords = [
+    ...words,
+    { word: "First", start: 5.0, end: 5.2 },
+    { word: "Point", start: 5.6, end: 5.8 },
+    { word: "repo.", start: 6.2, end: 6.5 },
+    { word: "Ship.", start: 7.0, end: 7.3 }
+  ];
+  const timeline = validateTimeline({
+    version: MOTION_TIMELINE_VERSION,
+    duration_seconds: 8,
+    base: { type: "placeholder", src: "" },
+    words: stepWords,
+    scenes: [
+      { id: "a", type: "typography", start: 0, end: 1.8, transition: "cut", items: [{ text: "One", at: 0.3 }, { text: "two", at: 0.9 }, { text: "three", at: 1.5 }] },
+      { id: "b", type: "prompt_card", start: 1.8, end: 3.0, transition: "cut", text: "launchclip direct . --voice tts" },
+      { id: "c", type: "terminal_receipt", start: 3.0, end: 4.3, transition: "cut", command: "npm run smoke", output: "Smoke OK", status: "passed", at: 4.0 },
+      { id: "d", type: "card_steps", start: 4.3, end: 6.6, transition: "cut", items: [{ text: "First", at: 5.0 }, { text: "Point", at: 5.6 }, { text: "repo", at: 6.2 }] },
+      { id: "e", type: "quote_card", start: 6.6, end: 8.0, transition: "cut", text: "Ship the proof.", at: 7.0 }
+    ],
+    events: []
+  });
+  assert.equal(timeline.ok, true, timeline.errors.join("; "));
+  const result = lintTimeline(timeline.timeline, { referenceGrade: true });
+  assert.ok(result.failures.some((failure) => failure.includes("numbered cards must be real steps")));
 });
 
 test("estimateWords produces monotonic plausible timings", () => {

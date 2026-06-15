@@ -6,6 +6,7 @@
 const MAX_DEAD_AIR_SECONDS = 1.5;
 const MAX_REFERENCE_IDLE_SECONDS = 1.2;
 const WORD_SNAP_TOLERANCE = 0.12;
+const STEP_FILLER_WORDS = new Set(["first", "next", "finally", "point", "and", "then", "use", "build", "it", "to"]);
 
 // Scene types whose surface is continuously alive (footage plays, typing
 // types, feeds scroll) vs. those alive only when an item lands.
@@ -106,7 +107,23 @@ function checkReferenceGrade(timeline, failures) {
     }
   }
 
+  const counts = new Map();
+  for (const scene of scenes) counts.set(scene.type, (counts.get(scene.type) ?? 0) + 1);
+  for (const [type, count] of counts.entries()) {
+    if (count >= 3 && count / Math.max(1, scenes.length) > 0.3) {
+      failures.push(`scene type "${type}" appears ${count}/${scenes.length} times — reference-grade cuts need more visual families`);
+    }
+  }
+
   for (const scene of scenes) {
+    if (scene.type === "card_steps") {
+      const weakItems = (scene.items ?? []).filter((item) => isWeakStepLabel(item.text));
+      if (weakItems.length) {
+        failures.push(
+          `card_steps "${scene.id}" uses caption fragments (${weakItems.map((item) => `"${item.text}"`).join(", ")}) — numbered cards must be real steps`
+        );
+      }
+    }
     if (scene.type === "artifact_grid") {
       const missing = (scene.items ?? []).filter((item) => !item.path && !item.src).length;
       if (missing) failures.push(`artifact_grid "${scene.id}" has ${missing} item(s) without a path or src proof reference`);
@@ -115,6 +132,15 @@ function checkReferenceGrade(timeline, failures) {
       failures.push(`terminal_receipt "${scene.id}" needs real output text, not just a command`);
     }
   }
+}
+
+function isWeakStepLabel(text) {
+  const value = String(text ?? "").trim().toLowerCase();
+  if (!value) return true;
+  if (STEP_FILLER_WORDS.has(value)) return true;
+  const words = value.split(/\s+/).filter(Boolean);
+  if (words.length === 1 && value.length < 8) return true;
+  return false;
 }
 
 // Every build lands on a spoken word: item.at must match a word start.

@@ -60,8 +60,8 @@ export const SCENE_CATALOG = [
   },
   {
     type: "card_steps",
-    use_for: "Numbered how-to beats, checklists, 'N things' structures: white chips with mint numerals stacking as each is spoken.",
-    avoid_when: "More than 5 items (split into two scenes); item text longer than ~6 words.",
+    use_for: "Literal numbered how-to beats, checklists, and 'N things' structures where each item is a complete action/object phrase like 'Capture the demo' or 'Approve the packet'.",
+    avoid_when: "Ordinary narration chunks, filler words ('first', 'next', 'point', 'and'), or captions split across cards. More than 5 items (split into two scenes); item text longer than ~6 words. If the words are not real steps, use typography, funnel, artifact_grid, or prompt_card instead.",
     params: '{ "type": "card_steps", "start", "end", "title?": "script-italic kicker", "items": [{"text", "at"}] }',
     density: "One chip + click SFX per item; chips already on screen glide apart to make room as each lands.",
     example: { type: "card_steps", start: 8.4, end: 11.1, items: [{ text: "Script with timing", at: 8.45 }, { text: "Matched visuals", at: 9.4 }] }
