@@ -54,9 +54,9 @@ export function SceneTrack({ scenes, width, height }) {
 function SettleShell({ settle, children }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const settleP = settle ? spring({ frame, fps, config: SPRINGS.settle }) : 1;
+  const settleP = settle ? calmEnter(frame, fps, 0.22) : 1;
   return (
-    <AbsoluteFill style={{ transform: `scale(${settle ? 1.04 - settleP * 0.04 : 1})`, transformOrigin: "50% 45%" }}>
+    <AbsoluteFill style={{ transform: `scale(${settle ? 1.018 - settleP * 0.018 : 1})`, transformOrigin: "50% 45%" }}>
       {children}
     </AbsoluteFill>
   );
@@ -116,6 +116,9 @@ function TalkingHeadScene({ scene, width, height }) {
       </AbsoluteFill>
     );
   }
+  if (scene.layout === "window") {
+    return <PresenterWindowScene scene={scene} width={width} height={height} />;
+  }
   // split: face bottom ~52%, graphics unfold on the paper above.
   return (
     <AbsoluteFill>
@@ -123,6 +126,82 @@ function TalkingHeadScene({ scene, width, height }) {
       <WordBuild scene={scene} width={width} height={height} region={{ top: 0.05, height: 0.38 }} />
     </AbsoluteFill>
   );
+}
+
+function PresenterWindowScene({ scene, width, height }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const enter = calmEnter(frame, fps, 0.32);
+  const sceneFrames = Math.max(1, (scene.end - scene.start) * fps);
+  const exit = interpolate(frame, [Math.max(0, sceneFrames - fps * 0.28), sceneFrames], [0, 1], {
+    easing: Easing.bezier(0.45, 0, 0.55, 1),
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  const presence = enter * (1 - exit);
+  const box = presenterWindowBox(scene.window, width, height);
+  const drift = interpolate(frame, [0, sceneFrames], [-0.01, 0.012], {
+    easing: Easing.bezier(0.45, 0, 0.55, 1),
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+  return (
+    <AbsoluteFill>
+      <div
+        style={{
+          position: "absolute",
+          left: box.left,
+          top: box.top,
+          width: box.width,
+          height: box.height,
+          transform: [
+            `translate(${drift * width}px, ${(1 - presence) * height * 0.035}px)`,
+            `scale(${0.94 + presence * 0.06})`
+          ].join(" "),
+          transformOrigin: "50% 70%",
+          opacity: Math.min(1, presence * 1.35)
+        }}
+      >
+        <Card elevation="high" radius={24} style={{ width: "100%", height: "100%", overflow: "hidden", background: CARD.dark }}>
+          <OffthreadVideo
+            muted
+            src={resolveSrc(scene.src)}
+            trimBefore={Math.round((scene.offset ?? 0) * fps)}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        </Card>
+      </div>
+      <WordBuild scene={scene} width={width} height={height} region={windowTextRegion(scene.window)} />
+    </AbsoluteFill>
+  );
+}
+
+function presenterWindowBox(config, width, height) {
+  const window = config ?? { position: "lower", width: 0.82, x: null, y: null };
+  const boxWidth = width * (window.width ?? 0.82);
+  const boxHeight = boxWidth * 9 / 16;
+  const fallback = {
+    lower: { x: 0.5, y: 0.7 },
+    upper: { x: 0.5, y: 0.28 },
+    left: { x: 0.31, y: 0.56 },
+    right: { x: 0.69, y: 0.56 },
+    center: { x: 0.5, y: 0.5 }
+  }[window.position ?? "lower"];
+  const centerX = width * (window.x ?? fallback.x);
+  const centerY = height * (window.y ?? fallback.y);
+  return {
+    width: boxWidth,
+    height: boxHeight,
+    left: Math.max(width * 0.04, Math.min(width - boxWidth - width * 0.04, centerX - boxWidth / 2)),
+    top: Math.max(height * 0.1, Math.min(height - boxHeight - height * 0.05, centerY - boxHeight / 2))
+  };
+}
+
+function windowTextRegion(config) {
+  const position = config?.position ?? "lower";
+  if (position === "upper") return { top: 0.54, height: 0.32 };
+  if (position === "left" || position === "right") return { top: 0.12, height: 0.28 };
+  return { top: 0.1, height: 0.34 };
 }
 
 function ScreenScene({ scene, width, height }) {
@@ -586,6 +665,14 @@ function ScreenshotPileScene({ scene, width, height }) {
 function entranceBlur(enterNow, enterPrev) {
   const blur = Math.min(5, Math.max(0, enterNow - enterPrev) * 30);
   return blur > 0.4 ? `blur(${blur.toFixed(1)}px)` : undefined;
+}
+
+function calmEnter(frame, fps, seconds = 0.28) {
+  return interpolate(frame, [0, fps * seconds], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
 }
 
 // One oversized number rolling up to its value, label beneath. The number is
