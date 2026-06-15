@@ -285,13 +285,16 @@ test("scene transitions and talking_head layouts validate", () => {
     scenes: [
       { id: "a", type: "talking_head", start: 0, end: 4, src: "base/take.mp4", transition: "swipe_left", items: [{ text: "yo", at: 1 }] },
       { id: "b", type: "screenshot_pile", start: 4, end: 8, mode: "scroll", transition: "zoom_into", items: [{ src: "shots/a.png" }] },
-      { id: "c", type: "talking_head", start: 8, end: 10, src: "base/take.mp4", layout: "full" }
+      { id: "c", type: "talking_head", start: 8, end: 10, src: "base/take.mp4", layout: "window", window: { position: "right", width: 0.64, x: 0.7 } }
     ]
   });
   assert.equal(valid.ok, true, valid.errors.join("; "));
   assert.equal(valid.timeline.scenes[0].transition, "cut", "first scene is forced to cut");
   assert.equal(valid.timeline.scenes[0].layout, "split");
   assert.equal(valid.timeline.scenes[1].mode, "scroll");
+  assert.equal(valid.timeline.scenes[2].layout, "window");
+  assert.equal(valid.timeline.scenes[2].window.position, "right");
+  assert.equal(valid.timeline.scenes[2].window.width, 0.64);
 });
 
 test("parseWords accepts plain arrays and whisper output", () => {

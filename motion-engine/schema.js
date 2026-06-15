@@ -33,7 +33,7 @@ export const MIN_SCENE_SECONDS = 0.8;
 // immediately and the motion lives inside the scene.
 export const SCENE_TRANSITIONS = new Set(["cut", "swipe_left", "swipe_right", "zoom_into"]);
 
-export const TALKING_HEAD_LAYOUTS = new Set(["split", "card", "full", "overlay"]);
+export const TALKING_HEAD_LAYOUTS = new Set(["split", "card", "full", "overlay", "window"]);
 
 export const DEFAULT_SFX = {
   punch_zoom: "fast_whoosh.wav",
@@ -200,6 +200,9 @@ function normalizeScene(scene, index, errors) {
     };
     if (type === "talking_head") {
       footage.layout = layout;
+      if (layout === "window") {
+        footage.window = normalizePresenterWindow(scene?.window);
+      }
       // Optional word builds staged on the paper above a split-layout face.
       footage.items = Array.isArray(scene?.items)
         ? scene.items.map((item, itemIndex) => ({
@@ -353,6 +356,17 @@ function normalizeScene(scene, index, errors) {
     };
   }
   return base;
+}
+
+function normalizePresenterWindow(input) {
+  const value = input && typeof input === "object" ? input : {};
+  const position = ["lower", "upper", "left", "right", "center"].includes(value.position) ? value.position : "lower";
+  return {
+    position,
+    width: clampNumber(value.width, 0.35, 0.9, 0.82),
+    x: value.x === undefined ? null : clampNumber(value.x, 0, 1, 0.5),
+    y: value.y === undefined ? null : clampNumber(value.y, 0, 1, 0.72)
+  };
 }
 
 // The cut is already the accent — zooms hugging a boundary double-hit.

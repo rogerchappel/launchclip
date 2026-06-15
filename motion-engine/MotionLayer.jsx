@@ -86,6 +86,7 @@ export function MotionLayer({ timeline, enableSfx = true }) {
           src={resolveSrc(timeline.audio.music)}
           baseVolume={timeline.audio.music_volume ?? 0.08}
           durationSeconds={timeline.duration_seconds}
+          beatTimes={musicBeatTimes(timeline.events, timeline.scenes ?? [])}
         />
       ) : null}
       {enableSfx ? <SfxLayer events={timeline.events} scenes={timeline.scenes ?? []} fps={fps} /> : null}
@@ -154,7 +155,7 @@ function BaseLayer({ base, width, height }) {
 
 // The music bed eases in, sits under the voice, and drops out entirely for
 // the final beat so the CTA lands in (relative) silence.
-function MusicBed({ src, baseVolume, durationSeconds }) {
+function MusicBed({ src, baseVolume, durationSeconds, beatTimes = [] }) {
   const { fps } = useVideoConfig();
   return (
     <Html5Audio
@@ -164,10 +165,39 @@ function MusicBed({ src, baseVolume, durationSeconds }) {
         const fadeIn = Math.min(1, seconds / 0.6);
         const tail = durationSeconds - seconds;
         const fadeOut = tail < 1.2 ? Math.max(0, tail / 1.2) : 1;
-        return baseVolume * fadeIn * fadeOut;
+        const beatDuck = beatDucking(seconds, beatTimes);
+        return baseVolume * fadeIn * fadeOut * beatDuck;
       }}
     />
   );
+}
+
+function musicBeatTimes(events, scenes) {
+  const beats = [];
+  for (const event of events) {
+    if (event.type === "punch_zoom" || event.type === "logo_pop") beats.push(event.start);
+  }
+  for (const scene of scenes) {
+    if (Array.isArray(scene.items)) {
+      scene.items.forEach((item) => {
+        if (Number.isFinite(item.at)) beats.push(item.at);
+      });
+    }
+    if (scene.branch && Number.isFinite(scene.branch.at)) beats.push(scene.branch.at);
+    if (scene.total && Number.isFinite(scene.total.at)) beats.push(scene.total.at);
+    if (Number.isFinite(scene.at)) beats.push(scene.at);
+  }
+  return [...new Set(beats.map((beat) => Number(beat.toFixed(2))))].sort((a, b) => a - b);
+}
+
+function beatDucking(seconds, beatTimes) {
+  let duck = 0;
+  for (const beat of beatTimes) {
+    const distance = seconds - beat;
+    if (distance < 0 || distance > 0.28) continue;
+    duck = Math.max(duck, 1 - distance / 0.28);
+  }
+  return 1 - duck * 0.18;
 }
 
 // Sound design, bound automatically — never authored per-scene:
