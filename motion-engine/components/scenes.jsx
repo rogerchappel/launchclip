@@ -616,7 +616,7 @@ function ScreenshotPileScene({ scene, width, height }) {
           {scene.items.map((item, index) => (
             <div key={index} style={{ marginBottom: gap, transform: `rotate(${WORD_ROTATIONS[index % WORD_ROTATIONS.length] * 0.35}deg)` }}>
               <Card elevation="mid" radius={18} style={{ width: "100%", height: cardHeight }}>
-                <Img src={resolveSrc(item.src)} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }} />
+                <Img src={resolveSrc(item.src)} style={{ width: "100%", height: "100%", objectFit: screenshotObjectFit(item.src), objectPosition: "top" }} />
               </Card>
             </div>
           ))}
@@ -651,7 +651,7 @@ function ScreenshotPileScene({ scene, width, height }) {
               }}
             >
               <Card elevation={index === 0 ? "high" : "mid"} radius={18} style={{ width: "100%", height: "100%" }}>
-                <Img src={resolveSrc(item.src)} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }} />
+                <Img src={resolveSrc(item.src)} style={{ width: "100%", height: "100%", objectFit: screenshotObjectFit(item.src), objectPosition: "top" }} />
               </Card>
             </div>
           );
@@ -960,6 +960,10 @@ function semanticColor(name) {
 function resolveSrc(src) {
   if (/^https?:\/\//.test(src)) return src;
   return staticFile(src);
+}
+
+function screenshotObjectFit(src) {
+  return String(src || "").toLowerCase().endsWith(".svg") ? "contain" : "cover";
 }
 
 function clamp(value) {
