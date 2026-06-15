@@ -131,7 +131,15 @@ vision transforms constantly.
    Never full-screen a landscape presenter crop unless the asset is already
    vertical. Graphics and proof carry the rest.
 9. HOOK IN THE FIRST 3 SECONDS; the CTA gets its own final scene with the
-   emphasised payoff word.`;
+   emphasised payoff word.
+10. VISUAL RANGE: never let one scene family dominate. In a 30-55s short, use
+    at least 5 distinct visual families and rotate variants when a family
+    appears again. If card_steps is used, it must be a real checklist with
+    complete step labels; never split ordinary narration into numbered cards.
+11. REFERENCE-GRADE PRODUCT PROOF: prefer concrete, object-rich scenes:
+    prompt_card for commands/prompts, terminal_receipt for command proof,
+    artifact_grid/screenshot_pile for outputs, funnel for process, icon_flow
+    with 'orbit' for systems, profile_cards only for real people.`;
 
 const DIRECTION_SCHEMA = {
   type: "object",
@@ -391,8 +399,9 @@ const CRITIC_SCHEMA = {
 const CRITIC_CHECKLIST = `A render is disqualified by any of: a scene over 6s or sitting visually idle;
 two focal elements fighting; accent color in more than one place at a time; builds that ignore the
 voice; a hook that doesn't grab in 3s; a CTA without a payoff word; repetitive scene types back to
-back saying the same thing; chapter rail entries that don't match the actual beats; any fabricated
-media reference. Also judge: does the sequence FLOW (each scene answers the previous), and does the
+back saying the same thing; one scene family dominating the whole video; numbered cards made from
+caption fragments instead of real steps; chapter rail entries that don't match the actual beats;
+any fabricated media reference. Also judge: does the sequence FLOW (each scene answers the previous), and does the
 creative direction actually shape the result?`;
 
 // --quality high: structure pass -> parallel per-scene authors -> stitch ->

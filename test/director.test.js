@@ -42,9 +42,12 @@ test("catalog covers every renderer scene and event type", () => {
 test("system prompt assembles digest, catalog, and preset", () => {
   const prompt = buildSystemPrompt("explainer");
   assert.ok(prompt.includes("CADENCE IS ABSOLUTE"));
+  assert.ok(prompt.includes("VISUAL RANGE"));
   assert.ok(prompt.includes("### typography"));
   assert.ok(prompt.includes("Format preset: explainer"));
-  assert.ok(renderPreset(PRESETS.software_demo).includes("software_demo"));
+  const renderedPreset = renderPreset(PRESETS.software_demo);
+  assert.ok(renderedPreset.includes("software_demo"));
+  assert.ok(renderedPreset.includes("Do not use card_steps as captions"));
 });
 
 test("lint flags dead air in graphic scenes", () => {
