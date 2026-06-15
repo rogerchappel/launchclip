@@ -452,11 +452,7 @@ export async function directHighTimeline(ctx) {
   const rest = await Promise.all(structure.scenes.slice(1).map((skeleton, index) => authorScene(skeleton, index + 1)));
   const authored = [first, ...rest];
 
-  const draft = {
-    scenes: authored.map((entry) => entry.scene),
-    events: authored.flatMap((entry, index) => entry.events.map((event, eventIndex) => ({ ...event, id: `${event.id || "ev"}-s${index}-${eventIndex}` }))),
-    chapters: structure.chapters
-  };
+  const draft = stitchAuthoredScenes(authored, structure.chapters);
 
   log("critic pass");
   const criticResponse = await createWithSchemaRetry(client, {
@@ -496,6 +492,16 @@ export async function directHighTimeline(ctx) {
   repaired.report.mode = "high+repair";
   repaired.report.critic = critique;
   return repaired;
+}
+
+export function stitchAuthoredScenes(authored, chapters = []) {
+  return {
+    scenes: authored.map((entry) => entry.scene),
+    events: authored.flatMap((entry, index) =>
+      (entry.events ?? []).map((event, eventIndex) => ({ ...event, id: `${event.id || "ev"}-s${index}-${eventIndex}` }))
+    ),
+    chapters
+  };
 }
 
 // Scan known public/ dirs + an optional assets dir into a manifest of

@@ -8,7 +8,7 @@ import { validateTimeline, MOTION_TIMELINE_VERSION } from "../motion-engine/sche
 import { SCENE_CATALOG, EVENT_CATALOG, renderCatalog } from "../motion-engine/catalog.js";
 import { SCENE_TYPES, EVENT_TYPES } from "../motion-engine/schema.js";
 import { PRESETS, renderPreset } from "../motion-engine/presets.js";
-import { buildSystemPrompt, estimateWords, mergeAssetManifests, renderAssetManifest, runDirect } from "../src/director.js";
+import { buildSystemPrompt, estimateWords, mergeAssetManifests, renderAssetManifest, runDirect, stitchAuthoredScenes } from "../src/director.js";
 import { captureProofAssets } from "../src/proof_capture.js";
 
 const words = [
@@ -140,6 +140,17 @@ test("reference-grade lint rejects caption fragments in numbered steps", () => {
   assert.equal(timeline.ok, true, timeline.errors.join("; "));
   const result = lintTimeline(timeline.timeline, { referenceGrade: true });
   assert.ok(result.failures.some((failure) => failure.includes("numbered cards must be real steps")));
+});
+
+test("high-quality stitcher tolerates scenes with no overlay events", () => {
+  const stitched = stitchAuthoredScenes([
+    { scene: { id: "a", type: "typography", start: 0, end: 2, items: [{ text: "One", at: 0.3 }] } },
+    { scene: { id: "b", type: "quote_card", start: 2, end: 4, text: "Ship it.", at: 2.1 }, events: [{ type: "punch_zoom", start: 2.1, end: 3.1 }] }
+  ], [{ title: "Hook", at: 0 }]);
+  assert.equal(stitched.scenes.length, 2);
+  assert.equal(stitched.events.length, 1);
+  assert.equal(stitched.events[0].id, "ev-s1-0");
+  assert.equal(stitched.chapters[0].title, "Hook");
 });
 
 test("estimateWords produces monotonic plausible timings", () => {
