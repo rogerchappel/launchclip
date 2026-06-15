@@ -640,7 +640,7 @@ function ScreenshotPileScene({ scene, width, height }) {
               style={{
                 position: "absolute",
                 inset: 0,
-                zIndex: 100 - index,
+                zIndex: 100 + index,
                 filter: motionBlur,
                 transform: [
                   `translate(${slot.x * cardWidth * enter}px, ${slot.y * cardWidth * enter + (1 - enter) * height * 0.035}px)`,
