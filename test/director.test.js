@@ -8,7 +8,8 @@ import { validateTimeline, MOTION_TIMELINE_VERSION } from "../motion-engine/sche
 import { SCENE_CATALOG, EVENT_CATALOG, renderCatalog } from "../motion-engine/catalog.js";
 import { SCENE_TYPES, EVENT_TYPES } from "../motion-engine/schema.js";
 import { PRESETS, renderPreset } from "../motion-engine/presets.js";
-import { buildSystemPrompt, estimateWords, runDirect } from "../src/director.js";
+import { buildSystemPrompt, estimateWords, mergeAssetManifests, renderAssetManifest, runDirect } from "../src/director.js";
+import { captureProofAssets } from "../src/proof_capture.js";
 
 const words = [
   { word: "One", start: 0.3, end: 0.5 },
@@ -182,6 +183,30 @@ test("direct record mode writes script and waits for a take without an LLM key",
     assert.ok(script.word_count >= 130);
     assert.equal(voiceover.segments[0].beat, "hook");
     assert.match(teleprompter, /Teleprompter/);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("proof capture writes renderer-ready real receipt cards", async () => {
+  const temp = await makeDirectWorkspace();
+  const publicRoot = path.join(temp, "public");
+  try {
+    await mkdir(path.join(temp, "video"), { recursive: true });
+    await writeFile(path.join(temp, "video", "script.json"), "{}\n");
+    const proof = await captureProofAssets(temp, { publicRoot });
+    assert.equal(proof.assets.length, 3);
+    assert.equal(proof.terminal.command, "npm run smoke");
+    assert.match(proof.terminal.output, /sample-tool smoke passed/);
+    const manifest = renderAssetManifest(mergeAssetManifests([{ path: "shots/manual.svg", kind: "screenshot" }], proof.assets));
+    assert.match(manifest, /real terminal receipt/);
+    assert.match(manifest, /sample-tool smoke passed/);
+    for (const asset of proof.assets) {
+      assert.ok(asset.path.startsWith("shots/proof-sample-tool-"));
+      assert.match(await readFile(path.join(publicRoot, asset.path), "utf8"), /<svg/);
+    }
+    const saved = JSON.parse(await readFile(path.join(temp, "video", "proof-assets.json"), "utf8"));
+    assert.equal(saved.schema_version, "launchclip.proof-assets.v1");
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

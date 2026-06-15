@@ -13,6 +13,7 @@ import { PRESETS, renderPreset } from "../motion-engine/presets.js";
 import { alignRecording, renderMotion } from "./talking_head.js";
 import { writeViralScript } from "./script_writer.js";
 import { generateMusic, resolveMusicPrompt, shouldAutoGenerateMusic } from "./music.js";
+import { captureProofAssets } from "./proof_capture.js";
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MODEL = "claude-opus-4-8";
@@ -282,7 +283,7 @@ export function estimateWords(script) {
 
 export async function directTimeline({ client, words, durationSeconds, assets, direction, preset, scriptText, baseSrc, voiceoverSrc, musicSrc, priorDraft = null, priorIssues = "", log = () => {} }) {
   const system = [{ type: "text", text: buildSystemPrompt(preset), cache_control: { type: "ephemeral" } }];
-  const manifest = assets.map((asset) => `- ${asset.path} (${asset.kind})`).join("\n") || "(no assets — graphic scenes only)";
+  const manifest = renderAssetManifest(assets);
   const baseInput = [
     `DURATION: ${durationSeconds}s exactly. Scenes must cover 0 to ${durationSeconds}.`,
     `SCRIPT (the voiceover):\n${scriptText}`,
@@ -400,7 +401,7 @@ creative direction actually shape the result?`;
 export async function directHighTimeline(ctx) {
   const { client, words, durationSeconds, assets, direction, preset, scriptText, baseSrc, log = () => {} } = ctx;
   const system = [{ type: "text", text: buildSystemPrompt(preset), cache_control: { type: "ephemeral" } }];
-  const manifest = assets.map((asset) => `- ${asset.path} (${asset.kind})`).join("\n") || "(no assets)";
+  const manifest = renderAssetManifest(assets);
 
   log("structure pass");
   const structureResponse = await createWithSchemaRetry(client, {
@@ -518,6 +519,22 @@ export function scanAssets(extraDir = null) {
   return assets;
 }
 
+export function renderAssetManifest(assets) {
+  return assets.map((asset) => {
+    const detail = asset.description ? ` - ${asset.description}` : "";
+    return `- ${asset.path} (${asset.kind})${detail}`;
+  }).join("\n") || "(no assets - graphic scenes only)";
+}
+
+export function mergeAssetManifests(...groups) {
+  const byPath = new Map();
+  for (const asset of groups.flat()) {
+    if (!asset?.path) continue;
+    byPath.set(asset.path, { ...(byPath.get(asset.path) ?? {}), ...asset });
+  }
+  return [...byPath.values()];
+}
+
 function isPublicAssetPath(value) {
   return /^(base|voice|music|shots|logos|icons|assets)\//.test(String(value ?? ""));
 }
@@ -602,7 +619,8 @@ export async function runDirect(out, flags = {}) {
   voiceoverSrc = flags["voice-src"] ?? baseSrc;
   const musicSrc = flags.music ?? (existsSync(path.join(PACKAGE_ROOT, "public", "music", "golden-bed.mp3")) ? "music/golden-bed.mp3" : "");
 
-  const assets = scanAssets(flags.assets ?? null);
+  const proof = await captureProofAssets(out, { log });
+  const assets = mergeAssetManifests(scanAssets(flags.assets ?? null), proof.assets);
   log(`assets: ${assets.length} | words: ${words.length} | duration: ${durationSeconds}s | preset: ${preset}`);
 
   // Anthropic (default) or OpenAI, by key/flag. It is intentionally created
