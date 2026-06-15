@@ -125,9 +125,10 @@ vision transforms constantly.
    (mint = highlight/success, coral = warm punch, purple = brand-specific).
 7. CONTENT HONESTY: footage/screenshots/prompts must come from the provided
    asset manifest, verbatim. Never invent media paths or fabricate UI.
-8. THE FACE IS THE NARRATOR, NOT THE CHASSIS: if presenter footage exists, use
-   it for the hook (split layout) and at most one more beat; graphics carry
-   the rest.
+8. THE FACE IS THE NARRATOR, NOT THE CHASSIS: if presenter footage exists, keep
+   it as a 16:9 windowed talking_head beat for the hook/CTA or a short aside.
+   Never full-screen a landscape presenter crop unless the asset is already
+   vertical. Graphics and proof carry the rest.
 9. HOOK IN THE FIRST 3 SECONDS; the CTA gets its own final scene with the
    emphasised payoff word.`;
 
