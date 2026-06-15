@@ -945,11 +945,11 @@ function TerminalReceiptScene({ scene, width, height }) {
 
 function artifactKind(text) {
   const value = String(text || "").toLowerCase();
-  if (value.endsWith(".mp4") || value.includes("video")) return "MP4";
-  if (value.includes("thumb") || value.endsWith(".png") || value.endsWith(".jpg") || value.endsWith(".jpeg")) return "IMG";
   if (value.includes("caption") || value.endsWith(".srt") || value.endsWith(".vtt")) return "TXT";
+  if (value.includes("thumb") || value.endsWith(".png") || value.endsWith(".jpg") || value.endsWith(".jpeg")) return "IMG";
+  if (value.endsWith(".mp4") || value.endsWith(".mov") || value.endsWith(".webm") || /\bvideo\b/.test(value)) return "MP4";
   if (value.includes("plan") || value.endsWith(".json")) return "JSON";
-  if (value.includes("review") || value.endsWith(".md")) return "MD";
+  if (value.includes("review") || value.endsWith(".md") || value.endsWith(".markdown")) return "MD";
   return "FILE";
 }
 
