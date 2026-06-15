@@ -34,6 +34,8 @@ export const MIN_SCENE_SECONDS = 0.8;
 export const SCENE_TRANSITIONS = new Set(["cut", "swipe_left", "swipe_right", "zoom_into"]);
 
 export const TALKING_HEAD_LAYOUTS = new Set(["split", "card", "full", "overlay", "window"]);
+export const CARD_STEP_VARIANTS = new Set(["stack", "rail"]);
+export const ICON_FLOW_VARIANTS = new Set(["vertical", "orbit"]);
 
 export const DEFAULT_SFX = {
   punch_zoom: "fast_whoosh.wav",
@@ -261,6 +263,16 @@ function normalizeScene(scene, index, errors) {
       const mode = String(scene?.mode ?? "pile");
       if (mode !== "pile" && mode !== "scroll") errors.push(`scenes[${index}] (screenshot_pile) has unknown mode "${mode}"`);
       return { ...base, title: String(scene?.title ?? ""), mode, items };
+    }
+    if (type === "card_steps") {
+      const variant = String(scene?.variant ?? "stack");
+      if (!CARD_STEP_VARIANTS.has(variant)) errors.push(`scenes[${index}] (card_steps) has unknown variant "${variant}"`);
+      return { ...base, title: String(scene?.title ?? ""), variant, items };
+    }
+    if (type === "icon_flow") {
+      const variant = String(scene?.variant ?? "vertical");
+      if (!ICON_FLOW_VARIANTS.has(variant)) errors.push(`scenes[${index}] (icon_flow) has unknown variant "${variant}"`);
+      return { ...base, title: String(scene?.title ?? ""), variant, items };
     }
     return { ...base, title: String(scene?.title ?? ""), items };
   }
