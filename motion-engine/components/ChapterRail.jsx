@@ -1,6 +1,6 @@
 import React from "react";
-import { spring, useCurrentFrame, useVideoConfig } from "remotion";
-import { FONTS, INK, SEMANTIC, SPRINGS } from "../theme.js";
+import { Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { FONTS, INK, SEMANTIC } from "../theme.js";
 
 // Persistent chapter rail across the top: numbered dots on a line with short
 // titles, the current chapter highlighted. A table of contents the viewer
@@ -10,7 +10,11 @@ export function ChapterRail({ chapters, width, height }) {
   const { fps } = useVideoConfig();
   if (!chapters?.length) return null;
   const now = frame / fps;
-  const enter = spring({ frame, fps, config: SPRINGS.settle });
+  const enter = interpolate(frame, [0, 18], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: Easing.bezier(0.16, 1, 0.3, 1)
+  });
   const activeIndex = chapters.reduce((current, chapter, index) => (now >= chapter.at ? index : current), 0);
   const left = width * 0.07;
   const right = width * 0.07;
@@ -26,7 +30,14 @@ export function ChapterRail({ chapters, width, height }) {
         const x = chapters.length === 1 ? 0 : (index / (chapters.length - 1)) * railWidth;
         const isActive = index === activeIndex;
         const isPast = index < activeIndex;
-        const pulse = isActive ? spring({ frame: frame - chapter.at * fps, fps, config: SPRINGS.enter }) : 1;
+        const activeFrame = frame - chapter.at * fps;
+        const activeScale = isActive
+          ? interpolate(activeFrame, [0, 8, 20], [0.96, 1.14, 1.08], {
+              extrapolateLeft: "clamp",
+              extrapolateRight: "clamp",
+              easing: Easing.bezier(0.16, 1, 0.3, 1)
+            })
+          : 1;
         return (
           <div key={index} style={{ position: "absolute", left: x, top: 0, transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
             <div
@@ -36,7 +47,7 @@ export function ChapterRail({ chapters, width, height }) {
                 borderRadius: 999,
                 background: isActive ? SEMANTIC.mint : isPast ? INK.primary : "#FFFFFF",
                 border: `2px solid ${isActive ? SEMANTIC.mint : INK.primary}`,
-                transform: `scale(${isActive ? 0.8 + pulse * 0.45 : 1})`,
+                transform: `scale(${activeScale})`,
                 boxShadow: isActive ? "0 2px 10px rgba(79,174,133,0.5)" : "0 1px 4px rgba(26,26,24,0.2)"
               }}
             />
