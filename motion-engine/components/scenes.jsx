@@ -1,7 +1,7 @@
 import React from "react";
-import { AbsoluteFill, Easing, Img, OffthreadVideo, Sequence, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, Img, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { Card, GlowBorder } from "./paper.jsx";
-import { CARD, FONTS, INK, SEMANTIC, SPRINGS, TYPE_SHADOW } from "../theme.js";
+import { CARD, FONTS, INK, SEMANTIC, TYPE_SHADOW } from "../theme.js";
 import { focalDrift, stackLayout } from "../reflow.js";
 import { FunnelScene } from "./FunnelScene.jsx";
 import { ProfileCards } from "./ProfileCards.jsx";
@@ -256,8 +256,8 @@ function WordBuild({ scene, width, height, region, onDark = false }) {
         // staged once and never rewraps — each word pops into its reserved
         // slot on its beat instead of shoving the others around.
         const localFrame = frame - (item.at - scene.start) * fps;
-        const enter = localFrame < 0 ? 0 : spring({ frame: localFrame, fps, config: SPRINGS.enter });
-        const enterPrev = localFrame < 1 ? 0 : spring({ frame: localFrame - 1, fps, config: SPRINGS.enter });
+        const enter = localFrame < 0 ? 0 : calmEnter(localFrame, fps, 0.46);
+        const enterPrev = localFrame < 1 ? 0 : calmEnter(localFrame - 1, fps, 0.46);
         const motionBlur = entranceBlur(enter, enterPrev);
         const emphasised = Boolean(item.emphasis);
         const size = emphasised ? base * 1.9 : base;
@@ -271,8 +271,8 @@ function WordBuild({ scene, width, height, region, onDark = false }) {
             ? semanticColor(item.color)
             : onDark ? INK.onDark : INK.primary
           : onDark ? INK.onDark : INK.primary;
-        const pulseP = item.color && emphasised ? clamp(spring({ frame: localFrame - colorDelay, fps, config: SPRINGS.enter })) : 0;
-        const pulse = 1 + 0.09 * Math.sin(pulseP * Math.PI);
+        const pulseP = item.color && emphasised ? clamp(calmEnter(localFrame - colorDelay, fps, 0.28)) : 0;
+        const pulse = 1 + 0.035 * Math.sin(pulseP * Math.PI);
         return (
           <span
             key={index}
@@ -287,10 +287,10 @@ function WordBuild({ scene, width, height, region, onDark = false }) {
               textShadow: onDark ? "0 4px 18px rgba(10,10,8,0.55)" : TYPE_SHADOW,
               transform: [
                 `rotate(${WORD_ROTATIONS[index % WORD_ROTATIONS.length]}deg)`,
-                `translateY(${WORD_OFFSETS[index % WORD_OFFSETS.length] * base + (1 - enter) * base * 0.6}px)`,
-                `scale(${(0.7 + enter * 0.3) * pulse})`
+                `translateY(${WORD_OFFSETS[index % WORD_OFFSETS.length] * base + (1 - enter) * base * 0.28}px)`,
+                `scale(${(0.96 + enter * 0.04) * pulse})`
               ].join(" "),
-              opacity: Math.min(1, enter * 1.5),
+              opacity: Math.min(1, enter * 1.12),
               filter: motionBlur
             }}
           >
@@ -321,7 +321,7 @@ function PromptCardScene({ scene, width, height }) {
   const { fps } = useVideoConfig();
   const seconds = frame / fps;
   const sceneLength = scene.end - scene.start;
-  const enter = spring({ frame, fps, config: SPRINGS.enter });
+  const enter = calmEnter(frame, fps, 0.56);
   const typeStart = 0.35;
   const typeSpan = Math.max(0.6, sceneLength - 1.1);
   const typeProgress = clamp((seconds - typeStart) / typeSpan);
@@ -336,11 +336,11 @@ function PromptCardScene({ scene, width, height }) {
   for (let line = 0; line < totalLines; line += 1) {
     const at = typeStart + ((line * charsPerLine) / scene.text.length) * typeSpan;
     const local = frame - at * fps;
-    if (local >= 0) textArea += lineHeight * spring({ frame: local, fps, config: SPRINGS.settle });
+    if (local >= 0) textArea += lineHeight * calmEnter(local, fps, 0.32);
   }
   // The send press: the arrow dips and rebounds the moment the prompt is done.
-  const pressP = spring({ frame: frame - (typeStart + typeSpan + 0.12) * fps, fps, config: SPRINGS.enter });
-  const arrowScale = 1 - 0.35 * Math.sin(clamp(pressP) * Math.PI);
+  const pressP = calmEnter(frame - (typeStart + typeSpan + 0.12) * fps, fps, 0.22);
+  const arrowScale = 1 - 0.12 * Math.sin(clamp(pressP) * Math.PI);
   const radius = fontSize * 2.3;
   const drift = focalDrift({ frame, fps, seconds: sceneLength, zoom: 0.1, pan: 0.03 });
   return (
@@ -348,8 +348,8 @@ function PromptCardScene({ scene, width, height }) {
       <div
         style={{
           width: "100%",
-          transform: `translate(${drift.panX * width}px, ${(1 - enter) * height * 0.06}px) scale(${drift.scale})`,
-          opacity: Math.min(1, enter * 1.4)
+          transform: `translate(${drift.panX * width}px, ${(1 - enter) * height * 0.035}px) scale(${drift.scale})`,
+          opacity: Math.min(1, enter * 1.08)
         }}
       >
         <GlowBorder radius={radius}>
@@ -440,7 +440,7 @@ function IconFlowScene({ scene, width, height }) {
   });
   const presences = scene.items.map((item) => {
     const localFrame = frame - (item.at - scene.start) * fps;
-    return localFrame < 0 ? 0 : spring({ frame: localFrame, fps, config: SPRINGS.enter });
+    return localFrame < 0 ? 0 : calmEnter(localFrame, fps, 0.48);
   });
   const { centers } = stackLayout({ sizes, presences });
   return (
@@ -449,7 +449,7 @@ function IconFlowScene({ scene, width, height }) {
         {scene.items.map((item, index) => {
           const enter = presences[index];
           if (enter <= 0) return null;
-          const depthBlur = enter < 0.75 ? (1 - enter) * 6 : 0;
+          const depthBlur = enter < 0.75 ? (1 - enter) * 2.4 : 0;
           return (
             <div
               key={index}
@@ -470,7 +470,7 @@ function IconFlowScene({ scene, width, height }) {
                     width: 0,
                     height: connectorHeight,
                     borderLeft: `3.5px dashed ${INK.primary}`,
-                    opacity: Math.min(1, enter * 1.4),
+                    opacity: Math.min(1, enter * 1.12),
                     transform: `scaleY(${enter})`,
                     transformOrigin: "top"
                   }}
@@ -482,8 +482,8 @@ function IconFlowScene({ scene, width, height }) {
                   flexDirection: "column",
                   alignItems: "center",
                   gap: labelSize * 0.4,
-                  transform: `scale(${0.06 + enter * 0.94})`,
-                  opacity: Math.min(1, enter * 2),
+                  transform: `scale(${0.9 + enter * 0.1})`,
+                  opacity: Math.min(1, enter * 1.15),
                   filter: depthBlur > 0.4 ? `blur(${depthBlur.toFixed(1)}px)` : undefined
                 }}
               >
@@ -524,7 +524,7 @@ function CardStepsScene({ scene, width, height }) {
   });
   const presences = entries.map((entry) => {
     const localFrame = frame - (entry.at - scene.start) * fps;
-    return localFrame < 0 ? 0 : spring({ frame: localFrame, fps, config: SPRINGS.enter });
+    return localFrame < 0 ? 0 : calmEnter(localFrame, fps, 0.44);
   });
   const { centers } = stackLayout({ sizes: entries.map((entry) => entry.size), presences, gap });
   return (
@@ -534,7 +534,7 @@ function CardStepsScene({ scene, width, height }) {
           const enter = presences[position];
           if (enter <= 0) return null;
           const localFrame = frame - (entry.at - scene.start) * fps;
-          const motionBlur = entranceBlur(enter, localFrame < 1 ? 0 : spring({ frame: localFrame - 1, fps, config: SPRINGS.enter }));
+          const motionBlur = entranceBlur(enter, localFrame < 1 ? 0 : calmEnter(localFrame - 1, fps, 0.44));
           if (entry.kind === "title") {
             return (
               <div
@@ -550,8 +550,8 @@ function CardStepsScene({ scene, width, height }) {
                   fontWeight: 900,
                   fontSize: fontSize * 1.5,
                   color: INK.primary,
-                  transform: `translateY(-50%) translateY(${(1 - enter) * height * 0.04}px) rotate(-2deg)`,
-                  opacity: Math.min(1, enter * 1.5),
+                  transform: `translateY(-50%) translateY(${(1 - enter) * height * 0.026}px) rotate(-2deg)`,
+                  opacity: Math.min(1, enter * 1.1),
                   filter: motionBlur
                 }}
               >
@@ -568,8 +568,8 @@ function CardStepsScene({ scene, width, height }) {
                 left: 0,
                 right: 0,
                 top: centers[position],
-                transform: `translateY(-50%) translateY(${(1 - enter) * height * 0.05}px) rotate(${tilt}deg)`,
-                opacity: Math.min(1, enter * 1.5),
+                transform: `translateY(-50%) translateY(${(1 - enter) * height * 0.03}px) rotate(${tilt}deg)`,
+                opacity: Math.min(1, enter * 1.1),
                 filter: motionBlur
               }}
             >
@@ -616,7 +616,7 @@ function ScreenshotPileScene({ scene, width, height }) {
           {scene.items.map((item, index) => (
             <div key={index} style={{ marginBottom: gap, transform: `rotate(${WORD_ROTATIONS[index % WORD_ROTATIONS.length] * 0.35}deg)` }}>
               <Card elevation="mid" radius={18} style={{ width: "100%", height: cardHeight }}>
-                <Img src={resolveSrc(item.src)} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }} />
+                <Img src={resolveSrc(item.src)} style={{ width: "100%", height: "100%", objectFit: screenshotObjectFit(item.src), objectPosition: "top" }} />
               </Card>
             </div>
           ))}
@@ -632,26 +632,26 @@ function ScreenshotPileScene({ scene, width, height }) {
           const slot = PILE_SLOTS[index % PILE_SLOTS.length];
           const localFrame = frame - (item.at - scene.start) * fps;
           if (localFrame < 0) return null;
-          const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
-          const motionBlur = entranceBlur(enter, spring({ frame: localFrame - 1, fps, config: SPRINGS.enter }));
+          const enter = calmEnter(localFrame, fps, 0.5);
+          const motionBlur = entranceBlur(enter, calmEnter(localFrame - 1, fps, 0.5));
           return (
             <div
               key={index}
               style={{
                 position: "absolute",
                 inset: 0,
-                zIndex: 100 - index,
+                zIndex: 100 + index,
                 filter: motionBlur,
                 transform: [
-                  `translate(${slot.x * cardWidth * enter}px, ${slot.y * cardWidth * enter + (1 - enter) * height * 0.06}px)`,
+                  `translate(${slot.x * cardWidth * enter}px, ${slot.y * cardWidth * enter + (1 - enter) * height * 0.035}px)`,
                   `rotate(${slot.rot * enter}deg)`,
-                  `scale(${slot.scale * (0.8 + enter * 0.2)})`
+                  `scale(${slot.scale * (0.94 + enter * 0.06)})`
                 ].join(" "),
-                opacity: Math.min(1, enter * 1.5)
+                opacity: Math.min(1, enter * 1.12)
               }}
             >
               <Card elevation={index === 0 ? "high" : "mid"} radius={18} style={{ width: "100%", height: "100%" }}>
-                <Img src={resolveSrc(item.src)} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }} />
+                <Img src={resolveSrc(item.src)} style={{ width: "100%", height: "100%", objectFit: screenshotObjectFit(item.src), objectPosition: "top" }} />
               </Card>
             </div>
           );
@@ -663,13 +663,13 @@ function ScreenshotPileScene({ scene, width, height }) {
 
 // Anything moving fast enough to streak gets a touch of blur; at rest, none.
 function entranceBlur(enterNow, enterPrev) {
-  const blur = Math.min(5, Math.max(0, enterNow - enterPrev) * 30);
-  return blur > 0.4 ? `blur(${blur.toFixed(1)}px)` : undefined;
+  const blur = Math.min(2.4, Math.max(0, enterNow - enterPrev) * 14);
+  return blur > 0.25 ? `blur(${blur.toFixed(1)}px)` : undefined;
 }
 
 function calmEnter(frame, fps, seconds = 0.28) {
   return interpolate(frame, [0, fps * seconds], [0, 1], {
-    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    easing: Easing.bezier(0.19, 1, 0.22, 1),
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp"
   });
@@ -682,8 +682,8 @@ function StatCounterScene({ scene, width, height }) {
   const { fps } = useVideoConfig();
   const localFrame = frame - (scene.at - scene.start) * fps;
   if (localFrame < 0) return null;
-  const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
-  const roll = spring({ frame: localFrame, fps, config: { damping: 30, stiffness: 60, mass: 1.2 } });
+  const enter = calmEnter(localFrame, fps, 0.55);
+  const roll = calmEnter(localFrame, fps, 0.9);
   const match = scene.value.match(/([\d.,]+)/);
   let display = scene.value;
   if (match) {
@@ -710,11 +710,11 @@ function StatCounterScene({ scene, width, height }) {
         transform: `translateX(${drift.panX * width}px) scale(${drift.scale})`
       }}
     >
-      <div style={{ fontFamily: FONTS.script, fontStyle: "italic", fontWeight: 900, fontSize: valueSize, lineHeight: 1, color: semanticColor(scene.color), transform: `scale(${0.6 + enter * 0.4}) rotate(-2deg)`, opacity: Math.min(1, enter * 1.5) }}>
+      <div style={{ fontFamily: FONTS.script, fontStyle: "italic", fontWeight: 900, fontSize: valueSize, lineHeight: 1, color: semanticColor(scene.color), transform: `scale(${0.92 + enter * 0.08}) rotate(-2deg)`, opacity: Math.min(1, enter * 1.1) }}>
         {display}
       </div>
       {scene.label ? (
-        <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: Math.round(height * 0.032), lineHeight: 1.15, color: INK.primary, textAlign: "center", maxWidth: width * 0.8, transform: `translateY(${(1 - enter) * height * 0.02}px)`, opacity: Math.min(1, enter * 1.3) }}>
+        <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: Math.round(height * 0.032), lineHeight: 1.15, color: INK.primary, textAlign: "center", maxWidth: width * 0.8, transform: `translateY(${(1 - enter) * height * 0.014}px)`, opacity: Math.min(1, enter * 1.08) }}>
           {scene.label}
         </div>
       ) : null}
@@ -728,7 +728,7 @@ function QuoteCardScene({ scene, width, height }) {
   const { fps } = useVideoConfig();
   const localFrame = frame - (scene.at - scene.start) * fps;
   if (localFrame < 0) return null;
-  const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
+  const enter = calmEnter(localFrame, fps, 0.55);
   const fontSize = Math.round(height * 0.034);
   const drift = focalDrift({ frame, fps, seconds: scene.end - scene.start, zoom: 0.03, pan: 0.006 });
   return (
@@ -736,9 +736,9 @@ function QuoteCardScene({ scene, width, height }) {
       <div
         style={{
           width: "100%",
-          transform: `translate(${drift.panX * width}px, ${(1 - enter) * height * 0.05}px) rotate(-1deg) scale(${drift.scale})`,
-          opacity: Math.min(1, enter * 1.4),
-          filter: entranceBlur(enter, spring({ frame: localFrame - 1, fps, config: SPRINGS.enter }))
+          transform: `translate(${drift.panX * width}px, ${(1 - enter) * height * 0.03}px) rotate(-1deg) scale(${drift.scale})`,
+          opacity: Math.min(1, enter * 1.08),
+          filter: entranceBlur(enter, calmEnter(localFrame - 1, fps, 0.55))
         }}
       >
         <Card elevation="high" radius={26} style={{ padding: `${fontSize * 1.4}px ${fontSize * 1.3}px` }}>
@@ -774,7 +774,7 @@ function ArtifactGridScene({ scene, width, height }) {
   const rows = Math.ceil(scene.items.length / columns);
   const boardWidth = columns * cardWidth + (columns - 1) * gap;
   const boardHeight = rows * cardHeight + (rows - 1) * gap;
-  const titleEnter = spring({ frame, fps, config: SPRINGS.settle });
+  const titleEnter = calmEnter(frame, fps, 0.52);
 
   return (
     <AbsoluteFill style={{ display: "grid", placeItems: "center", padding: `0 ${width * 0.07}px` }}>
@@ -796,8 +796,8 @@ function ArtifactGridScene({ scene, width, height }) {
               fontWeight: 900,
               fontSize: titleSize,
               color: INK.primary,
-              opacity: Math.min(1, titleEnter * 1.4),
-              transform: `translateY(${(1 - titleEnter) * height * 0.035}px) rotate(-2deg)`
+              opacity: Math.min(1, titleEnter * 1.08),
+              transform: `translateY(${(1 - titleEnter) * height * 0.022}px) rotate(-2deg)`
             }}
           >
             {scene.title}
@@ -809,8 +809,8 @@ function ArtifactGridScene({ scene, width, height }) {
             const row = Math.floor(index / columns);
             const localFrame = frame - (item.at - scene.start) * fps;
             if (localFrame < 0) return null;
-            const enter = spring({ frame: localFrame, fps, config: SPRINGS.enter });
-            const enterPrev = localFrame < 1 ? 0 : spring({ frame: localFrame - 1, fps, config: SPRINGS.enter });
+            const enter = calmEnter(localFrame, fps, 0.46);
+            const enterPrev = localFrame < 1 ? 0 : calmEnter(localFrame - 1, fps, 0.46);
             const accent = index % 3 === 0 ? SEMANTIC.mint : index % 3 === 1 ? SEMANTIC.coral : SEMANTIC.purple;
             const stamp = item.status || artifactKind(item.path || item.label);
             return (
@@ -823,11 +823,11 @@ function ArtifactGridScene({ scene, width, height }) {
                   width: cardWidth,
                   height: cardHeight,
                   transform: [
-                    `translateY(${(1 - enter) * height * 0.045}px)`,
+                    `translateY(${(1 - enter) * height * 0.028}px)`,
                     `rotate(${WORD_ROTATIONS[index % WORD_ROTATIONS.length] * 0.25 * enter}deg)`,
-                    `scale(${0.86 + enter * 0.14})`
+                    `scale(${0.96 + enter * 0.04})`
                   ].join(" "),
-                  opacity: Math.min(1, enter * 1.5),
+                  opacity: Math.min(1, enter * 1.08),
                   filter: entranceBlur(enter, enterPrev)
                 }}
               >
@@ -867,7 +867,7 @@ function TerminalReceiptScene({ scene, width, height }) {
   const seconds = frame / fps;
   const sceneLength = scene.end - scene.start;
   const sceneFrames = Math.max(1, sceneLength * fps);
-  const enter = spring({ frame, fps, config: SPRINGS.enter });
+  const enter = calmEnter(frame, fps, 0.55);
   const drift = interpolate(frame, [0, sceneFrames], [0.02, -0.016], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
@@ -880,7 +880,7 @@ function TerminalReceiptScene({ scene, width, height }) {
   const outputProgress = clamp((seconds - 0.75) / Math.max(0.8, sceneLength * 0.42));
   const visibleLines = outputLines.slice(0, Math.ceil(outputLines.length * outputProgress));
   const statusFrame = frame - (scene.at - scene.start) * fps;
-  const statusEnter = statusFrame < 0 ? 0 : spring({ frame: statusFrame, fps, config: SPRINGS.enter });
+  const statusEnter = statusFrame < 0 ? 0 : calmEnter(statusFrame, fps, 0.34);
   const fontSize = Math.round(height * 0.022);
   const titleSize = Math.round(height * 0.03);
 
@@ -889,9 +889,9 @@ function TerminalReceiptScene({ scene, width, height }) {
       <div
         style={{
           width: "100%",
-          transform: `translate(${drift * width}px, ${(1 - enter) * height * 0.045}px) scale(${0.92 + enter * 0.08}) rotate(0.8deg)`,
-          opacity: Math.min(1, enter * 1.5),
-          filter: entranceBlur(enter, spring({ frame: frame - 1, fps, config: SPRINGS.enter }))
+          transform: `translate(${drift * width}px, ${(1 - enter) * height * 0.028}px) scale(${0.96 + enter * 0.04}) rotate(0.8deg)`,
+          opacity: Math.min(1, enter * 1.08),
+          filter: entranceBlur(enter, calmEnter(frame - 1, fps, 0.55))
         }}
       >
         <GlowBorder radius={24}>
@@ -929,8 +929,8 @@ function TerminalReceiptScene({ scene, width, height }) {
                   fontWeight: 800,
                   fontSize: fontSize * 0.72,
                   textTransform: "uppercase",
-                  transform: `translateY(${(1 - statusEnter) * fontSize * 1.4}px) scale(${0.7 + statusEnter * 0.3})`,
-                  opacity: Math.min(1, statusEnter * 1.5)
+                  transform: `translateY(${(1 - statusEnter) * fontSize * 0.85}px) scale(${0.92 + statusEnter * 0.08})`,
+                  opacity: Math.min(1, statusEnter * 1.1)
                 }}
               >
                 {scene.status}
@@ -960,6 +960,10 @@ function semanticColor(name) {
 function resolveSrc(src) {
   if (/^https?:\/\//.test(src)) return src;
   return staticFile(src);
+}
+
+function screenshotObjectFit(src) {
+  return String(src || "").toLowerCase().endsWith(".svg") ? "contain" : "cover";
 }
 
 function clamp(value) {

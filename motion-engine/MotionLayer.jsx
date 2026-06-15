@@ -160,16 +160,24 @@ function MusicBed({ src, baseVolume, durationSeconds, beatTimes = [] }) {
   return (
     <Html5Audio
       src={src}
+      loop
+      loopVolumeCurveBehavior="extend"
       volume={(frame) => {
         const seconds = frame / fps;
-        const fadeIn = Math.min(1, seconds / 0.6);
-        const tail = durationSeconds - seconds;
-        const fadeOut = tail < 1.2 ? Math.max(0, tail / 1.2) : 1;
+        const fadeIn = smoothAudioRamp(seconds, 0, 0.9);
+        const fadeOut = 1 - smoothAudioRamp(seconds, durationSeconds - 1.8, 1.8);
         const beatDuck = beatDucking(seconds, beatTimes);
         return baseVolume * fadeIn * fadeOut * beatDuck;
       }}
     />
   );
+}
+
+function smoothAudioRamp(seconds, start, span) {
+  if (seconds <= start) return 0;
+  if (seconds >= start + span) return 1;
+  const t = (seconds - start) / span;
+  return t * t * (3 - 2 * t);
 }
 
 function musicBeatTimes(events, scenes) {
