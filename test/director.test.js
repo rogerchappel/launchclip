@@ -8,7 +8,7 @@ import { validateTimeline, MOTION_TIMELINE_VERSION } from "../motion-engine/sche
 import { SCENE_CATALOG, EVENT_CATALOG, renderCatalog } from "../motion-engine/catalog.js";
 import { SCENE_TYPES, EVENT_TYPES } from "../motion-engine/schema.js";
 import { PRESETS, renderPreset } from "../motion-engine/presets.js";
-import { buildSystemPrompt, estimateWords, mergeAssetManifests, renderAssetManifest, runDirect, stitchAuthoredScenes } from "../src/director.js";
+import { buildSystemPrompt, estimateWords, mergeAssetManifests, normalizeCritique, renderAssetManifest, runDirect, stitchAuthoredScenes } from "../src/director.js";
 import { captureProofAssets } from "../src/proof_capture.js";
 
 const words = [
@@ -151,6 +151,14 @@ test("high-quality stitcher tolerates scenes with no overlay events", () => {
   assert.equal(stitched.events.length, 1);
   assert.equal(stitched.events[0].id, "ev-s1-0");
   assert.equal(stitched.chapters[0].title, "Hook");
+});
+
+test("critic normalization defaults missing findings to an empty list", () => {
+  assert.deepEqual(normalizeCritique({ verdict: "ship" }), { verdict: "ship", findings: [] });
+  assert.deepEqual(normalizeCritique({ verdict: "revise", findings: [{ issue: "flat", fix: "vary it" }] }), {
+    verdict: "revise",
+    findings: [{ issue: "flat", fix: "vary it" }]
+  });
 });
 
 test("estimateWords produces monotonic plausible timings", () => {

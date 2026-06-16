@@ -463,7 +463,7 @@ export async function directHighTimeline(ctx) {
     messages: [{ role: "user", content: `SCRIPT:\n${scriptText}\n\nCREATIVE DIRECTION:\n${JSON.stringify(direction)}\n\nTIMELINE:\n${JSON.stringify(draft)}\n\nVerdict?` }],
     output_config: { format: { type: "json_schema", schema: CRITIC_SCHEMA } }
   });
-  const critique = JSON.parse(firstText(criticResponse));
+  const critique = normalizeCritique(JSON.parse(firstText(criticResponse)));
   log(`critic: ${critique.verdict} (${critique.findings.length} findings)`);
 
   // Stitch + check; on any issue (mechanical or critical), one full repair
@@ -501,6 +501,13 @@ export function stitchAuthoredScenes(authored, chapters = []) {
       (entry.events ?? []).map((event, eventIndex) => ({ ...event, id: `${event.id || "ev"}-s${index}-${eventIndex}` }))
     ),
     chapters
+  };
+}
+
+export function normalizeCritique(critique) {
+  return {
+    verdict: critique?.verdict === "revise" ? "revise" : "ship",
+    findings: Array.isArray(critique?.findings) ? critique.findings : []
   };
 }
 
