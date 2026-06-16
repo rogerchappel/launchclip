@@ -22,6 +22,9 @@ export function ChapterRail({ chapters, width, height }) {
   const y = height * 0.045;
   const dot = Math.round(height * 0.009);
   const fontSize = Math.round(height * 0.0125);
+  const activeX = chapters.length === 1 ? 0 : (activeIndex / (chapters.length - 1)) * railWidth;
+  const activeLabelWidth = Math.min(width * 0.42, railWidth);
+  const activeLabelLeft = Math.max(0, Math.min(railWidth - activeLabelWidth, activeX - activeLabelWidth / 2));
 
   return (
     <div style={{ position: "absolute", left, top: y, width: railWidth, zIndex: 40, opacity: enter, transform: `translateY(${(1 - enter) * -12}px)` }}>
@@ -51,21 +54,28 @@ export function ChapterRail({ chapters, width, height }) {
                 boxShadow: isActive ? "0 2px 10px rgba(79,174,133,0.5)" : "0 1px 4px rgba(26,26,24,0.2)"
               }}
             />
-            <div
-              style={{
-                fontFamily: FONTS.sans,
-                fontWeight: isActive ? 800 : 600,
-                fontSize,
-                whiteSpace: "nowrap",
-                color: isActive ? INK.primary : INK.muted,
-                letterSpacing: "0.04em"
-              }}
-            >
-              {chapter.title}
-            </div>
           </div>
         );
       })}
+      <div
+        style={{
+          position: "absolute",
+          left: activeLabelLeft,
+          top: dot * 2 + 8,
+          width: activeLabelWidth,
+          fontFamily: FONTS.sans,
+          fontWeight: 850,
+          fontSize,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          textAlign: "center",
+          color: INK.primary,
+          letterSpacing: 0
+        }}
+      >
+        {chapters[activeIndex]?.title}
+      </div>
     </div>
   );
 }
