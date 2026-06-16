@@ -9,7 +9,9 @@
   "scripts": {
     "test": "node --test",
     "smoke": "node ./scripts/smoke.js",
-    "check": "npm test && npm run smoke"
+    "check": "npm test && npm run smoke",
+    "package:smoke": "npm pack --dry-run",
+    "release:check": "npm run check && npm run package:smoke"
   },
   "keywords": [
     "oss",
@@ -34,7 +36,9 @@
     "docs",
     "SKILL.md",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "SECURITY.md",
+    "CONTRIBUTING.md"
   ],
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
