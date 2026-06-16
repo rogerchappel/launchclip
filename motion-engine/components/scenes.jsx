@@ -429,6 +429,7 @@ function Paperclip({ size }) {
 // node's slot (connector included) grows with its spring, so earlier nodes
 // glide up to make room as the chain extends downward.
 function IconFlowScene({ scene, width, height }) {
+  if (scene.variant === "orbit") return <IconFlowOrbitScene scene={scene} width={width} height={height} />;
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const iconSize = Math.round(width * 0.24);
@@ -504,10 +505,99 @@ function IconFlowScene({ scene, width, height }) {
   );
 }
 
+function IconFlowOrbitScene({ scene, width, height }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const slots = [
+    { x: 0.5, y: 0.24 },
+    { x: 0.24, y: 0.46 },
+    { x: 0.76, y: 0.46 },
+    { x: 0.34, y: 0.7 },
+    { x: 0.66, y: 0.7 }
+  ];
+  const iconSize = Math.round(width * 0.16);
+  const labelSize = Math.round(height * 0.025);
+  const presences = scene.items.map((item) => {
+    const localFrame = frame - (item.at - scene.start) * fps;
+    return localFrame < 0 ? 0 : calmEnter(localFrame, fps, 0.56);
+  });
+  const drift = focalDrift({ frame, fps, seconds: scene.end - scene.start, zoom: 0.035, pan: 0.01 });
+  return (
+    <AbsoluteFill style={{ transform: `translateX(${drift.panX * width}px) scale(${drift.scale})` }}>
+      {scene.items.map((item, index) => {
+        if (index === 0) return null;
+        const from = slots[(index - 1) % slots.length];
+        const to = slots[index % slots.length];
+        const enter = presences[index];
+        if (enter <= 0) return null;
+        return <FlowConnector key={`connector-${index}`} from={from} to={to} width={width} height={height} progress={enter} />;
+      })}
+      {scene.items.map((item, index) => {
+        const slot = slots[index % slots.length];
+        const enter = presences[index];
+        if (enter <= 0) return null;
+        const localFrame = frame - (item.at - scene.start) * fps;
+        const blur = entranceBlur(enter, localFrame < 1 ? 0 : calmEnter(localFrame - 1, fps, 0.56));
+        return (
+          <div
+            key={index}
+            style={{
+              position: "absolute",
+              left: slot.x * width,
+              top: slot.y * height,
+              width: width * 0.28,
+              transform: `translate(-50%, -50%) translateY(${(1 - enter) * height * 0.035}px) scale(${0.92 + enter * 0.08})`,
+              opacity: Math.min(1, enter * 1.08),
+              filter: blur,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: labelSize * 0.36
+            }}
+          >
+            <Card dark radius={iconSize * 0.22} elevation="mid" style={{ width: iconSize, height: iconSize, display: "grid", placeItems: "center", padding: iconSize * 0.2 }}>
+              {item.src ? <Img src={resolveSrc(item.src)} style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : <div style={{ width: iconSize * 0.28, height: iconSize * 0.28, borderRadius: "50%", background: INK.onDark }} />}
+            </Card>
+            <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: labelSize, lineHeight: 1.04, color: item.color ? semanticColor(item.color) : INK.primary, textAlign: "center", textShadow: TYPE_SHADOW }}>
+              {item.text}
+            </div>
+          </div>
+        );
+      })}
+    </AbsoluteFill>
+  );
+}
+
+function FlowConnector({ from, to, width, height, progress }) {
+  const x1 = from.x * width;
+  const y1 = from.y * height;
+  const x2 = to.x * width;
+  const y2 = to.y * height;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const length = Math.hypot(dx, dy);
+  const angle = Math.atan2(dy, dx);
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: x1,
+        top: y1,
+        width: length * progress,
+        borderTop: `3px dashed rgba(26,26,24,0.42)`,
+        transform: `rotate(${angle}rad)`,
+        transformOrigin: "0 50%",
+        opacity: Math.min(1, progress * 1.2)
+      }}
+    />
+  );
+}
+
 // Numbered chips with drawn thickness, stacking as each is spoken. The stack
 // reflows: every chip's slot grows with its entrance spring, so chips already
 // on screen glide apart to make room instead of jumping when one lands.
 function CardStepsScene({ scene, width, height }) {
+  if (scene.variant === "rail") return <CardStepsRailScene scene={scene} width={width} height={height} />;
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const fontSize = Math.round(height * 0.028);
@@ -583,6 +673,123 @@ function CardStepsScene({ scene, width, height }) {
           );
         })}
       </div>
+    </AbsoluteFill>
+  );
+}
+
+function CardStepsRailScene({ scene, width, height }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const fontSize = Math.round(height * 0.023);
+  const titleSize = Math.round(height * 0.034);
+  const cardWidth = width * 0.43;
+  const cardHeight = height * 0.082;
+  const spineX = width * 0.5;
+  const top = height * (scene.title ? 0.26 : 0.2);
+  const available = height * 0.56;
+  const stepGap = scene.items.length > 1 ? available / (scene.items.length - 1) : 0;
+  const titleEnter = calmEnter(frame, fps, 0.52);
+  return (
+    <AbsoluteFill>
+      {scene.title ? (
+        <div
+          style={{
+            position: "absolute",
+            left: width * 0.08,
+            right: width * 0.08,
+            top: height * 0.1,
+            textAlign: "center",
+            fontFamily: FONTS.script,
+            fontStyle: "italic",
+            fontWeight: 900,
+            fontSize: titleSize,
+            color: INK.primary,
+            transform: `translateY(${(1 - titleEnter) * height * 0.018}px) rotate(-2deg)`,
+            opacity: Math.min(1, titleEnter * 1.1)
+          }}
+        >
+          {scene.title}
+        </div>
+      ) : null}
+      <div
+        style={{
+          position: "absolute",
+          left: spineX,
+          top,
+          height: available,
+          borderLeft: `3px dashed rgba(26,26,24,0.34)`,
+          transform: "translateX(-50%)",
+          opacity: 0.9
+        }}
+      />
+      {scene.items.map((item, index) => {
+        const localFrame = frame - (item.at - scene.start) * fps;
+        if (localFrame < 0) return null;
+        const enter = calmEnter(localFrame, fps, 0.5);
+        const enterPrev = localFrame < 1 ? 0 : calmEnter(localFrame - 1, fps, 0.5);
+        const y = top + index * stepGap;
+        const leftSide = index % 2 === 0;
+        const cardX = leftSide ? width * 0.08 : width * 0.49;
+        const lineStart = leftSide ? cardX + cardWidth : spineX;
+        const lineWidth = Math.abs(spineX - (leftSide ? cardX + cardWidth : cardX));
+        const accent = item.color ? semanticColor(item.color) : index === scene.items.length - 1 ? SEMANTIC.mint : INK.primary;
+        return (
+          <React.Fragment key={index}>
+            <div
+              style={{
+                position: "absolute",
+                left: lineStart,
+                top: y,
+                width: lineWidth * enter,
+                borderTop: `3px solid rgba(26,26,24,0.26)`,
+                transform: "translateY(-50%)",
+                transformOrigin: leftSide ? "100% 50%" : "0 50%",
+                opacity: Math.min(1, enter * 1.1)
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                left: spineX,
+                top: y,
+                width: fontSize * 1.55,
+                height: fontSize * 1.55,
+                borderRadius: "50%",
+                background: accent,
+                color: index === scene.items.length - 1 || item.color ? INK.onDark : CARD.paper,
+                display: "grid",
+                placeItems: "center",
+                fontFamily: FONTS.sans,
+                fontWeight: 900,
+                fontSize: fontSize * 0.62,
+                transform: `translate(-50%, -50%) scale(${0.86 + enter * 0.14})`,
+                opacity: Math.min(1, enter * 1.15),
+                boxShadow: "0 10px 20px rgba(26,26,24,0.18)"
+              }}
+            >
+              {index + 1}
+            </div>
+            <div
+              style={{
+                position: "absolute",
+                left: cardX,
+                top: y,
+                width: cardWidth,
+                height: cardHeight,
+                transform: `translate(${(leftSide ? -1 : 1) * (1 - enter) * width * 0.08}px, -50%) rotate(${(leftSide ? -1 : 1) * WORD_ROTATIONS[index % WORD_ROTATIONS.length] * 0.28 * enter}deg)`,
+                opacity: Math.min(1, enter * 1.1),
+                filter: entranceBlur(enter, enterPrev)
+              }}
+            >
+              <Card chip elevation="mid" radius={18} style={{ height: "100%", padding: `${fontSize * 0.65}px ${fontSize * 0.8}px`, display: "flex", alignItems: "center" }}>
+                <div style={{ fontFamily: FONTS.sans, fontWeight: 850, fontSize, lineHeight: 1.12, color: INK.primary }}>
+                  {item.text}
+                </div>
+              </Card>
+            </div>
+          </React.Fragment>
+        );
+      })}
     </AbsoluteFill>
   );
 }

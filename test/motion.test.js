@@ -136,16 +136,32 @@ test("steps and flow items default their build times inside the scene", () => {
   const result = validateTimeline({
     ...baseTimeline([]),
     scenes: [
-      { id: "s", type: "card_steps", start: 0, end: 4, items: [{ text: "one" }, { text: "two" }] },
-      { id: "f", type: "icon_flow", start: 4, end: 8, items: [{ label: "in" }, { label: "out", at: 5 }] },
+      { id: "s", type: "card_steps", start: 0, end: 4, variant: "rail", items: [{ text: "one" }, { text: "two" }] },
+      { id: "f", type: "icon_flow", start: 4, end: 8, variant: "orbit", items: [{ label: "in" }, { label: "out", at: 5 }] },
       { id: "t", type: "talking_head", start: 8, end: 10, src: "base/take.mp4" }
     ]
   });
   assert.equal(result.ok, true, result.errors.join("; "));
   const [steps, flow] = result.timeline.scenes;
+  assert.equal(steps.variant, "rail");
   assert.equal(steps.items[1].at, 0.8);
+  assert.equal(flow.variant, "orbit");
   assert.equal(flow.items[0].text, "in");
   assert.equal(flow.items[1].at, 5);
+});
+
+test("steps and flow reject unknown variants", () => {
+  const result = validateTimeline({
+    ...baseTimeline([]),
+    scenes: [
+      { id: "s", type: "card_steps", start: 0, end: 4, variant: "caption_stack", items: [{ text: "one" }] },
+      { id: "f", type: "icon_flow", start: 4, end: 8, variant: "snake", items: [{ label: "in" }] },
+      { id: "t", type: "talking_head", start: 8, end: 10, src: "base/take.mp4" }
+    ]
+  });
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => error.includes("card_steps") && error.includes("unknown variant")));
+  assert.ok(result.errors.some((error) => error.includes("icon_flow") && error.includes("unknown variant")));
 });
 
 test("prompt_card icons normalize to at most 3 string paths", () => {

@@ -8,7 +8,7 @@ import { validateTimeline, MOTION_TIMELINE_VERSION } from "../motion-engine/sche
 import { SCENE_CATALOG, EVENT_CATALOG, renderCatalog } from "../motion-engine/catalog.js";
 import { SCENE_TYPES, EVENT_TYPES } from "../motion-engine/schema.js";
 import { PRESETS, renderPreset } from "../motion-engine/presets.js";
-import { buildSystemPrompt, estimateWords, mergeAssetManifests, renderAssetManifest, runDirect } from "../src/director.js";
+import { buildSystemPrompt, estimateWords, mergeAssetManifests, normalizeCritique, renderAssetManifest, runDirect, stitchAuthoredScenes } from "../src/director.js";
 import { captureProofAssets } from "../src/proof_capture.js";
 
 const words = [
@@ -42,9 +42,12 @@ test("catalog covers every renderer scene and event type", () => {
 test("system prompt assembles digest, catalog, and preset", () => {
   const prompt = buildSystemPrompt("explainer");
   assert.ok(prompt.includes("CADENCE IS ABSOLUTE"));
+  assert.ok(prompt.includes("VISUAL RANGE"));
   assert.ok(prompt.includes("### typography"));
   assert.ok(prompt.includes("Format preset: explainer"));
-  assert.ok(renderPreset(PRESETS.software_demo).includes("software_demo"));
+  const renderedPreset = renderPreset(PRESETS.software_demo);
+  assert.ok(renderedPreset.includes("software_demo"));
+  assert.ok(renderedPreset.includes("Do not use card_steps as captions"));
 });
 
 test("lint flags dead air in graphic scenes", () => {
@@ -53,6 +56,37 @@ test("lint flags dead air in graphic scenes", () => {
   ]);
   const result = lintTimeline(timeline);
   assert.ok(result.failures.some((failure) => failure.includes("idle")));
+});
+
+test("lint counts visible item build duration toward density", () => {
+  const timeline = validateTimeline({
+    version: MOTION_TIMELINE_VERSION,
+    duration_seconds: 4.0,
+    base: { type: "placeholder", src: "" },
+    words: [
+      { word: "One", start: 0.3, end: 0.5 },
+      { word: "two", start: 1.55, end: 1.8 },
+      { word: "three", start: 2.8, end: 3.1 }
+    ],
+    scenes: [
+      {
+        id: "flow",
+        type: "icon_flow",
+        variant: "orbit",
+        start: 0,
+        end: 4,
+        items: [
+          { text: "One", at: 0.3 },
+          { text: "two", at: 1.55 },
+          { text: "three", at: 2.8 }
+        ]
+      }
+    ],
+    events: []
+  });
+  assert.equal(timeline.ok, true, timeline.errors.join("; "));
+  const result = lintTimeline(timeline.timeline, { referenceGrade: true });
+  assert.ok(!result.failures.some((failure) => failure.includes("idle")), result.failures.join("; "));
 });
 
 test("lint flags off-word builds and missing tail coverage", () => {
@@ -100,6 +134,7 @@ test("reference-grade lint requires proof, variety, and tighter density", () => 
   assert.ok(weakResult.failures.some((failure) => failure.includes("at least 4")));
   assert.ok(weakResult.failures.some((failure) => failure.includes("include artifact_grid or terminal_receipt")));
   assert.ok(weakResult.failures.some((failure) => failure.includes("repeats")));
+  assert.ok(weakResult.failures.some((failure) => failure.includes("visual families")));
 
   const strong = makeTimeline([
     { id: "a", type: "typography", start: 0, end: 1.8, transition: "cut", items: [{ text: "One", at: 0.3 }, { text: "two", at: 0.9 }, { text: "three", at: 1.5 }] },
@@ -109,6 +144,80 @@ test("reference-grade lint requires proof, variety, and tighter density", () => 
   ]);
   const strongResult = lintTimeline(strong, { referenceGrade: true });
   assert.equal(strongResult.failures.length, 0, strongResult.failures.join("; "));
+});
+
+test("reference-grade lint rejects caption fragments in numbered steps", () => {
+  const stepWords = [
+    ...words,
+    { word: "First", start: 5.0, end: 5.2 },
+    { word: "Point", start: 5.6, end: 5.8 },
+    { word: "repo.", start: 6.2, end: 6.5 },
+    { word: "Ship.", start: 7.0, end: 7.3 }
+  ];
+  const timeline = validateTimeline({
+    version: MOTION_TIMELINE_VERSION,
+    duration_seconds: 8,
+    base: { type: "placeholder", src: "" },
+    words: stepWords,
+    scenes: [
+      { id: "a", type: "typography", start: 0, end: 1.8, transition: "cut", items: [{ text: "One", at: 0.3 }, { text: "two", at: 0.9 }, { text: "three", at: 1.5 }] },
+      { id: "b", type: "prompt_card", start: 1.8, end: 3.0, transition: "cut", text: "launchclip direct . --voice tts" },
+      { id: "c", type: "terminal_receipt", start: 3.0, end: 4.3, transition: "cut", command: "npm run smoke", output: "Smoke OK", status: "passed", at: 4.0 },
+      { id: "d", type: "card_steps", start: 4.3, end: 6.6, transition: "cut", items: [{ text: "First", at: 5.0 }, { text: "Point", at: 5.6 }, { text: "repo", at: 6.2 }] },
+      { id: "e", type: "quote_card", start: 6.6, end: 8.0, transition: "cut", text: "Ship the proof.", at: 7.0 }
+    ],
+    events: []
+  });
+  assert.equal(timeline.ok, true, timeline.errors.join("; "));
+  const result = lintTimeline(timeline.timeline, { referenceGrade: true });
+  assert.ok(result.failures.some((failure) => failure.includes("numbered cards must be real steps")));
+});
+
+test("reference-grade lint rejects weak diagram labels and proof-card magnifiers", () => {
+  const timeline = validateTimeline({
+    version: MOTION_TIMELINE_VERSION,
+    duration_seconds: 6,
+    base: { type: "placeholder", src: "" },
+    words: [
+      { word: "Hook", start: 0.3, end: 0.6 },
+      { word: "passed", start: 1.5, end: 1.8 },
+      { word: "proof", start: 2.4, end: 2.7 },
+      { word: "use", start: 3.4, end: 3.7 },
+      { word: "repo", start: 4.1, end: 4.4 },
+      { word: "ship", start: 5.2, end: 5.5 }
+    ],
+    scenes: [
+      { id: "a", type: "typography", start: 0, end: 1.2, transition: "cut", items: [{ text: "Hook", at: 0.3 }] },
+      { id: "b", type: "terminal_receipt", start: 1.2, end: 2.0, transition: "cut", command: "npm run smoke", output: "Smoke OK", status: "passed", at: 1.5 },
+      { id: "c", type: "magnifier", start: 2.0, end: 3.2, transition: "cut", src: "shots/proof-launchclip-demo.svg", text: "proof" },
+      { id: "d", type: "icon_flow", start: 3.2, end: 5.0, transition: "cut", items: [{ text: "use", at: 3.4 }, { text: "repo", at: 4.1 }] },
+      { id: "e", type: "quote_card", start: 5.0, end: 6.0, transition: "cut", text: "Ship proof.", at: 5.2 }
+    ],
+    events: []
+  });
+  assert.equal(timeline.ok, true, timeline.errors.join("; "));
+  const result = lintTimeline(timeline.timeline, { referenceGrade: true });
+  assert.ok(result.failures.some((failure) => failure.includes("filler labels")));
+  assert.ok(result.failures.some((failure) => failure.includes("proof card")));
+});
+
+test("high-quality stitcher tolerates scenes with no overlay events", () => {
+  const stitched = stitchAuthoredScenes([
+    { scene: { id: "a", type: "typography", start: 0, end: 2, items: [{ text: "One", at: 0.3 }] } },
+    { scene: { id: "b", type: "quote_card", start: 2, end: 4, text: "Ship it.", at: 2.1 }, events: [{ type: "punch_zoom", start: 2.1, end: 3.1 }] }
+  ], [{ title: "Hook", at: 0 }]);
+  assert.equal(stitched.scenes.length, 2);
+  assert.equal(stitched.events.length, 1);
+  assert.equal(stitched.events[0].id, "ev-s1-0");
+  assert.equal(stitched.chapters[0].title, "Hook");
+});
+
+test("critic normalization defaults missing findings to an empty list", () => {
+  assert.deepEqual(normalizeCritique({ verdict: "ship" }), { verdict: "ship", findings: [] });
+  assert.deepEqual(normalizeCritique({ verdict: "revise", findings: [{ issue: "flat", fix: "vary it" }] }), {
+    verdict: "revise",
+    findings: [{ issue: "flat", fix: "vary it" }]
+  });
 });
 
 test("estimateWords produces monotonic plausible timings", () => {
