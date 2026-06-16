@@ -127,6 +127,17 @@ function checkReferenceGrade(timeline, failures) {
         );
       }
     }
+    if (scene.type === "icon_flow" || scene.type === "funnel") {
+      const weakItems = (scene.items ?? []).filter((item) => isFillerLabel(item.text));
+      if (weakItems.length) {
+        failures.push(
+          `${scene.type} "${scene.id}" uses filler labels (${weakItems.map((item) => `"${item.text}"`).join(", ")}) — diagram labels must name concrete objects or actions`
+        );
+      }
+    }
+    if (scene.type === "magnifier" && /(^|\/)proof-[^/]+\.svg$/i.test(scene.src)) {
+      failures.push(`magnifier "${scene.id}" uses generated proof card "${scene.src}" — use screenshot_pile or artifact_grid for proof cards`);
+    }
     if (scene.type === "artifact_grid") {
       const missing = (scene.items ?? []).filter((item) => !item.path && !item.src).length;
       if (missing) failures.push(`artifact_grid "${scene.id}" has ${missing} item(s) without a path or src proof reference`);
@@ -140,10 +151,14 @@ function checkReferenceGrade(timeline, failures) {
 function isWeakStepLabel(text) {
   const value = String(text ?? "").trim().toLowerCase();
   if (!value) return true;
-  if (STEP_FILLER_WORDS.has(value)) return true;
+  if (isFillerLabel(value)) return true;
   const words = value.split(/\s+/).filter(Boolean);
   if (words.length === 1 && value.length < 8) return true;
   return false;
+}
+
+function isFillerLabel(text) {
+  return STEP_FILLER_WORDS.has(String(text ?? "").trim().toLowerCase());
 }
 
 // Every build lands on a spoken word: item.at must match a word start.

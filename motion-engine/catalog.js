@@ -106,7 +106,7 @@ export const SCENE_CATALOG = [
   {
     type: "magnifier",
     use_for: "Inspecting a detail in a real screenshot: a glass magnifying lens glides across the screenshot and reveals a key phrase in prism/rainbow text inside the lens. Use to call out one line in a job post, dashboard, or UI.",
-    avoid_when: "No real screenshot. The phrase is invented. More than one phrase (that's two scenes).",
+    avoid_when: "No real screenshot. Generated proof-card SVGs such as shots/proof-*.svg; use screenshot_pile or artifact_grid for those. The phrase is invented. More than one phrase (that's two scenes).",
     params: '{ "type": "magnifier", "start", "end", "src": "<real screenshot>", "text": "the phrase the lens reveals", "from?": {"x":0-1,"y":0-1}, "to?": {"x":0-1,"y":0-1} }',
     density: "The lens glides for the whole scene (continuous motion); keep it 2.5-4s.",
     example: { type: "magnifier", start: 4, end: 7.5, src: "shots/job-post.png", text: "Meta/Google ad management", from: { x: 0.3, y: 0.25 }, to: { x: 0.6, y: 0.7 } }

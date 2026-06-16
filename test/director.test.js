@@ -173,6 +173,34 @@ test("reference-grade lint rejects caption fragments in numbered steps", () => {
   assert.ok(result.failures.some((failure) => failure.includes("numbered cards must be real steps")));
 });
 
+test("reference-grade lint rejects weak diagram labels and proof-card magnifiers", () => {
+  const timeline = validateTimeline({
+    version: MOTION_TIMELINE_VERSION,
+    duration_seconds: 6,
+    base: { type: "placeholder", src: "" },
+    words: [
+      { word: "Hook", start: 0.3, end: 0.6 },
+      { word: "passed", start: 1.5, end: 1.8 },
+      { word: "proof", start: 2.4, end: 2.7 },
+      { word: "use", start: 3.4, end: 3.7 },
+      { word: "repo", start: 4.1, end: 4.4 },
+      { word: "ship", start: 5.2, end: 5.5 }
+    ],
+    scenes: [
+      { id: "a", type: "typography", start: 0, end: 1.2, transition: "cut", items: [{ text: "Hook", at: 0.3 }] },
+      { id: "b", type: "terminal_receipt", start: 1.2, end: 2.0, transition: "cut", command: "npm run smoke", output: "Smoke OK", status: "passed", at: 1.5 },
+      { id: "c", type: "magnifier", start: 2.0, end: 3.2, transition: "cut", src: "shots/proof-launchclip-demo.svg", text: "proof" },
+      { id: "d", type: "icon_flow", start: 3.2, end: 5.0, transition: "cut", items: [{ text: "use", at: 3.4 }, { text: "repo", at: 4.1 }] },
+      { id: "e", type: "quote_card", start: 5.0, end: 6.0, transition: "cut", text: "Ship proof.", at: 5.2 }
+    ],
+    events: []
+  });
+  assert.equal(timeline.ok, true, timeline.errors.join("; "));
+  const result = lintTimeline(timeline.timeline, { referenceGrade: true });
+  assert.ok(result.failures.some((failure) => failure.includes("filler labels")));
+  assert.ok(result.failures.some((failure) => failure.includes("proof card")));
+});
+
 test("high-quality stitcher tolerates scenes with no overlay events", () => {
   const stitched = stitchAuthoredScenes([
     { scene: { id: "a", type: "typography", start: 0, end: 2, items: [{ text: "One", at: 0.3 }] } },
