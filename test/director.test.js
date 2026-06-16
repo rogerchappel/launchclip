@@ -58,6 +58,37 @@ test("lint flags dead air in graphic scenes", () => {
   assert.ok(result.failures.some((failure) => failure.includes("idle")));
 });
 
+test("lint counts visible item build duration toward density", () => {
+  const timeline = validateTimeline({
+    version: MOTION_TIMELINE_VERSION,
+    duration_seconds: 4.0,
+    base: { type: "placeholder", src: "" },
+    words: [
+      { word: "One", start: 0.3, end: 0.5 },
+      { word: "two", start: 1.55, end: 1.8 },
+      { word: "three", start: 2.8, end: 3.1 }
+    ],
+    scenes: [
+      {
+        id: "flow",
+        type: "icon_flow",
+        variant: "orbit",
+        start: 0,
+        end: 4,
+        items: [
+          { text: "One", at: 0.3 },
+          { text: "two", at: 1.55 },
+          { text: "three", at: 2.8 }
+        ]
+      }
+    ],
+    events: []
+  });
+  assert.equal(timeline.ok, true, timeline.errors.join("; "));
+  const result = lintTimeline(timeline.timeline, { referenceGrade: true });
+  assert.ok(!result.failures.some((failure) => failure.includes("idle")), result.failures.join("; "));
+});
+
 test("lint flags off-word builds and missing tail coverage", () => {
   const timeline = makeTimeline([
     { id: "a", type: "card_steps", start: 0, end: 3, transition: "cut", items: [{ text: "One", at: 0.3 }, { text: "two", at: 0.9 }, { text: "x", at: 2.2 }] }

@@ -6,6 +6,7 @@
 const MAX_DEAD_AIR_SECONDS = 1.5;
 const MAX_REFERENCE_IDLE_SECONDS = 1.2;
 const WORD_SNAP_TOLERANCE = 0.12;
+const ITEM_BUILD_SECONDS = 0.55;
 const STEP_FILLER_WORDS = new Set(["first", "next", "finally", "point", "and", "then", "use", "build", "it", "to"]);
 
 // Scene types whose surface is continuously alive (footage plays, typing
@@ -36,7 +37,9 @@ export function lintTimeline(timeline, { direction = null, assets = [], presente
 
 function sceneActivityTimes(scene) {
   const times = [scene.start];
-  for (const item of scene.items ?? []) times.push(item.at);
+  for (const item of scene.items ?? []) {
+    times.push(item.at, Math.min(scene.end, item.at + ITEM_BUILD_SECONDS));
+  }
   if (scene.type === "stat_counter" || scene.type === "quote_card") {
     times.push(scene.at, scene.at + 1.0);
   }
