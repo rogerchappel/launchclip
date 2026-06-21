@@ -140,7 +140,13 @@ The dry-run payload uses `approval_status: "pending"`, `metadata_json` for sourc
 ## Verification
 
 ```bash
-npm test
-npm run smoke
-npm run check
+npm run release:check
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development expectations and [SECURITY.md](SECURITY.md) for vulnerability reporting and data handling guidance.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
