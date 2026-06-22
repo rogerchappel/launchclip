@@ -89,6 +89,99 @@ test("lint counts visible item build duration toward density", () => {
   assert.ok(!result.failures.some((failure) => failure.includes("idle")), result.failures.join("; "));
 });
 
+test("lint counts chart marks and object lifecycle states toward density", () => {
+  const timeline = validateTimeline({
+    version: MOTION_TIMELINE_VERSION,
+    duration_seconds: 4.0,
+    base: { type: "placeholder", src: "" },
+    words,
+    scenes: [
+      {
+        id: "proof-chart",
+        type: "chart",
+        chart_type: "bar",
+        start: 0,
+        end: 4,
+        title: "Proof outputs",
+        x_label: "artifact",
+        y_label: "count",
+        source: "launchclip workspace",
+        data: [{ label: "review", value: 1, at: 0.3 }]
+      }
+    ],
+    objects: [
+      {
+        id: "review-card",
+        role: "proof",
+        ref: "artifact_card",
+        scene_id: "proof-chart",
+        states: [
+          { state: "enter", at: 0.9 },
+          { state: "settle", at: 1.45 },
+          { state: "emphasize", at: 2.4 },
+          { state: "exit", at: 3.45 }
+        ]
+      }
+    ],
+    events: []
+  });
+  assert.equal(timeline.ok, true, timeline.errors.join("; "));
+  const result = lintTimeline(timeline.timeline);
+  assert.ok(!result.failures.some((failure) => failure.includes("idle")), result.failures.join("; "));
+});
+
+test("lint rejects diagram connectors that draw before endpoints", () => {
+  const timeline = validateTimeline({
+    version: MOTION_TIMELINE_VERSION,
+    duration_seconds: 4.0,
+    base: { type: "placeholder", src: "" },
+    words,
+    scenes: [
+      {
+        id: "flow",
+        type: "diagram",
+        diagram_type: "pipeline",
+        start: 0,
+        end: 4,
+        nodes: [{ id: "draft", label: "Draft", at: 0.3 }, { id: "review", label: "Review", at: 2.0 }],
+        connectors: [{ from: "draft", to: "review", at: 1.0 }]
+      }
+    ],
+    events: []
+  });
+  assert.equal(timeline.ok, true, timeline.errors.join("; "));
+  const result = lintTimeline(timeline.timeline);
+  assert.ok(result.failures.some((failure) => failure.includes("before both endpoint nodes exist")), result.failures.join("; "));
+});
+
+test("lint rejects lifecycle objects that pop without continuity", () => {
+  const timeline = validateTimeline({
+    version: MOTION_TIMELINE_VERSION,
+    duration_seconds: 6,
+    base: { type: "placeholder", src: "" },
+    words,
+    scenes: [
+      {
+        id: "a",
+        type: "typography",
+        start: 0,
+        end: 6,
+        items: [{ text: "One", at: 0.3 }, { text: "two", at: 0.9 }, { text: "three", at: 1.5 }, { text: "Done", at: 4.0 }, { text: "now", at: 4.6 }]
+      }
+    ],
+    objects: [
+      { id: "instant-card", role: "proof", ref: "artifact_card", scene_id: "a", states: [{ state: "enter", at: 0.3 }] },
+      { id: "jump-card", role: "proof", ref: "artifact_card", scene_id: "a", states: [{ state: "enter", at: 0.9 }, { state: "transform", at: 1.5 }] }
+    ],
+    events: []
+  });
+  assert.equal(timeline.ok, true, timeline.errors.join("; "));
+  const result = lintTimeline(timeline.timeline);
+  assert.ok(result.failures.some((failure) => failure.includes("only one lifecycle state")), result.failures.join("; "));
+  assert.ok(result.failures.some((failure) => failure.includes("without settling")), result.failures.join("; "));
+  assert.ok(result.failures.some((failure) => failure.includes('needs a "to" target')), result.failures.join("; "));
+});
+
 test("lint flags off-word builds and missing tail coverage", () => {
   const timeline = makeTimeline([
     { id: "a", type: "card_steps", start: 0, end: 3, transition: "cut", items: [{ text: "One", at: 0.3 }, { text: "two", at: 0.9 }, { text: "x", at: 2.2 }] }

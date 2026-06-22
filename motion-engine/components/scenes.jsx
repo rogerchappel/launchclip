@@ -25,7 +25,7 @@ import { MagnifierScene } from "./Magnifier.jsx";
 // old content just leaves once the new has arrived. No whoosh/zoom/fade.
 const CROSS_HOLD_SECONDS = 0.2;
 
-export function SceneTrack({ scenes, width, height }) {
+export function SceneTrack({ scenes, objects = [], width, height }) {
   const { fps } = useVideoConfig();
   const hold = Math.round(CROSS_HOLD_SECONDS * fps);
   return (
@@ -42,6 +42,7 @@ export function SceneTrack({ scenes, width, height }) {
             <AbsoluteFill style={{ zIndex: index }}>
               <SettleShell settle={index > 0}>
                 <Scene scene={scene} width={width} height={height} />
+                <LifecycleObjects objects={objectsForScene(objects, scene)} scene={scene} width={width} height={height} />
               </SettleShell>
             </AbsoluteFill>
           </Sequence>
@@ -82,6 +83,159 @@ function Scene({ scene, width, height }) {
   return null;
 }
 
+function objectsForScene(objects, scene) {
+  return objects.filter((object) => {
+    if (object.scene_id) return object.scene_id === scene.id;
+    return (object.states ?? []).some((state) => state.at >= scene.start && state.at <= scene.end);
+  });
+}
+
+function LifecycleObjects({ objects, scene, width, height }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  if (!objects.length) return null;
+  return (
+    <AbsoluteFill style={{ pointerEvents: "none" }}>
+      {objects.map((object, index) => {
+        const pose = lifecyclePose(object, { frame, fps, scene, width, height, index, total: objects.length });
+        if (pose.opacity <= 0.01) return null;
+        const size = Math.max(118, Math.min(width * 0.25, height * 0.22));
+        const label = objectLabel(object);
+        const accent = objectAccent(object);
+        return (
+          <div
+            key={object.id || index}
+            style={{
+              position: "absolute",
+              left: pose.x * width - size / 2,
+              top: pose.y * height - size * 0.36,
+              width: size,
+              transform: `translateY(${pose.yOffset}px) rotate(${pose.rotate}deg) scale(${pose.scale})`,
+              transformOrigin: "50% 65%",
+              opacity: pose.opacity,
+              zIndex: object.z ?? 20 + index,
+              filter: pose.blur > 0.25 ? `blur(${pose.blur.toFixed(2)}px)` : undefined
+            }}
+          >
+            <Card
+              elevation="mid"
+              radius={18}
+              style={{
+                padding: `${height * 0.014}px ${width * 0.018}px`,
+                background: "#fffdf8",
+                border: `3px solid ${INK.primary}`,
+                boxShadow: `10px 12px 0 rgba(26,26,24,0.15), 0 0 ${pose.glow * 26}px ${accent}`
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: height * 0.006 }}>
+                <span style={{ width: 10, height: 10, borderRadius: "50%", background: accent, flexShrink: 0 }} />
+                <span style={{ fontFamily: FONTS.sans, fontSize: height * 0.011, fontWeight: 900, color: INK.muted, textTransform: "uppercase", letterSpacing: 0 }}>
+                  {object.role || "object"}
+                </span>
+              </div>
+              <div style={{ fontFamily: FONTS.serif, fontSize: height * 0.021, lineHeight: 1.05, fontWeight: 900, color: INK.primary, wordBreak: "break-word" }}>
+                {label}
+              </div>
+              {object.ref ? (
+                <div style={{ marginTop: height * 0.006, fontFamily: FONTS.sans, fontSize: height * 0.01, lineHeight: 1.1, fontWeight: 800, color: INK.muted, wordBreak: "break-word" }}>
+                  {object.ref}
+                </div>
+              ) : null}
+            </Card>
+          </div>
+        );
+      })}
+    </AbsoluteFill>
+  );
+}
+
+function lifecyclePose(object, { frame, fps, scene, width, height, index, total }) {
+  const base = defaultObjectPose(index, total);
+  const pose = { ...base, opacity: 0, scale: 0.86, rotate: base.rotate, yOffset: height * 0.04, glow: 0, blur: 2.5 };
+  const states = object.states ?? [];
+  if (!states.length) return pose;
+
+  for (const state of states) {
+    const start = state.at - scene.start;
+    if (frame < start * fps) break;
+    const duration = state.duration ?? 0.35;
+    const p = lifecycleProgress(frame, fps, start, duration, state.state);
+    if (state.state === "enter") {
+      pose.opacity = p;
+      pose.scale = 0.86 + p * 0.14;
+      pose.yOffset = (1 - p) * height * 0.04;
+      pose.blur = (1 - p) * 2.5;
+    } else if (state.state === "settle") {
+      pose.opacity = 1;
+      pose.scale *= 1 + Math.sin(p * Math.PI) * 0.018;
+      pose.yOffset *= 1 - p;
+      pose.blur *= 1 - p;
+    } else if (state.state === "transform" || state.state === "connect") {
+      const target = targetPose(state.to, pose);
+      pose.x = mix(pose.x, target.x, p);
+      pose.y = mix(pose.y, target.y, p);
+      pose.scale = mix(pose.scale, target.scale, p);
+      pose.rotate = mix(pose.rotate, target.rotate, p);
+      pose.opacity = mix(pose.opacity || 1, target.opacity, p);
+      pose.glow = Math.max(pose.glow, Math.sin(p * Math.PI) * (state.state === "connect" ? 0.55 : 0.35));
+    } else if (state.state === "emphasize") {
+      pose.opacity = Math.max(pose.opacity, 1);
+      pose.scale *= 1 + Math.sin(p * Math.PI) * 0.08;
+      pose.glow = Math.max(pose.glow, Math.sin(p * Math.PI));
+    } else if (state.state === "exit") {
+      pose.opacity = 1 - p;
+      pose.scale *= 1 - p * 0.08;
+      pose.yOffset = -p * height * 0.045;
+      pose.blur = p * 1.8;
+    }
+  }
+  return pose;
+}
+
+function lifecycleProgress(frame, fps, startSeconds, durationSeconds, state) {
+  const easing = state === "exit" ? Easing.bezier(0.45, 0, 0.55, 1) : Easing.bezier(0.16, 1, 0.3, 1);
+  return interpolate(frame, [startSeconds * fps, (startSeconds + durationSeconds) * fps], [0, 1], {
+    easing,
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+}
+
+function defaultObjectPose(index, total) {
+  const spread = total <= 1 ? 0 : (index / (total - 1) - 0.5) * 0.34;
+  return {
+    x: clampRange(0.5 + spread, 0.12, 0.88),
+    y: 0.68 - (index % 2) * 0.08,
+    scale: 1,
+    rotate: (index % 2 === 0 ? -1 : 1) * (2 + index * 0.6),
+    opacity: 1
+  };
+}
+
+function targetPose(target, current) {
+  const value = target && typeof target === "object" ? target : {};
+  return {
+    x: clampRange(numberOr(value.x, current.x), 0.08, 0.92),
+    y: clampRange(numberOr(value.y, current.y), 0.12, 0.88),
+    scale: clampRange(numberOr(value.scale, current.scale), 0.5, 1.8),
+    rotate: numberOr(value.rotate, current.rotate),
+    opacity: clampRange(numberOr(value.opacity, current.opacity || 1), 0, 1)
+  };
+}
+
+function objectLabel(object) {
+  const raw = object.label || object.object_type || object.ref || object.id || "motion object";
+  return String(raw).replace(/[_-]+/g, " ");
+}
+
+function objectAccent(object) {
+  const value = `${object.role ?? ""} ${object.ref ?? ""} ${object.object_type ?? ""}`.toLowerCase();
+  if (value.includes("warning") || value.includes("risk")) return SEMANTIC.coral;
+  if (value.includes("chart") || value.includes("proof") || value.includes("success")) return SEMANTIC.mint;
+  if (value.includes("diagram") || value.includes("connector")) return SEMANTIC.purple;
+  return SEMANTIC.mint;
+}
+
 function ChartScene({ scene, width, height }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -103,25 +257,7 @@ function ChartScene({ scene, width, height }) {
           <div style={{ marginTop: height * 0.018, fontFamily: FONTS.sans, fontSize: labelSize, fontWeight: 800, color: INK.muted }}>
             {scene.y_label || "value"} / {scene.x_label || "label"}
           </div>
-          <div style={{ height: plotH, marginTop: height * 0.038, display: "flex", alignItems: "flex-end", gap: Math.max(8, width * 0.012), borderLeft: `3px solid ${INK.primary}`, borderBottom: `3px solid ${INK.primary}`, padding: `${height * 0.018}px ${width * 0.018}px 0` }}>
-            {data.map((point, index) => {
-              const localFrame = frame - (point.at - scene.start) * fps;
-              const p = localFrame < 0 ? 0 : calmEnter(localFrame, fps, 0.42);
-              const value = Number(point.value) || 0;
-              const barHeight = Math.max(6, (value / maxValue) * (plotH * 0.82) * p);
-              return (
-                <div key={index} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                  <div style={{ fontFamily: FONTS.sans, fontSize: labelSize * 0.95, fontWeight: 900, color: point.color ? semanticColor(point.color) : INK.primary, opacity: p }}>
-                    {value}
-                  </div>
-                  <div style={{ width: "100%", maxWidth: 72, height: barHeight, borderRadius: "12px 12px 4px 4px", background: point.color ? semanticColor(point.color) : SEMANTIC.mint, boxShadow: "8px 10px 0 rgba(26,26,24,0.16)", transform: `translateY(${(1 - p) * 16}px)` }} />
-                  <div style={{ fontFamily: FONTS.sans, fontSize: labelSize * 0.82, fontWeight: 800, color: INK.muted, textAlign: "center", minHeight: labelSize * 2.2, lineHeight: 1.1 }}>
-                    {point.label}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <ChartBody scene={scene} data={data} maxValue={maxValue} frame={frame} fps={fps} width={width} height={height} plotH={plotH} labelSize={labelSize} />
           <div style={{ marginTop: height * 0.02, display: "flex", justifyContent: "space-between", gap: 18, fontFamily: FONTS.sans, fontSize: labelSize * 0.82, fontWeight: 800, color: INK.muted }}>
             <span>{scene.chart_type}</span>
             <span>{scene.source || scene.claim_status}</span>
@@ -130,6 +266,214 @@ function ChartScene({ scene, width, height }) {
       </div>
     </AbsoluteFill>
   );
+}
+
+function ChartBody({ scene, data, maxValue, frame, fps, width, height, plotH, labelSize }) {
+  if (scene.chart_type === "donut") return <DonutChartBody scene={scene} data={data} frame={frame} fps={fps} width={width} height={height} plotH={plotH} labelSize={labelSize} />;
+  if (scene.chart_type === "gauge") return <GaugeChartBody scene={scene} data={data} frame={frame} fps={fps} width={width} height={height} plotH={plotH} labelSize={labelSize} />;
+  if (scene.chart_type === "line" || scene.chart_type === "area" || scene.chart_type === "sparkline" || scene.chart_type === "scatter") {
+    return <PathChartBody scene={scene} data={data} maxValue={maxValue} frame={frame} fps={fps} width={width} height={height} plotH={plotH} labelSize={labelSize} />;
+  }
+  if (scene.chart_type === "comparison_table") return <ComparisonTableBody scene={scene} data={data} frame={frame} fps={fps} height={height} labelSize={labelSize} />;
+  if (scene.chart_type === "stat_counter") return <StatChartBody scene={scene} data={data} frame={frame} fps={fps} height={height} plotH={plotH} labelSize={labelSize} />;
+  if (scene.chart_type === "matrix") return <MatrixChartBody scene={scene} data={data} maxValue={maxValue} frame={frame} fps={fps} height={height} plotH={plotH} labelSize={labelSize} />;
+  return <BarChartBody scene={scene} data={data} maxValue={maxValue} frame={frame} fps={fps} width={width} height={height} plotH={plotH} labelSize={labelSize} horizontal={scene.chart_type === "funnel"} />;
+}
+
+function BarChartBody({ scene, data, maxValue, frame, fps, width, height, plotH, labelSize, horizontal = false }) {
+  if (horizontal) {
+    return (
+      <div style={{ height: plotH, marginTop: height * 0.038, display: "flex", flexDirection: "column", justifyContent: "center", gap: height * 0.014 }}>
+        {data.map((point, index) => {
+          const p = chartPointProgress(frame, fps, point.at, scene.start);
+          const value = Number(point.value) || 0;
+          const barWidth = `${Math.max(8, (value / maxValue) * 100 * p)}%`;
+          return (
+            <div key={index} style={{ display: "grid", gridTemplateColumns: "28% 1fr auto", alignItems: "center", gap: 10, opacity: Math.min(1, p * 1.2) }}>
+              <span style={{ fontFamily: FONTS.sans, fontSize: labelSize * 0.78, fontWeight: 900, color: INK.muted, lineHeight: 1.1 }}>{point.label}</span>
+              <span style={{ height: height * 0.034, borderRadius: 999, background: "rgba(26,26,24,0.08)", overflow: "hidden" }}>
+                <span style={{ display: "block", width: barWidth, height: "100%", borderRadius: 999, background: point.color ? semanticColor(point.color) : SEMANTIC.mint, boxShadow: "6px 0 0 rgba(26,26,24,0.14)" }} />
+              </span>
+              <span style={{ fontFamily: FONTS.sans, fontSize: labelSize * 0.82, fontWeight: 900, color: INK.primary }}>{value}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  return (
+    <div style={{ height: plotH, marginTop: height * 0.038, display: "flex", alignItems: "flex-end", gap: Math.max(8, width * 0.012), borderLeft: `3px solid ${INK.primary}`, borderBottom: `3px solid ${INK.primary}`, padding: `${height * 0.018}px ${width * 0.018}px 0` }}>
+      {data.map((point, index) => {
+        const p = chartPointProgress(frame, fps, point.at, scene.start);
+        const value = Number(point.value) || 0;
+        const barHeight = Math.max(6, (value / maxValue) * (plotH * 0.82) * p);
+        return (
+          <div key={index} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+            <div style={{ fontFamily: FONTS.sans, fontSize: labelSize * 0.95, fontWeight: 900, color: point.color ? semanticColor(point.color) : INK.primary, opacity: p }}>
+              {value}
+            </div>
+            <div style={{ width: "100%", maxWidth: 72, height: barHeight, borderRadius: "12px 12px 4px 4px", background: point.color ? semanticColor(point.color) : SEMANTIC.mint, boxShadow: "8px 10px 0 rgba(26,26,24,0.16)", transform: `translateY(${(1 - p) * 16}px)` }} />
+            <div style={{ fontFamily: FONTS.sans, fontSize: labelSize * 0.82, fontWeight: 800, color: INK.muted, textAlign: "center", minHeight: labelSize * 2.2, lineHeight: 1.1 }}>
+              {point.label}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PathChartBody({ scene, data, maxValue, frame, fps, width, height, plotH, labelSize }) {
+  const pad = { left: width * 0.04, right: width * 0.025, top: height * 0.018, bottom: height * 0.04 };
+  const plotW = width * 0.68;
+  const points = data.map((point, index) => ({
+    ...point,
+    x: pad.left + (data.length <= 1 ? 0.5 : index / (data.length - 1)) * (plotW - pad.left - pad.right),
+    y: pad.top + (1 - (Number(point.value) || 0) / maxValue) * (plotH - pad.top - pad.bottom)
+  }));
+  const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+  const area = path ? `${path} L ${points[points.length - 1].x} ${plotH - pad.bottom} L ${points[0].x} ${plotH - pad.bottom} Z` : "";
+  const firstAt = points[0]?.at ?? scene.start;
+  const draw = chartPointProgress(frame, fps, firstAt, scene.start, 0.75);
+  const clipId = `chart-clip-${scene.id}`;
+  const isScatter = scene.chart_type === "scatter";
+  return (
+    <div style={{ height: plotH, marginTop: height * 0.038, borderLeft: `3px solid ${INK.primary}`, borderBottom: `3px solid ${INK.primary}`, position: "relative" }}>
+      <svg width="100%" height="100%" viewBox={`0 0 ${plotW} ${plotH}`} preserveAspectRatio="none" style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+        <defs>
+          <clipPath id={clipId}><rect x="0" y="0" width={plotW * draw} height={plotH} /></clipPath>
+        </defs>
+        {scene.chart_type === "area" && area ? <path d={area} clipPath={`url(#${clipId})`} fill="rgba(79,174,133,0.18)" /> : null}
+        {!isScatter && path ? <path d={path} clipPath={`url(#${clipId})`} fill="none" stroke={SEMANTIC.mint} strokeWidth={5} strokeLinejoin="round" strokeLinecap="round" /> : null}
+        {points.map((point, index) => {
+          const p = chartPointProgress(frame, fps, point.at, scene.start);
+          return <circle key={index} cx={point.x} cy={point.y} r={(isScatter ? 9 : 6) * p} fill={point.color ? semanticColor(point.color) : SEMANTIC.mint} stroke={INK.primary} strokeWidth={isScatter ? 2 : 0} opacity={Math.min(1, p * 1.2)} />;
+        })}
+      </svg>
+      {points.map((point, index) => {
+        const p = chartPointProgress(frame, fps, point.at, scene.start);
+        return (
+          <div key={index} style={{ position: "absolute", left: `${(point.x / plotW) * 100}%`, bottom: -labelSize * 2.5, transform: "translateX(-50%)", maxWidth: width * 0.13, textAlign: "center", fontFamily: FONTS.sans, fontSize: labelSize * 0.72, fontWeight: 800, color: INK.muted, lineHeight: 1.05, opacity: p }}>
+            {point.label}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DonutChartBody({ scene, data, frame, fps, width, height, plotH, labelSize }) {
+  const total = Math.max(1, data.reduce((sum, point) => sum + (Number(point.value) || 0), 0));
+  const size = Math.min(plotH, width * 0.46);
+  const radius = size * 0.34;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+  return (
+    <div style={{ height: plotH, marginTop: height * 0.038, display: "grid", gridTemplateColumns: "1fr 1fr", alignItems: "center", gap: width * 0.03 }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ justifySelf: "center" }}>
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(26,26,24,0.08)" strokeWidth={size * 0.12} />
+        {data.map((point, index) => {
+          const value = Number(point.value) || 0;
+          const length = (value / total) * circumference;
+          const p = chartPointProgress(frame, fps, point.at, scene.start);
+          const stroke = point.color ? semanticColor(point.color) : [SEMANTIC.mint, SEMANTIC.purple, SEMANTIC.coral][index % 3];
+          const dashOffset = -offset;
+          offset += length;
+          return <circle key={index} cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={stroke} strokeWidth={size * 0.12} strokeLinecap="round" strokeDasharray={`${length * p} ${circumference}`} strokeDashoffset={dashOffset} transform={`rotate(-90 ${size / 2} ${size / 2})`} />;
+        })}
+        <text x="50%" y="51%" dominantBaseline="middle" textAnchor="middle" style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: size * 0.18, fill: INK.primary }}>{total}</text>
+      </svg>
+      <ChartLegend scene={scene} data={data} frame={frame} fps={fps} labelSize={labelSize} />
+    </div>
+  );
+}
+
+function GaugeChartBody({ scene, data, frame, fps, width, height, plotH, labelSize }) {
+  const point = data[0] ?? { label: "", value: 0, at: scene.start };
+  const value = Number(point.value) || 0;
+  const pct = clampRange(value / 100, 0, 1);
+  const p = chartPointProgress(frame, fps, point.at, scene.start, 0.75);
+  const size = Math.min(plotH * 1.15, width * 0.55);
+  const radius = size * 0.34;
+  const circumference = 2 * Math.PI * radius;
+  return (
+    <div style={{ height: plotH, marginTop: height * 0.038, display: "grid", placeItems: "center" }}>
+      <svg width={size} height={size * 0.72} viewBox={`0 0 ${size} ${size * 0.72}`}>
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(26,26,24,0.1)" strokeWidth={size * 0.1} strokeDasharray={`${circumference * 0.5} ${circumference}`} strokeLinecap="round" transform={`rotate(180 ${size / 2} ${size / 2})`} />
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={point.color ? semanticColor(point.color) : SEMANTIC.mint} strokeWidth={size * 0.1} strokeDasharray={`${circumference * 0.5 * pct * p} ${circumference}`} strokeLinecap="round" transform={`rotate(180 ${size / 2} ${size / 2})`} />
+        <text x="50%" y="66%" dominantBaseline="middle" textAnchor="middle" style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: size * 0.18, fill: INK.primary }}>{value}</text>
+        <text x="50%" y="84%" dominantBaseline="middle" textAnchor="middle" style={{ fontFamily: FONTS.sans, fontWeight: 800, fontSize: labelSize, fill: INK.muted }}>{point.label}</text>
+      </svg>
+    </div>
+  );
+}
+
+function ComparisonTableBody({ scene, data, frame, fps, height, labelSize }) {
+  return (
+    <div style={{ marginTop: height * 0.032, display: "grid", gap: height * 0.012 }}>
+      {data.slice(0, 6).map((point, index) => {
+        const p = chartPointProgress(frame, fps, point.at, scene.start);
+        return (
+          <div key={index} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 14, alignItems: "center", padding: `${height * 0.014}px ${height * 0.016}px`, borderRadius: 14, background: index % 2 ? "rgba(26,26,24,0.04)" : "rgba(79,174,133,0.1)", transform: `translateY(${(1 - p) * 14}px)`, opacity: p }}>
+            <span style={{ fontFamily: FONTS.sans, fontWeight: 900, fontSize: labelSize, color: INK.primary }}>{point.label}</span>
+            <span style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: labelSize * 1.35, color: point.color ? semanticColor(point.color) : SEMANTIC.mint }}>{point.value}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function StatChartBody({ scene, data, frame, fps, height, plotH, labelSize }) {
+  const point = data[0] ?? { label: scene.title, value: 0, at: scene.start };
+  const p = chartPointProgress(frame, fps, point.at, scene.start, 0.7);
+  return (
+    <div style={{ height: plotH, marginTop: height * 0.026, display: "grid", placeItems: "center", textAlign: "center" }}>
+      <div style={{ transform: `translateY(${(1 - p) * 18}px) scale(${0.92 + p * 0.08})`, opacity: p }}>
+        <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: height * 0.105, lineHeight: 0.9, color: point.color ? semanticColor(point.color) : SEMANTIC.mint, textShadow: TYPE_SHADOW }}>{point.value}</div>
+        <div style={{ marginTop: height * 0.012, fontFamily: FONTS.sans, fontWeight: 900, fontSize: labelSize * 1.1, color: INK.muted }}>{point.label}</div>
+      </div>
+    </div>
+  );
+}
+
+function MatrixChartBody({ scene, data, maxValue, frame, fps, height, plotH, labelSize }) {
+  return (
+    <div style={{ height: plotH, marginTop: height * 0.038, display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: height * 0.012 }}>
+      {data.slice(0, 16).map((point, index) => {
+        const p = chartPointProgress(frame, fps, point.at, scene.start);
+        const strength = clampRange((Number(point.value) || 0) / maxValue, 0.15, 1);
+        return (
+          <div key={index} style={{ borderRadius: 14, padding: height * 0.012, background: point.color ? semanticColor(point.color) : `rgba(79,174,133,${0.18 + strength * 0.55})`, border: `2px solid rgba(26,26,24,${0.2 + strength * 0.25})`, transform: `scale(${0.88 + p * 0.12})`, opacity: p }}>
+            <div style={{ fontFamily: FONTS.sans, fontWeight: 900, fontSize: labelSize * 0.75, color: INK.primary, lineHeight: 1.05 }}>{point.label}</div>
+            <div style={{ marginTop: 4, fontFamily: FONTS.serif, fontWeight: 900, fontSize: labelSize * 1.05, color: INK.primary }}>{point.value}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ChartLegend({ scene, data, frame, fps, labelSize }) {
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {data.slice(0, 6).map((point, index) => {
+        const p = chartPointProgress(frame, fps, point.at, scene.start);
+        const color = point.color ? semanticColor(point.color) : [SEMANTIC.mint, SEMANTIC.purple, SEMANTIC.coral][index % 3];
+        return (
+          <div key={index} style={{ display: "flex", alignItems: "center", gap: 9, opacity: p, transform: `translateX(${(1 - p) * 12}px)` }}>
+            <span style={{ width: 12, height: 12, borderRadius: "50%", background: color, flexShrink: 0 }} />
+            <span style={{ fontFamily: FONTS.sans, fontWeight: 900, fontSize: labelSize * 0.84, color: INK.primary }}>{point.label}</span>
+            <span style={{ marginLeft: "auto", fontFamily: FONTS.sans, fontWeight: 900, fontSize: labelSize * 0.84, color: INK.muted }}>{point.value}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function chartPointProgress(frame, fps, at, sceneStart, seconds = 0.42) {
+  return frame - (at - sceneStart) * fps < 0 ? 0 : calmEnter(frame - (at - sceneStart) * fps, fps, seconds);
 }
 
 function DiagramScene({ scene, width, height }) {
@@ -1293,4 +1637,17 @@ function screenshotObjectFit(src) {
 
 function clamp(value) {
   return Math.max(0, Math.min(1, value));
+}
+
+function clampRange(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function numberOr(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function mix(from, to, progress) {
+  return from + (to - from) * progress;
 }

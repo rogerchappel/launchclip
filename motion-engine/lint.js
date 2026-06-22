@@ -8,6 +8,7 @@ const MAX_REFERENCE_IDLE_SECONDS = 1.2;
 const WORD_SNAP_TOLERANCE = 0.12;
 const ITEM_BUILD_SECONDS = 0.55;
 const STEP_FILLER_WORDS = new Set(["first", "next", "finally", "point", "and", "then", "use", "build", "it", "to"]);
+const OBJECT_STATE_RANK = { enter: 0, settle: 1, transform: 2, connect: 2, emphasize: 2, exit: 3 };
 
 // Scene types whose surface is continuously alive (footage plays, typing
 // types, feeds scroll) vs. those alive only when an item lands.
@@ -21,6 +22,8 @@ export function lintTimeline(timeline, { direction = null, assets = [], presente
   checkDensity(timeline, failures, { maxDeadAirSeconds: referenceGrade ? MAX_REFERENCE_IDLE_SECONDS : MAX_DEAD_AIR_SECONDS });
   checkWordGrounding(timeline, failures, advisories);
   checkBudgets(timeline, failures);
+  checkSceneBuildOrder(timeline, failures);
+  checkObjectLifecycle(timeline, failures);
   if (referenceGrade) checkReferenceGrade(timeline, failures);
   if (direction) checkDirectionHonored(timeline, direction, failures);
   if (assets.length) checkAssetsExist(timeline, assets, failures);
@@ -35,10 +38,19 @@ export function lintTimeline(timeline, { direction = null, assets = [], presente
   return { ok: failures.length === 0, failures, advisories };
 }
 
-function sceneActivityTimes(scene) {
+function sceneActivityTimes(scene, timeline) {
   const times = [scene.start];
   for (const item of scene.items ?? []) {
     times.push(item.at, Math.min(scene.end, item.at + ITEM_BUILD_SECONDS));
+  }
+  for (const point of scene.data ?? []) {
+    times.push(point.at, Math.min(scene.end, point.at + ITEM_BUILD_SECONDS));
+  }
+  for (const node of scene.nodes ?? []) {
+    times.push(node.at, Math.min(scene.end, node.at + ITEM_BUILD_SECONDS));
+  }
+  for (const connector of scene.connectors ?? []) {
+    times.push(connector.at, Math.min(scene.end, connector.at + ITEM_BUILD_SECONDS));
   }
   if (scene.type === "stat_counter" || scene.type === "quote_card") {
     times.push(scene.at, scene.at + 1.0);
@@ -46,6 +58,13 @@ function sceneActivityTimes(scene) {
   // A funnel branch and a profile_cards total are each a landing transform.
   if (scene.branch?.at !== undefined) times.push(scene.branch.at);
   if (scene.total?.at !== undefined) times.push(scene.total.at, scene.total.at + 1.0);
+  for (const object of timeline.objects ?? []) {
+    if (object.scene_id && object.scene_id !== scene.id) continue;
+    for (const state of object.states ?? []) {
+      if (state.at < scene.start || state.at > scene.end) continue;
+      times.push(state.at, Math.min(scene.end, state.at + (state.duration ?? ITEM_BUILD_SECONDS)));
+    }
+  }
   return times;
 }
 
@@ -75,7 +94,7 @@ function checkDensity(timeline, failures, { maxDeadAirSeconds }) {
       .filter((event) => event.end > scene.start && event.start < scene.end)
       .flatMap((event) => [event.start, event.end])
       .filter((time) => time >= scene.start && time <= scene.end);
-    const marks = [...sceneActivityTimes(scene), ...overlayMarks].sort((a, b) => a - b);
+    const marks = [...sceneActivityTimes(scene, timeline), ...overlayMarks].sort((a, b) => a - b);
     let previous = scene.start;
     for (const mark of [...marks, scene.end]) {
       const gap = mark - previous;
@@ -87,6 +106,52 @@ function checkDensity(timeline, failures, { maxDeadAirSeconds }) {
         break;
       }
       previous = Math.max(previous, mark);
+    }
+  }
+}
+
+function checkSceneBuildOrder(timeline, failures) {
+  for (const scene of timeline.scenes ?? []) {
+    if (scene.type !== "diagram") continue;
+    const nodeTimes = new Map((scene.nodes ?? []).map((node) => [node.id, node.at]));
+    for (const connector of scene.connectors ?? []) {
+      const fromAt = nodeTimes.get(connector.from);
+      const toAt = nodeTimes.get(connector.to);
+      if (!Number.isFinite(fromAt) || !Number.isFinite(toAt)) continue;
+      const earliest = Math.max(fromAt, toAt);
+      if (connector.at < earliest - 0.001) {
+        failures.push(
+          `diagram "${scene.id}" connector "${connector.from}" -> "${connector.to}" draws at ${connector.at}s before both endpoint nodes exist (${earliest}s)`
+        );
+      }
+    }
+  }
+}
+
+function checkObjectLifecycle(timeline, failures) {
+  for (const object of timeline.objects ?? []) {
+    const id = object.id || "unnamed";
+    const states = object.states ?? [];
+    if (!states.length) continue;
+    if (states.length === 1) {
+      failures.push(`object "${id}" has only one lifecycle state — add settle, transform, emphasize, connect, or exit`);
+    }
+    if (states[0]?.state === "enter" && states[1] && states[1].state !== "settle") {
+      failures.push(`object "${id}" enters and then ${states[1].state} without settling — use enter -> settle before transforms`);
+    }
+
+    let previousRank = -1;
+    for (const state of states) {
+      const rank = OBJECT_STATE_RANK[state.state];
+      if (rank === undefined) continue;
+      if (rank < previousRank) {
+        failures.push(`object "${id}" moves backward from a later lifecycle state to ${state.state}`);
+        break;
+      }
+      previousRank = Math.max(previousRank, rank);
+      if ((state.state === "transform" || state.state === "connect") && !state.to) {
+        failures.push(`object "${id}" ${state.state} state at ${state.at}s needs a "to" target`);
+      }
     }
   }
 }

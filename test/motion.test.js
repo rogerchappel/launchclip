@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import {
   DEFAULT_SFX,
   MOTION_TIMELINE_VERSION,
+  OBJECT_LIFECYCLE_STATES,
   SCENE_SFX,
   validateTimeline,
   snapEventsToWords,
@@ -82,9 +83,87 @@ test("renderCatalog includes the reusable object library and graph/chart vocabul
   assert.match(renderedObjects, /bar_chart/);
   assert.match(renderedObjects, /solid_connector/);
   assert.match(renderedCatalog, /Reusable motion object library/);
+  assert.match(renderedCatalog, /Timeline-level: objects/);
+  assert.match(renderedCatalog, /enter -> settle -> transform/);
   assert.match(renderedCatalog, new RegExp(`${stats.total} reusable objects`));
   assert.match(renderedCatalog, /diagram_node/);
   assert.match(renderedCatalog, /stat_counter/);
+});
+
+test("object lifecycle timelines normalize persistent object states", () => {
+  const result = validateTimeline({
+    ...baseTimeline([]),
+    scenes: [
+      {
+        id: "proof",
+        type: "diagram",
+        start: 0,
+        end: 6,
+        diagram_type: "pipeline",
+        claim_status: "evidence-backed",
+        nodes: [{ id: "packet", label: "Review packet", at: 0.4 }, { id: "publish", label: "Publish", at: 1.2 }],
+        connectors: [{ from: "packet", to: "publish", at: 1.6 }]
+      },
+      { id: "outro", type: "typography", start: 6, end: 10, items: [{ text: "Ship", at: 6.2 }, { text: "proof", at: 7 }] }
+    ],
+    objects: [
+      {
+        id: "packet-card",
+        role: "artifact",
+        ref: "artifact_card",
+        object_type: "review_proof",
+        scene_id: "proof",
+        z: 4,
+        states: [
+          { state: "enter", at: 0.2 },
+          { state: "settle", at: 0.8 },
+          { state: "transform", at: 3.5, to: { x: 0.7, scale: 1.1 }, sfx: "paper_hit.wav" },
+          { state: "exit", at: 5.6, duration: 0.4, sfx: null }
+        ]
+      }
+    ]
+  });
+
+  assert.equal(result.ok, true, result.errors.join("; "));
+  assert.equal(OBJECT_LIFECYCLE_STATES.has("transform"), true);
+  assert.equal(result.timeline.objects.length, 1);
+  assert.equal(result.timeline.objects[0].id, "packet-card");
+  assert.equal(result.timeline.objects[0].states[2].to.scale, 1.1);
+  assert.equal(result.timeline.objects[0].states[2].sfx, "paper_hit.wav");
+  assert.equal(result.timeline.objects[0].states[3].sfx, null);
+});
+
+test("object lifecycle timelines reject broken identity and timing", () => {
+  const result = validateTimeline({
+    ...baseTimeline([]),
+    scenes: [{ id: "proof", type: "typography", start: 0, end: 10, items: [{ text: "one", at: 0.3 }] }],
+    objects: [
+      {
+        id: "proof-card",
+        scene_id: "missing",
+        states: [
+          { state: "transform", at: 2 },
+          { state: "exit", at: 4 },
+          { state: "settle", at: 4.5 }
+        ]
+      },
+      {
+        id: "proof-card",
+        states: [
+          { state: "enter", at: 3 },
+          { state: "warp", at: 2.5 }
+        ]
+      }
+    ]
+  });
+
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => error.includes("duplicate id")));
+  assert.ok(result.errors.some((error) => error.includes("unknown scene_id")));
+  assert.ok(result.errors.some((error) => error.includes("must start with enter or settle")));
+  assert.ok(result.errors.some((error) => error.includes("exit state must be final")));
+  assert.ok(result.errors.some((error) => error.includes("unknown lifecycle state")));
+  assert.ok(result.errors.some((error) => error.includes("moves backward in time")));
 });
 
 test("validateTimeline rejects unknown types, bad timing, and overlapping zooms", () => {
