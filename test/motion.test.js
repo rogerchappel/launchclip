@@ -289,6 +289,85 @@ test("artifact_grid and terminal_receipt normalize proof fields", () => {
   assert.equal(terminal.status, "passed");
 });
 
+test("chart and diagram scenes normalize data, nodes, and connectors", () => {
+  const result = validateTimeline({
+    ...baseTimeline([]),
+    scenes: [
+      {
+        id: "chart",
+        type: "chart",
+        start: 0,
+        end: 4,
+        chart_type: "bar",
+        title: "Outputs",
+        x_label: "artifact",
+        y_label: "count",
+        source: "launchclip workspace",
+        data: [
+          { label: "brief", value: 1, at: 0.2 },
+          { label: "captions", value: 4, at: 0.8, series: "generated" }
+        ]
+      },
+      {
+        id: "diagram",
+        type: "diagram",
+        start: 4,
+        end: 10,
+        diagram_type: "pipeline",
+        title: "Launch flow",
+        nodes: [
+          { id: "demo", label: "Demo proof", at: 4.2 },
+          { id: "plan", label: "Video plan", at: 4.8 },
+          { id: "review", label: "Human review", at: 5.4, color: "mint" }
+        ],
+        connectors: [
+          { from: "demo", to: "plan", at: 5.0 },
+          { from: "plan", to: "review", style: "success", at: 5.8 }
+        ]
+      }
+    ]
+  });
+  assert.equal(result.ok, true, result.errors.join("; "));
+  const [chart, diagram] = result.timeline.scenes;
+  assert.equal(chart.chart_type, "bar");
+  assert.equal(chart.data[1].value, 4);
+  assert.equal(chart.claim_status, "evidence-backed");
+  assert.equal(diagram.diagram_type, "pipeline");
+  assert.equal(diagram.nodes[2].color, "mint");
+  assert.equal(diagram.connectors[1].style, "success");
+});
+
+test("chart and diagram scenes reject bad data and broken connectors", () => {
+  const result = validateTimeline({
+    ...baseTimeline([]),
+    scenes: [
+      {
+        id: "bad-chart",
+        type: "chart",
+        start: 0,
+        end: 4,
+        chart_type: "radar",
+        data: [{ label: "made up", value: "nope" }]
+      },
+      {
+        id: "bad-diagram",
+        type: "diagram",
+        start: 4,
+        end: 10,
+        diagram_type: "pipeline",
+        nodes: [{ id: "one", label: "One" }, { id: "two", label: "Two" }],
+        connectors: [{ from: "one", to: "missing" }]
+      }
+    ]
+  });
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => error.includes("unknown chart_type")));
+  assert.ok(result.errors.some((error) => error.includes("requires source or claim_status")));
+  assert.ok(result.errors.some((error) => error.includes("requires x_label and y_label")));
+  assert.ok(result.errors.some((error) => error.includes("requires numeric value")));
+  assert.ok(result.errors.some((error) => error.includes('unknown to "missing"')));
+});
+
 test("zooms hugging a scene cut produce a warning", () => {
   const result = validateTimeline({
     ...baseTimeline([{ id: "z", type: "punch_zoom", start: 3.8, end: 4.8 }]),

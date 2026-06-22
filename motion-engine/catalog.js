@@ -123,6 +123,26 @@ export const SCENE_CATALOG = [
     example: { type: "artifact_grid", start: 18, end: 23, title: "receipts", items: [{ label: "script", path: "video/script.json", at: 18.2 }, { label: "captions", path: "captions/*.md", at: 19.0 }, { label: "review", path: "REVIEW.md", at: 20.0, status: "ready" }] }
   },
   {
+    type: "chart",
+    use_for:
+      "Deterministic data visualizations: bar, stacked_bar, line, area, donut, scatter, gauge, funnel, matrix, sparkline, stat_counter, comparison_table. Use when the script includes explicit numbers, comparisons, or measured change.",
+    avoid_when: "No explicit data/source/claim status. Do not freehand invented graphs. Avoid tiny axes, crowded labels, or more than 24 data points.",
+    params:
+      '{ "type": "chart", "start", "end", "chart_type": "bar|line|area|donut|scatter|gauge|funnel|matrix|sparkline|stat_counter|comparison_table", "title", "x_label?", "y_label?", "source?", "claim_status?", "data": [{"label", "value", "series?", "at"}] }',
+    density: "Axis draws first; one mark/value lands per data point every 0.35-0.6s; labels settle last.",
+    example: { type: "chart", start: 12, end: 16, chart_type: "bar", title: "Review packet outputs", x_label: "artifact", y_label: "count", source: "launchclip workspace", data: [{ label: "brief", value: 1, at: 12.2 }, { label: "captions", value: 4, at: 12.8 }, { label: "review", value: 1, at: 13.4 }] }
+  },
+  {
+    type: "diagram",
+    use_for:
+      "Interconnected systems and explanations: directed_graph, hub_spoke, pipeline, swimlane, feedback_loop, architecture_layers, causal_chain, comparison_split. Nodes and connectors are explicit so lines attach to real endpoints and animate on beat.",
+    avoid_when: "Labels are vague filler, nodes have no real relationship, or connectors reference missing endpoints. Use icon_flow for very small linear chains.",
+    params:
+      '{ "type": "diagram", "start", "end", "diagram_type": "directed_graph|hub_spoke|pipeline|swimlane|feedback_loop|architecture_layers|causal_chain|comparison_split", "title?", "nodes": [{"id", "label", "at", "x?", "y?", "icon?", "color?"}], "connectors": [{"from", "to", "label?", "style": "solid|dotted|curved|loopback|warning|success", "at"}] }',
+    density: "Nodes enter first; connectors draw only after both endpoints exist; moving nodes should pull connectors with them.",
+    example: { type: "diagram", start: 16, end: 21, diagram_type: "pipeline", title: "launch flow", nodes: [{ id: "demo", label: "Demo proof", at: 16.2 }, { id: "plan", label: "Video plan", at: 16.8 }, { id: "review", label: "Human review", at: 17.4, color: "mint" }], connectors: [{ from: "demo", to: "plan", at: 17.0 }, { from: "plan", to: "review", style: "success", at: 17.8 }] }
+  },
+  {
     type: "terminal_receipt",
     use_for:
       "Real demo command proof: command text, short terminal output, and pass/fail receipt badge. Use for the first concrete proof beat after the hook.",
