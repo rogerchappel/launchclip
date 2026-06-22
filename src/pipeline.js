@@ -9,6 +9,8 @@ const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const PREMIUM_PRODUCT_STYLE = "premium-product-short";
 const ASSET_MANIFEST_SCHEMA = "launchclip.assets.v1";
 const ASSET_MANIFEST_FILE = "launchclip-assets.json";
+const ART_DIRECTION_SCHEMA = "launchclip.art-direction.v1";
+const HYPERFRAMES_PROJECT_DIR = "video/hyperframes";
 const PREMIUM_REQUIRED_ASSET_ALIASES = ["claude-code", "github", "obsidian", "prompt-example", "terminal-demo"];
 const PREMIUM_OPTIONAL_ASSET_ALIASES = ["brand-font", "presenter-cutaway", "product-logo", "repo-logo", "sfx-type", "sfx-whoosh"];
 
@@ -103,6 +105,8 @@ export async function planVideo(workspacePath, flags = {}) {
   const assets = await buildAssetPlan(style, flags);
   const script = buildScriptPlan(style, manifest, stylePreset, talkingHead);
   const creativeStoryboard = buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHead);
+  const artDirection = buildArtDirectionContract(style, manifest, stylePreset, script, creativeStoryboard, assets, talkingHead);
+  const hyperframes = buildHyperframesHandoff(videoTitle(manifest), duration);
   const voiceover = buildVoiceoverPlan(script, talkingHead);
   const soundDesign = buildSoundDesignPlan(script, stylePreset);
   const video = {
@@ -117,8 +121,10 @@ export async function planVideo(workspacePath, flags = {}) {
     script_visual_alignment: script.timeline,
     voiceover,
     sound_design: soundDesign,
+    art_direction: artDirection,
     creative_storyboard: creativeStoryboard,
     creative_recipe: stylePreset.recipe,
+    hyperframes,
     talking_head: talkingHead,
     assets,
     evidence: ["demo/terminal.txt", "demo/command-receipt.json"],
@@ -149,6 +155,11 @@ ${voiceover.full_text}
 ## Sound Design
 ${soundDesign.cues.map((cue) => `- ${cue.time_range} ${cue.beat}: ${cue.sound} (${cue.trigger})`).join("\n")}
 
+## HyperFrames
+Project: ${hyperframes.project_dir}
+Composition: ${hyperframes.composition_id}
+Render: ${hyperframes.render_command.join(" ")}
+
 ## Assets
 Mode: ${assets.mode}
 Provided aliases: ${assets.provided_aliases.length ? assets.provided_aliases.join(", ") : "none"}
@@ -174,20 +185,45 @@ Missing aliases: ${assets.missing_aliases.length ? assets.missing_aliases.join("
     adapters: {
       cutpilot: "Future optional local EDL/ffmpeg handoff.",
       remotion: "Render frame-accurate motion, camera pushes, kinetic captions, and local sound-design cues from the plan.",
-      hyperframes: "Future scene/frame handoff with camera, asset, caption, and sound-design lanes.",
+      hyperframes: "Open video/hyperframes/index.html with HyperFrames. Run npx hyperframes lint, preview, then render; the composition is generated from frame.md, art-direction.json, and creative_storyboard.",
       "ugc-split": "Product-videogen or a future renderer should compose presenter footage, generated/demo B-roll, subtitles, and voiceover timing from creative_recipe.",
       heygen: "First talking-head adapter target for ugc-split. Generate original avatar footage from the script beats, then composite with B-roll and captions.",
       talking_head: "Provider-neutral adapter contract. Add new providers by mapping talking_head.script_segments, b_roll_slots, captions, and consent/safety fields."
-    }
+    },
+    art_direction: artDirection,
+    storyboard_preview: "video/storyboard.html",
+    hyperframes
   };
   await writeJson(path.join(out, "video", "video.json"), video);
   await writeJson(path.join(out, "video", "voiceover.json"), voiceover);
+  await writeJson(path.join(out, "video", "art-direction.json"), artDirection);
+  await writeFile(path.join(out, "video", "frame.md"), renderFrameMd(artDirection));
+  await writeFile(path.join(out, "video", "storyboard.html"), renderStoryboardHtml(manifest, video));
+  await writeHyperframesProject(out, manifest, video);
   await writeFile(path.join(out, "video", "brief.md"), brief);
   await writeJson(path.join(out, "video", "render-plan.json"), renderPlan);
   await updateManifest(out, (existing) => {
-    existing.stages.plan = { status: "passed", format, renderer: video.renderer, style, talking_head: talkingHead.provider };
+    existing.stages.plan = {
+      status: "passed",
+      format,
+      renderer: video.renderer,
+      style,
+      talking_head: talkingHead.provider,
+      art_direction: "video/art-direction.json",
+      frame_md: "video/frame.md",
+      storyboard_preview: "video/storyboard.html",
+      hyperframes_project: HYPERFRAMES_PROJECT_DIR
+    };
   });
-  return { stage: "plan", video: path.join(out, "video", "video.json"), brief: path.join(out, "video", "brief.md"), voiceover: path.join(out, "video", "voiceover.json") };
+  return {
+    stage: "plan",
+    video: path.join(out, "video", "video.json"),
+    brief: path.join(out, "video", "brief.md"),
+    voiceover: path.join(out, "video", "voiceover.json"),
+    frame: path.join(out, "video", "frame.md"),
+    storyboard: path.join(out, "video", "storyboard.html"),
+    hyperframes: path.join(out, HYPERFRAMES_PROJECT_DIR, "index.html")
+  };
 }
 
 export async function writeCaptions(workspacePath, flags = {}) {
@@ -217,6 +253,7 @@ export async function renderVideo(workspacePath, flags = {}) {
   const provider = flags.provider ?? "product-videogen";
   if (provider === "local-ffmpeg") return renderLocalFfmpeg(out, flags);
   if (provider === "remotion") return renderRemotion(out, flags);
+  if (provider === "hyperframes") return renderHyperframes(out, flags);
   if (provider !== "product-videogen") throw new Error(`Unsupported render provider: ${provider}`);
   const payload = await productVideogenPayload(out, "render");
   const filePath = path.join(out, "video", "product-videogen.dry-run.json");
@@ -288,6 +325,56 @@ async function renderRemotion(out, flags = {}) {
     };
   });
   return { stage: "render", mode: "local", provider: "remotion", video: output, thumbnail, props: propsPath, publicDir: publicAssets?.public_dir ?? null, voiceoverAudio };
+}
+
+async function renderHyperframes(out, flags = {}) {
+  if (flags["dry-run"]) {
+    throw new Error("hyperframes renders a real media file; omit --dry-run to create video/launchclip-hyperframes.mp4");
+  }
+  const projectDir = path.join(out, HYPERFRAMES_PROJECT_DIR.replace(/\//g, path.sep));
+  const composition = path.join(projectDir, "index.html");
+  const output = path.join(out, "video", flags.output ?? "launchclip-hyperframes.mp4");
+  const thumbnail = path.join(out, "video", "hyperframes-thumbnail.png");
+  if (!(await fileExists(composition))) {
+    const manifest = await readJson(path.join(out, "launchclip.json"));
+    const video = await readJson(path.join(out, "video", "video.json"));
+    await writeHyperframesProject(out, manifest, video);
+  }
+  const renderArgs = [
+    "hyperframes",
+    "render",
+    "index.html",
+    "--output",
+    output,
+    "--quality",
+    flags.quality ?? "high"
+  ];
+  if (flags.fps) renderArgs.push("--fps", String(flags.fps));
+  if (flags.format) renderArgs.push("--format", String(flags.format));
+  await execFileAsync("npx", renderArgs, { cwd: projectDir, maxBuffer: 1024 * 1024 * 16 });
+  const voiceoverAudio = await applyVoiceoverIfRequested(out, output, flags);
+  await execFileAsync("ffmpeg", [
+    "-y",
+    "-ss",
+    "1",
+    "-i",
+    output,
+    "-frames:v",
+    "1",
+    thumbnail
+  ], { maxBuffer: 1024 * 1024 * 8 });
+  await updateManifest(out, (manifest) => {
+    manifest.stages.render = {
+      status: "passed",
+      provider: "hyperframes",
+      media: rel(out, output),
+      thumbnail: rel(out, thumbnail),
+      composition: "LaunchclipHyperframes",
+      project_dir: HYPERFRAMES_PROJECT_DIR,
+      voiceover_audio: voiceoverAudio
+    };
+  });
+  return { stage: "render", mode: "local", provider: "hyperframes", video: output, thumbnail, projectDir, voiceoverAudio };
 }
 
 async function renderLocalFfmpeg(out, flags = {}) {
@@ -528,6 +615,10 @@ Rendered video: ${manifest.stages.render?.media ?? "not rendered"}
 - demo/terminal.txt
 - demo/command-receipt.json
 - video/video.json
+- video/frame.md
+- video/art-direction.json
+- video/storyboard.html
+- video/hyperframes/index.html
 - video/brief.md
 - video/render-plan.json
 - ${manifest.stages.render?.media ?? "video/launchclip.mp4"}
@@ -585,6 +676,10 @@ export async function validateWorkspace(workspacePath, flags = {}) {
     "demo/command-receipt.json",
     "video/video.json",
     "video/voiceover.json",
+    "video/frame.md",
+    "video/art-direction.json",
+    "video/storyboard.html",
+    "video/hyperframes/index.html",
     "video/brief.md",
     "video/render-plan.json",
     "video/product-videogen.dry-run.json",
@@ -611,6 +706,8 @@ export async function validateWorkspace(workspacePath, flags = {}) {
   issues.push(...scriptAlignmentIssues(video));
   issues.push(...voiceoverIssues(video));
   issues.push(...soundDesignIssues(video));
+  issues.push(...artDirectionIssues(video));
+  issues.push(...hyperframesIssues(video));
   issues.push(...creativeStoryboardIssues(video));
   const warnings = assetWarnings(video);
   for (const [platform, caption] of Object.entries(captions)) {
@@ -686,8 +783,10 @@ async function productVideogenPayload(out, purpose) {
       script_visual_alignment: video?.script_visual_alignment,
       voiceover: voiceover ?? video?.voiceover,
       sound_design: video?.sound_design,
+      art_direction: video?.art_direction,
       creative_storyboard: video?.creative_storyboard,
       creative_recipe: video?.creative_recipe,
+      hyperframes: video?.hyperframes,
       talking_head: video?.talking_head,
       assets: video?.assets,
       demo_artifacts: receipt?.artifacts ?? [],
@@ -918,6 +1017,379 @@ function buildSoundDesignPlan(script, stylePreset) {
   };
 }
 
+function videoTitle(manifest) {
+  return `${stripMarkdown(manifest.source_repo.name)} OSS launch clip`;
+}
+
+function buildArtDirectionContract(style, manifest, stylePreset, script, storyboard, assets, talkingHead = { enabled: false, provider: "none" }) {
+  const premium = isPremiumStyle(style);
+  const social = isSocialReadyStyle(style);
+  const repoName = stripMarkdown(manifest.source_repo.name);
+  const palette = premium
+    ? ["paper #ECE8E1", "ink #1A1A18", "success #62BD93", "coral #F06F5F", "brand accents from manifest assets"]
+    : social
+      ? ["warm paper", "charcoal ink", "proof green", "warning coral", "editorial blue"]
+      : ["deep slate", "white", "Launchclip green", "proof blue"];
+  return {
+    schema_version: ART_DIRECTION_SCHEMA,
+    frame_md: "video/frame.md",
+    generated_for: repoName,
+    style,
+    renderer_targets: ["hyperframes", "remotion", "product-videogen", "local-ffmpeg"],
+    hyperframes: {
+      project_dir: HYPERFRAMES_PROJECT_DIR,
+      composition_id: "LaunchclipHyperframes",
+      authoring_model: "plain HTML, CSS, and JavaScript with data-* timeline attributes",
+      commands: [
+        "npx hyperframes doctor",
+        "npx hyperframes lint",
+        "npx hyperframes preview",
+        "npx hyperframes render index.html --output ../launchclip-hyperframes.mp4 --quality high"
+      ],
+      requirements: ["Node.js 22+", "FFmpeg", "HyperFrames CLI via npx"]
+    },
+    brand_system: {
+      source: assets.assets_dir ? "launchclip-assets.json plus repo metadata" : "repo metadata plus generated proof artifacts",
+      palette,
+      typography: premium || social
+        ? "large mixed-case display type, short labels, monospace only for prompt or terminal proof"
+        : "clear proof-card headings with compact body text",
+      logo_policy: "use only supplied local manifest assets or generic proof tokens; do not auto-fetch logos in this phase"
+    },
+    frame_composition: {
+      aspect_ratio: stylePreset.recipe?.aspect_ratio ?? "9:16",
+      resolution: stylePreset.recipe?.resolution ?? { width: 1080, height: 1920, fps: 30 },
+      first_frame: social ? "the payoff must read without audio" : "repo name, proof claim, and CTA should be visible",
+      safe_areas: ["keep chapter/progress UI out of the top 12%", "keep CTA and captions above the bottom 10%", "avoid tiny text in charts"]
+    },
+    motion: {
+      density: premium ? "visible object, camera, type, or SFX change every 0.4-1.2 seconds" : "visible change every 0.7-1.5 seconds",
+      object_lifecycle: ["enter", "settle", "transform", "connect", "emphasize", "exit"],
+      transitions: [
+        "shared objects morph across beats when possible",
+        "connectors redraw while nodes move",
+        "fast travel uses motion blur and then crisp settle",
+        "avoid blank frames and dead holds"
+      ],
+      smoothness_gates: ["no static scene tail over 1.2 seconds", "no object teleports without a state transition", "no repeated hard-card cuts for adjacent beats"]
+    },
+    reusable_object_library: {
+      target_count: 100,
+      categories: [
+        "product UI surfaces",
+        "workflow cards and receipts",
+        "brand and media tokens",
+        "diagram nodes and connectors",
+        "charts and data marks",
+        "proof/review objects",
+        "caption and chapter objects",
+        "motion props and focus effects",
+        "SFX-bound interaction objects",
+        "creator/talking-head frames"
+      ],
+      selection_rule: "the Director chooses object intent; renderer code owns drawing quality, layout constraints, and motion behavior"
+    },
+    charts_diagrams: {
+      chart_types: ["bar", "line", "area", "donut", "scatter", "gauge", "funnel", "matrix", "sparkline", "stat-counter"],
+      diagram_types: ["directed graph", "hub-and-spoke", "pipeline", "swimlane", "feedback loop", "architecture layers", "causal chain", "comparison split"],
+      honesty_rules: [
+        "charts require explicit data, labels, and claim/source status",
+        "fabricated metrics are forbidden",
+        "diagram connectors must have real endpoints",
+        "labels must fit at mobile vertical resolution"
+      ]
+    },
+    sound_design: {
+      strategy: "SFX are attached to object lifecycle events, not just scene boundaries",
+      families: ["whoosh", "paper-hit", "typing-tick", "connector-pop", "chart-rise", "success-ding", "warning-tap", "soft-thump"],
+      mix: "duck under voiceover; vary repeated sounds; avoid meme or impact sounds that overpower proof"
+    },
+    storyboard_review: {
+      html: "video/storyboard.html",
+      purpose: "review dense scene frames, missing assets, text load, chart/diagram intent, and SFX coverage before rendering",
+      scenes: Array.isArray(storyboard.scenes) ? storyboard.scenes.length : 0,
+      quality_gates: storyboard.quality_gates ?? []
+    },
+    presenter: talkingHead.enabled ? talkingHead.provider : "none",
+    script_strategy: script.strategy,
+    creative_positioning: stylePreset.angle
+  };
+}
+
+function buildHyperframesHandoff(title, duration) {
+  return {
+    schema_version: "launchclip.hyperframes-handoff.v1",
+    project_dir: HYPERFRAMES_PROJECT_DIR,
+    composition_id: "LaunchclipHyperframes",
+    entrypoint: `${HYPERFRAMES_PROJECT_DIR}/index.html`,
+    frame_md: "video/frame.md",
+    storyboard_preview: "video/storyboard.html",
+    duration_seconds: duration,
+    title,
+    render_command: ["npx", "hyperframes", "render", "index.html", "--output", "../launchclip-hyperframes.mp4", "--quality", "high"],
+    preview_command: ["npx", "hyperframes", "preview"],
+    lint_command: ["npx", "hyperframes", "lint"],
+    notes: [
+      "Generated as an editable HyperFrames scaffold from Launchclip's storyboard contract.",
+      "Use HyperFrames skills to refine motion, transitions, reusable objects, SFX, charts, and diagrams inside this project.",
+      "Keep claims and screenshots grounded in the Launchclip packet."
+    ]
+  };
+}
+
+function renderFrameMd(artDirection) {
+  return `# frame.md
+
+Video-oriented design system for ${artDirection.generated_for}.
+
+## Renderer Target
+
+- Primary: HyperFrames
+- Composition: ${artDirection.hyperframes.composition_id}
+- Project: ${artDirection.hyperframes.project_dir}
+- Contract: ${artDirection.hyperframes.authoring_model}
+
+## Brand System
+
+- Source: ${artDirection.brand_system.source}
+- Palette: ${artDirection.brand_system.palette.join("; ")}
+- Typography: ${artDirection.brand_system.typography}
+- Logo policy: ${artDirection.brand_system.logo_policy}
+
+## Frame Composition
+
+- Aspect ratio: ${artDirection.frame_composition.aspect_ratio}
+- First frame: ${artDirection.frame_composition.first_frame}
+- Safe areas: ${artDirection.frame_composition.safe_areas.join("; ")}
+
+## Motion Direction
+
+- Density: ${artDirection.motion.density}
+- Object lifecycle: ${artDirection.motion.object_lifecycle.join(" -> ")}
+- Transitions: ${artDirection.motion.transitions.join("; ")}
+- Smoothness gates: ${artDirection.motion.smoothness_gates.join("; ")}
+
+## Reusable Object Library
+
+- Target object count: ${artDirection.reusable_object_library.target_count}+
+- Categories: ${artDirection.reusable_object_library.categories.join("; ")}
+- Selection rule: ${artDirection.reusable_object_library.selection_rule}
+
+## Charts And Diagrams
+
+- Charts: ${artDirection.charts_diagrams.chart_types.join(", ")}
+- Diagrams: ${artDirection.charts_diagrams.diagram_types.join(", ")}
+- Honesty rules: ${artDirection.charts_diagrams.honesty_rules.join("; ")}
+
+## Sound Design
+
+- Strategy: ${artDirection.sound_design.strategy}
+- Families: ${artDirection.sound_design.families.join(", ")}
+- Mix: ${artDirection.sound_design.mix}
+
+## Storyboard Review
+
+- Preview: ${artDirection.storyboard_review.html}
+- Purpose: ${artDirection.storyboard_review.purpose}
+- Quality gates:
+${artDirection.storyboard_review.quality_gates.map((gate) => `  - ${gate}`).join("\n")}
+`;
+}
+
+function renderStoryboardHtml(manifest, video) {
+  const scenes = Array.isArray(video.creative_storyboard?.scenes) ? video.creative_storyboard.scenes : [];
+  const gates = video.creative_storyboard?.quality_gates ?? [];
+  const cards = scenes.map((scene) => {
+    const aliases = Array.isArray(scene.asset_aliases) && scene.asset_aliases.length ? scene.asset_aliases.join(", ") : "none";
+    const motion = Array.isArray(scene.motion_grammar) ? scene.motion_grammar.join(", ") : scene.motion_grammar ?? "";
+    const sfx = Array.isArray(scene.sfx_cues) && scene.sfx_cues.length ? scene.sfx_cues.join(", ") : scene.sound_design ?? "";
+    return `<article class="scene-card">
+      <div class="scene-meta">${escapeHtml(scene.time_range ?? "")} / ${escapeHtml(scene.id ?? scene.order ?? "scene")}</div>
+      <h2>${escapeHtml(scene.hook ?? scene.caption ?? scene.id ?? "Scene")}</h2>
+      <p class="voice">${escapeHtml(scene.voiceover ?? "")}</p>
+      <dl>
+        <dt>Layout</dt><dd>${escapeHtml(scene.layout ?? "")}</dd>
+        <dt>Composition</dt><dd>${escapeHtml(scene.composition ?? "")}</dd>
+        <dt>Motion</dt><dd>${escapeHtml(motion)}</dd>
+        <dt>SFX</dt><dd>${escapeHtml(sfx)}</dd>
+        <dt>Assets</dt><dd>${escapeHtml(aliases)}</dd>
+        <dt>Evidence</dt><dd>${escapeHtml(scene.evidence_source ?? "")}</dd>
+      </dl>
+    </article>`;
+  }).join("\n");
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(video.title)} storyboard</title>
+  <style>
+    :root { color-scheme: light; --paper: #ece8e1; --ink: #1a1a18; --green: #62bd93; --coral: #f06f5f; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--paper); color: var(--ink); }
+    main { max-width: 1280px; margin: 0 auto; padding: 40px 28px 56px; }
+    header { display: grid; gap: 12px; margin-bottom: 28px; }
+    h1 { font-size: clamp(32px, 5vw, 72px); line-height: 0.95; margin: 0; letter-spacing: 0; }
+    .sub { max-width: 760px; font-size: 18px; line-height: 1.45; }
+    .gates { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 16px 0 0; list-style: none; }
+    .gates li { border: 1px solid rgba(26, 26, 24, 0.18); border-radius: 999px; padding: 8px 12px; background: rgba(255,255,255,0.44); font-size: 13px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+    .scene-card { min-height: 520px; border: 1px solid rgba(26,26,24,0.12); border-radius: 8px; background: #fffdf8; padding: 22px; box-shadow: 10px 14px 0 rgba(26,26,24,0.12); display: flex; flex-direction: column; gap: 14px; }
+    .scene-meta { color: var(--coral); font-weight: 800; text-transform: uppercase; font-size: 12px; letter-spacing: 0.08em; }
+    h2 { font-size: 34px; line-height: 1.02; margin: 0; letter-spacing: 0; }
+    .voice { font-size: 16px; line-height: 1.35; margin: 0; padding-left: 12px; border-left: 4px solid var(--green); }
+    dl { display: grid; grid-template-columns: 88px 1fr; gap: 10px 12px; margin: auto 0 0; font-size: 13px; line-height: 1.32; }
+    dt { font-weight: 800; }
+    dd { margin: 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>${escapeHtml(video.title)}</h1>
+      <p class="sub">${escapeHtml(video.creative_storyboard?.intent ?? manifest.source_repo.summary)}</p>
+      <ul class="gates">${gates.map((gate) => `<li>${escapeHtml(gate)}</li>`).join("")}</ul>
+    </header>
+    <section class="grid">${cards || "<p>No storyboard scenes were generated.</p>"}</section>
+  </main>
+</body>
+</html>
+`;
+}
+
+async function writeHyperframesProject(out, manifest, video) {
+  const projectDir = path.join(out, HYPERFRAMES_PROJECT_DIR.replace(/\//g, path.sep));
+  await mkdir(projectDir, { recursive: true });
+  await writeJson(path.join(projectDir, "launchclip-data.json"), {
+    schema_version: "launchclip.hyperframes-data.v1",
+    repo: manifest.source_repo,
+    video: {
+      title: video.title,
+      duration_seconds: video.duration_seconds,
+      style: video.style,
+      timeline: video.script_visual_alignment,
+      storyboard: video.creative_storyboard,
+      sound_design: video.sound_design,
+      assets: video.assets
+    }
+  });
+  await writeFile(path.join(projectDir, "README.md"), renderHyperframesReadme(video));
+  await writeFile(path.join(projectDir, "index.html"), renderHyperframesIndex(manifest, video));
+}
+
+function renderHyperframesReadme(video) {
+  return `# ${video.title} HyperFrames project
+
+Generated by Launchclip from \`video/video.json\`, \`video/frame.md\`, and \`video/storyboard.html\`.
+
+## Requirements
+
+- Node.js 22+
+- FFmpeg
+- HyperFrames CLI through \`npx\`
+
+## Review Loop
+
+\`\`\`bash
+npx hyperframes doctor
+npx hyperframes lint
+npx hyperframes preview
+npx hyperframes render index.html --output ../launchclip-hyperframes.mp4 --quality high
+\`\`\`
+
+Use the official HyperFrames skills to improve this scaffold with richer reusable objects, object state transitions, charts, diagrams, SFX, and scene-specific art direction. Keep claims grounded in the Launchclip packet.
+`;
+}
+
+function renderHyperframesIndex(manifest, video) {
+  const width = 1080;
+  const height = 1920;
+  const scenes = (video.creative_storyboard?.scenes?.length ? video.creative_storyboard.scenes : video.script_visual_alignment ?? []).map((scene, index) => {
+    const range = parseTimeRange(scene.time_range);
+    const start = Number.isFinite(range.start) ? range.start : index * 3;
+    const end = Number.isFinite(range.end) ? range.end : start + Number(scene.target_seconds ?? 3);
+    const duration = Math.max(0.8, end - start);
+    const caption = scene.hook ?? scene.caption ?? scene.beat ?? `Scene ${index + 1}`;
+    const body = scene.composition ?? scene.visual ?? scene.voiceover ?? "";
+    const emphasis = Array.isArray(scene.caption_emphasis) && scene.caption_emphasis.length ? scene.caption_emphasis[0] : scene.id ?? scene.beat ?? "proof";
+    return { ...scene, index, start, duration, caption, body, emphasis };
+  });
+  const sceneHtml = scenes.map((scene) => `<section class="scene scene-${scene.index % 5}" data-start="${scene.start}" data-duration="${scene.duration.toFixed(2)}" data-track-index="${scene.index + 1}">
+      <div class="rail">Scene ${scene.index + 1} / ${escapeHtml(scene.id ?? scene.beat ?? "beat")}</div>
+      <div class="paper-card hero-card">
+        <p class="eyebrow">${escapeHtml(scene.time_range ?? "")}</p>
+        <h1>${escapeHtml(scene.caption)}</h1>
+        <p>${escapeHtml(scene.body)}</p>
+      </div>
+      <div class="object-row">
+        <div class="token">${escapeHtml(scene.emphasis)}</div>
+        <div class="connector"></div>
+        <div class="token alt">${escapeHtml(scene.evidence_source ?? "proof")}</div>
+      </div>
+    </section>`).join("\n");
+  const duration = Number(video.duration_seconds ?? 30);
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=${width}, height=${height}" />
+  <title>${escapeHtml(video.title)}</title>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@hyperframes/core/dist/hyperframe.runtime.iife.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: ${width}px; height: ${height}px; margin: 0; overflow: hidden; background: #ece8e1; color: #1a1a18; }
+    body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    [data-composition-id="LaunchclipHyperframes"] { position: relative; width: ${width}px; height: ${height}px; overflow: hidden; background: #ece8e1; }
+    .grid-bg { position: absolute; inset: -80px; opacity: 0.22; background-image: linear-gradient(rgba(26,26,24,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(26,26,24,0.08) 1px, transparent 1px); background-size: 48px 48px; transform: rotateX(5deg) scale(1.08); }
+    .scene { position: absolute; inset: 0; padding: 150px 84px 120px; display: flex; flex-direction: column; justify-content: center; gap: 44px; }
+    .rail { position: absolute; top: 56px; left: 84px; right: 84px; padding-bottom: 18px; border-bottom: 3px solid rgba(26,26,24,0.16); font-size: 28px; font-weight: 900; color: #f06f5f; }
+    .paper-card { border-radius: 28px; background: #fffdf8; box-shadow: 20px 28px 0 rgba(26,26,24,0.18), 0 24px 80px rgba(26,26,24,0.18); border: 2px solid rgba(26,26,24,0.12); }
+    .hero-card { padding: 54px; min-height: 620px; transform: rotate(-1.2deg); }
+    .eyebrow { margin: 0 0 22px; color: #62bd93; font-size: 28px; font-weight: 900; text-transform: uppercase; }
+    h1 { margin: 0; max-width: 820px; font-size: 92px; line-height: 0.95; letter-spacing: 0; }
+    p { font-size: 34px; line-height: 1.28; }
+    .object-row { display: grid; grid-template-columns: 1fr 160px 1fr; align-items: center; gap: 22px; }
+    .token { min-height: 132px; border-radius: 26px; padding: 30px; background: #111; color: #ece8e1; font-size: 30px; font-weight: 900; display: grid; place-items: center; text-align: center; box-shadow: 14px 20px 0 rgba(26,26,24,0.16); }
+    .token.alt { background: #62bd93; color: #101010; }
+    .connector { height: 6px; background: repeating-linear-gradient(90deg, #1a1a18 0 18px, transparent 18px 30px); position: relative; }
+    .connector::after { content: ""; position: absolute; right: -2px; top: -10px; border-left: 24px solid #1a1a18; border-top: 13px solid transparent; border-bottom: 13px solid transparent; }
+    .scene-1 .hero-card { transform: rotate(1deg); }
+    .scene-2 .hero-card { transform: rotate(-0.4deg); }
+    .scene-3 .hero-card { transform: rotate(1.4deg); }
+    .scene-4 .hero-card { transform: rotate(-1.8deg); }
+  </style>
+</head>
+<body>
+  <div id="stage" data-composition-id="LaunchclipHyperframes" data-start="0" data-duration="${duration}" data-width="${width}" data-height="${height}">
+    <div class="grid-bg" data-start="0" data-duration="${duration}" data-track-index="0"></div>
+${sceneHtml}
+  </div>
+  <script>
+    const scenes = document.querySelectorAll(".scene");
+    scenes.forEach((scene, index) => {
+      const card = scene.querySelector(".hero-card");
+      const tokens = scene.querySelectorAll(".token");
+      const connector = scene.querySelector(".connector");
+      gsap.set(scene, { opacity: 0 });
+      gsap.set(card, { y: 80, rotate: index % 2 ? 4 : -4, scale: 0.92 });
+      gsap.set(tokens, { y: 46, opacity: 0, scale: 0.86 });
+      gsap.set(connector, { scaleX: 0, transformOrigin: "left center" });
+      const start = Number(scene.dataset.start || 0);
+      const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+      tl.to(scene, { opacity: 1, duration: 0.12 }, start)
+        .to(card, { y: 0, rotate: index % 2 ? 1 : -1.2, scale: 1, duration: 0.72 }, start + 0.06)
+        .to(tokens, { y: 0, opacity: 1, scale: 1, stagger: 0.12, duration: 0.42 }, start + 0.42)
+        .to(connector, { scaleX: 1, duration: 0.44 }, start + 0.58)
+        .to(card, { scale: 1.035, duration: Math.max(0.8, Number(scene.dataset.duration || 2) - 0.8), ease: "none" }, start + 0.84)
+        .to(scene, { opacity: 0, duration: 0.1 }, start + Number(scene.dataset.duration || 2) - 0.1);
+    });
+  </script>
+</body>
+</html>
+`;
+}
+
 function cleanVoiceoverLine(value) {
   return String(value ?? "")
     .replace(/\s+/g, " ")
@@ -1007,6 +1479,53 @@ function soundDesignIssues(video) {
     if (!cue.sound) issues.push(`Sound design cue ${cue.beat ?? "unknown"} is missing sound.`);
     if (!cue.trigger) issues.push(`Sound design cue ${cue.beat ?? "unknown"} is missing trigger.`);
     if (!cue.provider_prompt) issues.push(`Sound design cue ${cue.beat ?? "unknown"} is missing provider_prompt.`);
+  }
+  return issues;
+}
+
+function artDirectionIssues(video) {
+  if (!video) return [];
+  const issues = [];
+  const artDirection = video.art_direction;
+  if (!artDirection) return ["Video plan is missing art_direction."];
+  if (artDirection.schema_version !== ART_DIRECTION_SCHEMA) {
+    issues.push(`Art direction schema_version must be ${ART_DIRECTION_SCHEMA}.`);
+  }
+  if (!artDirection.frame_md) issues.push("Art direction is missing frame_md.");
+  if (!artDirection.renderer_targets?.includes("hyperframes")) {
+    issues.push("Art direction must include hyperframes as a renderer target.");
+  }
+  if (!artDirection.reusable_object_library || artDirection.reusable_object_library.target_count < 100) {
+    issues.push("Art direction must define a reusable object library target of at least 100 objects.");
+  }
+  if (!Array.isArray(artDirection.charts_diagrams?.chart_types) || artDirection.charts_diagrams.chart_types.length < 8) {
+    issues.push("Art direction must define at least eight chart types.");
+  }
+  if (!Array.isArray(artDirection.charts_diagrams?.diagram_types) || artDirection.charts_diagrams.diagram_types.length < 8) {
+    issues.push("Art direction must define at least eight diagram types.");
+  }
+  if (!Array.isArray(artDirection.sound_design?.families) || artDirection.sound_design.families.length < 6) {
+    issues.push("Art direction must define reusable SFX families.");
+  }
+  return issues;
+}
+
+function hyperframesIssues(video) {
+  if (!video) return [];
+  const issues = [];
+  const hyperframes = video.hyperframes;
+  if (!hyperframes) return ["Video plan is missing hyperframes handoff."];
+  if (hyperframes.schema_version !== "launchclip.hyperframes-handoff.v1") {
+    issues.push("HyperFrames handoff schema_version must be launchclip.hyperframes-handoff.v1.");
+  }
+  if (hyperframes.project_dir !== HYPERFRAMES_PROJECT_DIR) {
+    issues.push(`HyperFrames project_dir must be ${HYPERFRAMES_PROJECT_DIR}.`);
+  }
+  if (!hyperframes.entrypoint?.endsWith("index.html")) {
+    issues.push("HyperFrames handoff must point at an index.html entrypoint.");
+  }
+  if (!Array.isArray(hyperframes.render_command) || !hyperframes.render_command.includes("hyperframes")) {
+    issues.push("HyperFrames handoff must include an npx hyperframes render command.");
   }
   return issues;
 }
@@ -2740,6 +3259,14 @@ function stripMarkdown(text) {
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/[#*_>~-]/g, " ")
     .trim();
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function round(value) {
