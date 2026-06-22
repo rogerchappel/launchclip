@@ -257,25 +257,7 @@ function ChartScene({ scene, width, height }) {
           <div style={{ marginTop: height * 0.018, fontFamily: FONTS.sans, fontSize: labelSize, fontWeight: 800, color: INK.muted }}>
             {scene.y_label || "value"} / {scene.x_label || "label"}
           </div>
-          <div style={{ height: plotH, marginTop: height * 0.038, display: "flex", alignItems: "flex-end", gap: Math.max(8, width * 0.012), borderLeft: `3px solid ${INK.primary}`, borderBottom: `3px solid ${INK.primary}`, padding: `${height * 0.018}px ${width * 0.018}px 0` }}>
-            {data.map((point, index) => {
-              const localFrame = frame - (point.at - scene.start) * fps;
-              const p = localFrame < 0 ? 0 : calmEnter(localFrame, fps, 0.42);
-              const value = Number(point.value) || 0;
-              const barHeight = Math.max(6, (value / maxValue) * (plotH * 0.82) * p);
-              return (
-                <div key={index} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                  <div style={{ fontFamily: FONTS.sans, fontSize: labelSize * 0.95, fontWeight: 900, color: point.color ? semanticColor(point.color) : INK.primary, opacity: p }}>
-                    {value}
-                  </div>
-                  <div style={{ width: "100%", maxWidth: 72, height: barHeight, borderRadius: "12px 12px 4px 4px", background: point.color ? semanticColor(point.color) : SEMANTIC.mint, boxShadow: "8px 10px 0 rgba(26,26,24,0.16)", transform: `translateY(${(1 - p) * 16}px)` }} />
-                  <div style={{ fontFamily: FONTS.sans, fontSize: labelSize * 0.82, fontWeight: 800, color: INK.muted, textAlign: "center", minHeight: labelSize * 2.2, lineHeight: 1.1 }}>
-                    {point.label}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <ChartBody scene={scene} data={data} maxValue={maxValue} frame={frame} fps={fps} width={width} height={height} plotH={plotH} labelSize={labelSize} />
           <div style={{ marginTop: height * 0.02, display: "flex", justifyContent: "space-between", gap: 18, fontFamily: FONTS.sans, fontSize: labelSize * 0.82, fontWeight: 800, color: INK.muted }}>
             <span>{scene.chart_type}</span>
             <span>{scene.source || scene.claim_status}</span>
@@ -284,6 +266,214 @@ function ChartScene({ scene, width, height }) {
       </div>
     </AbsoluteFill>
   );
+}
+
+function ChartBody({ scene, data, maxValue, frame, fps, width, height, plotH, labelSize }) {
+  if (scene.chart_type === "donut") return <DonutChartBody scene={scene} data={data} frame={frame} fps={fps} width={width} height={height} plotH={plotH} labelSize={labelSize} />;
+  if (scene.chart_type === "gauge") return <GaugeChartBody scene={scene} data={data} frame={frame} fps={fps} width={width} height={height} plotH={plotH} labelSize={labelSize} />;
+  if (scene.chart_type === "line" || scene.chart_type === "area" || scene.chart_type === "sparkline" || scene.chart_type === "scatter") {
+    return <PathChartBody scene={scene} data={data} maxValue={maxValue} frame={frame} fps={fps} width={width} height={height} plotH={plotH} labelSize={labelSize} />;
+  }
+  if (scene.chart_type === "comparison_table") return <ComparisonTableBody scene={scene} data={data} frame={frame} fps={fps} height={height} labelSize={labelSize} />;
+  if (scene.chart_type === "stat_counter") return <StatChartBody scene={scene} data={data} frame={frame} fps={fps} height={height} plotH={plotH} labelSize={labelSize} />;
+  if (scene.chart_type === "matrix") return <MatrixChartBody scene={scene} data={data} maxValue={maxValue} frame={frame} fps={fps} height={height} plotH={plotH} labelSize={labelSize} />;
+  return <BarChartBody scene={scene} data={data} maxValue={maxValue} frame={frame} fps={fps} width={width} height={height} plotH={plotH} labelSize={labelSize} horizontal={scene.chart_type === "funnel"} />;
+}
+
+function BarChartBody({ scene, data, maxValue, frame, fps, width, height, plotH, labelSize, horizontal = false }) {
+  if (horizontal) {
+    return (
+      <div style={{ height: plotH, marginTop: height * 0.038, display: "flex", flexDirection: "column", justifyContent: "center", gap: height * 0.014 }}>
+        {data.map((point, index) => {
+          const p = chartPointProgress(frame, fps, point.at, scene.start);
+          const value = Number(point.value) || 0;
+          const barWidth = `${Math.max(8, (value / maxValue) * 100 * p)}%`;
+          return (
+            <div key={index} style={{ display: "grid", gridTemplateColumns: "28% 1fr auto", alignItems: "center", gap: 10, opacity: Math.min(1, p * 1.2) }}>
+              <span style={{ fontFamily: FONTS.sans, fontSize: labelSize * 0.78, fontWeight: 900, color: INK.muted, lineHeight: 1.1 }}>{point.label}</span>
+              <span style={{ height: height * 0.034, borderRadius: 999, background: "rgba(26,26,24,0.08)", overflow: "hidden" }}>
+                <span style={{ display: "block", width: barWidth, height: "100%", borderRadius: 999, background: point.color ? semanticColor(point.color) : SEMANTIC.mint, boxShadow: "6px 0 0 rgba(26,26,24,0.14)" }} />
+              </span>
+              <span style={{ fontFamily: FONTS.sans, fontSize: labelSize * 0.82, fontWeight: 900, color: INK.primary }}>{value}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  return (
+    <div style={{ height: plotH, marginTop: height * 0.038, display: "flex", alignItems: "flex-end", gap: Math.max(8, width * 0.012), borderLeft: `3px solid ${INK.primary}`, borderBottom: `3px solid ${INK.primary}`, padding: `${height * 0.018}px ${width * 0.018}px 0` }}>
+      {data.map((point, index) => {
+        const p = chartPointProgress(frame, fps, point.at, scene.start);
+        const value = Number(point.value) || 0;
+        const barHeight = Math.max(6, (value / maxValue) * (plotH * 0.82) * p);
+        return (
+          <div key={index} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+            <div style={{ fontFamily: FONTS.sans, fontSize: labelSize * 0.95, fontWeight: 900, color: point.color ? semanticColor(point.color) : INK.primary, opacity: p }}>
+              {value}
+            </div>
+            <div style={{ width: "100%", maxWidth: 72, height: barHeight, borderRadius: "12px 12px 4px 4px", background: point.color ? semanticColor(point.color) : SEMANTIC.mint, boxShadow: "8px 10px 0 rgba(26,26,24,0.16)", transform: `translateY(${(1 - p) * 16}px)` }} />
+            <div style={{ fontFamily: FONTS.sans, fontSize: labelSize * 0.82, fontWeight: 800, color: INK.muted, textAlign: "center", minHeight: labelSize * 2.2, lineHeight: 1.1 }}>
+              {point.label}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PathChartBody({ scene, data, maxValue, frame, fps, width, height, plotH, labelSize }) {
+  const pad = { left: width * 0.04, right: width * 0.025, top: height * 0.018, bottom: height * 0.04 };
+  const plotW = width * 0.68;
+  const points = data.map((point, index) => ({
+    ...point,
+    x: pad.left + (data.length <= 1 ? 0.5 : index / (data.length - 1)) * (plotW - pad.left - pad.right),
+    y: pad.top + (1 - (Number(point.value) || 0) / maxValue) * (plotH - pad.top - pad.bottom)
+  }));
+  const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+  const area = path ? `${path} L ${points[points.length - 1].x} ${plotH - pad.bottom} L ${points[0].x} ${plotH - pad.bottom} Z` : "";
+  const firstAt = points[0]?.at ?? scene.start;
+  const draw = chartPointProgress(frame, fps, firstAt, scene.start, 0.75);
+  const clipId = `chart-clip-${scene.id}`;
+  const isScatter = scene.chart_type === "scatter";
+  return (
+    <div style={{ height: plotH, marginTop: height * 0.038, borderLeft: `3px solid ${INK.primary}`, borderBottom: `3px solid ${INK.primary}`, position: "relative" }}>
+      <svg width="100%" height="100%" viewBox={`0 0 ${plotW} ${plotH}`} preserveAspectRatio="none" style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+        <defs>
+          <clipPath id={clipId}><rect x="0" y="0" width={plotW * draw} height={plotH} /></clipPath>
+        </defs>
+        {scene.chart_type === "area" && area ? <path d={area} clipPath={`url(#${clipId})`} fill="rgba(79,174,133,0.18)" /> : null}
+        {!isScatter && path ? <path d={path} clipPath={`url(#${clipId})`} fill="none" stroke={SEMANTIC.mint} strokeWidth={5} strokeLinejoin="round" strokeLinecap="round" /> : null}
+        {points.map((point, index) => {
+          const p = chartPointProgress(frame, fps, point.at, scene.start);
+          return <circle key={index} cx={point.x} cy={point.y} r={(isScatter ? 9 : 6) * p} fill={point.color ? semanticColor(point.color) : SEMANTIC.mint} stroke={INK.primary} strokeWidth={isScatter ? 2 : 0} opacity={Math.min(1, p * 1.2)} />;
+        })}
+      </svg>
+      {points.map((point, index) => {
+        const p = chartPointProgress(frame, fps, point.at, scene.start);
+        return (
+          <div key={index} style={{ position: "absolute", left: `${(point.x / plotW) * 100}%`, bottom: -labelSize * 2.5, transform: "translateX(-50%)", maxWidth: width * 0.13, textAlign: "center", fontFamily: FONTS.sans, fontSize: labelSize * 0.72, fontWeight: 800, color: INK.muted, lineHeight: 1.05, opacity: p }}>
+            {point.label}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DonutChartBody({ scene, data, frame, fps, width, height, plotH, labelSize }) {
+  const total = Math.max(1, data.reduce((sum, point) => sum + (Number(point.value) || 0), 0));
+  const size = Math.min(plotH, width * 0.46);
+  const radius = size * 0.34;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+  return (
+    <div style={{ height: plotH, marginTop: height * 0.038, display: "grid", gridTemplateColumns: "1fr 1fr", alignItems: "center", gap: width * 0.03 }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ justifySelf: "center" }}>
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(26,26,24,0.08)" strokeWidth={size * 0.12} />
+        {data.map((point, index) => {
+          const value = Number(point.value) || 0;
+          const length = (value / total) * circumference;
+          const p = chartPointProgress(frame, fps, point.at, scene.start);
+          const stroke = point.color ? semanticColor(point.color) : [SEMANTIC.mint, SEMANTIC.purple, SEMANTIC.coral][index % 3];
+          const dashOffset = -offset;
+          offset += length;
+          return <circle key={index} cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={stroke} strokeWidth={size * 0.12} strokeLinecap="round" strokeDasharray={`${length * p} ${circumference}`} strokeDashoffset={dashOffset} transform={`rotate(-90 ${size / 2} ${size / 2})`} />;
+        })}
+        <text x="50%" y="51%" dominantBaseline="middle" textAnchor="middle" style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: size * 0.18, fill: INK.primary }}>{total}</text>
+      </svg>
+      <ChartLegend scene={scene} data={data} frame={frame} fps={fps} labelSize={labelSize} />
+    </div>
+  );
+}
+
+function GaugeChartBody({ scene, data, frame, fps, width, height, plotH, labelSize }) {
+  const point = data[0] ?? { label: "", value: 0, at: scene.start };
+  const value = Number(point.value) || 0;
+  const pct = clampRange(value / 100, 0, 1);
+  const p = chartPointProgress(frame, fps, point.at, scene.start, 0.75);
+  const size = Math.min(plotH * 1.15, width * 0.55);
+  const radius = size * 0.34;
+  const circumference = 2 * Math.PI * radius;
+  return (
+    <div style={{ height: plotH, marginTop: height * 0.038, display: "grid", placeItems: "center" }}>
+      <svg width={size} height={size * 0.72} viewBox={`0 0 ${size} ${size * 0.72}`}>
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(26,26,24,0.1)" strokeWidth={size * 0.1} strokeDasharray={`${circumference * 0.5} ${circumference}`} strokeLinecap="round" transform={`rotate(180 ${size / 2} ${size / 2})`} />
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={point.color ? semanticColor(point.color) : SEMANTIC.mint} strokeWidth={size * 0.1} strokeDasharray={`${circumference * 0.5 * pct * p} ${circumference}`} strokeLinecap="round" transform={`rotate(180 ${size / 2} ${size / 2})`} />
+        <text x="50%" y="66%" dominantBaseline="middle" textAnchor="middle" style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: size * 0.18, fill: INK.primary }}>{value}</text>
+        <text x="50%" y="84%" dominantBaseline="middle" textAnchor="middle" style={{ fontFamily: FONTS.sans, fontWeight: 800, fontSize: labelSize, fill: INK.muted }}>{point.label}</text>
+      </svg>
+    </div>
+  );
+}
+
+function ComparisonTableBody({ scene, data, frame, fps, height, labelSize }) {
+  return (
+    <div style={{ marginTop: height * 0.032, display: "grid", gap: height * 0.012 }}>
+      {data.slice(0, 6).map((point, index) => {
+        const p = chartPointProgress(frame, fps, point.at, scene.start);
+        return (
+          <div key={index} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 14, alignItems: "center", padding: `${height * 0.014}px ${height * 0.016}px`, borderRadius: 14, background: index % 2 ? "rgba(26,26,24,0.04)" : "rgba(79,174,133,0.1)", transform: `translateY(${(1 - p) * 14}px)`, opacity: p }}>
+            <span style={{ fontFamily: FONTS.sans, fontWeight: 900, fontSize: labelSize, color: INK.primary }}>{point.label}</span>
+            <span style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: labelSize * 1.35, color: point.color ? semanticColor(point.color) : SEMANTIC.mint }}>{point.value}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function StatChartBody({ scene, data, frame, fps, height, plotH, labelSize }) {
+  const point = data[0] ?? { label: scene.title, value: 0, at: scene.start };
+  const p = chartPointProgress(frame, fps, point.at, scene.start, 0.7);
+  return (
+    <div style={{ height: plotH, marginTop: height * 0.026, display: "grid", placeItems: "center", textAlign: "center" }}>
+      <div style={{ transform: `translateY(${(1 - p) * 18}px) scale(${0.92 + p * 0.08})`, opacity: p }}>
+        <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: height * 0.105, lineHeight: 0.9, color: point.color ? semanticColor(point.color) : SEMANTIC.mint, textShadow: TYPE_SHADOW }}>{point.value}</div>
+        <div style={{ marginTop: height * 0.012, fontFamily: FONTS.sans, fontWeight: 900, fontSize: labelSize * 1.1, color: INK.muted }}>{point.label}</div>
+      </div>
+    </div>
+  );
+}
+
+function MatrixChartBody({ scene, data, maxValue, frame, fps, height, plotH, labelSize }) {
+  return (
+    <div style={{ height: plotH, marginTop: height * 0.038, display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: height * 0.012 }}>
+      {data.slice(0, 16).map((point, index) => {
+        const p = chartPointProgress(frame, fps, point.at, scene.start);
+        const strength = clampRange((Number(point.value) || 0) / maxValue, 0.15, 1);
+        return (
+          <div key={index} style={{ borderRadius: 14, padding: height * 0.012, background: point.color ? semanticColor(point.color) : `rgba(79,174,133,${0.18 + strength * 0.55})`, border: `2px solid rgba(26,26,24,${0.2 + strength * 0.25})`, transform: `scale(${0.88 + p * 0.12})`, opacity: p }}>
+            <div style={{ fontFamily: FONTS.sans, fontWeight: 900, fontSize: labelSize * 0.75, color: INK.primary, lineHeight: 1.05 }}>{point.label}</div>
+            <div style={{ marginTop: 4, fontFamily: FONTS.serif, fontWeight: 900, fontSize: labelSize * 1.05, color: INK.primary }}>{point.value}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ChartLegend({ scene, data, frame, fps, labelSize }) {
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {data.slice(0, 6).map((point, index) => {
+        const p = chartPointProgress(frame, fps, point.at, scene.start);
+        const color = point.color ? semanticColor(point.color) : [SEMANTIC.mint, SEMANTIC.purple, SEMANTIC.coral][index % 3];
+        return (
+          <div key={index} style={{ display: "flex", alignItems: "center", gap: 9, opacity: p, transform: `translateX(${(1 - p) * 12}px)` }}>
+            <span style={{ width: 12, height: 12, borderRadius: "50%", background: color, flexShrink: 0 }} />
+            <span style={{ fontFamily: FONTS.sans, fontWeight: 900, fontSize: labelSize * 0.84, color: INK.primary }}>{point.label}</span>
+            <span style={{ marginLeft: "auto", fontFamily: FONTS.sans, fontWeight: 900, fontSize: labelSize * 0.84, color: INK.muted }}>{point.value}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function chartPointProgress(frame, fps, at, sceneStart, seconds = 0.42) {
+  return frame - (at - sceneStart) * fps < 0 ? 0 : calmEnter(frame - (at - sceneStart) * fps, fps, seconds);
 }
 
 function DiagramScene({ scene, width, height }) {
