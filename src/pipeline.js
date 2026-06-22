@@ -105,8 +105,9 @@ export async function planVideo(workspacePath, flags = {}) {
   const assets = await buildAssetPlan(style, flags);
   const script = buildScriptPlan(style, manifest, stylePreset, talkingHead);
   const creativeStoryboard = buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHead);
-  const artDirection = buildArtDirectionContract(style, manifest, stylePreset, script, creativeStoryboard, assets, talkingHead);
-  const hyperframes = buildHyperframesHandoff(videoTitle(manifest), duration);
+  const objectLifecycle = buildHyperframesObjectLifecycle(creativeStoryboard, duration);
+  const artDirection = buildArtDirectionContract(style, manifest, stylePreset, script, creativeStoryboard, assets, talkingHead, objectLifecycle);
+  const hyperframes = buildHyperframesHandoff(videoTitle(manifest), duration, objectLifecycle);
   const voiceover = buildVoiceoverPlan(script, talkingHead);
   const soundDesign = buildSoundDesignPlan(script, stylePreset);
   const video = {
@@ -123,6 +124,7 @@ export async function planVideo(workspacePath, flags = {}) {
     sound_design: soundDesign,
     art_direction: artDirection,
     creative_storyboard: creativeStoryboard,
+    object_lifecycle: objectLifecycle,
     creative_recipe: stylePreset.recipe,
     hyperframes,
     talking_head: talkingHead,
@@ -1021,7 +1023,7 @@ function videoTitle(manifest) {
   return `${stripMarkdown(manifest.source_repo.name)} OSS launch clip`;
 }
 
-function buildArtDirectionContract(style, manifest, stylePreset, script, storyboard, assets, talkingHead = { enabled: false, provider: "none" }) {
+function buildArtDirectionContract(style, manifest, stylePreset, script, storyboard, assets, talkingHead = { enabled: false, provider: "none" }, objectLifecycle = []) {
   const premium = isPremiumStyle(style);
   const social = isSocialReadyStyle(style);
   const repoName = stripMarkdown(manifest.source_repo.name);
@@ -1065,6 +1067,7 @@ function buildArtDirectionContract(style, manifest, stylePreset, script, storybo
     motion: {
       density: premium ? "visible object, camera, type, or SFX change every 0.4-1.2 seconds" : "visible change every 0.7-1.5 seconds",
       object_lifecycle: ["enter", "settle", "transform", "connect", "emphasize", "exit"],
+      object_contract: 'objects[] = {id, scene_id, role, ref, label, states:[{state, at, duration, to?, sfx?}]}',
       transitions: [
         "shared objects morph across beats when possible",
         "connectors redraw while nodes move",
@@ -1088,6 +1091,12 @@ function buildArtDirectionContract(style, manifest, stylePreset, script, storybo
         "creator/talking-head frames"
       ],
       selection_rule: "the Director chooses object intent; renderer code owns drawing quality, layout constraints, and motion behavior"
+    },
+    persistent_objects: {
+      schema_version: "launchclip.object-lifecycle.v1",
+      source: "video.object_lifecycle",
+      count: objectLifecycle.length,
+      objects: objectLifecycle
     },
     charts_diagrams: {
       chart_types: ["bar", "line", "area", "donut", "scatter", "gauge", "funnel", "matrix", "sparkline", "stat-counter"],
@@ -1116,7 +1125,7 @@ function buildArtDirectionContract(style, manifest, stylePreset, script, storybo
   };
 }
 
-function buildHyperframesHandoff(title, duration) {
+function buildHyperframesHandoff(title, duration, objectLifecycle = []) {
   return {
     schema_version: "launchclip.hyperframes-handoff.v1",
     project_dir: HYPERFRAMES_PROJECT_DIR,
@@ -1129,6 +1138,11 @@ function buildHyperframesHandoff(title, duration) {
     render_command: ["npx", "hyperframes", "render", "index.html", "--output", "../launchclip-hyperframes.mp4", "--quality", "high"],
     preview_command: ["npx", "hyperframes", "preview"],
     lint_command: ["npx", "hyperframes", "lint"],
+    object_lifecycle: {
+      schema_version: "launchclip.object-lifecycle.v1",
+      source: "video/video.json#object_lifecycle",
+      objects: objectLifecycle
+    },
     notes: [
       "Generated as an editable HyperFrames scaffold from Launchclip's storyboard contract.",
       "Use HyperFrames skills to refine motion, transitions, reusable objects, SFX, charts, and diagrams inside this project.",
@@ -1137,7 +1151,95 @@ function buildHyperframesHandoff(title, duration) {
   };
 }
 
+function buildHyperframesObjectLifecycle(storyboard, duration) {
+  const scenes = Array.isArray(storyboard?.scenes) ? storyboard.scenes : [];
+  return scenes.map((scene, index) => {
+    const range = parseTimeRange(scene.time_range);
+    const start = Number.isFinite(range.start) ? range.start : index * Math.max(1.2, duration / Math.max(1, scenes.length));
+    const targetSeconds = Number(scene.target_seconds ?? 3);
+    const end = Number.isFinite(range.end) ? range.end : Math.min(duration, start + targetSeconds);
+    const sceneDuration = Math.max(0.8, end - start);
+    const sceneId = String(scene.id ?? scene.beat ?? `scene-${index + 1}`);
+    const role = objectRoleForScene(scene, index);
+    const ref = objectRefForScene(scene, role);
+    const x = round(0.36 + (index % 3) * 0.14);
+    const y = round(0.66 - (index % 2) * 0.1);
+    return {
+      id: `hf-${safeObjectId(sceneId)}-primary`,
+      scene_id: sceneId,
+      role,
+      ref,
+      label: objectLabelForScene(scene, sceneId),
+      states: [
+        { state: "enter", at: objectStateAt(start + 0.1, start, end), duration: 0.42, sfx: objectSfxForScene(scene, "enter") },
+        { state: "settle", at: objectStateAt(start + Math.min(0.62, sceneDuration * 0.24), start, end), duration: 0.32 },
+        {
+          state: "transform",
+          at: objectStateAt(start + Math.min(1.15, sceneDuration * 0.46), start, end),
+          duration: 0.58,
+          to: { x, y, scale: round(1.02 + (index % 2) * 0.06), rotate: index % 2 ? 2.4 : -2.1 }
+        },
+        { state: "emphasize", at: objectStateAt(end - Math.min(0.9, sceneDuration * 0.28), start, end), duration: 0.34, sfx: objectSfxForScene(scene, "emphasize") },
+        { state: "exit", at: objectStateAt(end - 0.16, start, end), duration: 0.24 }
+      ]
+    };
+  });
+}
+
+function objectStateAt(value, start, end) {
+  return round(Math.max(start, Math.min(Math.max(start, end - 0.05), value)));
+}
+
+function objectRoleForScene(scene, index) {
+  const text = `${scene.id ?? ""} ${scene.beat ?? ""} ${scene.layout ?? ""} ${scene.composition ?? ""}`.toLowerCase();
+  if (text.includes("terminal") || text.includes("prompt") || text.includes("type")) return "proof-ui";
+  if (text.includes("asset") || text.includes("brand")) return "brand-token";
+  if (text.includes("artifact") || text.includes("receipt") || text.includes("proof")) return "proof-card";
+  if (text.includes("cta")) return "cta-card";
+  return index === 0 ? "hook-card" : "motion-card";
+}
+
+function objectRefForScene(scene, role) {
+  const aliases = Array.isArray(scene.asset_aliases) ? scene.asset_aliases.filter(Boolean) : [];
+  if (aliases.length) return `asset:${aliases[0]}`;
+  if (role === "proof-ui") return "terminal_receipt";
+  if (role === "brand-token") return "brand_logo_card";
+  if (role === "proof-card") return "artifact_card";
+  if (role === "cta-card") return "cta_button";
+  return "paper_card";
+}
+
+function objectLabelForScene(scene, fallback) {
+  const emphasis = Array.isArray(scene.caption_emphasis) && scene.caption_emphasis.length ? scene.caption_emphasis[0] : null;
+  return cleanObjectLabel(emphasis ?? scene.hook ?? scene.caption ?? fallback);
+}
+
+function objectSfxForScene(scene, state) {
+  const text = `${scene.id ?? ""} ${scene.beat ?? ""} ${scene.sound_design ?? ""} ${(scene.sfx_cues ?? []).join(" ")}`.toLowerCase();
+  if (text.includes("typing") || text.includes("prompt") || text.includes("terminal")) return state === "enter" ? "single_type.wav" : "success_ding.wav";
+  if (text.includes("success") || text.includes("cta")) return state === "emphasize" ? "success_ding.wav" : "paper_hit.wav";
+  return state === "enter" ? "paper_hit.wav" : "soft_thump.wav";
+}
+
+function cleanObjectLabel(value) {
+  return stripMarkdown(value).replace(/\s+/g, " ").trim().slice(0, 34) || "motion object";
+}
+
+function safeObjectId(value) {
+  return String(value ?? "object")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40) || "object";
+}
+
 function renderFrameMd(artDirection) {
+  const objectLines = (artDirection.persistent_objects?.objects ?? []).map((object) => {
+    const states = object.states.map((state) => state.state).join(" -> ");
+    const firstTarget = object.states.find((state) => state.to)?.to;
+    const target = firstTarget ? ` target=${JSON.stringify(firstTarget)}` : "";
+    return `- ${object.id} (${object.role}, ${object.ref}) scene=${object.scene_id}; states=${states}; sfx=${object.states.filter((state) => state.sfx).map((state) => state.sfx).join(", ") || "none"}${target}`;
+  }).join("\n");
   return `# frame.md
 
 Video-oriented design system for ${artDirection.generated_for}.
@@ -1166,8 +1268,16 @@ Video-oriented design system for ${artDirection.generated_for}.
 
 - Density: ${artDirection.motion.density}
 - Object lifecycle: ${artDirection.motion.object_lifecycle.join(" -> ")}
+- Object contract: ${artDirection.motion.object_contract}
 - Transitions: ${artDirection.motion.transitions.join("; ")}
 - Smoothness gates: ${artDirection.motion.smoothness_gates.join("; ")}
+
+## Persistent Object Timeline
+
+- Source: ${artDirection.persistent_objects.source}
+- Count: ${artDirection.persistent_objects.count}
+- State order: enter -> settle -> transform -> emphasize -> exit
+${objectLines}
 
 ## Reusable Object Library
 
@@ -1199,10 +1309,13 @@ ${artDirection.storyboard_review.quality_gates.map((gate) => `  - ${gate}`).join
 function renderStoryboardHtml(manifest, video) {
   const scenes = Array.isArray(video.creative_storyboard?.scenes) ? video.creative_storyboard.scenes : [];
   const gates = video.creative_storyboard?.quality_gates ?? [];
+  const objects = Array.isArray(video.object_lifecycle) ? video.object_lifecycle : [];
   const cards = scenes.map((scene) => {
     const aliases = Array.isArray(scene.asset_aliases) && scene.asset_aliases.length ? scene.asset_aliases.join(", ") : "none";
     const motion = Array.isArray(scene.motion_grammar) ? scene.motion_grammar.join(", ") : scene.motion_grammar ?? "";
     const sfx = Array.isArray(scene.sfx_cues) && scene.sfx_cues.length ? scene.sfx_cues.join(", ") : scene.sound_design ?? "";
+    const sceneObjects = objects.filter((object) => object.scene_id === scene.id);
+    const objectSummary = sceneObjects.map((object) => `${object.id}: ${object.states.map((state) => state.state).join(" -> ")}`).join("; ") || "none";
     return `<article class="scene-card">
       <div class="scene-meta">${escapeHtml(scene.time_range ?? "")} / ${escapeHtml(scene.id ?? scene.order ?? "scene")}</div>
       <h2>${escapeHtml(scene.hook ?? scene.caption ?? scene.id ?? "Scene")}</h2>
@@ -1212,6 +1325,7 @@ function renderStoryboardHtml(manifest, video) {
         <dt>Composition</dt><dd>${escapeHtml(scene.composition ?? "")}</dd>
         <dt>Motion</dt><dd>${escapeHtml(motion)}</dd>
         <dt>SFX</dt><dd>${escapeHtml(sfx)}</dd>
+        <dt>Objects</dt><dd>${escapeHtml(objectSummary)}</dd>
         <dt>Assets</dt><dd>${escapeHtml(aliases)}</dd>
         <dt>Evidence</dt><dd>${escapeHtml(scene.evidence_source ?? "")}</dd>
       </dl>
@@ -1269,6 +1383,7 @@ async function writeHyperframesProject(out, manifest, video) {
       style: video.style,
       timeline: video.script_visual_alignment,
       storyboard: video.creative_storyboard,
+      object_lifecycle: video.object_lifecycle ?? [],
       sound_design: video.sound_design,
       assets: video.assets
     }
@@ -1304,6 +1419,7 @@ Use the official HyperFrames skills to improve this scaffold with richer reusabl
 function renderHyperframesIndex(manifest, video) {
   const width = 1080;
   const height = 1920;
+  const lifecycleObjects = Array.isArray(video.object_lifecycle) ? video.object_lifecycle : [];
   const scenes = (video.creative_storyboard?.scenes?.length ? video.creative_storyboard.scenes : video.script_visual_alignment ?? []).map((scene, index) => {
     const range = parseTimeRange(scene.time_range);
     const start = Number.isFinite(range.start) ? range.start : index * 3;
@@ -1314,7 +1430,14 @@ function renderHyperframesIndex(manifest, video) {
     const emphasis = Array.isArray(scene.caption_emphasis) && scene.caption_emphasis.length ? scene.caption_emphasis[0] : scene.id ?? scene.beat ?? "proof";
     return { ...scene, index, start, duration, caption, body, emphasis };
   });
-  const sceneHtml = scenes.map((scene) => `<section class="scene scene-${scene.index % 5}" data-start="${scene.start}" data-duration="${scene.duration.toFixed(2)}" data-track-index="${scene.index + 1}">
+  const sceneHtml = scenes.map((scene) => {
+    const sceneObjects = lifecycleObjects.filter((object) => object.scene_id === scene.id);
+    const objectHtml = sceneObjects.map((object) => `<div class="lifecycle-object" data-object-id="${escapeHtml(object.id)}" data-role="${escapeHtml(object.role)}" data-ref="${escapeHtml(object.ref)}" data-states="${escapeHtml(JSON.stringify(object.states))}">
+          <span class="object-role">${escapeHtml(object.role)}</span>
+          <strong>${escapeHtml(object.label ?? object.id)}</strong>
+          <span class="object-ref">${escapeHtml(object.ref)}</span>
+        </div>`).join("\n");
+    return `<section class="scene scene-${scene.index % 5}" data-start="${scene.start}" data-duration="${scene.duration.toFixed(2)}" data-track-index="${scene.index + 1}" data-object-ids="${escapeHtml(sceneObjects.map((object) => object.id).join(","))}">
       <div class="rail">Scene ${scene.index + 1} / ${escapeHtml(scene.id ?? scene.beat ?? "beat")}</div>
       <div class="paper-card hero-card">
         <p class="eyebrow">${escapeHtml(scene.time_range ?? "")}</p>
@@ -1326,7 +1449,9 @@ function renderHyperframesIndex(manifest, video) {
         <div class="connector"></div>
         <div class="token alt">${escapeHtml(scene.evidence_source ?? "proof")}</div>
       </div>
-    </section>`).join("\n");
+      <div class="lifecycle-layer">${objectHtml}</div>
+    </section>`;
+  }).join("\n");
   const duration = Number(video.duration_seconds ?? 30);
   return `<!doctype html>
 <html lang="en">
@@ -1354,6 +1479,10 @@ function renderHyperframesIndex(manifest, video) {
     .token.alt { background: #62bd93; color: #101010; }
     .connector { height: 6px; background: repeating-linear-gradient(90deg, #1a1a18 0 18px, transparent 18px 30px); position: relative; }
     .connector::after { content: ""; position: absolute; right: -2px; top: -10px; border-left: 24px solid #1a1a18; border-top: 13px solid transparent; border-bottom: 13px solid transparent; }
+    .lifecycle-layer { position: absolute; inset: 0; pointer-events: none; }
+    .lifecycle-object { position: absolute; left: 50%; top: 68%; width: 310px; min-height: 150px; border-radius: 24px; padding: 24px; background: #fffdf8; border: 3px solid #1a1a18; box-shadow: 16px 20px 0 rgba(26,26,24,0.16); font-size: 22px; font-weight: 900; }
+    .object-role { display: block; margin-bottom: 8px; color: #f06f5f; font-size: 17px; text-transform: uppercase; }
+    .object-ref { display: block; margin-top: 8px; color: rgba(26,26,24,0.6); font-size: 16px; }
     .scene-1 .hero-card { transform: rotate(1deg); }
     .scene-2 .hero-card { transform: rotate(-0.4deg); }
     .scene-3 .hero-card { transform: rotate(1.4deg); }
@@ -1371,10 +1500,12 @@ ${sceneHtml}
       const card = scene.querySelector(".hero-card");
       const tokens = scene.querySelectorAll(".token");
       const connector = scene.querySelector(".connector");
+      const lifecycleObjects = scene.querySelectorAll(".lifecycle-object");
       gsap.set(scene, { opacity: 0 });
       gsap.set(card, { y: 80, rotate: index % 2 ? 4 : -4, scale: 0.92 });
       gsap.set(tokens, { y: 46, opacity: 0, scale: 0.86 });
       gsap.set(connector, { scaleX: 0, transformOrigin: "left center" });
+      gsap.set(lifecycleObjects, { opacity: 0, y: 58, scale: 0.86, rotate: -3, filter: "blur(6px)" });
       const start = Number(scene.dataset.start || 0);
       const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
       tl.to(scene, { opacity: 1, duration: 0.12 }, start)
@@ -1383,6 +1514,20 @@ ${sceneHtml}
         .to(connector, { scaleX: 1, duration: 0.44 }, start + 0.58)
         .to(card, { scale: 1.035, duration: Math.max(0.8, Number(scene.dataset.duration || 2) - 0.8), ease: "none" }, start + 0.84)
         .to(scene, { opacity: 0, duration: 0.1 }, start + Number(scene.dataset.duration || 2) - 0.1);
+      lifecycleObjects.forEach((object, objectIndex) => {
+        let states = [];
+        try { states = JSON.parse(object.dataset.states || "[]"); } catch {}
+        const objectTl = gsap.timeline({ defaults: { ease: "power3.out" } });
+        states.forEach((state) => {
+          const at = Number(state.at || start);
+          const duration = Number(state.duration || 0.35);
+          if (state.state === "enter") objectTl.to(object, { opacity: 1, y: 0, scale: 1, rotate: objectIndex % 2 ? 2 : -2, filter: "blur(0px)", duration }, at);
+          if (state.state === "settle") objectTl.to(object, { y: -8, scale: 1.02, duration: duration / 2, yoyo: true, repeat: 1 }, at);
+          if (state.state === "transform") objectTl.to(object, { left: \`\${Number(state.to?.x ?? 0.5) * 100}%\`, top: \`\${Number(state.to?.y ?? 0.68) * 100}%\`, scale: Number(state.to?.scale ?? 1), rotate: Number(state.to?.rotate ?? 0), duration }, at);
+          if (state.state === "emphasize") objectTl.to(object, { scale: 1.1, boxShadow: "0 0 54px rgba(98,189,147,0.45), 16px 20px 0 rgba(26,26,24,0.16)", duration: duration / 2, yoyo: true, repeat: 1 }, at);
+          if (state.state === "exit") objectTl.to(object, { opacity: 0, y: -54, scale: 0.94, filter: "blur(4px)", duration }, at);
+        });
+      });
     });
   </script>
 </body>
