@@ -152,6 +152,10 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.equal(video.object_lifecycle.length, video.creative_storyboard.scenes.length);
     assert.equal(video.object_lifecycle[0].states.map((state) => state.state).join(" -> "), "enter -> settle -> transform -> emphasize -> exit");
     assert.equal(video.art_direction.persistent_objects.count, video.object_lifecycle.length);
+    const objectTemplates = new Set(video.object_lifecycle.map((object) => object.template));
+    for (const template of ["brand_token", "terminal_ui", "diagram", "prompt_ui", "chart", "folder_stack", "cta_card"]) {
+      assert.ok(objectTemplates.has(template), `missing HyperFrames object template ${template}`);
+    }
     assert.equal(video.hyperframes.schema_version, "launchclip.hyperframes-handoff.v1");
     assert.equal(video.hyperframes.entrypoint, "video/hyperframes/index.html");
     assert.deepEqual(video.hyperframes.render_command.slice(0, 3), ["npx", "hyperframes", "render"]);
@@ -176,14 +180,21 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.match(frame, /Target object count: 100\+/);
     assert.match(frame, /Persistent Object Timeline/);
     assert.match(frame, /enter -> settle -> transform -> emphasize -> exit/);
+    assert.match(frame, /template=diagram/);
     assert.match(storyboardHtml, /Receipts before posting|The proof board|Repo proof to premium Short/);
     assert.match(storyboardHtml, /Objects/);
     assert.match(hyperframesHtml, /data-composition-id="LaunchclipHyperframes"/);
     assert.match(hyperframesHtml, /data-object-id="hf-/);
+    assert.match(hyperframesHtml, /data-template="diagram"/);
     assert.match(hyperframesHtml, /data-states=/);
     assert.match(hyperframesHtml, /lifecycle-object/);
+    assert.match(hyperframesHtml, /object-terminal/);
+    assert.match(hyperframesHtml, /object-diagram/);
+    assert.match(hyperframesHtml, /chart-bar-fill/);
+    assert.match(hyperframesHtml, /diagram-connector-line/);
     assert.match(hyperframesHtml, /@hyperframes\/core/);
     assert.equal(hyperframesData.video.object_lifecycle.length, video.object_lifecycle.length);
+    assert.equal(hyperframesData.video.object_lifecycle[2].template, "diagram");
     await access(path.join(out, "video/hyperframes/README.md"));
     await access(path.join(out, "video/hyperframes/launchclip-data.json"));
     assert.equal(readiness.status, "ready");
