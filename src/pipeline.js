@@ -1162,6 +1162,7 @@ function buildHyperframesObjectLifecycle(storyboard, duration) {
     const sceneId = String(scene.id ?? scene.beat ?? `scene-${index + 1}`);
     const role = objectRoleForScene(scene, index);
     const ref = objectRefForScene(scene, role);
+    const template = objectTemplateForScene(scene, role);
     const x = round(0.36 + (index % 3) * 0.14);
     const y = round(0.66 - (index % 2) * 0.1);
     return {
@@ -1169,6 +1170,8 @@ function buildHyperframesObjectLifecycle(storyboard, duration) {
       scene_id: sceneId,
       role,
       ref,
+      template,
+      template_data: objectTemplateDataForScene(scene, template, index),
       label: objectLabelForScene(scene, sceneId),
       states: [
         { state: "enter", at: objectStateAt(start + 0.1, start, end), duration: 0.42, sfx: objectSfxForScene(scene, "enter") },
@@ -1192,21 +1195,53 @@ function objectStateAt(value, start, end) {
 
 function objectRoleForScene(scene, index) {
   const text = `${scene.id ?? ""} ${scene.beat ?? ""} ${scene.layout ?? ""} ${scene.composition ?? ""}`.toLowerCase();
+  if (text.includes("cta")) return "cta-card";
+  if (text.includes("orbit") || text.includes("connector") || text.includes("workflow") || text.includes("line")) return "diagram";
+  if (text.includes("collage") || text.includes("grid") || text.includes("outputs") || text.includes("chart")) return "chart";
   if (text.includes("terminal") || text.includes("prompt") || text.includes("type")) return "proof-ui";
   if (text.includes("asset") || text.includes("brand")) return "brand-token";
-  if (text.includes("artifact") || text.includes("receipt") || text.includes("proof")) return "proof-card";
-  if (text.includes("cta")) return "cta-card";
+  if (text.includes("artifact") || text.includes("receipt") || text.includes("proof") || text.includes("folder") || text.includes("packet") || text.includes("file")) return "proof-card";
   return index === 0 ? "hook-card" : "motion-card";
 }
 
 function objectRefForScene(scene, role) {
+  const text = `${scene.id ?? ""} ${scene.beat ?? ""} ${scene.layout ?? ""} ${scene.composition ?? ""}`.toLowerCase();
   const aliases = Array.isArray(scene.asset_aliases) ? scene.asset_aliases.filter(Boolean) : [];
-  if (aliases.length) return `asset:${aliases[0]}`;
-  if (role === "proof-ui") return "terminal_receipt";
+  if (role === "diagram") return "connector_graph";
+  if (role === "chart") return "matrix_chart";
+  if (role === "proof-ui") return text.includes("prompt") ? "prompt_composer" : "terminal_receipt";
   if (role === "brand-token") return "brand_logo_card";
   if (role === "proof-card") return "artifact_card";
   if (role === "cta-card") return "cta_button";
+  if (aliases.length) return `asset:${aliases[0]}`;
   return "paper_card";
+}
+
+function objectTemplateForScene(scene, role) {
+  const text = `${scene.id ?? ""} ${scene.beat ?? ""} ${scene.layout ?? ""} ${scene.composition ?? ""}`.toLowerCase();
+  if (role === "proof-ui") return text.includes("prompt") ? "prompt_ui" : "terminal_ui";
+  if (role === "diagram") return "diagram";
+  if (role === "chart") return "chart";
+  if (role === "brand-token") return "brand_token";
+  if (role === "cta-card") return "cta_card";
+  if (role === "proof-card") return text.includes("folder") ? "folder_stack" : "proof_card";
+  return "paper_card";
+}
+
+function objectTemplateDataForScene(scene, template, index) {
+  const aliases = Array.isArray(scene.asset_aliases) ? scene.asset_aliases.filter(Boolean).slice(0, 4) : [];
+  const mediaSlots = Array.isArray(scene.media_slots) ? scene.media_slots.filter(Boolean).slice(0, 5) : [];
+  const sfx = Array.isArray(scene.sfx_cues) ? scene.sfx_cues.filter(Boolean).slice(0, 4) : [];
+  const events = Array.isArray(scene.micro_events) ? scene.micro_events.filter(Boolean).slice(0, 4) : [];
+  return {
+    aliases,
+    media_slots: mediaSlots,
+    sfx,
+    events,
+    value: `${index + 1}/${Math.max(1, mediaSlots.length || aliases.length || 3)}`,
+    evidence: cleanObjectLabel(scene.evidence_source ?? "proof"),
+    template
+  };
 }
 
 function objectLabelForScene(scene, fallback) {
@@ -1238,7 +1273,7 @@ function renderFrameMd(artDirection) {
     const states = object.states.map((state) => state.state).join(" -> ");
     const firstTarget = object.states.find((state) => state.to)?.to;
     const target = firstTarget ? ` target=${JSON.stringify(firstTarget)}` : "";
-    return `- ${object.id} (${object.role}, ${object.ref}) scene=${object.scene_id}; states=${states}; sfx=${object.states.filter((state) => state.sfx).map((state) => state.sfx).join(", ") || "none"}${target}`;
+    return `- ${object.id} (${object.role}, ${object.ref}, template=${object.template}) scene=${object.scene_id}; states=${states}; sfx=${object.states.filter((state) => state.sfx).map((state) => state.sfx).join(", ") || "none"}${target}`;
   }).join("\n");
   return `# frame.md
 
@@ -1416,6 +1451,107 @@ Use the official HyperFrames skills to improve this scaffold with richer reusabl
 `;
 }
 
+function renderHyperframesLifecycleObject(object, scene) {
+  const template = object.template ?? "paper_card";
+  return `<div class="lifecycle-object hf-object hf-object--${escapeHtml(template)}" data-object-id="${escapeHtml(object.id)}" data-role="${escapeHtml(object.role)}" data-ref="${escapeHtml(object.ref)}" data-template="${escapeHtml(template)}" data-states="${escapeHtml(JSON.stringify(object.states))}">
+          ${renderHyperframesObjectTemplate(object, scene, template)}
+        </div>`;
+}
+
+function renderHyperframesObjectTemplate(object, scene, template) {
+  if (template === "terminal_ui") return renderTerminalObject(object);
+  if (template === "prompt_ui") return renderPromptObject(object);
+  if (template === "diagram") return renderDiagramObject(object);
+  if (template === "chart") return renderChartObject(object);
+  if (template === "brand_token") return renderBrandTokenObject(object);
+  if (template === "folder_stack") return renderFolderStackObject(object);
+  if (template === "proof_card") return renderProofCardObject(object);
+  if (template === "cta_card") return renderCtaObject(object);
+  return renderPaperObject(object, scene);
+}
+
+function renderTerminalObject(object) {
+  const label = escapeHtml(object.label ?? "terminal proof");
+  return `<div class="object-terminal">
+            <div class="terminal-top"><span></span><span></span><span></span><em>${escapeHtml(object.template_data?.evidence ?? "proof")}</em></div>
+            <code><b>$</b> launchclip render --provider hyperframes</code>
+            <code class="terminal-line">status: ready</code>
+            <strong>${label}</strong>
+          </div>`;
+}
+
+function renderPromptObject(object) {
+  const label = escapeHtml(object.label ?? "prompt");
+  const aliases = object.template_data?.aliases ?? [];
+  return `<div class="object-prompt">
+            <div class="prompt-text">${label}</div>
+            <div class="prompt-chips">${aliases.map((alias) => `<span>${escapeHtml(alias)}</span>`).join("") || "<span>asset</span><span>proof</span>"}</div>
+            <div class="prompt-send">send</div>
+          </div>`;
+}
+
+function renderDiagramObject(object) {
+  const aliases = object.template_data?.aliases?.length ? object.template_data.aliases : ["input", "proof", "review"];
+  return `<div class="object-diagram">
+            <div class="diagram-node node-a">${escapeHtml(aliases[0] ?? "input")}</div>
+            <div class="diagram-connector-line line-a"></div>
+            <div class="diagram-node node-b">${escapeHtml(aliases[1] ?? "proof")}</div>
+            <div class="diagram-connector-line line-b"></div>
+            <div class="diagram-node node-c">${escapeHtml(aliases[2] ?? "review")}</div>
+          </div>`;
+}
+
+function renderChartObject(object) {
+  const slots = object.template_data?.media_slots?.length ? object.template_data.media_slots : ["brief", "captions", "review"];
+  return `<div class="object-chart">
+            <strong>${escapeHtml(object.label ?? "proof chart")}</strong>
+            <div class="chart-bars">
+              ${slots.slice(0, 4).map((slot, index) => `<span><i class="chart-bar-fill" style="height:${42 + index * 17}%"></i><em>${escapeHtml(slot)}</em></span>`).join("")}
+            </div>
+          </div>`;
+}
+
+function renderBrandTokenObject(object) {
+  const aliases = object.template_data?.aliases?.length ? object.template_data.aliases : [object.label ?? "brand"];
+  return `<div class="object-brand-token">
+            ${aliases.slice(0, 3).map((alias) => `<span>${escapeHtml(alias).slice(0, 2).toUpperCase()}</span>`).join("")}
+            <strong>${escapeHtml(object.label ?? "brand token")}</strong>
+          </div>`;
+}
+
+function renderFolderStackObject(object) {
+  const slots = object.template_data?.media_slots?.length ? object.template_data.media_slots : ["script", "captions", "review"];
+  return `<div class="object-folder-stack">
+            <div class="folder-tab">${escapeHtml(object.template_data?.evidence ?? "packet")}</div>
+            ${slots.slice(0, 3).map((slot, index) => `<span class="folder-file file-${index}">${escapeHtml(slot)}</span>`).join("")}
+          </div>`;
+}
+
+function renderProofCardObject(object) {
+  const rows = object.template_data?.media_slots?.length ? object.template_data.media_slots : ["demo", "script", "review"];
+  return `<div class="object-proof-card">
+            <span class="object-role">${escapeHtml(object.role)}</span>
+            <strong>${escapeHtml(object.label ?? "proof card")}</strong>
+            <div class="proof-rows">${rows.slice(0, 4).map((row) => `<span class="proof-row"><i></i>${escapeHtml(row)}</span>`).join("")}</div>
+          </div>`;
+}
+
+function renderCtaObject(object) {
+  return `<div class="object-cta">
+            <strong>${escapeHtml(object.label ?? "review first")}</strong>
+            <span class="cta-check">OK</span>
+            <span>${escapeHtml(object.template_data?.evidence ?? "approval boundary")}</span>
+          </div>`;
+}
+
+function renderPaperObject(object, scene) {
+  return `<div class="object-paper-card">
+            <span class="object-role">${escapeHtml(object.role || "object")}</span>
+            <strong>${escapeHtml(object.label ?? scene.caption ?? object.id)}</strong>
+            <span class="object-ref">${escapeHtml(object.ref)}</span>
+          </div>`;
+}
+
 function renderHyperframesIndex(manifest, video) {
   const width = 1080;
   const height = 1920;
@@ -1432,11 +1568,7 @@ function renderHyperframesIndex(manifest, video) {
   });
   const sceneHtml = scenes.map((scene) => {
     const sceneObjects = lifecycleObjects.filter((object) => object.scene_id === scene.id);
-    const objectHtml = sceneObjects.map((object) => `<div class="lifecycle-object" data-object-id="${escapeHtml(object.id)}" data-role="${escapeHtml(object.role)}" data-ref="${escapeHtml(object.ref)}" data-states="${escapeHtml(JSON.stringify(object.states))}">
-          <span class="object-role">${escapeHtml(object.role)}</span>
-          <strong>${escapeHtml(object.label ?? object.id)}</strong>
-          <span class="object-ref">${escapeHtml(object.ref)}</span>
-        </div>`).join("\n");
+    const objectHtml = sceneObjects.map((object) => renderHyperframesLifecycleObject(object, scene)).join("\n");
     return `<section class="scene scene-${scene.index % 5}" data-start="${scene.start}" data-duration="${scene.duration.toFixed(2)}" data-track-index="${scene.index + 1}" data-object-ids="${escapeHtml(sceneObjects.map((object) => object.id).join(","))}">
       <div class="rail">Scene ${scene.index + 1} / ${escapeHtml(scene.id ?? scene.beat ?? "beat")}</div>
       <div class="paper-card hero-card">
@@ -1480,9 +1612,53 @@ function renderHyperframesIndex(manifest, video) {
     .connector { height: 6px; background: repeating-linear-gradient(90deg, #1a1a18 0 18px, transparent 18px 30px); position: relative; }
     .connector::after { content: ""; position: absolute; right: -2px; top: -10px; border-left: 24px solid #1a1a18; border-top: 13px solid transparent; border-bottom: 13px solid transparent; }
     .lifecycle-layer { position: absolute; inset: 0; pointer-events: none; }
-    .lifecycle-object { position: absolute; left: 50%; top: 68%; width: 310px; min-height: 150px; border-radius: 24px; padding: 24px; background: #fffdf8; border: 3px solid #1a1a18; box-shadow: 16px 20px 0 rgba(26,26,24,0.16); font-size: 22px; font-weight: 900; }
+    .lifecycle-object { position: absolute; left: 50%; top: 68%; width: 330px; min-height: 150px; border-radius: 24px; padding: 0; background: #fffdf8; border: 3px solid #1a1a18; box-shadow: 16px 20px 0 rgba(26,26,24,0.16); font-size: 22px; font-weight: 900; overflow: hidden; }
+    .hf-object--terminal_ui, .hf-object--prompt_ui { background: #121212; color: #ece8e1; }
+    .hf-object--brand_token { border-radius: 999px; background: #1a1a18; color: #ece8e1; }
+    .hf-object--diagram { width: 430px; background: #fffdf8; }
+    .hf-object--chart { width: 390px; background: #fffdf8; }
+    .hf-object--folder_stack { width: 370px; overflow: visible; background: #62bd93; }
+    .hf-object--cta_card { background: #62bd93; }
     .object-role { display: block; margin-bottom: 8px; color: #f06f5f; font-size: 17px; text-transform: uppercase; }
     .object-ref { display: block; margin-top: 8px; color: rgba(26,26,24,0.6); font-size: 16px; }
+    .object-terminal, .object-prompt, .object-diagram, .object-chart, .object-brand-token, .object-folder-stack, .object-proof-card, .object-cta, .object-paper-card { width: 100%; min-height: 150px; padding: 24px; }
+    .terminal-top { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; color: rgba(236,232,225,0.62); font-size: 14px; }
+    .terminal-top span { width: 12px; height: 12px; border-radius: 50%; background: #f06f5f; }
+    .terminal-top span:nth-child(2) { background: #e0b94f; }
+    .terminal-top span:nth-child(3) { background: #62bd93; }
+    .terminal-top em { margin-left: auto; font-style: normal; text-transform: uppercase; }
+    .object-terminal code { display: block; margin-top: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #62bd93; font-size: 18px; }
+    .object-terminal strong { display: block; margin-top: 16px; font-size: 24px; }
+    .object-prompt { display: grid; grid-template-columns: 1fr 72px; gap: 14px; align-items: end; }
+    .prompt-text { grid-column: 1 / -1; color: #62bd93; font-size: 22px; line-height: 1.2; }
+    .prompt-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .prompt-chips span { border: 1px solid rgba(236,232,225,0.24); border-radius: 999px; padding: 8px 10px; font-size: 13px; color: rgba(236,232,225,0.78); }
+    .prompt-send { justify-self: end; width: 58px; height: 58px; border-radius: 50%; background: #ece8e1; color: #121212; display: grid; place-items: center; font-size: 13px; text-transform: uppercase; }
+    .object-diagram { display: grid; grid-template-columns: 1fr 62px 1fr 62px 1fr; align-items: center; gap: 8px; }
+    .diagram-node { min-height: 74px; border-radius: 18px; background: #1a1a18; color: #ece8e1; display: grid; place-items: center; padding: 12px; font-size: 16px; text-align: center; }
+    .node-c { background: #62bd93; color: #101010; }
+    .diagram-connector-line { height: 5px; background: repeating-linear-gradient(90deg, #1a1a18 0 12px, transparent 12px 20px); transform-origin: left center; }
+    .object-chart strong { display: block; margin-bottom: 18px; font-size: 24px; }
+    .chart-bars { height: 126px; display: flex; align-items: flex-end; gap: 14px; border-left: 3px solid #1a1a18; border-bottom: 3px solid #1a1a18; padding: 0 12px; }
+    .chart-bars span { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 8px; font-size: 10px; color: rgba(26,26,24,0.62); }
+    .chart-bar-fill { width: 100%; max-width: 44px; border-radius: 12px 12px 0 0; background: #62bd93; transform-origin: bottom; display: block; }
+    .object-brand-token { display: grid; grid-template-columns: repeat(3, 62px); align-items: center; justify-content: center; gap: 10px; min-height: 150px; text-align: center; }
+    .object-brand-token span { width: 62px; height: 62px; border-radius: 18px; background: #ece8e1; color: #1a1a18; display: grid; place-items: center; font-size: 18px; }
+    .object-brand-token strong { grid-column: 1 / -1; font-size: 18px; }
+    .object-folder-stack { min-height: 170px; position: relative; }
+    .folder-tab { position: absolute; left: 24px; top: -22px; min-width: 150px; padding: 12px 18px; border-radius: 18px 18px 0 0; background: #4fae85; border: 3px solid #1a1a18; border-bottom: none; font-size: 15px; }
+    .folder-file { position: absolute; left: 34px; right: 34px; min-height: 74px; border: 3px solid #1a1a18; border-radius: 18px; background: #fffdf8; padding: 18px; box-shadow: 10px 12px 0 rgba(26,26,24,0.12); }
+    .file-0 { top: 24px; transform: rotate(-4deg); }
+    .file-1 { top: 54px; transform: rotate(2deg); }
+    .file-2 { top: 84px; transform: rotate(-1deg); }
+    .object-proof-card { min-height: 178px; }
+    .proof-rows { display: grid; gap: 8px; margin-top: 16px; }
+    .proof-row { display: flex; align-items: center; gap: 9px; font-size: 15px; color: rgba(26,26,24,0.72); }
+    .proof-row i { width: 12px; height: 12px; border-radius: 50%; background: #62bd93; display: inline-block; }
+    .object-cta { min-height: 168px; display: grid; gap: 12px; align-content: center; text-align: center; }
+    .object-cta strong { font-size: 32px; line-height: 1; }
+    .cta-check { justify-self: center; width: 58px; height: 58px; border-radius: 50%; background: #1a1a18; color: #ece8e1; display: grid; place-items: center; font-size: 18px; }
+    .object-paper-card { min-height: 150px; }
     .scene-1 .hero-card { transform: rotate(1deg); }
     .scene-2 .hero-card { transform: rotate(-0.4deg); }
     .scene-3 .hero-card { transform: rotate(1.4deg); }
@@ -1517,14 +1693,29 @@ ${sceneHtml}
       lifecycleObjects.forEach((object, objectIndex) => {
         let states = [];
         try { states = JSON.parse(object.dataset.states || "[]"); } catch {}
+        const chartBars = object.querySelectorAll(".chart-bar-fill");
+        const diagramLines = object.querySelectorAll(".diagram-connector-line");
+        const proofRows = object.querySelectorAll(".proof-row, .folder-file");
+        gsap.set(chartBars, { scaleY: 0, transformOrigin: "bottom" });
+        gsap.set(diagramLines, { scaleX: 0, transformOrigin: "left center" });
+        gsap.set(proofRows, { opacity: 0, y: 12 });
         const objectTl = gsap.timeline({ defaults: { ease: "power3.out" } });
         states.forEach((state) => {
           const at = Number(state.at || start);
           const duration = Number(state.duration || 0.35);
-          if (state.state === "enter") objectTl.to(object, { opacity: 1, y: 0, scale: 1, rotate: objectIndex % 2 ? 2 : -2, filter: "blur(0px)", duration }, at);
+          if (state.state === "enter") {
+            objectTl.to(object, { opacity: 1, y: 0, scale: 1, rotate: objectIndex % 2 ? 2 : -2, filter: "blur(0px)", duration }, at);
+            objectTl.to(proofRows, { opacity: 1, y: 0, stagger: 0.06, duration: 0.24 }, at + 0.08);
+          }
           if (state.state === "settle") objectTl.to(object, { y: -8, scale: 1.02, duration: duration / 2, yoyo: true, repeat: 1 }, at);
-          if (state.state === "transform") objectTl.to(object, { left: \`\${Number(state.to?.x ?? 0.5) * 100}%\`, top: \`\${Number(state.to?.y ?? 0.68) * 100}%\`, scale: Number(state.to?.scale ?? 1), rotate: Number(state.to?.rotate ?? 0), duration }, at);
-          if (state.state === "emphasize") objectTl.to(object, { scale: 1.1, boxShadow: "0 0 54px rgba(98,189,147,0.45), 16px 20px 0 rgba(26,26,24,0.16)", duration: duration / 2, yoyo: true, repeat: 1 }, at);
+          if (state.state === "transform") {
+            objectTl.to(object, { left: \`\${Number(state.to?.x ?? 0.5) * 100}%\`, top: \`\${Number(state.to?.y ?? 0.68) * 100}%\`, scale: Number(state.to?.scale ?? 1), rotate: Number(state.to?.rotate ?? 0), duration }, at);
+            objectTl.to(chartBars, { scaleY: 1, stagger: 0.08, duration: 0.36 }, at + 0.06);
+            objectTl.to(diagramLines, { scaleX: 1, stagger: 0.12, duration: 0.34 }, at + 0.06);
+          }
+          if (state.state === "emphasize") {
+            objectTl.to(object, { scale: 1.1, boxShadow: "0 0 54px rgba(98,189,147,0.45), 16px 20px 0 rgba(26,26,24,0.16)", duration: duration / 2, yoyo: true, repeat: 1 }, at);
+          }
           if (state.state === "exit") objectTl.to(object, { opacity: 0, y: -54, scale: 0.94, filter: "blur(4px)", duration }, at);
         });
       });
