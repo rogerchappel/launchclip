@@ -140,6 +140,7 @@ test("plans premium product short contract with deterministic asset warnings", a
     const frame = await readFile(path.join(out, "video/frame.md"), "utf8");
     const storyboardHtml = await readFile(path.join(out, "video/storyboard.html"), "utf8");
     const hyperframesHtml = await readFile(path.join(out, "video/hyperframes/index.html"), "utf8");
+    const hyperframesData = JSON.parse(await readFile(path.join(out, "video/hyperframes/launchclip-data.json"), "utf8"));
 
     assert.equal(video.style, "premium-product-short");
     assert.equal(video.duration_seconds, 48);
@@ -148,9 +149,13 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.equal(video.art_direction.reusable_object_library.target_count, 100);
     assert.ok(video.art_direction.charts_diagrams.chart_types.length >= 8);
     assert.ok(video.art_direction.charts_diagrams.diagram_types.length >= 8);
+    assert.equal(video.object_lifecycle.length, video.creative_storyboard.scenes.length);
+    assert.equal(video.object_lifecycle[0].states.map((state) => state.state).join(" -> "), "enter -> settle -> transform -> emphasize -> exit");
+    assert.equal(video.art_direction.persistent_objects.count, video.object_lifecycle.length);
     assert.equal(video.hyperframes.schema_version, "launchclip.hyperframes-handoff.v1");
     assert.equal(video.hyperframes.entrypoint, "video/hyperframes/index.html");
     assert.deepEqual(video.hyperframes.render_command.slice(0, 3), ["npx", "hyperframes", "render"]);
+    assert.equal(video.hyperframes.object_lifecycle.objects.length, video.object_lifecycle.length);
     assert.equal(video.creative_recipe.renderer_contract.composition_id, "LaunchclipPremiumShort");
     assert.deepEqual(video.assets.provided_aliases, ["claude-code", "prompt-example"]);
     assert.deepEqual(video.assets.missing_aliases, ["github", "obsidian", "terminal-demo"]);
@@ -169,9 +174,16 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.equal(payload.recipe_json.creative_storyboard.scenes[3].type_sequences[0].source_alias, "prompt-example");
     assert.match(frame, /Primary: HyperFrames/);
     assert.match(frame, /Target object count: 100\+/);
+    assert.match(frame, /Persistent Object Timeline/);
+    assert.match(frame, /enter -> settle -> transform -> emphasize -> exit/);
     assert.match(storyboardHtml, /Receipts before posting|The proof board|Repo proof to premium Short/);
+    assert.match(storyboardHtml, /Objects/);
     assert.match(hyperframesHtml, /data-composition-id="LaunchclipHyperframes"/);
+    assert.match(hyperframesHtml, /data-object-id="hf-/);
+    assert.match(hyperframesHtml, /data-states=/);
+    assert.match(hyperframesHtml, /lifecycle-object/);
     assert.match(hyperframesHtml, /@hyperframes\/core/);
+    assert.equal(hyperframesData.video.object_lifecycle.length, video.object_lifecycle.length);
     await access(path.join(out, "video/hyperframes/README.md"));
     await access(path.join(out, "video/hyperframes/launchclip-data.json"));
     assert.equal(readiness.status, "ready");
