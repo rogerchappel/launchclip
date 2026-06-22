@@ -40,6 +40,7 @@ export const CARD_STEP_VARIANTS = new Set(["stack", "rail"]);
 export const ICON_FLOW_VARIANTS = new Set(["vertical", "orbit"]);
 export const CHART_TYPES = new Set(["bar", "stacked_bar", "line", "area", "donut", "scatter", "gauge", "funnel", "matrix", "sparkline", "stat_counter", "comparison_table"]);
 export const DIAGRAM_TYPES = new Set(["directed_graph", "hub_spoke", "pipeline", "swimlane", "feedback_loop", "architecture_layers", "causal_chain", "comparison_split"]);
+export const OBJECT_LIFECYCLE_STATES = new Set(["enter", "settle", "transform", "connect", "emphasize", "exit"]);
 
 export const DEFAULT_SFX = {
   punch_zoom: "fast_whoosh.wav",
@@ -94,12 +95,14 @@ export function validateTimeline(input) {
   const base = normalizeBase(input.base);
   const scenes = normalizeScenes(input.scenes, duration, errors, warnings);
   const chapters = normalizeChapters(input.chapters, duration, errors);
+  const objects = normalizeObjects(input.objects, scenes, duration, errors);
   checkZoomsNearCuts(events, scenes, warnings);
   const timeline = {
     version: MOTION_TIMELINE_VERSION,
     duration_seconds: duration,
     base,
     scenes,
+    objects,
     chapters,
     audio: normalizeAudio(input.audio),
     words,
@@ -170,6 +173,96 @@ function normalizeScenes(scenes, duration, errors, warnings) {
     }
   }
   return normalized;
+}
+
+// Optional persistent object identities across scenes/renderers. Scene items can
+// still be anonymous, but anything that must transform, connect, or exit later
+// should be authored here so renderers never have to teleport fresh shapes.
+function normalizeObjects(objects, scenes, duration, errors) {
+  if (objects === undefined || objects === null) return [];
+  if (!Array.isArray(objects)) {
+    errors.push("objects must be an array of persistent object timelines");
+    return [];
+  }
+  const sceneIds = new Set(scenes.map((scene) => scene.id));
+  const objectIds = new Set();
+  return objects.map((object, index) => {
+    const id = String(object?.id ?? "").trim();
+    if (!id) {
+      errors.push(`objects[${index}] missing id`);
+    } else if (objectIds.has(id)) {
+      errors.push(`objects[${index}] duplicate id "${id}"`);
+    } else {
+      objectIds.add(id);
+    }
+
+    const sceneId = object?.scene_id === undefined ? "" : String(object.scene_id);
+    if (sceneId && !sceneIds.has(sceneId)) {
+      errors.push(`objects[${index}] references unknown scene_id "${sceneId}"`);
+    }
+
+    const states = normalizeObjectStates(object?.states, index, duration, errors);
+    const role = String(object?.role ?? "prop").trim() || "prop";
+    const entry = { id, role, states };
+    if (object?.ref) entry.ref = String(object.ref);
+    if (sceneId) entry.scene_id = sceneId;
+    if (object?.object_type) entry.object_type = String(object.object_type);
+    const z = Number(object?.z);
+    if (Number.isFinite(z)) entry.z = z;
+    return entry;
+  });
+}
+
+function normalizeObjectStates(states, objectIndex, duration, errors) {
+  if (!Array.isArray(states) || !states.length) {
+    errors.push(`objects[${objectIndex}] requires states`);
+    return [];
+  }
+  let lastAt = -Infinity;
+  const normalized = states.slice(0, 20).map((state, stateIndex) => {
+    const lifecycleState = String(state?.state ?? "");
+    const at = Number(state?.at);
+    if (!OBJECT_LIFECYCLE_STATES.has(lifecycleState)) {
+      errors.push(`objects[${objectIndex}] states[${stateIndex}] has unknown lifecycle state "${lifecycleState}"`);
+    }
+    if (!Number.isFinite(at) || at < 0 || (Number.isFinite(duration) && at >= duration)) {
+      errors.push(`objects[${objectIndex}] states[${stateIndex}] has invalid at`);
+    }
+    if (Number.isFinite(at) && at < lastAt - 0.001) {
+      errors.push(`objects[${objectIndex}] states[${stateIndex}] moves backward in time`);
+    }
+    if (Number.isFinite(at)) lastAt = at;
+
+    const entry = {
+      state: lifecycleState,
+      at: Number.isFinite(at) ? at : 0,
+      duration: clampNumber(state?.duration, 0.05, 3, lifecycleState === "settle" ? 0.45 : 0.35)
+    };
+    const target = normalizeObjectTarget(state?.to);
+    if (target) entry.to = target;
+    if (state?.sfx !== undefined) entry.sfx = state.sfx === null ? null : String(state.sfx);
+    return entry;
+  });
+
+  const firstState = normalized[0]?.state;
+  if (firstState && firstState !== "enter" && firstState !== "settle") {
+    errors.push(`objects[${objectIndex}] must start with enter or settle`);
+  }
+  const exitIndex = normalized.findIndex((state) => state.state === "exit");
+  if (exitIndex !== -1 && exitIndex !== normalized.length - 1) {
+    errors.push(`objects[${objectIndex}] exit state must be final`);
+  }
+  return normalized;
+}
+
+function normalizeObjectTarget(target) {
+  if (!target || typeof target !== "object" || Array.isArray(target)) return null;
+  const normalized = {};
+  for (const [key, value] of Object.entries(target)) {
+    if (value === null || value === undefined) continue;
+    if (["string", "number", "boolean"].includes(typeof value)) normalized[key] = value;
+  }
+  return Object.keys(normalized).length ? normalized : null;
 }
 
 function normalizeScene(scene, index, errors) {
