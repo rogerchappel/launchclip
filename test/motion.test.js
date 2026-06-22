@@ -10,6 +10,8 @@ import {
   chunkWords
 } from "../motion-engine/schema.js";
 import { buildHeuristicTimeline, flagEmphasis, zoomEvents } from "../motion-engine/heuristics.js";
+import { renderCatalog } from "../motion-engine/catalog.js";
+import { MOTION_OBJECT_CATALOG, objectCatalogStats, renderObjectCatalog } from "../motion-engine/object-catalog.js";
 import { buildTeleprompterMarkdown, parseWords } from "../src/talking_head.js";
 import { REQUIRED_SFX_FILES } from "../src/sfx.js";
 
@@ -52,6 +54,37 @@ test("SFX role map references only required named pack files", () => {
   for (const role of ["funnel_item", "profile_card", "magnifier_focus", "artifact_item", "terminal_status"]) {
     assert.ok(SCENE_SFX[role], `missing scene SFX role ${role}`);
   }
+});
+
+test("motion object catalog exposes 100+ reusable objects for Director and HyperFrames", () => {
+  const stats = objectCatalogStats();
+  const ids = new Set(MOTION_OBJECT_CATALOG.map((entry) => entry.id));
+
+  assert.equal(ids.size, MOTION_OBJECT_CATALOG.length, "object ids must be unique");
+  assert.ok(stats.total >= 100, `expected at least 100 objects, got ${stats.total}`);
+  assert.ok(stats.charts >= 8, `expected at least 8 chart objects, got ${stats.charts}`);
+  assert.ok(stats.diagrams >= 8, `expected at least 8 diagram objects, got ${stats.diagrams}`);
+  for (const category of ["product_ui", "workflow_proof", "brand_media", "diagram", "chart", "motion_prop", "review_proof", "creator_text", "sfx_effect"]) {
+    assert.ok(stats.categories[category] > 0, `missing ${category} objects`);
+  }
+  for (const entry of MOTION_OBJECT_CATALOG) {
+    assert.ok(entry.use_for, `${entry.id} is missing use_for`);
+    assert.ok(entry.default_motion.includes("->") || entry.default_motion.includes("trigger"), `${entry.id} is missing lifecycle motion`);
+    assert.ok(entry.sfx_hooks.length >= 1, `${entry.id} is missing SFX hooks`);
+  }
+});
+
+test("renderCatalog includes the reusable object library and graph/chart vocabulary", () => {
+  const stats = objectCatalogStats();
+  const renderedObjects = renderObjectCatalog();
+  const renderedCatalog = renderCatalog();
+
+  assert.match(renderedObjects, /bar_chart/);
+  assert.match(renderedObjects, /solid_connector/);
+  assert.match(renderedCatalog, /Reusable motion object library/);
+  assert.match(renderedCatalog, new RegExp(`${stats.total} reusable objects`));
+  assert.match(renderedCatalog, /diagram_node/);
+  assert.match(renderedCatalog, /stat_counter/);
 });
 
 test("validateTimeline rejects unknown types, bad timing, and overlapping zooms", () => {

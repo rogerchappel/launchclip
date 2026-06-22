@@ -4,6 +4,8 @@
 // Director's vocabulary with no prompt rewrites. Keep entries honest: only
 // describe what the renderer actually does.
 
+import { objectCatalogStats, renderObjectCatalog } from "./object-catalog.js";
+
 export const SCENE_CATALOG = [
   {
     type: "talking_head",
@@ -160,5 +162,6 @@ export function renderCatalog() {
   ).join("\n\n");
   const events = EVENT_CATALOG.map((entry) => `### ${entry.type}\nUSE FOR: ${entry.use_for}\nPARAMS: ${entry.params}`).join("\n\n");
   const transitions = TRANSITION_CATALOG.map((entry) => `- ${entry.type}: ${entry.use_for}`).join("\n");
-  return `## Scene types\n\n${scenes}\n\n## Overlay events\n\n${events}\n\n## Transitions\n${transitions}\n\n## Timeline-level: chapters\nOptional persistent progress rail across the top: "chapters": [{"title": "Intro", "at": 0}, ...] (2-6 entries, short titles, at = chapter start time). Use for listicles, multi-step education, and any video with named sections. Omit for single-thought videos.`;
+  const stats = objectCatalogStats();
+  return `## Scene types\n\n${scenes}\n\n## Reusable motion object library\n\n${stats.total} reusable objects across ${Object.keys(stats.categories).length} categories. The Director may reference object IDs in scene intent, composition, media_slots, motion_grammar, or future object timelines; renderers own the exact drawing and lifecycle.\n\n${renderObjectCatalog()}\n\n## Overlay events\n\n${events}\n\n## Transitions\n${transitions}\n\n## Timeline-level: chapters\nOptional persistent progress rail across the top: "chapters": [{"title": "Intro", "at": 0}, ...] (2-6 entries, short titles, at = chapter start time). Use for listicles, multi-step education, and any video with named sections. Omit for single-thought videos.`;
 }
