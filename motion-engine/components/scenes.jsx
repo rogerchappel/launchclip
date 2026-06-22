@@ -25,7 +25,7 @@ import { MagnifierScene } from "./Magnifier.jsx";
 // old content just leaves once the new has arrived. No whoosh/zoom/fade.
 const CROSS_HOLD_SECONDS = 0.2;
 
-export function SceneTrack({ scenes, width, height }) {
+export function SceneTrack({ scenes, objects = [], width, height }) {
   const { fps } = useVideoConfig();
   const hold = Math.round(CROSS_HOLD_SECONDS * fps);
   return (
@@ -42,6 +42,7 @@ export function SceneTrack({ scenes, width, height }) {
             <AbsoluteFill style={{ zIndex: index }}>
               <SettleShell settle={index > 0}>
                 <Scene scene={scene} width={width} height={height} />
+                <LifecycleObjects objects={objectsForScene(objects, scene)} scene={scene} width={width} height={height} />
               </SettleShell>
             </AbsoluteFill>
           </Sequence>
@@ -80,6 +81,159 @@ function Scene({ scene, width, height }) {
   if (scene.type === "chart") return <ChartScene scene={scene} width={width} height={height} />;
   if (scene.type === "diagram") return <DiagramScene scene={scene} width={width} height={height} />;
   return null;
+}
+
+function objectsForScene(objects, scene) {
+  return objects.filter((object) => {
+    if (object.scene_id) return object.scene_id === scene.id;
+    return (object.states ?? []).some((state) => state.at >= scene.start && state.at <= scene.end);
+  });
+}
+
+function LifecycleObjects({ objects, scene, width, height }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  if (!objects.length) return null;
+  return (
+    <AbsoluteFill style={{ pointerEvents: "none" }}>
+      {objects.map((object, index) => {
+        const pose = lifecyclePose(object, { frame, fps, scene, width, height, index, total: objects.length });
+        if (pose.opacity <= 0.01) return null;
+        const size = Math.max(118, Math.min(width * 0.25, height * 0.22));
+        const label = objectLabel(object);
+        const accent = objectAccent(object);
+        return (
+          <div
+            key={object.id || index}
+            style={{
+              position: "absolute",
+              left: pose.x * width - size / 2,
+              top: pose.y * height - size * 0.36,
+              width: size,
+              transform: `translateY(${pose.yOffset}px) rotate(${pose.rotate}deg) scale(${pose.scale})`,
+              transformOrigin: "50% 65%",
+              opacity: pose.opacity,
+              zIndex: object.z ?? 20 + index,
+              filter: pose.blur > 0.25 ? `blur(${pose.blur.toFixed(2)}px)` : undefined
+            }}
+          >
+            <Card
+              elevation="mid"
+              radius={18}
+              style={{
+                padding: `${height * 0.014}px ${width * 0.018}px`,
+                background: "#fffdf8",
+                border: `3px solid ${INK.primary}`,
+                boxShadow: `10px 12px 0 rgba(26,26,24,0.15), 0 0 ${pose.glow * 26}px ${accent}`
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: height * 0.006 }}>
+                <span style={{ width: 10, height: 10, borderRadius: "50%", background: accent, flexShrink: 0 }} />
+                <span style={{ fontFamily: FONTS.sans, fontSize: height * 0.011, fontWeight: 900, color: INK.muted, textTransform: "uppercase", letterSpacing: 0 }}>
+                  {object.role || "object"}
+                </span>
+              </div>
+              <div style={{ fontFamily: FONTS.serif, fontSize: height * 0.021, lineHeight: 1.05, fontWeight: 900, color: INK.primary, wordBreak: "break-word" }}>
+                {label}
+              </div>
+              {object.ref ? (
+                <div style={{ marginTop: height * 0.006, fontFamily: FONTS.sans, fontSize: height * 0.01, lineHeight: 1.1, fontWeight: 800, color: INK.muted, wordBreak: "break-word" }}>
+                  {object.ref}
+                </div>
+              ) : null}
+            </Card>
+          </div>
+        );
+      })}
+    </AbsoluteFill>
+  );
+}
+
+function lifecyclePose(object, { frame, fps, scene, width, height, index, total }) {
+  const base = defaultObjectPose(index, total);
+  const pose = { ...base, opacity: 0, scale: 0.86, rotate: base.rotate, yOffset: height * 0.04, glow: 0, blur: 2.5 };
+  const states = object.states ?? [];
+  if (!states.length) return pose;
+
+  for (const state of states) {
+    const start = state.at - scene.start;
+    if (frame < start * fps) break;
+    const duration = state.duration ?? 0.35;
+    const p = lifecycleProgress(frame, fps, start, duration, state.state);
+    if (state.state === "enter") {
+      pose.opacity = p;
+      pose.scale = 0.86 + p * 0.14;
+      pose.yOffset = (1 - p) * height * 0.04;
+      pose.blur = (1 - p) * 2.5;
+    } else if (state.state === "settle") {
+      pose.opacity = 1;
+      pose.scale *= 1 + Math.sin(p * Math.PI) * 0.018;
+      pose.yOffset *= 1 - p;
+      pose.blur *= 1 - p;
+    } else if (state.state === "transform" || state.state === "connect") {
+      const target = targetPose(state.to, pose);
+      pose.x = mix(pose.x, target.x, p);
+      pose.y = mix(pose.y, target.y, p);
+      pose.scale = mix(pose.scale, target.scale, p);
+      pose.rotate = mix(pose.rotate, target.rotate, p);
+      pose.opacity = mix(pose.opacity || 1, target.opacity, p);
+      pose.glow = Math.max(pose.glow, Math.sin(p * Math.PI) * (state.state === "connect" ? 0.55 : 0.35));
+    } else if (state.state === "emphasize") {
+      pose.opacity = Math.max(pose.opacity, 1);
+      pose.scale *= 1 + Math.sin(p * Math.PI) * 0.08;
+      pose.glow = Math.max(pose.glow, Math.sin(p * Math.PI));
+    } else if (state.state === "exit") {
+      pose.opacity = 1 - p;
+      pose.scale *= 1 - p * 0.08;
+      pose.yOffset = -p * height * 0.045;
+      pose.blur = p * 1.8;
+    }
+  }
+  return pose;
+}
+
+function lifecycleProgress(frame, fps, startSeconds, durationSeconds, state) {
+  const easing = state === "exit" ? Easing.bezier(0.45, 0, 0.55, 1) : Easing.bezier(0.16, 1, 0.3, 1);
+  return interpolate(frame, [startSeconds * fps, (startSeconds + durationSeconds) * fps], [0, 1], {
+    easing,
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp"
+  });
+}
+
+function defaultObjectPose(index, total) {
+  const spread = total <= 1 ? 0 : (index / (total - 1) - 0.5) * 0.34;
+  return {
+    x: clampRange(0.5 + spread, 0.12, 0.88),
+    y: 0.68 - (index % 2) * 0.08,
+    scale: 1,
+    rotate: (index % 2 === 0 ? -1 : 1) * (2 + index * 0.6),
+    opacity: 1
+  };
+}
+
+function targetPose(target, current) {
+  const value = target && typeof target === "object" ? target : {};
+  return {
+    x: clampRange(numberOr(value.x, current.x), 0.08, 0.92),
+    y: clampRange(numberOr(value.y, current.y), 0.12, 0.88),
+    scale: clampRange(numberOr(value.scale, current.scale), 0.5, 1.8),
+    rotate: numberOr(value.rotate, current.rotate),
+    opacity: clampRange(numberOr(value.opacity, current.opacity || 1), 0, 1)
+  };
+}
+
+function objectLabel(object) {
+  const raw = object.label || object.object_type || object.ref || object.id || "motion object";
+  return String(raw).replace(/[_-]+/g, " ");
+}
+
+function objectAccent(object) {
+  const value = `${object.role ?? ""} ${object.ref ?? ""} ${object.object_type ?? ""}`.toLowerCase();
+  if (value.includes("warning") || value.includes("risk")) return SEMANTIC.coral;
+  if (value.includes("chart") || value.includes("proof") || value.includes("success")) return SEMANTIC.mint;
+  if (value.includes("diagram") || value.includes("connector")) return SEMANTIC.purple;
+  return SEMANTIC.mint;
 }
 
 function ChartScene({ scene, width, height }) {
@@ -1293,4 +1447,17 @@ function screenshotObjectFit(src) {
 
 function clamp(value) {
   return Math.max(0, Math.min(1, value));
+}
+
+function clampRange(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function numberOr(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function mix(from, to, progress) {
+  return from + (to - from) * progress;
 }

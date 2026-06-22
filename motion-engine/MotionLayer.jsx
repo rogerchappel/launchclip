@@ -62,7 +62,7 @@ export function MotionLayer({ timeline, enableSfx = true }) {
             }}
           >
             {timeline.scenes?.length ? (
-              <SceneTrack scenes={timeline.scenes} width={width} height={height} />
+              <SceneTrack scenes={timeline.scenes} objects={timeline.objects ?? []} width={width} height={height} />
             ) : (
               <BaseLayer base={timeline.base} width={width} height={height} />
             )}
@@ -86,10 +86,10 @@ export function MotionLayer({ timeline, enableSfx = true }) {
           src={resolveSrc(timeline.audio.music)}
           baseVolume={timeline.audio.music_volume ?? 0.08}
           durationSeconds={timeline.duration_seconds}
-          beatTimes={musicBeatTimes(timeline.events, timeline.scenes ?? [])}
+          beatTimes={musicBeatTimes(timeline.events, timeline.scenes ?? [], timeline.objects ?? [])}
         />
       ) : null}
-      {enableSfx ? <SfxLayer events={timeline.events} scenes={timeline.scenes ?? []} fps={fps} /> : null}
+      {enableSfx ? <SfxLayer events={timeline.events} scenes={timeline.scenes ?? []} objects={timeline.objects ?? []} fps={fps} /> : null}
     </AbsoluteFill>
   );
 }
@@ -180,7 +180,7 @@ function smoothAudioRamp(seconds, start, span) {
   return t * t * (3 - 2 * t);
 }
 
-function musicBeatTimes(events, scenes) {
+function musicBeatTimes(events, scenes, objects = []) {
   const beats = [];
   for (const event of events) {
     if (event.type === "punch_zoom" || event.type === "logo_pop") beats.push(event.start);
@@ -194,6 +194,11 @@ function musicBeatTimes(events, scenes) {
     if (scene.branch && Number.isFinite(scene.branch.at)) beats.push(scene.branch.at);
     if (scene.total && Number.isFinite(scene.total.at)) beats.push(scene.total.at);
     if (Number.isFinite(scene.at)) beats.push(scene.at);
+  }
+  for (const object of objects) {
+    for (const state of object.states ?? []) {
+      if (Number.isFinite(state.at)) beats.push(state.at);
+    }
   }
   return [...new Set(beats.map((beat) => Number(beat.toFixed(2))))].sort((a, b) => a - b);
 }
@@ -211,12 +216,18 @@ function beatDucking(seconds, beatTimes) {
 // Sound design, bound automatically — never authored per-scene:
 // every travel/cut whooshes, prompt cards type while their text types,
 // step chips click as they land, the final icon node hits a retro success.
-function SfxLayer({ events, scenes, fps }) {
+function SfxLayer({ events, scenes, objects = [], fps }) {
   const sounds = [];
   for (const event of events) {
     if (!event.sfx) continue;
     sounds.push({ key: `sfx-${event.id}`, at: event.start, sfx: event.sfx, volume: 0.18 });
   }
+  objects.forEach((object) => {
+    (object.states ?? []).forEach((state, stateIndex) => {
+      if (!state.sfx) return;
+      sounds.push({ key: `object-${object.id}-${stateIndex}`, at: state.at, sfx: state.sfx, volume: 0.2 });
+    });
+  });
   scenes.forEach((scene) => {
     // No transition sound: the per-beat whoosh is retired (4e) — scene
     // changes are silent cuts; SFX belong to builds, not boundaries.
