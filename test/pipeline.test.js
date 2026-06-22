@@ -137,9 +137,20 @@ test("plans premium product short contract with deterministic asset warnings", a
     const video = JSON.parse(await readFile(path.join(out, "video/video.json"), "utf8"));
     const payload = JSON.parse(await readFile(path.join(out, "video/product-videogen.dry-run.json"), "utf8"));
     const readiness = await validateWorkspace(out);
+    const frame = await readFile(path.join(out, "video/frame.md"), "utf8");
+    const storyboardHtml = await readFile(path.join(out, "video/storyboard.html"), "utf8");
+    const hyperframesHtml = await readFile(path.join(out, "video/hyperframes/index.html"), "utf8");
 
     assert.equal(video.style, "premium-product-short");
     assert.equal(video.duration_seconds, 48);
+    assert.equal(video.art_direction.schema_version, "launchclip.art-direction.v1");
+    assert.deepEqual(video.art_direction.renderer_targets.slice(0, 2), ["hyperframes", "remotion"]);
+    assert.equal(video.art_direction.reusable_object_library.target_count, 100);
+    assert.ok(video.art_direction.charts_diagrams.chart_types.length >= 8);
+    assert.ok(video.art_direction.charts_diagrams.diagram_types.length >= 8);
+    assert.equal(video.hyperframes.schema_version, "launchclip.hyperframes-handoff.v1");
+    assert.equal(video.hyperframes.entrypoint, "video/hyperframes/index.html");
+    assert.deepEqual(video.hyperframes.render_command.slice(0, 3), ["npx", "hyperframes", "render"]);
     assert.equal(video.creative_recipe.renderer_contract.composition_id, "LaunchclipPremiumShort");
     assert.deepEqual(video.assets.provided_aliases, ["claude-code", "prompt-example"]);
     assert.deepEqual(video.assets.missing_aliases, ["github", "obsidian", "terminal-demo"]);
@@ -152,8 +163,17 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.ok(video.creative_storyboard.scenes[6].sfx_cues.includes("typing-ticks"));
     assert.ok(video.creative_storyboard.scenes[7].brand_moments.length >= 1);
     assert.equal(payload.recipe_json.video_manifest.style, "premium-product-short");
+    assert.equal(payload.recipe_json.art_direction.schema_version, "launchclip.art-direction.v1");
+    assert.equal(payload.recipe_json.hyperframes.composition_id, "LaunchclipHyperframes");
     assert.equal(payload.recipe_json.assets.schema_version, "launchclip.assets.v1");
     assert.equal(payload.recipe_json.creative_storyboard.scenes[3].type_sequences[0].source_alias, "prompt-example");
+    assert.match(frame, /Primary: HyperFrames/);
+    assert.match(frame, /Target object count: 100\+/);
+    assert.match(storyboardHtml, /Receipts before posting|The proof board|Repo proof to premium Short/);
+    assert.match(hyperframesHtml, /data-composition-id="LaunchclipHyperframes"/);
+    assert.match(hyperframesHtml, /@hyperframes\/core/);
+    await access(path.join(out, "video/hyperframes/README.md"));
+    await access(path.join(out, "video/hyperframes/launchclip-data.json"));
     assert.equal(readiness.status, "ready");
     assert.deepEqual(readiness.warnings, [
       "Missing asset alias: github",
@@ -371,6 +391,23 @@ test("rejects live submit in V1", async () => {
     await assert.rejects(
       submitReview(out, { provider: "product-videogen", submit: true }),
       /Live product-videogen submission is intentionally disabled/
+    );
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("hyperframes render provider rejects dry-run mode", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
+  const out = path.join(temp, "packet");
+  try {
+    await initWorkspace(fixtureRepo, { out });
+    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
+    await planVideo(out, { format: "short-30", renderer: "hyperframes", style: "premium-product-short" });
+
+    await assert.rejects(
+      renderVideo(out, { provider: "hyperframes", "dry-run": true }),
+      /hyperframes renders a real media file/
     );
   } finally {
     await rm(temp, { recursive: true, force: true });

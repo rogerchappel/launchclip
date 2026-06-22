@@ -10,6 +10,8 @@ import {
   chunkWords
 } from "../motion-engine/schema.js";
 import { buildHeuristicTimeline, flagEmphasis, zoomEvents } from "../motion-engine/heuristics.js";
+import { renderCatalog } from "../motion-engine/catalog.js";
+import { MOTION_OBJECT_CATALOG, objectCatalogStats, renderObjectCatalog } from "../motion-engine/object-catalog.js";
 import { buildTeleprompterMarkdown, parseWords } from "../src/talking_head.js";
 import { REQUIRED_SFX_FILES } from "../src/sfx.js";
 
@@ -52,6 +54,37 @@ test("SFX role map references only required named pack files", () => {
   for (const role of ["funnel_item", "profile_card", "magnifier_focus", "artifact_item", "terminal_status"]) {
     assert.ok(SCENE_SFX[role], `missing scene SFX role ${role}`);
   }
+});
+
+test("motion object catalog exposes 100+ reusable objects for Director and HyperFrames", () => {
+  const stats = objectCatalogStats();
+  const ids = new Set(MOTION_OBJECT_CATALOG.map((entry) => entry.id));
+
+  assert.equal(ids.size, MOTION_OBJECT_CATALOG.length, "object ids must be unique");
+  assert.ok(stats.total >= 100, `expected at least 100 objects, got ${stats.total}`);
+  assert.ok(stats.charts >= 8, `expected at least 8 chart objects, got ${stats.charts}`);
+  assert.ok(stats.diagrams >= 8, `expected at least 8 diagram objects, got ${stats.diagrams}`);
+  for (const category of ["product_ui", "workflow_proof", "brand_media", "diagram", "chart", "motion_prop", "review_proof", "creator_text", "sfx_effect"]) {
+    assert.ok(stats.categories[category] > 0, `missing ${category} objects`);
+  }
+  for (const entry of MOTION_OBJECT_CATALOG) {
+    assert.ok(entry.use_for, `${entry.id} is missing use_for`);
+    assert.ok(entry.default_motion.includes("->") || entry.default_motion.includes("trigger"), `${entry.id} is missing lifecycle motion`);
+    assert.ok(entry.sfx_hooks.length >= 1, `${entry.id} is missing SFX hooks`);
+  }
+});
+
+test("renderCatalog includes the reusable object library and graph/chart vocabulary", () => {
+  const stats = objectCatalogStats();
+  const renderedObjects = renderObjectCatalog();
+  const renderedCatalog = renderCatalog();
+
+  assert.match(renderedObjects, /bar_chart/);
+  assert.match(renderedObjects, /solid_connector/);
+  assert.match(renderedCatalog, /Reusable motion object library/);
+  assert.match(renderedCatalog, new RegExp(`${stats.total} reusable objects`));
+  assert.match(renderedCatalog, /diagram_node/);
+  assert.match(renderedCatalog, /stat_counter/);
 });
 
 test("validateTimeline rejects unknown types, bad timing, and overlapping zooms", () => {
@@ -254,6 +287,85 @@ test("artifact_grid and terminal_receipt normalize proof fields", () => {
   assert.equal(grid.items[1].status, "ready");
   assert.equal(terminal.command, "npm run smoke");
   assert.equal(terminal.status, "passed");
+});
+
+test("chart and diagram scenes normalize data, nodes, and connectors", () => {
+  const result = validateTimeline({
+    ...baseTimeline([]),
+    scenes: [
+      {
+        id: "chart",
+        type: "chart",
+        start: 0,
+        end: 4,
+        chart_type: "bar",
+        title: "Outputs",
+        x_label: "artifact",
+        y_label: "count",
+        source: "launchclip workspace",
+        data: [
+          { label: "brief", value: 1, at: 0.2 },
+          { label: "captions", value: 4, at: 0.8, series: "generated" }
+        ]
+      },
+      {
+        id: "diagram",
+        type: "diagram",
+        start: 4,
+        end: 10,
+        diagram_type: "pipeline",
+        title: "Launch flow",
+        nodes: [
+          { id: "demo", label: "Demo proof", at: 4.2 },
+          { id: "plan", label: "Video plan", at: 4.8 },
+          { id: "review", label: "Human review", at: 5.4, color: "mint" }
+        ],
+        connectors: [
+          { from: "demo", to: "plan", at: 5.0 },
+          { from: "plan", to: "review", style: "success", at: 5.8 }
+        ]
+      }
+    ]
+  });
+  assert.equal(result.ok, true, result.errors.join("; "));
+  const [chart, diagram] = result.timeline.scenes;
+  assert.equal(chart.chart_type, "bar");
+  assert.equal(chart.data[1].value, 4);
+  assert.equal(chart.claim_status, "evidence-backed");
+  assert.equal(diagram.diagram_type, "pipeline");
+  assert.equal(diagram.nodes[2].color, "mint");
+  assert.equal(diagram.connectors[1].style, "success");
+});
+
+test("chart and diagram scenes reject bad data and broken connectors", () => {
+  const result = validateTimeline({
+    ...baseTimeline([]),
+    scenes: [
+      {
+        id: "bad-chart",
+        type: "chart",
+        start: 0,
+        end: 4,
+        chart_type: "radar",
+        data: [{ label: "made up", value: "nope" }]
+      },
+      {
+        id: "bad-diagram",
+        type: "diagram",
+        start: 4,
+        end: 10,
+        diagram_type: "pipeline",
+        nodes: [{ id: "one", label: "One" }, { id: "two", label: "Two" }],
+        connectors: [{ from: "one", to: "missing" }]
+      }
+    ]
+  });
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => error.includes("unknown chart_type")));
+  assert.ok(result.errors.some((error) => error.includes("requires source or claim_status")));
+  assert.ok(result.errors.some((error) => error.includes("requires x_label and y_label")));
+  assert.ok(result.errors.some((error) => error.includes("requires numeric value")));
+  assert.ok(result.errors.some((error) => error.includes('unknown to "missing"')));
 });
 
 test("zooms hugging a scene cut produce a warning", () => {

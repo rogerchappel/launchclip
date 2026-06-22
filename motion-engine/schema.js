@@ -20,7 +20,9 @@ export const SCENE_TYPES = new Set([
   "profile_cards",
   "magnifier",
   "artifact_grid",
-  "terminal_receipt"
+  "terminal_receipt",
+  "chart",
+  "diagram"
 ]);
 
 // Art direction: scenes persist while builds run inside them, but nothing
@@ -36,6 +38,8 @@ export const SCENE_TRANSITIONS = new Set(["cut", "swipe_left", "swipe_right", "z
 export const TALKING_HEAD_LAYOUTS = new Set(["split", "card", "full", "overlay", "window"]);
 export const CARD_STEP_VARIANTS = new Set(["stack", "rail"]);
 export const ICON_FLOW_VARIANTS = new Set(["vertical", "orbit"]);
+export const CHART_TYPES = new Set(["bar", "stacked_bar", "line", "area", "donut", "scatter", "gauge", "funnel", "matrix", "sparkline", "stat_counter", "comparison_table"]);
+export const DIAGRAM_TYPES = new Set(["directed_graph", "hub_spoke", "pipeline", "swimlane", "feedback_loop", "architecture_layers", "causal_chain", "comparison_split"]);
 
 export const DEFAULT_SFX = {
   punch_zoom: "fast_whoosh.wav",
@@ -357,6 +361,83 @@ function normalizeScene(scene, index, errors) {
     }));
     return { ...base, title: String(scene?.title ?? ""), items };
   }
+  if (type === "chart") {
+    const chartType = String(scene?.chart_type ?? "bar");
+    if (!CHART_TYPES.has(chartType)) errors.push(`scenes[${index}] (chart) has unknown chart_type "${chartType}"`);
+    const raw = Array.isArray(scene?.data) ? scene.data : [];
+    if (!raw.length) errors.push(`scenes[${index}] (chart) requires data`);
+    if (!scene?.source && !scene?.claim_status) errors.push(`scenes[${index}] (chart) requires source or claim_status`);
+    const needsAxes = !["donut", "gauge", "stat_counter"].includes(chartType);
+    if (needsAxes && (!scene?.x_label || !scene?.y_label)) {
+      errors.push(`scenes[${index}] (chart) requires x_label and y_label for ${chartType}`);
+    }
+    const data = raw.slice(0, 24).map((point, pointIndex) => {
+      const entry = {
+        label: String(point?.label ?? point?.x ?? `point ${pointIndex + 1}`),
+        value: numberOrNull(point?.value ?? point?.y),
+        at: clampNumber(point?.at, start, end, start + pointIndex * 0.45)
+      };
+      if (point?.series) entry.series = String(point.series);
+      if (point?.x !== undefined) entry.x = String(point.x);
+      if (point?.color) entry.color = String(point.color);
+      if (entry.value === null) errors.push(`scenes[${index}] (chart) data[${pointIndex}] requires numeric value`);
+      return entry;
+    });
+    return {
+      ...base,
+      chart_type: chartType,
+      title: String(scene?.title ?? ""),
+      x_label: String(scene?.x_label ?? ""),
+      y_label: String(scene?.y_label ?? ""),
+      source: String(scene?.source ?? ""),
+      claim_status: String(scene?.claim_status ?? "evidence-backed"),
+      style: String(scene?.style ?? "paper"),
+      data
+    };
+  }
+  if (type === "diagram") {
+    const diagramType = String(scene?.diagram_type ?? "directed_graph");
+    if (!DIAGRAM_TYPES.has(diagramType)) errors.push(`scenes[${index}] (diagram) has unknown diagram_type "${diagramType}"`);
+    const rawNodes = Array.isArray(scene?.nodes) ? scene.nodes : [];
+    const rawConnectors = Array.isArray(scene?.connectors) ? scene.connectors : [];
+    if (!rawNodes.length) errors.push(`scenes[${index}] (diagram) requires nodes`);
+    const nodes = rawNodes.slice(0, 12).map((node, nodeIndex) => {
+      const id = String(node?.id ?? `node-${nodeIndex + 1}`);
+      if (!String(node?.label ?? "").trim()) errors.push(`scenes[${index}] (diagram) node "${id}" requires label`);
+      return {
+        id,
+        label: String(node?.label ?? ""),
+        at: clampNumber(node?.at, start, end, start + nodeIndex * 0.45),
+        x: clampNumber(node?.x, 0.04, 0.96, layoutPoint(nodeIndex, rawNodes.length).x),
+        y: clampNumber(node?.y, 0.08, 0.92, layoutPoint(nodeIndex, rawNodes.length).y),
+        ...(node?.icon ? { icon: String(node.icon) } : {}),
+        ...(node?.color ? { color: String(node.color) } : {})
+      };
+    });
+    const nodeIds = new Set(nodes.map((node) => node.id));
+    const connectors = rawConnectors.slice(0, 16).map((connector, connectorIndex) => {
+      const from = String(connector?.from ?? "");
+      const to = String(connector?.to ?? "");
+      if (!nodeIds.has(from)) errors.push(`scenes[${index}] (diagram) connector ${connectorIndex + 1} has unknown from "${from}"`);
+      if (!nodeIds.has(to)) errors.push(`scenes[${index}] (diagram) connector ${connectorIndex + 1} has unknown to "${to}"`);
+      const style = String(connector?.style ?? "solid");
+      return {
+        from,
+        to,
+        label: String(connector?.label ?? ""),
+        style: ["solid", "dotted", "curved", "loopback", "warning", "success"].includes(style) ? style : "solid",
+        at: clampNumber(connector?.at, start, end, start + nodes.length * 0.35 + connectorIndex * 0.35)
+      };
+    });
+    if (nodes.length > 1 && !connectors.length) errors.push(`scenes[${index}] (diagram) needs connectors for multi-node diagrams`);
+    return {
+      ...base,
+      diagram_type: diagramType,
+      title: String(scene?.title ?? ""),
+      nodes,
+      connectors
+    };
+  }
   if (type === "terminal_receipt") {
     if (!scene?.command) errors.push(`scenes[${index}] (terminal_receipt) requires command`);
     return {
@@ -368,6 +449,20 @@ function normalizeScene(scene, index, errors) {
     };
   }
   return base;
+}
+
+function numberOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function layoutPoint(index, total) {
+  if (total <= 1) return { x: 0.5, y: 0.5 };
+  const angle = -Math.PI / 2 + (index / total) * Math.PI * 2;
+  return {
+    x: 0.5 + Math.cos(angle) * 0.28,
+    y: 0.5 + Math.sin(angle) * 0.24
+  };
 }
 
 function normalizePresenterWindow(input) {

@@ -4,6 +4,8 @@
 // Director's vocabulary with no prompt rewrites. Keep entries honest: only
 // describe what the renderer actually does.
 
+import { objectCatalogStats, renderObjectCatalog } from "./object-catalog.js";
+
 export const SCENE_CATALOG = [
   {
     type: "talking_head",
@@ -121,6 +123,26 @@ export const SCENE_CATALOG = [
     example: { type: "artifact_grid", start: 18, end: 23, title: "receipts", items: [{ label: "script", path: "video/script.json", at: 18.2 }, { label: "captions", path: "captions/*.md", at: 19.0 }, { label: "review", path: "REVIEW.md", at: 20.0, status: "ready" }] }
   },
   {
+    type: "chart",
+    use_for:
+      "Deterministic data visualizations: bar, stacked_bar, line, area, donut, scatter, gauge, funnel, matrix, sparkline, stat_counter, comparison_table. Use when the script includes explicit numbers, comparisons, or measured change.",
+    avoid_when: "No explicit data/source/claim status. Do not freehand invented graphs. Avoid tiny axes, crowded labels, or more than 24 data points.",
+    params:
+      '{ "type": "chart", "start", "end", "chart_type": "bar|line|area|donut|scatter|gauge|funnel|matrix|sparkline|stat_counter|comparison_table", "title", "x_label?", "y_label?", "source?", "claim_status?", "data": [{"label", "value", "series?", "at"}] }',
+    density: "Axis draws first; one mark/value lands per data point every 0.35-0.6s; labels settle last.",
+    example: { type: "chart", start: 12, end: 16, chart_type: "bar", title: "Review packet outputs", x_label: "artifact", y_label: "count", source: "launchclip workspace", data: [{ label: "brief", value: 1, at: 12.2 }, { label: "captions", value: 4, at: 12.8 }, { label: "review", value: 1, at: 13.4 }] }
+  },
+  {
+    type: "diagram",
+    use_for:
+      "Interconnected systems and explanations: directed_graph, hub_spoke, pipeline, swimlane, feedback_loop, architecture_layers, causal_chain, comparison_split. Nodes and connectors are explicit so lines attach to real endpoints and animate on beat.",
+    avoid_when: "Labels are vague filler, nodes have no real relationship, or connectors reference missing endpoints. Use icon_flow for very small linear chains.",
+    params:
+      '{ "type": "diagram", "start", "end", "diagram_type": "directed_graph|hub_spoke|pipeline|swimlane|feedback_loop|architecture_layers|causal_chain|comparison_split", "title?", "nodes": [{"id", "label", "at", "x?", "y?", "icon?", "color?"}], "connectors": [{"from", "to", "label?", "style": "solid|dotted|curved|loopback|warning|success", "at"}] }',
+    density: "Nodes enter first; connectors draw only after both endpoints exist; moving nodes should pull connectors with them.",
+    example: { type: "diagram", start: 16, end: 21, diagram_type: "pipeline", title: "launch flow", nodes: [{ id: "demo", label: "Demo proof", at: 16.2 }, { id: "plan", label: "Video plan", at: 16.8 }, { id: "review", label: "Human review", at: 17.4, color: "mint" }], connectors: [{ from: "demo", to: "plan", at: 17.0 }, { from: "plan", to: "review", style: "success", at: 17.8 }] }
+  },
+  {
     type: "terminal_receipt",
     use_for:
       "Real demo command proof: command text, short terminal output, and pass/fail receipt badge. Use for the first concrete proof beat after the hook.",
@@ -160,5 +182,6 @@ export function renderCatalog() {
   ).join("\n\n");
   const events = EVENT_CATALOG.map((entry) => `### ${entry.type}\nUSE FOR: ${entry.use_for}\nPARAMS: ${entry.params}`).join("\n\n");
   const transitions = TRANSITION_CATALOG.map((entry) => `- ${entry.type}: ${entry.use_for}`).join("\n");
-  return `## Scene types\n\n${scenes}\n\n## Overlay events\n\n${events}\n\n## Transitions\n${transitions}\n\n## Timeline-level: chapters\nOptional persistent progress rail across the top: "chapters": [{"title": "Intro", "at": 0}, ...] (2-6 entries, short titles, at = chapter start time). Use for listicles, multi-step education, and any video with named sections. Omit for single-thought videos.`;
+  const stats = objectCatalogStats();
+  return `## Scene types\n\n${scenes}\n\n## Reusable motion object library\n\n${stats.total} reusable objects across ${Object.keys(stats.categories).length} categories. The Director may reference object IDs in scene intent, composition, media_slots, motion_grammar, or future object timelines; renderers own the exact drawing and lifecycle.\n\n${renderObjectCatalog()}\n\n## Overlay events\n\n${events}\n\n## Transitions\n${transitions}\n\n## Timeline-level: chapters\nOptional persistent progress rail across the top: "chapters": [{"title": "Intro", "at": 0}, ...] (2-6 entries, short titles, at = chapter start time). Use for listicles, multi-step education, and any video with named sections. Omit for single-thought videos.`;
 }
