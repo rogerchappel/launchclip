@@ -77,7 +77,125 @@ function Scene({ scene, width, height }) {
   if (scene.type === "magnifier") return <MagnifierScene scene={scene} width={width} height={height} />;
   if (scene.type === "artifact_grid") return <ArtifactGridScene scene={scene} width={width} height={height} />;
   if (scene.type === "terminal_receipt") return <TerminalReceiptScene scene={scene} width={width} height={height} />;
+  if (scene.type === "chart") return <ChartScene scene={scene} width={width} height={height} />;
+  if (scene.type === "diagram") return <DiagramScene scene={scene} width={width} height={height} />;
   return null;
+}
+
+function ChartScene({ scene, width, height }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const enter = calmEnter(frame, fps, 0.38);
+  const data = scene.data ?? [];
+  const maxValue = Math.max(1, ...data.map((point) => Number(point.value) || 0));
+  const cardW = width * 0.82;
+  const cardH = height * 0.58;
+  const plotH = cardH * 0.54;
+  const labelSize = Math.round(height * 0.018);
+  const titleSize = Math.round(height * 0.034);
+  return (
+    <AbsoluteFill style={{ display: "grid", placeItems: "center", paddingTop: height * 0.05 }}>
+      <div style={{ width: cardW, transform: `translateY(${(1 - enter) * height * 0.035}px) scale(${0.96 + enter * 0.04})`, opacity: Math.min(1, enter * 1.2) }}>
+        <Card elevation="high" radius={28} style={{ padding: width * 0.055, background: "#fffdf8" }}>
+          <div style={{ fontFamily: FONTS.serif, fontWeight: 900, fontSize: titleSize, color: INK.primary, lineHeight: 1.05 }}>
+            {scene.title || scene.chart_type}
+          </div>
+          <div style={{ marginTop: height * 0.018, fontFamily: FONTS.sans, fontSize: labelSize, fontWeight: 800, color: INK.muted }}>
+            {scene.y_label || "value"} / {scene.x_label || "label"}
+          </div>
+          <div style={{ height: plotH, marginTop: height * 0.038, display: "flex", alignItems: "flex-end", gap: Math.max(8, width * 0.012), borderLeft: `3px solid ${INK.primary}`, borderBottom: `3px solid ${INK.primary}`, padding: `${height * 0.018}px ${width * 0.018}px 0` }}>
+            {data.map((point, index) => {
+              const localFrame = frame - (point.at - scene.start) * fps;
+              const p = localFrame < 0 ? 0 : calmEnter(localFrame, fps, 0.42);
+              const value = Number(point.value) || 0;
+              const barHeight = Math.max(6, (value / maxValue) * (plotH * 0.82) * p);
+              return (
+                <div key={index} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                  <div style={{ fontFamily: FONTS.sans, fontSize: labelSize * 0.95, fontWeight: 900, color: point.color ? semanticColor(point.color) : INK.primary, opacity: p }}>
+                    {value}
+                  </div>
+                  <div style={{ width: "100%", maxWidth: 72, height: barHeight, borderRadius: "12px 12px 4px 4px", background: point.color ? semanticColor(point.color) : SEMANTIC.mint, boxShadow: "8px 10px 0 rgba(26,26,24,0.16)", transform: `translateY(${(1 - p) * 16}px)` }} />
+                  <div style={{ fontFamily: FONTS.sans, fontSize: labelSize * 0.82, fontWeight: 800, color: INK.muted, textAlign: "center", minHeight: labelSize * 2.2, lineHeight: 1.1 }}>
+                    {point.label}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: height * 0.02, display: "flex", justifyContent: "space-between", gap: 18, fontFamily: FONTS.sans, fontSize: labelSize * 0.82, fontWeight: 800, color: INK.muted }}>
+            <span>{scene.chart_type}</span>
+            <span>{scene.source || scene.claim_status}</span>
+          </div>
+        </Card>
+      </div>
+    </AbsoluteFill>
+  );
+}
+
+function DiagramScene({ scene, width, height }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const enter = calmEnter(frame, fps, 0.34);
+  const board = { left: width * 0.08, top: height * 0.15, width: width * 0.84, height: height * 0.66 };
+  const nodes = scene.nodes ?? [];
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const point = (node) => ({ x: board.left + node.x * board.width, y: board.top + node.y * board.height });
+  const nodeW = width * 0.24;
+  const nodeH = height * 0.075;
+  return (
+    <AbsoluteFill>
+      <div style={{ position: "absolute", left: board.left, top: height * 0.075, width: board.width, fontFamily: FONTS.serif, fontWeight: 900, fontSize: height * 0.038, color: INK.primary, transform: `translateY(${(1 - enter) * 20}px)`, opacity: enter }}>
+        {scene.title || scene.diagram_type}
+      </div>
+      <svg width={width} height={height} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+        {(scene.connectors ?? []).map((connector, index) => {
+          const from = nodeMap.get(connector.from);
+          const to = nodeMap.get(connector.to);
+          if (!from || !to) return null;
+          const localFrame = frame - (connector.at - scene.start) * fps;
+          const p = localFrame < 0 ? 0 : calmEnter(localFrame, fps, 0.46);
+          const a = point(from);
+          const b = point(to);
+          const color = connector.style === "warning" ? SEMANTIC.coral : connector.style === "success" ? SEMANTIC.mint : INK.primary;
+          const dash = connector.style === "dotted" || connector.style === "loopback" ? "10 10" : undefined;
+          const x2 = a.x + (b.x - a.x) * p;
+          const y2 = a.y + (b.y - a.y) * p;
+          return (
+            <g key={index} opacity={Math.min(1, p * 1.2)}>
+              <line x1={a.x} y1={a.y} x2={x2} y2={y2} stroke={color} strokeWidth={5} strokeDasharray={dash} strokeLinecap="round" />
+              <circle cx={x2} cy={y2} r={7 * p} fill={color} />
+            </g>
+          );
+        })}
+      </svg>
+      {nodes.map((node, index) => {
+        const localFrame = frame - (node.at - scene.start) * fps;
+        const p = localFrame < 0 ? 0 : calmEnter(localFrame, fps, 0.42);
+        const pos = point(node);
+        const color = node.color ? semanticColor(node.color) : INK.primary;
+        return (
+          <div
+            key={node.id}
+            style={{
+              position: "absolute",
+              left: pos.x - nodeW / 2,
+              top: pos.y - nodeH / 2,
+              width: nodeW,
+              minHeight: nodeH,
+              transform: `translateY(${(1 - p) * 34}px) scale(${0.88 + p * 0.12})`,
+              opacity: Math.min(1, p * 1.15)
+            }}
+          >
+            <Card elevation="mid" radius={22} style={{ padding: `${height * 0.016}px ${width * 0.02}px`, background: node.color ? color : "#fffdf8", border: `3px solid ${INK.primary}` }}>
+              <div style={{ fontFamily: FONTS.sans, fontSize: height * 0.019, lineHeight: 1.1, fontWeight: 900, textAlign: "center", color: node.color ? INK.primary : color }}>
+                {node.label}
+              </div>
+            </Card>
+          </div>
+        );
+      })}
+    </AbsoluteFill>
+  );
 }
 
 // The graphics are the protagonist; the face is the narrator. Default layout
