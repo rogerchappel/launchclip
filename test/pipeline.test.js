@@ -145,6 +145,7 @@ test("plans premium product short contract with deterministic asset warnings", a
     const hyperframesQaHtml = await readFile(path.join(out, "video/hyperframes/template-qa.html"), "utf8");
     const hyperframesAssetReadinessHtml = await readFile(path.join(out, "video/hyperframes/asset-readiness.html"), "utf8");
     const hyperframesChartDiagramQaHtml = await readFile(path.join(out, "video/hyperframes/chart-diagram-qa.html"), "utf8");
+    const hyperframesQualityChecklist = await readFile(path.join(out, "video/hyperframes/QUALITY.md"), "utf8");
     const hyperframesSfxManifest = JSON.parse(await readFile(path.join(out, "video/hyperframes/sfx-manifest.json"), "utf8"));
     const hyperframesData = JSON.parse(await readFile(path.join(out, "video/hyperframes/launchclip-data.json"), "utf8"));
 
@@ -177,6 +178,7 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.equal(video.hyperframes.sfx_manifest, "video/hyperframes/sfx-manifest.json");
     assert.equal(video.hyperframes.asset_readiness, "video/hyperframes/asset-readiness.html");
     assert.equal(video.hyperframes.chart_diagram_qa, "video/hyperframes/chart-diagram-qa.html");
+    assert.equal(video.hyperframes.quality_checklist, "video/hyperframes/QUALITY.md");
     assert.deepEqual(video.hyperframes.render_command.slice(0, 3), ["npx", "hyperframes", "render"]);
     assert.equal(video.hyperframes.object_lifecycle.objects.length, video.object_lifecycle.length);
     assert.equal(video.creative_recipe.renderer_contract.composition_id, "LaunchclipPremiumShort");
@@ -268,6 +270,14 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.match(hyperframesChartDiagramQaHtml, /Data table/);
     assert.match(hyperframesChartDiagramQaHtml, /matrix_chart/);
     assert.match(hyperframesChartDiagramQaHtml, /connector_graph/);
+    assert.match(hyperframesQualityChecklist, /HyperFrames Quality Handoff/);
+    assert.match(hyperframesQualityChecklist, /Gate Table/);
+    assert.match(hyperframesQualityChecklist, /Template QA/);
+    assert.match(hyperframesQualityChecklist, /Asset readiness/);
+    assert.match(hyperframesQualityChecklist, /Chart and diagram QA/);
+    assert.match(hyperframesQualityChecklist, /SFX runtime/);
+    assert.match(hyperframesQualityChecklist, /Human Acceptance Checklist/);
+    assert.match(hyperframesQualityChecklist, /npx hyperframes render index\.html/);
     assert.equal(hyperframesSfxManifest.schema_version, "launchclip.hyperframes-sfx.v1");
     assert.equal(hyperframesSfxManifest.runtime.schema_version, "launchclip.hyperframes-audio-runtime.v1");
     assert.equal(hyperframesSfxManifest.runtime.scheduler, "gsap.delayedCall");
@@ -296,12 +306,18 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.equal(hyperframesData.chart_diagram_qa.summary.issues, 0);
     assert.ok(hyperframesData.chart_diagram_qa.chart_objects.some((object) => object.ref === "matrix_chart" && object.data_mark_count >= 2 && object.source_status === "source-declared"));
     assert.ok(hyperframesData.chart_diagram_qa.diagram_objects.some((object) => object.ref === "connector_graph" && object.endpoint_count >= 2 && object.source_status === "source-declared"));
+    assert.equal(hyperframesData.quality_handoff.schema_version, "launchclip.hyperframes-quality-handoff.v1");
+    assert.equal(hyperframesData.quality_handoff.summary.total, 5);
+    assert.ok(hyperframesData.quality_handoff.checks.some((check) => check.gate === "Template QA" && check.status === "pass"));
+    assert.ok(hyperframesData.quality_handoff.checks.some((check) => check.gate === "SFX runtime" && check.status === "partial-assets"));
+    assert.ok(hyperframesData.quality_handoff.review_order.length >= 5);
     assert.equal(hyperframesData.video.object_lifecycle.length, video.object_lifecycle.length);
     assert.equal(hyperframesData.video.object_lifecycle[2].template, "diagram");
     await access(path.join(out, "video/hyperframes/README.md"));
     await access(path.join(out, "video/hyperframes/template-qa.html"));
     await access(path.join(out, "video/hyperframes/asset-readiness.html"));
     await access(path.join(out, "video/hyperframes/chart-diagram-qa.html"));
+    await access(path.join(out, "video/hyperframes/QUALITY.md"));
     await access(path.join(out, "video/hyperframes/sfx-manifest.json"));
     await access(path.join(out, "video/hyperframes/sfx/connector_pop.wav"));
     await access(path.join(out, "video/hyperframes/sfx/single_type.wav"));
