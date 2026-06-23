@@ -140,6 +140,7 @@ test("plans premium product short contract with deterministic asset warnings", a
     const frame = await readFile(path.join(out, "video/frame.md"), "utf8");
     const storyboardHtml = await readFile(path.join(out, "video/storyboard.html"), "utf8");
     const hyperframesHtml = await readFile(path.join(out, "video/hyperframes/index.html"), "utf8");
+    const hyperframesQaHtml = await readFile(path.join(out, "video/hyperframes/template-qa.html"), "utf8");
     const hyperframesData = JSON.parse(await readFile(path.join(out, "video/hyperframes/launchclip-data.json"), "utf8"));
 
     assert.equal(video.style, "premium-product-short");
@@ -158,6 +159,7 @@ test("plans premium product short contract with deterministic asset warnings", a
     }
     assert.equal(video.hyperframes.schema_version, "launchclip.hyperframes-handoff.v1");
     assert.equal(video.hyperframes.entrypoint, "video/hyperframes/index.html");
+    assert.equal(video.hyperframes.template_qa_preview, "video/hyperframes/template-qa.html");
     assert.deepEqual(video.hyperframes.render_command.slice(0, 3), ["npx", "hyperframes", "render"]);
     assert.equal(video.hyperframes.object_lifecycle.objects.length, video.object_lifecycle.length);
     assert.equal(video.creative_recipe.renderer_contract.composition_id, "LaunchclipPremiumShort");
@@ -193,9 +195,19 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.match(hyperframesHtml, /chart-bar-fill/);
     assert.match(hyperframesHtml, /diagram-connector-line/);
     assert.match(hyperframesHtml, /@hyperframes\/core/);
+    assert.match(hyperframesQaHtml, /HyperFrames Template QA/);
+    assert.match(hyperframesQaHtml, /Template coverage/);
+    assert.match(hyperframesQaHtml, /Static hold checks/);
+    assert.match(hyperframesQaHtml, /Reusable Object Snapshots/);
+    assert.match(hyperframesQaHtml, /data-template="brand_token"/);
+    assert.match(hyperframesQaHtml, /data-template="terminal_ui"/);
+    assert.match(hyperframesQaHtml, /data-template="diagram"/);
+    assert.match(hyperframesQaHtml, /chart-bar-fill/);
+    assert.match(hyperframesQaHtml, /Lifecycle Audit/);
     assert.equal(hyperframesData.video.object_lifecycle.length, video.object_lifecycle.length);
     assert.equal(hyperframesData.video.object_lifecycle[2].template, "diagram");
     await access(path.join(out, "video/hyperframes/README.md"));
+    await access(path.join(out, "video/hyperframes/template-qa.html"));
     await access(path.join(out, "video/hyperframes/launchclip-data.json"));
     assert.equal(readiness.status, "ready");
     assert.deepEqual(readiness.warnings, [
