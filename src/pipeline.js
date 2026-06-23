@@ -3,6 +3,7 @@ import { access, copyFile, mkdir, readFile, rename, rm, writeFile } from "node:f
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { prepareSfxPack } from "./sfx.js";
 
 const execFileAsync = promisify(execFile);
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -13,6 +14,17 @@ const ART_DIRECTION_SCHEMA = "launchclip.art-direction.v1";
 const HYPERFRAMES_PROJECT_DIR = "video/hyperframes";
 const HYPERFRAMES_REQUIRED_TEMPLATE_FAMILIES = ["brand_token", "terminal_ui", "diagram", "prompt_ui", "chart", "folder_stack", "cta_card"];
 const HYPERFRAMES_STATIC_HOLD_THRESHOLD_SECONDS = 1.2;
+const HYPERFRAMES_DEFAULT_SFX_BY_FAMILY = {
+  "connector-pop": "pop.wav",
+  "paper-hit": "paper_hit.wav",
+  "soft-thump": "soft_thump.wav",
+  "success-ding": "success_ding.wav",
+  "typing-tick": "single_type.wav",
+  "ui-hit": "tick.wav",
+  "warning-tap": "camera_tick.wav",
+  whoosh: "fast_whoosh.wav"
+};
+const HYPERFRAMES_MAX_POST_RENDER_SFX_CUES = 64;
 const PREMIUM_REQUIRED_ASSET_ALIASES = ["claude-code", "github", "obsidian", "prompt-example", "terminal-demo"];
 const PREMIUM_OPTIONAL_ASSET_ALIASES = ["brand-font", "presenter-cutaway", "product-logo", "repo-logo", "sfx-type", "sfx-whoosh"];
 
@@ -361,7 +373,7 @@ async function renderHyperframes(out, flags = {}) {
   if (flags.fps) renderArgs.push("--fps", String(flags.fps));
   if (flags.format) renderArgs.push("--format", String(flags.format));
   await execFileAsync("npx", renderArgs, { cwd: projectDir, maxBuffer: 1024 * 1024 * 16 });
-  const audio = await applyPostRenderAudio(out, output, flags, { defaultVoiceover: true, defaultMusic: true });
+  const audio = await applyPostRenderAudio(out, output, flags, { defaultVoiceover: true, defaultMusic: true, defaultSfx: true });
   await execFileAsync("ffmpeg", [
     "-y",
     "-ss",
@@ -382,10 +394,12 @@ async function renderHyperframes(out, flags = {}) {
       project_dir: HYPERFRAMES_PROJECT_DIR,
       voiceover_audio: audio.voiceoverAudio,
       music_audio: audio.musicAudio,
+      sfx_audio_cues: audio.sfxCueCount,
+      sfx_audio_assets: audio.sfxAssetCount,
       audio_mix: audio.applied ? "local-generated" : "none"
     };
   });
-  return { stage: "render", mode: "local", provider: "hyperframes", video: output, thumbnail, projectDir, voiceoverAudio: audio.voiceoverAudio, musicAudio: audio.musicAudio };
+  return { stage: "render", mode: "local", provider: "hyperframes", video: output, thumbnail, projectDir, voiceoverAudio: audio.voiceoverAudio, musicAudio: audio.musicAudio, sfxCueCount: audio.sfxCueCount, sfxAssetCount: audio.sfxAssetCount };
 }
 
 async function renderLocalFfmpeg(out, flags = {}) {
@@ -488,7 +502,11 @@ async function applyPostRenderAudio(out, videoPath, flags = {}, options = {}) {
   const useMusic = shouldGenerateMusicBed(flags, options);
   const voiceoverAudio = voiceoverMode ? await generateVoiceoverAudio(out, flags, voiceoverMode, videoDuration) : null;
   const musicAudio = useMusic ? await generateMusicBedAudio(out, videoDuration) : null;
-  if (!voiceoverAudio && !musicAudio) return { applied: false, voiceoverAudio: null, musicAudio: null };
+  const sfxInputs = options.defaultSfx ? await collectPostRenderSfxInputs(out, videoDuration) : [];
+  const sfxAssetCount = new Set(sfxInputs.map((input) => input.assetId)).size;
+  if (!voiceoverAudio && !musicAudio && !sfxInputs.length) {
+    return { applied: false, voiceoverAudio: null, musicAudio: null, sfxCueCount: 0, sfxAssetCount: 0 };
+  }
 
   const mixedPath = path.join(out, "video", "launchclip.audio.mp4");
   const args = ["-y", "-i", videoPath];
@@ -503,11 +521,19 @@ async function applyPostRenderAudio(out, videoPath, flags = {}, options = {}) {
   }
   if (musicAudio) {
     args.push("-i", path.join(out, musicAudio));
-    filters.push(`[${inputIndex}:a]volume=${voiceoverAudio ? "0.32" : "0.58"},apad[music]`);
+    filters.push(`[${inputIndex}:a]volume=${voiceoverAudio ? "0.42" : "0.68"},apad[music]`);
     mixInputs.push("[music]");
+    inputIndex += 1;
+  }
+  for (const [index, sfx] of sfxInputs.entries()) {
+    args.push("-i", sfx.path);
+    const label = `sfx${index}`;
+    filters.push(`[${inputIndex}:a]volume=${sfx.volume},adelay=${sfx.delayMs}:all=1,apad[${label}]`);
+    mixInputs.push(`[${label}]`);
+    inputIndex += 1;
   }
   const mixedFilter = mixInputs.length > 1
-    ? `${mixInputs.join("")}amix=inputs=${mixInputs.length}:duration=longest:dropout_transition=0,atrim=0:${videoDuration.toFixed(3)},asetpts=N/SR/TB[a]`
+    ? `${mixInputs.join("")}amix=inputs=${mixInputs.length}:duration=longest:dropout_transition=0:normalize=0,alimiter=limit=0.95,atrim=0:${videoDuration.toFixed(3)},asetpts=N/SR/TB[a]`
     : `${mixInputs[0]}atrim=0:${videoDuration.toFixed(3)},asetpts=N/SR/TB[a]`;
   const filter = `${filters.join(";")};${mixedFilter}`;
   await execFileAsync("ffmpeg", [
@@ -528,7 +554,7 @@ async function applyPostRenderAudio(out, videoPath, flags = {}, options = {}) {
     mixedPath
   ], { maxBuffer: 1024 * 1024 * 8 });
   await rename(mixedPath, videoPath);
-  return { applied: true, voiceoverAudio, musicAudio };
+  return { applied: true, voiceoverAudio, musicAudio, sfxCueCount: sfxInputs.length, sfxAssetCount };
 }
 
 async function resolveVoiceoverMode(flags = {}, options = {}) {
@@ -570,30 +596,106 @@ async function generateVoiceoverAudio(out, flags, mode, videoDuration) {
 
 async function generateMusicBedAudio(out, duration) {
   const musicPath = path.join(out, "video", "music-bed.wav");
-  const fadeOutStart = Math.max(0, duration - 0.8);
-  await execFileAsync("ffmpeg", [
-    "-y",
-    "-f",
-    "lavfi",
-    "-i",
-    `sine=frequency=110:duration=${duration.toFixed(3)}:sample_rate=44100`,
-    "-f",
-    "lavfi",
-    "-i",
-    `sine=frequency=164.81:duration=${duration.toFixed(3)}:sample_rate=44100`,
-    "-f",
-    "lavfi",
-    "-i",
-    `sine=frequency=220:duration=${duration.toFixed(3)}:sample_rate=44100`,
-    "-filter_complex",
-    `[0:a]volume=0.030[a0];[1:a]volume=0.020[a1];[2:a]volume=0.012[a2];[a0][a1][a2]amix=inputs=3:duration=first,afade=t=in:st=0:d=0.45,afade=t=out:st=${fadeOutStart.toFixed(3)}:d=0.8[a]`,
-    "-map",
-    "[a]",
-    "-c:a",
-    "pcm_s16le",
-    musicPath
-  ], { maxBuffer: 1024 * 1024 * 8 });
+  await writeFile(musicPath, makeGeneratedMusicBedWav(duration));
   return "video/music-bed.wav";
+}
+
+function makeGeneratedMusicBedWav(duration) {
+  const sampleRate = 44100;
+  const channels = 2;
+  const totalSamples = Math.max(1, Math.ceil(duration * sampleRate));
+  const dataSize = totalSamples * channels * 2;
+  const buffer = Buffer.alloc(44 + dataSize);
+  const beatSeconds = 60 / 94;
+  const progression = [
+    [110, 164.81, 220],
+    [98, 146.83, 196],
+    [123.47, 185, 246.94],
+    [82.41, 164.81, 220]
+  ];
+  let noiseSeed = 0x6c61756e;
+
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + dataSize, 4);
+  buffer.write("WAVE", 8);
+  buffer.write("fmt ", 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(channels, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * channels * 2, 28);
+  buffer.writeUInt16LE(channels * 2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(dataSize, 40);
+
+  for (let index = 0; index < totalSamples; index += 1) {
+    const t = index / sampleRate;
+    const beatIndex = Math.floor(t / beatSeconds);
+    const beatPhase = t - beatIndex * beatSeconds;
+    const eighthPhase = t - Math.floor(t / (beatSeconds / 2)) * (beatSeconds / 2);
+    const chord = progression[Math.floor(t / (beatSeconds * 4)) % progression.length];
+    noiseSeed = (noiseSeed * 1664525 + 1013904223) >>> 0;
+    const noise = (noiseSeed / 0xffffffff) * 2 - 1;
+    const fade = Math.min(1, t / 0.45, (duration - t) / 0.35);
+    const sidechain = 1 - 0.32 * Math.exp(-beatPhase * 11);
+    const pad = chord.reduce((sum, frequency, chordIndex) => {
+      const detune = chordIndex === 1 ? 1.003 : chordIndex === 2 ? 0.997 : 1;
+      return sum + Math.sin(2 * Math.PI * frequency * detune * t) * (0.023 / (chordIndex + 1));
+    }, 0) * sidechain;
+    const bass = Math.sin(2 * Math.PI * chord[0] * 0.5 * t) * Math.exp(-beatPhase * 3.6) * 0.045;
+    const arpStep = Math.floor(t / (beatSeconds / 2));
+    const arpPhase = eighthPhase;
+    const arp = Math.sin(2 * Math.PI * chord[arpStep % chord.length] * 2 * t) * Math.exp(-arpPhase * 12) * 0.035;
+    const kick = Math.sin(2 * Math.PI * (48 + 42 * Math.exp(-beatPhase * 18)) * t) * Math.exp(-beatPhase * 13) * 0.13;
+    const snarePhase = beatIndex % 4 === 2 ? beatPhase : 1;
+    const snare = snarePhase < 0.18 ? noise * Math.exp(-snarePhase * 20) * 0.035 : 0;
+    const hat = noise * Math.exp(-eighthPhase * 38) * 0.014;
+    const sample = clampSample((pad + bass + arp + kick + snare + hat) * Math.max(0, fade) * 0.92);
+    const left = clampSample(sample + pad * 0.16);
+    const right = clampSample(sample - pad * 0.16);
+    buffer.writeInt16LE(Math.round(left * 32767), 44 + index * channels * 2);
+    buffer.writeInt16LE(Math.round(right * 32767), 44 + index * channels * 2 + 2);
+  }
+  return buffer;
+}
+
+function clampSample(value) {
+  return Math.max(-1, Math.min(1, value));
+}
+
+async function collectPostRenderSfxInputs(out, videoDuration) {
+  const sfxManifest = await optionalJson(path.join(out, HYPERFRAMES_PROJECT_DIR.replace(/\//g, path.sep), "sfx-manifest.json"));
+  if (!sfxManifest) return [];
+  const assetsById = new Map((sfxManifest.assets ?? [])
+    .filter((asset) => asset.status === "available-local-asset" && asset.path)
+    .map((asset) => [asset.id, asset]));
+  const cues = [...(sfxManifest.cues ?? []), ...(sfxManifest.storyboard_cues ?? [])]
+    .map((cue) => ({ ...cue, at: Number(cue.at ?? 0) }))
+    .filter((cue) => Number.isFinite(cue.at) && cue.at >= 0 && cue.at < videoDuration)
+    .sort((a, b) => a.at - b.at)
+    .slice(0, HYPERFRAMES_MAX_POST_RENDER_SFX_CUES);
+  const inputs = [];
+  for (const cue of cues) {
+    const asset = assetsById.get(cue.asset_id);
+    if (!asset) continue;
+    const filePath = path.join(out, HYPERFRAMES_PROJECT_DIR.replace(/\//g, path.sep), asset.path);
+    if (!(await fileExists(filePath))) continue;
+    inputs.push({
+      assetId: asset.id,
+      cueId: cue.id,
+      path: filePath,
+      delayMs: Math.max(0, Math.round(cue.at * 1000)),
+      volume: postRenderSfxVolume(cue, asset)
+    });
+  }
+  return inputs;
+}
+
+function postRenderSfxVolume(cue, asset) {
+  const gainDb = Number(cue.gain_db ?? asset.gain_db ?? -18);
+  const linear = Math.pow(10, gainDb / 20) * 2.25;
+  return Math.max(0.035, Math.min(0.62, linear)).toFixed(4);
 }
 
 async function commandExists(command) {
@@ -2265,7 +2367,7 @@ function buildHyperframesSfxManifest(video) {
     schema_version: "launchclip.hyperframes-sfx.v1",
     source: "video/video.json#object_lifecycle",
     asset_base_path: "sfx/",
-    missing_asset_policy: "Render silently if an expected local asset is not present; do not substitute unrelated stock audio.",
+    missing_asset_policy: "Use explicit local assets first, then project-local default SFX generated from the required pack; only unresolved files stay silent.",
     mix: {
       master_gain_db: -12,
       voiceover_duck_db: -8,
@@ -2291,26 +2393,60 @@ async function copyHyperframesSfxAssets(projectDir, assets, sfxManifest) {
   const missing = [];
   const sfxDir = path.join(projectDir, "sfx");
   await mkdir(sfxDir, { recursive: true });
+  const defaultPack = await prepareSfxPack({ publicDir: projectDir, allowPlaceholder: true });
   for (const asset of sfxManifest.assets) {
     const entry = availableAliases.get(asset.id);
-    if (!entry) {
+    if (entry && await fileExists(entry.source_path)) {
+      const targetName = asset.file_name || path.basename(entry.source_path);
+      await copyFile(entry.source_path, path.join(sfxDir, targetName));
+      copied.push({
+        asset_id: asset.id,
+        alias: entry.alias,
+        source_path: entry.source_path,
+        path: `sfx/${targetName}`
+      });
+      continue;
+    }
+
+    const fallback = await hyperframesDefaultSfxSource(asset, defaultPack.dir);
+    if (!fallback) {
       missing.push(asset.id);
       continue;
     }
-    if (!(await fileExists(entry.source_path))) {
-      missing.push(asset.id);
-      continue;
+    const targetName = asset.file_name || path.basename(fallback.sourcePath);
+    const targetPath = path.join(sfxDir, targetName);
+    if (path.resolve(fallback.sourcePath) !== path.resolve(targetPath)) {
+      await copyFile(fallback.sourcePath, targetPath);
     }
-    const targetName = asset.file_name || path.basename(entry.source_path);
-    await copyFile(entry.source_path, path.join(sfxDir, targetName));
     copied.push({
       asset_id: asset.id,
-      alias: entry.alias,
-      source_path: entry.source_path,
+      alias: fallback.alias,
+      source_path: fallback.sourcePath,
       path: `sfx/${targetName}`
     });
   }
   return { copied, missing };
+}
+
+async function hyperframesDefaultSfxSource(asset, generatedSfxDir) {
+  const packageSfxDir = path.join(PACKAGE_ROOT, "public", "sfx");
+  const names = [...new Set([
+    asset.file_name,
+    HYPERFRAMES_DEFAULT_SFX_BY_FAMILY[asset.family],
+    "tick.wav"
+  ].filter(Boolean))];
+  for (const dir of [packageSfxDir, generatedSfxDir]) {
+    for (const name of names) {
+      const sourcePath = path.join(dir, name);
+      if (await fileExists(sourcePath)) {
+        return {
+          alias: path.resolve(dir) === path.resolve(generatedSfxDir) ? "generated-default-sfx" : "default-sfx-pack",
+          sourcePath
+        };
+      }
+    }
+  }
+  return null;
 }
 
 function hyperframesSfxAssetAliases(assets) {
