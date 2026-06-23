@@ -1479,6 +1479,8 @@ async function writeHyperframesProject(out, manifest, video) {
   const projectDir = path.join(out, HYPERFRAMES_PROJECT_DIR.replace(/\//g, path.sep));
   await mkdir(projectDir, { recursive: true });
   const sfxManifest = buildHyperframesSfxManifest(video);
+  const sfxCopy = await copyHyperframesSfxAssets(projectDir, video.assets, sfxManifest);
+  const resolvedSfxManifest = applyHyperframesSfxAvailability(sfxManifest, sfxCopy);
   await writeJson(path.join(projectDir, "launchclip-data.json"), {
     schema_version: "launchclip.hyperframes-data.v1",
     repo: manifest.source_repo,
@@ -1492,11 +1494,11 @@ async function writeHyperframesProject(out, manifest, video) {
       sound_design: video.sound_design,
       assets: video.assets
     },
-    sfx_manifest: sfxManifest
+    sfx_manifest: resolvedSfxManifest
   });
-  await writeJson(path.join(projectDir, "sfx-manifest.json"), sfxManifest);
+  await writeJson(path.join(projectDir, "sfx-manifest.json"), resolvedSfxManifest);
   await writeFile(path.join(projectDir, "README.md"), renderHyperframesReadme(video));
-  await writeFile(path.join(projectDir, "index.html"), renderHyperframesIndex(manifest, video));
+  await writeFile(path.join(projectDir, "index.html"), renderHyperframesIndex(manifest, video, resolvedSfxManifest));
   await writeFile(path.join(projectDir, "template-qa.html"), renderHyperframesTemplateQa(video));
 }
 
@@ -1581,6 +1583,80 @@ function buildHyperframesSfxManifest(video) {
     assets: [...assetsById.values()].sort((a, b) => a.id.localeCompare(b.id)),
     cues,
     storyboard_cues: storyboardCues
+  };
+}
+
+async function copyHyperframesSfxAssets(projectDir, assets, sfxManifest) {
+  const availableAliases = hyperframesSfxAssetAliases(assets);
+  const copied = [];
+  const missing = [];
+  const sfxDir = path.join(projectDir, "sfx");
+  await mkdir(sfxDir, { recursive: true });
+  for (const asset of sfxManifest.assets) {
+    const entry = availableAliases.get(asset.id);
+    if (!entry) {
+      missing.push(asset.id);
+      continue;
+    }
+    if (!(await fileExists(entry.source_path))) {
+      missing.push(asset.id);
+      continue;
+    }
+    const targetName = asset.file_name || path.basename(entry.source_path);
+    await copyFile(entry.source_path, path.join(sfxDir, targetName));
+    copied.push({
+      asset_id: asset.id,
+      alias: entry.alias,
+      source_path: entry.source_path,
+      path: `sfx/${targetName}`
+    });
+  }
+  return { copied, missing };
+}
+
+function hyperframesSfxAssetAliases(assets) {
+  const aliases = new Map();
+  for (const entry of Object.values(assets?.aliases ?? {})) {
+    if (!isHyperframesSfxAsset(entry)) continue;
+    for (const key of hyperframesSfxAliasKeys(entry)) {
+      aliases.set(key, entry);
+    }
+  }
+  return aliases;
+}
+
+function isHyperframesSfxAsset(entry) {
+  const type = String(entry?.type ?? "").toLowerCase();
+  const alias = String(entry?.alias ?? "").toLowerCase();
+  const extension = path.extname(entry?.source_path ?? entry?.manifest_path ?? "").toLowerCase();
+  return type === "sfx" || type === "audio" || alias.startsWith("sfx-") || [".wav", ".mp3", ".m4a", ".aac", ".aiff"].includes(extension);
+}
+
+function hyperframesSfxAliasKeys(entry) {
+  const alias = normalizeAssetAlias(entry?.alias);
+  const baseName = normalizeAssetAlias(path.basename(entry?.source_path ?? entry?.manifest_path ?? "", path.extname(entry?.source_path ?? entry?.manifest_path ?? "")));
+  const withoutPrefix = alias.startsWith("sfx-") ? alias.slice(4) : alias;
+  return [...new Set([alias, withoutPrefix, baseName].filter(Boolean))];
+}
+
+function applyHyperframesSfxAvailability(sfxManifest, sfxCopy) {
+  const copiedByAsset = new Map(sfxCopy.copied.map((entry) => [entry.asset_id, entry]));
+  const assets = sfxManifest.assets.map((asset) => {
+    const copied = copiedByAsset.get(asset.id);
+    if (!copied) return asset;
+    return {
+      ...asset,
+      path: copied.path,
+      status: "available-local-asset",
+      source_alias: copied.alias
+    };
+  });
+  const missing = assets.filter((asset) => asset.status !== "available-local-asset").map((asset) => asset.id);
+  return {
+    ...sfxManifest,
+    copied_assets: sfxCopy.copied,
+    missing_assets: missing,
+    assets
   };
 }
 
@@ -1739,12 +1815,12 @@ function renderPaperObject(object, scene) {
           </div>`;
 }
 
-function renderHyperframesIndex(manifest, video) {
+function renderHyperframesIndex(manifest, video, sfxManifest = null) {
   const width = 1080;
   const height = 1920;
   const lifecycleObjects = Array.isArray(video.object_lifecycle) ? video.object_lifecycle : [];
-  const sfxManifest = buildHyperframesSfxManifest(video);
-  const sfxManifestJson = JSON.stringify(sfxManifest).replace(/</g, "\\u003c");
+  const resolvedSfxManifest = sfxManifest ?? buildHyperframesSfxManifest(video);
+  const sfxManifestJson = JSON.stringify(resolvedSfxManifest).replace(/</g, "\\u003c");
   const scenes = (video.creative_storyboard?.scenes?.length ? video.creative_storyboard.scenes : video.script_visual_alignment ?? []).map((scene, index) => {
     const range = parseTimeRange(scene.time_range);
     const start = Number.isFinite(range.start) ? range.start : index * 3;
@@ -1855,7 +1931,7 @@ function renderHyperframesIndex(manifest, video) {
   </style>
 </head>
 <body>
-  <div id="stage" data-composition-id="LaunchclipHyperframes" data-start="0" data-duration="${duration}" data-width="${width}" data-height="${height}" data-sfx-manifest="sfx-manifest.json" data-sfx-cues="${sfxManifest.cues.length}">
+  <div id="stage" data-composition-id="LaunchclipHyperframes" data-start="0" data-duration="${duration}" data-width="${width}" data-height="${height}" data-sfx-manifest="sfx-manifest.json" data-sfx-cues="${resolvedSfxManifest.cues.length}">
     <div class="grid-bg" data-start="0" data-duration="${duration}" data-track-index="0"></div>
 ${sceneHtml}
   </div>
