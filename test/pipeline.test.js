@@ -125,7 +125,9 @@ test("plans premium product short contract with deterministic asset warnings", a
   try {
     await writePremiumAssetManifest(assetsDir, {
       "claude-code": "claude-code.png",
-      "prompt-example": { path: "prompt-example.txt", type: "text", label: "Launch prompt" }
+      "prompt-example": { path: "prompt-example.txt", type: "text", label: "Launch prompt" },
+      "sfx-connector-pop": { path: "connector_pop.wav", type: "sfx", label: "Connector pop" },
+      "sfx-single-type": { path: "single_type.wav", type: "sfx", label: "Single type" }
     });
     await initWorkspace(fixtureRepo, { out });
     await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
@@ -174,7 +176,7 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.deepEqual(video.hyperframes.render_command.slice(0, 3), ["npx", "hyperframes", "render"]);
     assert.equal(video.hyperframes.object_lifecycle.objects.length, video.object_lifecycle.length);
     assert.equal(video.creative_recipe.renderer_contract.composition_id, "LaunchclipPremiumShort");
-    assert.deepEqual(video.assets.provided_aliases, ["claude-code", "prompt-example"]);
+    assert.deepEqual(video.assets.provided_aliases, ["claude-code", "prompt-example", "sfx-connector-pop", "sfx-single-type"]);
     assert.deepEqual(video.assets.missing_aliases, ["github", "obsidian", "terminal-demo"]);
     assert.equal(video.creative_storyboard.asset_manifest.expected_file, "launchclip-assets.json");
     assert.equal(video.creative_storyboard.scenes.length, 8);
@@ -227,7 +229,11 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.ok(hyperframesSfxManifest.cues.length >= video.object_lifecycle.length);
     assert.ok(hyperframesSfxManifest.storyboard_cues.length >= video.creative_storyboard.scenes.length);
     assert.ok(hyperframesSfxManifest.assets.some((asset) => asset.id === "connector-pop" && asset.path === "sfx/connector_pop.wav"));
+    assert.ok(hyperframesSfxManifest.assets.some((asset) => asset.id === "connector-pop" && asset.status === "available-local-asset" && asset.source_alias === "sfx-connector-pop"));
+    assert.ok(hyperframesSfxManifest.assets.some((asset) => asset.id === "single-type" && asset.family === "typing-tick" && asset.status === "available-local-asset"));
     assert.ok(hyperframesSfxManifest.assets.some((asset) => asset.family === "typing-tick"));
+    assert.ok(hyperframesSfxManifest.copied_assets.some((asset) => asset.asset_id === "connector-pop" && asset.path === "sfx/connector_pop.wav"));
+    assert.ok(hyperframesSfxManifest.missing_assets.includes("paper-hit"));
     assert.ok(hyperframesSfxManifest.cues.some((cue) => cue.state === "connect" && cue.asset_id === "connector-pop"));
     assert.ok(hyperframesSfxManifest.cues.every((cue) => cue.duck_voiceover === true));
     assert.equal(hyperframesData.sfx_manifest.cues.length, hyperframesSfxManifest.cues.length);
@@ -236,6 +242,8 @@ test("plans premium product short contract with deterministic asset warnings", a
     await access(path.join(out, "video/hyperframes/README.md"));
     await access(path.join(out, "video/hyperframes/template-qa.html"));
     await access(path.join(out, "video/hyperframes/sfx-manifest.json"));
+    await access(path.join(out, "video/hyperframes/sfx/connector_pop.wav"));
+    await access(path.join(out, "video/hyperframes/sfx/single_type.wav"));
     await access(path.join(out, "video/hyperframes/launchclip-data.json"));
     assert.equal(readiness.status, "ready");
     assert.deepEqual(readiness.warnings, [
@@ -569,6 +577,8 @@ async function writePremiumAssetManifest(assetsDir, aliases) {
     const target = path.join(assetsDir, assetPath);
     if (assetPath.endsWith(".txt")) {
       await writeFile(target, "Create a premium product short with Claude Code, Obsidian, GitHub, typing, and review-safe proof.\n");
+    } else if (assetPath.endsWith(".wav")) {
+      await writeFile(target, `RIFF fixture ${assetPath}`);
     } else {
       await writeFile(target, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lwq3GQAAAABJRU5ErkJggg==", "base64"));
     }
