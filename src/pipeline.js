@@ -352,7 +352,7 @@ async function renderHyperframes(out, flags = {}) {
   const renderArgs = [
     "hyperframes",
     "render",
-    "index.html",
+    ".",
     "--output",
     output,
     "--quality",
@@ -361,7 +361,7 @@ async function renderHyperframes(out, flags = {}) {
   if (flags.fps) renderArgs.push("--fps", String(flags.fps));
   if (flags.format) renderArgs.push("--format", String(flags.format));
   await execFileAsync("npx", renderArgs, { cwd: projectDir, maxBuffer: 1024 * 1024 * 16 });
-  const voiceoverAudio = await applyVoiceoverIfRequested(out, output, flags);
+  const audio = await applyPostRenderAudio(out, output, flags, { defaultVoiceover: true, defaultMusic: true });
   await execFileAsync("ffmpeg", [
     "-y",
     "-ss",
@@ -380,10 +380,12 @@ async function renderHyperframes(out, flags = {}) {
       thumbnail: rel(out, thumbnail),
       composition: "LaunchclipHyperframes",
       project_dir: HYPERFRAMES_PROJECT_DIR,
-      voiceover_audio: voiceoverAudio
+      voiceover_audio: audio.voiceoverAudio,
+      music_audio: audio.musicAudio,
+      audio_mix: audio.applied ? "local-generated" : "none"
     };
   });
-  return { stage: "render", mode: "local", provider: "hyperframes", video: output, thumbnail, projectDir, voiceoverAudio };
+  return { stage: "render", mode: "local", provider: "hyperframes", video: output, thumbnail, projectDir, voiceoverAudio: audio.voiceoverAudio, musicAudio: audio.musicAudio };
 }
 
 async function renderLocalFfmpeg(out, flags = {}) {
@@ -476,16 +478,79 @@ async function renderLocalFfmpeg(out, flags = {}) {
 }
 
 async function applyVoiceoverIfRequested(out, videoPath, flags = {}) {
+  const audio = await applyPostRenderAudio(out, videoPath, flags, { defaultVoiceover: false, defaultMusic: false });
+  return audio.voiceoverAudio;
+}
+
+async function applyPostRenderAudio(out, videoPath, flags = {}, options = {}) {
+  const videoDuration = await mediaDurationSeconds(videoPath);
+  const voiceoverMode = await resolveVoiceoverMode(flags, options);
+  const useMusic = shouldGenerateMusicBed(flags, options);
+  const voiceoverAudio = voiceoverMode ? await generateVoiceoverAudio(out, flags, voiceoverMode, videoDuration) : null;
+  const musicAudio = useMusic ? await generateMusicBedAudio(out, videoDuration) : null;
+  if (!voiceoverAudio && !musicAudio) return { applied: false, voiceoverAudio: null, musicAudio: null };
+
+  const mixedPath = path.join(out, "video", "launchclip.audio.mp4");
+  const args = ["-y", "-i", videoPath];
+  const filters = [];
+  const mixInputs = [];
+  let inputIndex = 1;
+  if (voiceoverAudio) {
+    args.push("-i", path.join(out, voiceoverAudio));
+    filters.push(`[${inputIndex}:a]volume=1.0,apad[voice]`);
+    mixInputs.push("[voice]");
+    inputIndex += 1;
+  }
+  if (musicAudio) {
+    args.push("-i", path.join(out, musicAudio));
+    filters.push(`[${inputIndex}:a]volume=${voiceoverAudio ? "0.32" : "0.58"},apad[music]`);
+    mixInputs.push("[music]");
+  }
+  const mixedFilter = mixInputs.length > 1
+    ? `${mixInputs.join("")}amix=inputs=${mixInputs.length}:duration=longest:dropout_transition=0,atrim=0:${videoDuration.toFixed(3)},asetpts=N/SR/TB[a]`
+    : `${mixInputs[0]}atrim=0:${videoDuration.toFixed(3)},asetpts=N/SR/TB[a]`;
+  const filter = `${filters.join(";")};${mixedFilter}`;
+  await execFileAsync("ffmpeg", [
+    ...args,
+    "-filter_complex",
+    filter,
+    "-map",
+    "0:v:0",
+    "-map",
+    "[a]",
+    "-c:v",
+    "copy",
+    "-c:a",
+    "aac",
+    "-shortest",
+    "-movflags",
+    "+faststart",
+    mixedPath
+  ], { maxBuffer: 1024 * 1024 * 8 });
+  await rename(mixedPath, videoPath);
+  return { applied: true, voiceoverAudio, musicAudio };
+}
+
+async function resolveVoiceoverMode(flags = {}, options = {}) {
   const mode = flags.voiceover ?? flags["voice-over"];
+  if (!mode && options.defaultVoiceover) return (await commandExists("say")) ? "local-say" : null;
   if (!mode || mode === "none" || mode === "off") return null;
   if (mode !== "local-say" && mode !== "say") {
     throw new Error(`Unsupported voiceover provider: ${mode}. Supported: local-say`);
   }
+  return mode;
+}
+
+function shouldGenerateMusicBed(flags = {}, options = {}) {
+  const mode = flags.music;
+  if (flags["no-music"] || mode === "none" || mode === "off") return false;
+  return Boolean(options.defaultMusic || mode === "auto" || mode === "generated" || mode === "local");
+}
+
+async function generateVoiceoverAudio(out, flags, mode, videoDuration) {
   const voiceover = await readJson(path.join(out, "video", "voiceover.json"));
   const audioPath = path.join(out, "video", "voiceover.aiff");
   const rawAudioPath = path.join(out, "video", "voiceover.raw.aiff");
-  const voicedPath = path.join(out, "video", "launchclip.voiced.mp4");
-  const videoDuration = await mediaDurationSeconds(videoPath);
   const targetAudioDuration = Math.max(1, videoDuration - 0.85);
   const voiceArgs = flags.voice ? ["-v", flags.voice] : [];
   try {
@@ -500,29 +565,44 @@ async function applyVoiceoverIfRequested(out, videoPath, flags = {}) {
   }
   await fitVoiceoverAudio(rawAudioPath, audioPath, targetAudioDuration);
   await rm(rawAudioPath, { force: true });
+  return "video/voiceover.aiff";
+}
+
+async function generateMusicBedAudio(out, duration) {
+  const musicPath = path.join(out, "video", "music-bed.wav");
+  const fadeOutStart = Math.max(0, duration - 0.8);
   await execFileAsync("ffmpeg", [
     "-y",
+    "-f",
+    "lavfi",
     "-i",
-    videoPath,
+    `sine=frequency=110:duration=${duration.toFixed(3)}:sample_rate=44100`,
+    "-f",
+    "lavfi",
     "-i",
-    audioPath,
+    `sine=frequency=164.81:duration=${duration.toFixed(3)}:sample_rate=44100`,
+    "-f",
+    "lavfi",
+    "-i",
+    `sine=frequency=220:duration=${duration.toFixed(3)}:sample_rate=44100`,
     "-filter_complex",
-    "[1:a]apad[a]",
-    "-map",
-    "0:v:0",
+    `[0:a]volume=0.030[a0];[1:a]volume=0.020[a1];[2:a]volume=0.012[a2];[a0][a1][a2]amix=inputs=3:duration=first,afade=t=in:st=0:d=0.45,afade=t=out:st=${fadeOutStart.toFixed(3)}:d=0.8[a]`,
     "-map",
     "[a]",
-    "-c:v",
-    "copy",
     "-c:a",
-    "aac",
-    "-shortest",
-    "-movflags",
-    "+faststart",
-    voicedPath
+    "pcm_s16le",
+    musicPath
   ], { maxBuffer: 1024 * 1024 * 8 });
-  await rename(voicedPath, videoPath);
-  return "video/voiceover.aiff";
+  return "video/music-bed.wav";
+}
+
+async function commandExists(command) {
+  try {
+    await execFileAsync("which", [command], { maxBuffer: 1024 * 8 });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function fitVoiceoverAudio(inputPath, outputPath, targetDuration) {
@@ -566,7 +646,11 @@ function atempoFilter(speed) {
     filters.push("atempo=2");
     remaining /= 2;
   }
-  filters.push(`atempo=${remaining.toFixed(4)}`);
+  while (remaining < 0.5) {
+    filters.push("atempo=0.5");
+    remaining /= 0.5;
+  }
+  filters.push(`atempo=${remaining.toFixed(5)}`);
   return filters.join(",");
 }
 
@@ -1063,7 +1147,7 @@ function buildArtDirectionContract(style, manifest, stylePreset, script, storybo
         "npx hyperframes doctor",
         "npx hyperframes lint",
         "npx hyperframes preview",
-        "npx hyperframes render index.html --output ../launchclip-hyperframes.mp4 --quality high"
+        "npx hyperframes render . --output ../launchclip-hyperframes.mp4 --quality high"
       ],
       requirements: ["Node.js 22+", "FFmpeg", "HyperFrames CLI via npx"]
     },
@@ -1157,7 +1241,7 @@ function buildHyperframesHandoff(title, duration, objectLifecycle = []) {
     storyboard_preview: "video/storyboard.html",
     duration_seconds: duration,
     title,
-    render_command: ["npx", "hyperframes", "render", "index.html", "--output", "../launchclip-hyperframes.mp4", "--quality", "high"],
+    render_command: ["npx", "hyperframes", "render", ".", "--output", "../launchclip-hyperframes.mp4", "--quality", "high"],
     preview_command: ["npx", "hyperframes", "preview"],
     lint_command: ["npx", "hyperframes", "lint"],
     object_lifecycle: {
@@ -1542,7 +1626,7 @@ Start with \`QUALITY.md\` for the ordered HyperFrames review checklist. Open \`t
 npx hyperframes doctor
 npx hyperframes lint
 npx hyperframes preview
-npx hyperframes render index.html --output ../launchclip-hyperframes.mp4 --quality high
+npx hyperframes render . --output ../launchclip-hyperframes.mp4 --quality high
 \`\`\`
 
 Use the official HyperFrames skills to improve this scaffold with richer reusable objects, object state transitions, charts, diagrams, SFX, and scene-specific art direction. Keep claims grounded in the Launchclip packet.
@@ -1644,7 +1728,7 @@ ${handoff.human_acceptance.map((item) => `- [ ] ${item}`).join("\n")}
 npx hyperframes doctor
 npx hyperframes lint
 npx hyperframes preview
-npx hyperframes render index.html --output ../launchclip-hyperframes.mp4 --quality high
+npx hyperframes render . --output ../launchclip-hyperframes.mp4 --quality high
 \`\`\`
 `;
 }
@@ -2478,7 +2562,7 @@ function renderHyperframesIndex(manifest, video, sfxManifest = null) {
   const sceneHtml = scenes.map((scene) => {
     const sceneObjects = lifecycleObjects.filter((object) => object.scene_id === scene.id);
     const objectHtml = sceneObjects.map((object) => renderHyperframesLifecycleObject(object, scene)).join("\n");
-    return `<section class="scene scene-${scene.index % 5}" data-start="${scene.start}" data-duration="${scene.duration.toFixed(2)}" data-track-index="${scene.index + 1}" data-object-ids="${escapeHtml(sceneObjects.map((object) => object.id).join(","))}">
+    return `<section id="scene-${scene.index + 1}" class="clip scene scene-${scene.index % 5}" data-start="${scene.start}" data-duration="${scene.duration.toFixed(2)}" data-track-index="${scene.index + 1}" data-object-ids="${escapeHtml(sceneObjects.map((object) => object.id).join(","))}">
       <div class="rail">Scene ${scene.index + 1} / ${escapeHtml(scene.id ?? scene.beat ?? "beat")}</div>
       <div class="paper-card hero-card">
         <p class="eyebrow">${escapeHtml(scene.time_range ?? "")}</p>
@@ -2505,8 +2589,8 @@ function renderHyperframesIndex(manifest, video, sfxManifest = null) {
   <style>
     * { box-sizing: border-box; }
     html, body { width: ${width}px; height: ${height}px; margin: 0; overflow: hidden; background: #ece8e1; color: #1a1a18; }
-    body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    [data-composition-id="LaunchclipHyperframes"] { position: relative; width: ${width}px; height: ${height}px; overflow: hidden; background: #ece8e1; }
+    body { font-family: Inter, Arial, sans-serif; }
+    #stage { position: relative; width: ${width}px; height: ${height}px; overflow: hidden; background: #ece8e1; }
     .grid-bg { position: absolute; inset: -80px; opacity: 0.22; background-image: linear-gradient(rgba(26,26,24,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(26,26,24,0.08) 1px, transparent 1px); background-size: 48px 48px; transform: rotateX(5deg) scale(1.08); }
     .scene { position: absolute; inset: 0; padding: 150px 84px 120px; display: flex; flex-direction: column; justify-content: center; gap: 44px; }
     .rail { position: absolute; top: 56px; left: 84px; right: 84px; padding-bottom: 18px; border-bottom: 3px solid rgba(26,26,24,0.16); font-size: 28px; font-weight: 900; color: #f06f5f; }
@@ -2546,7 +2630,7 @@ function renderHyperframesIndex(manifest, video, sfxManifest = null) {
     .terminal-top span:nth-child(2) { background: #e0b94f; }
     .terminal-top span:nth-child(3) { background: #62bd93; }
     .terminal-top em { margin-left: auto; font-style: normal; text-transform: uppercase; }
-    .object-terminal code { display: block; margin-top: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #62bd93; font-size: 18px; }
+    .object-terminal code { display: block; margin-top: 8px; font-family: Consolas, monospace; color: #62bd93; font-size: 18px; }
     .object-terminal strong { display: block; margin-top: 16px; font-size: 24px; }
     .object-prompt { display: grid; grid-template-columns: 1fr 72px; gap: 14px; align-items: end; }
     .prompt-text { grid-column: 1 / -1; color: #62bd93; font-size: 22px; line-height: 1.2; }
@@ -2598,7 +2682,7 @@ function renderHyperframesIndex(manifest, video, sfxManifest = null) {
 </head>
 <body>
   <div id="stage" data-composition-id="LaunchclipHyperframes" data-start="0" data-duration="${duration}" data-width="${width}" data-height="${height}" data-sfx-runtime="launchclip.hyperframes-audio-runtime.v1" data-sfx-manifest="sfx-manifest.json" data-sfx-cues="${resolvedSfxManifest.cues.length}" data-sfx-storyboard-cues="${resolvedSfxManifest.storyboard_cues?.length ?? 0}" data-sfx-available="${availableSfxAssets.length}" data-sfx-status="idle">
-    <div class="grid-bg" data-start="0" data-duration="${duration}" data-track-index="0"></div>
+    <div id="grid-bg" class="clip grid-bg" data-start="0" data-duration="${duration}" data-track-index="0"></div>
 ${sceneHtml}
     ${audioAssetHtml}
   </div>
@@ -2611,6 +2695,9 @@ ${sceneHtml}
     const launchclipStoryboardSfxCues = launchclipSfxManifest.storyboard_cues || [];
     const launchclipSfxAudio = new Map(Array.from(document.querySelectorAll(".launchclip-sfx-audio")).map((audio) => [audio.dataset.sfxId, audio]));
     const launchclipStage = document.getElementById("stage");
+    window.__timelines = window.__timelines || {};
+    const launchclipTimeline = gsap.timeline({ paused: true, defaults: { ease: "power3.out" } });
+    window.__timelines["LaunchclipHyperframes"] = launchclipTimeline;
     const launchclipScheduledSfx = [];
     let launchclipPlayedSfxCount = 0;
     const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -2709,8 +2796,8 @@ ${sceneHtml}
       gsap.set(connector, { scaleX: 0, transformOrigin: "left center" });
       gsap.set(lifecycleObjects, { opacity: 0, y: 58, scale: 0.86, rotate: -3, filter: "blur(6px)" });
       const start = Number(scene.dataset.start || 0);
-      const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
-      tl.to(scene, { opacity: 1, duration: motionDuration(0.12) }, start)
+      const tl = launchclipTimeline;
+      tl.set(scene, { opacity: 1 }, start)
         .to(card, { y: 0, rotate: index % 2 ? 1 : -1.2, scale: 1, duration: motionDuration(0.72) }, start + 0.06)
         .to(tokens, { y: 0, opacity: 1, scale: 1, stagger: reducedMotion ? 0 : 0.12, duration: motionDuration(0.42) }, start + 0.42)
         .to(connector, { scaleX: 1, duration: motionDuration(0.44) }, start + 0.58)
@@ -2725,7 +2812,7 @@ ${sceneHtml}
         gsap.set(chartBars, { scaleY: 0, transformOrigin: "bottom" });
         gsap.set(diagramLines, { scaleX: 0, transformOrigin: "left center" });
         gsap.set(proofRows, { opacity: 0, y: 12 });
-        const objectTl = gsap.timeline({ defaults: { ease: "power3.out" } });
+        const objectTl = launchclipTimeline;
         states.forEach((state) => {
           const at = Number(state.at || start);
           const duration = motionDuration(Number(state.duration || 0.35));
