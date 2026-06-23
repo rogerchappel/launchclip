@@ -2081,6 +2081,13 @@ function buildHyperframesSfxManifest(video) {
       default_fade_ms: 18,
       max_polyphony: 3
     },
+    runtime: {
+      schema_version: "launchclip.hyperframes-audio-runtime.v1",
+      scheduler: "gsap.delayedCall",
+      preload_policy: "Preload available local audio assets and keep missing assets silent.",
+      failure_policy: "Autoplay or missing-file failures are recorded on the stage dataset without blocking visual render.",
+      duck_voiceover: true
+    },
     assets: [...assetsById.values()].sort((a, b) => a.id.localeCompare(b.id)),
     cues,
     storyboard_cues: storyboardCues
@@ -2349,6 +2356,8 @@ function renderHyperframesIndex(manifest, video, sfxManifest = null) {
   const lifecycleObjects = Array.isArray(video.object_lifecycle) ? video.object_lifecycle : [];
   const resolvedSfxManifest = sfxManifest ?? buildHyperframesSfxManifest(video);
   const sfxManifestJson = JSON.stringify(resolvedSfxManifest).replace(/</g, "\\u003c");
+  const availableSfxAssets = (resolvedSfxManifest.assets ?? []).filter((asset) => asset.status === "available-local-asset" && asset.path);
+  const audioAssetHtml = availableSfxAssets.map((asset) => `<audio class="launchclip-sfx-audio" data-sfx-id="${escapeHtml(asset.id)}" data-sfx-family="${escapeHtml(asset.family)}" data-sfx-gain="${escapeHtml(String(asset.gain_db ?? -18))}" src="${escapeHtml(asset.path)}" preload="auto"></audio>`).join("\n    ");
   const scenes = (video.creative_storyboard?.scenes?.length ? video.creative_storyboard.scenes : video.script_visual_alignment ?? []).map((scene, index) => {
     const range = parseTimeRange(scene.time_range);
     const start = Number.isFinite(range.start) ? range.start : index * 3;
@@ -2473,6 +2482,7 @@ function renderHyperframesIndex(manifest, video, sfxManifest = null) {
     .scene-2 .hero-card { transform: rotate(-0.4deg); }
     .scene-3 .hero-card { transform: rotate(1.4deg); }
     .scene-4 .hero-card { transform: rotate(-1.8deg); }
+    .launchclip-sfx-audio { display: none; }
     @media (prefers-reduced-motion: reduce) {
       .lifecycle-object { filter: none !important; }
       .grid-bg { transform: none; }
@@ -2480,25 +2490,105 @@ function renderHyperframesIndex(manifest, video, sfxManifest = null) {
   </style>
 </head>
 <body>
-  <div id="stage" data-composition-id="LaunchclipHyperframes" data-start="0" data-duration="${duration}" data-width="${width}" data-height="${height}" data-sfx-manifest="sfx-manifest.json" data-sfx-cues="${resolvedSfxManifest.cues.length}">
+  <div id="stage" data-composition-id="LaunchclipHyperframes" data-start="0" data-duration="${duration}" data-width="${width}" data-height="${height}" data-sfx-runtime="launchclip.hyperframes-audio-runtime.v1" data-sfx-manifest="sfx-manifest.json" data-sfx-cues="${resolvedSfxManifest.cues.length}" data-sfx-storyboard-cues="${resolvedSfxManifest.storyboard_cues?.length ?? 0}" data-sfx-available="${availableSfxAssets.length}" data-sfx-status="idle">
     <div class="grid-bg" data-start="0" data-duration="${duration}" data-track-index="0"></div>
 ${sceneHtml}
+    ${audioAssetHtml}
   </div>
   <script type="application/json" id="launchclip-sfx-manifest">${sfxManifestJson}</script>
   <script>
     const sfxManifestElement = document.getElementById("launchclip-sfx-manifest");
     const launchclipSfxManifest = sfxManifestElement ? JSON.parse(sfxManifestElement.textContent || "{}") : { assets: [], cues: [] };
     const launchclipSfxAssets = new Map((launchclipSfxManifest.assets || []).map((asset) => [asset.id, asset]));
+    const launchclipSfxCues = launchclipSfxManifest.cues || [];
+    const launchclipStoryboardSfxCues = launchclipSfxManifest.storyboard_cues || [];
+    const launchclipSfxAudio = new Map(Array.from(document.querySelectorAll(".launchclip-sfx-audio")).map((audio) => [audio.dataset.sfxId, audio]));
     const launchclipStage = document.getElementById("stage");
+    const launchclipScheduledSfx = [];
+    let launchclipPlayedSfxCount = 0;
     const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const motionDuration = (seconds) => reducedMotion ? Math.min(0.06, Number(seconds) || 0.06) : seconds;
     if (launchclipStage) launchclipStage.dataset.motionMode = reducedMotion ? "reduced" : "full";
+    function gainToVolume(gainDb) {
+      const gain = Number(gainDb ?? -18) + Number(launchclipSfxManifest.mix?.master_gain_db ?? 0);
+      return Math.max(0, Math.min(1, Math.pow(10, gain / 20)));
+    }
+    function cueAssetForCue(cue) {
+      return launchclipSfxAssets.get(cue?.asset_id) || null;
+    }
+    function playSfxCue(cue, sourceElement) {
+      const asset = cueAssetForCue(cue);
+      const baseAudio = asset ? launchclipSfxAudio.get(asset.id) : null;
+      if (!asset || !baseAudio) {
+        if (launchclipStage) launchclipStage.dataset.sfxStatus = "missing-asset";
+        if (sourceElement) sourceElement.dataset.sfxStatus = "missing-asset";
+        return;
+      }
+      const audio = baseAudio.cloneNode(true);
+      audio.dataset.runtimeClone = "true";
+      audio.volume = gainToVolume(cue.gain_db ?? asset.gain_db);
+      audio.currentTime = 0;
+      audio.addEventListener("ended", () => audio.remove(), { once: true });
+      audio.addEventListener("error", () => audio.remove(), { once: true });
+      document.body.appendChild(audio);
+      const playPromise = audio.play();
+      if (launchclipStage) {
+        launchclipStage.dataset.sfxStatus = "playing";
+        launchclipStage.dataset.sfxLastCue = cue.id || asset.id;
+      }
+      if (sourceElement) sourceElement.dataset.sfxStatus = "playing";
+      launchclipPlayedSfxCount += 1;
+      if (launchclipStage) launchclipStage.dataset.sfxPlayed = String(launchclipPlayedSfxCount);
+      if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch(() => {
+          audio.remove();
+          if (launchclipStage) launchclipStage.dataset.sfxStatus = "blocked";
+          if (sourceElement) sourceElement.dataset.sfxStatus = "blocked";
+        });
+      }
+    }
+    function scheduleSfxCue(cue, sourceElement) {
+      if (!cue) return;
+      const asset = cueAssetForCue(cue);
+      const delay = Math.max(0, Number(cue.at ?? 0));
+      launchclipScheduledSfx.push(cue.id || cue.asset_id || "cue");
+      if (launchclipStage) {
+        launchclipStage.dataset.sfxStatus = "scheduled";
+        launchclipStage.dataset.sfxScheduled = String(launchclipScheduledSfx.length);
+      }
+      if (sourceElement) {
+        sourceElement.dataset.sfxAsset = asset?.id || cue.asset_id || "";
+        sourceElement.dataset.sfxPath = asset?.path || "";
+        sourceElement.dataset.sfxGain = String(cue.gain_db ?? asset?.gain_db ?? "");
+      }
+      gsap.delayedCall(delay, () => playSfxCue(cue, sourceElement));
+    }
+    function lifecycleSfxCueForState(state, object) {
+      const objectId = object.dataset.objectId;
+      const at = Number(state.at ?? 0);
+      return launchclipSfxCues.find((cue) => cue.object_id === objectId && cue.state === state.state && Math.abs(Number(cue.at ?? 0) - at) < 0.05)
+        || launchclipSfxCues.find((cue) => cue.object_id === objectId && cue.state === state.state)
+        || null;
+    }
     function scheduleLifecycleSfx(state, object) {
       if (!state.sfx) return;
       const assetId = String(state.sfx).replace(/\\.[^.]+$/, "").replace(/_/g, "-").toLowerCase();
-      const asset = launchclipSfxAssets.get(assetId);
-      object.dataset.sfxAsset = asset?.id || assetId;
-      object.dataset.sfxPath = asset?.path || "";
+      const cue = lifecycleSfxCueForState(state, object) || {
+        id: object.dataset.objectId + "-" + String(state.state || "state") + "-runtime",
+        asset_id: assetId,
+        sound: state.sfx,
+        object_id: object.dataset.objectId,
+        scene_id: object.closest(".scene")?.dataset.trackIndex || "",
+        state: state.state,
+        at: Number(state.at ?? 0),
+        gain_db: launchclipSfxAssets.get(assetId)?.gain_db ?? -18,
+        duck_voiceover: true,
+        trigger: "object_lifecycle_runtime"
+      };
+      scheduleSfxCue(cue, object);
+    }
+    function scheduleStoryboardSfx() {
+      launchclipStoryboardSfxCues.forEach((cue) => scheduleSfxCue(cue, launchclipStage));
     }
     const scenes = document.querySelectorAll(".scene");
     scenes.forEach((scene, index) => {
@@ -2564,6 +2654,7 @@ ${sceneHtml}
         });
       });
     });
+    scheduleStoryboardSfx();
   </script>
 </body>
 </html>

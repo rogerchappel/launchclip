@@ -229,7 +229,19 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.match(hyperframesHtml, /state.state === "pulse"/);
     assert.match(hyperframesHtml, /launchclip-sfx-manifest/);
     assert.match(hyperframesHtml, /scheduleLifecycleSfx/);
+    assert.match(hyperframesHtml, /data-sfx-runtime="launchclip\.hyperframes-audio-runtime\.v1"/);
     assert.match(hyperframesHtml, /data-sfx-manifest="sfx-manifest\.json"/);
+    assert.match(hyperframesHtml, /data-sfx-available="2"/);
+    assert.match(hyperframesHtml, /data-sfx-storyboard-cues="/);
+    assert.match(hyperframesHtml, /class="launchclip-sfx-audio"/);
+    assert.match(hyperframesHtml, /data-sfx-id="connector-pop"/);
+    assert.match(hyperframesHtml, /src="sfx\/connector_pop\.wav"/);
+    assert.match(hyperframesHtml, /launchclipSfxAudio/);
+    assert.match(hyperframesHtml, /gainToVolume/);
+    assert.match(hyperframesHtml, /playSfxCue/);
+    assert.match(hyperframesHtml, /scheduleSfxCue/);
+    assert.match(hyperframesHtml, /scheduleStoryboardSfx/);
+    assert.match(hyperframesHtml, /gsap\.delayedCall/);
     assert.match(hyperframesQaHtml, /HyperFrames Template QA/);
     assert.match(hyperframesQaHtml, /Template coverage/);
     assert.match(hyperframesQaHtml, /Static hold checks/);
@@ -257,6 +269,8 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.match(hyperframesChartDiagramQaHtml, /matrix_chart/);
     assert.match(hyperframesChartDiagramQaHtml, /connector_graph/);
     assert.equal(hyperframesSfxManifest.schema_version, "launchclip.hyperframes-sfx.v1");
+    assert.equal(hyperframesSfxManifest.runtime.schema_version, "launchclip.hyperframes-audio-runtime.v1");
+    assert.equal(hyperframesSfxManifest.runtime.scheduler, "gsap.delayedCall");
     assert.ok(hyperframesSfxManifest.assets.length >= 4);
     assert.ok(hyperframesSfxManifest.cues.length >= video.object_lifecycle.length);
     assert.ok(hyperframesSfxManifest.storyboard_cues.length >= video.creative_storyboard.scenes.length);
