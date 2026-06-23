@@ -12,6 +12,7 @@ const ASSET_MANIFEST_FILE = "launchclip-assets.json";
 const ART_DIRECTION_SCHEMA = "launchclip.art-direction.v1";
 const HYPERFRAMES_PROJECT_DIR = "video/hyperframes";
 const HYPERFRAMES_REQUIRED_TEMPLATE_FAMILIES = ["brand_token", "terminal_ui", "diagram", "prompt_ui", "chart", "folder_stack", "cta_card"];
+const HYPERFRAMES_STATIC_HOLD_THRESHOLD_SECONDS = 1.2;
 const PREMIUM_REQUIRED_ASSET_ALIASES = ["claude-code", "github", "obsidian", "prompt-example", "terminal-demo"];
 const PREMIUM_OPTIONAL_ASSET_ALIASES = ["brand-font", "presenter-cutaway", "product-logo", "repo-logo", "sfx-type", "sfx-whoosh"];
 
@@ -1070,7 +1071,7 @@ function buildArtDirectionContract(style, manifest, stylePreset, script, storybo
     },
     motion: {
       density: premium ? "visible object, camera, type, or SFX change every 0.4-1.2 seconds" : "visible change every 0.7-1.5 seconds",
-      object_lifecycle: ["enter", "settle", "transform", "connect", "emphasize", "exit"],
+      object_lifecycle: ["enter", "settle", "transform", "connect", "drift", "pulse", "emphasize", "exit"],
       object_contract: 'objects[] = {id, scene_id, role, ref, label, states:[{state, at, duration, to?, sfx?}]}',
       transitions: [
         "shared objects morph across beats when possible",
@@ -1170,6 +1171,19 @@ function buildHyperframesObjectLifecycle(storyboard, duration) {
     const template = objectTemplateForScene(scene, role);
     const x = round(0.36 + (index % 3) * 0.14);
     const y = round(0.66 - (index % 2) * 0.1);
+    const states = smoothHyperframesObjectStates([
+      { state: "enter", at: objectStateAt(start + 0.1, start, end), duration: 0.42, easing: "power3.out", sfx: objectSfxForScene(scene, "enter") },
+      { state: "settle", at: objectStateAt(start + Math.min(0.62, sceneDuration * 0.24), start, end), duration: 0.32, easing: "sine.inOut" },
+      {
+        state: "transform",
+        at: objectStateAt(start + Math.min(1.15, sceneDuration * 0.46), start, end),
+        duration: 0.58,
+        easing: "power3.inOut",
+        to: { x, y, scale: round(1.02 + (index % 2) * 0.06), rotate: index % 2 ? 2.4 : -2.1 }
+      },
+      { state: "emphasize", at: objectStateAt(end - Math.min(0.9, sceneDuration * 0.28), start, end), duration: 0.34, easing: "back.out(1.5)", sfx: objectSfxForScene(scene, "emphasize") },
+      { state: "exit", at: objectStateAt(end - 0.16, start, end), duration: 0.24, easing: "power2.in" }
+    ], scene, index);
     return {
       id: `hf-${safeObjectId(sceneId)}-primary`,
       scene_id: sceneId,
@@ -1178,24 +1192,70 @@ function buildHyperframesObjectLifecycle(storyboard, duration) {
       template,
       template_data: objectTemplateDataForScene(scene, template, index),
       label: objectLabelForScene(scene, sceneId),
-      states: [
-        { state: "enter", at: objectStateAt(start + 0.1, start, end), duration: 0.42, sfx: objectSfxForScene(scene, "enter") },
-        { state: "settle", at: objectStateAt(start + Math.min(0.62, sceneDuration * 0.24), start, end), duration: 0.32 },
-        {
-          state: "transform",
-          at: objectStateAt(start + Math.min(1.15, sceneDuration * 0.46), start, end),
-          duration: 0.58,
-          to: { x, y, scale: round(1.02 + (index % 2) * 0.06), rotate: index % 2 ? 2.4 : -2.1 }
-        },
-        { state: "emphasize", at: objectStateAt(end - Math.min(0.9, sceneDuration * 0.28), start, end), duration: 0.34, sfx: objectSfxForScene(scene, "emphasize") },
-        { state: "exit", at: objectStateAt(end - 0.16, start, end), duration: 0.24 }
-      ]
+      states
     };
   });
 }
 
 function objectStateAt(value, start, end) {
   return round(Math.max(start, Math.min(Math.max(start, end - 0.05), value)));
+}
+
+function smoothHyperframesObjectStates(states, scene, objectIndex) {
+  const sortedStates = [...states].sort((a, b) => Number(a.at ?? 0) - Number(b.at ?? 0));
+  const smoothed = [];
+  for (let index = 0; index < sortedStates.length; index += 1) {
+    const current = sortedStates[index];
+    const next = sortedStates[index + 1];
+    smoothed.push(current);
+    if (!next) continue;
+    let previousEnd = Number(current.at ?? 0) + Number(current.duration ?? 0);
+    let gap = Number(next.at ?? previousEnd) - previousEnd;
+    let microIndex = 0;
+    while (gap > HYPERFRAMES_STATIC_HOLD_THRESHOLD_SECONDS) {
+      const at = round(Math.min(previousEnd + 0.86, Number(next.at) - 0.38));
+      if (!Number.isFinite(at) || at <= previousEnd + 0.12) break;
+      const microState = hyperframesMicroState(scene, objectIndex, microIndex, at);
+      smoothed.push(microState);
+      previousEnd = at + microState.duration;
+      gap = Number(next.at) - previousEnd;
+      microIndex += 1;
+      if (microIndex > 5) break;
+    }
+  }
+  return smoothed.sort((a, b) => Number(a.at ?? 0) - Number(b.at ?? 0));
+}
+
+function hyperframesMicroState(scene, objectIndex, microIndex, at) {
+  const state = ["connect", "drift", "pulse"][microIndex % 3];
+  const direction = objectIndex % 2 ? 1 : -1;
+  if (state === "connect") {
+    return {
+      state,
+      at,
+      duration: 0.26,
+      easing: "power2.out",
+      sfx: "connector_pop.wav",
+      to: { scale: 1.04, rotate: round(direction * 1.2) }
+    };
+  }
+  if (state === "drift") {
+    return {
+      state,
+      at,
+      duration: 0.32,
+      easing: "sine.inOut",
+      delta: { x: direction * 14, y: -10, rotate: direction * 0.8 }
+    };
+  }
+  return {
+    state,
+    at,
+    duration: 0.24,
+    easing: "power2.out",
+    sfx: objectSfxForScene(scene, "emphasize"),
+    to: { scale: 1.06, rotate: round(direction * 0.6) }
+  };
 }
 
 function objectRoleForScene(scene, index) {
@@ -1316,7 +1376,7 @@ Video-oriented design system for ${artDirection.generated_for}.
 
 - Source: ${artDirection.persistent_objects.source}
 - Count: ${artDirection.persistent_objects.count}
-- State order: enter -> settle -> transform -> emphasize -> exit
+- Core state order: enter -> settle -> transform -> [connect/drift/pulse] -> emphasize -> exit
 ${objectLines}
 
 ## Reusable Object Library
@@ -1711,20 +1771,34 @@ ${sceneHtml}
         states.forEach((state) => {
           const at = Number(state.at || start);
           const duration = Number(state.duration || 0.35);
+          const ease = state.easing || "power3.out";
           if (state.state === "enter") {
-            objectTl.to(object, { opacity: 1, y: 0, scale: 1, rotate: objectIndex % 2 ? 2 : -2, filter: "blur(0px)", duration }, at);
+            objectTl.to(object, { opacity: 1, y: 0, scale: 1, rotate: objectIndex % 2 ? 2 : -2, filter: "blur(0px)", duration, ease }, at);
             objectTl.to(proofRows, { opacity: 1, y: 0, stagger: 0.06, duration: 0.24 }, at + 0.08);
           }
-          if (state.state === "settle") objectTl.to(object, { y: -8, scale: 1.02, duration: duration / 2, yoyo: true, repeat: 1 }, at);
+          if (state.state === "settle") objectTl.to(object, { y: -8, scale: 1.02, duration: duration / 2, yoyo: true, repeat: 1, ease }, at);
           if (state.state === "transform") {
-            objectTl.to(object, { left: \`\${Number(state.to?.x ?? 0.5) * 100}%\`, top: \`\${Number(state.to?.y ?? 0.68) * 100}%\`, scale: Number(state.to?.scale ?? 1), rotate: Number(state.to?.rotate ?? 0), duration }, at);
+            const targetX = (Number(state.to?.x ?? 0.5) - 0.5) * ${width};
+            const targetY = (Number(state.to?.y ?? 0.68) - 0.68) * ${height};
+            objectTl.to(object, { x: targetX, y: targetY, scale: Number(state.to?.scale ?? 1), rotate: Number(state.to?.rotate ?? 0), duration, ease }, at);
             objectTl.to(chartBars, { scaleY: 1, stagger: 0.08, duration: 0.36 }, at + 0.06);
             objectTl.to(diagramLines, { scaleX: 1, stagger: 0.12, duration: 0.34 }, at + 0.06);
           }
-          if (state.state === "emphasize") {
-            objectTl.to(object, { scale: 1.1, boxShadow: "0 0 54px rgba(98,189,147,0.45), 16px 20px 0 rgba(26,26,24,0.16)", duration: duration / 2, yoyo: true, repeat: 1 }, at);
+          if (state.state === "connect") {
+            objectTl.to(object, { scale: Number(state.to?.scale ?? 1.04), rotate: Number(state.to?.rotate ?? 0), duration: duration / 2, yoyo: true, repeat: 1, ease }, at);
+            objectTl.to(diagramLines, { scaleX: 1, stagger: 0.08, duration: 0.24 }, at + 0.02);
+            objectTl.to(chartBars, { scaleY: 1, stagger: 0.06, duration: 0.24 }, at + 0.02);
           }
-          if (state.state === "exit") objectTl.to(object, { opacity: 0, y: -54, scale: 0.94, filter: "blur(4px)", duration }, at);
+          if (state.state === "drift") {
+            objectTl.to(object, { x: \`+=\${Number(state.delta?.x ?? 10)}\`, y: \`+=\${Number(state.delta?.y ?? -8)}\`, rotate: \`+=\${Number(state.delta?.rotate ?? 0.6)}\`, duration: duration / 2, yoyo: true, repeat: 1, ease }, at);
+          }
+          if (state.state === "pulse") {
+            objectTl.to(object, { scale: Number(state.to?.scale ?? 1.06), rotate: \`+=\${Number(state.to?.rotate ?? 0.6)}\`, duration: duration / 2, yoyo: true, repeat: 1, ease }, at);
+          }
+          if (state.state === "emphasize") {
+            objectTl.to(object, { scale: 1.1, boxShadow: "0 0 54px rgba(98,189,147,0.45), 16px 20px 0 rgba(26,26,24,0.16)", duration: duration / 2, yoyo: true, repeat: 1, ease }, at);
+          }
+          if (state.state === "exit") objectTl.to(object, { opacity: 0, y: -54, scale: 0.94, filter: "blur(4px)", duration, ease }, at);
         });
       });
     });
@@ -1943,15 +2017,15 @@ function hyperframesTemplateQaIssues(objects) {
   for (const object of objects) {
     const id = object.id ?? "unknown-object";
     const states = lifecycleStateNames(object);
-    const expected = ["enter", "settle", "transform", "emphasize", "exit"];
+    const allowed = new Set(["enter", "settle", "transform", "connect", "drift", "pulse", "emphasize", "exit"]);
     if (!object.template) {
       issues.push({ severity: "high", category: "Template coverage", target: id, issue: "Object has no reusable template family.", fix: "Assign a known template to the lifecycle object." });
     }
-    if (expected.some((state, index) => states[index] !== state)) {
-      issues.push({ severity: "high", category: "Transition states", target: id, issue: `State order is ${states.join(" -> ") || "empty"}.`, fix: "Use enter -> settle -> transform -> emphasize -> exit." });
+    if (!lifecycleCoreStateOrderValid(states) || states.some((state) => !allowed.has(state))) {
+      issues.push({ severity: "high", category: "Transition states", target: id, issue: `State order is ${states.join(" -> ") || "empty"}.`, fix: "Use enter -> settle -> transform -> optional connect/drift/pulse -> emphasize -> exit." });
     }
     const maxGap = lifecycleMaxStateGap(object);
-    if (maxGap > 1.2) {
+    if (maxGap > HYPERFRAMES_STATIC_HOLD_THRESHOLD_SECONDS) {
       issues.push({ severity: "medium", category: "Static hold", target: id, issue: `${maxGap.toFixed(2)}s gap between lifecycle state events.`, fix: "Add a connect, drift, pulse, or secondary object transition during the hold." });
     }
     if (!objectSfxList(object).length) {
@@ -1989,8 +2063,11 @@ function sampleObjectForTemplate(template, objects) {
       { state: "enter", at: 0.1, duration: 0.28, easing: "easeOutCubic", sfx: "paper_hit.wav" },
       { state: "settle", at: 0.48, duration: 0.24, easing: "easeOutQuad" },
       { state: "transform", at: 0.86, duration: 0.48, easing: "easeInOutCubic", to: { x: 0.5, y: 0.58, scale: 1.04, rotate: 0 } },
-      { state: "emphasize", at: 1.46, duration: 0.3, easing: "easeOutBack", sfx: "soft_thump.wav" },
-      { state: "exit", at: 2.08, duration: 0.28, easing: "easeInCubic" }
+      { state: "connect", at: 1.44, duration: 0.24, easing: "power2.out", sfx: "connector_pop.wav", to: { scale: 1.04, rotate: 0.8 } },
+      { state: "drift", at: 1.86, duration: 0.28, easing: "sine.inOut", delta: { x: 10, y: -8, rotate: 0.4 } },
+      { state: "pulse", at: 2.28, duration: 0.24, easing: "power2.out", sfx: "soft_thump.wav", to: { scale: 1.06, rotate: 0.4 } },
+      { state: "emphasize", at: 2.72, duration: 0.3, easing: "easeOutBack", sfx: "soft_thump.wav" },
+      { state: "exit", at: 3.28, duration: 0.28, easing: "easeInCubic" }
     ]
   };
 }
@@ -2014,6 +2091,17 @@ function templateDisplayName(template) {
 
 function lifecycleStateNames(object) {
   return (Array.isArray(object?.states) ? object.states : []).map((state) => state.state).filter(Boolean);
+}
+
+function lifecycleCoreStateOrderValid(states) {
+  const coreStates = ["enter", "settle", "transform", "emphasize", "exit"];
+  let cursor = -1;
+  for (const coreState of coreStates) {
+    const nextIndex = states.findIndex((state, index) => index > cursor && state === coreState);
+    if (nextIndex === -1) return false;
+    cursor = nextIndex;
+  }
+  return true;
 }
 
 function objectSfxList(object) {
