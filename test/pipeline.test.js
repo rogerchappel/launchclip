@@ -151,7 +151,16 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.ok(video.art_direction.charts_diagrams.chart_types.length >= 8);
     assert.ok(video.art_direction.charts_diagrams.diagram_types.length >= 8);
     assert.equal(video.object_lifecycle.length, video.creative_storyboard.scenes.length);
-    assert.equal(video.object_lifecycle[0].states.map((state) => state.state).join(" -> "), "enter -> settle -> transform -> emphasize -> exit");
+    const allObjectStates = video.object_lifecycle.flatMap((object) => object.states.map((state) => state.state));
+    assert.ok(allObjectStates.includes("connect"));
+    assert.ok(allObjectStates.includes("drift"));
+    assert.ok(allObjectStates.includes("pulse"));
+    for (const object of video.object_lifecycle) {
+      const objectStates = object.states.map((state) => state.state);
+      assert.equal(objectStates.slice(0, 3).join(" -> "), "enter -> settle -> transform");
+      assert.deepEqual(objectStates.slice(-2), ["emphasize", "exit"]);
+      assert.ok(maxLifecycleGap(object.states) <= 1.2, `${object.id} has a static hold over 1.2s`);
+    }
     assert.equal(video.art_direction.persistent_objects.count, video.object_lifecycle.length);
     const objectTemplates = new Set(video.object_lifecycle.map((object) => object.template));
     for (const template of ["brand_token", "terminal_ui", "diagram", "prompt_ui", "chart", "folder_stack", "cta_card"]) {
@@ -181,7 +190,7 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.match(frame, /Primary: HyperFrames/);
     assert.match(frame, /Target object count: 100\+/);
     assert.match(frame, /Persistent Object Timeline/);
-    assert.match(frame, /enter -> settle -> transform -> emphasize -> exit/);
+    assert.match(frame, /connect -> drift -> pulse/);
     assert.match(frame, /template=diagram/);
     assert.match(storyboardHtml, /Receipts before posting|The proof board|Repo proof to premium Short/);
     assert.match(storyboardHtml, /Objects/);
@@ -195,6 +204,9 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.match(hyperframesHtml, /chart-bar-fill/);
     assert.match(hyperframesHtml, /diagram-connector-line/);
     assert.match(hyperframesHtml, /@hyperframes\/core/);
+    assert.match(hyperframesHtml, /state.state === "connect"/);
+    assert.match(hyperframesHtml, /state.state === "drift"/);
+    assert.match(hyperframesHtml, /state.state === "pulse"/);
     assert.match(hyperframesQaHtml, /HyperFrames Template QA/);
     assert.match(hyperframesQaHtml, /Template coverage/);
     assert.match(hyperframesQaHtml, /Static hold checks/);
@@ -204,6 +216,7 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.match(hyperframesQaHtml, /data-template="diagram"/);
     assert.match(hyperframesQaHtml, /chart-bar-fill/);
     assert.match(hyperframesQaHtml, /Lifecycle Audit/);
+    assert.match(hyperframesQaHtml, /QA flags<\/span><strong>0<\/strong>/);
     assert.equal(hyperframesData.video.object_lifecycle.length, video.object_lifecycle.length);
     assert.equal(hyperframesData.video.object_lifecycle[2].template, "diagram");
     await access(path.join(out, "video/hyperframes/README.md"));
@@ -520,6 +533,18 @@ async function mediaDuration(filePath) {
     filePath
   ]);
   return Number(stdout.trim());
+}
+
+function maxLifecycleGap(states) {
+  const timedStates = states
+    .map((state) => ({ at: Number(state.at), duration: Number(state.duration ?? 0) }))
+    .filter((state) => Number.isFinite(state.at))
+    .sort((a, b) => a.at - b.at);
+  let maxGap = 0;
+  for (let index = 1; index < timedStates.length; index += 1) {
+    maxGap = Math.max(maxGap, timedStates[index].at - (timedStates[index - 1].at + Math.max(0, timedStates[index - 1].duration)));
+  }
+  return Math.round(maxGap * 100) / 100;
 }
 
 async function writePremiumAssetManifest(assetsDir, aliases) {
