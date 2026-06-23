@@ -238,7 +238,7 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.match(hyperframesHtml, /scheduleLifecycleSfx/);
     assert.match(hyperframesHtml, /data-sfx-runtime="launchclip\.hyperframes-audio-runtime\.v1"/);
     assert.match(hyperframesHtml, /data-sfx-manifest="sfx-manifest\.json"/);
-    assert.match(hyperframesHtml, /data-sfx-available="2"/);
+    assert.match(hyperframesHtml, /data-sfx-available="(?:[3-9]|[1-9][0-9]+)"/);
     assert.match(hyperframesHtml, /data-sfx-storyboard-cues="/);
     assert.match(hyperframesHtml, /class="launchclip-sfx-audio"/);
     assert.match(hyperframesHtml, /data-sfx-id="connector-pop"/);
@@ -266,7 +266,7 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.match(hyperframesAssetReadinessHtml, /github/);
     assert.match(hyperframesAssetReadinessHtml, /sfx\/connector_pop\.wav/);
     assert.match(hyperframesAssetReadinessHtml, /available-local-asset/);
-    assert.match(hyperframesAssetReadinessHtml, /expected-local-asset/);
+    assert.doesNotMatch(hyperframesAssetReadinessHtml, /<tr class="status-expected-local-asset"/);
     assert.match(hyperframesChartDiagramQaHtml, /HyperFrames Chart And Diagram QA/);
     assert.match(hyperframesChartDiagramQaHtml, /Chart Objects/);
     assert.match(hyperframesChartDiagramQaHtml, /Diagram Objects/);
@@ -294,15 +294,16 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.ok(hyperframesSfxManifest.assets.some((asset) => asset.id === "single-type" && asset.family === "typing-tick" && asset.status === "available-local-asset"));
     assert.ok(hyperframesSfxManifest.assets.some((asset) => asset.family === "typing-tick"));
     assert.ok(hyperframesSfxManifest.copied_assets.some((asset) => asset.asset_id === "connector-pop" && asset.path === "sfx/connector_pop.wav"));
-    assert.ok(hyperframesSfxManifest.missing_assets.includes("paper-hit"));
+    assert.ok(hyperframesSfxManifest.copied_assets.some((asset) => asset.asset_id === "paper-hit" && asset.alias === "generated-default-sfx"));
+    assert.deepEqual(hyperframesSfxManifest.missing_assets, []);
     assert.ok(hyperframesSfxManifest.cues.some((cue) => cue.state === "connect" && cue.asset_id === "connector-pop"));
     assert.ok(hyperframesSfxManifest.cues.every((cue) => cue.duck_voiceover === true));
     assert.equal(hyperframesData.sfx_manifest.cues.length, hyperframesSfxManifest.cues.length);
     assert.equal(hyperframesData.asset_readiness.schema_version, "launchclip.hyperframes-asset-readiness.v1");
     assert.ok(hyperframesData.asset_readiness.summary.visual_real >= 2);
     assert.ok(hyperframesData.asset_readiness.summary.visual_missing >= 3);
-    assert.ok(hyperframesData.asset_readiness.summary.audio_real >= 2);
-    assert.ok(hyperframesData.asset_readiness.summary.audio_missing >= 1);
+    assert.ok(hyperframesData.asset_readiness.summary.audio_real >= 4);
+    assert.equal(hyperframesData.asset_readiness.summary.audio_missing, 0);
     assert.ok(hyperframesData.asset_readiness.visual_assets.some((asset) => asset.alias === "github" && asset.status === "missing-required-asset"));
     assert.ok(hyperframesData.asset_readiness.audio_assets.some((asset) => asset.id === "connector-pop" && asset.status === "available-local-asset"));
     assert.equal(hyperframesData.chart_diagram_qa.schema_version, "launchclip.hyperframes-chart-diagram-qa.v1");
@@ -314,7 +315,7 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.equal(hyperframesData.quality_handoff.schema_version, "launchclip.hyperframes-quality-handoff.v1");
     assert.equal(hyperframesData.quality_handoff.summary.total, 5);
     assert.ok(hyperframesData.quality_handoff.checks.some((check) => check.gate === "Template QA" && check.status === "pass"));
-    assert.ok(hyperframesData.quality_handoff.checks.some((check) => check.gate === "SFX runtime" && check.status === "partial-assets"));
+    assert.ok(hyperframesData.quality_handoff.checks.some((check) => check.gate === "SFX runtime" && check.status === "pass"));
     assert.ok(hyperframesData.quality_handoff.review_order.length >= 5);
     assert.equal(hyperframesData.video.object_lifecycle.length, video.object_lifecycle.length);
     assert.equal(hyperframesData.video.object_lifecycle[2].template, "diagram");
@@ -325,6 +326,7 @@ test("plans premium product short contract with deterministic asset warnings", a
     await access(path.join(out, "video/hyperframes/QUALITY.md"));
     await access(path.join(out, "video/hyperframes/sfx-manifest.json"));
     await access(path.join(out, "video/hyperframes/sfx/connector_pop.wav"));
+    await access(path.join(out, "video/hyperframes/sfx/paper_hit.wav"));
     await access(path.join(out, "video/hyperframes/sfx/single_type.wav"));
     await access(path.join(out, "video/hyperframes/launchclip-data.json"));
     assert.equal(readiness.status, "ready");
