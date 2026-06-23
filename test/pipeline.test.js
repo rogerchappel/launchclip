@@ -211,6 +211,18 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.match(hyperframesHtml, /object-diagram/);
     assert.match(hyperframesHtml, /chart-bar-fill/);
     assert.match(hyperframesHtml, /diagram-connector-line/);
+    assert.match(hyperframesHtml, /data-polish="launchclip\.object-polish\.v1"/);
+    assert.match(hyperframesHtml, /data-quality="review-ready"/);
+    assert.match(hyperframesHtml, /data-source-status="source-declared"/);
+    assert.match(hyperframesHtml, /data-sfx-count="[1-9]/);
+    assert.match(hyperframesHtml, /aria-label="HyperFrames/);
+    assert.match(hyperframesHtml, /object-chrome/);
+    assert.match(hyperframesHtml, /object-state-strip/);
+    assert.match(hyperframesHtml, /diagram-endpoint-count/);
+    assert.match(hyperframesHtml, /chart-legend/);
+    assert.match(hyperframesHtml, /chart-value/);
+    assert.match(hyperframesHtml, /prefers-reduced-motion/);
+    assert.match(hyperframesHtml, /motionDuration/);
     assert.match(hyperframesHtml, /@hyperframes\/core/);
     assert.match(hyperframesHtml, /state.state === "connect"/);
     assert.match(hyperframesHtml, /state.state === "drift"/);

@@ -2217,9 +2217,33 @@ function hyperframesSfxDuration(value) {
 
 function renderHyperframesLifecycleObject(object, scene) {
   const template = object.template ?? "paper_card";
-  return `<div class="lifecycle-object hf-object hf-object--${escapeHtml(template)}" data-object-id="${escapeHtml(object.id)}" data-role="${escapeHtml(object.role)}" data-ref="${escapeHtml(object.ref)}" data-template="${escapeHtml(template)}" data-states="${escapeHtml(JSON.stringify(object.states))}">
-          ${renderHyperframesObjectTemplate(object, scene, template)}
+  const states = lifecycleStateNames(object);
+  const sfxCount = objectSfxList(object).length;
+  const sourceStatus = object.template_data?.evidence ? "source-declared" : "missing-source";
+  const qualityStatus = hyperframesObjectQualityStatus(object, template);
+  const stateStrip = states.slice(0, 6).map((state) => `<i class="object-state-dot state-${escapeHtml(state)}" title="${escapeHtml(state)}"></i>`).join("");
+  const ariaLabel = `HyperFrames ${templateDisplayName(template)} object ${object.label ?? object.id}; role ${object.role ?? "object"}; ${sourceStatus}; states ${states.join(", ") || "none"}`;
+  return `<div class="lifecycle-object hf-object hf-object--${escapeHtml(template)}" data-polish="launchclip.object-polish.v1" data-quality="${escapeHtml(qualityStatus)}" data-source-status="${escapeHtml(sourceStatus)}" data-state-count="${states.length}" data-sfx-count="${sfxCount}" data-object-id="${escapeHtml(object.id)}" data-role="${escapeHtml(object.role)}" data-ref="${escapeHtml(object.ref)}" data-template="${escapeHtml(template)}" data-states="${escapeHtml(JSON.stringify(object.states))}" aria-label="${escapeHtml(ariaLabel)}">
+          <div class="object-chrome" aria-hidden="true">
+            <span class="object-template-badge">${escapeHtml(templateDisplayName(template))}</span>
+            <span class="object-state-strip">${stateStrip}</span>
+            <span class="object-source-badge">${escapeHtml(sourceStatus)}</span>
+          </div>
+          <div class="object-inner">
+            ${renderHyperframesObjectTemplate(object, scene, template)}
+          </div>
         </div>`;
+}
+
+function hyperframesObjectQualityStatus(object, template) {
+  const states = lifecycleStateNames(object);
+  const hasCoreStates = lifecycleCoreStateOrderValid(states);
+  const hasSfx = objectSfxList(object).length > 0;
+  const hasSource = Boolean(object.template_data?.evidence);
+  const mediaSlots = Array.isArray(object.template_data?.media_slots) ? object.template_data.media_slots.filter(Boolean) : [];
+  const aliases = Array.isArray(object.template_data?.aliases) ? object.template_data.aliases.filter(Boolean) : [];
+  const dataReady = template === "chart" ? mediaSlots.length >= 2 : template === "diagram" ? aliases.length >= 2 : true;
+  return hasCoreStates && hasSfx && hasSource && dataReady ? "review-ready" : "needs-review";
 }
 
 function renderHyperframesObjectTemplate(object, scene, template) {
@@ -2257,11 +2281,13 @@ function renderPromptObject(object) {
 function renderDiagramObject(object) {
   const aliases = object.template_data?.aliases?.length ? object.template_data.aliases : ["input", "proof", "review"];
   return `<div class="object-diagram">
+            <div class="diagram-endpoint-count">${aliases.length} endpoints</div>
             <div class="diagram-node node-a">${escapeHtml(aliases[0] ?? "input")}</div>
             <div class="diagram-connector-line line-a"></div>
             <div class="diagram-node node-b">${escapeHtml(aliases[1] ?? "proof")}</div>
             <div class="diagram-connector-line line-b"></div>
             <div class="diagram-node node-c">${escapeHtml(aliases[2] ?? "review")}</div>
+            <div class="diagram-legend">Connector endpoints stay source-backed</div>
           </div>`;
 }
 
@@ -2270,8 +2296,9 @@ function renderChartObject(object) {
   return `<div class="object-chart">
             <strong>${escapeHtml(object.label ?? "proof chart")}</strong>
             <div class="chart-bars">
-              ${slots.slice(0, 4).map((slot, index) => `<span><i class="chart-bar-fill" style="height:${42 + index * 17}%"></i><em>${escapeHtml(slot)}</em></span>`).join("")}
+              ${slots.slice(0, 4).map((slot, index) => `<span data-value="${42 + index * 17}"><i class="chart-bar-fill" style="height:${42 + index * 17}%"></i><small class="chart-value">${42 + index * 17}</small><em>${escapeHtml(slot)}</em></span>`).join("")}
             </div>
+            <div class="chart-legend"><span><i></i>data marks</span><span><i></i>source-backed</span></div>
           </div>`;
 }
 
@@ -2378,7 +2405,17 @@ function renderHyperframesIndex(manifest, video, sfxManifest = null) {
     .connector { height: 6px; background: repeating-linear-gradient(90deg, #1a1a18 0 18px, transparent 18px 30px); position: relative; }
     .connector::after { content: ""; position: absolute; right: -2px; top: -10px; border-left: 24px solid #1a1a18; border-top: 13px solid transparent; border-bottom: 13px solid transparent; }
     .lifecycle-layer { position: absolute; inset: 0; pointer-events: none; }
-    .lifecycle-object { position: absolute; left: 50%; top: 68%; width: 330px; min-height: 150px; border-radius: 24px; padding: 0; background: #fffdf8; border: 3px solid #1a1a18; box-shadow: 16px 20px 0 rgba(26,26,24,0.16); font-size: 22px; font-weight: 900; overflow: hidden; }
+    .lifecycle-object { position: absolute; left: 50%; top: 68%; width: 330px; min-height: 206px; aspect-ratio: 16 / 9; border-radius: 24px; padding: 0; background: #fffdf8; border: 3px solid #1a1a18; box-shadow: 16px 20px 0 rgba(26,26,24,0.16), 0 18px 52px rgba(26,26,24,0.18); font-size: 22px; font-weight: 900; overflow: hidden; display: grid; grid-template-rows: auto 1fr; isolation: isolate; contain: layout; will-change: transform, opacity, filter; transform-style: preserve-3d; }
+    .lifecycle-object::before { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; background: linear-gradient(135deg, rgba(255,255,255,0.42), transparent 42%), radial-gradient(circle at 85% 18%, rgba(98,189,147,0.2), transparent 32%); mix-blend-mode: multiply; }
+    .object-chrome { position: relative; z-index: 2; min-height: 38px; padding: 10px 14px 0; display: flex; align-items: center; gap: 8px; color: rgba(26,26,24,0.68); font-size: 10px; line-height: 1; text-transform: uppercase; }
+    .object-template-badge, .object-source-badge { border: 1px solid rgba(26,26,24,0.18); border-radius: 999px; background: rgba(255,253,248,0.72); padding: 7px 9px; white-space: nowrap; }
+    .object-source-badge { margin-left: auto; color: #16613f; font-weight: 900; }
+    .object-state-strip { display: flex; gap: 4px; align-items: center; }
+    .object-state-dot { width: 7px; height: 7px; border-radius: 50%; background: #1a1a18; opacity: 0.34; }
+    .object-state-dot.state-connect, .object-state-dot.state-drift, .object-state-dot.state-pulse { background: #62bd93; opacity: 1; }
+    .object-inner { position: relative; z-index: 1; min-height: 150px; display: grid; }
+    .hf-object--terminal_ui .object-chrome, .hf-object--prompt_ui .object-chrome, .hf-object--brand_token .object-chrome { color: rgba(236,232,225,0.72); }
+    .hf-object--terminal_ui .object-template-badge, .hf-object--terminal_ui .object-source-badge, .hf-object--prompt_ui .object-template-badge, .hf-object--prompt_ui .object-source-badge, .hf-object--brand_token .object-template-badge, .hf-object--brand_token .object-source-badge { border-color: rgba(236,232,225,0.2); background: rgba(236,232,225,0.08); color: rgba(236,232,225,0.82); }
     .hf-object--terminal_ui, .hf-object--prompt_ui { background: #121212; color: #ece8e1; }
     .hf-object--brand_token { border-radius: 999px; background: #1a1a18; color: #ece8e1; }
     .hf-object--diagram { width: 430px; background: #fffdf8; }
@@ -2400,14 +2437,21 @@ function renderHyperframesIndex(manifest, video, sfxManifest = null) {
     .prompt-chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .prompt-chips span { border: 1px solid rgba(236,232,225,0.24); border-radius: 999px; padding: 8px 10px; font-size: 13px; color: rgba(236,232,225,0.78); }
     .prompt-send { justify-self: end; width: 58px; height: 58px; border-radius: 50%; background: #ece8e1; color: #121212; display: grid; place-items: center; font-size: 13px; text-transform: uppercase; }
-    .object-diagram { display: grid; grid-template-columns: 1fr 62px 1fr 62px 1fr; align-items: center; gap: 8px; }
+    .object-diagram { display: grid; grid-template-columns: 1fr 62px 1fr 62px 1fr; grid-template-rows: auto 1fr auto; align-items: center; gap: 8px; }
+    .diagram-endpoint-count, .diagram-legend { grid-column: 1 / -1; color: rgba(26,26,24,0.62); font-size: 12px; text-transform: uppercase; }
+    .diagram-endpoint-count { justify-self: start; border: 1px solid rgba(26,26,24,0.14); border-radius: 999px; padding: 6px 9px; background: rgba(236,232,225,0.64); }
+    .diagram-legend { justify-self: end; font-size: 11px; }
     .diagram-node { min-height: 74px; border-radius: 18px; background: #1a1a18; color: #ece8e1; display: grid; place-items: center; padding: 12px; font-size: 16px; text-align: center; }
     .node-c { background: #62bd93; color: #101010; }
     .diagram-connector-line { height: 5px; background: repeating-linear-gradient(90deg, #1a1a18 0 12px, transparent 12px 20px); transform-origin: left center; }
     .object-chart strong { display: block; margin-bottom: 18px; font-size: 24px; }
     .chart-bars { height: 126px; display: flex; align-items: flex-end; gap: 14px; border-left: 3px solid #1a1a18; border-bottom: 3px solid #1a1a18; padding: 0 12px; }
-    .chart-bars span { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 8px; font-size: 10px; color: rgba(26,26,24,0.62); }
+    .chart-bars span { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; font-size: 10px; color: rgba(26,26,24,0.62); position: relative; }
     .chart-bar-fill { width: 100%; max-width: 44px; border-radius: 12px 12px 0 0; background: #62bd93; transform-origin: bottom; display: block; }
+    .chart-value { font-size: 10px; font-weight: 900; color: #1a1a18; }
+    .chart-legend { display: flex; gap: 10px; align-items: center; margin-top: 12px; color: rgba(26,26,24,0.62); font-size: 11px; text-transform: uppercase; }
+    .chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .chart-legend i { width: 9px; height: 9px; border-radius: 50%; background: #62bd93; display: inline-block; }
     .object-brand-token { display: grid; grid-template-columns: repeat(3, 62px); align-items: center; justify-content: center; gap: 10px; min-height: 150px; text-align: center; }
     .object-brand-token span { width: 62px; height: 62px; border-radius: 18px; background: #ece8e1; color: #1a1a18; display: grid; place-items: center; font-size: 18px; }
     .object-brand-token strong { grid-column: 1 / -1; font-size: 18px; }
@@ -2429,6 +2473,10 @@ function renderHyperframesIndex(manifest, video, sfxManifest = null) {
     .scene-2 .hero-card { transform: rotate(-0.4deg); }
     .scene-3 .hero-card { transform: rotate(1.4deg); }
     .scene-4 .hero-card { transform: rotate(-1.8deg); }
+    @media (prefers-reduced-motion: reduce) {
+      .lifecycle-object { filter: none !important; }
+      .grid-bg { transform: none; }
+    }
   </style>
 </head>
 <body>
@@ -2441,6 +2489,10 @@ ${sceneHtml}
     const sfxManifestElement = document.getElementById("launchclip-sfx-manifest");
     const launchclipSfxManifest = sfxManifestElement ? JSON.parse(sfxManifestElement.textContent || "{}") : { assets: [], cues: [] };
     const launchclipSfxAssets = new Map((launchclipSfxManifest.assets || []).map((asset) => [asset.id, asset]));
+    const launchclipStage = document.getElementById("stage");
+    const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const motionDuration = (seconds) => reducedMotion ? Math.min(0.06, Number(seconds) || 0.06) : seconds;
+    if (launchclipStage) launchclipStage.dataset.motionMode = reducedMotion ? "reduced" : "full";
     function scheduleLifecycleSfx(state, object) {
       if (!state.sfx) return;
       const assetId = String(state.sfx).replace(/\\.[^.]+$/, "").replace(/_/g, "-").toLowerCase();
@@ -2461,12 +2513,12 @@ ${sceneHtml}
       gsap.set(lifecycleObjects, { opacity: 0, y: 58, scale: 0.86, rotate: -3, filter: "blur(6px)" });
       const start = Number(scene.dataset.start || 0);
       const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
-      tl.to(scene, { opacity: 1, duration: 0.12 }, start)
-        .to(card, { y: 0, rotate: index % 2 ? 1 : -1.2, scale: 1, duration: 0.72 }, start + 0.06)
-        .to(tokens, { y: 0, opacity: 1, scale: 1, stagger: 0.12, duration: 0.42 }, start + 0.42)
-        .to(connector, { scaleX: 1, duration: 0.44 }, start + 0.58)
-        .to(card, { scale: 1.035, duration: Math.max(0.8, Number(scene.dataset.duration || 2) - 0.8), ease: "none" }, start + 0.84)
-        .to(scene, { opacity: 0, duration: 0.1 }, start + Number(scene.dataset.duration || 2) - 0.1);
+      tl.to(scene, { opacity: 1, duration: motionDuration(0.12) }, start)
+        .to(card, { y: 0, rotate: index % 2 ? 1 : -1.2, scale: 1, duration: motionDuration(0.72) }, start + 0.06)
+        .to(tokens, { y: 0, opacity: 1, scale: 1, stagger: reducedMotion ? 0 : 0.12, duration: motionDuration(0.42) }, start + 0.42)
+        .to(connector, { scaleX: 1, duration: motionDuration(0.44) }, start + 0.58)
+        .to(card, { scale: 1.035, duration: motionDuration(Math.max(0.8, Number(scene.dataset.duration || 2) - 0.8)), ease: "none" }, start + 0.84)
+        .to(scene, { opacity: 0, duration: motionDuration(0.1) }, start + Number(scene.dataset.duration || 2) - 0.1);
       lifecycleObjects.forEach((object, objectIndex) => {
         let states = [];
         try { states = JSON.parse(object.dataset.states || "[]"); } catch {}
@@ -2479,25 +2531,25 @@ ${sceneHtml}
         const objectTl = gsap.timeline({ defaults: { ease: "power3.out" } });
         states.forEach((state) => {
           const at = Number(state.at || start);
-          const duration = Number(state.duration || 0.35);
+          const duration = motionDuration(Number(state.duration || 0.35));
           const ease = state.easing || "power3.out";
           scheduleLifecycleSfx(state, object);
           if (state.state === "enter") {
             objectTl.to(object, { opacity: 1, y: 0, scale: 1, rotate: objectIndex % 2 ? 2 : -2, filter: "blur(0px)", duration, ease }, at);
-            objectTl.to(proofRows, { opacity: 1, y: 0, stagger: 0.06, duration: 0.24 }, at + 0.08);
+            objectTl.to(proofRows, { opacity: 1, y: 0, stagger: reducedMotion ? 0 : 0.06, duration: motionDuration(0.24) }, at + 0.08);
           }
           if (state.state === "settle") objectTl.to(object, { y: -8, scale: 1.02, duration: duration / 2, yoyo: true, repeat: 1, ease }, at);
           if (state.state === "transform") {
             const targetX = (Number(state.to?.x ?? 0.5) - 0.5) * ${width};
             const targetY = (Number(state.to?.y ?? 0.68) - 0.68) * ${height};
             objectTl.to(object, { x: targetX, y: targetY, scale: Number(state.to?.scale ?? 1), rotate: Number(state.to?.rotate ?? 0), duration, ease }, at);
-            objectTl.to(chartBars, { scaleY: 1, stagger: 0.08, duration: 0.36 }, at + 0.06);
-            objectTl.to(diagramLines, { scaleX: 1, stagger: 0.12, duration: 0.34 }, at + 0.06);
+            objectTl.to(chartBars, { scaleY: 1, stagger: reducedMotion ? 0 : 0.08, duration: motionDuration(0.36) }, at + 0.06);
+            objectTl.to(diagramLines, { scaleX: 1, stagger: reducedMotion ? 0 : 0.12, duration: motionDuration(0.34) }, at + 0.06);
           }
           if (state.state === "connect") {
             objectTl.to(object, { scale: Number(state.to?.scale ?? 1.04), rotate: Number(state.to?.rotate ?? 0), duration: duration / 2, yoyo: true, repeat: 1, ease }, at);
-            objectTl.to(diagramLines, { scaleX: 1, stagger: 0.08, duration: 0.24 }, at + 0.02);
-            objectTl.to(chartBars, { scaleY: 1, stagger: 0.06, duration: 0.24 }, at + 0.02);
+            objectTl.to(diagramLines, { scaleX: 1, stagger: reducedMotion ? 0 : 0.08, duration: motionDuration(0.24) }, at + 0.02);
+            objectTl.to(chartBars, { scaleY: 1, stagger: reducedMotion ? 0 : 0.06, duration: motionDuration(0.24) }, at + 0.02);
           }
           if (state.state === "drift") {
             objectTl.to(object, { x: \`+=\${Number(state.delta?.x ?? 10)}\`, y: \`+=\${Number(state.delta?.y ?? -8)}\`, rotate: \`+=\${Number(state.delta?.rotate ?? 0.6)}\`, duration: duration / 2, yoyo: true, repeat: 1, ease }, at);
@@ -2628,14 +2680,21 @@ function renderHyperframesTemplateQa(video) {
     .prompt-chips { display: flex; flex-wrap: wrap; gap: 7px; }
     .prompt-chips span { border: 1px solid rgba(236,232,225,0.24); border-radius: 999px; padding: 7px 9px; font-size: 11px; color: rgba(236,232,225,0.78); }
     .prompt-send { justify-self: end; width: 50px; height: 50px; border-radius: 50%; background: var(--paper); color: var(--black); display: grid; place-items: center; font-size: 11px; text-transform: uppercase; }
-    .object-diagram { display: grid; grid-template-columns: 1fr 44px 1fr 44px 1fr; align-items: center; gap: 8px; }
+    .object-diagram { display: grid; grid-template-columns: 1fr 44px 1fr 44px 1fr; grid-template-rows: auto 1fr auto; align-items: center; gap: 8px; }
+    .diagram-endpoint-count, .diagram-legend { grid-column: 1 / -1; color: var(--muted); font-size: 10px; text-transform: uppercase; }
+    .diagram-endpoint-count { justify-self: start; border: 1px solid var(--line); border-radius: 999px; padding: 5px 8px; background: rgba(236,232,225,0.64); }
+    .diagram-legend { justify-self: end; font-size: 9px; }
     .diagram-node { min-height: 62px; border-radius: 14px; background: var(--ink); color: var(--paper); display: grid; place-items: center; padding: 10px; font-size: 12px; text-align: center; overflow-wrap: anywhere; }
     .node-c { background: var(--green); color: var(--black); }
     .diagram-connector-line { height: 5px; background: repeating-linear-gradient(90deg, var(--ink) 0 10px, transparent 10px 16px); transform-origin: left center; }
     .object-chart strong { display: block; margin-bottom: 16px; font-size: 19px; }
     .chart-bars { height: 114px; display: flex; align-items: flex-end; gap: 12px; border-left: 3px solid var(--ink); border-bottom: 3px solid var(--ink); padding: 0 10px; }
-    .chart-bars span { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 7px; font-size: 9px; color: var(--muted); overflow-wrap: anywhere; }
+    .chart-bars span { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 5px; font-size: 9px; color: var(--muted); overflow-wrap: anywhere; }
     .chart-bar-fill { width: 100%; max-width: 38px; border-radius: 10px 10px 0 0; background: var(--green); transform-origin: bottom; display: block; }
+    .chart-value { font-size: 9px; font-weight: 900; color: var(--ink); }
+    .chart-legend { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; color: var(--muted); font-size: 9px; text-transform: uppercase; }
+    .chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .chart-legend i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; }
     .object-brand-token { display: grid; grid-template-columns: repeat(3, 56px); align-items: center; justify-content: center; gap: 9px; min-height: 150px; text-align: center; }
     .object-brand-token span { width: 56px; height: 56px; border-radius: 16px; background: var(--paper); color: var(--ink); display: grid; place-items: center; font-size: 16px; }
     .object-brand-token strong { grid-column: 1 / -1; font-size: 16px; }
