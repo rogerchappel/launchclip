@@ -179,7 +179,7 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.equal(video.hyperframes.asset_readiness, "video/hyperframes/asset-readiness.html");
     assert.equal(video.hyperframes.chart_diagram_qa, "video/hyperframes/chart-diagram-qa.html");
     assert.equal(video.hyperframes.quality_checklist, "video/hyperframes/QUALITY.md");
-    assert.deepEqual(video.hyperframes.render_command.slice(0, 3), ["npx", "hyperframes", "render"]);
+    assert.deepEqual(video.hyperframes.render_command.slice(0, 4), ["npx", "hyperframes", "render", "."]);
     assert.equal(video.hyperframes.object_lifecycle.objects.length, video.object_lifecycle.length);
     assert.equal(video.creative_recipe.renderer_contract.composition_id, "LaunchclipPremiumShort");
     assert.deepEqual(video.assets.provided_aliases, ["claude-code", "prompt-example", "sfx-connector-pop", "sfx-single-type"]);
@@ -205,6 +205,11 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.match(storyboardHtml, /Receipts before posting|The proof board|Repo proof to premium Short/);
     assert.match(storyboardHtml, /Objects/);
     assert.match(hyperframesHtml, /data-composition-id="LaunchclipHyperframes"/);
+    assert.match(hyperframesHtml, /id="grid-bg" class="clip grid-bg"/);
+    assert.match(hyperframesHtml, /id="scene-1" class="clip scene/);
+    assert.match(hyperframesHtml, /window\.__timelines = window\.__timelines \|\| \{\}/);
+    assert.match(hyperframesHtml, /gsap\.timeline\(\{ paused: true/);
+    assert.match(hyperframesHtml, /window\.__timelines\["LaunchclipHyperframes"\] = launchclipTimeline/);
     assert.match(hyperframesHtml, /data-object-id="hf-/);
     assert.match(hyperframesHtml, /data-template="diagram"/);
     assert.match(hyperframesHtml, /data-states=/);
@@ -277,7 +282,7 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.match(hyperframesQualityChecklist, /Chart and diagram QA/);
     assert.match(hyperframesQualityChecklist, /SFX runtime/);
     assert.match(hyperframesQualityChecklist, /Human Acceptance Checklist/);
-    assert.match(hyperframesQualityChecklist, /npx hyperframes render index\.html/);
+    assert.match(hyperframesQualityChecklist, /npx hyperframes render \./);
     assert.equal(hyperframesSfxManifest.schema_version, "launchclip.hyperframes-sfx.v1");
     assert.equal(hyperframesSfxManifest.runtime.schema_version, "launchclip.hyperframes-audio-runtime.v1");
     assert.equal(hyperframesSfxManifest.runtime.scheduler, "gsap.delayedCall");
