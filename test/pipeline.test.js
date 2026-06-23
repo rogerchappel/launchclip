@@ -141,6 +141,7 @@ test("plans premium product short contract with deterministic asset warnings", a
     const storyboardHtml = await readFile(path.join(out, "video/storyboard.html"), "utf8");
     const hyperframesHtml = await readFile(path.join(out, "video/hyperframes/index.html"), "utf8");
     const hyperframesQaHtml = await readFile(path.join(out, "video/hyperframes/template-qa.html"), "utf8");
+    const hyperframesSfxManifest = JSON.parse(await readFile(path.join(out, "video/hyperframes/sfx-manifest.json"), "utf8"));
     const hyperframesData = JSON.parse(await readFile(path.join(out, "video/hyperframes/launchclip-data.json"), "utf8"));
 
     assert.equal(video.style, "premium-product-short");
@@ -169,6 +170,7 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.equal(video.hyperframes.schema_version, "launchclip.hyperframes-handoff.v1");
     assert.equal(video.hyperframes.entrypoint, "video/hyperframes/index.html");
     assert.equal(video.hyperframes.template_qa_preview, "video/hyperframes/template-qa.html");
+    assert.equal(video.hyperframes.sfx_manifest, "video/hyperframes/sfx-manifest.json");
     assert.deepEqual(video.hyperframes.render_command.slice(0, 3), ["npx", "hyperframes", "render"]);
     assert.equal(video.hyperframes.object_lifecycle.objects.length, video.object_lifecycle.length);
     assert.equal(video.creative_recipe.renderer_contract.composition_id, "LaunchclipPremiumShort");
@@ -207,6 +209,9 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.match(hyperframesHtml, /state.state === "connect"/);
     assert.match(hyperframesHtml, /state.state === "drift"/);
     assert.match(hyperframesHtml, /state.state === "pulse"/);
+    assert.match(hyperframesHtml, /launchclip-sfx-manifest/);
+    assert.match(hyperframesHtml, /scheduleLifecycleSfx/);
+    assert.match(hyperframesHtml, /data-sfx-manifest="sfx-manifest\.json"/);
     assert.match(hyperframesQaHtml, /HyperFrames Template QA/);
     assert.match(hyperframesQaHtml, /Template coverage/);
     assert.match(hyperframesQaHtml, /Static hold checks/);
@@ -217,10 +222,20 @@ test("plans premium product short contract with deterministic asset warnings", a
     assert.match(hyperframesQaHtml, /chart-bar-fill/);
     assert.match(hyperframesQaHtml, /Lifecycle Audit/);
     assert.match(hyperframesQaHtml, /QA flags<\/span><strong>0<\/strong>/);
+    assert.equal(hyperframesSfxManifest.schema_version, "launchclip.hyperframes-sfx.v1");
+    assert.ok(hyperframesSfxManifest.assets.length >= 4);
+    assert.ok(hyperframesSfxManifest.cues.length >= video.object_lifecycle.length);
+    assert.ok(hyperframesSfxManifest.storyboard_cues.length >= video.creative_storyboard.scenes.length);
+    assert.ok(hyperframesSfxManifest.assets.some((asset) => asset.id === "connector-pop" && asset.path === "sfx/connector_pop.wav"));
+    assert.ok(hyperframesSfxManifest.assets.some((asset) => asset.family === "typing-tick"));
+    assert.ok(hyperframesSfxManifest.cues.some((cue) => cue.state === "connect" && cue.asset_id === "connector-pop"));
+    assert.ok(hyperframesSfxManifest.cues.every((cue) => cue.duck_voiceover === true));
+    assert.equal(hyperframesData.sfx_manifest.cues.length, hyperframesSfxManifest.cues.length);
     assert.equal(hyperframesData.video.object_lifecycle.length, video.object_lifecycle.length);
     assert.equal(hyperframesData.video.object_lifecycle[2].template, "diagram");
     await access(path.join(out, "video/hyperframes/README.md"));
     await access(path.join(out, "video/hyperframes/template-qa.html"));
+    await access(path.join(out, "video/hyperframes/sfx-manifest.json"));
     await access(path.join(out, "video/hyperframes/launchclip-data.json"));
     assert.equal(readiness.status, "ready");
     assert.deepEqual(readiness.warnings, [
