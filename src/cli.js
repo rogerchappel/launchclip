@@ -1,10 +1,10 @@
-import { initWorkspace, runDemo, planVideo, writeCaptions, renderVideo, submitReview, writeReview, runPacket, validateWorkspace } from "./pipeline.js";
+import { analyzeRender, initWorkspace, runDemo, planVideo, writeCaptions, renderVideo, submitReview, writeReview, runPacket, validateWorkspace } from "./pipeline.js";
 import { writeTeleprompter, alignRecording, renderMotion } from "./talking_head.js";
 import { generateMusic } from "./music.js";
 import { runDirect } from "./director.js";
 import { preprocessPresenter } from "./presenter_preprocess.js";
 
-const COMMANDS = new Set(["init", "demo", "plan", "captions", "render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout } = io;
@@ -29,6 +29,8 @@ export async function runCli(argv, io = {}) {
     result = await writeCaptions(required(firstArg, "workspace path"), flags);
   } else if (command === "render") {
     result = await renderVideo(required(firstArg, "workspace path"), flags);
+  } else if (command === "analyze-render") {
+    result = await analyzeRender(required(firstArg, "workspace path"), flags);
   } else if (command === "submit-review") {
     result = await submitReview(required(firstArg, "workspace path"), flags);
   } else if (command === "review") {
@@ -92,6 +94,7 @@ Usage:
   launchclip render <workspace> --provider hyperframes [--quality high] [--voiceover local-say]
   launchclip render <workspace> --provider remotion [--assets-dir path/to/assets] [--voiceover local-say]
   launchclip render <workspace> --provider local-ffmpeg [--voiceover local-say]
+  launchclip analyze-render <workspace> [--video video/launchclip-hyperframes.mp4]
   launchclip submit-review <workspace> --provider product-videogen --dry-run
   launchclip review <workspace>
   launchclip validate <workspace>

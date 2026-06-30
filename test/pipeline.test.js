@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { initWorkspace, planVideo, renderDryRun, renderVideo, runDemo, runPacket, submitReview, validateWorkspace, writeCaptions, writeReview } from "../src/pipeline.js";
+import { analyzeRender, initWorkspace, planVideo, renderDryRun, renderVideo, runDemo, runPacket, submitReview, validateWorkspace, writeCaptions, writeReview } from "../src/pipeline.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -350,11 +350,13 @@ test("plans original 150 second data-story benchmark contract", async () => {
     await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
     await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
     await submitReview(out, { provider: "product-videogen", "dry-run": true });
+    const renderAnalysis = await analyzeRender(out);
 
     const video = JSON.parse(await readFile(path.join(out, "video/video.json"), "utf8"));
     const renderPlan = JSON.parse(await readFile(path.join(out, "video/render-plan.json"), "utf8"));
     const payload = JSON.parse(await readFile(path.join(out, "video/product-videogen.dry-run.json"), "utf8"));
     const hyperframesData = JSON.parse(await readFile(path.join(out, "video/hyperframes/launchclip-data.json"), "utf8"));
+    const renderAnalysisReport = JSON.parse(await readFile(path.join(out, "review/render-analysis.json"), "utf8"));
     const frame = await readFile(path.join(out, "video/frame.md"), "utf8");
     const storyboardHtml = await readFile(path.join(out, "video/storyboard.html"), "utf8");
     const readiness = await validateWorkspace(out);
@@ -372,6 +374,12 @@ test("plans original 150 second data-story benchmark contract", async () => {
     assert.equal(video.creative_storyboard.scenes.length, 8);
     assert.equal(video.sound_design.cues.length, 8);
     assert.equal(video.object_lifecycle.length, 8);
+    assert.equal(renderAnalysis.stage, "analyze-render");
+    assert.equal(renderAnalysis.voiceover.segment_count, 8);
+    assert.equal(renderAnalysis.transitions.section_count, 8);
+    assert.equal(renderAnalysis.music.present, false);
+    assert.equal(renderAnalysis.sfx_assets.generated_default_assets, 0);
+    assert.equal(renderAnalysisReport.output, "review/render-analysis.json");
     assert.equal(video.script_visual_alignment[0].beat, "public-record-hook");
     assert.equal(video.script_visual_alignment[7].beat, "verdict-cta");
     assert.match(video.creative_storyboard.non_goals.join("\n"), /Do not download or reuse the reference transcript/);

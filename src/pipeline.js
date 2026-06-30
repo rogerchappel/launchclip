@@ -17,12 +17,12 @@ const HYPERFRAMES_REQUIRED_TEMPLATE_FAMILIES = ["brand_token", "terminal_ui", "d
 const HYPERFRAMES_STATIC_HOLD_THRESHOLD_SECONDS = 1.2;
 const HYPERFRAMES_DEFAULT_SFX_BY_FAMILY = {
   "connector-pop": "pop.wav",
-  "paper-hit": "paper_hit.wav",
-  "soft-thump": "soft_thump.wav",
-  "success-ding": "success_ding.wav",
+  "paper-hit": "pop.wav",
+  "soft-thump": "cinematic_boom.wav",
+  "success-ding": "retro_success.wav",
   "typing-tick": "single_type.wav",
   "ui-hit": "tick.wav",
-  "warning-tap": "camera_tick.wav",
+  "warning-tap": "bell.wav",
   whoosh: "fast_whoosh.wav"
 };
 const HYPERFRAMES_MAX_POST_RENDER_SFX_CUES = 64;
@@ -374,7 +374,7 @@ async function renderHyperframes(out, flags = {}) {
   if (flags.fps) renderArgs.push("--fps", String(flags.fps));
   if (flags.format) renderArgs.push("--format", String(flags.format));
   await execFileAsync("npx", renderArgs, { cwd: projectDir, maxBuffer: 1024 * 1024 * 16 });
-  const audio = await applyPostRenderAudio(out, output, flags, { defaultVoiceover: true, defaultMusic: true, defaultSfx: true });
+  const audio = await applyPostRenderAudio(out, output, flags, { defaultVoiceover: true, defaultMusic: false, defaultSfx: true });
   await execFileAsync("ffmpeg", [
     "-y",
     "-ss",
@@ -576,9 +576,13 @@ async function generateVoiceoverAudio(out, flags, mode, videoDuration) {
   const rawAudioPath = path.join(out, "video", "voiceover.raw.aiff");
   const targetAudioDuration = Math.max(1, videoDuration - 0.85);
   const voiceArgs = flags.voice ? ["-v", flags.voice] : [];
+  const requestedRate = flags["voice-rate"] ?? flags.wpm;
+  const estimatedRate = Math.round(Math.max(115, Math.min(175, wordCount(voiceover.full_text) / (targetAudioDuration / 60))));
+  const rateArgs = ["-r", String(requestedRate ? Number(requestedRate) : estimatedRate)];
   try {
     await execFileAsync("say", [
       ...voiceArgs,
+      ...rateArgs,
       "-o",
       rawAudioPath,
       voiceover.full_text
@@ -706,7 +710,7 @@ async function commandExists(command) {
 
 async function fitVoiceoverAudio(inputPath, outputPath, targetDuration) {
   const duration = await mediaDurationSeconds(inputPath);
-  if (duration <= targetDuration) {
+  if (Math.abs(duration - targetDuration) <= 0.25) {
     await rename(inputPath, outputPath);
     return;
   }
@@ -840,6 +844,71 @@ ${receipt?.product_videogen_api_gap ?? "Run submit-review --provider product-vid
   return { stage: "review", review: reviewPath };
 }
 
+export async function analyzeRender(workspacePath, flags = {}) {
+  const out = path.resolve(workspacePath);
+  const manifest = await readJson(path.join(out, "launchclip.json"));
+  const video = await readJson(path.join(out, "video", "video.json"));
+  const renderMedia = flags.video ?? manifest.stages.render?.media ?? "video/launchclip-hyperframes.mp4";
+  const renderPath = path.isAbsolute(renderMedia) ? renderMedia : path.join(out, renderMedia);
+  const hasRenderedVideo = await fileExists(renderPath);
+  const media = hasRenderedVideo ? await mediaProbe(renderPath) : null;
+  const duration = media?.duration_seconds ?? Number(video.duration_seconds ?? 0);
+  const voiceoverPath = manifest.stages.render?.voiceover_audio
+    ? path.join(out, manifest.stages.render.voiceover_audio)
+    : path.join(out, "video", "voiceover.aiff");
+  const voiceoverDuration = await fileExists(voiceoverPath) ? await mediaDurationSeconds(voiceoverPath) : duration;
+  const sfxManifest = await optionalJson(path.join(out, HYPERFRAMES_PROJECT_DIR.replace(/\//g, path.sep), "sfx-manifest.json"));
+  const sfxCues = [...(sfxManifest?.cues ?? []), ...(sfxManifest?.storyboard_cues ?? [])]
+    .map((cue) => ({ ...cue, at: Number(cue.at ?? 0) }))
+    .filter((cue) => Number.isFinite(cue.at))
+    .sort((a, b) => a.at - b.at);
+  const alignment = analyzeVoiceoverAlignment(video, voiceoverDuration || duration);
+  const transitionCoverage = analyzeTransitionCoverage(video, sfxCues);
+  const sfxAssets = analyzeSfxAssets(sfxManifest);
+  const music = analyzeMusicBed(manifest);
+  const issues = [
+    ...(!hasRenderedVideo ? [`Rendered media is missing: ${renderMedia}`] : []),
+    ...(music.generated_local ? ["HyperFrames render used the generated local music bed; use --no-music or a deliberate external bed."] : []),
+    ...(alignment.max_abs_drift_seconds > 2.5 ? [`Voiceover segment timing drifts by up to ${alignment.max_abs_drift_seconds}s from visual sections.`] : []),
+    ...(transitionCoverage.coverage_ratio < 0.8 ? [`Only ${Math.round(transitionCoverage.coverage_ratio * 100)}% of section transitions have an SFX cue within 0.5s.`] : []),
+    ...(sfxAssets.generated_default_assets > 0 ? [`${sfxAssets.generated_default_assets} SFX assets came from generated placeholders instead of real files.`] : [])
+  ];
+  const warnings = [
+    ...(alignment.max_abs_drift_seconds > 1.25 && alignment.max_abs_drift_seconds <= 2.5 ? [`Voiceover alignment is loose: max drift ${alignment.max_abs_drift_seconds}s.`] : []),
+    ...(transitionCoverage.coverage_ratio >= 0.8 && transitionCoverage.average_nearest_transition_cue_seconds > 0.25 ? [`Transition SFX exists, but average cue offset is ${transitionCoverage.average_nearest_transition_cue_seconds}s.`] : []),
+    ...(music.present && !music.generated_local ? [`Music bed is present: ${music.path}. Confirm it was intentionally chosen.`] : [])
+  ];
+  const score = Math.max(0, Math.round(
+    100
+      - (music.generated_local ? 20 : 0)
+      - Math.min(25, sfxAssets.generated_default_assets * 5)
+      - Math.min(25, Math.max(0, alignment.max_abs_drift_seconds - 0.75) * 8)
+      - Math.min(20, Math.max(0, 0.9 - transitionCoverage.coverage_ratio) * 50)
+      - (!hasRenderedVideo ? 15 : 0)
+  ));
+  const result = {
+    stage: "analyze-render",
+    status: issues.length ? "needs-work" : warnings.length ? "review" : "ready",
+    score,
+    checked_at: new Date().toISOString(),
+    workspace: out,
+    media: media ?? { path: renderMedia, missing: true, duration_seconds: duration },
+    voiceover: alignment,
+    transitions: transitionCoverage,
+    sfx_assets: sfxAssets,
+    music,
+    issues,
+    warnings,
+    output: "review/render-analysis.json"
+  };
+  await mkdir(path.join(out, "review"), { recursive: true });
+  await writeJson(path.join(out, "review", "render-analysis.json"), result);
+  await updateManifest(out, (next) => {
+    next.stages.analyze_render = { status: result.status, score, report: "review/render-analysis.json" };
+  });
+  return result;
+}
+
 export async function runPacket(repoPath, flags = {}) {
   const repo = path.resolve(repoPath);
   const out = path.resolve(flags.out ?? defaultWorkspace(repo));
@@ -862,6 +931,149 @@ export async function runPacket(repoPath, flags = {}) {
   await writeReview(out);
   const readiness = await validateWorkspace(out, { write: true });
   return { stage: "run", workspace: out, status: readiness.status, issues: readiness.issues, warnings: readiness.warnings };
+}
+
+async function mediaProbe(filePath) {
+  const { stdout } = await execFileAsync("ffprobe", [
+    "-v",
+    "error",
+    "-show_entries",
+    "format=duration:stream=index,codec_type,width,height,r_frame_rate,avg_frame_rate,duration",
+    "-of",
+    "json",
+    filePath
+  ], { maxBuffer: 1024 * 256 });
+  const data = JSON.parse(stdout);
+  const duration = Number(data.format?.duration ?? 0);
+  const videoStream = (data.streams ?? []).find((stream) => stream.codec_type === "video") ?? {};
+  const audioStream = (data.streams ?? []).find((stream) => stream.codec_type === "audio") ?? {};
+  return {
+    path: filePath,
+    duration_seconds: round(duration),
+    width: videoStream.width ?? null,
+    height: videoStream.height ?? null,
+    fps: videoStream.avg_frame_rate ?? videoStream.r_frame_rate ?? null,
+    has_audio: Boolean(audioStream.codec_type),
+    audio_duration_seconds: audioStream.duration ? round(Number(audioStream.duration)) : null
+  };
+}
+
+function analyzeVoiceoverAlignment(video, voiceoverDuration) {
+  const segments = Array.isArray(video.script_visual_alignment) ? video.script_visual_alignment : [];
+  const totalWords = Math.max(1, segments.reduce((sum, segment) => sum + wordCount(segment.voiceover), 0));
+  let cursor = 0;
+  const rows = segments.map((segment) => {
+    const range = parseTimeRange(segment.time_range);
+    const words = wordCount(segment.voiceover);
+    const estimatedStart = cursor / totalWords * voiceoverDuration;
+    cursor += words;
+    const estimatedEnd = cursor / totalWords * voiceoverDuration;
+    const startDrift = round(estimatedStart - range.start);
+    const endDrift = round(estimatedEnd - range.end);
+    const maxDrift = round(Math.max(Math.abs(startDrift), Math.abs(endDrift)));
+    return {
+      beat: segment.beat,
+      time_range: segment.time_range,
+      planned_start: round(range.start),
+      planned_end: round(range.end),
+      words,
+      estimated_voice_start: round(estimatedStart),
+      estimated_voice_end: round(estimatedEnd),
+      start_drift_seconds: startDrift,
+      end_drift_seconds: endDrift,
+      status: maxDrift <= 1.25 ? "aligned" : maxDrift <= 2.5 ? "loose" : "off"
+    };
+  });
+  const maxDrift = rows.reduce((max, row) => Math.max(max, Math.abs(row.start_drift_seconds), Math.abs(row.end_drift_seconds)), 0);
+  return {
+    method: "word-count proportional estimate; replace with word timestamps for frame-accurate QA",
+    voiceover_duration_seconds: round(voiceoverDuration),
+    segment_count: rows.length,
+    total_words: totalWords,
+    max_abs_drift_seconds: round(maxDrift),
+    segments: rows
+  };
+}
+
+function analyzeTransitionCoverage(video, sfxCues) {
+  const segments = Array.isArray(video.script_visual_alignment) ? video.script_visual_alignment : [];
+  const rows = segments.map((segment, index) => {
+    const range = parseTimeRange(segment.time_range);
+    const nearest = sfxCues.reduce((best, cue) => {
+      const distance = Math.abs(Number(cue.at ?? 0) - range.start);
+      return !best || distance < best.distance ? { cue_id: cue.id, asset_id: cue.asset_id, at: round(cue.at), distance } : best;
+    }, null);
+    const cueCount = sfxCues.filter((cue) => Number(cue.at ?? -1) >= range.start && Number(cue.at ?? -1) < range.end).length;
+    const offset = nearest ? round(nearest.distance) : null;
+    return {
+      beat: segment.beat,
+      transition_at: round(range.start),
+      cue_count_in_section: cueCount,
+      nearest_cue_id: nearest?.cue_id ?? null,
+      nearest_asset_id: nearest?.asset_id ?? null,
+      nearest_cue_offset_seconds: offset,
+      status: index === 0 || (offset !== null && offset <= 0.5) ? "covered" : "late-or-missing"
+    };
+  });
+  const covered = rows.filter((row) => row.status === "covered").length;
+  const offsets = rows.map((row) => row.nearest_cue_offset_seconds).filter((value) => Number.isFinite(value));
+  return {
+    section_count: rows.length,
+    sfx_cue_count: sfxCues.length,
+    covered_transitions: covered,
+    coverage_ratio: rows.length ? round(covered / rows.length) : 0,
+    average_nearest_transition_cue_seconds: offsets.length ? round(offsets.reduce((sum, value) => sum + value, 0) / offsets.length) : null,
+    sections: rows
+  };
+}
+
+function analyzeSfxAssets(sfxManifest) {
+  const assets = sfxManifest?.assets ?? [];
+  const copied = sfxManifest?.copied_assets ?? [];
+  const generated = copied.filter((asset) => asset.alias === "generated-default-sfx").length
+    + assets.filter((asset) => asset.source_alias === "generated-default-sfx").length;
+  return {
+    asset_count: assets.length,
+    copied_asset_count: copied.length,
+    real_default_assets: copied.filter((asset) => asset.alias === "default-sfx-pack").length,
+    provided_alias_assets: copied.filter((asset) => asset.alias && asset.alias !== "default-sfx-pack" && asset.alias !== "generated-default-sfx").length,
+    generated_default_assets: generated,
+    missing_assets: sfxManifest?.missing_assets ?? [],
+    asset_ids: assets.map((asset) => asset.id).sort()
+  };
+}
+
+function analyzeMusicBed(manifest) {
+  const pathValue = manifest.stages.render?.music_audio ?? null;
+  return {
+    present: Boolean(pathValue),
+    path: pathValue,
+    generated_local: /(^|\/)music-bed\.wav$/i.test(String(pathValue ?? "")),
+    note: pathValue ? "Music must be intentional and ducked under narration." : "No default music bed; voice and SFX carry timing."
+  };
+}
+
+function applyVoiceWeightedTiming(timeline, totalDuration, fallbackStructure = []) {
+  const weights = timeline.map((segment, index) => Math.max(1, wordCount(segment.voiceover) || Number(fallbackStructure[index]?.seconds ?? 1)));
+  const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
+  let cursor = 0;
+  return timeline.map((segment, index) => {
+    const start = cursor;
+    const end = index === timeline.length - 1
+      ? totalDuration
+      : Math.min(totalDuration, start + (weights[index] / totalWeight * totalDuration));
+    cursor = end;
+    const targetSeconds = round(end - start);
+    return {
+      ...segment,
+      time_range: `${round(start)}-${round(end)}s`,
+      target_seconds: targetSeconds
+    };
+  });
+}
+
+function wordCount(value) {
+  return String(value ?? "").trim().split(/\s+/).filter(Boolean).length;
 }
 
 export async function validateWorkspace(workspacePath, flags = {}) {
@@ -5311,7 +5523,6 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
   }
   if (isDataStoryBenchmarkStyle(style)) {
     const structure = dataStoryBenchmarkStructure();
-    let cursor = 0;
     const timeline = [
       {
         beat: "public-record-hook",
@@ -5401,17 +5612,8 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         motion: "verdict card push, large number hit, URL pill land, final progress hold",
         transition: "quiet final hit"
       }
-    ].map((segment, index) => {
-      const target = Number(structure[index]?.seconds ?? 10);
-      const start = cursor;
-      const end = cursor + target;
-      cursor = end;
-      return {
-        ...segment,
-        time_range: `${start}-${end}s`,
-        target_seconds: target
-      };
-    });
+    ];
+    const timedTimeline = applyVoiceWeightedTiming(timeline, 150, structure);
     return {
       schema_version: "launchclip.script.v1",
       style,
@@ -5423,7 +5625,7 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         delivery: "fast data-story narration around 150 WPM, continuous but clear, with short pauses at chart-card transitions"
       },
       summary_line: summary || "turns local demo evidence into a reviewable launch packet",
-      timeline,
+      timeline: timedTimeline,
       alignment_rules: [
         "Do not use the reference transcript as generated voiceover and do not reuse its audio, footage, brand, graphics, chart values, or exact visuals.",
         "Every chart, map, and stat chip must declare synthetic fixture or launchclip artifact source status.",
