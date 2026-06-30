@@ -660,6 +660,34 @@ test("fits local-say voiceover before the video ends", async (t) => {
   }
 });
 
+test("ElevenLabs render voiceover requires an API key", async (t) => {
+  if (!(await hasCommand("ffmpeg"))) {
+    t.skip("ffmpeg is not installed");
+    return;
+  }
+  const previousKey = process.env.ELEVENLABS_API_KEY;
+  delete process.env.ELEVENLABS_API_KEY;
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
+  const out = path.join(temp, "packet");
+  try {
+    await initWorkspace(fixtureRepo, { out });
+    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
+    await planVideo(out, { format: "short-15", renderer: "local-ffmpeg" });
+
+    await assert.rejects(
+      renderVideo(out, { provider: "local-ffmpeg", duration: "1", fps: "2", voiceover: "elevenlabs" }),
+      /ELEVENLABS_API_KEY is not set/
+    );
+  } finally {
+    if (previousKey === undefined) {
+      delete process.env.ELEVENLABS_API_KEY;
+    } else {
+      process.env.ELEVENLABS_API_KEY = previousKey;
+    }
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("renders a local uploadable video when ffmpeg is available", async (t) => {
   if (!(await hasCommand("ffmpeg"))) {
     t.skip("ffmpeg is not installed");

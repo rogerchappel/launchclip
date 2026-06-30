@@ -91,9 +91,9 @@ Usage:
   launchclip plan <workspace> --format short-15 --renderer none|hyperframes [--style proof-card|ugc-split|ugc-demo-punchy|premium-product-short|data-story-benchmark] [--assets-dir path/to/assets] [--talking-head heygen --avatar-id avatar_123]
   launchclip captions <workspace> --platforms x,linkedin,tiktok,bluesky
   launchclip render <workspace> --provider product-videogen --dry-run
-  launchclip render <workspace> --provider hyperframes [--quality high] [--voiceover local-say]
-  launchclip render <workspace> --provider remotion [--assets-dir path/to/assets] [--voiceover local-say]
-  launchclip render <workspace> --provider local-ffmpeg [--voiceover local-say]
+  launchclip render <workspace> --provider hyperframes [--quality high] [--voiceover local-say|elevenlabs] [--music elevenlabs]
+  launchclip render <workspace> --provider remotion [--assets-dir path/to/assets] [--voiceover local-say|elevenlabs]
+  launchclip render <workspace> --provider local-ffmpeg [--voiceover local-say|elevenlabs]
   launchclip analyze-render <workspace> [--video video/launchclip-hyperframes.mp4]
   launchclip submit-review <workspace> --provider product-videogen --dry-run
   launchclip review <workspace>
@@ -105,7 +105,7 @@ Talking-head motion workflow:
   launchclip align <workspace> --media take.mp4        # whisper word timings + heuristic motion timeline
   launchclip align <workspace> --media take.mp4 --words words.json
   launchclip motion-render <workspace>                 # render video/motion.mp4 via the motion engine
-  launchclip music <workspace> [--prompt "..."] [--duration 18] [--output music/bed.mp3] [--force]
+  launchclip music <workspace> [--prompt "..."] [--duration 18] [--output music/bed.mp3] [--music-model music_v1] [--force]
   launchclip preprocess-presenter public/base/presenter.mp4 [--out public/base/presenter-prepped.mp4] [--speed 1.08] [--crop-x center]
   launchclip direct <workspace> --voice record --prompt "creative direction"       # writes script + teleprompter, waits for take
   launchclip direct <workspace> --voice record --take take.mp4 [--words w.json]    # aligns take, directs, renders

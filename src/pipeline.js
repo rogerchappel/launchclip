@@ -3,6 +3,7 @@ import { access, copyFile, mkdir, readFile, rename, rm, writeFile } from "node:f
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { requestElevenLabsMusic, resolveElevenLabsMusicModel, resolveMusicPrompt } from "./music.js";
 import { prepareSfxPack } from "./sfx.js";
 
 const execFileAsync = promisify(execFile);
@@ -397,7 +398,7 @@ async function renderHyperframes(out, flags = {}) {
       music_audio: audio.musicAudio,
       sfx_audio_cues: audio.sfxCueCount,
       sfx_audio_assets: audio.sfxAssetCount,
-      audio_mix: audio.applied ? "local-generated" : "none"
+      audio_mix: audio.applied ? audio.audioMix : "none"
     };
   });
   return { stage: "render", mode: "local", provider: "hyperframes", video: output, thumbnail, projectDir, voiceoverAudio: audio.voiceoverAudio, musicAudio: audio.musicAudio, sfxCueCount: audio.sfxCueCount, sfxAssetCount: audio.sfxAssetCount };
@@ -496,13 +497,14 @@ async function applyVoiceoverIfRequested(out, videoPath, flags = {}) {
 async function applyPostRenderAudio(out, videoPath, flags = {}, options = {}) {
   const videoDuration = await mediaDurationSeconds(videoPath);
   const voiceoverMode = await resolveVoiceoverMode(flags, options);
-  const useMusic = shouldGenerateMusicBed(flags, options);
+  const musicMode = resolveMusicBedMode(flags, options);
   const voiceoverAudio = voiceoverMode ? await generateVoiceoverAudio(out, flags, voiceoverMode, videoDuration) : null;
-  const musicAudio = useMusic ? await generateMusicBedAudio(out, videoDuration) : null;
+  const musicAudio = musicMode ? await generateMusicBedAudio(out, flags, musicMode, videoDuration) : null;
   const sfxInputs = options.defaultSfx ? await collectPostRenderSfxInputs(out, videoDuration) : [];
   const sfxAssetCount = new Set(sfxInputs.map((input) => input.assetId)).size;
+  const audioMix = postRenderAudioMixLabel({ voiceoverMode, musicMode, sfxInputs });
   if (!voiceoverAudio && !musicAudio && !sfxInputs.length) {
-    return { applied: false, voiceoverAudio: null, musicAudio: null, sfxCueCount: 0, sfxAssetCount: 0 };
+    return { applied: false, voiceoverAudio: null, musicAudio: null, voiceoverMode, musicMode, audioMix: "none", sfxCueCount: 0, sfxAssetCount: 0 };
   }
 
   const mixedPath = path.join(out, "video", "launchclip.audio.mp4");
@@ -511,14 +513,14 @@ async function applyPostRenderAudio(out, videoPath, flags = {}, options = {}) {
   const mixInputs = [];
   let inputIndex = 1;
   if (voiceoverAudio) {
-    args.push("-i", path.join(out, voiceoverAudio));
+    args.push("-i", workspaceMediaPath(out, voiceoverAudio));
     filters.push(`[${inputIndex}:a]volume=1.0,apad[voice]`);
     mixInputs.push("[voice]");
     inputIndex += 1;
   }
   if (musicAudio) {
-    args.push("-i", path.join(out, musicAudio));
-    filters.push(`[${inputIndex}:a]volume=${voiceoverAudio ? "0.42" : "0.68"},apad[music]`);
+    args.push("-i", workspaceMediaPath(out, musicAudio));
+    filters.push(`[${inputIndex}:a]volume=${voiceoverAudio ? "0.18" : "0.5"},apad[music]`);
     mixInputs.push("[music]");
     inputIndex += 1;
   }
@@ -551,30 +553,42 @@ async function applyPostRenderAudio(out, videoPath, flags = {}, options = {}) {
     mixedPath
   ], { maxBuffer: 1024 * 1024 * 8 });
   await rename(mixedPath, videoPath);
-  return { applied: true, voiceoverAudio, musicAudio, sfxCueCount: sfxInputs.length, sfxAssetCount };
+  return { applied: true, voiceoverAudio, musicAudio, voiceoverMode, musicMode, audioMix, sfxCueCount: sfxInputs.length, sfxAssetCount };
 }
 
 async function resolveVoiceoverMode(flags = {}, options = {}) {
   const mode = flags.voiceover ?? flags["voice-over"];
+  if (mode === "auto") return process.env.ELEVENLABS_API_KEY ? "elevenlabs" : (await commandExists("say")) ? "local-say" : null;
   if (!mode && options.defaultVoiceover) return (await commandExists("say")) ? "local-say" : null;
   if (!mode || mode === "none" || mode === "off") return null;
+  if (mode === "elevenlabs" || mode === "eleven-labs" || mode === "tts") return "elevenlabs";
   if (mode !== "local-say" && mode !== "say") {
-    throw new Error(`Unsupported voiceover provider: ${mode}. Supported: local-say`);
+    throw new Error(`Unsupported voiceover provider: ${mode}. Supported: local-say, elevenlabs`);
   }
-  return mode;
+  return "local-say";
 }
 
-function shouldGenerateMusicBed(flags = {}, options = {}) {
+function resolveMusicBedMode(flags = {}, options = {}) {
   const mode = flags.music;
   if (flags["no-music"] || mode === "none" || mode === "off") return false;
-  return Boolean(options.defaultMusic || mode === "auto" || mode === "generated" || mode === "local");
+  if (mode === "elevenlabs" || mode === "eleven-labs") return "elevenlabs";
+  if (mode === "auto") return process.env.ELEVENLABS_API_KEY ? "elevenlabs" : "local";
+  if (mode === "generated" || mode === "local") return "local";
+  if (options.defaultMusic) return "local";
+  if (mode) {
+    throw new Error(`Unsupported music provider: ${mode}. Supported: elevenlabs, auto, local, none`);
+  }
+  return null;
 }
 
 async function generateVoiceoverAudio(out, flags, mode, videoDuration) {
   const voiceover = await readJson(path.join(out, "video", "voiceover.json"));
+  const targetAudioDuration = Math.max(1, videoDuration - 0.85);
+  if (mode === "elevenlabs") {
+    return generateElevenLabsVoiceoverAudio(out, flags, voiceover, targetAudioDuration);
+  }
   const audioPath = path.join(out, "video", "voiceover.aiff");
   const rawAudioPath = path.join(out, "video", "voiceover.raw.aiff");
-  const targetAudioDuration = Math.max(1, videoDuration - 0.85);
   const voiceArgs = flags.voice ? ["-v", flags.voice] : [];
   const requestedRate = flags["voice-rate"] ?? flags.wpm;
   const estimatedRate = Math.round(Math.max(115, Math.min(175, wordCount(voiceover.full_text) / (targetAudioDuration / 60))));
@@ -595,10 +609,72 @@ async function generateVoiceoverAudio(out, flags, mode, videoDuration) {
   return "video/voiceover.aiff";
 }
 
-async function generateMusicBedAudio(out, duration) {
+async function generateElevenLabsVoiceoverAudio(out, flags, voiceover, targetDuration) {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) {
+    throw new Error("ELEVENLABS_API_KEY is not set. Export it (or source your .env) before rendering --voiceover elevenlabs.");
+  }
+  const voiceId = String(flags["voice-id"] ?? flags.voice ?? process.env.ELEVENLABS_VOICE_ID ?? "21m00Tcm4TlvDq8ikWAM");
+  const modelId = String(flags["voice-model"] ?? flags["tts-model"] ?? process.env.ELEVENLABS_VOICE_MODEL ?? "eleven_multilingual_v2");
+  const outputFormat = String(flags["voice-output-format"] ?? "mp3_44100_128");
+  const rawAudioPath = path.join(out, "video", "voiceover.raw.mp3");
+  const audioPath = path.join(out, "video", "voiceover.mp3");
+  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=${encodeURIComponent(outputFormat)}`, {
+    method: "POST",
+    headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      text: voiceover.full_text,
+      model_id: modelId
+    })
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`ElevenLabs TTS failed (${response.status}): ${detail.slice(0, 300)}`);
+  }
+  await writeFile(rawAudioPath, Buffer.from(await response.arrayBuffer()));
+  await fitVoiceoverAudio(rawAudioPath, audioPath, targetDuration);
+  await rm(rawAudioPath, { force: true });
+  return "video/voiceover.mp3";
+}
+
+async function generateMusicBedAudio(out, flags, mode, duration) {
+  if (mode === "elevenlabs") {
+    return generateElevenLabsMusicBedAudio(out, flags, duration);
+  }
   const musicPath = path.join(out, "video", "music-bed.wav");
   await writeFile(musicPath, makeGeneratedMusicBedWav(duration));
   return "video/music-bed.wav";
+}
+
+async function generateElevenLabsMusicBedAudio(out, flags, duration) {
+  const script = await optionalJson(path.join(out, "video", "video.json"));
+  const prompt = resolveMusicPrompt({ override: flags["music-prompt"], script });
+  const modelId = resolveElevenLabsMusicModel(flags);
+  const outputFormat = String(flags["music-output-format"] ?? "mp3_44100_128");
+  const audio = await requestElevenLabsMusic({ prompt, durationSeconds: duration, modelId, outputFormat });
+  const musicPath = path.join(out, "video", "elevenlabs-music.mp3");
+  await writeFile(musicPath, audio);
+  await writeJson(path.join(out, "video", "elevenlabs-music.json"), {
+    provider: "elevenlabs",
+    model_id: modelId,
+    output_format: outputFormat,
+    prompt,
+    duration_seconds: round(duration),
+    bytes: audio.length
+  });
+  return "video/elevenlabs-music.mp3";
+}
+
+function workspaceMediaPath(out, mediaPath) {
+  return path.isAbsolute(mediaPath) ? mediaPath : path.join(out, mediaPath);
+}
+
+function postRenderAudioMixLabel({ voiceoverMode, musicMode, sfxInputs }) {
+  return [
+    voiceoverMode ? `voiceover:${voiceoverMode}` : null,
+    musicMode ? `music:${musicMode}` : null,
+    sfxInputs.length ? "sfx:local" : null
+  ].filter(Boolean).join("+") || "none";
 }
 
 function makeGeneratedMusicBedWav(duration) {
@@ -1045,11 +1121,25 @@ function analyzeSfxAssets(sfxManifest) {
 
 function analyzeMusicBed(manifest) {
   const pathValue = manifest.stages.render?.music_audio ?? null;
+  const mixValue = String(manifest.stages.render?.audio_mix ?? "");
+  const generatedLocal = /(^|\/)music-bed\.wav$/i.test(String(pathValue ?? ""));
+  const provider = generatedLocal
+    ? "local-generated"
+    : /(^|\/)elevenlabs-music\.mp3$/i.test(String(pathValue ?? "")) || mixValue.includes("music:elevenlabs")
+      ? "elevenlabs"
+      : pathValue
+        ? "provided"
+        : null;
   return {
     present: Boolean(pathValue),
     path: pathValue,
-    generated_local: /(^|\/)music-bed\.wav$/i.test(String(pathValue ?? "")),
-    note: pathValue ? "Music must be intentional and ducked under narration." : "No default music bed; voice and SFX carry timing."
+    provider,
+    generated_local: generatedLocal,
+    note: provider === "elevenlabs"
+      ? "ElevenLabs music bed generated for this render."
+      : pathValue
+        ? "Music must be intentional and ducked under narration."
+        : "No default music bed; voice and SFX carry timing."
   };
 }
 
