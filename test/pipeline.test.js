@@ -398,6 +398,11 @@ test("plans original 150 second data-story benchmark contract", async () => {
     assert.match(hyperframesHtml, /proof-lane/);
     assert.match(hyperframesHtml, /risk-stack/);
     assert.match(hyperframesHtml, /scenario-board/);
+    assert.match(hyperframesHtml, /creator-hook/);
+    assert.match(hyperframesHtml, /prompt-workflow/);
+    assert.match(hyperframesHtml, /grader-table/);
+    assert.match(hyperframesHtml, /data-presenter-slot="adapter-ready"/);
+    assert.match(hyperframesHtml, /kinetic-caption/);
     assert.match(hyperframesHtml, /retention-line/);
     assert.equal(payload.duration_seconds, 150);
     assert.equal(payload.recipe_json.video_manifest.style, "data-story-benchmark");

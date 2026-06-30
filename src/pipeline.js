@@ -3112,6 +3112,15 @@ function dataStoryEditorialSectionMeta(segment, index) {
 function dataStoryEditorialBeatOverride(segment, preset) {
   const beat = String(segment.beat ?? "");
   const caption = segment.caption ?? preset.headline;
+  if (beat === "public-record-hook") {
+    return {
+      module: "creator-hook",
+      accent: "green",
+      kicker: "SOCIAL PROOF",
+      headline: "Launchclip graded itself",
+      subhead: "Data, captions, SFX, visual QA, and review artifacts in one motion system."
+    };
+  }
   if (["benchmark-scale", "failure-scenarios", "collapse-risk", "brutal-result"].includes(beat)) {
     const copy = {
       "benchmark-scale": {
@@ -3210,6 +3219,22 @@ function dataStoryEditorialBeatOverride(segment, preset) {
       subhead: "One synthetic tile opens up as a concrete QA failure."
     };
   }
+  if (["ask-open", "renderer-step-in"].includes(beat)) {
+    return {
+      module: "prompt-workflow",
+      accent: "blue",
+      headline: caption,
+      subhead: "The renderer needs a promptable workflow: source, storyboard, render, contact sheet, analyzer."
+    };
+  }
+  if (["decision-question", "automation-alone", "review-metrics", "visual-qa-required"].includes(beat)) {
+    return {
+      module: "grader-table",
+      accent: ["review-metrics"].includes(beat) ? "green" : "orange",
+      headline: caption,
+      subhead: "A social clip needs a visible rubric, not a silent pass/fail."
+    };
+  }
   return {};
 }
 
@@ -3230,6 +3255,31 @@ function dataStoryEditorialMotionBeats(segment, preset) {
     .filter(Boolean)
     .map((value) => cleanObjectLabel(value).slice(0, 32))
     .slice(0, 5);
+}
+
+function dataStoryKineticCaptionWords(section) {
+  const source = section.emphasis?.length ? section.emphasis : String(section.caption ?? section.headline ?? "").split(/\s+/);
+  return source
+    .flatMap((value) => String(value).split(/\s+/))
+    .map((value) => value.replace(/[^\w:%.-]/g, ""))
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
+function renderEditorialHostPip(section) {
+  const words = dataStoryKineticCaptionWords(section);
+  const label = words.slice(0, 2).join(" ") || "review";
+  return `<div class="host-screen" data-presenter-slot="adapter-ready">
+      <div class="host-bg"></div>
+      <div class="host-person">
+        <i class="host-cap"></i>
+        <i class="host-head"></i>
+        <i class="host-body"></i>
+        <i class="host-hand hand-a"></i>
+        <i class="host-hand hand-b"></i>
+      </div>
+      <span>${escapeHtml(label)}</span>
+    </div>`;
 }
 
 function renderEditorialBars(section) {
@@ -3283,6 +3333,19 @@ function renderEditorialHook(section) {
       <div class="count-strip"><b>47.582</b><em>synthetic seconds assessed</em></div>
       <div class="hook-proof-grid">${cells}</div>
       <div class="hook-question"><b>Can it hold attention?</b><em>or does the first card stop moving?</em></div>
+    </div>`;
+}
+
+function renderEditorialCreatorHook(section) {
+  const logos = ["IG", "YT", "TT", "GH", "AI", "QA"].map((logo, index) => `<span class="logo-badge logo-${index + 1}">${escapeHtml(logo)}</span>`).join("");
+  return `<div class="creator-hook">
+      <div class="logo-orbit">${logos}<i class="orbit-core">LC</i></div>
+      <div class="creator-hook-copy">
+        <span>${escapeHtml(section.kicker)}</span>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+      </div>
+      <div class="creator-hook-prompt"><b>connect</b><em>data -> script -> render -> review</em></div>
     </div>`;
 }
 
@@ -3340,6 +3403,38 @@ function renderEditorialQaWorkflow(section) {
       </div>
       <div class="workflow-steps">${steps.map((step, index) => `<b class="workflow-step step-${index + 1}">${escapeHtml(step)}</b>`).join("")}</div>
       <div class="review-strip">${thumbnails.map((label, index) => `<i class="review-thumb thumb-${index + 1}"><em>${escapeHtml(label)}</em>${index < 2 ? "<span>fix</span>" : ""}</i>`).join("")}</div>
+    </div>`;
+}
+
+function renderEditorialPromptWorkflow(section) {
+  const rows = ["source data", "script beats", "visual plan", "SFX cues"].map((row, index) => `<span class="prompt-row row-${index + 1}"><b>${escapeHtml(row)}</b><i></i></span>`).join("");
+  const cards = ["prompt", "storyboard", "render", "analyze"].map((card, index) => `<b class="prompt-card card-${index + 1}">${escapeHtml(card)}</b>`).join("");
+  return `<div class="prompt-workflow">
+      <div class="prompt-window">
+        <div class="prompt-top"><span></span><span></span><span></span><em>Launchclip prompt</em></div>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+        <div class="prompt-rows">${rows}</div>
+      </div>
+      <div class="prompt-card-rail">${cards}</div>
+    </div>`;
+}
+
+function renderEditorialGraderTable(section) {
+  const rows = [
+    ["hook", "B-", "needs faster proof"],
+    ["source", "A", "visible labels"],
+    ["motion", "B", "add scene events"],
+    ["rewrite", "A-", "ship after review"]
+  ];
+  return `<div class="grader-table">
+      <div class="grader-title">
+        <span>VISUAL QA RUBRIC</span>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+      </div>
+      <div class="grader-grid">${rows.map(([name, grade, note]) => `<span class="grader-cell"><b>${escapeHtml(name)}</b><em>${escapeHtml(grade)}</em><i>${escapeHtml(note)}</i></span>`).join("")}</div>
+      <div class="rewrite-card"><b>rewrite</b><span>tighten hook, add proof, cut dead air</span></div>
     </div>`;
 }
 
@@ -3408,9 +3503,12 @@ function renderEditorialVerdict(section) {
 
 function renderEditorialModule(section) {
   if (section.module === "hook") return renderEditorialHook(section);
+  if (section.module === "creator-hook") return renderEditorialCreatorHook(section);
   if (section.module === "failure-deck") return renderEditorialFailureDeck(section);
   if (section.module === "attention-meter") return renderEditorialAttentionMeter(section);
   if (section.module === "qa-workflow") return renderEditorialQaWorkflow(section);
+  if (section.module === "prompt-workflow") return renderEditorialPromptWorkflow(section);
+  if (section.module === "grader-table") return renderEditorialGraderTable(section);
   if (section.module === "proof-lane") return renderEditorialProofLane(section);
   if (section.module === "risk-stack") return renderEditorialRiskStack(section);
   if (section.module === "scenario-board") return renderEditorialScenarioBoard(section);
@@ -3432,12 +3530,15 @@ function renderDataStoryEditorialHyperframesIndex(manifest, video, sfxManifest =
   const sectionHtml = sections.map((section, index) => {
     const chips = (section.statChips ?? []).map(([value, label]) => `<span class="stat-chip"><b>${escapeHtml(String(value))}</b><em>${escapeHtml(String(label))}</em></span>`).join("");
     const motionBeats = (section.motionBeats ?? []).map((beat, beatIndex) => `<span class="motion-beat beat-${beatIndex + 1}"><b>${String(beatIndex + 1).padStart(2, "0")}</b><em>${escapeHtml(String(beat))}</em></span>`).join("");
+    const kineticCaption = dataStoryKineticCaptionWords(section).map((word, wordIndex) => `<b class="kinetic-word word-${wordIndex + 1}">${escapeHtml(word)}</b>`).join("");
     const beatTicks = Array.from({ length: Math.max(4, Math.min(9, Math.ceil(section.duration / 2.4))) }, (_, beatIndex) => `<i style="--tick:${beatIndex}"></i>`).join("");
     return `<section class="editorial-section section-${index + 1} accent-${escapeHtml(section.accent)}" data-start="${section.start}" data-duration="${section.duration.toFixed(2)}" data-section-id="${escapeHtml(section.id)}">
       <div class="section-kicker">${escapeHtml(section.kicker)}</div>
       <div class="section-clock">${escapeHtml(section.timeRange)}</div>
       <div class="section-lens"></div>
       <div class="section-module">${renderEditorialModule(section)}</div>
+      <div class="host-pip">${renderEditorialHostPip(section)}</div>
+      <div class="kinetic-caption">${kineticCaption}</div>
       <div class="motion-beat-stack">${motionBeats}</div>
       <div class="beat-timeline">${beatTicks}</div>
       <div class="stat-row">${chips}</div>
@@ -3530,6 +3631,36 @@ function renderDataStoryEditorialHyperframesIndex(manifest, video, sfxManifest =
     .hook-question { position: absolute; right: -16px; bottom: 96px; width: 285px; padding: 16px 18px; border-radius: 10px; background: rgba(8,11,18,0.88); border: 1px solid rgba(255,120,79,0.25); box-shadow: 0 18px 48px rgba(0,0,0,0.38); }
     .hook-question b { display: block; color: #fff8ef; font-size: 24px; line-height: 1.05; }
     .hook-question em { display: block; margin-top: 6px; color: rgba(245,239,231,0.66); font-size: 13px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .host-pip { position: absolute; left: 74px; bottom: 166px; width: 252px; height: 188px; z-index: 11; filter: drop-shadow(0 22px 46px rgba(0,0,0,0.42)); }
+    .host-screen { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 14px; background: #10141f; border: 1px solid rgba(245,239,231,0.18); }
+    .host-bg { position: absolute; inset: 0; background: radial-gradient(circle at 70% 22%, rgba(112,169,255,0.28), transparent 28%), linear-gradient(135deg, rgba(255,120,79,0.18), transparent 56%); }
+    .host-person { position: absolute; left: 54px; right: 54px; bottom: 0; height: 160px; }
+    .host-head { position: absolute; left: 50%; top: 28px; width: 74px; height: 82px; margin-left: -37px; border-radius: 42% 42% 48% 48%; background: #d1a57f; box-shadow: inset -10px -12px 0 rgba(84,48,34,0.18); }
+    .host-cap { position: absolute; left: 50%; top: 10px; width: 92px; height: 42px; margin-left: -46px; border-radius: 46px 46px 10px 10px; background: #242933; z-index: 2; }
+    .host-body { position: absolute; left: 50%; bottom: -26px; width: 130px; height: 92px; margin-left: -65px; border-radius: 54px 54px 0 0; background: #1d2230; }
+    .host-hand { position: absolute; width: 52px; height: 18px; border-radius: 999px; background: #d1a57f; z-index: 3; }
+    .hand-a { left: 12px; bottom: 48px; transform: rotate(-24deg); }
+    .hand-b { right: 8px; bottom: 66px; transform: rotate(28deg); }
+    .host-screen span { position: absolute; left: 12px; right: 12px; bottom: 10px; color: #fff8ef; font-size: 14px; font-weight: 900; text-align: center; text-transform: uppercase; }
+    .kinetic-caption { position: absolute; left: 356px; right: 72px; bottom: 202px; min-height: 58px; display: flex; align-items: center; gap: 10px; z-index: 11; }
+    .kinetic-word { padding: 9px 13px; border-radius: 8px; background: rgba(245,239,231,0.92); color: #111521; font-size: 25px; line-height: 1; font-weight: 900; text-transform: uppercase; box-shadow: 0 16px 34px rgba(0,0,0,0.36); white-space: nowrap; }
+    .creator-hook { position: relative; width: 850px; min-height: 780px; }
+    .logo-orbit { position: absolute; left: 60px; top: 92px; width: 430px; height: 430px; border-radius: 50%; border: 1px solid rgba(111,229,172,0.28); box-shadow: inset 0 0 58px rgba(111,229,172,0.12), 0 0 70px rgba(111,229,172,0.12); }
+    .orbit-core { position: absolute; left: 50%; top: 50%; width: 98px; height: 98px; margin: -49px 0 0 -49px; border-radius: 50%; display: grid; place-items: center; background: #6fe5ac; color: #0a1118; font-style: normal; font-size: 34px; font-weight: 900; box-shadow: 0 0 42px rgba(111,229,172,0.45); }
+    .logo-badge { position: absolute; width: 62px; height: 62px; border-radius: 16px; display: grid; place-items: center; color: #fff8ef; background: rgba(12,17,26,0.94); border: 1px solid rgba(245,239,231,0.18); font-size: 20px; font-weight: 900; box-shadow: 0 20px 46px rgba(0,0,0,0.4); }
+    .logo-1 { left: 50%; top: -31px; margin-left: -31px; background: #dd3f83; }
+    .logo-2 { right: -31px; top: 50%; margin-top: -31px; background: #ea3323; }
+    .logo-3 { left: 50%; bottom: -31px; margin-left: -31px; background: #111521; }
+    .logo-4 { left: -31px; top: 50%; margin-top: -31px; background: #242933; }
+    .logo-5 { left: 70px; top: 52px; background: #ff784f; }
+    .logo-6 { right: 70px; bottom: 52px; background: #2675d8; }
+    .creator-hook-copy { position: absolute; right: 0; top: 154px; width: 430px; min-height: 350px; padding: 34px 36px; border-radius: 14px; background: rgba(8,12,20,0.9); border: 1px solid rgba(245,239,231,0.14); box-shadow: 0 30px 80px rgba(0,0,0,0.42); }
+    .creator-hook-copy span, .prompt-window em, .grader-title span { display: block; color: #6fe5ac; font-size: 15px; font-weight: 900; letter-spacing: 0.16em; text-transform: uppercase; font-style: normal; }
+    .creator-hook-copy strong { display: block; margin-top: 18px; color: #fff8ef; font-size: 66px; line-height: 0.94; }
+    .creator-hook-copy p { margin: 18px 0 0; color: rgba(245,239,231,0.72); font-size: 20px; line-height: 1.25; font-weight: 800; }
+    .creator-hook-prompt { position: absolute; left: 120px; right: 80px; bottom: 78px; min-height: 88px; padding: 18px 22px; border-radius: 12px; background: #f4efe4; color: #111521; display: grid; grid-template-columns: 140px 1fr; align-items: center; gap: 16px; box-shadow: 0 28px 76px rgba(0,0,0,0.42); }
+    .creator-hook-prompt b { font-size: 28px; text-transform: uppercase; }
+    .creator-hook-prompt em { color: rgba(17,21,33,0.62); font-size: 18px; font-style: normal; font-weight: 900; text-transform: uppercase; }
     .failure-deck { position: relative; width: 850px; min-height: 770px; }
     .failure-primary { position: absolute; left: 18px; top: 56px; width: 540px; min-height: 370px; padding: 34px 36px; border-radius: 10px; background: #f4efe4; color: #111521; box-shadow: 0 34px 90px rgba(0,0,0,0.44); transform: rotate(-3deg); }
     .failure-primary span, .meter-copy span, .workflow-panel span, .meter-readout span { display: block; color: #ff784f; font-size: 15px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; }
@@ -3586,6 +3717,33 @@ function renderDataStoryEditorialHyperframesIndex(manifest, video, sfxManifest =
     .review-thumb::before { content: ""; position: absolute; left: 12px; right: 12px; top: 12px; height: 76px; border-radius: 5px; background: linear-gradient(135deg, rgba(111,229,172,0.5), rgba(112,169,255,0.28)); }
     .review-thumb em { position: relative; color: #f5efe7; font-size: 13px; font-style: normal; font-weight: 900; text-transform: uppercase; }
     .review-thumb span { position: absolute; right: -5px; top: 34px; padding: 4px 7px; border: 3px solid #e34b3e; color: #e34b3e; background: #f4efe4; font-size: 13px; font-weight: 900; text-transform: uppercase; transform: rotate(12deg); }
+    .prompt-workflow, .grader-table { position: relative; width: 850px; min-height: 770px; }
+    .prompt-window { position: absolute; left: 36px; top: 34px; width: 630px; min-height: 482px; padding: 58px 34px 34px; border-radius: 14px; background: #f4efe4; color: #111521; box-shadow: 0 32px 90px rgba(0,0,0,0.42); overflow: hidden; }
+    .prompt-top { position: absolute; left: 0; right: 0; top: 0; height: 44px; padding: 0 16px; background: rgba(17,21,33,0.08); display: flex; align-items: center; gap: 8px; }
+    .prompt-top span { width: 10px; height: 10px; border-radius: 50%; background: #ff784f; }
+    .prompt-top span:nth-child(2) { background: #f0b35b; }
+    .prompt-top span:nth-child(3) { background: #6fe5ac; }
+    .prompt-window em { margin-left: auto; color: rgba(17,21,33,0.54); font-size: 12px; }
+    .prompt-window strong { display: block; color: #111521; font-size: 52px; line-height: 0.98; }
+    .prompt-window p { margin: 16px 0 22px; color: rgba(17,21,33,0.68); font-size: 19px; line-height: 1.25; font-weight: 800; }
+    .prompt-rows { display: grid; gap: 10px; }
+    .prompt-row { min-height: 48px; padding: 0 14px; border-radius: 8px; background: rgba(17,21,33,0.06); display: grid; grid-template-columns: 150px 1fr; gap: 12px; align-items: center; }
+    .prompt-row b { color: rgba(17,21,33,0.72); font-size: 15px; text-transform: uppercase; }
+    .prompt-row i { height: 12px; border-radius: 999px; background: linear-gradient(90deg, #70a9ff, #ff784f); transform-origin: left center; }
+    .prompt-card-rail { position: absolute; right: 0; top: 142px; width: 260px; display: grid; gap: 14px; }
+    .prompt-card { min-height: 86px; border-radius: 10px; background: rgba(9,13,21,0.92); border: 1px solid rgba(245,239,231,0.14); color: #f5efe7; display: grid; place-items: center; font-size: 18px; text-transform: uppercase; box-shadow: 0 20px 50px rgba(0,0,0,0.34); }
+    .grader-title { position: absolute; left: 32px; top: 30px; width: 560px; min-height: 238px; padding: 32px 34px; border-radius: 14px; background: rgba(9,13,21,0.94); border: 1px solid rgba(245,239,231,0.13); box-shadow: 0 28px 80px rgba(0,0,0,0.42); }
+    .grader-title span { color: #ff784f; }
+    .grader-title strong { display: block; margin-top: 16px; color: #fff8ef; font-size: 52px; line-height: 0.96; }
+    .grader-title p { margin: 14px 0 0; color: rgba(245,239,231,0.72); font-size: 19px; line-height: 1.24; font-weight: 800; }
+    .grader-grid { position: absolute; left: 68px; right: 48px; top: 332px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .grader-cell { min-height: 188px; padding: 16px 12px; border-radius: 10px; background: #f4efe4; color: #111521; box-shadow: 0 24px 58px rgba(0,0,0,0.36); display: grid; grid-template-rows: auto auto 1fr; gap: 10px; }
+    .grader-cell b { color: rgba(17,21,33,0.58); font-size: 14px; text-transform: uppercase; }
+    .grader-cell em { color: #ff784f; font-size: 44px; line-height: 1; font-style: normal; font-weight: 900; }
+    .grader-cell i { color: rgba(17,21,33,0.7); font-size: 14px; line-height: 1.12; font-style: normal; font-weight: 800; }
+    .rewrite-card { position: absolute; left: 160px; right: 118px; bottom: 84px; min-height: 92px; padding: 16px 22px; border-radius: 12px; background: rgba(111,229,172,0.14); border: 1px solid rgba(111,229,172,0.3); display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: center; }
+    .rewrite-card b { color: #6fe5ac; font-size: 22px; text-transform: uppercase; }
+    .rewrite-card span { color: #f5efe7; font-size: 18px; font-weight: 900; text-transform: uppercase; }
     .proof-lane, .risk-stack, .scenario-board { position: relative; width: 850px; min-height: 760px; }
     .proof-copy { position: absolute; left: 22px; top: 24px; width: 560px; min-height: 250px; padding: 32px 36px; border-radius: 12px; background: rgba(11,15,25,0.94); border: 1px solid rgba(112,169,255,0.22); box-shadow: 0 26px 74px rgba(0,0,0,0.42); }
     .proof-copy span, .risk-alert span, .scenario-tile-main span { display: block; color: #70a9ff; font-size: 15px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; }
@@ -3674,13 +3832,18 @@ ${sectionHtml}
       const start = Number(section.dataset.start || 0);
       const dur = Number(section.dataset.duration || 8);
       const module = section.querySelector(".section-module");
-      const card = section.querySelector(".chart-card, .hook-lockup, .compare-wrap, .verdict-card, .failure-deck, .attention-meter, .qa-workflow, .proof-lane, .risk-stack, .scenario-board");
+      const card = section.querySelector(".chart-card, .hook-lockup, .compare-wrap, .verdict-card, .failure-deck, .attention-meter, .qa-workflow, .proof-lane, .risk-stack, .scenario-board, .creator-hook, .prompt-workflow, .grader-table");
       const bars = section.querySelectorAll(".bar-track i");
       const tiles = section.querySelectorAll(".tile-map i");
       const chips = section.querySelectorAll(".stat-chip");
       const motionBeats = section.querySelectorAll(".motion-beat");
       const beatTicks = section.querySelectorAll(".beat-timeline i");
       const lens = section.querySelector(".section-lens");
+      const hostPip = section.querySelector(".host-pip");
+      const hostHands = section.querySelectorAll(".host-hand");
+      const kineticWords = section.querySelectorAll(".kinetic-word");
+      const logoBadges = section.querySelectorAll(".logo-badge");
+      const orbitCore = section.querySelector(".orbit-core");
       const hookCells = section.querySelectorAll(".hook-proof-grid i");
       const hookQuestion = section.querySelector(".hook-question");
       const countStrip = section.querySelector(".count-strip");
@@ -3701,9 +3864,18 @@ ${sectionHtml}
       const diagnosticRows = section.querySelectorAll(".diagnostic-row");
       const qaBrackets = section.querySelectorAll(".qa-bracket");
       const miniTicks = section.querySelectorAll(".mini-timeline i");
+      const promptRows = section.querySelectorAll(".prompt-row i");
+      const promptCards = section.querySelectorAll(".prompt-card");
+      const graderCells = section.querySelectorAll(".grader-cell");
+      const rewriteCard = section.querySelector(".rewrite-card");
       gsap.set(motionBeats, { x: 28, autoAlpha: 0, scale: 0.96 });
       gsap.set(beatTicks, { scaleY: 0.35, autoAlpha: 0.36 });
       gsap.set(lens, { autoAlpha: 0, x: -120, y: 40, scale: 0.9 });
+      gsap.set(hostPip, { autoAlpha: 0, y: 24, scale: 0.9 });
+      gsap.set(hostHands, { rotation: 0 });
+      gsap.set(kineticWords, { autoAlpha: 0, y: 24, scale: 0.82, rotation: -4 });
+      gsap.set(logoBadges, { autoAlpha: 0, scale: 0.35 });
+      gsap.set(orbitCore, { scale: 0.7 });
       gsap.set(hookCells, { scale: 0.42, autoAlpha: 0.24 });
       gsap.set(hookQuestion, { x: 28, autoAlpha: 0, scale: 0.94 });
       gsap.set(contactTiles, { autoAlpha: 0, y: 28, scale: 0.84, rotation: -2 });
@@ -3723,14 +3895,32 @@ ${sectionHtml}
       gsap.set(diagnosticRows, { autoAlpha: 0, x: 30, scale: 0.94 });
       gsap.set(qaBrackets, { autoAlpha: 0, scale: 0.72 });
       gsap.set(miniTicks, { autoAlpha: 0, y: 22, scale: 0.86 });
+      gsap.set(promptRows, { scaleX: 0 });
+      gsap.set(promptCards, { autoAlpha: 0, x: 32, scale: 0.92 });
+      gsap.set(graderCells, { autoAlpha: 0, y: 30, scale: 0.9 });
+      gsap.set(rewriteCard, { autoAlpha: 0, y: 24, scale: 0.94 });
       tl.to(section, { autoAlpha: 1, y: 0, duration: 0.36 }, start);
       tl.fromTo(wipe, { xPercent: -120 }, { xPercent: 120, duration: 0.68, ease: "power2.inOut" }, Math.max(0, start - 0.04));
+      if (hostPip) {
+        tl.to(hostPip, { autoAlpha: 1, y: 0, scale: 1, duration: 0.28, ease: "back.out(1.6)" }, start + 0.12);
+        tl.to(hostPip, { y: -8, repeat: Math.max(1, Math.floor(dur / 2.4)), yoyo: true, duration: 0.24, ease: "sine.inOut" }, start + 0.8);
+      }
+      if (hostHands.length) tl.to(hostHands, { rotation: (i) => i % 2 ? -18 : 18, repeat: Math.max(2, Math.floor(dur / 1.4)), yoyo: true, duration: 0.18, stagger: 0.06, ease: "sine.inOut" }, start + 0.6);
+      if (kineticWords.length) {
+        tl.to(kineticWords, { autoAlpha: 1, y: 0, scale: 1, rotation: 0, duration: 0.18, stagger: Math.min(0.12, dur / 12), ease: "back.out(2.1)" }, start + 0.24);
+        tl.to(kineticWords, { scale: 1.08, repeat: Math.max(1, Math.floor(dur / 2.1)), yoyo: true, duration: 0.1, stagger: 0.04, ease: "sine.inOut" }, start + 1.0);
+      }
       if (lens) {
         tl.to(lens, { autoAlpha: 1, x: 90, y: index % 2 ? -24 : 32, scale: 1.08, duration: Math.min(1.2, Math.max(0.5, dur * 0.28)), ease: "power2.out" }, start + 0.08);
         tl.to(lens, { x: 540, y: index % 2 ? 120 : -80, scale: 1.22, duration: Math.max(0.7, dur - 0.8), ease: "none" }, start + 0.5);
       }
       if (card) tl.fromTo(card, { y: 44, scale: 0.92, filter: "blur(12px)" }, { y: 0, scale: 1, filter: "blur(0px)", duration: 0.62 }, start + 0.08);
       if (card) tl.to(card, { y: index % 2 ? -24 : 22, scale: 1.025, duration: Math.max(1, dur - 1.4), ease: "sine.inOut" }, start + 0.72);
+      if (logoBadges.length) {
+        tl.to(logoBadges, { autoAlpha: 1, scale: 1, duration: 0.24, stagger: 0.06, ease: "back.out(1.8)" }, start + 0.32);
+        tl.to(logoBadges, { rotation: "+=12", repeat: Math.max(1, Math.floor(dur / 2)), yoyo: true, duration: 0.22, stagger: 0.03, ease: "sine.inOut" }, start + 1.0);
+      }
+      if (orbitCore) tl.to(orbitCore, { scale: 1.08, repeat: Math.max(1, Math.floor(dur / 1.8)), yoyo: true, duration: 0.18, ease: "sine.inOut" }, start + 0.6);
       if (motionBeats.length) {
         tl.to(motionBeats, { x: 0, autoAlpha: 1, scale: 1, duration: 0.26, stagger: 0.08, ease: "back.out(1.6)" }, start + 0.2);
         tl.to(motionBeats, { x: -8, repeat: Math.max(1, Math.floor(dur / 2.2)), yoyo: true, duration: 0.2, stagger: 0.05, ease: "sine.inOut" }, start + 1.0);
@@ -3764,6 +3954,16 @@ ${sectionHtml}
         tl.to(workflowSteps, { autoAlpha: 1, y: 0, scale: 1, duration: 0.26, stagger: Math.min(0.16, dur / 10), ease: "back.out(1.6)" }, start + 0.46);
         tl.to(workflowSteps, { y: -10, repeat: Math.max(1, Math.floor(dur / 2.4)), yoyo: true, duration: 0.2, stagger: 0.06, ease: "sine.inOut" }, start + 1.2);
       }
+      if (promptRows.length) tl.to(promptRows, { scaleX: 1, duration: 0.34, stagger: 0.08, ease: "power3.out" }, start + 0.42);
+      if (promptCards.length) {
+        tl.to(promptCards, { autoAlpha: 1, x: 0, scale: 1, duration: 0.24, stagger: 0.08, ease: "back.out(1.6)" }, start + 0.62);
+        tl.to(promptCards, { x: -8, repeat: Math.max(1, Math.floor(dur / 2.2)), yoyo: true, duration: 0.18, stagger: 0.04, ease: "sine.inOut" }, start + 1.3);
+      }
+      if (graderCells.length) {
+        tl.to(graderCells, { autoAlpha: 1, y: 0, scale: 1, duration: 0.25, stagger: 0.08, ease: "back.out(1.5)" }, start + 0.42);
+        tl.to(graderCells, { y: -8, repeat: Math.max(1, Math.floor(dur / 2.5)), yoyo: true, duration: 0.18, stagger: 0.04, ease: "sine.inOut" }, start + 1.2);
+      }
+      if (rewriteCard) tl.to(rewriteCard, { autoAlpha: 1, y: 0, scale: 1, duration: 0.26, ease: "back.out(1.6)" }, start + Math.min(1.3, dur * 0.4));
       if (proofChips.length) {
         tl.to(proofChips, { autoAlpha: 1, x: 0, scale: 1, duration: 0.24, stagger: 0.07, ease: "back.out(1.7)" }, start + 0.34);
       }
