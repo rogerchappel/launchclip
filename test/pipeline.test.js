@@ -357,6 +357,7 @@ test("plans original 150 second data-story benchmark contract", async () => {
     const payload = JSON.parse(await readFile(path.join(out, "video/product-videogen.dry-run.json"), "utf8"));
     const hyperframesData = JSON.parse(await readFile(path.join(out, "video/hyperframes/launchclip-data.json"), "utf8"));
     const renderAnalysisReport = JSON.parse(await readFile(path.join(out, "review/render-analysis.json"), "utf8"));
+    const hyperframesHtml = await readFile(path.join(out, "video/hyperframes/index.html"), "utf8");
     const frame = await readFile(path.join(out, "video/frame.md"), "utf8");
     const storyboardHtml = await readFile(path.join(out, "video/storyboard.html"), "utf8");
     const readiness = await validateWorkspace(out);
@@ -391,6 +392,13 @@ test("plans original 150 second data-story benchmark contract", async () => {
     assert.match(video.creative_recipe.visual_language.pacing, /true hook in 2-4 seconds/);
     assert.match(video.creative_storyboard.scenes.find((scene) => scene.id === "grid-intro").layout, /matrix chart/);
     assert.match(video.creative_storyboard.scenes.find((scene) => scene.id === "automation-alone").layout, /counter chart/);
+    assert.match(hyperframesHtml, /failure-deck/);
+    assert.match(hyperframesHtml, /attention-meter/);
+    assert.match(hyperframesHtml, /qa-workflow/);
+    assert.match(hyperframesHtml, /proof-lane/);
+    assert.match(hyperframesHtml, /risk-stack/);
+    assert.match(hyperframesHtml, /scenario-board/);
+    assert.match(hyperframesHtml, /retention-line/);
     assert.equal(payload.duration_seconds, 150);
     assert.equal(payload.recipe_json.video_manifest.style, "data-story-benchmark");
     assert.equal(renderPlan.hyperframes.duration_seconds, 150);

@@ -3088,11 +3088,13 @@ function dataStoryEditorialSectionMeta(segment, index) {
   };
   const group = dataStoryBeatGroup(segment.beat);
   const preset = presets[group] ?? presets["hopes-chart"];
+  const override = dataStoryEditorialBeatOverride(segment, preset);
   const range = parseTimeRange(segment.time_range);
   const start = Number.isFinite(range.start) ? range.start : index * 10;
   const end = Number.isFinite(range.end) ? range.end : start + Number(segment.target_seconds ?? 10);
   return {
     ...preset,
+    ...override,
     id: segment.beat ?? `section-${index + 1}`,
     order: index + 1,
     start,
@@ -3100,11 +3102,115 @@ function dataStoryEditorialSectionMeta(segment, index) {
     timeRange: segment.time_range ?? `${start}-${end}s`,
     voiceover: segment.voiceover ?? "",
     caption: segment.caption ?? preset.headline,
-    headline: segment.caption ?? preset.headline,
+    headline: override.headline ?? segment.caption ?? preset.headline,
     motionBeats: dataStoryEditorialMotionBeats(segment, preset),
     emphasis: Array.isArray(segment.caption_emphasis) ? segment.caption_emphasis : [],
     evidence: segment.evidence_source ?? "synthetic benchmark fixture"
   };
+}
+
+function dataStoryEditorialBeatOverride(segment, preset) {
+  const beat = String(segment.beat ?? "");
+  const caption = segment.caption ?? preset.headline;
+  if (["benchmark-scale", "failure-scenarios", "collapse-risk", "brutal-result"].includes(beat)) {
+    const copy = {
+      "benchmark-scale": {
+        kicker: "THE SAMPLE",
+        headline: "47,582 viewer seconds",
+        subhead: "The benchmark behaves like a crowded review wall, not one static card.",
+        stamp: "STRESS RUN",
+        deckStat: "47,582"
+      },
+      "failure-scenarios": {
+        kicker: "THE TEST",
+        headline: "50 ways to lose the viewer",
+        subhead: "Each tile is a synthetic failure case the renderer has to survive.",
+        stamp: "50 CASES",
+        deckStat: "50"
+      },
+      "collapse-risk": {
+        kicker: "THE RISK",
+        headline: "Stillness kills retention",
+        subhead: "The frame fractures as soon as the visual event lane goes quiet.",
+        stamp: "DEAD HOLD",
+        deckStat: "1.2s"
+      },
+      "brutal-result": {
+        kicker: "THE REVIEW",
+        headline: "The first render failed the room",
+        subhead: "The contact sheet made the problem visible before the full watch.",
+        stamp: "REJECT",
+        deckStat: "BRUTAL"
+      }
+    };
+    return { module: "failure-deck", accent: beat === "collapse-risk" || beat === "brutal-result" ? "purple" : "orange", ...copy[beat] };
+  }
+  if (["attention-question", "viewer-not-waiting", "retention-trap", "renderer-step-in"].includes(beat)) {
+    const copy = {
+      "attention-question": {
+        kicker: "THE QUESTION",
+        headline: "Can it hold 2:30?",
+        subhead: "The voice asks for retention, so the frame has to show retention.",
+        meterValue: "2:30",
+        meterLabel: "target hold"
+      },
+      "viewer-not-waiting": {
+        kicker: "THE DROP",
+        headline: "Viewers do not wait",
+        subhead: "The line falls unless a real visual event arrives before the marker.",
+        meterValue: "0.8s",
+        meterLabel: "event gap"
+      },
+      "retention-trap": {
+        kicker: "THE TRAP",
+        headline: "Correct facts still feel automated",
+        subhead: "When weak hook, hidden source, and flat sound cluster, retention slips.",
+        meterValue: "3x",
+        meterLabel: "risk cluster"
+      },
+      "renderer-step-in": {
+        kicker: "THE INTERCEPT",
+        headline: "Renderer steps in before the drop",
+        subhead: "Guardrails catch the attention line while there is still time.",
+        meterValue: "LIVE",
+        meterLabel: "guardrail"
+      }
+    };
+    return { module: "attention-meter", accent: beat === "renderer-step-in" ? "green" : "blue", ...copy[beat] };
+  }
+  if (["guardrail-list", "launchclip-needs", "measurable-iteration", "generate-render-analyze", "contact-sheet-earns"].includes(beat)) {
+    return {
+      module: "qa-workflow",
+      accent: ["generate-render-analyze", "contact-sheet-earns", "launchclip-needs"].includes(beat) ? "green" : "blue",
+      headline: caption,
+      subhead: beat === "contact-sheet-earns" ? "The review artifact has to prove the next two minutes are worth it." : "Generate, render, analyze, then tighten the next pass."
+    };
+  }
+  if (["proof-motion", "captions-land", "motion-events"].includes(beat)) {
+    return {
+      module: "proof-lane",
+      accent: beat === "captions-land" ? "green" : "blue",
+      headline: caption,
+      subhead: beat === "captions-land" ? "Captions arrive as timed objects, not a paragraph." : "Proof, voice, and camera pressure move in the same lane."
+    };
+  }
+  if (["fears-open", "dead-holds", "empty-cards", "weak-signals", "change-rule"].includes(beat)) {
+    return {
+      module: "risk-stack",
+      accent: "purple",
+      headline: caption,
+      subhead: beat === "empty-cards" ? "The empty card becomes the subject before the message can land." : "The renderer needs visible interruption before the hold becomes a skip."
+    };
+  }
+  if (["no-hook-tile", "terminal-too-long", "source-hidden", "cut-without-sound"].includes(beat)) {
+    return {
+      module: "scenario-board",
+      accent: "orange",
+      headline: caption,
+      subhead: "One synthetic tile opens up as a concrete QA failure."
+    };
+  }
+  return {};
 }
 
 function dataStoryEditorialMotionBeats(segment, preset) {
@@ -3180,6 +3286,117 @@ function renderEditorialHook(section) {
     </div>`;
 }
 
+function renderEditorialFailureDeck(section) {
+  const labels = ["no hook", "dead hold", "tiny labels", "late caption", "flat SFX", "hidden source", "white card", "slow proof", "weak beat", "no motion", "bad cut", "review"];
+  const hotIndexes = new Set([1, 3, 5, 7, 9]);
+  const tiles = labels.map((label, index) => `<span class="contact-tile ${hotIndexes.has(index) ? "hot" : index % 3 === 0 ? "warn" : "calm"}"><i></i><b>${escapeHtml(label)}</b></span>`).join("");
+  const fragments = Array.from({ length: 7 }, (_, index) => `<i class="fragment fragment-${index + 1}"></i>`).join("");
+  return `<div class="failure-deck">
+      <div class="failure-primary">
+        <span>${escapeHtml(section.kicker)}</span>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+        <em class="reject-stamp">${escapeHtml(section.stamp ?? "REVIEW")}</em>
+      </div>
+      <div class="failure-contact-sheet">${tiles}</div>
+      <div class="failure-stat"><b>${escapeHtml(section.deckStat ?? "50")}</b><em>${escapeHtml(section.meterLabel ?? "synthetic checks")}</em></div>
+      <div class="fragment-cloud">${fragments}</div>
+    </div>`;
+}
+
+function renderEditorialAttentionMeter(section) {
+  return `<div class="attention-meter">
+      <div class="meter-card meter-copy">
+        <span>${escapeHtml(section.kicker)}</span>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+      </div>
+      <div class="meter-card meter-readout">
+        <span>${escapeHtml(section.meterLabel ?? "attention")}</span>
+        <strong>${escapeHtml(section.meterValue ?? "2:30")}</strong>
+        <div class="meter-track"><i class="meter-fill"></i></div>
+      </div>
+      <div class="retention-graph" aria-hidden="true">
+        <svg viewBox="0 0 520 260" preserveAspectRatio="none">
+          <path class="retention-grid" d="M0 60 H520 M0 130 H520 M0 200 H520" />
+          <path class="retention-shadow" d="M16 58 C92 42 118 90 170 88 C238 85 250 164 310 156 C374 146 394 110 452 96 C486 88 504 76 520 70" />
+          <path class="retention-line" d="M16 58 C92 42 118 90 170 88 C238 85 250 164 310 156 C374 146 394 110 452 96 C486 88 504 76 520 70" />
+        </svg>
+        <div class="event-marker marker-a">voice</div>
+        <div class="event-marker marker-b">cut</div>
+        <div class="event-marker marker-c">SFX</div>
+      </div>
+    </div>`;
+}
+
+function renderEditorialQaWorkflow(section) {
+  const steps = ["Generate", "Render", "Analyze", "Iterate"];
+  const thumbnails = ["hook", "proof", "chart", "sound", "QA", "ready"];
+  return `<div class="qa-workflow">
+      <div class="workflow-panel">
+        <span>${escapeHtml(section.kicker)}</span>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+      </div>
+      <div class="workflow-steps">${steps.map((step, index) => `<b class="workflow-step step-${index + 1}">${escapeHtml(step)}</b>`).join("")}</div>
+      <div class="review-strip">${thumbnails.map((label, index) => `<i class="review-thumb thumb-${index + 1}"><em>${escapeHtml(label)}</em>${index < 2 ? "<span>fix</span>" : ""}</i>`).join("")}</div>
+    </div>`;
+}
+
+function renderEditorialProofLane(section) {
+  const emphasis = section.emphasis?.length ? section.emphasis : ["proof", "voice", "beat"];
+  const chips = emphasis.slice(0, 4).map((item, index) => `<span class="proof-chip chip-${index + 1}">${escapeHtml(item)}</span>`).join("");
+  const wave = [28, 54, 38, 70, 46, 82, 36, 62, 44, 76, 34, 58].map((height, index) => `<i class="voice-bar bar-${index + 1}" style="--h:${height}%"></i>`).join("");
+  return `<div class="proof-lane">
+      <div class="proof-copy">
+        <span>${escapeHtml(section.kicker)}</span>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+      </div>
+      <div class="proof-screen">
+        <em>voice lane</em>
+        <div class="voice-wave">${wave}</div>
+        <div class="cursor-dot"></div>
+      </div>
+      <div class="proof-chips">${chips}</div>
+      <div class="proof-cardlets">
+        <b>source</b><b>chart</b><b>caption</b><b>SFX</b>
+      </div>
+    </div>`;
+}
+
+function renderEditorialRiskStack(section) {
+  const risks = section.emphasis?.length ? section.emphasis : ["dead hold", "tiny label", "flat audio"];
+  const rows = risks.slice(0, 4).map((risk, index) => `<span class="risk-row row-${index + 1}"><b>${escapeHtml(risk)}</b><i></i></span>`).join("");
+  const wave = Array.from({ length: 16 }, (_, index) => `<i class="risk-wave-bar bar-${index + 1}"></i>`).join("");
+  return `<div class="risk-stack">
+      <div class="risk-alert">
+        <span>${escapeHtml(section.kicker)}</span>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+      </div>
+      <div class="risk-meter"><b>1.2s</b><em>stillness limit</em><i class="risk-timer-fill"></i></div>
+      <div class="risk-rows">${rows}</div>
+      <div class="risk-wave">${wave}</div>
+      <div class="risk-tag">FIX BEFORE RENDER</div>
+    </div>`;
+}
+
+function renderEditorialScenarioBoard(section) {
+  const emphasis = section.emphasis?.length ? section.emphasis : [section.headline, "source", "sound"];
+  const rows = emphasis.slice(0, 3).map((item, index) => `<span class="diagnostic-row row-${index + 1}"><b>${escapeHtml(item)}</b><em>${index === 0 ? "fail" : "flag"}</em></span>`).join("");
+  return `<div class="scenario-board">
+      <div class="scenario-tile-main">
+        <span>${escapeHtml(section.kicker)}</span>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+        <i class="qa-bracket bracket-a"></i><i class="qa-bracket bracket-b"></i>
+      </div>
+      <div class="diagnostic-panel">${rows}</div>
+      <div class="mini-timeline"><i></i><i></i><i></i><i></i><i></i></div>
+    </div>`;
+}
+
 function renderEditorialVerdict(section) {
   return `<div class="verdict-card">
       <span>${escapeHtml(section.kicker)}</span>
@@ -3191,6 +3408,12 @@ function renderEditorialVerdict(section) {
 
 function renderEditorialModule(section) {
   if (section.module === "hook") return renderEditorialHook(section);
+  if (section.module === "failure-deck") return renderEditorialFailureDeck(section);
+  if (section.module === "attention-meter") return renderEditorialAttentionMeter(section);
+  if (section.module === "qa-workflow") return renderEditorialQaWorkflow(section);
+  if (section.module === "proof-lane") return renderEditorialProofLane(section);
+  if (section.module === "risk-stack") return renderEditorialRiskStack(section);
+  if (section.module === "scenario-board") return renderEditorialScenarioBoard(section);
   if (section.module === "grid") return renderEditorialGrid(section, false);
   if (section.module === "blue-grid") return renderEditorialGrid(section, true);
   if (section.module === "compare") return renderEditorialCompare(section);
@@ -3307,6 +3530,103 @@ function renderDataStoryEditorialHyperframesIndex(manifest, video, sfxManifest =
     .hook-question { position: absolute; right: -16px; bottom: 96px; width: 285px; padding: 16px 18px; border-radius: 10px; background: rgba(8,11,18,0.88); border: 1px solid rgba(255,120,79,0.25); box-shadow: 0 18px 48px rgba(0,0,0,0.38); }
     .hook-question b { display: block; color: #fff8ef; font-size: 24px; line-height: 1.05; }
     .hook-question em { display: block; margin-top: 6px; color: rgba(245,239,231,0.66); font-size: 13px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .failure-deck { position: relative; width: 850px; min-height: 770px; }
+    .failure-primary { position: absolute; left: 18px; top: 56px; width: 540px; min-height: 370px; padding: 34px 36px; border-radius: 10px; background: #f4efe4; color: #111521; box-shadow: 0 34px 90px rgba(0,0,0,0.44); transform: rotate(-3deg); }
+    .failure-primary span, .meter-copy span, .workflow-panel span, .meter-readout span { display: block; color: #ff784f; font-size: 15px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; }
+    .accent-blue .meter-copy span, .accent-blue .meter-readout span, .accent-blue .workflow-panel span { color: #70a9ff; }
+    .accent-green .workflow-panel span, .accent-green .meter-copy span, .accent-green .meter-readout span { color: #6fe5ac; }
+    .failure-primary strong { display: block; margin-top: 18px; font-size: 58px; line-height: 0.95; color: #111521; }
+    .failure-primary p { margin: 18px 0 0; color: rgba(17,21,33,0.72); font-size: 20px; line-height: 1.22; font-weight: 800; }
+    .reject-stamp { position: absolute; right: -24px; bottom: 34px; padding: 10px 16px; border: 5px solid #e34b3e; color: #e34b3e; font-size: 38px; line-height: 1; font-style: normal; font-weight: 900; letter-spacing: 0.05em; transform: rotate(12deg); text-transform: uppercase; }
+    .failure-contact-sheet { position: absolute; right: 0; top: 198px; width: 368px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; transform: rotate(4deg); }
+    .contact-tile { height: 118px; padding: 9px; border-radius: 6px; background: rgba(245,239,231,0.12); border: 1px solid rgba(245,239,231,0.16); box-shadow: 0 18px 38px rgba(0,0,0,0.24); display: grid; align-content: space-between; }
+    .contact-tile i { height: 54px; border-radius: 4px; background: linear-gradient(135deg, rgba(245,239,231,0.2), rgba(255,120,79,0.32)); box-shadow: inset 0 0 0 1px rgba(245,239,231,0.08); }
+    .contact-tile.hot { border-color: rgba(255,96,75,0.72); background: rgba(120,28,30,0.58); }
+    .contact-tile.warn { border-color: rgba(240,179,91,0.44); background: rgba(97,65,28,0.55); }
+    .contact-tile b { color: #f5efe7; font-size: 12px; line-height: 1.05; text-transform: uppercase; }
+    .failure-stat { position: absolute; left: 92px; bottom: 68px; width: 310px; padding: 16px 18px; border-radius: 10px; background: rgba(9,12,20,0.9); border: 1px solid rgba(255,120,79,0.26); box-shadow: 0 20px 50px rgba(0,0,0,0.4); }
+    .failure-stat b { display: block; color: #ff784f; font-size: 60px; line-height: 0.9; }
+    .failure-stat em { color: rgba(245,239,231,0.7); font-size: 14px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .fragment-cloud { position: absolute; inset: 0; pointer-events: none; }
+    .fragment { position: absolute; width: 78px; height: 12px; background: rgba(255,120,79,0.5); filter: blur(0.2px); }
+    .fragment-1 { left: 604px; top: 86px; transform: rotate(18deg); }
+    .fragment-2 { left: 68px; top: 490px; transform: rotate(-8deg); }
+    .fragment-3 { right: 88px; bottom: 80px; transform: rotate(24deg); }
+    .fragment-4 { left: 426px; bottom: 154px; transform: rotate(-18deg); }
+    .fragment-5 { right: 26px; top: 120px; transform: rotate(-24deg); }
+    .fragment-6 { left: 230px; top: 32px; transform: rotate(10deg); }
+    .fragment-7 { left: 610px; bottom: 238px; transform: rotate(-4deg); }
+    .attention-meter { position: relative; width: 850px; min-height: 760px; }
+    .meter-card { border-radius: 12px; background: rgba(13,17,27,0.92); border: 1px solid rgba(245,239,231,0.14); box-shadow: 0 26px 70px rgba(0,0,0,0.38); }
+    .meter-copy { position: absolute; left: 12px; top: 28px; width: 560px; min-height: 280px; padding: 34px 36px; }
+    .meter-copy strong { display: block; margin-top: 18px; color: #fff8ef; font-size: 62px; line-height: 0.96; }
+    .meter-copy p { margin: 18px 0 0; color: rgba(245,239,231,0.72); font-size: 20px; line-height: 1.25; font-weight: 800; }
+    .meter-readout { position: absolute; right: 0; top: 96px; width: 246px; min-height: 232px; padding: 26px; text-align: center; }
+    .meter-readout strong { display: block; margin: 18px 0; color: #70a9ff; font-size: 64px; line-height: 0.92; }
+    .accent-green .meter-readout strong { color: #6fe5ac; }
+    .meter-track { width: 100%; height: 18px; border-radius: 999px; background: rgba(245,239,231,0.12); overflow: hidden; }
+    .meter-fill { display: block; width: 78%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #70a9ff, #6fe5ac); transform-origin: left center; }
+    .retention-graph { position: absolute; left: 36px; right: 28px; bottom: 62px; height: 360px; border-radius: 12px; background: #f4efe4; box-shadow: 0 32px 90px rgba(0,0,0,0.42); overflow: hidden; }
+    .retention-graph svg { position: absolute; inset: 28px 24px 72px; width: calc(100% - 48px); height: 250px; }
+    .retention-grid { fill: none; stroke: rgba(17,21,33,0.12); stroke-width: 2; }
+    .retention-shadow { fill: none; stroke: rgba(255,120,79,0.16); stroke-width: 22; stroke-linecap: round; }
+    .retention-line { fill: none; stroke: #111521; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 720; stroke-dashoffset: 720; }
+    .event-marker { position: absolute; bottom: 28px; padding: 10px 14px; border-radius: 999px; background: #111521; color: #f4efe4; font-size: 15px; font-weight: 900; text-transform: uppercase; }
+    .marker-a { left: 62px; }
+    .marker-b { left: 342px; }
+    .marker-c { right: 62px; background: #ff784f; }
+    .qa-workflow { position: relative; width: 850px; min-height: 780px; }
+    .workflow-panel { position: absolute; left: 32px; top: 20px; width: 640px; min-height: 268px; padding: 34px 38px; border-radius: 12px; background: rgba(13,17,27,0.94); border: 1px solid rgba(111,229,172,0.22); box-shadow: 0 26px 76px rgba(0,0,0,0.42); }
+    .workflow-panel strong { display: block; margin-top: 16px; color: #fff8ef; font-size: 56px; line-height: 0.96; }
+    .workflow-panel p { margin: 18px 0 0; color: rgba(245,239,231,0.72); font-size: 20px; line-height: 1.25; font-weight: 800; }
+    .workflow-steps { position: absolute; left: 68px; right: 68px; top: 354px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .workflow-step { min-height: 96px; border-radius: 10px; background: #f4efe4; color: #111521; display: grid; place-items: center; font-size: 21px; text-transform: uppercase; box-shadow: 0 20px 54px rgba(0,0,0,0.36); }
+    .review-strip { position: absolute; left: 24px; right: 24px; bottom: 58px; display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; transform: rotate(-2deg); }
+    .review-thumb { position: relative; height: 150px; padding: 12px; border-radius: 8px; background: rgba(245,239,231,0.13); border: 1px solid rgba(245,239,231,0.15); box-shadow: 0 20px 50px rgba(0,0,0,0.34); display: flex; align-items: end; justify-content: center; }
+    .review-thumb::before { content: ""; position: absolute; left: 12px; right: 12px; top: 12px; height: 76px; border-radius: 5px; background: linear-gradient(135deg, rgba(111,229,172,0.5), rgba(112,169,255,0.28)); }
+    .review-thumb em { position: relative; color: #f5efe7; font-size: 13px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .review-thumb span { position: absolute; right: -5px; top: 34px; padding: 4px 7px; border: 3px solid #e34b3e; color: #e34b3e; background: #f4efe4; font-size: 13px; font-weight: 900; text-transform: uppercase; transform: rotate(12deg); }
+    .proof-lane, .risk-stack, .scenario-board { position: relative; width: 850px; min-height: 760px; }
+    .proof-copy { position: absolute; left: 22px; top: 24px; width: 560px; min-height: 250px; padding: 32px 36px; border-radius: 12px; background: rgba(11,15,25,0.94); border: 1px solid rgba(112,169,255,0.22); box-shadow: 0 26px 74px rgba(0,0,0,0.42); }
+    .proof-copy span, .risk-alert span, .scenario-tile-main span { display: block; color: #70a9ff; font-size: 15px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; }
+    .accent-green .proof-copy span { color: #6fe5ac; }
+    .proof-copy strong, .risk-alert strong, .scenario-tile-main strong { display: block; margin-top: 16px; color: #fff8ef; font-size: 58px; line-height: 0.96; }
+    .proof-copy p, .risk-alert p, .scenario-tile-main p { margin: 16px 0 0; color: rgba(245,239,231,0.72); font-size: 20px; line-height: 1.25; font-weight: 800; }
+    .proof-screen { position: absolute; left: 72px; right: 46px; bottom: 118px; height: 330px; border-radius: 12px; background: #f4efe4; color: #111521; box-shadow: 0 32px 90px rgba(0,0,0,0.42); overflow: hidden; }
+    .proof-screen em { position: absolute; left: 24px; top: 22px; color: rgba(17,21,33,0.46); font-size: 13px; font-style: normal; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; }
+    .voice-wave { position: absolute; left: 42px; right: 42px; bottom: 78px; height: 150px; display: flex; align-items: end; gap: 12px; }
+    .voice-bar { flex: 1; height: var(--h); min-width: 12px; border-radius: 4px 4px 0 0; background: linear-gradient(180deg, #70a9ff, #ff784f); transform-origin: bottom center; }
+    .cursor-dot { position: absolute; left: 54px; bottom: 46px; width: 72px; height: 10px; border-radius: 999px; background: #111521; box-shadow: 0 0 0 8px rgba(17,21,33,0.1); }
+    .proof-chips { position: absolute; right: 0; top: 86px; width: 260px; display: grid; gap: 10px; }
+    .proof-chip { padding: 12px 16px; border-radius: 999px; background: rgba(245,239,231,0.13); border: 1px solid rgba(245,239,231,0.16); color: #f5efe7; font-size: 18px; font-weight: 900; text-transform: uppercase; box-shadow: 0 18px 42px rgba(0,0,0,0.3); }
+    .proof-cardlets { position: absolute; left: 120px; right: 92px; bottom: 48px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .proof-cardlets b { min-height: 72px; border-radius: 8px; background: rgba(112,169,255,0.16); border: 1px solid rgba(112,169,255,0.24); color: #f5efe7; display: grid; place-items: center; font-size: 15px; text-transform: uppercase; }
+    .risk-alert { position: absolute; left: 22px; top: 28px; width: 560px; min-height: 288px; padding: 32px 36px; border-radius: 12px; background: rgba(14,12,22,0.94); border: 1px solid rgba(255,117,95,0.26); box-shadow: 0 26px 74px rgba(0,0,0,0.42); }
+    .risk-alert span { color: #ff755f; }
+    .risk-meter { position: absolute; right: 0; top: 92px; width: 236px; min-height: 220px; padding: 26px; border-radius: 12px; background: #f4efe4; color: #111521; overflow: hidden; box-shadow: 0 24px 66px rgba(0,0,0,0.38); }
+    .risk-meter b { display: block; color: #e34b3e; font-size: 64px; line-height: 0.92; }
+    .risk-meter em { display: block; margin-top: 12px; color: rgba(17,21,33,0.58); font-size: 14px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .risk-timer-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 12px; background: #e34b3e; transform-origin: left center; }
+    .risk-rows { position: absolute; left: 72px; right: 72px; top: 374px; display: grid; gap: 12px; }
+    .risk-row { min-height: 64px; padding: 0 18px; border-radius: 10px; background: rgba(245,239,231,0.12); border: 1px solid rgba(245,239,231,0.16); display: grid; grid-template-columns: 1fr 110px; align-items: center; box-shadow: 0 18px 44px rgba(0,0,0,0.3); }
+    .risk-row b { color: #f5efe7; font-size: 20px; text-transform: uppercase; }
+    .risk-row i { height: 16px; border-radius: 999px; background: #e34b3e; }
+    .risk-wave { position: absolute; left: 92px; right: 92px; bottom: 72px; height: 84px; display: flex; align-items: center; gap: 8px; }
+    .risk-wave-bar { flex: 1; height: 8px; border-radius: 999px; background: rgba(255,117,95,0.74); }
+    .risk-tag { position: absolute; right: 64px; bottom: 112px; padding: 9px 14px; border: 4px solid #e34b3e; color: #e34b3e; background: #f4efe4; font-size: 22px; font-weight: 900; transform: rotate(8deg); }
+    .scenario-tile-main { position: absolute; left: 42px; top: 42px; width: 575px; min-height: 455px; padding: 34px 38px; border-radius: 12px; background: #f4efe4; color: #111521; box-shadow: 0 34px 92px rgba(0,0,0,0.44); }
+    .scenario-tile-main span { color: #ff784f; }
+    .scenario-tile-main strong { color: #111521; font-size: 64px; }
+    .scenario-tile-main p { color: rgba(17,21,33,0.7); }
+    .qa-bracket { position: absolute; width: 92px; height: 92px; border-color: #e34b3e; border-style: solid; }
+    .bracket-a { left: 20px; top: 20px; border-width: 6px 0 0 6px; }
+    .bracket-b { right: 20px; bottom: 20px; border-width: 0 6px 6px 0; }
+    .diagnostic-panel { position: absolute; right: 8px; top: 142px; width: 306px; display: grid; gap: 12px; }
+    .diagnostic-row { min-height: 76px; padding: 14px; border-radius: 9px; background: rgba(10,13,22,0.92); border: 1px solid rgba(245,239,231,0.14); box-shadow: 0 20px 48px rgba(0,0,0,0.34); display: grid; grid-template-columns: 1fr 58px; align-items: center; }
+    .diagnostic-row b { color: #f5efe7; font-size: 17px; line-height: 1.05; text-transform: uppercase; }
+    .diagnostic-row em { justify-self: end; color: #ff755f; font-size: 14px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .mini-timeline { position: absolute; left: 92px; right: 92px; bottom: 90px; height: 88px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+    .mini-timeline i { border-radius: 8px; background: rgba(255,120,79,0.2); border: 1px solid rgba(255,120,79,0.28); box-shadow: 0 18px 42px rgba(0,0,0,0.28); }
     .compare-wrap { width: 780px; display: grid; grid-template-columns: 1fr 84px 1fr; align-items: center; gap: 20px; }
     .compare-card { min-height: 260px; border-radius: 18px; padding: 30px; background: rgba(14,18,27,0.92); border: 1px solid rgba(245,239,231,0.12); box-shadow: 0 24px 64px rgba(0,0,0,0.34); text-align: center; }
     .compare-card span { display: block; color: rgba(245,239,231,0.68); font-size: 17px; font-weight: 900; text-transform: uppercase; }
@@ -3354,7 +3674,7 @@ ${sectionHtml}
       const start = Number(section.dataset.start || 0);
       const dur = Number(section.dataset.duration || 8);
       const module = section.querySelector(".section-module");
-      const card = section.querySelector(".chart-card, .hook-lockup, .compare-wrap, .verdict-card");
+      const card = section.querySelector(".chart-card, .hook-lockup, .compare-wrap, .verdict-card, .failure-deck, .attention-meter, .qa-workflow, .proof-lane, .risk-stack, .scenario-board");
       const bars = section.querySelectorAll(".bar-track i");
       const tiles = section.querySelectorAll(".tile-map i");
       const chips = section.querySelectorAll(".stat-chip");
@@ -3364,11 +3684,45 @@ ${sectionHtml}
       const hookCells = section.querySelectorAll(".hook-proof-grid i");
       const hookQuestion = section.querySelector(".hook-question");
       const countStrip = section.querySelector(".count-strip");
+      const contactTiles = section.querySelectorAll(".contact-tile, .review-thumb");
+      const rejectStamp = section.querySelector(".reject-stamp");
+      const fragments = section.querySelectorAll(".fragment");
+      const meterFill = section.querySelector(".meter-fill");
+      const retentionLine = section.querySelector(".retention-line");
+      const eventMarkers = section.querySelectorAll(".event-marker");
+      const workflowSteps = section.querySelectorAll(".workflow-step");
+      const proofChips = section.querySelectorAll(".proof-chip, .proof-cardlets b");
+      const voiceBars = section.querySelectorAll(".voice-bar");
+      const cursorDot = section.querySelector(".cursor-dot");
+      const riskRows = section.querySelectorAll(".risk-row");
+      const riskTimer = section.querySelector(".risk-timer-fill");
+      const riskWave = section.querySelectorAll(".risk-wave-bar");
+      const riskTag = section.querySelector(".risk-tag");
+      const diagnosticRows = section.querySelectorAll(".diagnostic-row");
+      const qaBrackets = section.querySelectorAll(".qa-bracket");
+      const miniTicks = section.querySelectorAll(".mini-timeline i");
       gsap.set(motionBeats, { x: 28, autoAlpha: 0, scale: 0.96 });
       gsap.set(beatTicks, { scaleY: 0.35, autoAlpha: 0.36 });
       gsap.set(lens, { autoAlpha: 0, x: -120, y: 40, scale: 0.9 });
       gsap.set(hookCells, { scale: 0.42, autoAlpha: 0.24 });
       gsap.set(hookQuestion, { x: 28, autoAlpha: 0, scale: 0.94 });
+      gsap.set(contactTiles, { autoAlpha: 0, y: 28, scale: 0.84, rotation: -2 });
+      gsap.set(rejectStamp, { autoAlpha: 0, scale: 1.7, rotation: -18 });
+      gsap.set(fragments, { autoAlpha: 0, scaleX: 0.3 });
+      gsap.set(meterFill, { scaleX: 0 });
+      gsap.set(retentionLine, { strokeDashoffset: 720 });
+      gsap.set(eventMarkers, { autoAlpha: 0, y: 18, scale: 0.88 });
+      gsap.set(workflowSteps, { autoAlpha: 0, y: 32, scale: 0.9 });
+      gsap.set(proofChips, { autoAlpha: 0, x: 24, scale: 0.92 });
+      gsap.set(voiceBars, { scaleY: 0.12, autoAlpha: 0.68 });
+      gsap.set(cursorDot, { x: 0 });
+      gsap.set(riskRows, { autoAlpha: 0, x: -28, scale: 0.94 });
+      gsap.set(riskTimer, { scaleX: 0 });
+      gsap.set(riskWave, { scaleY: 0.18, autoAlpha: 0.42 });
+      gsap.set(riskTag, { autoAlpha: 0, scale: 1.4, rotation: -10 });
+      gsap.set(diagnosticRows, { autoAlpha: 0, x: 30, scale: 0.94 });
+      gsap.set(qaBrackets, { autoAlpha: 0, scale: 0.72 });
+      gsap.set(miniTicks, { autoAlpha: 0, y: 22, scale: 0.86 });
       tl.to(section, { autoAlpha: 1, y: 0, duration: 0.36 }, start);
       tl.fromTo(wipe, { xPercent: -120 }, { xPercent: 120, duration: 0.68, ease: "power2.inOut" }, Math.max(0, start - 0.04));
       if (lens) {
@@ -3391,6 +3745,46 @@ ${sectionHtml}
       }
       if (hookQuestion) tl.to(hookQuestion, { x: 0, autoAlpha: 1, scale: 1, duration: 0.34, ease: "back.out(1.4)" }, start + Math.min(1.2, dur * 0.34));
       if (countStrip) tl.to(countStrip, { scale: 1.055, repeat: Math.max(1, Math.floor(dur / 2)), yoyo: true, duration: 0.2, ease: "sine.inOut" }, start + 0.78);
+      if (contactTiles.length) {
+        tl.to(contactTiles, { autoAlpha: 1, y: 0, scale: 1, rotation: 0, duration: 0.28, stagger: { each: Math.min(0.06, dur / Math.max(1, contactTiles.length * 3)), from: "random" }, ease: "back.out(1.6)" }, start + 0.26);
+        tl.to(contactTiles, { x: -8, y: 6, repeat: Math.max(1, Math.floor(dur / 1.9)), yoyo: true, duration: 0.16, stagger: { each: 0.012, from: "random" }, ease: "sine.inOut" }, start + 1.0);
+      }
+      if (rejectStamp) tl.to(rejectStamp, { autoAlpha: 1, scale: 1, rotation: 12, duration: 0.2, ease: "back.out(2)" }, start + Math.min(1.1, dur * 0.34));
+      if (fragments.length) {
+        tl.to(fragments, { autoAlpha: 1, scaleX: 1, duration: 0.18, stagger: 0.04 }, start + Math.min(1.2, dur * 0.3));
+        tl.to(fragments, { x: (i) => (i % 2 ? -32 : 34), y: (i) => (i % 3 ? 18 : -24), rotation: "+=8", repeat: Math.max(1, Math.floor(dur / 2.2)), yoyo: true, duration: 0.28, stagger: 0.025, ease: "sine.inOut" }, start + 1.1);
+      }
+      if (meterFill) tl.to(meterFill, { scaleX: 1, duration: 0.58, ease: "power3.out" }, start + 0.5);
+      if (retentionLine) tl.to(retentionLine, { strokeDashoffset: 0, duration: Math.min(1.5, Math.max(0.7, dur * 0.36)), ease: "power2.out" }, start + 0.52);
+      if (eventMarkers.length) {
+        tl.to(eventMarkers, { autoAlpha: 1, y: 0, scale: 1, duration: 0.22, stagger: Math.min(0.22, dur / 8), ease: "back.out(1.8)" }, start + 0.88);
+        tl.to(eventMarkers, { y: -8, repeat: Math.max(1, Math.floor(dur / 2.1)), yoyo: true, duration: 0.14, stagger: 0.05, ease: "sine.inOut" }, start + 1.5);
+      }
+      if (workflowSteps.length) {
+        tl.to(workflowSteps, { autoAlpha: 1, y: 0, scale: 1, duration: 0.26, stagger: Math.min(0.16, dur / 10), ease: "back.out(1.6)" }, start + 0.46);
+        tl.to(workflowSteps, { y: -10, repeat: Math.max(1, Math.floor(dur / 2.4)), yoyo: true, duration: 0.2, stagger: 0.06, ease: "sine.inOut" }, start + 1.2);
+      }
+      if (proofChips.length) {
+        tl.to(proofChips, { autoAlpha: 1, x: 0, scale: 1, duration: 0.24, stagger: 0.07, ease: "back.out(1.7)" }, start + 0.34);
+      }
+      if (voiceBars.length) {
+        tl.to(voiceBars, { scaleY: 1, autoAlpha: 1, duration: 0.32, stagger: 0.025, ease: "power2.out" }, start + 0.52);
+        tl.to(voiceBars, { scaleY: (i) => (i % 2 ? 0.46 : 0.82), repeat: Math.max(2, Math.floor(dur / 1.6)), yoyo: true, duration: 0.16, stagger: 0.012, ease: "sine.inOut" }, start + 1.0);
+      }
+      if (cursorDot) tl.to(cursorDot, { x: 560, repeat: Math.max(1, Math.floor(dur / 2.2)), yoyo: true, duration: 0.75, ease: "sine.inOut" }, start + 0.68);
+      if (riskRows.length) {
+        tl.to(riskRows, { autoAlpha: 1, x: 0, scale: 1, duration: 0.24, stagger: 0.08, ease: "back.out(1.6)" }, start + 0.3);
+        tl.to(riskRows, { x: 10, repeat: Math.max(1, Math.floor(dur / 2)), yoyo: true, duration: 0.14, stagger: 0.035, ease: "sine.inOut" }, start + 1.0);
+      }
+      if (riskTimer) tl.to(riskTimer, { scaleX: 1, duration: 0.72, ease: "power3.out" }, start + 0.46);
+      if (riskWave.length) tl.to(riskWave, { scaleY: 1, autoAlpha: 1, repeat: Math.max(2, Math.floor(dur / 1.4)), yoyo: true, duration: 0.12, stagger: 0.01, ease: "sine.inOut" }, start + 0.82);
+      if (riskTag) tl.to(riskTag, { autoAlpha: 1, scale: 1, rotation: 8, duration: 0.2, ease: "back.out(2)" }, start + Math.min(1.1, dur * 0.36));
+      if (diagnosticRows.length) tl.to(diagnosticRows, { autoAlpha: 1, x: 0, scale: 1, duration: 0.24, stagger: 0.08, ease: "back.out(1.5)" }, start + 0.36);
+      if (qaBrackets.length) tl.to(qaBrackets, { autoAlpha: 1, scale: 1, duration: 0.24, stagger: 0.08, ease: "back.out(1.8)" }, start + 0.54);
+      if (miniTicks.length) {
+        tl.to(miniTicks, { autoAlpha: 1, y: 0, scale: 1, duration: 0.2, stagger: 0.05, ease: "back.out(1.5)" }, start + 0.72);
+        tl.to(miniTicks, { y: -8, repeat: Math.max(1, Math.floor(dur / 1.8)), yoyo: true, duration: 0.16, stagger: 0.035, ease: "sine.inOut" }, start + 1.2);
+      }
       if (bars.length) {
         tl.fromTo(bars, { scaleX: 0 }, { scaleX: 1, duration: 0.62, stagger: 0.12, ease: "power3.out" }, start + 0.48);
         tl.to(bars, { filter: "brightness(1.32)", repeat: Math.max(1, Math.floor(dur / 3)), yoyo: true, duration: 0.22, stagger: 0.08, ease: "sine.inOut" }, start + 1.6);
