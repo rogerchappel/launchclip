@@ -8,6 +8,7 @@ import { prepareSfxPack } from "./sfx.js";
 const execFileAsync = promisify(execFile);
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PREMIUM_PRODUCT_STYLE = "premium-product-short";
+const DATA_STORY_BENCHMARK_STYLE = "data-story-benchmark";
 const ASSET_MANIFEST_SCHEMA = "launchclip.assets.v1";
 const ASSET_MANIFEST_FILE = "launchclip-assets.json";
 const ART_DIRECTION_SCHEMA = "launchclip.art-direction.v1";
@@ -291,7 +292,7 @@ async function renderRemotion(out, flags = {}) {
   }
   const video = await readJson(path.join(out, "video", "video.json"));
   const fps = Number(flags.fps ?? 30);
-  const defaultDuration = isPremiumStyle(video.style) ? video.duration_seconds ?? 48 : Math.min(video.duration_seconds ?? 30, 30);
+  const defaultDuration = defaultRendererDuration(video, "remotion");
   const duration = Number(flags.duration ?? defaultDuration);
   const width = Number(flags.width ?? 720);
   const height = Number(flags.height ?? 1280);
@@ -411,11 +412,7 @@ async function renderLocalFfmpeg(out, flags = {}) {
   const terminal = await optionalText(path.join(out, "demo", "terminal.txt"));
   const receipt = await optionalJson(path.join(out, "demo", "command-receipt.json"));
   const captions = await readCaptions(out);
-  const defaultDuration = isPremiumStyle(video.style)
-    ? Math.min(video.duration_seconds ?? 48, 48)
-    : isSocialReadyStyle(video.style)
-    ? Math.min(video.duration_seconds ?? 30, 30)
-    : Math.min(video.duration_seconds ?? 15, 15);
+  const defaultDuration = defaultRendererDuration(video, "local-ffmpeg");
   const duration = Number(flags.duration ?? defaultDuration);
   const width = Number(flags.width ?? 720);
   const height = Number(flags.height ?? 1280);
@@ -1115,7 +1112,7 @@ function assetWarnings(video) {
 
 function talkingHeadAdapter(flags = {}, style = "proof-card") {
   const requested = flags["talking-head"] ?? flags.talkingHead;
-  const provider = requested ?? (isSocialReadyStyle(style) ? "heygen" : "none");
+  const provider = requested ?? (isSocialReadyStyle(style) && !isDataStoryBenchmarkStyle(style) ? "heygen" : "none");
   if (provider === "none" || provider === "off" || provider === false) {
     return { enabled: false, provider: "none" };
   }
@@ -3319,6 +3316,7 @@ function cleanVoiceoverLine(value) {
 }
 
 function deliveryForBeat(beat) {
+  if (isDataStoryBeat(beat)) return "fast but articulate data-story narration; let charts and counters breathe on transition hits";
   if (beat === "cold-open" || beat === "hook") return "fast hook, one breath, direct to camera";
   if (beat === "friction") return "slightly compressed pace, list rhythm";
   if (beat === "demo-trigger" || beat === "split-screen-proof") return "clear proof tone, slow enough for the command to land";
@@ -3328,6 +3326,31 @@ function deliveryForBeat(beat) {
   if (beat === "artifact-reveal" || beat === "artifacts") return "confident payoff, do not over-read filenames";
   if (beat === "cta") return "calm, short, leave a clean final hold";
   return "natural product explainer pace";
+}
+
+function isDataStoryBeat(beat) {
+  return [
+    "data-hook",
+    "question-card",
+    "dataset-setup",
+    "scenario-grid",
+    "friction-bars",
+    "proof-bars",
+    "trust-map",
+    "safeguard-map",
+    "split-counter-left",
+    "split-counter-right",
+    "workflow-demo",
+    "workflow-storyboard",
+    "workflow-hyperframes",
+    "sfx-pass",
+    "asset-readiness",
+    "placeholder-gaps",
+    "qa-static-holds",
+    "qa-source-honesty",
+    "packet-review",
+    "benchmark-cta"
+  ].includes(beat);
 }
 
 function parseTimeRange(range) {
@@ -3596,6 +3619,166 @@ function beatProductionDirection(beat) {
       intensity: "high",
       mixLevel: -16
     },
+    "data-hook": {
+      editDensity: "headline, masthead, texture drift, and chart-card flash every 0.6-1.0s",
+      cameraDirection: "slow push through a dark atlas background into a center headline",
+      sound: "sub-bass whoosh into data headline hit",
+      soundTrigger: "first-frame headline slam and masthead lock",
+      intensity: "high",
+      mixLevel: -15
+    },
+    "question-card": {
+      editDensity: "question fragments, underline strokes, and micro-stat ticks every 0.7-1.1s",
+      cameraDirection: "centered chart-card push with tiny parallax on background map texture",
+      sound: "soft tick build under a question-card rise",
+      soundTrigger: "question words and tiny counter marks entering",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "dataset-setup": {
+      editDensity: "fixture rows, source chips, and status badges enter every 0.6-1.0s",
+      cameraDirection: "table-card push with row highlights sweeping top to bottom",
+      sound: "data ticks and receipt pops",
+      soundTrigger: "fixture row highlights and source badge landing",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "scenario-grid": {
+      editDensity: "matrix tiles pulse, recolor, or regroup every 0.5-0.9s",
+      cameraDirection: "map-like matrix drift with quick zooms into active tile clusters",
+      sound: "grid ticks and light map taps",
+      soundTrigger: "tile cluster pulses and matrix regroup",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "friction-bars": {
+      editDensity: "bar fills, rank swaps, and label punches every 0.5-0.9s",
+      cameraDirection: "horizontal bar-chart push with rank-change overshoot",
+      sound: "bar-rise ticks with a soft rank hit",
+      soundTrigger: "bar fills and rank labels settling",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "proof-bars": {
+      editDensity: "receipt bars, source chips, and pass badges animate every 0.6-1.0s",
+      cameraDirection: "bar chart pulls back to reveal receipt labels and evidence chips",
+      sound: "success ticks and proof-card pops",
+      soundTrigger: "receipt chips landing on each proof bar",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "trust-map": {
+      editDensity: "risk cells pulse red, labels snap, and source warnings flicker every 0.6-1.1s",
+      cameraDirection: "map heat zoom from national view into clustered risk cells",
+      sound: "warning taps with a low map sweep",
+      soundTrigger: "red risk cells and warning labels appearing",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "safeguard-map": {
+      editDensity: "green safeguards sweep across cells and pin receipts every 0.6-1.1s",
+      cameraDirection: "reverse heat-map pullback from receipts to full safeguard grid",
+      sound: "soft success dings and map ticks",
+      soundTrigger: "green safeguard pins and receipt chips landing",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "split-counter-left": {
+      editDensity: "counter increments, red chips, and vertical divider pulses every 0.5-0.9s",
+      cameraDirection: "left counter punch-in with the right side held as muted context",
+      sound: "counter ticks with a restrained warning hit",
+      soundTrigger: "each never-fake item incrementing",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "split-counter-right": {
+      editDensity: "counter increments, green chips, and safe-generation labels tick every 0.5-0.9s",
+      cameraDirection: "right counter punch-in and settle back to the full split",
+      sound: "counter ticks into soft confirmation hit",
+      soundTrigger: "each safe-generation item incrementing",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "workflow-demo": {
+      editDensity: "pipeline node, connector, and receipt event every 0.6-1.0s",
+      cameraDirection: "connector-line follow from demo command to captured receipt",
+      sound: "typing ticks, connector pop, and receipt ding",
+      soundTrigger: "demo node, connector draw, and receipt lock",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "workflow-storyboard": {
+      editDensity: "script node, visual node, caption node, and playhead marker every 0.6-1.0s",
+      cameraDirection: "diagram push across script-to-visual connectors",
+      sound: "connector pops and playhead ticks",
+      soundTrigger: "script and storyboard nodes linking",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "workflow-hyperframes": {
+      editDensity: "object lifecycle states and template cards swap every 0.5-0.9s",
+      cameraDirection: "pipeline zoom into object lifecycle state strip",
+      sound: "template snaps and lifecycle pops",
+      soundTrigger: "template cards and lifecycle states locking",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "sfx-pass": {
+      editDensity: "audio lane ticks, waveform blips, and ducking labels every 0.5-0.9s",
+      cameraDirection: "timeline sweep across SFX lanes under the voice track",
+      sound: "whoosh, tick, paper hit, and ducked confirmation blend",
+      soundTrigger: "each SFX family lane entering",
+      intensity: "medium",
+      mixLevel: -20
+    },
+    "asset-readiness": {
+      editDensity: "asset rows, missing tags, and replacement slots animate every 0.6-1.0s",
+      cameraDirection: "readiness table push with row-by-row status reveal",
+      sound: "asset row ticks and soft warning taps",
+      soundTrigger: "missing asset tags and ready rows entering",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "placeholder-gaps": {
+      editDensity: "placeholder cards flip, gap tags pulse, and replacement arrows draw every 0.6-1.0s",
+      cameraDirection: "zoom from labelled placeholder to the exact replacement slot",
+      sound: "paper flip, warning tap, and connector pop",
+      soundTrigger: "placeholder label and replacement arrow",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "qa-static-holds": {
+      editDensity: "timer bars, red hold markers, and pass ticks every 0.5-0.9s",
+      cameraDirection: "timer-bar sweep with hard zooms on over-threshold holds",
+      sound: "timer ticks and pass/fail taps",
+      soundTrigger: "static hold markers crossing the threshold",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "qa-source-honesty": {
+      editDensity: "source chips, connector endpoints, and chart marks validate every 0.6-1.0s",
+      cameraDirection: "source-to-mark connector follow with crisp endpoint settles",
+      sound: "connector pops and review ticks",
+      soundTrigger: "source chips linking to chart marks",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "packet-review": {
+      editDensity: "file stack, QA page, manifest, and review payload flash every 0.6-1.0s",
+      cameraDirection: "artifact grid zooms into one review packet stack",
+      sound: "file flips and final packet thump",
+      soundTrigger: "review artifacts stacking",
+      intensity: "high",
+      mixLevel: -16
+    },
+    "benchmark-cta": {
+      editDensity: "final counter, checklist ticks, and calm hold with subtle map drift",
+      cameraDirection: "clean final push to packet lockup and benchmark duration",
+      sound: "two checklist ticks into quiet final hit",
+      soundTrigger: "final line-up checks and benchmark lockup",
+      intensity: "low-medium",
+      mixLevel: -21
+    },
     cta: {
       editDensity: "one clean punch-in, two check ticks, then final hold",
       cameraDirection: "calm final push to approval boundary and repo URL",
@@ -3652,13 +3835,28 @@ function isPremiumStyle(style) {
   return style === PREMIUM_PRODUCT_STYLE;
 }
 
+function isDataStoryBenchmarkStyle(style) {
+  return style === DATA_STORY_BENCHMARK_STYLE;
+}
+
 function isSocialReadyStyle(style) {
-  return style === "ugc-split" || style === "ugc-demo-punchy" || isPremiumStyle(style);
+  return style === "ugc-split" || style === "ugc-demo-punchy" || isPremiumStyle(style) || isDataStoryBenchmarkStyle(style);
+}
+
+function defaultRendererDuration(video = {}, provider = "remotion") {
+  if (isPremiumStyle(video.style)) return video.duration_seconds ?? 48;
+  if (isDataStoryBenchmarkStyle(video.style)) return video.duration_seconds ?? 150;
+  if (isSocialReadyStyle(video.style)) return Math.min(video.duration_seconds ?? 30, 30);
+  const cap = provider === "remotion" ? 30 : 15;
+  return Math.min(video.duration_seconds ?? cap, cap);
 }
 
 function buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHead = { enabled: false, provider: "none" }) {
   if (isPremiumStyle(style)) {
     return buildPremiumCreativeStoryboard(manifest, script, stylePreset, talkingHead);
+  }
+  if (isDataStoryBenchmarkStyle(style)) {
+    return buildDataStoryBenchmarkStoryboard(manifest, script, stylePreset);
   }
   if (!isSocialReadyStyle(style)) {
     return {
@@ -3800,6 +3998,275 @@ function buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHe
       };
     })
   };
+}
+
+function buildDataStoryBenchmarkStoryboard(manifest, script, stylePreset) {
+  const repoName = stripMarkdown(manifest.source_repo.name);
+  const timeline = script.timeline ?? [];
+  return {
+    schema_version: "launchclip.storyboard.v1",
+    intent: `${repoName} should stress Launchclip with an original 150-second vertical data story: dark atlas styling, chart cards, map grids, split counters, workflow diagrams, SFX lanes, and review artifacts.`,
+    creative_positioning: stylePreset.angle,
+    renderer_priority: ["hyperframes", "remotion", "product-videogen", "local-ffmpeg"],
+    non_goals: [
+      "Do not download or reuse the reference transcript, audio, footage, frames, graphics, creator likeness, chart values, or exact sequence.",
+      "Do not present synthetic benchmark fixtures as public survey data.",
+      "Do not invent adoption, revenue, safety, or performance claims.",
+      "Do not make a static slideshow; every scene needs chart, map, counter, connector, caption, camera, or SFX movement."
+    ],
+    quality_gates: [
+      "full duration is 150 seconds at vertical 9:16",
+      "voiceover lands around 350-430 original words",
+      "every 0.5-1.2 seconds changes chart, map, counter, object, camera, caption, or SFX focus",
+      "charts and diagrams declare source status as synthetic benchmark fixtures or launchclip artifacts",
+      "no static object lifecycle gap exceeds 1.2 seconds",
+      "SFX cues are adapter-ready and duck under voiceover",
+      "missing assets remain labelled placeholders instead of unrelated stock media",
+      "final output is a reviewable packet, not a live publish action"
+    ],
+    presenter_direction: "No talking-head by default. Use voiceover plus data graphics so charts, maps, counters, and QA artifacts carry the edit.",
+    scenes: timeline.map((segment, index) => {
+      const profile = dataStorySceneProfile(segment.beat);
+      const direction = beatProductionDirection(segment.beat);
+      return {
+        id: segment.beat,
+        order: index + 1,
+        time_range: segment.time_range,
+        target_seconds: segment.target_seconds,
+        hook: segment.caption,
+        voiceover: segment.voiceover,
+        evidence_source: segment.evidence_source,
+        adapter_target: segment.adapter_target,
+        layout: profile.layout,
+        composition: profile.composition,
+        media_slots: profile.mediaSlots,
+        motion_grammar: profile.motionGrammar,
+        typography: profile.typography,
+        color_grade: profile.colorGrade,
+        caption_emphasis: segment.caption_emphasis ?? [],
+        transition: segment.transition,
+        edit_density: direction.editDensity,
+        camera_direction: direction.cameraDirection,
+        sound_design: direction.sound,
+        asset_aliases: profile.assetAliases,
+        micro_events: profile.microEvents,
+        camera_path: profile.cameraPath,
+        sfx_cues: profile.sfxCues,
+        data_visualization: profile.dataVisualization,
+        success_criteria: [
+          "viewer can identify the chart or diagram purpose while muted",
+          "source status is visible for every data mark or connector",
+          "foreground motion, map texture, caption, or SFX cue changes before the scene feels static"
+        ]
+      };
+    })
+  };
+}
+
+function dataStorySceneProfile(beat) {
+  const common = {
+    typography: "condensed uppercase masthead, oversized mixed-case hook text, compact chart labels, source chips, and no paragraph subtitle blocks",
+    colorGrade: "dark atlas texture, off-white chart cards, coral risk marks, mint safeguard marks, cyan connector accents, and restrained amber warnings",
+    cameraPath: [
+      { t: 0, scale: 1.04, x: -10, y: 12, rotate: -0.4 },
+      { t: 0.52, scale: 1.0, x: 0, y: 0, rotate: 0 },
+      { t: 1, scale: 1.05, x: 8, y: -14, rotate: 0.3 }
+    ],
+    sfxCues: ["data-tick", "soft-whoosh", "caption-hit"]
+  };
+  const chartData = {
+    type: "chart",
+    source_status: "synthetic benchmark fixture",
+    honesty_note: "Illustrative QA data for renderer stress, not public survey data."
+  };
+  const artifactData = {
+    type: "artifact-diagram",
+    source_status: "launchclip generated artifact",
+    honesty_note: "Connectors point to packet files generated by launchclip."
+  };
+  const profiles = {
+    "data-hook": {
+      layout: "dark atlas first frame with persistent masthead and huge data-story title",
+      composition: "ANTICOPY benchmark masthead, large center title, subtle map texture, and a small 150s duration timer",
+      mediaSlots: ["title", "masthead", "duration-timer", "atlas-texture"],
+      motionGrammar: ["title slam", "map texture drift", "timer tick", "card flash"],
+      assetAliases: [],
+      microEvents: ["masthead locks on frame one", "title slams in", "duration timer ticks to 2:30", "first data card flashes"],
+      dataVisualization: { ...chartData, type: "stat-counter" }
+    },
+    "question-card": {
+      layout: "centered question chart card over dark map texture",
+      composition: "one big question, three tiny counters, and a source-status chip that says original benchmark",
+      mediaSlots: ["attention", "evidence", "timing", "source-chip"],
+      motionGrammar: ["question underline draw", "counter ticks", "source chip pop"],
+      assetAliases: [],
+      microEvents: ["question splits into three fragments", "counters tick up", "source chip lands", "map pins drift behind card"],
+      dataVisualization: { ...chartData, type: "stat-counter" }
+    },
+    "dataset-setup": {
+      layout: "fixture table chart card",
+      composition: "rows for synthetic scenarios, fixture status, and source labels with a clear non-survey disclaimer",
+      mediaSlots: ["synthetic scenarios", "fixture status", "source labels", "non-survey disclaimer"],
+      motionGrammar: ["row sweep", "source badge pop", "table-card push"],
+      assetAliases: [],
+      microEvents: ["first rows sweep in", "fixture badge turns mint", "non-survey label pulses", "table shifts into grid"],
+      dataVisualization: { ...chartData, type: "table-chart" }
+    },
+    "scenario-grid": {
+      layout: "map-like matrix chart with fifty fixture tiles",
+      composition: "tile grid groups failure modes by color while avoiding real geography or survey claims",
+      mediaSlots: ["missing proof", "vague captions", "slow transitions", "weak sound", "tiny labels"],
+      motionGrammar: ["matrix tile pulse", "cluster regroup", "map-like zoom"],
+      assetAliases: [],
+      microEvents: ["tiles fill in waves", "failure clusters regroup", "active cluster zooms", "legend snaps in"],
+      dataVisualization: { ...chartData, type: "matrix-map" }
+    },
+    "friction-bars": {
+      layout: "horizontal bar chart with ranked launch friction",
+      composition: "manual scripting, proof capture, edit alignment, caption review, and asset replacement rank as synthetic QA pressures",
+      mediaSlots: ["scripting", "proof capture", "edit alignment", "caption review", "asset replacement"],
+      motionGrammar: ["bar fill", "rank swap", "label punch", "axis tick"],
+      assetAliases: [],
+      microEvents: ["bars fill left to right", "edit alignment jumps rank", "axis ticks draw", "top label punches forward"],
+      dataVisualization: { ...chartData, type: "horizontal-bar" }
+    },
+    "proof-bars": {
+      layout: "receipt-backed proof bar chart",
+      composition: "bars switch from pressure to receipt coverage across terminal, render plan, storyboard, captions, and review payload",
+      mediaSlots: ["terminal output", "render plan", "storyboard", "captions", "review payload"],
+      motionGrammar: ["bar refill", "receipt chip land", "source badge sweep"],
+      assetAliases: [],
+      microEvents: ["red bars drain", "green receipt bars fill", "source chips attach", "proof label settles"],
+      dataVisualization: { ...chartData, type: "receipt-bar" }
+    },
+    "trust-map": {
+      layout: "risk heat-map chart",
+      composition: "red cells mark places a viewer might distrust the output: unsupported numbers, unclear sources, copied media, or overconfident automation",
+      mediaSlots: ["unsupported numbers", "unclear sources", "copied media", "overconfident automation"],
+      motionGrammar: ["heat pulse", "warning label snap", "risk zoom"],
+      assetAliases: [],
+      microEvents: ["red cells pulse", "risk labels snap", "heat map zooms inward", "warning source chip appears"],
+      dataVisualization: { ...chartData, type: "risk-heat-map" }
+    },
+    "safeguard-map": {
+      layout: "safeguard heat-map chart",
+      composition: "green pins mark dry runs, local assets, validation, review gates, and human approval boundaries",
+      mediaSlots: ["dry runs", "local assets", "validation", "review gates", "human approval"],
+      motionGrammar: ["green sweep", "receipt pin", "map pullback"],
+      assetAliases: [],
+      microEvents: ["green cells sweep across grid", "receipt pins land", "approval boundary glows", "map pulls back"],
+      dataVisualization: { ...chartData, type: "safeguard-heat-map" }
+    },
+    "split-counter-left": {
+      layout: "left side of split counter chart",
+      composition: "red counter stacks items launchclip must never fake",
+      mediaSlots: ["likenesses", "verbatim transcript", "survey data", "production claims", "platform posting"],
+      motionGrammar: ["counter increment", "chip stack", "divider pulse"],
+      assetAliases: [],
+      microEvents: ["left counter hits five", "red chips stack", "divider pulses", "never fake label locks"],
+      dataVisualization: { ...chartData, type: "split-counter" }
+    },
+    "split-counter-right": {
+      layout: "right side of split counter chart",
+      composition: "green counter stacks original things launchclip can safely generate",
+      mediaSlots: ["original narration", "synthetic fixtures", "chart layouts", "sound cues", "QA artifacts"],
+      motionGrammar: ["counter increment", "safe chip stack", "split settle"],
+      assetAliases: [],
+      microEvents: ["right counter hits five", "green chips stack", "safe generation label locks", "split view settles"],
+      dataVisualization: { ...chartData, type: "split-counter" }
+    },
+    "workflow-demo": {
+      layout: "pipeline connector diagram from demo command to receipt",
+      composition: "demo node connects to terminal output, receipt, and redaction badge",
+      mediaSlots: ["demo command", "terminal output", "redaction badge"],
+      motionGrammar: ["node enter", "connector draw", "receipt pop"],
+      assetAliases: ["demo-command", "terminal-output", "redaction-badge"],
+      microEvents: ["demo node enters", "connector draws to terminal", "redaction badge lands", "receipt turns mint"],
+      dataVisualization: { ...artifactData, type: "workflow-diagram" }
+    },
+    "workflow-storyboard": {
+      layout: "script-to-visual connector diagram",
+      composition: "script nodes link to captions, visual cards, camera moves, and source labels",
+      mediaSlots: ["script node", "caption node", "visual card", "camera move"],
+      motionGrammar: ["connector follow", "node pulse", "playhead sweep"],
+      assetAliases: ["script-plan", "caption-node", "chart-card", "camera-move"],
+      microEvents: ["script node pulses", "connector draws to visual card", "caption chip lands", "playhead sweeps"],
+      dataVisualization: { ...artifactData, type: "alignment-diagram" }
+    },
+    "workflow-hyperframes": {
+      layout: "HyperFrames object lifecycle pipeline diagram",
+      composition: "scene nodes connect to templates, object states, data QA, diagram QA, and quality checklist",
+      mediaSlots: ["scene nodes", "templates", "object states", "data QA", "quality checklist"],
+      motionGrammar: ["pipeline follow", "template snap", "state strip sweep"],
+      assetAliases: ["scene-node", "template-card", "object-state", "chart-qa", "quality-checklist"],
+      microEvents: ["template cards snap in", "object state strip scrolls", "QA card flashes", "checklist node locks"],
+      dataVisualization: { ...artifactData, type: "pipeline-diagram" }
+    },
+    "sfx-pass": {
+      layout: "audio lane chart under voiceover",
+      composition: "whoosh, tick, paper hit, pop, and quiet final hit lanes appear below a ducking curve",
+      mediaSlots: ["whoosh", "tick", "paper hit", "connector pop", "ducking line"],
+      motionGrammar: ["waveform blip", "lane tick", "ducking curve"],
+      assetAliases: [],
+      microEvents: ["voice lane appears", "SFX lanes tick in", "ducking curve bends", "mix label settles"],
+      dataVisualization: { ...chartData, type: "audio-lane-chart" }
+    },
+    "asset-readiness": {
+      layout: "asset readiness table chart",
+      composition: "logos, screenshots, voice, and SFX rows declare available, missing, or placeholder status",
+      mediaSlots: ["logos", "screenshots", "voice", "SFX", "placeholder status"],
+      motionGrammar: ["row reveal", "status pill pop", "replacement slot draw"],
+      assetAliases: [],
+      microEvents: ["rows reveal", "missing tags pulse", "available tags settle", "replacement slots draw"],
+      dataVisualization: { ...chartData, type: "readiness-table" }
+    },
+    "placeholder-gaps": {
+      layout: "gap replacement chart",
+      composition: "labelled placeholder cards point to exact replacement slots so review can continue without hiding missing assets",
+      mediaSlots: ["placeholder logo", "placeholder voice", "placeholder screenshot", "replacement slot"],
+      motionGrammar: ["card flip", "gap tag pulse", "arrow draw"],
+      assetAliases: [],
+      microEvents: ["placeholder card flips", "gap label pulses", "replacement arrow draws", "reviewable tag lands"],
+      dataVisualization: { ...chartData, type: "gap-chart" }
+    },
+    "qa-static-holds": {
+      layout: "static-hold timer chart",
+      composition: "timer bars show object lifecycle gaps and highlight the one point two second threshold",
+      mediaSlots: ["enter", "settle", "transform", "micro-state", "exit"],
+      motionGrammar: ["timer sweep", "threshold marker", "pass tick"],
+      assetAliases: [],
+      microEvents: ["timer bars sweep", "threshold marker flashes", "micro-state inserts", "pass tick lands"],
+      dataVisualization: { ...chartData, type: "timer-bar-chart" }
+    },
+    "qa-source-honesty": {
+      layout: "source-to-mark connector diagram",
+      composition: "source chips connect to data marks, diagram endpoints, captions, and review notes",
+      mediaSlots: ["source chip", "data mark", "diagram endpoint", "review note"],
+      motionGrammar: ["connector draw", "endpoint settle", "source chip pulse"],
+      assetAliases: ["source-chip", "chart-mark", "diagram-endpoint", "review-note"],
+      microEvents: ["source chip pulses", "connector draws to mark", "endpoint settles", "review note ticks"],
+      dataVisualization: { ...artifactData, type: "source-honesty-diagram" }
+    },
+    "packet-review": {
+      layout: "review packet artifact grid chart",
+      composition: "transcript plan, storyboard, render handoff, captions, SFX manifest, and QA pages converge into one packet",
+      mediaSlots: ["transcript plan", "storyboard", "render handoff", "captions", "SFX manifest", "QA pages"],
+      motionGrammar: ["file flash", "grid zoom", "stack thump"],
+      assetAliases: [],
+      microEvents: ["files flash in sequence", "QA pages slide under stack", "SFX manifest flips", "packet thumps"],
+      dataVisualization: { ...chartData, type: "artifact-grid" }
+    },
+    "benchmark-cta": {
+      layout: "final benchmark lockup with 2:30 duration and review checklist",
+      composition: "packet stack, duration timer, no-copy boundary, and review-ready checkmarks settle into final hold",
+      mediaSlots: ["packet stack", "2:30 timer", "no-copy boundary", "review-ready checks"],
+      motionGrammar: ["final push", "check ticks", "quiet hold"],
+      assetAliases: [],
+      microEvents: ["duration timer locks", "review checks tick", "no-copy boundary appears", "final map drift continues"],
+      dataVisualization: { ...artifactData, type: "cta-lockup" }
+    }
+  };
+  return { ...common, ...(profiles[beat] ?? profiles["question-card"]) };
 }
 
 function buildPremiumCreativeStoryboard(manifest, script, stylePreset, talkingHead = { enabled: false, provider: "none" }) {
@@ -4099,6 +4566,31 @@ function premiumProductStructure(manifest) {
   ];
 }
 
+function dataStoryBenchmarkStructure() {
+  return [
+    { beat: "data-hook", seconds: 7.5, instruction: "Open with a dark atlas data-story hook, persistent masthead, and a 2:30 benchmark counter." },
+    { beat: "question-card", seconds: 7.5, instruction: "Ask whether launchclip can hold attention for 150 seconds without hiding weak evidence." },
+    { beat: "dataset-setup", seconds: 7.5, instruction: "Declare the original synthetic benchmark fixture and its source-status boundary." },
+    { beat: "scenario-grid", seconds: 7.5, instruction: "Show fifty synthetic launch scenarios as a map-like matrix, not real survey data." },
+    { beat: "friction-bars", seconds: 7.5, instruction: "Rank synthetic launch friction as horizontal bars with fast label changes." },
+    { beat: "proof-bars", seconds: 7.5, instruction: "Flip the chart into receipt-backed proof coverage from launchclip artifacts." },
+    { beat: "trust-map", seconds: 7.5, instruction: "Turn the map red for trust failures: unsupported numbers, unclear sources, copied media, automation overreach." },
+    { beat: "safeguard-map", seconds: 7.5, instruction: "Turn the map green for safeguards: dry run, local assets, validation, review, approval." },
+    { beat: "split-counter-left", seconds: 7.5, instruction: "Count the things launchclip must never fake." },
+    { beat: "split-counter-right", seconds: 7.5, instruction: "Count the things launchclip can safely generate as original benchmark material." },
+    { beat: "workflow-demo", seconds: 7.5, instruction: "Connect demo command, terminal output, redaction, and receipt in a pipeline diagram." },
+    { beat: "workflow-storyboard", seconds: 7.5, instruction: "Connect script, caption, chart card, and camera move as an alignment diagram." },
+    { beat: "workflow-hyperframes", seconds: 7.5, instruction: "Connect scenes, templates, object states, chart QA, and quality checklist for HyperFrames." },
+    { beat: "sfx-pass", seconds: 7.5, instruction: "Show the sound-design lane and voiceover ducking as part of the timeline." },
+    { beat: "asset-readiness", seconds: 7.5, instruction: "Show asset readiness rows for logos, screenshots, voice, and SFX." },
+    { beat: "placeholder-gaps", seconds: 7.5, instruction: "Show labelled placeholders and replacement slots instead of hiding missing assets." },
+    { beat: "qa-static-holds", seconds: 7.5, instruction: "Show static-hold timing and the 1.2 second lifecycle threshold." },
+    { beat: "qa-source-honesty", seconds: 7.5, instruction: "Connect source chips to chart marks, diagram endpoints, captions, and review notes." },
+    { beat: "packet-review", seconds: 7.5, instruction: "Stack transcript plan, storyboard, render handoff, captions, SFX manifest, and QA pages." },
+    { beat: "benchmark-cta", seconds: 7.5, instruction: "End with the packet, benchmark duration, no-copy boundary, and review-ready checks." }
+  ];
+}
+
 function videoStylePreset(style, manifest, talkingHead = { enabled: false, provider: "none" }) {
   if (isPremiumStyle(style)) {
     return {
@@ -4151,6 +4643,65 @@ function videoStylePreset(style, manifest, talkingHead = { enabled: false, provi
           "Store SFX as adapter-ready cues and local synthetic sounds.",
           talkingHead.enabled ? `Presenter generation can map to ${talkingHead.provider}, but local render uses a placeholder until media is supplied.` : "Presenter slot remains adapter-ready.",
           "Every claim must trace to repo metadata, demo evidence, or Launchclip-generated artifacts."
+        ]
+      }
+    };
+  }
+  if (isDataStoryBenchmarkStyle(style)) {
+    return {
+      duration_seconds: 150,
+      angle: "Create an original 2:30 vertical data-story benchmark that matches the reference quality pressure: dark atlas energy, persistent masthead, dense chart cards, map grids, split counters, workflow diagrams, SFX cues, and QA artifacts, without copying reference transcript, media, data, or exact visuals.",
+      briefBeats: [
+        "Open with the benchmark boundary and duration visible on frame one.",
+        "Use synthetic fixture data, never public survey claims.",
+        "Alternate chart cards, map grids, counters, and connector diagrams.",
+        "Keep source status visible for every chart mark or diagram endpoint.",
+        "Attach SFX to chart, map, counter, file, and lifecycle events.",
+        "Make missing assets reviewable with labelled placeholders.",
+        "End on the generated packet and no-live-publish approval boundary."
+      ],
+      structure: dataStoryBenchmarkStructure(manifest),
+      recipe: {
+        preset: DATA_STORY_BENCHMARK_STYLE,
+        aspect_ratio: "9:16",
+        duration_seconds: 150,
+        resolution: { width: 1080, height: 1920, fps: 30 },
+        layout: [
+          "0-15s: original benchmark hook and fixture setup.",
+          "15-45s: matrix/map fixture grid and friction/proof charts.",
+          "45-75s: red trust-risk map into green safeguard map.",
+          "75-105s: split counters and launchclip workflow diagrams.",
+          "105-135s: SFX lane, asset readiness, placeholders, and QA timing.",
+          "135-150s: packet-review lockup and benchmark CTA."
+        ],
+        visual_language: {
+          palette: "dark atlas background, off-white chart cards, coral risk, mint safeguard, cyan connectors, sparse amber warnings",
+          masthead: "persistent compact masthead and source-status chip; never use the reference brand lockup",
+          data_viz: "horizontal bars, matrix maps, heat maps, split counters, readiness tables, workflow diagrams, source-to-mark connectors, artifact grids",
+          pacing: "visible chart, map, counter, object, caption, camera, or SFX change every 0.5-1.2 seconds",
+          captions: "large kinetic emphasis phrases, 2-6 words, not full transcript subtitles",
+          sound_design: "subtle whooshes, data ticks, connector pops, paper hits, warning taps, and quiet final hit; duck under voiceover",
+          source_policy: "all numbers and map tiles are synthetic benchmark fixtures unless tied to launchclip-generated artifacts",
+          production_layers: ["voiceover", "chart marks", "map tiles", "split counters", "object lifecycle", "SFX cues", "QA artifacts"]
+        },
+        renderer_contract: {
+          adapter: "launchclip.hyperframes-data-story.v1",
+          composition_id: "LaunchclipHyperframes",
+          primary_renderer: "hyperframes",
+          fallback_adapters: ["remotion", "local-ffmpeg", "product-videogen"],
+          external_api_policy: "No reference download, no voice cloning, no live product-videogen submit, no social posting, and no unlabelled synthetic claims."
+        },
+        benchmark_reference_observations: {
+          source_video_duration_seconds: 150,
+          source_video_aspect: "vertical 9:16",
+          observed_pacing: "about 67 auto-caption cues and roughly 400 words across 150 seconds",
+          safe_reuse_boundary: "Reuse only high-level production pressure: data-story density, charts, maps, counters, captions, and SFX timing."
+        },
+        generation_notes: [
+          "Write and synthesize an original script only.",
+          "Do not use or store the reference transcript as voiceover text.",
+          "Do not recreate the exact reference charts, title cards, or map sequence.",
+          "Keep every chart and diagram source-labelled for review."
         ]
       }
     };
@@ -4377,6 +4928,258 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         "Use only local manifest assets and render fallbacks for missing aliases.",
         "No static text-card-only sequence may last longer than 1.2 seconds.",
         "External providers receive adapter-ready cues only; local rendering must not call them."
+      ]
+    };
+  }
+  if (isDataStoryBenchmarkStyle(style)) {
+    const timeline = [
+      {
+        beat: "data-hook",
+        voiceover: "We are not copying the reference. We are copying the challenge: a dense vertical data story with motion every few seconds.",
+        caption: "Original benchmark",
+        visual: "Dark atlas texture, persistent masthead, huge headline, chart-card flash, and a 2:30 duration counter.",
+        evidence_source: "original launchclip benchmark spec",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["not copying", "data story"],
+        motion: "headline slam, atlas drift, duration counter tick, first chart card flash",
+        transition: "data headline hit"
+      },
+      {
+        beat: "question-card",
+        voiceover: "The question is simple. Can launchclip hold attention for two minutes thirty without hiding weak evidence behind pretty charts?",
+        caption: "Can it hold?",
+        visual: "Centered question card with three tiny counters for attention, evidence, and timing.",
+        evidence_source: "original launchclip benchmark prompt",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["attention", "evidence", "charts"],
+        motion: "question underline draw, counter ticks, source chip pop",
+        transition: "card rise"
+      },
+      {
+        beat: "dataset-setup",
+        voiceover: "Instead of real states, this benchmark uses fifty synthetic launch scenarios, each one a safe fixture for renderer stress.",
+        caption: "Synthetic fixtures",
+        visual: "Fixture table declares source status and non-survey boundary before any chart appears.",
+        evidence_source: "synthetic benchmark fixture declared in video plan",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["synthetic", "safe fixture"],
+        motion: "row sweep, source badge pop, table-card push",
+        transition: "table sweep"
+      },
+      {
+        beat: "scenario-grid",
+        voiceover: "Every tile carries a failure mode: missing proof, vague captions, slow transitions, weak sound, tiny labels, or unclear approval.",
+        caption: "Fifty stress tiles",
+        visual: "Map-like matrix groups synthetic failure modes by color with a source-status legend.",
+        evidence_source: "synthetic benchmark fixture declared in video plan",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["missing proof", "weak sound", "unclear approval"],
+        motion: "matrix pulse, cluster regroup, legend snap",
+        transition: "matrix zoom"
+      },
+      {
+        beat: "friction-bars",
+        voiceover: "The first chart sorts friction. Scripting hurts, capture hurts, but editing quality collapses when visuals drift from the voice.",
+        caption: "Where quality breaks",
+        visual: "Horizontal bars rank synthetic friction areas with edit alignment jumping to the top.",
+        evidence_source: "synthetic benchmark fixture declared in video plan",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["friction", "editing quality", "voice"],
+        motion: "bar fill, rank swap, label punch",
+        transition: "rank hit"
+      },
+      {
+        beat: "proof-bars",
+        voiceover: "The proof chart answers that. Every claim needs a receipt: terminal output, render plan, storyboard, caption draft, or review payload.",
+        caption: "Receipts beat claims",
+        visual: "Friction bars refill as green receipt-backed proof coverage across generated launchclip artifacts.",
+        evidence_source: "demo/terminal.txt, video/render-plan.json, video/storyboard.html, captions, review payload",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["receipt", "terminal output", "review payload"],
+        motion: "receipt bars refill, source chips attach, proof label settle",
+        transition: "receipt flip"
+      },
+      {
+        beat: "trust-map",
+        voiceover: "Now the map turns red where trust can break: unsupported numbers, unclear sources, copied media, and overconfident automation.",
+        caption: "Trust can break",
+        visual: "Risk heat map pulses red across source, data, media, and automation failure cells.",
+        evidence_source: "launchclip review and validation policy",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["unsupported numbers", "copied media"],
+        motion: "red heat pulse, warning label snap, risk zoom",
+        transition: "risk sweep"
+      },
+      {
+        beat: "safeguard-map",
+        voiceover: "Then it turns green where the packet has safeguards: dry runs, local assets, validation, review gates, and human approval.",
+        caption: "Safeguards visible",
+        visual: "Green safeguard map pins dry-run, asset, validation, review, and approval boundaries.",
+        evidence_source: "launchclip safety manifest and review payload",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["dry runs", "validation", "human approval"],
+        motion: "green sweep, receipt pin, map pullback",
+        transition: "safeguard sweep"
+      },
+      {
+        beat: "split-counter-left",
+        voiceover: "The split counter separates what we must never fake: likenesses, transcript, survey data, production claims, and platform posting.",
+        caption: "Never fake",
+        visual: "Left counter stacks red chips for prohibited copy or unsafe automation targets.",
+        evidence_source: "launchclip safety and copyright boundary",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["never fake", "transcript", "platform posting"],
+        motion: "counter increment, chip stack, divider pulse",
+        transition: "split punch"
+      },
+      {
+        beat: "split-counter-right",
+        voiceover: "The other side counts what we can generate: original narration, synthetic fixtures, chart layouts, sound cues, and QA artifacts.",
+        caption: "Safe to generate",
+        visual: "Right counter stacks green chips for original benchmark material and review artifacts.",
+        evidence_source: "original launchclip benchmark spec",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["original narration", "sound cues", "QA artifacts"],
+        motion: "counter increment, safe chip stack, split settle",
+        transition: "counter settle"
+      },
+      {
+        beat: "workflow-demo",
+        voiceover: "The workflow line starts with the demo. A command runs, output is captured, and secret-looking text is redacted before planning.",
+        caption: "Demo to receipt",
+        visual: "Pipeline diagram connects demo command, terminal output, redaction badge, and command receipt.",
+        evidence_source: "demo/terminal.txt and demo/command-receipt.json",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["command runs", "redacted"],
+        motion: "node enter, connector draw, receipt pop",
+        transition: "connector follow"
+      },
+      {
+        beat: "workflow-storyboard",
+        voiceover: "Next, the script maps words to visuals so captions, charts, and camera moves do not become disconnected decoration.",
+        caption: "Words map to visuals",
+        visual: "Connector diagram links script nodes to caption nodes, chart cards, and camera moves.",
+        evidence_source: "video/video.json script_visual_alignment",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["script", "visuals", "camera moves"],
+        motion: "connector follow, node pulse, playhead sweep",
+        transition: "playhead sweep"
+      },
+      {
+        beat: "workflow-hyperframes",
+        voiceover: "Then HyperFrames receives scenes, objects, lifecycles, chart intent, diagram endpoints, and a checklist instead of vague creative notes.",
+        caption: "Scenes become objects",
+        visual: "Pipeline zooms into HyperFrames scene templates, object states, chart QA, and quality checklist.",
+        evidence_source: "video/hyperframes/launchclip-data.json",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["objects", "lifecycles", "checklist"],
+        motion: "template snap, state strip sweep, QA card flash",
+        transition: "template snap"
+      },
+      {
+        beat: "sfx-pass",
+        voiceover: "Sound becomes a lane too: whooshes for layout moves, ticks for typing, paper hits for cards, and quiet space for voice.",
+        caption: "Sound has a lane",
+        visual: "Audio lanes show whoosh, tick, paper hit, connector pop, and ducking curve under the voice track.",
+        evidence_source: "video/hyperframes/sfx-manifest.json",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["whooshes", "ticks", "voice"],
+        motion: "waveform blip, lane tick, ducking curve",
+        transition: "audio sweep"
+      },
+      {
+        beat: "asset-readiness",
+        voiceover: "Asset readiness gets its own moment. Missing logos, screenshots, voices, and sound effects become explicit review items, not surprises.",
+        caption: "Missing is visible",
+        visual: "Readiness table rows declare available, missing, and placeholder status for visual and audio assets.",
+        evidence_source: "video/hyperframes/asset-readiness.html",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["missing", "review items"],
+        motion: "row reveal, status pill pop, replacement slot draw",
+        transition: "readiness row wipe"
+      },
+      {
+        beat: "placeholder-gaps",
+        voiceover: "Placeholders are allowed only when labelled. The test should keep rendering while showing exactly what still needs replacement.",
+        caption: "Label every gap",
+        visual: "Placeholder cards flip into replacement slots with explicit labels and reviewable gap tags.",
+        evidence_source: "video/hyperframes/asset-readiness.html",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["labelled", "replacement"],
+        motion: "card flip, gap tag pulse, arrow draw",
+        transition: "placeholder flip"
+      },
+      {
+        beat: "qa-static-holds",
+        voiceover: "The quality gate is ruthless: no static hold over one point two seconds and no label too small for mobile.",
+        caption: "No dead holds",
+        visual: "Timer bars show lifecycle states and flag over-threshold static holds.",
+        evidence_source: "video/hyperframes/template-qa.html",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["1.2 seconds", "mobile"],
+        motion: "timer sweep, threshold marker, pass tick",
+        transition: "timer snap"
+      },
+      {
+        beat: "qa-source-honesty",
+        voiceover: "Source honesty matters as much as motion. Every chart mark and connector needs a declared source or fixture status.",
+        caption: "Source every mark",
+        visual: "Source chips connect to chart marks, diagram endpoints, captions, and review notes.",
+        evidence_source: "video/hyperframes/chart-diagram-qa.html",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["source honesty", "fixture status"],
+        motion: "connector draw, endpoint settle, source chip pulse",
+        transition: "source connector"
+      },
+      {
+        beat: "packet-review",
+        voiceover: "By the end, the packet is the product: transcript plan, storyboard, render handoff, captions, SFX manifest, QA pages.",
+        caption: "Packet is product",
+        visual: "Artifact grid stacks transcript plan, storyboard, render handoff, captions, SFX manifest, and QA pages.",
+        evidence_source: "generated launchclip packet artifacts",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["packet", "SFX manifest", "QA pages"],
+        motion: "file flash, grid zoom, stack thump",
+        transition: "artifact stack"
+      },
+      {
+        beat: "benchmark-cta",
+        voiceover: "If those files line up at two minutes thirty, launchclip is ready for harder reference-grade work without copying anyone.",
+        caption: "Ready without copying",
+        visual: "Final lockup shows packet stack, 2:30 counter, no-copy boundary, and review-ready checks.",
+        evidence_source: "video/REVIEW.md and review/social-readiness.json",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["two minutes thirty", "without copying"],
+        motion: "final push, check ticks, quiet hold",
+        transition: "quiet final hit"
+      }
+    ].map((segment, index) => {
+      const start = index * 7.5;
+      const end = start + 7.5;
+      return {
+        ...segment,
+        time_range: `${start}-${end}s`,
+        target_seconds: 7.5
+      };
+    });
+    return {
+      schema_version: "launchclip.script.v1",
+      style,
+      strategy: "original long-form data-story benchmark with dense charts, map grids, split counters, workflow diagrams, SFX lanes, QA pages, and no copied reference material",
+      duration_seconds: 150,
+      voice: {
+        provider: "none",
+        avatar_id: null,
+        delivery: "fast data-story narration around 150 WPM, continuous but clear, with short pauses at chart-card transitions"
+      },
+      summary_line: summary || "turns local demo evidence into a reviewable launch packet",
+      timeline,
+      alignment_rules: [
+        "Do not use the reference transcript, audio, footage, graphics, chart values, or exact sequence.",
+        "Every chart and diagram must declare synthetic fixture or launchclip artifact source status.",
+        "Each 7.5-second beat must contain object, camera, chart, counter, caption, or SFX motion throughout.",
+        "Voiceover is continuous; captions are short emphasis phrases, not transcript subtitles.",
+        "The generated packet remains dry-run and review-first."
       ]
     };
   }

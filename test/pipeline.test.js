@@ -340,6 +340,64 @@ test("plans premium product short contract with deterministic asset warnings", a
   }
 });
 
+test("plans original 150 second data-story benchmark contract", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
+  const out = path.join(temp, "packet");
+  try {
+    await initWorkspace(fixtureRepo, { out });
+    await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
+    await planVideo(out, { format: "short-150", renderer: "hyperframes", style: "data-story-benchmark" });
+    await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
+    await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
+    await submitReview(out, { provider: "product-videogen", "dry-run": true });
+
+    const video = JSON.parse(await readFile(path.join(out, "video/video.json"), "utf8"));
+    const renderPlan = JSON.parse(await readFile(path.join(out, "video/render-plan.json"), "utf8"));
+    const payload = JSON.parse(await readFile(path.join(out, "video/product-videogen.dry-run.json"), "utf8"));
+    const hyperframesData = JSON.parse(await readFile(path.join(out, "video/hyperframes/launchclip-data.json"), "utf8"));
+    const frame = await readFile(path.join(out, "video/frame.md"), "utf8");
+    const storyboardHtml = await readFile(path.join(out, "video/storyboard.html"), "utf8");
+    const readiness = await validateWorkspace(out);
+    const words = video.voiceover.full_text.split(/\s+/).filter(Boolean);
+
+    assert.equal(video.style, "data-story-benchmark");
+    assert.equal(video.duration_seconds, 150);
+    assert.equal(video.talking_head.provider, "none");
+    assert.equal(video.creative_recipe.preset, "data-story-benchmark");
+    assert.equal(video.creative_recipe.duration_seconds, 150);
+    assert.equal(video.creative_recipe.renderer_contract.primary_renderer, "hyperframes");
+    assert.match(video.creative_recipe.benchmark_reference_observations.observed_pacing, /400 words/);
+    assert.ok(words.length >= 350 && words.length <= 430, `expected benchmark voiceover word count near reference density, got ${words.length}`);
+    assert.equal(video.script_visual_alignment.length, 20);
+    assert.equal(video.creative_storyboard.scenes.length, 20);
+    assert.equal(video.sound_design.cues.length, 20);
+    assert.equal(video.object_lifecycle.length, 20);
+    assert.equal(video.script_visual_alignment[0].beat, "data-hook");
+    assert.equal(video.script_visual_alignment[19].beat, "benchmark-cta");
+    assert.match(video.creative_storyboard.non_goals.join("\n"), /Do not download or reuse the reference transcript/);
+    assert.match(video.creative_storyboard.quality_gates.join("\n"), /150 seconds/);
+    assert.match(video.creative_storyboard.scenes[3].layout, /matrix chart/);
+    assert.match(video.creative_storyboard.scenes[10].layout, /pipeline connector diagram/);
+    assert.equal(payload.duration_seconds, 150);
+    assert.equal(payload.recipe_json.video_manifest.style, "data-story-benchmark");
+    assert.equal(renderPlan.hyperframes.duration_seconds, 150);
+    assert.match(frame, /data marks/);
+    assert.match(storyboardHtml, /Original benchmark/);
+    assert.equal(hyperframesData.video.duration_seconds, 150);
+    assert.equal(hyperframesData.video.timeline.length, 20);
+    assert.ok(hyperframesData.chart_diagram_qa.summary.chart_objects >= 10);
+    assert.ok(hyperframesData.chart_diagram_qa.summary.diagram_objects >= 4);
+    assert.equal(hyperframesData.chart_diagram_qa.summary.issues, 0);
+    assert.ok(hyperframesData.quality_handoff.checks.some((check) => check.gate === "Chart and diagram QA" && check.status === "pass"));
+    for (const object of video.object_lifecycle) {
+      assert.ok(maxLifecycleGap(object.states) <= 1.2, `${object.id} has a static hold over 1.2s`);
+    }
+    assert.equal(readiness.status, "ready");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("plans and renders punchy social-ready UGC preview", async (t) => {
   if (!(await hasCommand("ffmpeg"))) {
     t.skip("ffmpeg is not installed");
