@@ -1,10 +1,10 @@
-import { initWorkspace, runDemo, planVideo, writeCaptions, renderVideo, submitReview, writeReview, runPacket, validateWorkspace } from "./pipeline.js";
+import { analyzeRender, initWorkspace, runDemo, planVideo, writeCaptions, renderVideo, submitReview, writeReview, runPacket, validateWorkspace } from "./pipeline.js";
 import { writeTeleprompter, alignRecording, renderMotion } from "./talking_head.js";
 import { generateMusic } from "./music.js";
 import { runDirect } from "./director.js";
 import { preprocessPresenter } from "./presenter_preprocess.js";
 
-const COMMANDS = new Set(["init", "demo", "plan", "captions", "render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout } = io;
@@ -29,6 +29,8 @@ export async function runCli(argv, io = {}) {
     result = await writeCaptions(required(firstArg, "workspace path"), flags);
   } else if (command === "render") {
     result = await renderVideo(required(firstArg, "workspace path"), flags);
+  } else if (command === "analyze-render") {
+    result = await analyzeRender(required(firstArg, "workspace path"), flags);
   } else if (command === "submit-review") {
     result = await submitReview(required(firstArg, "workspace path"), flags);
   } else if (command === "review") {
@@ -86,12 +88,13 @@ function help() {
 Usage:
   launchclip init <repo> --out <workspace>
   launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]
-  launchclip plan <workspace> --format short-15 --renderer none|hyperframes [--style proof-card|ugc-split|ugc-demo-punchy|premium-product-short] [--assets-dir path/to/assets] [--talking-head heygen --avatar-id avatar_123]
+  launchclip plan <workspace> --format short-15 --renderer none|hyperframes [--style proof-card|ugc-split|ugc-demo-punchy|premium-product-short|data-story-benchmark] [--assets-dir path/to/assets] [--talking-head heygen --avatar-id avatar_123]
   launchclip captions <workspace> --platforms x,linkedin,tiktok,bluesky
   launchclip render <workspace> --provider product-videogen --dry-run
-  launchclip render <workspace> --provider hyperframes [--quality high] [--voiceover local-say]
-  launchclip render <workspace> --provider remotion [--assets-dir path/to/assets] [--voiceover local-say]
-  launchclip render <workspace> --provider local-ffmpeg [--voiceover local-say]
+  launchclip render <workspace> --provider hyperframes [--quality high] [--voiceover local-say|elevenlabs] [--music elevenlabs]
+  launchclip render <workspace> --provider remotion [--assets-dir path/to/assets] [--voiceover local-say|elevenlabs]
+  launchclip render <workspace> --provider local-ffmpeg [--voiceover local-say|elevenlabs]
+  launchclip analyze-render <workspace> [--video video/launchclip-hyperframes.mp4]
   launchclip submit-review <workspace> --provider product-videogen --dry-run
   launchclip review <workspace>
   launchclip validate <workspace>
@@ -102,7 +105,7 @@ Talking-head motion workflow:
   launchclip align <workspace> --media take.mp4        # whisper word timings + heuristic motion timeline
   launchclip align <workspace> --media take.mp4 --words words.json
   launchclip motion-render <workspace>                 # render video/motion.mp4 via the motion engine
-  launchclip music <workspace> [--prompt "..."] [--duration 18] [--output music/bed.mp3] [--force]
+  launchclip music <workspace> [--prompt "..."] [--duration 18] [--output music/bed.mp3] [--music-model music_v1] [--force]
   launchclip preprocess-presenter public/base/presenter.mp4 [--out public/base/presenter-prepped.mp4] [--speed 1.08] [--crop-x center]
   launchclip direct <workspace> --voice record --prompt "creative direction"       # writes script + teleprompter, waits for take
   launchclip direct <workspace> --voice record --take take.mp4 [--words w.json]    # aligns take, directs, renders

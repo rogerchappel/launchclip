@@ -3,11 +3,13 @@ import { access, copyFile, mkdir, readFile, rename, rm, writeFile } from "node:f
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { requestElevenLabsMusic, resolveElevenLabsMusicModel, resolveMusicPrompt } from "./music.js";
 import { prepareSfxPack } from "./sfx.js";
 
 const execFileAsync = promisify(execFile);
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PREMIUM_PRODUCT_STYLE = "premium-product-short";
+const DATA_STORY_BENCHMARK_STYLE = "data-story-benchmark";
 const ASSET_MANIFEST_SCHEMA = "launchclip.assets.v1";
 const ASSET_MANIFEST_FILE = "launchclip-assets.json";
 const ART_DIRECTION_SCHEMA = "launchclip.art-direction.v1";
@@ -16,12 +18,12 @@ const HYPERFRAMES_REQUIRED_TEMPLATE_FAMILIES = ["brand_token", "terminal_ui", "d
 const HYPERFRAMES_STATIC_HOLD_THRESHOLD_SECONDS = 1.2;
 const HYPERFRAMES_DEFAULT_SFX_BY_FAMILY = {
   "connector-pop": "pop.wav",
-  "paper-hit": "paper_hit.wav",
-  "soft-thump": "soft_thump.wav",
-  "success-ding": "success_ding.wav",
+  "paper-hit": "pop.wav",
+  "soft-thump": "cinematic_boom.wav",
+  "success-ding": "retro_success.wav",
   "typing-tick": "single_type.wav",
   "ui-hit": "tick.wav",
-  "warning-tap": "camera_tick.wav",
+  "warning-tap": "bell.wav",
   whoosh: "fast_whoosh.wav"
 };
 const HYPERFRAMES_MAX_POST_RENDER_SFX_CUES = 64;
@@ -291,7 +293,7 @@ async function renderRemotion(out, flags = {}) {
   }
   const video = await readJson(path.join(out, "video", "video.json"));
   const fps = Number(flags.fps ?? 30);
-  const defaultDuration = isPremiumStyle(video.style) ? video.duration_seconds ?? 48 : Math.min(video.duration_seconds ?? 30, 30);
+  const defaultDuration = defaultRendererDuration(video, "remotion");
   const duration = Number(flags.duration ?? defaultDuration);
   const width = Number(flags.width ?? 720);
   const height = Number(flags.height ?? 1280);
@@ -373,7 +375,7 @@ async function renderHyperframes(out, flags = {}) {
   if (flags.fps) renderArgs.push("--fps", String(flags.fps));
   if (flags.format) renderArgs.push("--format", String(flags.format));
   await execFileAsync("npx", renderArgs, { cwd: projectDir, maxBuffer: 1024 * 1024 * 16 });
-  const audio = await applyPostRenderAudio(out, output, flags, { defaultVoiceover: true, defaultMusic: true, defaultSfx: true });
+  const audio = await applyPostRenderAudio(out, output, flags, { defaultVoiceover: true, defaultMusic: false, defaultSfx: true });
   await execFileAsync("ffmpeg", [
     "-y",
     "-ss",
@@ -396,7 +398,7 @@ async function renderHyperframes(out, flags = {}) {
       music_audio: audio.musicAudio,
       sfx_audio_cues: audio.sfxCueCount,
       sfx_audio_assets: audio.sfxAssetCount,
-      audio_mix: audio.applied ? "local-generated" : "none"
+      audio_mix: audio.applied ? audio.audioMix : "none"
     };
   });
   return { stage: "render", mode: "local", provider: "hyperframes", video: output, thumbnail, projectDir, voiceoverAudio: audio.voiceoverAudio, musicAudio: audio.musicAudio, sfxCueCount: audio.sfxCueCount, sfxAssetCount: audio.sfxAssetCount };
@@ -411,11 +413,7 @@ async function renderLocalFfmpeg(out, flags = {}) {
   const terminal = await optionalText(path.join(out, "demo", "terminal.txt"));
   const receipt = await optionalJson(path.join(out, "demo", "command-receipt.json"));
   const captions = await readCaptions(out);
-  const defaultDuration = isPremiumStyle(video.style)
-    ? Math.min(video.duration_seconds ?? 48, 48)
-    : isSocialReadyStyle(video.style)
-    ? Math.min(video.duration_seconds ?? 30, 30)
-    : Math.min(video.duration_seconds ?? 15, 15);
+  const defaultDuration = defaultRendererDuration(video, "local-ffmpeg");
   const duration = Number(flags.duration ?? defaultDuration);
   const width = Number(flags.width ?? 720);
   const height = Number(flags.height ?? 1280);
@@ -499,13 +497,14 @@ async function applyVoiceoverIfRequested(out, videoPath, flags = {}) {
 async function applyPostRenderAudio(out, videoPath, flags = {}, options = {}) {
   const videoDuration = await mediaDurationSeconds(videoPath);
   const voiceoverMode = await resolveVoiceoverMode(flags, options);
-  const useMusic = shouldGenerateMusicBed(flags, options);
+  const musicMode = resolveMusicBedMode(flags, options);
   const voiceoverAudio = voiceoverMode ? await generateVoiceoverAudio(out, flags, voiceoverMode, videoDuration) : null;
-  const musicAudio = useMusic ? await generateMusicBedAudio(out, videoDuration) : null;
+  const musicAudio = musicMode ? await generateMusicBedAudio(out, flags, musicMode, videoDuration) : null;
   const sfxInputs = options.defaultSfx ? await collectPostRenderSfxInputs(out, videoDuration) : [];
   const sfxAssetCount = new Set(sfxInputs.map((input) => input.assetId)).size;
+  const audioMix = postRenderAudioMixLabel({ voiceoverMode, musicMode, sfxInputs });
   if (!voiceoverAudio && !musicAudio && !sfxInputs.length) {
-    return { applied: false, voiceoverAudio: null, musicAudio: null, sfxCueCount: 0, sfxAssetCount: 0 };
+    return { applied: false, voiceoverAudio: null, musicAudio: null, voiceoverMode, musicMode, audioMix: "none", sfxCueCount: 0, sfxAssetCount: 0 };
   }
 
   const mixedPath = path.join(out, "video", "launchclip.audio.mp4");
@@ -514,14 +513,14 @@ async function applyPostRenderAudio(out, videoPath, flags = {}, options = {}) {
   const mixInputs = [];
   let inputIndex = 1;
   if (voiceoverAudio) {
-    args.push("-i", path.join(out, voiceoverAudio));
+    args.push("-i", workspaceMediaPath(out, voiceoverAudio));
     filters.push(`[${inputIndex}:a]volume=1.0,apad[voice]`);
     mixInputs.push("[voice]");
     inputIndex += 1;
   }
   if (musicAudio) {
-    args.push("-i", path.join(out, musicAudio));
-    filters.push(`[${inputIndex}:a]volume=${voiceoverAudio ? "0.42" : "0.68"},apad[music]`);
+    args.push("-i", workspaceMediaPath(out, musicAudio));
+    filters.push(`[${inputIndex}:a]volume=${voiceoverAudio ? "0.18" : "0.5"},apad[music]`);
     mixInputs.push("[music]");
     inputIndex += 1;
   }
@@ -554,34 +553,50 @@ async function applyPostRenderAudio(out, videoPath, flags = {}, options = {}) {
     mixedPath
   ], { maxBuffer: 1024 * 1024 * 8 });
   await rename(mixedPath, videoPath);
-  return { applied: true, voiceoverAudio, musicAudio, sfxCueCount: sfxInputs.length, sfxAssetCount };
+  return { applied: true, voiceoverAudio, musicAudio, voiceoverMode, musicMode, audioMix, sfxCueCount: sfxInputs.length, sfxAssetCount };
 }
 
 async function resolveVoiceoverMode(flags = {}, options = {}) {
   const mode = flags.voiceover ?? flags["voice-over"];
+  if (mode === "auto") return process.env.ELEVENLABS_API_KEY ? "elevenlabs" : (await commandExists("say")) ? "local-say" : null;
   if (!mode && options.defaultVoiceover) return (await commandExists("say")) ? "local-say" : null;
   if (!mode || mode === "none" || mode === "off") return null;
+  if (mode === "elevenlabs" || mode === "eleven-labs" || mode === "tts") return "elevenlabs";
   if (mode !== "local-say" && mode !== "say") {
-    throw new Error(`Unsupported voiceover provider: ${mode}. Supported: local-say`);
+    throw new Error(`Unsupported voiceover provider: ${mode}. Supported: local-say, elevenlabs`);
   }
-  return mode;
+  return "local-say";
 }
 
-function shouldGenerateMusicBed(flags = {}, options = {}) {
+function resolveMusicBedMode(flags = {}, options = {}) {
   const mode = flags.music;
   if (flags["no-music"] || mode === "none" || mode === "off") return false;
-  return Boolean(options.defaultMusic || mode === "auto" || mode === "generated" || mode === "local");
+  if (mode === "elevenlabs" || mode === "eleven-labs") return "elevenlabs";
+  if (mode === "auto") return process.env.ELEVENLABS_API_KEY ? "elevenlabs" : "local";
+  if (mode === "generated" || mode === "local") return "local";
+  if (options.defaultMusic) return "local";
+  if (mode) {
+    throw new Error(`Unsupported music provider: ${mode}. Supported: elevenlabs, auto, local, none`);
+  }
+  return null;
 }
 
 async function generateVoiceoverAudio(out, flags, mode, videoDuration) {
   const voiceover = await readJson(path.join(out, "video", "voiceover.json"));
+  const targetAudioDuration = Math.max(1, videoDuration - 0.85);
+  if (mode === "elevenlabs") {
+    return generateElevenLabsVoiceoverAudio(out, flags, voiceover, targetAudioDuration);
+  }
   const audioPath = path.join(out, "video", "voiceover.aiff");
   const rawAudioPath = path.join(out, "video", "voiceover.raw.aiff");
-  const targetAudioDuration = Math.max(1, videoDuration - 0.85);
   const voiceArgs = flags.voice ? ["-v", flags.voice] : [];
+  const requestedRate = flags["voice-rate"] ?? flags.wpm;
+  const estimatedRate = Math.round(Math.max(115, Math.min(175, wordCount(voiceover.full_text) / (targetAudioDuration / 60))));
+  const rateArgs = ["-r", String(requestedRate ? Number(requestedRate) : estimatedRate)];
   try {
     await execFileAsync("say", [
       ...voiceArgs,
+      ...rateArgs,
       "-o",
       rawAudioPath,
       voiceover.full_text
@@ -594,10 +609,72 @@ async function generateVoiceoverAudio(out, flags, mode, videoDuration) {
   return "video/voiceover.aiff";
 }
 
-async function generateMusicBedAudio(out, duration) {
+async function generateElevenLabsVoiceoverAudio(out, flags, voiceover, targetDuration) {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) {
+    throw new Error("ELEVENLABS_API_KEY is not set. Export it (or source your .env) before rendering --voiceover elevenlabs.");
+  }
+  const voiceId = String(flags["voice-id"] ?? flags.voice ?? process.env.ELEVENLABS_VOICE_ID ?? "21m00Tcm4TlvDq8ikWAM");
+  const modelId = String(flags["voice-model"] ?? flags["tts-model"] ?? process.env.ELEVENLABS_VOICE_MODEL ?? "eleven_multilingual_v2");
+  const outputFormat = String(flags["voice-output-format"] ?? "mp3_44100_128");
+  const rawAudioPath = path.join(out, "video", "voiceover.raw.mp3");
+  const audioPath = path.join(out, "video", "voiceover.mp3");
+  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=${encodeURIComponent(outputFormat)}`, {
+    method: "POST",
+    headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      text: voiceover.full_text,
+      model_id: modelId
+    })
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`ElevenLabs TTS failed (${response.status}): ${detail.slice(0, 300)}`);
+  }
+  await writeFile(rawAudioPath, Buffer.from(await response.arrayBuffer()));
+  await fitVoiceoverAudio(rawAudioPath, audioPath, targetDuration);
+  await rm(rawAudioPath, { force: true });
+  return "video/voiceover.mp3";
+}
+
+async function generateMusicBedAudio(out, flags, mode, duration) {
+  if (mode === "elevenlabs") {
+    return generateElevenLabsMusicBedAudio(out, flags, duration);
+  }
   const musicPath = path.join(out, "video", "music-bed.wav");
   await writeFile(musicPath, makeGeneratedMusicBedWav(duration));
   return "video/music-bed.wav";
+}
+
+async function generateElevenLabsMusicBedAudio(out, flags, duration) {
+  const script = await optionalJson(path.join(out, "video", "video.json"));
+  const prompt = resolveMusicPrompt({ override: flags["music-prompt"], script });
+  const modelId = resolveElevenLabsMusicModel(flags);
+  const outputFormat = String(flags["music-output-format"] ?? "mp3_44100_128");
+  const audio = await requestElevenLabsMusic({ prompt, durationSeconds: duration, modelId, outputFormat });
+  const musicPath = path.join(out, "video", "elevenlabs-music.mp3");
+  await writeFile(musicPath, audio);
+  await writeJson(path.join(out, "video", "elevenlabs-music.json"), {
+    provider: "elevenlabs",
+    model_id: modelId,
+    output_format: outputFormat,
+    prompt,
+    duration_seconds: round(duration),
+    bytes: audio.length
+  });
+  return "video/elevenlabs-music.mp3";
+}
+
+function workspaceMediaPath(out, mediaPath) {
+  return path.isAbsolute(mediaPath) ? mediaPath : path.join(out, mediaPath);
+}
+
+function postRenderAudioMixLabel({ voiceoverMode, musicMode, sfxInputs }) {
+  return [
+    voiceoverMode ? `voiceover:${voiceoverMode}` : null,
+    musicMode ? `music:${musicMode}` : null,
+    sfxInputs.length ? "sfx:local" : null
+  ].filter(Boolean).join("+") || "none";
 }
 
 function makeGeneratedMusicBedWav(duration) {
@@ -709,7 +786,7 @@ async function commandExists(command) {
 
 async function fitVoiceoverAudio(inputPath, outputPath, targetDuration) {
   const duration = await mediaDurationSeconds(inputPath);
-  if (duration <= targetDuration) {
+  if (Math.abs(duration - targetDuration) <= 0.25) {
     await rename(inputPath, outputPath);
     return;
   }
@@ -843,6 +920,71 @@ ${receipt?.product_videogen_api_gap ?? "Run submit-review --provider product-vid
   return { stage: "review", review: reviewPath };
 }
 
+export async function analyzeRender(workspacePath, flags = {}) {
+  const out = path.resolve(workspacePath);
+  const manifest = await readJson(path.join(out, "launchclip.json"));
+  const video = await readJson(path.join(out, "video", "video.json"));
+  const renderMedia = flags.video ?? manifest.stages.render?.media ?? "video/launchclip-hyperframes.mp4";
+  const renderPath = path.isAbsolute(renderMedia) ? renderMedia : path.join(out, renderMedia);
+  const hasRenderedVideo = await fileExists(renderPath);
+  const media = hasRenderedVideo ? await mediaProbe(renderPath) : null;
+  const duration = media?.duration_seconds ?? Number(video.duration_seconds ?? 0);
+  const voiceoverPath = manifest.stages.render?.voiceover_audio
+    ? path.join(out, manifest.stages.render.voiceover_audio)
+    : path.join(out, "video", "voiceover.aiff");
+  const voiceoverDuration = await fileExists(voiceoverPath) ? await mediaDurationSeconds(voiceoverPath) : duration;
+  const sfxManifest = await optionalJson(path.join(out, HYPERFRAMES_PROJECT_DIR.replace(/\//g, path.sep), "sfx-manifest.json"));
+  const sfxCues = [...(sfxManifest?.cues ?? []), ...(sfxManifest?.storyboard_cues ?? [])]
+    .map((cue) => ({ ...cue, at: Number(cue.at ?? 0) }))
+    .filter((cue) => Number.isFinite(cue.at))
+    .sort((a, b) => a.at - b.at);
+  const alignment = analyzeVoiceoverAlignment(video, voiceoverDuration || duration);
+  const transitionCoverage = analyzeTransitionCoverage(video, sfxCues);
+  const sfxAssets = analyzeSfxAssets(sfxManifest);
+  const music = analyzeMusicBed(manifest);
+  const issues = [
+    ...(!hasRenderedVideo ? [`Rendered media is missing: ${renderMedia}`] : []),
+    ...(music.generated_local ? ["HyperFrames render used the generated local music bed; use --no-music or a deliberate external bed."] : []),
+    ...(alignment.max_abs_drift_seconds > 2.5 ? [`Voiceover segment timing drifts by up to ${alignment.max_abs_drift_seconds}s from visual sections.`] : []),
+    ...(transitionCoverage.coverage_ratio < 0.8 ? [`Only ${Math.round(transitionCoverage.coverage_ratio * 100)}% of section transitions have an SFX cue within 0.5s.`] : []),
+    ...(sfxAssets.generated_default_assets > 0 ? [`${sfxAssets.generated_default_assets} SFX assets came from generated placeholders instead of real files.`] : [])
+  ];
+  const warnings = [
+    ...(alignment.max_abs_drift_seconds > 1.25 && alignment.max_abs_drift_seconds <= 2.5 ? [`Voiceover alignment is loose: max drift ${alignment.max_abs_drift_seconds}s.`] : []),
+    ...(transitionCoverage.coverage_ratio >= 0.8 && transitionCoverage.average_nearest_transition_cue_seconds > 0.25 ? [`Transition SFX exists, but average cue offset is ${transitionCoverage.average_nearest_transition_cue_seconds}s.`] : []),
+    ...(music.present && !music.generated_local ? [`Music bed is present: ${music.path}. Confirm it was intentionally chosen.`] : [])
+  ];
+  const score = Math.max(0, Math.round(
+    100
+      - (music.generated_local ? 20 : 0)
+      - Math.min(25, sfxAssets.generated_default_assets * 5)
+      - Math.min(25, Math.max(0, alignment.max_abs_drift_seconds - 0.75) * 8)
+      - Math.min(20, Math.max(0, 0.9 - transitionCoverage.coverage_ratio) * 50)
+      - (!hasRenderedVideo ? 15 : 0)
+  ));
+  const result = {
+    stage: "analyze-render",
+    status: issues.length ? "needs-work" : warnings.length ? "review" : "ready",
+    score,
+    checked_at: new Date().toISOString(),
+    workspace: out,
+    media: media ?? { path: renderMedia, missing: true, duration_seconds: duration },
+    voiceover: alignment,
+    transitions: transitionCoverage,
+    sfx_assets: sfxAssets,
+    music,
+    issues,
+    warnings,
+    output: "review/render-analysis.json"
+  };
+  await mkdir(path.join(out, "review"), { recursive: true });
+  await writeJson(path.join(out, "review", "render-analysis.json"), result);
+  await updateManifest(out, (next) => {
+    next.stages.analyze_render = { status: result.status, score, report: "review/render-analysis.json" };
+  });
+  return result;
+}
+
 export async function runPacket(repoPath, flags = {}) {
   const repo = path.resolve(repoPath);
   const out = path.resolve(flags.out ?? defaultWorkspace(repo));
@@ -865,6 +1007,163 @@ export async function runPacket(repoPath, flags = {}) {
   await writeReview(out);
   const readiness = await validateWorkspace(out, { write: true });
   return { stage: "run", workspace: out, status: readiness.status, issues: readiness.issues, warnings: readiness.warnings };
+}
+
+async function mediaProbe(filePath) {
+  const { stdout } = await execFileAsync("ffprobe", [
+    "-v",
+    "error",
+    "-show_entries",
+    "format=duration:stream=index,codec_type,width,height,r_frame_rate,avg_frame_rate,duration",
+    "-of",
+    "json",
+    filePath
+  ], { maxBuffer: 1024 * 256 });
+  const data = JSON.parse(stdout);
+  const duration = Number(data.format?.duration ?? 0);
+  const videoStream = (data.streams ?? []).find((stream) => stream.codec_type === "video") ?? {};
+  const audioStream = (data.streams ?? []).find((stream) => stream.codec_type === "audio") ?? {};
+  return {
+    path: filePath,
+    duration_seconds: round(duration),
+    width: videoStream.width ?? null,
+    height: videoStream.height ?? null,
+    fps: videoStream.avg_frame_rate ?? videoStream.r_frame_rate ?? null,
+    has_audio: Boolean(audioStream.codec_type),
+    audio_duration_seconds: audioStream.duration ? round(Number(audioStream.duration)) : null
+  };
+}
+
+function analyzeVoiceoverAlignment(video, voiceoverDuration) {
+  const segments = Array.isArray(video.script_visual_alignment) ? video.script_visual_alignment : [];
+  const totalWords = Math.max(1, segments.reduce((sum, segment) => sum + wordCount(segment.voiceover), 0));
+  let cursor = 0;
+  const rows = segments.map((segment) => {
+    const range = parseTimeRange(segment.time_range);
+    const words = wordCount(segment.voiceover);
+    const estimatedStart = cursor / totalWords * voiceoverDuration;
+    cursor += words;
+    const estimatedEnd = cursor / totalWords * voiceoverDuration;
+    const startDrift = round(estimatedStart - range.start);
+    const endDrift = round(estimatedEnd - range.end);
+    const maxDrift = round(Math.max(Math.abs(startDrift), Math.abs(endDrift)));
+    return {
+      beat: segment.beat,
+      time_range: segment.time_range,
+      planned_start: round(range.start),
+      planned_end: round(range.end),
+      words,
+      estimated_voice_start: round(estimatedStart),
+      estimated_voice_end: round(estimatedEnd),
+      start_drift_seconds: startDrift,
+      end_drift_seconds: endDrift,
+      status: maxDrift <= 1.25 ? "aligned" : maxDrift <= 2.5 ? "loose" : "off"
+    };
+  });
+  const maxDrift = rows.reduce((max, row) => Math.max(max, Math.abs(row.start_drift_seconds), Math.abs(row.end_drift_seconds)), 0);
+  return {
+    method: "word-count proportional estimate; replace with word timestamps for frame-accurate QA",
+    voiceover_duration_seconds: round(voiceoverDuration),
+    segment_count: rows.length,
+    total_words: totalWords,
+    max_abs_drift_seconds: round(maxDrift),
+    segments: rows
+  };
+}
+
+function analyzeTransitionCoverage(video, sfxCues) {
+  const segments = Array.isArray(video.script_visual_alignment) ? video.script_visual_alignment : [];
+  const rows = segments.map((segment, index) => {
+    const range = parseTimeRange(segment.time_range);
+    const nearest = sfxCues.reduce((best, cue) => {
+      const distance = Math.abs(Number(cue.at ?? 0) - range.start);
+      return !best || distance < best.distance ? { cue_id: cue.id, asset_id: cue.asset_id, at: round(cue.at), distance } : best;
+    }, null);
+    const cueCount = sfxCues.filter((cue) => Number(cue.at ?? -1) >= range.start && Number(cue.at ?? -1) < range.end).length;
+    const offset = nearest ? round(nearest.distance) : null;
+    return {
+      beat: segment.beat,
+      transition_at: round(range.start),
+      cue_count_in_section: cueCount,
+      nearest_cue_id: nearest?.cue_id ?? null,
+      nearest_asset_id: nearest?.asset_id ?? null,
+      nearest_cue_offset_seconds: offset,
+      status: index === 0 || (offset !== null && offset <= 0.5) ? "covered" : "late-or-missing"
+    };
+  });
+  const covered = rows.filter((row) => row.status === "covered").length;
+  const offsets = rows.map((row) => row.nearest_cue_offset_seconds).filter((value) => Number.isFinite(value));
+  return {
+    section_count: rows.length,
+    sfx_cue_count: sfxCues.length,
+    covered_transitions: covered,
+    coverage_ratio: rows.length ? round(covered / rows.length) : 0,
+    average_nearest_transition_cue_seconds: offsets.length ? round(offsets.reduce((sum, value) => sum + value, 0) / offsets.length) : null,
+    sections: rows
+  };
+}
+
+function analyzeSfxAssets(sfxManifest) {
+  const assets = sfxManifest?.assets ?? [];
+  const copied = sfxManifest?.copied_assets ?? [];
+  const generated = copied.filter((asset) => asset.alias === "generated-default-sfx").length
+    + assets.filter((asset) => asset.source_alias === "generated-default-sfx").length;
+  return {
+    asset_count: assets.length,
+    copied_asset_count: copied.length,
+    real_default_assets: copied.filter((asset) => asset.alias === "default-sfx-pack").length,
+    provided_alias_assets: copied.filter((asset) => asset.alias && asset.alias !== "default-sfx-pack" && asset.alias !== "generated-default-sfx").length,
+    generated_default_assets: generated,
+    missing_assets: sfxManifest?.missing_assets ?? [],
+    asset_ids: assets.map((asset) => asset.id).sort()
+  };
+}
+
+function analyzeMusicBed(manifest) {
+  const pathValue = manifest.stages.render?.music_audio ?? null;
+  const mixValue = String(manifest.stages.render?.audio_mix ?? "");
+  const generatedLocal = /(^|\/)music-bed\.wav$/i.test(String(pathValue ?? ""));
+  const provider = generatedLocal
+    ? "local-generated"
+    : /(^|\/)elevenlabs-music\.mp3$/i.test(String(pathValue ?? "")) || mixValue.includes("music:elevenlabs")
+      ? "elevenlabs"
+      : pathValue
+        ? "provided"
+        : null;
+  return {
+    present: Boolean(pathValue),
+    path: pathValue,
+    provider,
+    generated_local: generatedLocal,
+    note: provider === "elevenlabs"
+      ? "ElevenLabs music bed generated for this render."
+      : pathValue
+        ? "Music must be intentional and ducked under narration."
+        : "No default music bed; voice and SFX carry timing."
+  };
+}
+
+function applyVoiceWeightedTiming(timeline, totalDuration, fallbackStructure = []) {
+  const weights = timeline.map((segment, index) => Math.max(1, wordCount(segment.voiceover) || Number(fallbackStructure[index]?.seconds ?? 1)));
+  const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
+  let cursor = 0;
+  return timeline.map((segment, index) => {
+    const start = cursor;
+    const end = index === timeline.length - 1
+      ? totalDuration
+      : Math.min(totalDuration, start + (weights[index] / totalWeight * totalDuration));
+    cursor = end;
+    const targetSeconds = round(end - start);
+    return {
+      ...segment,
+      time_range: `${round(start)}-${round(end)}s`,
+      target_seconds: targetSeconds
+    };
+  });
+}
+
+function wordCount(value) {
+  return String(value ?? "").trim().split(/\s+/).filter(Boolean).length;
 }
 
 export async function validateWorkspace(workspacePath, flags = {}) {
@@ -1115,7 +1414,7 @@ function assetWarnings(video) {
 
 function talkingHeadAdapter(flags = {}, style = "proof-card") {
   const requested = flags["talking-head"] ?? flags.talkingHead;
-  const provider = requested ?? (isSocialReadyStyle(style) ? "heygen" : "none");
+  const provider = requested ?? (isSocialReadyStyle(style) && !isDataStoryBenchmarkStyle(style) ? "heygen" : "none");
   if (provider === "none" || provider === "off" || provider === false) {
     return { enabled: false, provider: "none" };
   }
@@ -1422,7 +1721,7 @@ function smoothHyperframesObjectStates(states, scene, objectIndex) {
       previousEnd = at + microState.duration;
       gap = Number(next.at) - previousEnd;
       microIndex += 1;
-      if (microIndex > 5) break;
+      if (microIndex > 24) break;
     }
   }
   return smoothed.sort((a, b) => Number(a.at ?? 0) - Number(b.at ?? 0));
@@ -2677,11 +2976,379 @@ function renderPaperObject(object, scene) {
           </div>`;
 }
 
+function dataStoryEditorialSectionMeta(segment, index) {
+  const presets = {
+    "public-record-hook": {
+      kicker: "THE BENCHMARK",
+      headline: "LAUNCHCLIP JUST GRADED ITS OWN OUTPUT",
+      subhead: "47,582 synthetic viewer seconds stress-tested",
+      module: "hook",
+      accent: "orange",
+      statChips: [
+        ["47,582", "synthetic seconds"],
+        ["150s", "target hold"],
+        ["8", "editorial sections"]
+      ]
+    },
+    "hopes-chart": {
+      kicker: "THE HOPES",
+      headline: "What a launch clip has to deliver",
+      module: "bars",
+      accent: "orange",
+      bars: [
+        ["proof moves", 48, "orange"],
+        ["charts clarify", 36, "blue"],
+        ["captions land", 29, "orange"],
+        ["review is safe", 22, "blue"],
+        ["sound supports", 18, "orange"]
+      ],
+      statChips: [
+        ["48%", "want proof motion"],
+        ["36%", "need clear charts"]
+      ]
+    },
+    "fears-chart": {
+      kicker: "THE FEARS",
+      headline: "And the weak spots hit harder",
+      module: "bars",
+      accent: "purple",
+      bars: [
+        ["dead holds", 64, "blue"],
+        ["white cards", 56, "orange"],
+        ["weak hooks", 51, "blue"],
+        ["tiny labels", 45, "orange"],
+        ["flat audio", 39, "blue"]
+      ],
+      statChips: [
+        ["64%", "fear dead holds"],
+        ["56%", "notice white cards"]
+      ]
+    },
+    "state-grid": {
+      kicker: "EVERY SCENARIO",
+      headline: "Dead air: the number-one fear everywhere",
+      module: "grid",
+      accent: "orange",
+      statChips: [
+        ["71%", "flow risk"],
+        ["57%", "scene fatigue"],
+        ["50", "synthetic tiles"]
+      ]
+    },
+    "twist-chart": {
+      kicker: "THE TWIST",
+      headline: "The prettier the card, the more viewers punish stillness",
+      module: "bars",
+      accent: "blue",
+      bars: [
+        ["visual polish", 82, "blue"],
+        ["motion clarity", 74, "blue"],
+        ["source labels", 70, "blue"],
+        ["sound timing", 64, "blue"],
+        ["plain card", 31, "blue"]
+      ],
+      statChips: [
+        ["68%", "prefer motion"],
+        ["70/54", "source + timing wins"]
+      ]
+    },
+    "ask-map": {
+      kicker: "THE ASK",
+      headline: "Can the renderer step in before retention drops?",
+      module: "blue-grid",
+      accent: "green",
+      statChips: [
+        ["71%", "want motion guardrails"],
+        ["47%", "want visual QA"],
+        ["1.2s", "max stillness"]
+      ]
+    },
+    "trust-answer": {
+      kicker: "THE ANSWER",
+      headline: "Who should decide if a launch clip is ready?",
+      module: "compare",
+      accent: "orange",
+      statChips: [
+        ["20%", "trust automation alone"],
+        ["44%", "want analyst review"]
+      ]
+    },
+    "verdict-cta": {
+      kicker: "THE VERDICT",
+      headline: "15%",
+      subhead: "trust a generated clip with no visual QA",
+      module: "verdict",
+      accent: "orange",
+      statChips: [
+        ["review first", "then render"],
+        ["no copy", "original script"],
+        ["ship only", "when metrics pass"]
+      ]
+    }
+  };
+  const preset = presets[segment.beat] ?? presets["hopes-chart"];
+  const range = parseTimeRange(segment.time_range);
+  const start = Number.isFinite(range.start) ? range.start : index * 10;
+  const end = Number.isFinite(range.end) ? range.end : start + Number(segment.target_seconds ?? 10);
+  return {
+    ...preset,
+    id: segment.beat ?? `section-${index + 1}`,
+    order: index + 1,
+    start,
+    duration: Math.max(0.8, end - start),
+    timeRange: segment.time_range ?? `${start}-${end}s`,
+    voiceover: segment.voiceover ?? "",
+    caption: segment.caption ?? preset.headline,
+    emphasis: Array.isArray(segment.caption_emphasis) ? segment.caption_emphasis : [],
+    evidence: segment.evidence_source ?? "synthetic benchmark fixture"
+  };
+}
+
+function renderEditorialBars(section) {
+  const bars = section.bars ?? [
+    ["proof", 48, "orange"],
+    ["motion", 36, "blue"],
+    ["review", 22, "orange"]
+  ];
+  return `<div class="chart-card bars-card">
+      <h2>${escapeHtml(section.headline)}</h2>
+      <div class="bar-list">
+        ${bars.map(([label, value, color]) => `<div class="bar-row ${escapeHtml(color)}">
+          <span>${escapeHtml(label)}</span>
+          <div class="bar-track"><i style="--w:${Number(value)}%"></i></div>
+          <b>${Number(value)}%</b>
+        </div>`).join("")}
+      </div>
+      <small>synthetic launchclip benchmark fixture</small>
+    </div>`;
+}
+
+function renderEditorialGrid(section, blue = false) {
+  const cells = Array.from({ length: 50 }, (_, index) => {
+    const hot = [2, 6, 9, 14, 18, 21, 25, 29, 33, 37, 41, 44, 48].includes(index);
+    const medium = index % 4 === 0 || index % 7 === 0;
+    const cls = hot ? "hot" : medium ? "mid" : "low";
+    return `<i class="${cls}"></i>`;
+  }).join("");
+  return `<div class="chart-card map-card ${blue ? "blue-map" : "orange-map"}">
+      <h2>${escapeHtml(section.headline)}</h2>
+      <div class="tile-map">${cells}</div>
+      <div class="map-legend"><span>low</span><span>medium</span><span>high</span></div>
+      <small>50 synthetic launch scenarios, not public survey data</small>
+    </div>`;
+}
+
+function renderEditorialCompare(section) {
+  return `<div class="compare-wrap">
+      <div class="compare-card red"><span>trust automation</span><strong>15</strong><em>no QA</em></div>
+      <div class="versus">VS</div>
+      <div class="compare-card green"><span>trust analyst review</span><strong>43</strong><em>with metrics</em></div>
+    </div>
+    <p class="micro-copy">${escapeHtml(section.headline)}</p>`;
+}
+
+function renderEditorialHook(section) {
+  return `<div class="hook-lockup">
+      <strong>${escapeHtml(section.headline)}</strong>
+      <span>${escapeHtml(section.subhead ?? "")}</span>
+      <div class="count-strip"><b>47.582</b><em>synthetic seconds assessed</em></div>
+    </div>`;
+}
+
+function renderEditorialVerdict(section) {
+  return `<div class="verdict-card">
+      <span>${escapeHtml(section.kicker)}</span>
+      <strong>${escapeHtml(section.headline)}</strong>
+      <p>${escapeHtml(section.subhead ?? "")}</p>
+    </div>
+    <div class="url-pill">launchclip.local / review</div>`;
+}
+
+function renderEditorialModule(section) {
+  if (section.module === "hook") return renderEditorialHook(section);
+  if (section.module === "grid") return renderEditorialGrid(section, false);
+  if (section.module === "blue-grid") return renderEditorialGrid(section, true);
+  if (section.module === "compare") return renderEditorialCompare(section);
+  if (section.module === "verdict") return renderEditorialVerdict(section);
+  return renderEditorialBars(section);
+}
+
+function renderDataStoryEditorialHyperframesIndex(manifest, video, sfxManifest = null) {
+  const width = 1080;
+  const height = 1920;
+  const duration = Number(video.duration_seconds ?? 150);
+  const sections = (video.script_visual_alignment ?? video.voiceover?.timeline ?? [])
+    .map((segment, index) => dataStoryEditorialSectionMeta(segment, index));
+  const resolvedSfxManifest = sfxManifest ?? buildHyperframesSfxManifest(video);
+  const sfxManifestJson = JSON.stringify(resolvedSfxManifest).replace(/</g, "\\u003c");
+  const sectionHtml = sections.map((section, index) => {
+    const chips = (section.statChips ?? []).map(([value, label]) => `<span class="stat-chip"><b>${escapeHtml(String(value))}</b><em>${escapeHtml(String(label))}</em></span>`).join("");
+    return `<section class="editorial-section section-${index + 1} accent-${escapeHtml(section.accent)}" data-start="${section.start}" data-duration="${section.duration.toFixed(2)}" data-section-id="${escapeHtml(section.id)}">
+      <div class="section-kicker">${escapeHtml(section.kicker)}</div>
+      <div class="section-clock">${escapeHtml(section.timeRange)}</div>
+      <div class="section-module">${renderEditorialModule(section)}</div>
+      <div class="stat-row">${chips}</div>
+      <div class="source-chip">${escapeHtml(section.evidence)}</div>
+    </section>`;
+  }).join("\n");
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=${width}, height=${height}" />
+  <title>${escapeHtml(video.title)} editorial data story</title>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@hyperframes/core/dist/hyperframe.runtime.iife.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: ${width}px; height: ${height}px; margin: 0; overflow: hidden; background: #070a12; color: #f5efe7; }
+    body { font-family: Inter, Arial, sans-serif; }
+    #stage { position: relative; width: ${width}px; height: ${height}px; overflow: hidden; background: radial-gradient(circle at 50% 18%, rgba(43,62,103,0.38), transparent 34%), linear-gradient(180deg, #111521 0%, #060914 56%, #05070d 100%); }
+    .atlas-noise, .atlas-lines, .atlas-shapes, .vignette, .progress-rail, .masthead, .rec-dot, .runtime-code { position: absolute; pointer-events: none; }
+    .atlas-noise { inset: 0; opacity: 0.32; background-image: linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px); background-size: 84px 84px; }
+    .atlas-lines { inset: -80px; opacity: 0.28; background: radial-gradient(circle at 26% 26%, rgba(112,128,156,0.32) 0 4px, transparent 5px), radial-gradient(circle at 62% 34%, rgba(112,128,156,0.28) 0 4px, transparent 5px), radial-gradient(circle at 42% 66%, rgba(112,128,156,0.26) 0 3px, transparent 4px), linear-gradient(35deg, transparent 0 43%, rgba(112,128,156,0.16) 43.2% 43.4%, transparent 43.7% 100%); background-size: 310px 310px, 420px 420px, 370px 370px, 540px 540px; transform: rotate(-8deg) scale(1.08); }
+    .atlas-shapes { inset: 0; opacity: 0.24; }
+    .atlas-shapes i { position: absolute; width: 120px; height: 54px; background: #5b6071; clip-path: polygon(0 40%, 18% 22%, 26% 42%, 45% 12%, 58% 34%, 74% 24%, 100% 50%, 78% 74%, 54% 66%, 40% 88%, 22% 64%); }
+    .atlas-shapes i:nth-child(1) { left: 70px; top: 520px; transform: rotate(-20deg); }
+    .atlas-shapes i:nth-child(2) { right: 70px; top: 360px; transform: rotate(18deg) scale(1.2); }
+    .atlas-shapes i:nth-child(3) { right: 120px; bottom: 180px; transform: rotate(30deg); }
+    .atlas-shapes i:nth-child(4) { left: 160px; bottom: 420px; transform: rotate(-8deg) scale(0.85); }
+    .vignette { inset: 0; box-shadow: inset 0 0 140px rgba(0,0,0,0.58), inset 0 0 36px rgba(255,108,69,0.12); }
+    .masthead { top: 58px; left: 0; right: 0; text-align: center; font-size: 52px; letter-spacing: 0.08em; font-weight: 900; color: #fff8ef; text-transform: uppercase; z-index: 10; }
+    .rec-dot { top: 32px; left: 32px; z-index: 10; color: #ff7157; font-size: 18px; font-weight: 900; text-transform: uppercase; }
+    .rec-dot::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: #ff3c2f; box-shadow: 0 0 14px rgba(255,60,47,0.8); }
+    .runtime-code { top: 32px; right: 32px; z-index: 10; color: rgba(245,239,231,0.62); font-size: 18px; font-variant-numeric: tabular-nums; }
+    .progress-rail { left: 22px; right: 22px; bottom: 20px; z-index: 12; height: 5px; background: rgba(245,239,231,0.12); }
+    .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #ff784f, #f0b35b); box-shadow: 0 0 22px rgba(255,120,79,0.5); }
+    .editorial-section { position: absolute; inset: 0; padding: 168px 72px 86px; opacity: 0; transform: translateY(22px); z-index: 5; }
+    .section-kicker { text-align: center; margin-top: 8px; font-size: 18px; letter-spacing: 0.22em; color: #ff784f; font-weight: 900; text-transform: uppercase; }
+    .accent-blue .section-kicker { color: #70a9ff; }
+    .accent-purple .section-kicker { color: #a88bff; }
+    .accent-green .section-kicker { color: #6fe5ac; }
+    .section-clock { position: absolute; top: 118px; right: 44px; color: rgba(245,239,231,0.46); font-size: 16px; font-weight: 800; }
+    .section-module { position: absolute; left: 74px; right: 74px; top: 250px; min-height: 920px; display: grid; place-items: center; }
+    .stat-row { position: absolute; left: 70px; right: 70px; bottom: 122px; display: flex; justify-content: center; gap: 14px; min-height: 62px; }
+    .stat-chip { min-width: 190px; min-height: 58px; padding: 12px 18px; border-radius: 14px; background: rgba(13,16,24,0.92); border: 1px solid rgba(245,239,231,0.12); box-shadow: 0 16px 38px rgba(0,0,0,0.32); display: inline-flex; align-items: center; gap: 8px; justify-content: center; white-space: nowrap; }
+    .stat-chip b { color: #ff784f; font-size: 26px; line-height: 1; }
+    .accent-blue .stat-chip b { color: #70a9ff; }
+    .accent-green .stat-chip b { color: #6fe5ac; }
+    .stat-chip em { color: rgba(245,239,231,0.76); font-size: 16px; font-style: normal; font-weight: 800; }
+    .source-chip { position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%); color: rgba(245,239,231,0.44); font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .chart-card { width: 600px; min-height: 520px; padding: 34px 38px 28px; border-radius: 12px; background: #f3efe5; color: #141820; box-shadow: 0 0 0 1px rgba(255,255,255,0.35), 0 30px 80px rgba(0,0,0,0.42); }
+    .chart-card h2 { margin: 0 0 24px; color: #141820; font-size: 31px; line-height: 1.05; text-align: center; }
+    .chart-card small { display: block; margin-top: 20px; color: rgba(20,24,32,0.52); font-size: 12px; text-align: center; text-transform: uppercase; letter-spacing: 0.08em; }
+    .bar-list { display: grid; gap: 13px; }
+    .bar-row { display: grid; grid-template-columns: 160px 1fr 54px; gap: 12px; align-items: center; font-size: 17px; font-weight: 800; }
+    .bar-row span { color: rgba(20,24,32,0.76); }
+    .bar-row b { text-align: right; font-size: 18px; }
+    .bar-track { height: 22px; border-radius: 4px; background: rgba(20,24,32,0.08); overflow: hidden; }
+    .bar-track i { display: block; width: var(--w); height: 100%; transform-origin: left center; background: #ff784f; }
+    .bar-row.blue .bar-track i { background: #2f8cff; }
+    .bar-row.orange .bar-track i { background: #ff784f; }
+    .map-card { width: 548px; min-height: 620px; }
+    .tile-map { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; width: 430px; margin: 26px auto 20px; }
+    .tile-map i { height: 33px; border-radius: 3px; background: #f4be57; box-shadow: inset 0 0 0 1px rgba(20,24,32,0.16); }
+    .tile-map i.mid { background: #f09a28; }
+    .tile-map i.hot { background: #dd6a14; }
+    .blue-map .tile-map i { background: #9bc9ff; }
+    .blue-map .tile-map i.mid { background: #5fa9ff; }
+    .blue-map .tile-map i.hot { background: #2675d8; }
+    .map-legend { display: flex; justify-content: center; gap: 18px; color: rgba(20,24,32,0.58); font-size: 14px; text-transform: uppercase; }
+    .hook-lockup { width: 820px; min-height: 680px; display: grid; align-content: center; gap: 24px; text-align: left; }
+    .hook-lockup strong { display: block; font-size: 72px; line-height: 0.92; color: #fff8ef; text-shadow: 0 14px 44px rgba(0,0,0,0.46); }
+    .hook-lockup span { display: block; color: rgba(245,239,231,0.82); font-size: 26px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+    .count-strip { width: 440px; padding: 12px 18px; border-radius: 8px; background: rgba(255,120,79,0.2); box-shadow: inset 0 0 0 1px rgba(255,120,79,0.36); display: flex; align-items: center; gap: 12px; }
+    .count-strip b { color: #ff784f; font-size: 42px; }
+    .count-strip em { color: #f5efe7; font-size: 16px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .compare-wrap { width: 780px; display: grid; grid-template-columns: 1fr 84px 1fr; align-items: center; gap: 20px; }
+    .compare-card { min-height: 260px; border-radius: 18px; padding: 30px; background: rgba(14,18,27,0.92); border: 1px solid rgba(245,239,231,0.12); box-shadow: 0 24px 64px rgba(0,0,0,0.34); text-align: center; }
+    .compare-card span { display: block; color: rgba(245,239,231,0.68); font-size: 17px; font-weight: 900; text-transform: uppercase; }
+    .compare-card strong { display: block; margin-top: 18px; font-size: 96px; line-height: 1; }
+    .compare-card em { display: block; color: rgba(245,239,231,0.58); font-size: 16px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .compare-card.red strong { color: #ff755f; }
+    .compare-card.green strong { color: #6fe5ac; }
+    .versus { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: #f3efe5; color: #111521; font-weight: 900; }
+    .micro-copy { margin: 28px auto 0; max-width: 760px; text-align: center; font-size: 31px; font-weight: 900; color: #f5efe7; }
+    .verdict-card { width: 760px; min-height: 360px; padding: 42px; border-radius: 16px; background: rgba(12,16,24,0.94); border: 1px solid rgba(255,120,79,0.38); box-shadow: 0 0 42px rgba(255,120,79,0.16), 0 24px 80px rgba(0,0,0,0.48); text-align: center; }
+    .verdict-card span { color: #6fe5ac; font-size: 18px; font-weight: 900; letter-spacing: 0.2em; }
+    .verdict-card strong { display: block; color: #ff784f; font-size: 124px; line-height: 1; margin-top: 18px; }
+    .verdict-card p { margin: 14px auto 0; max-width: 460px; color: #f5efe7; font-size: 26px; font-weight: 900; }
+    .url-pill { margin-top: 30px; padding: 14px 26px; border-radius: 10px; background: rgba(245,239,231,0.12); color: #f5efe7; font-size: 26px; font-weight: 900; text-align: center; }
+    .wipe { position: absolute; inset: 0; z-index: 9; pointer-events: none; background: linear-gradient(115deg, transparent 0 34%, rgba(245,239,231,0.08) 42%, rgba(255,120,79,0.26) 50%, rgba(245,239,231,0.06) 58%, transparent 68%); transform: translateX(-120%) skewX(-12deg); filter: blur(4px); }
+  </style>
+</head>
+<body>
+  <div id="stage" data-composition-id="LaunchclipHyperframes" data-start="0" data-duration="${duration}" data-width="${width}" data-height="${height}" data-sfx-runtime="launchclip.hyperframes-audio-runtime.v1" data-sfx-manifest="sfx-manifest.json">
+    <div class="atlas-noise"></div>
+    <div class="atlas-lines"></div>
+    <div class="atlas-shapes"><i></i><i></i><i></i><i></i></div>
+    <div class="masthead">LAUNCHCLIP</div>
+    <div class="rec-dot">REC</div>
+    <div class="runtime-code">00:02:30</div>
+    <div class="wipe"></div>
+${sectionHtml}
+    <div class="progress-rail"><div class="progress-fill"></div></div>
+    <div class="vignette"></div>
+  </div>
+  <script type="application/json" id="launchclip-sfx-manifest">${sfxManifestJson}</script>
+  <script>
+    window.__timelines = window.__timelines || {};
+    const tl = gsap.timeline({ paused: true, defaults: { ease: "power3.out" } });
+    window.__timelines["LaunchclipHyperframes"] = tl;
+    const totalDuration = ${duration};
+    const sections = Array.from(document.querySelectorAll(".editorial-section"));
+    const progress = document.querySelector(".progress-fill");
+    const wipe = document.querySelector(".wipe");
+    gsap.set(sections, { autoAlpha: 0, y: 22 });
+    tl.to(".atlas-lines", { x: -58, y: 36, rotation: -5, duration: totalDuration, ease: "none" }, 0);
+    tl.to(".atlas-shapes", { x: 42, y: -34, duration: totalDuration, ease: "none" }, 0);
+    tl.to(".atlas-noise", { backgroundPosition: "160px 220px", duration: totalDuration, ease: "none" }, 0);
+    sections.forEach((section, index) => {
+      const start = Number(section.dataset.start || 0);
+      const dur = Number(section.dataset.duration || 8);
+      const module = section.querySelector(".section-module");
+      const card = section.querySelector(".chart-card, .hook-lockup, .compare-wrap, .verdict-card");
+      const bars = section.querySelectorAll(".bar-track i");
+      const tiles = section.querySelectorAll(".tile-map i");
+      const chips = section.querySelectorAll(".stat-chip");
+      tl.to(section, { autoAlpha: 1, y: 0, duration: 0.36 }, start);
+      tl.fromTo(wipe, { xPercent: -120 }, { xPercent: 120, duration: 0.68, ease: "power2.inOut" }, Math.max(0, start - 0.04));
+      if (card) tl.fromTo(card, { y: 44, scale: 0.92, filter: "blur(12px)" }, { y: 0, scale: 1, filter: "blur(0px)", duration: 0.62 }, start + 0.08);
+      if (card) tl.to(card, { y: index % 2 ? -24 : 22, scale: 1.025, duration: Math.max(1, dur - 1.4), ease: "sine.inOut" }, start + 0.72);
+      if (bars.length) {
+        tl.fromTo(bars, { scaleX: 0 }, { scaleX: 1, duration: 0.62, stagger: 0.12, ease: "power3.out" }, start + 0.48);
+        tl.to(bars, { filter: "brightness(1.32)", repeat: Math.max(1, Math.floor(dur / 3)), yoyo: true, duration: 0.22, stagger: 0.08, ease: "sine.inOut" }, start + 1.6);
+      }
+      if (tiles.length) {
+        tl.fromTo(tiles, { scale: 0.45, autoAlpha: 0.22 }, { scale: 1, autoAlpha: 1, duration: 0.34, stagger: { each: 0.018, from: "center" } }, start + 0.42);
+        tl.to(tiles, { scale: 0.88, repeat: Math.max(2, Math.floor(dur / 3)), yoyo: true, duration: 0.18, stagger: { each: 0.006, from: "random" }, ease: "sine.inOut" }, start + 1.4);
+      }
+      if (chips.length) {
+        tl.fromTo(chips, { y: 22, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.28, stagger: 0.16 }, start + Math.min(2.6, dur * 0.4));
+        tl.to(chips, { scale: 1.045, repeat: Math.max(1, Math.floor(dur / 4)), yoyo: true, duration: 0.24, stagger: 0.09, ease: "sine.inOut" }, start + Math.min(3.3, dur * 0.5));
+      }
+      if (module) {
+        tl.to(module, { scale: 1.055, x: index % 2 ? -34 : 34, y: index % 3 ? -28 : 22, duration: Math.max(1, dur - 1.4), ease: "sine.inOut" }, start + 0.72);
+      }
+      tl.to(progress, { width: ((start + dur) / totalDuration * 100).toFixed(3) + "%", duration: dur, ease: "none" }, start);
+      tl.to(section, { autoAlpha: 0, y: -18, duration: 0.3, ease: "power2.in" }, start + dur - 0.32);
+    });
+    if (window.HyperframeRuntime && typeof window.HyperframeRuntime.mount === "function") {
+      window.HyperframeRuntime.mount({ timelines: window.__timelines });
+    }
+  </script>
+</body>
+</html>`;
+}
+
 function renderHyperframesIndex(manifest, video, sfxManifest = null) {
   const width = 1080;
   const height = 1920;
   const lifecycleObjects = Array.isArray(video.object_lifecycle) ? video.object_lifecycle : [];
   const resolvedSfxManifest = sfxManifest ?? buildHyperframesSfxManifest(video);
+  if (isDataStoryBenchmarkStyle(video.style)) {
+    return renderDataStoryEditorialHyperframesIndex(manifest, video, resolvedSfxManifest);
+  }
   const sfxManifestJson = JSON.stringify(resolvedSfxManifest).replace(/</g, "\\u003c");
   const availableSfxAssets = (resolvedSfxManifest.assets ?? []).filter((asset) => asset.status === "available-local-asset" && asset.path);
   const audioAssetHtml = availableSfxAssets.map((asset) => `<audio class="launchclip-sfx-audio" data-sfx-id="${escapeHtml(asset.id)}" data-sfx-family="${escapeHtml(asset.family)}" data-sfx-gain="${escapeHtml(String(asset.gain_db ?? -18))}" src="${escapeHtml(asset.path)}" preload="auto"></audio>`).join("\n    ");
@@ -3319,6 +3986,7 @@ function cleanVoiceoverLine(value) {
 }
 
 function deliveryForBeat(beat) {
+  if (isDataStoryBeat(beat)) return "fast but articulate data-story narration; let charts and counters breathe on transition hits";
   if (beat === "cold-open" || beat === "hook") return "fast hook, one breath, direct to camera";
   if (beat === "friction") return "slightly compressed pace, list rhythm";
   if (beat === "demo-trigger" || beat === "split-screen-proof") return "clear proof tone, slow enough for the command to land";
@@ -3328,6 +3996,31 @@ function deliveryForBeat(beat) {
   if (beat === "artifact-reveal" || beat === "artifacts") return "confident payoff, do not over-read filenames";
   if (beat === "cta") return "calm, short, leave a clean final hold";
   return "natural product explainer pace";
+}
+
+function isDataStoryBeat(beat) {
+  return [
+    "data-hook",
+    "question-card",
+    "dataset-setup",
+    "scenario-grid",
+    "friction-bars",
+    "proof-bars",
+    "trust-map",
+    "safeguard-map",
+    "split-counter-left",
+    "split-counter-right",
+    "workflow-demo",
+    "workflow-storyboard",
+    "workflow-hyperframes",
+    "sfx-pass",
+    "asset-readiness",
+    "placeholder-gaps",
+    "qa-static-holds",
+    "qa-source-honesty",
+    "packet-review",
+    "benchmark-cta"
+  ].includes(beat);
 }
 
 function parseTimeRange(range) {
@@ -3596,6 +4289,166 @@ function beatProductionDirection(beat) {
       intensity: "high",
       mixLevel: -16
     },
+    "data-hook": {
+      editDensity: "headline, masthead, texture drift, and chart-card flash every 0.6-1.0s",
+      cameraDirection: "slow push through a dark atlas background into a center headline",
+      sound: "sub-bass whoosh into data headline hit",
+      soundTrigger: "first-frame headline slam and masthead lock",
+      intensity: "high",
+      mixLevel: -15
+    },
+    "question-card": {
+      editDensity: "question fragments, underline strokes, and micro-stat ticks every 0.7-1.1s",
+      cameraDirection: "centered chart-card push with tiny parallax on background map texture",
+      sound: "soft tick build under a question-card rise",
+      soundTrigger: "question words and tiny counter marks entering",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "dataset-setup": {
+      editDensity: "fixture rows, source chips, and status badges enter every 0.6-1.0s",
+      cameraDirection: "table-card push with row highlights sweeping top to bottom",
+      sound: "data ticks and receipt pops",
+      soundTrigger: "fixture row highlights and source badge landing",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "scenario-grid": {
+      editDensity: "matrix tiles pulse, recolor, or regroup every 0.5-0.9s",
+      cameraDirection: "map-like matrix drift with quick zooms into active tile clusters",
+      sound: "grid ticks and light map taps",
+      soundTrigger: "tile cluster pulses and matrix regroup",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "friction-bars": {
+      editDensity: "bar fills, rank swaps, and label punches every 0.5-0.9s",
+      cameraDirection: "horizontal bar-chart push with rank-change overshoot",
+      sound: "bar-rise ticks with a soft rank hit",
+      soundTrigger: "bar fills and rank labels settling",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "proof-bars": {
+      editDensity: "receipt bars, source chips, and pass badges animate every 0.6-1.0s",
+      cameraDirection: "bar chart pulls back to reveal receipt labels and evidence chips",
+      sound: "success ticks and proof-card pops",
+      soundTrigger: "receipt chips landing on each proof bar",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "trust-map": {
+      editDensity: "risk cells pulse red, labels snap, and source warnings flicker every 0.6-1.1s",
+      cameraDirection: "map heat zoom from national view into clustered risk cells",
+      sound: "warning taps with a low map sweep",
+      soundTrigger: "red risk cells and warning labels appearing",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "safeguard-map": {
+      editDensity: "green safeguards sweep across cells and pin receipts every 0.6-1.1s",
+      cameraDirection: "reverse heat-map pullback from receipts to full safeguard grid",
+      sound: "soft success dings and map ticks",
+      soundTrigger: "green safeguard pins and receipt chips landing",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "split-counter-left": {
+      editDensity: "counter increments, red chips, and vertical divider pulses every 0.5-0.9s",
+      cameraDirection: "left counter punch-in with the right side held as muted context",
+      sound: "counter ticks with a restrained warning hit",
+      soundTrigger: "each never-fake item incrementing",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "split-counter-right": {
+      editDensity: "counter increments, green chips, and safe-generation labels tick every 0.5-0.9s",
+      cameraDirection: "right counter punch-in and settle back to the full split",
+      sound: "counter ticks into soft confirmation hit",
+      soundTrigger: "each safe-generation item incrementing",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "workflow-demo": {
+      editDensity: "pipeline node, connector, and receipt event every 0.6-1.0s",
+      cameraDirection: "connector-line follow from demo command to captured receipt",
+      sound: "typing ticks, connector pop, and receipt ding",
+      soundTrigger: "demo node, connector draw, and receipt lock",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "workflow-storyboard": {
+      editDensity: "script node, visual node, caption node, and playhead marker every 0.6-1.0s",
+      cameraDirection: "diagram push across script-to-visual connectors",
+      sound: "connector pops and playhead ticks",
+      soundTrigger: "script and storyboard nodes linking",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "workflow-hyperframes": {
+      editDensity: "object lifecycle states and template cards swap every 0.5-0.9s",
+      cameraDirection: "pipeline zoom into object lifecycle state strip",
+      sound: "template snaps and lifecycle pops",
+      soundTrigger: "template cards and lifecycle states locking",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "sfx-pass": {
+      editDensity: "audio lane ticks, waveform blips, and ducking labels every 0.5-0.9s",
+      cameraDirection: "timeline sweep across SFX lanes under the voice track",
+      sound: "whoosh, tick, paper hit, and ducked confirmation blend",
+      soundTrigger: "each SFX family lane entering",
+      intensity: "medium",
+      mixLevel: -20
+    },
+    "asset-readiness": {
+      editDensity: "asset rows, missing tags, and replacement slots animate every 0.6-1.0s",
+      cameraDirection: "readiness table push with row-by-row status reveal",
+      sound: "asset row ticks and soft warning taps",
+      soundTrigger: "missing asset tags and ready rows entering",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "placeholder-gaps": {
+      editDensity: "placeholder cards flip, gap tags pulse, and replacement arrows draw every 0.6-1.0s",
+      cameraDirection: "zoom from labelled placeholder to the exact replacement slot",
+      sound: "paper flip, warning tap, and connector pop",
+      soundTrigger: "placeholder label and replacement arrow",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "qa-static-holds": {
+      editDensity: "timer bars, red hold markers, and pass ticks every 0.5-0.9s",
+      cameraDirection: "timer-bar sweep with hard zooms on over-threshold holds",
+      sound: "timer ticks and pass/fail taps",
+      soundTrigger: "static hold markers crossing the threshold",
+      intensity: "medium-high",
+      mixLevel: -18
+    },
+    "qa-source-honesty": {
+      editDensity: "source chips, connector endpoints, and chart marks validate every 0.6-1.0s",
+      cameraDirection: "source-to-mark connector follow with crisp endpoint settles",
+      sound: "connector pops and review ticks",
+      soundTrigger: "source chips linking to chart marks",
+      intensity: "medium",
+      mixLevel: -19
+    },
+    "packet-review": {
+      editDensity: "file stack, QA page, manifest, and review payload flash every 0.6-1.0s",
+      cameraDirection: "artifact grid zooms into one review packet stack",
+      sound: "file flips and final packet thump",
+      soundTrigger: "review artifacts stacking",
+      intensity: "high",
+      mixLevel: -16
+    },
+    "benchmark-cta": {
+      editDensity: "final counter, checklist ticks, and calm hold with subtle map drift",
+      cameraDirection: "clean final push to packet lockup and benchmark duration",
+      sound: "two checklist ticks into quiet final hit",
+      soundTrigger: "final line-up checks and benchmark lockup",
+      intensity: "low-medium",
+      mixLevel: -21
+    },
     cta: {
       editDensity: "one clean punch-in, two check ticks, then final hold",
       cameraDirection: "calm final push to approval boundary and repo URL",
@@ -3605,7 +4458,17 @@ function beatProductionDirection(beat) {
       mixLevel: -21
     }
   };
-  return directions[beat] ?? directions.cta;
+  const aliases = {
+    "public-record-hook": "data-hook",
+    "hopes-chart": "friction-bars",
+    "fears-chart": "trust-map",
+    "state-grid": "scenario-grid",
+    "twist-chart": "friction-bars",
+    "ask-map": "safeguard-map",
+    "trust-answer": "split-counter-left",
+    "verdict-cta": "benchmark-cta"
+  };
+  return directions[beat] ?? directions[aliases[beat]] ?? directions.cta;
 }
 
 function creativeStoryboardIssues(video) {
@@ -3652,13 +4515,28 @@ function isPremiumStyle(style) {
   return style === PREMIUM_PRODUCT_STYLE;
 }
 
+function isDataStoryBenchmarkStyle(style) {
+  return style === DATA_STORY_BENCHMARK_STYLE;
+}
+
 function isSocialReadyStyle(style) {
-  return style === "ugc-split" || style === "ugc-demo-punchy" || isPremiumStyle(style);
+  return style === "ugc-split" || style === "ugc-demo-punchy" || isPremiumStyle(style) || isDataStoryBenchmarkStyle(style);
+}
+
+function defaultRendererDuration(video = {}, provider = "remotion") {
+  if (isPremiumStyle(video.style)) return video.duration_seconds ?? 48;
+  if (isDataStoryBenchmarkStyle(video.style)) return video.duration_seconds ?? 150;
+  if (isSocialReadyStyle(video.style)) return Math.min(video.duration_seconds ?? 30, 30);
+  const cap = provider === "remotion" ? 30 : 15;
+  return Math.min(video.duration_seconds ?? cap, cap);
 }
 
 function buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHead = { enabled: false, provider: "none" }) {
   if (isPremiumStyle(style)) {
     return buildPremiumCreativeStoryboard(manifest, script, stylePreset, talkingHead);
+  }
+  if (isDataStoryBenchmarkStyle(style)) {
+    return buildDataStoryBenchmarkStoryboard(manifest, script, stylePreset);
   }
   if (!isSocialReadyStyle(style)) {
     return {
@@ -3800,6 +4678,285 @@ function buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHe
       };
     })
   };
+}
+
+function buildDataStoryBenchmarkStoryboard(manifest, script, stylePreset) {
+  const repoName = stripMarkdown(manifest.source_repo.name);
+  const timeline = script.timeline ?? [];
+  return {
+    schema_version: "launchclip.storyboard.v1",
+    intent: `${repoName} should stress Launchclip with an original 150-second vertical data story: dark atlas styling, chart cards, map grids, split counters, workflow diagrams, SFX lanes, and review artifacts.`,
+    creative_positioning: stylePreset.angle,
+    renderer_priority: ["hyperframes", "remotion", "product-videogen", "local-ffmpeg"],
+    non_goals: [
+      "Do not download or reuse the reference transcript, audio, footage, frames, graphics, creator likeness, chart values, or exact sequence.",
+      "Do not present synthetic benchmark fixtures as public survey data.",
+      "Do not invent adoption, revenue, safety, or performance claims.",
+      "Do not make a static slideshow; every scene needs chart, map, counter, connector, caption, camera, or SFX movement."
+    ],
+    quality_gates: [
+      "full duration is 150 seconds at vertical 9:16",
+      "voiceover lands around 350-430 original words",
+      "every 0.5-1.2 seconds changes chart, map, counter, object, camera, caption, or SFX focus",
+      "charts and diagrams declare source status as synthetic benchmark fixtures or launchclip artifacts",
+      "no static object lifecycle gap exceeds 1.2 seconds",
+      "SFX cues are adapter-ready and duck under voiceover",
+      "missing assets remain labelled placeholders instead of unrelated stock media",
+      "final output is a reviewable packet, not a live publish action"
+    ],
+    presenter_direction: "No talking-head by default. Use voiceover plus data graphics so charts, maps, counters, and QA artifacts carry the edit.",
+    scenes: timeline.map((segment, index) => {
+      const profile = dataStorySceneProfile(segment.beat);
+      const direction = beatProductionDirection(segment.beat);
+      return {
+        id: segment.beat,
+        order: index + 1,
+        time_range: segment.time_range,
+        target_seconds: segment.target_seconds,
+        hook: segment.caption,
+        voiceover: segment.voiceover,
+        evidence_source: segment.evidence_source,
+        adapter_target: segment.adapter_target,
+        layout: profile.layout,
+        composition: profile.composition,
+        media_slots: profile.mediaSlots,
+        motion_grammar: profile.motionGrammar,
+        typography: profile.typography,
+        color_grade: profile.colorGrade,
+        caption_emphasis: segment.caption_emphasis ?? [],
+        transition: segment.transition,
+        edit_density: direction.editDensity,
+        camera_direction: direction.cameraDirection,
+        sound_design: direction.sound,
+        asset_aliases: profile.assetAliases,
+        micro_events: profile.microEvents,
+        camera_path: profile.cameraPath,
+        sfx_cues: profile.sfxCues,
+        data_visualization: profile.dataVisualization,
+        success_criteria: [
+          "viewer can identify the chart or diagram purpose while muted",
+          "source status is visible for every data mark or connector",
+          "foreground motion, map texture, caption, or SFX cue changes before the scene feels static"
+        ]
+      };
+    })
+  };
+}
+
+function dataStorySceneProfile(beat) {
+  const common = {
+    typography: "condensed uppercase masthead, oversized mixed-case hook text, compact chart labels, source chips, and no paragraph subtitle blocks",
+    colorGrade: "dark atlas texture, off-white chart cards, coral risk marks, mint safeguard marks, cyan connector accents, and restrained amber warnings",
+    cameraPath: [
+      { t: 0, scale: 1.04, x: -10, y: 12, rotate: -0.4 },
+      { t: 0.52, scale: 1.0, x: 0, y: 0, rotate: 0 },
+      { t: 1, scale: 1.05, x: 8, y: -14, rotate: 0.3 }
+    ],
+    sfxCues: ["data-tick", "soft-whoosh", "caption-hit"]
+  };
+  const chartData = {
+    type: "chart",
+    source_status: "synthetic benchmark fixture",
+    honesty_note: "Illustrative QA data for renderer stress, not public survey data."
+  };
+  const artifactData = {
+    type: "artifact-diagram",
+    source_status: "launchclip generated artifact",
+    honesty_note: "Connectors point to packet files generated by launchclip."
+  };
+  const profiles = {
+    "data-hook": {
+      layout: "dark atlas first frame with persistent masthead and huge data-story title",
+      composition: "ANTICOPY benchmark masthead, large center title, subtle map texture, and a small 150s duration timer",
+      mediaSlots: ["title", "masthead", "duration-timer", "atlas-texture"],
+      motionGrammar: ["title slam", "map texture drift", "timer tick", "card flash"],
+      assetAliases: [],
+      microEvents: ["masthead locks on frame one", "title slams in", "duration timer ticks to 2:30", "first data card flashes"],
+      dataVisualization: { ...chartData, type: "stat-counter" }
+    },
+    "question-card": {
+      layout: "centered question chart card over dark map texture",
+      composition: "one big question, three tiny counters, and a source-status chip that says original benchmark",
+      mediaSlots: ["attention", "evidence", "timing", "source-chip"],
+      motionGrammar: ["question underline draw", "counter ticks", "source chip pop"],
+      assetAliases: [],
+      microEvents: ["question splits into three fragments", "counters tick up", "source chip lands", "map pins drift behind card"],
+      dataVisualization: { ...chartData, type: "stat-counter" }
+    },
+    "dataset-setup": {
+      layout: "fixture table chart card",
+      composition: "rows for synthetic scenarios, fixture status, and source labels with a clear non-survey disclaimer",
+      mediaSlots: ["synthetic scenarios", "fixture status", "source labels", "non-survey disclaimer"],
+      motionGrammar: ["row sweep", "source badge pop", "table-card push"],
+      assetAliases: [],
+      microEvents: ["first rows sweep in", "fixture badge turns mint", "non-survey label pulses", "table shifts into grid"],
+      dataVisualization: { ...chartData, type: "table-chart" }
+    },
+    "scenario-grid": {
+      layout: "map-like matrix chart with fifty fixture tiles",
+      composition: "tile grid groups failure modes by color while avoiding real geography or survey claims",
+      mediaSlots: ["missing proof", "vague captions", "slow transitions", "weak sound", "tiny labels"],
+      motionGrammar: ["matrix tile pulse", "cluster regroup", "map-like zoom"],
+      assetAliases: [],
+      microEvents: ["tiles fill in waves", "failure clusters regroup", "active cluster zooms", "legend snaps in"],
+      dataVisualization: { ...chartData, type: "matrix-map" }
+    },
+    "friction-bars": {
+      layout: "horizontal bar chart with ranked launch friction",
+      composition: "manual scripting, proof capture, edit alignment, caption review, and asset replacement rank as synthetic QA pressures",
+      mediaSlots: ["scripting", "proof capture", "edit alignment", "caption review", "asset replacement"],
+      motionGrammar: ["bar fill", "rank swap", "label punch", "axis tick"],
+      assetAliases: [],
+      microEvents: ["bars fill left to right", "edit alignment jumps rank", "axis ticks draw", "top label punches forward"],
+      dataVisualization: { ...chartData, type: "horizontal-bar" }
+    },
+    "proof-bars": {
+      layout: "receipt-backed proof bar chart",
+      composition: "bars switch from pressure to receipt coverage across terminal, render plan, storyboard, captions, and review payload",
+      mediaSlots: ["terminal output", "render plan", "storyboard", "captions", "review payload"],
+      motionGrammar: ["bar refill", "receipt chip land", "source badge sweep"],
+      assetAliases: [],
+      microEvents: ["red bars drain", "green receipt bars fill", "source chips attach", "proof label settles"],
+      dataVisualization: { ...chartData, type: "receipt-bar" }
+    },
+    "trust-map": {
+      layout: "risk heat-map chart",
+      composition: "red cells mark places a viewer might distrust the output: unsupported numbers, unclear sources, copied media, or overconfident automation",
+      mediaSlots: ["unsupported numbers", "unclear sources", "copied media", "overconfident automation"],
+      motionGrammar: ["heat pulse", "warning label snap", "risk zoom"],
+      assetAliases: [],
+      microEvents: ["red cells pulse", "risk labels snap", "heat map zooms inward", "warning source chip appears"],
+      dataVisualization: { ...chartData, type: "risk-heat-map" }
+    },
+    "safeguard-map": {
+      layout: "safeguard heat-map chart",
+      composition: "green pins mark dry runs, local assets, validation, review gates, and human approval boundaries",
+      mediaSlots: ["dry runs", "local assets", "validation", "review gates", "human approval"],
+      motionGrammar: ["green sweep", "receipt pin", "map pullback"],
+      assetAliases: [],
+      microEvents: ["green cells sweep across grid", "receipt pins land", "approval boundary glows", "map pulls back"],
+      dataVisualization: { ...chartData, type: "safeguard-heat-map" }
+    },
+    "split-counter-left": {
+      layout: "left side of split counter chart",
+      composition: "red counter stacks items launchclip must never fake",
+      mediaSlots: ["likenesses", "verbatim transcript", "survey data", "production claims", "platform posting"],
+      motionGrammar: ["counter increment", "chip stack", "divider pulse"],
+      assetAliases: [],
+      microEvents: ["left counter hits five", "red chips stack", "divider pulses", "never fake label locks"],
+      dataVisualization: { ...chartData, type: "split-counter" }
+    },
+    "split-counter-right": {
+      layout: "right side of split counter chart",
+      composition: "green counter stacks original things launchclip can safely generate",
+      mediaSlots: ["original narration", "synthetic fixtures", "chart layouts", "sound cues", "QA artifacts"],
+      motionGrammar: ["counter increment", "safe chip stack", "split settle"],
+      assetAliases: [],
+      microEvents: ["right counter hits five", "green chips stack", "safe generation label locks", "split view settles"],
+      dataVisualization: { ...chartData, type: "split-counter" }
+    },
+    "workflow-demo": {
+      layout: "pipeline connector diagram from demo command to receipt",
+      composition: "demo node connects to terminal output, receipt, and redaction badge",
+      mediaSlots: ["demo command", "terminal output", "redaction badge"],
+      motionGrammar: ["node enter", "connector draw", "receipt pop"],
+      assetAliases: ["demo-command", "terminal-output", "redaction-badge"],
+      microEvents: ["demo node enters", "connector draws to terminal", "redaction badge lands", "receipt turns mint"],
+      dataVisualization: { ...artifactData, type: "workflow-diagram" }
+    },
+    "workflow-storyboard": {
+      layout: "script-to-visual connector diagram",
+      composition: "script nodes link to captions, visual cards, camera moves, and source labels",
+      mediaSlots: ["script node", "caption node", "visual card", "camera move"],
+      motionGrammar: ["connector follow", "node pulse", "playhead sweep"],
+      assetAliases: ["script-plan", "caption-node", "chart-card", "camera-move"],
+      microEvents: ["script node pulses", "connector draws to visual card", "caption chip lands", "playhead sweeps"],
+      dataVisualization: { ...artifactData, type: "alignment-diagram" }
+    },
+    "workflow-hyperframes": {
+      layout: "HyperFrames object lifecycle pipeline diagram",
+      composition: "scene nodes connect to templates, object states, data QA, diagram QA, and quality checklist",
+      mediaSlots: ["scene nodes", "templates", "object states", "data QA", "quality checklist"],
+      motionGrammar: ["pipeline follow", "template snap", "state strip sweep"],
+      assetAliases: ["scene-node", "template-card", "object-state", "chart-qa", "quality-checklist"],
+      microEvents: ["template cards snap in", "object state strip scrolls", "QA card flashes", "checklist node locks"],
+      dataVisualization: { ...artifactData, type: "pipeline-diagram" }
+    },
+    "sfx-pass": {
+      layout: "audio lane chart under voiceover",
+      composition: "whoosh, tick, paper hit, pop, and quiet final hit lanes appear below a ducking curve",
+      mediaSlots: ["whoosh", "tick", "paper hit", "connector pop", "ducking line"],
+      motionGrammar: ["waveform blip", "lane tick", "ducking curve"],
+      assetAliases: [],
+      microEvents: ["voice lane appears", "SFX lanes tick in", "ducking curve bends", "mix label settles"],
+      dataVisualization: { ...chartData, type: "audio-lane-chart" }
+    },
+    "asset-readiness": {
+      layout: "asset readiness table chart",
+      composition: "logos, screenshots, voice, and SFX rows declare available, missing, or placeholder status",
+      mediaSlots: ["logos", "screenshots", "voice", "SFX", "placeholder status"],
+      motionGrammar: ["row reveal", "status pill pop", "replacement slot draw"],
+      assetAliases: [],
+      microEvents: ["rows reveal", "missing tags pulse", "available tags settle", "replacement slots draw"],
+      dataVisualization: { ...chartData, type: "readiness-table" }
+    },
+    "placeholder-gaps": {
+      layout: "gap replacement chart",
+      composition: "labelled placeholder cards point to exact replacement slots so review can continue without hiding missing assets",
+      mediaSlots: ["placeholder logo", "placeholder voice", "placeholder screenshot", "replacement slot"],
+      motionGrammar: ["card flip", "gap tag pulse", "arrow draw"],
+      assetAliases: [],
+      microEvents: ["placeholder card flips", "gap label pulses", "replacement arrow draws", "reviewable tag lands"],
+      dataVisualization: { ...chartData, type: "gap-chart" }
+    },
+    "qa-static-holds": {
+      layout: "static-hold timer chart",
+      composition: "timer bars show object lifecycle gaps and highlight the one point two second threshold",
+      mediaSlots: ["enter", "settle", "transform", "micro-state", "exit"],
+      motionGrammar: ["timer sweep", "threshold marker", "pass tick"],
+      assetAliases: [],
+      microEvents: ["timer bars sweep", "threshold marker flashes", "micro-state inserts", "pass tick lands"],
+      dataVisualization: { ...chartData, type: "timer-bar-chart" }
+    },
+    "qa-source-honesty": {
+      layout: "source-to-mark connector diagram",
+      composition: "source chips connect to data marks, diagram endpoints, captions, and review notes",
+      mediaSlots: ["source chip", "data mark", "diagram endpoint", "review note"],
+      motionGrammar: ["connector draw", "endpoint settle", "source chip pulse"],
+      assetAliases: ["source-chip", "chart-mark", "diagram-endpoint", "review-note"],
+      microEvents: ["source chip pulses", "connector draws to mark", "endpoint settles", "review note ticks"],
+      dataVisualization: { ...artifactData, type: "source-honesty-diagram" }
+    },
+    "packet-review": {
+      layout: "review packet artifact grid chart",
+      composition: "transcript plan, storyboard, render handoff, captions, SFX manifest, and QA pages converge into one packet",
+      mediaSlots: ["transcript plan", "storyboard", "render handoff", "captions", "SFX manifest", "QA pages"],
+      motionGrammar: ["file flash", "grid zoom", "stack thump"],
+      assetAliases: [],
+      microEvents: ["files flash in sequence", "QA pages slide under stack", "SFX manifest flips", "packet thumps"],
+      dataVisualization: { ...chartData, type: "artifact-grid" }
+    },
+    "benchmark-cta": {
+      layout: "final benchmark lockup with 2:30 duration and review checklist",
+      composition: "packet stack, duration timer, no-copy boundary, and review-ready checkmarks settle into final hold",
+      mediaSlots: ["packet stack", "2:30 timer", "no-copy boundary", "review-ready checks"],
+      motionGrammar: ["final push", "check ticks", "quiet hold"],
+      assetAliases: [],
+      microEvents: ["duration timer locks", "review checks tick", "no-copy boundary appears", "final map drift continues"],
+      dataVisualization: { ...artifactData, type: "cta-lockup" }
+    }
+  };
+  const aliases = {
+    "public-record-hook": "data-hook",
+    "hopes-chart": "friction-bars",
+    "fears-chart": "friction-bars",
+    "state-grid": "scenario-grid",
+    "twist-chart": "friction-bars",
+    "ask-map": "safeguard-map",
+    "trust-answer": "split-counter-left",
+    "verdict-cta": "benchmark-cta"
+  };
+  return { ...common, ...(profiles[beat] ?? profiles[aliases[beat]] ?? profiles["question-card"]) };
 }
 
 function buildPremiumCreativeStoryboard(manifest, script, stylePreset, talkingHead = { enabled: false, provider: "none" }) {
@@ -4099,6 +5256,19 @@ function premiumProductStructure(manifest) {
   ];
 }
 
+function dataStoryBenchmarkStructure() {
+  return [
+    { beat: "public-record-hook", seconds: 18, instruction: "Open with a dark atlas editorial hook, persistent masthead, rec/time UI, big challenge headline, and topic chips." },
+    { beat: "hopes-chart", seconds: 21, instruction: "Use a centered off-white horizontal bar chart for what a launch clip must deliver, with lower-third stat chips." },
+    { beat: "fears-chart", seconds: 19, instruction: "Flip to a second horizontal bar chart for the retention fears that make generated output feel weak." },
+    { beat: "state-grid", seconds: 20, instruction: "Show fifty synthetic launch scenarios as an orange map-like tile grid and hold the persistent shell." },
+    { beat: "twist-chart", seconds: 20, instruction: "Reveal the twist: polish without motion makes viewers more critical, using a blue ranked bar chart." },
+    { beat: "ask-map", seconds: 22, instruction: "Use a blue map grid to ask whether renderer guardrails can step in before retention drops." },
+    { beat: "trust-answer", seconds: 19, instruction: "Show the answer as two comparison cards: automation alone versus analyst review with metrics." },
+    { beat: "verdict-cta", seconds: 11, instruction: "End on a stark verdict card, review-first URL, comment-style prompt, and final progress hold." }
+  ];
+}
+
 function videoStylePreset(style, manifest, talkingHead = { enabled: false, provider: "none" }) {
   if (isPremiumStyle(style)) {
     return {
@@ -4151,6 +5321,67 @@ function videoStylePreset(style, manifest, talkingHead = { enabled: false, provi
           "Store SFX as adapter-ready cues and local synthetic sounds.",
           talkingHead.enabled ? `Presenter generation can map to ${talkingHead.provider}, but local render uses a placeholder until media is supplied.` : "Presenter slot remains adapter-ready.",
           "Every claim must trace to repo metadata, demo evidence, or Launchclip-generated artifacts."
+        ]
+      }
+    };
+  }
+  if (isDataStoryBenchmarkStyle(style)) {
+    return {
+      duration_seconds: 150,
+      angle: "Create an original 2:30 vertical editorial data-story benchmark that matches the reference quality pressure: dark atlas shell, persistent masthead, real chart modules, map grids, lower-third stat chips, timed wipes, SFX cues, and strict visual QA, without copying reference transcript, media, data, brand, or exact visuals.",
+      briefBeats: [
+        "Open with a dark first-frame hook, rec/time UI, persistent masthead, and a concrete challenge.",
+        "Use synthetic launchclip fixture data, never public survey claims.",
+        "Hold a single editorial shell while evidence modules change inside it.",
+        "Use lower-third stat chips to punctuate spoken clauses instead of paragraph cards.",
+        "Make chart/map transitions visible with blur wipes, card pushes, bar fills, tile waves, and SFX.",
+        "Keep source status visible for the generated benchmark data.",
+        "End on a stark verdict and review-first boundary."
+      ],
+      structure: dataStoryBenchmarkStructure(manifest),
+      recipe: {
+        preset: DATA_STORY_BENCHMARK_STYLE,
+        aspect_ratio: "9:16",
+        duration_seconds: 150,
+        resolution: { width: 1080, height: 1920, fps: 30 },
+        layout: [
+          "0-18s: editorial hook, challenge, question, and topic chips.",
+          "18-39s: hopes chart with proof, charts, captions, review, and sound.",
+          "39-58s: fears chart showing retention failure modes.",
+          "58-78s: orange synthetic scenario grid.",
+          "78-98s: blue twist chart about polish versus motion.",
+          "98-120s: blue map grid asking for renderer guardrails.",
+          "120-139s: trust comparison cards.",
+          "139-150s: verdict and review-first CTA."
+        ],
+        visual_language: {
+          palette: "very dark navy atlas background, small off-white chart cards, orange risk/attention marks, blue analysis marks, green review marks",
+          masthead: "persistent LAUNCHCLIP masthead, rec dot, runtime code, and bottom progress rail; never use the reference brand lockup",
+          data_viz: "horizontal bar charts, orange and blue tile maps, comparison cards, verdict card, lower-third stat chips",
+          pacing: "major section change every 11-22 seconds, but chart bars, tiles, stat chips, spotlight wipes, camera drift, and SFX move every 0.5-1.4 seconds",
+          captions: "headline and stat-chip copy only; no full transcript subtitles",
+          sound_design: "subtle whooshes for section wipes, data ticks for bars/tiles, low hits for verdict cards, and quiet final hit; duck under voiceover",
+          source_policy: "all numbers and map tiles are synthetic benchmark fixtures unless tied to launchclip-generated artifacts",
+          production_layers: ["persistent shell", "voiceover", "chart marks", "map tiles", "stat chips", "spotlight wipes", "SFX cues", "visual metrics"]
+        },
+        renderer_contract: {
+          adapter: "launchclip.hyperframes-data-story.v1",
+          composition_id: "LaunchclipHyperframes",
+          primary_renderer: "hyperframes",
+          fallback_adapters: ["remotion", "local-ffmpeg", "product-videogen"],
+          external_api_policy: "No reference download, no voice cloning, no live product-videogen submit, no social posting, and no unlabelled synthetic claims."
+        },
+        benchmark_reference_observations: {
+          source_video_duration_seconds: 150,
+          source_video_aspect: "vertical 9:16",
+          observed_pacing: "about 67 auto-caption cues and roughly 400 words across 150 seconds",
+          safe_reuse_boundary: "Reuse only high-level production pressure: data-story density, charts, maps, counters, captions, and SFX timing."
+        },
+        generation_notes: [
+          "Write and synthesize an original script only.",
+          "Do not use or store the reference transcript as voiceover text.",
+          "Do not recreate the exact reference charts, title cards, or map sequence.",
+          "Keep every chart and diagram source-labelled for review."
         ]
       }
     };
@@ -4377,6 +5608,120 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         "Use only local manifest assets and render fallbacks for missing aliases.",
         "No static text-card-only sequence may last longer than 1.2 seconds.",
         "External providers receive adapter-ready cues only; local rendering must not call them."
+      ]
+    };
+  }
+  if (isDataStoryBenchmarkStyle(style)) {
+    const structure = dataStoryBenchmarkStructure();
+    const timeline = [
+      {
+        beat: "public-record-hook",
+        voiceover: "Launchclip just graded its own launch clips: forty seven thousand five hundred eighty two synthetic viewer seconds, fifty failure scenarios, and one uncomfortable question. Can a generated video hold attention for two minutes thirty, or does it collapse the moment the first card stops moving? Stay for the answer, because the first render was brutal.",
+        caption: "Launchclip just graded its own output",
+        visual: "Dark atlas shell, persistent masthead, rec/time UI, large hook headline, topic chips, and a synthetic viewer-seconds counter.",
+        evidence_source: "synthetic launchclip benchmark fixture",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["graded", "one question", "brutal"],
+        motion: "headline slam, atlas drift, rec indicator pulse, counter reveal, topic chips land",
+        transition: "orange spotlight wipe"
+      },
+      {
+        beat: "hopes-chart",
+        voiceover: "Start with what viewers hope for. Number one, proof that moves with the voice. Forty eight percent of the fixture seconds reward visible evidence. Thirty six percent reward charts that explain the point fast. Twenty nine percent reward captions that land on the spoken beat, not two seconds late.",
+        caption: "What a launch clip has to deliver",
+        visual: "Centered off-white horizontal bar chart with orange and blue bars, source label, and lower-third stat chips.",
+        evidence_source: "synthetic launchclip benchmark fixture",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["proof moves", "charts explain", "captions land"],
+        motion: "chart card push, bar fills, number ticks, lower-third chips pop in sequence",
+        transition: "chart blur reveal"
+      },
+      {
+        beat: "fears-chart",
+        voiceover: "The fears hit harder. Sixty four percent punish dead holds. Fifty six percent notice bright empty cards before they notice the message. Weak hooks, tiny labels, and flat audio all show up fast. Across the whole benchmark, the viewer is not waiting for us to become interesting later.",
+        caption: "And the weak spots hit harder",
+        visual: "Second ranked bar chart with blue and orange retention risks, darker shell, and bottom stat chips.",
+        evidence_source: "synthetic launchclip benchmark fixture",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["dead holds", "empty cards", "not waiting"],
+        motion: "bar refills, risk labels snap, lower-third chips slide, subtle camera push",
+        transition: "risk card wipe"
+      },
+      {
+        beat: "state-grid",
+        voiceover: "Every tile in this grid is a synthetic launch scenario. Some start with no hook. Some show terminal proof too long. Some hide the source. Some cut without sound. When those problems cluster, the clip looks automated even when the facts are correct. That is the retention trap.",
+        caption: "Dead air: the number-one fear everywhere",
+        visual: "Orange map-like tile grid with cluster pulses, legend, and a synthetic scenario source label.",
+        evidence_source: "50 synthetic launch scenarios",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["no hook", "too long", "retention trap"],
+        motion: "tile wave, hot clusters pulse, legend snap, lower-third stats land",
+        transition: "map zoom wipe"
+      },
+      {
+        beat: "twist-chart",
+        voiceover: "Here is the twist. The more polished the surface, the less forgiving the viewer gets. A clean chart buys attention only if something changes: a bar fills, a chip lands, a number resolves, or the camera keeps pressure on the next idea.",
+        caption: "The prettier the card, the more viewers punish stillness",
+        visual: "Blue ranked bar chart showing polish versus motion, source labels, and moving lower-third chips.",
+        evidence_source: "synthetic launchclip benchmark fixture",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["polished", "less forgiving", "something changes"],
+        motion: "blue bars fill, polish row swaps, chip lands, camera pressure continues",
+        transition: "blue chart wipe"
+      },
+      {
+        beat: "ask-map",
+        voiceover: "So the ask is not just make a prettier template. The renderer has to step in before the drop: enforce dark-light balance, limit stillness, align words to visual events, schedule sound cues, and flag weak source labels. That is what an actual launch clip CLI needs to know.",
+        caption: "Can the renderer step in before retention drops?",
+        visual: "Blue map-like grid with renderer guardrail clusters, green stat chips, and a one point two second stillness marker.",
+        evidence_source: "launchclip visual QA target",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["step in", "align words", "sound cues"],
+        motion: "blue tile wave, guardrail clusters pulse, QA chips tick, progress rail advances",
+        transition: "guardrail map wipe"
+      },
+      {
+        beat: "trust-answer",
+        voiceover: "Who should decide if the output is ready? Automation alone gets the small number. Review with metrics gets the bigger one. The point is not to slow the system down. It is to make the next render measurably closer before anyone spends attention on it.",
+        caption: "Who should decide if a launch clip is ready?",
+        visual: "Two dark comparison cards, automation alone versus analyst review, with supporting lower-third trust chips.",
+        evidence_source: "synthetic launchclip benchmark fixture",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["automation alone", "review with metrics", "measurably closer"],
+        motion: "comparison cards punch in, numbers count up, stat chips attach, camera settles",
+        transition: "comparison punch"
+      },
+      {
+        beat: "verdict-cta",
+        voiceover: "The verdict is simple. A clip without visual QA is not launch-ready. Generate the packet, render it, analyze it, then iterate until the contact sheet earns the next two minutes.",
+        caption: "15% trust a generated clip with no visual QA",
+        visual: "Stark verdict card with a large percentage, review-first URL pill, final lower-third prompts, and quiet progress hold.",
+        evidence_source: "launchclip review-first benchmark boundary",
+        adapter_target: "hyperframes",
+        caption_emphasis: ["visual QA", "analyze it", "iterate"],
+        motion: "verdict card push, large number hit, URL pill land, final progress hold",
+        transition: "quiet final hit"
+      }
+    ];
+    const timedTimeline = applyVoiceWeightedTiming(timeline, 150, structure);
+    return {
+      schema_version: "launchclip.script.v1",
+      style,
+      strategy: "original editorial data-story benchmark with a persistent dark shell, chart cards, map grids, lower-third stat chips, timed wipes, SFX lanes, visual QA, and no copied reference material",
+      duration_seconds: 150,
+      voice: {
+        provider: "none",
+        avatar_id: null,
+        delivery: "fast data-story narration around 150 WPM, continuous but clear, with short pauses at chart-card transitions"
+      },
+      summary_line: summary || "turns local demo evidence into a reviewable launch packet",
+      timeline: timedTimeline,
+      alignment_rules: [
+        "Do not use the reference transcript as generated voiceover and do not reuse its audio, footage, brand, graphics, chart values, or exact visuals.",
+        "Every chart, map, and stat chip must declare synthetic fixture or launchclip artifact source status.",
+        "Keep the persistent editorial shell visible while modules change inside it.",
+        "Voiceover is continuous; on-screen copy is headline/stat-chip copy, not full transcript subtitles.",
+        "The generated packet remains dry-run and review-first."
       ]
     };
   }
