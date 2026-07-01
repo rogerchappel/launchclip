@@ -3519,6 +3519,31 @@ function renderEditorialModule(section) {
   return renderEditorialBars(section);
 }
 
+function dataStoryEditorialLayerPlan(section, index) {
+  const module = section.module ?? "bars";
+  const rightHeavyModules = new Set([
+    "attention-meter",
+    "creator-hook",
+    "failure-deck",
+    "grader-table",
+    "prompt-workflow",
+    "proof-lane",
+    "qa-workflow",
+    "risk-stack",
+    "scenario-board"
+  ]);
+  const presenterModules = new Set(["creator-hook", "prompt-workflow", "grader-table", "qa-workflow", "compare", "verdict"]);
+  const captionModules = new Set(["creator-hook", "proof-lane", "risk-stack", "grader-table", "prompt-workflow"]);
+  const statModules = new Set(["hook", "bars", "grid", "blue-grid", "attention-meter", "failure-deck", "compare", "verdict"]);
+  return {
+    motionStack: !rightHeavyModules.has(module),
+    presenter: presenterModules.has(module) || index % 6 === 0,
+    kineticCaption: captionModules.has(module) || index % 3 === 1,
+    statRow: statModules.has(module),
+    beatTimeline: module !== "creator-hook" && module !== "verdict"
+  };
+}
+
 function renderDataStoryEditorialHyperframesIndex(manifest, video, sfxManifest = null) {
   const width = 1080;
   const height = 1920;
@@ -3528,20 +3553,27 @@ function renderDataStoryEditorialHyperframesIndex(manifest, video, sfxManifest =
   const resolvedSfxManifest = sfxManifest ?? buildHyperframesSfxManifest(video);
   const sfxManifestJson = JSON.stringify(resolvedSfxManifest).replace(/</g, "\\u003c");
   const sectionHtml = sections.map((section, index) => {
+    const layerPlan = dataStoryEditorialLayerPlan(section, index);
+    const moduleClass = `module-${String(section.module ?? "bars").replace(/[^a-z0-9-]/gi, "-").toLowerCase()}`;
     const chips = (section.statChips ?? []).map(([value, label]) => `<span class="stat-chip"><b>${escapeHtml(String(value))}</b><em>${escapeHtml(String(label))}</em></span>`).join("");
     const motionBeats = (section.motionBeats ?? []).map((beat, beatIndex) => `<span class="motion-beat beat-${beatIndex + 1}"><b>${String(beatIndex + 1).padStart(2, "0")}</b><em>${escapeHtml(String(beat))}</em></span>`).join("");
     const kineticCaption = dataStoryKineticCaptionWords(section).map((word, wordIndex) => `<b class="kinetic-word word-${wordIndex + 1}">${escapeHtml(word)}</b>`).join("");
     const beatTicks = Array.from({ length: Math.max(4, Math.min(9, Math.ceil(section.duration / 2.4))) }, (_, beatIndex) => `<i style="--tick:${beatIndex}"></i>`).join("");
-    return `<section class="editorial-section section-${index + 1} accent-${escapeHtml(section.accent)}" data-start="${section.start}" data-duration="${section.duration.toFixed(2)}" data-section-id="${escapeHtml(section.id)}">
+    const hostHtml = layerPlan.presenter ? `<div class="host-pip">${renderEditorialHostPip(section)}</div>` : "";
+    const kineticHtml = layerPlan.kineticCaption && kineticCaption ? `<div class="kinetic-caption">${kineticCaption}</div>` : "";
+    const motionStackHtml = layerPlan.motionStack && motionBeats ? `<div class="motion-beat-stack">${motionBeats}</div>` : "";
+    const beatTimelineHtml = layerPlan.beatTimeline ? `<div class="beat-timeline">${beatTicks}</div>` : "";
+    const statRowHtml = layerPlan.statRow && chips ? `<div class="stat-row">${chips}</div>` : "";
+    return `<section class="editorial-section section-${index + 1} accent-${escapeHtml(section.accent)} ${moduleClass}" data-start="${section.start}" data-duration="${section.duration.toFixed(2)}" data-section-id="${escapeHtml(section.id)}" data-module="${escapeHtml(section.module ?? "bars")}" data-layer-motion-stack="${layerPlan.motionStack ? "true" : "false"}" data-layer-presenter="${layerPlan.presenter ? "true" : "false"}">
       <div class="section-kicker">${escapeHtml(section.kicker)}</div>
       <div class="section-clock">${escapeHtml(section.timeRange)}</div>
       <div class="section-lens"></div>
       <div class="section-module">${renderEditorialModule(section)}</div>
-      <div class="host-pip">${renderEditorialHostPip(section)}</div>
-      <div class="kinetic-caption">${kineticCaption}</div>
-      <div class="motion-beat-stack">${motionBeats}</div>
-      <div class="beat-timeline">${beatTicks}</div>
-      <div class="stat-row">${chips}</div>
+      ${hostHtml}
+      ${kineticHtml}
+      ${motionStackHtml}
+      ${beatTimelineHtml}
+      ${statRowHtml}
       <div class="source-chip">${escapeHtml(section.evidence)}</div>
     </section>`;
   }).join("\n");

@@ -403,6 +403,8 @@ test("plans original 150 second data-story benchmark contract", async () => {
     assert.match(hyperframesHtml, /grader-table/);
     assert.match(hyperframesHtml, /data-presenter-slot="adapter-ready"/);
     assert.match(hyperframesHtml, /kinetic-caption/);
+    assert.match(hyperframesHtml, /module-proof-lane[^"]*"[^>]+data-layer-motion-stack="false"/);
+    assert.match(hyperframesHtml, /data-layer-presenter="false"/);
     assert.match(hyperframesHtml, /retention-line/);
     assert.equal(payload.duration_seconds, 150);
     assert.equal(payload.recipe_json.video_manifest.style, "data-story-benchmark");
