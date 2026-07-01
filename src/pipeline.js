@@ -3086,12 +3086,15 @@ function dataStoryEditorialSectionMeta(segment, index) {
       ]
     }
   };
-  const preset = presets[segment.beat] ?? presets["hopes-chart"];
+  const group = dataStoryBeatGroup(segment.beat);
+  const preset = presets[group] ?? presets["hopes-chart"];
+  const override = dataStoryEditorialBeatOverride(segment, preset);
   const range = parseTimeRange(segment.time_range);
   const start = Number.isFinite(range.start) ? range.start : index * 10;
   const end = Number.isFinite(range.end) ? range.end : start + Number(segment.target_seconds ?? 10);
   return {
     ...preset,
+    ...override,
     id: segment.beat ?? `section-${index + 1}`,
     order: index + 1,
     start,
@@ -3099,9 +3102,184 @@ function dataStoryEditorialSectionMeta(segment, index) {
     timeRange: segment.time_range ?? `${start}-${end}s`,
     voiceover: segment.voiceover ?? "",
     caption: segment.caption ?? preset.headline,
+    headline: override.headline ?? segment.caption ?? preset.headline,
+    motionBeats: dataStoryEditorialMotionBeats(segment, preset),
     emphasis: Array.isArray(segment.caption_emphasis) ? segment.caption_emphasis : [],
     evidence: segment.evidence_source ?? "synthetic benchmark fixture"
   };
+}
+
+function dataStoryEditorialBeatOverride(segment, preset) {
+  const beat = String(segment.beat ?? "");
+  const caption = segment.caption ?? preset.headline;
+  if (beat === "public-record-hook") {
+    return {
+      module: "creator-hook",
+      accent: "green",
+      kicker: "SOCIAL PROOF",
+      headline: "Launchclip graded itself",
+      subhead: "Data, captions, SFX, visual QA, and review artifacts in one motion system."
+    };
+  }
+  if (["benchmark-scale", "failure-scenarios", "collapse-risk", "brutal-result"].includes(beat)) {
+    const copy = {
+      "benchmark-scale": {
+        kicker: "THE SAMPLE",
+        headline: "47,582 viewer seconds",
+        subhead: "The benchmark behaves like a crowded review wall, not one static card.",
+        stamp: "STRESS RUN",
+        deckStat: "47,582"
+      },
+      "failure-scenarios": {
+        kicker: "THE TEST",
+        headline: "50 ways to lose the viewer",
+        subhead: "Each tile is a synthetic failure case the renderer has to survive.",
+        stamp: "50 CASES",
+        deckStat: "50"
+      },
+      "collapse-risk": {
+        kicker: "THE RISK",
+        headline: "Stillness kills retention",
+        subhead: "The frame fractures as soon as the visual event lane goes quiet.",
+        stamp: "DEAD HOLD",
+        deckStat: "1.2s"
+      },
+      "brutal-result": {
+        kicker: "THE REVIEW",
+        headline: "The first render failed the room",
+        subhead: "The contact sheet made the problem visible before the full watch.",
+        stamp: "REJECT",
+        deckStat: "BRUTAL"
+      }
+    };
+    return { module: "failure-deck", accent: beat === "collapse-risk" || beat === "brutal-result" ? "purple" : "orange", ...copy[beat] };
+  }
+  if (["attention-question", "viewer-not-waiting", "retention-trap", "renderer-step-in"].includes(beat)) {
+    const copy = {
+      "attention-question": {
+        kicker: "THE QUESTION",
+        headline: "Can it hold 2:30?",
+        subhead: "The voice asks for retention, so the frame has to show retention.",
+        meterValue: "2:30",
+        meterLabel: "target hold"
+      },
+      "viewer-not-waiting": {
+        kicker: "THE DROP",
+        headline: "Viewers do not wait",
+        subhead: "The line falls unless a real visual event arrives before the marker.",
+        meterValue: "0.8s",
+        meterLabel: "event gap"
+      },
+      "retention-trap": {
+        kicker: "THE TRAP",
+        headline: "Correct facts still feel automated",
+        subhead: "When weak hook, hidden source, and flat sound cluster, retention slips.",
+        meterValue: "3x",
+        meterLabel: "risk cluster"
+      },
+      "renderer-step-in": {
+        kicker: "THE INTERCEPT",
+        headline: "Renderer steps in before the drop",
+        subhead: "Guardrails catch the attention line while there is still time.",
+        meterValue: "LIVE",
+        meterLabel: "guardrail"
+      }
+    };
+    return { module: "attention-meter", accent: beat === "renderer-step-in" ? "green" : "blue", ...copy[beat] };
+  }
+  if (["guardrail-list", "launchclip-needs", "measurable-iteration", "generate-render-analyze", "contact-sheet-earns"].includes(beat)) {
+    return {
+      module: "qa-workflow",
+      accent: ["generate-render-analyze", "contact-sheet-earns", "launchclip-needs"].includes(beat) ? "green" : "blue",
+      headline: caption,
+      subhead: beat === "contact-sheet-earns" ? "The review artifact has to prove the next two minutes are worth it." : "Generate, render, analyze, then tighten the next pass."
+    };
+  }
+  if (["proof-motion", "captions-land", "motion-events"].includes(beat)) {
+    return {
+      module: "proof-lane",
+      accent: beat === "captions-land" ? "green" : "blue",
+      headline: caption,
+      subhead: beat === "captions-land" ? "Captions arrive as timed objects, not a paragraph." : "Proof, voice, and camera pressure move in the same lane."
+    };
+  }
+  if (["fears-open", "dead-holds", "empty-cards", "weak-signals", "change-rule"].includes(beat)) {
+    return {
+      module: "risk-stack",
+      accent: "purple",
+      headline: caption,
+      subhead: beat === "empty-cards" ? "The empty card becomes the subject before the message can land." : "The renderer needs visible interruption before the hold becomes a skip."
+    };
+  }
+  if (["no-hook-tile", "terminal-too-long", "source-hidden", "cut-without-sound"].includes(beat)) {
+    return {
+      module: "scenario-board",
+      accent: "orange",
+      headline: caption,
+      subhead: "One synthetic tile opens up as a concrete QA failure."
+    };
+  }
+  if (["ask-open", "renderer-step-in"].includes(beat)) {
+    return {
+      module: "prompt-workflow",
+      accent: "blue",
+      headline: caption,
+      subhead: "The renderer needs a promptable workflow: source, storyboard, render, contact sheet, analyzer."
+    };
+  }
+  if (["decision-question", "automation-alone", "review-metrics", "visual-qa-required"].includes(beat)) {
+    return {
+      module: "grader-table",
+      accent: ["review-metrics"].includes(beat) ? "green" : "orange",
+      headline: caption,
+      subhead: "A social clip needs a visible rubric, not a silent pass/fail."
+    };
+  }
+  return {};
+}
+
+function dataStoryEditorialMotionBeats(segment, preset) {
+  if (segment.beat === "public-record-hook") {
+    return [
+      "47,582 viewer seconds",
+      "50 failure scenarios",
+      "first render was brutal",
+      "can it hold 2:30?",
+      "visual QA decides"
+    ];
+  }
+  const chips = (preset.statChips ?? []).map(([value, label]) => `${value} ${label}`);
+  const bars = (preset.bars ?? []).map(([label, value]) => `${value}% ${label}`);
+  const emphasis = Array.isArray(segment.caption_emphasis) ? segment.caption_emphasis : [];
+  return [...emphasis, ...chips, ...bars, preset.headline]
+    .filter(Boolean)
+    .map((value) => cleanObjectLabel(value).slice(0, 32))
+    .slice(0, 5);
+}
+
+function dataStoryKineticCaptionWords(section) {
+  const source = section.emphasis?.length ? section.emphasis : String(section.caption ?? section.headline ?? "").split(/\s+/);
+  return source
+    .flatMap((value) => String(value).split(/\s+/))
+    .map((value) => value.replace(/[^\w:%.-]/g, ""))
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
+function renderEditorialHostPip(section) {
+  const words = dataStoryKineticCaptionWords(section);
+  const label = words.slice(0, 2).join(" ") || "review";
+  return `<div class="host-screen" data-presenter-slot="adapter-ready">
+      <div class="host-bg"></div>
+      <div class="host-person">
+        <i class="host-cap"></i>
+        <i class="host-head"></i>
+        <i class="host-body"></i>
+        <i class="host-hand hand-a"></i>
+        <i class="host-hand hand-b"></i>
+      </div>
+      <span>${escapeHtml(label)}</span>
+    </div>`;
 }
 
 function renderEditorialBars(section) {
@@ -3148,10 +3326,169 @@ function renderEditorialCompare(section) {
 }
 
 function renderEditorialHook(section) {
+  const cells = Array.from({ length: 24 }, (_, index) => `<i class="${index % 5 === 0 || index % 7 === 0 ? "hot" : index % 3 === 0 ? "mid" : "low"}"></i>`).join("");
   return `<div class="hook-lockup">
-      <strong>${escapeHtml(section.headline)}</strong>
-      <span>${escapeHtml(section.subhead ?? "")}</span>
+      <strong class="hook-title">${escapeHtml(section.headline)}</strong>
+      <span class="hook-subhead">${escapeHtml(section.subhead ?? "")}</span>
       <div class="count-strip"><b>47.582</b><em>synthetic seconds assessed</em></div>
+      <div class="hook-proof-grid">${cells}</div>
+      <div class="hook-question"><b>Can it hold attention?</b><em>or does the first card stop moving?</em></div>
+    </div>`;
+}
+
+function renderEditorialCreatorHook(section) {
+  const logos = ["IG", "YT", "TT", "GH", "AI", "QA"].map((logo, index) => `<span class="logo-badge logo-${index + 1}">${escapeHtml(logo)}</span>`).join("");
+  return `<div class="creator-hook">
+      <div class="logo-orbit">${logos}<i class="orbit-core">LC</i></div>
+      <div class="creator-hook-copy">
+        <span>${escapeHtml(section.kicker)}</span>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+      </div>
+      <div class="creator-hook-prompt"><b>connect</b><em>data -> script -> render -> review</em></div>
+    </div>`;
+}
+
+function renderEditorialFailureDeck(section) {
+  const labels = ["no hook", "dead hold", "tiny labels", "late caption", "flat SFX", "hidden source", "white card", "slow proof", "weak beat", "no motion", "bad cut", "review"];
+  const hotIndexes = new Set([1, 3, 5, 7, 9]);
+  const tiles = labels.map((label, index) => `<span class="contact-tile ${hotIndexes.has(index) ? "hot" : index % 3 === 0 ? "warn" : "calm"}"><i></i><b>${escapeHtml(label)}</b></span>`).join("");
+  const fragments = Array.from({ length: 7 }, (_, index) => `<i class="fragment fragment-${index + 1}"></i>`).join("");
+  return `<div class="failure-deck">
+      <div class="failure-primary">
+        <span>${escapeHtml(section.kicker)}</span>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+        <em class="reject-stamp">${escapeHtml(section.stamp ?? "REVIEW")}</em>
+      </div>
+      <div class="failure-contact-sheet">${tiles}</div>
+      <div class="failure-stat"><b>${escapeHtml(section.deckStat ?? "50")}</b><em>${escapeHtml(section.meterLabel ?? "synthetic checks")}</em></div>
+      <div class="fragment-cloud">${fragments}</div>
+    </div>`;
+}
+
+function renderEditorialAttentionMeter(section) {
+  return `<div class="attention-meter">
+      <div class="meter-card meter-copy">
+        <span>${escapeHtml(section.kicker)}</span>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+      </div>
+      <div class="meter-card meter-readout">
+        <span>${escapeHtml(section.meterLabel ?? "attention")}</span>
+        <strong>${escapeHtml(section.meterValue ?? "2:30")}</strong>
+        <div class="meter-track"><i class="meter-fill"></i></div>
+      </div>
+      <div class="retention-graph" aria-hidden="true">
+        <svg viewBox="0 0 520 260" preserveAspectRatio="none">
+          <path class="retention-grid" d="M0 60 H520 M0 130 H520 M0 200 H520" />
+          <path class="retention-shadow" d="M16 58 C92 42 118 90 170 88 C238 85 250 164 310 156 C374 146 394 110 452 96 C486 88 504 76 520 70" />
+          <path class="retention-line" d="M16 58 C92 42 118 90 170 88 C238 85 250 164 310 156 C374 146 394 110 452 96 C486 88 504 76 520 70" />
+        </svg>
+        <div class="event-marker marker-a">voice</div>
+        <div class="event-marker marker-b">cut</div>
+        <div class="event-marker marker-c">SFX</div>
+      </div>
+    </div>`;
+}
+
+function renderEditorialQaWorkflow(section) {
+  const steps = ["Generate", "Render", "Analyze", "Iterate"];
+  const thumbnails = ["hook", "proof", "chart", "sound", "QA", "ready"];
+  return `<div class="qa-workflow">
+      <div class="workflow-panel">
+        <span>${escapeHtml(section.kicker)}</span>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+      </div>
+      <div class="workflow-steps">${steps.map((step, index) => `<b class="workflow-step step-${index + 1}">${escapeHtml(step)}</b>`).join("")}</div>
+      <div class="review-strip">${thumbnails.map((label, index) => `<i class="review-thumb thumb-${index + 1}"><em>${escapeHtml(label)}</em>${index < 2 ? "<span>fix</span>" : ""}</i>`).join("")}</div>
+    </div>`;
+}
+
+function renderEditorialPromptWorkflow(section) {
+  const rows = ["source data", "script beats", "visual plan", "SFX cues"].map((row, index) => `<span class="prompt-row row-${index + 1}"><b>${escapeHtml(row)}</b><i></i></span>`).join("");
+  const cards = ["prompt", "storyboard", "render", "analyze"].map((card, index) => `<b class="prompt-card card-${index + 1}">${escapeHtml(card)}</b>`).join("");
+  return `<div class="prompt-workflow">
+      <div class="prompt-window">
+        <div class="prompt-top"><span></span><span></span><span></span><em>Launchclip prompt</em></div>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+        <div class="prompt-rows">${rows}</div>
+      </div>
+      <div class="prompt-card-rail">${cards}</div>
+    </div>`;
+}
+
+function renderEditorialGraderTable(section) {
+  const rows = [
+    ["hook", "B-", "needs faster proof"],
+    ["source", "A", "visible labels"],
+    ["motion", "B", "add scene events"],
+    ["rewrite", "A-", "ship after review"]
+  ];
+  return `<div class="grader-table">
+      <div class="grader-title">
+        <span>VISUAL QA RUBRIC</span>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+      </div>
+      <div class="grader-grid">${rows.map(([name, grade, note]) => `<span class="grader-cell"><b>${escapeHtml(name)}</b><em>${escapeHtml(grade)}</em><i>${escapeHtml(note)}</i></span>`).join("")}</div>
+      <div class="rewrite-card"><b>rewrite</b><span>tighten hook, add proof, cut dead air</span></div>
+    </div>`;
+}
+
+function renderEditorialProofLane(section) {
+  const emphasis = section.emphasis?.length ? section.emphasis : ["proof", "voice", "beat"];
+  const chips = emphasis.slice(0, 4).map((item, index) => `<span class="proof-chip chip-${index + 1}">${escapeHtml(item)}</span>`).join("");
+  const wave = [28, 54, 38, 70, 46, 82, 36, 62, 44, 76, 34, 58].map((height, index) => `<i class="voice-bar bar-${index + 1}" style="--h:${height}%"></i>`).join("");
+  return `<div class="proof-lane">
+      <div class="proof-copy">
+        <span>${escapeHtml(section.kicker)}</span>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+      </div>
+      <div class="proof-screen">
+        <em>voice lane</em>
+        <div class="voice-wave">${wave}</div>
+        <div class="cursor-dot"></div>
+      </div>
+      <div class="proof-chips">${chips}</div>
+      <div class="proof-cardlets">
+        <b>source</b><b>chart</b><b>caption</b><b>SFX</b>
+      </div>
+    </div>`;
+}
+
+function renderEditorialRiskStack(section) {
+  const risks = section.emphasis?.length ? section.emphasis : ["dead hold", "tiny label", "flat audio"];
+  const rows = risks.slice(0, 4).map((risk, index) => `<span class="risk-row row-${index + 1}"><b>${escapeHtml(risk)}</b><i></i></span>`).join("");
+  const wave = Array.from({ length: 16 }, (_, index) => `<i class="risk-wave-bar bar-${index + 1}"></i>`).join("");
+  return `<div class="risk-stack">
+      <div class="risk-alert">
+        <span>${escapeHtml(section.kicker)}</span>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+      </div>
+      <div class="risk-meter"><b>1.2s</b><em>stillness limit</em><i class="risk-timer-fill"></i></div>
+      <div class="risk-rows">${rows}</div>
+      <div class="risk-wave">${wave}</div>
+      <div class="risk-tag">FIX BEFORE RENDER</div>
+    </div>`;
+}
+
+function renderEditorialScenarioBoard(section) {
+  const emphasis = section.emphasis?.length ? section.emphasis : [section.headline, "source", "sound"];
+  const rows = emphasis.slice(0, 3).map((item, index) => `<span class="diagnostic-row row-${index + 1}"><b>${escapeHtml(item)}</b><em>${index === 0 ? "fail" : "flag"}</em></span>`).join("");
+  return `<div class="scenario-board">
+      <div class="scenario-tile-main">
+        <span>${escapeHtml(section.kicker)}</span>
+        <strong>${escapeHtml(section.headline)}</strong>
+        <p>${escapeHtml(section.subhead ?? "")}</p>
+        <i class="qa-bracket bracket-a"></i><i class="qa-bracket bracket-b"></i>
+      </div>
+      <div class="diagnostic-panel">${rows}</div>
+      <div class="mini-timeline"><i></i><i></i><i></i><i></i><i></i></div>
     </div>`;
 }
 
@@ -3166,11 +3503,45 @@ function renderEditorialVerdict(section) {
 
 function renderEditorialModule(section) {
   if (section.module === "hook") return renderEditorialHook(section);
+  if (section.module === "creator-hook") return renderEditorialCreatorHook(section);
+  if (section.module === "failure-deck") return renderEditorialFailureDeck(section);
+  if (section.module === "attention-meter") return renderEditorialAttentionMeter(section);
+  if (section.module === "qa-workflow") return renderEditorialQaWorkflow(section);
+  if (section.module === "prompt-workflow") return renderEditorialPromptWorkflow(section);
+  if (section.module === "grader-table") return renderEditorialGraderTable(section);
+  if (section.module === "proof-lane") return renderEditorialProofLane(section);
+  if (section.module === "risk-stack") return renderEditorialRiskStack(section);
+  if (section.module === "scenario-board") return renderEditorialScenarioBoard(section);
   if (section.module === "grid") return renderEditorialGrid(section, false);
   if (section.module === "blue-grid") return renderEditorialGrid(section, true);
   if (section.module === "compare") return renderEditorialCompare(section);
   if (section.module === "verdict") return renderEditorialVerdict(section);
   return renderEditorialBars(section);
+}
+
+function dataStoryEditorialLayerPlan(section, index) {
+  const module = section.module ?? "bars";
+  const rightHeavyModules = new Set([
+    "attention-meter",
+    "creator-hook",
+    "failure-deck",
+    "grader-table",
+    "prompt-workflow",
+    "proof-lane",
+    "qa-workflow",
+    "risk-stack",
+    "scenario-board"
+  ]);
+  const presenterModules = new Set(["creator-hook", "prompt-workflow", "grader-table", "qa-workflow", "compare", "verdict"]);
+  const captionModules = new Set(["creator-hook", "proof-lane", "risk-stack", "grader-table", "prompt-workflow"]);
+  const statModules = new Set(["hook", "bars", "grid", "blue-grid", "attention-meter", "failure-deck", "compare", "verdict"]);
+  return {
+    motionStack: !rightHeavyModules.has(module),
+    presenter: presenterModules.has(module) || index % 6 === 0,
+    kineticCaption: captionModules.has(module) || index % 3 === 1,
+    statRow: statModules.has(module),
+    beatTimeline: module !== "creator-hook" && module !== "verdict"
+  };
 }
 
 function renderDataStoryEditorialHyperframesIndex(manifest, video, sfxManifest = null) {
@@ -3182,12 +3553,27 @@ function renderDataStoryEditorialHyperframesIndex(manifest, video, sfxManifest =
   const resolvedSfxManifest = sfxManifest ?? buildHyperframesSfxManifest(video);
   const sfxManifestJson = JSON.stringify(resolvedSfxManifest).replace(/</g, "\\u003c");
   const sectionHtml = sections.map((section, index) => {
+    const layerPlan = dataStoryEditorialLayerPlan(section, index);
+    const moduleClass = `module-${String(section.module ?? "bars").replace(/[^a-z0-9-]/gi, "-").toLowerCase()}`;
     const chips = (section.statChips ?? []).map(([value, label]) => `<span class="stat-chip"><b>${escapeHtml(String(value))}</b><em>${escapeHtml(String(label))}</em></span>`).join("");
-    return `<section class="editorial-section section-${index + 1} accent-${escapeHtml(section.accent)}" data-start="${section.start}" data-duration="${section.duration.toFixed(2)}" data-section-id="${escapeHtml(section.id)}">
+    const motionBeats = (section.motionBeats ?? []).map((beat, beatIndex) => `<span class="motion-beat beat-${beatIndex + 1}"><b>${String(beatIndex + 1).padStart(2, "0")}</b><em>${escapeHtml(String(beat))}</em></span>`).join("");
+    const kineticCaption = dataStoryKineticCaptionWords(section).map((word, wordIndex) => `<b class="kinetic-word word-${wordIndex + 1}">${escapeHtml(word)}</b>`).join("");
+    const beatTicks = Array.from({ length: Math.max(4, Math.min(9, Math.ceil(section.duration / 2.4))) }, (_, beatIndex) => `<i style="--tick:${beatIndex}"></i>`).join("");
+    const hostHtml = layerPlan.presenter ? `<div class="host-pip">${renderEditorialHostPip(section)}</div>` : "";
+    const kineticHtml = layerPlan.kineticCaption && kineticCaption ? `<div class="kinetic-caption">${kineticCaption}</div>` : "";
+    const motionStackHtml = layerPlan.motionStack && motionBeats ? `<div class="motion-beat-stack">${motionBeats}</div>` : "";
+    const beatTimelineHtml = layerPlan.beatTimeline ? `<div class="beat-timeline">${beatTicks}</div>` : "";
+    const statRowHtml = layerPlan.statRow && chips ? `<div class="stat-row">${chips}</div>` : "";
+    return `<section class="editorial-section section-${index + 1} accent-${escapeHtml(section.accent)} ${moduleClass}" data-start="${section.start}" data-duration="${section.duration.toFixed(2)}" data-section-id="${escapeHtml(section.id)}" data-module="${escapeHtml(section.module ?? "bars")}" data-layer-motion-stack="${layerPlan.motionStack ? "true" : "false"}" data-layer-presenter="${layerPlan.presenter ? "true" : "false"}">
       <div class="section-kicker">${escapeHtml(section.kicker)}</div>
       <div class="section-clock">${escapeHtml(section.timeRange)}</div>
+      <div class="section-lens"></div>
       <div class="section-module">${renderEditorialModule(section)}</div>
-      <div class="stat-row">${chips}</div>
+      ${hostHtml}
+      ${kineticHtml}
+      ${motionStackHtml}
+      ${beatTimelineHtml}
+      ${statRowHtml}
       <div class="source-chip">${escapeHtml(section.evidence)}</div>
     </section>`;
   }).join("\n");
@@ -3226,7 +3612,17 @@ function renderDataStoryEditorialHyperframesIndex(manifest, video, sfxManifest =
     .accent-purple .section-kicker { color: #a88bff; }
     .accent-green .section-kicker { color: #6fe5ac; }
     .section-clock { position: absolute; top: 118px; right: 44px; color: rgba(245,239,231,0.46); font-size: 16px; font-weight: 800; }
+    .section-lens { position: absolute; left: -120px; top: 300px; width: 340px; height: 340px; border-radius: 50%; border: 1px solid rgba(255,120,79,0.28); background: radial-gradient(circle, rgba(255,120,79,0.18), transparent 62%); filter: blur(0.4px); opacity: 0; }
     .section-module { position: absolute; left: 74px; right: 74px; top: 250px; min-height: 920px; display: grid; place-items: center; }
+    .motion-beat-stack { position: absolute; right: 52px; top: 370px; width: 230px; display: grid; gap: 10px; z-index: 8; }
+    .motion-beat { min-height: 50px; padding: 10px 12px; border-radius: 8px; background: rgba(8,11,18,0.78); border: 1px solid rgba(245,239,231,0.14); box-shadow: 0 14px 34px rgba(0,0,0,0.3); display: grid; grid-template-columns: 34px 1fr; gap: 8px; align-items: center; }
+    .motion-beat b { color: #ff784f; font-size: 15px; line-height: 1; font-variant-numeric: tabular-nums; }
+    .motion-beat em { color: rgba(245,239,231,0.8); font-size: 13px; line-height: 1.1; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .accent-blue .motion-beat b { color: #70a9ff; }
+    .accent-green .motion-beat b { color: #6fe5ac; }
+    .beat-timeline { position: absolute; left: 48px; top: 300px; bottom: 162px; width: 8px; display: flex; flex-direction: column; justify-content: space-between; z-index: 8; }
+    .beat-timeline i { width: 8px; height: 44px; border-radius: 999px; background: rgba(245,239,231,0.16); box-shadow: 0 0 0 1px rgba(245,239,231,0.08); transform-origin: center; }
+    .beat-timeline i:nth-child(odd) { background: rgba(255,120,79,0.38); }
     .stat-row { position: absolute; left: 70px; right: 70px; bottom: 122px; display: flex; justify-content: center; gap: 14px; min-height: 62px; }
     .stat-chip { min-width: 190px; min-height: 58px; padding: 12px 18px; border-radius: 14px; background: rgba(13,16,24,0.92); border: 1px solid rgba(245,239,231,0.12); box-shadow: 0 16px 38px rgba(0,0,0,0.32); display: inline-flex; align-items: center; gap: 8px; justify-content: center; white-space: nowrap; }
     .stat-chip b { color: #ff784f; font-size: 26px; line-height: 1; }
@@ -3254,12 +3650,173 @@ function renderDataStoryEditorialHyperframesIndex(manifest, video, sfxManifest =
     .blue-map .tile-map i.mid { background: #5fa9ff; }
     .blue-map .tile-map i.hot { background: #2675d8; }
     .map-legend { display: flex; justify-content: center; gap: 18px; color: rgba(20,24,32,0.58); font-size: 14px; text-transform: uppercase; }
-    .hook-lockup { width: 820px; min-height: 680px; display: grid; align-content: center; gap: 24px; text-align: left; }
+    .hook-lockup { position: relative; width: 820px; min-height: 680px; display: grid; align-content: center; gap: 24px; text-align: left; }
     .hook-lockup strong { display: block; font-size: 72px; line-height: 0.92; color: #fff8ef; text-shadow: 0 14px 44px rgba(0,0,0,0.46); }
     .hook-lockup span { display: block; color: rgba(245,239,231,0.82); font-size: 26px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
     .count-strip { width: 440px; padding: 12px 18px; border-radius: 8px; background: rgba(255,120,79,0.2); box-shadow: inset 0 0 0 1px rgba(255,120,79,0.36); display: flex; align-items: center; gap: 12px; }
     .count-strip b { color: #ff784f; font-size: 42px; }
     .count-strip em { color: #f5efe7; font-size: 16px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .hook-proof-grid { position: absolute; right: -34px; top: 98px; width: 220px; display: grid; grid-template-columns: repeat(6, 1fr); gap: 7px; transform: rotate(3deg); }
+    .hook-proof-grid i { height: 26px; border-radius: 4px; background: rgba(245,239,231,0.16); box-shadow: inset 0 0 0 1px rgba(245,239,231,0.08); }
+    .hook-proof-grid i.mid { background: rgba(240,179,91,0.76); }
+    .hook-proof-grid i.hot { background: rgba(255,120,79,0.92); }
+    .hook-question { position: absolute; right: -16px; bottom: 96px; width: 285px; padding: 16px 18px; border-radius: 10px; background: rgba(8,11,18,0.88); border: 1px solid rgba(255,120,79,0.25); box-shadow: 0 18px 48px rgba(0,0,0,0.38); }
+    .hook-question b { display: block; color: #fff8ef; font-size: 24px; line-height: 1.05; }
+    .hook-question em { display: block; margin-top: 6px; color: rgba(245,239,231,0.66); font-size: 13px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .host-pip { position: absolute; left: 74px; bottom: 166px; width: 252px; height: 188px; z-index: 11; filter: drop-shadow(0 22px 46px rgba(0,0,0,0.42)); }
+    .host-screen { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 14px; background: #10141f; border: 1px solid rgba(245,239,231,0.18); }
+    .host-bg { position: absolute; inset: 0; background: radial-gradient(circle at 70% 22%, rgba(112,169,255,0.28), transparent 28%), linear-gradient(135deg, rgba(255,120,79,0.18), transparent 56%); }
+    .host-person { position: absolute; left: 54px; right: 54px; bottom: 0; height: 160px; }
+    .host-head { position: absolute; left: 50%; top: 28px; width: 74px; height: 82px; margin-left: -37px; border-radius: 42% 42% 48% 48%; background: #d1a57f; box-shadow: inset -10px -12px 0 rgba(84,48,34,0.18); }
+    .host-cap { position: absolute; left: 50%; top: 10px; width: 92px; height: 42px; margin-left: -46px; border-radius: 46px 46px 10px 10px; background: #242933; z-index: 2; }
+    .host-body { position: absolute; left: 50%; bottom: -26px; width: 130px; height: 92px; margin-left: -65px; border-radius: 54px 54px 0 0; background: #1d2230; }
+    .host-hand { position: absolute; width: 52px; height: 18px; border-radius: 999px; background: #d1a57f; z-index: 3; }
+    .hand-a { left: 12px; bottom: 48px; transform: rotate(-24deg); }
+    .hand-b { right: 8px; bottom: 66px; transform: rotate(28deg); }
+    .host-screen span { position: absolute; left: 12px; right: 12px; bottom: 10px; color: #fff8ef; font-size: 14px; font-weight: 900; text-align: center; text-transform: uppercase; }
+    .kinetic-caption { position: absolute; left: 356px; right: 72px; bottom: 202px; min-height: 58px; display: flex; align-items: center; gap: 10px; z-index: 11; }
+    .kinetic-word { padding: 9px 13px; border-radius: 8px; background: rgba(245,239,231,0.92); color: #111521; font-size: 25px; line-height: 1; font-weight: 900; text-transform: uppercase; box-shadow: 0 16px 34px rgba(0,0,0,0.36); white-space: nowrap; }
+    .creator-hook { position: relative; width: 850px; min-height: 780px; }
+    .logo-orbit { position: absolute; left: 60px; top: 92px; width: 430px; height: 430px; border-radius: 50%; border: 1px solid rgba(111,229,172,0.28); box-shadow: inset 0 0 58px rgba(111,229,172,0.12), 0 0 70px rgba(111,229,172,0.12); }
+    .orbit-core { position: absolute; left: 50%; top: 50%; width: 98px; height: 98px; margin: -49px 0 0 -49px; border-radius: 50%; display: grid; place-items: center; background: #6fe5ac; color: #0a1118; font-style: normal; font-size: 34px; font-weight: 900; box-shadow: 0 0 42px rgba(111,229,172,0.45); }
+    .logo-badge { position: absolute; width: 62px; height: 62px; border-radius: 16px; display: grid; place-items: center; color: #fff8ef; background: rgba(12,17,26,0.94); border: 1px solid rgba(245,239,231,0.18); font-size: 20px; font-weight: 900; box-shadow: 0 20px 46px rgba(0,0,0,0.4); }
+    .logo-1 { left: 50%; top: -31px; margin-left: -31px; background: #dd3f83; }
+    .logo-2 { right: -31px; top: 50%; margin-top: -31px; background: #ea3323; }
+    .logo-3 { left: 50%; bottom: -31px; margin-left: -31px; background: #111521; }
+    .logo-4 { left: -31px; top: 50%; margin-top: -31px; background: #242933; }
+    .logo-5 { left: 70px; top: 52px; background: #ff784f; }
+    .logo-6 { right: 70px; bottom: 52px; background: #2675d8; }
+    .creator-hook-copy { position: absolute; right: 0; top: 154px; width: 430px; min-height: 350px; padding: 34px 36px; border-radius: 14px; background: rgba(8,12,20,0.9); border: 1px solid rgba(245,239,231,0.14); box-shadow: 0 30px 80px rgba(0,0,0,0.42); }
+    .creator-hook-copy span, .prompt-window em, .grader-title span { display: block; color: #6fe5ac; font-size: 15px; font-weight: 900; letter-spacing: 0.16em; text-transform: uppercase; font-style: normal; }
+    .creator-hook-copy strong { display: block; margin-top: 18px; color: #fff8ef; font-size: 66px; line-height: 0.94; }
+    .creator-hook-copy p { margin: 18px 0 0; color: rgba(245,239,231,0.72); font-size: 20px; line-height: 1.25; font-weight: 800; }
+    .creator-hook-prompt { position: absolute; left: 120px; right: 80px; bottom: 78px; min-height: 88px; padding: 18px 22px; border-radius: 12px; background: #f4efe4; color: #111521; display: grid; grid-template-columns: 140px 1fr; align-items: center; gap: 16px; box-shadow: 0 28px 76px rgba(0,0,0,0.42); }
+    .creator-hook-prompt b { font-size: 28px; text-transform: uppercase; }
+    .creator-hook-prompt em { color: rgba(17,21,33,0.62); font-size: 18px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .failure-deck { position: relative; width: 850px; min-height: 770px; }
+    .failure-primary { position: absolute; left: 18px; top: 56px; width: 540px; min-height: 370px; padding: 34px 36px; border-radius: 10px; background: #f4efe4; color: #111521; box-shadow: 0 34px 90px rgba(0,0,0,0.44); transform: rotate(-3deg); }
+    .failure-primary span, .meter-copy span, .workflow-panel span, .meter-readout span { display: block; color: #ff784f; font-size: 15px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; }
+    .accent-blue .meter-copy span, .accent-blue .meter-readout span, .accent-blue .workflow-panel span { color: #70a9ff; }
+    .accent-green .workflow-panel span, .accent-green .meter-copy span, .accent-green .meter-readout span { color: #6fe5ac; }
+    .failure-primary strong { display: block; margin-top: 18px; font-size: 58px; line-height: 0.95; color: #111521; }
+    .failure-primary p { margin: 18px 0 0; color: rgba(17,21,33,0.72); font-size: 20px; line-height: 1.22; font-weight: 800; }
+    .reject-stamp { position: absolute; right: -24px; bottom: 34px; padding: 10px 16px; border: 5px solid #e34b3e; color: #e34b3e; font-size: 38px; line-height: 1; font-style: normal; font-weight: 900; letter-spacing: 0.05em; transform: rotate(12deg); text-transform: uppercase; }
+    .failure-contact-sheet { position: absolute; right: 0; top: 198px; width: 368px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; transform: rotate(4deg); }
+    .contact-tile { height: 118px; padding: 9px; border-radius: 6px; background: rgba(245,239,231,0.12); border: 1px solid rgba(245,239,231,0.16); box-shadow: 0 18px 38px rgba(0,0,0,0.24); display: grid; align-content: space-between; }
+    .contact-tile i { height: 54px; border-radius: 4px; background: linear-gradient(135deg, rgba(245,239,231,0.2), rgba(255,120,79,0.32)); box-shadow: inset 0 0 0 1px rgba(245,239,231,0.08); }
+    .contact-tile.hot { border-color: rgba(255,96,75,0.72); background: rgba(120,28,30,0.58); }
+    .contact-tile.warn { border-color: rgba(240,179,91,0.44); background: rgba(97,65,28,0.55); }
+    .contact-tile b { color: #f5efe7; font-size: 12px; line-height: 1.05; text-transform: uppercase; }
+    .failure-stat { position: absolute; left: 92px; bottom: 68px; width: 310px; padding: 16px 18px; border-radius: 10px; background: rgba(9,12,20,0.9); border: 1px solid rgba(255,120,79,0.26); box-shadow: 0 20px 50px rgba(0,0,0,0.4); }
+    .failure-stat b { display: block; color: #ff784f; font-size: 60px; line-height: 0.9; }
+    .failure-stat em { color: rgba(245,239,231,0.7); font-size: 14px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .fragment-cloud { position: absolute; inset: 0; pointer-events: none; }
+    .fragment { position: absolute; width: 78px; height: 12px; background: rgba(255,120,79,0.5); filter: blur(0.2px); }
+    .fragment-1 { left: 604px; top: 86px; transform: rotate(18deg); }
+    .fragment-2 { left: 68px; top: 490px; transform: rotate(-8deg); }
+    .fragment-3 { right: 88px; bottom: 80px; transform: rotate(24deg); }
+    .fragment-4 { left: 426px; bottom: 154px; transform: rotate(-18deg); }
+    .fragment-5 { right: 26px; top: 120px; transform: rotate(-24deg); }
+    .fragment-6 { left: 230px; top: 32px; transform: rotate(10deg); }
+    .fragment-7 { left: 610px; bottom: 238px; transform: rotate(-4deg); }
+    .attention-meter { position: relative; width: 850px; min-height: 760px; }
+    .meter-card { border-radius: 12px; background: rgba(13,17,27,0.92); border: 1px solid rgba(245,239,231,0.14); box-shadow: 0 26px 70px rgba(0,0,0,0.38); }
+    .meter-copy { position: absolute; left: 12px; top: 28px; width: 560px; min-height: 280px; padding: 34px 36px; }
+    .meter-copy strong { display: block; margin-top: 18px; color: #fff8ef; font-size: 62px; line-height: 0.96; }
+    .meter-copy p { margin: 18px 0 0; color: rgba(245,239,231,0.72); font-size: 20px; line-height: 1.25; font-weight: 800; }
+    .meter-readout { position: absolute; right: 0; top: 96px; width: 246px; min-height: 232px; padding: 26px; text-align: center; }
+    .meter-readout strong { display: block; margin: 18px 0; color: #70a9ff; font-size: 64px; line-height: 0.92; }
+    .accent-green .meter-readout strong { color: #6fe5ac; }
+    .meter-track { width: 100%; height: 18px; border-radius: 999px; background: rgba(245,239,231,0.12); overflow: hidden; }
+    .meter-fill { display: block; width: 78%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #70a9ff, #6fe5ac); transform-origin: left center; }
+    .retention-graph { position: absolute; left: 36px; right: 28px; bottom: 62px; height: 360px; border-radius: 12px; background: #f4efe4; box-shadow: 0 32px 90px rgba(0,0,0,0.42); overflow: hidden; }
+    .retention-graph svg { position: absolute; inset: 28px 24px 72px; width: calc(100% - 48px); height: 250px; }
+    .retention-grid { fill: none; stroke: rgba(17,21,33,0.12); stroke-width: 2; }
+    .retention-shadow { fill: none; stroke: rgba(255,120,79,0.16); stroke-width: 22; stroke-linecap: round; }
+    .retention-line { fill: none; stroke: #111521; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 720; stroke-dashoffset: 720; }
+    .event-marker { position: absolute; bottom: 28px; padding: 10px 14px; border-radius: 999px; background: #111521; color: #f4efe4; font-size: 15px; font-weight: 900; text-transform: uppercase; }
+    .marker-a { left: 62px; }
+    .marker-b { left: 342px; }
+    .marker-c { right: 62px; background: #ff784f; }
+    .qa-workflow { position: relative; width: 850px; min-height: 780px; }
+    .workflow-panel { position: absolute; left: 32px; top: 20px; width: 640px; min-height: 268px; padding: 34px 38px; border-radius: 12px; background: rgba(13,17,27,0.94); border: 1px solid rgba(111,229,172,0.22); box-shadow: 0 26px 76px rgba(0,0,0,0.42); }
+    .workflow-panel strong { display: block; margin-top: 16px; color: #fff8ef; font-size: 56px; line-height: 0.96; }
+    .workflow-panel p { margin: 18px 0 0; color: rgba(245,239,231,0.72); font-size: 20px; line-height: 1.25; font-weight: 800; }
+    .workflow-steps { position: absolute; left: 68px; right: 68px; top: 354px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .workflow-step { min-height: 96px; border-radius: 10px; background: #f4efe4; color: #111521; display: grid; place-items: center; font-size: 21px; text-transform: uppercase; box-shadow: 0 20px 54px rgba(0,0,0,0.36); }
+    .review-strip { position: absolute; left: 24px; right: 24px; bottom: 58px; display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; transform: rotate(-2deg); }
+    .review-thumb { position: relative; height: 150px; padding: 12px; border-radius: 8px; background: rgba(245,239,231,0.13); border: 1px solid rgba(245,239,231,0.15); box-shadow: 0 20px 50px rgba(0,0,0,0.34); display: flex; align-items: end; justify-content: center; }
+    .review-thumb::before { content: ""; position: absolute; left: 12px; right: 12px; top: 12px; height: 76px; border-radius: 5px; background: linear-gradient(135deg, rgba(111,229,172,0.5), rgba(112,169,255,0.28)); }
+    .review-thumb em { position: relative; color: #f5efe7; font-size: 13px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .review-thumb span { position: absolute; right: -5px; top: 34px; padding: 4px 7px; border: 3px solid #e34b3e; color: #e34b3e; background: #f4efe4; font-size: 13px; font-weight: 900; text-transform: uppercase; transform: rotate(12deg); }
+    .prompt-workflow, .grader-table { position: relative; width: 850px; min-height: 770px; }
+    .prompt-window { position: absolute; left: 36px; top: 34px; width: 630px; min-height: 482px; padding: 58px 34px 34px; border-radius: 14px; background: #f4efe4; color: #111521; box-shadow: 0 32px 90px rgba(0,0,0,0.42); overflow: hidden; }
+    .prompt-top { position: absolute; left: 0; right: 0; top: 0; height: 44px; padding: 0 16px; background: rgba(17,21,33,0.08); display: flex; align-items: center; gap: 8px; }
+    .prompt-top span { width: 10px; height: 10px; border-radius: 50%; background: #ff784f; }
+    .prompt-top span:nth-child(2) { background: #f0b35b; }
+    .prompt-top span:nth-child(3) { background: #6fe5ac; }
+    .prompt-window em { margin-left: auto; color: rgba(17,21,33,0.54); font-size: 12px; }
+    .prompt-window strong { display: block; color: #111521; font-size: 52px; line-height: 0.98; }
+    .prompt-window p { margin: 16px 0 22px; color: rgba(17,21,33,0.68); font-size: 19px; line-height: 1.25; font-weight: 800; }
+    .prompt-rows { display: grid; gap: 10px; }
+    .prompt-row { min-height: 48px; padding: 0 14px; border-radius: 8px; background: rgba(17,21,33,0.06); display: grid; grid-template-columns: 150px 1fr; gap: 12px; align-items: center; }
+    .prompt-row b { color: rgba(17,21,33,0.72); font-size: 15px; text-transform: uppercase; }
+    .prompt-row i { height: 12px; border-radius: 999px; background: linear-gradient(90deg, #70a9ff, #ff784f); transform-origin: left center; }
+    .prompt-card-rail { position: absolute; right: 0; top: 142px; width: 260px; display: grid; gap: 14px; }
+    .prompt-card { min-height: 86px; border-radius: 10px; background: rgba(9,13,21,0.92); border: 1px solid rgba(245,239,231,0.14); color: #f5efe7; display: grid; place-items: center; font-size: 18px; text-transform: uppercase; box-shadow: 0 20px 50px rgba(0,0,0,0.34); }
+    .grader-title { position: absolute; left: 32px; top: 30px; width: 560px; min-height: 238px; padding: 32px 34px; border-radius: 14px; background: rgba(9,13,21,0.94); border: 1px solid rgba(245,239,231,0.13); box-shadow: 0 28px 80px rgba(0,0,0,0.42); }
+    .grader-title span { color: #ff784f; }
+    .grader-title strong { display: block; margin-top: 16px; color: #fff8ef; font-size: 52px; line-height: 0.96; }
+    .grader-title p { margin: 14px 0 0; color: rgba(245,239,231,0.72); font-size: 19px; line-height: 1.24; font-weight: 800; }
+    .grader-grid { position: absolute; left: 68px; right: 48px; top: 332px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .grader-cell { min-height: 188px; padding: 16px 12px; border-radius: 10px; background: #f4efe4; color: #111521; box-shadow: 0 24px 58px rgba(0,0,0,0.36); display: grid; grid-template-rows: auto auto 1fr; gap: 10px; }
+    .grader-cell b { color: rgba(17,21,33,0.58); font-size: 14px; text-transform: uppercase; }
+    .grader-cell em { color: #ff784f; font-size: 44px; line-height: 1; font-style: normal; font-weight: 900; }
+    .grader-cell i { color: rgba(17,21,33,0.7); font-size: 14px; line-height: 1.12; font-style: normal; font-weight: 800; }
+    .rewrite-card { position: absolute; left: 160px; right: 118px; bottom: 84px; min-height: 92px; padding: 16px 22px; border-radius: 12px; background: rgba(111,229,172,0.14); border: 1px solid rgba(111,229,172,0.3); display: grid; grid-template-columns: 120px 1fr; gap: 16px; align-items: center; }
+    .rewrite-card b { color: #6fe5ac; font-size: 22px; text-transform: uppercase; }
+    .rewrite-card span { color: #f5efe7; font-size: 18px; font-weight: 900; text-transform: uppercase; }
+    .proof-lane, .risk-stack, .scenario-board { position: relative; width: 850px; min-height: 760px; }
+    .proof-copy { position: absolute; left: 22px; top: 24px; width: 560px; min-height: 250px; padding: 32px 36px; border-radius: 12px; background: rgba(11,15,25,0.94); border: 1px solid rgba(112,169,255,0.22); box-shadow: 0 26px 74px rgba(0,0,0,0.42); }
+    .proof-copy span, .risk-alert span, .scenario-tile-main span { display: block; color: #70a9ff; font-size: 15px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase; }
+    .accent-green .proof-copy span { color: #6fe5ac; }
+    .proof-copy strong, .risk-alert strong, .scenario-tile-main strong { display: block; margin-top: 16px; color: #fff8ef; font-size: 58px; line-height: 0.96; }
+    .proof-copy p, .risk-alert p, .scenario-tile-main p { margin: 16px 0 0; color: rgba(245,239,231,0.72); font-size: 20px; line-height: 1.25; font-weight: 800; }
+    .proof-screen { position: absolute; left: 72px; right: 46px; bottom: 118px; height: 330px; border-radius: 12px; background: #f4efe4; color: #111521; box-shadow: 0 32px 90px rgba(0,0,0,0.42); overflow: hidden; }
+    .proof-screen em { position: absolute; left: 24px; top: 22px; color: rgba(17,21,33,0.46); font-size: 13px; font-style: normal; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; }
+    .voice-wave { position: absolute; left: 42px; right: 42px; bottom: 78px; height: 150px; display: flex; align-items: end; gap: 12px; }
+    .voice-bar { flex: 1; height: var(--h); min-width: 12px; border-radius: 4px 4px 0 0; background: linear-gradient(180deg, #70a9ff, #ff784f); transform-origin: bottom center; }
+    .cursor-dot { position: absolute; left: 54px; bottom: 46px; width: 72px; height: 10px; border-radius: 999px; background: #111521; box-shadow: 0 0 0 8px rgba(17,21,33,0.1); }
+    .proof-chips { position: absolute; right: 0; top: 86px; width: 260px; display: grid; gap: 10px; }
+    .proof-chip { padding: 12px 16px; border-radius: 999px; background: rgba(245,239,231,0.13); border: 1px solid rgba(245,239,231,0.16); color: #f5efe7; font-size: 18px; font-weight: 900; text-transform: uppercase; box-shadow: 0 18px 42px rgba(0,0,0,0.3); }
+    .proof-cardlets { position: absolute; left: 120px; right: 92px; bottom: 48px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .proof-cardlets b { min-height: 72px; border-radius: 8px; background: rgba(112,169,255,0.16); border: 1px solid rgba(112,169,255,0.24); color: #f5efe7; display: grid; place-items: center; font-size: 15px; text-transform: uppercase; }
+    .risk-alert { position: absolute; left: 22px; top: 28px; width: 560px; min-height: 288px; padding: 32px 36px; border-radius: 12px; background: rgba(14,12,22,0.94); border: 1px solid rgba(255,117,95,0.26); box-shadow: 0 26px 74px rgba(0,0,0,0.42); }
+    .risk-alert span { color: #ff755f; }
+    .risk-meter { position: absolute; right: 0; top: 92px; width: 236px; min-height: 220px; padding: 26px; border-radius: 12px; background: #f4efe4; color: #111521; overflow: hidden; box-shadow: 0 24px 66px rgba(0,0,0,0.38); }
+    .risk-meter b { display: block; color: #e34b3e; font-size: 64px; line-height: 0.92; }
+    .risk-meter em { display: block; margin-top: 12px; color: rgba(17,21,33,0.58); font-size: 14px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .risk-timer-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 12px; background: #e34b3e; transform-origin: left center; }
+    .risk-rows { position: absolute; left: 72px; right: 72px; top: 374px; display: grid; gap: 12px; }
+    .risk-row { min-height: 64px; padding: 0 18px; border-radius: 10px; background: rgba(245,239,231,0.12); border: 1px solid rgba(245,239,231,0.16); display: grid; grid-template-columns: 1fr 110px; align-items: center; box-shadow: 0 18px 44px rgba(0,0,0,0.3); }
+    .risk-row b { color: #f5efe7; font-size: 20px; text-transform: uppercase; }
+    .risk-row i { height: 16px; border-radius: 999px; background: #e34b3e; }
+    .risk-wave { position: absolute; left: 92px; right: 92px; bottom: 72px; height: 84px; display: flex; align-items: center; gap: 8px; }
+    .risk-wave-bar { flex: 1; height: 8px; border-radius: 999px; background: rgba(255,117,95,0.74); }
+    .risk-tag { position: absolute; right: 64px; bottom: 112px; padding: 9px 14px; border: 4px solid #e34b3e; color: #e34b3e; background: #f4efe4; font-size: 22px; font-weight: 900; transform: rotate(8deg); }
+    .scenario-tile-main { position: absolute; left: 42px; top: 42px; width: 575px; min-height: 455px; padding: 34px 38px; border-radius: 12px; background: #f4efe4; color: #111521; box-shadow: 0 34px 92px rgba(0,0,0,0.44); }
+    .scenario-tile-main span { color: #ff784f; }
+    .scenario-tile-main strong { color: #111521; font-size: 64px; }
+    .scenario-tile-main p { color: rgba(17,21,33,0.7); }
+    .qa-bracket { position: absolute; width: 92px; height: 92px; border-color: #e34b3e; border-style: solid; }
+    .bracket-a { left: 20px; top: 20px; border-width: 6px 0 0 6px; }
+    .bracket-b { right: 20px; bottom: 20px; border-width: 0 6px 6px 0; }
+    .diagnostic-panel { position: absolute; right: 8px; top: 142px; width: 306px; display: grid; gap: 12px; }
+    .diagnostic-row { min-height: 76px; padding: 14px; border-radius: 9px; background: rgba(10,13,22,0.92); border: 1px solid rgba(245,239,231,0.14); box-shadow: 0 20px 48px rgba(0,0,0,0.34); display: grid; grid-template-columns: 1fr 58px; align-items: center; }
+    .diagnostic-row b { color: #f5efe7; font-size: 17px; line-height: 1.05; text-transform: uppercase; }
+    .diagnostic-row em { justify-self: end; color: #ff755f; font-size: 14px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+    .mini-timeline { position: absolute; left: 92px; right: 92px; bottom: 90px; height: 88px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+    .mini-timeline i { border-radius: 8px; background: rgba(255,120,79,0.2); border: 1px solid rgba(255,120,79,0.28); box-shadow: 0 18px 42px rgba(0,0,0,0.28); }
     .compare-wrap { width: 780px; display: grid; grid-template-columns: 1fr 84px 1fr; align-items: center; gap: 20px; }
     .compare-card { min-height: 260px; border-radius: 18px; padding: 30px; background: rgba(14,18,27,0.92); border: 1px solid rgba(245,239,231,0.12); box-shadow: 0 24px 64px rgba(0,0,0,0.34); text-align: center; }
     .compare-card span { display: block; color: rgba(245,239,231,0.68); font-size: 17px; font-weight: 900; text-transform: uppercase; }
@@ -3307,14 +3864,159 @@ ${sectionHtml}
       const start = Number(section.dataset.start || 0);
       const dur = Number(section.dataset.duration || 8);
       const module = section.querySelector(".section-module");
-      const card = section.querySelector(".chart-card, .hook-lockup, .compare-wrap, .verdict-card");
+      const card = section.querySelector(".chart-card, .hook-lockup, .compare-wrap, .verdict-card, .failure-deck, .attention-meter, .qa-workflow, .proof-lane, .risk-stack, .scenario-board, .creator-hook, .prompt-workflow, .grader-table");
       const bars = section.querySelectorAll(".bar-track i");
       const tiles = section.querySelectorAll(".tile-map i");
       const chips = section.querySelectorAll(".stat-chip");
+      const motionBeats = section.querySelectorAll(".motion-beat");
+      const beatTicks = section.querySelectorAll(".beat-timeline i");
+      const lens = section.querySelector(".section-lens");
+      const hostPip = section.querySelector(".host-pip");
+      const hostHands = section.querySelectorAll(".host-hand");
+      const kineticWords = section.querySelectorAll(".kinetic-word");
+      const logoBadges = section.querySelectorAll(".logo-badge");
+      const orbitCore = section.querySelector(".orbit-core");
+      const hookCells = section.querySelectorAll(".hook-proof-grid i");
+      const hookQuestion = section.querySelector(".hook-question");
+      const countStrip = section.querySelector(".count-strip");
+      const contactTiles = section.querySelectorAll(".contact-tile, .review-thumb");
+      const rejectStamp = section.querySelector(".reject-stamp");
+      const fragments = section.querySelectorAll(".fragment");
+      const meterFill = section.querySelector(".meter-fill");
+      const retentionLine = section.querySelector(".retention-line");
+      const eventMarkers = section.querySelectorAll(".event-marker");
+      const workflowSteps = section.querySelectorAll(".workflow-step");
+      const proofChips = section.querySelectorAll(".proof-chip, .proof-cardlets b");
+      const voiceBars = section.querySelectorAll(".voice-bar");
+      const cursorDot = section.querySelector(".cursor-dot");
+      const riskRows = section.querySelectorAll(".risk-row");
+      const riskTimer = section.querySelector(".risk-timer-fill");
+      const riskWave = section.querySelectorAll(".risk-wave-bar");
+      const riskTag = section.querySelector(".risk-tag");
+      const diagnosticRows = section.querySelectorAll(".diagnostic-row");
+      const qaBrackets = section.querySelectorAll(".qa-bracket");
+      const miniTicks = section.querySelectorAll(".mini-timeline i");
+      const promptRows = section.querySelectorAll(".prompt-row i");
+      const promptCards = section.querySelectorAll(".prompt-card");
+      const graderCells = section.querySelectorAll(".grader-cell");
+      const rewriteCard = section.querySelector(".rewrite-card");
+      gsap.set(motionBeats, { x: 28, autoAlpha: 0, scale: 0.96 });
+      gsap.set(beatTicks, { scaleY: 0.35, autoAlpha: 0.36 });
+      gsap.set(lens, { autoAlpha: 0, x: -120, y: 40, scale: 0.9 });
+      gsap.set(hostPip, { autoAlpha: 0, y: 24, scale: 0.9 });
+      gsap.set(hostHands, { rotation: 0 });
+      gsap.set(kineticWords, { autoAlpha: 0, y: 24, scale: 0.82, rotation: -4 });
+      gsap.set(logoBadges, { autoAlpha: 0, scale: 0.35 });
+      gsap.set(orbitCore, { scale: 0.7 });
+      gsap.set(hookCells, { scale: 0.42, autoAlpha: 0.24 });
+      gsap.set(hookQuestion, { x: 28, autoAlpha: 0, scale: 0.94 });
+      gsap.set(contactTiles, { autoAlpha: 0, y: 28, scale: 0.84, rotation: -2 });
+      gsap.set(rejectStamp, { autoAlpha: 0, scale: 1.7, rotation: -18 });
+      gsap.set(fragments, { autoAlpha: 0, scaleX: 0.3 });
+      gsap.set(meterFill, { scaleX: 0 });
+      gsap.set(retentionLine, { strokeDashoffset: 720 });
+      gsap.set(eventMarkers, { autoAlpha: 0, y: 18, scale: 0.88 });
+      gsap.set(workflowSteps, { autoAlpha: 0, y: 32, scale: 0.9 });
+      gsap.set(proofChips, { autoAlpha: 0, x: 24, scale: 0.92 });
+      gsap.set(voiceBars, { scaleY: 0.12, autoAlpha: 0.68 });
+      gsap.set(cursorDot, { x: 0 });
+      gsap.set(riskRows, { autoAlpha: 0, x: -28, scale: 0.94 });
+      gsap.set(riskTimer, { scaleX: 0 });
+      gsap.set(riskWave, { scaleY: 0.18, autoAlpha: 0.42 });
+      gsap.set(riskTag, { autoAlpha: 0, scale: 1.4, rotation: -10 });
+      gsap.set(diagnosticRows, { autoAlpha: 0, x: 30, scale: 0.94 });
+      gsap.set(qaBrackets, { autoAlpha: 0, scale: 0.72 });
+      gsap.set(miniTicks, { autoAlpha: 0, y: 22, scale: 0.86 });
+      gsap.set(promptRows, { scaleX: 0 });
+      gsap.set(promptCards, { autoAlpha: 0, x: 32, scale: 0.92 });
+      gsap.set(graderCells, { autoAlpha: 0, y: 30, scale: 0.9 });
+      gsap.set(rewriteCard, { autoAlpha: 0, y: 24, scale: 0.94 });
       tl.to(section, { autoAlpha: 1, y: 0, duration: 0.36 }, start);
       tl.fromTo(wipe, { xPercent: -120 }, { xPercent: 120, duration: 0.68, ease: "power2.inOut" }, Math.max(0, start - 0.04));
+      if (hostPip) {
+        tl.to(hostPip, { autoAlpha: 1, y: 0, scale: 1, duration: 0.28, ease: "back.out(1.6)" }, start + 0.12);
+        tl.to(hostPip, { y: -8, repeat: Math.max(1, Math.floor(dur / 2.4)), yoyo: true, duration: 0.24, ease: "sine.inOut" }, start + 0.8);
+      }
+      if (hostHands.length) tl.to(hostHands, { rotation: (i) => i % 2 ? -18 : 18, repeat: Math.max(2, Math.floor(dur / 1.4)), yoyo: true, duration: 0.18, stagger: 0.06, ease: "sine.inOut" }, start + 0.6);
+      if (kineticWords.length) {
+        tl.to(kineticWords, { autoAlpha: 1, y: 0, scale: 1, rotation: 0, duration: 0.18, stagger: Math.min(0.12, dur / 12), ease: "back.out(2.1)" }, start + 0.24);
+        tl.to(kineticWords, { scale: 1.08, repeat: Math.max(1, Math.floor(dur / 2.1)), yoyo: true, duration: 0.1, stagger: 0.04, ease: "sine.inOut" }, start + 1.0);
+      }
+      if (lens) {
+        tl.to(lens, { autoAlpha: 1, x: 90, y: index % 2 ? -24 : 32, scale: 1.08, duration: Math.min(1.2, Math.max(0.5, dur * 0.28)), ease: "power2.out" }, start + 0.08);
+        tl.to(lens, { x: 540, y: index % 2 ? 120 : -80, scale: 1.22, duration: Math.max(0.7, dur - 0.8), ease: "none" }, start + 0.5);
+      }
       if (card) tl.fromTo(card, { y: 44, scale: 0.92, filter: "blur(12px)" }, { y: 0, scale: 1, filter: "blur(0px)", duration: 0.62 }, start + 0.08);
       if (card) tl.to(card, { y: index % 2 ? -24 : 22, scale: 1.025, duration: Math.max(1, dur - 1.4), ease: "sine.inOut" }, start + 0.72);
+      if (logoBadges.length) {
+        tl.to(logoBadges, { autoAlpha: 1, scale: 1, duration: 0.24, stagger: 0.06, ease: "back.out(1.8)" }, start + 0.32);
+        tl.to(logoBadges, { rotation: "+=12", repeat: Math.max(1, Math.floor(dur / 2)), yoyo: true, duration: 0.22, stagger: 0.03, ease: "sine.inOut" }, start + 1.0);
+      }
+      if (orbitCore) tl.to(orbitCore, { scale: 1.08, repeat: Math.max(1, Math.floor(dur / 1.8)), yoyo: true, duration: 0.18, ease: "sine.inOut" }, start + 0.6);
+      if (motionBeats.length) {
+        tl.to(motionBeats, { x: 0, autoAlpha: 1, scale: 1, duration: 0.26, stagger: 0.08, ease: "back.out(1.6)" }, start + 0.2);
+        tl.to(motionBeats, { x: -8, repeat: Math.max(1, Math.floor(dur / 2.2)), yoyo: true, duration: 0.2, stagger: 0.05, ease: "sine.inOut" }, start + 1.0);
+      }
+      if (beatTicks.length) {
+        tl.to(beatTicks, { scaleY: 1, autoAlpha: 1, duration: 0.18, stagger: { each: Math.min(0.18, dur / Math.max(1, beatTicks.length * 1.8)), from: "start" } }, start + 0.14);
+        tl.to(beatTicks, { scaleY: 0.52, repeat: Math.max(1, Math.floor(dur / 1.8)), yoyo: true, duration: 0.16, stagger: 0.025 }, start + 0.9);
+      }
+      if (hookCells.length) {
+        tl.to(hookCells, { scale: 1, autoAlpha: 1, duration: 0.22, stagger: { each: 0.018, from: "random" } }, start + 0.32);
+        tl.to(hookCells, { scale: 0.78, repeat: Math.max(2, Math.floor(dur / 1.6)), yoyo: true, duration: 0.12, stagger: { each: 0.006, from: "random" } }, start + 1.0);
+      }
+      if (hookQuestion) tl.to(hookQuestion, { x: 0, autoAlpha: 1, scale: 1, duration: 0.34, ease: "back.out(1.4)" }, start + Math.min(1.2, dur * 0.34));
+      if (countStrip) tl.to(countStrip, { scale: 1.055, repeat: Math.max(1, Math.floor(dur / 2)), yoyo: true, duration: 0.2, ease: "sine.inOut" }, start + 0.78);
+      if (contactTiles.length) {
+        tl.to(contactTiles, { autoAlpha: 1, y: 0, scale: 1, rotation: 0, duration: 0.28, stagger: { each: Math.min(0.06, dur / Math.max(1, contactTiles.length * 3)), from: "random" }, ease: "back.out(1.6)" }, start + 0.26);
+        tl.to(contactTiles, { x: -8, y: 6, repeat: Math.max(1, Math.floor(dur / 1.9)), yoyo: true, duration: 0.16, stagger: { each: 0.012, from: "random" }, ease: "sine.inOut" }, start + 1.0);
+      }
+      if (rejectStamp) tl.to(rejectStamp, { autoAlpha: 1, scale: 1, rotation: 12, duration: 0.2, ease: "back.out(2)" }, start + Math.min(1.1, dur * 0.34));
+      if (fragments.length) {
+        tl.to(fragments, { autoAlpha: 1, scaleX: 1, duration: 0.18, stagger: 0.04 }, start + Math.min(1.2, dur * 0.3));
+        tl.to(fragments, { x: (i) => (i % 2 ? -32 : 34), y: (i) => (i % 3 ? 18 : -24), rotation: "+=8", repeat: Math.max(1, Math.floor(dur / 2.2)), yoyo: true, duration: 0.28, stagger: 0.025, ease: "sine.inOut" }, start + 1.1);
+      }
+      if (meterFill) tl.to(meterFill, { scaleX: 1, duration: 0.58, ease: "power3.out" }, start + 0.5);
+      if (retentionLine) tl.to(retentionLine, { strokeDashoffset: 0, duration: Math.min(1.5, Math.max(0.7, dur * 0.36)), ease: "power2.out" }, start + 0.52);
+      if (eventMarkers.length) {
+        tl.to(eventMarkers, { autoAlpha: 1, y: 0, scale: 1, duration: 0.22, stagger: Math.min(0.22, dur / 8), ease: "back.out(1.8)" }, start + 0.88);
+        tl.to(eventMarkers, { y: -8, repeat: Math.max(1, Math.floor(dur / 2.1)), yoyo: true, duration: 0.14, stagger: 0.05, ease: "sine.inOut" }, start + 1.5);
+      }
+      if (workflowSteps.length) {
+        tl.to(workflowSteps, { autoAlpha: 1, y: 0, scale: 1, duration: 0.26, stagger: Math.min(0.16, dur / 10), ease: "back.out(1.6)" }, start + 0.46);
+        tl.to(workflowSteps, { y: -10, repeat: Math.max(1, Math.floor(dur / 2.4)), yoyo: true, duration: 0.2, stagger: 0.06, ease: "sine.inOut" }, start + 1.2);
+      }
+      if (promptRows.length) tl.to(promptRows, { scaleX: 1, duration: 0.34, stagger: 0.08, ease: "power3.out" }, start + 0.42);
+      if (promptCards.length) {
+        tl.to(promptCards, { autoAlpha: 1, x: 0, scale: 1, duration: 0.24, stagger: 0.08, ease: "back.out(1.6)" }, start + 0.62);
+        tl.to(promptCards, { x: -8, repeat: Math.max(1, Math.floor(dur / 2.2)), yoyo: true, duration: 0.18, stagger: 0.04, ease: "sine.inOut" }, start + 1.3);
+      }
+      if (graderCells.length) {
+        tl.to(graderCells, { autoAlpha: 1, y: 0, scale: 1, duration: 0.25, stagger: 0.08, ease: "back.out(1.5)" }, start + 0.42);
+        tl.to(graderCells, { y: -8, repeat: Math.max(1, Math.floor(dur / 2.5)), yoyo: true, duration: 0.18, stagger: 0.04, ease: "sine.inOut" }, start + 1.2);
+      }
+      if (rewriteCard) tl.to(rewriteCard, { autoAlpha: 1, y: 0, scale: 1, duration: 0.26, ease: "back.out(1.6)" }, start + Math.min(1.3, dur * 0.4));
+      if (proofChips.length) {
+        tl.to(proofChips, { autoAlpha: 1, x: 0, scale: 1, duration: 0.24, stagger: 0.07, ease: "back.out(1.7)" }, start + 0.34);
+      }
+      if (voiceBars.length) {
+        tl.to(voiceBars, { scaleY: 1, autoAlpha: 1, duration: 0.32, stagger: 0.025, ease: "power2.out" }, start + 0.52);
+        tl.to(voiceBars, { scaleY: (i) => (i % 2 ? 0.46 : 0.82), repeat: Math.max(2, Math.floor(dur / 1.6)), yoyo: true, duration: 0.16, stagger: 0.012, ease: "sine.inOut" }, start + 1.0);
+      }
+      if (cursorDot) tl.to(cursorDot, { x: 560, repeat: Math.max(1, Math.floor(dur / 2.2)), yoyo: true, duration: 0.75, ease: "sine.inOut" }, start + 0.68);
+      if (riskRows.length) {
+        tl.to(riskRows, { autoAlpha: 1, x: 0, scale: 1, duration: 0.24, stagger: 0.08, ease: "back.out(1.6)" }, start + 0.3);
+        tl.to(riskRows, { x: 10, repeat: Math.max(1, Math.floor(dur / 2)), yoyo: true, duration: 0.14, stagger: 0.035, ease: "sine.inOut" }, start + 1.0);
+      }
+      if (riskTimer) tl.to(riskTimer, { scaleX: 1, duration: 0.72, ease: "power3.out" }, start + 0.46);
+      if (riskWave.length) tl.to(riskWave, { scaleY: 1, autoAlpha: 1, repeat: Math.max(2, Math.floor(dur / 1.4)), yoyo: true, duration: 0.12, stagger: 0.01, ease: "sine.inOut" }, start + 0.82);
+      if (riskTag) tl.to(riskTag, { autoAlpha: 1, scale: 1, rotation: 8, duration: 0.2, ease: "back.out(2)" }, start + Math.min(1.1, dur * 0.36));
+      if (diagnosticRows.length) tl.to(diagnosticRows, { autoAlpha: 1, x: 0, scale: 1, duration: 0.24, stagger: 0.08, ease: "back.out(1.5)" }, start + 0.36);
+      if (qaBrackets.length) tl.to(qaBrackets, { autoAlpha: 1, scale: 1, duration: 0.24, stagger: 0.08, ease: "back.out(1.8)" }, start + 0.54);
+      if (miniTicks.length) {
+        tl.to(miniTicks, { autoAlpha: 1, y: 0, scale: 1, duration: 0.2, stagger: 0.05, ease: "back.out(1.5)" }, start + 0.72);
+        tl.to(miniTicks, { y: -8, repeat: Math.max(1, Math.floor(dur / 1.8)), yoyo: true, duration: 0.16, stagger: 0.035, ease: "sine.inOut" }, start + 1.2);
+      }
       if (bars.length) {
         tl.fromTo(bars, { scaleX: 0 }, { scaleX: 1, duration: 0.62, stagger: 0.12, ease: "power3.out" }, start + 0.48);
         tl.to(bars, { filter: "brightness(1.32)", repeat: Math.max(1, Math.floor(dur / 3)), yoyo: true, duration: 0.22, stagger: 0.08, ease: "sine.inOut" }, start + 1.6);
@@ -4956,7 +5658,8 @@ function dataStorySceneProfile(beat) {
     "trust-answer": "split-counter-left",
     "verdict-cta": "benchmark-cta"
   };
-  return { ...common, ...(profiles[beat] ?? profiles[aliases[beat]] ?? profiles["question-card"]) };
+  const group = dataStoryBeatGroup(beat);
+  return { ...common, ...(profiles[beat] ?? profiles[aliases[beat]] ?? profiles[aliases[group]] ?? profiles["question-card"]) };
 }
 
 function buildPremiumCreativeStoryboard(manifest, script, stylePreset, talkingHead = { enabled: false, provider: "none" }) {
@@ -5257,16 +5960,83 @@ function premiumProductStructure(manifest) {
 }
 
 function dataStoryBenchmarkStructure() {
+  return dataStoryBenchmarkTimeline().map((segment) => ({
+    beat: segment.beat,
+    seconds: segment.target_seconds,
+    instruction: segment.visual
+  }));
+}
+
+function dataStoryBenchmarkTimeline() {
   return [
-    { beat: "public-record-hook", seconds: 18, instruction: "Open with a dark atlas editorial hook, persistent masthead, rec/time UI, big challenge headline, and topic chips." },
-    { beat: "hopes-chart", seconds: 21, instruction: "Use a centered off-white horizontal bar chart for what a launch clip must deliver, with lower-third stat chips." },
-    { beat: "fears-chart", seconds: 19, instruction: "Flip to a second horizontal bar chart for the retention fears that make generated output feel weak." },
-    { beat: "state-grid", seconds: 20, instruction: "Show fifty synthetic launch scenarios as an orange map-like tile grid and hold the persistent shell." },
-    { beat: "twist-chart", seconds: 20, instruction: "Reveal the twist: polish without motion makes viewers more critical, using a blue ranked bar chart." },
-    { beat: "ask-map", seconds: 22, instruction: "Use a blue map grid to ask whether renderer guardrails can step in before retention drops." },
-    { beat: "trust-answer", seconds: 19, instruction: "Show the answer as two comparison cards: automation alone versus analyst review with metrics." },
-    { beat: "verdict-cta", seconds: 11, instruction: "End on a stark verdict card, review-first URL, comment-style prompt, and final progress hold." }
+    dataStoryBeat("public-record-hook", "Launchclip just graded its own launch clips.", "Launchclip graded itself", "Dark atlas shell starts in motion with masthead, rec dot, and a headline slam.", ["graded itself"], "headline slam, masthead lock, rec pulse", "hard orange hit", 3.2),
+    dataStoryBeat("benchmark-scale", "Forty seven thousand five hundred eighty two synthetic viewer seconds.", "47,582 viewer seconds", "Counter races upward with small fixture tiles flashing behind it.", ["47,582", "synthetic seconds"], "counter race, tile flash, camera push", "counter tick burst", 4.8),
+    dataStoryBeat("failure-scenarios", "Fifty failure scenarios, and one uncomfortable question.", "50 failure scenarios", "Failure chips stack into a compact grid and collapse toward one question mark.", ["50 scenarios", "one question"], "chip stack, grid collapse, question pop", "chip pop", 4.6),
+    dataStoryBeat("attention-question", "Can a generated video hold attention for two minutes thirty?", "Can it hold 2:30?", "Question card punches in with a duration timer and attention meter.", ["hold attention", "2:30"], "question punch, timer sweep, meter rise", "question wipe", 4.2),
+    dataStoryBeat("collapse-risk", "Or does it collapse the moment the first card stops moving?", "Does stillness kill it?", "The first card freezes, fractures, then the shell pushes to the next beat.", ["first card", "stops moving"], "freeze frame, fracture, recovery push", "fracture hit", 4.6),
+    dataStoryBeat("brutal-result", "Stay for the answer, because the first render was brutal.", "The first render was brutal", "Red review stamp lands over the hook sequence before the first chart arrives.", ["brutal", "stay for the answer"], "review stamp, red flash, chart preload", "stamp thump", 4),
+    dataStoryBeat("hopes-open", "Start with what viewers hope for.", "Start with the hopes", "Off-white chart card enters but keeps drifting with the atlas shell.", ["viewers hope"], "chart card enter, shell drift", "soft whoosh", 3),
+    dataStoryBeat("proof-motion", "Number one, proof that moves with the voice.", "Proof moves with voice", "First bar fills while a voice-lane cursor follows the words.", ["proof moves", "voice"], "bar fill, voice cursor follow", "data tick", 4.2),
+    dataStoryBeat("evidence-reward", "Forty eight percent of the fixture seconds reward visible evidence.", "48% reward evidence", "Evidence bar expands and source chip snaps onto the chart.", ["48%", "visible evidence"], "number tick, source chip snap", "chip pop", 5.2),
+    dataStoryBeat("charts-clarify", "Thirty six percent reward charts that explain the point fast.", "36% reward clear charts", "Second bar fills, labels enlarge, and axis ticks draw across the card.", ["36%", "charts explain"], "bar fill, label punch, axis tick", "axis tick", 5),
+    dataStoryBeat("captions-land", "Twenty nine percent reward captions that land on the spoken beat, not two seconds late.", "Captions land on beat", "Caption chips land on successive audio ticks instead of sitting as a paragraph.", ["29%", "on beat"], "caption chips land, beat markers pulse", "caption hit", 6.2),
+    dataStoryBeat("fears-open", "The fears hit harder.", "The fears hit harder", "Chart flips from hope to risk with a darker exposure and sharper wipe.", ["fears", "harder"], "card flip, exposure drop", "risk wipe", 2.4),
+    dataStoryBeat("dead-holds", "Sixty four percent punish dead holds.", "64% punish dead holds", "Dead-hold bar slams in and a stillness timer turns red.", ["64%", "dead holds"], "red bar slam, timer warning", "warning tap", 4),
+    dataStoryBeat("empty-cards", "Fifty six percent notice bright empty cards before they notice the message.", "56% notice empty cards", "A bright card flashes empty, then gets crossed by a risk label.", ["56%", "empty cards"], "empty card flash, risk label snap", "paper hit", 5.6),
+    dataStoryBeat("weak-signals", "Weak hooks, tiny labels, and flat audio all show up fast.", "Weak signals show fast", "Three small labels pop too tiny, then zoom to readable size as a warning.", ["weak hooks", "tiny labels", "flat audio"], "label pop, zoom correction, waveform flatline", "triple tick", 5),
+    dataStoryBeat("viewer-not-waiting", "Across the whole benchmark, the viewer is not waiting for us to become interesting later.", "Viewers do not wait", "Retention line drops unless a new visual event fires before the marker.", ["not waiting", "interesting later"], "retention line drop, event marker fire", "drop hit", 6.6),
+    dataStoryBeat("grid-intro", "Every tile in this grid is a synthetic launch scenario.", "Every tile is a scenario", "Orange grid builds tile by tile with a synthetic fixture source label.", ["synthetic", "scenario"], "tile wave, source label land", "tile ticks", 4.8),
+    dataStoryBeat("no-hook-tile", "Some start with no hook.", "No hook", "A tile opens blank, then gets flagged with a missing-hook tag.", ["no hook"], "blank tile, flag tag", "tag pop", 2.8),
+    dataStoryBeat("terminal-too-long", "Some show terminal proof too long.", "Terminal proof too long", "Terminal tile stretches past the stillness threshold and triggers a red marker.", ["terminal proof", "too long"], "terminal stretch, threshold marker", "timer tick", 3.8),
+    dataStoryBeat("source-hidden", "Some hide the source.", "Hidden source", "Source chip disappears, then the QA overlay pulls it back into view.", ["hide the source"], "source vanish, QA pullback", "source pop", 2.8),
+    dataStoryBeat("cut-without-sound", "Some cut without sound.", "Cut without sound", "A transition cuts silently, then waveform/SFX lanes snap into place.", ["without sound"], "silent cut, waveform snap", "late tick", 2.8),
+    dataStoryBeat("retention-trap", "When those problems cluster, the clip looks automated even when the facts are correct. That is the retention trap.", "The retention trap", "Risk clusters merge and the camera pulls back to reveal the trap label.", ["problems cluster", "facts correct", "retention trap"], "cluster merge, camera pullback, trap label", "cluster thump", 7.8),
+    dataStoryBeat("twist-open", "Here is the twist.", "Here is the twist", "Blue chart wipes over the orange grid with a hard color shift.", ["twist"], "blue wipe, palette shift", "blue wipe", 2.2),
+    dataStoryBeat("polish-punished", "The more polished the surface, the less forgiving the viewer gets.", "Polish raises the bar", "Polish bar rises while tolerance bar contracts underneath it.", ["polished", "less forgiving"], "rank swap, dual bar move", "rank tick", 5),
+    dataStoryBeat("change-rule", "A clean chart buys attention only if something changes.", "Clean is not enough", "Clean chart pauses for a beat, then a change marker interrupts it.", ["only if", "something changes"], "stillness marker, interrupt flash", "interrupt hit", 4.2),
+    dataStoryBeat("motion-events", "A bar fills, a chip lands, a number resolves, or the camera keeps pressure on the next idea.", "Change every beat", "Bar, chip, number, and camera move fire as four separate visual events.", ["bar fills", "chip lands", "number resolves", "camera pressure"], "bar fill, chip land, number resolve, camera push", "four ticks", 7),
+    dataStoryBeat("ask-open", "So the ask is not just make a prettier template.", "Not just prettier", "Template card slides aside and reveals the guardrail map behind it.", ["not just prettier"], "template slide, map reveal", "map reveal", 4.2),
+    dataStoryBeat("renderer-step-in", "The renderer has to step in before the drop.", "Renderer steps in", "Renderer guardrail node intercepts a falling retention line.", ["step in", "before the drop"], "guardrail intercept, line catch", "catch hit", 4),
+    dataStoryBeat("guardrail-list", "Enforce dark-light balance, limit stillness, align words to visual events, schedule sound cues, and flag weak source labels.", "The guardrail list", "Five checklist rows tick in quickly with a matching SFX lane.", ["balance", "stillness", "alignment", "sound cues", "source labels"], "checklist ticks, SFX lane, label flags", "check run", 8.2),
+    dataStoryBeat("launchclip-needs", "That is what an actual launch clip CLI needs to know.", "What the CLI needs to know", "QA card locks into the pipeline and the map turns green.", ["actual CLI", "needs to know"], "QA card lock, green sweep", "success tick", 4.2),
+    dataStoryBeat("decision-question", "Who should decide if the output is ready?", "Who decides readiness?", "Split comparison layout punches in with a question marker between cards.", ["who decides", "ready"], "split punch, question marker", "split hit", 4),
+    dataStoryBeat("automation-alone", "Automation alone gets the small number.", "Automation alone is small", "Left counter rises only to the low trust number.", ["automation alone", "small number"], "left counter increment, red hold", "counter tick", 4),
+    dataStoryBeat("review-metrics", "Review with metrics gets the bigger one.", "Metrics review wins", "Right counter overtakes the left with a green sweep.", ["review", "metrics", "bigger"], "right counter overtake, green sweep", "counter rise", 4),
+    dataStoryBeat("measurable-iteration", "The point is not to slow the system down. It is to make the next render measurably closer before anyone spends attention on it.", "Make the next render closer", "Two cards compress into an iteration loop with metric deltas.", ["not slower", "measurably closer", "before attention"], "iteration loop, delta chips, card compress", "loop hit", 9),
+    dataStoryBeat("verdict-open", "The verdict is simple.", "The verdict is simple", "Verdict card pushes forward out of the comparison layout.", ["verdict"], "verdict card push", "verdict hit", 2.4),
+    dataStoryBeat("visual-qa-required", "A clip without visual QA is not launch-ready.", "No visual QA, not ready", "Large percent card locks with a red no-QA boundary.", ["visual QA", "not launch-ready"], "percent lock, boundary draw", "boundary hit", 4.6),
+    dataStoryBeat("generate-render-analyze", "Generate the packet, render it, analyze it.", "Generate, render, analyze", "Three action chips land as a mini workflow.", ["generate", "render", "analyze"], "action chips land, connector draw", "chip run", 4.2),
+    dataStoryBeat("contact-sheet-earns", "Then iterate until the contact sheet earns the next two minutes.", "Earn the next two minutes", "Contact sheet thumbnails shuffle, reject weak holds, and settle on the review URL.", ["iterate", "contact sheet", "two minutes"], "thumbnail shuffle, reject tags, URL settle", "final settle", 5.4)
   ];
+}
+
+function dataStoryBeat(beat, voiceover, caption, visual, captionEmphasis, motion, transition, targetSeconds) {
+  return {
+    beat,
+    target_seconds: targetSeconds,
+    voiceover,
+    caption,
+    visual,
+    evidence_source: dataStoryBeatGroup(beat) === "state-grid" ? "50 synthetic launch scenarios" : dataStoryBeatGroup(beat) === "ask-map" ? "launchclip visual QA target" : dataStoryBeatGroup(beat) === "verdict-cta" ? "launchclip review-first benchmark boundary" : "synthetic launchclip benchmark fixture",
+    adapter_target: "hyperframes",
+    caption_emphasis: captionEmphasis,
+    motion,
+    transition
+  };
+}
+
+function dataStoryBeatGroup(beat) {
+  const text = String(beat ?? "").toLowerCase();
+  if (["public-record-hook", "hopes-chart", "fears-chart", "state-grid", "twist-chart", "ask-map", "trust-answer", "verdict-cta"].includes(text)) return text;
+  if (/benchmark|failure|attention|collapse|brutal|public-record/.test(text)) return "public-record-hook";
+  if (/hope|proof|evidence|charts|captions/.test(text)) return "hopes-chart";
+  if (/fear|dead|empty|weak|viewer-not/.test(text)) return "fears-chart";
+  if (/grid|tile|terminal|source-hidden|cut-without|retention-trap|no-hook/.test(text)) return "state-grid";
+  if (/twist|polish|change|motion-events/.test(text)) return "twist-chart";
+  if (/ask|renderer|guardrail|launchclip-needs/.test(text)) return "ask-map";
+  if (/decision|automation|review-metrics|measurable/.test(text)) return "trust-answer";
+  if (/verdict|visual-qa|required|generate|contact-sheet/.test(text)) return "verdict-cta";
+  return "hopes-chart";
 }
 
 function videoStylePreset(style, manifest, talkingHead = { enabled: false, provider: "none" }) {
@@ -5330,9 +6100,9 @@ function videoStylePreset(style, manifest, talkingHead = { enabled: false, provi
       duration_seconds: 150,
       angle: "Create an original 2:30 vertical editorial data-story benchmark that matches the reference quality pressure: dark atlas shell, persistent masthead, real chart modules, map grids, lower-third stat chips, timed wipes, SFX cues, and strict visual QA, without copying reference transcript, media, data, brand, or exact visuals.",
       briefBeats: [
-        "Open with a dark first-frame hook, rec/time UI, persistent masthead, and a concrete challenge.",
+        "Open with a true 2-4 second hook, rec/time UI, persistent masthead, and a concrete challenge.",
         "Use synthetic launchclip fixture data, never public survey claims.",
-        "Hold a single editorial shell while evidence modules change inside it.",
+        "Use many short HyperFrames sections inside the editorial shell; do not ask one scene to carry a full paragraph.",
         "Use lower-third stat chips to punctuate spoken clauses instead of paragraph cards.",
         "Make chart/map transitions visible with blur wipes, card pushes, bar fills, tile waves, and SFX.",
         "Keep source status visible for the generated benchmark data.",
@@ -5345,20 +6115,20 @@ function videoStylePreset(style, manifest, talkingHead = { enabled: false, provi
         duration_seconds: 150,
         resolution: { width: 1080, height: 1920, fps: 30 },
         layout: [
-          "0-18s: editorial hook, challenge, question, and topic chips.",
-          "18-39s: hopes chart with proof, charts, captions, review, and sound.",
-          "39-58s: fears chart showing retention failure modes.",
-          "58-78s: orange synthetic scenario grid.",
-          "78-98s: blue twist chart about polish versus motion.",
-          "98-120s: blue map grid asking for renderer guardrails.",
-          "120-139s: trust comparison cards.",
-          "139-150s: verdict and review-first CTA."
+          "0-4s: true hook, no long hold.",
+          "4-23s: fast benchmark scale, question, collapse risk, and brutal-result beats.",
+          "23-44s: hopes chart split into proof, evidence, chart, and caption beats.",
+          "44-64s: fears chart split into dead-hold, empty-card, weak-signal, and waiting beats.",
+          "64-86s: orange synthetic scenario grid with separate failure-cluster beats.",
+          "86-104s: blue twist chart split into polish, change-rule, and motion-event beats.",
+          "104-125s: guardrail map with renderer intervention and checklist beats.",
+          "125-150s: decision, verdict, workflow, and contact-sheet CTA beats."
         ],
         visual_language: {
           palette: "very dark navy atlas background, small off-white chart cards, orange risk/attention marks, blue analysis marks, green review marks",
           masthead: "persistent LAUNCHCLIP masthead, rec dot, runtime code, and bottom progress rail; never use the reference brand lockup",
           data_viz: "horizontal bar charts, orange and blue tile maps, comparison cards, verdict card, lower-third stat chips",
-          pacing: "major section change every 11-22 seconds, but chart bars, tiles, stat chips, spotlight wipes, camera drift, and SFX move every 0.5-1.4 seconds",
+          pacing: "true hook in 2-4 seconds; visual beat changes every 2-6 seconds; internal chart bars, tiles, stat chips, spotlight wipes, camera drift, and SFX move every 0.5-1.4 seconds",
           captions: "headline and stat-chip copy only; no full transcript subtitles",
           sound_design: "subtle whooshes for section wipes, data ticks for bars/tiles, low hits for verdict cards, and quiet final hit; duck under voiceover",
           source_policy: "all numbers and map tiles are synthetic benchmark fixtures unless tied to launchclip-generated artifacts",
@@ -5612,102 +6382,11 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
     };
   }
   if (isDataStoryBenchmarkStyle(style)) {
-    const structure = dataStoryBenchmarkStructure();
-    const timeline = [
-      {
-        beat: "public-record-hook",
-        voiceover: "Launchclip just graded its own launch clips: forty seven thousand five hundred eighty two synthetic viewer seconds, fifty failure scenarios, and one uncomfortable question. Can a generated video hold attention for two minutes thirty, or does it collapse the moment the first card stops moving? Stay for the answer, because the first render was brutal.",
-        caption: "Launchclip just graded its own output",
-        visual: "Dark atlas shell, persistent masthead, rec/time UI, large hook headline, topic chips, and a synthetic viewer-seconds counter.",
-        evidence_source: "synthetic launchclip benchmark fixture",
-        adapter_target: "hyperframes",
-        caption_emphasis: ["graded", "one question", "brutal"],
-        motion: "headline slam, atlas drift, rec indicator pulse, counter reveal, topic chips land",
-        transition: "orange spotlight wipe"
-      },
-      {
-        beat: "hopes-chart",
-        voiceover: "Start with what viewers hope for. Number one, proof that moves with the voice. Forty eight percent of the fixture seconds reward visible evidence. Thirty six percent reward charts that explain the point fast. Twenty nine percent reward captions that land on the spoken beat, not two seconds late.",
-        caption: "What a launch clip has to deliver",
-        visual: "Centered off-white horizontal bar chart with orange and blue bars, source label, and lower-third stat chips.",
-        evidence_source: "synthetic launchclip benchmark fixture",
-        adapter_target: "hyperframes",
-        caption_emphasis: ["proof moves", "charts explain", "captions land"],
-        motion: "chart card push, bar fills, number ticks, lower-third chips pop in sequence",
-        transition: "chart blur reveal"
-      },
-      {
-        beat: "fears-chart",
-        voiceover: "The fears hit harder. Sixty four percent punish dead holds. Fifty six percent notice bright empty cards before they notice the message. Weak hooks, tiny labels, and flat audio all show up fast. Across the whole benchmark, the viewer is not waiting for us to become interesting later.",
-        caption: "And the weak spots hit harder",
-        visual: "Second ranked bar chart with blue and orange retention risks, darker shell, and bottom stat chips.",
-        evidence_source: "synthetic launchclip benchmark fixture",
-        adapter_target: "hyperframes",
-        caption_emphasis: ["dead holds", "empty cards", "not waiting"],
-        motion: "bar refills, risk labels snap, lower-third chips slide, subtle camera push",
-        transition: "risk card wipe"
-      },
-      {
-        beat: "state-grid",
-        voiceover: "Every tile in this grid is a synthetic launch scenario. Some start with no hook. Some show terminal proof too long. Some hide the source. Some cut without sound. When those problems cluster, the clip looks automated even when the facts are correct. That is the retention trap.",
-        caption: "Dead air: the number-one fear everywhere",
-        visual: "Orange map-like tile grid with cluster pulses, legend, and a synthetic scenario source label.",
-        evidence_source: "50 synthetic launch scenarios",
-        adapter_target: "hyperframes",
-        caption_emphasis: ["no hook", "too long", "retention trap"],
-        motion: "tile wave, hot clusters pulse, legend snap, lower-third stats land",
-        transition: "map zoom wipe"
-      },
-      {
-        beat: "twist-chart",
-        voiceover: "Here is the twist. The more polished the surface, the less forgiving the viewer gets. A clean chart buys attention only if something changes: a bar fills, a chip lands, a number resolves, or the camera keeps pressure on the next idea.",
-        caption: "The prettier the card, the more viewers punish stillness",
-        visual: "Blue ranked bar chart showing polish versus motion, source labels, and moving lower-third chips.",
-        evidence_source: "synthetic launchclip benchmark fixture",
-        adapter_target: "hyperframes",
-        caption_emphasis: ["polished", "less forgiving", "something changes"],
-        motion: "blue bars fill, polish row swaps, chip lands, camera pressure continues",
-        transition: "blue chart wipe"
-      },
-      {
-        beat: "ask-map",
-        voiceover: "So the ask is not just make a prettier template. The renderer has to step in before the drop: enforce dark-light balance, limit stillness, align words to visual events, schedule sound cues, and flag weak source labels. That is what an actual launch clip CLI needs to know.",
-        caption: "Can the renderer step in before retention drops?",
-        visual: "Blue map-like grid with renderer guardrail clusters, green stat chips, and a one point two second stillness marker.",
-        evidence_source: "launchclip visual QA target",
-        adapter_target: "hyperframes",
-        caption_emphasis: ["step in", "align words", "sound cues"],
-        motion: "blue tile wave, guardrail clusters pulse, QA chips tick, progress rail advances",
-        transition: "guardrail map wipe"
-      },
-      {
-        beat: "trust-answer",
-        voiceover: "Who should decide if the output is ready? Automation alone gets the small number. Review with metrics gets the bigger one. The point is not to slow the system down. It is to make the next render measurably closer before anyone spends attention on it.",
-        caption: "Who should decide if a launch clip is ready?",
-        visual: "Two dark comparison cards, automation alone versus analyst review, with supporting lower-third trust chips.",
-        evidence_source: "synthetic launchclip benchmark fixture",
-        adapter_target: "hyperframes",
-        caption_emphasis: ["automation alone", "review with metrics", "measurably closer"],
-        motion: "comparison cards punch in, numbers count up, stat chips attach, camera settles",
-        transition: "comparison punch"
-      },
-      {
-        beat: "verdict-cta",
-        voiceover: "The verdict is simple. A clip without visual QA is not launch-ready. Generate the packet, render it, analyze it, then iterate until the contact sheet earns the next two minutes.",
-        caption: "15% trust a generated clip with no visual QA",
-        visual: "Stark verdict card with a large percentage, review-first URL pill, final lower-third prompts, and quiet progress hold.",
-        evidence_source: "launchclip review-first benchmark boundary",
-        adapter_target: "hyperframes",
-        caption_emphasis: ["visual QA", "analyze it", "iterate"],
-        motion: "verdict card push, large number hit, URL pill land, final progress hold",
-        transition: "quiet final hit"
-      }
-    ];
-    const timedTimeline = applyVoiceWeightedTiming(timeline, 150, structure);
+    const timedTimeline = applyVoiceWeightedTiming(dataStoryBenchmarkTimeline(), 150, dataStoryBenchmarkStructure());
     return {
       schema_version: "launchclip.script.v1",
       style,
-      strategy: "original editorial data-story benchmark with a persistent dark shell, chart cards, map grids, lower-third stat chips, timed wipes, SFX lanes, visual QA, and no copied reference material",
+      strategy: "original editorial data-story benchmark with a true 3-second hook, short visual beats, chart cards, map grids, lower-third stat chips, timed wipes, SFX lanes, visual QA, and no copied reference material",
       duration_seconds: 150,
       voice: {
         provider: "none",
@@ -5720,6 +6399,8 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         "Do not use the reference transcript as generated voiceover and do not reuse its audio, footage, brand, graphics, chart values, or exact visuals.",
         "Every chart, map, and stat chip must declare synthetic fixture or launchclip artifact source status.",
         "Keep the persistent editorial shell visible while modules change inside it.",
+        "The first hook beat must land inside four seconds; do not treat an entire intro chapter as the hook.",
+        "Use many short HyperFrames sections so no visual scene carries a full narration paragraph.",
         "Voiceover is continuous; on-screen copy is headline/stat-chip copy, not full transcript subtitles.",
         "The generated packet remains dry-run and review-first."
       ]

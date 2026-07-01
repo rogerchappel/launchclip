@@ -357,10 +357,13 @@ test("plans original 150 second data-story benchmark contract", async () => {
     const payload = JSON.parse(await readFile(path.join(out, "video/product-videogen.dry-run.json"), "utf8"));
     const hyperframesData = JSON.parse(await readFile(path.join(out, "video/hyperframes/launchclip-data.json"), "utf8"));
     const renderAnalysisReport = JSON.parse(await readFile(path.join(out, "review/render-analysis.json"), "utf8"));
+    const hyperframesHtml = await readFile(path.join(out, "video/hyperframes/index.html"), "utf8");
     const frame = await readFile(path.join(out, "video/frame.md"), "utf8");
     const storyboardHtml = await readFile(path.join(out, "video/storyboard.html"), "utf8");
     const readiness = await validateWorkspace(out);
     const words = video.voiceover.full_text.split(/\s+/).filter(Boolean);
+    const microSceneCount = video.script_visual_alignment.length;
+    const firstRange = parseRange(video.script_visual_alignment[0].time_range);
 
     assert.equal(video.style, "data-story-benchmark");
     assert.equal(video.duration_seconds, 150);
@@ -370,30 +373,46 @@ test("plans original 150 second data-story benchmark contract", async () => {
     assert.equal(video.creative_recipe.renderer_contract.primary_renderer, "hyperframes");
     assert.match(video.creative_recipe.benchmark_reference_observations.observed_pacing, /400 words/);
     assert.ok(words.length >= 350 && words.length <= 430, `expected benchmark voiceover word count near reference density, got ${words.length}`);
-    assert.equal(video.script_visual_alignment.length, 8);
-    assert.equal(video.creative_storyboard.scenes.length, 8);
-    assert.equal(video.sound_design.cues.length, 8);
-    assert.equal(video.object_lifecycle.length, 8);
+    assert.ok(microSceneCount >= 30, `expected many short data-story beats, got ${microSceneCount}`);
+    assert.ok(firstRange.end <= 4, `expected true hook under 4s, got ${video.script_visual_alignment[0].time_range}`);
+    assert.equal(video.creative_storyboard.scenes.length, microSceneCount);
+    assert.equal(video.sound_design.cues.length, microSceneCount);
+    assert.equal(video.object_lifecycle.length, microSceneCount);
     assert.equal(renderAnalysis.stage, "analyze-render");
-    assert.equal(renderAnalysis.voiceover.segment_count, 8);
-    assert.equal(renderAnalysis.transitions.section_count, 8);
+    assert.equal(renderAnalysis.voiceover.segment_count, microSceneCount);
+    assert.equal(renderAnalysis.transitions.section_count, microSceneCount);
     assert.equal(renderAnalysis.music.present, false);
     assert.equal(renderAnalysis.sfx_assets.generated_default_assets, 0);
     assert.equal(renderAnalysisReport.output, "review/render-analysis.json");
     assert.equal(video.script_visual_alignment[0].beat, "public-record-hook");
-    assert.equal(video.script_visual_alignment[7].beat, "verdict-cta");
+    assert.equal(video.script_visual_alignment.at(-1).beat, "contact-sheet-earns");
     assert.match(video.creative_storyboard.non_goals.join("\n"), /Do not download or reuse the reference transcript/);
     assert.match(video.creative_storyboard.quality_gates.join("\n"), /150 seconds/);
     assert.match(video.creative_recipe.visual_language.masthead, /persistent LAUNCHCLIP masthead/);
-    assert.match(video.creative_storyboard.scenes[3].layout, /matrix chart/);
-    assert.match(video.creative_storyboard.scenes[6].layout, /counter chart/);
+    assert.match(video.creative_recipe.visual_language.pacing, /true hook in 2-4 seconds/);
+    assert.match(video.creative_storyboard.scenes.find((scene) => scene.id === "grid-intro").layout, /matrix chart/);
+    assert.match(video.creative_storyboard.scenes.find((scene) => scene.id === "automation-alone").layout, /counter chart/);
+    assert.match(hyperframesHtml, /failure-deck/);
+    assert.match(hyperframesHtml, /attention-meter/);
+    assert.match(hyperframesHtml, /qa-workflow/);
+    assert.match(hyperframesHtml, /proof-lane/);
+    assert.match(hyperframesHtml, /risk-stack/);
+    assert.match(hyperframesHtml, /scenario-board/);
+    assert.match(hyperframesHtml, /creator-hook/);
+    assert.match(hyperframesHtml, /prompt-workflow/);
+    assert.match(hyperframesHtml, /grader-table/);
+    assert.match(hyperframesHtml, /data-presenter-slot="adapter-ready"/);
+    assert.match(hyperframesHtml, /kinetic-caption/);
+    assert.match(hyperframesHtml, /module-proof-lane[^"]*"[^>]+data-layer-motion-stack="false"/);
+    assert.match(hyperframesHtml, /data-layer-presenter="false"/);
+    assert.match(hyperframesHtml, /retention-line/);
     assert.equal(payload.duration_seconds, 150);
     assert.equal(payload.recipe_json.video_manifest.style, "data-story-benchmark");
     assert.equal(renderPlan.hyperframes.duration_seconds, 150);
     assert.match(frame, /data marks/);
     assert.match(storyboardHtml, /Launchclip just graded/);
     assert.equal(hyperframesData.video.duration_seconds, 150);
-    assert.equal(hyperframesData.video.timeline.length, 8);
+    assert.equal(hyperframesData.video.timeline.length, microSceneCount);
     assert.ok(hyperframesData.chart_diagram_qa.summary.chart_objects >= 6);
     assert.equal(hyperframesData.chart_diagram_qa.summary.diagram_objects, 0);
     assert.equal(hyperframesData.chart_diagram_qa.summary.issues, 0);
@@ -747,6 +766,14 @@ function maxLifecycleGap(states) {
     maxGap = Math.max(maxGap, timedStates[index].at - (timedStates[index - 1].at + Math.max(0, timedStates[index - 1].duration)));
   }
   return Math.round(maxGap * 100) / 100;
+}
+
+function parseRange(value) {
+  const [start, end] = String(value ?? "")
+    .replace(/s/g, "")
+    .split("-")
+    .map(Number);
+  return { start, end };
 }
 
 async function writePremiumAssetManifest(assetsDir, aliases) {
