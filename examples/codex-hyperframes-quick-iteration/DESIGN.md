@@ -20,8 +20,9 @@ A cinematic vertical technical explainer for founder-engineers: precise, editori
 ## Motion Rules
 
 - Format is 9:16, 1080x1920, YouTube Shorts safe.
-- Use focus blur, scale, and y-axis velocity to carry viewers between scenes.
-- Avoid hard scene-card swaps; the outgoing frame should smear into the next frame.
+- Treat the edit as one continuous camera pass through a larger world, not scene cards.
+- Use focus blur, scale, and y-axis velocity to carry viewers from one state to the next.
+- Avoid hard scene-card swaps; previous elements should leave frame through camera travel.
 - Captions sit lower-middle and move with short cinematic blur, not social bounce.
 - SFX support motion beats: riser, whoosh, impact.
 
