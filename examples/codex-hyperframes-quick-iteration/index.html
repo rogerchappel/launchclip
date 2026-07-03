@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "IBM Plex Mono";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url("https://fonts.gstatic.com/s/ibmplexmono/v20/-F63fjptAgt5VM-kVkqdyU8n5ig.ttf") format("truetype");
+      }
+
+      @font-face {
+        font-family: "IBM Plex Mono";
+        font-style: normal;
+        font-weight: 600;
+        font-display: swap;
+        src: url("https://fonts.gstatic.com/s/ibmplexmono/v20/-F6qfjptAgt5VM-kVkqdyU8n3vAO8lc.ttf") format("truetype");
+      }
+
+      @font-face {
+        font-family: "Space Grotesk";
+        font-style: normal;
+        font-weight: 300;
+        font-display: swap;
+        src: url("https://fonts.gstatic.com/s/spacegrotesk/v22/V8mQoQDjQSkFtoMM3T6r8E7mF71Q-gOoraIAEj62UUsj.ttf") format("truetype");
+      }
+
+      @font-face {
+        font-family: "Space Grotesk";
+        font-style: normal;
+        font-weight: 600;
+        font-display: swap;
+        src: url("https://fonts.gstatic.com/s/spacegrotesk/v22/V8mQoQDjQSkFtoMM3T6r8E7mF71Q-gOoraIAEj42Vksj.ttf") format("truetype");
+      }
+
+      @font-face {
+        font-family: "Space Grotesk";
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url("https://fonts.gstatic.com/s/spacegrotesk/v22/V8mQoQDjQSkFtoMM3T6r8E7mF71Q-gOoraIAEj4PVksj.ttf") format("truetype");
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        background: #0d1110;
+      }
+
+      body {
+        color: #f1ead8;
+        font-family: "Space Grotesk", sans-serif;
+      }
+
+      #root {
+        position: relative;
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        background: #0d1110;
+      }
+
+      .scene {
+        position: absolute;
+        inset: 0;
+        width: 1080px;
+        height: 1920px;
+        overflow: visible;
+        background: #0d1110;
+      }
+
+      #scene1 {
+        z-index: 1;
+      }
+
+      #scene2 {
+        z-index: 2;
+        opacity: 1;
+        visibility: hidden;
+      }
+
+      #scene3 {
+        z-index: 3;
+        opacity: 1;
+        visibility: hidden;
+      }
+
+      #scene4 {
+        z-index: 4;
+        opacity: 1;
+        visibility: hidden;
+      }
+
+      .scene-camera {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        will-change: transform, opacity, filter;
+      }
+
+      .scene-content {
+        position: relative;
+        z-index: 3;
+        width: 100%;
+        height: 100%;
+        padding: 94px 76px 132px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 42px;
+      }
+
+      .texture {
+        position: absolute;
+        inset: 0;
+        opacity: 0.18;
+        background:
+          repeating-linear-gradient(0deg, rgba(241, 234, 216, 0.035), rgba(241, 234, 216, 0.035) 1px, rgba(13, 17, 16, 0) 2px, rgba(13, 17, 16, 0) 7px),
+          repeating-linear-gradient(90deg, rgba(199, 244, 79, 0.025), rgba(199, 244, 79, 0.025) 1px, rgba(13, 17, 16, 0) 1px, rgba(13, 17, 16, 0) 86px);
+        pointer-events: none;
+      }
+
+      .light-leak {
+        position: absolute;
+        width: 1560px;
+        height: 900px;
+        background: radial-gradient(ellipse at center, rgba(217, 168, 95, 0.16), rgba(217, 168, 95, 0.06) 35%, rgba(217, 168, 95, 0) 72%);
+        filter: blur(16px);
+        opacity: 0.76;
+        transform: rotate(-18deg);
+        will-change: transform, opacity;
+      }
+
+      .light-leak.green {
+        background: radial-gradient(ellipse at center, rgba(199, 244, 79, 0.18), rgba(199, 244, 79, 0.055) 42%, rgba(199, 244, 79, 0) 76%);
+      }
+
+      .ghost-word {
+        position: absolute;
+        z-index: 1;
+        color: rgba(241, 234, 216, 0.045);
+        font-size: 192px;
+        font-weight: 700;
+        line-height: 0.84;
+        text-transform: uppercase;
+        pointer-events: none;
+        will-change: transform;
+      }
+
+      .ghost-word::before {
+        content: attr(data-word);
+      }
+
+      .kicker {
+        color: #c7f44f;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 24px;
+        font-weight: 600;
+        line-height: 1.1;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      .scene-index {
+        color: #d9a85f;
+      }
+
+      .headline {
+        color: #f1ead8;
+        font-size: 92px;
+        font-weight: 700;
+        letter-spacing: 0;
+        line-height: 0.91;
+        max-width: 930px;
+      }
+
+      .headline .accent {
+        color: #c7f44f;
+      }
+
+      .subhead {
+        color: #c7cdbf;
+        font-size: 34px;
+        font-weight: 300;
+        letter-spacing: 0;
+        line-height: 1.2;
+        max-width: 820px;
+      }
+
+      .topline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 28px;
+      }
+
+      .label-pill {
+        border: 1px solid rgba(199, 244, 79, 0.38);
+        border-radius: 999px;
+        background: rgba(199, 244, 79, 0.065);
+        color: #f1ead8;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 20px;
+        letter-spacing: 0;
+        padding: 13px 18px;
+        white-space: nowrap;
+      }
+
+      .cinema-rule {
+        height: 2px;
+        width: 100%;
+        background: #c7f44f;
+        opacity: 0.75;
+        transform-origin: left center;
+        will-change: transform;
+      }
+
+      .s1-hero {
+        display: flex;
+        flex-direction: column;
+        gap: 32px;
+      }
+
+      .code-rig {
+        position: relative;
+        border: 1px solid rgba(241, 234, 216, 0.16);
+        background: rgba(18, 24, 22, 0.88);
+        min-height: 560px;
+        padding: 34px;
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+        overflow: hidden;
+      }
+
+      .code-rig::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(110deg, rgba(199, 244, 79, 0.08), rgba(13, 17, 16, 0) 46%, rgba(217, 168, 95, 0.08));
+        opacity: 0.7;
+        pointer-events: none;
+      }
+
+      .code-line {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: 90px 1fr;
+        gap: 20px;
+        color: #f1ead8;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 30px;
+        line-height: 1.3;
+      }
+
+      .code-line span:first-child {
+        color: #d9a85f;
+      }
+
+      .code-line strong {
+        color: #c7f44f;
+        font-weight: 600;
+      }
+
+      .orbit-field {
+        position: absolute;
+        right: -210px;
+        top: 360px;
+        width: 620px;
+        height: 620px;
+        border: 1px solid rgba(199, 244, 79, 0.3);
+        border-radius: 50%;
+        opacity: 0.8;
+        will-change: transform;
+      }
+
+      .orbit-field::before,
+      .orbit-field::after {
+        content: "";
+        position: absolute;
+        inset: 70px;
+        border: 1px solid rgba(217, 168, 95, 0.24);
+        border-radius: 50%;
+      }
+
+      .orbit-field::after {
+        inset: 152px;
+        border-color: rgba(241, 234, 216, 0.16);
+      }
+
+      .timeline-stack {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 18px;
+      }
+
+      .timeline-row {
+        position: relative;
+        min-height: 154px;
+        border-left: 3px solid #c7f44f;
+        background: rgba(241, 234, 216, 0.06);
+        padding: 26px 28px;
+        display: grid;
+        grid-template-columns: 88px 1fr;
+        align-items: center;
+        gap: 24px;
+        overflow: hidden;
+      }
+
+      .timeline-row::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        width: 0;
+        background: rgba(199, 244, 79, 0.12);
+      }
+
+      .timeline-row small {
+        color: #d9a85f;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 20px;
+      }
+
+      .timeline-row strong {
+        display: block;
+        color: #f1ead8;
+        font-size: 38px;
+        line-height: 1;
+      }
+
+      .timeline-row span {
+        display: block;
+        margin-top: 8px;
+        color: #aeb7ae;
+        font-size: 24px;
+        line-height: 1.22;
+      }
+
+      .tail-graph {
+        position: relative;
+        height: 780px;
+        border-left: 2px solid rgba(241, 234, 216, 0.28);
+        border-bottom: 2px solid rgba(241, 234, 216, 0.28);
+        padding: 70px 42px 46px 48px;
+      }
+
+      .tail-label {
+        color: #9aa49d;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 19px;
+      }
+
+      .tail-label.y {
+        position: absolute;
+        left: 16px;
+        top: 70px;
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+      }
+
+      .tail-label.x {
+        position: absolute;
+        right: 28px;
+        bottom: 10px;
+      }
+
+      .tail-bar-row {
+        display: grid;
+        grid-template-columns: 190px 1fr;
+        align-items: center;
+        gap: 18px;
+        margin: 64px 0;
+      }
+
+      .tail-name {
+        color: #f1ead8;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 25px;
+      }
+
+      .tail-bar {
+        height: 58px;
+        background: linear-gradient(90deg, #c7f44f, #d9a85f);
+        transform-origin: left center;
+        will-change: transform;
+      }
+
+      .tail-bar.long {
+        width: 670px;
+      }
+
+      .tail-bar.mid {
+        width: 430px;
+      }
+
+      .tail-bar.short {
+        width: 190px;
+      }
+
+      .defect-stack {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 18px;
+      }
+
+      .defect {
+        border: 1px solid rgba(241, 234, 216, 0.14);
+        background: rgba(241, 234, 216, 0.055);
+        padding: 28px 30px;
+      }
+
+      .defect strong {
+        display: block;
+        color: #f1ead8;
+        font-size: 36px;
+        line-height: 1.04;
+      }
+
+      .defect span {
+        display: block;
+        margin-top: 10px;
+        color: #aeb7ae;
+        font-size: 24px;
+        line-height: 1.2;
+      }
+
+      .final-card {
+        border: 1px solid rgba(199, 244, 79, 0.34);
+        background: rgba(18, 24, 22, 0.86);
+        min-height: 760px;
+        padding: 46px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        overflow: hidden;
+      }
+
+      .final-steps {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 20px;
+      }
+
+      .final-step {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        border-bottom: 1px solid rgba(241, 234, 216, 0.13);
+        padding: 0 0 22px;
+      }
+
+      .final-step strong {
+        color: #f1ead8;
+        font-size: 32px;
+      }
+
+      .final-step span {
+        color: #c7f44f;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 20px;
+        white-space: nowrap;
+      }
+
+      .caption-track {
+        position: absolute;
+        inset: 0;
+        z-index: 30;
+        pointer-events: none;
+      }
+
+      .caption {
+        position: absolute;
+        left: 76px;
+        right: 76px;
+        height: 158px;
+        display: grid;
+        place-items: center;
+        color: #f1ead8;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 42px;
+        font-weight: 700;
+        letter-spacing: 0;
+        line-height: 1.05;
+        max-width: 928px;
+        margin: 0 auto;
+        padding: 24px 28px;
+        border: 1px solid rgba(241, 234, 216, 0.14);
+        background: rgba(13, 17, 16, 0.78);
+        box-shadow: 0 28px 80px rgba(0, 0, 0, 0.36);
+        text-align: center;
+        text-shadow: 0 10px 38px rgba(0, 0, 0, 0.65);
+        opacity: 0;
+        visibility: hidden;
+      }
+
+      #cap1 {
+        top: 982px;
+      }
+
+      #cap2,
+      #cap3,
+      #cap4a,
+      #cap6 {
+        top: 842px;
+      }
+
+      #cap4b,
+      #cap5 {
+        top: 1286px;
+      }
+
+      .caption em {
+        color: #c7f44f;
+        font-style: normal;
+      }
+
+      .transition-veil {
+        position: absolute;
+        inset: -160px;
+        z-index: 24;
+        background: linear-gradient(160deg, rgba(241, 234, 216, 0), rgba(199, 244, 79, 0.22), rgba(217, 168, 95, 0.16), rgba(241, 234, 216, 0));
+        filter: blur(20px);
+        opacity: 0;
+        transform: translateY(360px) rotate(-8deg) scale(1.2);
+        pointer-events: none;
+      }
+
+      .final-fade {
+        position: absolute;
+        inset: 0;
+        z-index: 40;
+        background: #0d1110;
+        opacity: 0;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="28" data-width="1080" data-height="1920">
+      <section id="scene1" class="scene" aria-label="Codex creates HyperFrames motion graphics">
+        <div class="scene-camera" data-layout-allow-overlap data-layout-allow-overflow data-layout-allow-occlusion>
+          <div class="texture" data-layout-ignore></div>
+          <div class="light-leak green" style="left: -620px; top: 120px" data-layout-ignore></div>
+          <div class="ghost-word" style="left: 520px; top: 210px" data-word="MOTION" data-layout-ignore></div>
+          <div class="orbit-field" data-layout-ignore></div>
+          <div class="scene-content">
+            <div class="topline">
+              <p class="kicker"><span class="scene-index">01</span> Codex + HyperFrames</p>
+              <p class="label-pill">Shorts cut</p>
+            </div>
+            <div class="s1-hero">
+              <h1 class="headline s1-headline">Make motion graphics with <span class="accent">code, not guesswork.</span></h1>
+              <p class="subhead s1-subhead">The composition is reviewable. The motion is inspectable. The render is a real artifact.</p>
+            </div>
+            <div class="code-rig s1-rig">
+              <div class="code-line"><span>$</span><span>codex writes the frame</span></div>
+              <div class="code-line"><span>$</span><span>gsap moves into place</span></div>
+              <div class="code-line"><span>$</span><span><strong>hyperframes render</strong></span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene2" class="scene" aria-label="Build from the finished frame">
+        <div class="scene-camera" data-layout-allow-overlap data-layout-allow-overflow data-layout-allow-occlusion>
+          <div class="texture" data-layout-ignore></div>
+          <div class="light-leak" style="right: -760px; top: 540px" data-layout-ignore></div>
+          <div class="ghost-word" style="left: -80px; bottom: 104px" data-word="FRAME" data-layout-ignore></div>
+          <div class="scene-content">
+            <div class="topline">
+              <p class="kicker"><span class="scene-index">02</span> Build the hero frame first</p>
+              <p class="label-pill">layout before animation</p>
+            </div>
+            <div class="cinema-rule s2-rule"></div>
+            <div class="timeline-stack">
+              <div class="timeline-row s2-row"><small>00</small><div><strong>Define the Short</strong><span>Format, voice, scene count, and target duration.</span></div></div>
+              <div class="timeline-row s2-row"><small>01</small><div><strong>Place the final frame</strong><span>Every element lands where it should be read.</span></div></div>
+              <div class="timeline-row s2-row"><small>02</small><div><strong>Animate into it</strong><span>Motion explains hierarchy instead of hiding layout misses.</span></div></div>
+              <div class="timeline-row s2-row"><small>03</small><div><strong>Render the draft</strong><span>The video answers faster than another speculative pass.</span></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene3" class="scene" aria-label="Compress the iteration tail">
+        <div class="scene-camera" data-layout-allow-overlap data-layout-allow-overflow data-layout-allow-occlusion>
+          <div class="texture" data-layout-ignore></div>
+          <div class="light-leak green" style="left: -710px; bottom: 260px" data-layout-ignore></div>
+          <div class="ghost-word" style="right: -260px; top: 84px" data-word="TAIL" data-layout-ignore></div>
+          <div class="scene-content">
+            <div class="topline">
+              <p class="kicker"><span class="scene-index">03</span> Shrink the tail end</p>
+              <p class="label-pill">visible defects first</p>
+            </div>
+            <div class="tail-graph s3-chart">
+              <span class="tail-label y">iteration cost</span>
+              <span class="tail-label x">toward usable</span>
+              <div class="tail-bar-row s3-bar-row"><span class="tail-name">open-ended</span><span class="tail-bar long s3-bar"></span></div>
+              <div class="tail-bar-row s3-bar-row"><span class="tail-name">inspected</span><span class="tail-bar mid s3-bar"></span></div>
+              <div class="tail-bar-row s3-bar-row"><span class="tail-name">scoped</span><span class="tail-bar short s3-bar"></span></div>
+            </div>
+            <div class="defect-stack">
+              <div class="defect s3-defect"><strong>Stop chasing taste.</strong><span>Find overlap, contrast, pacing, and dead air.</span></div>
+              <div class="defect s3-defect"><strong>Patch one ranked list.</strong><span>Fix the top visible misses, then render again.</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene4" class="scene" aria-label="Ship the usable cut" data-layout-allow-overflow>
+        <div class="scene-camera" data-layout-allow-overlap data-layout-allow-overflow data-layout-allow-occlusion>
+          <div class="texture" data-layout-ignore></div>
+          <div class="light-leak" style="right: -740px; top: 320px" data-layout-ignore></div>
+          <div class="ghost-word" style="left: -88px; bottom: 82px" data-word="USABLE" data-layout-ignore></div>
+          <div class="scene-content">
+            <div class="topline">
+              <p class="kicker"><span class="scene-index">04</span> Ship the usable cut</p>
+              <p class="label-pill">then one polish pass</p>
+            </div>
+            <h2 class="headline s4-headline">The goal is not infinite polish. It is <span class="accent">usable motion, fast.</span></h2>
+            <div class="final-card s4-card">
+              <div class="final-steps">
+                <div class="final-step s4-step"><strong>Lock the brief</strong><span>voice + format</span></div>
+                <div class="final-step s4-step"><strong>Inspect the frame</strong><span>layout + contrast</span></div>
+                <div class="final-step s4-step"><strong>Render the cut</strong><span>draft MP4</span></div>
+                <div class="final-step s4-step"><strong>Patch once</strong><span>usable</span></div>
+              </div>
+              <p class="subhead s4-subhead">Codex keeps the change small. HyperFrames keeps the result visible.</p>
+            </div>
+          </div>
+        </div>
+        <div class="final-fade"></div>
+      </section>
+
+      <div class="caption-track" aria-label="Narration captions" data-layout-allow-overlap data-layout-allow-occlusion>
+        <p id="cap1" class="caption">Codex is not just writing a page. <em>It is writing motion.</em></p>
+        <p id="cap2" class="caption">Start with the Short: format, voice, and hero frames.</p>
+        <p id="cap3" class="caption">Build the static frame first. Then animate into it.</p>
+        <p id="cap4a" class="caption">Use HyperFrames checks as the editor: lint, inspect, render.</p>
+        <p id="cap4b" class="caption">Use HyperFrames checks as the editor: lint, inspect, render.</p>
+        <p id="cap5" class="caption">Shrink the tail end: fix the visible misses first.</p>
+        <p id="cap6" class="caption">Render again, patch once, and ship the usable cut.</p>
+      </div>
+
+      <div class="transition-veil" data-layout-ignore></div>
+
+      <audio id="narration" data-start="0" data-track-index="7" src="assets/narration-elevenlabs.mp3" data-volume="0.95"></audio>
+      <audio id="sfx-opening-riser" data-start="0.15" data-track-index="8" src="assets/riser_sudden_cut.wav" data-volume="0.38"></audio>
+      <audio id="sfx-transition-1" data-start="6.45" data-track-index="9" src="assets/fast_whoosh.wav" data-volume="0.42"></audio>
+      <audio id="sfx-transition-2" data-start="13.35" data-track-index="10" src="assets/fast_whoosh.wav" data-volume="0.38"></audio>
+      <audio id="sfx-transition-3" data-start="20.05" data-track-index="11" src="assets/riser_sudden_cut.wav" data-volume="0.34"></audio>
+      <audio id="sfx-final-boom" data-start="24.95" data-track-index="12" src="assets/cinematic_boom.wav" data-volume="0.32"></audio>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      function sceneEnter(scene, start) {
+        tl.from(scene + " .kicker", { y: -36, opacity: 0, duration: 0.54, ease: "expo.out" }, start + 0.16);
+        tl.from(scene + " .label-pill", { scale: 0.92, opacity: 0, duration: 0.46, ease: "back.out(1.3)" }, start + 0.28);
+      }
+
+      function caption(id, start, end) {
+        tl.set(id, { visibility: "visible" }, start);
+        tl.fromTo(id, { y: 34, scale: 0.96, opacity: 0, filter: "blur(8px)" }, { y: 0, scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.38, ease: "power3.out" }, start);
+        tl.to(id, { y: -20, opacity: 0, filter: "blur(6px)", duration: 0.18, ease: "power2.in" }, end - 0.18);
+        tl.set(id, { visibility: "hidden", opacity: 0 }, end);
+      }
+
+      function focusTransition(oldScene, newScene, start, direction) {
+        var oldCamera = oldScene + " .scene-camera";
+        var newCamera = newScene + " .scene-camera";
+        tl.set(newScene, { visibility: "visible" }, start);
+        tl.fromTo(".transition-veil", { opacity: 0, y: 360 * direction, rotation: -8 * direction, scale: 1.22 }, { opacity: 1, y: -260 * direction, rotation: 3 * direction, scale: 1.04, duration: 0.44, ease: "power3.in" }, start);
+        tl.to(oldCamera, { filter: "blur(20px)", scale: 1.12, y: -170 * direction, opacity: 0, duration: 0.58, ease: "power3.in" }, start + 0.02);
+        tl.fromTo(newCamera, { filter: "blur(24px)", scale: 0.86, y: 210 * direction, opacity: 0 }, { filter: "blur(0px)", scale: 1, y: 0, opacity: 1, duration: 0.82, ease: "expo.out" }, start + 0.22);
+        tl.to(".transition-veil", { opacity: 0, duration: 0.34, ease: "sine.out" }, start + 0.48);
+        tl.set(oldScene, { visibility: "hidden" }, start + 0.86);
+      }
+
+      tl.to(".texture", { y: -42, duration: 4, repeat: 6, yoyo: true, ease: "sine.inOut" }, 0.2);
+      tl.to(".light-leak", { x: 90, y: -70, opacity: 0.5, duration: 5.2, repeat: 5, yoyo: true, ease: "sine.inOut" }, 0.25);
+      tl.to(".ghost-word", { x: 42, duration: 6.2, repeat: 4, yoyo: true, ease: "sine.inOut" }, 0.4);
+      tl.to(".orbit-field", { rotation: 22, scale: 1.05, duration: 7.2, repeat: 3, yoyo: true, ease: "sine.inOut" }, 0.3);
+
+      sceneEnter("#scene1", 0);
+      tl.from(".s1-headline", { y: 92, opacity: 0, filter: "blur(12px)", duration: 0.86, ease: "expo.out" }, 0.32);
+      tl.from(".s1-subhead", { y: 42, opacity: 0, duration: 0.58, ease: "power2.out" }, 0.9);
+      tl.from(".s1-rig", { y: 116, scale: 0.95, opacity: 0, filter: "blur(14px)", duration: 0.76, ease: "back.out(1.18)" }, 1.18);
+      tl.from(".code-line", { x: -46, opacity: 0, duration: 0.42, stagger: 0.12, ease: "circ.out" }, 1.52);
+
+      caption("#cap1", 0.78, 4.35);
+      caption("#cap2", 4.38, 8.35);
+
+      focusTransition("#scene1", "#scene2", 6.55, 1);
+      sceneEnter("#scene2", 6.75);
+      tl.from(".s2-rule", { scaleX: 0, duration: 0.62, ease: "power4.out" }, 7.1);
+      tl.from(".s2-row", { y: 88, opacity: 0, scale: 0.96, duration: 0.56, stagger: 0.13, ease: "back.out(1.15)" }, 7.32);
+
+      caption("#cap3", 8.38, 12.45);
+      caption("#cap4a", 12.48, 13.55);
+      caption("#cap4b", 14.05, 16.48);
+
+      focusTransition("#scene2", "#scene3", 13.45, -1);
+      sceneEnter("#scene3", 13.72);
+      tl.from(".s3-chart", { y: 110, opacity: 0, filter: "blur(12px)", duration: 0.72, ease: "expo.out" }, 14.12);
+      tl.from(".s3-bar", { scaleX: 0, duration: 0.66, stagger: 0.13, ease: "power4.out" }, 14.48);
+      tl.from(".s3-defect", { x: 64, opacity: 0, duration: 0.5, stagger: 0.14, ease: "circ.out" }, 15.12);
+
+      caption("#cap5", 16.52, 21.15);
+
+      focusTransition("#scene3", "#scene4", 20.15, 1);
+      sceneEnter("#scene4", 20.42);
+      tl.from(".s4-headline", { y: 94, opacity: 0, filter: "blur(12px)", duration: 0.76, ease: "expo.out" }, 20.78);
+      tl.from(".s4-card", { y: 118, scale: 0.96, opacity: 0, filter: "blur(14px)", duration: 0.74, ease: "back.out(1.12)" }, 21.28);
+      tl.from(".s4-step", { x: 52, opacity: 0, duration: 0.42, stagger: 0.1, ease: "power2.out" }, 21.68);
+      tl.from(".s4-subhead", { y: 26, opacity: 0, duration: 0.5, ease: "circ.out" }, 22.22);
+
+      caption("#cap6", 21.2, 26.3);
+      tl.to(".final-fade", { opacity: 1, duration: 0.9, ease: "sine.inOut" }, 26.92);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

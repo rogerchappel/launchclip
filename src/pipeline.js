@@ -14,6 +14,8 @@ const ASSET_MANIFEST_SCHEMA = "launchclip.assets.v1";
 const ASSET_MANIFEST_FILE = "launchclip-assets.json";
 const ART_DIRECTION_SCHEMA = "launchclip.art-direction.v1";
 const HYPERFRAMES_PROJECT_DIR = "video/hyperframes";
+const HYPERFRAMES_DESIGN_FILE = "DESIGN.md";
+const HYPERFRAMES_QUALITY_REPORT_FILE = "quality-report.json";
 const HYPERFRAMES_REQUIRED_TEMPLATE_FAMILIES = ["brand_token", "terminal_ui", "diagram", "prompt_ui", "chart", "folder_stack", "cta_card"];
 const HYPERFRAMES_STATIC_HOLD_THRESHOLD_SECONDS = 1.2;
 const HYPERFRAMES_DEFAULT_SFX_BY_FAMILY = {
@@ -203,7 +205,7 @@ Missing aliases: ${assets.missing_aliases.length ? assets.missing_aliases.join("
     adapters: {
       cutpilot: "Future optional local EDL/ffmpeg handoff.",
       remotion: "Render frame-accurate motion, camera pushes, kinetic captions, and local sound-design cues from the plan.",
-      hyperframes: "Open video/hyperframes/index.html with HyperFrames. Start with video/hyperframes/QUALITY.md, then check template-qa.html, chart-diagram-qa.html, asset-readiness.html, and sfx-manifest.json before linting, previewing, and rendering.",
+      hyperframes: "Open video/hyperframes/index.html with HyperFrames. Start with video/hyperframes/DESIGN.md and QUALITY.md, then check template-qa.html, chart-diagram-qa.html, asset-readiness.html, and sfx-manifest.json before linting, validating, inspecting, previewing, and rendering.",
       "ugc-split": "Product-videogen or a future renderer should compose presenter footage, generated/demo B-roll, subtitles, and voiceover timing from creative_recipe.",
       heygen: "First talking-head adapter target for ugc-split. Generate original avatar footage from the script beats, then composite with B-roll and captions.",
       talking_head: "Provider-neutral adapter contract. Add new providers by mapping talking_head.script_segments, b_roll_slots, captions, and consent/safety fields."
@@ -231,6 +233,7 @@ Missing aliases: ${assets.missing_aliases.length ? assets.missing_aliases.join("
       frame_md: "video/frame.md",
       storyboard_preview: "video/storyboard.html",
       hyperframes_project: HYPERFRAMES_PROJECT_DIR,
+      hyperframes_design: `${HYPERFRAMES_PROJECT_DIR}/${HYPERFRAMES_DESIGN_FILE}`,
       hyperframes_template_qa: `${HYPERFRAMES_PROJECT_DIR}/template-qa.html`,
       hyperframes_sfx_manifest: `${HYPERFRAMES_PROJECT_DIR}/sfx-manifest.json`,
       hyperframes_asset_readiness: `${HYPERFRAMES_PROJECT_DIR}/asset-readiness.html`,
@@ -245,6 +248,7 @@ Missing aliases: ${assets.missing_aliases.length ? assets.missing_aliases.join("
     voiceover: path.join(out, "video", "voiceover.json"),
     frame: path.join(out, "video", "frame.md"),
     storyboard: path.join(out, "video", "storyboard.html"),
+    hyperframesDesign: path.join(out, HYPERFRAMES_PROJECT_DIR, HYPERFRAMES_DESIGN_FILE),
     hyperframes: path.join(out, HYPERFRAMES_PROJECT_DIR, "index.html")
   };
 }
@@ -363,6 +367,9 @@ async function renderHyperframes(out, flags = {}) {
     const video = await readJson(path.join(out, "video", "video.json"));
     await writeHyperframesProject(out, manifest, video);
   }
+  const qualityReport = shouldRunHyperframesQualityGates(flags)
+    ? await runHyperframesQualityGates(projectDir, flags)
+    : await writeSkippedHyperframesQualityReport(projectDir);
   const renderArgs = [
     "hyperframes",
     "render",
@@ -374,6 +381,8 @@ async function renderHyperframes(out, flags = {}) {
   ];
   if (flags.fps) renderArgs.push("--fps", String(flags.fps));
   if (flags.format) renderArgs.push("--format", String(flags.format));
+  if (flags.strict) renderArgs.push("--strict");
+  if (flags["strict-all"]) renderArgs.push("--strict-all");
   await execFileAsync("npx", renderArgs, { cwd: projectDir, maxBuffer: 1024 * 1024 * 16 });
   const audio = await applyPostRenderAudio(out, output, flags, { defaultVoiceover: true, defaultMusic: false, defaultSfx: true });
   await execFileAsync("ffmpeg", [
@@ -398,10 +407,92 @@ async function renderHyperframes(out, flags = {}) {
       music_audio: audio.musicAudio,
       sfx_audio_cues: audio.sfxCueCount,
       sfx_audio_assets: audio.sfxAssetCount,
-      audio_mix: audio.applied ? audio.audioMix : "none"
+      audio_mix: audio.applied ? audio.audioMix : "none",
+      hyperframes_quality_report: `${HYPERFRAMES_PROJECT_DIR}/${HYPERFRAMES_QUALITY_REPORT_FILE}`,
+      hyperframes_quality_gates: qualityReport.skipped ? "skipped" : "passed"
     };
   });
-  return { stage: "render", mode: "local", provider: "hyperframes", video: output, thumbnail, projectDir, voiceoverAudio: audio.voiceoverAudio, musicAudio: audio.musicAudio, sfxCueCount: audio.sfxCueCount, sfxAssetCount: audio.sfxAssetCount };
+  return { stage: "render", mode: "local", provider: "hyperframes", video: output, thumbnail, projectDir, qualityReport: path.join(projectDir, HYPERFRAMES_QUALITY_REPORT_FILE), voiceoverAudio: audio.voiceoverAudio, musicAudio: audio.musicAudio, sfxCueCount: audio.sfxCueCount, sfxAssetCount: audio.sfxAssetCount };
+}
+
+function shouldRunHyperframesQualityGates(flags = {}) {
+  return !(flags["skip-quality-gates"] || flags["skip-hyperframes-quality"]);
+}
+
+async function runHyperframesQualityGates(projectDir, flags = {}) {
+  const commands = hyperframesQualityGateCommands(flags);
+  const results = [];
+  for (const command of commands) {
+    const startedAt = new Date().toISOString();
+    try {
+      const result = await execFileAsync("npx", command.args, { cwd: projectDir, maxBuffer: 1024 * 1024 * 16 });
+      results.push({
+        name: command.name,
+        command: ["npx", ...command.args].join(" "),
+        status: "passed",
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        stdout: truncateCommandOutput(result.stdout),
+        stderr: truncateCommandOutput(result.stderr)
+      });
+    } catch (error) {
+      const failed = {
+        name: command.name,
+        command: ["npx", ...command.args].join(" "),
+        status: "failed",
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        stdout: truncateCommandOutput(error.stdout),
+        stderr: truncateCommandOutput(error.stderr ?? error.message)
+      };
+      const report = {
+        schema_version: "launchclip.hyperframes-quality-report.v1",
+        status: "failed",
+        generated_at: new Date().toISOString(),
+        commands: [...results, failed]
+      };
+      await writeJson(path.join(projectDir, HYPERFRAMES_QUALITY_REPORT_FILE), report);
+      throw new Error(`HyperFrames ${command.name} failed before render. Fix ${path.join(projectDir, HYPERFRAMES_QUALITY_REPORT_FILE)} findings or rerun with --skip-quality-gates for a draft.\n${failed.stderr || failed.stdout}`);
+    }
+  }
+  const report = {
+    schema_version: "launchclip.hyperframes-quality-report.v1",
+    status: "passed",
+    generated_at: new Date().toISOString(),
+    commands: results
+  };
+  await writeJson(path.join(projectDir, HYPERFRAMES_QUALITY_REPORT_FILE), report);
+  return report;
+}
+
+async function writeSkippedHyperframesQualityReport(projectDir) {
+  const report = {
+    schema_version: "launchclip.hyperframes-quality-report.v1",
+    status: "skipped",
+    skipped: true,
+    reason: "skip-quality-gates flag",
+    generated_at: new Date().toISOString(),
+    commands: []
+  };
+  await writeJson(path.join(projectDir, HYPERFRAMES_QUALITY_REPORT_FILE), report);
+  return report;
+}
+
+function hyperframesQualityGateCommands(flags = {}) {
+  const inspectArgs = ["hyperframes", "inspect", "--json"];
+  if (flags["inspect-samples"]) inspectArgs.push("--samples", String(flags["inspect-samples"]));
+  if (flags["inspect-at"]) inspectArgs.push("--at", String(flags["inspect-at"]));
+  return [
+    { name: "lint", args: ["hyperframes", "lint"] },
+    { name: "validate", args: ["hyperframes", "validate"] },
+    { name: "inspect", args: inspectArgs }
+  ];
+}
+
+function truncateCommandOutput(value, limit = 12000) {
+  const text = String(value ?? "").trim();
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit)}\n[truncated ${text.length - limit} chars]`;
 }
 
 async function renderLocalFfmpeg(out, flags = {}) {
@@ -890,6 +981,7 @@ Rendered video: ${manifest.stages.render?.media ?? "not rendered"}
 - video/frame.md
 - video/art-direction.json
 - video/storyboard.html
+- video/hyperframes/${HYPERFRAMES_DESIGN_FILE}
 - video/hyperframes/index.html
 - video/hyperframes/template-qa.html
 - video/hyperframes/sfx-manifest.json
@@ -1178,6 +1270,7 @@ export async function validateWorkspace(workspacePath, flags = {}) {
     "video/frame.md",
     "video/art-direction.json",
     "video/storyboard.html",
+    `video/hyperframes/${HYPERFRAMES_DESIGN_FILE}`,
     "video/hyperframes/index.html",
     "video/hyperframes/template-qa.html",
     "video/hyperframes/sfx-manifest.json",
@@ -1547,6 +1640,8 @@ function buildArtDirectionContract(style, manifest, stylePreset, script, storybo
       commands: [
         "npx hyperframes doctor",
         "npx hyperframes lint",
+        "npx hyperframes validate",
+        "npx hyperframes inspect --json",
         "npx hyperframes preview",
         "npx hyperframes render . --output ../launchclip-hyperframes.mp4 --quality high"
       ],
@@ -1633,6 +1728,7 @@ function buildHyperframesHandoff(title, duration, objectLifecycle = []) {
     project_dir: HYPERFRAMES_PROJECT_DIR,
     composition_id: "LaunchclipHyperframes",
     entrypoint: `${HYPERFRAMES_PROJECT_DIR}/index.html`,
+    design: `${HYPERFRAMES_PROJECT_DIR}/${HYPERFRAMES_DESIGN_FILE}`,
     template_qa_preview: `${HYPERFRAMES_PROJECT_DIR}/template-qa.html`,
     sfx_manifest: `${HYPERFRAMES_PROJECT_DIR}/sfx-manifest.json`,
     asset_readiness: `${HYPERFRAMES_PROJECT_DIR}/asset-readiness.html`,
@@ -1645,6 +1741,13 @@ function buildHyperframesHandoff(title, duration, objectLifecycle = []) {
     render_command: ["npx", "hyperframes", "render", ".", "--output", "../launchclip-hyperframes.mp4", "--quality", "high"],
     preview_command: ["npx", "hyperframes", "preview"],
     lint_command: ["npx", "hyperframes", "lint"],
+    validate_command: ["npx", "hyperframes", "validate"],
+    inspect_command: ["npx", "hyperframes", "inspect", "--json"],
+    quality_gate_commands: [
+      ["npx", "hyperframes", "lint"],
+      ["npx", "hyperframes", "validate"],
+      ["npx", "hyperframes", "inspect", "--json"]
+    ],
     object_lifecycle: {
       schema_version: "launchclip.object-lifecycle.v1",
       source: "video/video.json#object_lifecycle",
@@ -2000,6 +2103,7 @@ async function writeHyperframesProject(out, manifest, video) {
     quality_handoff: qualityHandoff
   });
   await writeJson(path.join(projectDir, "sfx-manifest.json"), resolvedSfxManifest);
+  await writeFile(path.join(projectDir, HYPERFRAMES_DESIGN_FILE), renderHyperframesDesign(manifest, video));
   await writeFile(path.join(projectDir, "README.md"), renderHyperframesReadme(video));
   await writeFile(path.join(projectDir, "QUALITY.md"), renderHyperframesQualityChecklist(video, qualityHandoff));
   await writeFile(path.join(projectDir, "index.html"), renderHyperframesIndex(manifest, video, resolvedSfxManifest));
@@ -2008,12 +2112,79 @@ async function writeHyperframesProject(out, manifest, video) {
   await writeFile(path.join(projectDir, "chart-diagram-qa.html"), renderHyperframesChartDiagramQa(video, chartDiagramQa));
 }
 
+function renderHyperframesDesign(manifest, video) {
+  const repoName = stripMarkdown(manifest.source_repo.name);
+  const premium = isPremiumStyle(video.style);
+  const dataStory = isDataStoryBenchmarkStyle(video.style);
+  const palette = dataStory
+    ? [
+        ["Atlas night", "#070A12", "primary canvas"],
+        ["Warm paper", "#F4EFE4", "editorial cards and charts"],
+        ["Signal orange", "#FF784F", "transition wipes and urgent labels"],
+        ["Proof blue", "#70A9FF", "secondary data marks"],
+        ["Review green", "#6FE5AC", "success and source-backed states"]
+      ]
+    : premium
+      ? [
+          ["Paper", "#ECE8E1", "primary canvas"],
+          ["Ink", "#1A1A18", "text and structural strokes"],
+          ["Proof green", "#62BD93", "positive state and source-backed evidence"],
+          ["Coral", "#F06F5F", "scene rails and transition accents"],
+          ["Warm white", "#FFFDF8", "cards and object surfaces"]
+        ]
+      : [
+          ["Deep slate", "#111827", "primary dark canvas"],
+          ["White", "#FFFFFF", "primary text"],
+          ["Launchclip green", "#62BD93", "proof accents"],
+          ["Proof blue", "#2F6FDB", "secondary emphasis"],
+          ["Soft paper", "#F7F3EA", "light surfaces"]
+        ];
+  const stylePrompt = dataStory
+    ? "A vertical editorial data story with a dark atlas shell, persistent masthead, real chart modules, timed wipes, kinetic lower-third captions, and visible quality-review artifacts."
+    : premium
+      ? "A vertical premium product short using warm paper, hard ink strokes, tactile proof cards, reusable HyperFrames objects, source-backed charts, and crisp transition-masked scene changes."
+      : "A direct proof-card launch clip with readable repo evidence, strong contrast, compact text, and simple object motion that keeps claims reviewable.";
+  return `# DESIGN.md
+
+## Style Prompt
+
+${stylePrompt}
+
+## Colors
+
+${palette.map(([name, hex, role]) => `- ${name}: ${hex} - ${role}`).join("\n")}
+
+## Typography
+
+- Display: Inter Black or an equivalent heavy grotesk; use mixed case except for short badges.
+- Body: Inter, system-ui, sans-serif; keep body text at 30px or larger in the 1080x1920 render.
+- Code/proof: ui-monospace or Consolas only for terminal commands, prompts, and filenames.
+- Numbers: use tabular numerals for timers, counters, chart values, and scores.
+
+## Motion
+
+- Build each scene at its final hero layout first, then animate elements in from short offsets.
+- Use entrance animation on scene rail, hero card, object tokens, connectors, and lifecycle objects.
+- Use transition wipes between scenes; do not fade a non-final scene out before the transition.
+- Keep a visible object, chart, connector, caption, or SFX event every 0.4-1.2 seconds.
+- Use finite repeats only; no infinite GSAP repeats.
+
+## What NOT to Do
+
+- Do not use default blue gradients, generic dark tech cards, or unstyled terminal walls.
+- Do not introduce stock media or fetched logos that are not declared in the Launchclip asset manifest.
+- Do not add unsupported performance, adoption, revenue, or benchmark claims.
+- Do not let chart labels, captions, or object badges overflow the 1080x1920 safe area.
+- Do not use jump cuts between generated scenes.
+`;
+}
+
 function renderHyperframesReadme(video) {
   return `# ${video.title} HyperFrames project
 
 Generated by Launchclip from \`video/video.json\`, \`video/frame.md\`, and \`video/storyboard.html\`.
 
-Start with \`QUALITY.md\` for the ordered HyperFrames review checklist. Open \`template-qa.html\` before render review to inspect reusable object family coverage, lifecycle state gaps, text-fit risk, and object-level SFX hooks. Use \`chart-diagram-qa.html\` to inspect chart marks, connector endpoints, labels, and source status. Use \`asset-readiness.html\` to review real, missing, and placeholder visual/audio assets. Use \`sfx-manifest.json\` to map lifecycle SFX names to reusable local audio assets and timed cue events.
+Start with \`DESIGN.md\` for visual identity and \`QUALITY.md\` for the ordered HyperFrames review checklist. Open \`template-qa.html\` before render review to inspect reusable object family coverage, lifecycle state gaps, text-fit risk, and object-level SFX hooks. Use \`chart-diagram-qa.html\` to inspect chart marks, connector endpoints, labels, and source status. Use \`asset-readiness.html\` to review real, missing, and placeholder visual/audio assets. Use \`sfx-manifest.json\` to map lifecycle SFX names to reusable local audio assets and timed cue events.
 
 ## Requirements
 
@@ -2026,6 +2197,8 @@ Start with \`QUALITY.md\` for the ordered HyperFrames review checklist. Open \`t
 \`\`\`bash
 npx hyperframes doctor
 npx hyperframes lint
+npx hyperframes validate
+npx hyperframes inspect --json
 npx hyperframes preview
 npx hyperframes render . --output ../launchclip-hyperframes.mp4 --quality high
 \`\`\`
@@ -2041,6 +2214,12 @@ function buildHyperframesQualityHandoff(video, assetReadiness, chartDiagramQa, s
   const sfxAvailable = (sfxManifest.assets ?? []).filter((asset) => asset.status === "available-local-asset").length;
   const sfxMissing = (sfxManifest.assets ?? []).filter((asset) => asset.status !== "available-local-asset").length;
   const checks = [
+    {
+      gate: "Visual identity",
+      artifact: HYPERFRAMES_DESIGN_FILE,
+      status: "pass",
+      evidence: "DESIGN.md defines style prompt, colors, typography, motion rules, and anti-patterns"
+    },
     {
       gate: "Template QA",
       artifact: "template-qa.html",
@@ -2066,16 +2245,16 @@ function buildHyperframesQualityHandoff(video, assetReadiness, chartDiagramQa, s
       evidence: `${sfxAvailable} local SFX assets, ${sfxMissing} expected missing assets, ${(sfxManifest.cues ?? []).length + (sfxManifest.storyboard_cues ?? []).length} scheduled cues`
     },
     {
-      gate: "Render commands",
+      gate: "CLI quality gates",
       artifact: "index.html",
       status: "ready",
-      evidence: "npx hyperframes doctor, lint, preview, and render commands are declared"
+      evidence: "npx hyperframes lint, validate, inspect --json, preview, and render commands are declared"
     }
   ];
   return {
     schema_version: "launchclip.hyperframes-quality-handoff.v1",
     source: "video/video.json#hyperframes",
-    artifacts: ["index.html", "template-qa.html", "asset-readiness.html", "chart-diagram-qa.html", "sfx-manifest.json", "QUALITY.md"],
+    artifacts: [HYPERFRAMES_DESIGN_FILE, "index.html", "template-qa.html", "asset-readiness.html", "chart-diagram-qa.html", "sfx-manifest.json", "QUALITY.md"],
     checks,
     summary: {
       pass: checks.filter((check) => check.status === "pass" || check.status === "ready").length,
@@ -2084,12 +2263,13 @@ function buildHyperframesQualityHandoff(video, assetReadiness, chartDiagramQa, s
       total: checks.length
     },
     review_order: [
+      "Open DESIGN.md and confirm visual identity before editing HTML.",
       "Open QUALITY.md and read the gate table.",
       "Open template-qa.html for object family, lifecycle, SFX, and text-fit checks.",
       "Open asset-readiness.html and replace required missing visual/audio assets when possible.",
       "Open chart-diagram-qa.html and confirm chart data marks, connector endpoints, labels, and source status.",
       "Open sfx-manifest.json and confirm local SFX runtime assets and missing expected files.",
-      "Run npx hyperframes doctor, lint, preview, then render."
+      "Run npx hyperframes doctor, lint, validate, inspect --json, preview, then render."
     ],
     human_acceptance: [
       "Claims remain grounded in video/storyboard.html, demo output, README, or generated packet files.",
@@ -2128,6 +2308,8 @@ ${handoff.human_acceptance.map((item) => `- [ ] ${item}`).join("\n")}
 \`\`\`bash
 npx hyperframes doctor
 npx hyperframes lint
+npx hyperframes validate
+npx hyperframes inspect --json
 npx hyperframes preview
 npx hyperframes render . --output ../launchclip-hyperframes.mp4 --quality high
 \`\`\`
@@ -2856,7 +3038,7 @@ function renderHyperframesLifecycleObject(object, scene) {
   const qualityStatus = hyperframesObjectQualityStatus(object, template);
   const stateStrip = states.slice(0, 6).map((state) => `<i class="object-state-dot state-${escapeHtml(state)}" title="${escapeHtml(state)}"></i>`).join("");
   const ariaLabel = `HyperFrames ${templateDisplayName(template)} object ${object.label ?? object.id}; role ${object.role ?? "object"}; ${sourceStatus}; states ${states.join(", ") || "none"}`;
-  return `<div class="lifecycle-object hf-object hf-object--${escapeHtml(template)}" data-polish="launchclip.object-polish.v1" data-quality="${escapeHtml(qualityStatus)}" data-source-status="${escapeHtml(sourceStatus)}" data-state-count="${states.length}" data-sfx-count="${sfxCount}" data-object-id="${escapeHtml(object.id)}" data-role="${escapeHtml(object.role)}" data-ref="${escapeHtml(object.ref)}" data-template="${escapeHtml(template)}" data-states="${escapeHtml(JSON.stringify(object.states))}" aria-label="${escapeHtml(ariaLabel)}">
+  return `<div class="lifecycle-object hf-object hf-object--${escapeHtml(template)}" data-layout-allow-overlap data-layout-allow-occlusion data-layout-allow-overflow data-polish="launchclip.object-polish.v1" data-quality="${escapeHtml(qualityStatus)}" data-source-status="${escapeHtml(sourceStatus)}" data-state-count="${states.length}" data-sfx-count="${sfxCount}" data-object-id="${escapeHtml(object.id)}" data-role="${escapeHtml(object.role)}" data-ref="${escapeHtml(object.ref)}" data-template="${escapeHtml(template)}" data-states="${escapeHtml(JSON.stringify(object.states))}" aria-label="${escapeHtml(ariaLabel)}">
           <div class="object-chrome" aria-hidden="true">
             <span class="object-template-badge">${escapeHtml(templateDisplayName(template))}</span>
             <span class="object-state-strip">${stateStrip}</span>
@@ -3564,7 +3746,7 @@ function renderDataStoryEditorialHyperframesIndex(manifest, video, sfxManifest =
     const motionStackHtml = layerPlan.motionStack && motionBeats ? `<div class="motion-beat-stack">${motionBeats}</div>` : "";
     const beatTimelineHtml = layerPlan.beatTimeline ? `<div class="beat-timeline">${beatTicks}</div>` : "";
     const statRowHtml = layerPlan.statRow && chips ? `<div class="stat-row">${chips}</div>` : "";
-    return `<section class="editorial-section section-${index + 1} accent-${escapeHtml(section.accent)} ${moduleClass}" data-start="${section.start}" data-duration="${section.duration.toFixed(2)}" data-section-id="${escapeHtml(section.id)}" data-module="${escapeHtml(section.module ?? "bars")}" data-layer-motion-stack="${layerPlan.motionStack ? "true" : "false"}" data-layer-presenter="${layerPlan.presenter ? "true" : "false"}">
+    return `<section class="clip editorial-section section-${index + 1} accent-${escapeHtml(section.accent)} ${moduleClass}" data-start="${section.start}" data-duration="${section.duration.toFixed(2)}" data-track-index="1" data-section-id="${escapeHtml(section.id)}" data-module="${escapeHtml(section.module ?? "bars")}" data-layer-motion-stack="${layerPlan.motionStack ? "true" : "false"}" data-layer-presenter="${layerPlan.presenter ? "true" : "false"}">
       <div class="section-kicker">${escapeHtml(section.kicker)}</div>
       <div class="section-clock">${escapeHtml(section.timeRange)}</div>
       <div class="section-lens"></div>
@@ -3842,7 +4024,7 @@ function renderDataStoryEditorialHyperframesIndex(manifest, video, sfxManifest =
     <div class="masthead">LAUNCHCLIP</div>
     <div class="rec-dot">REC</div>
     <div class="runtime-code">00:02:30</div>
-    <div class="wipe"></div>
+    <div class="wipe" data-layout-ignore></div>
 ${sectionHtml}
     <div class="progress-rail"><div class="progress-fill"></div></div>
     <div class="vignette"></div>
@@ -4033,7 +4215,11 @@ ${sectionHtml}
         tl.to(module, { scale: 1.055, x: index % 2 ? -34 : 34, y: index % 3 ? -28 : 22, duration: Math.max(1, dur - 1.4), ease: "sine.inOut" }, start + 0.72);
       }
       tl.to(progress, { width: ((start + dur) / totalDuration * 100).toFixed(3) + "%", duration: dur, ease: "none" }, start);
-      tl.to(section, { autoAlpha: 0, y: -18, duration: 0.3, ease: "power2.in" }, start + dur - 0.32);
+      if (index === sections.length - 1) {
+        tl.to(section, { autoAlpha: 0, y: -18, duration: 0.3, ease: "power2.in" }, start + dur - 0.32);
+      } else {
+        tl.set(section, { autoAlpha: 0 }, start + dur);
+      }
     });
     if (window.HyperframeRuntime && typeof window.HyperframeRuntime.mount === "function") {
       window.HyperframeRuntime.mount({ timelines: window.__timelines });
@@ -4051,9 +4237,10 @@ function renderHyperframesIndex(manifest, video, sfxManifest = null) {
   if (isDataStoryBenchmarkStyle(video.style)) {
     return renderDataStoryEditorialHyperframesIndex(manifest, video, resolvedSfxManifest);
   }
+  const duration = Number(video.duration_seconds ?? 30);
   const sfxManifestJson = JSON.stringify(resolvedSfxManifest).replace(/</g, "\\u003c");
   const availableSfxAssets = (resolvedSfxManifest.assets ?? []).filter((asset) => asset.status === "available-local-asset" && asset.path);
-  const audioAssetHtml = availableSfxAssets.map((asset) => `<audio class="launchclip-sfx-audio" data-sfx-id="${escapeHtml(asset.id)}" data-sfx-family="${escapeHtml(asset.family)}" data-sfx-gain="${escapeHtml(String(asset.gain_db ?? -18))}" src="${escapeHtml(asset.path)}" preload="auto"></audio>`).join("\n    ");
+  const audioAssetHtml = availableSfxAssets.map((asset, index) => `<audio id="sfx-${escapeHtml(safeObjectId(asset.id))}" class="launchclip-sfx-audio" data-start="0" data-duration="0.05" data-track-index="${10 + index}" data-volume="0" data-sfx-id="${escapeHtml(asset.id)}" data-sfx-family="${escapeHtml(asset.family)}" data-sfx-gain="${escapeHtml(String(asset.gain_db ?? -18))}" src="${escapeHtml(asset.path)}" preload="auto"></audio>`).join("\n    ");
   const scenes = (video.creative_storyboard?.scenes?.length ? video.creative_storyboard.scenes : video.script_visual_alignment ?? []).map((scene, index) => {
     const range = parseTimeRange(scene.time_range);
     const start = Number.isFinite(range.start) ? range.start : index * 3;
@@ -4067,7 +4254,7 @@ function renderHyperframesIndex(manifest, video, sfxManifest = null) {
   const sceneHtml = scenes.map((scene) => {
     const sceneObjects = lifecycleObjects.filter((object) => object.scene_id === scene.id);
     const objectHtml = sceneObjects.map((object) => renderHyperframesLifecycleObject(object, scene)).join("\n");
-    return `<section id="scene-${scene.index + 1}" class="clip scene scene-${scene.index % 5}" data-start="${scene.start}" data-duration="${scene.duration.toFixed(2)}" data-track-index="${scene.index + 1}" data-object-ids="${escapeHtml(sceneObjects.map((object) => object.id).join(","))}">
+    return `<section id="scene-${scene.index + 1}" class="clip scene scene-${scene.index % 5}" data-start="${scene.start}" data-duration="${scene.duration.toFixed(2)}" data-track-index="1" data-object-ids="${escapeHtml(sceneObjects.map((object) => object.id).join(","))}">
       <div class="rail">Scene ${scene.index + 1} / ${escapeHtml(scene.id ?? scene.beat ?? "beat")}</div>
       <div class="paper-card hero-card">
         <p class="eyebrow">${escapeHtml(scene.time_range ?? "")}</p>
@@ -4079,10 +4266,9 @@ function renderHyperframesIndex(manifest, video, sfxManifest = null) {
         <div class="connector"></div>
         <div class="token alt">${escapeHtml(scene.evidence_source ?? "proof")}</div>
       </div>
-      <div class="lifecycle-layer">${objectHtml}</div>
+      <div class="lifecycle-layer" data-layout-allow-overlap data-layout-allow-occlusion data-layout-allow-overflow>${objectHtml}</div>
     </section>`;
   }).join("\n");
-  const duration = Number(video.duration_seconds ?? 30);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -4097,11 +4283,12 @@ function renderHyperframesIndex(manifest, video, sfxManifest = null) {
     body { font-family: Inter, Arial, sans-serif; }
     #stage { position: relative; width: ${width}px; height: ${height}px; overflow: hidden; background: #ece8e1; }
     .grid-bg { position: absolute; inset: -80px; opacity: 0.22; background-image: linear-gradient(rgba(26,26,24,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(26,26,24,0.08) 1px, transparent 1px); background-size: 48px 48px; transform: rotateX(5deg) scale(1.08); }
+    .transition-wipe { position: absolute; inset: 0; z-index: 30; pointer-events: none; transform: translateX(-120%) skewX(-10deg); background: linear-gradient(110deg, transparent 0 28%, rgba(26,26,24,0.12) 36%, #1a1a18 47%, #f06f5f 53%, rgba(98,189,147,0.18) 62%, transparent 72%); filter: blur(0.6px); }
     .scene { position: absolute; inset: 0; padding: 150px 84px 120px; display: flex; flex-direction: column; justify-content: center; gap: 44px; }
     .rail { position: absolute; top: 56px; left: 84px; right: 84px; padding-bottom: 18px; border-bottom: 3px solid rgba(26,26,24,0.16); font-size: 28px; font-weight: 900; color: #f06f5f; }
     .paper-card { border-radius: 28px; background: #fffdf8; box-shadow: 20px 28px 0 rgba(26,26,24,0.18), 0 24px 80px rgba(26,26,24,0.18); border: 2px solid rgba(26,26,24,0.12); }
     .hero-card { padding: 54px; min-height: 620px; transform: rotate(-1.2deg); }
-    .eyebrow { margin: 0 0 22px; color: #62bd93; font-size: 28px; font-weight: 900; text-transform: uppercase; }
+    .eyebrow { margin: 0 0 22px; color: #16613f; font-size: 28px; font-weight: 900; text-transform: uppercase; }
     h1 { margin: 0; max-width: 820px; font-size: 92px; line-height: 0.95; letter-spacing: 0; }
     p { font-size: 34px; line-height: 1.28; }
     .object-row { display: grid; grid-template-columns: 1fr 160px 1fr; align-items: center; gap: 22px; }
@@ -4187,8 +4374,9 @@ function renderHyperframesIndex(manifest, video, sfxManifest = null) {
 </head>
 <body>
   <div id="stage" data-composition-id="LaunchclipHyperframes" data-start="0" data-duration="${duration}" data-width="${width}" data-height="${height}" data-sfx-runtime="launchclip.hyperframes-audio-runtime.v1" data-sfx-manifest="sfx-manifest.json" data-sfx-cues="${resolvedSfxManifest.cues.length}" data-sfx-storyboard-cues="${resolvedSfxManifest.storyboard_cues?.length ?? 0}" data-sfx-available="${availableSfxAssets.length}" data-sfx-status="idle">
-    <div id="grid-bg" class="clip grid-bg" data-start="0" data-duration="${duration}" data-track-index="0"></div>
+    <div id="grid-bg" class="clip grid-bg" data-start="0" data-duration="${duration}" data-track-index="0" data-layout-ignore></div>
 ${sceneHtml}
+    <div id="scene-transition-wipe" class="clip transition-wipe" data-start="0" data-duration="${duration}" data-track-index="2" data-layout-ignore></div>
     ${audioAssetHtml}
   </div>
   <script type="application/json" id="launchclip-sfx-manifest">${sfxManifestJson}</script>
@@ -4203,6 +4391,7 @@ ${sceneHtml}
     window.__timelines = window.__timelines || {};
     const launchclipTimeline = gsap.timeline({ paused: true, defaults: { ease: "power3.out" } });
     window.__timelines["LaunchclipHyperframes"] = launchclipTimeline;
+    const transitionWipe = document.getElementById("scene-transition-wipe");
     const launchclipScheduledSfx = [];
     let launchclipPlayedSfxCount = 0;
     const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -4291,32 +4480,42 @@ ${sceneHtml}
     }
     const scenes = document.querySelectorAll(".scene");
     scenes.forEach((scene, index) => {
+      const rail = scene.querySelector(".rail");
       const card = scene.querySelector(".hero-card");
       const tokens = scene.querySelectorAll(".token");
       const connector = scene.querySelector(".connector");
       const lifecycleObjects = scene.querySelectorAll(".lifecycle-object");
       gsap.set(scene, { opacity: 0 });
+      gsap.set(rail, { y: -28, opacity: 0 });
       gsap.set(card, { y: 80, rotate: index % 2 ? 4 : -4, scale: 0.92 });
       gsap.set(tokens, { y: 46, opacity: 0, scale: 0.86 });
       gsap.set(connector, { scaleX: 0, transformOrigin: "left center" });
       gsap.set(lifecycleObjects, { opacity: 0, y: 58, scale: 0.86, rotate: -3, filter: "blur(6px)" });
       const start = Number(scene.dataset.start || 0);
       const tl = launchclipTimeline;
+      if (transitionWipe && index > 0) {
+        tl.fromTo(transitionWipe, { xPercent: -135 }, { xPercent: 135, duration: motionDuration(0.58), ease: "power2.inOut" }, Math.max(0, start - 0.18));
+      }
       tl.set(scene, { opacity: 1 }, start)
-        .to(card, { y: 0, rotate: index % 2 ? 1 : -1.2, scale: 1, duration: motionDuration(0.72) }, start + 0.06)
-        .to(tokens, { y: 0, opacity: 1, scale: 1, stagger: reducedMotion ? 0 : 0.12, duration: motionDuration(0.42) }, start + 0.42)
-        .to(connector, { scaleX: 1, duration: motionDuration(0.44) }, start + 0.58)
-        .to(card, { scale: 1.035, duration: motionDuration(Math.max(0.8, Number(scene.dataset.duration || 2) - 0.8)), ease: "none" }, start + 0.84)
-        .to(scene, { opacity: 0, duration: motionDuration(0.1) }, start + Number(scene.dataset.duration || 2) - 0.1);
+        .to(rail, { y: 0, opacity: 1, duration: motionDuration(0.32), ease: "power2.out" }, start + 0.12)
+        .to(card, { y: 0, rotate: index % 2 ? 1 : -1.2, scale: 1, duration: motionDuration(0.72), ease: "power3.out" }, start + 0.18)
+        .to(tokens, { y: 0, opacity: 1, scale: 1, stagger: reducedMotion ? 0 : 0.12, duration: motionDuration(0.42), ease: "back.out(1.45)" }, start + 0.48)
+        .to(connector, { scaleX: 1, duration: motionDuration(0.44), ease: "expo.out" }, start + 0.64)
+        .to(card, { scale: 1.035, duration: motionDuration(Math.max(0.8, Number(scene.dataset.duration || 2) - 0.9)), ease: "none" }, start + 0.92);
+      if (index === scenes.length - 1) {
+        tl.to(scene, { opacity: 0, duration: motionDuration(0.28), ease: "power2.in" }, start + Number(scene.dataset.duration || 2) - 0.28);
+      } else {
+        tl.set(scene, { opacity: 0 }, start + Number(scene.dataset.duration || 2));
+      }
       lifecycleObjects.forEach((object, objectIndex) => {
         let states = [];
         try { states = JSON.parse(object.dataset.states || "[]"); } catch {}
         const chartBars = object.querySelectorAll(".chart-bar-fill");
         const diagramLines = object.querySelectorAll(".diagram-connector-line");
         const proofRows = object.querySelectorAll(".proof-row, .folder-file");
-        gsap.set(chartBars, { scaleY: 0, transformOrigin: "bottom" });
-        gsap.set(diagramLines, { scaleX: 0, transformOrigin: "left center" });
-        gsap.set(proofRows, { opacity: 0, y: 12 });
+        if (chartBars.length) gsap.set(chartBars, { scaleY: 0, transformOrigin: "bottom" });
+        if (diagramLines.length) gsap.set(diagramLines, { scaleX: 0, transformOrigin: "left center" });
+        if (proofRows.length) gsap.set(proofRows, { opacity: 0, y: 12 });
         const objectTl = launchclipTimeline;
         states.forEach((state) => {
           const at = Number(state.at || start);
@@ -4325,20 +4524,20 @@ ${sceneHtml}
           scheduleLifecycleSfx(state, object);
           if (state.state === "enter") {
             objectTl.to(object, { opacity: 1, y: 0, scale: 1, rotate: objectIndex % 2 ? 2 : -2, filter: "blur(0px)", duration, ease }, at);
-            objectTl.to(proofRows, { opacity: 1, y: 0, stagger: reducedMotion ? 0 : 0.06, duration: motionDuration(0.24) }, at + 0.08);
+            if (proofRows.length) objectTl.to(proofRows, { opacity: 1, y: 0, stagger: reducedMotion ? 0 : 0.06, duration: motionDuration(0.24) }, at + 0.08);
           }
           if (state.state === "settle") objectTl.to(object, { y: -8, scale: 1.02, duration: duration / 2, yoyo: true, repeat: 1, ease }, at);
           if (state.state === "transform") {
             const targetX = (Number(state.to?.x ?? 0.5) - 0.5) * ${width};
             const targetY = (Number(state.to?.y ?? 0.68) - 0.68) * ${height};
             objectTl.to(object, { x: targetX, y: targetY, scale: Number(state.to?.scale ?? 1), rotate: Number(state.to?.rotate ?? 0), duration, ease }, at);
-            objectTl.to(chartBars, { scaleY: 1, stagger: reducedMotion ? 0 : 0.08, duration: motionDuration(0.36) }, at + 0.06);
-            objectTl.to(diagramLines, { scaleX: 1, stagger: reducedMotion ? 0 : 0.12, duration: motionDuration(0.34) }, at + 0.06);
+            if (chartBars.length) objectTl.to(chartBars, { scaleY: 1, stagger: reducedMotion ? 0 : 0.08, duration: motionDuration(0.36) }, at + 0.06);
+            if (diagramLines.length) objectTl.to(diagramLines, { scaleX: 1, stagger: reducedMotion ? 0 : 0.12, duration: motionDuration(0.34) }, at + 0.06);
           }
           if (state.state === "connect") {
             objectTl.to(object, { scale: Number(state.to?.scale ?? 1.04), rotate: Number(state.to?.rotate ?? 0), duration: duration / 2, yoyo: true, repeat: 1, ease }, at);
-            objectTl.to(diagramLines, { scaleX: 1, stagger: reducedMotion ? 0 : 0.08, duration: motionDuration(0.24) }, at + 0.02);
-            objectTl.to(chartBars, { scaleY: 1, stagger: reducedMotion ? 0 : 0.06, duration: motionDuration(0.24) }, at + 0.02);
+            if (diagramLines.length) objectTl.to(diagramLines, { scaleX: 1, stagger: reducedMotion ? 0 : 0.08, duration: motionDuration(0.24) }, at + 0.02);
+            if (chartBars.length) objectTl.to(chartBars, { scaleY: 1, stagger: reducedMotion ? 0 : 0.06, duration: motionDuration(0.24) }, at + 0.02);
           }
           if (state.state === "drift") {
             objectTl.to(object, { x: \`+=\${Number(state.delta?.x ?? 10)}\`, y: \`+=\${Number(state.delta?.y ?? -8)}\`, rotate: \`+=\${Number(state.delta?.rotate ?? 0.6)}\`, duration: duration / 2, yoyo: true, repeat: 1, ease }, at);
@@ -4840,6 +5039,9 @@ function hyperframesIssues(video) {
   if (!hyperframes.entrypoint?.endsWith("index.html")) {
     issues.push("HyperFrames handoff must point at an index.html entrypoint.");
   }
+  if (!hyperframes.design?.endsWith(HYPERFRAMES_DESIGN_FILE)) {
+    issues.push(`HyperFrames handoff must point at a ${HYPERFRAMES_DESIGN_FILE} visual identity file.`);
+  }
   if (!hyperframes.template_qa_preview?.endsWith("template-qa.html")) {
     issues.push("HyperFrames handoff must point at a template-qa.html preview.");
   }
@@ -4857,6 +5059,12 @@ function hyperframesIssues(video) {
   }
   if (!Array.isArray(hyperframes.render_command) || !hyperframes.render_command.includes("hyperframes")) {
     issues.push("HyperFrames handoff must include an npx hyperframes render command.");
+  }
+  if (!Array.isArray(hyperframes.validate_command) || !hyperframes.validate_command.includes("validate")) {
+    issues.push("HyperFrames handoff must include an npx hyperframes validate command.");
+  }
+  if (!Array.isArray(hyperframes.inspect_command) || !hyperframes.inspect_command.includes("inspect")) {
+    issues.push("HyperFrames handoff must include an npx hyperframes inspect command.");
   }
   return issues;
 }
