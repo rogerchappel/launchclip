@@ -151,7 +151,11 @@ test("plans premium product short contract with deterministic asset warnings", a
     const hyperframesData = JSON.parse(await readFile(path.join(out, "video/hyperframes/launchclip-data.json"), "utf8"));
 
     assert.equal(video.style, "premium-product-short");
-    assert.equal(video.duration_seconds, 48);
+    assert.equal(video.duration_seconds, 30);
+    assert.equal(video.script.duration_seconds, 30);
+    assert.equal(video.creative_recipe.duration_seconds, 30);
+    assert.equal(parseRange(video.script_visual_alignment.at(-1).time_range).end, 30);
+    assert.equal(hyperframesData.video.duration_seconds, 30);
     assert.equal(video.art_direction.schema_version, "launchclip.art-direction.v1");
     assert.deepEqual(video.art_direction.renderer_targets.slice(0, 2), ["hyperframes", "remotion"]);
     assert.equal(video.art_direction.reusable_object_library.target_count, 100);

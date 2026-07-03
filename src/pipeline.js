@@ -118,8 +118,9 @@ export async function planVideo(workspacePath, flags = {}) {
   const format = flags.format ?? "short-15";
   const style = flags.style ?? "proof-card";
   const talkingHead = talkingHeadAdapter(flags, style);
-  const stylePreset = videoStylePreset(style, manifest, talkingHead);
-  const duration = Number(flags.duration ?? stylePreset.duration_seconds ?? stylePreset.recipe?.duration_seconds ?? (format === "short-15" ? 15 : 30));
+  const baseStylePreset = videoStylePreset(style, manifest, talkingHead);
+  const duration = Number(flags.duration ?? durationFromFormat(format) ?? baseStylePreset.duration_seconds ?? baseStylePreset.recipe?.duration_seconds ?? 30);
+  const stylePreset = retimeStylePreset(baseStylePreset, duration);
   const assets = await buildAssetPlan(style, flags);
   const script = buildScriptPlan(style, manifest, stylePreset, talkingHead);
   const creativeStoryboard = buildCreativeStoryboard(style, manifest, script, stylePreset, talkingHead);
@@ -1254,6 +1255,77 @@ function applyVoiceWeightedTiming(timeline, totalDuration, fallbackStructure = [
   });
 }
 
+function applyTargetSecondTiming(timeline, totalDuration) {
+  const duration = Number(totalDuration);
+  if (!Number.isFinite(duration) || duration <= 0) return timeline;
+  const weights = timeline.map((segment) => Math.max(0.1, Number(segment.target_seconds ?? segment.seconds ?? 1)));
+  const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
+  let cursor = 0;
+  return timeline.map((segment, index) => {
+    const start = cursor;
+    const end = index === timeline.length - 1
+      ? duration
+      : Math.min(duration, start + (weights[index] / totalWeight * duration));
+    cursor = end;
+    const targetSeconds = round(end - start);
+    return {
+      ...segment,
+      time_range: `${round(start)}-${round(end)}s`,
+      target_seconds: targetSeconds
+    };
+  });
+}
+
+function durationFromFormat(format) {
+  const match = String(format ?? "").match(/^short-(\d+(?:\.\d+)?)$/i);
+  if (!match) return null;
+  const duration = Number(match[1]);
+  return Number.isFinite(duration) && duration > 0 ? duration : null;
+}
+
+function retimeStylePreset(stylePreset, duration) {
+  const targetDuration = Number(duration);
+  if (!Number.isFinite(targetDuration) || targetDuration <= 0) return stylePreset;
+  const sourceDuration = Number(stylePreset.duration_seconds ?? stylePreset.recipe?.duration_seconds);
+  if (!Number.isFinite(sourceDuration) || sourceDuration <= 0 || sourceDuration === targetDuration) return stylePreset;
+  const recipe = stylePreset.recipe
+    ? {
+        ...stylePreset.recipe,
+        duration_seconds: targetDuration,
+        layout: Array.isArray(stylePreset.recipe.layout)
+          ? stylePreset.recipe.layout.map((line) => retimeRangeText(line, sourceDuration, targetDuration))
+          : stylePreset.recipe.layout
+      }
+    : stylePreset.recipe;
+  return {
+    ...stylePreset,
+    duration_seconds: targetDuration,
+    structure: retimeStructure(stylePreset.structure, targetDuration),
+    recipe
+  };
+}
+
+function retimeStructure(structure, duration) {
+  if (!Array.isArray(structure) || !structure.length) return structure;
+  const total = structure.reduce((sum, segment) => sum + Math.max(0.1, Number(segment.seconds ?? 1)), 0) || 1;
+  let cursor = 0;
+  return structure.map((segment, index) => {
+    const start = cursor;
+    const end = index === structure.length - 1
+      ? duration
+      : Math.min(duration, start + (Math.max(0.1, Number(segment.seconds ?? 1)) / total * duration));
+    cursor = end;
+    return { ...segment, seconds: round(end - start) };
+  });
+}
+
+function retimeRangeText(value, sourceDuration, targetDuration) {
+  const scale = targetDuration / sourceDuration;
+  return String(value ?? "").replace(/(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)s/g, (_match, start, end) => {
+    return `${round(Number(start) * scale)}-${round(Number(end) * scale)}s`;
+  });
+}
+
 function wordCount(value) {
   return String(value ?? "").trim().split(/\s+/).filter(Boolean).length;
 }
@@ -1831,7 +1903,7 @@ function smoothHyperframesObjectStates(states, scene, objectIndex) {
 }
 
 function hyperframesMicroState(scene, objectIndex, microIndex, at) {
-  const state = ["connect", "drift", "pulse"][microIndex % 3];
+  const state = ["connect", "drift", "pulse"][(objectIndex + microIndex) % 3];
   const direction = objectIndex % 2 ? 1 : -1;
   if (state === "connect") {
     return {
@@ -6462,7 +6534,7 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
     .replace(/\s+/g, " ")
     .trim();
   if (isPremiumStyle(style)) {
-    const timeline = [
+    const timeline = applyTargetSecondTiming([
       {
         beat: "cold-open",
         time_range: "0-2.5s",
@@ -6567,12 +6639,12 @@ function buildScriptPlan(style, manifest, stylePreset, talkingHead = { enabled: 
         motion: "asset settle, check ticks, calm camera push, final hold",
         transition: "soft final hold"
       }
-    ];
+    ], stylePreset.duration_seconds ?? 48);
     return {
       schema_version: "launchclip.script.v1",
       style,
       strategy: "premium creator-product script with branded asset choreography, typed proof moments, physical depth, and adapter-ready SFX cues",
-      duration_seconds: 48,
+      duration_seconds: stylePreset.duration_seconds ?? 48,
       voice: {
         provider: talkingHead.enabled ? talkingHead.provider : "none",
         avatar_id: talkingHead.avatar_id ?? null,
