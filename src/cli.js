@@ -63,7 +63,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "allow-placeholder-sfx" || name === "no-music" || name === "no-trim-silence") {
+    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "allow-placeholder-sfx" || name === "no-music" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all") {
       flags[name] = true;
       continue;
     }
@@ -91,7 +91,7 @@ Usage:
   launchclip plan <workspace> --format short-15 --renderer none|hyperframes [--style proof-card|ugc-split|ugc-demo-punchy|premium-product-short|data-story-benchmark] [--assets-dir path/to/assets] [--talking-head heygen --avatar-id avatar_123]
   launchclip captions <workspace> --platforms x,linkedin,tiktok,bluesky
   launchclip render <workspace> --provider product-videogen --dry-run
-  launchclip render <workspace> --provider hyperframes [--quality high] [--voiceover local-say|elevenlabs] [--music elevenlabs]
+  launchclip render <workspace> --provider hyperframes [--quality high] [--strict-all] [--inspect-samples 15] [--skip-quality-gates] [--voiceover local-say|elevenlabs] [--music elevenlabs]
   launchclip render <workspace> --provider remotion [--assets-dir path/to/assets] [--voiceover local-say|elevenlabs]
   launchclip render <workspace> --provider local-ffmpeg [--voiceover local-say|elevenlabs]
   launchclip analyze-render <workspace> [--video video/launchclip-hyperframes.mp4]

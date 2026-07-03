@@ -26,6 +26,15 @@ launchclip plan .launchclip/my-oss-tool --format short-30 --style ugc-demo-punch
 launchclip render .launchclip/my-oss-tool --provider remotion
 ```
 
+For the higher-quality HyperFrames path:
+
+```bash
+launchclip plan .launchclip/my-oss-tool --format short-30 --style premium-product-short --renderer hyperframes
+launchclip render .launchclip/my-oss-tool --provider hyperframes --quality high
+```
+
+HyperFrames renders run `npx hyperframes lint`, `validate`, and `inspect --json` before producing the MP4. Use `--skip-quality-gates` only for draft iteration.
+
 You can also run each stage by hand:
 
 ```bash
@@ -56,6 +65,10 @@ Expected packet:
     video.json
     brief.md
     render-plan.json
+    hyperframes/
+      DESIGN.md
+      QUALITY.md
+      index.html
     remotion-props.json
     launchclip.mp4
     thumbnail.png
@@ -75,7 +88,7 @@ Expected packet:
 
 ## How It Works
 
-`launchclip run` executes the full dry-run workflow. `init` inspects a repo for README and package metadata, then creates a workspace manifest. `demo` runs only the command you explicitly provide and stores terminal evidence with obvious API keys, tokens, passwords, and GitHub tokens redacted; `--demo-media` can also copy a UI screenshot or short demo video into the packet. `plan` writes a video-skillkit-compatible `video.json`, a human brief, and a renderer handoff plan; the default `proof-card` style is a tight `short-15` flow with usage, terminal proof, generated artifacts, and CTA beats. Use `--style ugc-split` for a 30-second creator-led split-screen recipe with presenter, generated/demo B-roll, burned-in captions, numbered steps, artifact reveal, and approval-safe CTA. Use `--style ugc-demo-punchy` for the more social-ready version: seven short beats, first-frame hook, visible friction, real demo proof, script-to-visual alignment panels, fast artifact flashes, kinetic captions, motion/transition instructions, and a review-safe CTA. The plan also includes a deterministic `launchclip.script.v1` script, `script_visual_alignment` timeline, and `launchclip.storyboard.v1` creative storyboard so each beat carries layout, composition, media slots, motion grammar, typography, color grade, and quality gates before any renderer starts. `captions` writes deterministic platform drafts with claim status and optional `--angle`, `--audience`, and `--cta-url` context; it does not call an LLM. `render --provider product-videogen --dry-run` creates a dry-run product-videogen payload. `render --provider remotion` creates an uploadable vertical MP4 at `video/launchclip.mp4`, a thumbnail, and `video/remotion-props.json`; for `ugc-demo-punchy`, the Remotion composition follows the storyboard with creator-frame slots, device-capture proof, editor timeline motion, artifact inspection, and review-safe CTA. `render --provider local-ffmpeg` remains a dependency-light fallback. `submit-review` creates the dry-run product-videogen review payload. `validate` checks required artifacts, stage status, script/visual alignment, storyboard completeness, caption presence, claim status, media presence when locally rendered, and X/Bluesky/LinkedIn/TikTok length limits. `review` rolls the packet into one human-readable file.
+`launchclip run` executes the full dry-run workflow. `init` inspects a repo for README and package metadata, then creates a workspace manifest. `demo` runs only the command you explicitly provide and stores terminal evidence with obvious API keys, tokens, passwords, and GitHub tokens redacted; `--demo-media` can also copy a UI screenshot or short demo video into the packet. `plan` writes a video-skillkit-compatible `video.json`, a human brief, and a renderer handoff plan; the default `proof-card` style is a tight `short-15` flow with usage, terminal proof, generated artifacts, and CTA beats. Use `--style ugc-split` for a 30-second creator-led split-screen recipe with presenter, generated/demo B-roll, burned-in captions, numbered steps, artifact reveal, and approval-safe CTA. Use `--style ugc-demo-punchy` for the more social-ready version: seven short beats, first-frame hook, visible friction, real demo proof, script-to-visual alignment panels, fast artifact flashes, kinetic captions, motion/transition instructions, and a review-safe CTA. The plan also includes a deterministic `launchclip.script.v1` script, `script_visual_alignment` timeline, and `launchclip.storyboard.v1` creative storyboard so each beat carries layout, composition, media slots, motion grammar, typography, color grade, and quality gates before any renderer starts. `plan --renderer hyperframes` writes an editable HyperFrames project with `DESIGN.md`, `QUALITY.md`, QA pages, lifecycle object templates, transition-masked scenes, and SFX metadata. `captions` writes deterministic platform drafts with claim status and optional `--angle`, `--audience`, and `--cta-url` context; it does not call an LLM. `render --provider product-videogen --dry-run` creates a dry-run product-videogen payload. `render --provider hyperframes` runs HyperFrames lint, validate, and inspect before rendering `video/launchclip-hyperframes.mp4`; for draft iteration, pass `--skip-quality-gates`. `render --provider remotion` creates an uploadable vertical MP4 at `video/launchclip.mp4`, a thumbnail, and `video/remotion-props.json`; for `ugc-demo-punchy`, the Remotion composition follows the storyboard with creator-frame slots, device-capture proof, editor timeline motion, artifact inspection, and review-safe CTA. `render --provider local-ffmpeg` remains a dependency-light fallback. `submit-review` creates the dry-run product-videogen review payload. `validate` checks required artifacts, stage status, script/visual alignment, storyboard completeness, caption presence, claim status, media presence when locally rendered, and X/Bluesky/LinkedIn/TikTok length limits. `review` rolls the packet into one human-readable file.
 
 ## UGC Split Style
 
