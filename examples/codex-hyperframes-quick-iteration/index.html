@@ -72,35 +72,56 @@
         background: #0d1110;
       }
 
+      .world {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1320px;
+        height: 7580px;
+        transform-origin: 0 0;
+        will-change: transform, filter;
+      }
+
+      .world-depth {
+        position: absolute;
+        inset: -240px -220px;
+        background:
+          radial-gradient(circle at 18% 10%, rgba(199, 244, 79, 0.13), rgba(199, 244, 79, 0) 18%),
+          radial-gradient(circle at 82% 62%, rgba(217, 168, 95, 0.12), rgba(217, 168, 95, 0) 24%),
+          linear-gradient(180deg, #0d1110 0%, #101613 38%, #0d1110 100%);
+        pointer-events: none;
+      }
+
       .scene {
         position: absolute;
-        inset: 0;
         width: 1080px;
         height: 1920px;
         overflow: visible;
-        background: #0d1110;
+        background: rgba(13, 17, 16, 0);
       }
 
       #scene1 {
         z-index: 1;
+        left: 0;
+        top: 0;
       }
 
       #scene2 {
         z-index: 2;
-        opacity: 1;
-        visibility: hidden;
+        left: 70px;
+        top: 1780px;
       }
 
       #scene3 {
         z-index: 3;
-        opacity: 1;
-        visibility: hidden;
+        left: -50px;
+        top: 3680px;
       }
 
       #scene4 {
         z-index: 4;
-        opacity: 1;
-        visibility: hidden;
+        left: 40px;
+        top: 5580px;
       }
 
       .scene-camera {
@@ -516,9 +537,12 @@
 
       #cap2,
       #cap3,
-      #cap4a,
-      #cap6 {
+      #cap4a {
         top: 842px;
+      }
+
+      #cap6 {
+        top: 1032px;
       }
 
       #cap4b,
@@ -542,6 +566,17 @@
         pointer-events: none;
       }
 
+      .velocity-wash {
+        position: absolute;
+        inset: -180px;
+        z-index: 22;
+        background: linear-gradient(150deg, rgba(241, 234, 216, 0), rgba(199, 244, 79, 0.16), rgba(217, 168, 95, 0.08), rgba(241, 234, 216, 0));
+        filter: blur(32px);
+        opacity: 0;
+        transform: translate3d(-180px, 420px, 0) rotate(-12deg) scale(1.18);
+        pointer-events: none;
+      }
+
       .final-fade {
         position: absolute;
         inset: 0;
@@ -554,7 +589,9 @@
   </head>
   <body>
     <div id="root" data-composition-id="main" data-start="0" data-duration="28" data-width="1080" data-height="1920">
-      <section id="scene1" class="scene" aria-label="Codex creates HyperFrames motion graphics">
+      <div id="world" class="world" data-layout-allow-overlap data-layout-allow-overflow data-layout-allow-occlusion>
+        <div class="world-depth" data-layout-ignore></div>
+        <section id="scene1" class="scene" aria-label="Codex creates HyperFrames motion graphics">
         <div class="scene-camera" data-layout-allow-overlap data-layout-allow-overflow data-layout-allow-occlusion>
           <div class="texture" data-layout-ignore></div>
           <div class="light-leak green" style="left: -620px; top: 120px" data-layout-ignore></div>
@@ -646,8 +683,8 @@
             </div>
           </div>
         </div>
-        <div class="final-fade"></div>
       </section>
+      </div>
 
       <div class="caption-track" aria-label="Narration captions" data-layout-allow-overlap data-layout-allow-occlusion>
         <p id="cap1" class="caption">Codex is not just writing a page. <em>It is writing motion.</em></p>
@@ -660,6 +697,8 @@
       </div>
 
       <div class="transition-veil" data-layout-ignore></div>
+      <div class="velocity-wash" data-layout-ignore></div>
+      <div class="final-fade"></div>
 
       <audio id="narration" data-start="0" data-track-index="7" src="assets/narration-elevenlabs.mp3" data-volume="0.95"></audio>
       <audio id="sfx-opening-riser" data-start="0.15" data-track-index="8" src="assets/riser_sudden_cut.wav" data-volume="0.38"></audio>
@@ -672,10 +711,25 @@
     <script>
       window.__timelines = window.__timelines || {};
       var tl = gsap.timeline({ paused: true });
+      var world = document.getElementById("world");
+      var camera = { x: 0, y: 0, scale: 1, blur: 0 };
+      var drift = { p: 0 };
 
-      function sceneEnter(scene, start) {
-        tl.from(scene + " .kicker", { y: -36, opacity: 0, duration: 0.54, ease: "expo.out" }, start + 0.16);
-        tl.from(scene + " .label-pill", { scale: 0.92, opacity: 0, duration: 0.46, ease: "back.out(1.3)" }, start + 0.28);
+      function applyCamera() {
+        var dx = Math.sin(drift.p) * 7;
+        var dy = Math.sin(drift.p * 1.31) * 4;
+        world.style.transform = "translate(" + (camera.x + dx) + "px, " + (camera.y + dy) + "px) scale(" + camera.scale + ")";
+        world.style.filter = "blur(" + camera.blur + "px)";
+      }
+
+      function cameraTo(start, duration, x, y, scale, ease, blurPeak, washDirection) {
+        tl.to(camera, { x: x, y: y, scale: scale, duration: duration, ease: ease, onUpdate: applyCamera }, start);
+        if (blurPeak > 0) {
+          tl.to(camera, { blur: blurPeak, duration: 0.16, ease: "power2.in", onUpdate: applyCamera }, start);
+          tl.to(camera, { blur: 0, duration: 0.34, ease: "power2.out", onUpdate: applyCamera }, start + 0.16);
+          tl.fromTo(".velocity-wash", { opacity: 0, y: 460 * washDirection, rotation: -12 * washDirection }, { opacity: 0.38, y: -360 * washDirection, rotation: 4 * washDirection, duration: Math.min(0.72, duration * 0.26), ease: "power3.inOut" }, start);
+          tl.to(".velocity-wash", { opacity: 0, duration: Math.min(0.42, duration * 0.2), ease: "sine.out" }, start + Math.min(0.72, duration * 0.26));
+        }
       }
 
       function caption(id, start, end) {
@@ -685,23 +739,17 @@
         tl.set(id, { visibility: "hidden", opacity: 0 }, end);
       }
 
-      function focusTransition(oldScene, newScene, start, direction) {
-        var oldCamera = oldScene + " .scene-camera";
-        var newCamera = newScene + " .scene-camera";
-        tl.set(newScene, { visibility: "visible" }, start);
-        tl.fromTo(".transition-veil", { opacity: 0, y: 360 * direction, rotation: -8 * direction, scale: 1.22 }, { opacity: 1, y: -260 * direction, rotation: 3 * direction, scale: 1.04, duration: 0.44, ease: "power3.in" }, start);
-        tl.to(oldCamera, { filter: "blur(20px)", scale: 1.12, y: -170 * direction, opacity: 0, duration: 0.58, ease: "power3.in" }, start + 0.02);
-        tl.fromTo(newCamera, { filter: "blur(24px)", scale: 0.86, y: 210 * direction, opacity: 0 }, { filter: "blur(0px)", scale: 1, y: 0, opacity: 1, duration: 0.82, ease: "expo.out" }, start + 0.22);
-        tl.to(".transition-veil", { opacity: 0, duration: 0.34, ease: "sine.out" }, start + 0.48);
-        tl.set(oldScene, { visibility: "hidden" }, start + 0.86);
-      }
+      applyCamera();
 
+      tl.to(drift, { p: Math.PI * 4.8, duration: 28, ease: "none", onUpdate: applyCamera }, 0);
       tl.to(".texture", { y: -42, duration: 4, repeat: 6, yoyo: true, ease: "sine.inOut" }, 0.2);
       tl.to(".light-leak", { x: 90, y: -70, opacity: 0.5, duration: 5.2, repeat: 5, yoyo: true, ease: "sine.inOut" }, 0.25);
       tl.to(".ghost-word", { x: 42, duration: 6.2, repeat: 4, yoyo: true, ease: "sine.inOut" }, 0.4);
       tl.to(".orbit-field", { rotation: 22, scale: 1.05, duration: 7.2, repeat: 3, yoyo: true, ease: "sine.inOut" }, 0.3);
 
-      sceneEnter("#scene1", 0);
+      cameraTo(0.1, 4.4, -28, -112, 1.035, "sine.inOut", 0, 1);
+      tl.from("#scene1 .kicker", { y: -36, opacity: 0, duration: 0.54, ease: "expo.out" }, 0.16);
+      tl.from("#scene1 .label-pill", { scale: 0.92, opacity: 0, duration: 0.46, ease: "back.out(1.3)" }, 0.28);
       tl.from(".s1-headline", { y: 92, opacity: 0, filter: "blur(12px)", duration: 0.86, ease: "expo.out" }, 0.32);
       tl.from(".s1-subhead", { y: 42, opacity: 0, duration: 0.58, ease: "power2.out" }, 0.9);
       tl.from(".s1-rig", { y: 116, scale: 0.95, opacity: 0, filter: "blur(14px)", duration: 0.76, ease: "back.out(1.18)" }, 1.18);
@@ -710,31 +758,38 @@
       caption("#cap1", 0.78, 4.35);
       caption("#cap2", 4.38, 8.35);
 
-      focusTransition("#scene1", "#scene2", 6.55, 1);
-      sceneEnter("#scene2", 6.75);
-      tl.from(".s2-rule", { scaleX: 0, duration: 0.62, ease: "power4.out" }, 7.1);
-      tl.from(".s2-row", { y: 88, opacity: 0, scale: 0.96, duration: 0.56, stagger: 0.13, ease: "back.out(1.15)" }, 7.32);
+      cameraTo(4.52, 3.18, -166, -1716, 1.02, "power3.inOut", 4.5, 1);
+      tl.from("#scene2 .kicker", { y: -34, opacity: 0, duration: 0.48, ease: "expo.out" }, 6.55);
+      tl.from("#scene2 .label-pill", { x: 36, opacity: 0, duration: 0.42, ease: "circ.out" }, 6.72);
+      tl.from(".s2-rule", { scaleX: 0, duration: 0.62, ease: "power4.out" }, 7.04);
+      tl.from(".s2-row", { y: 88, opacity: 0, scale: 0.96, duration: 0.56, stagger: 0.13, ease: "back.out(1.15)" }, 7.28);
+      cameraTo(7.7, 4.25, -118, -2200, 1.105, "sine.inOut", 1.4, -1);
 
       caption("#cap3", 8.38, 12.45);
       caption("#cap4a", 12.48, 13.55);
       caption("#cap4b", 14.05, 16.48);
 
-      focusTransition("#scene2", "#scene3", 13.45, -1);
-      sceneEnter("#scene3", 13.72);
-      tl.from(".s3-chart", { y: 110, opacity: 0, filter: "blur(12px)", duration: 0.72, ease: "expo.out" }, 14.12);
-      tl.from(".s3-bar", { scaleX: 0, duration: 0.66, stagger: 0.13, ease: "power4.out" }, 14.48);
-      tl.from(".s3-defect", { x: 64, opacity: 0, duration: 0.5, stagger: 0.14, ease: "circ.out" }, 15.12);
+      cameraTo(11.95, 3.35, -42, -3624, 1.02, "power3.inOut", 4.5, -1);
+      tl.from("#scene3 .kicker", { y: -34, opacity: 0, duration: 0.5, ease: "expo.out" }, 13.35);
+      tl.from("#scene3 .label-pill", { scale: 0.92, opacity: 0, duration: 0.42, ease: "back.out(1.25)" }, 13.56);
+      tl.from(".s3-chart", { y: 110, opacity: 0, filter: "blur(12px)", duration: 0.72, ease: "expo.out" }, 13.9);
+      tl.from(".s3-bar", { scaleX: 0, duration: 0.66, stagger: 0.13, ease: "power4.out" }, 14.28);
+      tl.from(".s3-defect", { x: 64, opacity: 0, duration: 0.5, stagger: 0.14, ease: "circ.out" }, 15.0);
+      cameraTo(15.3, 3.75, -122, -3920, 1.08, "sine.inOut", 1.2, 1);
 
       caption("#cap5", 16.52, 21.15);
 
-      focusTransition("#scene3", "#scene4", 20.15, 1);
-      sceneEnter("#scene4", 20.42);
-      tl.from(".s4-headline", { y: 94, opacity: 0, filter: "blur(12px)", duration: 0.76, ease: "expo.out" }, 20.78);
-      tl.from(".s4-card", { y: 118, scale: 0.96, opacity: 0, filter: "blur(14px)", duration: 0.74, ease: "back.out(1.12)" }, 21.28);
-      tl.from(".s4-step", { x: 52, opacity: 0, duration: 0.42, stagger: 0.1, ease: "power2.out" }, 21.68);
-      tl.from(".s4-subhead", { y: 26, opacity: 0, duration: 0.5, ease: "circ.out" }, 22.22);
+      cameraTo(19.05, 3.22, -104, -5532, 1.02, "power3.inOut", 4.8, 1);
+      tl.from("#scene4 .kicker", { y: -36, opacity: 0, duration: 0.5, ease: "expo.out" }, 20.2);
+      tl.from("#scene4 .label-pill", { x: 40, opacity: 0, duration: 0.42, ease: "circ.out" }, 20.38);
+      tl.from(".s4-headline", { y: 94, opacity: 0, filter: "blur(12px)", duration: 0.76, ease: "expo.out" }, 20.74);
+      tl.from(".s4-card", { y: 118, scale: 0.96, opacity: 0, filter: "blur(14px)", duration: 0.74, ease: "back.out(1.12)" }, 21.18);
+      tl.from(".s4-step", { x: 52, opacity: 0, duration: 0.42, stagger: 0.1, ease: "power2.out" }, 21.58);
+      tl.from(".s4-subhead", { y: 26, opacity: 0, duration: 0.5, ease: "circ.out" }, 22.18);
+      cameraTo(22.28, 4.12, -72, -5740, 1.07, "sine.inOut", 1.2, -1);
 
       caption("#cap6", 21.2, 26.3);
+      cameraTo(26.42, 0.68, -48, -5808, 1.105, "power2.inOut", 2.2, 1);
       tl.to(".final-fade", { opacity: 1, duration: 0.9, ease: "sine.inOut" }, 26.92);
 
       window.__timelines["main"] = tl;
