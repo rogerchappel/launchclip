@@ -3,8 +3,9 @@ import { writeTeleprompter, alignRecording, renderMotion } from "./talking_head.
 import { generateMusic } from "./music.js";
 import { runDirect } from "./director.js";
 import { preprocessPresenter } from "./presenter_preprocess.js";
+import { writeIntake } from "./intake.js";
 
-const COMMANDS = new Set(["init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["intake", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout } = io;
@@ -19,7 +20,9 @@ export async function runCli(argv, io = {}) {
 
   const flags = parseFlags(rest);
   let result;
-  if (command === "init") {
+  if (command === "intake") {
+    result = await writeIntake(required(firstArg, "source"), flags);
+  } else if (command === "init") {
     result = await initWorkspace(required(firstArg, "repo path"), flags);
   } else if (command === "demo") {
     result = await runDemo(required(firstArg, "repo path"), flags);
@@ -63,7 +66,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "allow-placeholder-sfx" || name === "no-music" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all") {
+    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "allow-placeholder-sfx" || name === "no-music" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro") {
       flags[name] = true;
       continue;
     }
@@ -71,7 +74,11 @@ export function parseFlags(args) {
     if (!value || value.startsWith("--")) {
       throw new Error(`Missing value for --${name}`);
     }
-    flags[name] = value;
+    if (Object.hasOwn(flags, name)) {
+      flags[name] = Array.isArray(flags[name]) ? [...flags[name], value] : [flags[name], value];
+    } else {
+      flags[name] = value;
+    }
     index += 1;
   }
   return flags;
@@ -86,6 +93,7 @@ function help() {
   return `launchclip creates dry-run-first OSS promotion packets.
 
 Usage:
+  launchclip intake <source> [--kind repository|product|topic|voiceover] [--resource path] [--reference url] [--voiceover audio] [--presenter video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
   launchclip init <repo> --out <workspace>
   launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]
   launchclip plan <workspace> --format short-15 --renderer none|hyperframes [--style proof-card|ugc-split|ugc-demo-punchy|premium-product-short|data-story-benchmark] [--assets-dir path/to/assets] [--talking-head heygen --avatar-id avatar_123]
