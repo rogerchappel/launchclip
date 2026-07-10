@@ -53,14 +53,14 @@ independently rerunnable.
 
 ```bash
 # Repository explainer
-launchclip create https://github.com/owner/repo \
+launchclip produce https://github.com/owner/repo \
   --prompt "Explain why this changes agent workflows" \
   --resource ./screenshots \
   --aspect 9:16 \
   --duration 60
 
 # SaaS/product narrative from footage and brand resources
-launchclip create https://product.example \
+launchclip produce https://product.example \
   --kind product \
   --resource ./recordings/onboarding.mp4 \
   --resource ./brand/logo.svg \
@@ -68,21 +68,43 @@ launchclip create https://product.example \
   --aspect 16:9
 
 # Topic/research explainer
-launchclip create "Compare the leading coding models" \
+launchclip produce "Compare the leading coding models" \
   --kind topic \
   --resource ./research/paper.pdf \
   --resource ./research/notes.md \
   --aspect 9:16
 
 # Build around supplied narration or an avatar take
-launchclip create ./brief.md \
+launchclip produce ./brief.md \
   --voiceover ./narration.wav \
+  --transcript ./narration.txt \
   --presenter ./avatar-take.mp4 \
   --prompt "Keep the presenter visible; move them around the evidence"
 ```
 
 The command writes a workspace and stops at an editable preview by default.
 Final rendering remains an explicit approval step.
+
+Every stage can also be resumed directly:
+
+```bash
+launchclip evidence <workspace>
+launchclip source-media <workspace>
+launchclip creative-plan <workspace>
+launchclip production-audio <workspace>
+launchclip direct-frames <workspace> --concurrency 4
+launchclip assemble <workspace>
+launchclip production-verify <workspace>
+launchclip production-critique <workspace>
+launchclip production-repair <workspace>
+launchclip production-render <workspace> --approve \
+  --reference-video ./reference-short.mp4
+```
+
+`produce --no-audio` is useful for visual evaluation when ElevenLabs is not
+configured. A supplied voiceover requires either `--transcript` or an
+`ELEVENLABS_API_KEY` for Scribe transcription. Generated narration additionally
+requires `ELEVENLABS_VOICE_ID` (or `--voice-id`).
 
 ## Pipeline
 
@@ -200,6 +222,12 @@ Only those frames are regenerated. Repeat within a bounded repair budget.
 
 Final render remains human-gated.
 
+After encoding, Launchclip measures per-frame luminance difference, stillness,
+motion bursts, velocity, acceleration, deceleration, jerk, cut cadence, and shot
+duration. Reference comparison first selects a compatible editorial family and
+then compares temporal distributions and envelopes. It does not optimize RGB,
+SSIM, or pixel resemblance between unrelated visual styles.
+
 ## Reference Quality Observations
 
 The supplied GPT-5.6 Sol example demonstrates a useful pattern rather than a
@@ -218,6 +246,12 @@ style to copy:
 
 Those are evaluation criteria. Colors, layouts, typography, and scene content
 must be chosen anew from the target material.
+
+Across the supplied references, very different editing families still cluster
+around roughly 20–25 meaningful motion developments per minute. That is a QA
+observation, not a mandate for constant motion: strong examples also contain
+long intentional reading holds. The comparator therefore evaluates burst
+cadence together with cut rate and hold ratio.
 
 ## Safety and Approval
 

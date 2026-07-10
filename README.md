@@ -19,6 +19,50 @@ launchclip run ./my-oss-tool \
 
 That creates the full dry-run packet, validates it for social review, and writes `REVIEW.md`.
 
+## Model-Directed HyperFrames Production
+
+The newer production lane accepts a GitHub/local repository, product URL,
+topic, research resources, screenshots, screen recordings, supplied narration,
+or presenter video. GPT-5.6 directs the narrative and art direction from
+evidence; Launchclip owns schemas, media paths, HyperFrames assembly, bounded
+repairs, and approval gates.
+
+```bash
+launchclip produce https://github.com/owner/repo \
+  --out .launchclip/repo-video \
+  --prompt "Lead with the workflow change" \
+  --reference https://www.youtube.com/shorts/example \
+  --aspect 9:16 \
+  --duration 45 \
+  --voice-id "$ELEVENLABS_VOICE_ID"
+
+launchclip production-verify .launchclip/repo-video
+launchclip production-critique .launchclip/repo-video
+launchclip production-repair .launchclip/repo-video
+launchclip assemble .launchclip/repo-video
+launchclip production-render .launchclip/repo-video --approve \
+  --reference-video ./references/example.mp4
+```
+
+For a supplied avatar/presenter take, pass the media as both the authoritative
+voice source and presenter resource when appropriate:
+
+```bash
+launchclip produce "Product workflow" \
+  --voiceover ./presenter-take.mp4 \
+  --transcript ./presenter-take.txt \
+  --presenter ./presenter-take.mp4 \
+  --resource ./screen-recordings \
+  --cta "Start a workspace" \
+  --aspect 16:9
+```
+
+The command stops at an editable assembled project. Final rendering requires
+the explicit `--approve` flag and still returns for human review; it never
+publishes. See [the model-directed pipeline](docs/MODEL_DIRECTED_VIDEO.md) for
+artifact contracts, provider requirements, reference analysis, and repair
+semantics.
+
 To create an uploadable video from that packet:
 
 ```bash
