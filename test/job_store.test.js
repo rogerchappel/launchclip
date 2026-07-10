@@ -44,6 +44,17 @@ test("records provider state, bounded attempts, sanitized failures, and retries"
   await assert.rejects(() => store.retry("plan"), /exhausted/);
 });
 
+test("allows response metadata updates while the final permitted attempt is running", async () => {
+  const workspace = await tempWorkspace();
+  const store = await ProductionJobStore.open(workspace);
+  await store.add({ ...job("frame", []), max_attempts: 1 });
+  await store.markRunning("frame", { provider: "openai", response_id: null, status: "running" });
+  await store.markRunning("frame", { provider: "openai", response_id: "resp_final", status: "queued" });
+  assert.equal(store.get("frame").attempt, 1);
+  assert.equal(store.get("frame").remote.response_id, "resp_final");
+  await store.markSucceeded("frame");
+});
+
 test("propagates stale state to descendants", async () => {
   const workspace = await tempWorkspace();
   const store = await ProductionJobStore.open(workspace);

@@ -78,7 +78,7 @@ export class ProductionJobStore {
     const job = this.require(id);
     if (!JOB_STATUSES.has(status)) throw new Error(`Unknown job status: ${status}`);
     if (job.status !== status && !TRANSITIONS.get(job.status)?.has(status)) throw new Error(`Invalid job transition: ${job.status} -> ${status}`);
-    if ((status === "submitted" || status === "running") && job.attempt >= job.max_attempts) {
+    if ((status === "submitted" || status === "running") && job.status === "pending" && job.attempt >= job.max_attempts) {
       throw new Error(`Job ${id} exhausted its ${job.max_attempts} attempts`);
     }
     if ((status === "submitted" || status === "running") && job.status === "pending") job.attempt += 1;
