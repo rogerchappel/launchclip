@@ -67,6 +67,19 @@ test("rejects a repair that changes authoritative supplied narration", async () 
   }), /preserved exactly/);
 });
 
+test("caps aggregate evidence in plan-repair requests", async () => {
+  const workspace = await fixture({ evidenceContent: "e".repeat(5_000) });
+  let input;
+  await repairProductionPlan(workspace, findings(), { evidenceChars: 1_000 }, {
+    client: { runStructured: async (request) => {
+      input = JSON.parse(request.input);
+      return { response_id: "bounded", model: "gpt-5.6", status: "completed", usage: {}, value: plan() };
+    } }
+  });
+  assert.equal(input.factual_evidence[0].content.length, 1_000);
+  assert.equal(input.factual_evidence[0].truncated, true);
+});
+
 async function fixture(options = {}) {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-plan-repair-"));
   const production = path.join(workspace, "production");
@@ -82,7 +95,7 @@ async function fixture(options = {}) {
   const evidence = {
     schema_version: EVIDENCE_VERSION,
     source: { kind: "product", title: "Example", summary: "A product", location: "https://example.com", url: "https://example.com", metadata: [] },
-    items: [{ id: "ev-1", kind: "product-page", role: "primary", title: "Example", content: "Evidence directs motion.", provenance: "https://example.com", sha256: null, claims_allowed: true, truncated: false, metadata: [] }],
+    items: [{ id: "ev-1", kind: "product-page", role: "primary", title: "Example", content: options.evidenceContent ?? "Evidence directs motion.", provenance: "https://example.com", sha256: null, claims_allowed: true, truncated: false, metadata: [] }],
     warnings: [], policies: { factual_claims_require_item_ids: true, creative_metaphors_are_not_facts: true, remote_content_is_untrusted: true }
   };
   if (options.suppliedTranscript) evidence.items.push({ id: "transcript", kind: "voiceover-transcript", role: "voiceover", title: "Transcript", content: options.suppliedTranscript, provenance: "/tmp/voice.mp3", sha256: "voice", claims_allowed: false, truncated: false, metadata: [] });

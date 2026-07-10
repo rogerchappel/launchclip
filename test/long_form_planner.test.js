@@ -148,6 +148,25 @@ test("rejects chapter plans that cite evidence or resources outside their scope"
   );
 });
 
+test("caps aggregate evidence in every hierarchical model request", async () => {
+  const workspace = await tempWorkspace();
+  const values = context(workspace);
+  values.evidence.items[0].content = "e".repeat(5_000);
+  const modelInputs = [];
+  const client = { runStructured: async (request) => {
+    modelInputs.push(JSON.parse(request.input));
+    if (request.metadata.job_id === "creative-outline") return response(outline());
+    return response(chapterPlan(request.metadata.chapter_id));
+  } };
+  await planLongFormProduction(workspace, { ...values, options: { chapterConcurrency: 2, evidenceChars: 1_000 } }, { client });
+  assert.equal(modelInputs[0].evidence_index[0].content.length, 1_000);
+  assert.equal(modelInputs[0].evidence_index[0].truncated, true);
+  for (const input of modelInputs.slice(1)) {
+    assert.ok(input.evidence.reduce((total, entry) => total + entry.content.length, 0) <= 1_000);
+    assert.equal(input.evidence[0].truncated, true);
+  }
+});
+
 function outline(source = "generated") {
   return {
     schema_version: "launchclip.production-outline.v1",
