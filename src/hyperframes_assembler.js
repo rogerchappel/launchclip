@@ -19,7 +19,8 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
     const validation = validateFrameBundle(bundle, {
       shotId: plan.shots[index].id,
       evidenceIds: evidence.items.map((entry) => entry.id),
-      resourceIds: intake.resources.map((entry) => entry.id)
+      resourceIds: intake.resources.map((entry) => entry.id),
+      allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
     });
     if (!validation.ok) throw new Error(`Cannot assemble invalid frame ${bundle.shot_id}: ${validation.errors.join("; ")}`);
   }

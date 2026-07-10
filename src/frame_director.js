@@ -127,7 +127,8 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
       const validation = validateFrameBundle(result.value, {
         shotId: shot.id,
         evidenceIds: evidence.items.map((entry) => entry.id),
-        resourceIds: intake.resources.map((entry) => entry.id)
+        resourceIds: intake.resources.map((entry) => entry.id),
+        allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
       });
       errors = [...validation.errors, ...validateHyperFramesRoot(result.value.html, shot, plan.format)];
       if (errors.length) {
