@@ -45,16 +45,29 @@ test("uses supplied narration without calling TTS and reports timing drift from 
   const suppliedPath = path.join(await mkdtemp(path.join(os.tmpdir(), "launchclip-supplied-")), "take.mp4");
   await writeFile(suppliedPath, "take");
   const workspace = await fixture({ suppliedPath });
-  const result = await produceAudio(workspace, { noMusic: true, noSfx: true }, { provider: { synthesizeNarration: async () => { throw new Error("must not call"); } } });
+  const result = await produceAudio(workspace, { noMusic: true, noSfx: true }, { provider: { synthesizeNarration: async () => { throw new Error("must not call"); } }, probeDuration: async () => 10 });
   assert.equal((await readFile(result.voiceover)).toString(), "take");
 
   const generated = await fixture();
   const driftingProvider = {
-    synthesizeNarration: async (options) => { await writeFile(options.outputPath, "voice"); await writeFile(options.wordsPath, "[]"); return { path: options.outputPath, words_path: options.wordsPath, duration_seconds: 14 }; }
+    synthesizeNarration: async (options) => { await writeFile(options.outputPath, "voice"); await writeFile(options.wordsPath, "[]"); return { provider: "elevenlabs", path: options.outputPath, words_path: options.wordsPath, duration_seconds: 14 }; }
   };
-  const drift = await produceAudio(generated, { noMusic: true, noSfx: true }, { provider: driftingProvider });
-  assert.equal(drift.status, "needs-retiming");
-  assert.match(drift.warnings[0], /4\.00s/);
+  const drift = await produceAudio(generated, { noMusic: true, noSfx: true }, { provider: driftingProvider, conformNarration: async (voiceover, duration) => ({ ...voiceover, original_duration_seconds: voiceover.duration_seconds, duration_seconds: duration, conformed: true }) });
+  assert.equal(drift.status, "ready");
+  assert.match(drift.notes[0], /4\.00s/);
+});
+
+test("reuses Scribe word timing for supplied narration", async () => {
+  const suppliedPath = path.join(await mkdtemp(path.join(os.tmpdir(), "launchclip-supplied-words-")), "take.mp4");
+  await writeFile(suppliedPath, "take");
+  const workspace = await fixture({ suppliedPath });
+  const wordsPath = path.join(workspace, "scribed.words.json");
+  await writeFile(wordsPath, `${JSON.stringify([{ word: "Proof", start: 0, end: 9.8 }])}\n`);
+  await writeFile(path.join(workspace, "production", "evidence.json"), `${JSON.stringify({ items: [{ kind: "voiceover-transcript", role: "voiceover", provenance: suppliedPath, metadata: [{ key: "words_path", value: wordsPath }] }] })}\n`);
+  const result = await produceAudio(workspace, { noMusic: true, noSfx: true }, {});
+  const manifest = JSON.parse(await readFile(result.manifest, "utf8"));
+  assert.equal(manifest.voiceover.duration_seconds, 9.8);
+  assert.deepEqual(JSON.parse(await readFile(manifest.voiceover.words_path, "utf8")), [{ word: "Proof", start: 0, end: 9.8 }]);
 });
 
 async function fixture(options = {}) {
