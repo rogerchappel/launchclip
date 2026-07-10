@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { PRODUCTION_PATHS } from "./production_contracts.js";
+import { isValidShotId, PRODUCTION_PATHS } from "./production_contracts.js";
 import { writeAudioReport } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
 import { critiqueProduction } from "./production_critic.js";
@@ -35,6 +35,11 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
     }
     await writeFile(path.join(qaDir, `${name}.json`), `${JSON.stringify(checks[name], null, 2)}\n`);
   }
+  Object.assign(checks, await verifyShotCompositions(project, qaDir, plan, {
+    run,
+    inspectSamples: options.inspectSamples,
+    concurrency: options.shotInspectConcurrency
+  }));
   checks.snapshot = await capture(run, "npx", ["hyperframes", "snapshot", "--frames", String(options.snapshotFrames ?? 12), "--output", snapshots, project], { cwd: project });
   await writeFile(path.join(qaDir, "snapshot.json"), `${JSON.stringify(checks.snapshot, null, 2)}\n`);
   const failed = Object.entries(checks).filter(([, result]) => !result.ok).map(([name]) => name);
@@ -49,6 +54,58 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
   await writeFile(path.join(qaDir, "verification.json"), `${JSON.stringify(summary, null, 2)}\n`);
   if (failed.length) throw new Error(`HyperFrames verification failed: ${failed.join(", ")}. Review ${qaDir}.`);
   return { stage: "production-verify", status: "ready", workspace, project, qa: qaDir, snapshots, checks: summary.checks };
+}
+
+export async function verifyShotCompositions(projectPath, qaDirPath, plan, options = {}) {
+  const project = path.resolve(projectPath);
+  const qaDir = path.resolve(qaDirPath);
+  const run = options.run ?? runCommand;
+  const shots = plan.shots ?? [];
+  const results = await mapConcurrent(shots, Number(options.concurrency ?? 2), async (shot) => {
+    if (!isValidShotId(shot.id)) throw new Error(`Cannot inspect unsafe shot id: ${shot.id}`);
+    const duration = Number(shot.end_seconds) - Number(shot.start_seconds);
+    if (!(duration > 0)) throw new Error(`Cannot inspect shot with invalid duration: ${shot.id}`);
+    const directory = path.join(qaDir, "shot-inspect", shot.id);
+    const compositions = path.join(directory, "compositions");
+    const assets = path.join(directory, "assets");
+    await Promise.all([mkdir(compositions, { recursive: true }), mkdir(assets, { recursive: true })]);
+    const sourceHtml = path.join(project, "compositions", `${shot.id}.html`);
+    const sourceMotion = path.join(project, "compositions", `${shot.id}.motion.json`);
+    const html = await readFile(sourceHtml, "utf8");
+    const motion = await readFile(sourceMotion, "utf8");
+    await Promise.all([
+      writeFile(path.join(compositions, "shot.html"), html),
+      writeFile(path.join(directory, "index.motion.json"), motion),
+      writeFile(path.join(directory, "index.html"), renderShotInspectionRoot(shot, plan.format, duration))
+    ]);
+    const assetFiles = [...new Set([...html.matchAll(/\bassets\/([a-zA-Z0-9._-]+)/g)].map((match) => match[1]))];
+    await Promise.all(assetFiles.map((file) => copyFile(path.join(project, "assets", file), path.join(assets, file))));
+    const check = await capture(run, "npx", [
+      "hyperframes", "inspect", "--json", "--samples", String(options.inspectSamples ?? 15), "--at-transitions", directory
+    ], { cwd: directory });
+    await writeFile(path.join(directory, "inspect.json"), `${JSON.stringify(check, null, 2)}\n`);
+    return [`inspect:${shot.id}`, check];
+  });
+  return Object.fromEntries(results);
+}
+
+function renderShotInspectionRoot(shot, format, duration) {
+  return `<!doctype html>
+<html lang="${escapeHtml(format.language ?? "en")}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=${Number(format.width)}, height=${Number(format.height)}">
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <style>*{box-sizing:border-box}html,body{margin:0;width:${Number(format.width)}px;height:${Number(format.height)}px;overflow:hidden;background:#000}#shot-verification-root,.shot-mount{position:absolute;inset:0;width:100%;height:100%}</style>
+</head>
+<body>
+  <div id="shot-verification-root" data-composition-id="main" data-start="0" data-duration="${duration}" data-width="${Number(format.width)}" data-height="${Number(format.height)}">
+    <div id="verify-${shot.id}" class="clip shot-mount" data-composition-id="${shot.id}" data-composition-src="compositions/shot.html" data-start="0" data-duration="${duration}" data-track-index="1" data-width="${Number(format.width)}" data-height="${Number(format.height)}"></div>
+    <script>window.__timelines=window.__timelines||{};window.__timelines.main=gsap.timeline({paused:true});</script>
+  </div>
+</body>
+</html>
+`;
 }
 
 export async function renderProduction(workspacePath, options = {}, adapters = {}) {
@@ -171,6 +228,24 @@ function parseOutput(value) {
 function values(value) {
   if (value == null) return [];
   return Array.isArray(value) ? value : [value];
+}
+
+async function mapConcurrent(values, concurrency, worker) {
+  const output = new Array(values.length);
+  let cursor = 0;
+  const count = Math.max(1, Math.min(values.length || 1, Math.floor(concurrency) || 1));
+  await Promise.all(Array.from({ length: count }, async () => {
+    while (cursor < values.length) {
+      const index = cursor;
+      cursor += 1;
+      output[index] = await worker(values[index], index);
+    }
+  }));
+  return output;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 }
 
 async function runCommand(command, args, options) {

@@ -17,6 +17,46 @@ test("runs lint, browser validation, transition-aware inspection, and assembled 
   assert.deepEqual((JSON.parse(await readFile(path.join(result.qa, "verification.json"), "utf8"))).failed, []);
 });
 
+test("runs each model-authored shot motion sidecar through an isolated native inspection", async () => {
+  const workspace = await fixture();
+  await addShotFixture(workspace);
+  const commands = [];
+  const result = await verifyProduction(workspace, { inspectSamples: 11 }, {
+    run: async (command, args, options) => {
+      commands.push({ command, args, options });
+      return { stdout: args.includes("--json") ? JSON.stringify({ ok: true, motionSpec: args.at(-1).includes("shot-inspect") ? "index.motion.json" : null, issues: [] }) : "ok", stderr: "" };
+    }
+  });
+  assert.equal(result.checks["inspect:shot-1"].ok, true);
+  const shotCommand = commands.find((entry) => entry.args[1] === "inspect" && entry.args.at(-1).includes("shot-inspect"));
+  assert.ok(shotCommand);
+  assert.ok(shotCommand.args.includes("--at-transitions"));
+  assert.equal(shotCommand.args[shotCommand.args.indexOf("--samples") + 1], "11");
+  const directory = path.join(result.qa, "shot-inspect", "shot-1");
+  assert.match(await readFile(path.join(directory, "index.html"), "utf8"), /data-composition-src="compositions\/shot\.html"/);
+  assert.match(await readFile(path.join(directory, "index.html"), "utf8"), /gsap@3\.14\.2/);
+  assert.equal(await readFile(path.join(directory, "assets", "proof.png"), "utf8"), "proof-image");
+  assert.equal(JSON.parse(await readFile(path.join(directory, "index.motion.json"), "utf8")).assertions[0].selector, "#proof");
+});
+
+test("blocks production when a shot-local motion assertion fails", async () => {
+  const workspace = await fixture();
+  await addShotFixture(workspace);
+  const run = async (_command, args) => {
+    if (args[1] === "inspect" && args.at(-1).includes("shot-inspect")) {
+      const error = new Error("missing selector");
+      error.code = 1;
+      error.stdout = JSON.stringify({ ok: false, issues: [{ code: "motion_selector_missing", severity: "error", selector: "#proof" }] });
+      throw error;
+    }
+    return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
+  };
+  await assert.rejects(() => verifyProduction(workspace, {}, { run }), /inspect:shot-1/);
+  const report = JSON.parse(await readFile(path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json"), "utf8"));
+  assert.equal(report.ok, false);
+  assert.equal(report.stdout.issues[0].code, "motion_selector_missing");
+});
+
 test("blocks final rendering without approval and records failed HyperFrames checks", async () => {
   const workspace = await fixture();
   await assert.rejects(() => renderProduction(workspace), /requires explicit --approve/);
@@ -108,4 +148,19 @@ async function fixture() {
   await writeFile(path.join(workspace, "production", "plan.json"), `${JSON.stringify({ format: { duration_seconds: 10, width: 1080, height: 1920 } })}\n`);
   await writeFile(path.join(workspace, "production", "hyperframes", "index.html"), '<div data-composition-id="main" data-duration="10" data-width="1080" data-height="1920"></div>');
   return workspace;
+}
+
+async function addShotFixture(workspace) {
+  const production = path.join(workspace, "production");
+  const project = path.join(production, "hyperframes");
+  const compositions = path.join(project, "compositions");
+  const assets = path.join(project, "assets");
+  await Promise.all([mkdir(compositions, { recursive: true }), mkdir(assets, { recursive: true })]);
+  await writeFile(path.join(production, "plan.json"), `${JSON.stringify({
+    format: { duration_seconds: 10, width: 1080, height: 1920, language: "en" },
+    shots: [{ id: "shot-1", start_seconds: 0, end_seconds: 10 }]
+  })}\n`);
+  await writeFile(path.join(compositions, "shot-1.html"), '<!doctype html><html><body><template><style>#root{position:absolute;inset:0}</style><div id="root" data-composition-id="shot-1" data-start="0" data-duration="10" data-width="1080" data-height="1920"><img id="proof" src="assets/proof.png"></div><script>const timeline=gsap.timeline({paused:true});window.__timelines=window.__timelines||{};window.__timelines["shot-1"]=timeline;</script></template></body></html>');
+  await writeFile(path.join(compositions, "shot-1.motion.json"), `${JSON.stringify({ version: 1, duration: 10, assertions: [{ kind: "appearsBy", selector: "#proof", bySec: 1 }] })}\n`);
+  await writeFile(path.join(assets, "proof.png"), "proof-image");
 }
