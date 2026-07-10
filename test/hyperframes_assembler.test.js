@@ -94,6 +94,8 @@ test("translates model motion intent into discoverable HyperFrames assertions", 
   assert.ok(root.assertions.some((entry) => entry.kind === "appearsBy" && entry.selector === "#mount-shot-1"));
   assert.ok(root.assertions.every((entry) => !["#headline", "#proof"].includes(entry.selector ?? entry.withinSelector)));
   assert.ok(root.assertions.every((entry) => entry.kind !== "keepsMoving"));
+  const longRoot = rootMotionSpec({ format: { duration_seconds: 90 }, shots: [{ id: "long-shot", start_seconds: 45, end_seconds: 90 }] }, [bundle]);
+  assert.equal(longRoot.assertions.find((entry) => entry.kind === "appearsBy").bySec, 45.5);
 });
 
 test("freezes assets, rewrites frame paths, assembles a resumable HyperFrames project", async () => {
