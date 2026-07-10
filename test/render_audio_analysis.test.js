@@ -36,6 +36,19 @@ test("blocks a missing audio stream when the manifest expects audio", () => {
   assert.equal(quality.findings[0].severity, "blocking");
 });
 
+test("does not require an audio stream for an empty SFX manifest", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "launchclip-silent-qa-"));
+  const sfxPath = path.join(directory, "sfx.json");
+  const manifestPath = path.join(directory, "manifest.json");
+  await writeFile(sfxPath, `${JSON.stringify({ cues: [] })}\n`);
+  await writeFile(manifestPath, `${JSON.stringify({ voiceover: null, music: null, sfx_manifest: sfxPath })}\n`);
+  const report = await analyzeProductionAudio("/tmp/silent.mp4", manifestPath, {}, {
+    run: async () => ({ stdout: JSON.stringify({ format: { duration: "1" }, streams: [{ codec_type: "video" }] }) })
+  });
+  assert.equal(report.expected_audio, false);
+  assert.equal(report.quality.ok, true);
+});
+
 function audioOutputs(lufs, peak, peaks) {
   return [
     { stdout: "", stderr: `Summary:\n  I: ${lufs} LUFS\n  Peak: ${peak} dBFS` },

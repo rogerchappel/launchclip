@@ -8,15 +8,15 @@ const execFileAsync = promisify(execFile);
 export async function analyzeProductionAudio(videoPath, manifestPath, options = {}, adapters = {}) {
   const run = adapters.run ?? runCommand;
   const manifest = manifestPath ? JSON.parse(await readFile(path.resolve(manifestPath), "utf8")) : { voiceover: null, music: null, sfx_manifest: null };
+  const sfx = manifest.sfx_manifest ? JSON.parse(await readFile(path.resolve(manifest.sfx_manifest), "utf8")) : { cues: [] };
   const probe = JSON.parse((await run("ffprobe", ["-v", "error", "-show_entries", "stream=index,codec_type,codec_name,channels,sample_rate:format=duration", "-of", "json", path.resolve(videoPath)])).stdout);
   const audioStream = (probe.streams ?? []).find((entry) => entry.codec_type === "audio") ?? null;
-  const expectedAudio = Boolean(manifest.voiceover || manifest.music || manifest.sfx_manifest);
+  const expectedAudio = Boolean(manifest.voiceover || manifest.music || (sfx.cues ?? []).length);
   const output = audioStream ? await loudnessAndPeaks(path.resolve(videoPath), run) : null;
   const [voiceover, music] = await Promise.all([
     manifest.voiceover?.path ? loudnessAndPeaks(path.resolve(manifest.voiceover.path), run) : null,
     manifest.music?.path ? loudnessAndPeaks(path.resolve(manifest.music.path), run) : null
   ]);
-  const sfx = manifest.sfx_manifest ? JSON.parse(await readFile(path.resolve(manifest.sfx_manifest), "utf8")) : { cues: [] };
   const cues = (sfx.cues ?? []).map((cue) => cueEvidence(cue, output?.peaks ?? []));
   const report = {
     schema_version: "launchclip.render-audio.v1",
