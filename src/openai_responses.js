@@ -37,6 +37,7 @@ export class OpenAIResponsesClient {
 
   async runStructured(options) {
     const submitted = await this.submitStructured(options);
+    await options.onSubmitted?.(submitted);
     const response = submitted.status === "completed" ? submitted : await this.wait(submitted, options);
     return {
       response_id: response.id,

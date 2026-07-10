@@ -56,16 +56,20 @@ test("submits, polls, and parses a background structured response", async () => 
     },
     sleep: async () => {}
   });
+  let submitted;
   const result = await client.runStructured({
     input: "Return an answer",
     instructions: "Follow the schema",
     schema: SCHEMA,
     schemaName: "answer",
-    pollIntervalMs: 0
+    pollIntervalMs: 0,
+    onSubmitted: async (response) => { submitted = response; }
   });
 
   assert.deepEqual(result.value, { answer: "ship it" });
   assert.equal(result.response_id, "resp_1");
+  assert.equal(submitted.id, "resp_1");
+  assert.equal(submitted.status, "in_progress");
   assert.equal(result.model, "gpt-5.6-sol");
   assert.equal(result.usage.cached_tokens, 40);
   assert.equal(result.usage.reasoning_tokens, 12);
