@@ -22,6 +22,7 @@ export class ProductionJobStore {
     this.workspace = path.resolve(workspace);
     this.filePath = safeWorkspacePath(this.workspace, PRODUCTION_PATHS.jobs);
     this.data = validateStore(data);
+    this.saveQueue = Promise.resolve();
   }
 
   static async open(workspace, options = {}) {
@@ -151,7 +152,13 @@ export class ProductionJobStore {
     return { ok: results.every((entry) => entry.matches), outputs: results };
   }
 
-  async save() {
+  save() {
+    const operation = this.saveQueue.then(() => this.writeSnapshot());
+    this.saveQueue = operation.catch(() => {});
+    return operation;
+  }
+
+  async writeSnapshot() {
     validateStore(this.data);
     this.data.revision += 1;
     await mkdir(path.dirname(this.filePath), { recursive: true });

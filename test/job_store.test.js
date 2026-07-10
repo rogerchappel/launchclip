@@ -55,6 +55,17 @@ test("allows response metadata updates while the final permitted attempt is runn
   await store.markSucceeded("frame");
 });
 
+test("serializes concurrent job snapshots without losing mutations", async () => {
+  const workspace = await tempWorkspace();
+  const store = await ProductionJobStore.open(workspace);
+  await Promise.all(Array.from({ length: 20 }, (_, index) => store.add(job(`frame-${index}`, []))));
+  await Promise.all(store.list().map((entry) => store.markRunning(entry.id)));
+  const reopened = await ProductionJobStore.open(workspace, { create: false });
+  assert.equal(reopened.list().length, 20);
+  assert.ok(reopened.list().every((entry) => entry.status === "running" && entry.attempt === 1));
+  assert.equal(reopened.data.revision, 40);
+});
+
 test("propagates stale state to descendants", async () => {
   const workspace = await tempWorkspace();
   const store = await ProductionJobStore.open(workspace);
