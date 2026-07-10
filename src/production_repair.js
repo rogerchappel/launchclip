@@ -24,7 +24,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     readJson(path.join(workspace, PRODUCTION_PATHS.intake)),
     readJson(path.join(workspace, PRODUCTION_PATHS.evidence)),
     readJson(path.join(workspace, PRODUCTION_PATHS.plan)),
-    readJson(path.join(qaDir, "critique.json"))
+    readOptionalJson(path.join(qaDir, "critique.json"), { verdict: "ship", findings: [] })
   ]);
   if (critique.verdict === "replan") throw new Error("Critique requires broader work before frame repair: replan");
   const deterministicFindings = await collectDeterministicRepairFindings(workspace, plan);
@@ -273,6 +273,10 @@ async function snapshotImages(directory, limit) {
 
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
+}
+
+async function readOptionalJson(filePath, fallback = null) {
+  try { return await readJson(filePath); } catch (error) { if (error.code === "ENOENT") return fallback; throw error; }
 }
 
 async function writeAtomic(filePath, content) {

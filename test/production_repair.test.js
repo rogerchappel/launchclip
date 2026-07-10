@@ -86,6 +86,21 @@ test("repairs native shot inspection failures even when the visual critic ships"
   assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-1"]);
 });
 
+test("repairs deterministic failures before the first visual critique exists", async () => {
+  const workspace = await fixture({ omitCritique: true });
+  const reportPath = path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json");
+  await mkdir(path.dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, `${JSON.stringify({
+    ok: false,
+    stdout: { issues: [{ code: "motion_selector_missing", severity: "error", message: "Missing target", selector: "#shot-1-proof" }] }
+  })}\n`);
+  const client = { runStructured: async () => ({ response_id: "precritic_repair", model: "gpt-5.6", status: "completed", usage: {}, value: bundle("shot-1", "Pre-critic repair") }) };
+  const result = await repairProduction(workspace, {}, { client });
+  assert.equal(result.status, "repaired");
+  assert.equal(result.deterministic_findings, 1);
+  assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-1"]);
+});
+
 test("ignores shot inspection reports older than the frame they describe", async () => {
   const workspace = await fixture({ verdict: "ship" });
   const reportPath = path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json");
@@ -170,10 +185,12 @@ async function fixture(options = {}) {
   }
   const findings = [{ id: "f-1", severity: "major", category: "composition", shot_ids: ["shot-2"], repair_scope: options.repairScope ?? "frame", instruction: "Make proof dominant", preserve: ["exact copy"] }];
   if (options.includeAudio) findings.push({ id: "f-audio", severity: "major", category: "audio", shot_ids: ["shot-1", "shot-2"], repair_scope: "audio", instruction: "Measure the mix", preserve: [] });
-  await writeFile(path.join(production, "qa", "critique.json"), `${JSON.stringify({
-    verdict: options.verdict ?? "repair",
-    findings
-  })}\n`);
+  if (!options.omitCritique) {
+    await writeFile(path.join(production, "qa", "critique.json"), `${JSON.stringify({
+      verdict: options.verdict ?? "repair",
+      findings
+    })}\n`);
+  }
   await writeFile(path.join(snapshots, "001.png"), "snapshot");
   const store = await ProductionJobStore.open(workspace);
   await store.add({ id: "creative-plan", kind: "creative-plan", depends_on: [], input_hash: semanticHash(plan) });
