@@ -106,11 +106,12 @@ export async function planLongFormProduction(workspacePath, context, adapters = 
       normalize: normalizeProductionPlanTiming,
       validate: (value) => validateProductionPlan(value, validationContext(
         intake,
-        evidence,
+        { ...evidence, items: chapterEvidence },
         duration,
         suppliedNarration,
         false,
-        index === outline.chapters.length - 1 ? intake.brief.cta : null
+        index === outline.chapters.length - 1 ? intake.brief.cta : null,
+        chapterResources
       ))
     });
   });
@@ -267,12 +268,12 @@ function validateOutline(outline, intake, evidence, suppliedNarration) {
   return { ok: errors.length === 0, errors };
 }
 
-function validationContext(intake, evidence, duration, suppliedNarration, requireTranscript, requestedCta = requireTranscript ? intake.brief.cta : null) {
+function validationContext(intake, evidence, duration, suppliedNarration, requireTranscript, requestedCta = requireTranscript ? intake.brief.cta : null, resources = intake.resources) {
   return {
     evidenceIds: evidence.items.map((entry) => entry.id),
     claimEligibleEvidenceIds: evidence.items.filter((entry) => entry.claims_allowed && entry.role !== "reference").map((entry) => entry.id),
-    resourceIds: intake.resources.map((entry) => entry.id),
-    resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
+    resourceIds: resources.map((entry) => entry.id),
+    resourceRoles: Object.fromEntries(resources.map((entry) => [entry.id, entry.role])),
     expectedDuration: duration,
     expectedFormat: { aspect: intake.brief.aspect.id, width: intake.brief.aspect.width, height: intake.brief.aspect.height, language: intake.brief.language },
     requestedCta,

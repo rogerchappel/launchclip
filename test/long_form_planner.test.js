@@ -121,6 +121,33 @@ test("bounds prefixed shot IDs during deterministic stitching", () => {
   assert.match(stitched.shots[0].id, /^[a-z0-9][a-z0-9-]{0,63}$/);
 });
 
+test("rejects chapter plans that cite evidence or resources outside their scope", async () => {
+  const workspace = await tempWorkspace();
+  const values = context(workspace);
+  values.intake.resources.push({ id: "screen-2", role: "supporting", type: "video", location: "/tmp/screen-2.mp4", sha256: "screen-2" });
+  values.evidence.items.push({ id: "ev-2", kind: "research", role: "primary", title: "Other evidence", content: "Neighbor-only proof.", provenance: "other", sha256: null, claims_allowed: true, truncated: false, metadata: [] });
+  const scopedOutline = outline();
+  scopedOutline.chapters[1].evidence_ids = ["ev-2"];
+  scopedOutline.chapters[1].resource_ids = ["screen-2"];
+  const client = { runStructured: async (request) => {
+    if (request.metadata.job_id === "creative-outline") return response(scopedOutline);
+    const value = chapterPlan(request.metadata.chapter_id);
+    const evidenceId = "ev-2";
+    const resourceId = "screen-2";
+    value.claims[0].evidence_ids = [evidenceId];
+    for (const shot of value.shots) {
+      shot.evidence_ids = [evidenceId];
+      shot.resource_ids = [resourceId];
+    }
+    for (const section of value.narration.sections) section.evidence_ids = [evidenceId];
+    return response(value);
+  } };
+  await assert.rejects(
+    () => planLongFormProduction(workspace, { ...values, options: { chapterConcurrency: 1 } }, { client }),
+    /references unknown id: (?:ev-2|screen-2)/
+  );
+});
+
 function outline(source = "generated") {
   return {
     schema_version: "launchclip.production-outline.v1",
