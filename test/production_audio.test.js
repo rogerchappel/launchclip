@@ -41,6 +41,59 @@ test("produces ElevenLabs narration and music plus timed local SFX as resumable 
   assert.equal(calls.length, 2);
 });
 
+test("segments long-form narration and music within ElevenLabs limits, then joins exact timelines", async () => {
+  const narrationText = "Alpha beta gamma. Delta epsilon zeta. Eta theta iota.";
+  const workspace = await fixture({ durationSeconds: 1205, narrationText });
+  const voiceCalls = [];
+  const musicCalls = [];
+  let voiceIndex = 0;
+  const provider = {
+    synthesizeNarration: async (options) => {
+      voiceCalls.push(options);
+      voiceIndex += 1;
+      await writeFile(options.outputPath, `voice-${voiceIndex}`);
+      const duration = 1205 / 3;
+      const words = [{ word: `part-${voiceIndex}`, start: 0, end: duration }];
+      await writeFile(options.wordsPath, `${JSON.stringify(words)}\n`);
+      return { provider: "elevenlabs", path: options.outputPath, words_path: options.wordsPath, words, duration_seconds: duration, request_id: `voice-${voiceIndex}` };
+    },
+    composeMusic: async (options) => {
+      musicCalls.push(options);
+      await writeFile(options.outputPath, "music");
+      return { provider: "elevenlabs", path: options.outputPath, duration_seconds: options.durationSeconds, request_id: `music-${musicCalls.length}`, song_id: `song-${musicCalls.length}` };
+    }
+  };
+  const joins = [];
+  const result = await produceAudio(workspace, { noVoice: true, noSfx: true, maxNarrationChars: 100 }, {
+    provider,
+    combineAudio: async (inputs, output) => { joins.push(inputs); await writeFile(output, "joined"); }
+  });
+  const manifest = JSON.parse(await readFile(result.manifest, "utf8"));
+  assert.equal(voiceCalls.length, 0);
+  assert.equal(musicCalls.length, 3);
+  assert.ok(musicCalls.every((entry) => entry.durationSeconds <= 600));
+  assert.ok(Math.abs(musicCalls.reduce((sum, entry) => sum + entry.durationSeconds, 0) - 1205) < .001);
+  assert.equal(manifest.music.segments.length, 3);
+  assert.equal(joins.length, 1);
+
+  const segmentedWorkspace = await fixture({ durationSeconds: 1205, narrationText: narrationText.repeat(8) });
+  voiceCalls.length = 0;
+  musicCalls.length = 0;
+  voiceIndex = 0;
+  joins.length = 0;
+  const segmented = await produceAudio(segmentedWorkspace, { noMusic: true, noSfx: true, maxNarrationChars: 100 }, {
+    provider,
+    combineAudio: async (inputs, output) => { joins.push(inputs); await writeFile(output, "joined"); },
+    conformNarration: async (voiceover, duration) => ({ ...voiceover, original_duration_seconds: voiceover.duration_seconds, duration_seconds: duration, conformed: true })
+  });
+  const segmentedManifest = JSON.parse(await readFile(segmented.manifest, "utf8"));
+  assert.ok(voiceCalls.length > 1);
+  assert.equal(voiceCalls[1].previousRequestIds[0], "voice-1");
+  assert.ok(voiceCalls.every((entry) => entry.text.length <= 100));
+  assert.equal(segmentedManifest.voiceover.segments.length, voiceCalls.length);
+  assert.equal(joins.length, 1);
+});
+
 test("uses supplied narration without calling TTS and reports timing drift from generated speech", async () => {
   const suppliedPath = path.join(await mkdtemp(path.join(os.tmpdir(), "launchclip-supplied-")), "take.mp4");
   await writeFile(suppliedPath, "take");
@@ -79,8 +132,8 @@ async function fixture(options = {}) {
   };
   const plan = {
     schema_version: PRODUCTION_PLAN_VERSION,
-    format: { duration_seconds: 10, language: "en" },
-    narration: { source: supplied ? "supplied" : "generated", full_text: "Proof becomes motion." },
+    format: { duration_seconds: options.durationSeconds ?? 10, language: "en" },
+    narration: { source: supplied ? "supplied" : "generated", full_text: options.narrationText ?? "Proof becomes motion." },
     audio: { music_prompt: "A plan-specific pulse" },
     shots: [{ id: "shot-1", start_seconds: 0, sfx: [{ at_seconds: 1.5, cue: "evidence tick", intent: "mark proof", volume: .3 }] }]
   };

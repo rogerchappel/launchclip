@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -19,7 +19,7 @@ export async function produceAudio(workspacePath, options = {}, adapters = {}) {
     readOptionalJson(path.join(workspace, PRODUCTION_PATHS.evidence), { items: [] })
   ]);
   const mediaDir = path.join(workspace, "production", "media");
-  const inputHash = semanticHash({ intake, plan, evidence, options: safeOptions(options), audio: "production-audio.v1" });
+  const inputHash = semanticHash({ intake, plan, evidence, options: safeOptions(options), audio: "production-audio.v2" });
   const store = adapters.store ?? await ProductionJobStore.open(workspace, { create: false });
   if (store.get("creative-plan")?.status !== "succeeded") throw new Error("Creative plan job must succeed before audio production");
   const jobId = "production-audio";
@@ -42,8 +42,8 @@ export async function produceAudio(workspacePath, options = {}, adapters = {}) {
     const needsProvider = (!options.noVoice && plan.narration.source === "generated") || !options.noMusic;
     const provider = adapters.provider ?? (needsProvider ? new ElevenLabsMediaProvider() : null);
     let [voiceover, music, sfx] = await Promise.all([
-      prepareVoiceover({ mediaDir, intake, evidence, plan, options, provider, probeDuration: adapters.probeDuration ?? probeDuration }),
-      prepareMusic({ mediaDir, plan, options, provider }),
+      prepareVoiceover({ mediaDir, intake, evidence, plan, options, provider, probeDuration: adapters.probeDuration ?? probeDuration, combineAudio: adapters.combineAudio ?? combineAudioFiles }),
+      prepareMusic({ mediaDir, plan, options, provider, combineAudio: adapters.combineAudio ?? combineAudioFiles }),
       prepareSfx({ mediaDir, plan, options, library: adapters.sfxLibrary })
     ]);
     const warnings = [];
@@ -80,7 +80,7 @@ export async function produceAudio(workspacePath, options = {}, adapters = {}) {
   }
 }
 
-async function prepareVoiceover({ mediaDir, intake, evidence, plan, options, provider, probeDuration }) {
+async function prepareVoiceover({ mediaDir, intake, evidence, plan, options, provider, probeDuration, combineAudio }) {
   if (options.noVoice) return null;
   if (plan.narration.source === "supplied") {
     const supplied = intake.resources.find((entry) => entry.role === "voiceover" && !entry.is_remote);
@@ -100,14 +100,48 @@ async function prepareVoiceover({ mediaDir, intake, evidence, plan, options, pro
     const durationSeconds = Number.isFinite(wordsDuration) && wordsDuration > 0 ? wordsDuration : await probeDuration(target);
     return { provider: "supplied", kind: "narration", path: target, words_path: wordsPath, duration_seconds: durationSeconds, source_resource_id: supplied.id };
   }
-  return provider.synthesizeNarration({
-    text: plan.narration.full_text,
-    voiceId: options.voiceId,
-    modelId: options.voiceModel ?? "eleven_multilingual_v2",
-    languageCode: plan.format.language,
-    outputPath: path.join(mediaDir, "voiceover.mp3"),
-    wordsPath: path.join(mediaDir, "voiceover.words.json")
+  const chunks = splitNarrationText(plan.narration.full_text, Number(options.maxNarrationChars ?? 2_800));
+  const outputPath = path.join(mediaDir, "voiceover.mp3");
+  const wordsPath = path.join(mediaDir, "voiceover.words.json");
+  if (chunks.length === 1) return provider.synthesizeNarration({
+    text: chunks[0], voiceId: options.voiceId, modelId: options.voiceModel ?? "eleven_multilingual_v2",
+    languageCode: plan.format.language, outputPath, wordsPath
   });
+
+  const segments = [];
+  try {
+    for (const [index, text] of chunks.entries()) {
+      const segment = await provider.synthesizeNarration({
+        text,
+        previousText: chunks[index - 1]?.slice(-1_000),
+        nextText: chunks[index + 1]?.slice(0, 1_000),
+        previousRequestIds: segments.map((entry) => entry.request_id).filter(Boolean).slice(-3),
+        voiceId: options.voiceId,
+        modelId: options.voiceModel ?? "eleven_multilingual_v2",
+        languageCode: plan.format.language,
+        outputPath: path.join(mediaDir, `voiceover-${String(index + 1).padStart(3, "0")}.mp3`),
+        wordsPath: path.join(mediaDir, `voiceover-${String(index + 1).padStart(3, "0")}.words.json`)
+      });
+      segments.push(segment);
+    }
+    await combineAudio(segments.map((entry) => entry.path), outputPath);
+    let offset = 0;
+    const words = [];
+    for (const segment of segments) {
+      const segmentWords = Array.isArray(segment.words) ? segment.words : await readOptionalJson(segment.words_path, []);
+      for (const word of segmentWords) words.push({ ...word, start: round(Number(word.start) + offset), end: round(Number(word.end) + offset) });
+      offset += positiveDuration(segment.duration_seconds, "Narration segment");
+    }
+    await writeAtomic(wordsPath, `${JSON.stringify(words, null, 2)}\n`);
+    return {
+      provider: "elevenlabs", kind: "narration", path: outputPath, words_path: wordsPath, words,
+      duration_seconds: offset, request_ids: segments.map((entry) => entry.request_id).filter(Boolean),
+      model_id: options.voiceModel ?? "eleven_multilingual_v2", voice_id: options.voiceId ?? process.env.ELEVENLABS_VOICE_ID ?? null,
+      segments: segments.map((entry, index) => ({ index: index + 1, characters: chunks[index].length, duration_seconds: entry.duration_seconds, request_id: entry.request_id ?? null }))
+    };
+  } finally {
+    await Promise.all(segments.flatMap((entry) => [entry.path, entry.words_path]).filter(Boolean).map((entry) => rm(entry, { force: true })));
+  }
 }
 
 export async function conformNarration(voiceover, targetDuration, run = execFileAsync) {
@@ -143,15 +177,89 @@ async function probeDuration(filePath) {
   return duration;
 }
 
-async function prepareMusic({ mediaDir, plan, options, provider }) {
+async function prepareMusic({ mediaDir, plan, options, provider, combineAudio }) {
   if (options.noMusic) return null;
-  return provider.composeMusic({
-    prompt: plan.audio.music_prompt,
-    durationSeconds: plan.format.duration_seconds,
-    modelId: options.musicModel ?? "music_v2",
-    forceInstrumental: true,
-    outputPath: path.join(mediaDir, "music.mp3")
+  const durations = splitLongDuration(plan.format.duration_seconds, 600);
+  const outputPath = path.join(mediaDir, "music.mp3");
+  if (durations.length === 1) return provider.composeMusic({
+    prompt: plan.audio.music_prompt, durationSeconds: durations[0], modelId: options.musicModel ?? "music_v2",
+    forceInstrumental: true, outputPath
   });
+  const segments = [];
+  try {
+    for (const [index, durationSeconds] of durations.entries()) {
+      const continuity = ` Long-form segment ${index + 1} of ${durations.length}; preserve the same musical identity and make both boundaries join cleanly.`;
+      segments.push(await provider.composeMusic({
+        prompt: `${String(plan.audio.music_prompt).slice(0, 4_100 - continuity.length)}${continuity}`, durationSeconds,
+        modelId: options.musicModel ?? "music_v2", forceInstrumental: true,
+        outputPath: path.join(mediaDir, `music-${String(index + 1).padStart(3, "0")}.mp3`)
+      }));
+    }
+    await combineAudio(segments.map((entry) => entry.path), outputPath);
+    return {
+      provider: "elevenlabs", kind: "music", path: outputPath, duration_seconds: Number(plan.format.duration_seconds),
+      model_id: options.musicModel ?? "music_v2", prompt: plan.audio.music_prompt,
+      request_ids: segments.map((entry) => entry.request_id).filter(Boolean), song_ids: segments.map((entry) => entry.song_id).filter(Boolean),
+      segments: segments.map((entry, index) => ({ index: index + 1, duration_seconds: durations[index], request_id: entry.request_id ?? null, song_id: entry.song_id ?? null }))
+    };
+  } finally {
+    await Promise.all(segments.map((entry) => entry.path).filter(Boolean).map((entry) => rm(entry, { force: true })));
+  }
+}
+
+export function splitNarrationText(text, maxCharacters = 2_800) {
+  const limit = Math.floor(Number(maxCharacters));
+  if (!Number.isFinite(limit) || limit < 100) throw new Error("Narration chunk size must be at least 100 characters");
+  const sentences = String(text ?? "").trim().replace(/\s+/g, " ").match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.map((entry) => entry.trim()).filter(Boolean) ?? [];
+  if (!sentences.length) throw new Error("Narration text is required");
+  const pieces = sentences.flatMap((sentence) => sentence.length <= limit ? [sentence] : splitWords(sentence, limit));
+  const chunks = [];
+  let current = "";
+  for (const piece of pieces) {
+    const candidate = current ? `${current} ${piece}` : piece;
+    if (candidate.length <= limit) current = candidate;
+    else { if (current) chunks.push(current); current = piece; }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+export function splitLongDuration(durationSeconds, maximumSeconds = 600) {
+  const duration = positiveDuration(durationSeconds, "Music");
+  const maximum = positiveDuration(maximumSeconds, "Music segment maximum");
+  const count = Math.ceil(duration / maximum);
+  return Array.from({ length: count }, () => duration / count);
+}
+
+export async function combineAudioFiles(inputPaths, outputPath, run = execFileAsync) {
+  if (!inputPaths.length) throw new Error("Audio concatenation requires at least one input");
+  if (inputPaths.length === 1) return copyFile(inputPaths[0], outputPath);
+  const inputs = inputPaths.flatMap((entry) => ["-i", path.resolve(entry)]);
+  const labels = inputPaths.map((_, index) => `[${index}:a]`).join("");
+  await run("ffmpeg", ["-y", "-hide_banner", "-loglevel", "error", ...inputs, "-filter_complex", `${labels}concat=n=${inputPaths.length}:v=0:a=1[outa]`, "-map", "[outa]", "-vn", "-c:a", "libmp3lame", "-q:a", "2", path.resolve(outputPath)]);
+}
+
+function splitWords(text, limit) {
+  const output = [];
+  let current = "";
+  for (const word of String(text).split(/\s+/)) {
+    if (word.length > limit) {
+      if (current) { output.push(current); current = ""; }
+      for (let index = 0; index < word.length; index += limit) output.push(word.slice(index, index + limit));
+      continue;
+    }
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= limit) current = candidate;
+    else { output.push(current); current = word; }
+  }
+  if (current) output.push(current);
+  return output;
+}
+
+function positiveDuration(value, label) {
+  const duration = Number(value);
+  if (!Number.isFinite(duration) || duration <= 0) throw new Error(`${label} duration must be positive`);
+  return duration;
 }
 
 async function prepareSfx({ mediaDir, plan, options, library }) {
@@ -176,7 +284,8 @@ function safeOptions(options) {
   return {
     noVoice: Boolean(options.noVoice), noMusic: Boolean(options.noMusic), noSfx: Boolean(options.noSfx),
     voiceId: options.voiceId ?? null, voiceModel: options.voiceModel ?? null, musicModel: options.musicModel ?? null,
-    sfxDir: options.sfxDir ? path.resolve(options.sfxDir) : null, words: options.words ? path.resolve(options.words) : null
+    sfxDir: options.sfxDir ? path.resolve(options.sfxDir) : null, words: options.words ? path.resolve(options.words) : null,
+    maxNarrationChars: options.maxNarrationChars ?? null
   };
 }
 
