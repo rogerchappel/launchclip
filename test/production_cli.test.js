@@ -51,6 +51,31 @@ test("runs bounded critic-directed repairs before asking for human approval", as
   assert.equal(result.repairs[0].pass, 1);
 });
 
+test("fast eval keeps full QA while lowering provider and sampling budgets", async () => {
+  const received = {};
+  const adapters = {
+    withProductionLease: async (_workspace, operation) => operation(),
+    buildIntake: async (_source, flags) => { received.intake = flags; return { workspace: "/tmp/workspace" }; },
+    writeIntake: async () => ({ workspace: "/tmp/workspace" }),
+    collectEvidence: async () => ({}),
+    analyzeSourceMedia: async (_workspace, options) => { received.media = options; return {}; },
+    planProduction: async (_workspace, options) => { received.plan = options; return {}; },
+    produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
+    directFrames: async (_workspace, options) => { received.frames = options; return { generated: 1, cached: 0 }; },
+    assembleHyperFrames: async () => ({ index: "/tmp/index.html" }),
+    renderDraftProduction: async (_workspace, options) => { received.draft = options; return { status: "ready", video: "/tmp/draft.mp4", verification: { snapshots: "/tmp/snapshots" }, critique: { verdict: "ship" } }; }
+  };
+  await runProduction("owner/repo", { "fast-eval": true, "no-audio": true }, adapters);
+  assert.equal(received.intake.reasoning, "high");
+  assert.equal(received.media.samples, 8);
+  assert.equal(received.media.reasoning, "medium");
+  assert.equal(received.plan.maxOutputTokens, 32000);
+  assert.deepEqual({ reasoning: received.frames.reasoning, max: received.frames.maxOutputTokens, attempts: received.frames.semanticAttempts, concurrency: received.frames.concurrency }, { reasoning: "medium", max: 20000, attempts: 1, concurrency: 3 });
+  assert.equal(received.draft.snapshotFrames, 6);
+  assert.equal(received.draft.inspectSamples, 9);
+  assert.equal(received.draft.criticReasoning, "high");
+});
+
 test("blocks assembly when measured narration timing requires a replan", async () => {
   let framesCalled = false;
   const adapters = {
