@@ -39,14 +39,12 @@ export class OpenAIResponsesClient {
     const submitted = await this.submitStructured(options);
     await options.onSubmitted?.(submitted);
     const response = submitted.status === "completed" ? submitted : await this.wait(submitted, options);
-    return {
-      response_id: response.id,
-      model: response.model ?? options.model,
-      status: response.status,
-      value: parseStructuredOutput(response),
-      usage: normalizeUsage(response.usage),
-      reasoning: response.reasoning ?? null
-    };
+    return structuredResult(response, options);
+  }
+
+  async resumeStructured(responseId, options = {}) {
+    const response = await this.wait(responseId, options);
+    return structuredResult(response, options);
   }
 
   async request(endpoint, init) {
@@ -79,6 +77,17 @@ export class OpenAIResponsesClient {
     throw new Error("OpenAI request exhausted retries");
   }
 }
+
+function structuredResult(response, options) {
+    return {
+      response_id: response.id,
+      model: response.model ?? options.model,
+      status: response.status,
+      value: parseStructuredOutput(response),
+      usage: normalizeUsage(response.usage),
+      reasoning: response.reasoning ?? null
+    };
+  }
 
 export function buildStructuredRequest(options = {}) {
   if (!options.schema || !options.schemaName) throw new Error("Structured responses require schema and schemaName");

@@ -94,6 +94,23 @@ test("retries transient API failures and honors Retry-After", async () => {
   assert.deepEqual(delays, [2000]);
 });
 
+test("resumes a persisted background response without submitting a duplicate", async () => {
+  const requests = [];
+  const client = new OpenAIResponsesClient({
+    apiKey: "test-key",
+    fetch: async (url, init) => {
+      requests.push({ url, init });
+      return jsonResponse({ id: "resp_resume", status: "completed", model: "gpt-5.6-sol", output_text: '{"answer":"resumed"}', usage: { total_tokens: 9 } });
+    },
+    sleep: async () => {}
+  });
+  const result = await client.resumeStructured("resp_resume", { pollIntervalMs: 0 });
+  assert.deepEqual(result.value, { answer: "resumed" });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].init.method, "GET");
+  assert.match(requests[0].url, /\/responses\/resp_resume$/);
+});
+
 test("reports refusals, terminal failures, invalid JSON, and missing credentials safely", async () => {
   assert.throws(() => new OpenAIResponsesClient({ apiKey: "" }), /OPENAI_API_KEY/);
   assert.throws(() => parseStructuredOutput({
