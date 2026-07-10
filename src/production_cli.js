@@ -52,15 +52,28 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
     throw new Error(`${audio.warnings.join(" ")} Re-run creative planning with measured narration timing, or pass --allow-timing-drift to inspect the draft.`);
   }
   const frames = await (adapters.directFrames ?? directFrames)(workspace, frameOptions(flags), adapters.frames);
-  const assembly = await (adapters.assembleHyperFrames ?? assembleHyperFrames)(workspace, {
+  const assemblyOptions = {
     voiceover: audio.voiceover,
     music: audio.music,
     sfxManifest: audio.sfx,
     musicVolume: numberOr(flags["music-volume"], 0.16)
-  });
+  };
+  let assembly = await (adapters.assembleHyperFrames ?? assembleHyperFrames)(workspace, assemblyOptions);
+  let verification = await (adapters.verifyProduction ?? verifyProduction)(workspace, renderOptions(flags), adapters.render);
+  let critique = await (adapters.critiqueProduction ?? critiqueProduction)(workspace, criticOptions(flags), adapters.critic);
+  const repairs = [];
+  const maximumRepairPasses = numberOr(flags["max-repair-passes"], 2);
+  for (let pass = 1; pass <= maximumRepairPasses && critique.verdict === "repair"; pass += 1) {
+    const repair = await (adapters.repairProduction ?? repairProduction)(workspace, repairOptions(flags), adapters.repair);
+    repairs.push({ pass, ...repair });
+    assembly = await (adapters.assembleHyperFrames ?? assembleHyperFrames)(workspace, assemblyOptions);
+    verification = await (adapters.verifyProduction ?? verifyProduction)(workspace, renderOptions(flags), adapters.render);
+    critique = await (adapters.critiqueProduction ?? critiqueProduction)(workspace, criticOptions(flags), adapters.critic);
+  }
+  const readyForApproval = critique.verdict === "ship";
   return {
     stage: "produce",
-    status: "awaiting-approval",
+    status: readyForApproval ? "awaiting-approval" : "needs-repair",
     workspace,
     evidence,
     source_media: sourceMedia,
@@ -68,7 +81,12 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
     audio,
     frames: { generated: frames.generated, cached: frames.cached },
     assembly,
-    next: `Review ${assembly.index}, then run launchclip production-render ${workspace} when approved.`
+    verification,
+    critique,
+    repairs,
+    next: readyForApproval
+      ? `Review ${assembly.index} and ${verification.snapshots}, then run launchclip production-render ${workspace} --approve.`
+      : `Review ${critique.critique ?? "production/qa/critique.json"}; resolve remaining findings before final approval.`
   };
 }
 
