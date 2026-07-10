@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { renderProduction, verifyProduction } from "../src/production_render.js";
+import { renderDraftProduction, renderProduction, verifyProduction } from "../src/production_render.js";
 
 test("runs lint, browser validation, transition-aware inspection, and assembled snapshots", async () => {
   const workspace = await fixture();
@@ -62,6 +62,21 @@ test("renders only after verification then runs frame-by-frame motion gates", as
   assert.equal(motionInput.options.expected.width, 1080);
   assert.deepEqual(motionInput.options.references, ["/tmp/reference.mp4", "/tmp/staged-reference.mp4"]);
   assert.equal(JSON.parse(await readFile(result.audio, "utf8")).status, "not-requested");
+});
+
+test("renders a temporally analyzed draft before approval", async () => {
+  const workspace = await fixture();
+  const commands = [];
+  const result = await renderDraftProduction(workspace, {}, {
+    run: async (_command, args) => { commands.push(args); return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" }; },
+    writeMotionReport: async (_video, output) => { await writeFile(output, "{}\n"); return { quality: { ok: true }, family: "developing-card" }; },
+    critiqueProduction: async () => ({ verdict: "ship", status: "approved" })
+  });
+  const renderArgs = commands.find((args) => args[1] === "render");
+  assert.equal(result.stage, "production-draft");
+  assert.equal(result.status, "ready");
+  assert.match(result.video, /production\/renders\/draft\.mp4$/);
+  assert.equal(renderArgs[renderArgs.indexOf("--quality") + 1], "draft");
 });
 
 test("blocks final approval when rendered audio fails deterministic gates", async () => {

@@ -53,22 +53,37 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
 
 export async function renderProduction(workspacePath, options = {}, adapters = {}) {
   if (!options.approve) throw new Error("Final production render requires explicit --approve after reviewing the assembled project and snapshots");
+  return renderAnalyzedProduction(workspacePath, options, adapters, {
+    stage: "production-render", outputName: "final.mp4", quality: options.quality ?? "high",
+    logName: "render.json", successStatus: "awaiting-human-review", enforceQuality: true
+  });
+}
+
+export async function renderDraftProduction(workspacePath, options = {}, adapters = {}) {
+  return renderAnalyzedProduction(workspacePath, options, adapters, {
+    stage: "production-draft", outputName: "draft.mp4", quality: options.draftQuality ?? "draft",
+    logName: "draft-render.json", successStatus: "ready", enforceQuality: false
+  });
+}
+
+async function renderAnalyzedProduction(workspacePath, options, adapters, profile) {
   const workspace = path.resolve(workspacePath);
   const verification = await verifyProduction(workspace, options, adapters);
   const project = verification.project;
   const qaDir = verification.qa;
   const renderDir = path.join(workspace, "production", "renders");
-  const output = path.resolve(options.output ?? path.join(renderDir, "final.mp4"));
+  const requestedOutput = profile.stage === "production-draft" ? options.draftOutput : options.output;
+  const output = path.resolve(requestedOutput ?? path.join(renderDir, profile.outputName));
   await mkdir(path.dirname(output), { recursive: true });
   const run = adapters.run ?? runCommand;
   const render = await capture(run, "npx", [
     "hyperframes", "render", "--output", output,
-    "--quality", String(options.quality ?? "high"),
+    "--quality", String(profile.quality),
     "--workers", String(options.workers ?? "auto"),
     "--strict-all", "--skill", "product-launch-video", project
   ], { cwd: project });
-  await writeFile(path.join(qaDir, "render.json"), `${JSON.stringify(render, null, 2)}\n`);
-  if (!render.ok) throw new Error(`HyperFrames render failed. Review ${path.join(qaDir, "render.json")}.`);
+  await writeFile(path.join(qaDir, profile.logName), `${JSON.stringify(render, null, 2)}\n`);
+  if (!render.ok) throw new Error(`HyperFrames render failed. Review ${path.join(qaDir, profile.logName)}.`);
 
   const plan = JSON.parse(await readFile(path.join(workspace, PRODUCTION_PATHS.plan), "utf8"));
   const sourceMedia = await readOptionalJson(path.join(workspace, "production", "source-media", "analysis.json"));
@@ -78,7 +93,7 @@ export async function renderProduction(workspacePath, options = {}, adapters = {
   const motion = adapters.writeMotionReport
     ? await adapters.writeMotionReport(output, motionPath, analysisOptions)
     : await writeMotionReport(output, motionPath, analysisOptions, adapters.motion);
-  if (!motion.quality.ok) throw new Error(`Rendered video failed motion quality gates. Review ${motionPath}.`);
+  if (profile.enforceQuality && !motion.quality.ok) throw new Error(`Rendered video failed motion quality gates. Review ${motionPath}.`);
   const audioPath = path.join(qaDir, "audio.json");
   const audioManifestPath = path.join(workspace, "production", "media", "manifest.json");
   const audioManifest = await readOptionalJson(audioManifestPath);
@@ -88,13 +103,13 @@ export async function renderProduction(workspacePath, options = {}, adapters = {
       : await writeAudioReport(output, audioManifestPath, audioPath, { musicVolume: Number(options.musicVolume ?? .16) }, adapters.audio)
     : { schema_version: "launchclip.render-audio.v1", status: "not-requested", quality: { ok: true, findings: [] } };
   if (!audioManifest) await writeFile(audioPath, `${JSON.stringify(audio, null, 2)}\n`);
-  if (!audio.quality.ok) throw new Error(`Rendered video failed audio quality gates. Review ${audioPath}.`);
+  if (profile.enforceQuality && !audio.quality.ok) throw new Error(`Rendered video failed audio quality gates. Review ${audioPath}.`);
   const critique = adapters.critiqueProduction
     ? await adapters.critiqueProduction(workspace, criticOptions(options))
     : await critiqueProduction(workspace, criticOptions(options), adapters.critic);
   return {
-    stage: "production-render",
-    status: critique.verdict === "ship" ? "awaiting-human-review" : "needs-repair",
+    stage: profile.stage,
+    status: critique.verdict === "ship" && motion.quality.ok && audio.quality.ok ? profile.successStatus : "needs-repair",
     workspace,
     video: output,
     verification,
