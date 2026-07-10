@@ -22,6 +22,7 @@ test("gives an independent GPT-5.6 critic the plan, QA evidence, motion profile,
   assert.match(request.images[0].url, /^data:image\/png;base64,/);
   const input = JSON.parse(request.input);
   assert.equal(input.temporal_motion_analysis.family, "rapid-hybrid");
+  assert.equal(input.deterministic_reports.inspect.stdout.issueCount, 1);
   assert.deepEqual(input.snapshot_order, ["001.png", "002.png"]);
   assert.match(await readFile(result.markdown, "utf8"), /Reduce presenter occupancy/);
 });
@@ -46,6 +47,9 @@ async function fixture() {
   await writeFile(path.join(workspace, "production", "evidence.json"), `${JSON.stringify({ items: [{ id: "ev-1", title: "README", provenance: "README.md", claims_allowed: true }] })}\n`);
   await writeFile(path.join(qa, "verification.json"), `${JSON.stringify({ failed: [], snapshots })}\n`);
   await writeFile(path.join(qa, "motion.json"), `${JSON.stringify({ family: "rapid-hybrid", motion_bursts_per_minute: 22 })}\n`);
+  await writeFile(path.join(qa, "lint.json"), `${JSON.stringify({ ok: true, stdout: { findings: [] } })}\n`);
+  await writeFile(path.join(qa, "validate.json"), `${JSON.stringify({ ok: true, stdout: { errors: [] } })}\n`);
+  await writeFile(path.join(qa, "inspect.json"), `${JSON.stringify({ ok: false, stdout: { issueCount: 1, issues: [{ code: "text_occluded", severity: "error" }] } })}\n`);
   await writeFile(path.join(snapshots, "002.png"), "second");
   await writeFile(path.join(snapshots, "001.png"), "first");
   return workspace;

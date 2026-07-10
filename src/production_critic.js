@@ -20,11 +20,14 @@ Return only the strict production-critique JSON.`;
 export async function critiqueProduction(workspacePath, options = {}, adapters = {}) {
   const workspace = path.resolve(workspacePath);
   const qaDir = path.join(workspace, PRODUCTION_PATHS.qa);
-  const [plan, evidence, verification, motion] = await Promise.all([
+  const [plan, evidence, verification, motion, lint, validate, inspect] = await Promise.all([
     readJson(path.join(workspace, PRODUCTION_PATHS.plan)),
     readJson(path.join(workspace, PRODUCTION_PATHS.evidence)),
     readJson(path.join(qaDir, "verification.json")),
-    readOptionalJson(path.join(qaDir, "motion.json"))
+    readOptionalJson(path.join(qaDir, "motion.json")),
+    readOptionalJson(path.join(qaDir, "lint.json")),
+    readOptionalJson(path.join(qaDir, "validate.json")),
+    readOptionalJson(path.join(qaDir, "inspect.json"))
   ]);
   const snapshots = await snapshotPaths(verification.snapshots ?? path.join(qaDir, "snapshots"), Number(options.maxSnapshots ?? 12));
   if (!snapshots.length) throw new Error("Production critique requires rendered snapshots");
@@ -46,6 +49,7 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
       claims: plan.claims,
       evidence_index: evidence.items.map((entry) => ({ id: entry.id, title: entry.title, provenance: entry.provenance, claims_allowed: entry.claims_allowed })),
       deterministic_verification: verification,
+      deterministic_reports: { lint, validate, inspect },
       temporal_motion_analysis: motion,
       snapshot_order: snapshots.map((entry) => path.basename(entry))
     }),
