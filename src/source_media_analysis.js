@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { OpenAIResponsesClient } from "./openai_responses.js";
@@ -40,6 +40,16 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
   const mediaDir = path.join(workspace, "production", "source-media");
   await mkdir(mediaDir, { recursive: true });
   const resources = intake.resources.filter((entry) => !entry.is_remote && ["video", "image", "audio"].includes(entry.type));
+  const stagedReferences = [];
+  for (const resource of intake.resources.filter((entry) => entry.role === "reference" && entry.is_remote && isSupportedVideoReference(entry.location))) {
+    if (options.stageRemoteReferences === false) continue;
+    const stagedPath = adapters.stageReference
+      ? await adapters.stageReference(resource, mediaDir, options)
+      : await stageVideoReference(resource, mediaDir, adapters.run ?? runCommand);
+    const staged = { ...resource, type: "video", location: stagedPath, is_remote: false, staged_from: resource.location };
+    resources.push(staged);
+    stagedReferences.push({ resource_id: resource.id, source_url: resource.location, local_path: stagedPath });
+  }
   const needsTranscript = intake.policies?.supplied_voiceover_is_authoritative && !evidence.items.some((entry) => entry.kind === "voiceover-transcript");
   const transcriber = adapters.transcriber ?? (process.env.ELEVENLABS_API_KEY ? new ElevenLabsMediaProvider() : null);
   if (needsTranscript && !transcriber) throw new Error("Supplied voiceover requires --transcript or ELEVENLABS_API_KEY for Scribe transcription");
@@ -48,11 +58,13 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
   const analyses = [];
 
   for (const resource of resources) {
-    if ((resource.role === "voiceover" || options.transcribeAll) && ["video", "audio"].includes(resource.type) && transcriber) {
+    if ((resource.role === "voiceover" || resource.role === "reference" || options.transcribeAll) && ["video", "audio"].includes(resource.type) && transcriber) {
       const transcript = await transcriber.transcribe({ filePath: resource.location, modelId: options.transcriptionModel ?? "scribe_v2", languageCode: intake.brief.language });
       const wordsPath = path.join(mediaDir, `${resource.id}.words.json`);
       await writeAtomic(wordsPath, `${JSON.stringify(transcript.words, null, 2)}\n`);
       const isVoiceover = resource.role === "voiceover";
+      const duration = Number(transcript.words.at(-1)?.end ?? 0);
+      const wordCount = transcript.words.length;
       newItems.push(evidenceItem({
         id: `resource:${resource.id}:transcript`,
         kind: isVoiceover ? "voiceover-transcript" : "media-transcript",
@@ -62,7 +74,7 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
         provenance: resource.location,
         sha256: resource.sha256,
         claimsAllowed: !isVoiceover && resource.role !== "reference",
-        metadata: [["words_path", wordsPath], ["language", transcript.language_code ?? ""], ["provider", transcript.provider]]
+        metadata: [["words_path", wordsPath], ["language", transcript.language_code ?? ""], ["provider", transcript.provider], ["word_count", wordCount], ["words_per_minute", duration > 0 ? Math.round(wordCount * 60 / duration) : null]]
       }));
     }
     if (!["video", "image"].includes(resource.type)) continue;
@@ -89,7 +101,7 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
       if (!(segment.end_seconds > segment.start_seconds)) throw new Error(`Media analysis segment must have end > start for ${resource.id}`);
       if (duration && segment.end_seconds > duration + .25) throw new Error(`Media analysis segment exceeds ${resource.id} duration`);
     }
-    analyses.push({ resource_id: resource.id, analysis: result.value, contact_sheet: visualPath, response_id: result.response_id, model: result.model });
+    analyses.push({ resource_id: resource.id, analysis: result.value, contact_sheet: visualPath, staged_from: resource.staged_from ?? null, response_id: result.response_id, model: result.model });
     newItems.push(evidenceItem({
       id: `resource:${resource.id}:visual-analysis`,
       kind: resource.role === "reference" ? "reference-visual-analysis" : "visual-media-analysis",
@@ -106,8 +118,26 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
   evidence.items = [...evidence.items.filter((entry) => !ids.has(entry.id)), ...newItems];
   await writeAtomic(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
   const reportPath = path.join(mediaDir, "analysis.json");
-  await writeAtomic(reportPath, `${JSON.stringify({ schema_version: "launchclip.source-media-analysis.v1", analyses }, null, 2)}\n`);
-  return { stage: "source-media-analysis", status: "ready", workspace, evidence: evidencePath, report: reportPath, resources: resources.length, analyses: analyses.length, transcripts: newItems.filter((entry) => /transcript$/.test(entry.kind)).length };
+  await writeAtomic(reportPath, `${JSON.stringify({ schema_version: "launchclip.source-media-analysis.v1", analyses, staged_references: stagedReferences }, null, 2)}\n`);
+  return { stage: "source-media-analysis", status: "ready", workspace, evidence: evidencePath, report: reportPath, reference_videos: stagedReferences.map((entry) => entry.local_path), resources: resources.length, analyses: analyses.length, transcripts: newItems.filter((entry) => /transcript$/.test(entry.kind)).length };
+}
+
+async function stageVideoReference(resource, mediaDir, run) {
+  const directory = path.join(mediaDir, "references");
+  await mkdir(directory, { recursive: true });
+  const output = path.join(directory, `${resource.id}.mp4`);
+  await run("yt-dlp", [
+    "--no-playlist", "--match-filter", "duration <= 900",
+    "--format", "bv*[height<=1080]+ba/b[height<=1080]",
+    "--merge-output-format", "mp4", "--output", output, resource.location
+  ]);
+  const info = await stat(output);
+  if (!info.isFile() || !info.size) throw new Error(`Reference staging produced no video: ${resource.location}`);
+  return output;
+}
+
+function isSupportedVideoReference(value) {
+  return /^https?:\/\/(?:www\.)?(?:youtube\.com\/(?:watch|shorts\/)|youtu\.be\/)/i.test(String(value ?? ""));
 }
 
 async function makeContactSheet(resource, mediaDir, options, adapters) {

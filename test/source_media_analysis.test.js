@@ -43,17 +43,36 @@ test("keeps reference visual analysis out of factual evidence", async () => {
   assert.equal(item.claims_allowed, false);
 });
 
+test("stages a remote YouTube reference for visual and transcript analysis", async () => {
+  const workspace = await fixture({ role: "reference", authoritative: false, remote: true });
+  const staged = path.join(workspace, "reference.mp4");
+  const client = { runStructured: async () => ({ response_id: "r", model: "gpt-5.6", value: { resource_id: "take", summary: "Fast reference", visible_text: [], narrative_opportunities: ["hook, proof, CTA"], segments: [], quality_warnings: [] } }) };
+  const transcriber = { transcribe: async () => ({ provider: "elevenlabs", text: "Hook proof call to action", words: [{ word: "Hook", start: 0, end: .5 }, { word: "proof", start: .5, end: 1 }], language_code: "en" }) };
+  const result = await analyzeSourceMedia(workspace, {}, {
+    client, transcriber,
+    stageReference: async () => { await writeFile(staged, "video"); return staged; },
+    contactSheet: async (_source, output) => writeFile(output, "sheet")
+  });
+  assert.deepEqual(result.reference_videos, [staged]);
+  const report = JSON.parse(await readFile(result.report, "utf8"));
+  assert.equal(report.staged_references[0].source_url, "https://www.youtube.com/shorts/example");
+  const evidence = JSON.parse(await readFile(result.evidence, "utf8"));
+  const transcript = evidence.items.find((entry) => entry.kind === "media-transcript");
+  assert.equal(transcript.claims_allowed, false);
+  assert.equal(transcript.metadata.find((entry) => entry.key === "word_count").value, "2");
+});
+
 async function fixture(options = {}) {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-source-media-"));
   const production = path.join(workspace, "production");
   await mkdir(production, { recursive: true });
-  const media = path.join(workspace, "take.mp4");
-  await writeFile(media, "media");
+  const media = options.remote ? "https://www.youtube.com/shorts/example" : path.join(workspace, "take.mp4");
+  if (!options.remote) await writeFile(media, "media");
   const role = options.role ?? "voiceover";
   await writeFile(path.join(production, "intake.json"), `${JSON.stringify({
     brief: { language: "en" }, model: { id: "gpt-5.6" },
     policies: { supplied_voiceover_is_authoritative: options.authoritative ?? role === "voiceover" },
-    resources: [{ id: "take", role, type: "video", location: media, is_remote: false, sha256: "hash" }]
+    resources: [{ id: "take", role, type: options.remote ? "url" : "video", location: media, is_remote: Boolean(options.remote), sha256: options.remote ? null : "hash" }]
   })}\n`);
   await writeFile(path.join(production, "evidence.json"), `${JSON.stringify({
     items: [{ id: "resource:take", kind: "video-metadata", role, title: "take.mp4", content: "{}", provenance: media, sha256: "hash", claims_allowed: false, truncated: false, metadata: [{ key: "duration_seconds", value: "5" }] }], warnings: []
