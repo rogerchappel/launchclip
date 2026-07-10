@@ -45,10 +45,10 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   }
   const current = store.get(jobId);
   if (!current) await store.add({ id: jobId, kind: "hyperframes-assembly", depends_on: dependencies, input_hash: inputHash });
-  else if (current.status === "failed" || current.status === "stale") await store.retry(jobId);
+  else if (current.status === "failed" || current.status === "stale") await store.retry(jobId, { inputHash });
   else if (current.status === "running" || current.status === "submitted") {
     await store.markStaleFrom([jobId]);
-    await store.retry(jobId);
+    await store.retry(jobId, { inputHash });
   }
   else if (current.status !== "pending") throw new Error(`Assembly job is already ${current.status}`);
   await store.markRunning(jobId);

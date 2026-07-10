@@ -33,10 +33,10 @@ export async function produceAudio(workspacePath, options = {}, adapters = {}) {
   }
   const current = store.get(jobId);
   if (!current) await store.add({ id: jobId, kind: "production-audio", depends_on: ["creative-plan"], input_hash: inputHash });
-  else if (current.status === "failed" || current.status === "stale") await store.retry(jobId);
+  else if (current.status === "failed" || current.status === "stale") await store.retry(jobId, { inputHash });
   else if (current.status === "running" || current.status === "submitted") {
     await store.markStaleFrom([jobId]);
-    await store.retry(jobId);
+    await store.retry(jobId, { inputHash });
   }
   else if (current.status !== "pending") throw new Error(`Audio job is already ${current.status}`);
   await store.markRunning(jobId);
