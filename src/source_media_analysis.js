@@ -41,7 +41,7 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
   const derivedEvidencePath = path.join(mediaDir, "evidence.json");
   const [intake, evidence] = await Promise.all([readJson(intakePath), readJson(evidencePath)]);
   const sourceEvidence = { ...evidence, items: evidence.items.filter((entry) => !/:transcript$|:visual-analysis$/.test(entry.id)) };
-  const inputHash = semanticHash({ intake, evidence: sourceEvidence, options: { samples: options.samples ?? 12, columns: options.columns ?? 4, reasoning: options.reasoning ?? "high", transcriptionModel: options.transcriptionModel ?? "scribe_v2", transcribeAll: Boolean(options.transcribeAll), stageRemoteReferences: options.stageRemoteReferences !== false }, stage: "source-media-analysis.v2" });
+  const inputHash = semanticHash({ intake, evidence: sourceEvidence, options: { samples: options.samples ?? 12, columns: options.columns ?? 4, reasoning: options.reasoning ?? "high", transcriptionModel: options.transcriptionModel ?? "scribe_v2", transcribeAll: Boolean(options.transcribeAll), stageRemoteReferences: options.stageRemoteReferences !== false }, stage: "source-media-analysis.v3" });
   const store = adapters.store ?? await ProductionJobStore.open(workspace);
   const jobId = "source-media-analysis";
   const existing = store.get(jobId);
@@ -110,7 +110,7 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
     if (!["video", "image"].includes(resource.type)) continue;
     const visualPath = resource.type === "video"
       ? await makeContactSheet(resource, mediaDir, options, adapters)
-      : resource.location;
+      : await normalizeVisualImage(resource, mediaDir, adapters);
     const result = await client.runStructured({
       model: intake.model?.id ?? "gpt-5.6",
       reasoningEffort: options.reasoning ?? "high",
@@ -198,6 +198,29 @@ async function makeContactSheet(resource, mediaDir, options, adapters) {
   return output;
 }
 
+async function normalizeVisualImage(resource, mediaDir, adapters) {
+  if (/\.(?:png|jpe?g|gif|webp)$/i.test(resource.location)) return resource.location;
+  const output = path.join(mediaDir, `${resource.id}.image.png`);
+  if (adapters.rasterizeImage) await adapters.rasterizeImage(resource.location, output);
+  else await rasterizeImageWithLocalTools(resource.location, output, adapters.run ?? runCommand);
+  const info = await stat(output);
+  if (!info.isFile() || !info.size) throw new Error(`Image rasterization produced no PNG: ${resource.location}`);
+  return output;
+}
+
+async function rasterizeImageWithLocalTools(source, output, run) {
+  const attempts = [
+    ["magick", [source, "-background", "none", "-resize", "1920x1920>", output]],
+    ["convert", [source, "-background", "none", "-resize", "1920x1920>", output]],
+    ["sips", ["-s", "format", "png", source, "--out", output]]
+  ];
+  const failures = [];
+  for (const [command, args] of attempts) {
+    try { await run(command, args); return; } catch (error) { failures.push(`${command}: ${error.message}`); }
+  }
+  throw new Error(`Rasterizing ${source} requires ImageMagick (magick/convert) or macOS sips. ${failures.join("; ")}`);
+}
+
 async function probeDuration(filePath, run) {
   const { stdout } = await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", filePath]);
   const duration = Number(String(stdout).trim());
@@ -216,7 +239,7 @@ function metadataNumber(item, key) {
 
 async function dataImage(filePath) {
   const extension = path.extname(filePath).toLowerCase();
-  const mime = extension === ".png" ? "image/png" : extension === ".webp" ? "image/webp" : "image/jpeg";
+  const mime = extension === ".png" ? "image/png" : extension === ".webp" ? "image/webp" : extension === ".gif" ? "image/gif" : "image/jpeg";
   return { url: `data:${mime};base64,${(await readFile(filePath)).toString("base64")}`, detail: "original" };
 }
 

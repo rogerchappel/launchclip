@@ -45,7 +45,7 @@ test("recovers an interrupted aggregate source-media job", async () => {
   const workspace = await fixture({ role: "supporting", authoritative: false });
   const intake = JSON.parse(await readFile(path.join(workspace, "production", "intake.json"), "utf8"));
   const evidence = JSON.parse(await readFile(path.join(workspace, "production", "evidence.json"), "utf8"));
-  const inputHash = semanticHash({ intake, evidence, options: { samples: 12, columns: 4, reasoning: "high", transcriptionModel: "scribe_v2", transcribeAll: false, stageRemoteReferences: true }, stage: "source-media-analysis.v2" });
+  const inputHash = semanticHash({ intake, evidence, options: { samples: 12, columns: 4, reasoning: "high", transcriptionModel: "scribe_v2", transcribeAll: false, stageRemoteReferences: true }, stage: "source-media-analysis.v3" });
   const store = await ProductionJobStore.open(workspace);
   await store.add({ id: "source-media-analysis", kind: "source-media-analysis", depends_on: [], input_hash: inputHash });
   await store.markRunning("source-media-analysis");
@@ -65,6 +65,17 @@ test("keeps reference visual analysis out of factual evidence", async () => {
   const evidence = JSON.parse(await readFile(result.evidence, "utf8"));
   const item = evidence.items.find((entry) => entry.kind === "reference-visual-analysis");
   assert.equal(item.claims_allowed, false);
+});
+
+test("rasterizes SVG resources before GPT vision upload", async () => {
+  const workspace = await fixture({ role: "supporting", authoritative: false, type: "image", extension: ".svg" });
+  let image;
+  const result = await analyzeSourceMedia(workspace, {}, {
+    client: { runStructured: async (options) => { image = options.images[0]; return { response_id: "r", model: "gpt-5.6", value: { resource_id: "take", summary: "Logo", visible_text: [], narrative_opportunities: [], segments: [], quality_warnings: [] } }; } },
+    rasterizeImage: async (_source, output) => writeFile(output, "png")
+  });
+  assert.equal(result.analyses, 1);
+  assert.match(image.url, /^data:image\/png;base64,/);
 });
 
 test("stages a remote YouTube reference for visual and transcript analysis", async () => {
@@ -90,13 +101,13 @@ async function fixture(options = {}) {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-source-media-"));
   const production = path.join(workspace, "production");
   await mkdir(production, { recursive: true });
-  const media = options.remote ? "https://www.youtube.com/shorts/example" : path.join(workspace, "take.mp4");
+  const media = options.remote ? "https://www.youtube.com/shorts/example" : path.join(workspace, `take${options.extension ?? ".mp4"}`);
   if (!options.remote) await writeFile(media, "media");
   const role = options.role ?? "voiceover";
   await writeFile(path.join(production, "intake.json"), `${JSON.stringify({
     brief: { language: "en" }, model: { id: "gpt-5.6" },
     policies: { supplied_voiceover_is_authoritative: options.authoritative ?? role === "voiceover" },
-    resources: [{ id: "take", role, type: options.remote ? "url" : "video", location: media, is_remote: Boolean(options.remote), sha256: options.remote ? null : "hash" }]
+    resources: [{ id: "take", role, type: options.remote ? "url" : options.type ?? "video", location: media, is_remote: Boolean(options.remote), sha256: options.remote ? null : "hash" }]
   })}\n`);
   await writeFile(path.join(production, "evidence.json"), `${JSON.stringify({
     items: [{ id: "resource:take", kind: "video-metadata", role, title: "take.mp4", content: "{}", provenance: media, sha256: "hash", claims_allowed: false, truncated: false, metadata: [{ key: "duration_seconds", value: "5" }] }], warnings: []
