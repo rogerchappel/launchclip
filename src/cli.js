@@ -6,7 +6,7 @@ import { preprocessPresenter } from "./presenter_preprocess.js";
 import { writeIntake } from "./intake.js";
 import { runProductionStage } from "./production_cli.js";
 
-const PRODUCTION_COMMANDS = new Set(["evidence", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-critique", "production-render", "produce"]);
+const PRODUCTION_COMMANDS = new Set(["evidence", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-critique", "production-repair", "production-render", "produce"]);
 const COMMANDS = new Set(["intake", ...PRODUCTION_COMMANDS, "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
@@ -106,6 +106,7 @@ Usage:
   launchclip assemble <workspace> [--music-volume 0.16]
   launchclip production-verify <workspace> [--inspect-samples 15] [--snapshot-frames 12]
   launchclip production-critique <workspace> [--critic-reasoning xhigh] [--critic-pro]
+  launchclip production-repair <workspace> [--repair-reasoning high] [--repair-snapshots 8]
   launchclip production-render <workspace> --approve [--quality high] [--reference-video local.mp4]
   launchclip init <repo> --out <workspace>
   launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]

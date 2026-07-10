@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { runProduction } from "../src/production_cli.js";
+import { runProduction, runProductionStage } from "../src/production_cli.js";
 
 test("runs the delegated production DAG in dependency order and stops for approval", async () => {
   const calls = [];
@@ -33,4 +33,15 @@ test("blocks assembly when measured narration timing requires a replan", async (
   };
   await assert.rejects(() => runProduction("owner/repo", {}, adapters), /Re-run creative planning/);
   assert.equal(framesCalled, false);
+});
+
+test("routes production repair with scoped model controls", async () => {
+  let received;
+  const result = await runProductionStage("production-repair", "/tmp/workspace", { "repair-model": "gpt-5.6", "repair-reasoning": "xhigh", "repair-snapshots": "6" }, {
+    repairProduction: async (workspace, options) => { received = { workspace, options }; return { status: "repaired" }; }
+  });
+  assert.equal(result.status, "repaired");
+  assert.equal(received.workspace, "/tmp/workspace");
+  assert.equal(received.options.reasoning, "xhigh");
+  assert.equal(received.options.maxSnapshots, 6);
 });

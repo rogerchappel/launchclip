@@ -8,6 +8,7 @@ import { planProduction } from "./creative_planner.js";
 import { produceAudio } from "./production_audio.js";
 import { renderProduction, verifyProduction } from "./production_render.js";
 import { critiqueProduction } from "./production_critic.js";
+import { repairProduction } from "./production_repair.js";
 
 export async function runProductionStage(command, target, flags = {}, adapters = {}) {
   if (command === "evidence") return collectEvidence(target, evidenceOptions(flags), adapters.evidence);
@@ -18,6 +19,7 @@ export async function runProductionStage(command, target, flags = {}, adapters =
   if (command === "production-verify") return verifyProduction(target, renderOptions(flags));
   if (command === "production-render") return renderProduction(target, renderOptions(flags));
   if (command === "production-critique") return critiqueProduction(target, criticOptions(flags));
+  if (command === "production-repair") return (adapters.repairProduction ?? repairProduction)(target, repairOptions(flags), adapters.repair);
   if (command !== "produce") throw new Error(`Unknown production stage: ${command}`);
   return runProduction(target, flags, adapters);
 }
@@ -127,6 +129,15 @@ function criticOptions(flags) {
     reasoning: flags["critic-reasoning"] ?? "xhigh",
     pro: Boolean(flags["critic-pro"]),
     maxSnapshots: numberOr(flags["critic-snapshots"], 12)
+  };
+}
+
+function repairOptions(flags) {
+  return {
+    model: flags["repair-model"] ?? "gpt-5.6",
+    reasoning: flags["repair-reasoning"] ?? "high",
+    maxSnapshots: numberOr(flags["repair-snapshots"], 8),
+    background: !flags.foreground
   };
 }
 
