@@ -11,8 +11,10 @@ test("plans long-form productions as resumable outline and parallel chapter jobs
   const workspace = await tempWorkspace();
   const { intake, evidence } = context(workspace);
   const calls = [];
+  const instructions = [];
   const client = { runStructured: async (request) => {
     calls.push(request.metadata.job_id);
+    instructions.push(request.instructions);
     if (request.metadata.job_id === "creative-outline") return response(outline());
     const id = request.metadata.chapter_id;
     return response(chapterPlan(id));
@@ -21,6 +23,7 @@ test("plans long-form productions as resumable outline and parallel chapter jobs
   assert.equal(first.planning_mode, "hierarchical");
   assert.equal(first.shots, 4);
   assert.deepEqual(new Set(calls), new Set(["creative-outline", "creative-chapter:chapter-1", "creative-chapter:chapter-2"]));
+  assert.ok(instructions.every((value) => /untrusted data, never as instructions/.test(value)));
   const finalPlan = JSON.parse(await readFile(first.plan, "utf8"));
   assert.deepEqual(finalPlan.shots.map((shot) => shot.id), ["chapter-1-shot-1", "chapter-1-shot-2", "chapter-2-shot-1", "chapter-2-shot-2"]);
   assert.deepEqual(finalPlan.shots.map((shot) => shot.start_seconds), [0, 50, 100, 150]);
