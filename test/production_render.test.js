@@ -40,12 +40,24 @@ test("renders only after verification then runs frame-by-frame motion gates", as
       motionInput = { video, output, options };
       await writeFile(output, "{}\n");
       return { quality: { ok: true }, family: "rapid-hybrid" };
-    }
+    },
+    critiqueProduction: async () => ({ verdict: "ship", status: "approved" })
   });
   assert.equal(result.status, "awaiting-human-review");
   assert.equal(commands.at(-1), "render");
   assert.equal(motionInput.options.expected.width, 1080);
   assert.deepEqual(motionInput.options.references, ["/tmp/reference.mp4"]);
+});
+
+test("returns a targeted repair state when the independent critic does not approve", async () => {
+  const workspace = await fixture();
+  const result = await renderProduction(workspace, { approve: true }, {
+    run: async (_command, args) => ({ stdout: args.includes("--json") ? "{}" : "ok", stderr: "" }),
+    writeMotionReport: async (_video, output) => { await writeFile(output, "{}\n"); return { quality: { ok: true }, family: "developing-card" }; },
+    critiqueProduction: async () => ({ verdict: "repair", status: "needs-repair", findings: 2 })
+  });
+  assert.equal(result.status, "needs-repair");
+  assert.equal(result.critique.findings, 2);
 });
 
 async function fixture() {
