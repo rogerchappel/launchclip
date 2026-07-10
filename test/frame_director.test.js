@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { buildFrameInput, directFrames, validateHyperFramesRoot } from "../src/frame_director.js";
+import { buildFrameInput, directFrames, safeShotFile, validateHyperFramesRoot } from "../src/frame_director.js";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { EVIDENCE_VERSION, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
@@ -63,6 +63,12 @@ test("rejects a frame root with wrong identity, time, or dimensions", () => {
   assert.ok(errors.some((entry) => entry.includes("data-start")));
   assert.ok(errors.some((entry) => entry.includes("data-duration")));
   assert.ok(errors.some((entry) => entry.includes("data-width")));
+});
+
+test("contains model-authored shot artifact paths", () => {
+  assert.equal(safeShotFile("/tmp/frames", "shot-1", ".json"), "/tmp/frames/shot-1.json");
+  assert.throws(() => safeShotFile("/tmp/frames", "../outside", ".json"), /Unsafe shot ID/);
+  assert.throws(() => safeShotFile("/tmp/frames", "shot-1", "/outside"), /Unsafe shot artifact suffix/);
 });
 
 test("waits for sibling frame jobs to settle before reporting a delegated failure", async () => {
