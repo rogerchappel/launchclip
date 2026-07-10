@@ -239,6 +239,8 @@ export function validateProductionPlan(plan, context = {}) {
     errors.push(`format.duration_seconds must match authoritative narration duration ${context.expectedDuration}`);
   }
   const seen = new Set();
+  const presenterIds = idsForRole(context.resourceRoles, "presenter");
+  let visiblePresenterShots = 0;
   let cursor = 0;
   for (const [index, shot] of (plan.shots ?? []).entries()) {
     const label = `shots[${index}]`;
@@ -262,8 +264,13 @@ export function validateProductionPlan(plan, context = {}) {
     }
     checkReferences(errors, `${label}.evidence_ids`, shot?.evidence_ids, context.evidenceIds);
     checkReferences(errors, `${label}.resource_ids`, shot?.resource_ids, context.resourceIds);
+    if (shot?.presenter?.visible) {
+      visiblePresenterShots += 1;
+      if (context.resourceRoles && !shot.resource_ids?.some((id) => presenterIds.has(id))) errors.push(`${label} marks presenter visible without a presenter resource_id`);
+    }
     cursor = end;
   }
+  if (presenterIds.size && !visiblePresenterShots) errors.push("at least one shot must show the supplied presenter");
   if (Number.isFinite(duration) && Math.abs(cursor - duration) > 0.05) errors.push(`shots must cover the full duration (expected ${duration}, got ${cursor})`);
   for (const [index, claim] of (plan.claims ?? []).entries()) {
     if (claim?.confidence !== "creative" && !claim?.evidence_ids?.length) errors.push(`claims[${index}] requires evidence_ids unless confidence is creative`);
@@ -322,6 +329,9 @@ export function validateFrameBundle(bundle, context = {}) {
   }
   checkReferences(errors, "evidence_ids", bundle.evidence_ids, context.evidenceIds);
   checkReferences(errors, "root_media_requests.resource_id", (bundle.root_media_requests ?? []).map((entry) => entry.resource_id), context.resourceIds);
+  const shotDuration = context.shot ? Number(context.shot.end_seconds) - Number(context.shot.start_seconds) : null;
+  const allowedShotResources = context.shot ? new Set(context.shot.resource_ids ?? []) : null;
+  const presenterIds = idsForRole(context.resourceRoles, "presenter");
   for (const [index, request] of (bundle.root_media_requests ?? []).entries()) {
     if (!(request.end_seconds > request.start_seconds)) errors.push(`root_media_requests[${index}] must have end_seconds > start_seconds`);
     if (request.source_end_seconds != null && request.source_start_seconds != null && !(request.source_end_seconds > request.source_start_seconds)) {
@@ -332,8 +342,22 @@ export function validateFrameBundle(bundle, context = {}) {
       const sourceDuration = request.source_end_seconds - request.source_start_seconds;
       if (Math.abs(slotDuration - sourceDuration) > .05) errors.push(`root_media_requests[${index}] source range must match its output duration; HyperFrames does not infer retiming`);
     }
+    if (allowedShotResources && !allowedShotResources.has(request.resource_id)) errors.push(`root_media_requests[${index}] uses a resource not approved for this shot: ${request.resource_id}`);
+    if (shotDuration != null && (request.start_seconds < 0 || request.end_seconds > shotDuration + .05)) errors.push(`root_media_requests[${index}] falls outside the shot-local duration ${shotDuration}`);
+    if (context.format && (request.placement.x >= context.format.width || request.placement.y >= context.format.height || request.placement.x + request.placement.width <= 0 || request.placement.y + request.placement.height <= 0)) {
+      errors.push(`root_media_requests[${index}] placement does not intersect the ${context.format.width}x${context.format.height} canvas`);
+    }
+  }
+  if (context.shot?.presenter?.visible && context.resourceRoles && !(bundle.root_media_requests ?? []).some((request) => presenterIds.has(request.resource_id) && request.kind === "video")) {
+    errors.push("visible presenter shot must mount a presenter video at the host root");
   }
   return { ok: errors.length === 0, errors };
+}
+
+function idsForRole(resourceRoles, role) {
+  if (!resourceRoles) return new Set();
+  const entries = resourceRoles instanceof Map ? resourceRoles.entries() : Object.entries(resourceRoles);
+  return new Set([...entries].filter(([, value]) => value === role).map(([id]) => id));
 }
 
 function checkFrameAssetPaths(errors, html, allowed) {

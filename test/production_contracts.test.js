@@ -103,6 +103,20 @@ test("requires requested source trims to match their HyperFrames playback slots"
   assert.ok(result.errors.some((error) => error.includes("does not infer retiming")));
 });
 
+test("requires supplied presenters to be planned and mounted in visible avatar shots", () => {
+  const plan = samplePlan();
+  const roles = { "res-1": "presenter" };
+  assert.equal(validateProductionPlan(plan, { evidenceIds: ["ev-1"], resourceIds: ["res-1"], resourceRoles: roles }).ok, true);
+  plan.shots.forEach((shot) => { shot.presenter.visible = false; });
+  assert.ok(validateProductionPlan(plan, { resourceIds: ["res-1"], resourceRoles: roles }).errors.some((error) => error.includes("at least one shot")));
+
+  const visibleShot = sampleShot("shot-1", 0, 5);
+  const bundle = sampleFrameBundle();
+  assert.equal(validateFrameBundle(bundle, { shotId: "shot-1", shot: visibleShot, format: { width: 1920, height: 1080 }, resourceIds: ["res-1"], resourceRoles: roles }).ok, true);
+  bundle.root_media_requests = [];
+  assert.ok(validateFrameBundle(bundle, { shot: visibleShot, resourceRoles: roles }).errors.some((error) => error.includes("mount a presenter video")));
+});
+
 test("critique cannot ship with blocking findings or unknown shots", () => {
   const critique = {
     schema_version: CRITIQUE_VERSION,
