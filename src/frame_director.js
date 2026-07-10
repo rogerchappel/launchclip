@@ -21,6 +21,7 @@ HyperFrames contract:
 - Give every timeline-visible class="clip" element a stable, descriptive, shot-prefixed id for Studio editing and motion inspection.
 - Put a full-bleed background on a child layer rather than the composition root; root backgrounds can disappear during frame compositing. Use only declared @font-face families or renderer-safe generic families such as Arial, Georgia, or Courier New; do not name an unavailable platform font.
 - Do not include audio or video elements. Request those through root_media_requests; the assembler owns media playback.
+- Presenter video follows one continuous production timeline even when its placement changes. Set presenter source_start_seconds to the shot's global start_seconds plus the request's shot-local start_seconds; never restart a presenter take at zero on a later shot.
 - Do not fetch, use timers, Date.now, Math.random, requestAnimationFrame, or browser storage.
 - Use only supplied local resource paths. If a requested visual asset is unavailable, design a native HTML/CSS/SVG treatment instead of inventing a path.
 - When narration_timing is present, synchronize semantic reveals to its shot-local word timestamps instead of estimating speech timing.
