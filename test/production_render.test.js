@@ -35,6 +35,7 @@ test("runs each model-authored shot motion sidecar through an isolated native in
   const directory = path.join(result.qa, "shot-inspect", "shot-1");
   assert.match(await readFile(path.join(directory, "index.html"), "utf8"), /data-composition-src="compositions\/shot\.html"/);
   assert.match(await readFile(path.join(directory, "index.html"), "utf8"), /gsap@3\.14\.2/);
+  assert.match(await readFile(path.join(directory, "index.html"), "utf8"), /connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'/);
   assert.equal(await readFile(path.join(directory, "assets", "proof.png"), "utf8"), "proof-image");
   assert.equal(JSON.parse(await readFile(path.join(directory, "index.motion.json"), "utf8")).assertions[0].selector, "#proof");
 });
