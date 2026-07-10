@@ -268,6 +268,21 @@ export function validateProductionPlan(plan, context = {}) {
   return { ok: errors.length === 0, errors };
 }
 
+export function normalizeProductionPlanTiming(plan) {
+  const normalized = structuredClone(plan);
+  for (const shot of normalized?.shots ?? []) {
+    const start = Number(shot.start_seconds);
+    const end = Number(shot.end_seconds);
+    const duration = end - start;
+    if (!Number.isFinite(start) || !Number.isFinite(end) || duration <= 0 || start <= 0) continue;
+    for (const timed of [...(shot.visual?.internal_reveals ?? []), ...(shot.sfx ?? [])]) {
+      const at = Number(timed.at_seconds);
+      if (at > duration + .001 && at >= start - .001 && at <= end + .001) timed.at_seconds = Math.round((at - start) * 1000) / 1000;
+    }
+  }
+  return normalized;
+}
+
 export function validateFrameBundle(bundle, context = {}) {
   const errors = schemaErrors(bundle, FRAME_BUNDLE_SCHEMA, "frame");
   if (!isObject(bundle)) return { ok: false, errors };

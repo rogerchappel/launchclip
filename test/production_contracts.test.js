@@ -7,6 +7,7 @@ import {
   FRAME_BUNDLE_VERSION,
   PRODUCTION_PLAN_SCHEMA,
   PRODUCTION_PLAN_VERSION,
+  normalizeProductionPlanTiming,
   validateCritique,
   validateFrameBundle,
   validateProductionPlan
@@ -38,6 +39,17 @@ test("rejects timeline gaps, unknown evidence, and changed supplied narration", 
   assert.ok(result.errors.some((error) => error.includes("butt-join")));
   assert.ok(result.errors.some((error) => error.includes("unknown id: missing")));
   assert.ok(result.errors.some((error) => error.includes("preserved exactly")));
+});
+
+test("canonicalizes unambiguous global reveal and SFX timestamps into shot-local time", () => {
+  const plan = samplePlan();
+  plan.shots[1].visual.internal_reveals[0].at_seconds = 6;
+  plan.shots[1].sfx[0].at_seconds = 6.1;
+  const normalized = normalizeProductionPlanTiming(plan);
+  assert.equal(normalized.shots[1].visual.internal_reveals[0].at_seconds, 1);
+  assert.equal(normalized.shots[1].sfx[0].at_seconds, 1.1);
+  assert.equal(plan.shots[1].visual.internal_reveals[0].at_seconds, 6, "does not mutate the model response");
+  assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).ok, true);
 });
 
 test("frame bundles request root media without owning media tags", () => {
