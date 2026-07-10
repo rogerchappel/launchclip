@@ -35,6 +35,7 @@ test("delegates shots concurrently, repairs invalid HTML, and writes modular fra
       active -= 1;
       const bundle = frameBundle(input.shot.id, input.shot.duration_seconds);
       if (input.shot.id === "shot-1" && count === 1) bundle.html = bundle.html.replace('data-start="0"', 'data-start="1"');
+      if (input.shot.id === "shot-2" && count === 1) bundle.html = bundle.html.replace(`window.__timelines["${input.shot.id}"]=timeline;`, "");
       await options.onSubmitted({ id: `resp_${input.shot.id}_${count}`, status: "in_progress" });
       return { response_id: `resp_${input.shot.id}_${count}`, model: "gpt-5.6-sol", status: "completed", value: bundle, usage: { total_tokens: 100 } };
     }
@@ -46,6 +47,7 @@ test("delegates shots concurrently, repairs invalid HTML, and writes modular fra
   assert.equal(attempts.get("shot-1"), 2);
   assert.match(await readFile(result.frames[0].html, "utf8"), /data-composition-id="shot-1"/);
   assert.match(await readFile(result.frames[0].motion, "utf8"), /#shot-1-proof/);
+  assert.match(await readFile(result.frames[1].html, "utf8"), /window\.__timelines\["shot-2"\] = timeline/);
 
   const cached = await directFrames(workspace, { concurrency: 2 }, { client });
   assert.equal(cached.cached, 2);

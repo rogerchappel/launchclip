@@ -10,6 +10,7 @@ export function ensureTimelineRegistration(html, compositionId) {
     return `${html.slice(0, closure.index)}${statements}\n${html.slice(closure.index)}`;
   }
   const registration = `<script>\n${statements}\n</script>`;
+  if (/<\/template>/i.test(html)) return html.replace(/<\/template>/i, `${registration}\n</template>`);
   return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${registration}\n</body>`) : `${html}\n${registration}`;
 }
 

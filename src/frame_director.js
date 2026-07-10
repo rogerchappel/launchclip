@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
+import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
 import { OpenAIResponsesClient } from "./openai_responses.js";
 import { FRAME_BUNDLE_SCHEMA, PRODUCTION_PATHS, isValidShotId, validateFrameBundle } from "./production_contracts.js";
 
@@ -127,7 +128,8 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
       };
       const result = resumeResponseId ? await client.resumeStructured(resumeResponseId, request) : await client.runStructured(request);
       resumeResponseId = null;
-      const validation = validateFrameBundle(result.value, {
+      const candidate = { ...result.value, html: ensureTimelineRegistration(result.value.html, shot.id) };
+      const validation = validateFrameBundle(candidate, {
         shotId: shot.id,
         shot,
         format: plan.format,
@@ -136,13 +138,13 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
         allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
       });
-      errors = [...validation.errors, ...validateHyperFramesRoot(result.value.html, shot, plan.format)];
+      errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
       if (errors.length) {
-        prior = result.value;
+        prior = candidate;
         if (attempt < Number(options.semanticAttempts ?? 2)) continue;
         throw new Error(`Frame ${shot.id} failed semantic validation: ${errors.join("; ")}`);
       }
-      const paths = await writeFrameArtifacts(workspace, result.value);
+      const paths = await writeFrameArtifacts(workspace, candidate);
       await store.markRunning(jobId, { provider: "openai", response_id: result.response_id, status: result.status });
       const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
       await store.markSucceeded(jobId, outputs, result.usage);
