@@ -33,7 +33,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   const dependencies = plan.shots.map((shot) => `frame:${shot.id}`);
   for (const dependency of dependencies) if (store.get(dependency)?.status !== "succeeded") throw new Error(`Frame job must succeed before assembly: ${dependency}`);
   const extraAudio = await describeExtraAudio(options);
-  const inputHash = semanticHash({ intake, plan, bundles, extraAudio, assembler: "hyperframes-assembler.v4" });
+  const inputHash = semanticHash({ intake, plan, bundles, extraAudio, assembler: "hyperframes-assembler.v5" });
   const jobId = "hyperframes-assembly";
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
@@ -111,15 +111,6 @@ export function rootMotionSpec(plan, bundles) {
     const selector = `#mount-${shot.id}`;
     assertions.push({ kind: "appearsBy", selector, bySec: shot.start_seconds + .05 });
     assertions.push({ kind: "staysInFrame", selector });
-    const shotMotion = toHyperFramesMotionSpec(bundles[index] ?? { motion: { assertions: [] } }, shot.end_seconds - shot.start_seconds);
-    for (const assertion of shotMotion.assertions) {
-      assertions.push(assertion.kind === "appearsBy"
-        ? { ...assertion, bySec: shot.start_seconds + assertion.bySec }
-        : { ...assertion });
-    }
-    if ((bundles[index]?.motion?.assertions ?? []).some((entry) => entry.must_remain_live)) {
-      assertions.push({ kind: "keepsMoving", withinSelector: selector, maxStaticSec: Math.min(2, Math.max(.25, (shot.end_seconds - shot.start_seconds) / 3)) });
-    }
     if (index > 0) assertions.push({ kind: "before", a: `#mount-${plan.shots[index - 1].id}`, b: selector });
   }
   return { version: 1, duration: plan.format.duration_seconds, assertions };
