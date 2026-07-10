@@ -24,6 +24,14 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
     ["inspect", ["hyperframes", "inspect", "--json", "--samples", String(options.inspectSamples ?? 15), "--at-transitions", project]]
   ]) {
     checks[name] = await capture(run, "npx", args, { cwd: project });
+    if (name === "lint" && options.strictAll !== false) {
+      const findings = checks[name].stdout?.findings ?? [];
+      const warningCount = Number(checks[name].stdout?.warningCount ?? findings.filter((entry) => entry.severity === "warning").length);
+      if (warningCount > 0) {
+        checks[name].ok = false;
+        checks[name].strict_warning_count = warningCount;
+      }
+    }
     await writeFile(path.join(qaDir, `${name}.json`), `${JSON.stringify(checks[name], null, 2)}\n`);
   }
   checks.snapshot = await capture(run, "npx", ["hyperframes", "snapshot", "--frames", String(options.snapshotFrames ?? 12), "--output", snapshots, project], { cwd: project });
@@ -33,7 +41,7 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
     schema_version: "launchclip.production-verification.v1",
     project,
     plan: { duration_seconds: plan.format.duration_seconds, width: plan.format.width, height: plan.format.height },
-    checks: Object.fromEntries(Object.entries(checks).map(([name, result]) => [name, { ok: result.ok, exit_code: result.exit_code }])),
+    checks: Object.fromEntries(Object.entries(checks).map(([name, result]) => [name, { ok: result.ok, exit_code: result.exit_code, strict_warning_count: result.strict_warning_count ?? 0 }])),
     failed,
     snapshots
   };

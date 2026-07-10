@@ -29,6 +29,17 @@ test("blocks final rendering without approval and records failed HyperFrames che
   assert.equal(inspect.ok, false);
 });
 
+test("fails verification on lint warnings because final rendering uses strict-all", async () => {
+  const workspace = await fixture();
+  const run = async (_command, args) => ({
+    stdout: args[1] === "lint" ? JSON.stringify({ warningCount: 1, findings: [{ severity: "warning", code: "missing_editable_id" }] }) : args.includes("--json") ? "{}" : "ok",
+    stderr: ""
+  });
+  await assert.rejects(() => verifyProduction(workspace, {}, { run }), /lint/);
+  const verification = JSON.parse(await readFile(path.join(workspace, "production", "qa", "verification.json"), "utf8"));
+  assert.equal(verification.checks.lint.strict_warning_count, 1);
+});
+
 test("renders only after verification then runs frame-by-frame motion gates", async () => {
   const workspace = await fixture();
   const commands = [];
