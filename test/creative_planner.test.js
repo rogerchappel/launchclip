@@ -134,6 +134,7 @@ test("selects hierarchical planning for long productions and delegates the froze
   assert.equal(received[1].intake.brief.duration_seconds, 240);
   assert.deepEqual(received[1].sfxCatalog, ["tick"]);
   assert.equal(received[1].options.hierarchicalThresholdSeconds, 180);
+  assert.equal(received[2].client, undefined, "an injected planner must not instantiate a credentialed client");
 });
 
 function sampleIntake() {

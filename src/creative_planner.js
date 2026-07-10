@@ -48,9 +48,11 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
   const planningMode = resolvePlanningMode(options.planningMode, suppliedNarration?.duration_seconds ?? intake.brief.duration_seconds, options.hierarchicalThresholdSeconds);
   if (planningMode === "hierarchical") {
     const store = adapters.store ?? await ProductionJobStore.open(workspace);
-    const client = adapters.client ?? new OpenAIResponsesClient();
     const hierarchicalPlanner = adapters.planLongFormProduction ?? (await import("./long_form_planner.js")).planLongFormProduction;
-    return hierarchicalPlanner(workspace, { intake, evidence, suppliedNarration, sfxCatalog, options }, { store, client });
+    const plannerAdapters = { store };
+    if (adapters.client) plannerAdapters.client = adapters.client;
+    else if (!adapters.planLongFormProduction) plannerAdapters.client = new OpenAIResponsesClient();
+    return hierarchicalPlanner(workspace, { intake, evidence, suppliedNarration, sfxCatalog, options }, plannerAdapters);
   }
   const input = buildPlanningInput(intake, evidence, suppliedNarration, { ...options, sfxCatalog });
   const inputHash = semanticHash({ input, model: intake.model, schema: PRODUCTION_PLAN_SCHEMA, planner: "creative-planner.v1" });
