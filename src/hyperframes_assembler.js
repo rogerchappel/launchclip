@@ -59,13 +59,16 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
         if (frozen && resource.location) html = html.split(resource.location).join(`../assets/${frozen.file}`);
       }
       await writeAtomic(safeShotFile(compositionsDir, bundle.shot_id, ".html"), `${html.trim()}\n`);
-      await writeAtomic(safeShotFile(compositionsDir, bundle.shot_id, ".motion.json"), `${JSON.stringify(bundle.motion, null, 2)}\n`);
+      const shot = plan.shots.find((entry) => entry.id === bundle.shot_id);
+      await writeAtomic(safeShotFile(compositionsDir, bundle.shot_id, ".motion.json"), `${JSON.stringify(toHyperFramesMotionSpec(bundle, shot.end_seconds - shot.start_seconds), null, 2)}\n`);
     }
 
     const html = renderRoot({ intake, plan, bundles, assetMap, extraAudio });
     const indexPath = path.join(projectDir, "index.html");
+    const motionPath = path.join(projectDir, "index.motion.json");
     const manifestPath = path.join(projectDir, "assembly.json");
     await writeAtomic(indexPath, html);
+    await writeAtomic(motionPath, `${JSON.stringify(rootMotionSpec(plan, bundles), null, 2)}\n`);
     await writeAtomic(manifestPath, `${JSON.stringify({
       schema_version: "launchclip.hyperframes-assembly.v1",
       duration_seconds: plan.format.duration_seconds,
@@ -74,13 +77,41 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
       shots: plan.shots.map((shot) => ({ id: shot.id, start_seconds: shot.start_seconds, end_seconds: shot.end_seconds, composition: `compositions/${shot.id}.html` })),
       assets: [...assetMap.entries()].map(([id, entry]) => ({ id, file: `assets/${entry.file}`, sha256: entry.sha256 }))
     }, null, 2)}\n`);
-    const outputs = await Promise.all([indexPath, manifestPath, ...bundles.map((bundle) => safeShotFile(compositionsDir, bundle.shot_id, ".html"))].map((filePath) => describeJobOutput(workspace, filePath)));
+    const outputs = await Promise.all([indexPath, motionPath, manifestPath, ...bundles.map((bundle) => safeShotFile(compositionsDir, bundle.shot_id, ".html"))].map((filePath) => describeJobOutput(workspace, filePath)));
     await store.markSucceeded(jobId, outputs);
     return { stage: "hyperframes-assembly", status: "ready", workspace, project: projectDir, index: indexPath, manifest: manifestPath, compositions: bundles.length, assets: assetMap.size, cached: false };
   } catch (error) {
     await store.markFailed(jobId, error);
     throw error;
   }
+}
+
+export function toHyperFramesMotionSpec(bundle, duration) {
+  const assertions = [];
+  const ordered = [];
+  for (const assertion of bundle.motion?.assertions ?? []) {
+    if (assertion.appears_by_seconds != null) assertions.push({ kind: "appearsBy", selector: assertion.selector, bySec: assertion.appears_by_seconds });
+    if (assertion.must_stay_in_frame) assertions.push({ kind: "staysInFrame", selector: assertion.selector });
+    if (assertion.must_remain_live) assertions.push({ kind: "keepsMoving", withinSelector: assertion.selector, maxStaticSec: Math.min(2, Math.max(.25, Number(duration) / 3)) });
+    if (assertion.order != null) ordered.push(assertion);
+  }
+  ordered.sort((a, b) => a.order - b.order);
+  for (let index = 1; index < ordered.length; index += 1) assertions.push({ kind: "before", a: ordered[index - 1].selector, b: ordered[index].selector });
+  return { version: 1, duration: Number(duration), assertions };
+}
+
+export function rootMotionSpec(plan, bundles) {
+  const assertions = [];
+  for (const [index, shot] of plan.shots.entries()) {
+    const selector = `#mount-${shot.id}`;
+    assertions.push({ kind: "appearsBy", selector, bySec: shot.start_seconds + .05 });
+    assertions.push({ kind: "staysInFrame", selector });
+    if ((bundles[index]?.motion?.assertions ?? []).some((entry) => entry.must_remain_live)) {
+      assertions.push({ kind: "keepsMoving", withinSelector: selector, maxStaticSec: Math.min(2, Math.max(.25, (shot.end_seconds - shot.start_seconds) / 3)) });
+    }
+    if (index > 0) assertions.push({ kind: "before", a: `#mount-${plan.shots[index - 1].id}`, b: selector });
+  }
+  return { version: 1, duration: plan.format.duration_seconds, assertions };
 }
 
 export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {

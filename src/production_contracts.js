@@ -170,6 +170,7 @@ export const FRAME_BUNDLE_SCHEMA = strictObject({
   motion: strictObject({
     assertions: {
       type: "array",
+      minItems: 1,
       items: strictObject({
         selector: string,
         appears_by_seconds: { type: ["number", "null"], minimum: 0 },
@@ -307,6 +308,11 @@ export function validateFrameBundle(bundle, context = {}) {
   if (/\b(?:src|href)\s*=\s*["']https?:\/\//i.test(html)) errors.push("frame HTML must not load remote assets at render time");
   if (/\b(?:fetch|XMLHttpRequest|WebSocket)\s*\(/i.test(html)) errors.push("frame HTML must not perform render-time network requests");
   if (/\b(?:Date\.now|Math\.random)\s*\(/i.test(html)) errors.push("frame HTML must be deterministic");
+  for (const [index, assertion] of (bundle.motion?.assertions ?? []).entries()) {
+    if (assertion.appears_by_seconds == null && assertion.order == null && !assertion.must_stay_in_frame && !assertion.must_remain_live) {
+      errors.push(`motion.assertions[${index}] must express at least one enforceable motion intent`);
+    }
+  }
   checkReferences(errors, "evidence_ids", bundle.evidence_ids, context.evidenceIds);
   checkReferences(errors, "root_media_requests.resource_id", (bundle.root_media_requests ?? []).map((entry) => entry.resource_id), context.resourceIds);
   for (const [index, request] of (bundle.root_media_requests ?? []).entries()) {

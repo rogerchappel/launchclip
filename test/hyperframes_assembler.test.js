@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { assembleHyperFrames, ensureTimelineRegistration, renderRoot } from "../src/hyperframes_assembler.js";
+import { assembleHyperFrames, ensureTimelineRegistration, renderRoot, rootMotionSpec, toHyperFramesMotionSpec } from "../src/hyperframes_assembler.js";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { EVIDENCE_VERSION, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
@@ -34,6 +34,19 @@ test("canonicalizes model-authored GSAP timelines into the HyperFrames registry"
   assert.equal(ensureTimelineRegistration(normalized, "shot-1"), normalized);
 });
 
+test("translates model motion intent into discoverable HyperFrames assertions", () => {
+  const bundle = { motion: { assertions: [
+    { selector: "#headline", appears_by_seconds: .5, order: 1, must_stay_in_frame: true, must_remain_live: false },
+    { selector: "#proof", appears_by_seconds: 1.5, order: 2, must_stay_in_frame: true, must_remain_live: true }
+  ] } };
+  const local = toHyperFramesMotionSpec(bundle, 4);
+  assert.ok(local.assertions.some((entry) => entry.kind === "appearsBy" && entry.bySec === .5));
+  assert.ok(local.assertions.some((entry) => entry.kind === "before" && entry.a === "#headline" && entry.b === "#proof"));
+  assert.ok(local.assertions.some((entry) => entry.kind === "keepsMoving" && entry.withinSelector === "#proof"));
+  const root = rootMotionSpec({ format: { duration_seconds: 4 }, shots: [{ id: "shot-1", start_seconds: 0, end_seconds: 4 }] }, [bundle]);
+  assert.ok(root.assertions.some((entry) => entry.kind === "appearsBy" && entry.selector === "#mount-shot-1"));
+});
+
 test("freezes assets, rewrites frame paths, assembles a resumable HyperFrames project", async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-assembly-"));
   const source = path.join(workspace, "screen.mp4");
@@ -49,6 +62,10 @@ test("freezes assets, rewrites frame paths, assembles a resumable HyperFrames pr
   assert.match(frame, /src="\.\.\/assets\/screen\.mp4"/);
   assert.doesNotMatch(frame, new RegExp(source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.deepEqual((JSON.parse(await readFile(first.manifest, "utf8"))).shots.map((entry) => entry.id), ["shot-1"]);
+  const rootMotion = JSON.parse(await readFile(path.join(first.project, "index.motion.json"), "utf8"));
+  assert.equal(rootMotion.version, 1);
+  const frameMotion = JSON.parse(await readFile(path.join(first.project, "compositions", "shot-1.motion.json"), "utf8"));
+  assert.equal(frameMotion.duration, 5);
 
   const second = await assembleHyperFrames(workspace);
   assert.equal(second.cached, true);
@@ -70,7 +87,7 @@ function fixture(source) {
   const bundle = {
     schema_version: FRAME_BUNDLE_VERSION, shot_id: "shot-1",
     html: `<!doctype html><html><body><div data-composition-id="shot-1" data-start="0" data-duration="5" data-width="1080" data-height="1920"><img src="${source}"></div></body></html>`,
-    motion: { assertions: [] },
+    motion: { assertions: [{ selector: "#proof", appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: false }] },
     root_media_requests: [{
       resource_id: "screen", kind: "video", start_seconds: 1, end_seconds: 4,
       source_start_seconds: 4, source_end_seconds: 7, volume: 0,
