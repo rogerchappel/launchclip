@@ -119,6 +119,22 @@ test("repairs deterministic failures before the first visual critique exists", a
   assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-1"]);
 });
 
+test("ignores an older visual critique during verification-triggered repair", async () => {
+  const workspace = await fixture({ verdict: "replan" });
+  const reportPath = path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json");
+  await mkdir(path.dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, `${JSON.stringify({
+    ok: false,
+    stdout: { issues: [{ code: "motion_selector_missing", severity: "error", message: "Missing target", selector: "#shot-1-proof" }] }
+  })}\n`);
+  const result = await repairProduction(workspace, { trigger: "verification" }, {
+    repairProductionPlan: async () => { throw new Error("must not replay the older critique"); },
+    client: { runStructured: async () => ({ response_id: "verification_repair", model: "gpt-5.6", status: "completed", usage: {}, value: bundle("shot-1", "Current verification repair") }) }
+  });
+  assert.equal(result.status, "repaired");
+  assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-1"]);
+});
+
 test("ignores shot inspection reports older than the frame they describe", async () => {
   const workspace = await fixture({ verdict: "ship" });
   const reportPath = path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json");

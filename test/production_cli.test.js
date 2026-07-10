@@ -54,6 +54,7 @@ test("runs bounded critic-directed repairs before asking for human approval", as
 
 test("automatically repairs deterministic verification failures before rendering a draft", async () => {
   const calls = [];
+  let repairOptions;
   let drafts = 0;
   const adapters = {
     withProductionLease: async (_workspace, operation) => operation(),
@@ -73,12 +74,14 @@ test("automatically repairs deterministic verification failures before rendering
       }
       return { status: "ready", video: "/tmp/draft.mp4", verification: { status: "ready", snapshots: "/tmp/snapshots" }, critique: { verdict: "ship" } };
     },
-    repairProduction: async () => { calls.push("repair"); return { status: "repaired", repaired: [{ shot_id: "shot-2" }] }; }
+    repairProduction: async (_workspace, options) => { calls.push("repair"); repairOptions = options; return { status: "repaired", repaired: [{ shot_id: "shot-2" }] }; }
   };
   const result = await runProduction("owner/repo", {}, adapters);
   assert.equal(result.status, "awaiting-approval");
   assert.deepEqual(calls, ["assemble", "draft", "repair", "assemble", "draft"]);
   assert.equal(result.repairs[0].trigger, "verification");
+  assert.equal(repairOptions.trigger, "verification");
+  assert.deepEqual(repairOptions.verification.failed, ["inspect:shot-2"]);
 });
 
 test("stops a persistent verification repair loop at the configured bound", async () => {
