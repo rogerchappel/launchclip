@@ -171,6 +171,7 @@ function renderOptions(flags) {
     draftOutput: flags["draft-output"],
     workers: flags.workers,
     inspectSamples: numberOr(flags["inspect-samples"], 15),
+    shotInspectConcurrency: numberOr(flags["shot-inspect-concurrency"], 2),
     snapshotFrames: numberOr(flags["snapshot-frames"], 12),
     references: flags["reference-video"],
     durationToleranceSeconds: flags["duration-tolerance"],
@@ -224,6 +225,7 @@ function productionFlags(flags) {
     "repair-snapshots": flags["repair-snapshots"] ?? "6",
     "snapshot-frames": flags["snapshot-frames"] ?? "6",
     "inspect-samples": flags["inspect-samples"] ?? "9",
+    "shot-inspect-concurrency": flags["shot-inspect-concurrency"] ?? "3",
     "max-repair-passes": flags["max-repair-passes"] ?? "1"
   };
 }

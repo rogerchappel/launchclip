@@ -73,6 +73,7 @@ test("fast eval keeps full QA while lowering provider and sampling budgets", asy
   assert.deepEqual({ reasoning: received.frames.reasoning, max: received.frames.maxOutputTokens, attempts: received.frames.semanticAttempts, concurrency: received.frames.concurrency }, { reasoning: "medium", max: 20000, attempts: 1, concurrency: 3 });
   assert.equal(received.draft.snapshotFrames, 6);
   assert.equal(received.draft.inspectSamples, 9);
+  assert.equal(received.draft.shotInspectConcurrency, 3);
   assert.equal(received.draft.criticReasoning, "high");
 });
 
@@ -107,7 +108,7 @@ test("routes production repair with scoped model controls", async () => {
 
 test("routes an independently rerunnable analyzed draft stage", async () => {
   let received;
-  const result = await runProductionStage("production-draft", "/tmp/workspace", { "draft-quality": "draft", "reference-video": "/tmp/reference.mp4" }, {
+  const result = await runProductionStage("production-draft", "/tmp/workspace", { "draft-quality": "draft", "reference-video": "/tmp/reference.mp4", "shot-inspect-concurrency": "4" }, {
     withProductionLease: async (_workspace, operation) => operation(),
     renderDraftProduction: async (workspace, options) => { received = { workspace, options }; return { status: "ready", video: "/tmp/draft.mp4" }; }
   });
@@ -115,4 +116,5 @@ test("routes an independently rerunnable analyzed draft stage", async () => {
   assert.equal(received.workspace, "/tmp/workspace");
   assert.equal(received.options.draftQuality, "draft");
   assert.equal(received.options.references, "/tmp/reference.mp4");
+  assert.equal(received.options.shotInspectConcurrency, 4);
 });
