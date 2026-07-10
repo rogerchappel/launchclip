@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { ProductionVerificationError, assertVerificationFresh, renderDraftProduction, renderProduction, verifyProduction } from "../src/production_render.js";
+import { ProductionVerificationError, assertVerificationFresh, renderDraftProduction, renderProduction, verifyProduction, verifyShotCompositions } from "../src/production_render.js";
 
 test("runs lint, browser validation, transition-aware inspection, and assembled snapshots", async () => {
   const workspace = await fixture();
@@ -38,6 +38,34 @@ test("runs each model-authored shot motion sidecar through an isolated native in
   assert.match(await readFile(path.join(directory, "index.html"), "utf8"), /connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'/);
   assert.equal(await readFile(path.join(directory, "assets", "proof.png"), "utf8"), "proof-image");
   assert.equal(JSON.parse(await readFile(path.join(directory, "index.motion.json"), "utf8")).assertions[0].selector, "#proof");
+});
+
+test("waits for active shot inspectors before reporting a sibling setup failure", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "launchclip-shot-drain-"));
+  const project = path.join(root, "project");
+  const compositions = path.join(project, "compositions");
+  const qa = path.join(root, "qa");
+  await Promise.all([mkdir(compositions, { recursive: true }), mkdir(qa, { recursive: true })]);
+  await writeFile(path.join(compositions, "shot-2.html"), '<div data-composition-id="shot-2"></div>');
+  await writeFile(path.join(compositions, "shot-2.motion.json"), JSON.stringify({ version: 1, duration: 5, assertions: [] }));
+  let siblingSettled = false;
+  const plan = {
+    format: { width: 1080, height: 1920, language: "en" },
+    shots: [
+      { id: "shot-1", start_seconds: 0, end_seconds: 5 },
+      { id: "shot-2", start_seconds: 5, end_seconds: 10 }
+    ]
+  };
+  await assert.rejects(() => verifyShotCompositions(project, qa, plan, {
+    concurrency: 2,
+    run: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      siblingSettled = true;
+      return { stdout: "{}", stderr: "" };
+    }
+  }), { code: "ENOENT" });
+  assert.equal(siblingSettled, true);
+  assert.equal(JSON.parse(await readFile(path.join(qa, "shot-inspect", "shot-2", "inspect.json"), "utf8")).ok, true);
 });
 
 test("reuses a content-addressed verification receipt with intact reports and snapshots", async () => {

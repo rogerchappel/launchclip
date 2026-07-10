@@ -469,14 +469,20 @@ function values(value) {
 async function mapConcurrent(values, concurrency, worker) {
   const output = new Array(values.length);
   let cursor = 0;
+  let firstError = null;
   const count = Math.max(1, Math.min(values.length || 1, Math.floor(concurrency) || 1));
   await Promise.all(Array.from({ length: count }, async () => {
-    while (cursor < values.length) {
+    while (cursor < values.length && !firstError) {
       const index = cursor;
       cursor += 1;
-      output[index] = await worker(values[index], index);
+      try {
+        output[index] = await worker(values[index], index);
+      } catch (error) {
+        firstError ??= error;
+      }
     }
   }));
+  if (firstError) throw firstError;
   return output;
 }
 
