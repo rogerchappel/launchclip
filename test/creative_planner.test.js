@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { buildPlanningInput, planProduction } from "../src/creative_planner.js";
+import { ProductionJobStore } from "../src/job_store.js";
 import { EVIDENCE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
 test("passes evidence, references, resources, and format to the creative director without choosing a style", () => {
@@ -30,6 +31,10 @@ test("runs GPT-5.6 planning, validates the plan, writes artifacts, and caches ve
       value.shots[1].visual.internal_reveals[0].at_seconds = 6;
       value.shots[1].sfx[0].at_seconds = 6.1;
       return { response_id: "resp_plan", model: "gpt-5.6-sol", status: "completed", value, usage: { total_tokens: 1234 } };
+    },
+    resumeStructured: async (responseId) => {
+      assert.equal(responseId, "resp_saved");
+      return { response_id: responseId, model: "gpt-5.6-sol", status: "completed", value: samplePlan(), usage: { total_tokens: 12 } };
     }
   };
   const first = await planProduction(workspace, { background: false }, { client });
@@ -46,6 +51,14 @@ test("runs GPT-5.6 planning, validates the plan, writes artifacts, and caches ve
   const second = await planProduction(workspace, {}, { client });
   assert.equal(second.cached, true);
   assert.equal(calls.length, 1);
+
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  await store.markStaleFrom(["creative-plan"]);
+  await store.retry("creative-plan");
+  await store.markRunning("creative-plan", { provider: "openai", response_id: "resp_saved", status: "in_progress" });
+  const resumed = await planProduction(workspace, {}, { client });
+  assert.equal(resumed.response_id, "resp_saved");
+  assert.equal(calls.length, 1, "resume does not submit another response");
 
   const changedIntake = sampleIntake();
   changedIntake.model.id = "gpt-5.6-terra";

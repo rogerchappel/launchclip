@@ -56,18 +56,22 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
     await store.markStaleFrom([jobId]);
   }
   const current = store.get(jobId);
+  let resumeResponseId = null;
   if (!current) {
     await store.add({ id: jobId, kind: "creative-plan", depends_on: [], input_hash: inputHash, max_attempts: Number(options.maxAttempts ?? 3) });
   } else if (current.status === "failed" || current.status === "stale") {
     await store.retry(jobId);
+  } else if (current.status === "running" || current.status === "submitted") {
+    if (!current.remote?.response_id) throw new Error(`Creative plan job is ${current.status} without a resumable response id: ${jobId}`);
+    resumeResponseId = current.remote.response_id;
   } else if (current.status !== "pending") {
     throw new Error(`Creative plan job is already ${current.status}: ${jobId}`);
   }
 
   const client = adapters.client ?? new OpenAIResponsesClient();
-  await store.markRunning(jobId, { provider: "openai", response_id: null, status: "running" });
+  if (!resumeResponseId) await store.markRunning(jobId, { provider: "openai", response_id: null, status: "running" });
   try {
-    const result = await client.runStructured({
+    const request = {
       model: intake.model?.id ?? "gpt-5.6",
       reasoningEffort: intake.model?.reasoning_effort ?? "xhigh",
       reasoningContext: "current_turn",
@@ -81,7 +85,8 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
       promptCacheKey: "launchclip:creative-planner:v1",
       metadata: { job_id: jobId, source_kind: intake.source.kind, aspect: intake.brief.aspect.id },
       onSubmitted: async (response) => store.markRunning(jobId, { provider: "openai", response_id: response.id, status: response.status })
-    });
+    };
+    const result = resumeResponseId ? await client.resumeStructured(resumeResponseId, request) : await client.runStructured(request);
     const plan = normalizeProductionPlanTiming(result.value);
     const validation = validateProductionPlan(plan, {
       evidenceIds: evidence.items.map((entry) => entry.id),
