@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { writePlanArtifacts } from "./creative_planner.js";
+import { compactEvidence, writePlanArtifacts } from "./creative_planner.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { OpenAIResponsesClient } from "./openai_responses.js";
 import { PRODUCTION_PATHS, PRODUCTION_PLAN_SCHEMA, PRODUCTION_PLAN_VERSION, normalizeProductionPlanTiming, validateProductionPlan } from "./production_contracts.js";
@@ -58,7 +58,7 @@ export async function planLongFormProduction(workspacePath, context, adapters = 
       language: intake.brief.language
     },
     source: evidence.source,
-    evidence_index: compactEvidence(evidence.items),
+    evidence_index: compactEvidence(evidence.items, options.evidenceChars),
     resources: intake.resources,
     available_sfx: sfxCatalog,
     narration: suppliedNarration ? { source: "supplied", transcript: suppliedNarration.transcript, words: suppliedNarration.words } : { source: "generated", transcript: null, words: [] },
@@ -87,7 +87,7 @@ export async function planLongFormProduction(workspacePath, context, adapters = 
       global: { project: outline.project, design: outline.design, audio: outline.audio, narration: outline.narration, rubric: outline.rubric },
       chapter: { ...chapter, duration_seconds: chapter.end_seconds - chapter.start_seconds },
       neighbors: { previous: outline.chapters[index - 1] ?? null, next: outline.chapters[index + 1] ?? null },
-      evidence: compactEvidence(chapterEvidence), resources: chapterResources, available_sfx: sfxCatalog,
+      evidence: compactEvidence(chapterEvidence, options.evidenceChars), resources: chapterResources, available_sfx: sfxCatalog,
       required_cta: index === outline.chapters.length - 1 ? intake.brief.cta : null,
       supplied_narration: suppliedNarration ? { full_transcript: suppliedNarration.transcript, chapter_words: words } : null
     };
@@ -292,7 +292,6 @@ function aggregateUsage(store, ids) {
   }, {});
 }
 
-function compactEvidence(items) { return items.map((entry) => ({ id: entry.id, role: entry.role, title: entry.title, content: String(entry.content ?? "").slice(0, 30_000), provenance: entry.provenance, claims_allowed: entry.claims_allowed })); }
 function strictObject(properties) { return { type: "object", properties, required: Object.keys(properties), additionalProperties: false }; }
 function round(value) { return Math.round(Number(value) * 1000) / 1000; }
 function wordsInInterval(words, start, end) {

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { writePlanArtifacts } from "./creative_planner.js";
+import { compactEvidence, writePlanArtifacts } from "./creative_planner.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { OpenAIResponsesClient } from "./openai_responses.js";
 import { PRODUCTION_PATHS, PRODUCTION_PLAN_SCHEMA, normalizeProductionPlanTiming, validateProductionPlan } from "./production_contracts.js";
@@ -28,7 +28,8 @@ export async function repairProductionPlan(workspacePath, findings, options = {}
   if (intake.policies?.supplied_voiceover_is_authoritative && !suppliedTranscript) throw new Error("Plan repair requires the authoritative supplied transcript");
   const model = options.model ?? intake.model?.id ?? "gpt-5.6";
   const reasoning = options.reasoning ?? intake.model?.reasoning_effort ?? "xhigh";
-  const inputHash = semanticHash({ worker: "production-plan-repair.v1", model, reasoning, prior, findings });
+  const compactedEvidence = compactEvidence(evidence.items, options.evidenceChars);
+  const inputHash = semanticHash({ worker: "production-plan-repair.v2", model, reasoning, prior, findings, compactedEvidence });
   const store = adapters.store ?? await ProductionJobStore.open(workspace, { create: false });
   const canonical = store.get("creative-plan");
   if (canonical?.status !== "succeeded") throw new Error("Creative plan job must succeed before plan repair");
@@ -92,8 +93,8 @@ export async function repairProductionPlan(workspacePath, findings, options = {}
             required_cta: validationContext.requestedCta,
             supplied_transcript: suppliedTranscript
           },
-          factual_evidence: compactEvidence(evidence.items.filter((entry) => entry.claims_allowed && entry.role !== "reference")),
-          creative_references: compactEvidence(evidence.items.filter((entry) => entry.role === "reference")),
+          factual_evidence: compactedEvidence.filter((entry) => entry.claims_allowed && entry.role !== "reference"),
+          creative_references: compactedEvidence.filter((entry) => entry.role === "reference"),
           resources: intake.resources.map((entry) => ({ id: entry.id, role: entry.role, type: entry.type, location: entry.location, sha256: entry.sha256 }))
         }),
         schema: PRODUCTION_PLAN_SCHEMA,
@@ -166,10 +167,6 @@ function planRepairResult(workspace, job, cached) {
     usage: job.usage,
     cached
   };
-}
-
-function compactEvidence(items) {
-  return items.map((entry) => ({ id: entry.id, title: entry.title, content: String(entry.content ?? "").slice(0, 30_000), provenance: entry.provenance, claims_allowed: entry.claims_allowed }));
 }
 
 function relative(workspace, filePath) {

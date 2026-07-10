@@ -199,9 +199,10 @@ export async function writePlanArtifacts(workspace, plan) {
   return [planPath, scriptPath, storyboardPath];
 }
 
-function compactEvidence(items, totalBudget) {
+export function compactEvidence(items, totalBudget = 220_000) {
   const output = [];
-  let remaining = Math.max(1_000, totalBudget);
+  const requestedBudget = Number(totalBudget);
+  let remaining = Number.isFinite(requestedBudget) ? Math.max(1_000, requestedBudget) : 220_000;
   for (const item of items ?? []) {
     if (remaining <= 0) break;
     const limit = Math.min(30_000, remaining);
