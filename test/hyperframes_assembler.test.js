@@ -20,10 +20,30 @@ test("renders subcompositions while keeping timed media and SFX as direct root c
   assert.match(html, /Content-Security-Policy/);
   assert.match(html, /window\.__timelines\["main"\] = gsap\.timeline\(\{ paused: true \}\)/);
   assert.match(html, /<video[^>]+data-start="1"[^>]+data-duration="3"[^>]+data-media-start="4"/);
+  assert.match(html, /<video[^>]+ muted playsinline>/);
   assert.match(html, /left:100px;top:200px;width:800px;height:600px/);
   assert.equal((html.match(/<video/g) ?? []).length, 1);
   assert.match(html, /<audio id="sfx-001"[^>]+data-start="2\.25"[^>]+data-volume="0\.3"/);
   assert.ok(html.indexOf("<video") > html.indexOf('data-composition-id="main"'));
+});
+
+test("moves presenter video between beat-specific avatar layouts at the host root", () => {
+  const request = (x, y, width, height) => ({
+    resource_id: "presenter", kind: "video", start_seconds: 0, end_seconds: 3,
+    source_start_seconds: 0, source_end_seconds: 3, volume: 0,
+    placement: { x, y, width, height, object_fit: "cover", border_radius: 28, z_index: 8, treatment: "avatar cutout" }
+  });
+  const plan = { format: { language: "en", width: 1080, height: 1920, duration_seconds: 6 }, shots: [
+    { id: "shot-1", start_seconds: 0, end_seconds: 3 },
+    { id: "shot-2", start_seconds: 3, end_seconds: 6 }
+  ] };
+  const bundles = [
+    { shot_id: "shot-1", root_media_requests: [request(80, 1120, 920, 720)] },
+    { shot_id: "shot-2", root_media_requests: [request(620, 120, 380, 600)] }
+  ];
+  const html = renderRoot({ plan, bundles, assetMap: new Map([["presenter", { file: "presenter.mp4" }]]) });
+  assert.match(html, /id="shot-1-media-1"[^>]+data-start="0"[^>]+left:80px;top:1120px;width:920px;height:720px/);
+  assert.match(html, /id="shot-2-media-1"[^>]+data-start="3"[^>]+left:620px;top:120px;width:380px;height:600px/);
 });
 
 test("applies a restrictive CSP to model-authored frame documents", () => {
@@ -93,7 +113,7 @@ function fixture(source) {
     resources: [{ id: "screen", role: "supporting", type: "video", location: source, is_remote: /^https:/.test(source), sha256: "screen-hash" }]
   };
   const evidence = { schema_version: EVIDENCE_VERSION, items: [{ id: "ev-1" }] };
-  const shot = { id: "shot-1", start_seconds: 0, end_seconds: 5 };
+  const shot = { id: "shot-1", start_seconds: 0, end_seconds: 5, resource_ids: ["screen"] };
   const plan = { schema_version: PRODUCTION_PLAN_VERSION, format: { aspect: "9:16", width: 1080, height: 1920, duration_seconds: 5, language: "en" }, shots: [shot] };
   const bundle = {
     schema_version: FRAME_BUNDLE_VERSION, shot_id: "shot-1",

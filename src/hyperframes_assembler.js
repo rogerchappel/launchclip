@@ -18,8 +18,11 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   for (const [index, bundle] of bundles.entries()) {
     const validation = validateFrameBundle(bundle, {
       shotId: plan.shots[index].id,
+      shot: plan.shots[index],
+      format: plan.format,
       evidenceIds: evidence.items.map((entry) => entry.id),
       resourceIds: intake.resources.map((entry) => entry.id),
+      resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
       allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
     });
     const rootErrors = validateHyperFramesRoot(bundle.html, plan.shots[index], plan.format);
@@ -196,7 +199,7 @@ function renderMedia({ id, request, asset, globalStart }) {
   const duration = request.end_seconds - request.start_seconds;
   const mediaStart = request.source_start_seconds ?? 0;
   const common = `id="${escapeAttr(id)}" class="clip root-media" src="assets/${escapeAttr(asset.file)}" data-start="${number(globalStart)}" data-duration="${number(duration)}" data-media-start="${number(mediaStart)}" data-volume="${number(request.volume)}" data-track-index="${placement.z_index}" style="${style}" data-treatment="${escapeAttr(placement.treatment)}"`;
-  return request.kind === "video" ? `<video ${common} playsinline></video>` : `<audio ${common}></audio>`;
+  return request.kind === "video" ? `<video ${common} muted playsinline></video>` : `<audio ${common}></audio>`;
 }
 
 async function freezeResources(resources, assetsDir) {
