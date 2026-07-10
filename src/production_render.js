@@ -4,6 +4,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { PRODUCTION_PATHS } from "./production_contracts.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
+import { critiqueProduction } from "./production_critic.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -66,7 +67,19 @@ export async function renderProduction(workspacePath, options = {}, adapters = {
     ? await adapters.writeMotionReport(output, motionPath, motionOptions(plan, options))
     : await writeMotionReport(output, motionPath, motionOptions(plan, options), adapters.motion);
   if (!motion.quality.ok) throw new Error(`Rendered video failed motion quality gates. Review ${motionPath}.`);
-  return { stage: "production-render", status: "awaiting-human-review", workspace, video: output, verification, motion: motionPath, family: motion.family };
+  const critique = adapters.critiqueProduction
+    ? await adapters.critiqueProduction(workspace, criticOptions(options))
+    : await critiqueProduction(workspace, criticOptions(options), adapters.critic);
+  return {
+    stage: "production-render",
+    status: critique.verdict === "ship" ? "awaiting-human-review" : "needs-repair",
+    workspace,
+    video: output,
+    verification,
+    motion: motionPath,
+    family: motion.family,
+    critique
+  };
 }
 
 function motionOptions(plan, options) {
@@ -80,6 +93,16 @@ function motionOptions(plan, options) {
       maximum_hold_ratio: Number(options.maximumHoldRatio ?? .985),
       minimum_bursts_per_minute: Number(options.minimumBurstsPerMinute ?? 4)
     }
+  };
+}
+
+function criticOptions(options) {
+  return {
+    model: options.criticModel ?? "gpt-5.6",
+    reasoning: options.criticReasoning ?? "xhigh",
+    pro: Boolean(options.criticPro),
+    background: options.background !== false,
+    maxSnapshots: Number(options.maxCriticSnapshots ?? 12)
   };
 }
 

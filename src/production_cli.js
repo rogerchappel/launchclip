@@ -7,6 +7,7 @@ import { writeIntake } from "./intake.js";
 import { planProduction } from "./creative_planner.js";
 import { produceAudio } from "./production_audio.js";
 import { renderProduction, verifyProduction } from "./production_render.js";
+import { critiqueProduction } from "./production_critic.js";
 
 export async function runProductionStage(command, target, flags = {}, adapters = {}) {
   if (command === "evidence") return collectEvidence(target, evidenceOptions(flags), adapters.evidence);
@@ -16,6 +17,7 @@ export async function runProductionStage(command, target, flags = {}, adapters =
   if (command === "assemble") return assembleWithProducedAudio(target, flags);
   if (command === "production-verify") return verifyProduction(target, renderOptions(flags));
   if (command === "production-render") return renderProduction(target, renderOptions(flags));
+  if (command === "production-critique") return critiqueProduction(target, criticOptions(flags));
   if (command !== "produce") throw new Error(`Unknown production stage: ${command}`);
   return runProduction(target, flags, adapters);
 }
@@ -116,6 +118,15 @@ function renderOptions(flags) {
     durationToleranceSeconds: flags["duration-tolerance"],
     maximumHoldRatio: flags["maximum-hold-ratio"],
     minimumBurstsPerMinute: flags["minimum-bursts-per-minute"]
+  };
+}
+
+function criticOptions(flags) {
+  return {
+    model: flags["critic-model"] ?? "gpt-5.6",
+    reasoning: flags["critic-reasoning"] ?? "xhigh",
+    pro: Boolean(flags["critic-pro"]),
+    maxSnapshots: numberOr(flags["critic-snapshots"], 12)
   };
 }
 
