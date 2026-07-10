@@ -8,6 +8,7 @@ const execFileAsync = promisify(execFile);
 export async function analyzeRenderMotion(videoPath, options = {}, adapters = {}) {
   const resolved = path.resolve(videoPath);
   const run = adapters.run ?? runCommand;
+  const runRaw = adapters.runRaw ?? (adapters.run ? adapters.run : runRawCommand);
   const probe = JSON.parse((await run("ffprobe", [
     "-v", "error", "-show_entries", "format=duration,size:stream=index,codec_type,width,height,avg_frame_rate,r_frame_rate",
     "-of", "json", resolved
@@ -35,7 +36,7 @@ export async function analyzeRenderMotion(videoPath, options = {}, adapters = {}
   const flowFps = Number(options.flowFps ?? 10);
   const flowWidth = Number(options.flowWidth ?? 64);
   const flowHeight = Number(options.flowHeight ?? 36);
-  const rawFlow = await run("ffmpeg", [
+  const rawFlow = await runRaw("ffmpeg", [
     "-hide_banner", "-loglevel", "error", "-i", resolved,
     "-vf", `fps=${flowFps},scale=${flowWidth}:${flowHeight},format=gray`,
     "-an", "-f", "rawvideo", "pipe:1"
@@ -346,4 +347,8 @@ function escapeRegExp(value) {
 
 async function runCommand(command, args) {
   return execFileAsync(command, args, { maxBuffer: 1024 * 1024 * 128 });
+}
+
+async function runRawCommand(command, args) {
+  return execFileAsync(command, args, { encoding: null, maxBuffer: 1024 * 1024 * 128 });
 }

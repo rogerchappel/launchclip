@@ -43,15 +43,19 @@ test("analyzes ffmpeg frame differences and scene scores without comparing pixel
   const outputs = [
     { stdout: JSON.stringify({ format: { duration: "10" }, streams: [{ codec_type: "video", width: 1080, height: 1920, avg_frame_rate: "30/1" }] }) },
     { stdout: metadata("lavfi.signalstats.YAVG", [0.1, 0.1, 5, 0.1, 0.1, 7, 0.1]) },
-    { stdout: metadata("lavfi.scene_score", [0, .1, .6, .1, .7, .1, .1]) },
-    { stdout: Buffer.alloc(64 * 36 * 3) }
+    { stdout: metadata("lavfi.scene_score", [0, .1, .6, .1, .7, .1, .1]) }
   ];
-  const metrics = await analyzeRenderMotion("/tmp/candidate.mp4", {}, { run: async (command, args) => { commands.push([command, args]); return outputs.shift(); } });
+  let rawCalls = 0;
+  const metrics = await analyzeRenderMotion("/tmp/candidate.mp4", {}, {
+    run: async (command, args) => { commands.push([command, args]); return outputs.shift(); },
+    runRaw: async () => { rawCalls += 1; return { stdout: Buffer.alloc(64 * 36 * 3) }; }
+  });
   assert.equal(metrics.aspect, "9:16");
   assert.deepEqual(metrics.cuts.map((value) => Number(value.toFixed(3))), [.067, .133]);
   assert.equal(metrics.cut_rate_per_minute, 12);
   assert.ok(metrics.motion.frame_difference.length > 0);
   assert.equal(metrics.optical_flow.method, "block-matching");
+  assert.equal(rawCalls, 1);
   assert.match(commands[1][1].join(" "), /tblend=all_mode=difference/);
   assert.match(commands[2][1].join(" "), /scene_score/);
 });
