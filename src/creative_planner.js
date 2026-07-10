@@ -39,7 +39,7 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
   }
 
   const input = buildPlanningInput(intake, evidence, suppliedTranscript, options);
-  const inputHash = semanticHash({ input, schema: PRODUCTION_PLAN_SCHEMA, planner: "creative-planner.v1" });
+  const inputHash = semanticHash({ input, model: intake.model, schema: PRODUCTION_PLAN_SCHEMA, planner: "creative-planner.v1" });
   const store = adapters.store ?? await ProductionJobStore.open(workspace);
   const jobId = String(options.jobId ?? "creative-plan");
   const existing = store.get(jobId);

@@ -45,6 +45,12 @@ test("runs GPT-5.6 planning, validates the plan, writes artifacts, and caches ve
   const second = await planProduction(workspace, {}, { client });
   assert.equal(second.cached, true);
   assert.equal(calls.length, 1);
+
+  const changedIntake = sampleIntake();
+  changedIntake.model.id = "gpt-5.6-terra";
+  await writeFile(path.join(workspace, "production", "intake.json"), `${JSON.stringify({ ...changedIntake, workspace }, null, 2)}\n`);
+  await planProduction(workspace, {}, { client });
+  assert.equal(calls.length, 2, "changing model configuration invalidates the cached plan");
 });
 
 test("requires an authoritative transcript and preserves it exactly", async () => {
