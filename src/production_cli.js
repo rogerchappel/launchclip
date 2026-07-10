@@ -10,25 +10,34 @@ import { renderProduction, verifyProduction } from "./production_render.js";
 import { critiqueProduction } from "./production_critic.js";
 import { repairProduction } from "./production_repair.js";
 import { analyzeSourceMedia } from "./source_media_analysis.js";
+import { withProductionLease } from "./job_store.js";
 
 export async function runProductionStage(command, target, flags = {}, adapters = {}) {
-  if (command === "evidence") return collectEvidence(target, evidenceOptions(flags), adapters.evidence);
-  if (command === "creative-plan") return planProduction(target, plannerOptions(flags), adapters.planner);
-  if (command === "direct-frames") return directFrames(target, frameOptions(flags), adapters.frames);
-  if (command === "production-audio") return produceAudio(target, audioOptions(flags), adapters.audio);
-  if (command === "assemble") return assembleWithProducedAudio(target, flags);
-  if (command === "production-verify") return verifyProduction(target, renderOptions(flags));
-  if (command === "production-render") return renderProduction(target, renderOptions(flags));
-  if (command === "production-critique") return critiqueProduction(target, criticOptions(flags));
-  if (command === "production-repair") return (adapters.repairProduction ?? repairProduction)(target, repairOptions(flags), adapters.repair);
-  if (command === "source-media") return (adapters.analyzeSourceMedia ?? analyzeSourceMedia)(target, mediaAnalysisOptions(flags), adapters.mediaAnalysis);
-  if (command !== "produce") throw new Error(`Unknown production stage: ${command}`);
-  return runProduction(target, flags, adapters);
+  if (command === "produce") return runProduction(target, flags, adapters);
+  const lease = adapters.withProductionLease ?? withProductionLease;
+  return lease(target, async () => {
+    if (command === "evidence") return collectEvidence(target, evidenceOptions(flags), adapters.evidence);
+    if (command === "creative-plan") return planProduction(target, plannerOptions(flags), adapters.planner);
+    if (command === "direct-frames") return directFrames(target, frameOptions(flags), adapters.frames);
+    if (command === "production-audio") return produceAudio(target, audioOptions(flags), adapters.audio);
+    if (command === "assemble") return assembleWithProducedAudio(target, flags);
+    if (command === "production-verify") return verifyProduction(target, renderOptions(flags));
+    if (command === "production-render") return renderProduction(target, renderOptions(flags));
+    if (command === "production-critique") return critiqueProduction(target, criticOptions(flags));
+    if (command === "production-repair") return (adapters.repairProduction ?? repairProduction)(target, repairOptions(flags), adapters.repair);
+    if (command === "source-media") return (adapters.analyzeSourceMedia ?? analyzeSourceMedia)(target, mediaAnalysisOptions(flags), adapters.mediaAnalysis);
+    throw new Error(`Unknown production stage: ${command}`);
+  });
 }
 
 export async function runProduction(source, flags = {}, adapters = {}) {
   const intake = await (adapters.writeIntake ?? writeIntake)(source, flags);
   const workspace = intake.workspace;
+  const lease = adapters.withProductionLease ?? withProductionLease;
+  return lease(workspace, () => runProductionInWorkspace(workspace, flags, adapters));
+}
+
+async function runProductionInWorkspace(workspace, flags, adapters) {
   const evidence = await (adapters.collectEvidence ?? collectEvidence)(workspace, evidenceOptions(flags), adapters.evidence);
   const sourceMedia = await (adapters.analyzeSourceMedia ?? analyzeSourceMedia)(workspace, mediaAnalysisOptions(flags), adapters.mediaAnalysis);
   const plan = await (adapters.planProduction ?? planProduction)(workspace, plannerOptions(flags), adapters.planner);
