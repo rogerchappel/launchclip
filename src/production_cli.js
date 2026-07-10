@@ -199,6 +199,7 @@ function repairOptions(flags) {
   return {
     model: flags["repair-model"] ?? "gpt-5.6",
     reasoning: flags["repair-reasoning"] ?? "high",
+    semanticAttempts: numberOr(flags["repair-semantic-attempts"], 2),
     maxSnapshots: numberOr(flags["repair-snapshots"], 8),
     concurrency: numberOr(flags.concurrency, 3),
     maxOutputTokens: numberOr(flags["repair-max-output-tokens"], 36_000),
@@ -222,6 +223,7 @@ function productionFlags(flags) {
     "critic-snapshots": flags["critic-snapshots"] ?? "8",
     "repair-reasoning": flags["repair-reasoning"] ?? "medium",
     "repair-max-output-tokens": flags["repair-max-output-tokens"] ?? "20000",
+    "repair-semantic-attempts": flags["repair-semantic-attempts"] ?? "1",
     "repair-snapshots": flags["repair-snapshots"] ?? "6",
     "snapshot-frames": flags["snapshot-frames"] ?? "6",
     "inspect-samples": flags["inspect-samples"] ?? "9",

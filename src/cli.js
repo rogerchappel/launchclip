@@ -108,7 +108,7 @@ Usage:
   launchclip production-verify <workspace> [--inspect-samples 15] [--shot-inspect-concurrency 2] [--snapshot-frames 12]
   launchclip production-draft <workspace> [--draft-quality draft] [--shot-inspect-concurrency 2] [--reference-video local.mp4]
   launchclip production-critique <workspace> [--critic-reasoning xhigh] [--critic-pro]
-  launchclip production-repair <workspace> [--repair-reasoning high] [--repair-snapshots 8]
+  launchclip production-repair <workspace> [--repair-reasoning high] [--repair-semantic-attempts 2] [--repair-snapshots 8]
   launchclip production-render <workspace> --approve [--quality high] [--shot-inspect-concurrency 2] [--reference-video local.mp4]
   launchclip init <repo> --out <workspace>
   launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]
