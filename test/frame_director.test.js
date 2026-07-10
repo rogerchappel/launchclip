@@ -45,7 +45,7 @@ test("delegates shots concurrently, repairs invalid HTML, and writes modular fra
   assert.equal(peak, 2);
   assert.equal(attempts.get("shot-1"), 2);
   assert.match(await readFile(result.frames[0].html, "utf8"), /data-composition-id="shot-1"/);
-  assert.match(await readFile(result.frames[0].motion, "utf8"), /#proof/);
+  assert.match(await readFile(result.frames[0].motion, "utf8"), /#shot-1-proof/);
 
   const cached = await directFrames(workspace, { concurrency: 2 }, { client });
   assert.equal(cached.cached, 2);
@@ -59,7 +59,7 @@ test("delegates shots concurrently, repairs invalid HTML, and writes modular fra
 
 test("rejects a frame root with wrong identity, time, or dimensions", () => {
   const { plan } = fixture();
-  const errors = validateHyperFramesRoot('<div data-composition-id="wrong" data-start="1" data-duration="3" data-width="100" data-height="100"></div>', plan.shots[0], plan.format);
+  const errors = validateHyperFramesRoot('<template><style>#root{position:absolute}</style><div id="root" data-composition-id="wrong" data-start="1" data-duration="3" data-width="100" data-height="100"></div><script>window.__timelines["wrong"]={}</script></template>', plan.shots[0], plan.format);
   assert.ok(errors.some((entry) => entry.includes("shot-1")));
   assert.ok(errors.some((entry) => entry.includes("data-start")));
   assert.ok(errors.some((entry) => entry.includes("data-duration")));
@@ -112,8 +112,8 @@ function frameBundle(id, duration) {
   return {
     schema_version: FRAME_BUNDLE_VERSION,
     shot_id: id,
-    html: `<!doctype html><html><body><div data-composition-id="${id}" data-start="0" data-duration="${duration}" data-width="1080" data-height="1920"><div id="proof" class="clip" data-start="0" data-duration="${duration}">Proof</div></div></body></html>`,
-    motion: { assertions: [{ selector: "#proof", appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: true }] },
+    html: `<!doctype html><html><head></head><body><template><style>#root{position:absolute;inset:0}</style><div id="root" data-composition-id="${id}" data-start="0" data-duration="${duration}" data-width="1080" data-height="1920"><div id="${id}-proof" class="clip" data-start="0" data-duration="${duration}">Proof</div></div><script>window.__timelines=window.__timelines||{};const timeline=gsap.timeline({paused:true});window.__timelines["${id}"]=timeline;</script></template></body></html>`,
+    motion: { assertions: [{ selector: `#${id}-proof`, appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: true }] },
     root_media_requests: [{
       resource_id: "screen", kind: "video", start_seconds: 0, end_seconds: duration,
       source_start_seconds: 0, source_end_seconds: duration, volume: 0,

@@ -60,8 +60,8 @@ test("resumes a persisted background repair response without another submission"
 function bundle(id, copy = "Proof") {
   return {
     schema_version: FRAME_BUNDLE_VERSION, shot_id: id,
-    html: `<!doctype html><html><body><div data-composition-id="${id}" data-start="0" data-duration="5" data-width="1080" data-height="1920"><div id="proof" class="clip" data-start="0" data-duration="5">${copy}</div></div></body></html>`,
-    motion: { assertions: [{ selector: "#proof", appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: true }] },
+    html: `<!doctype html><html><head></head><body><template><style>#root{position:absolute;inset:0}</style><div id="root" data-composition-id="${id}" data-start="0" data-duration="5" data-width="1080" data-height="1920"><div id="${id}-proof" class="clip" data-start="0" data-duration="5">${copy}</div></div><script>window.__timelines=window.__timelines||{};const timeline=gsap.timeline({paused:true});window.__timelines["${id}"]=timeline;</script></template></body></html>`,
+    motion: { assertions: [{ selector: `#${id}-proof`, appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: true }] },
     root_media_requests: [], evidence_ids: ["ev-1"], visible_copy: [copy], preserve: ["exact copy"]
   };
 }

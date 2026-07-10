@@ -10,14 +10,16 @@ const FRAME_INSTRUCTIONS = `You are a senior motion designer authoring one modul
 Translate the director's shot brief into an original, polished HTML composition. Honor the global design language while making this shot's composition and motion serve its specific idea. Return only the strict frame-bundle JSON.
 
 HyperFrames contract:
-- html is one complete HTML document containing exactly one root with data-composition-id equal to shot_id, data-start="0", the supplied data-duration, width, and height.
+- html is one complete SUB-COMPOSITION document. Body contains exactly one <template>; every live <style>, root element, and <script> is inside that template because the host clones only template contents.
+- Inside the template, use one root with id="root" and data-composition-id equal to shot_id, data-start="0", the supplied data-duration, width, and height. Style that root with #root, never a root class selector.
+- Prefix every non-root element id with "shot_id-" so mounted scenes cannot collide. Motion assertion selectors use those prefixed ids.
 - Visual timeline elements use class="clip" with local data-start and data-duration values.
 - GSAP is already available as a global. Do not import libraries, fonts, or remote assets. Keep animation seek-safe and deterministic.
 - Create the GSAP timeline paused and register it exactly with: window.__timelines = window.__timelines || {}; window.__timelines[shot_id] = timeline. Do not use alternate registry names.
 - Do not declare an initial CSS transform on any selector that GSAP animates. Set initial transform state with gsap.set so one system owns the full transform.
 - Animate transforms and opacity for movement. Never tween font-size, width, height, top, left, padding, or other layout/reflow properties; author the final readable size in CSS and reveal it with transform/opacity.
-- Give every timeline-visible class="clip" element a stable, descriptive id for Studio editing and motion inspection.
-- Give the composition root a stable id and style it by that id, never by a root class selector. Use only declared @font-face families or renderer-safe generic families such as Arial, Georgia, or Courier New; do not name an unavailable platform font.
+- Give every timeline-visible class="clip" element a stable, descriptive, shot-prefixed id for Studio editing and motion inspection.
+- Put a full-bleed background on a child layer rather than the composition root; root backgrounds can disappear during frame compositing. Use only declared @font-face families or renderer-safe generic families such as Arial, Georgia, or Courier New; do not name an unavailable platform font.
 - Do not include audio or video elements. Request those through root_media_requests; the assembler owns media playback.
 - Do not fetch, use timers, Date.now, Math.random, requestAnimationFrame, or browser storage.
 - Use only supplied local resource paths. If a requested visual asset is unavailable, design a native HTML/CSS/SVG treatment instead of inventing a path.
@@ -151,16 +153,33 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
 
 export function validateHyperFramesRoot(html, shot, format) {
   const errors = [];
-  const root = String(html ?? "").match(/<[^>]+data-composition-id=["']([^"']+)["'][^>]*>/i)?.[0] ?? "";
+  const source = String(html ?? "");
+  const templates = [...source.matchAll(/<template\b[^>]*>([\s\S]*?)<\/template>/gi)];
+  if (templates.length !== 1) return ["frame HTML requires exactly one template transport container"];
+  const template = templates[0][1];
+  const outsideTemplate = `${source.slice(0, templates[0].index)}${source.slice(templates[0].index + templates[0][0].length)}`;
+  if (/<(?:style|script)\b/i.test(outsideTemplate)) errors.push("all live style and script blocks must be inside the template");
+  const root = template.match(/<[^>]+data-composition-id=["']([^"']+)["'][^>]*>/i)?.[0] ?? "";
   if (!root) return ["frame HTML requires a data-composition-id root"];
   const attr = (name) => root.match(new RegExp(`${name}=["']([^"']+)["']`, "i"))?.[1];
+  if (attr("id") !== "root") errors.push('sub-composition root id must be "root"');
+  if (attr("class")) errors.push("sub-composition root must not use a class; style it with #root");
   if (attr("data-composition-id") !== shot.id) errors.push(`root data-composition-id must be ${shot.id}`);
   if (Number(attr("data-start")) !== 0) errors.push("root data-start must be 0");
   const duration = shot.end_seconds - shot.start_seconds;
   if (Math.abs(Number(attr("data-duration")) - duration) > 0.01) errors.push(`root data-duration must be ${duration}`);
   if (Number(attr("data-width")) !== format.width) errors.push(`root data-width must be ${format.width}`);
   if (Number(attr("data-height")) !== format.height) errors.push(`root data-height must be ${format.height}`);
+  if (!/#root\s*\{/i.test(template)) errors.push("sub-composition root must be styled by #root inside the template");
+  if (!new RegExp(`window\\.__timelines\\s*\\[\\s*["']${escapeRegExp(shot.id)}["']\\s*\\]`).test(template)) errors.push(`template must register window.__timelines[${shot.id}]`);
+  const ids = [...template.matchAll(/\sid=["']([^"']+)["']/gi)].map((match) => match[1]);
+  const invalidIds = ids.filter((id) => id !== "root" && !id.startsWith(`${shot.id}-`));
+  if (invalidIds.length) errors.push(`non-root ids must be prefixed with ${shot.id}-: ${[...new Set(invalidIds)].join(", ")}`);
   return errors;
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function writeFrameArtifacts(workspace, bundle) {
