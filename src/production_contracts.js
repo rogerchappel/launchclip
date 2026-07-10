@@ -327,6 +327,11 @@ export function validateFrameBundle(bundle, context = {}) {
     if (request.source_end_seconds != null && request.source_start_seconds != null && !(request.source_end_seconds > request.source_start_seconds)) {
       errors.push(`root_media_requests[${index}] must have source_end_seconds > source_start_seconds`);
     }
+    if (request.source_end_seconds != null && request.source_start_seconds != null) {
+      const slotDuration = request.end_seconds - request.start_seconds;
+      const sourceDuration = request.source_end_seconds - request.source_start_seconds;
+      if (Math.abs(slotDuration - sourceDuration) > .05) errors.push(`root_media_requests[${index}] source range must match its output duration; HyperFrames does not infer retiming`);
+    }
   }
   return { ok: errors.length === 0, errors };
 }

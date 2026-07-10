@@ -95,6 +95,14 @@ test("rejects active content and assets outside the approved local resource set"
   assert.ok(result.errors.some((error) => error.includes("unapproved asset path")));
 });
 
+test("requires requested source trims to match their HyperFrames playback slots", () => {
+  const bundle = sampleFrameBundle();
+  bundle.root_media_requests[0].source_end_seconds = 9;
+  const result = validateFrameBundle(bundle, { resourceIds: ["res-1"] });
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => error.includes("does not infer retiming")));
+});
+
 test("critique cannot ship with blocking findings or unknown shots", () => {
   const critique = {
     schema_version: CRITIQUE_VERSION,
