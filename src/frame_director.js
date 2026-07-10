@@ -13,6 +13,10 @@ HyperFrames contract:
 - html is one complete HTML document containing exactly one root with data-composition-id equal to shot_id, data-start="0", the supplied data-duration, width, and height.
 - Visual timeline elements use class="clip" with local data-start and data-duration values.
 - GSAP is already available as a global. Do not import libraries, fonts, or remote assets. Keep animation seek-safe and deterministic.
+- Create the GSAP timeline paused and register it exactly with: window.__timelines = window.__timelines || {}; window.__timelines[shot_id] = timeline. Do not use alternate registry names.
+- Do not declare an initial CSS transform on any selector that GSAP animates. Set initial transform state with gsap.set so one system owns the full transform.
+- Give every timeline-visible class="clip" element a stable, descriptive id for Studio editing and motion inspection.
+- Give the composition root a stable id and style it by that id, never by a root class selector. Use only declared @font-face families or renderer-safe generic families.
 - Do not include audio or video elements. Request those through root_media_requests; the assembler owns media playback.
 - Do not fetch, use timers, Date.now, Math.random, requestAnimationFrame, or browser storage.
 - Use only supplied local resource paths. If a requested visual asset is unavailable, design a native HTML/CSS/SVG treatment instead of inventing a path.

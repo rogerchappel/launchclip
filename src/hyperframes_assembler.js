@@ -26,7 +26,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   const dependencies = plan.shots.map((shot) => `frame:${shot.id}`);
   for (const dependency of dependencies) if (store.get(dependency)?.status !== "succeeded") throw new Error(`Frame job must succeed before assembly: ${dependency}`);
   const extraAudio = await describeExtraAudio(options);
-  const inputHash = semanticHash({ intake, plan, bundles, extraAudio, assembler: "hyperframes-assembler.v1" });
+  const inputHash = semanticHash({ intake, plan, bundles, extraAudio, assembler: "hyperframes-assembler.v2" });
   const jobId = "hyperframes-assembly";
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
@@ -51,7 +51,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
     for (const audio of extraAudio) assetMap.set(audio.id, await freezeFile(audio.id, audio.path, assetsDir));
 
     for (const bundle of bundles) {
-      let html = bundle.html;
+      let html = ensureTimelineRegistration(bundle.html, bundle.shot_id);
       for (const resource of intake.resources) {
         const frozen = assetMap.get(resource.id);
         if (frozen && resource.location) html = html.split(resource.location).join(`../assets/${frozen.file}`);
@@ -103,6 +103,7 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=${plan.format.width}, height=${plan.format.height}">
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     html, body { margin: 0; width: ${plan.format.width}px; height: ${plan.format.height}px; overflow: hidden; background: #000; }
@@ -112,13 +113,28 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
   </style>
 </head>
 <body>
-  <div id="launchclip-root" data-composition-id="main" data-start="0" data-duration="${number(plan.format.duration_seconds)}" data-width="${plan.format.width}" data-height="${plan.format.height}">
+  <div id="launchclip-root" data-composition-id="main" data-no-timeline data-start="0" data-duration="${number(plan.format.duration_seconds)}" data-width="${plan.format.width}" data-height="${plan.format.height}">
     ${media.join("\n    ")}
     ${compositions.join("\n    ")}
   </div>
 </body>
 </html>
 `;
+}
+
+export function ensureTimelineRegistration(html, compositionId) {
+  if (new RegExp(`window\\.__timelines\\s*\\[\\s*["']${escapeRegExp(compositionId)}["']\\s*\\]`).test(html)) return html;
+  const variables = [...String(html).matchAll(/(?:const|let|var)\s+([a-zA-Z_$][\w$]*)\s*=\s*gsap\.timeline\s*\(/g)].map((match) => match[1]);
+  const timeline = variables.at(-1);
+  if (!timeline) return html;
+  const statements = `window.__timelines = window.__timelines || {};\n${timeline}.pause(0);\nwindow.__timelines[${JSON.stringify(compositionId)}] = ${timeline};`;
+  const closures = [...String(html).matchAll(/\}\s*\(\s*\)\s*\)\s*;|\}\s*\)\s*\(\s*\)\s*;/g)];
+  if (closures.length) {
+    const closure = closures.at(-1);
+    return `${html.slice(0, closure.index)}${statements}\n${html.slice(closure.index)}`;
+  }
+  const registration = `<script>\n${statements}\n</script>`;
+  return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${registration}\n</body>`) : `${html}\n${registration}`;
 }
 
 function renderMedia({ id, request, asset, globalStart }) {
@@ -208,6 +224,10 @@ function slug(value) {
 
 function escapeAttr(value) {
   return String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function number(value) {

@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { assembleHyperFrames, renderRoot } from "../src/hyperframes_assembler.js";
+import { assembleHyperFrames, ensureTimelineRegistration, renderRoot } from "../src/hyperframes_assembler.js";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { EVIDENCE_VERSION, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
@@ -15,11 +15,22 @@ test("renders subcompositions while keeping timed media and SFX as direct root c
     extraAudio: [{ id: "sfx-001", at_seconds: 2.25, duration_seconds: null, source_start_seconds: 0, volume: .3, track: 60 }]
   });
   assert.match(html, /data-composition-src="compositions\/shot-1.html"/);
+  assert.match(html, /gsap@3\.14\.2/);
+  assert.match(html, /data-composition-id="main" data-no-timeline/);
   assert.match(html, /<video[^>]+data-start="1"[^>]+data-duration="3"[^>]+data-media-start="4"/);
   assert.match(html, /left:100px;top:200px;width:800px;height:600px/);
   assert.equal((html.match(/<video/g) ?? []).length, 1);
   assert.match(html, /<audio id="sfx-001"[^>]+data-start="2\.25"[^>]+data-volume="0\.3"/);
   assert.ok(html.indexOf("<video") > html.indexOf('data-composition-id="main"'));
+});
+
+test("canonicalizes model-authored GSAP timelines into the HyperFrames registry", () => {
+  const source = '<html><body><div data-composition-id="shot-1"></div><script>(function(){const timeline = gsap.timeline({defaults:{ease:"power3.out"}});})();</script></body></html>';
+  const normalized = ensureTimelineRegistration(source, "shot-1");
+  assert.match(normalized, /timeline\.pause\(0\)/);
+  assert.match(normalized, /window\.__timelines\["shot-1"\] = timeline/);
+  assert.ok(normalized.indexOf('window.__timelines["shot-1"]') < normalized.indexOf("})();"));
+  assert.equal(ensureTimelineRegistration(normalized, "shot-1"), normalized);
 });
 
 test("freezes assets, rewrites frame paths, assembles a resumable HyperFrames project", async () => {
