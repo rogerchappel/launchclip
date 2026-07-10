@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { PRODUCTION_PATHS } from "./production_contracts.js";
+import { writeAudioReport } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
 import { critiqueProduction } from "./production_critic.js";
 
@@ -75,6 +76,16 @@ export async function renderProduction(workspacePath, options = {}, adapters = {
     ? await adapters.writeMotionReport(output, motionPath, motionOptions(plan, options))
     : await writeMotionReport(output, motionPath, motionOptions(plan, options), adapters.motion);
   if (!motion.quality.ok) throw new Error(`Rendered video failed motion quality gates. Review ${motionPath}.`);
+  const audioPath = path.join(qaDir, "audio.json");
+  const audioManifestPath = path.join(workspace, "production", "media", "manifest.json");
+  const audioManifest = await readOptionalJson(audioManifestPath);
+  const audio = audioManifest
+    ? adapters.writeAudioReport
+      ? await adapters.writeAudioReport(output, audioManifestPath, audioPath, { musicVolume: Number(options.musicVolume ?? .16) })
+      : await writeAudioReport(output, audioManifestPath, audioPath, { musicVolume: Number(options.musicVolume ?? .16) }, adapters.audio)
+    : { schema_version: "launchclip.render-audio.v1", status: "not-requested", quality: { ok: true, findings: [] } };
+  if (!audioManifest) await writeFile(audioPath, `${JSON.stringify(audio, null, 2)}\n`);
+  if (!audio.quality.ok) throw new Error(`Rendered video failed audio quality gates. Review ${audioPath}.`);
   const critique = adapters.critiqueProduction
     ? await adapters.critiqueProduction(workspace, criticOptions(options))
     : await critiqueProduction(workspace, criticOptions(options), adapters.critic);
@@ -85,9 +96,14 @@ export async function renderProduction(workspacePath, options = {}, adapters = {
     video: output,
     verification,
     motion: motionPath,
+    audio: audioPath,
     family: motion.family,
     critique
   };
+}
+
+async function readOptionalJson(filePath) {
+  try { return JSON.parse(await readFile(filePath, "utf8")); } catch (error) { if (error.code === "ENOENT") return null; throw error; }
 }
 
 function motionOptions(plan, options) {

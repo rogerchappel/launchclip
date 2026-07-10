@@ -20,11 +20,12 @@ Return only the strict production-critique JSON.`;
 export async function critiqueProduction(workspacePath, options = {}, adapters = {}) {
   const workspace = path.resolve(workspacePath);
   const qaDir = path.join(workspace, PRODUCTION_PATHS.qa);
-  const [plan, evidence, verification, motion, lint, validate, inspect] = await Promise.all([
+  const [plan, evidence, verification, motion, audio, lint, validate, inspect] = await Promise.all([
     readJson(path.join(workspace, PRODUCTION_PATHS.plan)),
     readJson(path.join(workspace, PRODUCTION_PATHS.evidence)),
     readJson(path.join(qaDir, "verification.json")),
     readOptionalJson(path.join(qaDir, "motion.json")),
+    readOptionalJson(path.join(qaDir, "audio.json")),
     readOptionalJson(path.join(qaDir, "lint.json")),
     readOptionalJson(path.join(qaDir, "validate.json")),
     readOptionalJson(path.join(qaDir, "inspect.json"))
@@ -54,6 +55,7 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
       deterministic_verification: verification,
       deterministic_reports: { lint, validate, inspect },
       temporal_motion_analysis: motion,
+      time_aligned_audio_analysis: audio,
       snapshot_order: snapshots.map((entry) => path.basename(entry))
     }),
     images,
