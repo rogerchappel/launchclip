@@ -10,6 +10,7 @@
     "test": "node --test",
     "smoke": "node ./scripts/smoke.js",
     "check": "npm test && npm run smoke",
+    "eval:production": "node ./src/production_eval.js",
     "package:smoke": "npm pack --dry-run",
     "release:check": "npm run check && npm run package:smoke"
   },
