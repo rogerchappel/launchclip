@@ -26,7 +26,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   const dependencies = plan.shots.map((shot) => `frame:${shot.id}`);
   for (const dependency of dependencies) if (store.get(dependency)?.status !== "succeeded") throw new Error(`Frame job must succeed before assembly: ${dependency}`);
   const extraAudio = await describeExtraAudio(options);
-  const inputHash = semanticHash({ intake, plan, bundles, extraAudio, assembler: "hyperframes-assembler.v2" });
+  const inputHash = semanticHash({ intake, plan, bundles, extraAudio, assembler: "hyperframes-assembler.v3" });
   const jobId = "hyperframes-assembly";
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
@@ -113,9 +113,13 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
   </style>
 </head>
 <body>
-  <div id="launchclip-root" data-composition-id="main" data-no-timeline data-start="0" data-duration="${number(plan.format.duration_seconds)}" data-width="${plan.format.width}" data-height="${plan.format.height}">
+  <div id="launchclip-root" data-composition-id="main" data-start="0" data-duration="${number(plan.format.duration_seconds)}" data-width="${plan.format.width}" data-height="${plan.format.height}">
     ${media.join("\n    ")}
     ${compositions.join("\n    ")}
+    <script>
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = gsap.timeline({ paused: true });
+    </script>
   </div>
 </body>
 </html>

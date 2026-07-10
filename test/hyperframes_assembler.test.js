@@ -16,7 +16,7 @@ test("renders subcompositions while keeping timed media and SFX as direct root c
   });
   assert.match(html, /data-composition-src="compositions\/shot-1.html"/);
   assert.match(html, /gsap@3\.14\.2/);
-  assert.match(html, /data-composition-id="main" data-no-timeline/);
+  assert.match(html, /window\.__timelines\["main"\] = gsap\.timeline\(\{ paused: true \}\)/);
   assert.match(html, /<video[^>]+data-start="1"[^>]+data-duration="3"[^>]+data-media-start="4"/);
   assert.match(html, /left:100px;top:200px;width:800px;height:600px/);
   assert.equal((html.match(/<video/g) ?? []).length, 1);
