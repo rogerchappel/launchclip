@@ -88,6 +88,20 @@ test("writes evidence JSON and a human-readable digest", async () => {
   assert.match(digest, /source:topic/);
 });
 
+test("marks a supplied transcript as authoritative narration rather than factual evidence", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "launchclip-transcript-evidence-"));
+  const transcript = path.join(root, "transcript.txt");
+  await writeFile(transcript, "These words must stay exactly as spoken.");
+  const evidence = await buildEvidence({
+    source: { kind: "topic", value: "A narrated explainer", location: "A narrated explainer" },
+    resources: [{ id: "transcript", role: "voiceover-transcript", type: "text", source: transcript, location: transcript, is_remote: false, size_bytes: 40, sha256: "hash" }]
+  });
+  const item = evidence.items.find((entry) => entry.kind === "voiceover-transcript");
+  assert.equal(item.role, "voiceover");
+  assert.equal(item.claims_allowed, false);
+  assert.equal(item.content, "These words must stay exactly as spoken.");
+});
+
 test("evidence schema keeps nested object fields explicit", () => {
   assert.equal(EVIDENCE_SCHEMA.additionalProperties, false);
   assert.equal(EVIDENCE_SCHEMA.properties.source.additionalProperties, false);

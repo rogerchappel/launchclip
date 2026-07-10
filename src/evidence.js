@@ -186,6 +186,9 @@ async function collectResource(resource, context) {
   if (resource.type === "text") {
     const raw = await readFile(resource.location, "utf8");
     const clipped = truncateText(raw, context.maxItemChars);
+    if (resource.role === "voiceover-transcript") {
+      return [item({ ...base, role: "voiceover", kind: "voiceover-transcript", title: "Authoritative supplied narration transcript", content: clipped.content, claimsAllowed: false, truncated: clipped.truncated })];
+    }
     return [item({ ...base, kind: "text-resource", content: clipped.content, claimsAllowed: resource.role !== "reference", truncated: clipped.truncated })];
   }
   if (resource.type === "directory") {
