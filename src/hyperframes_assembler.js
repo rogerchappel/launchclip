@@ -33,7 +33,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   const dependencies = plan.shots.map((shot) => `frame:${shot.id}`);
   for (const dependency of dependencies) if (store.get(dependency)?.status !== "succeeded") throw new Error(`Frame job must succeed before assembly: ${dependency}`);
   const extraAudio = await describeExtraAudio(options);
-  const inputHash = semanticHash({ intake, plan, bundles, extraAudio, assembler: "hyperframes-assembler.v6" });
+  const inputHash = semanticHash({ intake, plan, bundles, extraAudio, assembler: "hyperframes-assembler.v7" });
   const jobId = "hyperframes-assembly";
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
@@ -171,11 +171,11 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
 }
 
 export function applyFrameCsp(html) {
-  if (/http-equiv=["']Content-Security-Policy["']/i.test(html)) return html;
+  const source = String(html).replace(/<meta\b(?=[^>]*\bhttp-equiv\s*=\s*(?:["']content-security-policy["']|content-security-policy\b))[^>]*>/gi, "");
   const policy = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">`;
-  if (/<head\b[^>]*>/i.test(html)) return html.replace(/<head\b[^>]*>/i, (head) => `${head}\n  ${policy}`);
-  if (/<html\b[^>]*>/i.test(html)) return html.replace(/<html\b[^>]*>/i, (root) => `${root}\n<head>${policy}</head>`);
-  return `${policy}\n${html}`;
+  if (/<head\b[^>]*>/i.test(source)) return source.replace(/<head\b[^>]*>/i, (head) => `${head}\n  ${policy}`);
+  if (/<html\b[^>]*>/i.test(source)) return source.replace(/<html\b[^>]*>/i, (root) => `${root}\n<head>${policy}</head>`);
+  return `${policy}\n${source}`;
 }
 
 export function ensureTimelineRegistration(html, compositionId) {

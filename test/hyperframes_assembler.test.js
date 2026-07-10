@@ -47,9 +47,10 @@ test("moves presenter video between beat-specific avatar layouts at the host roo
 });
 
 test("applies a restrictive CSP to model-authored frame documents", () => {
-  const html = applyFrameCsp("<!doctype html><html><head><title>Shot</title></head><body></body></html>");
+  const html = applyFrameCsp(`<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src *"><title>Shot</title></head><body><template><meta content="default-src https:" http-equiv='content-security-policy'><div></div></template></body></html>`);
   assert.match(html, /default-src 'none'/);
   assert.match(html, /connect-src 'none'/);
+  assert.doesNotMatch(html, /default-src \*|default-src https:/);
   assert.equal((applyFrameCsp(html).match(/Content-Security-Policy/g) ?? []).length, 1);
 });
 
