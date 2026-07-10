@@ -15,6 +15,7 @@ test("renders subcompositions while keeping timed media and SFX as direct root c
     extraAudio: [{ id: "sfx-001", at_seconds: 2.25, duration_seconds: null, source_start_seconds: 0, volume: .3, track: 60 }]
   });
   assert.match(html, /data-composition-src="compositions\/shot-1.html"/);
+  assert.match(html, /data-composition-src="compositions\/shot-1\.html" data-start="0" data-duration="4\.999"/);
   assert.match(html, /gsap@3\.14\.2/);
   assert.match(html, /window\.__timelines\["main"\] = gsap\.timeline\(\{ paused: true \}\)/);
   assert.match(html, /<video[^>]+data-start="1"[^>]+data-duration="3"[^>]+data-media-start="4"/);

@@ -15,8 +15,9 @@ HyperFrames contract:
 - GSAP is already available as a global. Do not import libraries, fonts, or remote assets. Keep animation seek-safe and deterministic.
 - Create the GSAP timeline paused and register it exactly with: window.__timelines = window.__timelines || {}; window.__timelines[shot_id] = timeline. Do not use alternate registry names.
 - Do not declare an initial CSS transform on any selector that GSAP animates. Set initial transform state with gsap.set so one system owns the full transform.
+- Animate transforms and opacity for movement. Never tween font-size, width, height, top, left, padding, or other layout/reflow properties; author the final readable size in CSS and reveal it with transform/opacity.
 - Give every timeline-visible class="clip" element a stable, descriptive id for Studio editing and motion inspection.
-- Give the composition root a stable id and style it by that id, never by a root class selector. Use only declared @font-face families or renderer-safe generic families.
+- Give the composition root a stable id and style it by that id, never by a root class selector. Use only declared @font-face families or renderer-safe generic families such as Arial, Georgia, or Courier New; do not name an unavailable platform font.
 - Do not include audio or video elements. Request those through root_media_requests; the assembler owns media playback.
 - Do not fetch, use timers, Date.now, Math.random, requestAnimationFrame, or browser storage.
 - Use only supplied local resource paths. If a requested visual asset is unavailable, design a native HTML/CSS/SVG treatment instead of inventing a path.

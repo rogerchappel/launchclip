@@ -26,7 +26,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   const dependencies = plan.shots.map((shot) => `frame:${shot.id}`);
   for (const dependency of dependencies) if (store.get(dependency)?.status !== "succeeded") throw new Error(`Frame job must succeed before assembly: ${dependency}`);
   const extraAudio = await describeExtraAudio(options);
-  const inputHash = semanticHash({ intake, plan, bundles, extraAudio, assembler: "hyperframes-assembler.v3" });
+  const inputHash = semanticHash({ intake, plan, bundles, extraAudio, assembler: "hyperframes-assembler.v4" });
   const jobId = "hyperframes-assembly";
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
@@ -97,7 +97,7 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
     const duration = audio.duration_seconds == null ? "" : ` data-duration="${number(audio.duration_seconds)}"`;
     media.push(`<audio id="${escapeAttr(audio.id)}" class="clip" src="assets/${escapeAttr(asset.file)}" data-start="${number(audio.at_seconds ?? 0)}"${duration} data-media-start="${number(audio.source_start_seconds ?? 0)}" data-volume="${number(audio.volume)}" data-track-index="${audio.track}"></audio>`);
   }
-  const compositions = plan.shots.map((shot, index) => `<div id="mount-${escapeAttr(shot.id)}" class="clip shot-mount" data-composition-id="${escapeAttr(shot.id)}" data-composition-src="compositions/${escapeAttr(shot.id)}.html" data-start="${number(shot.start_seconds)}" data-duration="${number(shot.end_seconds - shot.start_seconds)}" data-track-index="${100 + index}" data-width="${plan.format.width}" data-height="${plan.format.height}"></div>`);
+  const compositions = plan.shots.map((shot, index) => `<div id="mount-${escapeAttr(shot.id)}" class="clip shot-mount" data-composition-id="${escapeAttr(shot.id)}" data-composition-src="compositions/${escapeAttr(shot.id)}.html" data-start="${number(shot.start_seconds)}" data-duration="${number(Math.max(.001, shot.end_seconds - shot.start_seconds - .001))}" data-track-index="${100 + index}" data-width="${plan.format.width}" data-height="${plan.format.height}"></div>`);
   return `<!doctype html>
 <html lang="${escapeAttr(plan.format.language)}">
 <head>
