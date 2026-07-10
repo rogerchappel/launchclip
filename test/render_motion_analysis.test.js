@@ -60,18 +60,25 @@ test("analyzes ffmpeg frame differences and scene scores without comparing pixel
   assert.match(commands[2][1].join(" "), /scene_score/);
 });
 
-test("compares temporal distributions within compatible reference families", () => {
-  const profile = (video, cut, bursts, hold, energies) => ({
+test("compares temporal distributions and optical-flow easing within compatible reference families", () => {
+  const profile = (video, cut, bursts, hold, energies, velocity) => ({
     video, family: classifyMotionFamily({ cut_rate_per_minute: cut, motion_bursts_per_minute: bursts, hold_ratio: hold }),
     cut_rate_per_minute: cut, motion_bursts_per_minute: bursts,
-    motion: { hold_ratio: hold, frame_difference: energies.map((energy, frame) => ({ frame, energy })) }
+    motion: { hold_ratio: hold, frame_difference: energies.map((energy, frame) => ({ frame, energy })) },
+    optical_flow: { sample_fps: 10, samples: velocity.map((pixels_per_second, frame) => ({ frame, pixels_per_second })) }
   });
-  const candidate = profile("candidate", 20, 22, .4, [0, 1, 4, 1]);
-  const comparison = compareMotionProfiles(candidate, [profile("fast", 24, 20, .35, [0, 2, 5, 1]), profile("slow", 3, 18, .9, [0, .1, 1, .1])]);
+  const candidate = profile("candidate", 20, 22, .4, [0, 1, 4, 1], [0, 10, 30, 12, 0]);
+  const comparison = compareMotionProfiles(candidate, [
+    profile("fast", 24, 20, .35, [0, 2, 5, 1], [0, 12, 28, 10, 0]),
+    profile("slow", 3, 18, .9, [0, .1, 1, .1], [0, 1, 2, 1, 0])
+  ]);
   assert.equal(comparison.compatible_family, "rapid-hybrid");
   assert.equal(comparison.references.length, 1);
   assert.equal(comparison.references[0].video, "fast");
   assert.ok(Number.isFinite(comparison.references[0].change_energy_wasserstein));
+  assert.ok(Number.isFinite(comparison.references[0].flow_velocity_temporal_dtw));
+  assert.ok(Number.isFinite(comparison.references[0].flow_acceleration_wasserstein));
+  assert.ok(Number.isFinite(comparison.references[0].flow_deceleration_wasserstein));
 });
 
 test("quality gates exact duration, dimensions, dead motion, and missing samples", () => {

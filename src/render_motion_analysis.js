@@ -176,6 +176,11 @@ export function compareMotionProfiles(candidate, references) {
       candidate.motion.frame_difference.map((entry) => entry.energy),
       reference.motion.frame_difference.map((entry) => entry.energy)
     ), 5),
+    flow_velocity_wasserstein: flowDistance(candidate, reference, "velocity"),
+    flow_acceleration_wasserstein: flowDistance(candidate, reference, "acceleration"),
+    flow_deceleration_wasserstein: flowDistance(candidate, reference, "deceleration"),
+    flow_jerk_wasserstein: flowDistance(candidate, reference, "jerk"),
+    flow_velocity_temporal_dtw: round(temporalDtw(flowSeries(candidate).velocity, flowSeries(reference).velocity), 5),
     cut_rate_delta: round(candidate.cut_rate_per_minute - reference.cut_rate_per_minute, 3),
     burst_rate_delta: round(candidate.motion_bursts_per_minute - reference.motion_bursts_per_minute, 3),
     hold_ratio_delta: round(candidate.motion.hold_ratio - reference.motion.hold_ratio, 4)
@@ -190,6 +195,50 @@ export function compareMotionProfiles(candidate, references) {
       hold_ratio_position: envelopePosition(candidate.motion.hold_ratio, referenceEnvelope.hold_ratio)
     }
   };
+}
+
+function flowSeries(profile) {
+  const flow = profile.optical_flow ?? {};
+  const fps = Number(flow.sample_fps ?? 1);
+  const velocity = (flow.samples ?? []).map((entry) => Number(entry.pixels_per_second)).filter(Number.isFinite);
+  const acceleration = differences(velocity).map((value) => value * fps);
+  return {
+    velocity,
+    acceleration,
+    deceleration: acceleration.filter((value) => value < 0).map(Math.abs),
+    jerk: differences(acceleration).map((value) => value * fps)
+  };
+}
+
+function flowDistance(left, right, key) {
+  const a = flowSeries(left)[key];
+  const b = flowSeries(right)[key];
+  return a.length && b.length ? round(wassersteinQuantiles(a, b), 5) : null;
+}
+
+function temporalDtw(left, right, maximumPoints = 600) {
+  const a = resampleSeries(left, maximumPoints);
+  const b = resampleSeries(right, maximumPoints);
+  if (!a.length || !b.length) return NaN;
+  const window = Math.max(Math.abs(a.length - b.length), Math.ceil(Math.max(a.length, b.length) * .15));
+  let previous = new Float64Array(b.length + 1).fill(Infinity);
+  previous[0] = 0;
+  for (let row = 1; row <= a.length; row += 1) {
+    const current = new Float64Array(b.length + 1).fill(Infinity);
+    const start = Math.max(1, row - window);
+    const end = Math.min(b.length, row + window);
+    for (let column = start; column <= end; column += 1) {
+      current[column] = Math.abs(a[row - 1] - b[column - 1]) + Math.min(previous[column], current[column - 1], previous[column - 1]);
+    }
+    previous = current;
+  }
+  return previous[b.length] / (a.length + b.length);
+}
+
+function resampleSeries(values, maximumPoints) {
+  const clean = values.map(Number).filter(Number.isFinite);
+  if (clean.length <= maximumPoints) return clean;
+  return Array.from({ length: maximumPoints }, (_, index) => clean[Math.round(index * (clean.length - 1) / (maximumPoints - 1))]);
 }
 
 export function evaluateMotionQuality(metrics, expected = {}) {
