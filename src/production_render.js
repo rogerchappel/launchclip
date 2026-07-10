@@ -9,6 +9,15 @@ import { critiqueProduction } from "./production_critic.js";
 
 const execFileAsync = promisify(execFile);
 
+export class ProductionVerificationError extends Error {
+  constructor(verification) {
+    super(`HyperFrames verification failed: ${verification.failed.join(", ")}. Review ${verification.qa}.`);
+    this.name = "ProductionVerificationError";
+    this.code = "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED";
+    this.verification = verification;
+  }
+}
+
 export async function verifyProduction(workspacePath, options = {}, adapters = {}) {
   const workspace = path.resolve(workspacePath);
   const project = path.join(workspace, PRODUCTION_PATHS.hyperframes);
@@ -52,7 +61,18 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
     snapshots
   };
   await writeFile(path.join(qaDir, "verification.json"), `${JSON.stringify(summary, null, 2)}\n`);
-  if (failed.length) throw new Error(`HyperFrames verification failed: ${failed.join(", ")}. Review ${qaDir}.`);
+  if (failed.length) {
+    throw new ProductionVerificationError({
+      stage: "production-verify",
+      status: "failed",
+      workspace,
+      project,
+      qa: qaDir,
+      snapshots,
+      checks: summary.checks,
+      failed
+    });
+  }
   return { stage: "production-verify", status: "ready", workspace, project, qa: qaDir, snapshots, checks: summary.checks };
 }
 

@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { renderDraftProduction, renderProduction, verifyProduction } from "../src/production_render.js";
+import { ProductionVerificationError, renderDraftProduction, renderProduction, verifyProduction } from "../src/production_render.js";
 
 test("runs lint, browser validation, transition-aware inspection, and assembled snapshots", async () => {
   const workspace = await fixture();
@@ -52,7 +52,13 @@ test("blocks production when a shot-local motion assertion fails", async () => {
     }
     return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
   };
-  await assert.rejects(() => verifyProduction(workspace, {}, { run }), /inspect:shot-1/);
+  await assert.rejects(() => verifyProduction(workspace, {}, { run }), (error) => {
+    assert.ok(error instanceof ProductionVerificationError);
+    assert.equal(error.code, "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED");
+    assert.deepEqual(error.verification.failed, ["inspect:shot-1"]);
+    assert.equal(error.verification.status, "failed");
+    return true;
+  });
   const report = JSON.parse(await readFile(path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json"), "utf8"));
   assert.equal(report.ok, false);
   assert.equal(report.stdout.issues[0].code, "motion_selector_missing");
