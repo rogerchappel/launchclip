@@ -10,7 +10,7 @@ export async function analyzeRenderMotion(videoPath, options = {}, adapters = {}
   const run = adapters.run ?? runCommand;
   const runRaw = adapters.runRaw ?? (adapters.run ? adapters.run : runRawCommand);
   const probe = JSON.parse((await run("ffprobe", [
-    "-v", "error", "-show_entries", "format=duration,size:stream=index,codec_type,width,height,avg_frame_rate,r_frame_rate",
+    "-v", "error", "-count_frames", "-show_entries", "format=duration,size:stream=index,codec_type,width,height,avg_frame_rate,r_frame_rate,nb_frames,nb_read_frames",
     "-of", "json", resolved
   ])).stdout);
   const video = (probe.streams ?? []).find((entry) => entry.codec_type === "video");
@@ -32,6 +32,9 @@ export async function analyzeRenderMotion(videoPath, options = {}, adapters = {}
   const sceneThreshold = Number(options.sceneThreshold ?? 0.35);
   const cutFrames = scenes.filter((entry) => entry.value >= sceneThreshold).map((entry) => entry.frame);
   const duration = Number(probe.format?.duration ?? series.frame_count / fps);
+  const encodedFrameCount = positiveInteger(video.nb_read_frames)
+    ?? positiveInteger(video.nb_frames)
+    ?? (duration > 0 && fps > 0 ? Math.round(duration * fps) : series.frame_count + 1);
   const cuts = cutFrames.map((frame) => frame / fps).filter((time) => time > 0.05 && time < duration - 0.05);
   const flowFps = Number(options.flowFps ?? 10);
   const flowWidth = Number(options.flowWidth ?? 64);
@@ -51,7 +54,8 @@ export async function analyzeRenderMotion(videoPath, options = {}, adapters = {}
     height: Number(video.height),
     aspect: aspectOf(video.width, video.height),
     fps: round(fps),
-    frame_count: series.frame_count,
+    frame_count: encodedFrameCount,
+    frame_difference_count: series.frame_count,
     cut_threshold: sceneThreshold,
     cuts,
     cut_rate_per_minute: rate(cuts.length, duration),
@@ -367,6 +371,11 @@ function parseRate(value) {
   const rate = Number(numerator) / Number(denominator);
   if (!Number.isFinite(rate) || rate <= 0) throw new Error(`Invalid frame rate: ${value}`);
   return rate;
+}
+
+function positiveInteger(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : null;
 }
 
 function aspectOf(width, height) {

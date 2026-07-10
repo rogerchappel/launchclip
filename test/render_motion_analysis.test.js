@@ -41,7 +41,7 @@ test("measures velocity and easing from block-matched frame motion", () => {
 test("analyzes ffmpeg frame differences and scene scores without comparing pixels to references", async () => {
   const commands = [];
   const outputs = [
-    { stdout: JSON.stringify({ format: { duration: "10" }, streams: [{ codec_type: "video", width: 1080, height: 1920, avg_frame_rate: "30/1" }] }) },
+    { stdout: JSON.stringify({ format: { duration: "10" }, streams: [{ codec_type: "video", width: 1080, height: 1920, avg_frame_rate: "30/1", nb_frames: "300", nb_read_frames: "300" }] }) },
     { stdout: metadata("lavfi.signalstats.YAVG", [0.1, 0.1, 5, 0.1, 0.1, 7, 0.1]) },
     { stdout: metadata("lavfi.scene_score", [0, .1, .6, .1, .7, .1, .1]) }
   ];
@@ -51,6 +51,9 @@ test("analyzes ffmpeg frame differences and scene scores without comparing pixel
     runRaw: async () => { rawCalls += 1; return { stdout: Buffer.alloc(64 * 36 * 3) }; }
   });
   assert.equal(metrics.aspect, "9:16");
+  assert.equal(metrics.frame_count, 300);
+  assert.equal(metrics.frame_difference_count, 7);
+  assert.equal(metrics.motion.frame_count, 7);
   assert.deepEqual(metrics.cuts.map((value) => Number(value.toFixed(3))), [.067, .133]);
   assert.equal(metrics.cut_rate_per_minute, 12);
   assert.ok(metrics.motion.frame_difference.length > 0);
@@ -58,6 +61,8 @@ test("analyzes ffmpeg frame differences and scene scores without comparing pixel
   assert.equal(rawCalls, 1);
   assert.match(commands[1][1].join(" "), /tblend=all_mode=difference/);
   assert.match(commands[2][1].join(" "), /scene_score/);
+  assert.match(commands[0][1].join(" "), /-count_frames/);
+  assert.match(commands[0][1].join(" "), /nb_read_frames/);
 });
 
 test("compares temporal distributions and optical-flow easing within compatible reference families", () => {
