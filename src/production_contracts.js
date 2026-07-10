@@ -143,7 +143,15 @@ export const PRODUCTION_PLAN_SCHEMA = strictObject({
         }
       }),
       transition_out: string,
-      sfx: stringArray
+      sfx: {
+        type: "array",
+        items: strictObject({
+          at_seconds: { type: "number", minimum: 0 },
+          cue: string,
+          intent: string,
+          volume: { type: "number", minimum: 0, maximum: 1 }
+        })
+      }
     })
   },
   rubric: {
@@ -240,6 +248,9 @@ export function validateProductionPlan(plan, context = {}) {
       const shotDuration = end - start;
       for (const reveal of shot.visual.internal_reveals) {
         if (reveal.at_seconds < 0 || reveal.at_seconds > shotDuration) errors.push(`${label} reveal at ${reveal.at_seconds}s falls outside its ${shotDuration}s duration`);
+      }
+      for (const cue of shot.sfx ?? []) {
+        if (cue.at_seconds < 0 || cue.at_seconds > shotDuration) errors.push(`${label} SFX at ${cue.at_seconds}s falls outside its ${shotDuration}s duration`);
       }
     }
     checkReferences(errors, `${label}.evidence_ids`, shot?.evidence_ids, context.evidenceIds);

@@ -88,7 +88,7 @@ function samplePlan() {
     on_screen_text: ["Proof"], evidence_ids: ["ev-1"], resource_ids: ["screen"],
     presenter: { visible: false, placement: "offstage", size: "none", treatment: "none" },
     visual: { description: "The evidence becomes the interface", composition: "Subject-led hierarchy", typography: "Editorial display and metadata", background: "Quiet field", foreground: "One proof object", motion: "Reveal, connect, settle", internal_reveals: [{ at_seconds: 1, action: "connect claim to proof", easing_intent: "fast then settle", emphasis: "proof" }] },
-    transition_out: "semantic match", sfx: ["soft evidence tick"]
+    transition_out: "semantic match", sfx: [{ at_seconds: 1, cue: "soft evidence tick", intent: "mark the proof connection", volume: 0.3 }]
   });
   return {
     schema_version: PRODUCTION_PLAN_VERSION,

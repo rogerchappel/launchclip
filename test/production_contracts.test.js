@@ -129,7 +129,7 @@ function sampleShot(id, start, end) {
       internal_reveals: [{ at_seconds: 1, action: "reveal the proof value", easing_intent: "fast then settle", emphasis: "proof" }]
     },
     transition_out: "content-led cut",
-    sfx: ["evidence tick"]
+    sfx: [{ at_seconds: 1, cue: "evidence tick", intent: "mark the proof reveal", volume: 0.35 }]
   };
 }
 
