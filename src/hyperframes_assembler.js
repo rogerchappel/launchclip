@@ -111,6 +111,12 @@ export function rootMotionSpec(plan, bundles) {
     const selector = `#mount-${shot.id}`;
     assertions.push({ kind: "appearsBy", selector, bySec: shot.start_seconds + .05 });
     assertions.push({ kind: "staysInFrame", selector });
+    const shotMotion = toHyperFramesMotionSpec(bundles[index] ?? { motion: { assertions: [] } }, shot.end_seconds - shot.start_seconds);
+    for (const assertion of shotMotion.assertions) {
+      assertions.push(assertion.kind === "appearsBy"
+        ? { ...assertion, bySec: shot.start_seconds + assertion.bySec }
+        : { ...assertion });
+    }
     if ((bundles[index]?.motion?.assertions ?? []).some((entry) => entry.must_remain_live)) {
       assertions.push({ kind: "keepsMoving", withinSelector: selector, maxStaticSec: Math.min(2, Math.max(.25, (shot.end_seconds - shot.start_seconds) / 3)) });
     }
