@@ -21,22 +21,24 @@ HyperFrames contract:
 - Do not include audio or video elements. Request those through root_media_requests; the assembler owns media playback.
 - Do not fetch, use timers, Date.now, Math.random, requestAnimationFrame, or browser storage.
 - Use only supplied local resource paths. If a requested visual asset is unavailable, design a native HTML/CSS/SVG treatment instead of inventing a path.
+- When narration_timing is present, synchronize semantic reveals to its shot-local word timestamps instead of estimating speech timing.
 - Use transform and opacity for primary motion. Name selectors in motion assertions so inspection can verify the intended reveals.
 - Keep essential text and proof inside the frame at all times. Preserve exact visible copy and factual meaning.
 - The first and last rendered frame must be intentional, including when mounted next to neighboring shots.`;
 
 export async function directFrames(workspacePath, options = {}, adapters = {}) {
   const workspace = path.resolve(workspacePath);
-  const [intake, evidence, plan] = await Promise.all([
+  const [intake, evidence, plan, narrationTiming] = await Promise.all([
     readJson(path.join(workspace, PRODUCTION_PATHS.intake)),
     readJson(path.join(workspace, PRODUCTION_PATHS.evidence)),
-    readJson(path.join(workspace, PRODUCTION_PATHS.plan))
+    readJson(path.join(workspace, PRODUCTION_PATHS.plan)),
+    readNarrationTiming(workspace)
   ]);
   const store = adapters.store ?? await ProductionJobStore.open(workspace, { create: false });
   if (store.get("creative-plan")?.status !== "succeeded") throw new Error("Creative plan job must succeed before frame delegation");
   const client = adapters.client ?? new OpenAIResponsesClient();
   const concurrency = positiveInteger(options.concurrency ?? 4, "concurrency");
-  const tasks = plan.shots.map((shot, index) => () => directOneFrame({ workspace, intake, evidence, plan, shot, index, store, client, options }));
+  const tasks = plan.shots.map((shot, index) => () => directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, client, options }));
   const frames = await runPool(tasks, concurrency);
   return {
     stage: "frame-direction",
@@ -48,7 +50,7 @@ export async function directFrames(workspacePath, options = {}, adapters = {}) {
   };
 }
 
-export function buildFrameInput({ intake, evidence, plan, shot, index, prior = null, errors = [] }) {
+export function buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming = null, prior = null, errors = [] }) {
   const neighbors = [plan.shots[index - 1], plan.shots[index + 1]].filter(Boolean).map((entry) => ({
     id: entry.id,
     purpose: entry.purpose,
@@ -57,6 +59,13 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, prior = n
   }));
   const evidenceById = new Map(evidence.items.map((entry) => [entry.id, entry]));
   const resourceById = new Map(intake.resources.map((entry) => [entry.id, entry]));
+  const timedWords = (narrationTiming?.words ?? []).filter((word) => Number(word.end) > shot.start_seconds && Number(word.start) < shot.end_seconds).map((word) => ({
+    word: word.word,
+    global_start_seconds: Number(word.start),
+    global_end_seconds: Number(word.end),
+    shot_start_seconds: Math.max(0, Number(word.start) - shot.start_seconds),
+    shot_end_seconds: Math.min(shot.end_seconds - shot.start_seconds, Number(word.end) - shot.start_seconds)
+  }));
   return JSON.stringify({
     global_design: plan.design,
     format: plan.format,
@@ -65,15 +74,16 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, prior = n
     neighbors,
     evidence: shot.evidence_ids.map((id) => evidenceById.get(id)).filter(Boolean).map((entry) => ({ id: entry.id, title: entry.title, content: entry.content, provenance: entry.provenance })),
     resources: shot.resource_ids.map((id) => resourceById.get(id)).filter(Boolean).map((entry) => ({ id: entry.id, role: entry.role, type: entry.type, local_path: entry.is_remote ? null : entry.location, remote: entry.is_remote })),
+    narration_timing: narrationTiming ? { duration_seconds: narrationTiming.duration_seconds, words: timedWords } : null,
     frame_responsibility: "Own visual HTML and motion for this shot only. Request media; do not mount it.",
     prior_attempt: prior,
     validation_errors_to_repair: errors
   });
 }
 
-async function directOneFrame({ workspace, intake, evidence, plan, shot, index, store, client, options }) {
+async function directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, client, options }) {
   const jobId = `frame:${shot.id}`;
-  const baseInput = buildFrameInput({ intake, evidence, plan, shot, index });
+  const baseInput = buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming });
   const inputHash = semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v1" });
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
@@ -99,7 +109,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         reasoningContext: "current_turn",
         pro: false,
         instructions: FRAME_INSTRUCTIONS,
-        input: buildFrameInput({ intake, evidence, plan, shot, index, prior, errors }),
+        input: buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming, prior, errors }),
         schema: FRAME_BUNDLE_SCHEMA,
         schemaName: "launchclip_frame_bundle",
         background: options.background !== false,
@@ -183,6 +193,18 @@ async function runPool(tasks, concurrency) {
 
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
+}
+
+async function readNarrationTiming(workspace) {
+  try {
+    const manifest = await readJson(path.join(workspace, "production", "media", "manifest.json"));
+    const voiceover = manifest.voiceover;
+    if (!voiceover?.words_path) return voiceover?.duration_seconds ? { duration_seconds: voiceover.duration_seconds, words: [] } : null;
+    return { duration_seconds: voiceover.duration_seconds, words: await readJson(path.resolve(voiceover.words_path)) };
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
 }
 
 async function writeAtomic(filePath, content) {

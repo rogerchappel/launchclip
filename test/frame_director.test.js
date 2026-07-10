@@ -9,12 +9,13 @@ import { EVIDENCE_VERSION, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from 
 
 test("gives each delegated frame only its shot, neighbors, grounded evidence, and resources", () => {
   const context = fixture();
-  const input = JSON.parse(buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0 }));
+  const input = JSON.parse(buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0, narrationTiming: { duration_seconds: 10, words: [{ word: "Proof", start: 1.5, end: 2 }, { word: "Next", start: 5.2, end: 5.7 }] } }));
   assert.equal(input.shot.id, "shot-1");
   assert.deepEqual(input.neighbors.map((entry) => entry.id), ["shot-2"]);
   assert.deepEqual(input.evidence.map((entry) => entry.id), ["ev-1"]);
   assert.deepEqual(input.resources.map((entry) => entry.id), ["screen"]);
   assert.equal(input.global_design.concept, "Evidence choreography");
+  assert.deepEqual(input.narration_timing.words, [{ word: "Proof", global_start_seconds: 1.5, global_end_seconds: 2, shot_start_seconds: 1.5, shot_end_seconds: 2 }]);
 });
 
 test("delegates shots concurrently, repairs invalid HTML, and writes modular frame artifacts", async () => {
