@@ -305,8 +305,15 @@ export function validateFrameBundle(bundle, context = {}) {
   const html = String(bundle.html ?? "");
   if (!html.trim()) errors.push("html is required");
   if (/<(?:audio|video)\b/i.test(html)) errors.push("frame HTML must not own audio or video; request root media instead");
-  if (/\b(?:src|href)\s*=\s*["']https?:\/\//i.test(html)) errors.push("frame HTML must not load remote assets at render time");
-  if (/\b(?:fetch|XMLHttpRequest|WebSocket)\s*\(/i.test(html)) errors.push("frame HTML must not perform render-time network requests");
+  if (/<(?:iframe|object|embed|link|base|form)\b/i.test(html)) errors.push("frame HTML must not contain active embedding or navigation elements");
+  if (/<script\b[^>]*\bsrc\s*=/i.test(html)) errors.push("frame HTML scripts must be inline and deterministic");
+  if (/\son[a-z]+\s*=/i.test(html)) errors.push("frame HTML must not contain event-handler attributes");
+  if (/\bsrcset\s*=/i.test(html)) errors.push("frame HTML must not contain unverified srcset resources");
+  if (/\b(?:src|href|action|poster)\s*=\s*["']\s*(?:https?:|\/\/|file:|javascript:)/i.test(html)) errors.push("frame HTML must not load remote assets, file-scheme resources, or executable URLs at render time");
+  if (/@import\b/i.test(html)) errors.push("frame CSS must not import external stylesheets");
+  if (/url\(\s*["']?\s*(?:https?:|\/\/|file:|javascript:)/i.test(html)) errors.push("frame CSS must not load remote, file-scheme, or executable assets");
+  if (/\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|sendBeacon|window\.open)\s*\(/i.test(html) || /\bnew\s+Image\s*\(/i.test(html) || /\bimport\s*\(/i.test(html)) errors.push("frame HTML must not perform render-time network requests");
+  checkFrameAssetPaths(errors, html, context.allowedAssetPaths);
   if (/\b(?:Date\.now|Math\.random)\s*\(/i.test(html)) errors.push("frame HTML must be deterministic");
   for (const [index, assertion] of (bundle.motion?.assertions ?? []).entries()) {
     if (assertion.appears_by_seconds == null && assertion.order == null && !assertion.must_stay_in_frame && !assertion.must_remain_live) {
@@ -322,6 +329,18 @@ export function validateFrameBundle(bundle, context = {}) {
     }
   }
   return { ok: errors.length === 0, errors };
+}
+
+function checkFrameAssetPaths(errors, html, allowed) {
+  if (!allowed) return;
+  const paths = new Set([...allowed].map(String));
+  const candidates = [
+    ...String(html).matchAll(/\b(?:src|href|poster)\s*=\s*["']([^"']+)["']/gi),
+    ...String(html).matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/gi)
+  ].map((match) => match[1].trim()).filter((value) => value && !/^(?:data:image\/|blob:|#)/i.test(value));
+  for (const candidate of candidates) {
+    if (!paths.has(candidate)) errors.push(`frame HTML references an unapproved asset path: ${candidate}`);
+  }
 }
 
 export function validateCritique(critique, shotIds = []) {

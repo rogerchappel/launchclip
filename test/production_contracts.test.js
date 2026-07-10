@@ -84,6 +84,17 @@ test("frame bundles request root media without owning media tags", () => {
   assert.ok(invalid.errors.some((error) => error.includes("deterministic")));
 });
 
+test("rejects active content and assets outside the approved local resource set", () => {
+  const bundle = sampleFrameBundle();
+  bundle.html = '<style>@import "https://bad.example/x.css"; .x{background:url(file:///etc/passwd)}</style><iframe src="//bad.example"></iframe><script>navigator.sendBeacon("/leak")</script><img src="/tmp/unknown.png" onload="steal()">';
+  const result = validateFrameBundle(bundle, { allowedAssetPaths: ["/tmp/approved.png"] });
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => error.includes("active embedding")));
+  assert.ok(result.errors.some((error) => error.includes("event-handler")));
+  assert.ok(result.errors.some((error) => error.includes("network requests")));
+  assert.ok(result.errors.some((error) => error.includes("unapproved asset path")));
+});
+
 test("critique cannot ship with blocking findings or unknown shots", () => {
   const critique = {
     schema_version: CRITIQUE_VERSION,
