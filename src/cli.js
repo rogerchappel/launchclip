@@ -4,8 +4,10 @@ import { generateMusic } from "./music.js";
 import { runDirect } from "./director.js";
 import { preprocessPresenter } from "./presenter_preprocess.js";
 import { writeIntake } from "./intake.js";
+import { runProductionStage } from "./production_cli.js";
 
-const COMMANDS = new Set(["intake", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const PRODUCTION_COMMANDS = new Set(["evidence", "creative-plan", "direct-frames", "production-audio", "assemble", "produce"]);
+const COMMANDS = new Set(["intake", ...PRODUCTION_COMMANDS, "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout } = io;
@@ -22,6 +24,8 @@ export async function runCli(argv, io = {}) {
   let result;
   if (command === "intake") {
     result = await writeIntake(required(firstArg, "source"), flags);
+  } else if (PRODUCTION_COMMANDS.has(command)) {
+    result = await runProductionStage(command, required(firstArg, command === "produce" ? "source" : "workspace path"), flags);
   } else if (command === "init") {
     result = await initWorkspace(required(firstArg, "repo path"), flags);
   } else if (command === "demo") {
@@ -66,7 +70,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "allow-placeholder-sfx" || name === "no-music" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro") {
+    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "allow-placeholder-sfx" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "allow-timing-drift" || name === "foreground" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro") {
       flags[name] = true;
       continue;
     }
@@ -94,6 +98,12 @@ function help() {
 
 Usage:
   launchclip intake <source> [--kind repository|product|topic|voiceover] [--resource path] [--reference url] [--voiceover audio] [--presenter video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
+  launchclip produce <source> [intake flags] [--voice-id id] [--sfx-dir path] [--concurrency 4] [--no-audio] [--allow-timing-drift]
+  launchclip evidence <workspace>
+  launchclip creative-plan <workspace> [--max-output-tokens 48000] [--foreground]
+  launchclip production-audio <workspace> [--voice-id id] [--music-model music_v2] [--sfx-dir path] [--no-voice] [--no-music] [--no-sfx]
+  launchclip direct-frames <workspace> [--concurrency 4] [--semantic-attempts 2] [--frame-reasoning high]
+  launchclip assemble <workspace> [--music-volume 0.16]
   launchclip init <repo> --out <workspace>
   launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]
   launchclip plan <workspace> --format short-15 --renderer none|hyperframes [--style proof-card|ugc-split|ugc-demo-punchy|premium-product-short|data-story-benchmark] [--assets-dir path/to/assets] [--talking-head heygen --avatar-id avatar_123]
