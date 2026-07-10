@@ -65,7 +65,11 @@ function frameBundle(id, duration) {
     shot_id: id,
     html: `<!doctype html><html><body><div data-composition-id="${id}" data-start="0" data-duration="${duration}" data-width="1080" data-height="1920"><div id="proof" class="clip" data-start="0" data-duration="${duration}">Proof</div></div></body></html>`,
     motion: { assertions: [{ selector: "#proof", appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: true }] },
-    root_media_requests: [{ resource_id: "screen", kind: "video", start_seconds: 0, end_seconds: duration, volume: 0, placement: "proof window" }],
+    root_media_requests: [{
+      resource_id: "screen", kind: "video", start_seconds: 0, end_seconds: duration,
+      source_start_seconds: 0, source_end_seconds: duration, volume: 0,
+      placement: { x: 80, y: 180, width: 920, height: 720, object_fit: "cover", border_radius: 32, z_index: 2, treatment: "proof window" }
+    }],
     evidence_ids: ["ev-1"], visible_copy: ["Proof"], preserve: ["proof hierarchy"]
   };
 }

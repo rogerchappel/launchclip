@@ -176,8 +176,19 @@ export const FRAME_BUNDLE_SCHEMA = strictObject({
       kind: { type: "string", enum: ["audio", "video"] },
       start_seconds: { type: "number", minimum: 0 },
       end_seconds: { type: "number", exclusiveMinimum: 0 },
+      source_start_seconds: { type: ["number", "null"], minimum: 0 },
+      source_end_seconds: { type: ["number", "null"], exclusiveMinimum: 0 },
       volume: { type: "number", minimum: 0, maximum: 1 },
-      placement: string
+      placement: strictObject({
+        x: { type: "number" },
+        y: { type: "number" },
+        width: { type: "number", exclusiveMinimum: 0 },
+        height: { type: "number", exclusiveMinimum: 0 },
+        object_fit: { type: "string", enum: ["cover", "contain", "fill"] },
+        border_radius: { type: "number", minimum: 0 },
+        z_index: { type: "integer" },
+        treatment: string
+      })
     })
   },
   evidence_ids: stringArray,
@@ -262,6 +273,9 @@ export function validateFrameBundle(bundle, context = {}) {
   checkReferences(errors, "root_media_requests.resource_id", (bundle.root_media_requests ?? []).map((entry) => entry.resource_id), context.resourceIds);
   for (const [index, request] of (bundle.root_media_requests ?? []).entries()) {
     if (!(request.end_seconds > request.start_seconds)) errors.push(`root_media_requests[${index}] must have end_seconds > start_seconds`);
+    if (request.source_end_seconds != null && request.source_start_seconds != null && !(request.source_end_seconds > request.source_start_seconds)) {
+      errors.push(`root_media_requests[${index}] must have source_end_seconds > source_start_seconds`);
+    }
   }
   return { ok: errors.length === 0, errors };
 }

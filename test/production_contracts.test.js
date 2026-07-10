@@ -139,7 +139,11 @@ function sampleFrameBundle() {
     shot_id: "shot-1",
     html: '<template><div data-composition-id="shot-1" data-width="1920" data-height="1080"></div></template>',
     motion: { assertions: [{ selector: "#proof", appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: true }] },
-    root_media_requests: [{ resource_id: "res-1", kind: "video", start_seconds: 0, end_seconds: 5, volume: 0, placement: "right third" }],
+    root_media_requests: [{
+      resource_id: "res-1", kind: "video", start_seconds: 0, end_seconds: 5,
+      source_start_seconds: 3, source_end_seconds: 8, volume: 0,
+      placement: { x: 1180, y: 120, width: 620, height: 840, object_fit: "cover", border_radius: 24, z_index: 3, treatment: "right-third presenter cutout" }
+    }],
     evidence_ids: ["ev-1"],
     visible_copy: ["Proof appears"],
     preserve: ["asymmetric balance"]
