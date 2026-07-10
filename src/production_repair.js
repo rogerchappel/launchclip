@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promi
 import path from "node:path";
 import { safeShotFile, validateHyperFramesRoot } from "./frame_director.js";
 import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
-import { describeJobOutput, ProductionJobStore } from "./job_store.js";
+import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { OpenAIResponsesClient } from "./openai_responses.js";
 import { FRAME_BUNDLE_SCHEMA, PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
 
@@ -57,6 +57,14 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     const shot = plan.shots.find((entry) => entry.id === shotId);
     if (!shot) throw new Error(`Critique references unknown shot: ${shotId}`);
     const prior = await readJson(safeShotFile(path.join(workspace, PRODUCTION_PATHS.frames), shotId, ".json"));
+    const repairInputHash = semanticHash({
+      worker: "frame-repair.v3",
+      model: options.model ?? "gpt-5.6",
+      reasoning: options.reasoning ?? "high",
+      shot,
+      findings,
+      prior
+    });
     const jobId = `frame:${shotId}`;
     const current = store.get(jobId);
     let resumeResponseId = null;
@@ -64,7 +72,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
       if (!current.remote?.response_id) throw new Error(`Repair job is ${current.status} without a resumable response id: ${jobId}`);
       resumeResponseId = current.remote.response_id;
     } else {
-      if (current.status === "failed" || current.status === "stale") await store.retry(jobId);
+      if (current.status === "failed" || current.status === "stale") await store.retry(jobId, { inputHash: repairInputHash });
       await store.markRunning(jobId, { provider: "openai", response_id: null, status: "repairing" });
     }
     try {
@@ -141,23 +149,39 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
 export async function collectDeterministicRepairFindings(workspacePath, plan) {
   const workspace = path.resolve(workspacePath);
   const findings = [];
+  const lintPath = path.join(workspace, PRODUCTION_PATHS.qa, "lint.json");
+  const lintInfo = await optionalStat(lintPath);
+  const lint = lintInfo ? await readJson(lintPath) : null;
   for (const shot of plan.shots ?? []) {
     const reportPath = path.join(workspace, PRODUCTION_PATHS.qa, "shot-inspect", shot.id, "inspect.json");
     const framePath = safeShotFile(path.join(workspace, PRODUCTION_PATHS.frames), shot.id, ".html");
     const [reportInfo, frameInfo] = await Promise.all([optionalStat(reportPath), optionalStat(framePath)]);
-    if (!reportInfo || !frameInfo || reportInfo.mtimeMs < frameInfo.mtimeMs) continue;
-    const report = await readJson(reportPath);
-    if (report.ok !== false) continue;
-    const rawIssues = Array.isArray(report.stdout?.issues)
-      ? report.stdout.issues.filter((issue) => issue?.severity === "error")
-      : [];
-    const issues = uniqueIssues(rawIssues.length ? rawIssues : [{
-      code: "inspect_failed",
-      severity: "error",
-      message: String(report.stderr || "Shot-local HyperFrames inspection failed without structured issue details.").slice(0, 2_000),
-      selector: null,
-      fixHint: "Correct the shot-local runtime or composition error, then make native inspection pass."
-    }]);
+    if (!frameInfo) continue;
+    const rawIssues = [];
+    if (reportInfo && reportInfo.mtimeMs >= frameInfo.mtimeMs) {
+      const report = await readJson(reportPath);
+      if (report.ok === false) {
+        const inspectIssues = Array.isArray(report.stdout?.issues)
+          ? report.stdout.issues.filter((issue) => issue?.severity === "error")
+          : [];
+        rawIssues.push(...(inspectIssues.length ? inspectIssues : [{
+          code: "inspect_failed",
+          severity: "error",
+          message: String(report.stderr || "Shot-local HyperFrames inspection failed without structured issue details.").slice(0, 2_000),
+          selector: null,
+          fixHint: "Correct the shot-local runtime or composition error, then make native inspection pass."
+        }]));
+      }
+    }
+    if (lintInfo && lintInfo.mtimeMs >= frameInfo.mtimeMs) {
+      const expectedFile = `${shot.id}.html`;
+      const lintFindings = Array.isArray(lint?.stdout?.findings) ? lint.stdout.findings : [];
+      rawIssues.push(...lintFindings
+        .filter((finding) => ["error", "warning"].includes(finding?.severity) && path.basename(String(finding.file ?? "")) === expectedFile)
+        .map(lintRepairIssue));
+    }
+    const issues = uniqueIssues(rawIssues);
+    if (!issues.length) continue;
     const codes = issues.map((issue) => String(issue.code ?? "inspect_failed"));
     findings.push({
       id: `native-${shot.id}`,
@@ -189,6 +213,17 @@ function describeNativeIssue(issue) {
   const selector = issue.selector ? ` at ${issue.selector}` : "";
   const hint = issue.fixHint ? ` (${String(issue.fixHint).trim()})` : "";
   return `${issue.code ?? "inspect_failed"}${selector}: ${String(issue.message ?? "inspection failed").trim()}${hint}`;
+}
+
+function lintRepairIssue(finding) {
+  const message = String(finding.message ?? "HyperFrames lint failed");
+  return {
+    code: /GSAP tweens overlap/i.test(message) ? "motion_tween_overlap" : `lint_${String(finding.rule ?? "warning").replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`,
+    severity: finding.severity,
+    message,
+    selector: finding.selector ?? null,
+    fixHint: "Resolve the lint finding without weakening strict verification."
+  };
 }
 
 function nativeCategory(codes) {

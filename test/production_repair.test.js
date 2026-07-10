@@ -24,6 +24,8 @@ test("repairs only criticised frames, preserves the frame contract, and invalida
   const store = await ProductionJobStore.open(workspace, { create: false });
   assert.equal(store.get("frame:shot-1").status, "succeeded");
   assert.equal(store.get("frame:shot-2").status, "succeeded");
+  assert.equal(store.get("frame:shot-2").attempt, 1);
+  assert.notEqual(store.get("frame:shot-2").input_hash, semanticHash({ id: "shot-2" }));
   assert.equal(store.get("hyperframes-assembly").status, "stale");
 });
 
@@ -118,6 +120,24 @@ test("feeds semantic validation errors back into a bounded repair retry", async 
   assert.equal(result.status, "repaired");
   assert.equal(calls, 2);
   assert.match(await readFile(result.repaired[0].html, "utf8"), /Valid retry/);
+});
+
+test("converts fresh strict lint warnings into shot-scoped repair findings", async () => {
+  const workspace = await fixture({ verdict: "ship" });
+  const lintPath = path.join(workspace, "production", "qa", "lint.json");
+  await writeFile(lintPath, `${JSON.stringify({
+    ok: false,
+    stdout: { findings: [{ severity: "warning", file: path.join(workspace, "production", "hyperframes", "compositions", "shot-2.html"), message: 'GSAP tweens overlap on "#shot-2-proof" for x.' }] }
+  })}\n`);
+  const client = { runStructured: async (request) => {
+    const finding = JSON.parse(request.input).findings[0];
+    assert.equal(finding.shot_ids[0], "shot-2");
+    assert.match(finding.instruction, /motion_tween_overlap/);
+    return { response_id: "lint_repair", model: "gpt-5.6", status: "completed", usage: {}, value: bundle("shot-2", "Lint repair") };
+  } };
+  const result = await repairProduction(workspace, {}, { client });
+  assert.equal(result.deterministic_findings, 1);
+  assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-2"]);
 });
 
 function bundle(id, copy = "Proof") {
