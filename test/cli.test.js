@@ -16,3 +16,15 @@ test("parses boolean and value flags", () => {
 test("requires flag values", () => {
   assert.throws(() => parseFlags(["--out"]), /Missing value/);
 });
+
+test("parses model-directed production control flags", () => {
+  assert.deepEqual(parseFlags(["--no-audio", "--fast-eval", "--allow-timing-drift", "--foreground", "--approve", "--concurrency", "4", "--voice-id", "voice_1"]), {
+    "no-audio": true,
+    "fast-eval": true,
+    "allow-timing-drift": true,
+    foreground: true,
+    approve: true,
+    concurrency: "4",
+    "voice-id": "voice_1"
+  });
+});

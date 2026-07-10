@@ -219,7 +219,7 @@ Missing aliases: ${assets.missing_aliases.length ? assets.missing_aliases.join("
   await writeJson(path.join(out, "video", "art-direction.json"), artDirection);
   await writeFile(path.join(out, "video", "frame.md"), renderFrameMd(artDirection));
   await writeFile(path.join(out, "video", "storyboard.html"), renderStoryboardHtml(manifest, video));
-  await writeHyperframesProject(out, manifest, video);
+  await writeHyperframesProject(out, manifest, video, { sfxDir: flags["sfx-dir"] });
   await writeFile(path.join(out, "video", "brief.md"), brief);
   await writeJson(path.join(out, "video", "render-plan.json"), renderPlan);
   await updateManifest(out, (existing) => {
@@ -365,7 +365,7 @@ async function renderHyperframes(out, flags = {}) {
   if (!(await fileExists(composition))) {
     const manifest = await readJson(path.join(out, "launchclip.json"));
     const video = await readJson(path.join(out, "video", "video.json"));
-    await writeHyperframesProject(out, manifest, video);
+    await writeHyperframesProject(out, manifest, video, { sfxDir: flags["sfx-dir"] });
   }
   const qualityReport = shouldRunHyperframesQualityGates(flags)
     ? await runHyperframesQualityGates(projectDir, flags)
@@ -2075,11 +2075,11 @@ function renderStoryboardHtml(manifest, video) {
 `;
 }
 
-async function writeHyperframesProject(out, manifest, video) {
+async function writeHyperframesProject(out, manifest, video, options = {}) {
   const projectDir = path.join(out, HYPERFRAMES_PROJECT_DIR.replace(/\//g, path.sep));
   await mkdir(projectDir, { recursive: true });
   const sfxManifest = buildHyperframesSfxManifest(video);
-  const sfxCopy = await copyHyperframesSfxAssets(projectDir, video.assets, sfxManifest);
+  const sfxCopy = await copyHyperframesSfxAssets(projectDir, video.assets, sfxManifest, options);
   const resolvedSfxManifest = applyHyperframesSfxAvailability(sfxManifest, sfxCopy);
   const assetReadiness = buildHyperframesAssetReadiness(video, resolvedSfxManifest);
   const chartDiagramQa = buildHyperframesChartDiagramQa(video);
@@ -2868,13 +2868,13 @@ function buildHyperframesSfxManifest(video) {
   };
 }
 
-async function copyHyperframesSfxAssets(projectDir, assets, sfxManifest) {
+async function copyHyperframesSfxAssets(projectDir, assets, sfxManifest, options = {}) {
   const availableAliases = hyperframesSfxAssetAliases(assets);
   const copied = [];
   const missing = [];
   const sfxDir = path.join(projectDir, "sfx");
   await mkdir(sfxDir, { recursive: true });
-  const defaultPack = await prepareSfxPack({ publicDir: projectDir, allowPlaceholder: true });
+  const defaultPack = await prepareSfxPack({ sfxDir: options.sfxDir, publicDir: projectDir, allowPlaceholder: !options.sfxDir });
   for (const asset of sfxManifest.assets) {
     const entry = availableAliases.get(asset.id);
     if (entry && await fileExists(entry.source_path)) {
@@ -2889,7 +2889,7 @@ async function copyHyperframesSfxAssets(projectDir, assets, sfxManifest) {
       continue;
     }
 
-    const fallback = await hyperframesDefaultSfxSource(asset, defaultPack.dir);
+    const fallback = await hyperframesDefaultSfxSource(asset, defaultPack.dir, options.sfxDir ? "provided-sfx-pack" : "generated-default-sfx");
     if (!fallback) {
       missing.push(asset.id);
       continue;
@@ -2909,7 +2909,7 @@ async function copyHyperframesSfxAssets(projectDir, assets, sfxManifest) {
   return { copied, missing };
 }
 
-async function hyperframesDefaultSfxSource(asset, generatedSfxDir) {
+async function hyperframesDefaultSfxSource(asset, generatedSfxDir, fallbackAlias = "generated-default-sfx") {
   const packageSfxDir = path.join(PACKAGE_ROOT, "public", "sfx");
   const names = [...new Set([
     asset.file_name,
@@ -2921,7 +2921,7 @@ async function hyperframesDefaultSfxSource(asset, generatedSfxDir) {
       const sourcePath = path.join(dir, name);
       if (await fileExists(sourcePath)) {
         return {
-          alias: path.resolve(dir) === path.resolve(generatedSfxDir) ? "generated-default-sfx" : "default-sfx-pack",
+          alias: path.resolve(dir) === path.resolve(generatedSfxDir) ? fallbackAlias : "default-sfx-pack",
           sourcePath
         };
       }
