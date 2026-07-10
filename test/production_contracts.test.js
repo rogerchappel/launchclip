@@ -41,6 +41,26 @@ test("rejects timeline gaps, unknown evidence, and changed supplied narration", 
   assert.ok(result.errors.some((error) => error.includes("preserved exactly")));
 });
 
+test("rejects unsafe shot IDs and evidence that is not eligible to support claims", () => {
+  const plan = samplePlan();
+  plan.shots[0].id = "../escape";
+  plan.claims[0].evidence_ids = ["ref-1"];
+  plan.narration.sections[0].evidence_ids = ["ref-1"];
+  const result = validateProductionPlan(plan, {
+    evidenceIds: ["ev-1", "ref-1"],
+    claimEligibleEvidenceIds: ["ev-1"],
+    resourceIds: ["res-1"]
+  });
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => error.includes("shots[0].id must match")));
+  assert.ok(result.errors.some((error) => error.includes("claims[0].evidence_ids references ineligible evidence id: ref-1")));
+  assert.ok(result.errors.some((error) => error.includes("narration.sections[0].evidence_ids references ineligible evidence id: ref-1")));
+
+  const bundle = sampleFrameBundle();
+  bundle.shot_id = "../../outside";
+  assert.equal(validateFrameBundle(bundle).ok, false);
+});
+
 test("canonicalizes unambiguous global reveal and SFX timestamps into shot-local time", () => {
   const plan = samplePlan();
   plan.shots[1].visual.internal_reveals[0].at_seconds = 6;

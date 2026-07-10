@@ -2,6 +2,7 @@ export const PRODUCTION_PLAN_VERSION = "launchclip.production-plan.v1";
 export const FRAME_BUNDLE_VERSION = "launchclip.frame-bundle.v1";
 export const CRITIQUE_VERSION = "launchclip.production-critique.v1";
 export const EVIDENCE_VERSION = "launchclip.evidence.v1";
+export const SHOT_ID_PATTERN = "^[a-z0-9][a-z0-9_-]{0,63}$";
 
 export const PRODUCTION_PATHS = Object.freeze({
   intake: "production/intake.json",
@@ -16,6 +17,7 @@ export const PRODUCTION_PATHS = Object.freeze({
 });
 
 const string = { type: "string" };
+const shotId = { type: "string", pattern: SHOT_ID_PATTERN };
 const nullableString = { type: ["string", "null"] };
 const stringArray = { type: "array", items: string };
 
@@ -111,7 +113,7 @@ export const PRODUCTION_PLAN_SCHEMA = strictObject({
     type: "array",
     minItems: 1,
     items: strictObject({
-      id: string,
+      id: shotId,
       start_seconds: { type: "number", minimum: 0 },
       end_seconds: { type: "number", exclusiveMinimum: 0 },
       purpose: string,
@@ -163,7 +165,7 @@ export const PRODUCTION_PLAN_SCHEMA = strictObject({
 
 export const FRAME_BUNDLE_SCHEMA = strictObject({
   schema_version: { type: "string", enum: [FRAME_BUNDLE_VERSION] },
-  shot_id: string,
+  shot_id: shotId,
   html: string,
   motion: strictObject({
     assertions: {
@@ -237,6 +239,7 @@ export function validateProductionPlan(plan, context = {}) {
   for (const [index, shot] of (plan.shots ?? []).entries()) {
     const label = `shots[${index}]`;
     if (!shot?.id) errors.push(`${label}.id is required`);
+    else if (!isValidShotId(shot.id)) errors.push(`${label}.id must match ${SHOT_ID_PATTERN}`);
     if (seen.has(shot?.id)) errors.push(`${label}.id must be unique: ${shot.id}`);
     seen.add(shot?.id);
     const start = Number(shot?.start_seconds);
@@ -261,6 +264,11 @@ export function validateProductionPlan(plan, context = {}) {
   for (const [index, claim] of (plan.claims ?? []).entries()) {
     if (claim?.confidence !== "creative" && !claim?.evidence_ids?.length) errors.push(`claims[${index}] requires evidence_ids unless confidence is creative`);
     checkReferences(errors, `claims[${index}].evidence_ids`, claim?.evidence_ids, context.evidenceIds);
+    if (claim?.confidence !== "creative") checkReferences(errors, `claims[${index}].evidence_ids`, claim?.evidence_ids, context.claimEligibleEvidenceIds, "ineligible evidence id");
+  }
+  for (const [index, section] of (plan.narration?.sections ?? []).entries()) {
+    checkReferences(errors, `narration.sections[${index}].evidence_ids`, section?.evidence_ids, context.evidenceIds);
+    checkReferences(errors, `narration.sections[${index}].evidence_ids`, section?.evidence_ids, context.claimEligibleEvidenceIds, "ineligible evidence id");
   }
   if (plan.narration?.source === "supplied" && context.suppliedTranscript && plan.narration.full_text !== context.suppliedTranscript) {
     errors.push("supplied narration must be preserved exactly");
@@ -288,6 +296,7 @@ export function validateFrameBundle(bundle, context = {}) {
   if (!isObject(bundle)) return { ok: false, errors };
   if (bundle.schema_version !== FRAME_BUNDLE_VERSION) errors.push(`schema_version must be ${FRAME_BUNDLE_VERSION}`);
   if (!bundle.shot_id) errors.push("shot_id is required");
+  else if (!isValidShotId(bundle.shot_id)) errors.push(`shot_id must match ${SHOT_ID_PATTERN}`);
   if (context.shotId && bundle.shot_id !== context.shotId) errors.push(`shot_id must be ${context.shotId}`);
   const html = String(bundle.html ?? "");
   if (!html.trim()) errors.push("html is required");
@@ -333,11 +342,15 @@ function strictObject(properties) {
   };
 }
 
-function checkReferences(errors, label, values, allowed) {
+export function isValidShotId(value) {
+  return typeof value === "string" && new RegExp(SHOT_ID_PATTERN).test(value);
+}
+
+function checkReferences(errors, label, values, allowed, reason = "unknown id") {
   if (!allowed) return;
   const ids = allowed instanceof Set ? allowed : new Set(allowed);
   for (const value of values ?? []) {
-    if (!ids.has(value)) errors.push(`${label} references unknown id: ${value}`);
+    if (!ids.has(value)) errors.push(`${label} references ${reason}: ${value}`);
   }
 }
 
@@ -353,6 +366,7 @@ function schemaErrors(value, schema, label) {
   if (!typeMatches) return [`${label} must be ${acceptedTypes.join(" or ")}`];
   if (value == null) return errors;
   if (schema.enum && !schema.enum.includes(value)) errors.push(`${label} must be one of: ${schema.enum.join(", ")}`);
+  if (typeof value === "string" && schema.pattern && !new RegExp(schema.pattern).test(value)) errors.push(`${label} must match ${schema.pattern}`);
   if (typeof value === "number") {
     if (schema.minimum != null && value < schema.minimum) errors.push(`${label} must be >= ${schema.minimum}`);
     if (schema.exclusiveMinimum != null && value <= schema.exclusiveMinimum) errors.push(`${label} must be > ${schema.exclusiveMinimum}`);
