@@ -26,7 +26,7 @@ test("generates timed narration and model-directed instrumental music through El
   ];
   const provider = new ElevenLabsMediaProvider({ apiKey: "test-key", fetch: async (url, init) => { requests.push({ url, init }); return responses.shift(); } });
   const voicePath = path.join(directory, "voice.mp3");
-  const voice = await provider.synthesizeNarration({ text: "Go", voiceId: "voice_1", outputPath: voicePath });
+  const voice = await provider.synthesizeNarration({ text: "Go", previousText: "Ready.", nextText: "Now.", previousRequestIds: ["req_0"], voiceId: "voice_1", outputPath: voicePath });
   const music = await provider.composeMusic({ prompt: "A restrained technical pulse that resolves cleanly", durationSeconds: 30, outputPath: path.join(directory, "music.mp3") });
 
   assert.equal((await readFile(voicePath)).toString(), "voice");
@@ -34,6 +34,9 @@ test("generates timed narration and model-directed instrumental music through El
   assert.equal(voice.request_id, "req_voice");
   assert.equal(music.song_id, "song_1");
   assert.match(requests[0].url, /text-to-speech\/voice_1\/with-timestamps/);
+  assert.deepEqual(JSON.parse(requests[0].init.body), {
+    text: "Go", model_id: "eleven_multilingual_v2", previous_text: "Ready.", next_text: "Now.", previous_request_ids: ["req_0"]
+  });
   assert.deepEqual(JSON.parse(requests[1].init.body), { prompt: "A restrained technical pulse that resolves cleanly", music_length_ms: 30000, model_id: "music_v2", force_instrumental: true });
 });
 

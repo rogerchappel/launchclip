@@ -23,7 +23,10 @@ export class ElevenLabsMediaProvider {
         text,
         model_id: options.modelId ?? "eleven_multilingual_v2",
         ...(options.languageCode ? { language_code: options.languageCode } : {}),
-        ...(options.voiceSettings ? { voice_settings: options.voiceSettings } : {})
+        ...(options.voiceSettings ? { voice_settings: options.voiceSettings } : {}),
+        ...(options.previousText ? { previous_text: String(options.previousText) } : {}),
+        ...(options.nextText ? { next_text: String(options.nextText) } : {}),
+        ...(options.previousRequestIds?.length ? { previous_request_ids: options.previousRequestIds.map(String).slice(-3) } : {})
       })
     }, "json");
     if (!response.data.audio_base64) throw new Error("ElevenLabs narration response contained no audio");
