@@ -57,9 +57,10 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
     await store.markStaleFrom([jobId]);
   }
   const current = store.get(jobId);
+  const dependencies = store.get("source-media-analysis") ? ["source-media-analysis"] : [];
   let resumeResponseId = null;
   if (!current) {
-    await store.add({ id: jobId, kind: "creative-plan", depends_on: [], input_hash: inputHash, max_attempts: Number(options.maxAttempts ?? 3) });
+    await store.add({ id: jobId, kind: "creative-plan", depends_on: dependencies, input_hash: inputHash, max_attempts: Number(options.maxAttempts ?? 3) });
   } else if (current.status === "failed" || current.status === "stale") {
     await store.retry(jobId);
   } else if (current.status === "running" || current.status === "submitted") {
