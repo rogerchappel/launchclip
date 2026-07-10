@@ -71,6 +71,53 @@ test("waits for active chapter workers before reporting a sibling failure", asyn
   assert.equal(store.get("creative-chapter:chapter-2").status, "succeeded");
 });
 
+test("rejects a missing final CTA before caching the chapter and retries it", async () => {
+  const workspace = await tempWorkspace();
+  const { intake, evidence } = context(workspace);
+  const calls = new Map();
+  const client = { runStructured: async (request) => {
+    calls.set(request.metadata.job_id, (calls.get(request.metadata.job_id) ?? 0) + 1);
+    if (request.metadata.job_id === "creative-outline") return response(outline());
+    if (request.metadata.chapter_id === "chapter-2" && calls.get(request.metadata.job_id) === 1) {
+      const invalid = chapterPlan("chapter-2");
+      invalid.narration.full_text = "The model directs the finished motion.";
+      invalid.narration.sections[0].text = invalid.narration.full_text;
+      for (const shot of invalid.shots) {
+        shot.voiceover = invalid.narration.full_text;
+        shot.on_screen_text = ["Proof"];
+      }
+      return response(invalid);
+    }
+    return response(chapterPlan(request.metadata.chapter_id));
+  } };
+  await assert.rejects(
+    () => planLongFormProduction(workspace, { intake, evidence, options: { chapterConcurrency: 2 } }, { client }),
+    /requested CTA/
+  );
+  let store = await ProductionJobStore.open(workspace, { create: false });
+  assert.equal(store.get("creative-chapter:chapter-2").status, "failed");
+
+  const result = await planLongFormProduction(workspace, { intake, evidence, options: { chapterConcurrency: 2 } }, { client });
+  assert.equal(result.status, "ready");
+  assert.equal(calls.get("creative-outline"), 1);
+  assert.equal(calls.get("creative-chapter:chapter-1"), 1);
+  assert.equal(calls.get("creative-chapter:chapter-2"), 2);
+  store = await ProductionJobStore.open(workspace, { create: false });
+  assert.equal(store.get("creative-chapter:chapter-2").status, "succeeded");
+});
+
+test("bounds prefixed shot IDs during deterministic stitching", () => {
+  const longChapterId = `c-${"a".repeat(61)}`;
+  const longShotId = `s-${"b".repeat(61)}`;
+  const longOutline = outline();
+  longOutline.chapters[0].id = longChapterId;
+  const first = chapterPlan("chapter-1");
+  first.shots[0].id = longShotId;
+  const stitched = stitchLongFormPlan(longOutline, [first, chapterPlan("chapter-2")]);
+  assert.ok(stitched.shots[0].id.length <= 64);
+  assert.match(stitched.shots[0].id, /^[a-z0-9][a-z0-9-]{0,63}$/);
+});
+
 function outline(source = "generated") {
   return {
     schema_version: "launchclip.production-outline.v1",

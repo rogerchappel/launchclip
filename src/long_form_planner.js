@@ -88,6 +88,7 @@ export async function planLongFormProduction(workspacePath, context, adapters = 
       chapter: { ...chapter, duration_seconds: chapter.end_seconds - chapter.start_seconds },
       neighbors: { previous: outline.chapters[index - 1] ?? null, next: outline.chapters[index + 1] ?? null },
       evidence: compactEvidence(chapterEvidence), resources: chapterResources, available_sfx: sfxCatalog,
+      required_cta: index === outline.chapters.length - 1 ? intake.brief.cta : null,
       supplied_narration: suppliedNarration ? { full_transcript: suppliedNarration.transcript, chapter_words: words } : null
     };
     const duration = chapter.end_seconds - chapter.start_seconds;
@@ -103,7 +104,14 @@ export async function planLongFormProduction(workspacePath, context, adapters = 
         metadata: { job_id: chapterId, chapter_id: chapter.id, chapter_index: index }
       },
       normalize: normalizeProductionPlanTiming,
-      validate: (value) => validateProductionPlan(value, validationContext(intake, evidence, duration, suppliedNarration, false))
+      validate: (value) => validateProductionPlan(value, validationContext(
+        intake,
+        evidence,
+        duration,
+        suppliedNarration,
+        false,
+        index === outline.chapters.length - 1 ? intake.brief.cta : null
+      ))
     });
   });
   const chapterPlans = await runPool(chapterTasks, Number(options.chapterConcurrency ?? 3));
@@ -154,7 +162,7 @@ export function stitchLongFormPlan(outline, chapterPlans, suppliedNarration = nu
       const end = round(chapter.start_seconds + shot.end_seconds);
       shots.push({
         ...shot,
-        id: `${chapter.id}-${shot.id}`,
+        id: stitchedShotId(chapter.id, shot.id),
         start_seconds: start,
         end_seconds: end,
         voiceover: suppliedNarration?.words?.length ? wordsInInterval(suppliedNarration.words, start, end) : shot.voiceover
@@ -259,7 +267,7 @@ function validateOutline(outline, intake, evidence, suppliedNarration) {
   return { ok: errors.length === 0, errors };
 }
 
-function validationContext(intake, evidence, duration, suppliedNarration, requireTranscript) {
+function validationContext(intake, evidence, duration, suppliedNarration, requireTranscript, requestedCta = requireTranscript ? intake.brief.cta : null) {
   return {
     evidenceIds: evidence.items.map((entry) => entry.id),
     claimEligibleEvidenceIds: evidence.items.filter((entry) => entry.claims_allowed && entry.role !== "reference").map((entry) => entry.id),
@@ -267,7 +275,7 @@ function validationContext(intake, evidence, duration, suppliedNarration, requir
     resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
     expectedDuration: duration,
     expectedFormat: { aspect: intake.brief.aspect.id, width: intake.brief.aspect.width, height: intake.brief.aspect.height, language: intake.brief.language },
-    requestedCta: requireTranscript ? intake.brief.cta : null,
+    requestedCta,
     suppliedTranscript: requireTranscript ? suppliedNarration?.transcript ?? null : null
   };
 }
@@ -295,6 +303,20 @@ function wordsInInterval(words, start, end) {
     .map((word) => String(word.word ?? "").trim())
     .filter(Boolean)
     .join(" ");
+}
+
+function stitchedShotId(chapterId, shotId) {
+  const candidate = `${chapterId}-${shotId}`;
+  if (new RegExp(CHAPTER_ID_PATTERN).test(candidate)) return candidate;
+  const suffix = semanticHash({ chapterId, shotId }).slice(0, 10);
+  const maxPrefix = 63 - suffix.length;
+  const prefix = candidate
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+/, "")
+    .slice(0, maxPrefix)
+    .replace(/-+$/, "") || "shot";
+  return `${prefix}-${suffix}`;
 }
 
 async function runPool(tasks, concurrency) {
