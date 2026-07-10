@@ -13,12 +13,11 @@ test("runs the delegated production DAG in dependency order and stops for approv
     produceAudio: async (_workspace, options) => { calls.push(["audio", options]); return { status: "ready", voiceover: "/tmp/voice.mp3", music: "/tmp/music.mp3", sfx: "/tmp/sfx.json", warnings: [] }; },
     directFrames: async () => { calls.push("frames"); return { generated: 2, cached: 0 }; },
     assembleHyperFrames: async (_workspace, options) => { calls.push(["assemble", options]); return { index: "/tmp/workspace/production/hyperframes/index.html" }; },
-    verifyProduction: async () => { calls.push("verify"); return { snapshots: "/tmp/workspace/production/qa/snapshots" }; },
-    critiqueProduction: async () => { calls.push("critique"); return { verdict: "ship" }; }
+    renderDraftProduction: async () => { calls.push("draft"); return { status: "ready", video: "/tmp/draft.mp4", verification: { snapshots: "/tmp/workspace/production/qa/snapshots" }, critique: { verdict: "ship" } }; }
   };
   const result = await runProduction("owner/repo", { "no-audio": true, concurrency: "2" }, adapters);
   assert.equal(result.status, "awaiting-approval");
-  assert.deepEqual(calls.map((entry) => Array.isArray(entry) ? entry[0] : entry), ["intake", "lease", "evidence", "source-media", "plan", "audio", "frames", "assemble", "verify", "critique"]);
+  assert.deepEqual(calls.map((entry) => Array.isArray(entry) ? entry[0] : entry), ["intake", "lease", "evidence", "source-media", "plan", "audio", "frames", "assemble", "draft"]);
   assert.equal(calls[5][1].noVoice, true);
   assert.equal(calls[5][1].noMusic, true);
   assert.equal(calls[5][1].noSfx, true);
@@ -28,7 +27,7 @@ test("runs the delegated production DAG in dependency order and stops for approv
 
 test("runs bounded critic-directed repairs before asking for human approval", async () => {
   const calls = [];
-  let critiques = 0;
+  let drafts = 0;
   const adapters = {
     withProductionLease: async (_workspace, operation) => operation(),
     writeIntake: async () => ({ workspace: "/tmp/workspace" }),
@@ -36,13 +35,16 @@ test("runs bounded critic-directed repairs before asking for human approval", as
     produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
     directFrames: async () => ({ generated: 2, cached: 0 }),
     assembleHyperFrames: async () => { calls.push("assemble"); return { index: "/tmp/index.html" }; },
-    verifyProduction: async () => { calls.push("verify"); return { snapshots: "/tmp/snapshots" }; },
-    critiqueProduction: async () => { calls.push("critique"); critiques += 1; return { verdict: critiques === 1 ? "repair" : "ship" }; },
+    renderDraftProduction: async () => {
+      calls.push("draft"); drafts += 1;
+      const verdict = drafts === 1 ? "repair" : "ship";
+      return { status: verdict === "ship" ? "ready" : "needs-repair", video: "/tmp/draft.mp4", verification: { snapshots: "/tmp/snapshots" }, critique: { verdict } };
+    },
     repairProduction: async () => { calls.push("repair"); return { status: "repaired", repaired: [{ shot_id: "shot-2" }] }; }
   };
   const result = await runProduction("owner/repo", {}, adapters);
   assert.equal(result.status, "awaiting-approval");
-  assert.deepEqual(calls, ["assemble", "verify", "critique", "repair", "assemble", "verify", "critique"]);
+  assert.deepEqual(calls, ["assemble", "draft", "repair", "assemble", "draft"]);
   assert.equal(result.repairs.length, 1);
   assert.equal(result.repairs[0].pass, 1);
 });

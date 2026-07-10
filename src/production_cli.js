@@ -6,7 +6,7 @@ import { assembleHyperFrames } from "./hyperframes_assembler.js";
 import { writeIntake } from "./intake.js";
 import { planProduction } from "./creative_planner.js";
 import { produceAudio } from "./production_audio.js";
-import { renderProduction, verifyProduction } from "./production_render.js";
+import { renderDraftProduction, renderProduction, verifyProduction } from "./production_render.js";
 import { critiqueProduction } from "./production_critic.js";
 import { repairProduction } from "./production_repair.js";
 import { analyzeSourceMedia } from "./source_media_analysis.js";
@@ -59,18 +59,20 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
     musicVolume: numberOr(flags["music-volume"], 0.16)
   };
   let assembly = await (adapters.assembleHyperFrames ?? assembleHyperFrames)(workspace, assemblyOptions);
-  let verification = await (adapters.verifyProduction ?? verifyProduction)(workspace, renderOptions(flags), adapters.render);
-  let critique = await (adapters.critiqueProduction ?? critiqueProduction)(workspace, criticOptions(flags), adapters.critic);
+  let draft = await (adapters.renderDraftProduction ?? renderDraftProduction)(workspace, renderOptions(flags), adapters.render);
+  let verification = draft.verification;
+  let critique = draft.critique;
   const repairs = [];
   const maximumRepairPasses = numberOr(flags["max-repair-passes"], 2);
   for (let pass = 1; pass <= maximumRepairPasses && critique.verdict === "repair"; pass += 1) {
     const repair = await (adapters.repairProduction ?? repairProduction)(workspace, repairOptions(flags), adapters.repair);
     repairs.push({ pass, ...repair });
     assembly = await (adapters.assembleHyperFrames ?? assembleHyperFrames)(workspace, assemblyOptions);
-    verification = await (adapters.verifyProduction ?? verifyProduction)(workspace, renderOptions(flags), adapters.render);
-    critique = await (adapters.critiqueProduction ?? critiqueProduction)(workspace, criticOptions(flags), adapters.critic);
+    draft = await (adapters.renderDraftProduction ?? renderDraftProduction)(workspace, renderOptions(flags), adapters.render);
+    verification = draft.verification;
+    critique = draft.critique;
   }
-  const readyForApproval = critique.verdict === "ship";
+  const readyForApproval = draft.status === "ready" && critique.verdict === "ship";
   return {
     stage: "produce",
     status: readyForApproval ? "awaiting-approval" : "needs-repair",
@@ -81,11 +83,12 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
     audio,
     frames: { generated: frames.generated, cached: frames.cached },
     assembly,
+    draft,
     verification,
     critique,
     repairs,
     next: readyForApproval
-      ? `Review ${assembly.index} and ${verification.snapshots}, then run launchclip production-render ${workspace} --approve.`
+      ? `Review ${draft.video} and ${verification.snapshots}, then run launchclip production-render ${workspace} --approve.`
       : `Review ${critique.critique ?? "production/qa/critique.json"}; resolve remaining findings before final approval.`
   };
 }
@@ -156,13 +159,21 @@ function renderOptions(flags) {
     approve: Boolean(flags.approve),
     output: flags.output,
     quality: flags.quality,
+    draftQuality: flags["draft-quality"] ?? "draft",
+    draftOutput: flags["draft-output"],
     workers: flags.workers,
     inspectSamples: numberOr(flags["inspect-samples"], 15),
     snapshotFrames: numberOr(flags["snapshot-frames"], 12),
     references: flags["reference-video"],
     durationToleranceSeconds: flags["duration-tolerance"],
     maximumHoldRatio: flags["maximum-hold-ratio"],
-    minimumBurstsPerMinute: flags["minimum-bursts-per-minute"]
+    minimumBurstsPerMinute: flags["minimum-bursts-per-minute"],
+    musicVolume: flags["music-volume"],
+    criticModel: flags["critic-model"] ?? "gpt-5.6",
+    criticReasoning: flags["critic-reasoning"] ?? "xhigh",
+    criticPro: Boolean(flags["critic-pro"]),
+    maxCriticSnapshots: numberOr(flags["critic-snapshots"], 12),
+    background: !flags.foreground
   };
 }
 
