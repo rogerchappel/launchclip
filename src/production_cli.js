@@ -18,7 +18,7 @@ export async function runProductionStage(command, target, flags = {}, adapters =
   const lease = adapters.withProductionLease ?? withProductionLease;
   return lease(target, async () => {
     if (command === "evidence") return collectEvidence(target, evidenceOptions(flags), adapters.evidence);
-    if (command === "creative-plan") return planProduction(target, plannerOptions(flags), adapters.planner);
+    if (command === "creative-plan") return (adapters.planProduction ?? planProduction)(target, plannerOptions(flags), adapters.planner);
     if (command === "direct-frames") return directFrames(target, frameOptions(flags), adapters.frames);
     if (command === "production-audio") return produceAudio(target, audioOptions(flags), adapters.audio);
     if (command === "assemble") return assembleWithProducedAudio(target, flags);
@@ -165,6 +165,11 @@ function plannerOptions(flags) {
     background: !flags.foreground,
     maxOutputTokens: numberOr(flags["max-output-tokens"], 48_000),
     maxAttempts: numberOr(flags["max-attempts"], 3),
+    planningMode: flags["planning-mode"] ?? "auto",
+    hierarchicalThresholdSeconds: numberOr(flags["hierarchical-threshold"], 180),
+    chapterConcurrency: numberOr(flags["chapter-concurrency"], 3),
+    outlineMaxOutputTokens: numberOr(flags["outline-max-output-tokens"], 24_000),
+    chapterMaxOutputTokens: numberOr(flags["chapter-max-output-tokens"], 40_000),
     sfxDir: flags["sfx-dir"]
   };
 }
@@ -245,6 +250,9 @@ function productionFlags(flags) {
     "media-samples": flags["media-samples"] ?? "8",
     "media-reasoning": flags["media-reasoning"] ?? "medium",
     "max-output-tokens": flags["max-output-tokens"] ?? "32000",
+    "outline-max-output-tokens": flags["outline-max-output-tokens"] ?? "18000",
+    "chapter-max-output-tokens": flags["chapter-max-output-tokens"] ?? "28000",
+    "chapter-concurrency": flags["chapter-concurrency"] ?? "3",
     "frame-reasoning": flags["frame-reasoning"] ?? "medium",
     "frame-max-output-tokens": flags["frame-max-output-tokens"] ?? "20000",
     "semantic-attempts": flags["semantic-attempts"] ?? "1",

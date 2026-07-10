@@ -148,11 +148,30 @@ test("fast eval keeps full QA while lowering provider and sampling budgets", asy
   assert.equal(received.media.samples, 8);
   assert.equal(received.media.reasoning, "medium");
   assert.equal(received.plan.maxOutputTokens, 32000);
+  assert.equal(received.plan.planningMode, "auto");
+  assert.equal(received.plan.hierarchicalThresholdSeconds, 180);
+  assert.equal(received.plan.outlineMaxOutputTokens, 18000);
+  assert.equal(received.plan.chapterMaxOutputTokens, 28000);
+  assert.equal(received.plan.chapterConcurrency, 3);
   assert.deepEqual({ reasoning: received.frames.reasoning, max: received.frames.maxOutputTokens, attempts: received.frames.semanticAttempts, concurrency: received.frames.concurrency }, { reasoning: "medium", max: 20000, attempts: 1, concurrency: 3 });
   assert.equal(received.draft.snapshotFrames, 6);
   assert.equal(received.draft.inspectSamples, 9);
   assert.equal(received.draft.shotInspectConcurrency, 3);
   assert.equal(received.draft.criticReasoning, "high");
+});
+
+test("routes explicit hierarchical planning controls", async () => {
+  let received;
+  const result = await runProductionStage("creative-plan", "/tmp/workspace", { "planning-mode": "hierarchical", "hierarchical-threshold": "120", "chapter-concurrency": "4", "outline-max-output-tokens": "22000", "chapter-max-output-tokens": "36000" }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    planProduction: async (_workspace, options) => { received = options; return { status: "ready" }; }
+  });
+  assert.equal(result.status, "ready");
+  assert.equal(received.planningMode, "hierarchical");
+  assert.equal(received.hierarchicalThresholdSeconds, 120);
+  assert.equal(received.chapterConcurrency, 4);
+  assert.equal(received.outlineMaxOutputTokens, 22000);
+  assert.equal(received.chapterMaxOutputTokens, 36000);
 });
 
 test("blocks assembly when measured narration timing requires a replan", async () => {
