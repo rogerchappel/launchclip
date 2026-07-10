@@ -6,6 +6,7 @@ import { OpenAIResponsesClient } from "./openai_responses.js";
 import {
   PRODUCTION_PATHS,
   PRODUCTION_PLAN_SCHEMA,
+  normalizeProductionPlanTiming,
   validateProductionPlan
 } from "./production_contracts.js";
 
@@ -75,14 +76,15 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
       promptCacheKey: "launchclip:creative-planner:v1",
       metadata: { job_id: jobId, source_kind: intake.source.kind, aspect: intake.brief.aspect.id }
     });
-    const validation = validateProductionPlan(result.value, {
+    const plan = normalizeProductionPlanTiming(result.value);
+    const validation = validateProductionPlan(plan, {
       evidenceIds: evidence.items.map((entry) => entry.id),
       resourceIds: intake.resources.map((entry) => entry.id),
       suppliedTranscript
     });
     if (!validation.ok) throw new Error(`GPT-5.6 production plan failed semantic validation: ${validation.errors.join("; ")}`);
 
-    const paths = await writePlanArtifacts(workspace, result.value);
+    const paths = await writePlanArtifacts(workspace, plan);
     await store.markRunning(jobId, { provider: "openai", response_id: result.response_id, status: result.status });
     const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
     await store.markSucceeded(jobId, outputs, result.usage);
@@ -93,7 +95,7 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
       plan: paths[0],
       script: paths[1],
       storyboard: paths[2],
-      shots: result.value.shots.length,
+      shots: plan.shots.length,
       response_id: result.response_id,
       model: result.model,
       usage: result.usage,

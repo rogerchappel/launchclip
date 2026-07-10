@@ -24,7 +24,10 @@ test("runs GPT-5.6 planning, validates the plan, writes artifacts, and caches ve
   const client = {
     runStructured: async (options) => {
       calls.push(options);
-      return { response_id: "resp_plan", model: "gpt-5.6-sol", status: "completed", value: samplePlan(), usage: { total_tokens: 1234 } };
+      const value = samplePlan();
+      value.shots[1].visual.internal_reveals[0].at_seconds = 6;
+      value.shots[1].sfx[0].at_seconds = 6.1;
+      return { response_id: "resp_plan", model: "gpt-5.6-sol", status: "completed", value, usage: { total_tokens: 1234 } };
     }
   };
   const first = await planProduction(workspace, { background: false }, { client });
@@ -36,6 +39,7 @@ test("runs GPT-5.6 planning, validates the plan, writes artifacts, and caches ve
   assert.equal(calls[0].schema.additionalProperties, false);
   assert.match(await readFile(first.script, "utf8"), /Proof becomes the story/);
   assert.match(await readFile(first.storyboard, "utf8"), /fast then settle/);
+  assert.equal(JSON.parse(await readFile(first.plan, "utf8")).shots[1].sfx[0].at_seconds, 1.1);
 
   const second = await planProduction(workspace, {}, { client });
   assert.equal(second.cached, true);
