@@ -32,6 +32,15 @@ test("refuses frame-level repair when the critic requires script, audio, or plan
   await assert.rejects(() => repairProduction(workspace, {}, { client: {} }), /broader work/);
 });
 
+test("repairs supported assembly findings while reporting unrelated audio blockers", async () => {
+  const workspace = await fixture({ includeAudio: true, repairScope: "assembly" });
+  const client = { runStructured: async () => ({ response_id: "r", model: "gpt-5.6", status: "completed", usage: {}, value: bundle("shot-2", "Assembly repaired") }) };
+  const result = await repairProduction(workspace, {}, { client });
+  assert.equal(result.status, "partially-repaired");
+  assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-2"]);
+  assert.deepEqual(result.blockers.map((entry) => entry.repair_scope), ["audio"]);
+});
+
 function bundle(id, copy = "Proof") {
   return {
     schema_version: FRAME_BUNDLE_VERSION, shot_id: id,
@@ -58,9 +67,11 @@ async function fixture(options = {}) {
     await writeFile(path.join(frames, `${id}.html`), prior.html);
     await writeFile(path.join(frames, `${id}.motion.json`), `${JSON.stringify(prior.motion)}\n`);
   }
+  const findings = [{ id: "f-1", severity: "major", category: "composition", shot_ids: ["shot-2"], repair_scope: options.repairScope ?? "frame", instruction: "Make proof dominant", preserve: ["exact copy"] }];
+  if (options.includeAudio) findings.push({ id: "f-audio", severity: "major", category: "audio", shot_ids: ["shot-1", "shot-2"], repair_scope: "audio", instruction: "Measure the mix", preserve: [] });
   await writeFile(path.join(production, "qa", "critique.json"), `${JSON.stringify({
     verdict: "repair",
-    findings: [{ id: "f-1", severity: "major", category: "composition", shot_ids: ["shot-2"], repair_scope: options.repairScope ?? "frame", instruction: "Make proof dominant", preserve: ["exact copy"] }]
+    findings
   })}\n`);
   await writeFile(path.join(snapshots, "001.png"), "snapshot");
   const store = await ProductionJobStore.open(workspace);

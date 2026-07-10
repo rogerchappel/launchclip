@@ -22,18 +22,18 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     readJson(path.join(qaDir, "critique.json"))
   ]);
   if (critique.verdict === "ship") return { stage: "production-repair", status: "not-needed", repaired: [] };
-  const unsupported = critique.findings.filter((finding) => !["frame", "frames"].includes(finding.repair_scope));
-  if (critique.verdict === "replan" || unsupported.length) {
-    throw new Error(`Critique requires broader work before frame repair: ${unsupported.map((entry) => `${entry.id}:${entry.repair_scope}`).join(", ") || "replan"}`);
-  }
+  if (critique.verdict === "replan") throw new Error("Critique requires broader work before frame repair: replan");
+  const repairableScopes = new Set(["frame", "frames", "assembly", "design"]);
+  const repairable = critique.findings.filter((finding) => repairableScopes.has(finding.repair_scope) && finding.shot_ids.length);
+  const unsupported = critique.findings.filter((finding) => !repairable.includes(finding));
   const byShot = new Map();
-  for (const finding of critique.findings) {
+  for (const finding of repairable) {
     for (const shotId of finding.shot_ids) {
       if (!byShot.has(shotId)) byShot.set(shotId, []);
       byShot.get(shotId).push(finding);
     }
   }
-  if (!byShot.size) throw new Error("Frame repair critique did not identify any shot IDs");
+  if (!byShot.size) throw new Error(`Critique requires broader work before frame repair: ${unsupported.map((entry) => `${entry.id}:${entry.repair_scope}`).join(", ") || "no repairable shot IDs"}`);
   const store = adapters.store ?? await ProductionJobStore.open(workspace, { create: false });
   const jobIds = [...byShot.keys()].map((shotId) => `frame:${shotId}`);
   await store.markStaleFrom(jobIds);
@@ -87,7 +87,13 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
       throw error;
     }
   }
-  return { stage: "production-repair", status: "repaired", repaired, next: "Re-run launchclip assemble, production-verify, and production-render." };
+  return {
+    stage: "production-repair",
+    status: unsupported.length ? "partially-repaired" : "repaired",
+    repaired,
+    blockers: unsupported.map((finding) => ({ id: finding.id, repair_scope: finding.repair_scope, instruction: finding.instruction })),
+    next: "Re-run launchclip assemble and production-verify; resolve any listed blockers before production-render."
+  };
 }
 
 async function writeFrameArtifacts(workspace, bundle) {
