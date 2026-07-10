@@ -25,6 +25,10 @@ test("renders subcompositions while keeping timed media and SFX as direct root c
   assert.equal((html.match(/<video/g) ?? []).length, 1);
   assert.match(html, /<audio id="sfx-001"[^>]+data-start="2\.25"[^>]+data-volume="0\.3"/);
   assert.ok(html.indexOf("<video") > html.indexOf('data-composition-id="main"'));
+  bundles[0].root_media_requests[0].volume = .65;
+  const audible = renderRoot({ plan, bundles, assetMap: new Map([["screen", { file: "screen.mp4" }]]) });
+  assert.match(audible, /<video[^>]+data-volume="0\.65"[^>]+data-has-audio="true" playsinline>/);
+  assert.doesNotMatch(audible, /<video[^>]+ muted playsinline>/);
 });
 
 test("moves presenter video between beat-specific avatar layouts at the host root", () => {

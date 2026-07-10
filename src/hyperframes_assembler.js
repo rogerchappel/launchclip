@@ -33,7 +33,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   const dependencies = plan.shots.map((shot) => `frame:${shot.id}`);
   for (const dependency of dependencies) if (store.get(dependency)?.status !== "succeeded") throw new Error(`Frame job must succeed before assembly: ${dependency}`);
   const extraAudio = await describeExtraAudio(options);
-  const inputHash = semanticHash({ intake, plan, bundles, extraAudio, assembler: "hyperframes-assembler.v7" });
+  const inputHash = semanticHash({ intake, plan, bundles, extraAudio, assembler: "hyperframes-assembler.v8" });
   const jobId = "hyperframes-assembly";
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
@@ -204,7 +204,8 @@ function renderMedia({ id, request, asset, globalStart }) {
   const duration = request.end_seconds - request.start_seconds;
   const mediaStart = request.source_start_seconds ?? 0;
   const common = `id="${escapeAttr(id)}" class="clip root-media" src="assets/${escapeAttr(asset.file)}" data-start="${number(globalStart)}" data-duration="${number(duration)}" data-media-start="${number(mediaStart)}" data-volume="${number(request.volume)}" data-track-index="${placement.z_index}" style="${style}" data-treatment="${escapeAttr(placement.treatment)}"`;
-  return request.kind === "video" ? `<video ${common} muted playsinline></video>` : `<audio ${common}></audio>`;
+  const videoAudio = request.volume > 0 ? `data-has-audio="true"` : "muted";
+  return request.kind === "video" ? `<video ${common} ${videoAudio} playsinline></video>` : `<audio ${common}></audio>`;
 }
 
 async function freezeResources(resources, assetsDir) {
