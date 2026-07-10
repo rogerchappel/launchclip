@@ -60,10 +60,10 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
   } else if (existing && existing.input_hash !== inputHash) await store.markStaleFrom([jobId]);
   const current = store.get(jobId);
   if (!current) await store.add({ id: jobId, kind: "source-media-analysis", depends_on: [], input_hash: inputHash });
-  else if (current.status === "failed" || current.status === "stale") await store.retry(jobId);
+  else if (current.status === "failed" || current.status === "stale") await store.retry(jobId, { inputHash });
   else if (current.status === "running" || current.status === "submitted") {
     await store.markStaleFrom([jobId]);
-    await store.retry(jobId);
+    await store.retry(jobId, { inputHash });
   }
   else if (current.status !== "pending") throw new Error(`Source media analysis job is already ${current.status}`);
   await store.markRunning(jobId);

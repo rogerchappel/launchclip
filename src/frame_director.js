@@ -99,7 +99,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   const current = store.get(jobId);
   let resumeResponseId = null;
   if (!current) await store.add({ id: jobId, kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash, max_attempts: Number(options.maxAttempts ?? 3) });
-  else if (current.status === "failed" || current.status === "stale") await store.retry(jobId);
+  else if (current.status === "failed" || current.status === "stale") await store.retry(jobId, { inputHash });
   else if (current.status === "running" || current.status === "submitted") {
     if (!current.remote?.response_id) throw new Error(`Frame job is ${current.status} without a resumable response id: ${jobId}`);
     resumeResponseId = current.remote.response_id;

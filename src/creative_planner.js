@@ -63,7 +63,7 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
   if (!current) {
     await store.add({ id: jobId, kind: "creative-plan", depends_on: dependencies, input_hash: inputHash, max_attempts: Number(options.maxAttempts ?? 3) });
   } else if (current.status === "failed" || current.status === "stale") {
-    await store.retry(jobId);
+    await store.retry(jobId, { inputHash });
   } else if (current.status === "running" || current.status === "submitted") {
     if (!current.remote?.response_id) throw new Error(`Creative plan job is ${current.status} without a resumable response id: ${jobId}`);
     resumeResponseId = current.remote.response_id;
