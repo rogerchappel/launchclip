@@ -87,8 +87,11 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
       const result = resumeResponseId ? await client.resumeStructured(resumeResponseId, request) : await client.runStructured(request);
       const validation = validateFrameBundle(result.value, {
         shotId,
+        shot,
+        format: plan.format,
         evidenceIds: evidence.items.map((entry) => entry.id),
         resourceIds: intake.resources.map((entry) => entry.id),
+        resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
         allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
       });
       const errors = [...validation.errors, ...validateHyperFramesRoot(result.value.html, shot, plan.format)];

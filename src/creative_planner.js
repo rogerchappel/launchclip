@@ -94,6 +94,7 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
       evidenceIds: evidence.items.map((entry) => entry.id),
       claimEligibleEvidenceIds: evidence.items.filter((entry) => entry.claims_allowed && entry.role !== "reference").map((entry) => entry.id),
       resourceIds: intake.resources.map((entry) => entry.id),
+      resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
       expectedDuration: suppliedNarration?.duration_seconds ?? null,
       suppliedTranscript
     });
