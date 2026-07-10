@@ -33,7 +33,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   const dependencies = plan.shots.map((shot) => `frame:${shot.id}`);
   for (const dependency of dependencies) if (store.get(dependency)?.status !== "succeeded") throw new Error(`Frame job must succeed before assembly: ${dependency}`);
   const extraAudio = await describeExtraAudio(options);
-  const inputHash = semanticHash({ intake, plan, bundles, extraAudio, assembler: "hyperframes-assembler.v5" });
+  const inputHash = semanticHash({ intake, plan, bundles, extraAudio, assembler: "hyperframes-assembler.v6" });
   const jobId = "hyperframes-assembly";
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
@@ -86,7 +86,11 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
       shots: plan.shots.map((shot) => ({ id: shot.id, start_seconds: shot.start_seconds, end_seconds: shot.end_seconds, composition: `compositions/${shot.id}.html` })),
       assets: [...assetMap.entries()].map(([id, entry]) => ({ id, file: `assets/${entry.file}`, sha256: entry.sha256 }))
     }, null, 2)}\n`);
-    const outputs = await Promise.all([indexPath, motionPath, manifestPath, ...bundles.map((bundle) => safeShotFile(compositionsDir, bundle.shot_id, ".html"))].map((filePath) => describeJobOutput(workspace, filePath)));
+    const outputs = await Promise.all([
+      indexPath, motionPath, manifestPath,
+      ...bundles.flatMap((bundle) => [safeShotFile(compositionsDir, bundle.shot_id, ".html"), safeShotFile(compositionsDir, bundle.shot_id, ".motion.json")]),
+      ...[...assetMap.values()].map((entry) => path.join(assetsDir, entry.file))
+    ].map((filePath) => describeJobOutput(workspace, filePath)));
     await store.markSucceeded(jobId, outputs);
     return { stage: "hyperframes-assembly", status: "ready", workspace, project: projectDir, index: indexPath, manifest: manifestPath, compositions: bundles.length, assets: assetMap.size, cached: false };
   } catch (error) {

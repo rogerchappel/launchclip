@@ -103,6 +103,23 @@ test("freezes assets, rewrites frame paths, assembles a resumable HyperFrames pr
   const second = await assembleHyperFrames(workspace);
   assert.equal(second.cached, true);
 
+  const frozenAsset = path.join(first.project, "assets", "screen.mp4");
+  await writeFile(frozenAsset, "tampered");
+  const rebuilt = await assembleHyperFrames(workspace);
+  assert.equal(rebuilt.cached, false);
+  assert.equal((await readFile(frozenAsset, "utf8")), "fake-media");
+  const protectedOutputs = (await ProductionJobStore.open(workspace, { create: false })).get("hyperframes-assembly").outputs.map((entry) => entry.path);
+  assert.ok(protectedOutputs.some((entry) => entry.endsWith("assets/screen.mp4")));
+  assert.ok(protectedOutputs.some((entry) => entry.endsWith("compositions/shot-1.motion.json")));
+
+});
+
+test("recovers an interrupted HyperFrames assembly", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-assembly-recovery-"));
+  const source = path.join(workspace, "screen.mp4");
+  await writeFile(source, "fake-media");
+  await writeFixture(workspace, fixture(source));
+  await assembleHyperFrames(workspace);
   const interrupted = await ProductionJobStore.open(workspace, { create: false });
   await interrupted.markStaleFrom(["hyperframes-assembly"]);
   await interrupted.retry("hyperframes-assembly");
