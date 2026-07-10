@@ -337,14 +337,30 @@ export function validateFrameBundle(bundle, context = {}) {
   if (/\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|sendBeacon|window\.open)\s*\(/i.test(html) || /\bnew\s+Image\s*\(/i.test(html) || /\bimport\s*\(/i.test(html)) errors.push("frame HTML must not perform render-time network requests");
   checkFrameAssetPaths(errors, html, context.allowedAssetPaths);
   if (/\b(?:Date\.now|Math\.random)\s*\(/i.test(html)) errors.push("frame HTML must be deterministic");
+  const shotDuration = context.shot ? Number(context.shot.end_seconds) - Number(context.shot.start_seconds) : null;
+  const motionOrders = new Map();
   for (const [index, assertion] of (bundle.motion?.assertions ?? []).entries()) {
+    const label = `motion.assertions[${index}]`;
     if (assertion.appears_by_seconds == null && assertion.order == null && !assertion.must_stay_in_frame && !assertion.must_remain_live) {
-      errors.push(`motion.assertions[${index}] must express at least one enforceable motion intent`);
+      errors.push(`${label} must express at least one enforceable motion intent`);
+    }
+    const selector = String(assertion.selector ?? "");
+    const expectedPrefix = `#${bundle.shot_id}-`;
+    if (!isValidShotId(bundle.shot_id) || !selector.startsWith(expectedPrefix) || !/^#[a-z0-9][a-z0-9_-]*$/i.test(selector)) {
+      errors.push(`${label}.selector must be one real shot-prefixed id selector beginning ${expectedPrefix}`);
+    } else if (!new RegExp(`\\bid\\s*=\\s*["']${escapeRegExp(selector.slice(1))}["']`, "i").test(html)) {
+      errors.push(`${label}.selector does not exist in frame HTML: ${selector}`);
+    }
+    if (shotDuration != null && assertion.appears_by_seconds != null && Number(assertion.appears_by_seconds) > shotDuration + .001) {
+      errors.push(`${label}.appears_by_seconds falls outside the shot-local duration ${shotDuration}`);
+    }
+    if (assertion.order != null) {
+      if (motionOrders.has(assertion.order)) errors.push(`${label}.order duplicates ${motionOrders.get(assertion.order)}; simultaneous entrances must use null order`);
+      else motionOrders.set(assertion.order, label);
     }
   }
   checkReferences(errors, "evidence_ids", bundle.evidence_ids, context.evidenceIds);
   checkReferences(errors, "root_media_requests.resource_id", (bundle.root_media_requests ?? []).map((entry) => entry.resource_id), context.resourceIds);
-  const shotDuration = context.shot ? Number(context.shot.end_seconds) - Number(context.shot.start_seconds) : null;
   const allowedShotResources = context.shot ? new Set(context.shot.resource_ids ?? []) : null;
   const presenterIds = idsForRole(context.resourceRoles, "presenter");
   for (const [index, request] of (bundle.root_media_requests ?? []).entries()) {
@@ -376,6 +392,10 @@ export function validateFrameBundle(bundle, context = {}) {
 
 function normalizeCopy(value) {
   return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function idsForRole(resourceRoles, role) {

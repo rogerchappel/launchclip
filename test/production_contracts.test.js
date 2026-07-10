@@ -106,6 +106,16 @@ test("frame bundles request root media without owning media tags", () => {
   assert.ok(invalid.errors.some((error) => error.includes("deterministic")));
 });
 
+test("requires motion assertions to target real shot-prefixed elements on truthful local timing", () => {
+  const bundle = sampleFrameBundle();
+  bundle.motion.assertions.push({ selector: "#missing", appears_by_seconds: 8, order: 1, must_stay_in_frame: false, must_remain_live: false });
+  const result = validateFrameBundle(bundle, { shot: sampleShot("shot-1", 0, 5) });
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => error.includes("real shot-prefixed id selector")));
+  assert.ok(result.errors.some((error) => error.includes("shot-local duration")));
+  assert.ok(result.errors.some((error) => error.includes("duplicates")));
+});
+
 test("rejects active content and assets outside the approved local resource set", () => {
   const bundle = sampleFrameBundle();
   bundle.html = '<style>@import "https://bad.example/x.css"; .x{background:url(file:///etc/passwd)}</style><iframe src="//bad.example"></iframe><script>navigator.sendBeacon("/leak")</script><img src="/tmp/unknown.png" onload="steal()">';
@@ -226,8 +236,8 @@ function sampleFrameBundle() {
   return {
     schema_version: FRAME_BUNDLE_VERSION,
     shot_id: "shot-1",
-    html: '<template><div data-composition-id="shot-1" data-width="1920" data-height="1080"></div></template>',
-    motion: { assertions: [{ selector: "#proof", appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: true }] },
+    html: '<template><div data-composition-id="shot-1" data-width="1920" data-height="1080"><div id="shot-1-proof">Proof</div></div></template>',
+    motion: { assertions: [{ selector: "#shot-1-proof", appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: true }] },
     root_media_requests: [{
       resource_id: "res-1", kind: "video", start_seconds: 0, end_seconds: 5,
       source_start_seconds: 0, source_end_seconds: 5, volume: 0,
