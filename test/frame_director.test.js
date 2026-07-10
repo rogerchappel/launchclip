@@ -49,6 +49,11 @@ test("delegates shots concurrently, repairs invalid HTML, and writes modular fra
   const cached = await directFrames(workspace, { concurrency: 2 }, { client });
   assert.equal(cached.cached, 2);
   assert.equal(attempts.get("shot-1"), 2);
+
+  const redirected = await directFrames(workspace, { concurrency: 2, reasoning: "xhigh" }, { client });
+  assert.equal(redirected.generated, 2);
+  assert.equal(attempts.get("shot-1"), 3);
+  assert.equal(attempts.get("shot-2"), 2);
 });
 
 test("rejects a frame root with wrong identity, time, or dimensions", () => {

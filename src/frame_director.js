@@ -69,7 +69,7 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, prior = n
 async function directOneFrame({ workspace, intake, evidence, plan, shot, index, store, client, options }) {
   const jobId = `frame:${shot.id}`;
   const baseInput = buildFrameInput({ intake, evidence, plan, shot, index });
-  const inputHash = semanticHash({ input: baseInput, schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v1" });
+  const inputHash = semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v1" });
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
     const verification = await store.verifyOutputs(jobId);
