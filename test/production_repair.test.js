@@ -41,6 +41,22 @@ test("repairs supported assembly findings while reporting unrelated audio blocke
   assert.deepEqual(result.blockers.map((entry) => entry.repair_scope), ["audio"]);
 });
 
+test("resumes a persisted background repair response without another submission", async () => {
+  const workspace = await fixture();
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  await store.markStaleFrom(["frame:shot-2"]);
+  await store.retry("frame:shot-2");
+  await store.markRunning("frame:shot-2", { provider: "openai", response_id: "repair_saved", status: "in_progress" });
+  let resumed = 0;
+  const client = {
+    runStructured: async () => { throw new Error("must not submit a duplicate repair"); },
+    resumeStructured: async (responseId) => { resumed += 1; assert.equal(responseId, "repair_saved"); return { response_id: responseId, model: "gpt-5.6", status: "completed", value: bundle("shot-2", "Resumed repair"), usage: {} }; }
+  };
+  const result = await repairProduction(workspace, {}, { client, store });
+  assert.equal(result.repaired.length, 1);
+  assert.equal(resumed, 1);
+});
+
 function bundle(id, copy = "Proof") {
   return {
     schema_version: FRAME_BUNDLE_VERSION, shot_id: id,

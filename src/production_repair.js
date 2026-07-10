@@ -38,7 +38,11 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
   if (!byShot.size) throw new Error(`Critique requires broader work before frame repair: ${unsupported.map((entry) => `${entry.id}:${entry.repair_scope}`).join(", ") || "no repairable shot IDs"}`);
   const store = adapters.store ?? await ProductionJobStore.open(workspace, { create: false });
   const jobIds = [...byShot.keys()].map((shotId) => `frame:${shotId}`);
-  await store.markStaleFrom(jobIds);
+  const resumableJobIds = new Set(jobIds.filter((jobId) => {
+    const job = store.get(jobId);
+    return (job?.status === "running" || job?.status === "submitted") && job.remote?.response_id;
+  }));
+  await store.markStaleFrom(jobIds.filter((jobId) => !resumableJobIds.has(jobId)));
   const client = adapters.client ?? new OpenAIResponsesClient();
   const images = await snapshotImages(path.join(qaDir, "snapshots"), Number(options.maxSnapshots ?? 8));
   const repaired = [];
@@ -47,10 +51,17 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     if (!shot) throw new Error(`Critique references unknown shot: ${shotId}`);
     const prior = await readJson(safeShotFile(path.join(workspace, PRODUCTION_PATHS.frames), shotId, ".json"));
     const jobId = `frame:${shotId}`;
-    await store.retry(jobId);
-    await store.markRunning(jobId, { provider: "openai", response_id: null, status: "repairing" });
+    const current = store.get(jobId);
+    let resumeResponseId = null;
+    if (current.status === "running" || current.status === "submitted") {
+      if (!current.remote?.response_id) throw new Error(`Repair job is ${current.status} without a resumable response id: ${jobId}`);
+      resumeResponseId = current.remote.response_id;
+    } else {
+      if (current.status === "failed" || current.status === "stale") await store.retry(jobId);
+      await store.markRunning(jobId, { provider: "openai", response_id: null, status: "repairing" });
+    }
     try {
-      const result = await client.runStructured({
+      const request = {
         model: options.model ?? "gpt-5.6",
         reasoningEffort: options.reasoning ?? "high",
         reasoningContext: "current_turn",
@@ -72,7 +83,8 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
         promptCacheKey: "launchclip:frame-repair:v1",
         metadata: { job_id: jobId, shot_id: shotId, repair_findings: findings.length },
         onSubmitted: async (response) => store.markRunning(jobId, { provider: "openai", response_id: response.id, status: response.status })
-      });
+      };
+      const result = resumeResponseId ? await client.resumeStructured(resumeResponseId, request) : await client.runStructured(request);
       const validation = validateFrameBundle(result.value, {
         shotId,
         evidenceIds: evidence.items.map((entry) => entry.id),
