@@ -114,6 +114,39 @@ test("refuses to replace outputs for a non-succeeded canonical job", async () =>
   await assert.rejects(() => store.replaceSucceededOutputs("frame", []), /Only succeeded/);
 });
 
+test("reconfigures a stale job dependency closure with a fresh attempt budget", async () => {
+  const workspace = await tempWorkspace();
+  const store = await ProductionJobStore.open(workspace);
+  await store.add(job("plan", []));
+  await store.add(job("frame-old", ["plan"]));
+  await store.add(job("frame-new", ["plan"]));
+  await store.add({ ...job("assembly", ["frame-old"]), max_attempts: 1 });
+  for (const id of ["plan", "frame-old", "frame-new", "assembly"]) {
+    await store.markRunning(id);
+    await store.markSucceeded(id);
+  }
+  await store.markStaleFrom(["assembly"]);
+  const inputHash = semanticHash({ assembly: "new" });
+  const configured = await store.reconfigure("assembly", { depends_on: ["frame-new"], input_hash: inputHash, max_attempts: 4 });
+  assert.equal(configured.status, "pending");
+  assert.equal(configured.attempt, 0);
+  assert.equal(configured.max_attempts, 4);
+  assert.equal(configured.input_hash, inputHash);
+  assert.deepEqual(configured.depends_on, ["frame-new"]);
+  assert.deepEqual(store.ready().map((entry) => entry.id), ["assembly"]);
+});
+
+test("rejects unsafe reconfiguration and rolls back dependency cycles", async () => {
+  const workspace = await tempWorkspace();
+  const store = await ProductionJobStore.open(workspace);
+  await store.add(job("a", []));
+  await store.add(job("b", ["a"]));
+  await assert.rejects(() => store.reconfigure("a", { depends_on: ["b"] }), /cycle/);
+  assert.deepEqual(store.get("a").depends_on, []);
+  await store.markRunning("a");
+  await assert.rejects(() => store.reconfigure("a", { input_hash: "changed" }), /Only pending/);
+});
+
 test("checksums outputs and detects tampering", async () => {
   const workspace = await tempWorkspace();
   const outputPath = path.join(workspace, "production", "plan.json");

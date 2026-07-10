@@ -168,6 +168,33 @@ export class ProductionJobStore {
     return { job: structuredClone(source), stale: [...stale] };
   }
 
+  async reconfigure(id, definition = {}) {
+    const job = this.require(id);
+    if (!["pending", "failed", "stale"].includes(job.status)) throw new Error(`Only pending, failed, or stale jobs can be reconfigured: ${id}`);
+    const before = structuredClone(job);
+    Object.assign(job, {
+      depends_on: definition.depends_on ? [...definition.depends_on].map(String) : job.depends_on,
+      input_hash: definition.input_hash == null ? job.input_hash : String(definition.input_hash),
+      max_attempts: definition.max_attempts == null ? job.max_attempts : Number(definition.max_attempts),
+      status: "pending",
+      attempt: 0,
+      remote: null,
+      outputs: [],
+      usage: {},
+      error: null,
+      updated_at: new Date().toISOString()
+    });
+    try {
+      normalizeJob(job);
+      validateDependencies(this.data.jobs);
+    } catch (error) {
+      Object.assign(job, before);
+      throw error;
+    }
+    await this.save();
+    return structuredClone(job);
+  }
+
   async verifyOutputs(id) {
     const job = this.require(id);
     const results = [];
