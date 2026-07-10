@@ -65,6 +65,9 @@ export async function buildIntake(source, flags = {}, env = process.env) {
   const model = String(flags.model ?? env.OPENAI_VIDEO_MODEL ?? "gpt-5.6").trim();
   const reasoningEffort = resolveReasoningEffort(flags.reasoning ?? env.OPENAI_VIDEO_REASONING ?? "xhigh");
   const resources = [];
+  if (sourceKind === "voiceover" && existsSync(path.resolve(value))) {
+    resources.push(await describeResource(value, "voiceover", resources.length));
+  }
   for (const [role, entries] of [
     ["supporting", values(flags.resource)],
     ["reference", values(flags.reference)],
@@ -72,7 +75,10 @@ export async function buildIntake(source, flags = {}, env = process.env) {
     ["voiceover-transcript", values(flags.transcript)],
     ["presenter", values(flags.presenter)]
   ]) {
-    for (const entry of entries) resources.push(await describeResource(entry, role, resources.length));
+    for (const entry of entries) {
+      const described = await describeResource(entry, role, resources.length);
+      if (!resources.some((resource) => resource.role === described.role && resource.location === described.location)) resources.push(described);
+    }
   }
   const slug = sourceSlug(value, sourceKind);
   const workspace = path.resolve(flags.out ?? path.join(".launchclip", slug));

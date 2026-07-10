@@ -20,6 +20,9 @@ test("accepts authoritative transcripts and voiceover video sources", async () =
   await writeFile(video, "video");
   await writeFile(transcript, "Exact supplied words.");
   assert.equal(inferSourceKind(video), "voiceover");
+  const direct = await buildIntake(video, { transcript, out: path.join(directory, "direct") });
+  assert.deepEqual(direct.resources.map((entry) => entry.role), ["voiceover", "voiceover-transcript"]);
+  assert.equal(direct.policies.supplied_voiceover_is_authoritative, true);
   const intake = await buildIntake("A topic", { voiceover: video, transcript, out: path.join(directory, "out") });
   assert.deepEqual(intake.resources.map((entry) => entry.role), ["voiceover", "voiceover-transcript"]);
   assert.equal(intake.policies.supplied_voiceover_is_authoritative, true);
