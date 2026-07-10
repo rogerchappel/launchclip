@@ -152,6 +152,7 @@ function repairOptions(flags) {
     model: flags["repair-model"] ?? "gpt-5.6",
     reasoning: flags["repair-reasoning"] ?? "high",
     maxSnapshots: numberOr(flags["repair-snapshots"], 8),
+    concurrency: numberOr(flags.concurrency, 3),
     background: !flags.foreground
   };
 }

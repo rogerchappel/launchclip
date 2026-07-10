@@ -97,7 +97,7 @@ function help() {
   return `launchclip creates dry-run-first OSS promotion packets.
 
 Usage:
-  launchclip intake <source> [--kind repository|product|topic|voiceover] [--resource path] [--reference url] [--voiceover audio] [--presenter video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
+  launchclip intake <source> [--kind repository|product|topic|voiceover] [--resource path] [--reference url] [--voiceover audio|video] [--transcript text] [--presenter video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
   launchclip produce <source> [intake flags] [--voice-id id] [--sfx-dir path] [--concurrency 4] [--no-audio] [--allow-timing-drift]
   launchclip evidence <workspace>
   launchclip source-media <workspace> [--media-samples 12] [--media-reasoning high] [--transcribe-all]
