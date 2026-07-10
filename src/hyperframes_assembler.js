@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { copyFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { safeShotFile, validateHyperFramesRoot } from "./frame_director.js";
 import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
@@ -66,6 +66,10 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
     const projectDir = path.join(workspace, PRODUCTION_PATHS.hyperframes);
     const compositionsDir = path.join(projectDir, "compositions");
     const assetsDir = path.join(projectDir, "assets");
+    await Promise.all([
+      rm(compositionsDir, { recursive: true, force: true }),
+      rm(assetsDir, { recursive: true, force: true })
+    ]);
     await Promise.all([mkdir(compositionsDir, { recursive: true }), mkdir(assetsDir, { recursive: true })]);
     const assetMap = await freezeResources(intake.resources, assetsDir);
     for (const audio of extraAudio) assetMap.set(audio.id, await freezeFile(audio.id, audio.path, assetsDir));

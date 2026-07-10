@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -174,6 +174,8 @@ test("reconfigures assembly dependencies when a repaired plan replaces shot ids"
   const reopened = await ProductionJobStore.open(workspace, { create: false });
   assert.deepEqual(reopened.get("hyperframes-assembly").depends_on, ["frame:shot-2"]);
   assert.deepEqual((JSON.parse(await readFile(result.manifest, "utf8"))).shots.map((shot) => shot.id), ["shot-2"]);
+  await assert.rejects(() => access(path.join(result.project, "compositions", "shot-1.html")), { code: "ENOENT" });
+  await assert.rejects(() => access(path.join(result.project, "compositions", "shot-1.motion.json")), { code: "ENOENT" });
 });
 
 test("refuses remote or missing media requested by a delegated frame", () => {
