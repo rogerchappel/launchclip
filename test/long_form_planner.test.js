@@ -50,6 +50,27 @@ test("stitches an authoritative supplied transcript exactly across chapter plans
   assert.equal(stitched.shots.at(-1).end_seconds, 200);
 });
 
+test("waits for active chapter workers before reporting a sibling failure", async () => {
+  const workspace = await tempWorkspace();
+  const { intake, evidence } = context(workspace);
+  let delayedSiblingSettled = false;
+  const client = { runStructured: async (request) => {
+    if (request.metadata.job_id === "creative-outline") return response(outline());
+    if (request.metadata.chapter_id === "chapter-1") throw new Error("chapter one failed");
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    delayedSiblingSettled = true;
+    return response(chapterPlan("chapter-2"));
+  } };
+  await assert.rejects(
+    () => planLongFormProduction(workspace, { intake, evidence, options: { chapterConcurrency: 2 } }, { client }),
+    /chapter one failed/
+  );
+  assert.equal(delayedSiblingSettled, true);
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  assert.equal(store.get("creative-chapter:chapter-1").status, "failed");
+  assert.equal(store.get("creative-chapter:chapter-2").status, "succeeded");
+});
+
 function outline(source = "generated") {
   return {
     schema_version: "launchclip.production-outline.v1",

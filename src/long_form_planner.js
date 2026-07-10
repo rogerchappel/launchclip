@@ -300,8 +300,19 @@ function wordsInInterval(words, start, end) {
 async function runPool(tasks, concurrency) {
   const output = new Array(tasks.length);
   let cursor = 0;
+  let firstError = null;
   const count = Math.max(1, Math.min(tasks.length || 1, Math.floor(concurrency) || 1));
-  await Promise.all(Array.from({ length: count }, async () => { while (cursor < tasks.length) { const index = cursor++; output[index] = await tasks[index](); } }));
+  await Promise.all(Array.from({ length: count }, async () => {
+    while (cursor < tasks.length && !firstError) {
+      const index = cursor++;
+      try {
+        output[index] = await tasks[index]();
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+  }));
+  if (firstError) throw firstError;
   return output;
 }
 
