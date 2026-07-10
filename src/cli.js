@@ -70,7 +70,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "allow-timing-drift" || name === "foreground" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro") {
+    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro") {
       flags[name] = true;
       continue;
     }
@@ -98,7 +98,7 @@ function help() {
 
 Usage:
   launchclip intake <source> [--kind repository|product|topic|voiceover] [--resource path] [--reference url] [--voiceover audio|video] [--transcript text] [--presenter video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
-  launchclip produce <source> [intake flags] [--voice-id id] [--sfx-dir path] [--concurrency 4] [--no-audio] [--allow-timing-drift]
+  launchclip produce <source> [intake flags] [--voice-id id] [--sfx-dir path] [--concurrency 4] [--no-audio] [--fast-eval] [--allow-timing-drift]
   launchclip evidence <workspace>
   launchclip source-media <workspace> [--media-samples 12] [--media-reasoning high] [--transcribe-all]
   launchclip creative-plan <workspace> [--max-output-tokens 48000] [--foreground]

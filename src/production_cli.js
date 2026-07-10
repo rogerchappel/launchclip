@@ -14,6 +14,7 @@ import { withProductionLease } from "./job_store.js";
 
 export async function runProductionStage(command, target, flags = {}, adapters = {}) {
   if (command === "produce") return runProduction(target, flags, adapters);
+  flags = productionFlags(flags);
   const lease = adapters.withProductionLease ?? withProductionLease;
   return lease(target, async () => {
     if (command === "evidence") return collectEvidence(target, evidenceOptions(flags), adapters.evidence);
@@ -31,6 +32,7 @@ export async function runProductionStage(command, target, flags = {}, adapters =
 }
 
 export async function runProduction(source, flags = {}, adapters = {}) {
+  flags = productionFlags(flags);
   const normalized = await (adapters.buildIntake ?? buildIntake)(source, flags);
   const workspace = path.resolve(normalized.workspace);
   const lease = adapters.withProductionLease ?? withProductionLease;
@@ -141,7 +143,8 @@ function frameOptions(flags) {
     background: !flags.foreground,
     concurrency: numberOr(flags.concurrency, 4),
     semanticAttempts: numberOr(flags["semantic-attempts"], 2),
-    reasoning: flags["frame-reasoning"] ?? "high"
+    reasoning: flags["frame-reasoning"] ?? "high",
+    maxOutputTokens: numberOr(flags["frame-max-output-tokens"], 36_000)
   };
 }
 
@@ -196,7 +199,31 @@ function repairOptions(flags) {
     reasoning: flags["repair-reasoning"] ?? "high",
     maxSnapshots: numberOr(flags["repair-snapshots"], 8),
     concurrency: numberOr(flags.concurrency, 3),
+    maxOutputTokens: numberOr(flags["repair-max-output-tokens"], 36_000),
     background: !flags.foreground
+  };
+}
+
+function productionFlags(flags) {
+  if (!flags["fast-eval"]) return flags;
+  return {
+    ...flags,
+    reasoning: flags.reasoning ?? "high",
+    "media-samples": flags["media-samples"] ?? "8",
+    "media-reasoning": flags["media-reasoning"] ?? "medium",
+    "max-output-tokens": flags["max-output-tokens"] ?? "32000",
+    "frame-reasoning": flags["frame-reasoning"] ?? "medium",
+    "frame-max-output-tokens": flags["frame-max-output-tokens"] ?? "20000",
+    "semantic-attempts": flags["semantic-attempts"] ?? "1",
+    concurrency: flags.concurrency ?? "3",
+    "critic-reasoning": flags["critic-reasoning"] ?? "high",
+    "critic-snapshots": flags["critic-snapshots"] ?? "8",
+    "repair-reasoning": flags["repair-reasoning"] ?? "medium",
+    "repair-max-output-tokens": flags["repair-max-output-tokens"] ?? "20000",
+    "repair-snapshots": flags["repair-snapshots"] ?? "6",
+    "snapshot-frames": flags["snapshot-frames"] ?? "6",
+    "inspect-samples": flags["inspect-samples"] ?? "9",
+    "max-repair-passes": flags["max-repair-passes"] ?? "1"
   };
 }
 
