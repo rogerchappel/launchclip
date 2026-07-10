@@ -83,6 +83,15 @@ test("requires an authoritative transcript and preserves it exactly", async () =
   await assert.rejects(() => planProduction(workspace, {}, { client: { runStructured: async () => ({ response_id: "r", model: "gpt-5.6", status: "completed", value: plan, usage: {} }) } }), /preserved exactly/);
 });
 
+test("rejects a model plan that changes the requested canvas", async () => {
+  const workspace = await tempWorkspace(sampleIntake());
+  const plan = samplePlan();
+  plan.format = { ...plan.format, aspect: "16:9", width: 1920, height: 1080 };
+  await assert.rejects(() => planProduction(workspace, {}, {
+    client: { runStructured: async () => ({ response_id: "r", model: "gpt-5.6", status: "completed", value: plan, usage: {} }) }
+  }), /requested aspect/);
+});
+
 test("plans supplied narration against Scribe word timing and measured media duration", async () => {
   const intake = sampleIntake();
   intake.policies.supplied_voiceover_is_authoritative = true;
@@ -136,7 +145,7 @@ function sampleEvidence() {
 function samplePlan() {
   const shot = (id, start, end, voiceover) => ({
     id, start_seconds: start, end_seconds: end, purpose: "Advance the proof", voiceover,
-    on_screen_text: ["Proof"], evidence_ids: ["ev-1"], resource_ids: ["screen"],
+    on_screen_text: ["Proof", "Try it"], evidence_ids: ["ev-1"], resource_ids: ["screen"],
     presenter: { visible: false, placement: "offstage", size: "none", treatment: "none" },
     visual: { description: "The evidence becomes the interface", composition: "Subject-led hierarchy", typography: "Editorial display and metadata", background: "Quiet field", foreground: "One proof object", motion: "Reveal, connect, settle", internal_reveals: [{ at_seconds: 1, action: "connect claim to proof", easing_intent: "fast then settle", emphasis: "proof" }] },
     transition_out: "semantic match", sfx: [{ at_seconds: 1, cue: "soft evidence tick", intent: "mark the proof connection", volume: 0.3 }]

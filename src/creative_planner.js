@@ -95,7 +95,9 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
       claimEligibleEvidenceIds: evidence.items.filter((entry) => entry.claims_allowed && entry.role !== "reference").map((entry) => entry.id),
       resourceIds: intake.resources.map((entry) => entry.id),
       resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
-      expectedDuration: suppliedNarration?.duration_seconds ?? null,
+      expectedDuration: suppliedNarration?.duration_seconds ?? intake.brief.duration_seconds,
+      expectedFormat: { aspect: intake.brief.aspect.id, width: intake.brief.aspect.width, height: intake.brief.aspect.height, language: intake.brief.language },
+      requestedCta: intake.brief.cta,
       suppliedTranscript
     });
     if (!validation.ok) throw new Error(`GPT-5.6 production plan failed semantic validation: ${validation.errors.join("; ")}`);
