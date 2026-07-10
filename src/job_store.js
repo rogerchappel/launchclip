@@ -105,11 +105,17 @@ export class ProductionJobStore {
     return this.transition(id, "failed", { error: sanitizeError(error), ...(remote ? { remote: normalizeRemote(remote) } : {}) });
   }
 
-  async retry(id) {
+  async retry(id, options = {}) {
     const job = this.require(id);
     if (job.status !== "failed" && job.status !== "stale") throw new Error(`Only failed or stale jobs can be retried: ${id}`);
-    if (job.attempt >= job.max_attempts) throw new Error(`Job ${id} exhausted its ${job.max_attempts} attempts`);
-    return this.transition(id, "pending", { remote: null, outputs: [], usage: {}, error: null });
+    const inputHash = typeof options === "string" ? options : options.inputHash;
+    const changedInput = inputHash != null && inputHash !== job.input_hash;
+    if (!changedInput && job.attempt >= job.max_attempts) throw new Error(`Job ${id} exhausted its ${job.max_attempts} attempts`);
+    return this.transition(id, "pending", {
+      ...(inputHash != null ? { input_hash: String(inputHash) } : {}),
+      ...(changedInput ? { attempt: 0 } : {}),
+      remote: null, outputs: [], usage: {}, error: null
+    });
   }
 
   async markStaleFrom(ids) {

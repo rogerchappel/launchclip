@@ -42,6 +42,10 @@ test("records provider state, bounded attempts, sanitized failures, and retries"
   await store.markRunning("plan");
   await store.markFailed("plan", "second failure");
   await assert.rejects(() => store.retry("plan"), /exhausted/);
+  const replacementHash = semanticHash({ plan: "replacement" });
+  await store.retry("plan", { inputHash: replacementHash });
+  assert.equal(store.get("plan").input_hash, replacementHash);
+  assert.equal(store.get("plan").attempt, 0);
 });
 
 test("allows response metadata updates while the final permitted attempt is running", async () => {
