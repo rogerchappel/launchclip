@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -71,4 +71,20 @@ test("rejects unknown evaluation scenarios before executing work", async () => {
     }),
     /Unknown evaluation scenario/
   );
+});
+
+test("force replacement only removes evaluator-owned output", async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), "launchclip-eval-ownership-"));
+  const output = path.join(parent, "unowned");
+  const sentinel = path.join(output, "keep.txt");
+  await mkdir(output);
+  await writeFile(sentinel, "do not remove\n");
+
+  await assert.rejects(
+    () => runProductionEvaluationMatrix(output, { force: true }, {
+      createFixtures: async () => { throw new Error("must not create fixtures"); }
+    }),
+    /Refusing to replace unowned evaluation output/
+  );
+  assert.equal(await readFile(sentinel, "utf8"), "do not remove\n");
 });

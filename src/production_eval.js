@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -17,6 +18,7 @@ import { analyzeSourceMedia } from "./source_media_analysis.js";
 const execFileAsync = promisify(execFile);
 
 export const PRODUCTION_EVALUATION_VERSION = "launchclip.production-evaluation.v1";
+const PRODUCTION_EVALUATION_MARKER = ".launchclip-production-evaluation.json";
 export const PRODUCTION_EVALUATION_SCENARIOS = Object.freeze([
   "saas-16x9",
   "topic-pdf",
@@ -576,14 +578,38 @@ function selectScenarios(definitions, requested) {
 }
 
 async function prepareOutput(root, force) {
+  assertSafeEvaluationRoot(root);
   try {
     await stat(root);
     if (!force) throw new Error(`Evaluation output already exists: ${root}. Pass --force to replace it.`);
+    let marker;
+    try {
+      marker = await readJson(path.join(root, PRODUCTION_EVALUATION_MARKER));
+    } catch {
+      throw new Error(`Refusing to replace unowned evaluation output: ${root}. Choose a new --out directory.`);
+    }
+    if (marker.schema_version !== PRODUCTION_EVALUATION_VERSION) {
+      throw new Error(`Refusing to replace incompatible evaluation output: ${root}. Choose a new --out directory.`);
+    }
     await rm(root, { recursive: true, force: true });
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
   await mkdir(root, { recursive: true });
+  await writeAtomic(path.join(root, PRODUCTION_EVALUATION_MARKER), `${JSON.stringify({
+    schema_version: PRODUCTION_EVALUATION_VERSION,
+    purpose: "launchclip-production-evaluation-output"
+  }, null, 2)}\n`);
+}
+
+function assertSafeEvaluationRoot(root) {
+  const resolved = path.resolve(root);
+  const cwd = path.resolve(process.cwd());
+  const relativeCwd = path.relative(resolved, cwd);
+  const containsCwd = relativeCwd === "" || (!relativeCwd.startsWith(`..${path.sep}`) && relativeCwd !== ".." && !path.isAbsolute(relativeCwd));
+  if (resolved === path.parse(resolved).root || resolved === path.resolve(os.homedir()) || containsCwd) {
+    throw new Error(`Unsafe evaluation output directory: ${resolved}. Choose a dedicated child directory.`);
+  }
 }
 
 async function snapshotFiles(directory, root) {
