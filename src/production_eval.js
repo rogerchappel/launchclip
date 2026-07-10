@@ -30,6 +30,7 @@ export async function runProductionEvaluationMatrix(outputPath, options = {}, ad
   await prepareOutput(root, Boolean(options.force));
   const createFixtures = adapters.createFixtures ?? createEvaluationFixtures;
   const executeScenario = adapters.executeScenario ?? executeEvaluationScenario;
+  const onProgress = adapters.onProgress ?? (() => {});
   const fixtures = await createFixtures(path.join(root, "fixtures"), { run: adapters.run ?? execFileAsync });
   const definitions = evaluationScenarioDefinitions(fixtures, root);
   const selected = selectScenarios(definitions, options.scenarios);
@@ -38,12 +39,14 @@ export async function runProductionEvaluationMatrix(outputPath, options = {}, ad
 
   for (const definition of selected) {
     const start = Date.now();
+    await onProgress({ scenario: definition.id, status: "started" });
     const result = await executeScenario(definition, {
       inspectSamples: Number(options.inspectSamples ?? 7),
       snapshotFrames: Number(options.snapshotFrames ?? 5),
       requireVerificationCache: options.requireVerificationCache !== false
     }, adapters);
     scenarios.push({ ...result, elapsed_ms: Date.now() - start });
+    await onProgress({ scenario: definition.id, status: result.status, elapsed_ms: Date.now() - start });
   }
 
   const finishedAt = new Date();
@@ -626,7 +629,9 @@ function parseArguments(argv) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const options = parseArguments(process.argv.slice(2));
-  runProductionEvaluationMatrix(options.out, options)
+  runProductionEvaluationMatrix(options.out, options, {
+    onProgress: (event) => process.stderr.write(`[evaluation] ${event.scenario}: ${event.status}${event.elapsed_ms ? ` (${event.elapsed_ms}ms)` : ""}\n`)
+  })
     .then((result) => process.stdout.write(`${JSON.stringify(result, null, 2)}\n`))
     .catch((error) => { process.stderr.write(`${error.stack ?? error.message}\n`); process.exitCode = 1; });
 }

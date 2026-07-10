@@ -33,6 +33,7 @@ test("writes a selected frozen-provider matrix report without requiring credenti
   const parent = await mkdtemp(path.join(os.tmpdir(), "launchclip-eval-matrix-"));
   const output = path.join(parent, "matrix");
   const executed = [];
+  const progress = [];
   const result = await runProductionEvaluationMatrix(output, { scenarios: ["saas-16x9", "presenter-video"] }, {
     createFixtures: async () => ({
       screenVideo: "/fixtures/screen.mp4", voiceoverAudio: "/fixtures/voice.wav", presenterVideo: "/fixtures/presenter.mp4",
@@ -41,10 +42,12 @@ test("writes a selected frozen-provider matrix report without requiring credenti
     executeScenario: async (definition) => {
       executed.push(definition.id);
       return { id: definition.id, status: "passed", snapshots: [`scenarios/${definition.id}/snapshot.png`] };
-    }
+    },
+    onProgress: async (event) => progress.push(`${event.scenario}:${event.status}`)
   });
   assert.equal(result.status, "passed");
   assert.deepEqual(executed, ["saas-16x9", "presenter-video"]);
+  assert.deepEqual(progress, ["saas-16x9:started", "saas-16x9:passed", "presenter-video:started", "presenter-video:passed"]);
   const report = JSON.parse(await readFile(result.report, "utf8"));
   assert.equal(report.schema_version, PRODUCTION_EVALUATION_VERSION);
   assert.equal(report.provider_mode, "frozen-no-openai-or-elevenlabs-credentials");
