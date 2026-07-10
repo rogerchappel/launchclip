@@ -9,6 +9,7 @@ import { produceAudio } from "./production_audio.js";
 import { renderProduction, verifyProduction } from "./production_render.js";
 import { critiqueProduction } from "./production_critic.js";
 import { repairProduction } from "./production_repair.js";
+import { analyzeSourceMedia } from "./source_media_analysis.js";
 
 export async function runProductionStage(command, target, flags = {}, adapters = {}) {
   if (command === "evidence") return collectEvidence(target, evidenceOptions(flags), adapters.evidence);
@@ -20,6 +21,7 @@ export async function runProductionStage(command, target, flags = {}, adapters =
   if (command === "production-render") return renderProduction(target, renderOptions(flags));
   if (command === "production-critique") return critiqueProduction(target, criticOptions(flags));
   if (command === "production-repair") return (adapters.repairProduction ?? repairProduction)(target, repairOptions(flags), adapters.repair);
+  if (command === "source-media") return (adapters.analyzeSourceMedia ?? analyzeSourceMedia)(target, mediaAnalysisOptions(flags), adapters.mediaAnalysis);
   if (command !== "produce") throw new Error(`Unknown production stage: ${command}`);
   return runProduction(target, flags, adapters);
 }
@@ -28,6 +30,7 @@ export async function runProduction(source, flags = {}, adapters = {}) {
   const intake = await (adapters.writeIntake ?? writeIntake)(source, flags);
   const workspace = intake.workspace;
   const evidence = await (adapters.collectEvidence ?? collectEvidence)(workspace, evidenceOptions(flags), adapters.evidence);
+  const sourceMedia = await (adapters.analyzeSourceMedia ?? analyzeSourceMedia)(workspace, mediaAnalysisOptions(flags), adapters.mediaAnalysis);
   const plan = await (adapters.planProduction ?? planProduction)(workspace, plannerOptions(flags), adapters.planner);
   const noAudio = Boolean(flags["no-audio"]);
   const audio = await (adapters.produceAudio ?? produceAudio)(workspace, {
@@ -51,6 +54,7 @@ export async function runProduction(source, flags = {}, adapters = {}) {
     status: "awaiting-approval",
     workspace,
     evidence,
+    source_media: sourceMedia,
     plan,
     audio,
     frames: { generated: frames.generated, cached: frames.cached },
@@ -76,6 +80,17 @@ async function assembleWithProducedAudio(workspace, flags) {
 
 function evidenceOptions(flags) {
   return { maxItemChars: numberOr(flags["max-evidence-chars"], 60_000) };
+}
+
+function mediaAnalysisOptions(flags) {
+  return {
+    samples: numberOr(flags["media-samples"], 12),
+    columns: numberOr(flags["media-columns"], 4),
+    reasoning: flags["media-reasoning"] ?? "high",
+    transcriptionModel: flags["transcription-model"] ?? "scribe_v2",
+    transcribeAll: Boolean(flags["transcribe-all"]),
+    background: !flags.foreground
+  };
 }
 
 function plannerOptions(flags) {

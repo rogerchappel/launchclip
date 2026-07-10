@@ -6,7 +6,7 @@ import { preprocessPresenter } from "./presenter_preprocess.js";
 import { writeIntake } from "./intake.js";
 import { runProductionStage } from "./production_cli.js";
 
-const PRODUCTION_COMMANDS = new Set(["evidence", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-critique", "production-repair", "production-render", "produce"]);
+const PRODUCTION_COMMANDS = new Set(["evidence", "source-media", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-critique", "production-repair", "production-render", "produce"]);
 const COMMANDS = new Set(["intake", ...PRODUCTION_COMMANDS, "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
@@ -70,7 +70,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "critic-pro" || name === "allow-placeholder-sfx" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "allow-timing-drift" || name === "foreground" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro") {
+    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "allow-timing-drift" || name === "foreground" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro") {
       flags[name] = true;
       continue;
     }
@@ -100,6 +100,7 @@ Usage:
   launchclip intake <source> [--kind repository|product|topic|voiceover] [--resource path] [--reference url] [--voiceover audio] [--presenter video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
   launchclip produce <source> [intake flags] [--voice-id id] [--sfx-dir path] [--concurrency 4] [--no-audio] [--allow-timing-drift]
   launchclip evidence <workspace>
+  launchclip source-media <workspace> [--media-samples 12] [--media-reasoning high] [--transcribe-all]
   launchclip creative-plan <workspace> [--max-output-tokens 48000] [--foreground]
   launchclip production-audio <workspace> [--voice-id id] [--music-model music_v2] [--sfx-dir path] [--no-voice] [--no-music] [--no-sfx]
   launchclip direct-frames <workspace> [--concurrency 4] [--semantic-attempts 2] [--frame-reasoning high]
