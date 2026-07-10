@@ -47,19 +47,20 @@ export async function runProduction(source, flags = {}, adapters = {}) {
 async function runProductionInWorkspace(workspace, flags, adapters) {
   const evidence = await (adapters.collectEvidence ?? collectEvidence)(workspace, evidenceOptions(flags), adapters.evidence);
   const sourceMedia = await (adapters.analyzeSourceMedia ?? analyzeSourceMedia)(workspace, mediaAnalysisOptions(flags), adapters.mediaAnalysis);
-  const plan = await (adapters.planProduction ?? planProduction)(workspace, plannerOptions(flags), adapters.planner);
+  let plan = await (adapters.planProduction ?? planProduction)(workspace, plannerOptions(flags), adapters.planner);
   const noAudio = Boolean(flags["no-audio"]);
-  const audio = await (adapters.produceAudio ?? produceAudio)(workspace, {
+  const requestedAudioOptions = {
     ...audioOptions(flags),
     noVoice: noAudio || Boolean(flags["no-voice"]),
     noMusic: noAudio || Boolean(flags["no-music"]),
     noSfx: noAudio || Boolean(flags["no-sfx"])
-  }, adapters.audio);
+  };
+  let audio = await (adapters.produceAudio ?? produceAudio)(workspace, requestedAudioOptions, adapters.audio);
   if (audio.status === "needs-retiming" && !flags["allow-timing-drift"]) {
     throw new Error(`${audio.warnings.join(" ")} Re-run creative planning with measured narration timing, or pass --allow-timing-drift to inspect the draft.`);
   }
-  const frames = await (adapters.directFrames ?? directFrames)(workspace, frameOptions(flags), adapters.frames);
-  const assemblyOptions = {
+  let frames = await (adapters.directFrames ?? directFrames)(workspace, frameOptions(flags), adapters.frames);
+  let assemblyOptions = {
     voiceover: audio.voiceover,
     music: audio.music,
     sfxManifest: audio.sfx,
@@ -77,7 +78,7 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
       draft = await (adapters.renderDraftProduction ?? renderDraftProduction)(workspace, renderOptions(flags), adapters.render);
       verification = draft.verification;
       critique = draft.critique;
-      if (critique.verdict !== "repair") break;
+      if (!["repair", "replan"].includes(critique.verdict)) break;
       trigger = "critique";
     } catch (error) {
       if (error?.code !== "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED") throw error;
@@ -89,7 +90,21 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
     if (repairs.length >= maximumRepairPasses) break;
     const repair = await (adapters.repairProduction ?? repairProduction)(workspace, repairOptions(flags), adapters.repair);
     repairs.push({ pass: repairs.length + 1, trigger, ...repair });
-    if (!repair.repaired?.length) break;
+    if (!repair.repaired?.length && !repair.actions?.plan_revised) break;
+    if (repair.actions?.plan_revised) {
+      plan = repair.plan ?? plan;
+      audio = await (adapters.produceAudio ?? produceAudio)(workspace, requestedAudioOptions, adapters.audio);
+      if (audio.status === "needs-retiming" && !flags["allow-timing-drift"]) {
+        throw new Error(`${audio.warnings.join(" ")} Revised narration timing still requires another plan repair.`);
+      }
+      frames = await (adapters.directFrames ?? directFrames)(workspace, frameOptions(flags), adapters.frames);
+      assemblyOptions = {
+        voiceover: audio.voiceover,
+        music: audio.music,
+        sfxManifest: audio.sfx,
+        musicVolume: numberOr(flags["music-volume"], 0.16)
+      };
+    }
     assembly = await (adapters.assembleHyperFrames ?? assembleHyperFrames)(workspace, assemblyOptions);
   }
   const readyForApproval = draft?.status === "ready" && critique?.verdict === "ship";

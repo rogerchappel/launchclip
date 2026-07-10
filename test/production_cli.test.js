@@ -104,6 +104,31 @@ test("stops a persistent verification repair loop at the configured bound", asyn
   assert.match(result.next, /\/tmp\/qa/);
 });
 
+test("executes the full audio, frame, assembly, and draft closure after a replan verdict", async () => {
+  const calls = [];
+  let drafts = 0;
+  const adapters = {
+    withProductionLease: async (_workspace, operation) => operation(),
+    buildIntake: async () => ({ workspace: "/tmp/workspace" }), writeIntake: async () => ({ workspace: "/tmp/workspace" }),
+    collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}),
+    planProduction: async () => { calls.push("plan"); return { revision: 0 }; },
+    produceAudio: async () => { calls.push("audio"); return { status: "ready", voiceover: "/tmp/voice.mp3", music: "/tmp/music.mp3", sfx: "/tmp/sfx.json", warnings: [] }; },
+    directFrames: async () => { calls.push("frames"); return { generated: 2, cached: 0 }; },
+    assembleHyperFrames: async () => { calls.push("assemble"); return {}; },
+    renderDraftProduction: async () => {
+      calls.push("draft"); drafts += 1;
+      const verdict = drafts === 1 ? "replan" : "ship";
+      return { status: verdict === "ship" ? "ready" : "needs-repair", video: "/tmp/draft.mp4", verification: { status: "ready", snapshots: "/tmp/snapshots" }, critique: { verdict } };
+    },
+    repairProduction: async () => { calls.push("repair-plan"); return { status: "replanned", repaired: [], plan: { revision: 1 }, actions: { plan_revised: true, audio: "regenerate", frames: "all", assemble: true } }; }
+  };
+  const result = await runProduction("owner/repo", {}, adapters);
+  assert.equal(result.status, "awaiting-approval");
+  assert.deepEqual(calls, ["plan", "audio", "frames", "assemble", "draft", "repair-plan", "audio", "frames", "assemble", "draft"]);
+  assert.equal(result.plan.revision, 1);
+  assert.equal(result.repairs[0].trigger, "critique");
+});
+
 test("fast eval keeps full QA while lowering provider and sampling budgets", async () => {
   const received = {};
   const adapters = {
