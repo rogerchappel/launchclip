@@ -32,6 +32,15 @@ export async function analyzeRenderMotion(videoPath, options = {}, adapters = {}
   const cutFrames = scenes.filter((entry) => entry.value >= sceneThreshold).map((entry) => entry.frame);
   const duration = Number(probe.format?.duration ?? series.frame_count / fps);
   const cuts = cutFrames.map((frame) => frame / fps).filter((time) => time > 0.05 && time < duration - 0.05);
+  const flowFps = Number(options.flowFps ?? 10);
+  const flowWidth = Number(options.flowWidth ?? 64);
+  const flowHeight = Number(options.flowHeight ?? 36);
+  const rawFlow = await run("ffmpeg", [
+    "-hide_banner", "-loglevel", "error", "-i", resolved,
+    "-vf", `fps=${flowFps},scale=${flowWidth}:${flowHeight},format=gray`,
+    "-an", "-f", "rawvideo", "pipe:1"
+  ]);
+  const opticalFlow = analyzeBlockMotion(Buffer.isBuffer(rawFlow.stdout) ? rawFlow.stdout : Buffer.from(rawFlow.stdout ?? "", "binary"), flowWidth, flowHeight, flowFps, { ...options, cutTimes: cuts });
   const shotDurations = boundariesToDurations([0, ...cuts, duration]);
   return {
     schema_version: "launchclip.render-motion.v1",
@@ -48,21 +57,22 @@ export async function analyzeRenderMotion(videoPath, options = {}, adapters = {}
     shot_duration_seconds: distribution(shotDurations),
     motion_bursts_per_minute: rate(series.bursts.length, duration),
     motion: series,
+    optical_flow: opticalFlow,
     family: classifyMotionFamily({ cut_rate_per_minute: rate(cuts.length, duration), hold_ratio: series.hold_ratio, motion_bursts_per_minute: rate(series.bursts.length, duration) })
   };
 }
 
 export function analyzeMotionSeries(values, fps, options = {}) {
   const clean = values.map(Number).filter(Number.isFinite);
-  if (!clean.length) return { frame_count: 0, change_energy: distribution([]), hold_ratio: 1, burst_threshold: 0, bursts: [], velocity: distribution([]), acceleration: distribution([]), deceleration: distribution([]), jerk: distribution([]), frame_difference: [] };
+  if (!clean.length) return { frame_count: 0, change_energy: distribution([]), hold_ratio: 1, burst_threshold: 0, bursts: [], pixel_change_rate: distribution([]), pixel_change_acceleration: distribution([]), pixel_change_deceleration: distribution([]), pixel_change_jerk: distribution([]), frame_difference: [] };
   const baseline = median(clean);
   const mad = median(clean.map((value) => Math.abs(value - baseline)));
   const threshold = Number(options.burstThreshold ?? baseline + Math.max(mad * 4, 0.45));
   const holdThreshold = Number(options.holdThreshold ?? baseline + Math.max(mad, 0.12));
-  const velocity = clean.map((value) => value / 255);
-  const acceleration = differences(velocity).map((value) => value * fps);
-  const deceleration = acceleration.filter((value) => value < 0).map(Math.abs);
-  const jerk = differences(acceleration).map((value) => value * fps);
+  const changeRate = clean.map((value) => value / 255);
+  const changeAcceleration = differences(changeRate).map((value) => value * fps);
+  const changeDeceleration = changeAcceleration.filter((value) => value < 0).map(Math.abs);
+  const changeJerk = differences(changeAcceleration).map((value) => value * fps);
   const bursts = groupBursts(clean, threshold, fps, Number(options.mergeGapFrames ?? Math.max(1, Math.round(fps * 0.08))));
   return {
     frame_count: clean.length,
@@ -71,12 +81,82 @@ export function analyzeMotionSeries(values, fps, options = {}) {
     burst_threshold: round(threshold, 5),
     hold_threshold: round(holdThreshold, 5),
     bursts,
-    velocity: distribution(velocity),
-    acceleration: signedDistribution(acceleration),
-    deceleration: distribution(deceleration),
-    jerk: signedDistribution(jerk),
+    pixel_change_rate: distribution(changeRate),
+    pixel_change_acceleration: signedDistribution(changeAcceleration),
+    pixel_change_deceleration: distribution(changeDeceleration),
+    pixel_change_jerk: signedDistribution(changeJerk),
     frame_difference: clean.map((value, index) => ({ frame: index, at_seconds: round(index / fps, 4), energy: round(value, 5) }))
   };
+}
+
+export function analyzeBlockMotion(rawFrames, width, height, fps, options = {}) {
+  const frameSize = width * height;
+  const count = Math.floor(rawFrames.length / frameSize);
+  const block = Number(options.flowBlockSize ?? 6);
+  const radius = Number(options.flowSearchRadius ?? 2);
+  const cutTimes = options.cutTimes ?? [];
+  const magnitudes = [];
+  const samples = [];
+  for (let frame = 1; frame < count; frame += 1) {
+    const at = frame / fps;
+    if (cutTimes.some((time) => Math.abs(time - at) <= 1 / fps)) continue;
+    const previousOffset = (frame - 1) * frameSize;
+    const currentOffset = frame * frameSize;
+    const vectors = [];
+    for (let y = radius; y + block + radius < height; y += block) {
+      for (let x = radius; x + block + radius < width; x += block) {
+        if (blockTexture(rawFrames, previousOffset, width, x, y, block) < Number(options.flowTextureThreshold ?? 5)) continue;
+        let bestSad = Infinity;
+        let bestMagnitude = 0;
+        for (let dy = -radius; dy <= radius; dy += 1) {
+          for (let dx = -radius; dx <= radius; dx += 1) {
+            const sad = blockSad(rawFrames, previousOffset, currentOffset, width, x, y, dx, dy, block);
+            if (sad < bestSad) { bestSad = sad; bestMagnitude = Math.hypot(dx, dy); }
+          }
+        }
+        vectors.push(bestMagnitude * fps);
+      }
+    }
+    const magnitude = vectors.length ? quantile(vectors.sort((a, b) => a - b), .75) : 0;
+    magnitudes.push(magnitude);
+    samples.push({ frame, at_seconds: round(at, 4), pixels_per_second: round(magnitude, 4), tracked_blocks: vectors.length });
+  }
+  const acceleration = differences(magnitudes).map((value) => value * fps);
+  const deceleration = acceleration.filter((value) => value < 0).map(Math.abs);
+  const jerk = differences(acceleration).map((value) => value * fps);
+  return {
+    method: "block-matching",
+    sample_fps: fps,
+    block_size: block,
+    search_radius: radius,
+    tracked_frame_pairs: magnitudes.length,
+    velocity_pixels_per_second: distribution(magnitudes),
+    acceleration_pixels_per_second_squared: signedDistribution(acceleration),
+    deceleration_pixels_per_second_squared: distribution(deceleration),
+    jerk_pixels_per_second_cubed: signedDistribution(jerk),
+    samples
+  };
+}
+
+function blockTexture(buffer, offset, width, x, y, block) {
+  let sum = 0;
+  let sumSquares = 0;
+  for (let row = 0; row < block; row += 1) for (let column = 0; column < block; column += 1) {
+    const value = buffer[offset + (y + row) * width + x + column];
+    sum += value;
+    sumSquares += value * value;
+  }
+  const count = block * block;
+  const mean = sum / count;
+  return Math.sqrt(Math.max(0, sumSquares / count - mean * mean));
+}
+
+function blockSad(buffer, previousOffset, currentOffset, width, x, y, dx, dy, block) {
+  let sad = 0;
+  for (let row = 0; row < block; row += 1) for (let column = 0; column < block; column += 1) {
+    sad += Math.abs(buffer[previousOffset + (y + row) * width + x + column] - buffer[currentOffset + (y + row + dy) * width + x + column + dx]);
+  }
+  return sad;
 }
 
 export function compareMotionProfiles(candidate, references) {
