@@ -122,7 +122,9 @@ The intake records:
 - requested model, reasoning effort, and pro-mode setting
 
 Repeated `--resource` and `--reference` flags are ordered arrays. The original
-files remain immutable.
+files remain immutable. Directories are recursively expanded into stable,
+checksummed file resources (hidden files and `node_modules` are ignored), so a
+screen-recordings directory is directly usable by analysis and frame workers.
 
 ### 2. Evidence
 
@@ -136,6 +138,10 @@ Create `production/evidence.json` and derived analysis artifacts.
 - Audio/video: duration, dimensions, transcript, word timings, and contact
   sheets. Long recordings are summarized by chapter without discarding the
   timestamped transcript.
+- Supported YouTube references: locally staged analysis copy, contact sheet,
+  optional Scribe transcript/WPM, semantic segments, and later frame-motion
+  comparison. Staging is capped at 15 minutes and never mounts reference
+  footage in the output.
 
 Every claim in a later script points back to one or more evidence ids. The model
 may create analogies and visual metaphors, but it may not turn an unverified
@@ -182,7 +188,8 @@ Write human-readable `SCRIPT.md` and `STORYBOARD.md` from the validated plan.
 
 - A supplied voiceover is authoritative; its real word timings drive the edit.
 - Otherwise, ElevenLabs generates the approved script in bounded sections and
-  returns or derives word timings.
+  returns word timings. Moderate duration drift is pitch-preservingly conformed
+  to the approved timeline and the word alignment is scaled with it.
 - ElevenLabs music uses the model-authored music brief and the final duration.
 - SFX are resolved from the local library by semantic intent and copied into
   the project with a manifest.
@@ -204,7 +211,10 @@ Each frame author receives only:
 
 This keeps the design contextual without giving one request an unbounded output
 surface. The assembler owns media tracks, frame timing, transitions, and the
-root composition.
+root composition. Model-authored documents run behind a restrictive CSP and an
+active-content/asset allowlist. Motion intent is translated into the native
+HyperFrames `appearsBy`, `before`, `staysInFrame`, and `keepsMoving` sidecar
+contract, including a root sidecar discovered by `hyperframes inspect`.
 
 ### 6. Visual Review and Repair
 
@@ -223,10 +233,14 @@ Only those frames are regenerated. Repeat within a bounded repair budget.
 Final render remains human-gated.
 
 After encoding, Launchclip measures per-frame luminance difference, stillness,
-motion bursts, velocity, acceleration, deceleration, jerk, cut cadence, and shot
-duration. Reference comparison first selects a compatible editorial family and
-then compares temporal distributions and envelopes. It does not optimize RGB,
-SSIM, or pixel resemblance between unrelated visual styles.
+motion bursts, cut cadence, and shot duration. A separate block-matching pass
+measures displacement velocity, acceleration, deceleration, and jerk; luma
+derivatives are explicitly reported only as pixel-change metrics. Audio QA
+checks stream presence, integrated loudness, true peak, narrated silence,
+voice/music margin, and SFX transients at scheduled cue times. Reference
+comparison first selects a compatible editorial family and then compares
+temporal distributions and envelopes. It does not optimize RGB, SSIM, or pixel
+resemblance between unrelated visual styles.
 
 ## Reference Quality Observations
 
@@ -261,6 +275,10 @@ cadence together with cut rate and hold ratio.
 - Do not invent repository capabilities, product metrics, research results, or
   public claims.
 - Do not auto-publish, upload, or submit a final render.
+- Stage public reference video only for analysis when authorized; do not copy
+  its footage, audio, likeness, or design into the deliverable.
+- Pass `--sfx-dir` for packaged installs until the repository pack's
+  redistribution terms are explicitly approved.
 - Store provider ids and receipts, never API keys.
 - Make every stage resumable and reviewable before incurring the next expensive
   provider call.

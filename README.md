@@ -40,8 +40,7 @@ launchclip production-verify .launchclip/repo-video
 launchclip production-critique .launchclip/repo-video
 launchclip production-repair .launchclip/repo-video
 launchclip assemble .launchclip/repo-video
-launchclip production-render .launchclip/repo-video --approve \
-  --reference-video ./references/example.mp4
+launchclip production-render .launchclip/repo-video --approve
 ```
 
 For a supplied avatar/presenter take, pass the media as both the authoritative
@@ -62,6 +61,16 @@ the explicit `--approve` flag and still returns for human review; it never
 publishes. See [the model-directed pipeline](docs/MODEL_DIRECTED_VIDEO.md) for
 artifact contracts, provider requirements, reference analysis, and repair
 semantics.
+
+Resource directories are expanded into checksummed file-level inputs. Supported
+YouTube references are staged locally with `yt-dlp` (15-minute limit) for visual,
+transcript, pacing, and frame-motion analysis, then kept out of the final media
+assets. Only analyze references you are authorized to use. A local
+`--reference-video` remains available for media that cannot be staged.
+
+The repository-local SFX pack is the default during source development. Until
+its redistribution terms are approved for the npm artifact, packaged installs
+must pass an authorized pack with `--sfx-dir /path/to/sfx`.
 
 To create an uploadable video from that packet:
 
