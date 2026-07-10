@@ -13,6 +13,18 @@ test("collects repeated resource and reference flags", () => {
   });
 });
 
+test("accepts authoritative transcripts and voiceover video sources", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "launchclip-voice-video-"));
+  const video = path.join(directory, "presenter.mp4");
+  const transcript = path.join(directory, "transcript.txt");
+  await writeFile(video, "video");
+  await writeFile(transcript, "Exact supplied words.");
+  assert.equal(inferSourceKind(video), "voiceover");
+  const intake = await buildIntake("A topic", { voiceover: video, transcript, out: path.join(directory, "out") });
+  assert.deepEqual(intake.resources.map((entry) => entry.role), ["voiceover", "voiceover-transcript"]);
+  assert.equal(intake.policies.supplied_voiceover_is_authoritative, true);
+});
+
 test("infers supported source kinds", () => {
   assert.equal(inferSourceKind("https://github.com/openai/openai-node"), "repository");
   assert.equal(inferSourceKind("openai/openai-node"), "repository");

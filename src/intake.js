@@ -69,6 +69,7 @@ export async function buildIntake(source, flags = {}, env = process.env) {
     ["supporting", values(flags.resource)],
     ["reference", values(flags.reference)],
     ["voiceover", values(flags.voiceover)],
+    ["voiceover-transcript", values(flags.transcript)],
     ["presenter", values(flags.presenter)]
   ]) {
     for (const entry of entries) resources.push(await describeResource(entry, role, resources.length));
@@ -121,7 +122,7 @@ export function inferSourceKind(source, requestedKind = null) {
   const resolved = path.resolve(source);
   if (existsSync(resolved)) {
     const extension = path.extname(resolved).toLowerCase();
-    if ([".mp3", ".wav", ".m4a", ".aac", ".aiff", ".flac"].includes(extension)) return "voiceover";
+    if ([".mp3", ".wav", ".m4a", ".aac", ".aiff", ".flac", ".mp4", ".mov", ".webm", ".mkv"].includes(extension)) return "voiceover";
     if (!extension || existsSync(path.join(resolved, ".git")) || existsSync(path.join(resolved, "README.md"))) return "repository";
   }
   return "topic";
