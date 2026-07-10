@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -141,7 +141,7 @@ export function evaluationScenarioDefinitions(fixtures, root) {
       },
       planningMode: "single",
       audioMode: "supplied",
-      expected: { aspect: "9:16", narration: "supplied", presenter: true, visualAnalysis: true }
+      expected: { aspect: "9:16", narration: "supplied", suppliedAudio: true, presenter: true, visualAnalysis: true }
     },
     {
       id: "hierarchical-longform",
@@ -239,38 +239,45 @@ async function executeEvaluationScenario(definition, options, adapters) {
 async function scenarioAssertions(context) {
   const { definition, workspace, intake, evidence, plan, audio, assembly, jobs, mediaResult, verification, cachedVerification, requireVerificationCache } = context;
   const frameBundles = await Promise.all(plan.shots.map((shot) => readJson(path.join(workspace, "production", "frames", `${shot.id}.json`))));
+  const assembled = await inspectAssembledProject(workspace, assembly);
   const checks = [
     assertion("requested-aspect", plan.format.aspect === definition.expected.aspect, `${plan.format.width}x${plan.format.height}`),
     assertion("requested-narration-source", plan.narration.source === definition.expected.narration, plan.narration.source),
     assertion("native-verification-passed", verification.status === "ready" && !(verification.failed ?? []).length, verification.status),
     assertion("assembled-all-shots", assembly.shots.length === plan.shots.length, `${assembly.shots.length}/${plan.shots.length}`),
+    assertion("frozen-assets-intact", assembled.assets.every((entry) => entry.ok), assembled.assets.filter((entry) => !entry.ok).map((entry) => entry.id).join(", ") || `${assembled.assets.length} verified`),
     assertion("frozen-verification-reused", !requireVerificationCache || cachedVerification.cached === true, String(Boolean(cachedVerification.cached)))
   ];
   if (definition.expected.visualAnalysis) checks.push(assertion("visual-media-analyzed", mediaResult.analyses > 0, String(mediaResult.analyses)));
-  if (definition.expected.screenMedia) checks.push(assertion(
-    "screen-recording-mounted",
-    frameBundles.some((bundle) => bundle.root_media_requests.some((request) => request.kind === "video")),
-    "root_media_requests"
-  ));
+  if (definition.expected.screenMedia) {
+    const screenIds = new Set(intake.resources.filter((entry) => entry.type === "video" && entry.role !== "presenter").map((entry) => entry.id));
+    const mounted = matchAssembledMediaRequests(plan, frameBundles, assembled, screenIds);
+    checks.push(assertion("screen-recording-mounted", mounted.length > 0 && mounted.every((entry) => entry.mounted), `${mounted.filter((entry) => entry.mounted).length}/${mounted.length} root videos`));
+  }
   if (definition.expected.pdfEvidence) checks.push(assertion(
     "pdf-ingested-as-evidence",
     evidence.items.some((entry) => entry.kind === "document-text" && /evidence becomes motion/i.test(entry.content)),
     "document-text"
   ));
-  if (definition.expected.suppliedAudio) checks.push(assertion(
-    "supplied-audio-preserved",
-    audio.voiceover?.provider === "supplied" && Boolean(audio.voiceover.path),
-    audio.voiceover?.provider ?? "missing"
-  ));
+  if (definition.expected.suppliedAudio) {
+    const voiceoverAsset = assembled.assetById.get("voiceover");
+    const voiceoverMedia = assembled.media.find((entry) => entry.id === "voiceover" && entry.kind === "audio");
+    const sourceSha256 = audio.voiceover?.path ? await sha256File(audio.voiceover.path).catch(() => null) : null;
+    checks.push(assertion(
+      "supplied-audio-preserved",
+      audio.voiceover?.provider === "supplied" && voiceoverAsset?.ok && voiceoverMedia?.src === voiceoverAsset.file && sourceSha256 === voiceoverAsset.sha256,
+      voiceoverMedia?.src ?? audio.voiceover?.provider ?? "missing"
+    ));
+  }
   if (definition.expected.presenter) {
     const presenterIds = new Set(intake.resources.filter((entry) => entry.role === "presenter").map((entry) => entry.id));
-    const placements = frameBundles.flatMap((bundle) => bundle.root_media_requests.filter((request) => presenterIds.has(request.resource_id)).map((request) => request.placement));
-    checks.push(assertion("presenter-visible", plan.shots.some((shot) => shot.presenter.visible), String(plan.shots.filter((shot) => shot.presenter.visible).length)));
-    checks.push(assertion("presenter-layout-changes", placements.length >= 2 && new Set(placements.map((entry) => `${entry.x}:${entry.y}:${entry.width}:${entry.height}`)).size >= 2, String(placements.length)));
-    checks.push(assertion("presenter-continuous-timeline", frameBundles.every((bundle) => {
-      const shot = plan.shots.find((entry) => entry.id === bundle.shot_id);
-      return bundle.root_media_requests.filter((request) => presenterIds.has(request.resource_id)).every((request) => request.source_start_seconds === shot.start_seconds + request.start_seconds);
-    }), "source_start_seconds"));
+    const presenterMedia = matchAssembledMediaRequests(plan, frameBundles, assembled, presenterIds);
+    const visibleShots = plan.shots.filter((shot) => shot.presenter.visible);
+    const mountedShots = new Set(presenterMedia.filter((entry) => entry.mounted).map((entry) => entry.shotId));
+    const mountedStyles = presenterMedia.filter((entry) => entry.mounted).map((entry) => entry.actual.style);
+    checks.push(assertion("presenter-visible", visibleShots.length > 0 && visibleShots.every((shot) => mountedShots.has(shot.id)), `${mountedShots.size}/${visibleShots.length} visible shots mounted`));
+    checks.push(assertion("presenter-layout-changes", mountedStyles.length >= 2 && new Set(mountedStyles).size >= 2, String(mountedStyles.length)));
+    checks.push(assertion("presenter-continuous-timeline", presenterMedia.length > 0 && presenterMedia.every((entry) => entry.mounted && entry.timingMatches), `${presenterMedia.filter((entry) => entry.timingMatches).length}/${presenterMedia.length}`));
   }
   if (definition.expected.hierarchical) {
     const jobEntries = Array.isArray(jobs.jobs) ? jobs.jobs : Object.values(jobs.jobs ?? jobs);
@@ -278,6 +285,73 @@ async function scenarioAssertions(context) {
     checks.push(assertion("outline-and-chapters-succeeded", jobEntries.some((entry) => entry.id === "creative-outline" && entry.status === "succeeded") && jobEntries.filter((entry) => entry.id?.startsWith("creative-chapter:") && entry.status === "succeeded").length >= 2, "jobs.json"));
   }
   return checks;
+}
+
+async function inspectAssembledProject(workspace, assembly) {
+  const project = path.join(workspace, "production", "hyperframes");
+  const rootHtml = await readFile(path.join(project, "index.html"), "utf8");
+  const assets = await Promise.all((assembly.assets ?? []).map(async (asset) => {
+    const target = path.resolve(project, asset.file);
+    const relativeTarget = path.relative(project, target);
+    const contained = relativeTarget !== "" && !relativeTarget.startsWith(`..${path.sep}`) && relativeTarget !== ".." && !path.isAbsolute(relativeTarget);
+    if (!contained) return { ...asset, ok: false };
+    const actualSha256 = await sha256File(target).catch(() => null);
+    return { ...asset, actual_sha256: actualSha256, ok: actualSha256 === asset.sha256 };
+  }));
+  return {
+    assets,
+    assetById: new Map(assets.map((entry) => [entry.id, entry])),
+    media: [...rootHtml.matchAll(/<(video|audio)\b[^>]*>/gi)].map((match) => ({
+      kind: match[1].toLowerCase(),
+      id: htmlAttribute(match[0], "id"),
+      src: htmlAttribute(match[0], "src"),
+      start: Number(htmlAttribute(match[0], "data-start")),
+      duration: Number(htmlAttribute(match[0], "data-duration")),
+      mediaStart: Number(htmlAttribute(match[0], "data-media-start")),
+      style: htmlAttribute(match[0], "style") ?? ""
+    }))
+  };
+}
+
+function matchAssembledMediaRequests(plan, bundles, assembled, resourceIds) {
+  const shotById = new Map(plan.shots.map((shot) => [shot.id, shot]));
+  return bundles.flatMap((bundle) => bundle.root_media_requests.flatMap((request, index) => {
+    if (!resourceIds.has(request.resource_id)) return [];
+    const shot = shotById.get(bundle.shot_id);
+    const asset = assembled.assetById.get(request.resource_id);
+    const actual = assembled.media.find((entry) => entry.id === `${bundle.shot_id}-media-${index + 1}`);
+    const expectedStart = shot.start_seconds + request.start_seconds;
+    const expectedDuration = request.end_seconds - request.start_seconds;
+    const expectedMediaStart = request.source_start_seconds ?? 0;
+    const timingMatches = actual != null && approximately(actual.start, expectedStart) && approximately(actual.duration, expectedDuration) && approximately(actual.mediaStart, expectedMediaStart);
+    const placementMatches = actual != null && [
+      `left:${renderedNumber(request.placement.x)}px`, `top:${renderedNumber(request.placement.y)}px`,
+      `width:${renderedNumber(request.placement.width)}px`, `height:${renderedNumber(request.placement.height)}px`
+    ].every((value) => actual.style.includes(value));
+    return [{
+      shotId: bundle.shot_id,
+      actual,
+      timingMatches,
+      mounted: Boolean(asset?.ok && actual?.kind === request.kind && actual.src === asset.file && timingMatches && placementMatches)
+    }];
+  }));
+}
+
+function htmlAttribute(tag, name) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return tag.match(new RegExp(`\\b${escaped}="([^"]*)"`, "i"))?.[1] ?? null;
+}
+
+function approximately(actual, expected) {
+  return Number.isFinite(actual) && Math.abs(actual - Number(expected)) <= .001;
+}
+
+function renderedNumber(value) {
+  return String(Math.round(Number(value) * 1000) / 1000);
+}
+
+async function sha256File(filePath) {
+  return createHash("sha256").update(await readFile(filePath)).digest("hex");
 }
 
 class FrozenEvaluationClient {

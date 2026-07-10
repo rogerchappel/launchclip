@@ -27,6 +27,7 @@ test("defines the five required source-to-video evaluation modes", () => {
   assert.equal(definitions.find((entry) => entry.id === "topic-pdf").source, fixtures.paperPdf);
   assert.equal(definitions.find((entry) => entry.id === "supplied-audio").expected.narration, "supplied");
   assert.equal(definitions.find((entry) => entry.id === "presenter-video").expected.presenter, true);
+  assert.equal(definitions.find((entry) => entry.id === "presenter-video").expected.suppliedAudio, true);
   assert.equal(definitions.find((entry) => entry.id === "hierarchical-longform").planningMode, "hierarchical");
 });
 
