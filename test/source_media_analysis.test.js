@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { analyzeSourceMedia, MEDIA_ANALYSIS_SCHEMA } from "../src/source_media_analysis.js";
+import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 
 test("transcribes authoritative video narration and gives GPT-5.6 an ordered contact sheet", async () => {
   const workspace = await fixture();
@@ -34,6 +35,23 @@ test("transcribes authoritative video narration and gives GPT-5.6 an ordered con
 test("requires a transcript path or Scribe credentials before planning supplied narration", async () => {
   const workspace = await fixture();
   await assert.rejects(() => analyzeSourceMedia(workspace, {}, { client: {} }), /requires --transcript or ELEVENLABS_API_KEY/);
+});
+
+test("recovers an interrupted aggregate source-media job", async () => {
+  const workspace = await fixture({ role: "supporting", authoritative: false });
+  const intake = JSON.parse(await readFile(path.join(workspace, "production", "intake.json"), "utf8"));
+  const evidence = JSON.parse(await readFile(path.join(workspace, "production", "evidence.json"), "utf8"));
+  const inputHash = semanticHash({ intake, evidence, options: { samples: 12, columns: 4, reasoning: "high", transcriptionModel: "scribe_v2", transcribeAll: false, stageRemoteReferences: true }, stage: "source-media-analysis.v1" });
+  const store = await ProductionJobStore.open(workspace);
+  await store.add({ id: "source-media-analysis", kind: "source-media-analysis", depends_on: [], input_hash: inputHash });
+  await store.markRunning("source-media-analysis");
+  const result = await analyzeSourceMedia(workspace, {}, {
+    store,
+    client: { runStructured: async () => ({ response_id: "r", model: "gpt-5.6", value: { resource_id: "take", summary: "Recovered", visible_text: [], narrative_opportunities: [], segments: [], quality_warnings: [] } }) },
+    contactSheet: async (_source, output) => writeFile(output, "sheet")
+  });
+  assert.equal(result.status, "ready");
+  assert.equal(store.get("source-media-analysis").status, "succeeded");
 });
 
 test("keeps reference visual analysis out of factual evidence", async () => {
