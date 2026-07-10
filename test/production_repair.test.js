@@ -14,7 +14,7 @@ test("repairs only criticised frames, preserves the frame contract, and invalida
     request = options;
     return { response_id: "resp_repair", model: "gpt-5.6-sol", status: "completed", usage: { total_tokens: 500 }, value: bundle("shot-2", "Repaired proof hierarchy") };
   } };
-  const result = await repairProduction(workspace, { background: false }, { client });
+  const result = await repairProduction(workspace, { background: false, concurrency: 2 }, { client });
   assert.equal(result.status, "repaired");
   assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-2"]);
   assert.equal(JSON.parse(request.input).findings[0].id, "f-1");

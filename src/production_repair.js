@@ -40,7 +40,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
   const client = adapters.client ?? new OpenAIResponsesClient();
   const images = await snapshotImages(path.join(qaDir, "snapshots"), Number(options.maxSnapshots ?? 8));
   const repaired = [];
-  for (const [shotId, findings] of byShot) {
+  const tasks = [...byShot].map(([shotId, findings]) => async () => {
     const shot = plan.shots.find((entry) => entry.id === shotId);
     if (!shot) throw new Error(`Critique references unknown shot: ${shotId}`);
     const prior = await readJson(path.join(workspace, PRODUCTION_PATHS.frames, `${shotId}.json`));
@@ -68,7 +68,8 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
         background: options.background !== false,
         maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
         promptCacheKey: "launchclip:frame-repair:v1",
-        metadata: { job_id: jobId, shot_id: shotId, repair_findings: findings.length }
+        metadata: { job_id: jobId, shot_id: shotId, repair_findings: findings.length },
+        onSubmitted: async (response) => store.markRunning(jobId, { provider: "openai", response_id: response.id, status: response.status })
       });
       const validation = validateFrameBundle(result.value, {
         shotId,
@@ -86,7 +87,8 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
       await store.markFailed(jobId, error);
       throw error;
     }
-  }
+  });
+  await runPool(tasks, Number(options.concurrency ?? 3));
   return {
     stage: "production-repair",
     status: unsupported.length ? "partially-repaired" : "repaired",
@@ -94,6 +96,18 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     blockers: unsupported.map((finding) => ({ id: finding.id, repair_scope: finding.repair_scope, instruction: finding.instruction })),
     next: "Re-run launchclip assemble and production-verify; resolve any listed blockers before production-render."
   };
+}
+
+async function runPool(tasks, concurrency) {
+  if (!Number.isInteger(concurrency) || concurrency <= 0) throw new Error("Repair concurrency must be a positive integer");
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < tasks.length) {
+      const index = cursor++;
+      await tasks[index]();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
 }
 
 async function writeFrameArtifacts(workspace, bundle) {
