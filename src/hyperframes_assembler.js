@@ -54,7 +54,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
     for (const audio of extraAudio) assetMap.set(audio.id, await freezeFile(audio.id, audio.path, assetsDir));
 
     for (const bundle of bundles) {
-      let html = ensureTimelineRegistration(bundle.html, bundle.shot_id);
+      let html = applyFrameCsp(ensureTimelineRegistration(bundle.html, bundle.shot_id));
       for (const resource of intake.resources) {
         const frozen = assetMap.get(resource.id);
         if (frozen && resource.location) html = html.split(resource.location).join(`../assets/${frozen.file}`);
@@ -137,6 +137,7 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=${plan.format.width}, height=${plan.format.height}">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -158,6 +159,14 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
 </body>
 </html>
 `;
+}
+
+export function applyFrameCsp(html) {
+  if (/http-equiv=["']Content-Security-Policy["']/i.test(html)) return html;
+  const policy = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">`;
+  if (/<head\b[^>]*>/i.test(html)) return html.replace(/<head\b[^>]*>/i, (head) => `${head}\n  ${policy}`);
+  if (/<html\b[^>]*>/i.test(html)) return html.replace(/<html\b[^>]*>/i, (root) => `${root}\n<head>${policy}</head>`);
+  return `${policy}\n${html}`;
 }
 
 export function ensureTimelineRegistration(html, compositionId) {

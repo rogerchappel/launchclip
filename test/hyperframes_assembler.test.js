@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { assembleHyperFrames, ensureTimelineRegistration, renderRoot, rootMotionSpec, toHyperFramesMotionSpec } from "../src/hyperframes_assembler.js";
+import { applyFrameCsp, assembleHyperFrames, ensureTimelineRegistration, renderRoot, rootMotionSpec, toHyperFramesMotionSpec } from "../src/hyperframes_assembler.js";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { EVIDENCE_VERSION, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
@@ -17,12 +17,20 @@ test("renders subcompositions while keeping timed media and SFX as direct root c
   assert.match(html, /data-composition-src="compositions\/shot-1.html"/);
   assert.match(html, /data-composition-src="compositions\/shot-1\.html" data-start="0" data-duration="4\.999"/);
   assert.match(html, /gsap@3\.14\.2/);
+  assert.match(html, /Content-Security-Policy/);
   assert.match(html, /window\.__timelines\["main"\] = gsap\.timeline\(\{ paused: true \}\)/);
   assert.match(html, /<video[^>]+data-start="1"[^>]+data-duration="3"[^>]+data-media-start="4"/);
   assert.match(html, /left:100px;top:200px;width:800px;height:600px/);
   assert.equal((html.match(/<video/g) ?? []).length, 1);
   assert.match(html, /<audio id="sfx-001"[^>]+data-start="2\.25"[^>]+data-volume="0\.3"/);
   assert.ok(html.indexOf("<video") > html.indexOf('data-composition-id="main"'));
+});
+
+test("applies a restrictive CSP to model-authored frame documents", () => {
+  const html = applyFrameCsp("<!doctype html><html><head><title>Shot</title></head><body></body></html>");
+  assert.match(html, /default-src 'none'/);
+  assert.match(html, /connect-src 'none'/);
+  assert.equal((applyFrameCsp(html).match(/Content-Security-Policy/g) ?? []).length, 1);
 });
 
 test("canonicalizes model-authored GSAP timelines into the HyperFrames registry", () => {
@@ -60,6 +68,7 @@ test("freezes assets, rewrites frame paths, assembles a resumable HyperFrames pr
   assert.equal(first.cached, false);
   assert.match(root, /src="assets\/screen\.mp4"/);
   assert.match(frame, /src="\.\.\/assets\/screen\.mp4"/);
+  assert.match(frame, /default-src 'none'/);
   assert.doesNotMatch(frame, new RegExp(source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.deepEqual((JSON.parse(await readFile(first.manifest, "utf8"))).shots.map((entry) => entry.id), ["shot-1"]);
   const rootMotion = JSON.parse(await readFile(path.join(first.project, "index.motion.json"), "utf8"));
