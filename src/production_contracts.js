@@ -234,6 +234,9 @@ export function validateProductionPlan(plan, context = {}) {
   if (!Array.isArray(plan.shots) || plan.shots.length === 0) errors.push("shots must contain at least one shot");
   const duration = Number(plan.format?.duration_seconds);
   if (!Number.isFinite(duration) || duration <= 0) errors.push("format.duration_seconds must be positive");
+  if (context.expectedDuration != null && Number.isFinite(Number(context.expectedDuration)) && Math.abs(duration - Number(context.expectedDuration)) > 0.05) {
+    errors.push(`format.duration_seconds must match authoritative narration duration ${context.expectedDuration}`);
+  }
   const seen = new Set();
   let cursor = 0;
   for (const [index, shot] of (plan.shots ?? []).entries()) {

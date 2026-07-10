@@ -37,13 +37,14 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
   const workspace = path.resolve(workspacePath);
   const intake = await readJson(path.join(workspace, PRODUCTION_PATHS.intake));
   const evidence = await readJson(path.join(workspace, PRODUCTION_PATHS.evidence));
-  const suppliedTranscript = authoritativeTranscript(intake, evidence);
-  if (intake.policies?.supplied_voiceover_is_authoritative && !suppliedTranscript) {
+  const suppliedNarration = await authoritativeNarration(intake, evidence);
+  const suppliedTranscript = suppliedNarration?.transcript ?? null;
+  if (intake.policies?.supplied_voiceover_is_authoritative && !suppliedNarration) {
     throw new Error("Supplied voiceover requires a transcript evidence item before creative planning");
   }
 
   const sfxCatalog = options.sfxCatalog ?? await listSfx(options.sfxDir ?? path.join(PACKAGE_ROOT, "public", "sfx"));
-  const input = buildPlanningInput(intake, evidence, suppliedTranscript, { ...options, sfxCatalog });
+  const input = buildPlanningInput(intake, evidence, suppliedNarration, { ...options, sfxCatalog });
   const inputHash = semanticHash({ input, model: intake.model, schema: PRODUCTION_PLAN_SCHEMA, planner: "creative-planner.v1" });
   const store = adapters.store ?? await ProductionJobStore.open(workspace);
   const jobId = String(options.jobId ?? "creative-plan");
@@ -92,6 +93,7 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
       evidenceIds: evidence.items.map((entry) => entry.id),
       claimEligibleEvidenceIds: evidence.items.filter((entry) => entry.claims_allowed && entry.role !== "reference").map((entry) => entry.id),
       resourceIds: intake.resources.map((entry) => entry.id),
+      expectedDuration: suppliedNarration?.duration_seconds ?? null,
       suppliedTranscript
     });
     if (!validation.ok) throw new Error(`GPT-5.6 production plan failed semantic validation: ${validation.errors.join("; ")}`);
@@ -119,9 +121,10 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
   }
 }
 
-export function buildPlanningInput(intake, evidence, suppliedTranscript = null, options = {}) {
+export function buildPlanningInput(intake, evidence, suppliedNarration = null, options = {}) {
   const evidenceBudget = Number(options.evidenceChars ?? 220_000);
   const items = compactEvidence(evidence.items, evidenceBudget);
+  const narration = typeof suppliedNarration === "string" ? { transcript: suppliedNarration, words: [], duration_seconds: null } : suppliedNarration;
   return JSON.stringify({
     brief: {
       source_kind: intake.source.kind,
@@ -129,7 +132,7 @@ export function buildPlanningInput(intake, evidence, suppliedTranscript = null, 
       audience: intake.brief.audience,
       call_to_action: intake.brief.cta,
       language: intake.brief.language,
-      requested_duration_seconds: intake.brief.duration_seconds,
+      requested_duration_seconds: narration?.duration_seconds ?? intake.brief.duration_seconds,
       requested_format: intake.brief.aspect
     },
     source: evidence.source,
@@ -144,9 +147,9 @@ export function buildPlanningInput(intake, evidence, suppliedTranscript = null, 
       sha256: entry.sha256
     })),
     available_sfx: (options.sfxCatalog ?? []).map(String),
-    narration: suppliedTranscript
-      ? { source: "supplied", authoritative_transcript: suppliedTranscript }
-      : { source: "generated", authoritative_transcript: null },
+    narration: narration
+      ? { source: "supplied", authoritative_transcript: narration.transcript, measured_duration_seconds: narration.duration_seconds, word_timing: narration.words }
+      : { source: "generated", authoritative_transcript: null, measured_duration_seconds: null, word_timing: [] },
     policies: intake.policies,
     evidence_warnings: evidence.warnings
   });
@@ -197,10 +200,19 @@ function compactEvidence(items, totalBudget) {
   return output;
 }
 
-function authoritativeTranscript(intake, evidence) {
+async function authoritativeNarration(intake, evidence) {
   if (!intake.policies?.supplied_voiceover_is_authoritative) return null;
   const transcript = evidence.items.find((entry) => entry.kind === "voiceover-transcript" && entry.role === "voiceover");
-  return transcript?.content?.trim() || null;
+  const text = transcript?.content?.trim();
+  if (!text) return null;
+  const wordsPath = transcript.metadata?.find((entry) => entry.key === "words_path")?.value;
+  const words = wordsPath ? await readJson(path.resolve(wordsPath)) : [];
+  const voiceover = intake.resources.find((entry) => entry.role === "voiceover");
+  const mediaEvidence = evidence.items.find((entry) => entry.id === `resource:${voiceover?.id}`);
+  const mediaDuration = Number(mediaEvidence?.metadata?.find((entry) => entry.key === "duration_seconds")?.value);
+  const wordDuration = Number(words.at(-1)?.end);
+  const duration = Number.isFinite(mediaDuration) && mediaDuration > 0 ? mediaDuration : Number.isFinite(wordDuration) && wordDuration > 0 ? wordDuration : null;
+  return { transcript: text, words, duration_seconds: duration, words_path: wordsPath ?? null };
 }
 
 function renderScript(plan) {

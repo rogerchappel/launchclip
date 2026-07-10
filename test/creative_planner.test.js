@@ -83,6 +83,32 @@ test("requires an authoritative transcript and preserves it exactly", async () =
   await assert.rejects(() => planProduction(workspace, {}, { client: { runStructured: async () => ({ response_id: "r", model: "gpt-5.6", status: "completed", value: plan, usage: {} }) } }), /preserved exactly/);
 });
 
+test("plans supplied narration against Scribe word timing and measured media duration", async () => {
+  const intake = sampleIntake();
+  intake.policies.supplied_voiceover_is_authoritative = true;
+  intake.resources.push({ id: "voice", role: "voiceover", type: "audio", location: "/tmp/voice.mp3", sha256: "v" });
+  const evidence = sampleEvidence();
+  const workspace = await tempWorkspace(intake, evidence);
+  const wordsPath = path.join(workspace, "production", "source-media", "voice.words.json");
+  await mkdir(path.dirname(wordsPath), { recursive: true });
+  await writeFile(wordsPath, `${JSON.stringify([{ word: "Exact", start: 0.2, end: 4.8 }])}\n`);
+  evidence.items.push(
+    { id: "resource:voice", kind: "audio-metadata", role: "voiceover", title: "voice", content: "{}", provenance: "/tmp/voice.mp3", sha256: "v", claims_allowed: false, truncated: false, metadata: [{ key: "duration_seconds", value: "5" }] },
+    { id: "voice-transcript", kind: "voiceover-transcript", role: "voiceover", title: "Transcript", content: "Exact", provenance: "/tmp/voice.mp3", sha256: "v", claims_allowed: false, truncated: false, metadata: [{ key: "words_path", value: wordsPath }] }
+  );
+  await writeFile(path.join(workspace, "production", "evidence.json"), `${JSON.stringify(evidence)}\n`);
+  let request;
+  const plan = samplePlan();
+  plan.format.duration_seconds = 5;
+  plan.shots = [plan.shots[0]];
+  plan.shots[0].end_seconds = 5;
+  plan.narration.source = "supplied";
+  plan.narration.full_text = "Exact";
+  await planProduction(workspace, {}, { client: { runStructured: async (options) => { request = JSON.parse(options.input); return { response_id: "r", model: "gpt-5.6", status: "completed", value: plan, usage: {} }; } } });
+  assert.equal(request.brief.requested_duration_seconds, 5);
+  assert.deepEqual(request.narration.word_timing, [{ word: "Exact", start: 0.2, end: 4.8 }]);
+});
+
 function sampleIntake() {
   return {
     schema_version: "launchclip.intake.v1",
