@@ -102,6 +102,14 @@ test("freezes assets, rewrites frame paths, assembles a resumable HyperFrames pr
 
   const second = await assembleHyperFrames(workspace);
   assert.equal(second.cached, true);
+
+  const interrupted = await ProductionJobStore.open(workspace, { create: false });
+  await interrupted.markStaleFrom(["hyperframes-assembly"]);
+  await interrupted.retry("hyperframes-assembly");
+  await interrupted.markRunning("hyperframes-assembly");
+  const recovered = await assembleHyperFrames(workspace);
+  assert.equal(recovered.cached, false);
+  assert.equal((await ProductionJobStore.open(workspace, { create: false })).get("hyperframes-assembly").status, "succeeded");
 });
 
 test("refuses remote or missing media requested by a delegated frame", () => {
