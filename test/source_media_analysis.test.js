@@ -28,8 +28,12 @@ test("transcribes authoritative video narration and gives GPT-5.6 an ordered con
   assert.equal(transcript.content, "Exact spoken words.");
   assert.equal(transcript.claims_allowed, false);
   assert.equal(evidence.items.find((entry) => entry.kind === "visual-media-analysis").claims_allowed, true);
+  await writeFile(result.evidence, `${JSON.stringify({ ...evidence, items: evidence.items.filter((entry) => !["voiceover-transcript", "visual-media-analysis"].includes(entry.kind)) })}\n`);
   const cached = await analyzeSourceMedia(workspace, { background: false }, { client, transcriber, contactSheet: async () => { throw new Error("cached analysis must not recapture"); } });
   assert.equal(cached.cached, true);
+  const rehydrated = JSON.parse(await readFile(result.evidence, "utf8"));
+  assert.ok(rehydrated.items.some((entry) => entry.kind === "voiceover-transcript"));
+  assert.ok(rehydrated.items.some((entry) => entry.kind === "visual-media-analysis"));
 });
 
 test("requires a transcript path or Scribe credentials before planning supplied narration", async () => {
@@ -41,7 +45,7 @@ test("recovers an interrupted aggregate source-media job", async () => {
   const workspace = await fixture({ role: "supporting", authoritative: false });
   const intake = JSON.parse(await readFile(path.join(workspace, "production", "intake.json"), "utf8"));
   const evidence = JSON.parse(await readFile(path.join(workspace, "production", "evidence.json"), "utf8"));
-  const inputHash = semanticHash({ intake, evidence, options: { samples: 12, columns: 4, reasoning: "high", transcriptionModel: "scribe_v2", transcribeAll: false, stageRemoteReferences: true }, stage: "source-media-analysis.v1" });
+  const inputHash = semanticHash({ intake, evidence, options: { samples: 12, columns: 4, reasoning: "high", transcriptionModel: "scribe_v2", transcribeAll: false, stageRemoteReferences: true }, stage: "source-media-analysis.v2" });
   const store = await ProductionJobStore.open(workspace);
   await store.add({ id: "source-media-analysis", kind: "source-media-analysis", depends_on: [], input_hash: inputHash });
   await store.markRunning("source-media-analysis");

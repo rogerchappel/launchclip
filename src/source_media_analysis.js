@@ -37,15 +37,22 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
   const workspace = path.resolve(workspacePath);
   const intakePath = path.join(workspace, PRODUCTION_PATHS.intake);
   const evidencePath = path.join(workspace, PRODUCTION_PATHS.evidence);
+  const mediaDir = path.join(workspace, "production", "source-media");
+  const derivedEvidencePath = path.join(mediaDir, "evidence.json");
   const [intake, evidence] = await Promise.all([readJson(intakePath), readJson(evidencePath)]);
   const sourceEvidence = { ...evidence, items: evidence.items.filter((entry) => !/:transcript$|:visual-analysis$/.test(entry.id)) };
-  const inputHash = semanticHash({ intake, evidence: sourceEvidence, options: { samples: options.samples ?? 12, columns: options.columns ?? 4, reasoning: options.reasoning ?? "high", transcriptionModel: options.transcriptionModel ?? "scribe_v2", transcribeAll: Boolean(options.transcribeAll), stageRemoteReferences: options.stageRemoteReferences !== false }, stage: "source-media-analysis.v1" });
+  const inputHash = semanticHash({ intake, evidence: sourceEvidence, options: { samples: options.samples ?? 12, columns: options.columns ?? 4, reasoning: options.reasoning ?? "high", transcriptionModel: options.transcriptionModel ?? "scribe_v2", transcribeAll: Boolean(options.transcribeAll), stageRemoteReferences: options.stageRemoteReferences !== false }, stage: "source-media-analysis.v2" });
   const store = adapters.store ?? await ProductionJobStore.open(workspace);
   const jobId = "source-media-analysis";
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
     const verification = await store.verifyOutputs(jobId);
     if (verification.ok) {
+      const derived = await readJson(derivedEvidencePath);
+      const currentEvidence = await readJson(evidencePath);
+      const derivedIds = new Set(derived.items.map((entry) => entry.id));
+      currentEvidence.items = [...currentEvidence.items.filter((entry) => !derivedIds.has(entry.id)), ...derived.items];
+      await writeAtomic(evidencePath, `${JSON.stringify(currentEvidence, null, 2)}\n`);
       const report = await readJson(path.join(workspace, "production", "source-media", "analysis.json"));
       return { stage: "source-media-analysis", status: "ready", workspace, evidence: evidencePath, report: path.join(workspace, "production", "source-media", "analysis.json"), reference_videos: (report.staged_references ?? []).map((entry) => entry.local_path), resources: report.summary?.resources ?? report.analyses.length, analyses: report.analyses.length, transcripts: report.summary?.transcripts ?? 0, cached: true };
     }
@@ -61,7 +68,6 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
   else if (current.status !== "pending") throw new Error(`Source media analysis job is already ${current.status}`);
   await store.markRunning(jobId);
   try {
-  const mediaDir = path.join(workspace, "production", "source-media");
   await mkdir(mediaDir, { recursive: true });
   const resources = intake.resources.filter((entry) => !entry.is_remote && ["video", "image", "audio"].includes(entry.type));
   const stagedReferences = [];
@@ -141,10 +147,11 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
   const ids = new Set(newItems.map((entry) => entry.id));
   evidence.items = [...evidence.items.filter((entry) => !ids.has(entry.id)), ...newItems];
   await writeAtomic(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
+  await writeAtomic(derivedEvidencePath, `${JSON.stringify({ schema_version: "launchclip.source-media-evidence.v1", items: newItems }, null, 2)}\n`);
   const reportPath = path.join(mediaDir, "analysis.json");
   const transcriptCount = newItems.filter((entry) => /transcript$/.test(entry.kind)).length;
   await writeAtomic(reportPath, `${JSON.stringify({ schema_version: "launchclip.source-media-analysis.v1", analyses, staged_references: stagedReferences, summary: { resources: resources.length, analyses: analyses.length, transcripts: transcriptCount } }, null, 2)}\n`);
-  const candidates = [evidencePath, reportPath, ...stagedReferences.map((entry) => entry.local_path), ...newItems.flatMap((entry) => entry.metadata.filter((item) => item.key === "words_path").map((item) => item.value))];
+  const candidates = [derivedEvidencePath, reportPath, ...stagedReferences.map((entry) => entry.local_path), ...newItems.flatMap((entry) => entry.metadata.filter((item) => item.key === "words_path").map((item) => item.value))];
   const outputs = await Promise.all([...new Set(candidates)].map((filePath) => describeJobOutput(workspace, filePath)));
   await store.markSucceeded(jobId, outputs);
   return { stage: "source-media-analysis", status: "ready", workspace, evidence: evidencePath, report: reportPath, reference_videos: stagedReferences.map((entry) => entry.local_path), resources: resources.length, analyses: analyses.length, transcripts: transcriptCount, cached: false };
