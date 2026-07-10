@@ -71,10 +71,13 @@ export async function renderProduction(workspacePath, options = {}, adapters = {
   if (!render.ok) throw new Error(`HyperFrames render failed. Review ${path.join(qaDir, "render.json")}.`);
 
   const plan = JSON.parse(await readFile(path.join(workspace, PRODUCTION_PATHS.plan), "utf8"));
+  const sourceMedia = await readOptionalJson(path.join(workspace, "production", "source-media", "analysis.json"));
+  const references = [...new Set([...values(options.references), ...(sourceMedia?.staged_references ?? []).map((entry) => entry.local_path)].filter(Boolean).map((entry) => path.resolve(entry)))];
+  const analysisOptions = motionOptions(plan, { ...options, references });
   const motionPath = path.join(qaDir, "motion.json");
   const motion = adapters.writeMotionReport
-    ? await adapters.writeMotionReport(output, motionPath, motionOptions(plan, options))
-    : await writeMotionReport(output, motionPath, motionOptions(plan, options), adapters.motion);
+    ? await adapters.writeMotionReport(output, motionPath, analysisOptions)
+    : await writeMotionReport(output, motionPath, analysisOptions, adapters.motion);
   if (!motion.quality.ok) throw new Error(`Rendered video failed motion quality gates. Review ${motionPath}.`);
   const audioPath = path.join(qaDir, "audio.json");
   const audioManifestPath = path.join(workspace, "production", "media", "manifest.json");

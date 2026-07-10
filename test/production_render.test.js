@@ -42,6 +42,9 @@ test("fails verification on lint warnings because final rendering uses strict-al
 
 test("renders only after verification then runs frame-by-frame motion gates", async () => {
   const workspace = await fixture();
+  const sourceMedia = path.join(workspace, "production", "source-media");
+  await mkdir(sourceMedia, { recursive: true });
+  await writeFile(path.join(sourceMedia, "analysis.json"), `${JSON.stringify({ staged_references: [{ local_path: "/tmp/staged-reference.mp4" }] })}\n`);
   const commands = [];
   const run = async (_command, args) => { commands.push(args[1]); return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" }; };
   let motionInput;
@@ -57,7 +60,7 @@ test("renders only after verification then runs frame-by-frame motion gates", as
   assert.equal(result.status, "awaiting-human-review");
   assert.equal(commands.at(-1), "render");
   assert.equal(motionInput.options.expected.width, 1080);
-  assert.deepEqual(motionInput.options.references, ["/tmp/reference.mp4"]);
+  assert.deepEqual(motionInput.options.references, ["/tmp/reference.mp4", "/tmp/staged-reference.mp4"]);
   assert.equal(JSON.parse(await readFile(result.audio, "utf8")).status, "not-requested");
 });
 
