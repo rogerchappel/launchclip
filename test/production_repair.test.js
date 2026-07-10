@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -57,6 +57,45 @@ test("resumes a persisted background repair response without another submission"
   assert.equal(resumed, 1);
 });
 
+test("repairs native shot inspection failures even when the visual critic ships", async () => {
+  const workspace = await fixture({ verdict: "ship" });
+  const reportPath = path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json");
+  await mkdir(path.dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, `${JSON.stringify({
+    ok: false,
+    stdout: { issues: [
+      { code: "motion_frozen", severity: "error", message: "The asserted node is static", selector: "#shot-1-proof", fixHint: "Animate the asserted node" },
+      { code: "content_overlap", severity: "warning", message: "Possible overlap", selector: "#shot-1-proof" }
+    ] },
+    stderr: ""
+  })}\n`);
+  const client = { runStructured: async (request) => {
+    const finding = JSON.parse(request.input).findings[0];
+    assert.equal(finding.id, "native-shot-1");
+    assert.match(finding.instruction, /Motion assertions must describe motion on the asserted element itself/);
+    assert.doesNotMatch(finding.instruction, /content_overlap/);
+    return { response_id: "native_repair", model: "gpt-5.6", status: "completed", usage: {}, value: bundle("shot-1", "Native repair") };
+  } };
+  const result = await repairProduction(workspace, {}, { client });
+  assert.equal(result.status, "repaired");
+  assert.equal(result.deterministic_findings, 1);
+  assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-1"]);
+});
+
+test("ignores shot inspection reports older than the frame they describe", async () => {
+  const workspace = await fixture({ verdict: "ship" });
+  const reportPath = path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json");
+  await mkdir(path.dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, `${JSON.stringify({ ok: false, stdout: { issues: [{ code: "motion_frozen", severity: "error", message: "Old issue" }] } })}\n`);
+  const old = new Date(Date.now() - 60_000);
+  const fresh = new Date();
+  await utimes(reportPath, old, old);
+  await utimes(path.join(workspace, "production", "frames", "shot-1.html"), fresh, fresh);
+  const result = await repairProduction(workspace, {}, { client: { runStructured: async () => { throw new Error("must not repair stale findings"); } } });
+  assert.equal(result.status, "not-needed");
+  assert.equal(result.deterministic_findings, 0);
+});
+
 function bundle(id, copy = "Proof") {
   return {
     schema_version: FRAME_BUNDLE_VERSION, shot_id: id,
@@ -86,7 +125,7 @@ async function fixture(options = {}) {
   const findings = [{ id: "f-1", severity: "major", category: "composition", shot_ids: ["shot-2"], repair_scope: options.repairScope ?? "frame", instruction: "Make proof dominant", preserve: ["exact copy"] }];
   if (options.includeAudio) findings.push({ id: "f-audio", severity: "major", category: "audio", shot_ids: ["shot-1", "shot-2"], repair_scope: "audio", instruction: "Measure the mix", preserve: [] });
   await writeFile(path.join(production, "qa", "critique.json"), `${JSON.stringify({
-    verdict: "repair",
+    verdict: options.verdict ?? "repair",
     findings
   })}\n`);
   await writeFile(path.join(snapshots, "001.png"), "snapshot");

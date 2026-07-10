@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { safeShotFile, validateHyperFramesRoot } from "./frame_director.js";
 import { describeJobOutput, ProductionJobStore } from "./job_store.js";
@@ -23,11 +23,17 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     readJson(path.join(workspace, PRODUCTION_PATHS.plan)),
     readJson(path.join(qaDir, "critique.json"))
   ]);
-  if (critique.verdict === "ship") return { stage: "production-repair", status: "not-needed", repaired: [] };
   if (critique.verdict === "replan") throw new Error("Critique requires broader work before frame repair: replan");
+  const deterministicFindings = await collectDeterministicRepairFindings(workspace, plan);
+  if (critique.verdict === "ship" && !deterministicFindings.length) {
+    return { stage: "production-repair", status: "not-needed", repaired: [], deterministic_findings: 0 };
+  }
+  const findings = critique.verdict === "ship"
+    ? deterministicFindings
+    : [...critique.findings, ...deterministicFindings];
   const repairableScopes = new Set(["frame", "frames", "assembly", "design"]);
-  const repairable = critique.findings.filter((finding) => repairableScopes.has(finding.repair_scope) && finding.shot_ids.length);
-  const unsupported = critique.findings.filter((finding) => !repairable.includes(finding));
+  const repairable = findings.filter((finding) => repairableScopes.has(finding.repair_scope) && finding.shot_ids.length);
+  const unsupported = findings.filter((finding) => !repairable.includes(finding));
   const byShot = new Map();
   for (const finding of repairable) {
     for (const shotId of finding.shot_ids) {
@@ -111,9 +117,73 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     stage: "production-repair",
     status: unsupported.length ? "partially-repaired" : "repaired",
     repaired,
+    deterministic_findings: deterministicFindings.length,
     blockers: unsupported.map((finding) => ({ id: finding.id, repair_scope: finding.repair_scope, instruction: finding.instruction })),
     next: "Re-run launchclip assemble and production-verify; resolve any listed blockers before production-render."
   };
+}
+
+export async function collectDeterministicRepairFindings(workspacePath, plan) {
+  const workspace = path.resolve(workspacePath);
+  const findings = [];
+  for (const shot of plan.shots ?? []) {
+    const reportPath = path.join(workspace, PRODUCTION_PATHS.qa, "shot-inspect", shot.id, "inspect.json");
+    const framePath = safeShotFile(path.join(workspace, PRODUCTION_PATHS.frames), shot.id, ".html");
+    const [reportInfo, frameInfo] = await Promise.all([optionalStat(reportPath), optionalStat(framePath)]);
+    if (!reportInfo || !frameInfo || reportInfo.mtimeMs < frameInfo.mtimeMs) continue;
+    const report = await readJson(reportPath);
+    if (report.ok !== false) continue;
+    const rawIssues = Array.isArray(report.stdout?.issues)
+      ? report.stdout.issues.filter((issue) => issue?.severity === "error")
+      : [];
+    const issues = uniqueIssues(rawIssues.length ? rawIssues : [{
+      code: "inspect_failed",
+      severity: "error",
+      message: String(report.stderr || "Shot-local HyperFrames inspection failed without structured issue details.").slice(0, 2_000),
+      selector: null,
+      fixHint: "Correct the shot-local runtime or composition error, then make native inspection pass."
+    }]);
+    const codes = issues.map((issue) => String(issue.code ?? "inspect_failed"));
+    findings.push({
+      id: `native-${shot.id}`,
+      severity: "major",
+      category: nativeCategory(codes),
+      shot_ids: [shot.id],
+      start_seconds: Number.isFinite(Number(shot.start_seconds)) ? Number(shot.start_seconds) : null,
+      end_seconds: Number.isFinite(Number(shot.end_seconds)) ? Number(shot.end_seconds) : null,
+      evidence: `Shot-local HyperFrames inspection failed with ${issues.length} unique blocking issue${issues.length === 1 ? "" : "s"}: ${issues.map(describeNativeIssue).join("; ")}`,
+      repair_scope: "frame",
+      instruction: `Make native shot-local inspection pass by correcting these issues: ${issues.map(describeNativeIssue).join("; ")}. Do not hide a real defect with a layout-allow annotation; use one only when the overlap or off-canvas state is visibly intentional and remains legible. Motion assertions must describe motion on the asserted element itself.`,
+      preserve: ["Factual copy and evidence grounding", "The established art direction", "Unrelated composition and motion"]
+    });
+  }
+  return findings;
+}
+
+function uniqueIssues(issues) {
+  const seen = new Set();
+  return issues.filter((issue) => {
+    const key = [issue.code, issue.selector, issue.message].map((value) => String(value ?? "")).join("\u0000");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function describeNativeIssue(issue) {
+  const selector = issue.selector ? ` at ${issue.selector}` : "";
+  const hint = issue.fixHint ? ` (${String(issue.fixHint).trim()})` : "";
+  return `${issue.code ?? "inspect_failed"}${selector}: ${String(issue.message ?? "inspection failed").trim()}${hint}`;
+}
+
+function nativeCategory(codes) {
+  if (codes.every((code) => code.startsWith("motion_"))) return "motion";
+  if (codes.every((code) => code.includes("text") || code.includes("typography"))) return "typography";
+  return "composition";
+}
+
+async function optionalStat(filePath) {
+  try { return await stat(filePath); } catch (error) { if (error.code === "ENOENT") return null; throw error; }
 }
 
 async function runPool(tasks, concurrency) {
