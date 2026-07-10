@@ -149,8 +149,26 @@ export function stitchLongFormPlan(outline, chapterPlans, suppliedNarration = nu
   const seenClaims = new Set();
   outline.chapters.forEach((chapter, index) => {
     const chapterPlan = chapterPlans[index];
-    for (const shot of chapterPlan.shots) shots.push({ ...shot, id: `${chapter.id}-${shot.id}`, start_seconds: round(chapter.start_seconds + shot.start_seconds), end_seconds: round(chapter.start_seconds + shot.end_seconds) });
-    for (const section of chapterPlan.narration.sections) sections.push({ ...section, id: `${chapter.id}-${section.id}` });
+    for (const shot of chapterPlan.shots) {
+      const start = round(chapter.start_seconds + shot.start_seconds);
+      const end = round(chapter.start_seconds + shot.end_seconds);
+      shots.push({
+        ...shot,
+        id: `${chapter.id}-${shot.id}`,
+        start_seconds: start,
+        end_seconds: end,
+        voiceover: suppliedNarration?.words?.length ? wordsInInterval(suppliedNarration.words, start, end) : shot.voiceover
+      });
+    }
+    if (suppliedNarration?.words?.length) {
+      sections.push({
+        id: `${chapter.id}-authoritative`,
+        text: wordsInInterval(suppliedNarration.words, chapter.start_seconds, chapter.end_seconds),
+        evidence_ids: [...new Set(chapterPlan.narration.sections.flatMap((section) => section.evidence_ids))]
+      });
+    } else {
+      for (const section of chapterPlan.narration.sections) sections.push({ ...section, id: `${chapter.id}-${section.id}` });
+    }
     for (const claim of chapterPlan.claims) {
       const key = semanticHash({ text: claim.text, evidence_ids: claim.evidence_ids });
       if (!seenClaims.has(key)) { seenClaims.add(key); claims.push(claim); }
@@ -268,6 +286,16 @@ function aggregateUsage(store, ids) {
 function compactEvidence(items) { return items.map((entry) => ({ id: entry.id, role: entry.role, title: entry.title, content: String(entry.content ?? "").slice(0, 30_000), provenance: entry.provenance, claims_allowed: entry.claims_allowed })); }
 function strictObject(properties) { return { type: "object", properties, required: Object.keys(properties), additionalProperties: false }; }
 function round(value) { return Math.round(Number(value) * 1000) / 1000; }
+function wordsInInterval(words, start, end) {
+  return words
+    .filter((word) => {
+      const midpoint = (Number(word.start) + Number(word.end)) / 2;
+      return Number.isFinite(midpoint) && midpoint >= Number(start) && midpoint < Number(end);
+    })
+    .map((word) => String(word.word ?? "").trim())
+    .filter(Boolean)
+    .join(" ");
+}
 
 async function runPool(tasks, concurrency) {
   const output = new Array(tasks.length);

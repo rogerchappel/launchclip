@@ -35,10 +35,18 @@ test("plans long-form productions as resumable outline and parallel chapter jobs
 });
 
 test("stitches an authoritative supplied transcript exactly across chapter plans", () => {
-  const full = "Exact supplied narration, including punctuation.";
-  const stitched = stitchLongFormPlan(outline("supplied"), [chapterPlan("chapter-1", "supplied"), chapterPlan("chapter-2", "supplied")], { transcript: full, words: [] });
+  const full = "One two three four.";
+  const words = [
+    { word: "One", start: 0, end: 40 },
+    { word: "two", start: 50, end: 90 },
+    { word: "three", start: 100, end: 140 },
+    { word: "four.", start: 150, end: 190 }
+  ];
+  const stitched = stitchLongFormPlan(outline("supplied"), [chapterPlan("chapter-1", "supplied"), chapterPlan("chapter-2", "supplied")], { transcript: full, words });
   assert.equal(stitched.narration.source, "supplied");
   assert.equal(stitched.narration.full_text, full);
+  assert.deepEqual(stitched.shots.map((shot) => shot.voiceover), ["One", "two", "three", "four."]);
+  assert.deepEqual(stitched.narration.sections.map((section) => section.text), ["One two", "three four."]);
   assert.equal(stitched.shots.at(-1).end_seconds, 200);
 });
 
