@@ -9,12 +9,13 @@ import { EVIDENCE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_con
 test("passes evidence, references, resources, and format to the creative director without choosing a style", () => {
   const intake = sampleIntake();
   const evidence = sampleEvidence();
-  const input = JSON.parse(buildPlanningInput(intake, evidence));
+  const input = JSON.parse(buildPlanningInput(intake, evidence, null, { sfxCatalog: ["tick", "fast_whoosh"] }));
   assert.equal(input.brief.requested_format.id, "9:16");
   assert.deepEqual(input.factual_evidence.map((entry) => entry.id), ["ev-1"]);
   assert.deepEqual(input.creative_references.map((entry) => entry.id), ["ref-1"]);
   assert.deepEqual(input.resources.map((entry) => entry.id), ["screen"]);
   assert.equal(input.narration.source, "generated");
+  assert.deepEqual(input.available_sfx, ["tick", "fast_whoosh"]);
   assert.equal(input.brief.prompt, "Lead with the surprising workflow");
 });
 

@@ -97,7 +97,8 @@ function plannerOptions(flags) {
   return {
     background: !flags.foreground,
     maxOutputTokens: numberOr(flags["max-output-tokens"], 48_000),
-    maxAttempts: numberOr(flags["max-attempts"], 3)
+    maxAttempts: numberOr(flags["max-attempts"], 3),
+    sfxDir: flags["sfx-dir"]
   };
 }
 

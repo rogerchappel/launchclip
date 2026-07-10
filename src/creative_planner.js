@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { OpenAIResponsesClient } from "./openai_responses.js";
 import {
@@ -24,10 +25,13 @@ Rules:
 - Design motion semantically: name internal reveals, their timing, and acceleration/deceleration intent. Favor purposeful development within shots over constant cutting.
 - Keep on-screen copy concise enough to read in its available time.
 - Presenter/avatar placement may change between beats when it improves hierarchy, but must never obscure essential proof.
+- Choose SFX cue names only from available_sfx. The cue timing and intent remain your creative decision.
 - Cover the exact requested duration with gap-free, butt-joined shots.
 - The rubric must be measurable on a rendered video and specific to this plan.
 
 Return only the strict production-plan JSON.`;
+
+const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export async function planProduction(workspacePath, options = {}, adapters = {}) {
   const workspace = path.resolve(workspacePath);
@@ -38,7 +42,8 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
     throw new Error("Supplied voiceover requires a transcript evidence item before creative planning");
   }
 
-  const input = buildPlanningInput(intake, evidence, suppliedTranscript, options);
+  const sfxCatalog = options.sfxCatalog ?? await listSfx(options.sfxDir ?? path.join(PACKAGE_ROOT, "public", "sfx"));
+  const input = buildPlanningInput(intake, evidence, suppliedTranscript, { ...options, sfxCatalog });
   const inputHash = semanticHash({ input, model: intake.model, schema: PRODUCTION_PLAN_SCHEMA, planner: "creative-planner.v1" });
   const store = adapters.store ?? await ProductionJobStore.open(workspace);
   const jobId = String(options.jobId ?? "creative-plan");
@@ -132,12 +137,25 @@ export function buildPlanningInput(intake, evidence, suppliedTranscript = null, 
       location: entry.location,
       sha256: entry.sha256
     })),
+    available_sfx: (options.sfxCatalog ?? []).map(String),
     narration: suppliedTranscript
       ? { source: "supplied", authoritative_transcript: suppliedTranscript }
       : { source: "generated", authoritative_transcript: null },
     policies: intake.policies,
     evidence_warnings: evidence.warnings
   });
+}
+
+async function listSfx(directory) {
+  try {
+    return (await readdir(path.resolve(directory), { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && /\.(?:wav|mp3|m4a|aac|flac)$/i.test(entry.name))
+      .map((entry) => path.basename(entry.name, path.extname(entry.name)))
+      .sort();
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
 }
 
 export async function writePlanArtifacts(workspace, plan) {
