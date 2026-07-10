@@ -227,13 +227,22 @@ test("infers fresh verification context for standalone production repair", async
   const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-standalone-repair-"));
   const qa = path.join(workspace, "production", "qa");
   await mkdir(qa, { recursive: true });
-  const verification = { schema_version: "launchclip.production-verification.v2", status: "failed", failed: ["inspect:shot-1"] };
+  const verification = {
+    schema_version: "launchclip.production-verification.v2",
+    status: "failed",
+    failed: ["inspect:shot-1"],
+    inputs: { options: { strict_all: true, validate_timeout_ms: 12_000, inspect_samples: 17, snapshot_frames: 9 } }
+  };
   await writeFile(path.join(qa, "verification.json"), `${JSON.stringify(verification)}\n`);
   let received;
   let freshnessChecked = false;
   await runProductionStage("production-repair", workspace, {}, {
     withProductionLease: async (_workspace, operation) => operation(),
-    assertVerificationFresh: async (_workspace, value) => { freshnessChecked = true; assert.deepEqual(value.failed, ["inspect:shot-1"]); },
+    assertVerificationFresh: async (_workspace, value, options) => {
+      freshnessChecked = true;
+      assert.deepEqual(value.failed, ["inspect:shot-1"]);
+      assert.deepEqual(options, { strictAll: true, timeoutMs: 12_000, inspectSamples: 17, snapshotFrames: 9 });
+    },
     repairProduction: async (_workspace, options) => { received = options; return { status: "repaired" }; }
   });
   assert.equal(freshnessChecked, true);

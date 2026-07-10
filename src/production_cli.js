@@ -43,7 +43,13 @@ async function standaloneRepairOptions(workspacePath, flags, adapters) {
   }
   if (verification?.status !== "failed") return options;
   try {
-    await (adapters.assertVerificationFresh ?? assertVerificationFresh)(workspacePath, verification, renderOptions(flags));
+    const recorded = verification.inputs?.options ?? {};
+    await (adapters.assertVerificationFresh ?? assertVerificationFresh)(workspacePath, verification, {
+      strictAll: recorded.strict_all,
+      timeoutMs: recorded.validate_timeout_ms,
+      inspectSamples: recorded.inspect_samples,
+      snapshotFrames: recorded.snapshot_frames
+    });
   } catch (error) {
     if (error?.code === "LAUNCHCLIP_STALE_PRODUCTION_VERIFICATION") return options;
     throw error;
