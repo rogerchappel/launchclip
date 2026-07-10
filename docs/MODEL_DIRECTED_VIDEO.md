@@ -82,8 +82,9 @@ launchclip produce ./brief.md \
   --prompt "Keep the presenter visible; move them around the evidence"
 ```
 
-The command writes a workspace and stops at an editable preview by default.
-Final rendering remains an explicit approval step.
+The command writes a workspace, renders and analyzes an editable draft, asks an
+independent critic to judge it, and performs up to two bounded repair passes by
+default. Final high-quality rendering remains an explicit approval step.
 
 Every stage can also be resumed directly:
 
@@ -95,6 +96,8 @@ launchclip production-audio <workspace>
 launchclip direct-frames <workspace> --concurrency 4
 launchclip assemble <workspace>
 launchclip production-verify <workspace>
+launchclip production-draft <workspace> \
+  --reference-video ./reference-short.mp4
 launchclip production-critique <workspace>
 launchclip production-repair <workspace>
 launchclip production-render <workspace> --approve \
@@ -105,6 +108,15 @@ launchclip production-render <workspace> --approve \
 configured. A supplied voiceover requires either `--transcript` or an
 `ELEVENLABS_API_KEY` for Scribe transcription. Generated narration additionally
 requires `ELEVENLABS_VOICE_ID` (or `--voice-id`).
+
+Use `produce --fast-eval` for the short iteration loop. It keeps the same
+evidence, schema, native HyperFrames, rendered-motion, and independent-critic
+gates while reducing media samples, model output budgets, critic snapshots,
+and repair passes. Every stage is receipt-backed and resumable, so rerunning the
+same workspace reuses valid provider responses and artifacts. After editing an
+assembled composition, `production-draft` reruns verification, a draft encode,
+motion/audio analysis, reference comparison, and critique without repeating
+intake, evidence, planning, frame generation, or audio production.
 
 ## Pipeline
 
@@ -142,6 +154,10 @@ Create `production/evidence.json` and derived analysis artifacts.
   optional Scribe transcript/WPM, semantic segments, and later frame-motion
   comparison. Staging is capped at 15 minutes and never mounts reference
   footage in the output.
+
+SVG inputs are preserved as source evidence and rasterized to derived PNGs for
+vision analysis. Rasterization uses an available ImageMagick `magick`/`convert`
+binary or macOS `sips`; packaged installs do not currently bundle a rasterizer.
 
 Every claim in a later script points back to one or more evidence ids. The model
 may create analogies and visual metaphors, but it may not turn an unverified

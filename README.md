@@ -36,8 +36,16 @@ launchclip produce https://github.com/owner/repo \
   --duration 45 \
   --voice-id "$ELEVENLABS_VOICE_ID"
 
-launchclip production-verify .launchclip/repo-video
-launchclip production-critique .launchclip/repo-video
+# Faster evaluation with smaller model/snapshot budgets; completed stages resume.
+launchclip produce https://github.com/owner/repo \
+  --out .launchclip/repo-fast-eval \
+  --no-audio \
+  --fast-eval
+
+# Re-render, re-analyze, and re-critique the existing assembled project only.
+launchclip production-draft .launchclip/repo-video \
+  --reference-video ./reference-short.mp4
+
 launchclip production-repair .launchclip/repo-video
 launchclip assemble .launchclip/repo-video
 launchclip production-render .launchclip/repo-video --approve
@@ -56,9 +64,10 @@ launchclip produce "Product workflow" \
   --aspect 16:9
 ```
 
-The command stops at an editable assembled project. Final rendering requires
-the explicit `--approve` flag and still returns for human review; it never
-publishes. See [the model-directed pipeline](docs/MODEL_DIRECTED_VIDEO.md) for
+The command creates an editable assembled project, analyzed draft, independent
+critic report, and up to two bounded repair passes. Final rendering requires the
+explicit `--approve` flag and still returns for human review; it never publishes.
+See [the model-directed pipeline](docs/MODEL_DIRECTED_VIDEO.md) for
 artifact contracts, provider requirements, reference analysis, and repair
 semantics.
 
@@ -67,6 +76,10 @@ YouTube references are staged locally with `yt-dlp` (15-minute limit) for visual
 transcript, pacing, and frame-motion analysis, then kept out of the final media
 assets. Only analyze references you are authorized to use. A local
 `--reference-video` remains available for media that cannot be staged.
+
+SVG resources remain immutable, but GPT vision receives a derived PNG. Install
+ImageMagick (`magick` or `convert`) or use macOS `sips` for that normalization;
+the CLI reports a concrete error when none is available.
 
 The repository-local SFX pack is the default during source development. Until
 its redistribution terms are approved for the npm artifact, packaged installs
