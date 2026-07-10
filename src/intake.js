@@ -41,6 +41,10 @@ const RESOURCE_EXTENSIONS = new Map([
 
 export async function writeIntake(source, flags = {}, env = process.env) {
   const intake = await buildIntake(source, flags, env);
+  return writeIntakeManifest(intake);
+}
+
+export async function writeIntakeManifest(intake) {
   const workspace = intake.workspace;
   const productionDir = path.join(workspace, "production");
   await mkdir(productionDir, { recursive: true });
