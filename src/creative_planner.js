@@ -45,6 +45,13 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
   }
 
   const sfxCatalog = options.sfxCatalog ?? await listSfx(options.sfxDir ?? path.join(PACKAGE_ROOT, "public", "sfx"));
+  const planningMode = resolvePlanningMode(options.planningMode, suppliedNarration?.duration_seconds ?? intake.brief.duration_seconds, options.hierarchicalThresholdSeconds);
+  if (planningMode === "hierarchical") {
+    const store = adapters.store ?? await ProductionJobStore.open(workspace);
+    const client = adapters.client ?? new OpenAIResponsesClient();
+    const hierarchicalPlanner = adapters.planLongFormProduction ?? (await import("./long_form_planner.js")).planLongFormProduction;
+    return hierarchicalPlanner(workspace, { intake, evidence, suppliedNarration, sfxCatalog, options }, { store, client });
+  }
   const input = buildPlanningInput(intake, evidence, suppliedNarration, { ...options, sfxCatalog });
   const inputHash = semanticHash({ input, model: intake.model, schema: PRODUCTION_PLAN_SCHEMA, planner: "creative-planner.v1" });
   const store = adapters.store ?? await ProductionJobStore.open(workspace);
@@ -124,6 +131,16 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
     await store.markFailed(jobId, error);
     throw error;
   }
+}
+
+export function resolvePlanningMode(value = "auto", durationSeconds, thresholdSeconds = 180) {
+  const mode = String(value ?? "auto");
+  if (!["auto", "single", "hierarchical"].includes(mode)) throw new Error(`Unknown planning mode: ${mode}`);
+  if (mode !== "auto") return mode;
+  const duration = Number(durationSeconds);
+  const threshold = Number(thresholdSeconds);
+  if (!(threshold > 0)) throw new Error("Hierarchical planning threshold must be positive");
+  return Number.isFinite(duration) && duration >= threshold ? "hierarchical" : "single";
 }
 
 export function buildPlanningInput(intake, evidence, suppliedNarration = null, options = {}) {

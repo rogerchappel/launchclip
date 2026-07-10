@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { buildPlanningInput, planProduction } from "../src/creative_planner.js";
+import { buildPlanningInput, planProduction, resolvePlanningMode } from "../src/creative_planner.js";
 import { ProductionJobStore } from "../src/job_store.js";
 import { EVIDENCE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
@@ -116,6 +116,24 @@ test("plans supplied narration against Scribe word timing and measured media dur
   await planProduction(workspace, {}, { client: { runStructured: async (options) => { request = JSON.parse(options.input); return { response_id: "r", model: "gpt-5.6", status: "completed", value: plan, usage: {} }; } } });
   assert.equal(request.brief.requested_duration_seconds, 5);
   assert.deepEqual(request.narration.word_timing, [{ word: "Exact", start: 0.2, end: 4.8 }]);
+});
+
+test("selects hierarchical planning for long productions and delegates the frozen context", async () => {
+  assert.equal(resolvePlanningMode("auto", 179, 180), "single");
+  assert.equal(resolvePlanningMode("auto", 180, 180), "hierarchical");
+  assert.equal(resolvePlanningMode("single", 600, 180), "single");
+  assert.throws(() => resolvePlanningMode("unknown", 60), /Unknown planning mode/);
+  const intake = sampleIntake();
+  intake.brief.duration_seconds = 240;
+  const workspace = await tempWorkspace(intake);
+  let received;
+  const result = await planProduction(workspace, { planningMode: "auto", hierarchicalThresholdSeconds: 180, sfxCatalog: ["tick"] }, {
+    planLongFormProduction: async (...args) => { received = args; return { status: "ready", planning_mode: "hierarchical" }; }
+  });
+  assert.equal(result.planning_mode, "hierarchical");
+  assert.equal(received[1].intake.brief.duration_seconds, 240);
+  assert.deepEqual(received[1].sfxCatalog, ["tick"]);
+  assert.equal(received[1].options.hierarchicalThresholdSeconds, 180);
 });
 
 function sampleIntake() {
