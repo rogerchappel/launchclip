@@ -25,7 +25,9 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     readJson(path.join(workspace, PRODUCTION_PATHS.intake)),
     readJson(path.join(workspace, PRODUCTION_PATHS.evidence)),
     readJson(path.join(workspace, PRODUCTION_PATHS.plan)),
-    readOptionalJson(path.join(qaDir, "critique.json"), { verdict: "ship", findings: [] })
+    options.trigger === "verification"
+      ? Promise.resolve({ verdict: "ship", findings: [] })
+      : readOptionalJson(path.join(qaDir, "critique.json"), { verdict: "ship", findings: [] })
   ]);
   const deterministicFindings = await collectDeterministicRepairFindings(workspace, plan);
   if (critique.verdict === "ship" && !deterministicFindings.length) {

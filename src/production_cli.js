@@ -88,7 +88,11 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
       trigger = "verification";
     }
     if (repairs.length >= maximumRepairPasses) break;
-    const repair = await (adapters.repairProduction ?? repairProduction)(workspace, repairOptions(flags), adapters.repair);
+    const repair = await (adapters.repairProduction ?? repairProduction)(workspace, {
+      ...repairOptions(flags),
+      trigger,
+      verification
+    }, adapters.repair);
     repairs.push({ pass: repairs.length + 1, trigger, ...repair });
     if (!repair.repaired?.length && !repair.actions?.plan_revised) break;
     if (repair.actions?.plan_revised) {
