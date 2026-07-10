@@ -28,9 +28,9 @@ test("renders subcompositions while keeping timed media and SFX as direct root c
 });
 
 test("moves presenter video between beat-specific avatar layouts at the host root", () => {
-  const request = (x, y, width, height) => ({
+  const request = (x, y, width, height, sourceStart) => ({
     resource_id: "presenter", kind: "video", start_seconds: 0, end_seconds: 3,
-    source_start_seconds: 0, source_end_seconds: 3, volume: 0,
+    source_start_seconds: sourceStart, source_end_seconds: sourceStart + 3, volume: 0,
     placement: { x, y, width, height, object_fit: "cover", border_radius: 28, z_index: 8, treatment: "avatar cutout" }
   });
   const plan = { format: { language: "en", width: 1080, height: 1920, duration_seconds: 6 }, shots: [
@@ -38,12 +38,12 @@ test("moves presenter video between beat-specific avatar layouts at the host roo
     { id: "shot-2", start_seconds: 3, end_seconds: 6 }
   ] };
   const bundles = [
-    { shot_id: "shot-1", root_media_requests: [request(80, 1120, 920, 720)] },
-    { shot_id: "shot-2", root_media_requests: [request(620, 120, 380, 600)] }
+    { shot_id: "shot-1", root_media_requests: [request(80, 1120, 920, 720, 0)] },
+    { shot_id: "shot-2", root_media_requests: [request(620, 120, 380, 600, 3)] }
   ];
   const html = renderRoot({ plan, bundles, assetMap: new Map([["presenter", { file: "presenter.mp4" }]]) });
   assert.match(html, /id="shot-1-media-1"[^>]+data-start="0"[^>]+left:80px;top:1120px;width:920px;height:720px/);
-  assert.match(html, /id="shot-2-media-1"[^>]+data-start="3"[^>]+left:620px;top:120px;width:380px;height:600px/);
+  assert.match(html, /id="shot-2-media-1"[^>]+data-start="3"[^>]+data-media-start="3"[^>]+left:620px;top:120px;width:380px;height:600px/);
 });
 
 test("applies a restrictive CSP to model-authored frame documents", () => {
