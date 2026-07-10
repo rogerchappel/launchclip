@@ -66,20 +66,33 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
     musicVolume: numberOr(flags["music-volume"], 0.16)
   };
   let assembly = await (adapters.assembleHyperFrames ?? assembleHyperFrames)(workspace, assemblyOptions);
-  let draft = await (adapters.renderDraftProduction ?? renderDraftProduction)(workspace, renderOptions(flags), adapters.render);
-  let verification = draft.verification;
-  let critique = draft.critique;
+  let draft = null;
+  let verification = null;
+  let critique = null;
   const repairs = [];
   const maximumRepairPasses = numberOr(flags["max-repair-passes"], 2);
-  for (let pass = 1; pass <= maximumRepairPasses && critique.verdict === "repair"; pass += 1) {
+  while (true) {
+    let trigger;
+    try {
+      draft = await (adapters.renderDraftProduction ?? renderDraftProduction)(workspace, renderOptions(flags), adapters.render);
+      verification = draft.verification;
+      critique = draft.critique;
+      if (critique.verdict !== "repair") break;
+      trigger = "critique";
+    } catch (error) {
+      if (error?.code !== "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED") throw error;
+      draft = null;
+      critique = null;
+      verification = error.verification;
+      trigger = "verification";
+    }
+    if (repairs.length >= maximumRepairPasses) break;
     const repair = await (adapters.repairProduction ?? repairProduction)(workspace, repairOptions(flags), adapters.repair);
-    repairs.push({ pass, ...repair });
+    repairs.push({ pass: repairs.length + 1, trigger, ...repair });
+    if (!repair.repaired?.length) break;
     assembly = await (adapters.assembleHyperFrames ?? assembleHyperFrames)(workspace, assemblyOptions);
-    draft = await (adapters.renderDraftProduction ?? renderDraftProduction)(workspace, renderOptions(flags), adapters.render);
-    verification = draft.verification;
-    critique = draft.critique;
   }
-  const readyForApproval = draft.status === "ready" && critique.verdict === "ship";
+  const readyForApproval = draft?.status === "ready" && critique?.verdict === "ship";
   return {
     stage: "produce",
     status: readyForApproval ? "awaiting-approval" : "needs-repair",
@@ -96,7 +109,9 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
     repairs,
     next: readyForApproval
       ? `Review ${draft.video} and ${verification.snapshots}, then run launchclip production-render ${workspace} --approve.`
-      : `Review ${critique.critique ?? "production/qa/critique.json"}; resolve remaining findings before final approval.`
+      : verification?.status === "failed"
+        ? `Review ${verification.qa}; run production-repair after resolving any unscoped verification findings.`
+        : `Review ${critique?.critique ?? "production/qa/critique.json"}; resolve remaining findings before final approval.`
   };
 }
 
