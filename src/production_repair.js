@@ -13,7 +13,9 @@ Return a complete replacement frame-bundle JSON. Fix every supplied finding at t
 
 The replacement must remain a deterministic modular HyperFrames composition: one correctly sized local-time root, class="clip" for timed elements, no remote assets, no fetches, no audio/video tags, and all media requested at the host root with structured placement. Keep exact factual copy and evidence IDs. Presenter video follows one continuous production timeline: its source_start_seconds equals the shot's global start_seconds plus the request's shot-local start_seconds, so a later layout never restarts the take at zero.
 
-Register a paused GSAP timeline exactly on window.__timelines[shot_id]. Give every timeline-visible clip a stable descriptive ID. Style the root by its ID, not a root class. Use only declared @font-face families or Arial, Georgia, or Courier New. Never tween font-size, width, height, top, left, padding, or other reflow properties; use transform and opacity, with initial transforms owned by gsap.set rather than CSS.`;
+Register a paused GSAP timeline exactly on window.__timelines[shot_id]. Give every timeline-visible clip a stable descriptive ID. Style the root by its ID, not a root class. Use only declared @font-face families or Arial, Georgia, or Courier New. Never tween font-size, width, height, top, left, padding, or other reflow properties; use transform and opacity, with initial transforms owned by gsap.set rather than CSS.
+
+Motion assertions must be truthful. When native inspection reports motion_frozen for a must_remain_live assertion, set must_remain_live false unless the asserted element itself has clearly perceptible, inspection-visible transform or opacity motion across the required interval. Do not add imperceptible drift or tiny opacity changes merely to satisfy an assertion.`;
 
 export async function repairProduction(workspacePath, options = {}, adapters = {}) {
   const workspace = path.resolve(workspacePath);

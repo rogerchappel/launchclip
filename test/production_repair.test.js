@@ -75,6 +75,8 @@ test("repairs native shot inspection failures even when the visual critic ships"
     const finding = JSON.parse(request.input).findings[0];
     assert.equal(finding.id, "native-shot-1");
     assert.match(finding.instruction, /Motion assertions must describe motion on the asserted element itself/);
+    assert.match(request.instructions, /set must_remain_live false/);
+    assert.match(request.instructions, /Do not add imperceptible drift/);
     assert.doesNotMatch(finding.instruction, /content_overlap/);
     return { response_id: "native_repair", model: "gpt-5.6", status: "completed", usage: {}, value: bundle("shot-1", "Native repair") };
   } };
