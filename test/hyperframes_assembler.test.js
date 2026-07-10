@@ -7,13 +7,18 @@ import { assembleHyperFrames, renderRoot } from "../src/hyperframes_assembler.js
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { EVIDENCE_VERSION, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
-test("renders subcompositions while keeping timed media as direct root children", () => {
+test("renders subcompositions while keeping timed media and SFX as direct root children", () => {
   const { plan, bundles } = fixture("/tmp/screen.mp4");
-  const html = renderRoot({ plan, bundles, assetMap: new Map([["screen", { file: "screen.mp4" }]]) });
+  const html = renderRoot({
+    plan, bundles,
+    assetMap: new Map([["screen", { file: "screen.mp4" }], ["sfx-001", { file: "sfx-001.wav" }]]),
+    extraAudio: [{ id: "sfx-001", at_seconds: 2.25, duration_seconds: null, source_start_seconds: 0, volume: .3, track: 60 }]
+  });
   assert.match(html, /data-composition-src="compositions\/shot-1.html"/);
   assert.match(html, /<video[^>]+data-start="1"[^>]+data-duration="3"[^>]+data-media-start="4"/);
   assert.match(html, /left:100px;top:200px;width:800px;height:600px/);
   assert.equal((html.match(/<video/g) ?? []).length, 1);
+  assert.match(html, /<audio id="sfx-001"[^>]+data-start="2\.25"[^>]+data-volume="0\.3"/);
   assert.ok(html.indexOf("<video") > html.indexOf('data-composition-id="main"'));
 });
 

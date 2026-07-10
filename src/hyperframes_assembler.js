@@ -94,7 +94,8 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
   }
   for (const audio of extraAudio) {
     const asset = assetMap.get(audio.id);
-    media.push(`<audio id="${escapeAttr(audio.id)}" class="clip" src="assets/${escapeAttr(asset.file)}" data-start="0" data-duration="${number(plan.format.duration_seconds)}" data-media-start="0" data-volume="${number(audio.volume)}" data-track-index="${audio.track}"></audio>`);
+    const duration = audio.duration_seconds == null ? "" : ` data-duration="${number(audio.duration_seconds)}"`;
+    media.push(`<audio id="${escapeAttr(audio.id)}" class="clip" src="assets/${escapeAttr(asset.file)}" data-start="${number(audio.at_seconds ?? 0)}"${duration} data-media-start="${number(audio.source_start_seconds ?? 0)}" data-volume="${number(audio.volume)}" data-track-index="${audio.track}"></audio>`);
   }
   const compositions = plan.shots.map((shot, index) => `<div id="mount-${escapeAttr(shot.id)}" class="clip shot-mount" data-composition-id="${escapeAttr(shot.id)}" data-composition-src="compositions/${escapeAttr(shot.id)}.html" data-start="${number(shot.start_seconds)}" data-duration="${number(shot.end_seconds - shot.start_seconds)}" data-track-index="${100 + index}" data-width="${plan.format.width}" data-height="${plan.format.height}"></div>`);
   return `<!doctype html>
@@ -167,7 +168,25 @@ async function describeExtraAudio(options) {
     const filePath = path.resolve(value);
     const info = await stat(filePath);
     if (!info.isFile()) throw new Error(`${id} must be a file: ${filePath}`);
-    output.push({ id, path: filePath, volume, track, sha256: await sha256File(filePath) });
+    output.push({ id, path: filePath, volume, track, at_seconds: 0, duration_seconds: null, source_start_seconds: 0, sha256: await sha256File(filePath) });
+  }
+  if (options.sfxManifest) {
+    const manifest = JSON.parse(await readFile(path.resolve(options.sfxManifest), "utf8"));
+    for (const [index, cue] of (manifest.cues ?? []).entries()) {
+      const filePath = path.resolve(cue.path);
+      const info = await stat(filePath);
+      if (!info.isFile()) throw new Error(`SFX must be a file: ${filePath}`);
+      output.push({
+        id: `sfx-${String(index + 1).padStart(3, "0")}`,
+        path: filePath,
+        volume: Number(cue.volume),
+        track: 60 + index,
+        at_seconds: Number(cue.at_seconds),
+        duration_seconds: cue.duration_seconds == null ? null : Number(cue.duration_seconds),
+        source_start_seconds: Number(cue.source_start_seconds ?? 0),
+        sha256: await sha256File(filePath)
+      });
+    }
   }
   return output;
 }
