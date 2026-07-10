@@ -27,6 +27,8 @@ test("transcribes authoritative video narration and gives GPT-5.6 an ordered con
   assert.equal(transcript.content, "Exact spoken words.");
   assert.equal(transcript.claims_allowed, false);
   assert.equal(evidence.items.find((entry) => entry.kind === "visual-media-analysis").claims_allowed, true);
+  const cached = await analyzeSourceMedia(workspace, { background: false }, { client, transcriber, contactSheet: async () => { throw new Error("cached analysis must not recapture"); } });
+  assert.equal(cached.cached, true);
 });
 
 test("requires a transcript path or Scribe credentials before planning supplied narration", async () => {

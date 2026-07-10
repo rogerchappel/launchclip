@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { OpenAIResponsesClient } from "./openai_responses.js";
 import { ElevenLabsMediaProvider } from "./production_media.js";
 import { PRODUCTION_PATHS } from "./production_contracts.js";
+import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -37,6 +38,25 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
   const intakePath = path.join(workspace, PRODUCTION_PATHS.intake);
   const evidencePath = path.join(workspace, PRODUCTION_PATHS.evidence);
   const [intake, evidence] = await Promise.all([readJson(intakePath), readJson(evidencePath)]);
+  const sourceEvidence = { ...evidence, items: evidence.items.filter((entry) => !/:transcript$|:visual-analysis$/.test(entry.id)) };
+  const inputHash = semanticHash({ intake, evidence: sourceEvidence, options: { samples: options.samples ?? 12, columns: options.columns ?? 4, reasoning: options.reasoning ?? "high", transcriptionModel: options.transcriptionModel ?? "scribe_v2", transcribeAll: Boolean(options.transcribeAll), stageRemoteReferences: options.stageRemoteReferences !== false }, stage: "source-media-analysis.v1" });
+  const store = adapters.store ?? await ProductionJobStore.open(workspace);
+  const jobId = "source-media-analysis";
+  const existing = store.get(jobId);
+  if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
+    const verification = await store.verifyOutputs(jobId);
+    if (verification.ok) {
+      const report = await readJson(path.join(workspace, "production", "source-media", "analysis.json"));
+      return { stage: "source-media-analysis", status: "ready", workspace, evidence: evidencePath, report: path.join(workspace, "production", "source-media", "analysis.json"), reference_videos: (report.staged_references ?? []).map((entry) => entry.local_path), resources: report.summary?.resources ?? report.analyses.length, analyses: report.analyses.length, transcripts: report.summary?.transcripts ?? 0, cached: true };
+    }
+    await store.markStaleFrom([jobId]);
+  } else if (existing && existing.input_hash !== inputHash) await store.markStaleFrom([jobId]);
+  const current = store.get(jobId);
+  if (!current) await store.add({ id: jobId, kind: "source-media-analysis", depends_on: [], input_hash: inputHash });
+  else if (current.status === "failed" || current.status === "stale") await store.retry(jobId);
+  else if (current.status !== "pending") throw new Error(`Source media analysis job is already ${current.status}`);
+  await store.markRunning(jobId);
+  try {
   const mediaDir = path.join(workspace, "production", "source-media");
   await mkdir(mediaDir, { recursive: true });
   const resources = intake.resources.filter((entry) => !entry.is_remote && ["video", "image", "audio"].includes(entry.type));
@@ -118,8 +138,16 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
   evidence.items = [...evidence.items.filter((entry) => !ids.has(entry.id)), ...newItems];
   await writeAtomic(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
   const reportPath = path.join(mediaDir, "analysis.json");
-  await writeAtomic(reportPath, `${JSON.stringify({ schema_version: "launchclip.source-media-analysis.v1", analyses, staged_references: stagedReferences }, null, 2)}\n`);
-  return { stage: "source-media-analysis", status: "ready", workspace, evidence: evidencePath, report: reportPath, reference_videos: stagedReferences.map((entry) => entry.local_path), resources: resources.length, analyses: analyses.length, transcripts: newItems.filter((entry) => /transcript$/.test(entry.kind)).length };
+  const transcriptCount = newItems.filter((entry) => /transcript$/.test(entry.kind)).length;
+  await writeAtomic(reportPath, `${JSON.stringify({ schema_version: "launchclip.source-media-analysis.v1", analyses, staged_references: stagedReferences, summary: { resources: resources.length, analyses: analyses.length, transcripts: transcriptCount } }, null, 2)}\n`);
+  const candidates = [evidencePath, reportPath, ...stagedReferences.map((entry) => entry.local_path), ...newItems.flatMap((entry) => entry.metadata.filter((item) => item.key === "words_path").map((item) => item.value))];
+  const outputs = await Promise.all([...new Set(candidates)].map((filePath) => describeJobOutput(workspace, filePath)));
+  await store.markSucceeded(jobId, outputs);
+  return { stage: "source-media-analysis", status: "ready", workspace, evidence: evidencePath, report: reportPath, reference_videos: stagedReferences.map((entry) => entry.local_path), resources: resources.length, analyses: analyses.length, transcripts: transcriptCount, cached: false };
+  } catch (error) {
+    await store.markFailed(jobId, error);
+    throw error;
+  }
 }
 
 async function stageVideoReference(resource, mediaDir, run) {
