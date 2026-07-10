@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { buildFrameInput, directFrames, safeShotFile, validateHyperFramesRoot } from "../src/frame_director.js";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
-import { EVIDENCE_VERSION, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
+import { EVIDENCE_VERSION, FRAME_BUNDLE_SCHEMA, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
 test("gives each delegated frame only its shot, neighbors, grounded evidence, and resources", () => {
   const context = fixture();
@@ -87,6 +87,25 @@ test("waits for sibling frame jobs to settle before reporting a delegated failur
   assert.equal(siblingFinished, true);
   const store = await ProductionJobStore.open(workspace, { create: false });
   assert.equal(store.get("frame:shot-2").status, "succeeded");
+});
+
+test("resumes a persisted background frame response without submitting it twice", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  const baseInput = buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0 });
+  const inputHash = semanticHash({ input: baseInput, model: context.intake.model, reasoning: "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v1" });
+  await store.add({ id: "frame:shot-1", kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash });
+  await store.markRunning("frame:shot-1", { provider: "openai", response_id: "resp_saved", status: "in_progress" });
+  let resumed = 0;
+  let submitted = 0;
+  const client = {
+    resumeStructured: async (responseId) => { resumed += 1; assert.equal(responseId, "resp_saved"); return { response_id: responseId, model: "gpt-5.6", status: "completed", value: frameBundle("shot-1", 5), usage: {} }; },
+    runStructured: async (options) => { submitted += 1; const input = JSON.parse(options.input); return { response_id: "fresh", model: "gpt-5.6", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: {} }; }
+  };
+  await directFrames(workspace, { concurrency: 2 }, { client });
+  assert.equal(resumed, 1);
+  assert.equal(submitted, 1, "only the second shot needs a new response");
 });
 
 function frameBundle(id, duration) {

@@ -94,16 +94,20 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
     await store.markStaleFrom([jobId]);
   }
   const current = store.get(jobId);
+  let resumeResponseId = null;
   if (!current) await store.add({ id: jobId, kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash, max_attempts: Number(options.maxAttempts ?? 3) });
   else if (current.status === "failed" || current.status === "stale") await store.retry(jobId);
-  else if (current.status !== "pending") throw new Error(`Frame job is already ${current.status}: ${jobId}`);
+  else if (current.status === "running" || current.status === "submitted") {
+    if (!current.remote?.response_id) throw new Error(`Frame job is ${current.status} without a resumable response id: ${jobId}`);
+    resumeResponseId = current.remote.response_id;
+  } else if (current.status !== "pending") throw new Error(`Frame job is already ${current.status}: ${jobId}`);
 
-  await store.markRunning(jobId, { provider: "openai", response_id: null, status: "running" });
+  if (!resumeResponseId) await store.markRunning(jobId, { provider: "openai", response_id: null, status: "running" });
   let prior = null;
   let errors = [];
   try {
     for (let attempt = 1; attempt <= Number(options.semanticAttempts ?? 2); attempt += 1) {
-      const result = await client.runStructured({
+      const request = {
         model: intake.model?.id ?? "gpt-5.6",
         reasoningEffort: options.reasoning ?? "high",
         reasoningContext: "current_turn",
@@ -117,7 +121,9 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         promptCacheKey: "launchclip:frame-director:v1",
         metadata: { job_id: jobId, shot_id: shot.id, attempt },
         onSubmitted: async (response) => store.markRunning(jobId, { provider: "openai", response_id: response.id, status: response.status })
-      });
+      };
+      const result = resumeResponseId ? await client.resumeStructured(resumeResponseId, request) : await client.runStructured(request);
+      resumeResponseId = null;
       const validation = validateFrameBundle(result.value, {
         shotId: shot.id,
         evidenceIds: evidence.items.map((entry) => entry.id),
