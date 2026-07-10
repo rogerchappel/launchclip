@@ -23,6 +23,8 @@ test("gives an independent GPT-5.6 critic the plan, QA evidence, motion profile,
   const input = JSON.parse(request.input);
   assert.equal(input.temporal_motion_analysis.family, "rapid-hybrid");
   assert.equal(input.deterministic_reports.inspect.stdout.issueCount, 1);
+  assert.equal(input.evidence_index[0].content, "The README proves the workflow.");
+  assert.equal(input.claim_support[0].evidence[0].id, "ev-1");
   assert.deepEqual(input.snapshot_order, ["001.png", "002.png"]);
   assert.match(await readFile(result.markdown, "utf8"), /Reduce presenter occupancy/);
 });
@@ -41,10 +43,10 @@ async function fixture() {
   const snapshots = path.join(qa, "snapshots");
   await mkdir(snapshots, { recursive: true });
   await writeFile(path.join(workspace, "production", "plan.json"), `${JSON.stringify({
-    project: { title: "Proof" }, format: { duration_seconds: 10 }, design: { concept: "Evidence" }, narration: { full_text: "Proof." }, claims: [], rubric: [],
+    project: { title: "Proof" }, format: { duration_seconds: 10 }, design: { concept: "Evidence" }, narration: { full_text: "Proof." }, claims: [{ text: "The workflow is proven", confidence: "verified", qualifier: null, evidence_ids: ["ev-1"] }], rubric: [],
     shots: [{ id: "shot-1" }, { id: "shot-2" }]
   })}\n`);
-  await writeFile(path.join(workspace, "production", "evidence.json"), `${JSON.stringify({ items: [{ id: "ev-1", title: "README", provenance: "README.md", claims_allowed: true }] })}\n`);
+  await writeFile(path.join(workspace, "production", "evidence.json"), `${JSON.stringify({ items: [{ id: "ev-1", kind: "repository-readme", role: "primary", title: "README", content: "The README proves the workflow.", provenance: "README.md", claims_allowed: true }] })}\n`);
   await writeFile(path.join(qa, "verification.json"), `${JSON.stringify({ failed: [], snapshots })}\n`);
   await writeFile(path.join(qa, "motion.json"), `${JSON.stringify({ family: "rapid-hybrid", motion_bursts_per_minute: 22 })}\n`);
   await writeFile(path.join(qa, "lint.json"), `${JSON.stringify({ ok: true, stdout: { findings: [] } })}\n`);

@@ -32,6 +32,8 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
   const snapshots = await snapshotPaths(verification.snapshots ?? path.join(qaDir, "snapshots"), Number(options.maxSnapshots ?? 12));
   if (!snapshots.length) throw new Error("Production critique requires rendered snapshots");
   const images = await Promise.all(snapshots.map(dataImage));
+  const evidenceById = new Map(evidence.items.map((entry) => [entry.id, entry]));
+  const evidenceIndex = evidence.items.map((entry) => ({ id: entry.id, kind: entry.kind, role: entry.role, title: entry.title, content: String(entry.content ?? "").slice(0, 6_000), provenance: entry.provenance, claims_allowed: entry.claims_allowed }));
   const client = adapters.client ?? new OpenAIResponsesClient();
   const result = await client.runStructured({
     model: options.model ?? "gpt-5.6",
@@ -47,7 +49,8 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
       shots: plan.shots,
       rubric: plan.rubric,
       claims: plan.claims,
-      evidence_index: evidence.items.map((entry) => ({ id: entry.id, title: entry.title, provenance: entry.provenance, claims_allowed: entry.claims_allowed })),
+      evidence_index: evidenceIndex,
+      claim_support: plan.claims.map((claim) => ({ claim: claim.text, confidence: claim.confidence, qualifier: claim.qualifier, evidence: claim.evidence_ids.map((id) => evidenceById.get(id)).filter(Boolean).map((entry) => ({ id: entry.id, content: String(entry.content ?? "").slice(0, 6_000), provenance: entry.provenance, claims_allowed: entry.claims_allowed })) })),
       deterministic_verification: verification,
       deterministic_reports: { lint, validate, inspect },
       temporal_motion_analysis: motion,
