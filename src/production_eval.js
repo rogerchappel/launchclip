@@ -265,7 +265,7 @@ async function scenarioAssertions(context) {
     const sourceSha256 = audio.voiceover?.path ? await sha256File(audio.voiceover.path).catch(() => null) : null;
     checks.push(assertion(
       "supplied-audio-preserved",
-      audio.voiceover?.provider === "supplied" && voiceoverAsset?.ok && voiceoverMedia?.src === voiceoverAsset.file && sourceSha256 === voiceoverAsset.sha256,
+      audio.voiceover?.provider === "supplied" && voiceoverAsset?.ok && voiceoverMedia?.src === voiceoverAsset.file && sourceSha256 === voiceoverAsset.sha256 && voiceoverPlaybackIsAudible(voiceoverMedia),
       voiceoverMedia?.src ?? audio.voiceover?.provider ?? "missing"
     ));
   }
@@ -308,6 +308,9 @@ async function inspectAssembledProject(workspace, assembly) {
       start: Number(htmlAttribute(match[0], "data-start")),
       duration: Number(htmlAttribute(match[0], "data-duration")),
       mediaStart: Number(htmlAttribute(match[0], "data-media-start")),
+      volume: Number(htmlAttribute(match[0], "data-volume")),
+      muted: htmlHasAttribute(match[0], "muted"),
+      hasAudio: htmlAttribute(match[0], "data-has-audio") === "true",
       style: htmlAttribute(match[0], "style") ?? ""
     }))
   };
@@ -324,6 +327,7 @@ function matchAssembledMediaRequests(plan, bundles, assembled, resourceIds) {
     const expectedDuration = request.end_seconds - request.start_seconds;
     const expectedMediaStart = request.source_start_seconds ?? 0;
     const timingMatches = actual != null && approximately(actual.start, expectedStart) && approximately(actual.duration, expectedDuration) && approximately(actual.mediaStart, expectedMediaStart);
+    const playbackMatches = rootMediaPlaybackMatches(request, actual);
     const placementMatches = actual != null && [
       `left:${renderedNumber(request.placement.x)}px`, `top:${renderedNumber(request.placement.y)}px`,
       `width:${renderedNumber(request.placement.width)}px`, `height:${renderedNumber(request.placement.height)}px`
@@ -332,14 +336,31 @@ function matchAssembledMediaRequests(plan, bundles, assembled, resourceIds) {
       shotId: bundle.shot_id,
       actual,
       timingMatches,
-      mounted: Boolean(asset?.ok && actual?.kind === request.kind && actual.src === asset.file && timingMatches && placementMatches)
+      mounted: Boolean(asset?.ok && actual?.kind === request.kind && actual.src === asset.file && timingMatches && playbackMatches && placementMatches)
     }];
   }));
+}
+
+export function voiceoverPlaybackIsAudible(media) {
+  return media?.kind === "audio" && approximately(media.start, 0) && approximately(media.mediaStart, 0) && approximately(media.volume, 1) && media.muted !== true;
+}
+
+export function rootMediaPlaybackMatches(request, actual) {
+  if (!actual || !approximately(actual.volume, request.volume)) return false;
+  if (request.kind !== "video") return true;
+  return request.volume === 0
+    ? actual.muted === true && actual.hasAudio === false
+    : actual.muted === false && actual.hasAudio === true;
 }
 
 function htmlAttribute(tag, name) {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return tag.match(new RegExp(`\\b${escaped}="([^"]*)"`, "i"))?.[1] ?? null;
+}
+
+function htmlHasAttribute(tag, name) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:\\s|<)${escaped}(?:\\s|=|/?>)`, "i").test(tag);
 }
 
 function approximately(actual, expected) {

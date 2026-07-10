@@ -8,7 +8,9 @@ import {
   PRODUCTION_EVALUATION_VERSION,
   evaluationScenarioDefinitions,
   productionEvaluationExitCode,
-  runProductionEvaluationMatrix
+  rootMediaPlaybackMatches,
+  runProductionEvaluationMatrix,
+  voiceoverPlaybackIsAudible
 } from "../src/production_eval.js";
 
 test("defines the five required source-to-video evaluation modes", () => {
@@ -114,4 +116,16 @@ test("force replacement only removes evaluator-owned output", async () => {
     /Refusing to replace unowned evaluation output/
   );
   assert.equal(await readFile(sentinel, "utf8"), "do not remove\n");
+});
+
+test("requires audible voiceover playback and preserves presenter mute intent", () => {
+  const voiceover = { kind: "audio", start: 0, mediaStart: 0, volume: 1, muted: false };
+  assert.equal(voiceoverPlaybackIsAudible(voiceover), true);
+  assert.equal(voiceoverPlaybackIsAudible({ ...voiceover, start: 5 }), false);
+  assert.equal(voiceoverPlaybackIsAudible({ ...voiceover, volume: 0 }), false);
+
+  const silentPresenter = { volume: 0, muted: true, hasAudio: false };
+  assert.equal(rootMediaPlaybackMatches({ kind: "video", volume: 0 }, silentPresenter), true);
+  assert.equal(rootMediaPlaybackMatches({ kind: "video", volume: 0 }, { ...silentPresenter, muted: false }), false);
+  assert.equal(rootMediaPlaybackMatches({ kind: "video", volume: .5 }, { volume: .5, muted: false, hasAudio: true }), true);
 });
