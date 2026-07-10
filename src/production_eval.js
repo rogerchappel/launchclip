@@ -27,8 +27,13 @@ export const PRODUCTION_EVALUATION_SCENARIOS = Object.freeze([
   "hierarchical-longform"
 ]);
 
+export function productionEvaluationExitCode(result) {
+  return result?.status === "passed" ? 0 : 1;
+}
+
 export async function runProductionEvaluationMatrix(outputPath, options = {}, adapters = {}) {
   const root = path.resolve(outputPath ?? path.join(".launchclip", "eval-matrix", "v1"));
+  validateRequestedScenarios(options.scenarios);
   await prepareOutput(root, Boolean(options.force));
   const createFixtures = adapters.createFixtures ?? createEvaluationFixtures;
   const executeScenario = adapters.executeScenario ?? executeEvaluationScenario;
@@ -42,13 +47,26 @@ export async function runProductionEvaluationMatrix(outputPath, options = {}, ad
   for (const definition of selected) {
     const start = Date.now();
     await onProgress({ scenario: definition.id, status: "started" });
-    const result = await executeScenario(definition, {
-      inspectSamples: Number(options.inspectSamples ?? 7),
-      snapshotFrames: Number(options.snapshotFrames ?? 5),
-      requireVerificationCache: options.requireVerificationCache !== false
-    }, adapters);
-    scenarios.push({ ...result, elapsed_ms: Date.now() - start });
-    await onProgress({ scenario: definition.id, status: result.status, elapsed_ms: Date.now() - start });
+    try {
+      const result = await executeScenario(definition, {
+        inspectSamples: Number(options.inspectSamples ?? 7),
+        snapshotFrames: Number(options.snapshotFrames ?? 5),
+        requireVerificationCache: options.requireVerificationCache !== false
+      }, adapters);
+      const elapsed = Date.now() - start;
+      scenarios.push({ ...result, elapsed_ms: elapsed });
+      await onProgress({ scenario: definition.id, status: result.status, elapsed_ms: elapsed });
+    } catch (error) {
+      const elapsed = Date.now() - start;
+      scenarios.push({
+        id: definition.id,
+        status: "failed",
+        elapsed_ms: elapsed,
+        snapshots: [],
+        error: safeEvaluationError(error)
+      });
+      await onProgress({ scenario: definition.id, status: "failed", elapsed_ms: elapsed });
+    }
   }
 
   const finishedAt = new Date();
@@ -70,7 +88,7 @@ export async function runProductionEvaluationMatrix(outputPath, options = {}, ad
     root,
     report: reportPath,
     scenarios: scenarios.length,
-    snapshots: scenarios.flatMap((entry) => entry.snapshots.map((snapshot) => path.join(root, snapshot)))
+    snapshots: scenarios.flatMap((entry) => (entry.snapshots ?? []).map((snapshot) => path.join(root, snapshot)))
   };
 }
 
@@ -569,12 +587,28 @@ function minimalPdf(text) {
 }
 
 function selectScenarios(definitions, requested) {
-  const values = requested == null ? [] : Array.isArray(requested) ? requested : [requested];
+  const values = normalizeRequestedScenarios(requested);
   if (!values.length) return definitions;
   const selected = definitions.filter((entry) => values.includes(entry.id));
   const unknown = values.filter((value) => !definitions.some((entry) => entry.id === value));
   if (unknown.length) throw new Error(`Unknown evaluation scenario: ${unknown.join(", ")}. Supported: ${PRODUCTION_EVALUATION_SCENARIOS.join(", ")}`);
   return selected;
+}
+
+function validateRequestedScenarios(requested) {
+  const unknown = normalizeRequestedScenarios(requested).filter((value) => !PRODUCTION_EVALUATION_SCENARIOS.includes(value));
+  if (unknown.length) throw new Error(`Unknown evaluation scenario: ${unknown.join(", ")}. Supported: ${PRODUCTION_EVALUATION_SCENARIOS.join(", ")}`);
+}
+
+function normalizeRequestedScenarios(requested) {
+  return requested == null ? [] : Array.isArray(requested) ? requested : [requested];
+}
+
+function safeEvaluationError(error) {
+  return String(error?.message ?? error)
+    .replace(/(?:Bearer\s+|sk-)[A-Za-z0-9._-]+/gi, "[redacted credential]")
+    .replace(/\b(api[_ -]?key|token|secret|password)\s*[:=]\s*\S+/gi, "$1=[redacted]")
+    .slice(0, 2_000);
 }
 
 async function prepareOutput(root, force) {
@@ -658,6 +692,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   runProductionEvaluationMatrix(options.out, options, {
     onProgress: (event) => process.stderr.write(`[evaluation] ${event.scenario}: ${event.status}${event.elapsed_ms ? ` (${event.elapsed_ms}ms)` : ""}\n`)
   })
-    .then((result) => process.stdout.write(`${JSON.stringify(result, null, 2)}\n`))
+    .then((result) => {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      process.exitCode = productionEvaluationExitCode(result);
+    })
     .catch((error) => { process.stderr.write(`${error.stack ?? error.message}\n`); process.exitCode = 1; });
 }

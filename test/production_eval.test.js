@@ -7,6 +7,7 @@ import {
   PRODUCTION_EVALUATION_SCENARIOS,
   PRODUCTION_EVALUATION_VERSION,
   evaluationScenarioDefinitions,
+  productionEvaluationExitCode,
   runProductionEvaluationMatrix
 } from "../src/production_eval.js";
 
@@ -61,16 +62,41 @@ test("writes a selected frozen-provider matrix report without requiring credenti
 
 test("rejects unknown evaluation scenarios before executing work", async () => {
   const parent = await mkdtemp(path.join(os.tmpdir(), "launchclip-eval-unknown-"));
+  const output = path.join(parent, "matrix");
   await assert.rejects(
-    () => runProductionEvaluationMatrix(path.join(parent, "matrix"), { scenarios: ["unknown"] }, {
-      createFixtures: async () => ({
-        screenVideo: "screen", voiceoverAudio: "voice", presenterVideo: "presenter", paperPdf: "paper",
-        voiceoverTranscript: "voice-text", presenterTranscript: "presenter-text", longformNotes: "notes"
-      }),
+    () => runProductionEvaluationMatrix(output, { scenarios: ["unknown"] }, {
+      createFixtures: async () => { throw new Error("must not create fixtures"); },
       executeScenario: async () => { throw new Error("must not execute"); }
     }),
     /Unknown evaluation scenario/
   );
+  await assert.rejects(() => readFile(output), /ENOENT/);
+});
+
+test("records a failed scenario and continues the evaluation matrix", async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), "launchclip-eval-failure-"));
+  const progress = [];
+  const result = await runProductionEvaluationMatrix(path.join(parent, "matrix"), {
+    scenarios: ["saas-16x9", "topic-pdf"]
+  }, {
+    createFixtures: async () => ({
+      screenVideo: "screen", voiceoverAudio: "voice", presenterVideo: "presenter", paperPdf: "paper",
+      voiceoverTranscript: "voice-text", presenterTranscript: "presenter-text", longformNotes: "notes"
+    }),
+    executeScenario: async (definition) => {
+      if (definition.id === "saas-16x9") throw new Error("Bearer sk-secret-token must not leak");
+      return { id: definition.id, status: "passed", snapshots: [] };
+    },
+    onProgress: async (event) => progress.push(`${event.scenario}:${event.status}`)
+  });
+
+  assert.equal(result.status, "failed");
+  assert.equal(productionEvaluationExitCode(result), 1);
+  assert.equal(productionEvaluationExitCode({ status: "passed" }), 0);
+  const report = JSON.parse(await readFile(result.report, "utf8"));
+  assert.deepEqual(report.scenarios.map((entry) => entry.status), ["failed", "passed"]);
+  assert.equal(report.scenarios[0].error, "[redacted credential] must not leak");
+  assert.deepEqual(progress, ["saas-16x9:started", "saas-16x9:failed", "topic-pdf:started", "topic-pdf:passed"]);
 });
 
 test("force replacement only removes evaluator-owned output", async () => {
