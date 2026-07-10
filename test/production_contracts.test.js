@@ -41,6 +41,28 @@ test("rejects timeline gaps, unknown evidence, and changed supplied narration", 
   assert.ok(result.errors.some((error) => error.includes("preserved exactly")));
 });
 
+test("enforces the requested output format, duration, language, and exact CTA", () => {
+  const plan = samplePlan();
+  plan.format = { aspect: "9:16", width: 1080, height: 1920, duration_seconds: 9, language: "fr" };
+  const result = validateProductionPlan(plan, {
+    evidenceIds: ["ev-1"], resourceIds: ["res-1"], expectedDuration: 10,
+    expectedFormat: { aspect: "16:9", width: 1920, height: 1080, language: "en" }, requestedCta: "Start a free workspace"
+  });
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => error.includes("requested aspect")));
+  assert.ok(result.errors.some((error) => error.includes("requested width")));
+  assert.ok(result.errors.some((error) => error.includes("requested height")));
+  assert.ok(result.errors.some((error) => error.includes("requested language")));
+  assert.ok(result.errors.some((error) => error.includes("required duration")));
+  assert.ok(result.errors.some((error) => error.includes("requested CTA")));
+  plan.format = { aspect: "16:9", width: 1920, height: 1080, duration_seconds: 10, language: "en" };
+  plan.shots[1].on_screen_text.push("Start a free workspace");
+  assert.equal(validateProductionPlan(plan, {
+    evidenceIds: ["ev-1"], resourceIds: ["res-1"], expectedDuration: 10,
+    expectedFormat: { aspect: "16:9", width: 1920, height: 1080, language: "en" }, requestedCta: "Start a free workspace"
+  }).ok, true);
+});
+
 test("rejects unsafe shot IDs and evidence that is not eligible to support claims", () => {
   const plan = samplePlan();
   plan.shots[0].id = "../escape";
@@ -113,6 +135,8 @@ test("requires supplied presenters to be planned and mounted in visible avatar s
   const visibleShot = sampleShot("shot-1", 0, 5);
   const bundle = sampleFrameBundle();
   assert.equal(validateFrameBundle(bundle, { shotId: "shot-1", shot: visibleShot, format: { width: 1920, height: 1080 }, resourceIds: ["res-1"], resourceRoles: roles }).ok, true);
+  const laterShot = sampleShot("shot-2", 5, 10);
+  assert.ok(validateFrameBundle(bundle, { shot: laterShot, resourceRoles: roles }).errors.some((error) => error.includes("continuous production timeline")));
   bundle.root_media_requests = [];
   assert.ok(validateFrameBundle(bundle, { shot: visibleShot, resourceRoles: roles }).errors.some((error) => error.includes("mount a presenter video")));
 });
@@ -206,7 +230,7 @@ function sampleFrameBundle() {
     motion: { assertions: [{ selector: "#proof", appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: true }] },
     root_media_requests: [{
       resource_id: "res-1", kind: "video", start_seconds: 0, end_seconds: 5,
-      source_start_seconds: 3, source_end_seconds: 8, volume: 0,
+      source_start_seconds: 0, source_end_seconds: 5, volume: 0,
       placement: { x: 1180, y: 120, width: 620, height: 840, object_fit: "cover", border_radius: 24, z_index: 3, treatment: "right-third presenter cutout" }
     }],
     evidence_ids: ["ev-1"],

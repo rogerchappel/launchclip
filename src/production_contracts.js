@@ -235,8 +235,15 @@ export function validateProductionPlan(plan, context = {}) {
   if (!Array.isArray(plan.shots) || plan.shots.length === 0) errors.push("shots must contain at least one shot");
   const duration = Number(plan.format?.duration_seconds);
   if (!Number.isFinite(duration) || duration <= 0) errors.push("format.duration_seconds must be positive");
+  if (context.expectedFormat) {
+    const expected = context.expectedFormat;
+    if (expected.aspect && plan.format?.aspect !== expected.aspect) errors.push(`format.aspect must match requested aspect ${expected.aspect}`);
+    if (expected.width && Number(plan.format?.width) !== Number(expected.width)) errors.push(`format.width must match requested width ${expected.width}`);
+    if (expected.height && Number(plan.format?.height) !== Number(expected.height)) errors.push(`format.height must match requested height ${expected.height}`);
+    if (expected.language && String(plan.format?.language).toLowerCase() !== String(expected.language).toLowerCase()) errors.push(`format.language must match requested language ${expected.language}`);
+  }
   if (context.expectedDuration != null && Number.isFinite(Number(context.expectedDuration)) && Math.abs(duration - Number(context.expectedDuration)) > 0.05) {
-    errors.push(`format.duration_seconds must match authoritative narration duration ${context.expectedDuration}`);
+    errors.push(`format.duration_seconds must match required duration ${context.expectedDuration}`);
   }
   const seen = new Set();
   const presenterIds = idsForRole(context.resourceRoles, "presenter");
@@ -283,6 +290,14 @@ export function validateProductionPlan(plan, context = {}) {
   }
   if (plan.narration?.source === "supplied" && context.suppliedTranscript && plan.narration.full_text !== context.suppliedTranscript) {
     errors.push("supplied narration must be preserved exactly");
+  }
+  if (context.requestedCta) {
+    const requested = normalizeCopy(context.requestedCta);
+    const delivered = normalizeCopy([
+      plan.narration?.full_text,
+      ...(plan.shots ?? []).flatMap((shot) => [shot.voiceover, ...(shot.on_screen_text ?? [])])
+    ].filter(Boolean).join(" "));
+    if (!delivered.includes(requested)) errors.push(`requested CTA must appear verbatim in narration or on-screen text: ${context.requestedCta}`);
   }
   return { ok: errors.length === 0, errors };
 }
@@ -344,6 +359,11 @@ export function validateFrameBundle(bundle, context = {}) {
     }
     if (allowedShotResources && !allowedShotResources.has(request.resource_id)) errors.push(`root_media_requests[${index}] uses a resource not approved for this shot: ${request.resource_id}`);
     if (shotDuration != null && (request.start_seconds < 0 || request.end_seconds > shotDuration + .05)) errors.push(`root_media_requests[${index}] falls outside the shot-local duration ${shotDuration}`);
+    if (context.shot && presenterIds.has(request.resource_id)) {
+      const expectedSourceStart = Number(context.shot.start_seconds) + Number(request.start_seconds);
+      const actualSourceStart = Number(request.source_start_seconds ?? 0);
+      if (Math.abs(actualSourceStart - expectedSourceStart) > .05) errors.push(`root_media_requests[${index}] presenter source_start_seconds must follow the continuous production timeline (expected ${expectedSourceStart}, got ${actualSourceStart})`);
+    }
     if (context.format && (request.placement.x >= context.format.width || request.placement.y >= context.format.height || request.placement.x + request.placement.width <= 0 || request.placement.y + request.placement.height <= 0)) {
       errors.push(`root_media_requests[${index}] placement does not intersect the ${context.format.width}x${context.format.height} canvas`);
     }
@@ -352,6 +372,10 @@ export function validateFrameBundle(bundle, context = {}) {
     errors.push("visible presenter shot must mount a presenter video at the host root");
   }
   return { ok: errors.length === 0, errors };
+}
+
+function normalizeCopy(value) {
+  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function idsForRole(resourceRoles, role) {
