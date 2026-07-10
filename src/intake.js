@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream, existsSync } from "node:fs";
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export const INTAKE_SCHEMA_VERSION = "launchclip.intake.v1";
@@ -66,7 +66,7 @@ export async function buildIntake(source, flags = {}, env = process.env) {
   const reasoningEffort = resolveReasoningEffort(flags.reasoning ?? env.OPENAI_VIDEO_REASONING ?? "xhigh");
   const resources = [];
   if (sourceKind === "voiceover" && existsSync(path.resolve(value))) {
-    resources.push(await describeResource(value, "voiceover", resources.length));
+    resources.push(...await describeResourceEntries(value, "voiceover", resources.length));
   }
   for (const [role, entries] of [
     ["supporting", values(flags.resource)],
@@ -76,8 +76,9 @@ export async function buildIntake(source, flags = {}, env = process.env) {
     ["presenter", values(flags.presenter)]
   ]) {
     for (const entry of entries) {
-      const described = await describeResource(entry, role, resources.length);
-      if (!resources.some((resource) => resource.role === described.role && resource.location === described.location)) resources.push(described);
+      for (const described of await describeResourceEntries(entry, role, resources.length)) {
+        if (!resources.some((resource) => resource.role === described.role && resource.location === described.location)) resources.push(described);
+      }
     }
   }
   const slug = sourceSlug(value, sourceKind);
@@ -115,6 +116,31 @@ export async function buildIntake(source, flags = {}, env = process.env) {
       external_publish_allowed: false
     }
   };
+}
+
+async function describeResourceEntries(value, role, startIndex) {
+  const described = await describeResource(value, role, startIndex);
+  if (described.type !== "directory") return [described];
+  const files = await walkResourceDirectory(described.location);
+  if (!files.length) throw new Error(`Resource directory contains no files: ${described.location}`);
+  if (files.length > 512) throw new Error(`Resource directory exceeds the 512-file intake limit: ${described.location}`);
+  return Promise.all(files.map((filePath, index) => describeResource(filePath, role, startIndex + index)));
+}
+
+async function walkResourceDirectory(root) {
+  const files = [];
+  const pending = [path.resolve(root)];
+  while (pending.length) {
+    const directory = pending.shift();
+    const entries = (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
+      const location = path.join(directory, entry.name);
+      if (entry.isDirectory()) pending.push(location);
+      else if (entry.isFile()) files.push(location);
+    }
+  }
+  return files.sort((a, b) => a.localeCompare(b));
 }
 
 export function inferSourceKind(source, requestedKind = null) {

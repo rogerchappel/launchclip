@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -80,6 +80,20 @@ test("builds a normalized multi-resource intake", async () => {
   assert.equal(intake.resources[1].type, "url");
   assert.equal(intake.policies.supplied_voiceover_is_authoritative, true);
   assert.equal(intake.policies.presenter_requires_authorized_likeness, true);
+});
+
+test("expands a resource directory into stable file-level resources", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-directory-intake-"));
+  const recordings = path.join(temp, "screen-recordings");
+  await mkdir(path.join(recordings, "flow"), { recursive: true });
+  await writeFile(path.join(recordings, "cover.png"), "image");
+  await writeFile(path.join(recordings, "flow", "demo.mp4"), "video");
+  await writeFile(path.join(recordings, ".DS_Store"), "ignored");
+
+  const intake = await buildIntake("A SaaS launch", { kind: "product", resource: recordings, out: path.join(temp, "out") }, {});
+  assert.deepEqual(intake.resources.map((entry) => entry.type), ["image", "video"]);
+  assert.deepEqual(intake.resources.map((entry) => path.basename(entry.location)), ["cover.png", "demo.mp4"]);
+  assert.equal(new Set(intake.resources.map((entry) => entry.id)).size, 2);
 });
 
 test("writes production/intake.json", async () => {
