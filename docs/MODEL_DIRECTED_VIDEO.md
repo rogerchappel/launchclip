@@ -317,6 +317,38 @@ observation, not a mandate for constant motion: strong examples also contain
 long intentional reading holds. The comparator therefore evaluates burst
 cadence together with cut rate and hold ratio.
 
+## Frozen-Provider Evaluation Matrix
+
+Run the five-case production matrix without OpenAI or ElevenLabs credentials:
+
+```bash
+npm run eval:production -- --out .launchclip/eval-matrix/v1
+
+# Iterate on one case without running the full browser matrix.
+npm run eval:production -- \
+  --scenario presenter-video \
+  --out .launchclip/eval-matrix/presenter \
+  --force
+```
+
+The cases cover a 16:9 SaaS screen recording, a local topic/PDF, authoritative
+supplied audio, a presenter video with two layouts, and a 180-second
+hierarchical production. Provider responses are frozen, but intake, evidence,
+source-media processing, planning jobs, audio manifests, frame contracts,
+assembly, and content-addressed verification are real. Every case must pass
+HyperFrames lint, browser validation, root inspection, isolated shot
+inspection, snapshots, and immediate verification-receipt reuse.
+
+The command stops at snapshots; it does not bypass the final-render approval
+gate. Review `matrix-report.json` and each scenario's `production/qa/snapshots`
+before choosing a project to render.
+
+This is a **keyless** evaluation, not yet a fully network-isolated one. The
+assembled project currently loads GSAP from jsDelivr and `npx hyperframes` may
+need an existing package cache. PDF text extraction is frozen in the evaluator
+when `pdftotext` is unavailable. The report records those boundaries so it
+cannot be mistaken for credentialed creative-quality or offline proof.
+
 ## Safety and Approval
 
 - Do not clone a voice or likeness without explicit authorization.

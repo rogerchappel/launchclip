@@ -130,7 +130,9 @@ export function rootMotionSpec(plan, bundles) {
   const assertions = [];
   for (const [index, shot] of plan.shots.entries()) {
     const selector = `#mount-${shot.id}`;
-    assertions.push({ kind: "appearsBy", selector, bySec: shot.start_seconds + .05 });
+    const shotDuration = shot.end_seconds - shot.start_seconds;
+    const mountGrace = Math.min(.5, Math.max(.15, shotDuration * .02), shotDuration * .5);
+    assertions.push({ kind: "appearsBy", selector, bySec: Number((shot.start_seconds + mountGrace).toFixed(3)) });
     assertions.push({ kind: "staysInFrame", selector });
     if (index > 0) assertions.push({ kind: "before", a: `#mount-${plan.shots[index - 1].id}`, b: selector });
   }

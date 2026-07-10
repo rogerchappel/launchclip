@@ -84,7 +84,7 @@ export async function planLongFormProduction(workspacePath, context, adapters = 
     const chapterResources = intake.resources.filter((entry) => chapter.resource_ids.includes(entry.id));
     const words = (suppliedNarration?.words ?? []).filter((word) => Number(word.end) > chapter.start_seconds && Number(word.start) < chapter.end_seconds);
     const chapterInput = {
-      global: { project: outline.project, design: outline.design, audio: outline.audio, narration: outline.narration, rubric: outline.rubric },
+      global: { project: outline.project, format: outline.format, design: outline.design, audio: outline.audio, narration: outline.narration, rubric: outline.rubric },
       chapter: { ...chapter, duration_seconds: chapter.end_seconds - chapter.start_seconds },
       neighbors: { previous: outline.chapters[index - 1] ?? null, next: outline.chapters[index + 1] ?? null },
       evidence: compactEvidence(chapterEvidence, options.evidenceChars), resources: chapterResources, available_sfx: sfxCatalog,

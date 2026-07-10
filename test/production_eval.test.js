@@ -1,0 +1,131 @@
+import assert from "node:assert/strict";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import {
+  PRODUCTION_EVALUATION_SCENARIOS,
+  PRODUCTION_EVALUATION_VERSION,
+  evaluationScenarioDefinitions,
+  productionEvaluationExitCode,
+  rootMediaPlaybackMatches,
+  runProductionEvaluationMatrix,
+  voiceoverPlaybackIsAudible
+} from "../src/production_eval.js";
+
+test("defines the five required source-to-video evaluation modes", () => {
+  const fixtures = {
+    screenVideo: "/fixtures/screen.mp4",
+    voiceoverAudio: "/fixtures/voice.wav",
+    presenterVideo: "/fixtures/presenter.mp4",
+    paperPdf: "/fixtures/paper.pdf",
+    voiceoverTranscript: "/fixtures/voice.txt",
+    presenterTranscript: "/fixtures/presenter.txt",
+    longformNotes: "/fixtures/long.md"
+  };
+  const definitions = evaluationScenarioDefinitions(fixtures, "/eval");
+  assert.deepEqual(definitions.map((entry) => entry.id), PRODUCTION_EVALUATION_SCENARIOS);
+  assert.equal(definitions.find((entry) => entry.id === "saas-16x9").expected.aspect, "16:9");
+  assert.equal(definitions.find((entry) => entry.id === "topic-pdf").source, fixtures.paperPdf);
+  assert.equal(definitions.find((entry) => entry.id === "supplied-audio").expected.narration, "supplied");
+  assert.equal(definitions.find((entry) => entry.id === "presenter-video").expected.presenter, true);
+  assert.equal(definitions.find((entry) => entry.id === "presenter-video").expected.suppliedAudio, true);
+  assert.equal(definitions.find((entry) => entry.id === "hierarchical-longform").planningMode, "hierarchical");
+});
+
+test("writes a selected frozen-provider matrix report without requiring credentials", async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), "launchclip-eval-matrix-"));
+  const output = path.join(parent, "matrix");
+  const executed = [];
+  const progress = [];
+  const result = await runProductionEvaluationMatrix(output, { scenarios: ["saas-16x9", "presenter-video"] }, {
+    createFixtures: async () => ({
+      screenVideo: "/fixtures/screen.mp4", voiceoverAudio: "/fixtures/voice.wav", presenterVideo: "/fixtures/presenter.mp4",
+      paperPdf: "/fixtures/paper.pdf", voiceoverTranscript: "/fixtures/voice.txt", presenterTranscript: "/fixtures/presenter.txt", longformNotes: "/fixtures/long.md"
+    }),
+    executeScenario: async (definition) => {
+      executed.push(definition.id);
+      return { id: definition.id, status: "passed", snapshots: [`scenarios/${definition.id}/snapshot.png`] };
+    },
+    onProgress: async (event) => progress.push(`${event.scenario}:${event.status}`)
+  });
+  assert.equal(result.status, "passed");
+  assert.deepEqual(executed, ["saas-16x9", "presenter-video"]);
+  assert.deepEqual(progress, ["saas-16x9:started", "saas-16x9:passed", "presenter-video:started", "presenter-video:passed"]);
+  const report = JSON.parse(await readFile(result.report, "utf8"));
+  assert.equal(report.schema_version, PRODUCTION_EVALUATION_VERSION);
+  assert.equal(report.provider_mode, "frozen-no-openai-or-elevenlabs-credentials");
+  assert.match(report.network_boundary, /keyless, not fully network-isolated/);
+  assert.deepEqual(report.scenarios.map((entry) => entry.id), executed);
+  await assert.rejects(
+    () => runProductionEvaluationMatrix(output, {}, { createFixtures: async () => ({}), executeScenario: async () => ({ status: "passed", snapshots: [] }) }),
+    /already exists/
+  );
+});
+
+test("rejects unknown evaluation scenarios before executing work", async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), "launchclip-eval-unknown-"));
+  const output = path.join(parent, "matrix");
+  await assert.rejects(
+    () => runProductionEvaluationMatrix(output, { scenarios: ["unknown"] }, {
+      createFixtures: async () => { throw new Error("must not create fixtures"); },
+      executeScenario: async () => { throw new Error("must not execute"); }
+    }),
+    /Unknown evaluation scenario/
+  );
+  await assert.rejects(() => readFile(output), /ENOENT/);
+});
+
+test("records a failed scenario and continues the evaluation matrix", async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), "launchclip-eval-failure-"));
+  const progress = [];
+  const result = await runProductionEvaluationMatrix(path.join(parent, "matrix"), {
+    scenarios: ["saas-16x9", "topic-pdf"]
+  }, {
+    createFixtures: async () => ({
+      screenVideo: "screen", voiceoverAudio: "voice", presenterVideo: "presenter", paperPdf: "paper",
+      voiceoverTranscript: "voice-text", presenterTranscript: "presenter-text", longformNotes: "notes"
+    }),
+    executeScenario: async (definition) => {
+      if (definition.id === "saas-16x9") throw new Error("Bearer sk-secret-token must not leak");
+      return { id: definition.id, status: "passed", snapshots: [] };
+    },
+    onProgress: async (event) => progress.push(`${event.scenario}:${event.status}`)
+  });
+
+  assert.equal(result.status, "failed");
+  assert.equal(productionEvaluationExitCode(result), 1);
+  assert.equal(productionEvaluationExitCode({ status: "passed" }), 0);
+  const report = JSON.parse(await readFile(result.report, "utf8"));
+  assert.deepEqual(report.scenarios.map((entry) => entry.status), ["failed", "passed"]);
+  assert.equal(report.scenarios[0].error, "[redacted credential] must not leak");
+  assert.deepEqual(progress, ["saas-16x9:started", "saas-16x9:failed", "topic-pdf:started", "topic-pdf:passed"]);
+});
+
+test("force replacement only removes evaluator-owned output", async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), "launchclip-eval-ownership-"));
+  const output = path.join(parent, "unowned");
+  const sentinel = path.join(output, "keep.txt");
+  await mkdir(output);
+  await writeFile(sentinel, "do not remove\n");
+
+  await assert.rejects(
+    () => runProductionEvaluationMatrix(output, { force: true }, {
+      createFixtures: async () => { throw new Error("must not create fixtures"); }
+    }),
+    /Refusing to replace unowned evaluation output/
+  );
+  assert.equal(await readFile(sentinel, "utf8"), "do not remove\n");
+});
+
+test("requires audible voiceover playback and preserves presenter mute intent", () => {
+  const voiceover = { kind: "audio", start: 0, mediaStart: 0, volume: 1, muted: false };
+  assert.equal(voiceoverPlaybackIsAudible(voiceover), true);
+  assert.equal(voiceoverPlaybackIsAudible({ ...voiceover, start: 5 }), false);
+  assert.equal(voiceoverPlaybackIsAudible({ ...voiceover, volume: 0 }), false);
+
+  const silentPresenter = { volume: 0, muted: true, hasAudio: false };
+  assert.equal(rootMediaPlaybackMatches({ kind: "video", volume: 0 }, silentPresenter), true);
+  assert.equal(rootMediaPlaybackMatches({ kind: "video", volume: 0 }, { ...silentPresenter, muted: false }), false);
+  assert.equal(rootMediaPlaybackMatches({ kind: "video", volume: .5 }, { volume: .5, muted: false, hasAudio: true }), true);
+});
