@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { validateHyperFramesRoot } from "./frame_director.js";
+import { safeShotFile, validateHyperFramesRoot } from "./frame_director.js";
 import { describeJobOutput, ProductionJobStore } from "./job_store.js";
 import { OpenAIResponsesClient } from "./openai_responses.js";
 import { FRAME_BUNDLE_SCHEMA, PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
@@ -45,7 +45,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
   const tasks = [...byShot].map(([shotId, findings]) => async () => {
     const shot = plan.shots.find((entry) => entry.id === shotId);
     if (!shot) throw new Error(`Critique references unknown shot: ${shotId}`);
-    const prior = await readJson(path.join(workspace, PRODUCTION_PATHS.frames, `${shotId}.json`));
+    const prior = await readJson(safeShotFile(path.join(workspace, PRODUCTION_PATHS.frames), shotId, ".json"));
     const jobId = `frame:${shotId}`;
     await store.retry(jobId);
     await store.markRunning(jobId, { provider: "openai", response_id: null, status: "repairing" });
@@ -116,7 +116,7 @@ async function runPool(tasks, concurrency) {
 
 async function writeFrameArtifacts(workspace, bundle) {
   const directory = path.join(workspace, PRODUCTION_PATHS.frames);
-  const paths = [path.join(directory, `${bundle.shot_id}.json`), path.join(directory, `${bundle.shot_id}.html`), path.join(directory, `${bundle.shot_id}.motion.json`)];
+  const paths = [safeShotFile(directory, bundle.shot_id, ".json"), safeShotFile(directory, bundle.shot_id, ".html"), safeShotFile(directory, bundle.shot_id, ".motion.json")];
   await writeAtomic(paths[0], `${JSON.stringify(bundle, null, 2)}\n`);
   await writeAtomic(paths[1], `${bundle.html.trim()}\n`);
   await writeAtomic(paths[2], `${JSON.stringify(bundle.motion, null, 2)}\n`);

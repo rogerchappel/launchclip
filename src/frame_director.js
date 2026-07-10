@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { OpenAIResponsesClient } from "./openai_responses.js";
-import { FRAME_BUNDLE_SCHEMA, PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
+import { FRAME_BUNDLE_SCHEMA, PRODUCTION_PATHS, isValidShotId, validateFrameBundle } from "./production_contracts.js";
 
 const FRAME_INSTRUCTIONS = `You are a senior motion designer authoring one modular HyperFrames shot inside a larger film.
 
@@ -148,13 +148,22 @@ export function validateHyperFramesRoot(html, shot, format) {
 
 async function writeFrameArtifacts(workspace, bundle) {
   const directory = path.join(workspace, PRODUCTION_PATHS.frames);
-  const bundlePath = path.join(directory, `${bundle.shot_id}.json`);
-  const htmlPath = path.join(directory, `${bundle.shot_id}.html`);
-  const motionPath = path.join(directory, `${bundle.shot_id}.motion.json`);
+  const bundlePath = safeShotFile(directory, bundle.shot_id, ".json");
+  const htmlPath = safeShotFile(directory, bundle.shot_id, ".html");
+  const motionPath = safeShotFile(directory, bundle.shot_id, ".motion.json");
   await writeAtomic(bundlePath, `${JSON.stringify(bundle, null, 2)}\n`);
   await writeAtomic(htmlPath, `${bundle.html.trim()}\n`);
   await writeAtomic(motionPath, `${JSON.stringify(bundle.motion, null, 2)}\n`);
   return [bundlePath, htmlPath, motionPath];
+}
+
+export function safeShotFile(directory, shotId, suffix) {
+  if (!isValidShotId(shotId)) throw new Error(`Unsafe shot ID: ${shotId}`);
+  if (!/^\.[a-z0-9.-]+$/i.test(suffix)) throw new Error(`Unsafe shot artifact suffix: ${suffix}`);
+  const root = path.resolve(directory);
+  const output = path.resolve(root, `${shotId}${suffix}`);
+  if (path.dirname(output) !== root) throw new Error(`Shot artifact escapes its directory: ${shotId}`);
+  return output;
 }
 
 async function runPool(tasks, concurrency) {

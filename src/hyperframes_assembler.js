@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { copyFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { safeShotFile } from "./frame_director.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
 
@@ -12,7 +13,8 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
     readJson(path.join(workspace, PRODUCTION_PATHS.evidence)),
     readJson(path.join(workspace, PRODUCTION_PATHS.plan))
   ]);
-  const bundles = await Promise.all(plan.shots.map((shot) => readJson(path.join(workspace, PRODUCTION_PATHS.frames, `${shot.id}.json`))));
+  const framesDir = path.join(workspace, PRODUCTION_PATHS.frames);
+  const bundles = await Promise.all(plan.shots.map((shot) => readJson(safeShotFile(framesDir, shot.id, ".json"))));
   for (const [index, bundle] of bundles.entries()) {
     const validation = validateFrameBundle(bundle, {
       shotId: plan.shots[index].id,
@@ -56,8 +58,8 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
         const frozen = assetMap.get(resource.id);
         if (frozen && resource.location) html = html.split(resource.location).join(`../assets/${frozen.file}`);
       }
-      await writeAtomic(path.join(compositionsDir, `${bundle.shot_id}.html`), `${html.trim()}\n`);
-      await writeAtomic(path.join(compositionsDir, `${bundle.shot_id}.motion.json`), `${JSON.stringify(bundle.motion, null, 2)}\n`);
+      await writeAtomic(safeShotFile(compositionsDir, bundle.shot_id, ".html"), `${html.trim()}\n`);
+      await writeAtomic(safeShotFile(compositionsDir, bundle.shot_id, ".motion.json"), `${JSON.stringify(bundle.motion, null, 2)}\n`);
     }
 
     const html = renderRoot({ intake, plan, bundles, assetMap, extraAudio });
@@ -72,7 +74,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
       shots: plan.shots.map((shot) => ({ id: shot.id, start_seconds: shot.start_seconds, end_seconds: shot.end_seconds, composition: `compositions/${shot.id}.html` })),
       assets: [...assetMap.entries()].map(([id, entry]) => ({ id, file: `assets/${entry.file}`, sha256: entry.sha256 }))
     }, null, 2)}\n`);
-    const outputs = await Promise.all([indexPath, manifestPath, ...bundles.map((bundle) => path.join(compositionsDir, `${bundle.shot_id}.html`))].map((filePath) => describeJobOutput(workspace, filePath)));
+    const outputs = await Promise.all([indexPath, manifestPath, ...bundles.map((bundle) => safeShotFile(compositionsDir, bundle.shot_id, ".html"))].map((filePath) => describeJobOutput(workspace, filePath)));
     await store.markSucceeded(jobId, outputs);
     return { stage: "hyperframes-assembly", status: "ready", workspace, project: projectDir, index: indexPath, manifest: manifestPath, compositions: bundles.length, assets: assetMap.size, cached: false };
   } catch (error) {
