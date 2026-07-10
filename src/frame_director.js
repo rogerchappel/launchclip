@@ -27,6 +27,11 @@ HyperFrames contract:
 - Use only supplied local resource paths. If a requested visual asset is unavailable, design a native HTML/CSS/SVG treatment instead of inventing a path.
 - When narration_timing is present, synchronize semantic reveals to its shot-local word timestamps instead of estimating speech timing.
 - Use transform and opacity for primary motion. Name selectors in motion assertions so inspection can verify the intended reveals.
+- Motion assertions are executable test contracts, not aspirational descriptions. Every selector must be exactly one existing shot-prefixed id, such as #shot-01-headline when shot_id is shot-01; never assert a selector that is absent from html.
+- appears_by_seconds is shot-local and means the element is actually visible at opacity >= 0.5 by that time. Use 0 for elements intentionally visible on frame zero and leave a conservative buffer after entrance easing.
+- Assign order only when two elements have strictly different first-visible times. Use null for frame-zero or simultaneous entrances, and never reuse an order number.
+- must_remain_live means the selected element or its descendants keep moving with no static window longer than one third of the shot. Set it false for normal reveal-then-settle elements.
+- Set must_stay_in_frame true only when the element's entire visible bounding box remains on canvas after it appears; intentional off-canvas or clipped entrance geometry must use false.
 - Keep essential text and proof inside the frame at all times. Preserve exact visible copy and factual meaning.
 - The first and last rendered frame must be intentional, including when mounted next to neighboring shots.`;
 
@@ -88,7 +93,7 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, narration
 async function directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, client, options }) {
   const jobId = `frame:${shot.id}`;
   const baseInput = buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming });
-  const inputHash = semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v1" });
+  const inputHash = semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v2" });
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
     const verification = await store.verifyOutputs(jobId);
@@ -122,7 +127,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         schemaName: "launchclip_frame_bundle",
         background: options.background !== false,
         maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
-        promptCacheKey: "launchclip:frame-director:v1",
+        promptCacheKey: "launchclip:frame-director:v2",
         metadata: { job_id: jobId, shot_id: shot.id, attempt },
         onSubmitted: async (response) => store.markRunning(jobId, { provider: "openai", response_id: response.id, status: response.status })
       };

@@ -23,9 +23,11 @@ test("delegates shots concurrently, repairs invalid HTML, and writes modular fra
   const workspace = await workspaceFixture(context);
   let active = 0;
   let peak = 0;
+  let frameInstructions;
   const attempts = new Map();
   const client = {
     runStructured: async (options) => {
+      frameInstructions = options.instructions;
       active += 1;
       peak = Math.max(peak, active);
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -45,6 +47,8 @@ test("delegates shots concurrently, repairs invalid HTML, and writes modular fra
   assert.equal(result.generated, 2);
   assert.equal(peak, 2);
   assert.equal(attempts.get("shot-1"), 2);
+  assert.match(frameInstructions, /Motion assertions are executable test contracts/);
+  assert.match(frameInstructions, /must_remain_live means/);
   assert.match(await readFile(result.frames[0].html, "utf8"), /data-composition-id="shot-1"/);
   assert.match(await readFile(result.frames[0].motion, "utf8"), /#shot-1-proof/);
   assert.match(await readFile(result.frames[1].html, "utf8"), /window\.__timelines\["shot-2"\] = timeline/);
@@ -96,7 +100,7 @@ test("resumes a persisted background frame response without submitting it twice"
   const workspace = await workspaceFixture(context);
   const store = await ProductionJobStore.open(workspace, { create: false });
   const baseInput = buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0 });
-  const inputHash = semanticHash({ input: baseInput, model: context.intake.model, reasoning: "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v1" });
+  const inputHash = semanticHash({ input: baseInput, model: context.intake.model, reasoning: "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v2" });
   await store.add({ id: "frame:shot-1", kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash });
   await store.markRunning("frame:shot-1", { provider: "openai", response_id: "resp_saved", status: "in_progress" });
   let resumed = 0;
