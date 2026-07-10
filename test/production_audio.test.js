@@ -123,6 +123,30 @@ test("reuses Scribe word timing for supplied narration", async () => {
   assert.deepEqual(JSON.parse(await readFile(manifest.voiceover.words_path, "utf8")), [{ word: "Proof", start: 0, end: 9.8 }]);
 });
 
+test("recovers an interrupted aggregate audio job", async () => {
+  const workspace = await fixture();
+  const intake = JSON.parse(await readFile(path.join(workspace, "production", "intake.json"), "utf8"));
+  const plan = JSON.parse(await readFile(path.join(workspace, "production", "plan.json"), "utf8"));
+  const evidence = { items: [] };
+  const options = { noMusic: true, noSfx: true };
+  const inputHash = semanticHash({ intake, plan, evidence, options: {
+    noVoice: false, noMusic: true, noSfx: true, voiceId: null, voiceModel: null, musicModel: null,
+    sfxDir: null, words: null, maxNarrationChars: null
+  }, audio: "production-audio.v2" });
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  await store.add({ id: "production-audio", kind: "production-audio", depends_on: ["creative-plan"], input_hash: inputHash });
+  await store.markRunning("production-audio");
+  const result = await produceAudio(workspace, options, { store, provider: {
+    synthesizeNarration: async (request) => {
+      await writeFile(request.outputPath, "voice");
+      await writeFile(request.wordsPath, "[]\n");
+      return { provider: "elevenlabs", path: request.outputPath, words_path: request.wordsPath, duration_seconds: 10 };
+    }
+  } });
+  assert.equal(result.status, "ready");
+  assert.equal(store.get("production-audio").status, "succeeded");
+});
+
 async function fixture(options = {}) {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-audio-"));
   await mkdir(path.join(workspace, "production"), { recursive: true });
