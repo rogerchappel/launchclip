@@ -23,6 +23,10 @@ test("gives an independent GPT-5.6 critic the plan, QA evidence, motion profile,
   const input = JSON.parse(request.input);
   assert.equal(input.temporal_motion_analysis.family, "rapid-hybrid");
   assert.equal(input.time_aligned_audio_analysis.output.integrated_lufs, -14);
+  assert.equal(input.production_expectations.audio, "intentionally-silent");
+  assert.equal(input.production_expectations.encoded_frame_count_path, "temporal_motion_analysis.frame_count");
+  assert.match(request.instructions, /intentionally-silent/);
+  assert.match(request.instructions, /adjacent-frame difference samples/);
   assert.equal(input.deterministic_reports.inspect.stdout.issueCount, 1);
   assert.equal(input.evidence_index[0].content, "The README proves the workflow.");
   assert.equal(input.claim_support[0].evidence[0].id, "ev-1");
@@ -50,7 +54,7 @@ async function fixture() {
   await writeFile(path.join(workspace, "production", "evidence.json"), `${JSON.stringify({ items: [{ id: "ev-1", kind: "repository-readme", role: "primary", title: "README", content: "The README proves the workflow.", provenance: "README.md", claims_allowed: true }] })}\n`);
   await writeFile(path.join(qa, "verification.json"), `${JSON.stringify({ failed: [], snapshots })}\n`);
   await writeFile(path.join(qa, "motion.json"), `${JSON.stringify({ family: "rapid-hybrid", motion_bursts_per_minute: 22 })}\n`);
-  await writeFile(path.join(qa, "audio.json"), `${JSON.stringify({ output: { integrated_lufs: -14 }, quality: { ok: true, findings: [] } })}\n`);
+  await writeFile(path.join(qa, "audio.json"), `${JSON.stringify({ expected_audio: false, output: { integrated_lufs: -14 }, quality: { ok: true, findings: [] } })}\n`);
   await writeFile(path.join(qa, "lint.json"), `${JSON.stringify({ ok: true, stdout: { findings: [] } })}\n`);
   await writeFile(path.join(qa, "validate.json"), `${JSON.stringify({ ok: true, stdout: { errors: [] } })}\n`);
   await writeFile(path.join(qa, "inspect.json"), `${JSON.stringify({ ok: false, stdout: { issueCount: 1, issues: [{ code: "text_occluded", severity: "error" }] } })}\n`);

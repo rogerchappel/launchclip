@@ -11,6 +11,8 @@ Rules:
 - Technical validity is not creative quality. A clean DOM can still be dull, generic, illegible, or narratively weak.
 - Do not demand a fixed house style. Judge whether this video's chosen art direction is coherent, original, and appropriate to its subject.
 - Use motion metrics as temporal evidence. Do not treat raw RGB or pixel similarity to unrelated references as a quality target.
+- temporal_motion_analysis.frame_count is the encoded video frame count. temporal_motion_analysis.motion.frame_count is the number of adjacent-frame difference samples and is normally one lower; do not confuse the two.
+- When production_expectations.audio is intentionally-silent, do not request voiceover, music, sound effects, or an audio stream. Judge only the requested silent evaluation render.
 - A finding must name observable evidence, affected shot IDs, the smallest repair scope, a concrete instruction, and what must be preserved.
 - Use replan only when repairing frames cannot solve the narrative or timing problem.
 - Ship only when there are no blocking or major findings.
@@ -56,6 +58,11 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
       deterministic_reports: { lint, validate, inspect },
       temporal_motion_analysis: motion,
       time_aligned_audio_analysis: audio,
+      production_expectations: {
+        audio: audio?.expected_audio === true ? "required" : audio?.expected_audio === false ? "intentionally-silent" : "unknown",
+        encoded_frame_count_path: "temporal_motion_analysis.frame_count",
+        frame_difference_sample_count_path: "temporal_motion_analysis.motion.frame_count"
+      },
       snapshot_order: snapshots.map((entry) => path.basename(entry))
     }),
     images,
