@@ -80,6 +80,14 @@ launchclip produce ./brief.md \
   --transcript ./narration.txt \
   --presenter ./avatar-take.mp4 \
   --prompt "Keep the presenter visible; move them around the evidence"
+
+# Long-form: outline once, expand chapters concurrently, stitch deterministically
+launchclip produce ./research \
+  --kind topic \
+  --duration 240 \
+  --aspect 16:9 \
+  --planning-mode hierarchical \
+  --chapter-concurrency 3
 ```
 
 The command writes a workspace, renders and analyzes an editable draft, asks an
@@ -117,6 +125,13 @@ same workspace reuses valid provider responses and artifacts. After editing an
 assembled composition, `production-draft` reruns verification, a draft encode,
 motion/audio analysis, reference comparison, and critique without repeating
 intake, evidence, planning, frame generation, or audio production.
+
+Native QA also has a content-addressed receipt bound to the exact plan,
+assembled project tree, verifier settings, HyperFrames/browser toolchain, and
+the hashes of every report and snapshot. An unchanged draft reuses that receipt
+while still encoding, analyzing audio/motion, and running the independent
+critic. Any project, plan, toolchain, option, report, or snapshot change forces
+the full gate again.
 
 ## Pipeline
 
@@ -187,6 +202,14 @@ The plan contains:
 The schema describes the information a renderer needs. It does not enumerate a
 closed list of visual styles or force every video through named scene presets.
 
+Planning mode defaults to `auto`. Productions under 180 seconds use one strict
+planning call. At 180 seconds or above, Launchclip creates a resumable global
+outline, expands independent chapter jobs concurrently with frozen continuity
+anchors, and deterministically stitches their local timelines into the same
+`launchclip.production-plan.v1` contract. `--planning-mode single` and
+`--planning-mode hierarchical` override the threshold. Supplied narration
+remains byte-for-byte authoritative through the stitch.
+
 Default model configuration:
 
 ```text
@@ -251,6 +274,11 @@ critique said to ship. Each repair revision hashes its prior bundle and current
 findings, so changed evidence gets a fresh bounded attempt budget without
 invalidating clean shots. A structurally invalid replacement receives its exact
 validation errors on the next semantic attempt instead of ending the pass.
+Script, plan, audio, and `replan` findings create a constrained full-plan
+revision with immutable format, duration, language, CTA, evidence eligibility,
+and supplied narration. That revision then regenerates the affected audio and
+all frames, reconfigures assembly dependencies when shot IDs change, and returns
+through the same bounded verification/draft/critic loop.
 
 Final render remains human-gated.
 
