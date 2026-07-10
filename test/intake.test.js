@@ -38,6 +38,19 @@ test("infers supported source kinds", () => {
   assert.throws(() => inferSourceKind("anything", "unknown"), /Unsupported --kind/);
 });
 
+test("automatically treats a local paper or text source as topic evidence", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "launchclip-paper-source-"));
+  const paper = path.join(directory, "research.pdf");
+  await writeFile(paper, "pdf fixture");
+  assert.equal(inferSourceKind(paper), "topic");
+  const intake = await buildIntake(paper, { out: path.join(directory, "out") }, {});
+  assert.equal(intake.source.kind, "topic");
+  assert.equal(intake.resources.length, 1);
+  assert.equal(intake.resources[0].role, "supporting");
+  assert.equal(intake.resources[0].type, "document");
+  assert.equal(intake.resources[0].location, paper);
+});
+
 test("resolves aspect ratios and GPT-5.6 reasoning controls", () => {
   assert.deepEqual(resolveAspect("portrait"), { id: "9:16", width: 1080, height: 1920, orientation: "portrait" });
   assert.deepEqual(resolveAspect("16:9"), { id: "16:9", width: 1920, height: 1080, orientation: "landscape" });

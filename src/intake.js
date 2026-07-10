@@ -72,6 +72,10 @@ export async function buildIntake(source, flags = {}, env = process.env) {
   if (sourceKind === "voiceover" && existsSync(path.resolve(value))) {
     resources.push(...await describeResourceEntries(value, "voiceover", resources.length));
   }
+  if (sourceKind === "topic" && existsSync(path.resolve(value))) {
+    const type = RESOURCE_EXTENSIONS.get(path.extname(path.resolve(value)).toLowerCase());
+    if (type === "document" || type === "text") resources.push(...await describeResourceEntries(value, "supporting", resources.length));
+  }
   for (const [role, entries] of [
     ["supporting", values(flags.resource)],
     ["reference", values(flags.reference)],
