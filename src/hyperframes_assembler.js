@@ -3,8 +3,11 @@ import { createReadStream } from "node:fs";
 import { copyFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { safeShotFile, validateHyperFramesRoot } from "./frame_director.js";
+import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
+
+export { ensureTimelineRegistration } from "./hyperframes_timeline.js";
 
 export async function assembleHyperFrames(workspacePath, options = {}) {
   const workspace = path.resolve(workspacePath);
@@ -178,21 +181,6 @@ export function applyFrameCsp(html) {
   return `${policy}\n${source}`;
 }
 
-export function ensureTimelineRegistration(html, compositionId) {
-  if (new RegExp(`window\\.__timelines\\s*\\[\\s*["']${escapeRegExp(compositionId)}["']\\s*\\]`).test(html)) return html;
-  const variables = [...String(html).matchAll(/(?:const|let|var)\s+([a-zA-Z_$][\w$]*)\s*=\s*gsap\.timeline\s*\(/g)].map((match) => match[1]);
-  const timeline = variables.at(-1);
-  if (!timeline) return html;
-  const statements = `window.__timelines = window.__timelines || {};\n${timeline}.pause(0);\nwindow.__timelines[${JSON.stringify(compositionId)}] = ${timeline};`;
-  const closures = [...String(html).matchAll(/\}\s*\(\s*\)\s*\)\s*;|\}\s*\)\s*\(\s*\)\s*;/g)];
-  if (closures.length) {
-    const closure = closures.at(-1);
-    return `${html.slice(0, closure.index)}${statements}\n${html.slice(closure.index)}`;
-  }
-  const registration = `<script>\n${statements}\n</script>`;
-  return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${registration}\n</body>`) : `${html}\n${registration}`;
-}
-
 function renderMedia({ id, request, asset, globalStart }) {
   const placement = request.placement;
   const style = [
@@ -281,10 +269,6 @@ function slug(value) {
 
 function escapeAttr(value) {
   return String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function number(value) {
