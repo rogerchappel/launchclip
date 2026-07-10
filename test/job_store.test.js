@@ -84,6 +84,36 @@ test("propagates stale state to descendants", async () => {
   assert.ok(store.list().every((entry) => entry.status === "stale"));
 });
 
+test("replaces canonical outputs without changing semantic identity and stales only descendants", async () => {
+  const workspace = await tempWorkspace();
+  const store = await ProductionJobStore.open(workspace);
+  await store.add(job("plan", []));
+  await store.add(job("frame", ["plan"]));
+  await store.add(job("assembly", ["frame"]));
+  for (const id of ["plan", "frame", "assembly"]) {
+    await store.markRunning(id, { provider: "openai", response_id: `resp_${id}`, status: "completed" });
+    await store.markSucceeded(id, [{ path: `production/${id}.json`, sha256: `${id}-old`, size_bytes: 1 }]);
+  }
+  const before = store.get("frame");
+  const result = await store.replaceSucceededOutputs("frame", [{ path: "production/frame.json", sha256: "frame-repaired", size_bytes: 2 }]);
+  const after = store.get("frame");
+  assert.equal(after.status, "succeeded");
+  assert.equal(after.input_hash, before.input_hash);
+  assert.equal(after.attempt, before.attempt);
+  assert.deepEqual(after.remote, before.remote);
+  assert.equal(after.outputs[0].sha256, "frame-repaired");
+  assert.deepEqual(result.stale, ["assembly"]);
+  assert.equal(store.get("plan").status, "succeeded");
+  assert.equal(store.get("assembly").status, "stale");
+});
+
+test("refuses to replace outputs for a non-succeeded canonical job", async () => {
+  const workspace = await tempWorkspace();
+  const store = await ProductionJobStore.open(workspace);
+  await store.add(job("frame", []));
+  await assert.rejects(() => store.replaceSucceededOutputs("frame", []), /Only succeeded/);
+});
+
 test("checksums outputs and detects tampering", async () => {
   const workspace = await tempWorkspace();
   const outputPath = path.join(workspace, "production", "plan.json");

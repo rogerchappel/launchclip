@@ -141,6 +141,33 @@ export class ProductionJobStore {
     return [...stale];
   }
 
+  async replaceSucceededOutputs(id, outputs = []) {
+    const source = this.require(id);
+    if (source.status !== "succeeded") throw new Error(`Only succeeded job outputs can be replaced: ${id}`);
+    source.outputs = outputs.map(normalizeOutput);
+    source.updated_at = new Date().toISOString();
+    const stale = new Set();
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const job of this.data.jobs) {
+        if (job.id === id || stale.has(job.id)) continue;
+        if (job.depends_on.includes(id) || job.depends_on.some((dependency) => stale.has(dependency))) {
+          stale.add(job.id);
+          changed = true;
+        }
+      }
+    }
+    const now = new Date().toISOString();
+    for (const job of this.data.jobs) {
+      if (!stale.has(job.id) || job.status === "stale") continue;
+      if (!TRANSITIONS.get(job.status)?.has("stale")) throw new Error(`Cannot mark ${job.id} stale after replacing ${id} outputs from ${job.status}`);
+      Object.assign(job, { status: "stale", remote: null, outputs: [], error: null, updated_at: now });
+    }
+    await this.save();
+    return { job: structuredClone(source), stale: [...stale] };
+  }
+
   async verifyOutputs(id) {
     const job = this.require(id);
     const results = [];
