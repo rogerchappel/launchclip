@@ -81,6 +81,10 @@ export async function buildIntake(source, flags = {}, env = process.env) {
       }
     }
   }
+  const videoVoiceover = resources.find((entry) => entry.role === "voiceover" && entry.type === "video");
+  if (videoVoiceover && !resources.some((entry) => entry.role === "presenter" && entry.location === videoVoiceover.location)) {
+    resources.push({ ...videoVoiceover, id: resourceId(videoVoiceover.location, resources.length), role: "presenter", source: videoVoiceover.source });
+  }
   const slug = sourceSlug(value, sourceKind);
   const workspace = path.resolve(flags.out ?? path.join(".launchclip", slug));
   return {
