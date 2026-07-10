@@ -166,7 +166,9 @@ async function runPool(tasks, concurrency) {
       output[index] = await tasks[index]();
     }
   };
-  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
+  const settled = await Promise.allSettled(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
+  const failed = settled.find((entry) => entry.status === "rejected");
+  if (failed) throw failed.reason;
   return output;
 }
 

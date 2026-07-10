@@ -65,6 +65,23 @@ test("rejects a frame root with wrong identity, time, or dimensions", () => {
   assert.ok(errors.some((entry) => entry.includes("data-width")));
 });
 
+test("waits for sibling frame jobs to settle before reporting a delegated failure", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  let siblingFinished = false;
+  const client = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    if (input.shot.id === "shot-1") throw new Error("worker failed");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    siblingFinished = true;
+    return { response_id: "sibling", model: "gpt-5.6", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: {} };
+  } };
+  await assert.rejects(() => directFrames(workspace, { concurrency: 2 }, { client }), /worker failed/);
+  assert.equal(siblingFinished, true);
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  assert.equal(store.get("frame:shot-2").status, "succeeded");
+});
+
 function frameBundle(id, duration) {
   return {
     schema_version: FRAME_BUNDLE_VERSION,
