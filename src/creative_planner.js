@@ -74,7 +74,8 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
       background: options.background !== false,
       maxOutputTokens: Number(options.maxOutputTokens ?? 48_000),
       promptCacheKey: "launchclip:creative-planner:v1",
-      metadata: { job_id: jobId, source_kind: intake.source.kind, aspect: intake.brief.aspect.id }
+      metadata: { job_id: jobId, source_kind: intake.source.kind, aspect: intake.brief.aspect.id },
+      onSubmitted: async (response) => store.markRunning(jobId, { provider: "openai", response_id: response.id, status: response.status })
     });
     const plan = normalizeProductionPlanTiming(result.value);
     const validation = validateProductionPlan(plan, {

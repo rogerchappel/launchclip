@@ -24,6 +24,7 @@ test("runs GPT-5.6 planning, validates the plan, writes artifacts, and caches ve
   const client = {
     runStructured: async (options) => {
       calls.push(options);
+      await options.onSubmitted({ id: "resp_plan", status: "in_progress" });
       const value = samplePlan();
       value.shots[1].visual.internal_reveals[0].at_seconds = 6;
       value.shots[1].sfx[0].at_seconds = 6.1;
