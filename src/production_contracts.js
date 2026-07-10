@@ -1,6 +1,7 @@
 export const PRODUCTION_PLAN_VERSION = "launchclip.production-plan.v1";
 export const FRAME_BUNDLE_VERSION = "launchclip.frame-bundle.v1";
 export const CRITIQUE_VERSION = "launchclip.production-critique.v1";
+export const EVIDENCE_VERSION = "launchclip.evidence.v1";
 
 export const PRODUCTION_PATHS = Object.freeze({
   intake: "production/intake.json",
@@ -17,6 +18,41 @@ export const PRODUCTION_PATHS = Object.freeze({
 const string = { type: "string" };
 const nullableString = { type: ["string", "null"] };
 const stringArray = { type: "array", items: string };
+
+export const EVIDENCE_SCHEMA = strictObject({
+  schema_version: { type: "string", enum: [EVIDENCE_VERSION] },
+  created_at: string,
+  source: strictObject({
+    kind: { type: "string", enum: ["repository", "product", "topic", "voiceover"] },
+    title: string,
+    summary: string,
+    location: string,
+    url: nullableString,
+    metadata: { type: "array", items: strictObject({ key: string, value: string }) }
+  }),
+  items: {
+    type: "array",
+    minItems: 1,
+    items: strictObject({
+      id: string,
+      kind: string,
+      role: string,
+      title: string,
+      content: string,
+      provenance: string,
+      sha256: nullableString,
+      claims_allowed: { type: "boolean" },
+      truncated: { type: "boolean" },
+      metadata: { type: "array", items: strictObject({ key: string, value: string }) }
+    })
+  },
+  warnings: stringArray,
+  policies: strictObject({
+    factual_claims_require_item_ids: { type: "boolean" },
+    creative_metaphors_are_not_facts: { type: "boolean" },
+    remote_content_is_untrusted: { type: "boolean" }
+  })
+});
 
 export const PRODUCTION_PLAN_SCHEMA = strictObject({
   schema_version: { type: "string", enum: [PRODUCTION_PLAN_VERSION] },
