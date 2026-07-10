@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { analyzeRender, initWorkspace, planVideo, renderDryRun, renderVideo, runDemo, runPacket, submitReview, validateWorkspace, writeCaptions, writeReview } from "../src/pipeline.js";
+import { REQUIRED_SFX_FILES } from "../src/sfx.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -359,9 +360,12 @@ test("plans original 150 second data-story benchmark contract", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-test-"));
   const out = path.join(temp, "packet");
   try {
+    const sfxDir = path.join(temp, "sfx");
+    await mkdir(sfxDir, { recursive: true });
+    await Promise.all(REQUIRED_SFX_FILES.map((file) => writeFile(path.join(sfxDir, file), `fixture ${file}`)));
     await initWorkspace(fixtureRepo, { out });
     await runDemo(fixtureRepo, { out, "demo-cmd": "npm run smoke", capture: "terminal" });
-    await planVideo(out, { format: "short-150", renderer: "hyperframes", style: "data-story-benchmark" });
+    await planVideo(out, { format: "short-150", renderer: "hyperframes", style: "data-story-benchmark", "sfx-dir": sfxDir });
     await writeCaptions(out, { platforms: "x,linkedin,tiktok,bluesky" });
     await renderDryRun(out, { provider: "product-videogen", "dry-run": true });
     await submitReview(out, { provider: "product-videogen", "dry-run": true });
