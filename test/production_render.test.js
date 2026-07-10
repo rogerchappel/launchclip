@@ -58,6 +58,19 @@ test("renders only after verification then runs frame-by-frame motion gates", as
   assert.equal(commands.at(-1), "render");
   assert.equal(motionInput.options.expected.width, 1080);
   assert.deepEqual(motionInput.options.references, ["/tmp/reference.mp4"]);
+  assert.equal(JSON.parse(await readFile(result.audio, "utf8")).status, "not-requested");
+});
+
+test("blocks final approval when rendered audio fails deterministic gates", async () => {
+  const workspace = await fixture();
+  const media = path.join(workspace, "production", "media");
+  await mkdir(media, { recursive: true });
+  await writeFile(path.join(media, "manifest.json"), `${JSON.stringify({ voiceover: { path: "/tmp/voice.mp3" }, music: null, sfx_manifest: null })}\n`);
+  await assert.rejects(() => renderProduction(workspace, { approve: true }, {
+    run: async (_command, args) => ({ stdout: args.includes("--json") ? "{}" : "ok", stderr: "" }),
+    writeMotionReport: async (_video, output) => { await writeFile(output, "{}\n"); return { quality: { ok: true }, family: "developing-card" }; },
+    writeAudioReport: async (_video, _manifest, output) => { const report = { quality: { ok: false, findings: [{ severity: "major", category: "masking" }] } }; await writeFile(output, `${JSON.stringify(report)}\n`); return report; }
+  }), /audio quality gates/);
 });
 
 test("returns a targeted repair state when the independent critic does not approve", async () => {
