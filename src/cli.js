@@ -6,7 +6,7 @@ import { preprocessPresenter } from "./presenter_preprocess.js";
 import { writeIntake } from "./intake.js";
 import { runProductionStage } from "./production_cli.js";
 
-const PRODUCTION_COMMANDS = new Set(["evidence", "creative-plan", "direct-frames", "production-audio", "assemble", "produce"]);
+const PRODUCTION_COMMANDS = new Set(["evidence", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-render", "produce"]);
 const COMMANDS = new Set(["intake", ...PRODUCTION_COMMANDS, "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
@@ -70,7 +70,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "allow-placeholder-sfx" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "allow-timing-drift" || name === "foreground" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro") {
+    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "allow-placeholder-sfx" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "allow-timing-drift" || name === "foreground" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro") {
       flags[name] = true;
       continue;
     }
@@ -104,6 +104,8 @@ Usage:
   launchclip production-audio <workspace> [--voice-id id] [--music-model music_v2] [--sfx-dir path] [--no-voice] [--no-music] [--no-sfx]
   launchclip direct-frames <workspace> [--concurrency 4] [--semantic-attempts 2] [--frame-reasoning high]
   launchclip assemble <workspace> [--music-volume 0.16]
+  launchclip production-verify <workspace> [--inspect-samples 15] [--snapshot-frames 12]
+  launchclip production-render <workspace> --approve [--quality high] [--reference-video local.mp4]
   launchclip init <repo> --out <workspace>
   launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]
   launchclip plan <workspace> --format short-15 --renderer none|hyperframes [--style proof-card|ugc-split|ugc-demo-punchy|premium-product-short|data-story-benchmark] [--assets-dir path/to/assets] [--talking-head heygen --avatar-id avatar_123]

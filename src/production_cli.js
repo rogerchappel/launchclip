@@ -6,6 +6,7 @@ import { assembleHyperFrames } from "./hyperframes_assembler.js";
 import { writeIntake } from "./intake.js";
 import { planProduction } from "./creative_planner.js";
 import { produceAudio } from "./production_audio.js";
+import { renderProduction, verifyProduction } from "./production_render.js";
 
 export async function runProductionStage(command, target, flags = {}, adapters = {}) {
   if (command === "evidence") return collectEvidence(target, evidenceOptions(flags), adapters.evidence);
@@ -13,6 +14,8 @@ export async function runProductionStage(command, target, flags = {}, adapters =
   if (command === "direct-frames") return directFrames(target, frameOptions(flags), adapters.frames);
   if (command === "production-audio") return produceAudio(target, audioOptions(flags), adapters.audio);
   if (command === "assemble") return assembleWithProducedAudio(target, flags);
+  if (command === "production-verify") return verifyProduction(target, renderOptions(flags));
+  if (command === "production-render") return renderProduction(target, renderOptions(flags));
   if (command !== "produce") throw new Error(`Unknown production stage: ${command}`);
   return runProduction(target, flags, adapters);
 }
@@ -98,6 +101,21 @@ function audioOptions(flags) {
     musicModel: flags["music-model"],
     sfxDir: flags["sfx-dir"],
     words: flags.words
+  };
+}
+
+function renderOptions(flags) {
+  return {
+    approve: Boolean(flags.approve),
+    output: flags.output,
+    quality: flags.quality,
+    workers: flags.workers,
+    inspectSamples: numberOr(flags["inspect-samples"], 15),
+    snapshotFrames: numberOr(flags["snapshot-frames"], 12),
+    references: flags["reference-video"],
+    durationToleranceSeconds: flags["duration-tolerance"],
+    maximumHoldRatio: flags["maximum-hold-ratio"],
+    minimumBurstsPerMinute: flags["minimum-bursts-per-minute"]
   };
 }
 
