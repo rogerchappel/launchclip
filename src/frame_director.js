@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
-import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
+import { ensureTimelineRegistration, hasTimelineRegistration } from "./hyperframes_timeline.js";
 import { OpenAIResponsesClient } from "./openai_responses.js";
 import { FRAME_BUNDLE_SCHEMA, PRODUCTION_PATHS, isValidShotId, validateFrameBundle } from "./production_contracts.js";
 
@@ -182,15 +182,11 @@ export function validateHyperFramesRoot(html, shot, format) {
   if (Number(attr("data-width")) !== format.width) errors.push(`root data-width must be ${format.width}`);
   if (Number(attr("data-height")) !== format.height) errors.push(`root data-height must be ${format.height}`);
   if (!/#root\s*\{/i.test(template)) errors.push("sub-composition root must be styled by #root inside the template");
-  if (!new RegExp(`window\\.__timelines\\s*\\[\\s*["']${escapeRegExp(shot.id)}["']\\s*\\]`).test(template)) errors.push(`template must register window.__timelines[${shot.id}]`);
+  if (!hasTimelineRegistration(template, shot.id)) errors.push(`template must register window.__timelines[${shot.id}]`);
   const ids = [...template.matchAll(/\sid=["']([^"']+)["']/gi)].map((match) => match[1]);
   const invalidIds = ids.filter((id) => id !== "root" && !id.startsWith(`${shot.id}-`));
   if (invalidIds.length) errors.push(`non-root ids must be prefixed with ${shot.id}-: ${[...new Set(invalidIds)].join(", ")}`);
   return errors;
-}
-
-function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function writeFrameArtifacts(workspace, bundle) {

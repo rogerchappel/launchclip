@@ -65,6 +65,20 @@ test("canonicalizes model-authored GSAP timelines into the HyperFrames registry"
   assert.match(normalized, /window\.__timelines\["shot-1"\] = timeline/);
   assert.ok(normalized.indexOf('window.__timelines["shot-1"]') < normalized.indexOf("})();"));
   assert.equal(ensureTimelineRegistration(normalized, "shot-1"), normalized);
+
+  const aliased = '<html><body><template><div data-composition-id="shot-1"></div><script>const shot_id="shot-1";const timeline=gsap.timeline({paused:true});window.__timelines=window.__timelines||{};window.__timelines[shot_id]=timeline;</script></template></body></html>';
+  assert.equal(ensureTimelineRegistration(aliased, "shot-1"), aliased);
+  assert.equal((ensureTimelineRegistration(aliased, "shot-1").match(/<script>/g) ?? []).length, 1);
+
+  const legacyDuplicate = aliased.replace("</template>", '<script>window.__timelines = window.__timelines || {};\ntimeline.pause(0);\nwindow.__timelines["shot-1"] = timeline;</script>\n</template>');
+  const cleaned = ensureTimelineRegistration(legacyDuplicate, "shot-1");
+  assert.equal((cleaned.match(/<script>/g) ?? []).length, 1);
+  assert.doesNotMatch(cleaned, /timeline\.pause\(0\)/);
+
+  const topLevel = '<html><body><template><div data-composition-id="shot-1"></div><script>const timeline=gsap.timeline({paused:true});</script></template></body></html>';
+  const repairedTopLevel = ensureTimelineRegistration(topLevel, "shot-1");
+  assert.equal((repairedTopLevel.match(/<script>/g) ?? []).length, 1);
+  assert.ok(repairedTopLevel.indexOf('window.__timelines["shot-1"]') < repairedTopLevel.indexOf("</script>"));
 });
 
 test("translates model motion intent into discoverable HyperFrames assertions", () => {
