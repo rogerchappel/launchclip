@@ -148,6 +148,34 @@ test("recovers an interrupted HyperFrames assembly", async () => {
   assert.equal((await ProductionJobStore.open(workspace, { create: false })).get("hyperframes-assembly").status, "succeeded");
 });
 
+test("reconfigures assembly dependencies when a repaired plan replaces shot ids", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-assembly-replan-"));
+  const source = path.join(workspace, "screen.mp4");
+  await writeFile(source, "fake-media");
+  const context = fixture(source);
+  await writeFixture(workspace, context);
+  await assembleHyperFrames(workspace);
+
+  const replacement = structuredClone(context.bundles[0]);
+  replacement.shot_id = "shot-2";
+  replacement.html = replacement.html.replaceAll("shot-1", "shot-2");
+  replacement.motion.assertions[0].selector = "#shot-2-proof";
+  const revisedPlan = { ...context.plan, shots: [{ ...context.plan.shots[0], id: "shot-2" }] };
+  await writeFile(path.join(workspace, "production", "plan.json"), `${JSON.stringify(revisedPlan)}\n`);
+  await writeFile(path.join(workspace, "production", "frames", "shot-2.json"), `${JSON.stringify(replacement)}\n`);
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  await store.add({ id: "frame:shot-2", kind: "frame", depends_on: ["creative-plan"], input_hash: semanticHash(replacement) });
+  await store.markRunning("frame:shot-2");
+  await store.markSucceeded("frame:shot-2");
+  await store.markStaleFrom(["hyperframes-assembly"]);
+
+  const result = await assembleHyperFrames(workspace);
+  assert.equal(result.cached, false);
+  const reopened = await ProductionJobStore.open(workspace, { create: false });
+  assert.deepEqual(reopened.get("hyperframes-assembly").depends_on, ["frame:shot-2"]);
+  assert.deepEqual((JSON.parse(await readFile(result.manifest, "utf8"))).shots.map((shot) => shot.id), ["shot-2"]);
+});
+
 test("refuses remote or missing media requested by a delegated frame", () => {
   const { plan, bundles } = fixture("https://example.com/screen.mp4");
   assert.throws(() => renderRoot({ plan, bundles, assetMap: new Map() }), /unavailable local media/);

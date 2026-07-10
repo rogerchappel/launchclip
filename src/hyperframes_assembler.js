@@ -46,14 +46,20 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   } else if (existing && existing.input_hash !== inputHash) {
     await store.markStaleFrom([jobId]);
   }
-  const current = store.get(jobId);
-  if (!current) await store.add({ id: jobId, kind: "hyperframes-assembly", depends_on: dependencies, input_hash: inputHash });
-  else if (current.status === "failed" || current.status === "stale") await store.retry(jobId, { inputHash });
-  else if (current.status === "running" || current.status === "submitted") {
-    await store.markStaleFrom([jobId]);
-    await store.retry(jobId, { inputHash });
+  let current = store.get(jobId);
+  if (!current) {
+    await store.add({ id: jobId, kind: "hyperframes-assembly", depends_on: dependencies, input_hash: inputHash });
+  } else {
+    if (current.status === "running" || current.status === "submitted") {
+      await store.markStaleFrom([jobId]);
+      current = store.get(jobId);
+    }
+    const dependenciesChanged = current.depends_on.length !== dependencies.length || current.depends_on.some((dependency, index) => dependency !== dependencies[index]);
+    if (dependenciesChanged) await store.reconfigure(jobId, { depends_on: dependencies, input_hash: inputHash });
+    else if (current.status === "failed" || current.status === "stale") await store.retry(jobId, { inputHash });
+    else if (current.status === "pending" && current.input_hash !== inputHash) await store.reconfigure(jobId, { depends_on: dependencies, input_hash: inputHash });
+    else if (current.status !== "pending") throw new Error(`Assembly job is already ${current.status}`);
   }
-  else if (current.status !== "pending") throw new Error(`Assembly job is already ${current.status}`);
   await store.markRunning(jobId);
 
   try {
