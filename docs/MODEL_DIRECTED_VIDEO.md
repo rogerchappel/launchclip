@@ -95,11 +95,11 @@ launchclip creative-plan <workspace>
 launchclip production-audio <workspace>
 launchclip direct-frames <workspace> --concurrency 4
 launchclip assemble <workspace>
-launchclip production-verify <workspace>
+launchclip production-verify <workspace> --shot-inspect-concurrency 3
 launchclip production-draft <workspace> \
   --reference-video ./reference-short.mp4
 launchclip production-critique <workspace>
-launchclip production-repair <workspace>
+launchclip production-repair <workspace> --repair-semantic-attempts 2
 launchclip production-render <workspace> --approve \
   --reference-video ./reference-short.mp4
 ```
@@ -238,13 +238,19 @@ Run deterministic checks first:
 
 1. `hyperframes lint`
 2. `hyperframes validate`
-3. `hyperframes inspect`
-4. midpoint and boundary snapshots
+3. transition-aware root `hyperframes inspect`
+4. isolated native `hyperframes inspect` for every shot motion sidecar
+5. midpoint and boundary snapshots
 
 Then give GPT-5.6 the plan, diagnostics, and contact sheet. It returns a
 structured repair decision that identifies the smallest affected frame and the
 reason: factual, narrative, composition, typography, motion, asset, or timing.
-Only those frames are regenerated. Repeat within a bounded repair budget.
+Only those frames are regenerated. Fresh shot-local inspector errors and strict
+lint warnings also become shot-scoped repair findings, even when an older visual
+critique said to ship. Each repair revision hashes its prior bundle and current
+findings, so changed evidence gets a fresh bounded attempt budget without
+invalidating clean shots. A structurally invalid replacement receives its exact
+validation errors on the next semantic attempt instead of ending the pass.
 
 Final render remains human-gated.
 
