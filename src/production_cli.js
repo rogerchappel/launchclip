@@ -3,7 +3,7 @@ import path from "node:path";
 import { collectEvidence } from "./evidence.js";
 import { directFrames } from "./frame_director.js";
 import { assembleHyperFrames } from "./hyperframes_assembler.js";
-import { writeIntake } from "./intake.js";
+import { buildIntake, writeIntakeManifest } from "./intake.js";
 import { planProduction } from "./creative_planner.js";
 import { produceAudio } from "./production_audio.js";
 import { renderDraftProduction, renderProduction, verifyProduction } from "./production_render.js";
@@ -31,10 +31,14 @@ export async function runProductionStage(command, target, flags = {}, adapters =
 }
 
 export async function runProduction(source, flags = {}, adapters = {}) {
-  const intake = await (adapters.writeIntake ?? writeIntake)(source, flags);
-  const workspace = intake.workspace;
+  const normalized = await (adapters.buildIntake ?? buildIntake)(source, flags);
+  const workspace = path.resolve(normalized.workspace);
   const lease = adapters.withProductionLease ?? withProductionLease;
-  return lease(workspace, () => runProductionInWorkspace(workspace, flags, adapters));
+  return lease(workspace, async () => {
+    const intake = adapters.writeIntake ? await adapters.writeIntake(source, flags) : await writeIntakeManifest(normalized);
+    if (path.resolve(intake.workspace) !== workspace) throw new Error(`Intake workspace changed after lease acquisition: expected ${workspace}, got ${intake.workspace}`);
+    return runProductionInWorkspace(workspace, flags, adapters);
+  });
 }
 
 async function runProductionInWorkspace(workspace, flags, adapters) {

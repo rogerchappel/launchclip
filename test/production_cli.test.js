@@ -6,6 +6,7 @@ test("runs the delegated production DAG in dependency order and stops for approv
   const calls = [];
   const adapters = {
     withProductionLease: async (_workspace, operation) => { calls.push("lease"); return operation(); },
+    buildIntake: async () => { calls.push("normalize"); return { workspace: "/tmp/workspace" }; },
     writeIntake: async () => { calls.push("intake"); return { workspace: "/tmp/workspace" }; },
     collectEvidence: async () => { calls.push("evidence"); return { items: 3 }; },
     analyzeSourceMedia: async () => { calls.push("source-media"); return { analyses: 1 }; },
@@ -17,11 +18,11 @@ test("runs the delegated production DAG in dependency order and stops for approv
   };
   const result = await runProduction("owner/repo", { "no-audio": true, concurrency: "2" }, adapters);
   assert.equal(result.status, "awaiting-approval");
-  assert.deepEqual(calls.map((entry) => Array.isArray(entry) ? entry[0] : entry), ["intake", "lease", "evidence", "source-media", "plan", "audio", "frames", "assemble", "draft"]);
-  assert.equal(calls[5][1].noVoice, true);
-  assert.equal(calls[5][1].noMusic, true);
-  assert.equal(calls[5][1].noSfx, true);
-  assert.equal(calls[7][1].voiceover, "/tmp/voice.mp3");
+  assert.deepEqual(calls.map((entry) => Array.isArray(entry) ? entry[0] : entry), ["normalize", "lease", "intake", "evidence", "source-media", "plan", "audio", "frames", "assemble", "draft"]);
+  assert.equal(calls[6][1].noVoice, true);
+  assert.equal(calls[6][1].noMusic, true);
+  assert.equal(calls[6][1].noSfx, true);
+  assert.equal(calls[8][1].voiceover, "/tmp/voice.mp3");
   assert.match(result.next, /production-render/);
 });
 
@@ -30,6 +31,7 @@ test("runs bounded critic-directed repairs before asking for human approval", as
   let drafts = 0;
   const adapters = {
     withProductionLease: async (_workspace, operation) => operation(),
+    buildIntake: async () => ({ workspace: "/tmp/workspace" }),
     writeIntake: async () => ({ workspace: "/tmp/workspace" }),
     collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), planProduction: async () => ({}),
     produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
@@ -53,6 +55,7 @@ test("blocks assembly when measured narration timing requires a replan", async (
   let framesCalled = false;
   const adapters = {
     withProductionLease: async (_workspace, operation) => operation(),
+    buildIntake: async () => ({ workspace: "/tmp/workspace" }),
     writeIntake: async () => ({ workspace: "/tmp/workspace" }),
     collectEvidence: async () => ({}),
     analyzeSourceMedia: async () => ({}),
