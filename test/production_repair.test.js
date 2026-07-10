@@ -25,7 +25,9 @@ test("repairs only criticised frames, preserves the frame contract, and invalida
   assert.equal(store.get("frame:shot-1").status, "succeeded");
   assert.equal(store.get("frame:shot-2").status, "succeeded");
   assert.equal(store.get("frame:shot-2").attempt, 1);
-  assert.notEqual(store.get("frame:shot-2").input_hash, semanticHash({ id: "shot-2" }));
+  assert.equal(store.get("frame:shot-2").input_hash, semanticHash({ id: "shot-2" }));
+  assert.equal(store.get("repair:shot-2").status, "succeeded");
+  assert.equal((await store.verifyOutputs("frame:shot-2")).ok, true);
   assert.equal(store.get("hyperframes-assembly").status, "stale");
 });
 
@@ -46,9 +48,12 @@ test("repairs supported assembly findings while reporting unrelated audio blocke
 test("resumes a persisted background repair response without another submission", async () => {
   const workspace = await fixture();
   const store = await ProductionJobStore.open(workspace, { create: false });
-  await store.markStaleFrom(["frame:shot-2"]);
-  await store.retry("frame:shot-2");
-  await store.markRunning("frame:shot-2", { provider: "openai", response_id: "repair_saved", status: "in_progress" });
+  const plan = JSON.parse(await readFile(path.join(workspace, "production", "plan.json"), "utf8"));
+  const prior = JSON.parse(await readFile(path.join(workspace, "production", "frames", "shot-2.json"), "utf8"));
+  const critique = JSON.parse(await readFile(path.join(workspace, "production", "qa", "critique.json"), "utf8"));
+  const repairInputHash = semanticHash({ worker: "frame-repair.v3", model: "gpt-5.6", reasoning: "high", shot: plan.shots[1], findings: critique.findings, prior });
+  await store.add({ id: "repair:shot-2", kind: "frame-repair", depends_on: ["creative-plan"], input_hash: repairInputHash });
+  await store.markRunning("repair:shot-2", { provider: "openai", response_id: "repair_saved", status: "in_progress" });
   let resumed = 0;
   const client = {
     runStructured: async () => { throw new Error("must not submit a duplicate repair"); },

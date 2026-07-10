@@ -46,12 +46,6 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
   }
   if (!byShot.size) throw new Error(`Critique requires broader work before frame repair: ${unsupported.map((entry) => `${entry.id}:${entry.repair_scope}`).join(", ") || "no repairable shot IDs"}`);
   const store = adapters.store ?? await ProductionJobStore.open(workspace, { create: false });
-  const jobIds = [...byShot.keys()].map((shotId) => `frame:${shotId}`);
-  const resumableJobIds = new Set(jobIds.filter((jobId) => {
-    const job = store.get(jobId);
-    return (job?.status === "running" || job?.status === "submitted") && job.remote?.response_id;
-  }));
-  await store.markStaleFrom(jobIds.filter((jobId) => !resumableJobIds.has(jobId)));
   const client = adapters.client ?? new OpenAIResponsesClient();
   const images = await snapshotImages(path.join(qaDir, "snapshots"), Number(options.maxSnapshots ?? 8));
   const repaired = [];
@@ -67,8 +61,29 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
       findings,
       prior
     });
-    const jobId = `frame:${shotId}`;
-    const current = store.get(jobId);
+    const canonicalJobId = `frame:${shotId}`;
+    const canonical = store.get(canonicalJobId);
+    if (canonical?.status !== "succeeded") throw new Error(`Canonical frame job must succeed before repair: ${canonicalJobId}`);
+    const jobId = `repair:${shotId}`;
+    let current = store.get(jobId);
+    if (current && current.input_hash !== repairInputHash) {
+      if (current.status !== "stale") await store.markStaleFrom([jobId]);
+      current = store.get(jobId);
+    }
+    if (!current) {
+      await store.add({ id: jobId, kind: "frame-repair", depends_on: ["creative-plan"], input_hash: repairInputHash, max_attempts: Number(options.maxAttempts ?? 3) });
+      current = store.get(jobId);
+    }
+    if (current.status === "succeeded") {
+      const verification = await store.verifyOutputs(jobId);
+      if (verification.ok) {
+        await store.replaceSucceededOutputs(canonicalJobId, current.outputs);
+        repaired.push({ shot_id: shotId, findings: findings.map((entry) => entry.id), bundle: safeShotFile(path.join(workspace, PRODUCTION_PATHS.frames), shotId, ".json"), html: safeShotFile(path.join(workspace, PRODUCTION_PATHS.frames), shotId, ".html"), response_id: current.remote?.response_id ?? null, cached: true });
+        return;
+      }
+      await store.markStaleFrom([jobId]);
+      current = store.get(jobId);
+    }
     let resumeResponseId = null;
     if (current.status === "running" || current.status === "submitted") {
       if (!current.remote?.response_id) throw new Error(`Repair job is ${current.status} without a resumable response id: ${jobId}`);
@@ -128,12 +143,13 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
         const paths = await writeFrameArtifacts(workspace, candidate);
         await store.markRunning(jobId, { provider: "openai", response_id: result.response_id, status: result.status });
         const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
+        await store.replaceSucceededOutputs(canonicalJobId, outputs);
         await store.markSucceeded(jobId, outputs, result.usage);
-        repaired.push({ shot_id: shotId, findings: findings.map((entry) => entry.id), bundle: paths[0], html: paths[1], response_id: result.response_id });
+        repaired.push({ shot_id: shotId, findings: findings.map((entry) => entry.id), bundle: paths[0], html: paths[1], response_id: result.response_id, cached: false });
         break;
       }
     } catch (error) {
-      await store.markFailed(jobId, error);
+      if (["running", "submitted"].includes(store.get(jobId)?.status)) await store.markFailed(jobId, error);
       throw error;
     }
   });
