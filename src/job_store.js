@@ -177,6 +177,8 @@ export class ProductionJobStore {
 export async function withProductionLease(workspace, fn, options = {}) {
   const resolved = path.resolve(workspace);
   const lockPath = safeWorkspacePath(resolved, "production/.launchclip.lock");
+  const ttlMs = Number(options.ttlMs ?? 30 * 60 * 1000);
+  const token = randomUUID();
   await mkdir(path.dirname(lockPath), { recursive: true });
   let handle;
   try {
@@ -184,19 +186,28 @@ export async function withProductionLease(workspace, fn, options = {}) {
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
     const info = await stat(lockPath);
-    const ttlMs = Number(options.ttlMs ?? 30 * 60 * 1000);
     if (Date.now() - info.mtimeMs <= ttlMs) throw new Error(`Production workspace is already locked: ${resolved}`);
     await unlink(lockPath);
     handle = await open(lockPath, "wx", 0o600);
   }
-  await handle.writeFile(`${JSON.stringify({ pid: process.pid, acquired_at: new Date().toISOString() })}\n`);
+  await handle.writeFile(`${JSON.stringify({ pid: process.pid, token, acquired_at: new Date().toISOString() })}\n`);
+  let heartbeatError = null;
+  const heartbeatMs = Number(options.heartbeatMs ?? Math.max(5, Math.min(60_000, Math.floor(ttlMs / 3))));
+  const heartbeat = setInterval(() => {
+    const now = new Date();
+    handle.utimes(now, now).catch((error) => { heartbeatError ??= error; });
+  }, heartbeatMs);
+  heartbeat.unref?.();
   try {
-    return await fn();
+    const result = await fn();
+    if (heartbeatError) throw new Error(`Production workspace lease heartbeat failed: ${heartbeatError.message}`);
+    return result;
   } finally {
+    clearInterval(heartbeat);
     await handle.close();
-    await unlink(lockPath).catch((error) => {
-      if (error.code !== "ENOENT") throw error;
-    });
+    let owned = false;
+    try { owned = JSON.parse(await readFile(lockPath, "utf8")).token === token; } catch (error) { if (error.code !== "ENOENT") throw error; }
+    if (owned) await unlink(lockPath).catch((error) => { if (error.code !== "ENOENT") throw error; });
   }
 }
 

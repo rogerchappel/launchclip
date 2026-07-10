@@ -106,6 +106,14 @@ test("workspace lease rejects concurrent writers and releases cleanly", async ()
   assert.equal(value, "released");
 });
 
+test("workspace lease heartbeat prevents an active long run from being stolen after its TTL", async () => {
+  const workspace = await tempWorkspace();
+  await withProductionLease(workspace, async () => {
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    await assert.rejects(() => withProductionLease(workspace, async () => "stolen", { ttlMs: 20, heartbeatMs: 5 }), /already locked/);
+  }, { ttlMs: 20, heartbeatMs: 5 });
+});
+
 test("rejects dependency cycles and output paths outside the workspace", async () => {
   const workspace = await tempWorkspace();
   const storePath = path.join(workspace, "production", "jobs.json");
