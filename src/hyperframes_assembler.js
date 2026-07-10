@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { copyFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { safeShotFile } from "./frame_director.js";
+import { safeShotFile, validateHyperFramesRoot } from "./frame_director.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
 
@@ -22,7 +22,8 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
       resourceIds: intake.resources.map((entry) => entry.id),
       allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
     });
-    if (!validation.ok) throw new Error(`Cannot assemble invalid frame ${bundle.shot_id}: ${validation.errors.join("; ")}`);
+    const rootErrors = validateHyperFramesRoot(bundle.html, plan.shots[index], plan.format);
+    if (!validation.ok || rootErrors.length) throw new Error(`Cannot assemble invalid frame ${bundle.shot_id}: ${[...validation.errors, ...rootErrors].join("; ")}`);
   }
 
   const store = await ProductionJobStore.open(workspace, { create: false });

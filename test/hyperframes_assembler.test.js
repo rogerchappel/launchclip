@@ -69,6 +69,8 @@ test("freezes assets, rewrites frame paths, assembles a resumable HyperFrames pr
   assert.match(root, /src="assets\/screen\.mp4"/);
   assert.match(frame, /src="\.\.\/assets\/screen\.mp4"/);
   assert.match(frame, /default-src 'none'/);
+  assert.match(frame, /<template>[\s\S]*<style>[\s\S]*#root/);
+  assert.match(frame, /window\.__timelines\["shot-1"\]/);
   assert.doesNotMatch(frame, new RegExp(source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.deepEqual((JSON.parse(await readFile(first.manifest, "utf8"))).shots.map((entry) => entry.id), ["shot-1"]);
   const rootMotion = JSON.parse(await readFile(path.join(first.project, "index.motion.json"), "utf8"));
@@ -95,8 +97,8 @@ function fixture(source) {
   const plan = { schema_version: PRODUCTION_PLAN_VERSION, format: { aspect: "9:16", width: 1080, height: 1920, duration_seconds: 5, language: "en" }, shots: [shot] };
   const bundle = {
     schema_version: FRAME_BUNDLE_VERSION, shot_id: "shot-1",
-    html: `<!doctype html><html><body><div data-composition-id="shot-1" data-start="0" data-duration="5" data-width="1080" data-height="1920"><img src="${source}"></div></body></html>`,
-    motion: { assertions: [{ selector: "#proof", appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: false }] },
+    html: `<!doctype html><html><head></head><body><template><style>#root{position:absolute;inset:0}</style><div id="root" data-composition-id="shot-1" data-start="0" data-duration="5" data-width="1080" data-height="1920"><img id="shot-1-proof" src="${source}"></div><script>window.__timelines=window.__timelines||{};const timeline=gsap.timeline({paused:true});window.__timelines["shot-1"]=timeline;</script></template></body></html>`,
+    motion: { assertions: [{ selector: "#shot-1-proof", appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: false }] },
     root_media_requests: [{
       resource_id: "screen", kind: "video", start_seconds: 1, end_seconds: 4,
       source_start_seconds: 4, source_end_seconds: 7, volume: 0,
