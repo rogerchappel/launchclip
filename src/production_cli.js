@@ -23,6 +23,7 @@ export async function runProductionStage(command, target, flags = {}, adapters =
     if (command === "production-audio") return produceAudio(target, audioOptions(flags), adapters.audio);
     if (command === "assemble") return assembleWithProducedAudio(target, flags);
     if (command === "production-verify") return verifyProduction(target, renderOptions(flags));
+    if (command === "production-draft") return (adapters.renderDraftProduction ?? renderDraftProduction)(target, renderOptions(flags), adapters.render);
     if (command === "production-render") return renderProduction(target, renderOptions(flags));
     if (command === "production-critique") return critiqueProduction(target, criticOptions(flags));
     if (command === "production-repair") return (adapters.repairProduction ?? repairProduction)(target, repairOptions(flags), adapters.repair);

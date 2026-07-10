@@ -104,3 +104,15 @@ test("routes production repair with scoped model controls", async () => {
   assert.equal(received.options.maxSnapshots, 6);
   assert.equal(received.options.concurrency, 2);
 });
+
+test("routes an independently rerunnable analyzed draft stage", async () => {
+  let received;
+  const result = await runProductionStage("production-draft", "/tmp/workspace", { "draft-quality": "draft", "reference-video": "/tmp/reference.mp4" }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    renderDraftProduction: async (workspace, options) => { received = { workspace, options }; return { status: "ready", video: "/tmp/draft.mp4" }; }
+  });
+  assert.equal(result.status, "ready");
+  assert.equal(received.workspace, "/tmp/workspace");
+  assert.equal(received.options.draftQuality, "draft");
+  assert.equal(received.options.references, "/tmp/reference.mp4");
+});
