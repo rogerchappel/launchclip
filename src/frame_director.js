@@ -100,7 +100,8 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         background: options.background !== false,
         maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
         promptCacheKey: "launchclip:frame-director:v1",
-        metadata: { job_id: jobId, shot_id: shot.id, attempt }
+        metadata: { job_id: jobId, shot_id: shot.id, attempt },
+        onSubmitted: async (response) => store.markRunning(jobId, { provider: "openai", response_id: response.id, status: response.status })
       });
       const validation = validateFrameBundle(result.value, {
         shotId: shot.id,

@@ -34,6 +34,7 @@ test("delegates shots concurrently, repairs invalid HTML, and writes modular fra
       active -= 1;
       const bundle = frameBundle(input.shot.id, input.shot.duration_seconds);
       if (input.shot.id === "shot-1" && count === 1) bundle.html = bundle.html.replace('data-start="0"', 'data-start="1"');
+      await options.onSubmitted({ id: `resp_${input.shot.id}_${count}`, status: "in_progress" });
       return { response_id: `resp_${input.shot.id}_${count}`, model: "gpt-5.6-sol", status: "completed", value: bundle, usage: { total_tokens: 100 } };
     }
   };
