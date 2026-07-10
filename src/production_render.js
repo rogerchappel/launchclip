@@ -1,13 +1,18 @@
 import { execFile } from "node:child_process";
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { copyFile, lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { semanticHash } from "./job_store.js";
 import { isValidShotId, PRODUCTION_PATHS } from "./production_contracts.js";
 import { writeAudioReport } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
 import { critiqueProduction } from "./production_critic.js";
 
 const execFileAsync = promisify(execFile);
+const VERIFICATION_SCHEMA = "launchclip.production-verification.v2";
+const VERIFICATION_SUITE = "production-verify.v2";
 
 export class ProductionVerificationError extends Error {
   constructor(verification) {
@@ -26,6 +31,30 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
   const plan = JSON.parse(await readFile(path.join(workspace, PRODUCTION_PATHS.plan), "utf8"));
   const run = adapters.run ?? runCommand;
   await Promise.all([mkdir(qaDir, { recursive: true }), mkdir(snapshots, { recursive: true })]);
+  const toolchain = await resolveVerifierFingerprint(project, adapters);
+  const inputs = await buildVerificationInputs(workspace, project, options, toolchain);
+  const receiptPath = path.join(qaDir, "verification.json");
+  const cached = !options.forceVerification && toolchain
+    ? await readReusableVerification(workspace, receiptPath, inputs)
+    : null;
+  if (cached) return verificationResult({ workspace, project, qaDir, snapshots, receipt: cached, cached: true });
+  await Promise.all([
+    rm(path.join(qaDir, "shot-inspect"), { recursive: true, force: true }),
+    rm(snapshots, { recursive: true, force: true })
+  ]);
+  await mkdir(snapshots, { recursive: true });
+  await writeAtomic(receiptPath, `${JSON.stringify({
+    schema_version: VERIFICATION_SCHEMA,
+    status: "running",
+    created_at: new Date().toISOString(),
+    input_hash: inputs.input_hash,
+    inputs: inputs.value,
+    checks: {},
+    failed: [],
+    snapshots,
+    artifacts: [],
+    snapshot_artifacts: { directory: path.relative(workspace, snapshots).split(path.sep).join("/"), files: [] }
+  }, null, 2)}\n`);
 
   const checks = {};
   for (const [name, args] of [
@@ -52,28 +81,30 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
   checks.snapshot = await capture(run, "npx", ["hyperframes", "snapshot", "--frames", String(options.snapshotFrames ?? 12), "--output", snapshots, project], { cwd: project });
   await writeFile(path.join(qaDir, "snapshot.json"), `${JSON.stringify(checks.snapshot, null, 2)}\n`);
   const failed = Object.entries(checks).filter(([, result]) => !result.ok).map(([name]) => name);
+  const postInputs = await buildVerificationInputs(workspace, project, options, toolchain);
+  if (postInputs.input_hash !== inputs.input_hash) failed.push("inputs_changed_during_verification");
+  const artifacts = await collectVerificationArtifacts(workspace, qaDir, plan);
+  const snapshotArtifacts = await collectSnapshotArtifacts(workspace, snapshots);
   const summary = {
-    schema_version: "launchclip.production-verification.v1",
+    schema_version: VERIFICATION_SCHEMA,
+    status: failed.length ? "failed" : "passed",
+    created_at: new Date().toISOString(),
+    input_hash: inputs.input_hash,
+    inputs: inputs.value,
     project,
     plan: { duration_seconds: plan.format.duration_seconds, width: plan.format.width, height: plan.format.height },
     checks: Object.fromEntries(Object.entries(checks).map(([name, result]) => [name, { ok: result.ok, exit_code: result.exit_code, strict_warning_count: result.strict_warning_count ?? 0 }])),
     failed,
-    snapshots
+    snapshots,
+    cacheable: Boolean(toolchain && snapshotArtifacts.files.length),
+    artifacts,
+    snapshot_artifacts: snapshotArtifacts
   };
-  await writeFile(path.join(qaDir, "verification.json"), `${JSON.stringify(summary, null, 2)}\n`);
+  await writeAtomic(receiptPath, `${JSON.stringify(summary, null, 2)}\n`);
   if (failed.length) {
-    throw new ProductionVerificationError({
-      stage: "production-verify",
-      status: "failed",
-      workspace,
-      project,
-      qa: qaDir,
-      snapshots,
-      checks: summary.checks,
-      failed
-    });
+    throw new ProductionVerificationError(verificationResult({ workspace, project, qaDir, snapshots, receipt: summary, cached: false }));
   }
-  return { stage: "production-verify", status: "ready", workspace, project, qa: qaDir, snapshots, checks: summary.checks };
+  return verificationResult({ workspace, project, qaDir, snapshots, receipt: summary, cached: false });
 }
 
 export async function verifyShotCompositions(projectPath, qaDirPath, plan, options = {}) {
@@ -147,6 +178,7 @@ export async function renderDraftProduction(workspacePath, options = {}, adapter
 async function renderAnalyzedProduction(workspacePath, options, adapters, profile) {
   const workspace = path.resolve(workspacePath);
   const verification = await verifyProduction(workspace, options, adapters);
+  await assertVerificationFresh(workspace, verification, options);
   const project = verification.project;
   const qaDir = verification.qa;
   const renderDir = path.join(workspace, "production", "renders");
@@ -196,6 +228,189 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
     family: motion.family,
     critique
   };
+}
+
+export async function assertVerificationFresh(workspacePath, verification, options = {}) {
+  const workspace = path.resolve(workspacePath);
+  if (!verification?.inputs || !verification?.input_hash) throw staleVerificationError("Verification receipt is not content-addressed");
+  const current = await buildVerificationInputs(workspace, path.join(workspace, PRODUCTION_PATHS.hyperframes), options, verification.inputs.toolchain);
+  if (current.input_hash !== verification.input_hash) throw staleVerificationError("Plan or assembled project changed after verification");
+  return current.input_hash;
+}
+
+function verificationResult({ workspace, project, qaDir, snapshots, receipt, cached }) {
+  return {
+    stage: "production-verify",
+    status: receipt.status === "passed" ? "ready" : "failed",
+    workspace,
+    project,
+    qa: qaDir,
+    snapshots,
+    checks: receipt.checks,
+    failed: receipt.failed,
+    input_hash: receipt.input_hash,
+    inputs: receipt.inputs,
+    cached
+  };
+}
+
+async function buildVerificationInputs(workspace, project, options, toolchain) {
+  const value = {
+    suite_version: VERIFICATION_SUITE,
+    plan_sha256: await sha256File(path.join(workspace, PRODUCTION_PATHS.plan)),
+    project_tree_sha256: await sha256Tree(project),
+    options: {
+      strict_all: options.strictAll !== false,
+      validate_timeout_ms: Number(options.timeoutMs ?? 8000),
+      inspect_samples: Number(options.inspectSamples ?? 15),
+      snapshot_frames: Number(options.snapshotFrames ?? 12),
+      at_transitions: true
+    },
+    toolchain
+  };
+  return { value, input_hash: semanticHash(value) };
+}
+
+async function resolveVerifierFingerprint(project, adapters) {
+  if (adapters.verifierFingerprint) {
+    const value = typeof adapters.verifierFingerprint === "function"
+      ? await adapters.verifierFingerprint(project)
+      : adapters.verifierFingerprint;
+    return value || null;
+  }
+  if (adapters.run) return null;
+  try {
+    const info = parseOutput((await runCommand("npx", ["hyperframes", "info", "--json", project], { cwd: project })).stdout);
+    const browserResult = await runCommand("npx", ["hyperframes", "browser", "path"], { cwd: project });
+    const browserPath = String(browserResult.stdout ?? "").trim().split(/\r?\n/).filter(Boolean).at(-1);
+    if (!info?._meta?.version || !browserPath) return null;
+    const browserVersion = String((await runCommand(browserPath, ["--version"], { cwd: project })).stdout ?? "").trim();
+    if (!browserVersion) return null;
+    return {
+      hyperframes_cli: String(info._meta.version),
+      browser: browserVersion,
+      node: process.version,
+      platform: process.platform,
+      arch: process.arch
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function readReusableVerification(workspace, receiptPath, inputs) {
+  const receipt = await readOptionalJson(receiptPath);
+  if (!receipt || receipt.schema_version !== VERIFICATION_SCHEMA || receipt.status !== "passed" || receipt.cacheable !== true) return null;
+  if (receipt.input_hash !== inputs.input_hash || semanticHash(receipt.inputs) !== inputs.input_hash) return null;
+  if (!Array.isArray(receipt.failed) || receipt.failed.length || !receipt.checks || Object.values(receipt.checks).some((check) => check?.ok !== true)) return null;
+  if (!Array.isArray(receipt.artifacts) || receipt.artifacts.length < 4) return null;
+  if (!(await allReceiptFilesMatch(workspace, receipt.artifacts))) return null;
+  const snapshotReceipt = receipt.snapshot_artifacts;
+  if (!snapshotReceipt || !Array.isArray(snapshotReceipt.files) || !snapshotReceipt.files.length) return null;
+  const snapshotDirectory = safeReceiptPath(workspace, snapshotReceipt.directory);
+  if (!snapshotDirectory) return null;
+  let entries;
+  try { entries = await readdir(snapshotDirectory, { withFileTypes: true }); } catch { return null; }
+  const current = entries.filter((entry) => entry.isFile() && /\.(?:png|jpe?g|webp)$/i.test(entry.name)).map((entry) => entry.name).sort();
+  const expected = snapshotReceipt.files.map((entry) => path.basename(entry.path)).sort();
+  if (current.length !== expected.length || current.some((name, index) => name !== expected[index])) return null;
+  if (!(await allReceiptFilesMatch(workspace, snapshotReceipt.files))) return null;
+  return receipt;
+}
+
+async function collectVerificationArtifacts(workspace, qaDir, plan) {
+  const files = ["lint.json", "validate.json", "inspect.json", "snapshot.json"].map((name) => path.join(qaDir, name));
+  for (const shot of plan.shots ?? []) files.push(path.join(qaDir, "shot-inspect", shot.id, "inspect.json"));
+  return Promise.all(files.map((filePath) => describeReceiptFile(workspace, filePath)));
+}
+
+async function collectSnapshotArtifacts(workspace, directory) {
+  const entries = (await readdir(directory, { withFileTypes: true }))
+    .filter((entry) => entry.isFile() && /\.(?:png|jpe?g|webp)$/i.test(entry.name))
+    .map((entry) => entry.name)
+    .sort();
+  return {
+    directory: path.relative(workspace, directory).split(path.sep).join("/"),
+    files: await Promise.all(entries.map((name) => describeReceiptFile(workspace, path.join(directory, name))))
+  };
+}
+
+async function describeReceiptFile(workspace, filePath) {
+  const info = await stat(filePath);
+  if (!info.isFile()) throw new Error(`Verification artifact must be a file: ${filePath}`);
+  return {
+    path: path.relative(workspace, filePath).split(path.sep).join("/"),
+    sha256: await sha256File(filePath),
+    size_bytes: info.size
+  };
+}
+
+async function allReceiptFilesMatch(workspace, files) {
+  for (const expected of files) {
+    const filePath = safeReceiptPath(workspace, expected?.path);
+    if (!filePath) return false;
+    try {
+      const [info, linkInfo, workspaceReal, fileReal] = await Promise.all([stat(filePath), lstat(filePath), realpath(workspace), realpath(filePath)]);
+      if (!info.isFile() || linkInfo.isSymbolicLink() || !isWithin(workspaceReal, fileReal)) return false;
+      if (info.size !== Number(expected.size_bytes) || await sha256File(filePath) !== expected.sha256) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+function safeReceiptPath(workspace, relativePath) {
+  if (!relativePath || path.isAbsolute(relativePath)) return null;
+  const root = path.resolve(workspace);
+  const resolved = path.resolve(root, relativePath);
+  return isWithin(root, resolved) ? resolved : null;
+}
+
+function isWithin(root, target) {
+  const relative = path.relative(path.resolve(root), path.resolve(target));
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+async function sha256Tree(directory) {
+  const root = path.resolve(directory);
+  const files = [];
+  const visit = async (current) => {
+    const entries = await readdir(current, { withFileTypes: true });
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      const filePath = path.join(current, entry.name);
+      if (entry.isSymbolicLink()) throw new Error(`Verification input tree cannot contain symlinks: ${filePath}`);
+      if (entry.isDirectory()) await visit(filePath);
+      else if (entry.isFile()) {
+        const info = await stat(filePath);
+        files.push({ path: path.relative(root, filePath).split(path.sep).join("/"), size_bytes: info.size, sha256: await sha256File(filePath) });
+      } else throw new Error(`Unsupported verification input entry: ${filePath}`);
+    }
+  };
+  await visit(root);
+  return semanticHash(files);
+}
+
+function sha256File(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = createHash("sha256");
+    const stream = createReadStream(filePath);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("error", reject);
+    stream.on("end", () => resolve(hash.digest("hex")));
+  });
+}
+
+async function writeAtomic(filePath, content) {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  const temporary = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  await writeFile(temporary, content, { mode: 0o600 });
+  await rename(temporary, filePath);
+}
+
+function staleVerificationError(message) {
+  return Object.assign(new Error(message), { name: "StaleProductionVerificationError", code: "LAUNCHCLIP_STALE_PRODUCTION_VERIFICATION" });
 }
 
 async function readOptionalJson(filePath) {

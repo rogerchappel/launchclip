@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { ProductionVerificationError, renderDraftProduction, renderProduction, verifyProduction } from "../src/production_render.js";
+import { ProductionVerificationError, assertVerificationFresh, renderDraftProduction, renderProduction, verifyProduction } from "../src/production_render.js";
 
 test("runs lint, browser validation, transition-aware inspection, and assembled snapshots", async () => {
   const workspace = await fixture();
@@ -38,6 +38,58 @@ test("runs each model-authored shot motion sidecar through an isolated native in
   assert.match(await readFile(path.join(directory, "index.html"), "utf8"), /connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'/);
   assert.equal(await readFile(path.join(directory, "assets", "proof.png"), "utf8"), "proof-image");
   assert.equal(JSON.parse(await readFile(path.join(directory, "index.motion.json"), "utf8")).assertions[0].selector, "#proof");
+});
+
+test("reuses a content-addressed verification receipt with intact reports and snapshots", async () => {
+  const workspace = await fixture();
+  const commands = [];
+  const run = async (_command, args) => {
+    commands.push(args[1]);
+    if (args[1] === "snapshot") await writeFile(path.join(args[args.indexOf("--output") + 1], "frame-00.png"), "snapshot");
+    return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
+  };
+  const adapters = { run, verifierFingerprint: { hyperframes_cli: "test", browser: "test", node: "test", platform: "test", arch: "test" } };
+  const first = await verifyProduction(workspace, {}, adapters);
+  const second = await verifyProduction(workspace, {}, adapters);
+  assert.equal(first.cached, false);
+  assert.equal(second.cached, true);
+  assert.deepEqual(commands, ["lint", "validate", "inspect", "snapshot"]);
+  const receipt = JSON.parse(await readFile(path.join(workspace, "production", "qa", "verification.json"), "utf8"));
+  assert.equal(receipt.schema_version, "launchclip.production-verification.v2");
+  assert.equal(receipt.status, "passed");
+  assert.equal(receipt.cacheable, true);
+  assert.equal(receipt.snapshot_artifacts.files.length, 1);
+});
+
+test("invalidates verification reuse when project content or a receipt artifact changes", async () => {
+  const workspace = await fixture();
+  let commands = 0;
+  const run = async (_command, args) => {
+    commands += 1;
+    if (args[1] === "snapshot") await writeFile(path.join(args[args.indexOf("--output") + 1], "frame-00.png"), `snapshot-${commands}`);
+    return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
+  };
+  const adapters = { run, verifierFingerprint: { hyperframes_cli: "test", browser: "test", node: "test", platform: "test", arch: "test" } };
+  await verifyProduction(workspace, {}, adapters);
+  await writeFile(path.join(workspace, "production", "qa", "lint.json"), "tampered\n");
+  const afterTamper = await verifyProduction(workspace, {}, adapters);
+  assert.equal(afterTamper.cached, false);
+  assert.equal(commands, 8);
+  await writeFile(path.join(workspace, "production", "hyperframes", "index.html"), '<div data-composition-id="main" data-duration="10" data-width="1080" data-height="1920">changed</div>');
+  const afterProjectChange = await verifyProduction(workspace, {}, adapters);
+  assert.equal(afterProjectChange.cached, false);
+  assert.equal(commands, 12);
+});
+
+test("rejects a verification receipt when the assembled project changes before render", async () => {
+  const workspace = await fixture();
+  const run = async (_command, args) => {
+    if (args[1] === "snapshot") await writeFile(path.join(args[args.indexOf("--output") + 1], "frame-00.png"), "snapshot");
+    return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
+  };
+  const verification = await verifyProduction(workspace, {}, { run, verifierFingerprint: { hyperframes_cli: "test", browser: "test" } });
+  await writeFile(path.join(workspace, "production", "hyperframes", "index.html"), "changed after verification");
+  await assert.rejects(() => assertVerificationFresh(workspace, verification, {}), (error) => error.code === "LAUNCHCLIP_STALE_PRODUCTION_VERIFICATION");
 });
 
 test("blocks production when a shot-local motion assertion fails", async () => {
@@ -124,6 +176,27 @@ test("renders a temporally analyzed draft before approval", async () => {
   assert.equal(result.status, "ready");
   assert.match(result.video, /production\/renders\/draft\.mp4$/);
   assert.equal(renderArgs[renderArgs.indexOf("--quality") + 1], "draft");
+});
+
+test("reuses unchanged native QA while still encoding and analyzing each draft", async () => {
+  const workspace = await fixture();
+  const commands = [];
+  const adapters = {
+    verifierFingerprint: { hyperframes_cli: "test", browser: "test", node: "test", platform: "test", arch: "test" },
+    run: async (_command, args) => {
+      commands.push(args[1]);
+      if (args[1] === "snapshot") await writeFile(path.join(args[args.indexOf("--output") + 1], "frame-00.png"), "snapshot");
+      return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
+    },
+    writeMotionReport: async (_video, output) => { await writeFile(output, "{}\n"); return { quality: { ok: true }, family: "developing-card" }; },
+    critiqueProduction: async () => ({ verdict: "ship", status: "approved" })
+  };
+  const first = await renderDraftProduction(workspace, {}, adapters);
+  const second = await renderDraftProduction(workspace, {}, adapters);
+  assert.equal(first.verification.cached, false);
+  assert.equal(second.verification.cached, true);
+  assert.equal(commands.filter((name) => name === "lint").length, 1);
+  assert.equal(commands.filter((name) => name === "render").length, 2);
 });
 
 test("blocks final approval when rendered audio fails deterministic gates", async () => {
