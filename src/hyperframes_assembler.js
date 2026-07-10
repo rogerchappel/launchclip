@@ -61,7 +61,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
       let html = applyFrameCsp(ensureTimelineRegistration(bundle.html, bundle.shot_id));
       for (const resource of intake.resources) {
         const frozen = assetMap.get(resource.id);
-        if (frozen && resource.location) html = html.split(resource.location).join(`../assets/${frozen.file}`);
+        if (frozen && resource.location) html = html.split(resource.location).join(`assets/${frozen.file}`);
       }
       await writeAtomic(safeShotFile(compositionsDir, bundle.shot_id, ".html"), `${html.trim()}\n`);
       const shot = plan.shots.find((entry) => entry.id === bundle.shot_id);

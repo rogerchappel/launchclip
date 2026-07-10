@@ -87,7 +87,7 @@ test("freezes assets, rewrites frame paths, assembles a resumable HyperFrames pr
   const frame = await readFile(path.join(first.project, "compositions", "shot-1.html"), "utf8");
   assert.equal(first.cached, false);
   assert.match(root, /src="assets\/screen\.mp4"/);
-  assert.match(frame, /src="\.\.\/assets\/screen\.mp4"/);
+  assert.match(frame, /src="assets\/screen\.mp4"/);
   assert.match(frame, /default-src 'none'/);
   assert.match(frame, /<template>[\s\S]*<style>[\s\S]*#root/);
   assert.match(frame, /window\.__timelines\["shot-1"\]/);
