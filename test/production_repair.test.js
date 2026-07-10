@@ -96,6 +96,30 @@ test("ignores shot inspection reports older than the frame they describe", async
   assert.equal(result.deterministic_findings, 0);
 });
 
+test("feeds semantic validation errors back into a bounded repair retry", async () => {
+  const workspace = await fixture();
+  let calls = 0;
+  const client = { runStructured: async (request) => {
+    calls += 1;
+    if (calls === 1) {
+      assert.equal(request.metadata.attempt, 1);
+      return {
+        response_id: "invalid_repair", model: "gpt-5.6", status: "completed", usage: {},
+        value: { ...bundle("shot-2", "Invalid repair"), html: bundle("shot-2").html.replaceAll('id="root"', 'id="wrong-root"').replace("#root{", "#wrong-root{") }
+      };
+    }
+    const input = JSON.parse(request.input);
+    assert.equal(request.metadata.attempt, 2);
+    assert.match(input.validation_errors_to_repair.join(" "), /root id must be/);
+    assert.match(input.prior_bundle.html, /wrong-root/);
+    return { response_id: "valid_repair", model: "gpt-5.6", status: "completed", usage: {}, value: bundle("shot-2", "Valid retry") };
+  } };
+  const result = await repairProduction(workspace, { semanticAttempts: 2 }, { client });
+  assert.equal(result.status, "repaired");
+  assert.equal(calls, 2);
+  assert.match(await readFile(result.repaired[0].html, "utf8"), /Valid retry/);
+});
+
 function bundle(id, copy = "Proof") {
   return {
     schema_version: FRAME_BUNDLE_VERSION, shot_id: id,

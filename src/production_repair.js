@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { safeShotFile, validateHyperFramesRoot } from "./frame_director.js";
+import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
 import { describeJobOutput, ProductionJobStore } from "./job_store.js";
 import { OpenAIResponsesClient } from "./openai_responses.js";
 import { FRAME_BUNDLE_SCHEMA, PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
@@ -67,46 +68,60 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
       await store.markRunning(jobId, { provider: "openai", response_id: null, status: "repairing" });
     }
     try {
-      const request = {
-        model: options.model ?? "gpt-5.6",
-        reasoningEffort: options.reasoning ?? "high",
-        reasoningContext: "current_turn",
-        instructions: REPAIR_INSTRUCTIONS,
-        input: JSON.stringify({
-          global_design: plan.design,
-          format: plan.format,
+      let previousCandidate = null;
+      let validationErrors = [];
+      const semanticAttempts = Number(options.semanticAttempts ?? 2);
+      if (!Number.isInteger(semanticAttempts) || semanticAttempts <= 0) throw new Error("Repair semantic attempts must be a positive integer");
+      for (let attempt = 1; attempt <= semanticAttempts; attempt += 1) {
+        const request = {
+          model: options.model ?? "gpt-5.6",
+          reasoningEffort: options.reasoning ?? "high",
+          reasoningContext: "current_turn",
+          instructions: REPAIR_INSTRUCTIONS,
+          input: JSON.stringify({
+            global_design: plan.design,
+            format: plan.format,
+            shot,
+            findings,
+            prior_bundle: previousCandidate ?? prior,
+            validation_errors_to_repair: validationErrors,
+            available_resources: intake.resources.map((entry) => ({ id: entry.id, role: entry.role, type: entry.type, local_path: entry.is_remote ? null : entry.location })),
+            evidence_index: evidence.items.map((entry) => ({ id: entry.id, title: entry.title, provenance: entry.provenance }))
+          }),
+          images,
+          schema: FRAME_BUNDLE_SCHEMA,
+          schemaName: "launchclip_repaired_frame_bundle",
+          background: options.background !== false,
+          maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
+          promptCacheKey: "launchclip:frame-repair:v2",
+          metadata: { job_id: jobId, shot_id: shotId, repair_findings: findings.length, attempt },
+          onSubmitted: async (response) => store.markRunning(jobId, { provider: "openai", response_id: response.id, status: response.status })
+        };
+        const result = resumeResponseId ? await client.resumeStructured(resumeResponseId, request) : await client.runStructured(request);
+        resumeResponseId = null;
+        const candidate = { ...result.value, html: ensureTimelineRegistration(result.value.html, shotId) };
+        const validation = validateFrameBundle(candidate, {
+          shotId,
           shot,
-          findings,
-          prior_bundle: prior,
-          available_resources: intake.resources.map((entry) => ({ id: entry.id, role: entry.role, type: entry.type, local_path: entry.is_remote ? null : entry.location })),
-          evidence_index: evidence.items.map((entry) => ({ id: entry.id, title: entry.title, provenance: entry.provenance }))
-        }),
-        images,
-        schema: FRAME_BUNDLE_SCHEMA,
-        schemaName: "launchclip_repaired_frame_bundle",
-        background: options.background !== false,
-        maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
-        promptCacheKey: "launchclip:frame-repair:v1",
-        metadata: { job_id: jobId, shot_id: shotId, repair_findings: findings.length },
-        onSubmitted: async (response) => store.markRunning(jobId, { provider: "openai", response_id: response.id, status: response.status })
-      };
-      const result = resumeResponseId ? await client.resumeStructured(resumeResponseId, request) : await client.runStructured(request);
-      const validation = validateFrameBundle(result.value, {
-        shotId,
-        shot,
-        format: plan.format,
-        evidenceIds: evidence.items.map((entry) => entry.id),
-        resourceIds: intake.resources.map((entry) => entry.id),
-        resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
-        allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
-      });
-      const errors = [...validation.errors, ...validateHyperFramesRoot(result.value.html, shot, plan.format)];
-      if (errors.length) throw new Error(`Repaired frame ${shotId} failed validation: ${errors.join("; ")}`);
-      const paths = await writeFrameArtifacts(workspace, result.value);
-      await store.markRunning(jobId, { provider: "openai", response_id: result.response_id, status: result.status });
-      const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
-      await store.markSucceeded(jobId, outputs, result.usage);
-      repaired.push({ shot_id: shotId, findings: findings.map((entry) => entry.id), bundle: paths[0], html: paths[1], response_id: result.response_id });
+          format: plan.format,
+          evidenceIds: evidence.items.map((entry) => entry.id),
+          resourceIds: intake.resources.map((entry) => entry.id),
+          resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
+          allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
+        });
+        validationErrors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
+        if (validationErrors.length) {
+          previousCandidate = candidate;
+          if (attempt < semanticAttempts) continue;
+          throw new Error(`Repaired frame ${shotId} failed validation: ${validationErrors.join("; ")}`);
+        }
+        const paths = await writeFrameArtifacts(workspace, candidate);
+        await store.markRunning(jobId, { provider: "openai", response_id: result.response_id, status: result.status });
+        const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
+        await store.markSucceeded(jobId, outputs, result.usage);
+        repaired.push({ shot_id: shotId, findings: findings.map((entry) => entry.id), bundle: paths[0], html: paths[1], response_id: result.response_id });
+        break;
+      }
     } catch (error) {
       await store.markFailed(jobId, error);
       throw error;
