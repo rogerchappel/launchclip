@@ -6,7 +6,7 @@ import { assembleHyperFrames } from "./hyperframes_assembler.js";
 import { buildIntake, writeIntakeManifest } from "./intake.js";
 import { planProduction } from "./creative_planner.js";
 import { produceAudio } from "./production_audio.js";
-import { renderDraftProduction, renderProduction, verifyProduction } from "./production_render.js";
+import { assertVerificationFresh, renderDraftProduction, renderProduction, verifyProduction } from "./production_render.js";
 import { critiqueProduction } from "./production_critic.js";
 import { repairProduction } from "./production_repair.js";
 import { analyzeSourceMedia } from "./source_media_analysis.js";
@@ -26,10 +26,29 @@ export async function runProductionStage(command, target, flags = {}, adapters =
     if (command === "production-draft") return (adapters.renderDraftProduction ?? renderDraftProduction)(target, renderOptions(flags), adapters.render);
     if (command === "production-render") return renderProduction(target, renderOptions(flags));
     if (command === "production-critique") return critiqueProduction(target, criticOptions(flags));
-    if (command === "production-repair") return (adapters.repairProduction ?? repairProduction)(target, repairOptions(flags), adapters.repair);
+    if (command === "production-repair") return (adapters.repairProduction ?? repairProduction)(target, await standaloneRepairOptions(target, flags, adapters), adapters.repair);
     if (command === "source-media") return (adapters.analyzeSourceMedia ?? analyzeSourceMedia)(target, mediaAnalysisOptions(flags), adapters.mediaAnalysis);
     throw new Error(`Unknown production stage: ${command}`);
   });
+}
+
+async function standaloneRepairOptions(workspacePath, flags, adapters) {
+  const options = repairOptions(flags);
+  let verification;
+  try {
+    verification = JSON.parse(await readFile(path.join(path.resolve(workspacePath), "production", "qa", "verification.json"), "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return options;
+    throw error;
+  }
+  if (verification?.status !== "failed") return options;
+  try {
+    await (adapters.assertVerificationFresh ?? assertVerificationFresh)(workspacePath, verification, renderOptions(flags));
+  } catch (error) {
+    if (error?.code === "LAUNCHCLIP_STALE_PRODUCTION_VERIFICATION") return options;
+    throw error;
+  }
+  return { ...options, trigger: "verification", verification };
 }
 
 export async function runProduction(source, flags = {}, adapters = {}) {

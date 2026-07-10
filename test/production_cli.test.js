@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { runProduction, runProductionStage } from "../src/production_cli.js";
 
@@ -218,4 +221,22 @@ test("routes an independently rerunnable analyzed draft stage", async () => {
   assert.equal(received.options.draftQuality, "draft");
   assert.equal(received.options.references, "/tmp/reference.mp4");
   assert.equal(received.options.shotInspectConcurrency, 4);
+});
+
+test("infers fresh verification context for standalone production repair", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-standalone-repair-"));
+  const qa = path.join(workspace, "production", "qa");
+  await mkdir(qa, { recursive: true });
+  const verification = { schema_version: "launchclip.production-verification.v2", status: "failed", failed: ["inspect:shot-1"] };
+  await writeFile(path.join(qa, "verification.json"), `${JSON.stringify(verification)}\n`);
+  let received;
+  let freshnessChecked = false;
+  await runProductionStage("production-repair", workspace, {}, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    assertVerificationFresh: async (_workspace, value) => { freshnessChecked = true; assert.deepEqual(value.failed, ["inspect:shot-1"]); },
+    repairProduction: async (_workspace, options) => { received = options; return { status: "repaired" }; }
+  });
+  assert.equal(freshnessChecked, true);
+  assert.equal(received.trigger, "verification");
+  assert.deepEqual(received.verification.failed, ["inspect:shot-1"]);
 });
