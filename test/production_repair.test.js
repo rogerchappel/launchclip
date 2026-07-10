@@ -31,18 +31,31 @@ test("repairs only criticised frames, preserves the frame contract, and invalida
   assert.equal(store.get("hyperframes-assembly").status, "stale");
 });
 
-test("refuses frame-level repair when the critic requires script, audio, or plan changes", async () => {
+test("routes script and plan findings through a full constrained plan revision", async () => {
   const workspace = await fixture({ repairScope: "script" });
-  await assert.rejects(() => repairProduction(workspace, {}, { client: {} }), /broader work/);
+  let received;
+  const result = await repairProduction(workspace, {}, { repairProductionPlan: async (...args) => { received = args; return { status: "ready", plan: "/tmp/plan.json" }; } });
+  assert.equal(result.status, "replanned");
+  assert.equal(received[1][0].repair_scope, "script");
+  assert.deepEqual(result.actions, { plan_revised: true, audio: "regenerate", frames: "all", assemble: true });
 });
 
-test("repairs supported assembly findings while reporting unrelated audio blockers", async () => {
+test("routes audio findings through plan revision and media regeneration before frame repair", async () => {
   const workspace = await fixture({ includeAudio: true, repairScope: "assembly" });
-  const client = { runStructured: async () => ({ response_id: "r", model: "gpt-5.6", status: "completed", usage: {}, value: bundle("shot-2", "Assembly repaired") }) };
-  const result = await repairProduction(workspace, {}, { client });
-  assert.equal(result.status, "partially-repaired");
-  assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-2"]);
-  assert.deepEqual(result.blockers.map((entry) => entry.repair_scope), ["audio"]);
+  let findings;
+  const result = await repairProduction(workspace, {}, { repairProductionPlan: async (_workspace, entries) => { findings = entries; return { status: "ready" }; } });
+  assert.equal(result.status, "replanned");
+  assert.deepEqual(findings.map((entry) => entry.repair_scope), ["audio"]);
+  assert.equal(result.actions.audio, "regenerate");
+});
+
+test("routes a replan verdict through the full plan revision even for frame-scoped findings", async () => {
+  const workspace = await fixture({ verdict: "replan" });
+  let calls = 0;
+  const result = await repairProduction(workspace, {}, { repairProductionPlan: async () => { calls += 1; return { status: "ready" }; } });
+  assert.equal(result.status, "replanned");
+  assert.equal(calls, 1);
+  assert.equal(result.actions.frames, "all");
 });
 
 test("resumes a persisted background repair response without another submission", async () => {

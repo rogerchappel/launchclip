@@ -6,6 +6,7 @@ import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { OpenAIResponsesClient } from "./openai_responses.js";
 import { FRAME_BUNDLE_SCHEMA, PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
+import { repairProductionPlan } from "./production_plan_repair.js";
 
 const REPAIR_INSTRUCTIONS = `You are repairing one previously authored HyperFrames shot after independent review.
 
@@ -26,7 +27,6 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     readJson(path.join(workspace, PRODUCTION_PATHS.plan)),
     readOptionalJson(path.join(qaDir, "critique.json"), { verdict: "ship", findings: [] })
   ]);
-  if (critique.verdict === "replan") throw new Error("Critique requires broader work before frame repair: replan");
   const deterministicFindings = await collectDeterministicRepairFindings(workspace, plan);
   if (critique.verdict === "ship" && !deterministicFindings.length) {
     return { stage: "production-repair", status: "not-needed", repaired: [], deterministic_findings: 0 };
@@ -34,6 +34,32 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
   const findings = critique.verdict === "ship"
     ? deterministicFindings
     : [...critique.findings, ...deterministicFindings];
+  const broadScopes = new Set(["script", "plan", "audio"]);
+  const broadFindings = critique.verdict === "replan"
+    ? critique.findings
+    : findings.filter((finding) => broadScopes.has(finding.repair_scope));
+  if (broadFindings.length) {
+    const planRepair = await (adapters.repairProductionPlan ?? repairProductionPlan)(workspace, broadFindings, {
+      model: options.model,
+      reasoning: options.reasoning,
+      semanticAttempts: options.semanticAttempts,
+      maxAttempts: options.maxAttempts,
+      maxOutputTokens: options.maxOutputTokens,
+      background: options.background,
+      pro: options.pro
+    }, adapters.plan);
+    return {
+      stage: "production-repair",
+      status: "replanned",
+      repaired: [],
+      deterministic_findings: deterministicFindings.length,
+      plan: planRepair,
+      actions: { plan_revised: true, audio: "regenerate", frames: "all", assemble: true },
+      blockers: [],
+      next: "Regenerate audio and all frames from the revised plan, then assemble, verify, and render a new draft."
+    };
+  }
+  if (critique.verdict === "replan") throw new Error("Critique returned replan without an actionable finding");
   const repairableScopes = new Set(["frame", "frames", "assembly", "design"]);
   const repairable = findings.filter((finding) => repairableScopes.has(finding.repair_scope) && finding.shot_ids.length);
   const unsupported = findings.filter((finding) => !repairable.includes(finding));
