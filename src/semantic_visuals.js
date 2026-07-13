@@ -12,7 +12,11 @@ export function validateSemanticVisualPlan(plan) {
   for (const [index, shot] of shots.entries()) {
     const label = `shots[${index}]`;
     const visual = shot?.visual;
-    if (!visual) continue;
+    if (!visual) {
+      errors.push(`${label}.visual semantic contract is required`);
+      previous = shot;
+      continue;
+    }
     const duration = Number(shot.end_seconds) - Number(shot.start_seconds);
     const objects = Array.isArray(visual.objects) ? visual.objects : [];
     const events = Array.isArray(visual.events) ? visual.events : [];
