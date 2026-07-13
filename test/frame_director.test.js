@@ -49,6 +49,8 @@ test("delegates shots concurrently, repairs invalid HTML, and writes modular fra
   assert.equal(attempts.get("shot-1"), 2);
   assert.match(frameInstructions, /Motion assertions are executable test contracts/);
   assert.match(frameInstructions, /must_remain_live means/);
+  assert.match(frameInstructions, /Render the declared semantic representation/);
+  assert.match(frameInstructions, /Materialize every shot\.visual\.events entry/);
   assert.match(await readFile(result.frames[0].html, "utf8"), /data-composition-id="shot-1"/);
   assert.match(await readFile(result.frames[0].motion, "utf8"), /#shot-1-proof/);
   assert.match(await readFile(result.frames[1].html, "utf8"), /window\.__timelines\["shot-2"\] = timeline/);
@@ -179,7 +181,10 @@ function frameBundle(id, duration) {
     schema_version: FRAME_BUNDLE_VERSION,
     shot_id: id,
     html: `<!doctype html><html><head></head><body><template><style>#root{position:absolute;inset:0}</style><div id="root" data-composition-id="${id}" data-start="0" data-duration="${duration}" data-width="1080" data-height="1920"><div id="${id}-proof" class="clip" data-start="0" data-duration="${duration}">Proof</div></div><script>window.__timelines=window.__timelines||{};const timeline=gsap.timeline({paused:true});window.__timelines["${id}"]=timeline;</script></template></body></html>`,
-    motion: { assertions: [{ selector: `#${id}-proof`, appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: true }] },
+    motion: {
+      assertions: [{ selector: `#${id}-proof`, appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: true }],
+      events: [{ event_id: `${id}-reveal`, object_id: "proof-node", selector: `#${id}-proof`, at_seconds: 1, property: "opacity", visible_change: true }]
+    },
     root_media_requests: [{
       resource_id: "screen", kind: "video", start_seconds: 0, end_seconds: duration,
       source_start_seconds: 0, source_end_seconds: duration, volume: 0,
@@ -202,14 +207,28 @@ function fixture() {
   const shot = (id, start, end) => ({
     id, start_seconds: start, end_seconds: end, purpose: "Show proof", voiceover: "Proof.", on_screen_text: ["Proof"], evidence_ids: ["ev-1"], resource_ids: ["screen"],
     presenter: { mode: "voiceover", visible: false, placement: "offstage", size: "none", treatment: "none" },
-    visual: { description: "Proof develops", composition: "Asymmetric", typography: "Display", background: "Field", foreground: "Proof", motion: "Reveal then settle", internal_reveals: [{ at_seconds: 1, action: "reveal", easing_intent: "fast settle", emphasis: "proof" }] },
+    visual: {
+      description: "Proof develops", concept: "Proof connects to the result", world: "A moving evidence field", representation: "diagram",
+      composition: "Asymmetric", typography: "Display", background: "Field", foreground: "Proof", motion: "Reveal then settle",
+      objects: [
+        { id: "evidence-grid", kind: "decoration", meaning: "spatial field", layer: "background", asset_resource_id: null, lifecycle: "persist" },
+        { id: "proof-node", kind: "diagram-node", meaning: "grounded proof", layer: "midground", asset_resource_id: null, lifecycle: start ? "persist" : "enter" },
+        { id: "proof-label", kind: "text", meaning: "proof label", layer: "foreground", asset_resource_id: null, lifecycle: "enter" }
+      ],
+      events: [{ id: `${id}-reveal`, at_seconds: 1, target_ids: ["proof-node"], action: "reveal proof", motion_verb: "locks in", visible_change: "reveal", easing_intent: "fast settle", sfx_eligible: false }],
+      continuity: { sequence_id: "proof-sequence", handoff: end < 10 ? "continue" : "resolve", inherits_object_ids: start ? ["proof-node"] : [], hands_off_object_ids: end < 10 ? ["proof-node"] : [], camera_direction: "rightward", entry_velocity: start ? 320 : 0, exit_velocity: end < 10 ? 320 : 0, motion_blur_px: 12 },
+      internal_reveals: [{ at_seconds: 1, action: "reveal", easing_intent: "fast settle", emphasis: "proof" }]
+    },
     transition_out: "match", sfx: []
   });
   const plan = {
     schema_version: PRODUCTION_PLAN_VERSION,
     project: { title: "Test", thesis: "Proof", audience_promise: "Understand", angle: "Evidence", hook: "Look" },
     format: { aspect: "9:16", width: 1080, height: 1920, duration_seconds: 10, language: "en" },
-    design: { concept: "Evidence choreography", art_direction: "Original", palette_roles: [], typography: "Display", texture: "Subtle", composition_logic: "Proof first", motion_character: "Purposeful", density: "Measured" },
+    design: {
+      concept: "Evidence choreography", art_direction: "Original", palette_roles: [], typography: "Display", texture: "Subtle", composition_logic: "Proof first", motion_character: "Purposeful", density: "Measured",
+      style_dna: { family: "soft-grid-editorial", source: "auto", canvas: "light", colors: { background: "#F4F0E8", foreground: "#20231F", accent: "#E58B72", supporting: ["#A8D8C7"] }, typography: { display: "Newsreader", body: "Inter", metadata: "DM Mono" }, shape_language: "soft windows", background_system: "moving grid", diagram_language: "causal nodes", presenter_frame: "warm outline", motion_physics: { tempo: "measured", camera_behavior: "rightward", primary_ease: "power3.inOut", secondary_ease: "expo.out", motion_blur_px: 12 }, transition_vocabulary: ["velocity push"], forbidden_motifs: ["cyan on black"] }
+    },
     shots: [shot("shot-1", 0, 5), shot("shot-2", 5, 10)]
   };
   return { intake, evidence, plan };

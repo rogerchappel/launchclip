@@ -9,10 +9,11 @@ import { isValidShotId, PRODUCTION_PATHS } from "./production_contracts.js";
 import { writeAudioReport } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
 import { critiqueProduction } from "./production_critic.js";
+import { semanticVisualReport, validateSemanticVisualPlan } from "./semantic_visuals.js";
 
 const execFileAsync = promisify(execFile);
-const VERIFICATION_SCHEMA = "launchclip.production-verification.v2";
-const VERIFICATION_SUITE = "production-verify.v2";
+const VERIFICATION_SCHEMA = "launchclip.production-verification.v3";
+const VERIFICATION_SUITE = "production-verify.v3";
 
 export class ProductionVerificationError extends Error {
   constructor(verification) {
@@ -57,6 +58,27 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
   }, null, 2)}\n`);
 
   const checks = {};
+  checks.semantic = await verifySemanticArtifacts(project, plan);
+  await writeFile(path.join(qaDir, "semantic.json"), `${JSON.stringify(checks.semantic, null, 2)}\n`);
+  if (!checks.semantic.ok) {
+    const summary = {
+      schema_version: VERIFICATION_SCHEMA,
+      status: "failed",
+      created_at: new Date().toISOString(),
+      input_hash: inputs.input_hash,
+      inputs: inputs.value,
+      project,
+      plan: { duration_seconds: plan.format?.duration_seconds, width: plan.format?.width, height: plan.format?.height },
+      checks: { semantic: { ok: false, exit_code: 1, strict_warning_count: 0 } },
+      failed: ["semantic"],
+      snapshots,
+      cacheable: false,
+      artifacts: [await describeReceiptFile(workspace, path.join(qaDir, "semantic.json"))],
+      snapshot_artifacts: { directory: path.relative(workspace, snapshots).split(path.sep).join("/"), files: [] }
+    };
+    await writeAtomic(receiptPath, `${JSON.stringify(summary, null, 2)}\n`);
+    throw new ProductionVerificationError(verificationResult({ workspace, project, qaDir, snapshots, receipt: summary, cached: false }));
+  }
   for (const [name, args] of [
     ["lint", ["hyperframes", "lint", "--json", project]],
     ["validate", ["hyperframes", "validate", "--json", "--timeout", String(options.timeoutMs ?? 8000), project]],
@@ -138,6 +160,37 @@ export async function verifyShotCompositions(projectPath, qaDirPath, plan, optio
     return [`inspect:${shot.id}`, check];
   });
   return Object.fromEntries(results);
+}
+
+export async function verifySemanticArtifacts(projectPath, plan) {
+  const project = path.resolve(projectPath);
+  const errors = validateSemanticVisualPlan(plan);
+  const renderedEvents = [];
+  for (const shot of plan.shots ?? []) {
+    if (!shot.visual) continue;
+    const motionPath = path.join(project, "compositions", `${shot.id}.motion.json`);
+    let motion;
+    try { motion = JSON.parse(await readFile(motionPath, "utf8")); }
+    catch (error) {
+      errors.push(`shot ${shot.id} is missing its assembled motion event sidecar: ${error.code ?? error.message}`);
+      continue;
+    }
+    const actual = new Map((motion.events ?? []).map((event) => [event.event_id, event]));
+    for (const event of shot.visual.events ?? []) {
+      const rendered = actual.get(event.id);
+      if (!rendered) errors.push(`shot ${shot.id} did not render planned visual event ${event.id}`);
+      else if (!rendered.visible_change) errors.push(`shot ${shot.id} rendered event ${event.id} without a visible change`);
+      else renderedEvents.push(event.id);
+    }
+    for (const cue of shot.sfx ?? []) if (!actual.has(cue.event_id)) errors.push(`shot ${shot.id} SFX ${cue.cue} is orphaned from rendered event ${cue.event_id}`);
+  }
+  return {
+    ok: errors.length === 0,
+    exit_code: errors.length ? 1 : 0,
+    strict_warning_count: 0,
+    stdout: { ...semanticVisualReport(plan), rendered_events: renderedEvents, errors },
+    stderr: ""
+  };
 }
 
 function renderShotInspectionRoot(shot, format, duration) {
@@ -319,7 +372,7 @@ async function readReusableVerification(workspace, receiptPath, inputs) {
 }
 
 async function collectVerificationArtifacts(workspace, qaDir, plan) {
-  const files = ["lint.json", "validate.json", "inspect.json", "snapshot.json"].map((name) => path.join(qaDir, name));
+  const files = ["semantic.json", "lint.json", "validate.json", "inspect.json", "snapshot.json"].map((name) => path.join(qaDir, name));
   for (const shot of plan.shots ?? []) files.push(path.join(qaDir, "shot-inspect", shot.id, "inspect.json"));
   return Promise.all(files.map((filePath) => describeReceiptFile(workspace, filePath)));
 }

@@ -163,10 +163,15 @@ export class LocalSfxLibrary {
     const output = [];
     for (const shot of plan.shots ?? []) {
       for (const cue of shot.sfx ?? []) {
+        const event = (shot.visual?.events ?? []).find((candidate) => candidate.id === cue.event_id);
+        if (!cue.event_id || !event) throw new Error(`SFX cue in ${shot.id} must bind to a real visual event`);
+        if (!event.sfx_eligible) throw new Error(`SFX cue ${cue.event_id} is bound to an event that is not SFX-eligible`);
+        if (Math.abs(Number(cue.at_seconds) - Number(event.at_seconds)) > .05) throw new Error(`SFX cue ${cue.event_id} must align with its visual event within 0.05s`);
         const match = await this.resolve(cue.cue);
         output.push({
           ...match,
           shot_id: shot.id,
+          event_id: cue.event_id,
           at_seconds: shot.start_seconds + cue.at_seconds,
           volume: cue.volume,
           intent: cue.intent

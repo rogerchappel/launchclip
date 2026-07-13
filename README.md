@@ -59,10 +59,30 @@ launchclip produce "Product workflow" \
   --voiceover ./presenter-take.mp4 \
   --transcript ./presenter-take.txt \
   --presenter ./presenter-take.mp4 \
-  --resource ./screen-recordings \
+  --assets ./brand-assets \
+  --style soft-grid-editorial \
   --cta "Start a workspace" \
   --aspect 16:9
 ```
+
+`--assets` accepts a file or directory and is an intent-revealing alias for
+supporting resources. Directories are catalogued automatically from filenames
+and folder structure. An optional `assets.json` can override usage, entity
+hints, tags, priority, and licensing for individual relative paths; the media
+remains usable without a manifest.
+
+Styles are generative design systems rather than fixed scene templates.
+`--style auto` derives project-specific style DNA from the subject and assets;
+`--style <family>` supplies a creative family; `--style-file frame.md` applies a
+reusable video design specification; and `--style-reference` supplies visual
+direction. The generated plan freezes exact colors, type roles, shape and
+diagram language, presenter treatment, motion physics, transitions, and
+forbidden motifs while leaving composition driven by each narrated concept.
+
+Every planned shot carries semantic visual objects, continuity handoffs, and
+named visible events. SFX cues must bind to those events, and production
+verification stops before browser or render work if a planned event is missing
+from the assembled motion sidecar or a sound has no visible consequence.
 
 The command creates an editable assembled project, analyzed draft, independent
 critic report, and up to two bounded repair passes. Final rendering requires the

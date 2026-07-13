@@ -27,6 +27,11 @@ HyperFrames contract:
 - Presenter video follows one continuous production timeline even when its placement changes. Set presenter source_start_seconds to the shot's global start_seconds plus the request's shot-local start_seconds; never restart a presenter take at zero on a later shot.
 - Do not fetch, use timers, Date.now, Math.random, requestAnimationFrame, or browser storage.
 - Use only supplied local resource paths. If a requested visual asset is unavailable, design a native HTML/CSS/SVG treatment instead of inventing a path.
+- Treat global_design.style_dna as binding brand truth and shot.visual as binding semantic truth. Apply the exact palette, typography roles, shape language, background system, diagram language, presenter frame, motion physics, transition vocabulary, and forbidden motifs. Do not substitute a generic dark-blue UI.
+- Render the declared semantic representation. Diagrams need labeled nodes and connectors; comparisons need visibly opposed states; timelines need a spatial axis and progressing marks; processes need stages and direction; data needs a proportional visual form. A headline floating over decoration does not satisfy the visual concept.
+- Materialize every shot.visual.objects entry as a visible object or an approved root-media request. Give authored DOM objects data-visual-object-id equal to the planned object id while keeping the actual DOM id shot-prefixed.
+- Materialize every shot.visual.events entry in motion.events. Each event must point to the real selector that visibly changes at the planned time. SFX relies on this event contract, so do not report an event that has no perceptible animation.
+- Honor shot.visual.continuity and the neighbor handoff. Persistent object IDs retain their visual identity, transform events visibly evolve them, and camera velocity/direction/blur must make related shots feel like one moving canvas rather than separate slides.
 - When narration_timing is present, synchronize semantic reveals to its shot-local word timestamps instead of estimating speech timing.
 - Use transform and opacity for primary motion. Name selectors in motion assertions so inspection can verify the intended reveals.
 - Motion assertions are executable test contracts, not aspirational descriptions. Every selector must be exactly one existing shot-prefixed id, such as #shot-01-headline when shot_id is shot-01; never assert a selector that is absent from html.
@@ -68,7 +73,10 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, narration
     id: entry.id,
     purpose: entry.purpose,
     transition_out: entry.transition_out,
-    visual_description: entry.visual.description
+    visual_description: entry.visual.description,
+    representation: entry.visual.representation,
+    continuity: entry.visual.continuity,
+    objects: entry.visual.objects
   }));
   const evidenceById = new Map(evidence.items.map((entry) => [entry.id, entry]));
   const resourceById = new Map(intake.resources.map((entry) => [entry.id, entry]));
@@ -86,7 +94,7 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, narration
     shot: { ...shot, duration_seconds: shot.end_seconds - shot.start_seconds },
     neighbors,
     evidence: shot.evidence_ids.map((id) => evidenceById.get(id)).filter(Boolean).map((entry) => ({ id: entry.id, title: entry.title, content: entry.content, provenance: entry.provenance })),
-    resources: shot.resource_ids.map((id) => resourceById.get(id)).filter(Boolean).map((entry) => ({ id: entry.id, role: entry.role, type: entry.type, local_path: entry.is_remote ? null : entry.location, remote: entry.is_remote })),
+    resources: shot.resource_ids.map((id) => resourceById.get(id)).filter(Boolean).map((entry) => ({ id: entry.id, role: entry.role, type: entry.type, local_path: entry.is_remote ? null : entry.location, remote: entry.is_remote, catalog: entry.catalog ?? null })),
     narration_timing: narrationTiming ? { duration_seconds: narrationTiming.duration_seconds, words: timedWords } : null,
     frame_responsibility: "Own visual HTML and motion for this shot only. Request media; do not mount it.",
     prior_attempt: prior,
@@ -208,21 +216,29 @@ export function buildFallbackFrame({ intake, plan, shot }) {
   const visibleCopy = copy.length ? copy : [shot.purpose ?? "Continue"];
   const cardId = `${shot.id}-fallback-card`;
   const lineHtml = visibleCopy.map((line, index) => `<div id="${shot.id}-fallback-line-${index + 1}" class="fallback-line fallback-line-${index + 1}">${escapeHtml(line)}</div>`).join("\n        ");
-  const backdrop = presenter
-    ? "linear-gradient(180deg, rgba(7,12,18,.34) 0%, rgba(7,12,18,.08) 42%, rgba(7,12,18,.78) 100%)"
-    : "linear-gradient(145deg, #07121b 0%, #102536 55%, #081018 100%)";
+  const style = fallbackStyle(plan.design?.style_dna);
+  const semantic = fallbackSemanticObjects({ intake, shot });
+  const eventTweens = fallbackEventTweens(shot, semantic.selectors);
+  const backdrop = `radial-gradient(circle at 18% 12%, ${style.supporting} 0%, ${style.background} 46%, ${style.background} 100%)`;
   const html = `<!doctype html>
 <html><head></head><body><template>
   <style>
-    #root{position:relative;width:${Number(plan.format.width)}px;height:${Number(plan.format.height)}px;overflow:hidden;color:#f7f8fa;font-family:Arial,sans-serif}
+    #root{position:relative;width:${Number(plan.format.width)}px;height:${Number(plan.format.height)}px;overflow:hidden;color:${style.foreground};font-family:Arial,sans-serif}
     #${shot.id}-fallback-backdrop{position:absolute;inset:0;background:${backdrop}}
-    #${shot.id}-fallback-grid{position:absolute;inset:-10%;opacity:.22;background-image:linear-gradient(rgba(88,215,247,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(88,215,247,.12) 1px,transparent 1px);background-size:72px 72px}
-    #${shot.id}-fallback-rail{position:absolute;left:6%;top:7%;width:4px;height:86%;transform-origin:top;background:linear-gradient(180deg,#58d7f7,rgba(88,215,247,0));box-shadow:0 0 26px rgba(88,215,247,.62)}
-    #${shot.id}-fallback-index{position:absolute;right:7%;top:6%;font:700 20px/1 "Courier New",monospace;letter-spacing:.16em;color:rgba(247,248,250,.55)}
-    #${cardId}{position:absolute;left:9%;right:7%;${presenterLayout?.cardEdge ?? "top:24%;"}display:grid;gap:14px;perspective:1200px}
-    #${cardId} .fallback-line{padding:28px 30px;border:1px solid rgba(235,244,249,.2);border-left:8px solid #58d7f7;border-radius:18px;background:linear-gradient(135deg,rgba(8,14,21,.92),rgba(16,28,37,.78));box-shadow:0 22px 60px rgba(0,0,0,.28);font-size:${plan.format.height > plan.format.width ? 66 : 54}px;font-weight:800;line-height:1.02;letter-spacing:-.035em;text-wrap:balance}
-    #${cardId} .fallback-line-2{margin-left:5%;border-left-color:#a6ef67}
-    #${cardId} .fallback-line-3{margin-left:10%;border-left-color:#ffbd59;color:#ffcf7d}
+    #${shot.id}-fallback-grid{position:absolute;inset:-10%;opacity:.34;background-image:linear-gradient(${style.grid} 2px,transparent 2px),linear-gradient(90deg,${style.grid} 2px,transparent 2px);background-size:82px 82px}
+    #${shot.id}-fallback-rail{position:absolute;left:6%;top:7%;width:4px;height:86%;transform-origin:top;background:${style.accent}}
+    #${shot.id}-fallback-index{position:absolute;right:7%;top:6%;font:700 20px/1 "Courier New",monospace;letter-spacing:.16em;color:${style.muted}}
+    #${cardId}{position:absolute;left:9%;right:7%;top:7%;display:flex;gap:16px;align-items:flex-start;perspective:1200px}
+    #${cardId} .fallback-line{padding:12px 18px;border:2px solid ${style.foreground};border-radius:999px;background:${style.background};box-shadow:5px 5px 0 ${style.accent};font-size:${plan.format.height > plan.format.width ? 34 : 28}px;font-weight:800;line-height:1;letter-spacing:-.02em;text-wrap:balance}
+    #${cardId} .fallback-line-2,#${cardId} .fallback-line-3{color:${style.foreground};box-shadow:5px 5px 0 ${style.supporting}}
+    #${shot.id}-semantic-stage{position:absolute;left:9%;right:7%;top:22%;bottom:10%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:center;gap:28px;perspective:1200px}
+    #${shot.id}-semantic-stage .semantic-object{position:relative;min-height:170px;padding:28px;border:3px solid ${style.foreground};border-radius:${style.radius}px;background:${style.surface};box-shadow:10px 12px 0 ${style.shadow};display:flex;flex-direction:column;justify-content:space-between;overflow:hidden}
+    #${shot.id}-semantic-stage .semantic-object::after{content:"";position:absolute;width:90px;height:90px;border-radius:50%;right:-28px;bottom:-32px;background:${style.accent};opacity:.72}
+    #${shot.id}-semantic-stage .semantic-kind{font:700 17px/1 "Courier New",monospace;letter-spacing:.12em;text-transform:uppercase;color:${style.accent}}
+    #${shot.id}-semantic-stage .semantic-meaning{max-width:86%;font-size:${plan.format.height > plan.format.width ? 44 : 36}px;font-weight:800;line-height:1.02;letter-spacing:-.03em}
+    #${shot.id}-semantic-stage .semantic-object--connector{min-height:26px;grid-column:1/-1;padding:0;border:0;border-radius:0;background:${style.accent};box-shadow:none;transform-origin:left center}
+    #${shot.id}-semantic-stage .semantic-object--connector::after{display:none}
+    #${shot.id}-semantic-stage .semantic-asset{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:30px}
   </style>
   <div id="root" data-composition-id="${shot.id}" data-start="0" data-duration="${number(duration)}" data-width="${Number(plan.format.width)}" data-height="${Number(plan.format.height)}">
     <div id="${shot.id}-fallback-backdrop" class="clip" data-start="0" data-duration="${number(duration)}"></div>
@@ -232,6 +248,9 @@ export function buildFallbackFrame({ intake, plan, shot }) {
     <div id="${cardId}" class="clip" data-start="0" data-duration="${number(duration)}">
       ${lineHtml}
     </div>
+    <div id="${shot.id}-semantic-stage" class="clip" data-start="0" data-duration="${number(duration)}" data-semantic-representation="${escapeHtml(shot.visual?.representation ?? "hybrid")}">
+      ${semantic.html}
+    </div>
   </div>
   <script>
     window.__timelines=window.__timelines||{};
@@ -240,6 +259,7 @@ export function buildFallbackFrame({ intake, plan, shot }) {
     timeline.fromTo("#${shot.id}-fallback-rail",{opacity:0,scaleY:0},{opacity:1,scaleY:1,duration:.55,ease:"power3.out"},.05);
     timeline.fromTo("#${shot.id}-fallback-index",{opacity:0,x:24},{opacity:1,x:0,duration:.35,ease:"power2.out"},.12);
     timeline.fromTo("#${cardId} .fallback-line",{opacity:0,x:90,y:20,rotationY:-8},{opacity:1,x:0,y:0,rotationY:0,duration:.5,ease:"power3.out",stagger:.16},.16);
+    ${eventTweens.script}
     timeline.to("#${shot.id}-fallback-grid",{x:36,y:-22,duration:${number(Math.max(.8, duration - .7))},ease:"none"},.7);
     window.__timelines["${shot.id}"]=timeline;
   </script>
@@ -269,12 +289,78 @@ export function buildFallbackFrame({ intake, plan, shot }) {
     schema_version: FRAME_BUNDLE_VERSION,
     shot_id: shot.id,
     html,
-    motion: { assertions: [{ selector: `#${cardId}`, appears_by_seconds: .45, order: null, must_stay_in_frame: true, must_remain_live: false }] },
+    motion: {
+      assertions: [{ selector: `#${cardId}`, appears_by_seconds: .7, order: null, must_stay_in_frame: true, must_remain_live: false }, ...eventTweens.assertions],
+      events: eventTweens.events
+    },
     root_media_requests: rootMediaRequests,
     evidence_ids: [...(shot.evidence_ids ?? [])],
     visible_copy: visibleCopy,
     preserve: ["deterministic fallback", ...visibleCopy]
   };
+}
+
+function fallbackStyle(styleDna = {}) {
+  const colors = styleDna.colors ?? {};
+  const background = safeColor(colors.background, "#F4F0E8");
+  const foreground = safeColor(colors.foreground, "#20231F");
+  const accent = safeColor(colors.accent, "#E58B72");
+  const supporting = safeColor(colors.supporting?.[0], "#A8D8C7");
+  return { background, foreground, accent, supporting, surface: mixColor(background, "#FFFFFF"), grid: alphaColor(foreground, .14), muted: alphaColor(foreground, .58), shadow: alphaColor(foreground, .2), radius: /sharp|square|zero/i.test(styleDna.shape_language ?? "") ? 0 : 26 };
+}
+
+function fallbackSemanticObjects({ intake, shot }) {
+  const resources = new Map(intake.resources.map((resource) => [resource.id, resource]));
+  const objects = (shot.visual?.objects ?? []).filter((object) => object.kind !== "presenter").slice(0, 6);
+  const selected = objects.length ? objects : [{ id: "concept", kind: "diagram-node", meaning: shot.visual?.concept ?? shot.purpose ?? "Concept", asset_resource_id: null }];
+  const selectors = new Map();
+  const html = selected.map((object) => {
+    const id = `${shot.id}-object-${safeId(object.id)}`;
+    selectors.set(object.id, `#${id}`);
+    const resource = object.asset_resource_id ? resources.get(object.asset_resource_id) : null;
+    const asset = resource && resource.type === "image" && !resource.is_remote ? `<img class="semantic-asset" src="${escapeHtml(resource.location)}" alt="">` : "";
+    return `<div id="${id}" class="semantic-object semantic-object--${safeId(object.kind)}" data-visual-object-id="${escapeHtml(object.id)}">${asset}<span class="semantic-kind">${escapeHtml(object.kind)}</span><span class="semantic-meaning">${escapeHtml(object.meaning)}</span></div>`;
+  }).join("\n      ");
+  return { html, selectors };
+}
+
+function fallbackEventTweens(shot, selectors) {
+  const events = [];
+  const assertions = [];
+  const script = [];
+  const duration = Number(shot.end_seconds) - Number(shot.start_seconds);
+  for (const event of shot.visual?.events ?? []) {
+    const objectId = event.target_ids.find((candidate) => selectors.has(candidate));
+    const selector = selectors.get(objectId) ?? `#${shot.id}-semantic-stage`;
+    const at = Math.min(Math.max(0, Number(event.at_seconds)), Math.max(0, duration - .25));
+    const isConnector = event.visible_change === "connect";
+    const from = isConnector ? "{opacity:.15,scaleX:.08}" : event.visible_change === "move" ? "{opacity:1,x:-120,filter:\"blur(18px)\"}" : "{opacity:0,y:70,scale:.9,filter:\"blur(14px)\"}";
+    const to = isConnector ? `{opacity:1,scaleX:1,duration:.45,ease:"power3.out"}` : `{opacity:1,x:0,y:0,scale:1,filter:"blur(0px)",duration:.55,ease:"power3.out"}`;
+    script.push(`timeline.fromTo(${JSON.stringify(selector)},${from},${to},${number(at)});`);
+    assertions.push({ selector, appears_by_seconds: Math.min(duration, at + .6), order: null, must_stay_in_frame: true, must_remain_live: false });
+    events.push({ event_id: event.id, object_id: objectId ?? event.target_ids[0], selector, at_seconds: Number(event.at_seconds), property: "transform", visible_change: true });
+  }
+  return { script: script.join("\n    "), assertions, events };
+}
+
+function safeId(value) {
+  return String(value ?? "object").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "object";
+}
+
+function safeColor(value, fallback) {
+  const color = String(value ?? "").trim();
+  return /^#[0-9a-f]{3,8}$/i.test(color) ? color : fallback;
+}
+
+function alphaColor(value, alpha) {
+  const color = safeColor(value, "#20231F").slice(1);
+  const expanded = color.length === 3 ? [...color].map((entry) => `${entry}${entry}`).join("") : color.slice(0, 6);
+  const [r, g, b] = [0, 2, 4].map((index) => parseInt(expanded.slice(index, index + 2), 16));
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function mixColor(background, fallback) {
+  return /^#[0-9a-f]{6}$/i.test(background) ? `${background}F2` : fallback;
 }
 
 function fallbackPresenterLayout(format, shot, mode) {

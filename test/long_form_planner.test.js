@@ -175,7 +175,10 @@ function outline(source = "generated") {
     schema_version: "launchclip.production-outline.v1",
     project: { title: "Long proof", thesis: "Evidence directs the system", audience_promise: "Understand the whole chain", angle: "Causal deep dive", hook: "The repository becomes the director" },
     format: { aspect: "16:9", width: 1920, height: 1080, duration_seconds: 200, language: "en" },
-    design: { concept: "Evidence choreography", art_direction: "Subject-specific system diagrams", palette_roles: [{ name: "signal", role: "proof", color_hint: "accent" }], typography: "Editorial", texture: "Depth", composition_logic: "Proof earns space", motion_character: "Developing diagrams", density: "One turn every few seconds" },
+    design: {
+      concept: "Evidence choreography", art_direction: "Subject-specific system diagrams", palette_roles: [{ name: "signal", role: "proof", color_hint: "accent" }], typography: "Editorial", texture: "Depth", composition_logic: "Proof earns space", motion_character: "Developing diagrams", density: "One turn every few seconds",
+      style_dna: { family: "soft-grid-editorial", source: "auto", canvas: "light", colors: { background: "#F4F0E8", foreground: "#20231F", accent: "#E58B72", supporting: ["#A8D8C7"] }, typography: { display: "Newsreader", body: "Inter", metadata: "DM Mono" }, shape_language: "soft outlined nodes", background_system: "moving grid", diagram_language: "causal connectors", presenter_frame: "warm outline", motion_physics: { tempo: "measured", camera_behavior: "rightward", primary_ease: "power3.inOut", secondary_ease: "expo.out", motion_blur_px: 12 }, transition_vocabulary: ["velocity push"], forbidden_motifs: ["caption slideshow"] }
+    },
     narration: { source, target_wpm: 160, delivery: "clear and causal" },
     audio: { music_prompt: "evolving restrained score", music_strategy: "chapter-level development", sfx_strategy: "semantic proof cues" },
     rubric: [{ id: "rubric-1", criterion: "Every chapter advances", measurement: "Each boundary changes the viewer model", severity: "major" }],
@@ -188,7 +191,21 @@ function outline(source = "generated") {
 
 function chapterPlan(id, source = "generated") {
   const text = id === "chapter-1" ? "Evidence becomes the model." : "The model directs the finished motion. Try it";
-  const shot = (shotId, start, end) => ({ id: shotId, start_seconds: start, end_seconds: end, purpose: "Advance chapter", voiceover: text, on_screen_text: ["Proof", "Try it"], evidence_ids: ["ev-1"], resource_ids: ["screen"], presenter: { mode: "voiceover", visible: false, placement: "offstage", size: "none", treatment: "none" }, visual: { description: "Evidence diagram", composition: "Causal hierarchy", typography: "Editorial", background: "Quiet", foreground: "Proof", motion: "Develop and settle", internal_reveals: [{ at_seconds: 5, action: "connect", easing_intent: "accelerate then settle", emphasis: "proof" }] }, transition_out: "state continuation", sfx: [{ at_seconds: 5, cue: "tick", intent: "proof", volume: .3 }] });
+  const shot = (shotId, start, end) => ({
+    id: shotId, start_seconds: start, end_seconds: end, purpose: "Advance chapter", voiceover: text, on_screen_text: ["Proof", "Try it"], evidence_ids: ["ev-1"], resource_ids: ["screen"], presenter: { mode: "voiceover", visible: false, placement: "offstage", size: "none", treatment: "none" },
+    visual: {
+      description: "Evidence diagram", concept: "Evidence moves through a causal system", world: "A continuous proof map", representation: "diagram", composition: "Causal hierarchy", typography: "Editorial", background: "Quiet", foreground: "Proof", motion: "Develop and settle",
+      objects: [
+        { id: "proof-field", kind: "decoration", meaning: "shared field", layer: "background", asset_resource_id: null, lifecycle: "persist" },
+        { id: "proof-node", kind: "diagram-node", meaning: "evidence", layer: "midground", asset_resource_id: null, lifecycle: start ? "persist" : "enter" },
+        { id: "proof-label", kind: "text", meaning: "label", layer: "foreground", asset_resource_id: null, lifecycle: "enter" }
+      ],
+      events: [{ id: `${shotId}-connect`, at_seconds: 5, target_ids: ["proof-node"], action: "connect evidence", motion_verb: "locks in", visible_change: "connect", easing_intent: "accelerate then settle", sfx_eligible: true }],
+      continuity: { sequence_id: "chapter-proof", handoff: end < 100 ? "continue" : "resolve", inherits_object_ids: start ? ["proof-node"] : [], hands_off_object_ids: end < 100 ? ["proof-node"] : [], camera_direction: "rightward", entry_velocity: start ? 360 : 0, exit_velocity: end < 100 ? 360 : 0, motion_blur_px: 12 },
+      internal_reveals: [{ at_seconds: 5, action: "connect", easing_intent: "accelerate then settle", emphasis: "proof" }]
+    },
+    transition_out: "state continuation", sfx: [{ at_seconds: 5, cue: "tick", event_id: `${shotId}-connect`, intent: "proof", volume: .3 }]
+  });
   return {
     schema_version: PRODUCTION_PLAN_VERSION,
     project: outline(source).project,

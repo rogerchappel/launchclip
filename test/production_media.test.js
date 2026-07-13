@@ -63,10 +63,13 @@ test("resolves model-authored cues against the local SFX library and preserves t
   const directory = await mkdtemp(path.join(os.tmpdir(), "launchclip-sfx-"));
   await Promise.all(["tick.wav", "cinematic_boom.wav", "fast_whoosh.wav"].map((name) => writeFile(path.join(directory, name), name)));
   const library = new LocalSfxLibrary(directory);
-  const resolved = await library.resolvePlan({ shots: [{ id: "shot-1", start_seconds: 5, sfx: [{ at_seconds: 1.25, cue: "soft evidence click", intent: "mark proof", volume: .3 }] }] });
+  const visualEvent = { id: "shot-1-proof-lock", at_seconds: 1.25, sfx_eligible: true };
+  const resolved = await library.resolvePlan({ shots: [{ id: "shot-1", start_seconds: 5, visual: { events: [visualEvent] }, sfx: [{ at_seconds: 1.25, cue: "soft evidence click", event_id: visualEvent.id, intent: "mark proof", volume: .3 }] }] });
   assert.equal(resolved[0].id, "tick");
   assert.equal(resolved[0].at_seconds, 6.25);
+  assert.equal(resolved[0].event_id, "shot-1-proof-lock");
   assert.equal(resolved[0].intent, "mark proof");
+  await assert.rejects(() => library.resolvePlan({ shots: [{ id: "shot-1", start_seconds: 0, visual: { events: [] }, sfx: [{ at_seconds: 1, cue: "tick", event_id: "missing" }] }] }), /bind to a real visual event/);
   await assert.rejects(() => library.resolve("underwater dolphin chorus"), /No local SFX matches/);
 });
 

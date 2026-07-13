@@ -24,6 +24,8 @@ test("renders subcompositions while keeping timed media and SFX as direct root c
   assert.match(html, /<video[^>]+data-start="1"[^>]+data-duration="3"[^>]+data-media-start="4"/);
   assert.match(html, /<video[^>]+data-track-index="10"/);
   assert.match(html, /<video[^>]+ muted playsinline>/);
+  assert.match(html, /root-media-frame \{[^}]+border: 3px solid #20231F/);
+  assert.match(html, /root-media-window-bar \{[^}]+background: #F4F0E8F2/);
   assert.match(html, /left:100px;top:200px;width:800px;height:600px/);
   assert.equal((html.match(/<video/g) ?? []).length, 1);
   assert.match(html, /<audio id="sfx-001"[^>]+data-start="2\.25"[^>]+data-volume="0\.3"/);
@@ -95,8 +97,10 @@ test("translates model motion intent into discoverable HyperFrames assertions", 
   const bundle = { motion: { assertions: [
     { selector: "#headline", appears_by_seconds: .5, order: 1, must_stay_in_frame: true, must_remain_live: false },
     { selector: "#proof", appears_by_seconds: 1.5, order: 2, must_stay_in_frame: true, must_remain_live: true }
-  ] } };
+  ], events: [{ event_id: "shot-1-proof-lock", object_id: "proof-node", selector: "#proof", at_seconds: 1.5, property: "transform", visible_change: true }] } };
   const local = toHyperFramesMotionSpec(bundle, 4);
+  assert.equal(local.version, 2);
+  assert.equal(local.events[0].event_id, "shot-1-proof-lock");
   assert.ok(local.assertions.some((entry) => entry.kind === "appearsBy" && entry.bySec === .5));
   assert.ok(local.assertions.some((entry) => entry.kind === "before" && entry.a === "#headline" && entry.b === "#proof"));
   assert.ok(local.assertions.some((entry) => entry.kind === "keepsMoving" && entry.withinSelector === "#proof"));
@@ -175,7 +179,9 @@ test("reconfigures assembly dependencies when a repaired plan replaces shot ids"
   replacement.shot_id = "shot-2";
   replacement.html = replacement.html.replaceAll("shot-1", "shot-2");
   replacement.motion.assertions[0].selector = "#shot-2-proof";
-  const revisedPlan = { ...context.plan, shots: [{ ...context.plan.shots[0], id: "shot-2" }] };
+  replacement.motion.events[0].event_id = "shot-2-reveal";
+  replacement.motion.events[0].selector = "#shot-2-proof";
+  const revisedPlan = { ...context.plan, shots: [{ ...context.plan.shots[0], id: "shot-2", visual: { ...context.plan.shots[0].visual, events: [{ ...context.plan.shots[0].visual.events[0], id: "shot-2-reveal" }] } }] };
   await writeFile(path.join(workspace, "production", "plan.json"), `${JSON.stringify(revisedPlan)}\n`);
   await writeFile(path.join(workspace, "production", "frames", "shot-2.json"), `${JSON.stringify(replacement)}\n`);
   const store = await ProductionJobStore.open(workspace, { create: false });
@@ -204,12 +210,26 @@ function fixture(source) {
     resources: [{ id: "screen", role: "supporting", type: "video", location: source, is_remote: /^https:/.test(source), sha256: "screen-hash" }]
   };
   const evidence = { schema_version: EVIDENCE_VERSION, items: [{ id: "ev-1" }] };
-  const shot = { id: "shot-1", start_seconds: 0, end_seconds: 5, resource_ids: ["screen"] };
-  const plan = { schema_version: PRODUCTION_PLAN_VERSION, format: { aspect: "9:16", width: 1080, height: 1920, duration_seconds: 5, language: "en" }, shots: [shot] };
+  const shot = {
+    id: "shot-1", start_seconds: 0, end_seconds: 5, resource_ids: ["screen"],
+    visual: {
+      objects: [{ id: "proof-node", kind: "diagram-node" }],
+      events: [{ id: "shot-1-reveal", at_seconds: 1, target_ids: ["proof-node"], sfx_eligible: false }]
+    }
+  };
+  const plan = {
+    schema_version: PRODUCTION_PLAN_VERSION,
+    format: { aspect: "9:16", width: 1080, height: 1920, duration_seconds: 5, language: "en" },
+    design: { style_dna: { colors: { background: "#F4F0E8", foreground: "#20231F", accent: "#E58B72" }, shape_language: "soft rounded windows", presenter_frame: "warm outlined window" } },
+    shots: [shot]
+  };
   const bundle = {
     schema_version: FRAME_BUNDLE_VERSION, shot_id: "shot-1",
     html: `<!doctype html><html><head></head><body><template><style>#root{position:absolute;inset:0}</style><div id="root" data-composition-id="shot-1" data-start="0" data-duration="5" data-width="1080" data-height="1920"><img id="shot-1-proof" src="${source}"></div><script>window.__timelines=window.__timelines||{};const timeline=gsap.timeline({paused:true});window.__timelines["shot-1"]=timeline;</script></template></body></html>`,
-    motion: { assertions: [{ selector: "#shot-1-proof", appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: false }] },
+    motion: {
+      assertions: [{ selector: "#shot-1-proof", appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: false }],
+      events: [{ event_id: "shot-1-reveal", object_id: "proof-node", selector: "#shot-1-proof", at_seconds: 1, property: "opacity", visible_change: true }]
+    },
     root_media_requests: [{
       resource_id: "screen", kind: "video", start_seconds: 1, end_seconds: 4,
       source_start_seconds: 4, source_end_seconds: 7, volume: 0,

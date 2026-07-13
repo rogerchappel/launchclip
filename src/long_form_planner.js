@@ -161,9 +161,9 @@ export function stitchLongFormPlan(outline, chapterPlans, suppliedNarration = nu
     for (const shot of chapterPlan.shots) {
       const start = round(chapter.start_seconds + shot.start_seconds);
       const end = round(chapter.start_seconds + shot.end_seconds);
+      const stitched = stitchChapterShot(chapter.id, shot);
       shots.push({
-        ...shot,
-        id: stitchedShotId(chapter.id, shot.id),
+        ...stitched,
         start_seconds: start,
         end_seconds: end,
         voiceover: suppliedNarration?.words?.length ? wordsInInterval(suppliedNarration.words, start, end) : shot.voiceover
@@ -317,6 +317,32 @@ function stitchedShotId(chapterId, shotId) {
     .slice(0, maxPrefix)
     .replace(/-+$/, "") || "shot";
   return `${prefix}-${suffix}`;
+}
+
+function stitchChapterShot(chapterId, shot) {
+  const id = stitchedShotId(chapterId, shot.id);
+  const objectIds = new Map((shot.visual?.objects ?? []).map((object) => [object.id, stitchedShotId(chapterId, object.id)]));
+  const eventIds = new Map((shot.visual?.events ?? []).map((event) => {
+    const suffix = String(event.id).startsWith(`${shot.id}-`) ? String(event.id).slice(String(shot.id).length + 1) : event.id;
+    return [event.id, stitchedShotId(id, suffix)];
+  }));
+  const visual = shot.visual ? {
+    ...shot.visual,
+    objects: shot.visual.objects.map((object) => ({ ...object, id: objectIds.get(object.id) })),
+    events: shot.visual.events.map((event) => ({ ...event, id: eventIds.get(event.id), target_ids: event.target_ids.map((objectId) => objectIds.get(objectId) ?? objectId) })),
+    continuity: {
+      ...shot.visual.continuity,
+      sequence_id: stitchedShotId(chapterId, shot.visual.continuity.sequence_id),
+      inherits_object_ids: shot.visual.continuity.inherits_object_ids.map((objectId) => objectIds.get(objectId) ?? stitchedShotId(chapterId, objectId)),
+      hands_off_object_ids: shot.visual.continuity.hands_off_object_ids.map((objectId) => objectIds.get(objectId) ?? stitchedShotId(chapterId, objectId))
+    }
+  } : shot.visual;
+  return {
+    ...shot,
+    id,
+    visual,
+    sfx: (shot.sfx ?? []).map((cue) => ({ ...cue, event_id: eventIds.get(cue.event_id) ?? cue.event_id }))
+  };
 }
 
 async function runPool(tasks, concurrency) {
