@@ -4,6 +4,7 @@ import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/
 import path from "node:path";
 import { readFrameSelection, safeShotFile, validateHyperFramesRoot } from "./frame_director.js";
 import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
+import { ensureTextContainment } from "./hyperframes_text.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
 
@@ -41,7 +42,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   const dependencies = plan.shots.map((shot) => `frame:${shot.id}`);
   for (const dependency of dependencies) if (store.get(dependency)?.status !== "succeeded") throw new Error(`Frame job must succeed before assembly: ${dependency}`);
   const extraAudio = await describeExtraAudio(options);
-  const inputHash = semanticHash({ intake, plan, bundles, fallbacks, extraAudio, assembler: "hyperframes-assembler.v11" });
+  const inputHash = semanticHash({ intake, plan, bundles, fallbacks, extraAudio, assembler: "hyperframes-assembler.v14" });
   const jobId = "hyperframes-assembly";
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
@@ -80,7 +81,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
     for (const audio of extraAudio) assetMap.set(audio.id, await freezeFile(audio.id, audio.path, assetsDir));
 
     for (const bundle of bundles) {
-      let html = applyFrameCsp(ensureTimelineRegistration(bundle.html, bundle.shot_id));
+      let html = applyFrameCsp(ensureTextContainment(ensureTimelineRegistration(bundle.html, bundle.shot_id), bundle.shot_id));
       for (const resource of intake.resources) {
         const frozen = assetMap.get(resource.id);
         if (frozen && resource.location) html = html.split(resource.location).join(`assets/${frozen.file}`);

@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { writeFrameArtifacts } from "../src/frame_director.js";
 import { applyFrameCsp, assembleHyperFrames, buildShotTransitions, ensureTimelineRegistration, renderRoot, rootMotionSpec, toHyperFramesMotionSpec } from "../src/hyperframes_assembler.js";
+import { ensureTextContainment } from "../src/hyperframes_text.js";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { EVIDENCE_VERSION, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
@@ -87,6 +88,16 @@ test("applies a restrictive CSP to model-authored frame documents", () => {
   assert.match(html, /connect-src 'none'/);
   assert.doesNotMatch(html, /default-src \*|default-src https:/);
   assert.equal((applyFrameCsp(html).match(/Content-Security-Policy/g) ?? []).length, 1);
+});
+
+test("injects deterministic text containment into subcompositions", () => {
+  const source = '<html><body><template><div id="root" data-composition-id="shot-1"><div class="label">A LONG LABEL</div></div><script>window.__timelines={};</script></template></body></html>';
+  const contained = ensureTextContainment(source, "shot-1");
+  assert.match(contained, /data-launchclip-text-containment="v1"/);
+  assert.match(contained, /dataset\.launchclipFitText/);
+  assert.match(contained, /dataset\.launchclipTextUnresolved/);
+  assert.ok(contained.indexOf('data-launchclip-text-containment="v1"') < contained.indexOf("</template>"));
+  assert.equal(ensureTextContainment(contained, "shot-1"), contained);
 });
 
 test("canonicalizes model-authored GSAP timelines into the HyperFrames registry", () => {
