@@ -45,6 +45,7 @@ test("runs the delegated production DAG in dependency order and stops for approv
     prepareSourceMedia: async () => { calls.push("source-preprocess"); return { status: "ready" }; },
     collectEvidence: async () => { calls.push("evidence"); return { items: 3 }; },
     analyzeSourceMedia: async () => { calls.push("source-media"); return { analyses: 1 }; },
+    resolveProductionEntities: async () => { calls.push("entities"); return { matches: 2 }; },
     planProduction: async () => { calls.push("plan"); return { shots: 2 }; },
     produceAudio: async (_workspace, options) => { calls.push(["audio", options]); return { status: "ready", voiceover: "/tmp/voice.mp3", music: "/tmp/music.mp3", sfx: "/tmp/sfx.json", warnings: [] }; },
     directFrames: async () => { calls.push("frames"); return { generated: 2, cached: 0 }; },
@@ -53,11 +54,11 @@ test("runs the delegated production DAG in dependency order and stops for approv
   };
   const result = await runProduction("owner/repo", { "no-audio": true, concurrency: "2" }, adapters);
   assert.equal(result.status, "awaiting-approval");
-  assert.deepEqual(calls.map((entry) => Array.isArray(entry) ? entry[0] : entry), ["normalize", "lease", "intake", "source-preprocess", "evidence", "source-media", "plan", "audio", "frames", "assemble", "draft"]);
-  assert.equal(calls[7][1].noVoice, true);
-  assert.equal(calls[7][1].noMusic, true);
-  assert.equal(calls[7][1].noSfx, true);
-  assert.equal(calls[9][1].voiceover, "/tmp/voice.mp3");
+  assert.deepEqual(calls.map((entry) => Array.isArray(entry) ? entry[0] : entry), ["normalize", "lease", "intake", "source-preprocess", "evidence", "source-media", "entities", "plan", "audio", "frames", "assemble", "draft"]);
+  assert.equal(calls[8][1].noVoice, true);
+  assert.equal(calls[8][1].noMusic, true);
+  assert.equal(calls[8][1].noSfx, true);
+  assert.equal(calls[10][1].voiceover, "/tmp/voice.mp3");
   assert.match(result.next, /production-render/);
 });
 
@@ -69,7 +70,7 @@ test("runs bounded critic-directed repairs before asking for human approval", as
     buildIntake: async () => ({ workspace: "/tmp/workspace" }),
     writeIntake: async () => ({ workspace: "/tmp/workspace" }),
     prepareSourceMedia: async () => ({ status: "not-applicable" }),
-    collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), planProduction: async () => ({}),
+    collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), resolveProductionEntities: async () => ({}), planProduction: async () => ({}),
     produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
     directFrames: async () => ({ generated: 2, cached: 0 }),
     assembleHyperFrames: async () => { calls.push("assemble"); return { index: "/tmp/index.html" }; },
@@ -97,7 +98,7 @@ test("automatically repairs deterministic verification failures before rendering
     buildIntake: async () => ({ workspace: "/tmp/workspace" }),
     writeIntake: async () => ({ workspace: "/tmp/workspace" }),
     prepareSourceMedia: async () => ({ status: "not-applicable" }),
-    collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), planProduction: async () => ({}),
+    collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), resolveProductionEntities: async () => ({}), planProduction: async () => ({}),
     produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
     directFrames: async () => ({ generated: 2, cached: 0 }),
     assembleHyperFrames: async () => { calls.push("assemble"); return { index: "/tmp/index.html" }; },
@@ -129,7 +130,7 @@ test("stops infrastructure verification failures without fallback or paid repair
     buildIntake: async () => ({ workspace: "/tmp/workspace" }),
     writeIntake: async () => ({ workspace: "/tmp/workspace" }),
     prepareSourceMedia: async () => ({ status: "not-applicable" }),
-    collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), planProduction: async () => ({}),
+    collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), resolveProductionEntities: async () => ({}), planProduction: async () => ({}),
     produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
     directFrames: async () => ({ generated: 1, cached: 0 }),
     assembleHyperFrames: async () => { calls.push("assemble"); return {}; },
@@ -168,7 +169,7 @@ test("stops a persistent verification repair loop at the configured bound", asyn
   const adapters = {
     withProductionLease: async (_workspace, operation) => operation(),
     buildIntake: async () => ({ workspace: "/tmp/workspace" }), writeIntake: async () => ({ workspace: "/tmp/workspace" }), prepareSourceMedia: async () => ({ status: "not-applicable" }),
-    collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), planProduction: async () => ({}),
+    collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), resolveProductionEntities: async () => ({}), planProduction: async () => ({}),
     produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
     directFrames: async () => ({ generated: 1, cached: 0 }),
     assembleHyperFrames: async () => { calls.push("assemble"); return {}; },
@@ -193,7 +194,7 @@ test("executes the full audio, frame, assembly, and draft closure after a replan
   const adapters = {
     withProductionLease: async (_workspace, operation) => operation(),
     buildIntake: async () => ({ workspace: "/tmp/workspace" }), writeIntake: async () => ({ workspace: "/tmp/workspace" }), prepareSourceMedia: async () => ({ status: "not-applicable" }),
-    collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}),
+    collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), resolveProductionEntities: async () => ({}),
     planProduction: async () => { calls.push("plan"); return { revision: 0 }; },
     produceAudio: async () => { calls.push("audio"); return { status: "ready", voiceover: "/tmp/voice.mp3", music: "/tmp/music.mp3", sfx: "/tmp/sfx.json", warnings: [] }; },
     directFrames: async () => { calls.push("frames"); return { generated: 2, cached: 0 }; },
@@ -221,6 +222,7 @@ test("fast eval keeps full QA while lowering provider and sampling budgets", asy
     prepareSourceMedia: async () => ({ status: "not-applicable" }),
     collectEvidence: async () => ({}),
     analyzeSourceMedia: async (_workspace, options) => { received.media = options; return {}; },
+    resolveProductionEntities: async () => ({}),
     planProduction: async (_workspace, options) => { received.plan = options; return {}; },
     produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
     directFrames: async (_workspace, options) => { received.frames = options; return { generated: 1, cached: 0 }; },
@@ -279,6 +281,7 @@ test("blocks assembly when measured narration timing requires a replan", async (
     prepareSourceMedia: async () => ({ status: "not-applicable" }),
     collectEvidence: async () => ({}),
     analyzeSourceMedia: async () => ({}),
+    resolveProductionEntities: async () => ({}),
     planProduction: async () => ({}),
     produceAudio: async () => ({ status: "needs-retiming", warnings: ["Narration is four seconds long."] }),
     directFrames: async () => { framesCalled = true; }

@@ -12,6 +12,7 @@ import { repairProduction } from "./production_repair.js";
 import { analyzeSourceMedia } from "./source_media_analysis.js";
 import { prepareSourceMedia } from "./production_source_media.js";
 import { withProductionLease } from "./job_store.js";
+import { resolveProductionEntities } from "./entity_resolution.js";
 
 export async function runProductionStage(command, target, flags = {}, adapters = {}) {
   if (command === "produce") return runProduction(target, flags, adapters);
@@ -30,6 +31,7 @@ export async function runProductionStage(command, target, flags = {}, adapters =
     if (command === "production-repair") return (adapters.repairProduction ?? repairProduction)(target, await standaloneRepairOptions(target, flags, adapters), adapters.repair);
     if (command === "source-media") return (adapters.analyzeSourceMedia ?? analyzeSourceMedia)(target, mediaAnalysisOptions(flags), adapters.mediaAnalysis);
     if (command === "source-preprocess") return (adapters.prepareSourceMedia ?? prepareSourceMedia)(target, sourcePreprocessOptions(flags), adapters.sourcePreprocess);
+    if (command === "resolve-entities") return (adapters.resolveProductionEntities ?? resolveProductionEntities)(target, entityOptions(flags));
     throw new Error(`Unknown production stage: ${command}`);
   });
 }
@@ -81,6 +83,7 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
   const sourcePreprocess = await (adapters.prepareSourceMedia ?? prepareSourceMedia)(workspace, sourcePreprocessOptions(flags), adapters.sourcePreprocess);
   const evidence = await (adapters.collectEvidence ?? collectEvidence)(workspace, evidenceOptions(flags), adapters.evidence);
   const sourceMedia = await (adapters.analyzeSourceMedia ?? analyzeSourceMedia)(workspace, mediaAnalysisOptions(flags), adapters.mediaAnalysis);
+  const entityResolution = await (adapters.resolveProductionEntities ?? resolveProductionEntities)(workspace, entityOptions(flags));
   let plan = await (adapters.planProduction ?? planProduction)(workspace, plannerOptions(flags), adapters.planner);
   const noAudio = Boolean(flags["no-audio"]);
   const requestedAudioOptions = {
@@ -164,6 +167,7 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
     source_preprocess: sourcePreprocess,
     evidence,
     source_media: sourceMedia,
+    entity_resolution: entityResolution,
     plan,
     audio,
     frames: { generated: frames.generated, cached: frames.cached },
@@ -179,6 +183,10 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
         ? `Review ${verification.qa}; run production-repair after resolving any unscoped verification findings.`
         : `Review ${critique?.critique ?? "production/qa/critique.json"}; resolve remaining findings before final approval.`
   };
+}
+
+function entityOptions(flags) {
+  return { brandAssetsDir: flags["brand-assets-dir"] };
 }
 
 function sourcePreprocessOptions(flags) {
