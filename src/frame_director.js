@@ -216,7 +216,7 @@ export function buildFallbackFrame({ intake, plan, shot }) {
   <style>
     #root{position:relative;width:${Number(plan.format.width)}px;height:${Number(plan.format.height)}px;overflow:hidden;color:#f7f8fa;font-family:Arial,sans-serif}
     #${shot.id}-fallback-backdrop{position:absolute;inset:0;background:${backdrop}}
-    #${shot.id}-fallback-grid{position:absolute;inset:-10%;opacity:.22;background-image:linear-gradient(rgba(88,215,247,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(88,215,247,.12) 1px,transparent 1px);background-size:72px 72px;transform:rotate(-4deg)}
+    #${shot.id}-fallback-grid{position:absolute;inset:-10%;opacity:.22;background-image:linear-gradient(rgba(88,215,247,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(88,215,247,.12) 1px,transparent 1px);background-size:72px 72px}
     #${shot.id}-fallback-rail{position:absolute;left:6%;top:7%;width:4px;height:86%;transform-origin:top;background:linear-gradient(180deg,#58d7f7,rgba(88,215,247,0));box-shadow:0 0 26px rgba(88,215,247,.62)}
     #${shot.id}-fallback-index{position:absolute;right:7%;top:6%;font:700 20px/1 "Courier New",monospace;letter-spacing:.16em;color:rgba(247,248,250,.55)}
     #${cardId}{position:absolute;left:9%;right:7%;${presenterLayout?.cardEdge ?? "top:24%;"}display:grid;gap:14px;perspective:1200px}
@@ -236,7 +236,7 @@ export function buildFallbackFrame({ intake, plan, shot }) {
   <script>
     window.__timelines=window.__timelines||{};
     const timeline=gsap.timeline({paused:true});
-    timeline.fromTo("#${shot.id}-fallback-grid",{opacity:0,x:-40},{opacity:.22,x:0,duration:.7,ease:"power2.out"},0);
+    timeline.fromTo("#${shot.id}-fallback-grid",{opacity:0,x:-40,rotation:-4},{opacity:.22,x:0,rotation:-4,duration:.7,ease:"power2.out"},0);
     timeline.fromTo("#${shot.id}-fallback-rail",{opacity:0,scaleY:0},{opacity:1,scaleY:1,duration:.55,ease:"power3.out"},.05);
     timeline.fromTo("#${shot.id}-fallback-index",{opacity:0,x:24},{opacity:1,x:0,duration:.35,ease:"power2.out"},.12);
     timeline.fromTo("#${cardId} .fallback-line",{opacity:0,x:90,y:20,rotationY:-8},{opacity:1,x:0,y:0,rotationY:0,duration:.5,ease:"power3.out",stagger:.16},.16);
