@@ -75,6 +75,43 @@ test("runs GPT-5.6 planning, validates the plan, writes artifacts, and caches ve
   assert.equal(calls.length, 2, "changing model configuration invalidates the cached plan");
 });
 
+test("feeds a failed plan and exact validator errors into one bounded semantic repair", async () => {
+  const workspace = await tempWorkspace(sampleIntake());
+  const inputs = [];
+  const client = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    inputs.push(input);
+    const value = samplePlan();
+    if (inputs.length === 1) value.claims[0].evidence_ids = ["ref-1"];
+    return { response_id: `repair-${inputs.length}`, model: "gpt-5.6-sol", status: "completed", value, usage: { total_tokens: 100 * inputs.length } };
+  } };
+  const result = await planProduction(workspace, { semanticAttempts: 2 }, { client });
+  assert.equal(result.semantic_attempts, 2);
+  assert.equal(inputs.length, 2);
+  assert.equal(inputs[0].prior_attempt, undefined);
+  assert.equal(inputs[1].prior_attempt.claims[0].evidence_ids[0], "ref-1");
+  assert.match(inputs[1].validation_errors_to_repair.join(" "), /ineligible evidence id: ref-1/);
+  const attempts = path.join(workspace, "production", "plans", ".attempts");
+  assert.match(await readFile(path.join(attempts, "creative-plan-attempt-1.json"), "utf8"), /ineligible evidence id/);
+  assert.match(await readFile(path.join(attempts, "creative-plan-attempt-2.json"), "utf8"), /"errors": \[\]/);
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  assert.ok(store.get("creative-plan").outputs.some((entry) => entry.path.includes("plans/.attempts/creative-plan-attempt-1.json")));
+});
+
+test("stops semantic repair at the configured bound", async () => {
+  const workspace = await tempWorkspace(sampleIntake());
+  let calls = 0;
+  await assert.rejects(() => planProduction(workspace, { semanticAttempts: 2 }, { client: {
+    runStructured: async () => {
+      calls += 1;
+      const value = samplePlan();
+      value.claims[0].evidence_ids = ["ref-1"];
+      return { response_id: `invalid-${calls}`, model: "gpt-5.6-sol", status: "completed", value, usage: {} };
+    }
+  } }), /failed semantic validation after 2 attempts/);
+  assert.equal(calls, 2);
+});
+
 test("requires an authoritative transcript and preserves it exactly", async () => {
   const intake = sampleIntake();
   intake.policies.supplied_voiceover_is_authoritative = true;
