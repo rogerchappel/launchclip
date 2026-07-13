@@ -266,16 +266,18 @@ export async function fallbackFramesForVerification(workspacePath, verification)
   const shotIds = new Set((verification?.failed ?? [])
     .filter((entry) => String(entry).startsWith("inspect:"))
     .map((entry) => String(entry).slice("inspect:".length)));
-  const lintPath = path.join(verification?.qa ?? path.join(workspace, "production", "qa"), "lint.json");
-  try {
-    const lint = await readJson(lintPath);
-    for (const finding of lint?.stdout?.findings ?? []) {
-      if (finding.severity !== "error") continue;
-      const source = JSON.stringify(finding);
-      for (const shot of plan.shots) if (source.includes(shot.id)) shotIds.add(shot.id);
+  const qaDir = verification?.qa ?? path.join(workspace, "production", "qa");
+  for (const reportName of ["lint.json", "validate.json"]) {
+    try {
+      const report = await readJson(path.join(qaDir, reportName));
+      for (const finding of report?.stdout?.findings ?? []) {
+        if (finding.severity !== "error" && finding.level !== "error") continue;
+        const source = JSON.stringify(finding);
+        for (const shot of plan.shots) if (source.includes(shot.id)) shotIds.add(shot.id);
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
     }
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
   }
   const eligible = plan.shots.filter((shot) => shotIds.has(shot.id));
   if (!eligible.length) return { status: "not-applicable", repaired: [] };

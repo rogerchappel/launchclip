@@ -167,7 +167,7 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
     * { box-sizing: border-box; }
     html, body { margin: 0; width: ${plan.format.width}px; height: ${plan.format.height}px; overflow: hidden; background: #000; }
     #launchclip-root { position: relative; width: 100%; height: 100%; overflow: hidden; }
-    .shot-mount { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .shot-mount { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 100; }
     .root-media { position: absolute; display: block; overflow: hidden; }
   </style>
 </head>
