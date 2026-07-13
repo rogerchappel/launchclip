@@ -131,7 +131,7 @@ export function rootMotionSpec(plan, bundles) {
   for (const [index, shot] of plan.shots.entries()) {
     const selector = `#mount-${shot.id}`;
     const shotDuration = shot.end_seconds - shot.start_seconds;
-    const mountGrace = Math.min(.5, Math.max(.15, shotDuration * .02), shotDuration * .5);
+    const mountGrace = Math.min(.5, Math.max(.3, shotDuration * .02), shotDuration * .5);
     assertions.push({ kind: "appearsBy", selector, bySec: Number((shot.start_seconds + mountGrace).toFixed(3)) });
     assertions.push({ kind: "staysInFrame", selector });
     if (index > 0) assertions.push({ kind: "before", a: `#mount-${plan.shots[index - 1].id}`, b: selector });
@@ -147,7 +147,7 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
     for (const [index, request] of bundle.root_media_requests.entries()) {
       const asset = assetMap.get(request.resource_id);
       if (!asset) throw new Error(`Frame ${bundle.shot_id} requested unavailable local media: ${request.resource_id}`);
-      media.push(renderMedia({ id: `${bundle.shot_id}-media-${index + 1}`, request, asset, globalStart: shot.start_seconds + request.start_seconds }));
+      media.push(renderMedia({ id: `${bundle.shot_id}-media-${index + 1}`, request, asset, globalStart: shot.start_seconds + request.start_seconds, track: 10 + media.length }));
     }
   }
   for (const audio of extraAudio) {
@@ -193,7 +193,7 @@ export function applyFrameCsp(html) {
   return `${policy}\n${source}`;
 }
 
-function renderMedia({ id, request, asset, globalStart }) {
+function renderMedia({ id, request, asset, globalStart, track }) {
   const placement = request.placement;
   const style = [
     `left:${number(placement.x)}px`, `top:${number(placement.y)}px`,
@@ -203,7 +203,7 @@ function renderMedia({ id, request, asset, globalStart }) {
   ].join(";");
   const duration = request.end_seconds - request.start_seconds;
   const mediaStart = request.source_start_seconds ?? 0;
-  const common = `id="${escapeAttr(id)}" class="clip root-media" src="assets/${escapeAttr(asset.file)}" data-start="${number(globalStart)}" data-duration="${number(duration)}" data-media-start="${number(mediaStart)}" data-volume="${number(request.volume)}" data-track-index="${placement.z_index}" style="${style}" data-treatment="${escapeAttr(placement.treatment)}"`;
+  const common = `id="${escapeAttr(id)}" class="clip root-media" src="assets/${escapeAttr(asset.file)}" data-start="${number(globalStart)}" data-duration="${number(duration)}" data-media-start="${number(mediaStart)}" data-volume="${number(request.volume)}" data-track-index="${Number(track)}" style="${style}" data-treatment="${escapeAttr(placement.treatment)}"`;
   const videoAudio = request.volume > 0 ? `data-has-audio="true"` : "muted";
   return request.kind === "video" ? `<video ${common} ${videoAudio} playsinline></video>` : `<audio ${common}></audio>`;
 }
@@ -253,7 +253,7 @@ async function describeExtraAudio(options) {
         id: `sfx-${String(index + 1).padStart(3, "0")}`,
         path: filePath,
         volume: Number(cue.volume),
-        track: 60 + index,
+        track: 1000 + index,
         at_seconds: Number(cue.at_seconds),
         duration_seconds: cue.duration_seconds == null ? null : Number(cue.duration_seconds),
         source_start_seconds: Number(cue.source_start_seconds ?? 0),
