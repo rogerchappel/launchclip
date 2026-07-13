@@ -34,8 +34,8 @@ test("renders subcompositions while keeping timed media and SFX as direct root c
   assert.ok(html.indexOf("<video") > html.indexOf('data-composition-id="main"'));
   bundles[0].root_media_requests[0].volume = .65;
   const audible = renderRoot({ plan, bundles, assetMap: new Map([["screen", { file: "screen.mp4" }]]) });
-  assert.match(audible, /<video[^>]+data-volume="0\.65"[^>]+data-has-audio="true" playsinline>/);
-  assert.doesNotMatch(audible, /<video[^>]+ muted playsinline>/);
+  assert.match(audible, /<video[^>]+data-volume="0"[^>]+ muted playsinline>/);
+  assert.doesNotMatch(audible, /data-has-audio="true"/);
 });
 
 test("moves presenter video between beat-specific avatar layouts at the host root", () => {
@@ -45,7 +45,7 @@ test("moves presenter video between beat-specific avatar layouts at the host roo
     presentation: { mode: "companion", frame: "desktop-window", enter: "slide-up", exit: "slide-down", motion_blur_px: 16 },
     placement: { x, y, width, height, object_fit: "cover", border_radius: 28, z_index: 8, treatment: "avatar cutout" }
   });
-  const plan = { format: { language: "en", width: 1080, height: 1920, duration_seconds: 6 }, shots: [
+  const plan = { format: { language: "en", width: 1080, height: 1920, duration_seconds: 6 }, design: { style_dna: { colors: { background: "#F4F0E8" } } }, shots: [
     { id: "shot-1", start_seconds: 0, end_seconds: 3 },
     { id: "shot-2", start_seconds: 3, end_seconds: 6 }
   ] };
@@ -68,6 +68,9 @@ test("moves presenter video between beat-specific avatar layouts at the host roo
   assert.match(html, /data-composition-src="compositions\/shot-1\.html" data-start="0" data-duration="3\.26"/);
   assert.match(html, /timeline\.to\("#mount-shot-1"/);
   assert.match(html, /timeline\.fromTo\("#mount-shot-2"/);
+  assert.match(html, /"opacity":1,"x":-86,"y":0/);
+  assert.match(html, /"opacity":1,"x":86,"y":0/);
+  assert.match(html, /#launchclip-root \{[^}]+background: #F4F0E8/);
 });
 
 test("preserves explicit cuts and derives directional flow handoffs", () => {
@@ -93,11 +96,19 @@ test("applies a restrictive CSP to model-authored frame documents", () => {
 test("injects deterministic text containment into subcompositions", () => {
   const source = '<html><body><template><div id="root" data-composition-id="shot-1"><div class="label">A LONG LABEL</div></div><script>window.__timelines={};</script></template></body></html>';
   const contained = ensureTextContainment(source, "shot-1");
-  assert.match(contained, /data-launchclip-text-containment="v1"/);
+  assert.match(contained, /data-launchclip-text-containment="v2"/);
   assert.match(contained, /dataset\.launchclipFitText/);
   assert.match(contained, /dataset\.launchclipTextUnresolved/);
-  assert.ok(contained.indexOf('data-launchclip-text-containment="v1"') < contained.indexOf("</template>"));
+  assert.match(contained, /data-launchclip-max-lines/);
+  assert.match(contained, /data-launchclip-safe-padding/);
+  assert.match(contained, /text-collision/);
+  assert.match(contained, /console\.error\('\[LaunchClip text containment\]/);
+  assert.ok(contained.indexOf('data-launchclip-text-containment="v2"') < contained.indexOf("</template>"));
   assert.equal(ensureTextContainment(contained, "shot-1"), contained);
+
+  const upgraded = ensureTextContainment(contained.replaceAll('v2', 'v1'), "shot-1");
+  assert.equal((upgraded.match(/data-launchclip-text-containment=/g) ?? []).length, 1);
+  assert.match(upgraded, /data-launchclip-text-containment="v2"/);
 });
 
 test("canonicalizes model-authored GSAP timelines into the HyperFrames registry", () => {
