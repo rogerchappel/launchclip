@@ -22,6 +22,8 @@ HyperFrames contract:
 - Give every timeline-visible class="clip" element a stable, descriptive, shot-prefixed id for Studio editing and motion inspection.
 - Put a full-bleed background on a child layer rather than the composition root; root backgrounds can disappear during frame compositing. Use only declared @font-face families or renderer-safe generic families such as Arial, Georgia, or Courier New; do not name an unavailable platform font.
 - Do not include audio or video elements. Request those through root_media_requests; the assembler owns media playback.
+- Treat presenter media as a root visual object. For presenter.mode anchor or companion, request exactly one presenter video and include presentation.mode matching the shot, frame="desktop-window" unless the director explicitly requests no chrome, a seek-safe enter/exit preset, and motion_blur_px. For presenter.mode voiceover, request no presenter video; the authoritative audio continues independently.
+- Anchor means the presenter is the primary framed visual. Companion means a smaller framed presenter window shares the canvas with proof or motion graphics. Presenter placement is allowed to change between top, middle, and bottom across shots.
 - Presenter video follows one continuous production timeline even when its placement changes. Set presenter source_start_seconds to the shot's global start_seconds plus the request's shot-local start_seconds; never restart a presenter take at zero on a later shot.
 - Do not fetch, use timers, Date.now, Math.random, requestAnimationFrame, or browser storage.
 - Use only supplied local resource paths. If a requested visual asset is unavailable, design a native HTML/CSS/SVG treatment instead of inventing a path.
@@ -199,7 +201,9 @@ export function sanitizeFrameBundle(bundle) {
 
 export function buildFallbackFrame({ intake, plan, shot }) {
   const duration = Number(shot.end_seconds) - Number(shot.start_seconds);
-  const presenter = intake.resources.find((entry) => entry.role === "presenter" && entry.type === "video" && shot.resource_ids.includes(entry.id));
+  const presenterMode = ["anchor", "companion"].includes(shot.presenter?.mode) ? shot.presenter.mode : shot.presenter?.visible ? "companion" : "voiceover";
+  const presenter = presenterMode === "voiceover" ? null : intake.resources.find((entry) => entry.role === "presenter" && entry.type === "video" && shot.resource_ids.includes(entry.id));
+  const presenterLayout = presenter ? fallbackPresenterLayout(plan.format, shot, presenterMode) : null;
   const copy = (shot.on_screen_text ?? []).filter(Boolean).slice(0, 3);
   const visibleCopy = copy.length ? copy : [shot.purpose ?? "Continue"];
   const cardId = `${shot.id}-fallback-card`;
@@ -212,7 +216,7 @@ export function buildFallbackFrame({ intake, plan, shot }) {
   <style>
     #root{position:relative;width:${Number(plan.format.width)}px;height:${Number(plan.format.height)}px;overflow:hidden;color:#f7f8fa;font-family:Arial,sans-serif}
     #${shot.id}-fallback-backdrop{position:absolute;inset:0;background:${backdrop}}
-    #${cardId}{position:absolute;left:7%;right:7%;bottom:9%;padding:34px 36px 38px;border-left:8px solid #58d7f7;background:rgba(8,14,21,.72);box-shadow:0 24px 80px rgba(0,0,0,.34)}
+    #${cardId}{position:absolute;left:7%;right:7%;${presenterLayout?.cardEdge ?? "bottom:9%;"}padding:34px 36px 38px;border-left:8px solid #58d7f7;background:rgba(8,14,21,.78);box-shadow:0 24px 80px rgba(0,0,0,.34)}
     #${cardId} .fallback-line{font-size:${plan.format.height > plan.format.width ? 76 : 58}px;font-weight:800;line-height:1.02;letter-spacing:-.035em;text-wrap:balance}
     #${cardId} .fallback-line+.fallback-line{margin-top:10px}
     #${cardId} .fallback-line-3{color:#ffbd59}
@@ -238,10 +242,17 @@ export function buildFallbackFrame({ intake, plan, shot }) {
     source_start_seconds: Number(shot.start_seconds),
     source_end_seconds: Number(shot.end_seconds),
     volume: 0,
+    presentation: {
+      mode: presenterMode,
+      frame: "desktop-window",
+      enter: presenterLayout.enter,
+      exit: presenterLayout.exit,
+      motion_blur_px: 16
+    },
     placement: {
-      x: 0, y: 0, width: Number(plan.format.width), height: Number(plan.format.height),
-      object_fit: "cover", border_radius: 0, z_index: 1,
-      treatment: "deterministic presenter fallback"
+      x: presenterLayout.x, y: presenterLayout.y, width: presenterLayout.size, height: presenterLayout.size,
+      object_fit: "cover", border_radius: 28, z_index: 20,
+      treatment: `${presenterMode} desktop-window presenter object`
     }
   }] : [];
   return {
@@ -254,6 +265,21 @@ export function buildFallbackFrame({ intake, plan, shot }) {
     visible_copy: visibleCopy,
     preserve: ["deterministic fallback", ...visibleCopy]
   };
+}
+
+function fallbackPresenterLayout(format, shot, mode) {
+  const width = Number(format.width);
+  const height = Number(format.height);
+  const seed = [...String(shot.id)].reduce((sum, character) => sum + character.charCodeAt(0), 0);
+  const slot = seed % 3;
+  const size = Math.round(Math.min(width * (mode === "anchor" ? .82 : .58), height * (mode === "anchor" ? .46 : .34)));
+  const margin = Math.max(48, Math.round(width * .065));
+  const x = slot === 1 && mode === "companion" ? margin : slot === 2 && mode === "companion" ? width - size - margin : Math.round((width - size) / 2);
+  const y = slot === 0 ? Math.round(height * .1) : slot === 1 ? Math.round((height - size) / 2) : height - size - Math.round(height * .09);
+  const enter = slot === 0 ? "slide-up" : slot === 1 ? "slide-left" : "slide-right";
+  const exit = slot === 0 ? "slide-down" : slot === 1 ? "slide-left" : "slide-right";
+  const cardEdge = y + size > height * .66 ? "top:8%;" : "bottom:8%;";
+  return { x, y, size, enter, exit, cardEdge };
 }
 
 export async function fallbackFramesForVerification(workspacePath, verification) {
