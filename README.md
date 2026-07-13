@@ -19,6 +19,27 @@ launchclip run ./my-oss-tool \
 
 That creates the full dry-run packet, validates it for social review, and writes `REVIEW.md`.
 
+## Agent Skills
+
+Launchclip ships two agent-facing skills for different cost and execution
+models:
+
+- [`launchclip-create-video`](skills/launchclip-create-video/SKILL.md) extracts
+  the creative orchestration into a subscription-agent workflow. Codex, Claude,
+  or another capable coding agent conducts a compact intake, plans and authors
+  the HyperFrames composition itself, runs local QA, pauses for preview
+  approval, and renders without calling Launchclip's metered model stages. It
+  is self-contained and does not require the HyperFrames plugin skill pack.
+- [`launchclip-cli`](skills/launchclip-cli/SKILL.md) teaches an agent to operate
+  the existing CLI, including `produce`, resumable production stages, the
+  local-first promotion packet lane, cost receipts, and approval gates. The
+  model-directed CLI remains API-backed; a ChatGPT, Codex, or Claude OAuth login
+  is not an `OPENAI_API_KEY` or `ELEVENLABS_API_KEY`.
+
+Install or copy the desired skill directory into the agent's skill location, or
+point the agent directly at its `SKILL.md`. The root [`SKILL.md`](SKILL.md)
+remains the compatibility workflow for the original OSS promotion packet.
+
 ## Model-Directed HyperFrames Production
 
 The newer production lane accepts a GitHub/local repository, product URL,
