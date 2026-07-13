@@ -2,14 +2,20 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import {
+  DEFAULT_SILENCE_DURATION,
+  DEFAULT_SILENCE_PADDING,
+  detectSilenceTrim,
+  probeMedia
+} from "./media_trim.js";
+
+export { parseSilenceDetect } from "./media_trim.js";
 
 const execFileAsync = promisify(execFile);
 
 const DEFAULT_WIDTH = 720;
 const DEFAULT_HEIGHT = 1280;
 const DEFAULT_SPEED = 1.08;
-const DEFAULT_SILENCE_DURATION = 0.45;
-const DEFAULT_SILENCE_PADDING = 0.12;
 
 export async function preprocessPresenter(inputPath, flags = {}) {
   const input = path.resolve(inputPath);
@@ -35,7 +41,7 @@ export async function preprocessPresenter(inputPath, flags = {}) {
   };
   const detectedTrim = flags["no-trim-silence"] || !audio
     ? { start: 0, end: sourceDuration, leadingSilence: null, trailingSilence: null, thresholdDb: null }
-    : await detectSilenceTrim(input, sourceDuration, { silenceDuration, silencePadding });
+    : await detectSilenceTrim(input, { duration: sourceDuration, probe, silenceDuration, silencePadding });
   const trim = {
     ...detectedTrim,
     start: manualTrim.start ?? detectedTrim.start,
@@ -109,35 +115,6 @@ export function buildVideoFilter({ inputWidth, inputHeight, outputWidth = DEFAUL
   return `crop=${cropW}:${cropH}:${x}:${y},scale=${outputWidth}:${outputHeight},setpts=PTS/${formatSpeed(speed)}`;
 }
 
-export function parseSilenceDetect(stderr, duration, padding = DEFAULT_SILENCE_PADDING) {
-  const segments = [];
-  let pendingStart = null;
-  for (const line of String(stderr).split(/\r?\n/)) {
-    const start = line.match(/silence_start:\s*([0-9.]+)/);
-    if (start) {
-      pendingStart = Number(start[1]);
-      continue;
-    }
-    const end = line.match(/silence_end:\s*([0-9.]+)/);
-    if (end && pendingStart !== null) {
-      segments.push({ start: pendingStart, end: Number(end[1]) });
-      pendingStart = null;
-    }
-  }
-  if (pendingStart !== null) segments.push({ start: pendingStart, end: duration });
-
-  const first = segments[0];
-  const last = segments[segments.length - 1];
-  const leadingSilence = first && first.start <= 0.2 ? first : null;
-  const trailingSilence = last && last.end >= duration - 0.25 ? last : null;
-  return {
-    start: leadingSilence ? Math.min(duration, leadingSilence.end + padding) : 0,
-    end: trailingSilence ? Math.max(0, trailingSilence.start - padding) : duration,
-    leadingSilence,
-    trailingSilence
-  };
-}
-
 export function atempoFilter(speed) {
   const filters = [];
   let remaining = positiveNumber(speed, DEFAULT_SPEED, "speed");
@@ -151,56 +128,6 @@ export function atempoFilter(speed) {
   }
   filters.push(`atempo=${remaining.toFixed(4)}`);
   return filters.join(",");
-}
-
-async function detectSilenceTrim(input, duration, { silenceDuration, silencePadding }) {
-  const thresholdDb = await loudnessThreshold(input);
-  const { stderr } = await execFileAsync("ffmpeg", [
-    "-hide_banner",
-    "-nostats",
-    "-i",
-    input,
-    "-map",
-    "0:a:0",
-    "-af",
-    `silencedetect=noise=${thresholdDb}dB:d=${silenceDuration}`,
-    "-f",
-    "null",
-    "-"
-  ], { maxBuffer: 1024 * 1024 * 8 });
-  return { ...parseSilenceDetect(stderr, duration, silencePadding), thresholdDb };
-}
-
-async function loudnessThreshold(input) {
-  const { stderr } = await execFileAsync("ffmpeg", [
-    "-hide_banner",
-    "-nostats",
-    "-i",
-    input,
-    "-map",
-    "0:a:0",
-    "-af",
-    "loudnorm=print_format=json",
-    "-f",
-    "null",
-    "-"
-  ], { maxBuffer: 1024 * 1024 * 8 });
-  const match = stderr.match(/\{[\s\S]*"input_thresh"\s*:\s*"(-?[0-9.]+)"[\s\S]*\}/);
-  if (!match) return -35;
-  return Math.max(-60, Math.min(-20, Number(match[1])));
-}
-
-async function probeMedia(filePath) {
-  const { stdout } = await execFileAsync("ffprobe", [
-    "-v",
-    "error",
-    "-show_streams",
-    "-show_format",
-    "-of",
-    "json",
-    filePath
-  ], { maxBuffer: 1024 * 1024 * 4 });
-  return JSON.parse(stdout);
 }
 
 function buildFfmpegArgs({ input, output, start, duration, videoFilter, audioFilter, hasAudio, crf }) {
