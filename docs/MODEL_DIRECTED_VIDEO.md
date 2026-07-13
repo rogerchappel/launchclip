@@ -108,6 +108,7 @@ launchclip production-draft <workspace> \
   --reference-video ./reference-short.mp4
 launchclip production-critique <workspace>
 launchclip production-repair <workspace> --repair-semantic-attempts 2
+launchclip production-preview <workspace> --port 3002
 launchclip production-render <workspace> --approve \
   --reference-video ./reference-short.mp4
 ```
@@ -280,7 +281,14 @@ and supplied narration. That revision then regenerates the affected audio and
 all frames, reconfigures assembly dependencies when shot IDs change, and returns
 through the same bounded verification/draft/critic loop.
 
-Final render remains human-gated.
+Final render remains human-gated. Once the draft and critic verdict are ready,
+`production-preview <workspace>` starts or reuses HyperFrames Studio and returns
+its editable local URL with status `awaiting-approval`. Studio may create ad hoc
+exports, but its Export control is not a Launchclip approval event and does not
+run Launchclip's final motion, audio, or critic gates. The user approves the
+reviewed state separately, then `production-render <workspace> --approve`
+re-verifies the assembled project before encoding. If verification or a later
+repair changes the approved state, return to Studio and obtain fresh approval.
 
 After encoding, Launchclip measures per-frame luminance difference, stillness,
 motion bursts, cut cadence, and shot duration. A separate block-matching pass
