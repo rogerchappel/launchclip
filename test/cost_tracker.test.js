@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createCostTracker } from "../src/cost_tracker.js";
+import { createCostTracker, estimateOpenAiUsageCost } from "../src/cost_tracker.js";
+
+test("prices normalized OpenAI usage for an in-process circuit breaker", () => {
+  const estimate = estimateOpenAiUsageCost("gpt-5.6-sol", {
+    input_tokens: 100,
+    output_tokens: 20,
+    cached_tokens: 40,
+    reasoning_tokens: 8
+  });
+  assert.equal(estimate.complete, true);
+  assert.equal(estimate.estimated_usd, .00092);
+});
 
 test("totals OpenAI token usage and deduplicates background response polling", async () => {
   const tracker = createCostTracker({ fetch: async () => jsonResponse({
