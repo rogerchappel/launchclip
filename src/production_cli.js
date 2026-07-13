@@ -42,6 +42,12 @@ async function standaloneRepairOptions(workspacePath, flags, adapters) {
     throw error;
   }
   if (verification?.status !== "failed") return options;
+  if (verification.infrastructure_failed?.length) {
+    const error = new Error(`Production repair is blocked because verification failed in the toolchain: ${verification.infrastructure_failed.join(", ")}. Fix the verifier environment and rerun verification.`);
+    error.code = "LAUNCHCLIP_PRODUCTION_INFRASTRUCTURE_FAILED";
+    error.verification = verification;
+    throw error;
+  }
   try {
     const recorded = verification.inputs?.options ?? {};
     await (adapters.assertVerificationFresh ?? assertVerificationFresh)(workspacePath, verification, {

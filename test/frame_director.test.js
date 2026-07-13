@@ -132,11 +132,17 @@ test("recovers a previously rejected frame with a local fallback and does not bu
   assert.deepEqual(calls, ["shot-2"]);
   assert.equal(result.fallbacks, 1);
   assert.equal(result.frames[0].fallback, true);
-  assert.match(await readFile(path.join(workspace, "production", "frames", "shot-1.json"), "utf8"), /deterministic fallback/);
+  assert.match(await readFile(path.join(workspace, "production", "fallbacks", "shot-1.json"), "utf8"), /deterministic fallback/);
   for (let index = 0; index < 4; index += 1) {
     const local = await fallbackFramesForVerification(workspace, { failed: ["inspect:shot-1"], qa: path.join(workspace, "missing-qa") });
     assert.equal(local.repaired.length, 1);
   }
+  const canonicalPath = path.join(workspace, "production", "frames", "shot-2.json");
+  const canonicalBeforeFallback = await readFile(canonicalPath, "utf8");
+  const verificationFallback = await fallbackFramesForVerification(workspace, { failed: ["inspect:shot-2"], qa: path.join(workspace, "missing-qa") });
+  assert.equal(verificationFallback.repaired.length, 1);
+  assert.equal(await readFile(canonicalPath, "utf8"), canonicalBeforeFallback, "verification fallback preserves the paid model frame");
+  assert.match(await readFile(path.join(workspace, "production", "fallbacks", "shot-2.fallback.json"), "utf8"), /"source": "verification"/);
   assert.deepEqual(calls, ["shot-2"], "repeated local QA passes never submit another provider response");
 });
 

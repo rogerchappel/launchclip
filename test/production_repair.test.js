@@ -104,6 +104,22 @@ test("repairs native shot inspection failures even when the visual critic ships"
   assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-1"]);
 });
 
+test("rejects infrastructure inspection failures before any paid repair call", async () => {
+  const workspace = await fixture({ verdict: "ship" });
+  const reportPath = path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json");
+  await mkdir(path.dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, `${JSON.stringify({
+    ok: false,
+    failure_kind: "infrastructure",
+    stderr: "spec version 2 is not supported — upgrade the HyperFrames CLI"
+  })}\n`);
+  let providerCalls = 0;
+  await assert.rejects(() => repairProduction(workspace, { trigger: "verification" }, {
+    client: { runStructured: async () => { providerCalls += 1; } }
+  }), (error) => error.code === "LAUNCHCLIP_PRODUCTION_INFRASTRUCTURE_FAILED");
+  assert.equal(providerCalls, 0);
+});
+
 test("repairs deterministic failures before the first visual critique exists", async () => {
   const workspace = await fixture({ omitCritique: true });
   const reportPath = path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json");

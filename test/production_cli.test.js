@@ -88,6 +88,46 @@ test("automatically repairs deterministic verification failures before rendering
   assert.deepEqual(repairOptions.failed, ["inspect:shot-2"]);
 });
 
+test("stops infrastructure verification failures without fallback or paid repair calls", async () => {
+  const calls = [];
+  const adapters = {
+    withProductionLease: async (_workspace, operation) => operation(),
+    buildIntake: async () => ({ workspace: "/tmp/workspace" }),
+    writeIntake: async () => ({ workspace: "/tmp/workspace" }),
+    collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), planProduction: async () => ({}),
+    produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
+    directFrames: async () => ({ generated: 1, cached: 0 }),
+    assembleHyperFrames: async () => { calls.push("assemble"); return {}; },
+    renderDraftProduction: async () => {
+      calls.push("draft");
+      throw Object.assign(new Error("verifier contract mismatch"), {
+        code: "LAUNCHCLIP_PRODUCTION_INFRASTRUCTURE_FAILED",
+        verification: { status: "failed", failed: ["inspect:shot-1"], infrastructure_failed: ["inspect:shot-1"], qa: "/tmp/qa" }
+      });
+    },
+    fallbackFramesForVerification: async () => { calls.push("local-fallback"); return { repaired: [] }; },
+    repairProduction: async () => { calls.push("paid-repair"); return { repaired: [] }; }
+  };
+  await assert.rejects(() => runProduction("owner/repo", {}, adapters), (error) => error.code === "LAUNCHCLIP_PRODUCTION_INFRASTRUCTURE_FAILED");
+  assert.deepEqual(calls, ["assemble", "draft"]);
+});
+
+test("blocks standalone paid repair for a recorded infrastructure failure", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-infrastructure-repair-"));
+  await mkdir(path.join(workspace, "production", "qa"), { recursive: true });
+  await writeFile(path.join(workspace, "production", "qa", "verification.json"), JSON.stringify({
+    status: "failed",
+    failed: ["inspect:shot-1"],
+    infrastructure_failed: ["inspect:shot-1"]
+  }));
+  let repairCalls = 0;
+  await assert.rejects(() => runProductionStage("production-repair", workspace, {}, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    repairProduction: async () => { repairCalls += 1; }
+  }), (error) => error.code === "LAUNCHCLIP_PRODUCTION_INFRASTRUCTURE_FAILED");
+  assert.equal(repairCalls, 0);
+});
+
 test("stops a persistent verification repair loop at the configured bound", async () => {
   const calls = [];
   const adapters = {

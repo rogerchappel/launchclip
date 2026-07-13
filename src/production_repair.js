@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { safeShotFile, validateHyperFramesRoot } from "./frame_director.js";
+import { readFrameSelection, safeShotFile, validateHyperFramesRoot, writeFrameArtifacts } from "./frame_director.js";
 import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { OpenAIResponsesClient } from "./openai_responses.js";
@@ -22,6 +22,7 @@ Every planned shot.visual object and event remains part of the repair contract. 
 
 export async function repairProduction(workspacePath, options = {}, adapters = {}) {
   const workspace = path.resolve(workspacePath);
+  if (options.verification?.infrastructure_failed?.length) throw infrastructureRepairError(options.verification.infrastructure_failed);
   const qaDir = path.join(workspace, PRODUCTION_PATHS.qa);
   const [intake, evidence, plan, critique] = await Promise.all([
     readJson(path.join(workspace, PRODUCTION_PATHS.intake)),
@@ -82,7 +83,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
   const tasks = [...byShot].map(([shotId, findings]) => async () => {
     const shot = plan.shots.find((entry) => entry.id === shotId);
     if (!shot) throw new Error(`Critique references unknown shot: ${shotId}`);
-    const prior = await readJson(safeShotFile(path.join(workspace, PRODUCTION_PATHS.frames), shotId, ".json"));
+    const prior = (await readFrameSelection(workspace, shotId)).bundle;
     const repairInputHash = semanticHash({
       worker: "frame-repair.v3",
       model: options.model ?? "gpt-5.6",
@@ -209,6 +210,7 @@ export async function collectDeterministicRepairFindings(workspacePath, plan) {
     if (reportInfo && reportInfo.mtimeMs >= frameInfo.mtimeMs) {
       const report = await readJson(reportPath);
       if (report.ok === false) {
+        if (report.failure_kind === "infrastructure") throw infrastructureRepairError([`inspect:${shot.id}`]);
         const inspectIssues = Array.isArray(report.stdout?.issues)
           ? report.stdout.issues.filter((issue) => issue?.severity === "error")
           : [];
@@ -245,6 +247,13 @@ export async function collectDeterministicRepairFindings(workspacePath, plan) {
     });
   }
   return findings;
+}
+
+function infrastructureRepairError(failures) {
+  const error = new Error(`Production repair is blocked because verification failed in the toolchain: ${failures.join(", ")}. Fix the verifier environment and rerun verification.`);
+  error.code = "LAUNCHCLIP_PRODUCTION_INFRASTRUCTURE_FAILED";
+  error.infrastructure_failed = failures;
+  return error;
 }
 
 function uniqueIssues(issues) {
@@ -296,15 +305,6 @@ async function runPool(tasks, concurrency) {
   const settled = await Promise.allSettled(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
   const failed = settled.find((entry) => entry.status === "rejected");
   if (failed) throw failed.reason;
-}
-
-async function writeFrameArtifacts(workspace, bundle) {
-  const directory = path.join(workspace, PRODUCTION_PATHS.frames);
-  const paths = [safeShotFile(directory, bundle.shot_id, ".json"), safeShotFile(directory, bundle.shot_id, ".html"), safeShotFile(directory, bundle.shot_id, ".motion.json")];
-  await writeAtomic(paths[0], `${JSON.stringify(bundle, null, 2)}\n`);
-  await writeAtomic(paths[1], `${bundle.html.trim()}\n`);
-  await writeAtomic(paths[2], `${JSON.stringify(bundle.motion, null, 2)}\n`);
-  return paths;
 }
 
 async function snapshotImages(directory, limit) {

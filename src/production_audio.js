@@ -101,7 +101,12 @@ async function prepareVoiceover({ mediaDir, intake, evidence, plan, options, pro
       words = JSON.parse(await readFile(wordsPath, "utf8"));
     }
     const wordsDuration = Number(words.at(-1)?.end);
-    const durationSeconds = Number.isFinite(wordsDuration) && wordsDuration > 0 ? wordsDuration : await probeDuration(target);
+    let mediaDuration = null;
+    try { mediaDuration = await probeDuration(target); }
+    catch (error) {
+      if (!(Number.isFinite(wordsDuration) && wordsDuration > 0)) throw error;
+    }
+    const durationSeconds = Number.isFinite(mediaDuration) && mediaDuration > 0 ? mediaDuration : wordsDuration;
     return { provider: "supplied", kind: "narration", path: target, words_path: wordsPath, duration_seconds: durationSeconds, source_resource_id: supplied.id };
   }
   const chunks = splitNarrationText(plan.narration.full_text, Number(options.maxNarrationChars ?? 2_800));

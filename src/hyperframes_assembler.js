@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { safeShotFile, validateHyperFramesRoot } from "./frame_director.js";
+import { readFrameSelection, safeShotFile, validateHyperFramesRoot } from "./frame_director.js";
 import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
@@ -16,8 +16,9 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
     readJson(path.join(workspace, PRODUCTION_PATHS.evidence)),
     readJson(path.join(workspace, PRODUCTION_PATHS.plan))
   ]);
-  const framesDir = path.join(workspace, PRODUCTION_PATHS.frames);
-  const bundles = await Promise.all(plan.shots.map((shot) => readJson(safeShotFile(framesDir, shot.id, ".json"))));
+  const selections = await Promise.all(plan.shots.map((shot) => readFrameSelection(workspace, shot.id)));
+  const bundles = selections.map((selection) => selection.bundle);
+  const fallbacks = selections.filter((selection) => selection.fallback).map((selection) => selection.fallback);
   for (const [index, bundle] of bundles.entries()) {
     const validation = validateFrameBundle(bundle, {
       shotId: plan.shots[index].id,
@@ -36,12 +37,12 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   const dependencies = plan.shots.map((shot) => `frame:${shot.id}`);
   for (const dependency of dependencies) if (store.get(dependency)?.status !== "succeeded") throw new Error(`Frame job must succeed before assembly: ${dependency}`);
   const extraAudio = await describeExtraAudio(options);
-  const inputHash = semanticHash({ intake, plan, bundles, extraAudio, assembler: "hyperframes-assembler.v9" });
+  const inputHash = semanticHash({ intake, plan, bundles, fallbacks, extraAudio, assembler: "hyperframes-assembler.v10" });
   const jobId = "hyperframes-assembly";
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
     const verification = await store.verifyOutputs(jobId);
-    if (verification.ok) return { stage: "hyperframes-assembly", status: "ready", workspace, project: path.join(workspace, PRODUCTION_PATHS.hyperframes), index: path.join(workspace, PRODUCTION_PATHS.hyperframes, "index.html"), cached: true, outputs: verification.outputs };
+    if (verification.ok) return { stage: "hyperframes-assembly", status: "ready", workspace, project: path.join(workspace, PRODUCTION_PATHS.hyperframes), index: path.join(workspace, PRODUCTION_PATHS.hyperframes, "index.html"), cached: true, outputs: verification.outputs, fallback_count: fallbacks.length, full_fallback: fallbacks.length === bundles.length && bundles.length > 0 };
     await store.markStaleFrom([jobId]);
   } else if (existing && existing.input_hash !== inputHash) {
     await store.markStaleFrom([jobId]);
@@ -85,7 +86,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
       await writeAtomic(safeShotFile(compositionsDir, bundle.shot_id, ".motion.json"), `${JSON.stringify(toHyperFramesMotionSpec(bundle, shot.end_seconds - shot.start_seconds), null, 2)}\n`);
     }
 
-    const html = renderRoot({ intake, plan, bundles, assetMap, extraAudio });
+    const html = renderRoot({ intake, plan, bundles, assetMap, extraAudio, fallbacks });
     const indexPath = path.join(projectDir, "index.html");
     const motionPath = path.join(projectDir, "index.motion.json");
     const manifestPath = path.join(projectDir, "assembly.json");
@@ -96,6 +97,9 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
       duration_seconds: plan.format.duration_seconds,
       width: plan.format.width,
       height: plan.format.height,
+      fallbacks,
+      fallback_count: fallbacks.length,
+      full_fallback: fallbacks.length === bundles.length && bundles.length > 0,
       shots: plan.shots.map((shot) => ({ id: shot.id, start_seconds: shot.start_seconds, end_seconds: shot.end_seconds, composition: `compositions/${shot.id}.html` })),
       assets: [...assetMap.entries()].map(([id, entry]) => ({ id, file: `assets/${entry.file}`, sha256: entry.sha256 }))
     }, null, 2)}\n`);
@@ -105,7 +109,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
       ...[...assetMap.values()].map((entry) => path.join(assetsDir, entry.file))
     ].map((filePath) => describeJobOutput(workspace, filePath)));
     await store.markSucceeded(jobId, outputs);
-    return { stage: "hyperframes-assembly", status: "ready", workspace, project: projectDir, index: indexPath, manifest: manifestPath, compositions: bundles.length, assets: assetMap.size, cached: false };
+    return { stage: "hyperframes-assembly", status: "ready", workspace, project: projectDir, index: indexPath, manifest: manifestPath, compositions: bundles.length, assets: assetMap.size, fallback_count: fallbacks.length, full_fallback: fallbacks.length === bundles.length && bundles.length > 0, cached: false };
   } catch (error) {
     await store.markFailed(jobId, error);
     throw error;
@@ -123,7 +127,7 @@ export function toHyperFramesMotionSpec(bundle, duration) {
   }
   ordered.sort((a, b) => a.order - b.order);
   for (let index = 1; index < ordered.length; index += 1) assertions.push({ kind: "before", a: ordered[index - 1].selector, b: ordered[index].selector });
-  return { version: 2, duration: Number(duration), assertions, events: structuredClone(bundle.motion?.events ?? []) };
+  return { version: 1, duration: Number(duration), assertions, events: structuredClone(bundle.motion?.events ?? []) };
 }
 
 export function rootMotionSpec(plan, bundles) {
@@ -139,7 +143,7 @@ export function rootMotionSpec(plan, bundles) {
   return { version: 1, duration: plan.format.duration_seconds, assertions };
 }
 
-export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
+export function renderRoot({ plan, bundles, assetMap, extraAudio = [], fallbacks = [] }) {
   const chrome = presenterChromeStyle(plan.design?.style_dna);
   const shotById = new Map(plan.shots.map((shot) => [shot.id, shot]));
   const media = [];
@@ -181,12 +185,14 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
     .root-media-window-dot--close { background: #ff6258; }
     .root-media-window-dot--minimize { background: #ffc04a; }
     .root-media-window-dot--maximize { background: #40c957; }
+    .fallback-draft-label { position: absolute; top: 24px; right: 24px; z-index: 10000; padding: 10px 14px; border: 2px solid #111; border-radius: 999px; background: #ffdf57; color: #111; font: 800 18px/1 Arial,sans-serif; letter-spacing: .06em; box-shadow: 4px 4px 0 #111; }
   </style>
 </head>
 <body>
   <div id="launchclip-root" data-composition-id="main" data-start="0" data-duration="${number(plan.format.duration_seconds)}" data-width="${plan.format.width}" data-height="${plan.format.height}">
     ${media.join("\n    ")}
     ${compositions.join("\n    ")}
+    ${fallbacks.length ? `<div id="fallback-draft-label" class="clip fallback-draft-label" data-start="0" data-duration="${number(plan.format.duration_seconds)}" data-track-index="9999" data-layout-ignore="true">FALLBACK DRAFT • ${fallbacks.length}/${bundles.length} SHOTS</div>` : ""}
     <script>
       window.__timelines = window.__timelines || {};
       const timeline = gsap.timeline({ paused: true });

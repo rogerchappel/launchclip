@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { ensureTimelineRegistration, hasTimelineRegistration } from "./hyperframes_timeline.js";
@@ -41,6 +41,8 @@ HyperFrames contract:
 - Set must_stay_in_frame true only when the element's entire visible bounding box remains on canvas after it appears; intentional off-canvas or clipped entrance geometry must use false.
 - Keep essential text and proof inside the frame at all times. Preserve exact visible copy and factual meaning.
 - The first and last rendered frame must be intentional, including when mounted next to neighboring shots.`;
+
+export const FALLBACK_FRAMES_PATH = "production/fallbacks";
 
 export async function directFrames(workspacePath, options = {}, adapters = {}) {
   const workspace = path.resolve(workspacePath);
@@ -409,22 +411,19 @@ export async function fallbackFramesForVerification(workspacePath, verification)
   for (const shot of eligible) {
     const jobId = `frame:${shot.id}`;
     const current = store.get(jobId);
-    if (!current) continue;
-    if (current.status === "succeeded") await store.markStaleFrom([jobId]);
-    const stale = store.get(jobId);
-    if (stale.status === "failed" || stale.status === "stale") await store.reconfigure(jobId, { input_hash: stale.input_hash });
-    else if (stale.status !== "pending") continue;
-    await store.markRunning(jobId, { provider: "local", response_id: current.remote?.response_id ?? null, status: "verification-fallback" });
+    if (current?.status !== "succeeded") continue;
     repaired.push(await persistFallbackFrame({
       workspace, intake, evidence, plan, shot, store, jobId,
       reason: `Native verification failed: ${(verification.failed ?? []).join(", ")}`,
-      responseId: current.remote?.response_id ?? null
+      responseId: current.remote?.response_id ?? null,
+      source: "verification",
+      updateJob: false
     }));
   }
   return { status: repaired.length ? "repaired" : "not-applicable", repaired };
 }
 
-async function persistFallbackFrame({ workspace, intake, evidence, plan, shot, store, jobId, reason, responseId = null, usage = {} }) {
+async function persistFallbackFrame({ workspace, intake, evidence, plan, shot, store, jobId, reason, responseId = null, usage = {}, source = "semantic-validation", updateJob = true }) {
   const fallback = buildFallbackFrame({ intake, plan, shot });
   const validation = validateFrameBundle(fallback, {
     shotId: shot.id,
@@ -437,9 +436,9 @@ async function persistFallbackFrame({ workspace, intake, evidence, plan, shot, s
   });
   const errors = [...validation.errors, ...validateHyperFramesRoot(fallback.html, shot, plan.format)];
   if (errors.length) throw new Error(`Fallback frame ${shot.id} failed semantic validation: ${errors.join("; ")}`);
-  const paths = await writeFrameArtifacts(workspace, fallback);
+  const paths = await writeFrameArtifacts(workspace, fallback, { fallback: true, reason, source });
   const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
-  await store.markSucceeded(jobId, outputs, usage);
+  if (updateJob) await store.markSucceeded(jobId, outputs, usage);
   return {
     shot_id: shot.id,
     cached: false,
@@ -498,15 +497,47 @@ export function validateHyperFramesRoot(html, shot, format) {
   return errors;
 }
 
-async function writeFrameArtifacts(workspace, bundle) {
-  const directory = path.join(workspace, PRODUCTION_PATHS.frames);
+export async function writeFrameArtifacts(workspace, bundle, options = {}) {
+  const directory = path.join(workspace, options.fallback ? FALLBACK_FRAMES_PATH : PRODUCTION_PATHS.frames);
   const bundlePath = safeShotFile(directory, bundle.shot_id, ".json");
   const htmlPath = safeShotFile(directory, bundle.shot_id, ".html");
   const motionPath = safeShotFile(directory, bundle.shot_id, ".motion.json");
   await writeAtomic(bundlePath, `${JSON.stringify(bundle, null, 2)}\n`);
   await writeAtomic(htmlPath, `${bundle.html.trim()}\n`);
   await writeAtomic(motionPath, `${JSON.stringify(bundle.motion, null, 2)}\n`);
+  if (options.fallback) {
+    const markerPath = safeShotFile(directory, bundle.shot_id, ".fallback.json");
+    await writeAtomic(markerPath, `${JSON.stringify({
+      schema_version: "launchclip.frame-fallback.v1",
+      shot_id: bundle.shot_id,
+      reason: String(options.reason ?? "Fallback selected"),
+      source: String(options.source ?? "local")
+    }, null, 2)}\n`);
+    return [bundlePath, htmlPath, motionPath, markerPath];
+  }
+  await Promise.all([".json", ".html", ".motion.json", ".fallback.json"].map((suffix) => rm(safeShotFile(path.join(workspace, FALLBACK_FRAMES_PATH), bundle.shot_id, suffix), { force: true })));
   return [bundlePath, htmlPath, motionPath];
+}
+
+export async function readFrameSelection(workspacePath, shotId) {
+  const workspace = path.resolve(workspacePath);
+  const fallbackDirectory = path.join(workspace, FALLBACK_FRAMES_PATH);
+  let fallback = null;
+  try {
+    fallback = JSON.parse(await readFile(safeShotFile(fallbackDirectory, shotId, ".fallback.json"), "utf8"));
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  const directory = fallback ? fallbackDirectory : path.join(workspace, PRODUCTION_PATHS.frames);
+  return {
+    bundle: JSON.parse(await readFile(safeShotFile(directory, shotId, ".json"), "utf8")),
+    fallback,
+    paths: {
+      bundle: safeShotFile(directory, shotId, ".json"),
+      html: safeShotFile(directory, shotId, ".html"),
+      motion: safeShotFile(directory, shotId, ".motion.json")
+    }
+  };
 }
 
 export function safeShotFile(directory, shotId, suffix) {
