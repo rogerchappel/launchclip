@@ -123,7 +123,7 @@ export function toHyperFramesMotionSpec(bundle, duration) {
   }
   ordered.sort((a, b) => a.order - b.order);
   for (let index = 1; index < ordered.length; index += 1) assertions.push({ kind: "before", a: ordered[index - 1].selector, b: ordered[index].selector });
-  return { version: 2, duration: Number(duration), assertions, events: structuredClone(bundle.motion?.events ?? []) };
+  return { version: 1, duration: Number(duration), assertions, events: structuredClone(bundle.motion?.events ?? []) };
 }
 
 export function rootMotionSpec(plan, bundles) {

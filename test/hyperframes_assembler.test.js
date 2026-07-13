@@ -99,7 +99,7 @@ test("translates model motion intent into discoverable HyperFrames assertions", 
     { selector: "#proof", appears_by_seconds: 1.5, order: 2, must_stay_in_frame: true, must_remain_live: true }
   ], events: [{ event_id: "shot-1-proof-lock", object_id: "proof-node", selector: "#proof", at_seconds: 1.5, property: "transform", visible_change: true }] } };
   const local = toHyperFramesMotionSpec(bundle, 4);
-  assert.equal(local.version, 2);
+  assert.equal(local.version, 1);
   assert.equal(local.events[0].event_id, "shot-1-proof-lock");
   assert.ok(local.assertions.some((entry) => entry.kind === "appearsBy" && entry.bySec === .5));
   assert.ok(local.assertions.some((entry) => entry.kind === "before" && entry.a === "#headline" && entry.b === "#proof"));
@@ -136,6 +136,7 @@ test("freezes assets, rewrites frame paths, assembles a resumable HyperFrames pr
   const rootMotion = JSON.parse(await readFile(path.join(first.project, "index.motion.json"), "utf8"));
   assert.equal(rootMotion.version, 1);
   const frameMotion = JSON.parse(await readFile(path.join(first.project, "compositions", "shot-1.motion.json"), "utf8"));
+  assert.equal(frameMotion.version, 1);
   assert.equal(frameMotion.duration, 5);
 
   const second = await assembleHyperFrames(workspace);
