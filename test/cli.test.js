@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
-import { parseFlags } from "../src/cli.js";
+import { parseFlags, runCli } from "../src/cli.js";
 
 test("parses boolean and value flags", () => {
   assert.deepEqual(parseFlags(["--provider", "hyperframes", "--dry-run", "--allow-placeholder-sfx", "--no-music", "--strict-all", "--inspect-samples", "15"]), {
@@ -30,4 +33,42 @@ test("parses model-directed production control flags", () => {
     style: "soft-grid-editorial",
     "style-file": "./frame.md"
   });
+});
+
+test("includes a zero-cost tally in successful command JSON", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-cli-costs-"));
+  const output = [];
+  try {
+    await runCli(["init", path.resolve("test/fixtures/sample-tool"), "--out", path.join(temp, "packet")], {
+      stdout: { write: (value) => output.push(value) }
+    });
+    const result = JSON.parse(output.join(""));
+    assert.equal(result.stage, "init");
+    assert.deepEqual(result.costs, {
+      schema_version: "launchclip.costs.v1",
+      currency: "USD",
+      pricing_basis: "public-pay-as-you-go-estimate",
+      pricing_as_of: "2026-07-13",
+      total_usd: 0,
+      complete: true,
+      calls: 0,
+      by_provider: {},
+      line_items: [],
+      warnings: []
+    });
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("attaches the accrued cost tally to command failures", async () => {
+  await assert.rejects(
+    () => runCli(["init"], { stdout: { write: () => {} } }),
+    (error) => {
+      assert.match(error.message, /Missing repo path/);
+      assert.equal(error.costs.total_usd, 0);
+      assert.equal(error.costs.complete, true);
+      return true;
+    }
+  );
 });
