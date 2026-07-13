@@ -43,7 +43,7 @@ test("delegates shots concurrently, repairs invalid HTML, and writes modular fra
     }
   };
 
-  const result = await directFrames(workspace, { concurrency: 2, background: false }, { client });
+  const result = await directFrames(workspace, { concurrency: 2, background: false, allowFallback: true }, { client });
   assert.equal(result.generated, 2);
   assert.equal(peak, 2);
   assert.equal(attempts.get("shot-1"), 2);
@@ -143,7 +143,7 @@ test("recovers a previously rejected frame with a local fallback and does not bu
     calls.push(input.shot.id);
     return { response_id: "resp_fresh", model: "gpt-5.6", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: {} };
   } };
-  const result = await directFrames(workspace, { concurrency: 2, background: false }, { client });
+  const result = await directFrames(workspace, { concurrency: 2, background: false, allowFallback: true }, { client });
   assert.deepEqual(calls, ["shot-2"]);
   assert.equal(result.fallbacks, 1);
   assert.equal(result.frames[0].fallback, true);
@@ -209,7 +209,7 @@ test("waits for sibling frame jobs to settle before reporting a delegated failur
     siblingFinished = true;
     return { response_id: "sibling", model: "gpt-5.6", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: {} };
   } };
-  await assert.rejects(() => directFrames(workspace, { concurrency: 2 }, { client }), /worker failed/);
+  await assert.rejects(() => directFrames(workspace, { concurrency: 2, allowFallback: true }, { client }), /worker failed/);
   assert.equal(siblingFinished, true);
   const store = await ProductionJobStore.open(workspace, { create: false });
   assert.equal(store.get("frame:shot-2").status, "succeeded");
@@ -232,6 +232,79 @@ test("resumes a persisted background frame response without submitting it twice"
   await directFrames(workspace, { concurrency: 2 }, { client });
   assert.equal(resumed, 1);
   assert.equal(submitted, 1, "only the second shot needs a new response");
+});
+
+test("fails closed on fallback and does not start a later frame", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const calls = [];
+  const client = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    calls.push(input.shot.id);
+    const bundle = frameBundle(input.shot.id, input.shot.duration_seconds);
+    bundle.html = bundle.html.replace('data-start="0"', 'data-start="1"');
+    return { response_id: `resp_${input.shot.id}`, model: "gpt-5.6-sol", status: "completed", value: bundle, usage: { input_tokens: 100, output_tokens: 100 } };
+  } };
+
+  let error;
+  try {
+    await directFrames(workspace, { concurrency: 2, semanticAttempts: 1, background: false }, { client });
+    assert.fail("expected fallback to stop production");
+  } catch (caught) {
+    error = caught;
+  }
+  assert.match(error.message, /selected a deterministic fallback/);
+  assert.equal(error.code, "LAUNCHCLIP_FRAME_FALLBACK_BLOCKED");
+  assert.deepEqual(calls, ["shot-1"]);
+});
+
+test("stops before the next frame after the observed dollar limit is reached", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const calls = [];
+  const client = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    calls.push(input.shot.id);
+    return { response_id: `resp_${input.shot.id}`, model: "gpt-5.6-sol", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: { input_tokens: 100, output_tokens: 100, reasoning_tokens: 20 } };
+  } };
+
+  let error;
+  try {
+    await directFrames(workspace, { concurrency: 4, maxFrameCostUsd: .001, background: false }, { client });
+    assert.fail("expected frame cost guard to stop production");
+  } catch (caught) {
+    error = caught;
+  }
+  assert.match(error.message, /Observed frame cost reached/);
+  assert.equal(error.code, "LAUNCHCLIP_FRAME_COST_LIMIT");
+  assert.equal(error.frame_cost.estimated_usd, .0035);
+  assert.deepEqual(calls, ["shot-1"]);
+});
+
+test("replaces a cancelled persisted response in the same run", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  const baseInput = buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0 });
+  const inputHash = semanticHash({ input: baseInput, model: context.intake.model, reasoning: "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v2" });
+  await store.add({ id: "frame:shot-1", kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash });
+  await store.markRunning("frame:shot-1", { provider: "openai", response_id: "resp_cancelled", status: "in_progress" });
+  let resumed = 0;
+  const submitted = [];
+  const client = {
+    resumeStructured: async () => { resumed += 1; throw new Error("OpenAI response resp_cancelled cancelled: cancelled"); },
+    runStructured: async (options) => {
+      const input = JSON.parse(options.input);
+      submitted.push(input.shot.id);
+      return { response_id: `resp_${input.shot.id}`, model: "gpt-5.6-sol", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: {} };
+    }
+  };
+
+  await directFrames(workspace, { background: false }, { client });
+
+  assert.equal(resumed, 1);
+  assert.deepEqual(submitted, ["shot-1", "shot-2"]);
+  assert.equal((await ProductionJobStore.open(workspace, { create: false })).get("frame:shot-1").attempt, 2);
 });
 
 function frameBundle(id, duration) {

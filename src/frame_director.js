@@ -4,6 +4,7 @@ import path from "node:path";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { ensureTimelineRegistration, hasTimelineRegistration } from "./hyperframes_timeline.js";
 import { OpenAIResponsesClient } from "./openai_responses.js";
+import { estimateOpenAiUsageCost } from "./cost_tracker.js";
 import { FRAME_BUNDLE_SCHEMA, FRAME_BUNDLE_VERSION, PRODUCTION_PATHS, isValidShotId, validateFrameBundle } from "./production_contracts.js";
 
 const FRAME_INSTRUCTIONS = `You are a senior motion designer authoring one modular HyperFrames shot inside a larger film.
@@ -55,9 +56,25 @@ export async function directFrames(workspacePath, options = {}, adapters = {}) {
   const store = adapters.store ?? await ProductionJobStore.open(workspace, { create: false });
   if (store.get("creative-plan")?.status !== "succeeded") throw new Error("Creative plan job must succeed before frame delegation");
   const client = adapters.client ?? new OpenAIResponsesClient();
-  const concurrency = positiveInteger(options.concurrency ?? 4, "concurrency");
-  const tasks = plan.shots.map((shot, index) => () => directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, client, options }));
-  const frames = await runPool(tasks, concurrency);
+  const requestedConcurrency = positiveInteger(options.concurrency ?? 4, "concurrency");
+  const maxFrameCostUsd = options.maxFrameCostUsd == null ? null : positiveNumber(options.maxFrameCostUsd, "maxFrameCostUsd");
+  const failClosed = options.allowFallback !== true;
+  const concurrency = failClosed || maxFrameCostUsd != null ? 1 : requestedConcurrency;
+  const costState = { estimatedUsd: 0, calls: 0, complete: true, warnings: [], outputTokenLimitBreaches: [] };
+  const tasks = plan.shots.map((shot, index) => async () => {
+    assertFrameBudget(costState, maxFrameCostUsd);
+    const frame = await directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, client, options });
+    recordFrameCost(costState, frame, intake.model?.id ?? "gpt-5.6", Number(options.maxOutputTokens ?? 36_000));
+    if (frame.fallback && failClosed) throw frameFallbackError(frame);
+    return frame;
+  });
+  let frames;
+  try {
+    frames = await runPool(tasks, concurrency);
+  } catch (error) {
+    error.frame_cost = frameCostSummary(costState, maxFrameCostUsd);
+    throw error;
+  }
   return {
     stage: "frame-direction",
     status: "ready",
@@ -66,7 +83,8 @@ export async function directFrames(workspacePath, options = {}, adapters = {}) {
     generated: frames.filter((entry) => !entry.cached).length,
     cached: frames.filter((entry) => entry.cached).length,
     fallbacks: frames.filter((entry) => entry.fallback).length,
-    sanitized: frames.filter((entry) => entry.sanitized).length
+    sanitized: frames.filter((entry) => entry.sanitized).length,
+    frame_cost: frameCostSummary(costState, maxFrameCostUsd)
   };
 }
 
@@ -113,7 +131,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   if (recovered) return recovered;
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
     const verification = await store.verifyOutputs(jobId);
-    if (verification.ok) return { shot_id: shot.id, cached: true, outputs: verification.outputs, response_id: existing.remote?.response_id ?? null };
+    if (verification.ok) return { shot_id: shot.id, cached: true, fallback: hasFallbackFrameOutputs(existing), outputs: verification.outputs, response_id: existing.remote?.response_id ?? null };
     await store.markStaleFrom([jobId]);
   } else if (existing && existing.input_hash !== inputHash) {
     await store.markStaleFrom([jobId]);
@@ -152,7 +170,18 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         metadata: { job_id: jobId, shot_id: shot.id, attempt },
         onSubmitted: async (response) => store.markRunning(jobId, { provider: "openai", response_id: response.id, status: response.status })
       };
-      const result = resumeResponseId ? await client.resumeStructured(resumeResponseId, request) : await client.runStructured(request);
+      let result;
+      if (resumeResponseId) {
+        try {
+          result = await client.resumeStructured(resumeResponseId, request);
+        } catch (error) {
+          if (!isCancelledResponseFailure(error)) throw error;
+          await store.markFailed(jobId, error);
+          await store.retry(jobId, { inputHash });
+          await store.markRunning(jobId, { provider: "openai", response_id: null, status: "running" });
+          result = await client.runStructured(request);
+        }
+      } else result = await client.runStructured(request);
       resumeResponseId = null;
       await store.markRunning(jobId, { provider: "openai", response_id: result.response_id, status: result.status });
       const normalized = { ...result.value, html: ensureTimelineRegistration(result.value.html, shot.id) };
@@ -224,9 +253,10 @@ export function sanitizeFrameBundle(bundle, context = {}) {
 async function recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash }) {
   if (!existing || existing.input_hash !== inputHash) return null;
   if (!new Set(["failed", "running", "submitted", "succeeded"]).has(existing.status)) return null;
-  if (existing.status === "succeeded" && !existing.outputs.some((entry) => entry.path.includes(`/${FALLBACK_FRAMES_PATH}/`) || entry.path.startsWith(`${FALLBACK_FRAMES_PATH}/`))) return null;
+  if (existing.status === "succeeded" && !hasFallbackFrameOutputs(existing)) return null;
   const record = await readLatestFrameAttempt(workspace, shot.id);
   if (!record?.candidate || (record.input_hash && record.input_hash !== inputHash)) return null;
+  if (["running", "submitted"].includes(existing.status) && record.response_id !== existing.remote?.response_id) return null;
   const sanitized = sanitizeFrameBundle(record.candidate, {
     shot,
     resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
@@ -293,6 +323,64 @@ function frameValidationContext({ intake, evidence, plan, shot }) {
     resourceIds: intake.resources.map((entry) => entry.id),
     resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
     allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
+  };
+}
+
+function hasFallbackFrameOutputs(job) {
+  return (job?.outputs ?? []).some((entry) => entry.path.startsWith(`${FALLBACK_FRAMES_PATH}/`));
+}
+
+function isCancelledResponseFailure(error) {
+  return /OpenAI response\s+\S+\s+cancelled:/i.test(String(error?.message ?? error));
+}
+
+function recordFrameCost(state, frame, fallbackModel, maxOutputTokens) {
+  if (frame.cached || frame.recovered || !frame.usage) return;
+  const model = frame.model && !String(frame.model).startsWith("local-") ? frame.model : fallbackModel;
+  const estimate = estimateOpenAiUsageCost(model, frame.usage);
+  state.calls += 1;
+  if (estimate.estimated_usd == null) {
+    state.complete = false;
+    state.warnings.push(estimate.warning ?? `Unable to price frame response ${frame.response_id ?? "(unknown)"}`);
+  } else state.estimatedUsd += estimate.estimated_usd;
+  if (Number(frame.usage.output_tokens ?? 0) > maxOutputTokens) {
+    state.outputTokenLimitBreaches.push({
+      shot_id: frame.shot_id,
+      response_id: frame.response_id ?? null,
+      requested_max_output_tokens: maxOutputTokens,
+      reported_output_tokens: Number(frame.usage.output_tokens)
+    });
+  }
+}
+
+function assertFrameBudget(state, limit) {
+  if (limit == null) return;
+  if (!state.complete) throw frameBudgetError(`Frame cost cannot be priced reliably, so no additional provider response will be started`, state, limit);
+  if (state.estimatedUsd >= limit) throw frameBudgetError(`Observed frame cost reached the $${limit.toFixed(2)} limit; no additional provider response will be started`, state, limit);
+}
+
+function frameBudgetError(message, state, limit) {
+  const error = new Error(message);
+  error.code = "LAUNCHCLIP_FRAME_COST_LIMIT";
+  error.frame_cost = frameCostSummary(state, limit);
+  return error;
+}
+
+function frameFallbackError(frame) {
+  const error = new Error(`Frame ${frame.shot_id} selected a deterministic fallback; production stopped before starting another frame. Fix or resume the paid candidate, or explicitly pass --allow-frame-fallback.`);
+  error.code = "LAUNCHCLIP_FRAME_FALLBACK_BLOCKED";
+  error.frame = frame;
+  return error;
+}
+
+function frameCostSummary(state, limit) {
+  return {
+    estimated_usd: Math.round(state.estimatedUsd * 100_000_000) / 100_000_000,
+    limit_usd: limit,
+    complete: state.complete,
+    provider_calls_observed: state.calls,
+    output_token_limit_breaches: structuredClone(state.outputTokenLimitBreaches),
+    warnings: [...new Set(state.warnings)]
   };
 }
 
@@ -677,5 +765,11 @@ async function writeAtomic(filePath, content) {
 function positiveInteger(value, label) {
   const number = Number(value);
   if (!Number.isInteger(number) || number <= 0) throw new Error(`${label} must be a positive integer`);
+  return number;
+}
+
+function positiveNumber(value, label) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) throw new Error(`${label} must be a positive number`);
   return number;
 }
