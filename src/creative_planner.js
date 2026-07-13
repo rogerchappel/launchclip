@@ -24,10 +24,15 @@ Rules:
 - When narration is supplied, preserve its transcript exactly and build around its timing; do not rewrite it.
 - Preserve the requested aspect, dimensions, language, and required duration exactly. When a call to action is supplied, include that exact CTA verbatim in narration or on-screen text.
 - Design motion semantically: name internal reveals, their timing, and acceleration/deceleration intent. Favor purposeful development within shots over constant cutting.
+- Translate narration into visible models, not decorated captions. For every shot, name the concept and visual world, choose a semantic representation, declare the objects that carry meaning, and author visible events that develop the idea.
+- Typography supports the visual model; it is not the visual model. Across the full runtime, kinetic-type or text-only shots may occupy at most 15%. Companion and voiceover shots require content-bearing diagrams, comparisons, timelines, processes, networks, data, media, or spatial metaphors.
+- Build continuity sequences across related narration beats. Reuse stable object IDs, explicitly hand objects from one shot to the next, and match exit velocity to entry velocity within 5% so acceleration, deceleration, camera direction, and motion blur read as one continuous canvas.
+- Design style_dna before the shots. It is a project-specific design system, not a layout template: declare exact colors, type roles, shape language, background system, diagram language, presenter treatment, motion physics, transition vocabulary, and forbidden motifs. Avoid cyan-on-black and generic blue gradients unless the brief or supplied brand requires them.
+- Treat resource catalog metadata as semantic guidance. Bind logos, screenshots, icons, and clips only when the asset meaning matches the narration; otherwise build truthful native HTML/CSS/SVG diagrams.
 - Keep on-screen copy concise enough to read in its available time.
 - Treat presenter media as a choreographed visual object, never a fixed background. Assign every shot exactly one presenter.mode: anchor when the presenter is the primary visual, companion when a framed presenter window shares the stage with proof/graphics, or voiceover when the presenter is offstage and the supplied audio continues under full motion graphics.
 - Anchor and companion shots must set visible=true; voiceover shots must set visible=false. Presenter-led videos longer than 20 seconds must include at least one voiceover shot and use at least two modes. Vary presenter placement between top, middle, and bottom when it improves hierarchy, but never obscure essential proof.
-- Choose SFX cue names only from available_sfx. The cue timing and intent remain your creative decision.
+- Every visible event has a stable shot-prefixed event ID. Choose SFX cue names only from available_sfx, bind each cue to exactly one SFX-eligible visible event, and keep cue timing within 0.05s of that event. Do not schedule ambient chimes with no visible consequence.
 - Cover the exact requested duration with gap-free, butt-joined shots.
 - The rubric must be measurable on a rendered video and specific to this plan.
 
@@ -158,7 +163,8 @@ export function buildPlanningInput(intake, evidence, suppliedNarration = null, o
       call_to_action: intake.brief.cta,
       language: intake.brief.language,
       requested_duration_seconds: narration?.duration_seconds ?? intake.brief.duration_seconds,
-      requested_format: intake.brief.aspect
+      requested_format: intake.brief.aspect,
+      style: intake.brief.style ?? { family: "auto", source: "auto", specification: null, reference: null }
     },
     source: evidence.source,
     factual_evidence: items.filter((entry) => entry.claims_allowed && entry.role !== "reference"),
@@ -169,7 +175,8 @@ export function buildPlanningInput(intake, evidence, suppliedNarration = null, o
       role: entry.role,
       type: entry.type,
       location: entry.location,
-      sha256: entry.sha256
+      sha256: entry.sha256,
+      catalog: entry.catalog ?? null
     })),
     available_sfx: (options.sfxCatalog ?? []).map(String),
     narration: narration
@@ -276,14 +283,20 @@ function renderStoryboard(plan) {
       `Purpose: ${shot.purpose}`,
       `Voiceover: ${shot.voiceover || "—"}`,
       `Visual: ${shot.visual.description}`,
+      `Concept: ${shot.visual.concept}`,
+      `Representation: ${shot.visual.representation}`,
+      `World: ${shot.visual.world}`,
       `Composition: ${shot.visual.composition}`,
       `Motion: ${shot.visual.motion}`,
+      `Continuity: ${shot.visual.continuity.sequence_id} · ${shot.visual.continuity.handoff} · camera ${shot.visual.continuity.camera_direction}`,
+      `Objects: ${shot.visual.objects.map((object) => `${object.id}:${object.kind}:${object.lifecycle}`).join(", ")}`,
       `Presenter: ${shot.presenter.visible ? `${shot.presenter.placement}; ${shot.presenter.size}; ${shot.presenter.treatment}` : "hidden"}`,
       `Evidence: ${shot.evidence_ids.join(", ") || "—"}`,
       `Resources: ${shot.resource_ids.join(", ") || "—"}`,
       ""
     );
     for (const reveal of shot.visual.internal_reveals) lines.push(`- +${reveal.at_seconds.toFixed(2)}s: ${reveal.action} · ${reveal.easing_intent} · ${reveal.emphasis}`);
+    for (const event of shot.visual.events) lines.push(`- event ${event.id} +${event.at_seconds.toFixed(2)}s: ${event.motion_verb} ${event.target_ids.join(", ")} · ${event.visible_change}${event.sfx_eligible ? " · SFX eligible" : ""}`);
     lines.push("");
   }
   return `${lines.join("\n")}\n`;

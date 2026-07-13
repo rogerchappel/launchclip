@@ -30,6 +30,7 @@ test("runs GPT-5.6 planning, validates the plan, writes artifacts, and caches ve
       const value = samplePlan();
       value.shots[1].visual.internal_reveals[0].at_seconds = 6;
       value.shots[1].sfx[0].at_seconds = 6.1;
+      value.shots[1].visual.events[0].at_seconds = 6.1;
       return { response_id: "resp_plan", model: "gpt-5.6-sol", status: "completed", value, usage: { total_tokens: 1234 } };
     },
     resumeStructured: async (responseId) => {
@@ -141,9 +142,9 @@ function sampleIntake() {
   return {
     schema_version: "launchclip.intake.v1",
     source: { kind: "product", value: "https://example.com", location: "https://example.com" },
-    brief: { prompt: "Lead with the surprising workflow", audience: "technical founders", cta: "Try it", language: "en", duration_seconds: 10, aspect: { id: "9:16", width: 1080, height: 1920, orientation: "portrait" } },
+    brief: { prompt: "Lead with the surprising workflow", audience: "technical founders", cta: "Try it", language: "en", duration_seconds: 10, aspect: { id: "9:16", width: 1080, height: 1920, orientation: "portrait" }, style: { family: "soft-grid-editorial", source: "preset", specification: null, reference: null } },
     model: { provider: "openai", id: "gpt-5.6", reasoning_effort: "xhigh", reasoning_mode: "standard" },
-    resources: [{ id: "screen", role: "supporting", type: "video", location: "/tmp/screen.mp4", sha256: "s" }],
+    resources: [{ id: "screen", role: "supporting", type: "video", location: "/tmp/screen.mp4", sha256: "s", catalog: { usage: "product-demo", entity_hints: ["example"], tags: ["screen"], priority: 50, license: null, source: "auto" } }],
     policies: { supplied_voiceover_is_authoritative: false, final_render_requires_human_approval: true }
   };
 }
@@ -166,14 +167,28 @@ function samplePlan() {
     id, start_seconds: start, end_seconds: end, purpose: "Advance the proof", voiceover,
     on_screen_text: ["Proof", "Try it"], evidence_ids: ["ev-1"], resource_ids: ["screen"],
     presenter: { mode: "voiceover", visible: false, placement: "offstage", size: "none", treatment: "none" },
-    visual: { description: "The evidence becomes the interface", composition: "Subject-led hierarchy", typography: "Editorial display and metadata", background: "Quiet field", foreground: "One proof object", motion: "Reveal, connect, settle", internal_reveals: [{ at_seconds: 1, action: "connect claim to proof", easing_intent: "fast then settle", emphasis: "proof" }] },
-    transition_out: "semantic match", sfx: [{ at_seconds: 1, cue: "soft evidence tick", intent: "mark the proof connection", volume: 0.3 }]
+    visual: {
+      description: "The evidence becomes the interface", concept: "Proof travels through a causal chain", world: "A soft grid evidence system already moving", representation: "diagram",
+      composition: "Subject-led hierarchy", typography: "Editorial display and metadata", background: "Quiet field", foreground: "One proof object", motion: "Reveal, connect, settle",
+      objects: [
+        { id: "evidence-grid", kind: "decoration", meaning: "shared spatial field", layer: "background", asset_resource_id: null, lifecycle: "persist" },
+        { id: "proof-node", kind: "diagram-node", meaning: "verified evidence", layer: "midground", asset_resource_id: null, lifecycle: start === 0 ? "enter" : "persist" },
+        { id: "proof-label", kind: "text", meaning: "proof label", layer: "foreground", asset_resource_id: null, lifecycle: "enter" }
+      ],
+      events: [{ id: `${id}-connect`, at_seconds: 1, target_ids: ["proof-node"], action: "connect proof into the causal chain", motion_verb: "locks in", visible_change: "connect", easing_intent: "fast then settle", sfx_eligible: true }],
+      continuity: { sequence_id: "proof-sequence", handoff: end < 10 ? "continue" : "resolve", inherits_object_ids: start ? ["proof-node"] : [], hands_off_object_ids: end < 10 ? ["proof-node"] : [], camera_direction: "rightward", entry_velocity: start ? 360 : 0, exit_velocity: end < 10 ? 360 : 0, motion_blur_px: 12 },
+      internal_reveals: [{ at_seconds: 1, action: "connect claim to proof", easing_intent: "fast then settle", emphasis: "proof" }]
+    },
+    transition_out: "semantic match", sfx: [{ at_seconds: 1, cue: "soft evidence tick", event_id: `${id}-connect`, intent: "mark the proof connection", volume: 0.3 }]
   });
   return {
     schema_version: PRODUCTION_PLAN_VERSION,
     project: { title: "Proof becomes the story", thesis: "Evidence can direct the narrative", audience_promise: "See how it works", angle: "Show the chain", hook: "The proof writes the edit" },
     format: { aspect: "9:16", width: 1080, height: 1920, duration_seconds: 10, language: "en" },
-    design: { concept: "Evidence as choreography", art_direction: "Original product-specific visual language", palette_roles: [{ name: "signal", role: "verified proof", color_hint: "high-contrast accent" }], typography: "Editorial display with precise metadata", texture: "Subtle depth", composition_logic: "Proof earns visual weight", motion_character: "Semantic reveals and confident holds", density: "One meaningful development every two seconds" },
+    design: {
+      concept: "Evidence as choreography", art_direction: "Original product-specific visual language", palette_roles: [{ name: "signal", role: "verified proof", color_hint: "high-contrast accent" }], typography: "Editorial display with precise metadata", texture: "Subtle depth", composition_logic: "Proof earns visual weight", motion_character: "Semantic reveals and confident holds", density: "One meaningful development every two seconds",
+      style_dna: { family: "soft-grid-editorial", source: "preset", canvas: "light", colors: { background: "#F4F0E8", foreground: "#20231F", accent: "#E58B72", supporting: ["#A8D8C7"] }, typography: { display: "Newsreader", body: "Inter", metadata: "DM Mono" }, shape_language: "soft outlined windows", background_system: "moving editorial grid", diagram_language: "causal nodes and clean connectors", presenter_frame: "warm desktop outline", motion_physics: { tempo: "measured", camera_behavior: "continuous lateral drift", primary_ease: "power3.inOut", secondary_ease: "expo.out", motion_blur_px: 12 }, transition_vocabulary: ["velocity push"], forbidden_motifs: ["cyan on black", "caption slideshow"] }
+    },
     narration: { source: "generated", full_text: "Proof becomes the story. Then the result lands.", target_wpm: 180, delivery: "direct", sections: [{ id: "section-1", text: "Proof becomes the story.", evidence_ids: ["ev-1"] }] },
     audio: { music_prompt: "restrained pulse with authored development", music_strategy: "support the causal build", sfx_strategy: "small proof ticks and one resolving hit" },
     claims: [{ text: "Evidence becomes motion", evidence_ids: ["ev-1"], confidence: "verified", qualifier: null }],
