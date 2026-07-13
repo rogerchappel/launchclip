@@ -42,7 +42,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   const dependencies = plan.shots.map((shot) => `frame:${shot.id}`);
   for (const dependency of dependencies) if (store.get(dependency)?.status !== "succeeded") throw new Error(`Frame job must succeed before assembly: ${dependency}`);
   const extraAudio = await describeExtraAudio(options);
-  const inputHash = semanticHash({ intake, plan, bundles, fallbacks, extraAudio, assembler: "hyperframes-assembler.v14" });
+  const inputHash = semanticHash({ intake, plan, bundles, fallbacks, extraAudio, assembler: "hyperframes-assembler.v15" });
   const jobId = "hyperframes-assembly";
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
@@ -152,6 +152,7 @@ export function rootMotionSpec(plan, bundles) {
 
 export function renderRoot({ plan, bundles, assetMap, extraAudio = [], fallbacks = [], transitions = buildShotTransitions(plan) }) {
   const chrome = presenterChromeStyle(plan.design?.style_dna);
+  const canvas = safeStyleColor(plan.design?.style_dna?.colors?.background, "#000000");
   const shotById = new Map(plan.shots.map((shot) => [shot.id, shot]));
   const rootMediaLayerBase = SHOT_LAYER_BASE + plan.shots.length + ROOT_MEDIA_LAYER_GAP;
   const media = [];
@@ -198,8 +199,8 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [], fallbacks
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
   <style>
     * { box-sizing: border-box; }
-    html, body { margin: 0; width: ${plan.format.width}px; height: ${plan.format.height}px; overflow: hidden; background: #000; }
-    #launchclip-root { position: relative; width: 100%; height: 100%; overflow: hidden; }
+    html, body { margin: 0; width: ${plan.format.width}px; height: ${plan.format.height}px; overflow: hidden; background: ${canvas}; }
+    #launchclip-root { position: relative; width: 100%; height: 100%; overflow: hidden; background: ${canvas}; }
     .shot-mount { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transform-origin: center center; will-change: transform, opacity, filter; }
     .root-media { position: absolute; display: block; overflow: hidden; transform-origin: center center; will-change: transform, opacity, filter; }
     .root-media-frame { position: absolute; pointer-events: none; overflow: hidden; border: ${chrome.borderWidth}px solid ${chrome.foreground}; background: transparent; box-shadow: ${chrome.shadow}; transform-origin: center center; will-change: transform, opacity, filter; }
@@ -267,8 +268,8 @@ function renderShotTransitionMotion(plan, transitions) {
     }
     const outgoing = `#mount-${escapeJs(transition.from_shot_id)}`;
     const distance = 86 * transition.direction;
-    const outgoingState = { opacity: 0, x: transition.axis === "x" ? -distance : 0, y: transition.axis === "y" ? -distance : 0, scale: 1.018, filter: `blur(${number(transition.motion_blur_px)}px)` };
-    const incomingState = { opacity: 0, x: transition.axis === "x" ? distance : 0, y: transition.axis === "y" ? distance : 0, scale: .982, filter: `blur(${number(transition.motion_blur_px)}px)` };
+    const outgoingState = { opacity: 1, x: transition.axis === "x" ? -distance : 0, y: transition.axis === "y" ? -distance : 0, scale: 1.018, filter: `blur(${number(transition.motion_blur_px)}px)` };
+    const incomingState = { opacity: 1, x: transition.axis === "x" ? distance : 0, y: transition.axis === "y" ? distance : 0, scale: .982, filter: `blur(${number(transition.motion_blur_px)}px)` };
     const settled = { opacity: 1, x: 0, y: 0, scale: 1, filter: "blur(0px)", duration: transition.duration_seconds, ease: "power3.inOut" };
     statements.push(`timeline.to("${outgoing}",{...${JSON.stringify(outgoingState)},duration:${number(transition.duration_seconds)},ease:"power3.inOut"},${number(transition.at_seconds)});`);
     statements.push(`timeline.fromTo("${incoming}",${JSON.stringify(incomingState)},${JSON.stringify(settled)},${number(transition.at_seconds)});`);
@@ -297,9 +298,9 @@ function renderMedia({ id, request, asset, globalStart, track, layerBase }) {
   const duration = request.end_seconds - request.start_seconds;
   const mediaStart = request.source_start_seconds ?? 0;
   const presentation = request.presentation ?? { mode: "companion", frame: "none", enter: "cut", exit: "cut", motion_blur_px: 0 };
-  const common = `id="${escapeAttr(id)}" class="clip root-media root-media--${escapeAttr(presentation.mode)}" src="assets/${escapeAttr(asset.file)}" data-start="${number(globalStart)}" data-duration="${number(duration)}" data-media-start="${number(mediaStart)}" data-volume="${number(request.volume)}" data-track-index="${Number(track)}" style="${style}" data-treatment="${escapeAttr(placement.treatment)}" data-presentation-mode="${escapeAttr(presentation.mode)}" data-layer-role="presenter"`;
-  const videoAudio = request.volume > 0 ? `data-has-audio="true"` : "muted";
-  const mediaElement = request.kind === "video" ? `<video ${common} ${videoAudio} playsinline></video>` : `<audio ${common}></audio>`;
+  const volume = request.kind === "video" ? 0 : request.volume;
+  const common = `id="${escapeAttr(id)}" class="clip root-media root-media--${escapeAttr(presentation.mode)}" src="assets/${escapeAttr(asset.file)}" data-start="${number(globalStart)}" data-duration="${number(duration)}" data-media-start="${number(mediaStart)}" data-volume="${number(volume)}" data-track-index="${Number(track)}" style="${style}" data-treatment="${escapeAttr(placement.treatment)}" data-presentation-mode="${escapeAttr(presentation.mode)}" data-layer-role="presenter"`;
+  const mediaElement = request.kind === "video" ? `<video ${common} muted playsinline></video>` : `<audio ${common}></audio>`;
   const frameId = `${id}-frame`;
   const frameElement = request.kind === "video" && presentation.frame === "desktop-window"
     ? `<div id="${escapeAttr(frameId)}" class="clip root-media-frame" data-start="${number(globalStart)}" data-duration="${number(duration)}" data-track-index="${Number(500 + track)}" data-layout-allow-occlusion="true" data-layer-role="presenter-chrome" style="left:${number(placement.x)}px;top:${number(placement.y)}px;width:${number(placement.width)}px;height:${number(placement.height)}px;border-radius:${number(placement.border_radius)}px;z-index:${number(mediaLayer + 1)}"><div class="root-media-window-bar" aria-hidden="true"><span class="root-media-window-dot root-media-window-dot--close"></span><span class="root-media-window-dot root-media-window-dot--minimize"></span><span class="root-media-window-dot root-media-window-dot--maximize"></span></div></div>`
