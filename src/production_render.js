@@ -228,6 +228,14 @@ function renderShotInspectionRoot(shot, format, duration) {
 
 export async function renderProduction(workspacePath, options = {}, adapters = {}) {
   if (!options.approve) throw new Error("Final production render requires explicit --approve after reviewing the assembled project and snapshots");
+  const workspace = path.resolve(workspacePath);
+  const assembly = await readOptionalJson(path.join(workspace, PRODUCTION_PATHS.hyperframes, "assembly.json"));
+  if (assembly?.full_fallback) {
+    const error = new Error(`Final production render is blocked because all ${assembly.fallback_count ?? assembly.fallbacks?.length ?? 0} shots use deterministic fallbacks. Review the labelled draft and repair at least one model-authored frame first.`);
+    error.code = "LAUNCHCLIP_FULL_FALLBACK_RENDER_BLOCKED";
+    error.assembly = assembly;
+    throw error;
+  }
   return renderAnalyzedProduction(workspacePath, options, adapters, {
     stage: "production-render", outputName: "final.mp4", quality: options.quality ?? "high",
     logName: "render.json", successStatus: "awaiting-human-review", enforceQuality: true
@@ -283,6 +291,7 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
   const critique = adapters.critiqueProduction
     ? await adapters.critiqueProduction(workspace, criticOptions(options))
     : await critiqueProduction(workspace, criticOptions(options), adapters.critic);
+  const assembly = await readOptionalJson(path.join(project, "assembly.json"));
   return {
     stage: profile.stage,
     status: critique.verdict === "ship" && motion.quality.ok && audio.quality.ok ? profile.successStatus : "needs-repair",
@@ -292,6 +301,7 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
     motion: motionPath,
     audio: audioPath,
     family: motion.family,
+    fallbacks: assembly ? { count: assembly.fallback_count ?? 0, full: Boolean(assembly.full_fallback), shots: assembly.fallbacks ?? [] } : null,
     critique
   };
 }

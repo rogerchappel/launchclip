@@ -203,6 +203,20 @@ test("blocks final rendering without approval and records failed HyperFrames che
   assert.equal(inspect.ok, false);
 });
 
+test("blocks a fully deterministic fallback assembly from final rendering", async () => {
+  const workspace = await fixture();
+  await writeFile(path.join(workspace, "production", "hyperframes", "assembly.json"), `${JSON.stringify({
+    fallback_count: 1,
+    full_fallback: true,
+    fallbacks: [{ shot_id: "shot-1", source: "verification" }]
+  })}\n`);
+  let commands = 0;
+  await assert.rejects(() => renderProduction(workspace, { approve: true }, {
+    run: async () => { commands += 1; return { stdout: "{}", stderr: "" }; }
+  }), (error) => error.code === "LAUNCHCLIP_FULL_FALLBACK_RENDER_BLOCKED");
+  assert.equal(commands, 0);
+});
+
 test("fails verification on lint warnings because final rendering uses strict-all", async () => {
   const workspace = await fixture();
   const run = async (_command, args) => ({
