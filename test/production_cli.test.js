@@ -77,14 +77,15 @@ test("automatically repairs deterministic verification failures before rendering
       }
       return { status: "ready", video: "/tmp/draft.mp4", verification: { status: "ready", snapshots: "/tmp/snapshots" }, critique: { verdict: "ship" } };
     },
-    repairProduction: async (_workspace, options) => { calls.push("repair"); repairOptions = options; return { status: "repaired", repaired: [{ shot_id: "shot-2" }] }; }
+    fallbackFramesForVerification: async (_workspace, options) => { calls.push("local-fallback"); repairOptions = options; return { status: "repaired", repaired: [{ shot_id: "shot-2" }] }; },
+    repairProduction: async () => { calls.push("paid-repair"); return { status: "repaired", repaired: [] }; }
   };
   const result = await runProduction("owner/repo", {}, adapters);
   assert.equal(result.status, "awaiting-approval");
-  assert.deepEqual(calls, ["assemble", "draft", "repair", "assemble", "draft"]);
-  assert.equal(result.repairs[0].trigger, "verification");
-  assert.equal(repairOptions.trigger, "verification");
-  assert.deepEqual(repairOptions.verification.failed, ["inspect:shot-2"]);
+  assert.deepEqual(calls, ["assemble", "draft", "local-fallback", "assemble", "draft"]);
+  assert.equal(result.repairs.length, 0);
+  assert.equal(result.local_repairs.length, 1);
+  assert.deepEqual(repairOptions.failed, ["inspect:shot-2"]);
 });
 
 test("stops a persistent verification repair loop at the configured bound", async () => {
@@ -100,6 +101,7 @@ test("stops a persistent verification repair loop at the configured bound", asyn
       calls.push("draft");
       throw Object.assign(new Error("still failing"), { code: "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED", verification: { status: "failed", failed: ["inspect:shot-1"], qa: "/tmp/qa" } });
     },
+    fallbackFramesForVerification: async () => ({ status: "not-applicable", repaired: [] }),
     repairProduction: async () => { calls.push("repair"); return { status: "repaired", repaired: [{ shot_id: "shot-1" }] }; }
   };
   const result = await runProduction("owner/repo", { "max-repair-passes": "1" }, adapters);

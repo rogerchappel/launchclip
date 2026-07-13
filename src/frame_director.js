@@ -256,6 +256,49 @@ export function buildFallbackFrame({ intake, plan, shot }) {
   };
 }
 
+export async function fallbackFramesForVerification(workspacePath, verification) {
+  const workspace = path.resolve(workspacePath);
+  const [intake, evidence, plan] = await Promise.all([
+    readJson(path.join(workspace, PRODUCTION_PATHS.intake)),
+    readJson(path.join(workspace, PRODUCTION_PATHS.evidence)),
+    readJson(path.join(workspace, PRODUCTION_PATHS.plan))
+  ]);
+  const shotIds = new Set((verification?.failed ?? [])
+    .filter((entry) => String(entry).startsWith("inspect:"))
+    .map((entry) => String(entry).slice("inspect:".length)));
+  const lintPath = path.join(verification?.qa ?? path.join(workspace, "production", "qa"), "lint.json");
+  try {
+    const lint = await readJson(lintPath);
+    for (const finding of lint?.stdout?.findings ?? []) {
+      if (finding.severity !== "error") continue;
+      const source = JSON.stringify(finding);
+      for (const shot of plan.shots) if (source.includes(shot.id)) shotIds.add(shot.id);
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  const eligible = plan.shots.filter((shot) => shotIds.has(shot.id));
+  if (!eligible.length) return { status: "not-applicable", repaired: [] };
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  const repaired = [];
+  for (const shot of eligible) {
+    const jobId = `frame:${shot.id}`;
+    const current = store.get(jobId);
+    if (!current) continue;
+    if (current.status === "succeeded") await store.markStaleFrom([jobId]);
+    const stale = store.get(jobId);
+    if (stale.status === "failed" || stale.status === "stale") await store.retry(jobId, { inputHash: stale.input_hash });
+    else if (stale.status !== "pending") continue;
+    await store.markRunning(jobId, { provider: "local", response_id: current.remote?.response_id ?? null, status: "verification-fallback" });
+    repaired.push(await persistFallbackFrame({
+      workspace, intake, evidence, plan, shot, store, jobId,
+      reason: `Native verification failed: ${(verification.failed ?? []).join(", ")}`,
+      responseId: current.remote?.response_id ?? null
+    }));
+  }
+  return { status: repaired.length ? "repaired" : "not-applicable", repaired };
+}
+
 async function persistFallbackFrame({ workspace, intake, evidence, plan, shot, store, jobId, reason, responseId = null, usage = {} }) {
   const fallback = buildFallbackFrame({ intake, plan, shot });
   const validation = validateFrameBundle(fallback, {
