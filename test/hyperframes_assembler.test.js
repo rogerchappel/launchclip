@@ -57,6 +57,9 @@ test("moves presenter video between beat-specific avatar layouts at the host roo
   assert.match(html, /id="shot-2-media-1"[^>]+data-start="3"[^>]+data-media-start="3"[^>]+left:620px;top:120px;width:380px;height:600px/);
   assert.match(html, /id="shot-1-media-1"[^>]+data-track-index="10"/);
   assert.match(html, /id="shot-2-media-1"[^>]+data-track-index="11"/);
+  assert.match(html, /id="shot-1-media-1"[^>]+z-index:210[^>]+data-layer-role="presenter"/);
+  assert.match(html, /id="shot-1-media-1-frame"[^>]+data-layer-role="presenter-chrome"[^>]+z-index:211/);
+  assert.match(html, /id="mount-shot-2"[^>]+style="z-index:101"/);
   assert.match(html, /id="shot-1-media-1-frame"[^>]+root-media-frame/);
   assert.match(html, /root-media-window-dot--close/);
   assert.match(html, /timeline\.fromTo\("#shot-1-media-1,#shot-1-media-1-frame"/);
