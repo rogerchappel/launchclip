@@ -66,7 +66,11 @@ export async function directFrames(workspacePath, options = {}, adapters = {}) {
   const costState = { estimatedUsd: 0, calls: 0, complete: true, warnings: [], outputTokenLimitBreaches: [] };
   const tasks = plan.shots.map((shot, index) => async () => {
     assertFrameBudget(costState, maxFrameCostUsd);
-    const frame = await directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, client, options });
+    const existing = store.get(`frame:${shot.id}`);
+    const shotOptions = options.pendingReasoning && existing?.status !== "succeeded"
+      ? { ...options, reasoning: options.pendingReasoning }
+      : options;
+    const frame = await directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, client, options: shotOptions });
     recordFrameCost(costState, frame, intake.model?.id ?? "gpt-5.6", Number(options.maxOutputTokens ?? 36_000));
     if (frame.fallback && failClosed) throw frameFallbackError(frame);
     return frame;
