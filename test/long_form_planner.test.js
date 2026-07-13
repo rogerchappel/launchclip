@@ -188,7 +188,7 @@ function outline(source = "generated") {
 
 function chapterPlan(id, source = "generated") {
   const text = id === "chapter-1" ? "Evidence becomes the model." : "The model directs the finished motion. Try it";
-  const shot = (shotId, start, end) => ({ id: shotId, start_seconds: start, end_seconds: end, purpose: "Advance chapter", voiceover: text, on_screen_text: ["Proof", "Try it"], evidence_ids: ["ev-1"], resource_ids: ["screen"], presenter: { visible: false, placement: "offstage", size: "none", treatment: "none" }, visual: { description: "Evidence diagram", composition: "Causal hierarchy", typography: "Editorial", background: "Quiet", foreground: "Proof", motion: "Develop and settle", internal_reveals: [{ at_seconds: 5, action: "connect", easing_intent: "accelerate then settle", emphasis: "proof" }] }, transition_out: "state continuation", sfx: [{ at_seconds: 5, cue: "tick", intent: "proof", volume: .3 }] });
+  const shot = (shotId, start, end) => ({ id: shotId, start_seconds: start, end_seconds: end, purpose: "Advance chapter", voiceover: text, on_screen_text: ["Proof", "Try it"], evidence_ids: ["ev-1"], resource_ids: ["screen"], presenter: { mode: "voiceover", visible: false, placement: "offstage", size: "none", treatment: "none" }, visual: { description: "Evidence diagram", composition: "Causal hierarchy", typography: "Editorial", background: "Quiet", foreground: "Proof", motion: "Develop and settle", internal_reveals: [{ at_seconds: 5, action: "connect", easing_intent: "accelerate then settle", emphasis: "proof" }] }, transition_out: "state continuation", sfx: [{ at_seconds: 5, cue: "tick", intent: "proof", volume: .3 }] });
   return {
     schema_version: PRODUCTION_PLAN_VERSION,
     project: outline(source).project,
