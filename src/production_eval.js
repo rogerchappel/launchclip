@@ -514,7 +514,7 @@ function shot(id, start, end, purpose, voiceover, onScreenText, evidenceIds, res
   return {
     id, start_seconds: start, end_seconds: end, purpose, voiceover, on_screen_text: onScreenText,
     evidence_ids: evidenceIds, resource_ids: resourceIds,
-    presenter: { visible: presenterVisible, placement: presenterVisible ? presenterPlacement : "offstage", size: presenterVisible ? "medium" : "none", treatment: presenterVisible ? "rounded picture-in-picture" : "none" },
+    presenter: { mode: presenterVisible ? "companion" : "voiceover", visible: presenterVisible, placement: presenterVisible ? presenterPlacement : "offstage", size: presenterVisible ? "medium" : "none", treatment: presenterVisible ? "rounded picture-in-picture" : "none" },
     visual: {
       description: "A signal path develops from source artifact to verified frame",
       composition: "Large editorial headline, proof card, and one controlled accent",
