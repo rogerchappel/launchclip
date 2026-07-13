@@ -10,6 +10,7 @@ import {
   normalizeProductionPlanTiming,
   validateProductionPlan
 } from "./production_contracts.js";
+import { VISUAL_NOVELTY_CONTEXT_PATH, loadVisualNoveltyContext, writeVisualFingerprint } from "./visual_novelty.js";
 
 const PLANNER_INSTRUCTIONS = `You are the creative director, narrative editor, and motion-design lead for one excellent video.
 
@@ -28,6 +29,7 @@ Rules:
 - Typography supports the visual model; it is not the visual model. Across the full runtime, kinetic-type or text-only shots may occupy at most 15%. Companion and voiceover shots require content-bearing diagrams, comparisons, timelines, processes, networks, data, media, or spatial metaphors.
 - Build continuity sequences across related narration beats. Reuse stable object IDs, explicitly hand objects from one shot to the next, and match exit velocity to entry velocity within 5% so acceleration, deceleration, camera direction, and motion blur read as one continuous canvas.
 - Design style_dna before the shots. It is a project-specific design system, not a layout template: declare exact colors, type roles, shape language, background system, diagram language, presenter treatment, motion physics, transition vocabulary, and forbidden motifs. Avoid cyan-on-black and generic blue gradients unless the brief or supplied brand requires them.
+- Treat visual_novelty as a binding creative-direction contract. Keep style_dna stable while inventing a script-specific episode metaphor, representation sequence, spatial topology, motion vocabulary, transition vocabulary, and presenter rhythm. When mode=differentiate, differ from recent fingerprints across at least four axes without choosing visuals randomly. When mode=reproduce, preserve the matching fingerprint. Use creative_seed only to break ties between equally truthful concepts.
 - Treat resource catalog metadata as semantic guidance. Bind logos, screenshots, icons, and clips only when the asset meaning matches the narration; otherwise build truthful native HTML/CSS/SVG diagrams.
 - Keep on-screen copy concise enough to read in its available time.
 - Treat presenter media as a choreographed visual object, never a fixed background. Assign every shot exactly one presenter.mode: anchor when the presenter is the primary visual, companion when a framed presenter window shares the stage with proof/graphics, or voiceover when the presenter is offstage and the supplied audio continues under full motion graphics.
@@ -51,6 +53,14 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
   }
 
   const sfxCatalog = options.sfxCatalog ?? await listSfx(options.sfxDir ?? path.join(PACKAGE_ROOT, "public", "sfx"));
+  const noveltyContext = await loadVisualNoveltyContext(workspace, {
+    intake,
+    evidence,
+    suppliedNarration,
+    historyDir: options.visualHistoryDir,
+    historyLimit: options.visualHistoryLimit,
+    similarityLimit: options.visualSimilarityLimit
+  });
   const planningMode = resolvePlanningMode(options.planningMode, suppliedNarration?.duration_seconds ?? intake.brief.duration_seconds, options.hierarchicalThresholdSeconds);
   if (planningMode === "hierarchical") {
     const store = adapters.store ?? await ProductionJobStore.open(workspace);
@@ -58,9 +68,9 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
     const plannerAdapters = { store };
     if (adapters.client) plannerAdapters.client = adapters.client;
     else if (!adapters.planLongFormProduction) plannerAdapters.client = new OpenAIResponsesClient();
-    return hierarchicalPlanner(workspace, { intake, evidence, suppliedNarration, sfxCatalog, options }, plannerAdapters);
+    return hierarchicalPlanner(workspace, { intake, evidence, suppliedNarration, sfxCatalog, noveltyContext, options }, plannerAdapters);
   }
-  const input = buildPlanningInput(intake, evidence, suppliedNarration, { ...options, sfxCatalog });
+  const input = buildPlanningInput(intake, evidence, suppliedNarration, { ...options, sfxCatalog, noveltyContext });
   const inputHash = semanticHash({ input, model: intake.model, schema: PRODUCTION_PLAN_SCHEMA, planner: "creative-planner.v1" });
   const store = adapters.store ?? await ProductionJobStore.open(workspace);
   const jobId = String(options.jobId ?? "creative-plan");
@@ -119,6 +129,8 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
     if (!validation.ok) throw new Error(`GPT-5.6 production plan failed semantic validation: ${validation.errors.join("; ")}`);
 
     const paths = await writePlanArtifacts(workspace, plan);
+    paths.push(path.join(workspace, VISUAL_NOVELTY_CONTEXT_PATH));
+    paths.push(await writeVisualFingerprint(workspace, plan, noveltyContext));
     await store.markRunning(jobId, { provider: "openai", response_id: result.response_id, status: result.status });
     const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
     await store.markSucceeded(jobId, outputs, result.usage);
@@ -183,7 +195,8 @@ export function buildPlanningInput(intake, evidence, suppliedNarration = null, o
       ? { source: "supplied", authoritative_transcript: narration.transcript, measured_duration_seconds: narration.duration_seconds, word_timing: narration.words }
       : { source: "generated", authoritative_transcript: null, measured_duration_seconds: null, word_timing: [] },
     policies: intake.policies,
-    evidence_warnings: evidence.warnings
+    evidence_warnings: evidence.warnings,
+    visual_novelty: options.noveltyContext ?? null
   });
 }
 
