@@ -140,6 +140,7 @@ export function rootMotionSpec(plan, bundles) {
 }
 
 export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
+  const chrome = presenterChromeStyle(plan.design?.style_dna);
   const shotById = new Map(plan.shots.map((shot) => [shot.id, shot]));
   const media = [];
   const mediaMotion = [];
@@ -174,9 +175,9 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
     #launchclip-root { position: relative; width: 100%; height: 100%; overflow: hidden; }
     .shot-mount { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 100; }
     .root-media { position: absolute; display: block; overflow: hidden; transform-origin: center center; will-change: transform, opacity, filter; }
-    .root-media-frame { position: absolute; pointer-events: none; overflow: hidden; border: 3px solid rgba(235,244,249,.92); background: transparent; box-shadow: 0 24px 70px rgba(0,0,0,.38), 0 0 0 1px rgba(16,23,28,.45); transform-origin: center center; will-change: transform, opacity, filter; }
-    .root-media-window-bar { position: absolute; top: 0; left: 0; right: 0; height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid rgba(235,244,249,.28); background: linear-gradient(180deg, rgba(19,28,35,.94), rgba(13,20,26,.84)); }
-    .root-media-window-dot { width: 12px; height: 12px; border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.18); }
+    .root-media-frame { position: absolute; pointer-events: none; overflow: hidden; border: ${chrome.borderWidth}px solid ${chrome.foreground}; background: transparent; box-shadow: ${chrome.shadow}; transform-origin: center center; will-change: transform, opacity, filter; }
+    .root-media-window-bar { position: absolute; top: 0; left: 0; right: 0; height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: ${chrome.borderWidth}px solid ${chrome.foreground}; background: ${chrome.surface}; }
+    .root-media-window-dot { width: 12px; height: 12px; border-radius: ${chrome.dotRadius}; box-shadow: inset 0 0 0 1px ${chrome.foreground}; }
     .root-media-window-dot--close { background: #ff6258; }
     .root-media-window-dot--minimize { background: #ffc04a; }
     .root-media-window-dot--maximize { background: #40c957; }
@@ -326,6 +327,31 @@ async function writeAtomic(filePath, content) {
 
 function slug(value) {
   return String(value).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "asset";
+}
+
+function presenterChromeStyle(styleDna = {}) {
+  const colors = styleDna.colors ?? {};
+  const background = safeStyleColor(colors.background, "#F4F0E8");
+  const foreground = safeStyleColor(colors.foreground, "#20231F");
+  const accent = safeStyleColor(colors.accent, "#E58B72");
+  const sharp = /sharp|square|zero/i.test(String(styleDna.shape_language ?? ""));
+  const flat = /no shadow|flat|paper/i.test(String(styleDna.presenter_frame ?? ""));
+  return {
+    foreground,
+    surface: `${background}F2`,
+    borderWidth: sharp ? 4 : 3,
+    dotRadius: sharp ? "2px" : "999px",
+    shadow: flat ? `8px 8px 0 ${accent}` : `0 24px 70px ${hexAlpha(foreground, "38")}, 0 0 0 1px ${hexAlpha(accent, "80")}`
+  };
+}
+
+function safeStyleColor(value, fallback) {
+  const color = String(value ?? "").trim();
+  return /^#[0-9a-f]{6}$/i.test(color) ? color : fallback;
+}
+
+function hexAlpha(color, alpha) {
+  return `${safeStyleColor(color, "#20231F")}${alpha}`;
 }
 
 function escapeAttr(value) {
