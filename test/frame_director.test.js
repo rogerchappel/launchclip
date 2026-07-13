@@ -93,6 +93,9 @@ test("builds a deterministic presenter fallback that satisfies the frame contrac
   const intake = { ...context.intake, resources: [{ id: "presenter", role: "presenter", type: "video", location: "/tmp/presenter.mp4", is_remote: false }] };
   const fallback = buildFallbackFrame({ intake, plan: context.plan, shot });
   assert.match(fallback.html, /local-deterministic-fallback|fallback-card/);
+  assert.match(fallback.html, /fallback-grid/);
+  assert.match(fallback.html, /fallback-rail/);
+  assert.match(fallback.html, /stagger:\.16/);
   assert.equal(fallback.root_media_requests[0].resource_id, "presenter");
   assert.equal(fallback.root_media_requests[0].source_start_seconds, 0);
   assert.equal(fallback.root_media_requests[0].source_end_seconds, 5);
