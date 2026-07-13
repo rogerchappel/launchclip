@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { ensureTimelineRegistration, hasTimelineRegistration } from "./hyperframes_timeline.js";
@@ -109,6 +109,8 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   const baseInput = buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming });
   const inputHash = semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v2" });
   const existing = store.get(jobId);
+  const recovered = await recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
+  if (recovered) return recovered;
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
     const verification = await store.verifyOutputs(jobId);
     if (verification.ok) return { shot_id: shot.id, cached: true, outputs: verification.outputs, response_id: existing.remote?.response_id ?? null };
@@ -154,19 +156,15 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
       resumeResponseId = null;
       await store.markRunning(jobId, { provider: "openai", response_id: result.response_id, status: result.status });
       const normalized = { ...result.value, html: ensureTimelineRegistration(result.value.html, shot.id) };
-      const sanitized = sanitizeFrameBundle(normalized);
-      const candidate = sanitized.bundle;
-      const validation = validateFrameBundle(candidate, {
-        shotId: shot.id,
+      const sanitized = sanitizeFrameBundle(normalized, {
         shot,
-        format: plan.format,
-        evidenceIds: evidence.items.map((entry) => entry.id),
-        resourceIds: intake.resources.map((entry) => entry.id),
-        resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
-        allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
+        resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
       });
+      const candidate = sanitized.bundle;
+      const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
       errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
       await writeFrameAttempt(workspace, shot.id, attempt, {
+        input_hash: inputHash,
         response_id: result.response_id,
         model: result.model,
         usage: result.usage,
@@ -196,16 +194,105 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   }
 }
 
-export function sanitizeFrameBundle(bundle) {
+export function sanitizeFrameBundle(bundle, context = {}) {
   const html = String(bundle?.html ?? "");
   let removed = 0;
   const sanitizedHtml = html.replace(/\son[a-z][\w:-]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, () => {
     removed += 1;
     return "";
   });
+  const repairs = removed ? [{ kind: "remove-event-handler-attributes", count: removed }] : [];
+  const resourceRoles = context.resourceRoles instanceof Map ? context.resourceRoles : new Map(Object.entries(context.resourceRoles ?? {}));
+  const rootMediaRequests = [];
+  for (const request of bundle?.root_media_requests ?? []) {
+    if (resourceRoles.get(request.resource_id) !== "voiceover") {
+      rootMediaRequests.push(request);
+      continue;
+    }
+    repairs.push({
+      kind: "remove-authoritative-voiceover-root-media",
+      resource_id: request.resource_id,
+      presenter_mode: context.shot?.presenter?.mode ?? null
+    });
+  }
   return {
-    bundle: { ...bundle, html: sanitizedHtml },
-    repairs: removed ? [{ kind: "remove-event-handler-attributes", count: removed }] : []
+    bundle: { ...bundle, html: sanitizedHtml, root_media_requests: rootMediaRequests },
+    repairs
+  };
+}
+
+async function recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash }) {
+  if (!existing || existing.input_hash !== inputHash) return null;
+  if (!new Set(["failed", "running", "submitted", "succeeded"]).has(existing.status)) return null;
+  if (existing.status === "succeeded" && !existing.outputs.some((entry) => entry.path.includes(`/${FALLBACK_FRAMES_PATH}/`) || entry.path.startsWith(`${FALLBACK_FRAMES_PATH}/`))) return null;
+  const record = await readLatestFrameAttempt(workspace, shot.id);
+  if (!record?.candidate || (record.input_hash && record.input_hash !== inputHash)) return null;
+  const sanitized = sanitizeFrameBundle(record.candidate, {
+    shot,
+    resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
+  });
+  const candidate = sanitized.bundle;
+  const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
+  const errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
+  if (errors.length) return null;
+  const paths = await writeFrameArtifacts(workspace, candidate);
+  const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
+  if (existing.status === "succeeded") await store.replaceSucceededOutputs(jobId, outputs);
+  else {
+    if (existing.status === "failed") {
+      await store.reconfigure(jobId, { input_hash: inputHash });
+      await store.markRunning(jobId, { provider: "local", response_id: record.response_id ?? existing.remote?.response_id ?? null, status: "recovered" });
+    }
+    await store.markSucceeded(jobId, outputs, record.usage ?? existing.usage ?? {});
+  }
+  return {
+    shot_id: shot.id,
+    cached: false,
+    recovered: true,
+    sanitized: sanitized.repairs.length > 0,
+    repairs: sanitized.repairs,
+    bundle: paths[0], html: paths[1], motion: paths[2],
+    response_id: record.response_id ?? existing.remote?.response_id ?? null,
+    model: record.model ?? "stored-frame-candidate",
+    usage: record.usage ?? existing.usage ?? {}
+  };
+}
+
+async function readLatestFrameAttempt(workspace, shotId) {
+  const directory = path.join(workspace, PRODUCTION_PATHS.frames, ".attempts");
+  let names;
+  try {
+    names = await readdir(directory);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+  const prefix = `${shotId}-attempt-`;
+  const candidates = names
+    .filter((name) => name.startsWith(prefix) && name.endsWith(".json"))
+    .map((name) => ({ name, attempt: Number(name.slice(prefix.length, -".json".length)) }))
+    .filter((entry) => Number.isInteger(entry.attempt) && entry.attempt > 0)
+    .sort((left, right) => right.attempt - left.attempt);
+  for (const entry of candidates) {
+    try {
+      return await readJson(path.join(directory, entry.name));
+    } catch (error) {
+      if (error instanceof SyntaxError) continue;
+      throw error;
+    }
+  }
+  return null;
+}
+
+function frameValidationContext({ intake, evidence, plan, shot }) {
+  return {
+    shotId: shot.id,
+    shot,
+    format: plan.format,
+    evidenceIds: evidence.items.map((entry) => entry.id),
+    resourceIds: intake.resources.map((entry) => entry.id),
+    resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
+    allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
   };
 }
 
