@@ -71,6 +71,41 @@ and folder structure. An optional `assets.json` can override usage, entity
 hints, tags, priority, and licensing for individual relative paths; the media
 remains usable without a manifest.
 
+Authoritative local voiceover media is silence-trimmed before evidence,
+transcription, and planning so every later timestamp uses the prepared clip.
+The original is never overwritten. Use `--no-trim-silence` to opt out, or rerun
+only this free stage with `launchclip source-preprocess <workspace>`.
+
+Reusable company marks can live outside every repository in
+`~/.launchclip/brand-assets` (or `LAUNCHCLIP_BRAND_ASSETS_DIR`). Launchclip reads
+`brands.json`, resolves transcript mentions to canonical display names, and
+adds matching local files as checksummed planning resources. Normal product
+aliases and known speech-to-text mistakes are separate so a valid product name
+is not accidentally “corrected”:
+
+```json
+{
+  "schema_version": "launchclip.brand-library.v1",
+  "brands": [
+    {
+      "id": "refiant",
+      "canonical_name": "Refiant AI",
+      "display_name": "Refiant",
+      "aliases": ["Refiant"],
+      "asr_aliases": ["Refine"],
+      "domains": ["refiant.ai"],
+      "assets": [
+        { "kind": "logo", "variant": "default", "path": "refiant/logo.svg" }
+      ]
+    }
+  ]
+}
+```
+
+These personal assets are not copied into source control. During assembly the
+selected files are frozen into the ignored production workspace, so a future
+script that mentions the same company can reuse them without another upload.
+
 Styles are generative design systems rather than fixed scene templates.
 `--style auto` derives project-specific style DNA from the subject and assets;
 `--style <family>` supplies a creative family; `--style-file frame.md` applies a

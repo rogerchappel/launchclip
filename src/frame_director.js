@@ -30,6 +30,9 @@ HyperFrames contract:
 - Use only supplied local resource paths. If a requested visual asset is unavailable, design a native HTML/CSS/SVG treatment instead of inventing a path.
 - Treat global_design.style_dna as binding brand truth and shot.visual as binding semantic truth. Apply the exact palette, typography roles, shape language, background system, diagram language, presenter frame, motion physics, transition vocabulary, and forbidden motifs. Do not substitute a generic dark-blue UI.
 - Render the declared semantic representation. Diagrams need labeled nodes and connectors; comparisons need visibly opposed states; timelines need a spatial axis and progressing marks; processes need stages and direction; data needs a proportional visual form. A headline floating over decoration does not satisfy the visual concept.
+- Reserve explicit non-overlapping regions for headlines, metrics, labels, diagrams, and presenter media before drawing connectors or decoration. Semantic connectors sit behind copy, terminate at actual nodes, and never cross text or numeric values. Do not use scribbles, contour/isobar lines, or stray strokes as filler.
+- Use a separate DOM/SVG element for each semantic object. Do not schedule two GSAP tweens that write the same property on the same element during overlapping intervals; compose one timeline or split the properties across purposeful elements.
+- When a planned logo object has a supplied local logo resource, render that exact asset with contain sizing and protected clear space. Never approximate a logo with text, emoji, initials, or native shapes.
 - Materialize every shot.visual.objects entry as a visible object or an approved root-media request. Give authored DOM objects data-visual-object-id equal to the planned object id while keeping the actual DOM id shot-prefixed.
 - Materialize every shot.visual.events entry in motion.events. Each event must point to the real selector that visibly changes at the planned time. SFX relies on this event contract, so do not report an event that has no perceptible animation.
 - Honor shot.visual.continuity and the neighbor handoff. Persistent object IDs retain their visual identity, transform events visibly evolve them, and camera velocity/direction/blur must make related shots feel like one moving canvas rather than separate slides.
@@ -125,7 +128,7 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, narration
 async function directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, client, options }) {
   const jobId = `frame:${shot.id}`;
   const baseInput = buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming });
-  const inputHash = semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v2" });
+  const inputHash = semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v3" });
   const existing = store.get(jobId);
   const recovered = await recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
   if (recovered) return recovered;
@@ -166,7 +169,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         schemaName: "launchclip_frame_bundle",
         background: options.background !== false,
         maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
-        promptCacheKey: "launchclip:frame-director:v2",
+        promptCacheKey: "launchclip:frame-director:v3",
         metadata: { job_id: jobId, shot_id: shot.id, attempt },
         onSubmitted: async (response) => store.markRunning(jobId, { provider: "openai", response_id: response.id, status: response.status })
       };

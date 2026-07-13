@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { writeFrameArtifacts } from "../src/frame_director.js";
-import { applyFrameCsp, assembleHyperFrames, ensureTimelineRegistration, renderRoot, rootMotionSpec, toHyperFramesMotionSpec } from "../src/hyperframes_assembler.js";
+import { applyFrameCsp, assembleHyperFrames, buildShotTransitions, ensureTimelineRegistration, renderRoot, rootMotionSpec, toHyperFramesMotionSpec } from "../src/hyperframes_assembler.js";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { EVIDENCE_VERSION, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
@@ -19,7 +19,7 @@ test("renders subcompositions while keeping timed media and SFX as direct root c
   assert.match(html, /data-composition-src="compositions\/shot-1\.html" data-start="0" data-duration="4\.999"/);
   assert.match(html, /gsap@3\.14\.2/);
   assert.match(html, /Content-Security-Policy/);
-  assert.match(html, /\.shot-mount \{[^}]+z-index: 100/);
+  assert.match(html, /\.shot-mount \{[^}]+will-change: transform, opacity, filter/);
   assert.match(html, /const timeline = gsap\.timeline\(\{ paused: true \}\)/);
   assert.match(html, /window\.__timelines\["main"\] = timeline/);
   assert.match(html, /<video[^>]+data-start="1"[^>]+data-duration="3"[^>]+data-media-start="4"/);
@@ -61,6 +61,21 @@ test("moves presenter video between beat-specific avatar layouts at the host roo
   assert.match(html, /root-media-window-dot--close/);
   assert.match(html, /timeline\.fromTo\("#shot-1-media-1,#shot-1-media-1-frame"/);
   assert.match(html, /"filter":"blur\(16px\)"/);
+  assert.match(html, /data-composition-src="compositions\/shot-1\.html" data-start="0" data-duration="3\.26"/);
+  assert.match(html, /timeline\.to\("#mount-shot-1"/);
+  assert.match(html, /timeline\.fromTo\("#mount-shot-2"/);
+});
+
+test("preserves explicit cuts and derives directional flow handoffs", () => {
+  const plan = { format: { duration_seconds: 9 }, shots: [
+    { id: "one", start_seconds: 0, end_seconds: 3, transition_out: "velocity push", visual: { continuity: { camera_direction: "down", motion_blur_px: 18 } } },
+    { id: "two", start_seconds: 3, end_seconds: 6, transition_out: "hard cut", visual: { continuity: { camera_direction: "down", motion_blur_px: 18 } } },
+    { id: "three", start_seconds: 6, end_seconds: 9, visual: { continuity: { camera_direction: "right" } } }
+  ] };
+  assert.deepEqual(buildShotTransitions(plan).map((entry) => ({ kind: entry.kind, axis: entry.axis, duration: entry.duration_seconds })), [
+    { kind: "flow", axis: "y", duration: .26 },
+    { kind: "cut", axis: "x", duration: 0 }
+  ]);
 });
 
 test("applies a restrictive CSP to model-authored frame documents", () => {

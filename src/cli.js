@@ -7,7 +7,7 @@ import { writeIntake } from "./intake.js";
 import { runProductionStage } from "./production_cli.js";
 import { createCostTracker } from "./cost_tracker.js";
 
-const PRODUCTION_COMMANDS = new Set(["evidence", "source-media", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-critique", "production-repair", "production-render", "produce"]);
+const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-critique", "production-repair", "production-render", "produce"]);
 const COMMANDS = new Set(["intake", ...PRODUCTION_COMMANDS, "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
@@ -113,9 +113,11 @@ function help() {
 
 Usage:
   launchclip intake <source> [--kind repository|product|topic|voiceover] [--resource path] [--assets path] [--style auto|family] [--style-file frame.md] [--style-reference path|url] [--reference url] [--voiceover audio|video] [--transcript text] [--presenter video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
-  launchclip produce <source> [intake flags] [--planning-mode auto|single|hierarchical] [--chapter-concurrency 3] [--plan-semantic-attempts 2] [--visual-history-dir path] [--visual-history-limit 8] [--visual-similarity-limit 0.58] [--voice-id id] [--sfx-dir path] [--concurrency 4] [--max-frame-cost-usd 5] [--allow-frame-fallback] [--no-audio] [--fast-eval] [--allow-timing-drift]
+  launchclip produce <source> [intake flags] [--brand-assets-dir path] [--no-trim-silence] [--silence-duration 0.45] [--silence-padding 0.12] [--planning-mode auto|single|hierarchical] [--chapter-concurrency 3] [--plan-semantic-attempts 2] [--visual-history-dir path] [--visual-history-limit 8] [--visual-similarity-limit 0.58] [--voice-id id] [--sfx-dir path] [--concurrency 4] [--max-frame-cost-usd 5] [--allow-frame-fallback] [--no-audio] [--fast-eval] [--allow-timing-drift]
   launchclip evidence <workspace>
+  launchclip source-preprocess <workspace> [--no-trim-silence] [--silence-duration 0.45] [--silence-padding 0.12]
   launchclip source-media <workspace> [--media-samples 12] [--media-reasoning high] [--transcribe-all]
+  launchclip resolve-entities <workspace> [--brand-assets-dir ~/.launchclip/brand-assets]
   launchclip creative-plan <workspace> [--planning-mode auto|single|hierarchical] [--hierarchical-threshold 180] [--chapter-concurrency 3] [--plan-semantic-attempts 2] [--visual-history-dir path] [--visual-history-limit 8] [--visual-similarity-limit 0.58] [--max-output-tokens 48000] [--foreground]
   launchclip production-audio <workspace> [--voice-id id] [--music-model music_v2] [--sfx-dir path] [--no-voice] [--no-music] [--no-sfx]
   launchclip direct-frames <workspace> [--concurrency 4] [--semantic-attempts 2] [--frame-reasoning high] [--max-frame-cost-usd amount] [--allow-frame-fallback]

@@ -41,6 +41,28 @@ test("rejects timeline gaps, unknown evidence, and changed supplied narration", 
   assert.ok(result.errors.some((error) => error.includes("preserved exactly")));
 });
 
+test("keeps timed transcripts exact while rejecting ASR errors in display copy", () => {
+  const plan = samplePlan();
+  plan.narration.source = "supplied";
+  plan.shots[0].on_screen_text = ["DES- DESKTOP APP"];
+  plan.shots[1].on_screen_text = ["Refine ships 10M tokens"];
+  const result = validateProductionPlan(plan, {
+    evidenceIds: ["ev-1"],
+    resourceIds: ["res-1"],
+    suppliedTranscript: plan.narration.full_text,
+    canonicalEntities: [{ canonical_name: "Refiant AI", display_name: "Refiant", spoken_form: "refine", match_kind: "asr-alias", confidence: 0.98 }]
+  });
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => error.includes("false start")));
+  assert.ok(result.errors.some((error) => error.includes('use canonical display name "Refiant"')));
+  plan.shots[0].on_screen_text = ["DESKTOP APP"];
+  plan.shots[1].on_screen_text = ["Refiant ships 10M tokens"];
+  assert.equal(validateProductionPlan(plan, {
+    evidenceIds: ["ev-1"], resourceIds: ["res-1"], suppliedTranscript: plan.narration.full_text,
+    canonicalEntities: [{ canonical_name: "Refiant AI", display_name: "Refiant", spoken_form: "refine", match_kind: "asr-alias", confidence: 0.98 }]
+  }).ok, true);
+});
+
 test("enforces the requested output format, duration, language, and exact CTA", () => {
   const plan = samplePlan();
   plan.format = { aspect: "9:16", width: 1080, height: 1920, duration_seconds: 9, language: "fr" };

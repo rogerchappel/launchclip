@@ -83,7 +83,7 @@ test("reuses a content-addressed verification receipt with intact reports and sn
   assert.equal(second.cached, true);
   assert.deepEqual(commands, ["lint", "validate", "inspect", "snapshot"]);
   const receipt = JSON.parse(await readFile(path.join(workspace, "production", "qa", "verification.json"), "utf8"));
-  assert.equal(receipt.schema_version, "launchclip.production-verification.v4");
+  assert.equal(receipt.schema_version, "launchclip.production-verification.v5");
   assert.equal(receipt.status, "passed");
   assert.equal(receipt.cacheable, true);
   assert.equal(receipt.snapshot_artifacts.files.length, 1);
@@ -142,6 +142,24 @@ test("blocks production when a shot-local motion assertion fails", async () => {
   const report = JSON.parse(await readFile(path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json"), "utf8"));
   assert.equal(report.ok, false);
   assert.equal(report.stdout.issues[0].code, "motion_selector_missing");
+});
+
+test("fails closed when inspection returns structured errors with exit code zero", async () => {
+  const workspace = await fixture();
+  const run = async (_command, args) => ({
+    stdout: args[1] === "inspect"
+      ? JSON.stringify({ ok: false, issues: [{ code: "layout_overlap", severity: "error", message: "metric overlaps label" }] })
+      : args.includes("--json") ? "{}" : "ok",
+    stderr: ""
+  });
+  await assert.rejects(() => verifyProduction(workspace, {}, { run }), (error) => {
+    assert.ok(error instanceof ProductionVerificationError);
+    assert.deepEqual(error.verification.failed, ["inspect"]);
+    return true;
+  });
+  const report = JSON.parse(await readFile(path.join(workspace, "production", "qa", "inspect.json"), "utf8"));
+  assert.equal(report.ok, false);
+  assert.equal(report.failure_kind, "content");
 });
 
 test("classifies unsupported verifier contracts as infrastructure failures", async () => {

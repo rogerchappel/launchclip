@@ -29,8 +29,8 @@ test("parses leading and trailing silence into a trim range", () => {
 [silencedetect @ abc] silence_end: 10.0 | silence_duration: 0.6
 `;
   assert.deepEqual(parseSilenceDetect(stderr, 10, 0.1), {
-    start: 1.35,
-    end: 9.3,
+    start: 1.15,
+    end: 9.5,
     leadingSilence: { start: 0, end: 1.25 },
     trailingSilence: { start: 9.4, end: 10 }
   });

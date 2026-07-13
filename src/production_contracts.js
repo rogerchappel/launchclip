@@ -366,6 +366,9 @@ export function validateProductionPlan(plan, context = {}) {
     }
     checkReferences(errors, `${label}.evidence_ids`, shot?.evidence_ids, context.evidenceIds);
     checkReferences(errors, `${label}.resource_ids`, shot?.resource_ids, context.resourceIds);
+    for (const [copyIndex, copy] of (shot?.on_screen_text ?? []).entries()) {
+      validateDisplayCopy(errors, `${label}.on_screen_text[${copyIndex}]`, copy, plan.narration?.source, context.canonicalEntities);
+    }
     const presenterMode = shot?.presenter?.mode;
     if (presenterMode) presenterModes.add(presenterMode);
     if (presenterMode === "voiceover") {
@@ -552,6 +555,33 @@ export function validateFrameBundle(bundle, context = {}) {
 
 function normalizeCopy(value) {
   return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function validateDisplayCopy(errors, label, value, narrationSource, canonicalEntities = []) {
+  const copy = String(value ?? "");
+  if (narrationSource === "supplied") {
+    if (/\b[\p{L}\p{N}]{2,}-\s+[\p{L}\p{N}]/u.test(copy) || /\b([\p{L}\p{N}]{2,})[\s,]+\1\b/iu.test(copy)) {
+      errors.push(`${label} contains a transcript false start or repeated word; on-screen copy must be editorially clean`);
+    }
+  }
+  const normalized = normalizeEntityCopy(copy);
+  for (const entity of canonicalEntities ?? []) {
+    if (!new Set(["asr-alias", "fuzzy"]).has(entity.match_kind) || Number(entity.confidence) < 0.78) continue;
+    const spoken = normalizeEntityCopy(entity.spoken_form);
+    const display = normalizeEntityCopy(entity.display_name ?? entity.canonical_name);
+    const canonical = normalizeEntityCopy(entity.canonical_name);
+    if (!spoken || spoken === display || !containsPhrase(normalized, spoken)) continue;
+    if (containsPhrase(normalized, display) || containsPhrase(normalized, canonical)) continue;
+    errors.push(`${label} uses ASR form "${entity.spoken_form}"; use canonical display name "${entity.display_name ?? entity.canonical_name}"`);
+  }
+}
+
+function normalizeEntityCopy(value) {
+  return String(value ?? "").normalize("NFKD").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function containsPhrase(value, phrase) {
+  return Boolean(phrase) && ` ${value} `.includes(` ${phrase} `);
 }
 
 function escapeRegExp(value) {
