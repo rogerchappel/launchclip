@@ -211,6 +211,9 @@ function plannerOptions(flags) {
     chapterConcurrency: numberOr(flags["chapter-concurrency"], 3),
     outlineMaxOutputTokens: numberOr(flags["outline-max-output-tokens"], 24_000),
     chapterMaxOutputTokens: numberOr(flags["chapter-max-output-tokens"], 40_000),
+    visualHistoryDir: flags["visual-history-dir"],
+    visualHistoryLimit: numberOr(flags["visual-history-limit"], 8),
+    visualSimilarityLimit: numberOr(flags["visual-similarity-limit"], 0.58),
     sfxDir: flags["sfx-dir"]
   };
 }
