@@ -10,6 +10,7 @@ the current workflow and the decisions an operating agent must not guess.
 - [Model-directed production](#model-directed-production)
 - [Resume and repair commands](#resume-and-repair-commands)
 - [Workspace artifacts](#workspace-artifacts)
+- [Studio review](#studio-review)
 - [Final render](#final-render)
 - [Local-first OSS packet lane](#local-first-oss-packet-lane)
 - [Failure handling](#failure-handling)
@@ -141,6 +142,7 @@ launchclip direct-frames <workspace>
 launchclip assemble <workspace>
 launchclip production-verify <workspace>
 launchclip production-draft <workspace>
+launchclip production-preview <workspace>
 launchclip production-critique <workspace>
 launchclip production-repair <workspace>
 ```
@@ -190,9 +192,29 @@ Treat `costs.complete: false` as an incomplete estimate and report its warnings.
 `--fast-eval` reduces budgets and repair passes but is not a zero-cost mode.
 `--max-frame-cost-usd` guards cumulative direct-frame responses only.
 
+## Studio review
+
+After the draft is ready and the critic verdict is `ship`, open the assembled
+project in the editable HyperFrames Studio:
+
+```bash
+launchclip production-preview <workspace> [--port 3002] [--no-open]
+```
+
+The command starts or reuses the local Studio server, returns its project URL,
+and exits with status `awaiting-approval`. Use `--no-open` for an agent or
+headless host that should return the URL without opening a browser.
+
+Studio's Export control creates an ad hoc HyperFrames render in the composition
+project. It is not a LaunchClip approval signal or final artifact: it bypasses
+LaunchClip's stable output path, final motion/audio analysis, critic result, and
+stage receipt. Obtain explicit approval through the user interaction, then use
+the final-render command below. If Studio edits are repaired after approval,
+open the changed state for review again.
+
 ## Final render
 
-After the user reviews the draft and snapshots and explicitly approves:
+After the user reviews the Studio state and explicitly approves:
 
 ```bash
 launchclip production-render <workspace> --approve --quality high

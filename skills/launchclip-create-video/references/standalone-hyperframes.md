@@ -157,12 +157,19 @@ After all gates and snapshot inspection pass, open the editable Studio:
 npx hyperframes preview <project>
 ```
 
-Pause before rendering. The user must explicitly approve the reviewed preview.
-Do not publish the project as part of this workflow.
+Treat Studio as the review and editing surface. Its Export action creates an ad
+hoc HyperFrames render; it is not the user's approval signal or this workflow's
+final artifact.
+
+If the user edits the project in Studio, rerun `hyperframes check --snapshots`
+and inspect the new overview before requesting approval. Pause until the user
+explicitly approves the checked Studio state. If a repair changes that state,
+refresh Studio and obtain fresh approval. Do not publish the project as part of
+this workflow.
 
 ## Render and verify
 
-Render only after approval:
+Render from the CLI only after approval:
 
 ```bash
 npx hyperframes render <project> \

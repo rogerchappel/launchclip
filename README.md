@@ -69,8 +69,17 @@ launchclip production-draft .launchclip/repo-video \
 
 launchclip production-repair .launchclip/repo-video
 launchclip assemble .launchclip/repo-video
+launchclip production-preview .launchclip/repo-video
+# After reviewing or editing in Studio and explicitly approving the result:
 launchclip production-render .launchclip/repo-video --approve
 ```
+
+`production-preview` starts or reuses the local HyperFrames Studio server and
+returns the editable project URL without rendering. Studio's Export control is
+useful for ad hoc previews, but it is not a Launchclip approval signal or final
+artifact. After approval, `production-render --approve` re-verifies any Studio
+edits, runs the strict final render, and records Launchclip's motion, audio, and
+critic results.
 
 For a supplied avatar/presenter take, pass the media as both the authoritative
 voice source and presenter resource when appropriate:
@@ -143,6 +152,9 @@ from the assembled motion sidecar or a sound has no visible consequence.
 The command creates an editable assembled project, analyzed draft, independent
 critic report, and up to two bounded repair passes. Final rendering requires the
 explicit `--approve` flag and still returns for human review; it never publishes.
+Use `production-preview <workspace>` to open the assembled project in Studio
+before granting that approval. Do not treat Studio Export as completion of the
+Launchclip final-render stage.
 See [the model-directed pipeline](docs/MODEL_DIRECTED_VIDEO.md) for
 artifact contracts, provider requirements, reference analysis, and repair
 semantics.

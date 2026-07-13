@@ -124,13 +124,21 @@ seek-safe.
 Open HyperFrames Studio only after the automated gates and visual snapshot
 review pass. Tell the user where the editable project and preview are located,
 summarize any deliberate limitations, and ask for explicit render approval.
+Studio's Export action is useful for an ad hoc draft, but it is not the
+workflow's approval signal or final artifact.
+
+If Studio changes the composition, rerun the browser check and inspect fresh
+snapshots before asking for approval. If those checks trigger a repair that
+changes the visible result, refresh Studio and obtain fresh approval of that
+repaired state.
 
 After approval:
 
-1. Render a stable output path at the requested quality.
+1. Render from the CLI to a stable output path at the requested quality.
 2. Confirm the file exists and is non-empty.
 3. Probe its duration, dimensions, video codec, and audio presence.
-4. If a final render is visually different from snapshots, repair and rerender.
+4. If a final render is visually different from snapshots, repair, recheck,
+   obtain fresh approval, and rerender.
 5. Return the project path, planning artifacts, QA result, and final media path.
 
 Do not publish, upload, or post the result unless the user separately asks for

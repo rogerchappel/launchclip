@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { runProduction, runProductionStage } from "../src/production_cli.js";
 import { prepareSourceMedia } from "../src/production_source_media.js";
+import { launchHyperFramesStudio, openProductionPreview } from "../src/production_preview.js";
 
 test("prepares authoritative media before downstream timing and keeps the original derivation", async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-source-preprocess-"));
@@ -316,6 +317,70 @@ test("routes an independently rerunnable analyzed draft stage", async () => {
   assert.equal(received.options.draftQuality, "draft");
   assert.equal(received.options.references, "/tmp/reference.mp4");
   assert.equal(received.options.shotInspectConcurrency, 4);
+});
+
+test("opens the assembled project in Studio and returns an explicit approval handoff", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-production-preview-"));
+  const project = path.join(workspace, "production", "hyperframes");
+  await mkdir(project, { recursive: true });
+  await writeFile(path.join(project, "index.html"), "<!doctype html>");
+  let received;
+  const result = await openProductionPreview(workspace, { port: "3111", open: false }, {
+    launchStudio: async (projectPath, options) => {
+      received = { projectPath, options };
+      return { port: 3111, project_name: "hyperframes", url: "http://localhost:3111/#project/hyperframes", opened_browser: false, reused_server: false };
+    }
+  });
+  assert.equal(result.status, "awaiting-approval");
+  assert.equal(received.projectPath, project);
+  assert.deepEqual(received.options, { port: 3111, open: false, timeoutMs: 15_000 });
+  assert.match(result.next, /Do not use Studio Export/);
+  assert.match(result.final_render_command, /production-render .* --approve --quality high/);
+});
+
+test("waits for the matching registered Studio server", async () => {
+  const calls = [];
+  const child = {
+    exitCode: null,
+    once: (event) => calls.push(["once", event]),
+    unref: () => calls.push(["unref"]),
+    kill: () => calls.push(["kill"])
+  };
+  let reads = 0;
+  const result = await launchHyperFramesStudio("/tmp/project", { port: 3222, open: false, timeoutMs: 1_000 }, {
+    spawnProcess: (project, options) => { calls.push(["spawn", project, options]); return child; },
+    readContext: async () => {
+      reads += 1;
+      return reads === 1 ? null : { port: 3223, projectName: "project", projectDir: "/tmp/project" };
+    },
+    wait: async (milliseconds) => calls.push(["wait", milliseconds])
+  });
+  assert.deepEqual(result, { port: 3223, project_name: "project", url: "http://localhost:3223/#project/project", opened_browser: false, reused_server: false });
+  assert.equal(reads, 2);
+  assert.deepEqual(calls[0], ["spawn", "/tmp/project", { port: 3222, open: false, timeoutMs: 1_000 }]);
+  assert.ok(calls.some((entry) => entry[0] === "unref"));
+  assert.ok(!calls.some((entry) => entry[0] === "kill"));
+});
+
+test("reuses a matching Studio server without starting another one", async () => {
+  let openedUrl;
+  const result = await launchHyperFramesStudio("/tmp/project", { port: 3333 }, {
+    spawnProcess: () => { throw new Error("should not spawn"); },
+    readContext: async () => ({ port: 3222, projectName: "project", projectDir: "/tmp/project" }),
+    openUrl: async (url) => { openedUrl = url; }
+  });
+  assert.equal(openedUrl, "http://localhost:3222/#project/project");
+  assert.deepEqual(result, { port: 3222, project_name: "project", url: openedUrl, opened_browser: true, reused_server: true });
+});
+
+test("routes production preview controls without granting render approval", async () => {
+  let received;
+  const result = await runProductionStage("production-preview", "/tmp/workspace", { port: "3444", "no-open": true }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    openProductionPreview: async (workspace, options) => { received = { workspace, options }; return { status: "awaiting-approval" }; }
+  });
+  assert.equal(result.status, "awaiting-approval");
+  assert.deepEqual(received, { workspace: "/tmp/workspace", options: { port: "3444", open: false } });
 });
 
 test("infers fresh verification context for standalone production repair", async () => {
