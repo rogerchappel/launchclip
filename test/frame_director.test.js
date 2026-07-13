@@ -51,6 +51,8 @@ test("delegates shots concurrently, repairs invalid HTML, and writes modular fra
   assert.match(frameInstructions, /must_remain_live means/);
   assert.match(frameInstructions, /Render the declared semantic representation/);
   assert.match(frameInstructions, /Materialize every shot\.visual\.events entry/);
+  assert.match(frameInstructions, /never cross text or numeric values/);
+  assert.match(frameInstructions, /Never approximate a logo/);
   assert.match(await readFile(result.frames[0].html, "utf8"), /data-composition-id="shot-1"/);
   assert.match(await readFile(result.frames[0].motion, "utf8"), /#shot-1-proof/);
   assert.match(await readFile(result.frames[1].html, "utf8"), /window\.__timelines\["shot-2"\] = timeline/);
@@ -132,7 +134,7 @@ test("recovers a previously rejected frame with a local fallback and does not bu
     model: context.intake.model,
     reasoning: "high",
     schema: FRAME_BUNDLE_SCHEMA,
-    worker: "frame-director.v2"
+    worker: "frame-director.v3"
   });
   await store.add({ id: "frame:shot-1", kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash });
   await store.markRunning("frame:shot-1", { provider: "openai", response_id: "resp_spent", status: "completed" });
@@ -172,7 +174,7 @@ test("promotes a paid frame attempt after a deterministic media-role repair", as
     model: context.intake.model,
     reasoning: "high",
     schema: FRAME_BUNDLE_SCHEMA,
-    worker: "frame-director.v2"
+    worker: "frame-director.v3"
   });
   await store.add({ id: "frame:shot-1", kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash });
   await store.markRunning("frame:shot-1", { provider: "openai", response_id: "resp_spent", status: "completed" });
@@ -220,7 +222,7 @@ test("resumes a persisted background frame response without submitting it twice"
   const workspace = await workspaceFixture(context);
   const store = await ProductionJobStore.open(workspace, { create: false });
   const baseInput = buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0 });
-  const inputHash = semanticHash({ input: baseInput, model: context.intake.model, reasoning: "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v2" });
+  const inputHash = semanticHash({ input: baseInput, model: context.intake.model, reasoning: "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v3" });
   await store.add({ id: "frame:shot-1", kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash });
   await store.markRunning("frame:shot-1", { provider: "openai", response_id: "resp_saved", status: "in_progress" });
   let resumed = 0;
@@ -286,7 +288,7 @@ test("replaces a cancelled persisted response in the same run", async () => {
   const workspace = await workspaceFixture(context);
   const store = await ProductionJobStore.open(workspace, { create: false });
   const baseInput = buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0 });
-  const inputHash = semanticHash({ input: baseInput, model: context.intake.model, reasoning: "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v2" });
+  const inputHash = semanticHash({ input: baseInput, model: context.intake.model, reasoning: "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v3" });
   await store.add({ id: "frame:shot-1", kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash });
   await store.markRunning("frame:shot-1", { provider: "openai", response_id: "resp_cancelled", status: "in_progress" });
   let resumed = 0;
