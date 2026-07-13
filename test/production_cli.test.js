@@ -168,9 +168,9 @@ test("fast eval keeps full QA while lowering provider and sampling budgets", asy
   assert.equal(received.draft.criticReasoning, "high");
 });
 
-test("routes explicit hierarchical planning controls", async () => {
+test("routes explicit hierarchical and visual novelty planning controls", async () => {
   let received;
-  const result = await runProductionStage("creative-plan", "/tmp/workspace", { "planning-mode": "hierarchical", "hierarchical-threshold": "120", "chapter-concurrency": "4", "outline-max-output-tokens": "22000", "chapter-max-output-tokens": "36000" }, {
+  const result = await runProductionStage("creative-plan", "/tmp/workspace", { "planning-mode": "hierarchical", "hierarchical-threshold": "120", "chapter-concurrency": "4", "outline-max-output-tokens": "22000", "chapter-max-output-tokens": "36000", "visual-history-dir": "/tmp/brand-history", "visual-history-limit": "12", "visual-similarity-limit": "0.42" }, {
     withProductionLease: async (_workspace, operation) => operation(),
     planProduction: async (_workspace, options) => { received = options; return { status: "ready" }; }
   });
@@ -180,6 +180,9 @@ test("routes explicit hierarchical planning controls", async () => {
   assert.equal(received.chapterConcurrency, 4);
   assert.equal(received.outlineMaxOutputTokens, 22000);
   assert.equal(received.chapterMaxOutputTokens, 36000);
+  assert.equal(received.visualHistoryDir, "/tmp/brand-history");
+  assert.equal(received.visualHistoryLimit, 12);
+  assert.equal(received.visualSimilarityLimit, 0.42);
 });
 
 test("blocks assembly when measured narration timing requires a replan", async () => {

@@ -45,15 +45,22 @@ test("runs GPT-5.6 planning, validates the plan, writes artifacts, and caches ve
   assert.equal(calls[0].model, "gpt-5.6");
   assert.equal(calls[0].reasoningEffort, "xhigh");
   assert.equal(calls[0].schema.additionalProperties, false);
+  const noveltyInput = JSON.parse(calls[0].input).visual_novelty;
+  assert.equal(noveltyInput.mode, "differentiate");
+  assert.equal(noveltyInput.stable_design_system, true);
   assert.match(await readFile(first.script, "utf8"), /Proof becomes the story/);
   assert.match(await readFile(first.storyboard, "utf8"), /fast then settle/);
   assert.equal(JSON.parse(await readFile(first.plan, "utf8")).shots[1].sfx[0].at_seconds, 1.1);
+  const fingerprint = JSON.parse(await readFile(path.join(workspace, "production", "plans", "visual-fingerprint.json"), "utf8"));
+  assert.equal(fingerprint.episode_concept, "Evidence as choreography");
+  assert.deepEqual(fingerprint.representations, ["diagram"]);
 
   const second = await planProduction(workspace, {}, { client });
   assert.equal(second.cached, true);
   assert.equal(calls.length, 1);
 
   const store = await ProductionJobStore.open(workspace, { create: false });
+  assert.ok(store.get("creative-plan").outputs.some((entry) => entry.path.endsWith("visual-fingerprint.json")));
   await store.markStaleFrom(["creative-plan"]);
   await store.retry("creative-plan");
   await store.markRunning("creative-plan", { provider: "openai", response_id: "resp_saved", status: "in_progress" });

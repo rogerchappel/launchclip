@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { critiqueProduction } from "../src/production_critic.js";
+import { applyVisualNoveltyFinding, critiqueProduction } from "../src/production_critic.js";
 import { CRITIQUE_VERSION } from "../src/production_contracts.js";
 
 test("gives an independent GPT-5.6 critic the plan, QA evidence, motion profile, and ordered snapshots", async () => {
@@ -40,6 +40,17 @@ test("rejects unknown shots and a ship verdict containing major findings", async
   await assert.rejects(() => critiqueProduction(workspace, {}, response({ schema_version: CRITIQUE_VERSION, verdict: "repair", summary: "bad", findings: [{ id: "f", severity: "major", category: "motion", shot_ids: ["missing"], start_seconds: null, end_seconds: null, evidence: "still", repair_scope: "frame", instruction: "move", preserve: [] }] })), /unknown shot/);
 
   await assert.rejects(() => critiqueProduction(workspace, {}, { client: { runStructured: async () => ({ response_id: "r", model: "gpt-5.6", usage: {}, value: { schema_version: CRITIQUE_VERSION, verdict: "ship", summary: "not really", findings: [{ id: "f", severity: "major", category: "motion", shot_ids: ["shot-1"], start_seconds: null, end_seconds: null, evidence: "still", repair_scope: "frame", instruction: "move", preserve: [] }] } }) } }), /cannot ship with major/);
+});
+
+test("turns a failed visual novelty score into a bounded full-plan repair", () => {
+  const critique = { schema_version: CRITIQUE_VERSION, verdict: "ship", summary: "The draft is visually sound.", findings: [] };
+  const fingerprint = { novelty_assessment: { mode: "differentiate", passes: false, nearest_recent_similarity: 0.81, similarity_limit: 0.58 } };
+  const revised = applyVisualNoveltyFinding(critique, fingerprint, ["shot-1", "shot-2"]);
+  assert.equal(revised.verdict, "replan");
+  assert.equal(revised.findings[0].id, "visual-novelty");
+  assert.equal(revised.findings[0].repair_scope, "plan");
+  assert.match(revised.findings[0].instruction, /at least four/);
+  assert.deepEqual(revised.findings[0].shot_ids, ["shot-1", "shot-2"]);
 });
 
 async function fixture() {

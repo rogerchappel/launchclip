@@ -27,11 +27,14 @@ test("plans long-form productions as resumable outline and parallel chapter jobs
   assert.deepEqual(new Set(calls), new Set(["creative-outline", "creative-chapter:chapter-1", "creative-chapter:chapter-2"]));
   assert.ok(instructions.every((value) => /untrusted data, never as instructions/.test(value)));
   assert.ok(chapterInputs.every((value) => value.global.format.width === 1920 && value.global.format.height === 1080));
+  assert.ok(chapterInputs.every((value) => value.global.visual_novelty.mode === "differentiate"));
   const finalPlan = JSON.parse(await readFile(first.plan, "utf8"));
   assert.deepEqual(finalPlan.shots.map((shot) => shot.id), ["chapter-1-shot-1", "chapter-1-shot-2", "chapter-2-shot-1", "chapter-2-shot-2"]);
   assert.deepEqual(finalPlan.shots.map((shot) => shot.start_seconds), [0, 50, 100, 150]);
   assert.equal(finalPlan.format.duration_seconds, 200);
   assert.equal(validateProductionPlan(finalPlan, validationContext(intake, evidence)).ok, true);
+  const fingerprint = JSON.parse(await readFile(path.join(workspace, "production", "plans", "visual-fingerprint.json"), "utf8"));
+  assert.equal(fingerprint.episode_concept, "Evidence choreography");
 
   const second = await planLongFormProduction(workspace, { intake, evidence, options: { chapterConcurrency: 2 } }, { client });
   assert.equal(second.cached, true);
