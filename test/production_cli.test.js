@@ -201,6 +201,7 @@ test("fast eval keeps full QA while lowering provider and sampling budgets", asy
   assert.equal(received.plan.outlineMaxOutputTokens, 18000);
   assert.equal(received.plan.chapterMaxOutputTokens, 28000);
   assert.equal(received.plan.chapterConcurrency, 3);
+  assert.equal(received.plan.semanticAttempts, 2);
   assert.deepEqual({ reasoning: received.frames.reasoning, max: received.frames.maxOutputTokens, attempts: received.frames.semanticAttempts, concurrency: received.frames.concurrency }, { reasoning: "medium", max: 20000, attempts: 1, concurrency: 3 });
   assert.equal(received.draft.snapshotFrames, 6);
   assert.equal(received.draft.inspectSamples, 9);
@@ -208,9 +209,9 @@ test("fast eval keeps full QA while lowering provider and sampling budgets", asy
   assert.equal(received.draft.criticReasoning, "high");
 });
 
-test("routes explicit hierarchical and visual novelty planning controls", async () => {
+test("routes explicit hierarchical, repair, and visual novelty planning controls", async () => {
   let received;
-  const result = await runProductionStage("creative-plan", "/tmp/workspace", { "planning-mode": "hierarchical", "hierarchical-threshold": "120", "chapter-concurrency": "4", "outline-max-output-tokens": "22000", "chapter-max-output-tokens": "36000", "visual-history-dir": "/tmp/brand-history", "visual-history-limit": "12", "visual-similarity-limit": "0.42" }, {
+  const result = await runProductionStage("creative-plan", "/tmp/workspace", { "planning-mode": "hierarchical", "hierarchical-threshold": "120", "chapter-concurrency": "4", "outline-max-output-tokens": "22000", "chapter-max-output-tokens": "36000", "plan-semantic-attempts": "3", "visual-history-dir": "/tmp/brand-history", "visual-history-limit": "12", "visual-similarity-limit": "0.42" }, {
     withProductionLease: async (_workspace, operation) => operation(),
     planProduction: async (_workspace, options) => { received = options; return { status: "ready" }; }
   });
@@ -220,6 +221,7 @@ test("routes explicit hierarchical and visual novelty planning controls", async 
   assert.equal(received.chapterConcurrency, 4);
   assert.equal(received.outlineMaxOutputTokens, 22000);
   assert.equal(received.chapterMaxOutputTokens, 36000);
+  assert.equal(received.semanticAttempts, 3);
   assert.equal(received.visualHistoryDir, "/tmp/brand-history");
   assert.equal(received.visualHistoryLimit, 12);
   assert.equal(received.visualSimilarityLimit, 0.42);
