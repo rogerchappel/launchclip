@@ -226,7 +226,7 @@ export function buildFallbackFrame({ intake, plan, shot }) {
   </style>
   <div id="root" data-composition-id="${shot.id}" data-start="0" data-duration="${number(duration)}" data-width="${Number(plan.format.width)}" data-height="${Number(plan.format.height)}">
     <div id="${shot.id}-fallback-backdrop" class="clip" data-start="0" data-duration="${number(duration)}"></div>
-    <div id="${shot.id}-fallback-grid" class="clip" data-start="0" data-duration="${number(duration)}"></div>
+    <div id="${shot.id}-fallback-grid" class="clip" data-start="0" data-duration="${number(duration)}" data-layout-allow-overflow="true"></div>
     <div id="${shot.id}-fallback-rail" class="clip" data-start="0" data-duration="${number(duration)}"></div>
     <div id="${shot.id}-fallback-index" class="clip" data-start="0" data-duration="${number(duration)}">${escapeHtml(shot.id.toUpperCase())}</div>
     <div id="${cardId}" class="clip" data-start="0" data-duration="${number(duration)}">

@@ -180,7 +180,6 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
     .root-media-window-dot--close { background: #ff6258; }
     .root-media-window-dot--minimize { background: #ffc04a; }
     .root-media-window-dot--maximize { background: #40c957; }
-    .root-media-window-title { margin-left: auto; color: rgba(235,244,249,.68); font: 600 14px/1 Arial, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
   </style>
 </head>
 <body>
@@ -223,7 +222,7 @@ function renderMedia({ id, request, asset, globalStart, track }) {
   const mediaElement = request.kind === "video" ? `<video ${common} ${videoAudio} playsinline></video>` : `<audio ${common}></audio>`;
   const frameId = `${id}-frame`;
   const frameElement = request.kind === "video" && presentation.frame === "desktop-window"
-    ? `<div id="${escapeAttr(frameId)}" class="clip root-media-frame" data-start="${number(globalStart)}" data-duration="${number(duration)}" data-track-index="${Number(500 + track)}" data-layout-allow-occlusion="true" style="left:${number(placement.x)}px;top:${number(placement.y)}px;width:${number(placement.width)}px;height:${number(placement.height)}px;border-radius:${number(placement.border_radius)}px;z-index:${number(placement.z_index + 1)}"><div class="root-media-window-bar" aria-hidden="true"><span class="root-media-window-dot root-media-window-dot--close"></span><span class="root-media-window-dot root-media-window-dot--minimize"></span><span class="root-media-window-dot root-media-window-dot--maximize"></span><span class="root-media-window-title">presenter</span></div></div>`
+    ? `<div id="${escapeAttr(frameId)}" class="clip root-media-frame" data-start="${number(globalStart)}" data-duration="${number(duration)}" data-track-index="${Number(500 + track)}" data-layout-allow-occlusion="true" style="left:${number(placement.x)}px;top:${number(placement.y)}px;width:${number(placement.width)}px;height:${number(placement.height)}px;border-radius:${number(placement.border_radius)}px;z-index:${number(placement.z_index + 1)}"><div class="root-media-window-bar" aria-hidden="true"><span class="root-media-window-dot root-media-window-dot--close"></span><span class="root-media-window-dot root-media-window-dot--minimize"></span><span class="root-media-window-dot root-media-window-dot--maximize"></span></div></div>`
     : null;
   return {
     elements: frameElement ? [mediaElement, frameElement] : [mediaElement],
