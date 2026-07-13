@@ -106,6 +106,26 @@ test("removes authoritative voiceover requests from the frame bundle locally", (
   }]);
 });
 
+test("adds missing authoritative root contract attributes locally without overwriting authored values", () => {
+  const context = fixture();
+  const bundle = frameBundle("shot-1", 5);
+  bundle.html = bundle.html.replace(' data-start="0" data-duration="5" data-width="1080" data-height="1920"', "");
+
+  const sanitized = sanitizeFrameBundle(bundle, { shot: context.plan.shots[0], format: context.plan.format });
+
+  assert.match(sanitized.bundle.html, /id="root" data-composition-id="shot-1" data-start="0" data-duration="5" data-width="1080" data-height="1920"/);
+  assert.deepEqual(sanitized.repairs, [{
+    kind: "add-missing-root-contract-attributes",
+    attributes: ["data-start", "data-duration", "data-width", "data-height"]
+  }]);
+  assert.deepEqual(validateHyperFramesRoot(sanitized.bundle.html, context.plan.shots[0], context.plan.format), []);
+
+  const incorrect = frameBundle("shot-1", 5).html.replace('data-width="1080"', 'data-width="100"');
+  const preserved = sanitizeFrameBundle({ ...bundle, html: incorrect }, { shot: context.plan.shots[0], format: context.plan.format });
+  assert.match(preserved.bundle.html, /data-width="100"/);
+  assert.ok(validateHyperFramesRoot(preserved.bundle.html, context.plan.shots[0], context.plan.format).some((error) => error.includes("data-width")));
+});
+
 test("builds a deterministic presenter fallback that satisfies the frame contract", () => {
   const context = fixture();
   const shot = { ...context.plan.shots[0], presenter: { mode: "companion", visible: true }, resource_ids: ["presenter"] };

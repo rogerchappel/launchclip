@@ -190,6 +190,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
       const normalized = { ...result.value, html: ensureTimelineRegistration(result.value.html, shot.id) };
       const sanitized = sanitizeFrameBundle(normalized, {
         shot,
+        format: plan.format,
         resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
       });
       const candidate = sanitized.bundle;
@@ -229,11 +230,15 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
 export function sanitizeFrameBundle(bundle, context = {}) {
   const html = String(bundle?.html ?? "");
   let removed = 0;
-  const sanitizedHtml = html.replace(/\son[a-z][\w:-]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, () => {
+  const eventSafeHtml = html.replace(/\son[a-z][\w:-]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, () => {
     removed += 1;
     return "";
   });
   const repairs = removed ? [{ kind: "remove-event-handler-attributes", count: removed }] : [];
+  const rootRepair = repairFrameRootContract(eventSafeHtml, context);
+  if (rootRepair.attributes.length) {
+    repairs.push({ kind: "add-missing-root-contract-attributes", attributes: rootRepair.attributes });
+  }
   const resourceRoles = context.resourceRoles instanceof Map ? context.resourceRoles : new Map(Object.entries(context.resourceRoles ?? {}));
   const rootMediaRequests = [];
   for (const request of bundle?.root_media_requests ?? []) {
@@ -248,8 +253,46 @@ export function sanitizeFrameBundle(bundle, context = {}) {
     });
   }
   return {
-    bundle: { ...bundle, html: sanitizedHtml, root_media_requests: rootMediaRequests },
+    bundle: { ...bundle, html: rootRepair.html, root_media_requests: rootMediaRequests },
     repairs
+  };
+}
+
+function repairFrameRootContract(html, context = {}) {
+  const source = String(html ?? "");
+  const templates = [...source.matchAll(/<template\b[^>]*>([\s\S]*?)<\/template>/gi)];
+  if (templates.length !== 1) return { html: source, attributes: [] };
+  const template = templates[0][1];
+  const shotId = context.shot?.id;
+  const byRootId = template.match(/<[a-z][\w:-]*\b[^>]*\bid\s*=\s*["']root["'][^>]*>/i);
+  const byCompositionId = shotId
+    ? template.match(new RegExp(`<[a-z][\\w:-]*\\b[^>]*\\bdata-composition-id\\s*=\\s*["']${escapeRegExp(shotId)}["'][^>]*>`, "i"))
+    : null;
+  const match = byRootId ?? byCompositionId;
+  if (!match) return { html: source, attributes: [] };
+
+  const root = match[0];
+  const additions = [];
+  const addMissing = (name, value) => {
+    if (value == null || new RegExp(`\\b${escapeRegExp(name)}\\s*=`, "i").test(root)) return;
+    additions.push([name, String(value)]);
+  };
+  addMissing("id", "root");
+  addMissing("data-composition-id", shotId);
+  addMissing("data-start", shotId ? 0 : null);
+  const duration = context.shot ? Number(context.shot.end_seconds) - Number(context.shot.start_seconds) : null;
+  addMissing("data-duration", Number.isFinite(duration) && duration > 0 ? number(duration) : null);
+  addMissing("data-width", Number.isFinite(Number(context.format?.width)) && Number(context.format.width) > 0 ? Number(context.format.width) : null);
+  addMissing("data-height", Number.isFinite(Number(context.format?.height)) && Number(context.format.height) > 0 ? Number(context.format.height) : null);
+  if (!additions.length) return { html: source, attributes: [] };
+
+  const attributes = additions.map(([name]) => name);
+  const serialized = additions.map(([name, value]) => `${name}="${escapeHtml(value)}"`).join(" ");
+  const repairedRoot = root.replace(/\s*(\/?>)$/, ` ${serialized}$1`);
+  const rootOffset = templates[0].index + templates[0][0].indexOf(template) + match.index;
+  return {
+    html: `${source.slice(0, rootOffset)}${repairedRoot}${source.slice(rootOffset + root.length)}`,
+    attributes
   };
 }
 
@@ -262,6 +305,7 @@ async function recoverStoredFrameAttempt({ workspace, intake, evidence, plan, sh
   if (["running", "submitted"].includes(existing.status) && record.response_id !== existing.remote?.response_id) return null;
   const sanitized = sanitizeFrameBundle(record.candidate, {
     shot,
+    format: plan.format,
     resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
   });
   const candidate = sanitized.bundle;
@@ -642,6 +686,10 @@ async function writeFrameAttempt(workspace, shotId, attempt, record) {
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+}
+
+function escapeRegExp(value) {
+  return String(value ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function number(value) {
