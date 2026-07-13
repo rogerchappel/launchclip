@@ -12,8 +12,8 @@ import { critiqueProduction } from "./production_critic.js";
 import { semanticVisualReport, validateSemanticVisualPlan } from "./semantic_visuals.js";
 
 const execFileAsync = promisify(execFile);
-const VERIFICATION_SCHEMA = "launchclip.production-verification.v4";
-const VERIFICATION_SUITE = "production-verify.v4";
+const VERIFICATION_SCHEMA = "launchclip.production-verification.v5";
+const VERIFICATION_SUITE = "production-verify.v5";
 
 export class ProductionVerificationError extends Error {
   constructor(verification) {
@@ -87,7 +87,7 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
     ["validate", ["hyperframes", "validate", "--json", "--timeout", String(options.timeoutMs ?? 8000), project]],
     ["inspect", ["hyperframes", "inspect", "--json", "--samples", String(options.inspectSamples ?? 15), "--at-transitions", project]]
   ]) {
-    checks[name] = await capture(run, "npx", args, { cwd: project });
+    checks[name] = enforceStructuredCheck(await capture(run, "npx", args, { cwd: project }));
     if (name === "lint" && options.strictAll !== false) {
       const findings = checks[name].stdout?.findings ?? [];
       const warningCount = Number(checks[name].stdout?.warningCount ?? findings.filter((entry) => entry.severity === "warning").length);
@@ -166,9 +166,9 @@ export async function verifyShotCompositions(projectPath, qaDirPath, plan, optio
     ]);
     const assetFiles = [...new Set([...html.matchAll(/\bassets\/([a-zA-Z0-9._-]+)/g)].map((match) => match[1]))];
     await Promise.all(assetFiles.map((file) => copyFile(path.join(project, "assets", file), path.join(assets, file))));
-    const check = await capture(run, "npx", [
+    const check = enforceStructuredCheck(await capture(run, "npx", [
       "hyperframes", "inspect", "--json", "--samples", String(options.inspectSamples ?? 15), "--at-transitions", directory
-    ], { cwd: directory });
+    ], { cwd: directory }));
     await writeFile(path.join(directory, "inspect.json"), `${JSON.stringify(check, null, 2)}\n`);
     return [`inspect:${shot.id}`, check];
   });
@@ -535,6 +535,24 @@ async function capture(run, command, args, options) {
       error: compactCommandError(stdout, stderr)
     };
   }
+}
+
+function enforceStructuredCheck(check) {
+  if (!check.ok || !check.stdout || typeof check.stdout !== "object") return check;
+  const findings = [
+    ...(Array.isArray(check.stdout.issues) ? check.stdout.issues : []),
+    ...(Array.isArray(check.stdout.findings) ? check.stdout.findings : []),
+    ...(Array.isArray(check.stdout.errors) ? check.stdout.errors.map((error) => typeof error === "object" ? error : { severity: "error", message: String(error) }) : [])
+  ];
+  const blocking = findings.filter((entry) => new Set(["error", "blocking", "fatal"]).has(String(entry?.severity ?? "").toLowerCase()));
+  const declaredErrorCount = Number(check.stdout.errorCount ?? check.stdout.error_count ?? 0);
+  if (check.stdout.ok !== false && blocking.length === 0 && !(declaredErrorCount > 0)) return check;
+  return {
+    ...check,
+    ok: false,
+    failure_kind: "content",
+    error: compactCommandError(check.stdout, blocking[0]?.message ?? blocking[0]?.code ?? "structured verification reported an error")
+  };
 }
 
 export function classifyCommandFailure(stdout, stderr) {
