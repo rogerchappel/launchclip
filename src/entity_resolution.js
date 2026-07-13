@@ -95,6 +95,7 @@ function normalizeBrand(value) {
     canonical_name: String(value.canonical_name).trim(),
     display_name: String(value.display_name ?? value.canonical_name).trim(),
     aliases: uniqueStrings(value.aliases),
+    asr_aliases: uniqueStrings(value.asr_aliases),
     domains: uniqueStrings(value.domains).map((entry) => entry.toLowerCase()),
     assets: Array.isArray(value.assets) ? value.assets : []
   };
@@ -103,8 +104,14 @@ function normalizeBrand(value) {
 function findBrandMention(transcript, brand, evidenceContext) {
   const normalizedTranscript = normalizeText(transcript);
   if (!normalizedTranscript) return null;
-  const candidates = uniqueStrings([brand.canonical_name, brand.display_name, ...brand.aliases])
-    .map((value) => ({ value, normalized: normalizeText(value) }))
+  const candidates = [
+    { value: brand.canonical_name, kind: "canonical" },
+    { value: brand.display_name, kind: "alias" },
+    ...brand.aliases.map((value) => ({ value, kind: "alias" })),
+    ...brand.asr_aliases.map((value) => ({ value, kind: "asr-alias" }))
+  ]
+    .filter((entry, index, entries) => entries.findIndex((candidate) => normalizeText(candidate.value) === normalizeText(entry.value)) === index)
+    .map((entry) => ({ ...entry, normalized: normalizeText(entry.value) }))
     .filter((entry) => entry.normalized.length >= 2)
     .sort((a, b) => b.normalized.length - a.normalized.length);
   for (const candidate of candidates) {
@@ -113,8 +120,8 @@ function findBrandMention(transcript, brand, evidenceContext) {
     return {
       spoken_form: extractNormalizedPhrase(normalizedTranscript, index, candidate.normalized.length),
       matched_alias: candidate.value,
-      match_kind: normalizeText(brand.canonical_name) === candidate.normalized ? "canonical" : "alias",
-      confidence: normalizeText(brand.canonical_name) === candidate.normalized ? 1 : 0.98,
+      match_kind: candidate.kind,
+      confidence: candidate.kind === "canonical" ? 1 : 0.98,
       evidence_supported: evidenceSupports(brand, evidenceContext)
     };
   }
@@ -213,7 +220,7 @@ function replaceEvidenceItem(evidence, report, outputPath) {
 
 function evidenceSupports(brand, evidenceContext) {
   const normalized = normalizeText(evidenceContext);
-  if ([brand.canonical_name, brand.display_name, ...brand.aliases].some((value) => phraseIndex(normalized, normalizeText(value)) >= 0)) return true;
+  if ([brand.canonical_name, brand.display_name, ...brand.aliases, ...brand.asr_aliases].some((value) => phraseIndex(normalized, normalizeText(value)) >= 0)) return true;
   const lower = String(evidenceContext).toLowerCase();
   return brand.domains.some((domain) => lower.includes(domain));
 }
