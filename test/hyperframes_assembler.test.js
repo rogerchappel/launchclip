@@ -3,6 +3,7 @@ import { access, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { writeFrameArtifacts } from "../src/frame_director.js";
 import { applyFrameCsp, assembleHyperFrames, ensureTimelineRegistration, renderRoot, rootMotionSpec, toHyperFramesMotionSpec } from "../src/hyperframes_assembler.js";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { EVIDENCE_VERSION, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
@@ -166,6 +167,30 @@ test("recovers an interrupted HyperFrames assembly", async () => {
   const recovered = await assembleHyperFrames(workspace);
   assert.equal(recovered.cached, false);
   assert.equal((await ProductionJobStore.open(workspace, { create: false })).get("hyperframes-assembly").status, "succeeded");
+});
+
+test("assembles a separately stored fallback without overwriting its canonical frame", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-assembly-fallback-"));
+  const source = path.join(workspace, "screen.mp4");
+  await writeFile(source, "fake-media");
+  const context = fixture(source);
+  await writeFixture(workspace, context);
+  const canonicalPath = path.join(workspace, "production", "frames", "shot-1.json");
+  const canonical = await readFile(canonicalPath, "utf8");
+  const fallback = structuredClone(context.bundles[0]);
+  fallback.html = fallback.html.replace("<img", '<div id="shot-1-fallback-proof">Fallback proof</div><img');
+  await writeFrameArtifacts(workspace, fallback, { fallback: true, source: "verification", reason: "native inspection failed" });
+
+  const result = await assembleHyperFrames(workspace);
+  const manifest = JSON.parse(await readFile(result.manifest, "utf8"));
+  assert.equal(result.fallback_count, 1);
+  assert.equal(result.full_fallback, true);
+  assert.equal(manifest.fallback_count, 1);
+  assert.equal(manifest.full_fallback, true);
+  assert.equal(manifest.fallbacks[0].source, "verification");
+  assert.match(await readFile(result.index, "utf8"), /FALLBACK DRAFT • 1\/1 SHOTS/);
+  assert.match(await readFile(path.join(result.project, "compositions", "shot-1.html"), "utf8"), /Fallback proof/);
+  assert.equal(await readFile(canonicalPath, "utf8"), canonical);
 });
 
 test("reconfigures assembly dependencies when a repaired plan replaces shot ids", async () => {
