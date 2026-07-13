@@ -43,7 +43,7 @@ test("delegates shots concurrently, repairs invalid HTML, and writes modular fra
     }
   };
 
-  const result = await directFrames(workspace, { concurrency: 2, background: false }, { client });
+  const result = await directFrames(workspace, { concurrency: 2, background: false, allowFallback: true }, { client });
   assert.equal(result.generated, 2);
   assert.equal(peak, 2);
   assert.equal(attempts.get("shot-1"), 2);
@@ -89,6 +89,21 @@ test("removes event-handler attributes locally without changing visible button c
   assert.deepEqual(sanitized.repairs, [{ kind: "remove-event-handler-attributes", count: 1 }]);
 });
 
+test("removes authoritative voiceover requests from the frame bundle locally", () => {
+  const bundle = frameBundle("shot-1", 5);
+  bundle.root_media_requests[0] = { ...bundle.root_media_requests[0], resource_id: "voiceover", kind: "audio", volume: 1 };
+  const sanitized = sanitizeFrameBundle(bundle, {
+    shot: { presenter: { mode: "voiceover" } },
+    resourceRoles: { voiceover: "voiceover" }
+  });
+  assert.deepEqual(sanitized.bundle.root_media_requests, []);
+  assert.deepEqual(sanitized.repairs, [{
+    kind: "remove-authoritative-voiceover-root-media",
+    resource_id: "voiceover",
+    presenter_mode: "voiceover"
+  }]);
+});
+
 test("builds a deterministic presenter fallback that satisfies the frame contract", () => {
   const context = fixture();
   const shot = { ...context.plan.shots[0], presenter: { mode: "companion", visible: true }, resource_ids: ["presenter"] };
@@ -128,7 +143,7 @@ test("recovers a previously rejected frame with a local fallback and does not bu
     calls.push(input.shot.id);
     return { response_id: "resp_fresh", model: "gpt-5.6", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: {} };
   } };
-  const result = await directFrames(workspace, { concurrency: 2, background: false }, { client });
+  const result = await directFrames(workspace, { concurrency: 2, background: false, allowFallback: true }, { client });
   assert.deepEqual(calls, ["shot-2"]);
   assert.equal(result.fallbacks, 1);
   assert.equal(result.frames[0].fallback, true);
@@ -146,6 +161,43 @@ test("recovers a previously rejected frame with a local fallback and does not bu
   assert.deepEqual(calls, ["shot-2"], "repeated local QA passes never submit another provider response");
 });
 
+test("promotes a paid frame attempt after a deterministic media-role repair", async () => {
+  const context = fixture();
+  context.intake.resources.push({ id: "voiceover", role: "voiceover", type: "video", location: "/tmp/voiceover.mp4", is_remote: false, sha256: "v" });
+  context.plan.shots[0].resource_ids = ["voiceover"];
+  const workspace = await workspaceFixture(context);
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  const inputHash = semanticHash({
+    input: buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0 }),
+    model: context.intake.model,
+    reasoning: "high",
+    schema: FRAME_BUNDLE_SCHEMA,
+    worker: "frame-director.v2"
+  });
+  await store.add({ id: "frame:shot-1", kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash });
+  await store.markRunning("frame:shot-1", { provider: "openai", response_id: "resp_spent", status: "completed" });
+  await store.markFailed("frame:shot-1", new Error("Frame shot-1 failed semantic validation: root_media_requests[0] must not mount the authoritative voiceover resource as visual media; use the presenter resource"));
+  const candidate = frameBundle("shot-1", 5);
+  candidate.root_media_requests[0] = { ...candidate.root_media_requests[0], resource_id: "voiceover", kind: "audio", volume: 1 };
+  const attempts = path.join(workspace, "production", "frames", ".attempts");
+  await mkdir(attempts, { recursive: true });
+  await writeFile(path.join(attempts, "shot-1-attempt-1.json"), `${JSON.stringify({ input_hash: inputHash, response_id: "resp_spent", model: "gpt-5.6-sol", usage: { total_tokens: 100 }, candidate })}\n`);
+  const calls = [];
+  const client = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    calls.push(input.shot.id);
+    return { response_id: "resp_fresh", model: "gpt-5.6", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: {} };
+  } };
+
+  const result = await directFrames(workspace, { concurrency: 2, background: false }, { client });
+
+  assert.deepEqual(calls, ["shot-2"]);
+  assert.equal(result.frames[0].recovered, true);
+  assert.equal(result.frames[0].fallback, undefined);
+  assert.deepEqual(JSON.parse(await readFile(path.join(workspace, "production", "frames", "shot-1.json"), "utf8")).root_media_requests, []);
+  assert.equal((await ProductionJobStore.open(workspace, { create: false })).get("frame:shot-1").status, "succeeded");
+});
+
 test("waits for sibling frame jobs to settle before reporting a delegated failure", async () => {
   const context = fixture();
   const workspace = await workspaceFixture(context);
@@ -157,7 +209,7 @@ test("waits for sibling frame jobs to settle before reporting a delegated failur
     siblingFinished = true;
     return { response_id: "sibling", model: "gpt-5.6", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: {} };
   } };
-  await assert.rejects(() => directFrames(workspace, { concurrency: 2 }, { client }), /worker failed/);
+  await assert.rejects(() => directFrames(workspace, { concurrency: 2, allowFallback: true }, { client }), /worker failed/);
   assert.equal(siblingFinished, true);
   const store = await ProductionJobStore.open(workspace, { create: false });
   assert.equal(store.get("frame:shot-2").status, "succeeded");
@@ -180,6 +232,79 @@ test("resumes a persisted background frame response without submitting it twice"
   await directFrames(workspace, { concurrency: 2 }, { client });
   assert.equal(resumed, 1);
   assert.equal(submitted, 1, "only the second shot needs a new response");
+});
+
+test("fails closed on fallback and does not start a later frame", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const calls = [];
+  const client = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    calls.push(input.shot.id);
+    const bundle = frameBundle(input.shot.id, input.shot.duration_seconds);
+    bundle.html = bundle.html.replace('data-start="0"', 'data-start="1"');
+    return { response_id: `resp_${input.shot.id}`, model: "gpt-5.6-sol", status: "completed", value: bundle, usage: { input_tokens: 100, output_tokens: 100 } };
+  } };
+
+  let error;
+  try {
+    await directFrames(workspace, { concurrency: 2, semanticAttempts: 1, background: false }, { client });
+    assert.fail("expected fallback to stop production");
+  } catch (caught) {
+    error = caught;
+  }
+  assert.match(error.message, /selected a deterministic fallback/);
+  assert.equal(error.code, "LAUNCHCLIP_FRAME_FALLBACK_BLOCKED");
+  assert.deepEqual(calls, ["shot-1"]);
+});
+
+test("stops before the next frame after the observed dollar limit is reached", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const calls = [];
+  const client = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    calls.push(input.shot.id);
+    return { response_id: `resp_${input.shot.id}`, model: "gpt-5.6-sol", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: { input_tokens: 100, output_tokens: 100, reasoning_tokens: 20 } };
+  } };
+
+  let error;
+  try {
+    await directFrames(workspace, { concurrency: 4, maxFrameCostUsd: .001, background: false }, { client });
+    assert.fail("expected frame cost guard to stop production");
+  } catch (caught) {
+    error = caught;
+  }
+  assert.match(error.message, /Observed frame cost reached/);
+  assert.equal(error.code, "LAUNCHCLIP_FRAME_COST_LIMIT");
+  assert.equal(error.frame_cost.estimated_usd, .0035);
+  assert.deepEqual(calls, ["shot-1"]);
+});
+
+test("replaces a cancelled persisted response in the same run", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  const baseInput = buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0 });
+  const inputHash = semanticHash({ input: baseInput, model: context.intake.model, reasoning: "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v2" });
+  await store.add({ id: "frame:shot-1", kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash });
+  await store.markRunning("frame:shot-1", { provider: "openai", response_id: "resp_cancelled", status: "in_progress" });
+  let resumed = 0;
+  const submitted = [];
+  const client = {
+    resumeStructured: async () => { resumed += 1; throw new Error("OpenAI response resp_cancelled cancelled: cancelled"); },
+    runStructured: async (options) => {
+      const input = JSON.parse(options.input);
+      submitted.push(input.shot.id);
+      return { response_id: `resp_${input.shot.id}`, model: "gpt-5.6-sol", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: {} };
+    }
+  };
+
+  await directFrames(workspace, { background: false }, { client });
+
+  assert.equal(resumed, 1);
+  assert.deepEqual(submitted, ["shot-1", "shot-2"]);
+  assert.equal((await ProductionJobStore.open(workspace, { create: false })).get("frame:shot-1").attempt, 2);
 });
 
 function frameBundle(id, duration) {

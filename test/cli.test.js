@@ -21,13 +21,15 @@ test("requires flag values", () => {
 });
 
 test("parses model-directed production control flags", () => {
-  assert.deepEqual(parseFlags(["--no-audio", "--fast-eval", "--allow-timing-drift", "--foreground", "--approve", "--concurrency", "4", "--voice-id", "voice_1", "--assets", "./brand", "--style", "soft-grid-editorial", "--style-file", "./frame.md"]), {
+  assert.deepEqual(parseFlags(["--no-audio", "--fast-eval", "--allow-timing-drift", "--allow-frame-fallback", "--foreground", "--approve", "--concurrency", "4", "--max-frame-cost-usd", "7.5", "--voice-id", "voice_1", "--assets", "./brand", "--style", "soft-grid-editorial", "--style-file", "./frame.md"]), {
     "no-audio": true,
     "fast-eval": true,
     "allow-timing-drift": true,
+    "allow-frame-fallback": true,
     foreground: true,
     approve: true,
     concurrency: "4",
+    "max-frame-cost-usd": "7.5",
     "voice-id": "voice_1",
     assets: "./brand",
     style: "soft-grid-editorial",

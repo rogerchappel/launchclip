@@ -231,7 +231,9 @@ function frameOptions(flags) {
     concurrency: numberOr(flags.concurrency, 4),
     semanticAttempts: numberOr(flags["semantic-attempts"], 2),
     reasoning: flags["frame-reasoning"] ?? "high",
-    maxOutputTokens: numberOr(flags["frame-max-output-tokens"], 36_000)
+    maxOutputTokens: numberOr(flags["frame-max-output-tokens"], 36_000),
+    maxFrameCostUsd: numberOr(flags["max-frame-cost-usd"], undefined),
+    allowFallback: Boolean(flags["allow-frame-fallback"])
   };
 }
 
@@ -308,7 +310,8 @@ function productionFlags(flags) {
     "frame-reasoning": flags["frame-reasoning"] ?? "medium",
     "frame-max-output-tokens": flags["frame-max-output-tokens"] ?? "20000",
     "semantic-attempts": flags["semantic-attempts"] ?? "1",
-    concurrency: flags.concurrency ?? "3",
+    concurrency: flags.concurrency ?? "1",
+    "max-frame-cost-usd": flags["max-frame-cost-usd"] ?? "5",
     "critic-reasoning": flags["critic-reasoning"] ?? "high",
     "critic-snapshots": flags["critic-snapshots"] ?? "8",
     "repair-reasoning": flags["repair-reasoning"] ?? "medium",

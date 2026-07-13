@@ -57,6 +57,19 @@ export function createCostTracker(options = {}) {
   };
 }
 
+export function estimateOpenAiUsageCost(model, usage = {}) {
+  const item = openAiLineItem(
+    { json: { model: String(model ?? "unknown") } },
+    { status: "completed", model: String(model ?? "unknown"), usage }
+  );
+  return {
+    estimated_usd: item.estimated_usd,
+    complete: item.estimated_usd != null,
+    warning: item.warning ?? null,
+    pricing: item.pricing ?? null
+  };
+}
+
 async function describeRequest(input, init = {}) {
   const url = String(typeof input === "string" || input instanceof URL ? input : input?.url ?? "");
   const body = init?.body;
@@ -159,10 +172,10 @@ function normalizeOpenAiUsage(usage = {}) {
   const outputDetails = usage.output_tokens_details ?? usage.completion_tokens_details ?? {};
   return {
     input_tokens: input,
-    cached_input_tokens: finite(inputDetails.cached_tokens),
-    cache_write_input_tokens: finite(inputDetails.cache_write_tokens),
+    cached_input_tokens: finite(inputDetails.cached_tokens ?? usage.cached_tokens),
+    cache_write_input_tokens: finite(inputDetails.cache_write_tokens ?? usage.cache_write_tokens),
     output_tokens: output,
-    reasoning_tokens: finite(outputDetails.reasoning_tokens),
+    reasoning_tokens: finite(outputDetails.reasoning_tokens ?? usage.reasoning_tokens),
     total_tokens: finite(usage.total_tokens || input + output)
   };
 }

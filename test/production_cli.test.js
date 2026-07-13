@@ -202,7 +202,14 @@ test("fast eval keeps full QA while lowering provider and sampling budgets", asy
   assert.equal(received.plan.chapterMaxOutputTokens, 28000);
   assert.equal(received.plan.chapterConcurrency, 3);
   assert.equal(received.plan.semanticAttempts, 2);
-  assert.deepEqual({ reasoning: received.frames.reasoning, max: received.frames.maxOutputTokens, attempts: received.frames.semanticAttempts, concurrency: received.frames.concurrency }, { reasoning: "medium", max: 20000, attempts: 1, concurrency: 3 });
+  assert.deepEqual({
+    reasoning: received.frames.reasoning,
+    max: received.frames.maxOutputTokens,
+    attempts: received.frames.semanticAttempts,
+    concurrency: received.frames.concurrency,
+    maxCost: received.frames.maxFrameCostUsd,
+    allowFallback: received.frames.allowFallback
+  }, { reasoning: "medium", max: 20000, attempts: 1, concurrency: 1, maxCost: 5, allowFallback: false });
   assert.equal(received.draft.snapshotFrames, 6);
   assert.equal(received.draft.inspectSamples, 9);
   assert.equal(received.draft.shotInspectConcurrency, 3);
