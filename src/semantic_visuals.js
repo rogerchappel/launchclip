@@ -57,7 +57,7 @@ export function validateSemanticVisualPlan(plan) {
     }
 
     const continuity = visual.continuity;
-    if (previous && previous.visual?.continuity?.sequence_id === continuity?.sequence_id && ["continue", "transform"].includes(previous.visual.continuity.handoff)) {
+    if (previous && previous.visual?.continuity?.sequence_id === continuity?.sequence_id && ["continue", "transform"].includes(previous.visual?.continuity?.handoff)) {
       const handedOff = previous.visual.continuity.hands_off_object_ids ?? [];
       const inherited = new Set(continuity.inherits_object_ids ?? []);
       for (const objectId of handedOff) if (!inherited.has(objectId)) errors.push(`${label}.visual.continuity must inherit handed-off object ${objectId}`);
