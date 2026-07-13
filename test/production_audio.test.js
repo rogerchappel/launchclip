@@ -25,7 +25,7 @@ test("produces ElevenLabs narration and music plus timed local SFX as resumable 
   };
   const sfxSource = path.join(workspace, "tick.wav");
   await writeFile(sfxSource, "tick");
-  const sfxLibrary = { resolvePlan: async () => [{ id: "tick", path: sfxSource, cue: "evidence tick", score: 2, shot_id: "shot-1", at_seconds: 1.5, volume: .3, intent: "mark proof" }] };
+  const sfxLibrary = { resolvePlan: async () => [{ id: "tick", path: sfxSource, cue: "evidence tick", score: 2, shot_id: "shot-1", event_id: "shot-1-proof-lock", at_seconds: 1.5, volume: .3, intent: "mark proof" }] };
 
   const first = await produceAudio(workspace, {}, { provider, sfxLibrary });
   assert.equal(first.status, "ready");
@@ -34,6 +34,7 @@ test("produces ElevenLabs narration and music plus timed local SFX as resumable 
   assert.equal(calls[1][1].prompt, "A plan-specific pulse");
   const sfx = JSON.parse(await readFile(first.sfx, "utf8"));
   assert.equal(sfx.cues[0].at_seconds, 1.5);
+  assert.equal(sfx.cues[0].event_id, "shot-1-proof-lock");
   assert.match(sfx.cues[0].path, /production\/media\/sfx\/001-tick\.wav$/);
 
   const cached = await produceAudio(workspace, {}, { provider, sfxLibrary });
@@ -159,7 +160,7 @@ async function fixture(options = {}) {
     format: { duration_seconds: options.durationSeconds ?? 10, language: "en" },
     narration: { source: supplied ? "supplied" : "generated", full_text: options.narrationText ?? "Proof becomes motion." },
     audio: { music_prompt: "A plan-specific pulse" },
-    shots: [{ id: "shot-1", start_seconds: 0, sfx: [{ at_seconds: 1.5, cue: "evidence tick", intent: "mark proof", volume: .3 }] }]
+    shots: [{ id: "shot-1", start_seconds: 0, visual: { events: [{ id: "shot-1-proof-lock", at_seconds: 1.5, sfx_eligible: true }] }, sfx: [{ at_seconds: 1.5, cue: "evidence tick", event_id: "shot-1-proof-lock", intent: "mark proof", volume: .3 }] }]
   };
   await writeFile(path.join(workspace, "production", "intake.json"), `${JSON.stringify(intake)}\n`);
   await writeFile(path.join(workspace, "production", "plan.json"), `${JSON.stringify(plan)}\n`);
