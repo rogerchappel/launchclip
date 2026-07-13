@@ -270,7 +270,8 @@ export async function fallbackFramesForVerification(workspacePath, verification)
   for (const reportName of ["lint.json", "validate.json"]) {
     try {
       const report = await readJson(path.join(qaDir, reportName));
-      for (const finding of report?.stdout?.findings ?? []) {
+      const findings = report?.stdout?.findings ?? report?.stdout?.errors ?? report?.stdout?.issues ?? [];
+      for (const finding of findings) {
         if (finding.severity !== "error" && finding.level !== "error") continue;
         const source = JSON.stringify(finding);
         for (const shot of plan.shots) if (source.includes(shot.id)) shotIds.add(shot.id);
