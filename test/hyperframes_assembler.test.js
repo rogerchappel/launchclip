@@ -19,7 +19,8 @@ test("renders subcompositions while keeping timed media and SFX as direct root c
   assert.match(html, /gsap@3\.14\.2/);
   assert.match(html, /Content-Security-Policy/);
   assert.match(html, /\.shot-mount \{[^}]+z-index: 100/);
-  assert.match(html, /window\.__timelines\["main"\] = gsap\.timeline\(\{ paused: true \}\)/);
+  assert.match(html, /const timeline = gsap\.timeline\(\{ paused: true \}\)/);
+  assert.match(html, /window\.__timelines\["main"\] = timeline/);
   assert.match(html, /<video[^>]+data-start="1"[^>]+data-duration="3"[^>]+data-media-start="4"/);
   assert.match(html, /<video[^>]+data-track-index="10"/);
   assert.match(html, /<video[^>]+ muted playsinline>/);
@@ -37,6 +38,7 @@ test("moves presenter video between beat-specific avatar layouts at the host roo
   const request = (x, y, width, height, sourceStart) => ({
     resource_id: "presenter", kind: "video", start_seconds: 0, end_seconds: 3,
     source_start_seconds: sourceStart, source_end_seconds: sourceStart + 3, volume: 0,
+    presentation: { mode: "companion", frame: "desktop-window", enter: "slide-up", exit: "slide-down", motion_blur_px: 16 },
     placement: { x, y, width, height, object_fit: "cover", border_radius: 28, z_index: 8, treatment: "avatar cutout" }
   });
   const plan = { format: { language: "en", width: 1080, height: 1920, duration_seconds: 6 }, shots: [
@@ -52,6 +54,10 @@ test("moves presenter video between beat-specific avatar layouts at the host roo
   assert.match(html, /id="shot-2-media-1"[^>]+data-start="3"[^>]+data-media-start="3"[^>]+left:620px;top:120px;width:380px;height:600px/);
   assert.match(html, /id="shot-1-media-1"[^>]+data-track-index="10"/);
   assert.match(html, /id="shot-2-media-1"[^>]+data-track-index="11"/);
+  assert.match(html, /id="shot-1-media-1-frame"[^>]+root-media-frame/);
+  assert.match(html, /root-media-window-dot--close/);
+  assert.match(html, /timeline\.fromTo\("#shot-1-media-1,#shot-1-media-1-frame"/);
+  assert.match(html, /"filter":"blur\(16px\)"/);
 });
 
 test("applies a restrictive CSP to model-authored frame documents", () => {
@@ -207,6 +213,7 @@ function fixture(source) {
     root_media_requests: [{
       resource_id: "screen", kind: "video", start_seconds: 1, end_seconds: 4,
       source_start_seconds: 4, source_end_seconds: 7, volume: 0,
+      presentation: { mode: "companion", frame: "none", enter: "cut", exit: "cut", motion_blur_px: 0 },
       placement: { x: 100, y: 200, width: 800, height: 600, object_fit: "cover", border_radius: 24, z_index: 2, treatment: "screen proof" }
     }],
     evidence_ids: ["ev-1"], visible_copy: [], preserve: []

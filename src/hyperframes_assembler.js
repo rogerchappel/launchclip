@@ -142,12 +142,17 @@ export function rootMotionSpec(plan, bundles) {
 export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
   const shotById = new Map(plan.shots.map((shot) => [shot.id, shot]));
   const media = [];
+  const mediaMotion = [];
+  let mediaIndex = 0;
   for (const bundle of bundles) {
     const shot = shotById.get(bundle.shot_id);
     for (const [index, request] of bundle.root_media_requests.entries()) {
       const asset = assetMap.get(request.resource_id);
       if (!asset) throw new Error(`Frame ${bundle.shot_id} requested unavailable local media: ${request.resource_id}`);
-      media.push(renderMedia({ id: `${bundle.shot_id}-media-${index + 1}`, request, asset, globalStart: shot.start_seconds + request.start_seconds, track: 10 + media.length }));
+      const rendered = renderMedia({ id: `${bundle.shot_id}-media-${index + 1}`, request, asset, globalStart: shot.start_seconds + request.start_seconds, track: 10 + mediaIndex });
+      media.push(...rendered.elements);
+      mediaMotion.push(rendered.motion);
+      mediaIndex += 1;
     }
   }
   for (const audio of extraAudio) {
@@ -168,7 +173,14 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
     html, body { margin: 0; width: ${plan.format.width}px; height: ${plan.format.height}px; overflow: hidden; background: #000; }
     #launchclip-root { position: relative; width: 100%; height: 100%; overflow: hidden; }
     .shot-mount { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 100; }
-    .root-media { position: absolute; display: block; overflow: hidden; }
+    .root-media { position: absolute; display: block; overflow: hidden; transform-origin: center center; will-change: transform, opacity, filter; }
+    .root-media-frame { position: absolute; pointer-events: none; overflow: hidden; border: 3px solid rgba(235,244,249,.92); background: transparent; box-shadow: 0 24px 70px rgba(0,0,0,.38), 0 0 0 1px rgba(16,23,28,.45); transform-origin: center center; will-change: transform, opacity, filter; }
+    .root-media-window-bar { position: absolute; top: 0; left: 0; right: 0; height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid rgba(235,244,249,.28); background: linear-gradient(180deg, rgba(19,28,35,.94), rgba(13,20,26,.84)); }
+    .root-media-window-dot { width: 12px; height: 12px; border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.18); }
+    .root-media-window-dot--close { background: #ff6258; }
+    .root-media-window-dot--minimize { background: #ffc04a; }
+    .root-media-window-dot--maximize { background: #40c957; }
+    .root-media-window-title { margin-left: auto; color: rgba(235,244,249,.68); font: 600 14px/1 Arial, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
   </style>
 </head>
 <body>
@@ -177,7 +189,9 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [] }) {
     ${compositions.join("\n    ")}
     <script>
       window.__timelines = window.__timelines || {};
-      window.__timelines["main"] = gsap.timeline({ paused: true });
+      const timeline = gsap.timeline({ paused: true });
+      ${mediaMotion.join("\n      ")}
+      window.__timelines["main"] = timeline;
     </script>
   </div>
 </body>
@@ -203,9 +217,45 @@ function renderMedia({ id, request, asset, globalStart, track }) {
   ].join(";");
   const duration = request.end_seconds - request.start_seconds;
   const mediaStart = request.source_start_seconds ?? 0;
-  const common = `id="${escapeAttr(id)}" class="clip root-media" src="assets/${escapeAttr(asset.file)}" data-start="${number(globalStart)}" data-duration="${number(duration)}" data-media-start="${number(mediaStart)}" data-volume="${number(request.volume)}" data-track-index="${Number(track)}" style="${style}" data-treatment="${escapeAttr(placement.treatment)}"`;
+  const presentation = request.presentation ?? { mode: "companion", frame: "none", enter: "cut", exit: "cut", motion_blur_px: 0 };
+  const common = `id="${escapeAttr(id)}" class="clip root-media root-media--${escapeAttr(presentation.mode)}" src="assets/${escapeAttr(asset.file)}" data-start="${number(globalStart)}" data-duration="${number(duration)}" data-media-start="${number(mediaStart)}" data-volume="${number(request.volume)}" data-track-index="${Number(track)}" style="${style}" data-treatment="${escapeAttr(placement.treatment)}" data-presentation-mode="${escapeAttr(presentation.mode)}"`;
   const videoAudio = request.volume > 0 ? `data-has-audio="true"` : "muted";
-  return request.kind === "video" ? `<video ${common} ${videoAudio} playsinline></video>` : `<audio ${common}></audio>`;
+  const mediaElement = request.kind === "video" ? `<video ${common} ${videoAudio} playsinline></video>` : `<audio ${common}></audio>`;
+  const frameId = `${id}-frame`;
+  const frameElement = request.kind === "video" && presentation.frame === "desktop-window"
+    ? `<div id="${escapeAttr(frameId)}" class="clip root-media-frame" data-start="${number(globalStart)}" data-duration="${number(duration)}" data-track-index="${Number(500 + track)}" data-layout-allow-occlusion="true" style="left:${number(placement.x)}px;top:${number(placement.y)}px;width:${number(placement.width)}px;height:${number(placement.height)}px;border-radius:${number(placement.border_radius)}px;z-index:${number(placement.z_index + 1)}"><div class="root-media-window-bar" aria-hidden="true"><span class="root-media-window-dot root-media-window-dot--close"></span><span class="root-media-window-dot root-media-window-dot--minimize"></span><span class="root-media-window-dot root-media-window-dot--maximize"></span><span class="root-media-window-title">presenter</span></div></div>`
+    : null;
+  return {
+    elements: frameElement ? [mediaElement, frameElement] : [mediaElement],
+    motion: renderMediaMotion({ id, frameId: frameElement ? frameId : null, presentation, globalStart, duration })
+  };
+}
+
+function renderMediaMotion({ id, frameId, presentation, globalStart, duration }) {
+  const selector = frameId ? `#${id},#${frameId}` : `#${id}`;
+  const blur = Number(presentation.motion_blur_px ?? 0);
+  const enterDuration = Math.min(.5, Math.max(.2, duration * .12));
+  const exitDuration = Math.min(.45, Math.max(.18, duration * .1));
+  const enterState = motionState(presentation.enter, blur, true);
+  const exitState = motionState(presentation.exit, blur, false);
+  const statements = [];
+  if (presentation.enter === "cut") statements.push(`timeline.set("${selector}",{opacity:1,x:0,y:0,scale:1,filter:"blur(0px)"},${number(globalStart)});`);
+  else statements.push(`timeline.fromTo("${selector}",${JSON.stringify(enterState)},{opacity:1,x:0,y:0,scale:1,filter:"blur(0px)",duration:${number(enterDuration)},ease:"power3.out"},${number(globalStart)});`);
+  if (presentation.exit !== "cut" && duration > enterDuration + exitDuration + .1) {
+    statements.push(`timeline.to("${selector}",{...${JSON.stringify(exitState)},duration:${number(exitDuration)},ease:"power3.in"},${number(globalStart + duration - exitDuration)});`);
+  }
+  return statements.join("\n      ");
+}
+
+function motionState(kind, blur, entering) {
+  const state = { opacity: 0, x: 0, y: 0, scale: 1, filter: `blur(${number(blur)}px)` };
+  if (kind === "slide-up") state.y = entering ? 140 : -140;
+  if (kind === "slide-down") state.y = 140;
+  if (kind === "slide-left") state.x = -160;
+  if (kind === "slide-right") state.x = 160;
+  if (kind === "scale-in") state.scale = .82;
+  if (kind === "scale-out") state.scale = .84;
+  return state;
 }
 
 async function freezeResources(resources, assetsDir) {
