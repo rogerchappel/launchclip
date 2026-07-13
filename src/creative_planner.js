@@ -255,10 +255,22 @@ async function authoritativeNarration(intake, evidence) {
   const words = wordsPath ? await readJson(path.resolve(wordsPath)) : [];
   const voiceover = intake.resources.find((entry) => entry.role === "voiceover");
   const mediaEvidence = evidence.items.find((entry) => entry.id === `resource:${voiceover?.id}`);
-  const mediaDuration = Number(mediaEvidence?.metadata?.find((entry) => entry.key === "duration_seconds")?.value);
+  const mediaDuration = authoritativeMediaDuration(mediaEvidence);
   const wordDuration = Number(words.at(-1)?.end);
   const duration = Number.isFinite(mediaDuration) && mediaDuration > 0 ? mediaDuration : Number.isFinite(wordDuration) && wordDuration > 0 ? wordDuration : null;
   return { transcript: text, words, duration_seconds: duration, words_path: wordsPath ?? null };
+}
+
+function authoritativeMediaDuration(mediaEvidence) {
+  const metadataDuration = Number(mediaEvidence?.metadata?.find((entry) => entry.key === "duration_seconds")?.value);
+  if (Number.isFinite(metadataDuration) && metadataDuration > 0) return metadataDuration;
+  try {
+    const content = typeof mediaEvidence?.content === "string" ? JSON.parse(mediaEvidence.content) : mediaEvidence?.content;
+    const contentDuration = Number(content?.format?.duration ?? content?.duration_seconds);
+    return Number.isFinite(contentDuration) && contentDuration > 0 ? contentDuration : NaN;
+  } catch {
+    return NaN;
+  }
 }
 
 function renderScript(plan) {

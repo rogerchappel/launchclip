@@ -74,13 +74,13 @@ export function fingerprintProductionPlan(plan, inputSignature, noveltyContext =
     episode_concept: clip(plan.design?.concept),
     style_family: clip(plan.design?.style_dna?.family),
     representations: unique(shots.map((shot) => shot.visual?.representation)),
-    visual_concepts: unique(shots.map((shot) => shot.visual?.concept).map(clip)),
-    spatial_worlds: unique(shots.map((shot) => shot.visual?.world).map(clip)),
-    composition_patterns: unique(shots.map((shot) => shot.visual?.composition).map(clip)),
+    visual_concepts: unique(shots.map((shot) => shot.visual?.concept).map((value) => clip(value))),
+    spatial_worlds: unique(shots.map((shot) => shot.visual?.world).map((value) => clip(value))),
+    composition_patterns: unique(shots.map((shot) => shot.visual?.composition).map((value) => clip(value))),
     object_kinds: unique(shots.flatMap((shot) => (shot.visual?.objects ?? []).map((object) => object.kind))),
-    motion_verbs: unique(shots.flatMap((shot) => (shot.visual?.events ?? []).map((event) => event.motion_verb).map(clip))),
+    motion_verbs: unique(shots.flatMap((shot) => (shot.visual?.events ?? []).map((event) => event.motion_verb).map((value) => clip(value)))),
     visible_changes: unique(shots.flatMap((shot) => (shot.visual?.events ?? []).map((event) => event.visible_change))),
-    transition_vocabulary: unique([...(plan.design?.style_dna?.transition_vocabulary ?? []), ...shots.map((shot) => shot.transition_out)].map(clip)),
+    transition_vocabulary: unique([...(plan.design?.style_dna?.transition_vocabulary ?? []), ...shots.map((shot) => shot.transition_out)].map((value) => clip(value))),
     presenter_rhythm: shots.map((shot) => shot.presenter?.mode).filter(Boolean)
   };
   fingerprint.signature = semanticHash(fingerprint);
