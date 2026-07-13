@@ -80,6 +80,36 @@ test("caps aggregate evidence in plan-repair requests", async () => {
   assert.equal(input.factual_evidence[0].truncated, true);
 });
 
+test("preserves the frozen novelty contract and refreshes the repaired fingerprint", async () => {
+  const workspace = await fixture();
+  const plans = path.join(workspace, "production", "plans");
+  await mkdir(plans, { recursive: true });
+  const novelty = {
+    schema_version: "launchclip.visual-novelty.v1",
+    input_signature: "input-signature",
+    creative_seed: "stable-seed",
+    mode: "differentiate",
+    stable_design_system: true,
+    similarity_limit: 0.58,
+    requirements: ["Change at least four creative axes."],
+    reproduce_from: null,
+    avoid_recent: []
+  };
+  await writeFile(path.join(plans, "visual-novelty.json"), `${JSON.stringify(novelty)}\n`);
+  let requestInput;
+  const revised = plan();
+  revised.design.concept = "A completely different evidence workshop";
+  await repairProductionPlan(workspace, findings(), {}, { client: { runStructured: async (request) => {
+    requestInput = JSON.parse(request.input);
+    return { response_id: "novelty-repair", model: "gpt-5.6", status: "completed", usage: {}, value: revised };
+  } } });
+  assert.equal(requestInput.visual_novelty.creative_seed, "stable-seed");
+  const fingerprint = JSON.parse(await readFile(path.join(plans, "visual-fingerprint.json"), "utf8"));
+  assert.equal(fingerprint.episode_concept, "A completely different evidence workshop");
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  assert.ok(store.get("creative-plan").outputs.some((entry) => entry.path.endsWith("visual-fingerprint.json")));
+});
+
 async function fixture(options = {}) {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-plan-repair-"));
   const production = path.join(workspace, "production");
