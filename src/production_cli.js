@@ -13,6 +13,7 @@ import { analyzeSourceMedia } from "./source_media_analysis.js";
 import { prepareSourceMedia } from "./production_source_media.js";
 import { withProductionLease } from "./job_store.js";
 import { resolveProductionEntities } from "./entity_resolution.js";
+import { openProductionPreview } from "./production_preview.js";
 
 export async function runProductionStage(command, target, flags = {}, adapters = {}) {
   if (command === "produce") return runProduction(target, flags, adapters);
@@ -26,6 +27,7 @@ export async function runProductionStage(command, target, flags = {}, adapters =
     if (command === "assemble") return assembleWithProducedAudio(target, flags);
     if (command === "production-verify") return verifyProduction(target, renderOptions(flags));
     if (command === "production-draft") return (adapters.renderDraftProduction ?? renderDraftProduction)(target, renderOptions(flags), adapters.render);
+    if (command === "production-preview") return (adapters.openProductionPreview ?? openProductionPreview)(target, previewOptions(flags), adapters.preview);
     if (command === "production-render") return renderProduction(target, renderOptions(flags));
     if (command === "production-critique") return critiqueProduction(target, criticOptions(flags));
     if (command === "production-repair") return (adapters.repairProduction ?? repairProduction)(target, await standaloneRepairOptions(target, flags, adapters), adapters.repair);
@@ -293,6 +295,13 @@ function renderOptions(flags) {
     criticPro: Boolean(flags["critic-pro"]),
     maxCriticSnapshots: numberOr(flags["critic-snapshots"], 12),
     background: !flags.foreground
+  };
+}
+
+function previewOptions(flags) {
+  return {
+    port: flags.port,
+    open: !flags["no-open"]
   };
 }
 
