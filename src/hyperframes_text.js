@@ -1,11 +1,11 @@
-const TEXT_CONTAINMENT_VERSION = "v1";
+const TEXT_CONTAINMENT_VERSION = "v2";
 
 export function ensureTextContainment(html, shotId) {
   const source = String(html);
   if (source.includes(`data-launchclip-text-containment="${TEXT_CONTAINMENT_VERSION}"`)) return source;
   if (!/<\/template\s*>/i.test(source)) throw new Error(`Frame ${shotId} is missing the closing template required for text containment`);
-  const script = textContainmentScript(shotId);
-  return source.replace(/<\/template\s*>/i, `${script}\n</template>`);
+  const withoutLegacyGuard = source.replace(/<script\b[^>]*data-launchclip-text-containment=["']v\d+["'][^>]*>[\s\S]*?<\/script>\s*/gi, "");
+  return withoutLegacyGuard.replace(/<\/template\s*>/i, `${textContainmentScript(shotId)}\n</template>`);
 }
 
 function textContainmentScript(shotId) {
@@ -16,27 +16,45 @@ function textContainmentScript(shotId) {
   const root = scope && scope.querySelector(${JSON.stringify(`[data-composition-id="${String(shotId)}"]`)});
   if (!root) return;
   const blockedTags = new Set(['SCRIPT','STYLE','TEMPLATE','SVG','PATH','DEFS','IMG','VIDEO','AUDIO','CANVAS']);
-  const hasOwnText = (element) => Array.from(element.childNodes).some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+  const px = (value) => Number.parseFloat(value) || 0;
+  const ownText = (element) => Array.from(element.childNodes).filter((node) => node.nodeType === Node.TEXT_NODE).map((node) => node.textContent).join(' ').trim();
   const candidates = Array.from(root.querySelectorAll('*')).filter((element) =>
     !blockedTags.has(element.tagName) &&
     element.getAttribute('data-launchclip-text-fit') !== 'off' &&
-    hasOwnText(element)
+    ownText(element)
   );
-  const px = (value) => Number.parseFloat(value) || 0;
   const minimums = new WeakMap();
   const minSize = (element) => {
     if (!minimums.has(element)) {
       const initial = px(getComputedStyle(element).fontSize);
-      minimums.set(element, Math.max(10, Math.min(20, initial * .45)));
+      const declared = px(element.getAttribute('data-launchclip-min-font-size'));
+      minimums.set(element, declared > 0 ? Math.min(initial, declared) : Math.min(initial, Math.max(12, initial * .6)));
     }
     return minimums.get(element);
   };
+  const maxLines = (element) => {
+    const declared = Number.parseInt(element.getAttribute('data-launchclip-max-lines') || '', 10);
+    if (Number.isInteger(declared) && declared > 0) return declared;
+    return getComputedStyle(element).whiteSpace === 'nowrap' ? 1 : null;
+  };
+  const lineCount = (element) => {
+    const style = getComputedStyle(element);
+    const lineHeight = px(style.lineHeight) || px(style.fontSize) * 1.2;
+    return lineHeight > 0 ? Math.max(1, Math.round(element.scrollHeight / lineHeight)) : 1;
+  };
+  const applyLinePolicy = (element) => {
+    if (maxLines(element) === 1) {
+      element.style.whiteSpace = 'nowrap';
+      element.style.overflowWrap = 'normal';
+      element.style.wordBreak = 'normal';
+    }
+  };
   const ownOverflow = (element) => {
     if (!element.clientWidth) return false;
-    const style = getComputedStyle(element);
-    const clipsVertically = style.overflowY === 'hidden' || style.overflowY === 'clip';
+    const lines = maxLines(element);
     return element.scrollWidth > element.clientWidth + 1 ||
-      (clipsVertically && element.clientHeight > 0 && element.scrollHeight > element.clientHeight + 1);
+      (element.clientHeight > 0 && element.scrollHeight > element.clientHeight + 1) ||
+      (lines != null && lineCount(element) > lines);
   };
   const mark = (element) => {
     element.dataset.launchclipFitText = 'true';
@@ -52,12 +70,6 @@ function textContainmentScript(shotId) {
   const fitOwnBox = (element) => {
     let attempts = 0;
     while (ownOverflow(element) && attempts < 96 && shrinkOne(element)) attempts += 1;
-    const style = getComputedStyle(element);
-    if (ownOverflow(element) && style.whiteSpace !== 'nowrap') {
-      element.style.overflowWrap = 'anywhere';
-      attempts = 0;
-      while (ownOverflow(element) && attempts < 96 && shrinkOne(element)) attempts += 1;
-    }
   };
   const isVisualContainer = (element) => {
     if (!element || element === root || !element.clientWidth || !element.clientHeight) return false;
@@ -66,38 +78,82 @@ function textContainmentScript(shotId) {
       px(style.borderTopWidth) + px(style.borderRightWidth) + px(style.borderBottomWidth) + px(style.borderLeftWidth) > 0;
     return hasPaint || style.overflowX === 'hidden' || style.overflowY === 'hidden' || style.overflowX === 'clip' || style.overflowY === 'clip';
   };
-  const groupOverflow = (container, elements) => {
-    const box = container.getBoundingClientRect();
-    return elements.some((element) => {
-      const rect = element.getBoundingClientRect();
-      return rect.left < box.left - 1 || rect.right > box.right + 1 || rect.top < box.top - 1 || rect.bottom > box.bottom + 1;
-    });
+  const contentBox = (container) => {
+    const rect = container.getBoundingClientRect();
+    const style = getComputedStyle(container);
+    const declared = px(container.getAttribute('data-launchclip-safe-padding'));
+    const safe = declared > 0 ? declared : 8;
+    return {
+      left: rect.left + px(style.borderLeftWidth) + Math.max(px(style.paddingLeft), safe),
+      right: rect.right - px(style.borderRightWidth) - Math.max(px(style.paddingRight), safe),
+      top: rect.top + px(style.borderTopWidth) + Math.max(px(style.paddingTop), safe),
+      bottom: rect.bottom - px(style.borderBottomWidth) - Math.max(px(style.paddingBottom), safe)
+    };
   };
-  for (let pass = 0; pass < 4; pass += 1) {
+  const outside = (element, box) => {
+    const rect = element.getBoundingClientRect();
+    return rect.left < box.left - 1 || rect.right > box.right + 1 || rect.top < box.top - 1 || rect.bottom > box.bottom + 1;
+  };
+  const overlaps = (left, right) => {
+    if (left === right || left.contains(right) || right.contains(left)) return false;
+    const a = left.getBoundingClientRect();
+    const b = right.getBoundingClientRect();
+    const width = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+    const height = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+    return width > 2 && height > 2;
+  };
+  const groups = new Map();
+  for (const element of candidates) {
+    applyLinePolicy(element);
+    const container = element.parentElement;
+    if (!isVisualContainer(container)) continue;
+    if (!groups.has(container)) groups.set(container, []);
+    groups.get(container).push(element);
+  }
+  for (let pass = 0; pass < 6; pass += 1) {
     for (const element of candidates) fitOwnBox(element);
-    const groups = new Map();
-    for (const element of candidates) {
-      const container = element.parentElement;
-      if (!isVisualContainer(container)) continue;
-      if (!groups.has(container)) groups.set(container, []);
-      groups.get(container).push(element);
-    }
     for (const [container, elements] of groups) {
+      const box = contentBox(container);
       let attempts = 0;
-      while (groupOverflow(container, elements) && attempts < 96) {
+      while (elements.some((element) => outside(element, box)) && attempts < 96) {
         let changed = false;
-        for (const element of elements) changed = shrinkOne(element) || changed;
+        for (const element of elements) if (outside(element, box)) changed = shrinkOne(element) || changed;
+        if (!changed) break;
+        attempts += 1;
+      }
+      attempts = 0;
+      while (elements.some((element, index) => elements.slice(index + 1).some((other) => overlaps(element, other))) && attempts < 96) {
+        let changed = false;
+        for (let index = 0; index < elements.length; index += 1) {
+          for (const other of elements.slice(index + 1)) {
+            if (!overlaps(elements[index], other)) continue;
+            changed = shrinkOne(elements[index]) || changed;
+            changed = shrinkOne(other) || changed;
+          }
+        }
         if (!changed) break;
         attempts += 1;
       }
     }
   }
-  const unresolved = candidates.filter(ownOverflow);
+  const issues = [];
+  for (const element of candidates) {
+    if (ownOverflow(element)) issues.push({ kind: 'overflow-or-lines', element: element.id || element.className || element.tagName });
+  }
+  for (const [container, elements] of groups) {
+    const box = contentBox(container);
+    for (const element of elements) if (outside(element, box)) issues.push({ kind: 'unsafe-padding', element: element.id || element.className || element.tagName, container: container.id || container.className || container.tagName });
+    for (let index = 0; index < elements.length; index += 1) {
+      for (const other of elements.slice(index + 1)) if (overlaps(elements[index], other)) issues.push({ kind: 'text-collision', element: elements[index].id || elements[index].className || elements[index].tagName, other: other.id || other.className || other.tagName, container: container.id || container.className || container.tagName });
+    }
+  }
+  const adjusted = candidates.filter((element) => element.dataset.launchclipFitText === 'true').length;
   root.dataset.launchclipTextContainment = '${TEXT_CONTAINMENT_VERSION}';
-  root.dataset.launchclipTextAdjusted = String(candidates.filter((element) => element.dataset.launchclipFitText === 'true').length);
-  root.dataset.launchclipTextUnresolved = String(unresolved.length);
+  root.dataset.launchclipTextAdjusted = String(adjusted);
+  root.dataset.launchclipTextUnresolved = String(issues.length);
   window.__launchclipTextContainment = window.__launchclipTextContainment || [];
-  window.__launchclipTextContainment.push({ shotId: ${JSON.stringify(String(shotId))}, adjusted: Number(root.dataset.launchclipTextAdjusted), unresolved: unresolved.map((element) => element.id || element.className || element.tagName) });
+  window.__launchclipTextContainment.push({ shotId: ${JSON.stringify(String(shotId))}, adjusted, unresolved: issues });
+  if (issues.length) console.error('[LaunchClip text containment] ${String(shotId)} has ' + issues.length + ' unresolved layout issue(s)', issues);
 })();
 </script>`;
 }

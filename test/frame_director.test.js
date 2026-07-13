@@ -55,6 +55,10 @@ test("delegates shots concurrently, repairs invalid HTML, and writes modular fra
   assert.match(frameInstructions, /Never approximate a logo/);
   assert.match(frameInstructions, /Never apply non-uniform scaleX\/scaleY to text/);
   assert.match(frameInstructions, /Every text-bearing box needs an explicit readable text zone/);
+  assert.match(frameInstructions, /Use an 8px spacing rhythm/);
+  assert.match(frameInstructions, /data-launchclip-safe-padding/);
+  assert.match(frameInstructions, /data-launchclip-max-lines="1"/);
+  assert.match(frameInstructions, /text touching a border/);
   assert.match(frameInstructions, /filenames such as light or dark are hints/);
   assert.match(await readFile(result.frames[0].html, "utf8"), /data-composition-id="shot-1"/);
   assert.match(await readFile(result.frames[0].motion, "utf8"), /#shot-1-proof/);
