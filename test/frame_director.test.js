@@ -53,6 +53,9 @@ test("delegates shots concurrently, repairs invalid HTML, and writes modular fra
   assert.match(frameInstructions, /Materialize every shot\.visual\.events entry/);
   assert.match(frameInstructions, /never cross text or numeric values/);
   assert.match(frameInstructions, /Never approximate a logo/);
+  assert.match(frameInstructions, /Never apply non-uniform scaleX\/scaleY to text/);
+  assert.match(frameInstructions, /Every text-bearing box needs an explicit readable text zone/);
+  assert.match(frameInstructions, /filenames such as light or dark are hints/);
   assert.match(await readFile(result.frames[0].html, "utf8"), /data-composition-id="shot-1"/);
   assert.match(await readFile(result.frames[0].motion, "utf8"), /#shot-1-proof/);
   assert.match(await readFile(result.frames[1].html, "utf8"), /window\.__timelines\["shot-2"\] = timeline/);
