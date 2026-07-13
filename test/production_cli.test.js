@@ -1,9 +1,40 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { runProduction, runProductionStage } from "../src/production_cli.js";
+import { prepareSourceMedia } from "../src/production_source_media.js";
+
+test("prepares authoritative media before downstream timing and keeps the original derivation", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-source-preprocess-"));
+  const production = path.join(workspace, "production");
+  const input = path.join(workspace, "source.mov");
+  await mkdir(production, { recursive: true });
+  await writeFile(input, "source-media");
+  await writeFile(path.join(production, "intake.json"), JSON.stringify({
+    source: { kind: "voiceover", value: input, location: input },
+    brief: { duration_seconds: 60 },
+    resources: [
+      { id: "01-source", role: "voiceover", type: "video", location: input, source: input, is_remote: false, sha256: null },
+      { id: "02-source", role: "presenter", type: "video", location: input, source: input, is_remote: false, sha256: null }
+    ]
+  }));
+  const result = await prepareSourceMedia(workspace, {}, {
+    trimMediaSilence: async (_source, output) => {
+      await mkdir(path.dirname(output), { recursive: true });
+      await writeFile(output, "trimmed-media");
+      return { changed: true, output, trim: { start: 0.4, end: 9.6 }, source_duration_seconds: 10, rendered_duration_seconds: 9.2 };
+    }
+  });
+  const intake = JSON.parse(await readFile(path.join(production, "intake.json"), "utf8"));
+  assert.equal(result.changed, true);
+  assert.equal(intake.brief.duration_seconds, 9.2);
+  assert.equal(intake.resources[0].location, result.output);
+  assert.equal(intake.resources[1].location, result.output);
+  assert.equal(intake.resources[0].derived_from, input);
+  assert.equal(intake.source.derived_from, input);
+});
 
 test("runs the delegated production DAG in dependency order and stops for approval", async () => {
   const calls = [];
@@ -11,6 +42,7 @@ test("runs the delegated production DAG in dependency order and stops for approv
     withProductionLease: async (_workspace, operation) => { calls.push("lease"); return operation(); },
     buildIntake: async () => { calls.push("normalize"); return { workspace: "/tmp/workspace" }; },
     writeIntake: async () => { calls.push("intake"); return { workspace: "/tmp/workspace" }; },
+    prepareSourceMedia: async () => { calls.push("source-preprocess"); return { status: "ready" }; },
     collectEvidence: async () => { calls.push("evidence"); return { items: 3 }; },
     analyzeSourceMedia: async () => { calls.push("source-media"); return { analyses: 1 }; },
     planProduction: async () => { calls.push("plan"); return { shots: 2 }; },
@@ -21,11 +53,11 @@ test("runs the delegated production DAG in dependency order and stops for approv
   };
   const result = await runProduction("owner/repo", { "no-audio": true, concurrency: "2" }, adapters);
   assert.equal(result.status, "awaiting-approval");
-  assert.deepEqual(calls.map((entry) => Array.isArray(entry) ? entry[0] : entry), ["normalize", "lease", "intake", "evidence", "source-media", "plan", "audio", "frames", "assemble", "draft"]);
-  assert.equal(calls[6][1].noVoice, true);
-  assert.equal(calls[6][1].noMusic, true);
-  assert.equal(calls[6][1].noSfx, true);
-  assert.equal(calls[8][1].voiceover, "/tmp/voice.mp3");
+  assert.deepEqual(calls.map((entry) => Array.isArray(entry) ? entry[0] : entry), ["normalize", "lease", "intake", "source-preprocess", "evidence", "source-media", "plan", "audio", "frames", "assemble", "draft"]);
+  assert.equal(calls[7][1].noVoice, true);
+  assert.equal(calls[7][1].noMusic, true);
+  assert.equal(calls[7][1].noSfx, true);
+  assert.equal(calls[9][1].voiceover, "/tmp/voice.mp3");
   assert.match(result.next, /production-render/);
 });
 
@@ -36,6 +68,7 @@ test("runs bounded critic-directed repairs before asking for human approval", as
     withProductionLease: async (_workspace, operation) => operation(),
     buildIntake: async () => ({ workspace: "/tmp/workspace" }),
     writeIntake: async () => ({ workspace: "/tmp/workspace" }),
+    prepareSourceMedia: async () => ({ status: "not-applicable" }),
     collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), planProduction: async () => ({}),
     produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
     directFrames: async () => ({ generated: 2, cached: 0 }),
@@ -63,6 +96,7 @@ test("automatically repairs deterministic verification failures before rendering
     withProductionLease: async (_workspace, operation) => operation(),
     buildIntake: async () => ({ workspace: "/tmp/workspace" }),
     writeIntake: async () => ({ workspace: "/tmp/workspace" }),
+    prepareSourceMedia: async () => ({ status: "not-applicable" }),
     collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), planProduction: async () => ({}),
     produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
     directFrames: async () => ({ generated: 2, cached: 0 }),
@@ -94,6 +128,7 @@ test("stops infrastructure verification failures without fallback or paid repair
     withProductionLease: async (_workspace, operation) => operation(),
     buildIntake: async () => ({ workspace: "/tmp/workspace" }),
     writeIntake: async () => ({ workspace: "/tmp/workspace" }),
+    prepareSourceMedia: async () => ({ status: "not-applicable" }),
     collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), planProduction: async () => ({}),
     produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
     directFrames: async () => ({ generated: 1, cached: 0 }),
@@ -132,7 +167,7 @@ test("stops a persistent verification repair loop at the configured bound", asyn
   const calls = [];
   const adapters = {
     withProductionLease: async (_workspace, operation) => operation(),
-    buildIntake: async () => ({ workspace: "/tmp/workspace" }), writeIntake: async () => ({ workspace: "/tmp/workspace" }),
+    buildIntake: async () => ({ workspace: "/tmp/workspace" }), writeIntake: async () => ({ workspace: "/tmp/workspace" }), prepareSourceMedia: async () => ({ status: "not-applicable" }),
     collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), planProduction: async () => ({}),
     produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
     directFrames: async () => ({ generated: 1, cached: 0 }),
@@ -157,7 +192,7 @@ test("executes the full audio, frame, assembly, and draft closure after a replan
   let drafts = 0;
   const adapters = {
     withProductionLease: async (_workspace, operation) => operation(),
-    buildIntake: async () => ({ workspace: "/tmp/workspace" }), writeIntake: async () => ({ workspace: "/tmp/workspace" }),
+    buildIntake: async () => ({ workspace: "/tmp/workspace" }), writeIntake: async () => ({ workspace: "/tmp/workspace" }), prepareSourceMedia: async () => ({ status: "not-applicable" }),
     collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}),
     planProduction: async () => { calls.push("plan"); return { revision: 0 }; },
     produceAudio: async () => { calls.push("audio"); return { status: "ready", voiceover: "/tmp/voice.mp3", music: "/tmp/music.mp3", sfx: "/tmp/sfx.json", warnings: [] }; },
@@ -183,6 +218,7 @@ test("fast eval keeps full QA while lowering provider and sampling budgets", asy
     withProductionLease: async (_workspace, operation) => operation(),
     buildIntake: async (_source, flags) => { received.intake = flags; return { workspace: "/tmp/workspace" }; },
     writeIntake: async () => ({ workspace: "/tmp/workspace" }),
+    prepareSourceMedia: async () => ({ status: "not-applicable" }),
     collectEvidence: async () => ({}),
     analyzeSourceMedia: async (_workspace, options) => { received.media = options; return {}; },
     planProduction: async (_workspace, options) => { received.plan = options; return {}; },
@@ -240,6 +276,7 @@ test("blocks assembly when measured narration timing requires a replan", async (
     withProductionLease: async (_workspace, operation) => operation(),
     buildIntake: async () => ({ workspace: "/tmp/workspace" }),
     writeIntake: async () => ({ workspace: "/tmp/workspace" }),
+    prepareSourceMedia: async () => ({ status: "not-applicable" }),
     collectEvidence: async () => ({}),
     analyzeSourceMedia: async () => ({}),
     planProduction: async () => ({}),

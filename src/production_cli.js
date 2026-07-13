@@ -10,6 +10,7 @@ import { assertVerificationFresh, renderDraftProduction, renderProduction, verif
 import { critiqueProduction } from "./production_critic.js";
 import { repairProduction } from "./production_repair.js";
 import { analyzeSourceMedia } from "./source_media_analysis.js";
+import { prepareSourceMedia } from "./production_source_media.js";
 import { withProductionLease } from "./job_store.js";
 
 export async function runProductionStage(command, target, flags = {}, adapters = {}) {
@@ -28,6 +29,7 @@ export async function runProductionStage(command, target, flags = {}, adapters =
     if (command === "production-critique") return critiqueProduction(target, criticOptions(flags));
     if (command === "production-repair") return (adapters.repairProduction ?? repairProduction)(target, await standaloneRepairOptions(target, flags, adapters), adapters.repair);
     if (command === "source-media") return (adapters.analyzeSourceMedia ?? analyzeSourceMedia)(target, mediaAnalysisOptions(flags), adapters.mediaAnalysis);
+    if (command === "source-preprocess") return (adapters.prepareSourceMedia ?? prepareSourceMedia)(target, sourcePreprocessOptions(flags), adapters.sourcePreprocess);
     throw new Error(`Unknown production stage: ${command}`);
   });
 }
@@ -76,6 +78,7 @@ export async function runProduction(source, flags = {}, adapters = {}) {
 }
 
 async function runProductionInWorkspace(workspace, flags, adapters) {
+  const sourcePreprocess = await (adapters.prepareSourceMedia ?? prepareSourceMedia)(workspace, sourcePreprocessOptions(flags), adapters.sourcePreprocess);
   const evidence = await (adapters.collectEvidence ?? collectEvidence)(workspace, evidenceOptions(flags), adapters.evidence);
   const sourceMedia = await (adapters.analyzeSourceMedia ?? analyzeSourceMedia)(workspace, mediaAnalysisOptions(flags), adapters.mediaAnalysis);
   let plan = await (adapters.planProduction ?? planProduction)(workspace, plannerOptions(flags), adapters.planner);
@@ -158,6 +161,7 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
     stage: "produce",
     status: readyForApproval ? "awaiting-approval" : "needs-repair",
     workspace,
+    source_preprocess: sourcePreprocess,
     evidence,
     source_media: sourceMedia,
     plan,
@@ -174,6 +178,15 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
       : verification?.status === "failed"
         ? `Review ${verification.qa}; run production-repair after resolving any unscoped verification findings.`
         : `Review ${critique?.critique ?? "production/qa/critique.json"}; resolve remaining findings before final approval.`
+  };
+}
+
+function sourcePreprocessOptions(flags) {
+  return {
+    trimSilence: !flags["no-trim-silence"],
+    silenceDuration: numberOr(flags["silence-duration"], 0.45),
+    silencePadding: numberOr(flags["silence-padding"], 0.12),
+    crf: numberOr(flags["source-crf"], 18)
   };
 }
 
