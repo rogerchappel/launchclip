@@ -151,6 +151,24 @@ test("requires supplied presenters to be planned and mounted in visible avatar s
   assert.ok(validateFrameBundle(bundle, { shot: visibleShot, resourceRoles: roles }).errors.some((error) => error.includes("mount a presenter video")));
 });
 
+test("requires long presenter edits to alternate visual modes and keeps voiceover shots offstage", () => {
+  const plan = samplePlan();
+  plan.format.duration_seconds = 30;
+  plan.shots = [sampleShot("shot-1", 0, 10), sampleShot("shot-2", 10, 20), sampleShot("shot-3", 20, 30)];
+  const context = { evidenceIds: ["ev-1"], resourceIds: ["res-1"], resourceRoles: { "res-1": "presenter" } };
+  const repetitive = validateProductionPlan(plan, context);
+  assert.ok(repetitive.errors.some((error) => error.includes("presenter.mode voiceover")));
+  assert.ok(repetitive.errors.some((error) => error.includes("at least two presenter visual modes")));
+  plan.shots[1].presenter = { mode: "voiceover", visible: false, placement: "offstage", size: "none", treatment: "voiceover only" };
+  assert.equal(validateProductionPlan(plan, context).ok, true);
+
+  const bundle = sampleFrameBundle();
+  const voiceoverShot = plan.shots[1];
+  bundle.root_media_requests[0].source_start_seconds = 10;
+  bundle.root_media_requests[0].source_end_seconds = 15;
+  assert.ok(validateFrameBundle(bundle, { shot: voiceoverShot, resourceRoles: context.resourceRoles }).errors.some((error) => error.includes("must not mount presenter video")));
+});
+
 test("critique cannot ship with blocking findings or unknown shots", () => {
   const critique = {
     schema_version: CRITIQUE_VERSION,
@@ -217,7 +235,7 @@ function sampleShot(id, start, end) {
     on_screen_text: ["Proof appears"],
     evidence_ids: ["ev-1"],
     resource_ids: ["res-1"],
-    presenter: { visible: true, placement: "right third", size: "medium", treatment: "natural cutout" },
+    presenter: { mode: "companion", visible: true, placement: "right third", size: "medium", treatment: "natural cutout" },
     visual: {
       description: "Evidence builds opposite the presenter",
       composition: "Asymmetric split",
@@ -241,6 +259,7 @@ function sampleFrameBundle() {
     root_media_requests: [{
       resource_id: "res-1", kind: "video", start_seconds: 0, end_seconds: 5,
       source_start_seconds: 0, source_end_seconds: 5, volume: 0,
+      presentation: { mode: "companion", frame: "desktop-window", enter: "slide-right", exit: "slide-down", motion_blur_px: 14 },
       placement: { x: 1180, y: 120, width: 620, height: 840, object_fit: "cover", border_radius: 24, z_index: 3, treatment: "right-third presenter cutout" }
     }],
     evidence_ids: ["ev-1"],
