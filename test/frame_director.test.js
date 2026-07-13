@@ -303,6 +303,40 @@ test("stops before the next frame after the observed dollar limit is reached", a
   assert.deepEqual(calls, ["shot-1"]);
 });
 
+test("uses a reasoning override only for unfinished frames", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const initialClient = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    if (input.shot.id === "shot-2") throw new Error("stop after the first frame");
+    return { response_id: "resp_high", model: "gpt-5.6-sol", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: {} };
+  } };
+  await assert.rejects(
+    () => directFrames(workspace, { concurrency: 1, reasoning: "high", allowFallback: true, background: false }, { client: initialClient }),
+    /stop after the first frame/
+  );
+  const before = (await ProductionJobStore.open(workspace, { create: false })).get("frame:shot-1");
+  const calls = [];
+  const resumeClient = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    calls.push({ shot: input.shot.id, reasoning: options.reasoningEffort });
+    return { response_id: "resp_medium", model: "gpt-5.6-sol", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: {} };
+  } };
+
+  const result = await directFrames(workspace, {
+    concurrency: 1,
+    reasoning: "high",
+    pendingReasoning: "medium",
+    allowFallback: true,
+    background: false
+  }, { client: resumeClient });
+
+  assert.deepEqual(calls, [{ shot: "shot-2", reasoning: "medium" }]);
+  assert.equal(result.frames[0].cached, true);
+  assert.equal(result.frames[1].cached, false);
+  assert.equal((await ProductionJobStore.open(workspace, { create: false })).get("frame:shot-1").input_hash, before.input_hash);
+});
+
 test("replaces a cancelled persisted response in the same run", async () => {
   const context = fixture();
   const workspace = await workspaceFixture(context);

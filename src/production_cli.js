@@ -252,6 +252,7 @@ function frameOptions(flags) {
     concurrency: numberOr(flags.concurrency, 4),
     semanticAttempts: numberOr(flags["semantic-attempts"], 2),
     reasoning: flags["frame-reasoning"] ?? "high",
+    pendingReasoning: flags["pending-frame-reasoning"],
     maxOutputTokens: numberOr(flags["frame-max-output-tokens"], 36_000),
     maxFrameCostUsd: numberOr(flags["max-frame-cost-usd"], undefined),
     allowFallback: Boolean(flags["allow-frame-fallback"])
