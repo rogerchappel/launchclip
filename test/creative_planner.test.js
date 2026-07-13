@@ -10,7 +10,10 @@ import { EVIDENCE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_con
 test("passes evidence, references, resources, and format to the creative director without choosing a style", () => {
   const intake = sampleIntake();
   const evidence = sampleEvidence();
-  const input = JSON.parse(buildPlanningInput(intake, evidence, null, { sfxCatalog: ["tick", "fast_whoosh"] }));
+  const input = JSON.parse(buildPlanningInput(intake, evidence, null, {
+    sfxCatalog: ["tick", "fast_whoosh"],
+    entityResolution: { matches: [{ id: "refiant", canonical_name: "Refiant AI", display_name: "Refiant", spoken_form: "refine", confidence: 0.98, evidence_supported: true, assets: [{ id: "brand-refiant-logo-default", kind: "logo", variant: "default" }] }] }
+  }));
   assert.equal(input.brief.requested_format.id, "9:16");
   assert.deepEqual(input.factual_evidence.map((entry) => entry.id), ["ev-1"]);
   assert.deepEqual(input.creative_references.map((entry) => entry.id), ["ref-1"]);
@@ -18,10 +21,20 @@ test("passes evidence, references, resources, and format to the creative directo
   assert.equal(input.narration.source, "generated");
   assert.deepEqual(input.available_sfx, ["tick", "fast_whoosh"]);
   assert.equal(input.brief.prompt, "Lead with the surprising workflow");
+  assert.deepEqual(input.canonical_entities[0], {
+    id: "refiant",
+    canonical_name: "Refiant AI",
+    display_name: "Refiant",
+    spoken_form: "refine",
+    confidence: 0.98,
+    evidence_supported: true,
+    asset_resource_ids: [{ id: "brand-refiant-logo-default", kind: "logo", variant: "default" }]
+  });
 });
 
 test("runs GPT-5.6 planning, validates the plan, writes artifacts, and caches verified output", async () => {
   const workspace = await tempWorkspace(sampleIntake());
+  await writeFile(path.join(workspace, "production", "entities.json"), JSON.stringify({ matches: [{ id: "example", canonical_name: "Example Inc.", display_name: "Example", spoken_form: "example", confidence: 1, evidence_supported: true, assets: [] }] }));
   const calls = [];
   const client = {
     runStructured: async (options) => {
@@ -45,6 +58,7 @@ test("runs GPT-5.6 planning, validates the plan, writes artifacts, and caches ve
   assert.equal(calls[0].model, "gpt-5.6");
   assert.equal(calls[0].reasoningEffort, "xhigh");
   assert.equal(calls[0].schema.additionalProperties, false);
+  assert.equal(JSON.parse(calls[0].input).canonical_entities[0].canonical_name, "Example Inc.");
   const noveltyInput = JSON.parse(calls[0].input).visual_novelty;
   assert.equal(noveltyInput.mode, "differentiate");
   assert.equal(noveltyInput.stable_design_system, true);
