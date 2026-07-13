@@ -22,7 +22,7 @@ Return only the strict production-critique JSON.`;
 export async function critiqueProduction(workspacePath, options = {}, adapters = {}) {
   const workspace = path.resolve(workspacePath);
   const qaDir = path.join(workspace, PRODUCTION_PATHS.qa);
-  const [plan, evidence, verification, motion, audio, lint, validate, inspect] = await Promise.all([
+  const [plan, evidence, verification, motion, audio, lint, validate, inspect, visualFingerprint] = await Promise.all([
     readJson(path.join(workspace, PRODUCTION_PATHS.plan)),
     readJson(path.join(workspace, PRODUCTION_PATHS.evidence)),
     readJson(path.join(qaDir, "verification.json")),
@@ -30,7 +30,8 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
     readOptionalJson(path.join(qaDir, "audio.json")),
     readOptionalJson(path.join(qaDir, "lint.json")),
     readOptionalJson(path.join(qaDir, "validate.json")),
-    readOptionalJson(path.join(qaDir, "inspect.json"))
+    readOptionalJson(path.join(qaDir, "inspect.json")),
+    readOptionalJson(path.join(workspace, "production", "plans", "visual-fingerprint.json"))
   ]);
   const snapshots = await snapshotPaths(verification.snapshots ?? path.join(qaDir, "snapshots"), Number(options.maxSnapshots ?? 12));
   if (!snapshots.length) throw new Error("Production critique requires rendered snapshots");
@@ -63,6 +64,7 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
         encoded_frame_count_path: "temporal_motion_analysis.frame_count",
         frame_difference_sample_count_path: "temporal_motion_analysis.motion.frame_count"
       },
+      visual_novelty_assessment: visualFingerprint?.novelty_assessment ?? null,
       snapshot_order: snapshots.map((entry) => path.basename(entry))
     }),
     images,
@@ -73,16 +75,42 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
     promptCacheKey: "launchclip:production-critic:v1",
     metadata: { job_id: "production-critique", shots: plan.shots.length }
   });
-  const validation = validateCritique(result.value, plan.shots.map((shot) => shot.id));
+  const critique = applyVisualNoveltyFinding(result.value, visualFingerprint, plan.shots.map((shot) => shot.id));
+  const validation = validateCritique(critique, plan.shots.map((shot) => shot.id));
   if (!validation.ok) throw new Error(`GPT-5.6 production critique failed validation: ${validation.errors.join("; ")}`);
-  if (result.value.verdict === "ship" && result.value.findings.some((finding) => finding.severity === "major")) {
+  if (critique.verdict === "ship" && critique.findings.some((finding) => finding.severity === "major")) {
     throw new Error("GPT-5.6 production critique cannot ship with major findings");
   }
   const critiquePath = path.join(qaDir, "critique.json");
   const markdownPath = path.join(qaDir, "CRITIQUE.md");
-  await writeFile(critiquePath, `${JSON.stringify({ ...result.value, response_id: result.response_id, model: result.model, usage: result.usage }, null, 2)}\n`);
-  await writeFile(markdownPath, renderCritique(result.value));
-  return { stage: "production-critique", status: result.value.verdict === "ship" ? "approved" : "needs-repair", verdict: result.value.verdict, critique: critiquePath, markdown: markdownPath, findings: result.value.findings.length, response_id: result.response_id, model: result.model };
+  await writeFile(critiquePath, `${JSON.stringify({ ...critique, response_id: result.response_id, model: result.model, usage: result.usage }, null, 2)}\n`);
+  await writeFile(markdownPath, renderCritique(critique));
+  return { stage: "production-critique", status: critique.verdict === "ship" ? "approved" : "needs-repair", verdict: critique.verdict, critique: critiquePath, markdown: markdownPath, findings: critique.findings.length, response_id: result.response_id, model: result.model };
+}
+
+export function applyVisualNoveltyFinding(critique, fingerprint, shotIds = []) {
+  const assessment = fingerprint?.novelty_assessment;
+  if (!assessment || assessment.mode !== "differentiate" || assessment.passes !== false) return critique;
+  const similarity = Number(assessment.nearest_recent_similarity);
+  const limit = Number(assessment.similarity_limit);
+  const finding = {
+    id: "visual-novelty",
+    severity: "major",
+    category: "composition",
+    shot_ids: [...shotIds],
+    start_seconds: null,
+    end_seconds: null,
+    evidence: `The semantic visual fingerprint is ${similarity.toFixed(3)} similar to a recent video, above the configured ${limit.toFixed(3)} ceiling.`,
+    repair_scope: "plan",
+    instruction: "Keep the existing brand DNA, factual meaning, narration, and assets, but replace the governing episode metaphor and differ across at least four of these axes: representation sequence, spatial topology, motion vocabulary, transition vocabulary, presenter rhythm, and composition patterns.",
+    preserve: ["style_dna", "authoritative narration", "factual grounding", "approved assets"]
+  };
+  return {
+    ...critique,
+    verdict: "replan",
+    summary: `${critique.summary} The draft is too similar to a recent visual construction and requires a concept-level replan.`,
+    findings: [...critique.findings.filter((entry) => entry.id !== finding.id), finding]
+  };
 }
 
 function renderCritique(critique) {
