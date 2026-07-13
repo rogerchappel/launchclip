@@ -37,7 +37,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   const dependencies = plan.shots.map((shot) => `frame:${shot.id}`);
   for (const dependency of dependencies) if (store.get(dependency)?.status !== "succeeded") throw new Error(`Frame job must succeed before assembly: ${dependency}`);
   const extraAudio = await describeExtraAudio(options);
-  const inputHash = semanticHash({ intake, plan, bundles, fallbacks, extraAudio, assembler: "hyperframes-assembler.v10" });
+  const inputHash = semanticHash({ intake, plan, bundles, fallbacks, extraAudio, assembler: "hyperframes-assembler.v11" });
   const jobId = "hyperframes-assembly";
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
@@ -86,7 +86,8 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
       await writeAtomic(safeShotFile(compositionsDir, bundle.shot_id, ".motion.json"), `${JSON.stringify(toHyperFramesMotionSpec(bundle, shot.end_seconds - shot.start_seconds), null, 2)}\n`);
     }
 
-    const html = renderRoot({ intake, plan, bundles, assetMap, extraAudio, fallbacks });
+    const transitions = buildShotTransitions(plan);
+    const html = renderRoot({ intake, plan, bundles, assetMap, extraAudio, fallbacks, transitions });
     const indexPath = path.join(projectDir, "index.html");
     const motionPath = path.join(projectDir, "index.motion.json");
     const manifestPath = path.join(projectDir, "assembly.json");
@@ -100,6 +101,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
       fallbacks,
       fallback_count: fallbacks.length,
       full_fallback: fallbacks.length === bundles.length && bundles.length > 0,
+      transitions,
       shots: plan.shots.map((shot) => ({ id: shot.id, start_seconds: shot.start_seconds, end_seconds: shot.end_seconds, composition: `compositions/${shot.id}.html` })),
       assets: [...assetMap.entries()].map(([id, entry]) => ({ id, file: `assets/${entry.file}`, sha256: entry.sha256 }))
     }, null, 2)}\n`);
@@ -143,7 +145,7 @@ export function rootMotionSpec(plan, bundles) {
   return { version: 1, duration: plan.format.duration_seconds, assertions };
 }
 
-export function renderRoot({ plan, bundles, assetMap, extraAudio = [], fallbacks = [] }) {
+export function renderRoot({ plan, bundles, assetMap, extraAudio = [], fallbacks = [], transitions = buildShotTransitions(plan) }) {
   const chrome = presenterChromeStyle(plan.design?.style_dna);
   const shotById = new Map(plan.shots.map((shot) => [shot.id, shot]));
   const media = [];
@@ -165,7 +167,14 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [], fallbacks
     const duration = audio.duration_seconds == null ? "" : ` data-duration="${number(audio.duration_seconds)}"`;
     media.push(`<audio id="${escapeAttr(audio.id)}" class="clip" src="assets/${escapeAttr(asset.file)}" data-start="${number(audio.at_seconds ?? 0)}"${duration} data-media-start="${number(audio.source_start_seconds ?? 0)}" data-volume="${number(audio.volume)}" data-track-index="${audio.track}"></audio>`);
   }
-  const compositions = plan.shots.map((shot, index) => `<div id="mount-${escapeAttr(shot.id)}" class="clip shot-mount" data-composition-id="${escapeAttr(shot.id)}" data-composition-src="compositions/${escapeAttr(shot.id)}.html" data-start="${number(shot.start_seconds)}" data-duration="${number(Math.max(.001, shot.end_seconds - shot.start_seconds - .001))}" data-track-index="${100 + index}" data-width="${plan.format.width}" data-height="${plan.format.height}"></div>`);
+  const transitionByOutgoing = new Map(transitions.map((entry) => [entry.from_shot_id, entry]));
+  const compositions = plan.shots.map((shot, index) => {
+    const transition = transitionByOutgoing.get(shot.id);
+    const extension = transition?.kind === "flow" ? transition.duration_seconds : -.001;
+    const duration = Math.min(plan.format.duration_seconds - shot.start_seconds, shot.end_seconds - shot.start_seconds + extension);
+    return `<div id="mount-${escapeAttr(shot.id)}" class="clip shot-mount" data-composition-id="${escapeAttr(shot.id)}" data-composition-src="compositions/${escapeAttr(shot.id)}.html" data-start="${number(shot.start_seconds)}" data-duration="${number(Math.max(.001, duration))}" data-track-index="${100 + index}" data-width="${plan.format.width}" data-height="${plan.format.height}" style="z-index:${100 + index}"></div>`;
+  });
+  const transitionMotion = renderShotTransitionMotion(plan, transitions);
   return `<!doctype html>
 <html lang="${escapeAttr(plan.format.language)}">
 <head>
@@ -177,7 +186,7 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [], fallbacks
     * { box-sizing: border-box; }
     html, body { margin: 0; width: ${plan.format.width}px; height: ${plan.format.height}px; overflow: hidden; background: #000; }
     #launchclip-root { position: relative; width: 100%; height: 100%; overflow: hidden; }
-    .shot-mount { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 100; }
+    .shot-mount { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transform-origin: center center; will-change: transform, opacity, filter; }
     .root-media { position: absolute; display: block; overflow: hidden; transform-origin: center center; will-change: transform, opacity, filter; }
     .root-media-frame { position: absolute; pointer-events: none; overflow: hidden; border: ${chrome.borderWidth}px solid ${chrome.foreground}; background: transparent; box-shadow: ${chrome.shadow}; transform-origin: center center; will-change: transform, opacity, filter; }
     .root-media-window-bar { position: absolute; top: 0; left: 0; right: 0; height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: ${chrome.borderWidth}px solid ${chrome.foreground}; background: ${chrome.surface}; }
@@ -196,6 +205,7 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [], fallbacks
     <script>
       window.__timelines = window.__timelines || {};
       const timeline = gsap.timeline({ paused: true });
+      ${transitionMotion}
       ${mediaMotion.join("\n      ")}
       window.__timelines["main"] = timeline;
     </script>
@@ -203,6 +213,53 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [], fallbacks
 </body>
 </html>
 `;
+}
+
+export function buildShotTransitions(plan) {
+  const shots = plan?.shots ?? [];
+  const transitions = [];
+  for (let index = 0; index < shots.length - 1; index += 1) {
+    const outgoing = shots[index];
+    const incoming = shots[index + 1];
+    const explicit = String(outgoing.transition_out ?? "");
+    const kind = /\b(?:hard\s+)?cut\b/i.test(explicit) ? "cut" : "flow";
+    const outgoingDuration = Number(outgoing.end_seconds) - Number(outgoing.start_seconds);
+    const incomingDuration = Number(incoming.end_seconds) - Number(incoming.start_seconds);
+    const duration = kind === "cut" ? 0 : Math.min(.45, Math.max(.26, Math.min(outgoingDuration, incomingDuration) * .07));
+    const cameraDirection = String(incoming.visual?.continuity?.camera_direction ?? outgoing.visual?.continuity?.camera_direction ?? "right");
+    transitions.push({
+      from_shot_id: outgoing.id,
+      to_shot_id: incoming.id,
+      at_seconds: Number(incoming.start_seconds),
+      duration_seconds: Number(duration.toFixed(3)),
+      kind,
+      axis: /\b(?:up|down|vertical|descend|ascend)\b/i.test(cameraDirection) ? "y" : "x",
+      direction: /\b(?:left|up|reverse|back)\b/i.test(cameraDirection) ? -1 : 1,
+      motion_blur_px: Math.min(24, Math.max(8, Number(incoming.visual?.continuity?.motion_blur_px ?? outgoing.visual?.continuity?.motion_blur_px ?? 12))),
+      intent: explicit || "continuous canvas handoff"
+    });
+  }
+  return transitions;
+}
+
+function renderShotTransitionMotion(plan, transitions) {
+  if (!plan.shots?.length) return "";
+  const statements = [`timeline.set("#mount-${escapeJs(plan.shots[0].id)}",{opacity:1,x:0,y:0,scale:1,filter:"blur(0px)"},0);`];
+  for (const transition of transitions) {
+    const incoming = `#mount-${escapeJs(transition.to_shot_id)}`;
+    if (transition.kind === "cut") {
+      statements.push(`timeline.set("${incoming}",{opacity:1,x:0,y:0,scale:1,filter:"blur(0px)"},${number(transition.at_seconds)});`);
+      continue;
+    }
+    const outgoing = `#mount-${escapeJs(transition.from_shot_id)}`;
+    const distance = 86 * transition.direction;
+    const outgoingState = { opacity: 0, x: transition.axis === "x" ? -distance : 0, y: transition.axis === "y" ? -distance : 0, scale: 1.018, filter: `blur(${number(transition.motion_blur_px)}px)` };
+    const incomingState = { opacity: 0, x: transition.axis === "x" ? distance : 0, y: transition.axis === "y" ? distance : 0, scale: .982, filter: `blur(${number(transition.motion_blur_px)}px)` };
+    const settled = { opacity: 1, x: 0, y: 0, scale: 1, filter: "blur(0px)", duration: transition.duration_seconds, ease: "power3.inOut" };
+    statements.push(`timeline.to("${outgoing}",{...${JSON.stringify(outgoingState)},duration:${number(transition.duration_seconds)},ease:"power3.inOut"},${number(transition.at_seconds)});`);
+    statements.push(`timeline.fromTo("${incoming}",${JSON.stringify(incomingState)},${JSON.stringify(settled)},${number(transition.at_seconds)});`);
+  }
+  return statements.join("\n      ");
 }
 
 export function applyFrameCsp(html) {
@@ -362,6 +419,10 @@ function hexAlpha(color, alpha) {
 
 function escapeAttr(value) {
   return String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function escapeJs(value) {
+  return String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 function number(value) {
