@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { buildFrameInput, directFrames, safeShotFile, validateHyperFramesRoot } from "../src/frame_director.js";
+import { buildFallbackFrame, buildFrameInput, directFrames, safeShotFile, sanitizeFrameBundle, validateHyperFramesRoot } from "../src/frame_director.js";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { EVIDENCE_VERSION, FRAME_BUNDLE_SCHEMA, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
@@ -76,6 +76,54 @@ test("contains model-authored shot artifact paths", () => {
   assert.equal(safeShotFile("/tmp/frames", "shot-1", ".json"), "/tmp/frames/shot-1.json");
   assert.throws(() => safeShotFile("/tmp/frames", "../outside", ".json"), /Unsafe shot ID/);
   assert.throws(() => safeShotFile("/tmp/frames", "shot-1", "/outside"), /Unsafe shot artifact suffix/);
+});
+
+test("removes event-handler attributes locally without changing visible button copy", () => {
+  const bundle = frameBundle("shot-1", 5);
+  bundle.html = bundle.html.replace(">Proof</div>", ' onclick="doSomething()">Do something</div>');
+  const sanitized = sanitizeFrameBundle(bundle);
+  assert.doesNotMatch(sanitized.bundle.html, /onclick=/i);
+  assert.match(sanitized.bundle.html, />Do something<\/div>/);
+  assert.deepEqual(sanitized.repairs, [{ kind: "remove-event-handler-attributes", count: 1 }]);
+});
+
+test("builds a deterministic presenter fallback that satisfies the frame contract", () => {
+  const context = fixture();
+  const shot = { ...context.plan.shots[0], presenter: { visible: true }, resource_ids: ["presenter"] };
+  const intake = { ...context.intake, resources: [{ id: "presenter", role: "presenter", type: "video", location: "/tmp/presenter.mp4", is_remote: false }] };
+  const fallback = buildFallbackFrame({ intake, plan: context.plan, shot });
+  assert.match(fallback.html, /local-deterministic-fallback|fallback-card/);
+  assert.equal(fallback.root_media_requests[0].resource_id, "presenter");
+  assert.equal(fallback.root_media_requests[0].source_start_seconds, 0);
+  assert.equal(fallback.root_media_requests[0].source_end_seconds, 5);
+  assert.equal(validateHyperFramesRoot(fallback.html, shot, context.plan.format).length, 0);
+});
+
+test("recovers a previously rejected frame with a local fallback and does not buy another response", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  const inputHash = semanticHash({
+    input: buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0 }),
+    model: context.intake.model,
+    reasoning: "high",
+    schema: FRAME_BUNDLE_SCHEMA,
+    worker: "frame-director.v2"
+  });
+  await store.add({ id: "frame:shot-1", kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash });
+  await store.markRunning("frame:shot-1", { provider: "openai", response_id: "resp_spent", status: "completed" });
+  await store.markFailed("frame:shot-1", new Error("Frame shot-1 failed semantic validation: frame HTML must not contain event-handler attributes"));
+  const calls = [];
+  const client = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    calls.push(input.shot.id);
+    return { response_id: "resp_fresh", model: "gpt-5.6", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: {} };
+  } };
+  const result = await directFrames(workspace, { concurrency: 2, background: false }, { client });
+  assert.deepEqual(calls, ["shot-2"]);
+  assert.equal(result.fallbacks, 1);
+  assert.equal(result.frames[0].fallback, true);
+  assert.match(await readFile(path.join(workspace, "production", "frames", "shot-1.json"), "utf8"), /deterministic fallback/);
 });
 
 test("waits for sibling frame jobs to settle before reporting a delegated failure", async () => {
