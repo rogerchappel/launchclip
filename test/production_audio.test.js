@@ -111,16 +111,16 @@ test("uses supplied narration without calling TTS and reports timing drift from 
   assert.match(drift.notes[0], /4\.00s/);
 });
 
-test("reuses Scribe word timing for supplied narration", async () => {
+test("reuses Scribe word timing while preserving supplied media duration", async () => {
   const suppliedPath = path.join(await mkdtemp(path.join(os.tmpdir(), "launchclip-supplied-words-")), "take.mp4");
   await writeFile(suppliedPath, "take");
   const workspace = await fixture({ suppliedPath });
   const wordsPath = path.join(workspace, "scribed.words.json");
   await writeFile(wordsPath, `${JSON.stringify([{ word: "Proof", start: 0, end: 9.8 }])}\n`);
   await writeFile(path.join(workspace, "production", "evidence.json"), `${JSON.stringify({ items: [{ kind: "voiceover-transcript", role: "voiceover", provenance: suppliedPath, metadata: [{ key: "words_path", value: wordsPath }] }] })}\n`);
-  const result = await produceAudio(workspace, { noMusic: true, noSfx: true }, {});
+  const result = await produceAudio(workspace, { noMusic: true, noSfx: true }, { probeDuration: async () => 10.25 });
   const manifest = JSON.parse(await readFile(result.manifest, "utf8"));
-  assert.equal(manifest.voiceover.duration_seconds, 9.8);
+  assert.equal(manifest.voiceover.duration_seconds, 10.25);
   assert.deepEqual(JSON.parse(await readFile(manifest.voiceover.words_path, "utf8")), [{ word: "Proof", start: 0, end: 9.8 }]);
 });
 

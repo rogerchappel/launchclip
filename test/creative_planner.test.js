@@ -110,19 +110,19 @@ test("plans supplied narration against Scribe word timing and measured media dur
   await mkdir(path.dirname(wordsPath), { recursive: true });
   await writeFile(wordsPath, `${JSON.stringify([{ word: "Exact", start: 0.2, end: 4.8 }])}\n`);
   evidence.items.push(
-    { id: "resource:voice", kind: "audio-metadata", role: "voiceover", title: "voice", content: "{}", provenance: "/tmp/voice.mp3", sha256: "v", claims_allowed: false, truncated: false, metadata: [{ key: "duration_seconds", value: "5" }] },
+    { id: "resource:voice", kind: "audio-metadata", role: "voiceover", title: "voice", content: JSON.stringify({ format: { duration: "5.25" } }), provenance: "/tmp/voice.mp3", sha256: "v", claims_allowed: false, truncated: false, metadata: [] },
     { id: "voice-transcript", kind: "voiceover-transcript", role: "voiceover", title: "Transcript", content: "Exact", provenance: "/tmp/voice.mp3", sha256: "v", claims_allowed: false, truncated: false, metadata: [{ key: "words_path", value: wordsPath }] }
   );
   await writeFile(path.join(workspace, "production", "evidence.json"), `${JSON.stringify(evidence)}\n`);
   let request;
   const plan = samplePlan();
-  plan.format.duration_seconds = 5;
+  plan.format.duration_seconds = 5.25;
   plan.shots = [plan.shots[0]];
-  plan.shots[0].end_seconds = 5;
+  plan.shots[0].end_seconds = 5.25;
   plan.narration.source = "supplied";
   plan.narration.full_text = "Exact";
   await planProduction(workspace, {}, { client: { runStructured: async (options) => { request = JSON.parse(options.input); return { response_id: "r", model: "gpt-5.6", status: "completed", value: plan, usage: {} }; } } });
-  assert.equal(request.brief.requested_duration_seconds, 5);
+  assert.equal(request.brief.requested_duration_seconds, 5.25);
   assert.deepEqual(request.narration.word_timing, [{ word: "Exact", start: 0.2, end: 4.8 }]);
 });
 

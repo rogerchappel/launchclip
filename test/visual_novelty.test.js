@@ -27,6 +27,10 @@ test("measures plan similarity from concepts, constructs, motion, and presenter 
   const workshop = fingerprintProductionPlan(samplePlan("workshop"), "input-b");
   assert.equal(compareVisualFingerprints(transit, transitAgain), 1);
   assert.ok(compareVisualFingerprints(transit, workshop) < 0.45);
+  assert.deepEqual(transit.visual_concepts, ["Releases branch through a transit map", "The week travels station by station"]);
+  assert.deepEqual(transit.spatial_worlds, ["A living metro system", "A moving platform"]);
+  assert.deepEqual(transit.motion_verbs, ["routes", "travels"]);
+  assert.deepEqual(transit.transition_vocabulary, ["track push", "route wipe", "follow the route", "platform pass"]);
 });
 
 test("reproduces exact inputs, differentiates new scripts, and freezes history for retries", async () => {
