@@ -4,7 +4,7 @@ import path from "node:path";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { ensureTimelineRegistration, hasTimelineRegistration } from "./hyperframes_timeline.js";
 import { OpenAIResponsesClient } from "./openai_responses.js";
-import { FRAME_BUNDLE_SCHEMA, PRODUCTION_PATHS, isValidShotId, validateFrameBundle } from "./production_contracts.js";
+import { FRAME_BUNDLE_SCHEMA, FRAME_BUNDLE_VERSION, PRODUCTION_PATHS, isValidShotId, validateFrameBundle } from "./production_contracts.js";
 
 const FRAME_INSTRUCTIONS = `You are a senior motion designer authoring one modular HyperFrames shot inside a larger film.
 
@@ -55,7 +55,9 @@ export async function directFrames(workspacePath, options = {}, adapters = {}) {
     workspace,
     frames,
     generated: frames.filter((entry) => !entry.cached).length,
-    cached: frames.filter((entry) => entry.cached).length
+    cached: frames.filter((entry) => entry.cached).length,
+    fallbacks: frames.filter((entry) => entry.fallback).length,
+    sanitized: frames.filter((entry) => entry.sanitized).length
   };
 }
 
@@ -105,6 +107,11 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   const current = store.get(jobId);
   let resumeResponseId = null;
   if (!current) await store.add({ id: jobId, kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash, max_attempts: Number(options.maxAttempts ?? 3) });
+  else if (current.status === "failed" && existing?.input_hash === inputHash && isSemanticValidationFailure(current.error)) {
+    await store.retry(jobId, { inputHash });
+    await store.markRunning(jobId, { provider: "local", response_id: existing.remote?.response_id ?? null, status: "fallback" });
+    return persistFallbackFrame({ workspace, intake, evidence, plan, shot, store, jobId, reason: current.error, responseId: existing.remote?.response_id ?? null });
+  }
   else if (current.status === "failed" || current.status === "stale") await store.retry(jobId, { inputHash });
   else if (current.status === "running" || current.status === "submitted") {
     if (!current.remote?.response_id) throw new Error(`Frame job is ${current.status} without a resumable response id: ${jobId}`);
@@ -133,7 +140,10 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
       };
       const result = resumeResponseId ? await client.resumeStructured(resumeResponseId, request) : await client.runStructured(request);
       resumeResponseId = null;
-      const candidate = { ...result.value, html: ensureTimelineRegistration(result.value.html, shot.id) };
+      await store.markRunning(jobId, { provider: "openai", response_id: result.response_id, status: result.status });
+      const normalized = { ...result.value, html: ensureTimelineRegistration(result.value.html, shot.id) };
+      const sanitized = sanitizeFrameBundle(normalized);
+      const candidate = sanitized.bundle;
       const validation = validateFrameBundle(candidate, {
         shotId: shot.id,
         shot,
@@ -144,22 +154,199 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
       });
       errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
+      await writeFrameAttempt(workspace, shot.id, attempt, {
+        response_id: result.response_id,
+        model: result.model,
+        usage: result.usage,
+        repairs: sanitized.repairs,
+        errors,
+        candidate
+      });
       if (errors.length) {
         prior = candidate;
         if (attempt < Number(options.semanticAttempts ?? 2)) continue;
-        throw new Error(`Frame ${shot.id} failed semantic validation: ${errors.join("; ")}`);
+        return persistFallbackFrame({
+          workspace, intake, evidence, plan, shot, store, jobId,
+          reason: `Frame ${shot.id} failed semantic validation: ${errors.join("; ")}`,
+          responseId: result.response_id,
+          usage: result.usage
+        });
       }
       const paths = await writeFrameArtifacts(workspace, candidate);
-      await store.markRunning(jobId, { provider: "openai", response_id: result.response_id, status: result.status });
       const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
       await store.markSucceeded(jobId, outputs, result.usage);
-      return { shot_id: shot.id, cached: false, bundle: paths[0], html: paths[1], motion: paths[2], response_id: result.response_id, model: result.model, usage: result.usage };
+      return { shot_id: shot.id, cached: false, sanitized: sanitized.repairs.length > 0, repairs: sanitized.repairs, bundle: paths[0], html: paths[1], motion: paths[2], response_id: result.response_id, model: result.model, usage: result.usage };
     }
     throw new Error(`Frame ${shot.id} exhausted semantic attempts`);
   } catch (error) {
     await store.markFailed(jobId, error);
     throw error;
   }
+}
+
+export function sanitizeFrameBundle(bundle) {
+  const html = String(bundle?.html ?? "");
+  let removed = 0;
+  const sanitizedHtml = html.replace(/\son[a-z][\w:-]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, () => {
+    removed += 1;
+    return "";
+  });
+  return {
+    bundle: { ...bundle, html: sanitizedHtml },
+    repairs: removed ? [{ kind: "remove-event-handler-attributes", count: removed }] : []
+  };
+}
+
+export function buildFallbackFrame({ intake, plan, shot }) {
+  const duration = Number(shot.end_seconds) - Number(shot.start_seconds);
+  const presenter = intake.resources.find((entry) => entry.role === "presenter" && entry.type === "video" && shot.resource_ids.includes(entry.id));
+  const copy = (shot.on_screen_text ?? []).filter(Boolean).slice(0, 3);
+  const visibleCopy = copy.length ? copy : [shot.purpose ?? "Continue"];
+  const cardId = `${shot.id}-fallback-card`;
+  const lineHtml = visibleCopy.map((line, index) => `<div class="fallback-line fallback-line-${index + 1}">${escapeHtml(line)}</div>`).join("\n        ");
+  const backdrop = presenter
+    ? "linear-gradient(180deg, rgba(7,12,18,.34) 0%, rgba(7,12,18,.08) 42%, rgba(7,12,18,.78) 100%)"
+    : "linear-gradient(145deg, #07121b 0%, #102536 55%, #081018 100%)";
+  const html = `<!doctype html>
+<html><head></head><body><template>
+  <style>
+    #root{position:relative;width:${Number(plan.format.width)}px;height:${Number(plan.format.height)}px;overflow:hidden;color:#f7f8fa;font-family:Arial,sans-serif}
+    #${shot.id}-fallback-backdrop{position:absolute;inset:0;background:${backdrop}}
+    #${cardId}{position:absolute;left:7%;right:7%;bottom:9%;padding:34px 36px 38px;border-left:8px solid #58d7f7;background:rgba(8,14,21,.72);box-shadow:0 24px 80px rgba(0,0,0,.34)}
+    #${cardId} .fallback-line{font-size:${plan.format.height > plan.format.width ? 76 : 58}px;font-weight:800;line-height:1.02;letter-spacing:-.035em;text-wrap:balance}
+    #${cardId} .fallback-line+.fallback-line{margin-top:10px}
+    #${cardId} .fallback-line-3{color:#ffbd59}
+  </style>
+  <div id="root" data-composition-id="${shot.id}" data-start="0" data-duration="${number(duration)}" data-width="${Number(plan.format.width)}" data-height="${Number(plan.format.height)}">
+    <div id="${shot.id}-fallback-backdrop" class="clip" data-start="0" data-duration="${number(duration)}"></div>
+    <div id="${cardId}" class="clip" data-start="0" data-duration="${number(duration)}">
+      ${lineHtml}
+    </div>
+  </div>
+  <script>
+    window.__timelines=window.__timelines||{};
+    const timeline=gsap.timeline({paused:true});
+    timeline.fromTo("#${cardId}",{opacity:0,y:24},{opacity:1,y:0,duration:.35,ease:"power2.out"},.05);
+    window.__timelines["${shot.id}"]=timeline;
+  </script>
+</template></body></html>`;
+  const rootMediaRequests = presenter ? [{
+    resource_id: presenter.id,
+    kind: "video",
+    start_seconds: 0,
+    end_seconds: duration,
+    source_start_seconds: Number(shot.start_seconds),
+    source_end_seconds: Number(shot.end_seconds),
+    volume: 0,
+    placement: {
+      x: 0, y: 0, width: Number(plan.format.width), height: Number(plan.format.height),
+      object_fit: "cover", border_radius: 0, z_index: 1,
+      treatment: "deterministic presenter fallback"
+    }
+  }] : [];
+  return {
+    schema_version: FRAME_BUNDLE_VERSION,
+    shot_id: shot.id,
+    html,
+    motion: { assertions: [{ selector: `#${cardId}`, appears_by_seconds: .45, order: null, must_stay_in_frame: true, must_remain_live: false }] },
+    root_media_requests: rootMediaRequests,
+    evidence_ids: [...(shot.evidence_ids ?? [])],
+    visible_copy: visibleCopy,
+    preserve: ["deterministic fallback", ...visibleCopy]
+  };
+}
+
+export async function fallbackFramesForVerification(workspacePath, verification) {
+  const workspace = path.resolve(workspacePath);
+  const [intake, evidence, plan] = await Promise.all([
+    readJson(path.join(workspace, PRODUCTION_PATHS.intake)),
+    readJson(path.join(workspace, PRODUCTION_PATHS.evidence)),
+    readJson(path.join(workspace, PRODUCTION_PATHS.plan))
+  ]);
+  const shotIds = new Set((verification?.failed ?? [])
+    .filter((entry) => String(entry).startsWith("inspect:"))
+    .map((entry) => String(entry).slice("inspect:".length)));
+  const qaDir = verification?.qa ?? path.join(workspace, "production", "qa");
+  for (const reportName of ["lint.json", "validate.json"]) {
+    try {
+      const report = await readJson(path.join(qaDir, reportName));
+      const findings = report?.stdout?.findings ?? report?.stdout?.errors ?? report?.stdout?.issues ?? [];
+      for (const finding of findings) {
+        if (finding.severity !== "error" && finding.level !== "error") continue;
+        const source = JSON.stringify(finding);
+        for (const shot of plan.shots) if (source.includes(shot.id)) shotIds.add(shot.id);
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  const eligible = plan.shots.filter((shot) => shotIds.has(shot.id));
+  if (!eligible.length) return { status: "not-applicable", repaired: [] };
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  const repaired = [];
+  for (const shot of eligible) {
+    const jobId = `frame:${shot.id}`;
+    const current = store.get(jobId);
+    if (!current) continue;
+    if (current.status === "succeeded") await store.markStaleFrom([jobId]);
+    const stale = store.get(jobId);
+    if (stale.status === "failed" || stale.status === "stale") await store.retry(jobId, { inputHash: stale.input_hash });
+    else if (stale.status !== "pending") continue;
+    await store.markRunning(jobId, { provider: "local", response_id: current.remote?.response_id ?? null, status: "verification-fallback" });
+    repaired.push(await persistFallbackFrame({
+      workspace, intake, evidence, plan, shot, store, jobId,
+      reason: `Native verification failed: ${(verification.failed ?? []).join(", ")}`,
+      responseId: current.remote?.response_id ?? null
+    }));
+  }
+  return { status: repaired.length ? "repaired" : "not-applicable", repaired };
+}
+
+async function persistFallbackFrame({ workspace, intake, evidence, plan, shot, store, jobId, reason, responseId = null, usage = {} }) {
+  const fallback = buildFallbackFrame({ intake, plan, shot });
+  const validation = validateFrameBundle(fallback, {
+    shotId: shot.id,
+    shot,
+    format: plan.format,
+    evidenceIds: evidence.items.map((entry) => entry.id),
+    resourceIds: intake.resources.map((entry) => entry.id),
+    resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
+    allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
+  });
+  const errors = [...validation.errors, ...validateHyperFramesRoot(fallback.html, shot, plan.format)];
+  if (errors.length) throw new Error(`Fallback frame ${shot.id} failed semantic validation: ${errors.join("; ")}`);
+  const paths = await writeFrameArtifacts(workspace, fallback);
+  const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
+  await store.markSucceeded(jobId, outputs, usage);
+  return {
+    shot_id: shot.id,
+    cached: false,
+    fallback: true,
+    fallback_reason: reason,
+    bundle: paths[0], html: paths[1], motion: paths[2],
+    response_id: responseId,
+    model: "local-deterministic-fallback",
+    usage
+  };
+}
+
+function isSemanticValidationFailure(error) {
+  return /failed semantic validation/i.test(String(error ?? ""));
+}
+
+async function writeFrameAttempt(workspace, shotId, attempt, record) {
+  const directory = path.join(workspace, PRODUCTION_PATHS.frames, ".attempts");
+  const filePath = safeShotFile(directory, `${shotId}-attempt-${attempt}`, ".json");
+  await writeAtomic(filePath, `${JSON.stringify(record, null, 2)}\n`);
+  return filePath;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+}
+
+function number(value) {
+  return Number(Number(value).toFixed(3));
 }
 
 export function validateHyperFramesRoot(html, shot, format) {

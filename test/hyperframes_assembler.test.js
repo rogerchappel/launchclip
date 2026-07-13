@@ -18,8 +18,10 @@ test("renders subcompositions while keeping timed media and SFX as direct root c
   assert.match(html, /data-composition-src="compositions\/shot-1\.html" data-start="0" data-duration="4\.999"/);
   assert.match(html, /gsap@3\.14\.2/);
   assert.match(html, /Content-Security-Policy/);
+  assert.match(html, /\.shot-mount \{[^}]+z-index: 100/);
   assert.match(html, /window\.__timelines\["main"\] = gsap\.timeline\(\{ paused: true \}\)/);
   assert.match(html, /<video[^>]+data-start="1"[^>]+data-duration="3"[^>]+data-media-start="4"/);
+  assert.match(html, /<video[^>]+data-track-index="10"/);
   assert.match(html, /<video[^>]+ muted playsinline>/);
   assert.match(html, /left:100px;top:200px;width:800px;height:600px/);
   assert.equal((html.match(/<video/g) ?? []).length, 1);
@@ -48,6 +50,8 @@ test("moves presenter video between beat-specific avatar layouts at the host roo
   const html = renderRoot({ plan, bundles, assetMap: new Map([["presenter", { file: "presenter.mp4" }]]) });
   assert.match(html, /id="shot-1-media-1"[^>]+data-start="0"[^>]+left:80px;top:1120px;width:920px;height:720px/);
   assert.match(html, /id="shot-2-media-1"[^>]+data-start="3"[^>]+data-media-start="3"[^>]+left:620px;top:120px;width:380px;height:600px/);
+  assert.match(html, /id="shot-1-media-1"[^>]+data-track-index="10"/);
+  assert.match(html, /id="shot-2-media-1"[^>]+data-track-index="11"/);
 });
 
 test("applies a restrictive CSP to model-authored frame documents", () => {
@@ -92,6 +96,7 @@ test("translates model motion intent into discoverable HyperFrames assertions", 
   assert.ok(local.assertions.some((entry) => entry.kind === "keepsMoving" && entry.withinSelector === "#proof"));
   const root = rootMotionSpec({ format: { duration_seconds: 6 }, shots: [{ id: "shot-1", start_seconds: 2, end_seconds: 6 }] }, [bundle]);
   assert.ok(root.assertions.some((entry) => entry.kind === "appearsBy" && entry.selector === "#mount-shot-1"));
+  assert.equal(root.assertions.find((entry) => entry.kind === "appearsBy").bySec, 2.3);
   assert.ok(root.assertions.every((entry) => !["#headline", "#proof"].includes(entry.selector ?? entry.withinSelector)));
   assert.ok(root.assertions.every((entry) => entry.kind !== "keepsMoving"));
   const longRoot = rootMotionSpec({ format: { duration_seconds: 90 }, shots: [{ id: "long-shot", start_seconds: 45, end_seconds: 90 }] }, [bundle]);
