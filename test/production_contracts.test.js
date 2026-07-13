@@ -87,9 +87,11 @@ test("canonicalizes unambiguous global reveal and SFX timestamps into shot-local
   const plan = samplePlan();
   plan.shots[1].visual.internal_reveals[0].at_seconds = 6;
   plan.shots[1].sfx[0].at_seconds = 6.1;
+  plan.shots[1].visual.events[0].at_seconds = 6.1;
   const normalized = normalizeProductionPlanTiming(plan);
   assert.equal(normalized.shots[1].visual.internal_reveals[0].at_seconds, 1);
   assert.equal(normalized.shots[1].sfx[0].at_seconds, 1.1);
+  assert.equal(normalized.shots[1].visual.events[0].at_seconds, 1.1);
   assert.equal(plan.shots[1].visual.internal_reveals[0].at_seconds, 6, "does not mutate the model response");
   assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).ok, true);
 });
@@ -206,7 +208,19 @@ function samplePlan() {
       texture: "Soft paper and restrained grain",
       composition_logic: "Evidence and presenter trade visual weight",
       motion_character: "Fast evidence builds with calm explanatory holds",
-      density: "A meaningful change every one to two seconds"
+      density: "A meaningful change every one to two seconds",
+      style_dna: {
+        family: "soft-grid-editorial", source: "auto", canvas: "light",
+        colors: { background: "#F4F0E8", foreground: "#20231F", accent: "#E58B72", supporting: ["#A8D8C7", "#AFC7F5"] },
+        typography: { display: "Newsreader", body: "Inter", metadata: "DM Mono" },
+        shape_language: "soft outlined windows and rounded diagram nodes",
+        background_system: "moving editorial grid with paper grain",
+        diagram_language: "clean connectors and labeled causal nodes",
+        presenter_frame: "light desktop window with warm outline",
+        motion_physics: { tempo: "measured acceleration", camera_behavior: "continuous lateral drift", primary_ease: "power3.inOut", secondary_ease: "expo.out", motion_blur_px: 14 },
+        transition_vocabulary: ["velocity-matched push", "directional blur"],
+        forbidden_motifs: ["cyan on black", "identical caption cards"]
+      }
     },
     narration: {
       source: "generated",
@@ -238,15 +252,29 @@ function sampleShot(id, start, end) {
     presenter: { mode: "companion", visible: true, placement: "right third", size: "medium", treatment: "natural cutout" },
     visual: {
       description: "Evidence builds opposite the presenter",
+      concept: "A proof node connects the claim to its source",
+      world: "A soft editorial evidence map already in motion",
+      representation: "diagram",
       composition: "Asymmetric split",
       typography: "Large semantic headline",
       background: "Quiet editorial field",
       foreground: "Proof cards and metadata",
       motion: "Progressive reveals with a soft settle",
+      objects: [
+        { id: "editorial-grid", kind: "decoration", meaning: "persistent spatial field", layer: "background", asset_resource_id: null, lifecycle: "persist" },
+        { id: "proof-node", kind: "diagram-node", meaning: "grounded product proof", layer: "midground", asset_resource_id: null, lifecycle: start === 0 ? "enter" : "persist" },
+        { id: "proof-label", kind: "text", meaning: "concise proof label", layer: "foreground", asset_resource_id: null, lifecycle: "enter" }
+      ],
+      events: [{ id: `${id}-reveal`, at_seconds: 1, target_ids: ["proof-node"], action: "reveal and lock the proof node", motion_verb: "locks in", visible_change: "reveal", easing_intent: "fast then settle", sfx_eligible: true }],
+      continuity: {
+        sequence_id: "evidence-sequence", handoff: end < 10 ? "continue" : "resolve",
+        inherits_object_ids: start > 0 ? ["proof-node"] : [], hands_off_object_ids: end < 10 ? ["proof-node"] : [],
+        camera_direction: "left to right", entry_velocity: start > 0 ? 420 : 0, exit_velocity: end < 10 ? 420 : 0, motion_blur_px: 14
+      },
       internal_reveals: [{ at_seconds: 1, action: "reveal the proof value", easing_intent: "fast then settle", emphasis: "proof" }]
     },
     transition_out: "content-led cut",
-    sfx: [{ at_seconds: 1, cue: "evidence tick", intent: "mark the proof reveal", volume: 0.35 }]
+    sfx: [{ at_seconds: 1, cue: "evidence tick", event_id: `${id}-reveal`, intent: "mark the proof reveal", volume: 0.35 }]
   };
 }
 
@@ -255,7 +283,10 @@ function sampleFrameBundle() {
     schema_version: FRAME_BUNDLE_VERSION,
     shot_id: "shot-1",
     html: '<template><div data-composition-id="shot-1" data-width="1920" data-height="1080"><div id="shot-1-proof">Proof</div></div></template>',
-    motion: { assertions: [{ selector: "#shot-1-proof", appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: true }] },
+    motion: {
+      assertions: [{ selector: "#shot-1-proof", appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: true }],
+      events: [{ event_id: "shot-1-reveal", object_id: "proof-node", selector: "#shot-1-proof", at_seconds: 1, property: "opacity", visible_change: true }]
+    },
     root_media_requests: [{
       resource_id: "res-1", kind: "video", start_seconds: 0, end_seconds: 5,
       source_start_seconds: 0, source_end_seconds: 5, volume: 0,

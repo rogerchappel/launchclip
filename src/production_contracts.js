@@ -1,5 +1,7 @@
-export const PRODUCTION_PLAN_VERSION = "launchclip.production-plan.v1";
-export const FRAME_BUNDLE_VERSION = "launchclip.frame-bundle.v1";
+import { validateSemanticVisualPlan } from "./semantic_visuals.js";
+
+export const PRODUCTION_PLAN_VERSION = "launchclip.production-plan.v2";
+export const FRAME_BUNDLE_VERSION = "launchclip.frame-bundle.v2";
 export const CRITIQUE_VERSION = "launchclip.production-critique.v1";
 export const EVIDENCE_VERSION = "launchclip.evidence.v1";
 export const SHOT_ID_PATTERN = "^[a-z0-9][a-z0-9_-]{0,63}$";
@@ -83,7 +85,32 @@ export const PRODUCTION_PLAN_SCHEMA = strictObject({
     texture: string,
     composition_logic: string,
     motion_character: string,
-    density: string
+    density: string,
+    style_dna: strictObject({
+      family: string,
+      source: { type: "string", enum: ["auto", "preset", "file", "reference"] },
+      canvas: { type: "string", enum: ["light", "dark", "tinted"] },
+      colors: strictObject({
+        background: string,
+        foreground: string,
+        accent: string,
+        supporting: stringArray
+      }),
+      typography: strictObject({ display: string, body: string, metadata: string }),
+      shape_language: string,
+      background_system: string,
+      diagram_language: string,
+      presenter_frame: string,
+      motion_physics: strictObject({
+        tempo: string,
+        camera_behavior: string,
+        primary_ease: string,
+        secondary_ease: string,
+        motion_blur_px: { type: "number", minimum: 0, maximum: 40 }
+      }),
+      transition_vocabulary: stringArray,
+      forbidden_motifs: stringArray
+    })
   }),
   narration: strictObject({
     source: { type: "string", enum: ["generated", "supplied"] },
@@ -130,11 +157,56 @@ export const PRODUCTION_PLAN_SCHEMA = strictObject({
       }),
       visual: strictObject({
         description: string,
+        concept: string,
+        world: string,
+        representation: {
+          type: "string",
+          enum: ["presenter", "diagram", "comparison", "timeline", "process", "network", "data", "media", "spatial-metaphor", "kinetic-type", "hybrid"]
+        },
         composition: string,
         typography: string,
         background: string,
         foreground: string,
         motion: string,
+        objects: {
+          type: "array",
+          minItems: 1,
+          items: strictObject({
+            id: shotId,
+            kind: {
+              type: "string",
+              enum: ["text", "presenter", "asset", "logo", "diagram-node", "connector", "metric", "timeline", "process", "container", "decoration"]
+            },
+            meaning: string,
+            layer: { type: "string", enum: ["background", "midground", "foreground"] },
+            asset_resource_id: nullableString,
+            lifecycle: { type: "string", enum: ["enter", "persist", "transform", "exit"] }
+          })
+        },
+        events: {
+          type: "array",
+          minItems: 1,
+          items: strictObject({
+            id: shotId,
+            at_seconds: { type: "number", minimum: 0 },
+            target_ids: stringArray,
+            action: string,
+            motion_verb: string,
+            visible_change: { type: "string", enum: ["enter", "move", "transform", "reveal", "connect", "fill", "count", "exit", "camera"] },
+            easing_intent: string,
+            sfx_eligible: { type: "boolean" }
+          })
+        },
+        continuity: strictObject({
+          sequence_id: shotId,
+          handoff: { type: "string", enum: ["continue", "transform", "resolve", "cut"] },
+          inherits_object_ids: stringArray,
+          hands_off_object_ids: stringArray,
+          camera_direction: string,
+          entry_velocity: { type: "number", minimum: 0 },
+          exit_velocity: { type: "number", minimum: 0 },
+          motion_blur_px: { type: "number", minimum: 0, maximum: 40 }
+        }),
         internal_reveals: {
           type: "array",
           items: strictObject({
@@ -151,6 +223,7 @@ export const PRODUCTION_PLAN_SCHEMA = strictObject({
         items: strictObject({
           at_seconds: { type: "number", minimum: 0 },
           cue: string,
+          event_id: shotId,
           intent: string,
           volume: { type: "number", minimum: 0, maximum: 1 }
         })
@@ -178,6 +251,18 @@ export const FRAME_BUNDLE_SCHEMA = strictObject({
         order: { type: ["integer", "null"], minimum: 0 },
         must_stay_in_frame: { type: "boolean" },
         must_remain_live: { type: "boolean" }
+      })
+    },
+    events: {
+      type: "array",
+      minItems: 1,
+      items: strictObject({
+        event_id: shotId,
+        object_id: shotId,
+        selector: string,
+        at_seconds: { type: "number", minimum: 0 },
+        property: { type: "string", enum: ["transform", "opacity", "filter", "clip-path", "stroke", "number", "color"] },
+        visible_change: { type: "boolean" }
       })
     }
   }),
@@ -319,6 +404,7 @@ export function validateProductionPlan(plan, context = {}) {
     ].filter(Boolean).join(" "));
     if (!delivered.includes(requested)) errors.push(`requested CTA must appear verbatim in narration or on-screen text: ${context.requestedCta}`);
   }
+  errors.push(...validateSemanticVisualPlan(plan));
   return { ok: errors.length === 0, errors };
 }
 
@@ -329,7 +415,7 @@ export function normalizeProductionPlanTiming(plan) {
     const end = Number(shot.end_seconds);
     const duration = end - start;
     if (!Number.isFinite(start) || !Number.isFinite(end) || duration <= 0 || start <= 0) continue;
-    for (const timed of [...(shot.visual?.internal_reveals ?? []), ...(shot.sfx ?? [])]) {
+    for (const timed of [...(shot.visual?.internal_reveals ?? []), ...(shot.visual?.events ?? []), ...(shot.sfx ?? [])]) {
       const at = Number(timed.at_seconds);
       if (at > duration + .001 && at >= start - .001 && at <= end + .001) timed.at_seconds = Math.round((at - start) * 1000) / 1000;
     }
@@ -378,6 +464,19 @@ export function validateFrameBundle(bundle, context = {}) {
       if (motionOrders.has(assertion.order)) errors.push(`${label}.order duplicates ${motionOrders.get(assertion.order)}; simultaneous entrances must use null order`);
       else motionOrders.set(assertion.order, label);
     }
+  }
+  const plannedEvents = new Map((context.shot?.visual?.events ?? []).map((event) => [event.id, event]));
+  const plannedObjects = new Set((context.shot?.visual?.objects ?? []).map((object) => object.id));
+  for (const [index, event] of (bundle.motion?.events ?? []).entries()) {
+    const label = `motion.events[${index}]`;
+    const planned = plannedEvents.get(event.event_id);
+    if (context.shot && !planned) errors.push(`${label}.event_id references an unknown planned event: ${event.event_id}`);
+    if (context.shot && !plannedObjects.has(event.object_id)) errors.push(`${label}.object_id references an unknown planned object: ${event.object_id}`);
+    if (planned && Math.abs(Number(event.at_seconds) - Number(planned.at_seconds)) > .05) errors.push(`${label}.at_seconds must match planned event ${event.event_id}`);
+    if (planned && !planned.target_ids.includes(event.object_id)) errors.push(`${label}.object_id is not targeted by planned event ${event.event_id}`);
+    if (planned && !event.visible_change) errors.push(`${label} must declare a visible change for planned event ${event.event_id}`);
+    const selector = String(event.selector ?? "");
+    if (!new RegExp(`\\bid\\s*=\\s*["']${escapeRegExp(selector.replace(/^#/, ""))}["']`, "i").test(html)) errors.push(`${label}.selector does not exist in frame HTML: ${selector}`);
   }
   checkReferences(errors, "evidence_ids", bundle.evidence_ids, context.evidenceIds);
   checkReferences(errors, "root_media_requests.resource_id", (bundle.root_media_requests ?? []).map((entry) => entry.resource_id), context.resourceIds);
