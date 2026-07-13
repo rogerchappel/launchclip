@@ -1,0 +1,4 @@
+interface:
+  display_name: "LaunchClip CLI"
+  short_description: "Operate the LaunchClip CLI safely"
+  default_prompt: "Use $launchclip-cli to run the right LaunchClip workflow for this video task."
