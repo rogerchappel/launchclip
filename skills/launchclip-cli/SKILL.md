@@ -102,10 +102,17 @@ missing browser, FFmpeg, or HyperFrames installation.
 
 ## Respect final approval
 
-`produce` stops at an analyzed draft. Review the draft and QA snapshots with the
-user. Run `production-render <workspace> --approve` only after explicit human
-approval and only when verification is fresh and the independent critic says
-the draft is ready.
+`produce` stops at an analyzed draft. When verification is fresh and the
+independent critic says the draft is ready, run
+`production-preview <workspace>` to open the editable project in HyperFrames
+Studio and return its URL. Treat Studio as a review and editing surface: its
+Export action is an ad hoc HyperFrames render, not LaunchClip approval or the
+LaunchClip final artifact.
+
+Pause for explicit human approval of the reviewed Studio state. Then run
+`production-render <workspace> --approve --quality high`; that command reruns
+the final checks before rendering. If Studio edits or an automated repair
+change the visible result, reopen or refresh Studio and obtain fresh approval.
 
 After rendering, confirm the media exists, is non-empty, and has plausible
 duration and streams. LaunchClip does not grant permission to publish. Treat
