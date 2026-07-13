@@ -411,6 +411,7 @@ export function validateProductionPlan(plan, context = {}) {
 export function normalizeProductionPlanTiming(plan) {
   const normalized = structuredClone(plan);
   for (const shot of normalized?.shots ?? []) {
+    normalizeShotEventIds(shot);
     const start = Number(shot.start_seconds);
     const end = Number(shot.end_seconds);
     const duration = end - start;
@@ -421,6 +422,40 @@ export function normalizeProductionPlanTiming(plan) {
     }
   }
   return normalized;
+}
+
+function normalizeShotEventIds(shot) {
+  if (!isValidShotId(shot?.id) || !Array.isArray(shot?.visual?.events)) return;
+  const prefix = `${shot.id}-`;
+  const replacements = new Map();
+  const used = new Set();
+  for (const [index, event] of shot.visual.events.entries()) {
+    const original = String(event?.id ?? "");
+    const unprefixed = original.startsWith(prefix) ? original.slice(prefix.length) : original;
+    const suffix = slugIdentifier(unprefixed) || `event-${index + 1}`;
+    let candidate = `${prefix}${suffix}`;
+    let collision = 2;
+    while (used.has(candidate)) {
+      candidate = `${prefix}${suffix}-${collision}`;
+      collision += 1;
+    }
+    used.add(candidate);
+    if (!replacements.has(original)) replacements.set(original, candidate);
+    event.id = candidate;
+  }
+  for (const cue of shot.sfx ?? []) {
+    const replacement = replacements.get(String(cue?.event_id ?? ""));
+    if (replacement) cue.event_id = replacement;
+  }
+}
+
+function slugIdentifier(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[-_]+|[-_]+$/g, "");
 }
 
 export function validateFrameBundle(bundle, context = {}) {

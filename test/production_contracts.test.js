@@ -96,6 +96,23 @@ test("canonicalizes unambiguous global reveal and SFX timestamps into shot-local
   assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).ok, true);
 });
 
+test("canonicalizes model event ids and preserves their SFX bindings without a provider repair", () => {
+  const plan = samplePlan();
+  plan.shots[0].visual.events.push({
+    ...plan.shots[0].visual.events[0],
+    id: "Proof lands!",
+    at_seconds: 2
+  });
+  plan.shots[0].visual.events[0].id = "proof appears";
+  plan.shots[0].sfx[0].event_id = "proof appears";
+  const normalized = normalizeProductionPlanTiming(plan);
+  assert.equal(normalized.shots[0].visual.events[0].id, "shot-1-proof-appears");
+  assert.equal(normalized.shots[0].visual.events[1].id, "shot-1-proof-lands");
+  assert.equal(normalized.shots[0].sfx[0].event_id, "shot-1-proof-appears");
+  assert.equal(plan.shots[0].visual.events[0].id, "proof appears", "does not mutate the model response");
+  assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).ok, true);
+});
+
 test("frame bundles request root media without owning media tags", () => {
   const bundle = sampleFrameBundle();
   assert.deepEqual(validateFrameBundle(bundle, { shotId: "shot-1", evidenceIds: ["ev-1"], resourceIds: ["res-1"] }), { ok: true, errors: [] });
