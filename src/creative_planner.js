@@ -25,7 +25,8 @@ Rules:
 - Preserve the requested aspect, dimensions, language, and required duration exactly. When a call to action is supplied, include that exact CTA verbatim in narration or on-screen text.
 - Design motion semantically: name internal reveals, their timing, and acceleration/deceleration intent. Favor purposeful development within shots over constant cutting.
 - Keep on-screen copy concise enough to read in its available time.
-- Presenter/avatar placement may change between beats when it improves hierarchy, but must never obscure essential proof.
+- Treat presenter media as a choreographed visual object, never a fixed background. Assign every shot exactly one presenter.mode: anchor when the presenter is the primary visual, companion when a framed presenter window shares the stage with proof/graphics, or voiceover when the presenter is offstage and the supplied audio continues under full motion graphics.
+- Anchor and companion shots must set visible=true; voiceover shots must set visible=false. Presenter-led videos longer than 20 seconds must include at least one voiceover shot and use at least two modes. Vary presenter placement between top, middle, and bottom when it improves hierarchy, but never obscure essential proof.
 - Choose SFX cue names only from available_sfx. The cue timing and intent remain your creative decision.
 - Cover the exact requested duration with gap-free, butt-joined shots.
 - The rubric must be measurable on a rendered video and specific to this plan.

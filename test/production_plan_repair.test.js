@@ -130,7 +130,7 @@ function findings() {
 function plan() {
   const shot = (id, start, end, voiceover) => ({
     id, start_seconds: start, end_seconds: end, purpose: "Advance proof", voiceover, on_screen_text: ["Proof", "Try it"], evidence_ids: ["ev-1"], resource_ids: ["screen"],
-    presenter: { visible: false, placement: "offstage", size: "none", treatment: "none" },
+    presenter: { mode: "voiceover", visible: false, placement: "offstage", size: "none", treatment: "none" },
     visual: { description: "Evidence becomes interface", composition: "Subject-led hierarchy", typography: "Editorial display", background: "Quiet field", foreground: "Proof object", motion: "Reveal and settle", internal_reveals: [{ at_seconds: 1, action: "connect proof", easing_intent: "fast then settle", emphasis: "proof" }] },
     transition_out: "semantic match", sfx: [{ at_seconds: 1, cue: "soft tick", intent: "mark proof", volume: 0.3 }]
   });

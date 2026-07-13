@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { buildFallbackFrame, buildFrameInput, directFrames, safeShotFile, sanitizeFrameBundle, validateHyperFramesRoot } from "../src/frame_director.js";
+import { buildFallbackFrame, buildFrameInput, directFrames, fallbackFramesForVerification, safeShotFile, sanitizeFrameBundle, validateHyperFramesRoot } from "../src/frame_director.js";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { EVIDENCE_VERSION, FRAME_BUNDLE_SCHEMA, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
@@ -89,13 +89,20 @@ test("removes event-handler attributes locally without changing visible button c
 
 test("builds a deterministic presenter fallback that satisfies the frame contract", () => {
   const context = fixture();
-  const shot = { ...context.plan.shots[0], presenter: { visible: true }, resource_ids: ["presenter"] };
+  const shot = { ...context.plan.shots[0], presenter: { mode: "companion", visible: true }, resource_ids: ["presenter"] };
   const intake = { ...context.intake, resources: [{ id: "presenter", role: "presenter", type: "video", location: "/tmp/presenter.mp4", is_remote: false }] };
   const fallback = buildFallbackFrame({ intake, plan: context.plan, shot });
   assert.match(fallback.html, /local-deterministic-fallback|fallback-card/);
+  assert.match(fallback.html, /fallback-grid/);
+  assert.match(fallback.html, /fallback-rail/);
+  assert.match(fallback.html, /stagger:\.16/);
   assert.equal(fallback.root_media_requests[0].resource_id, "presenter");
   assert.equal(fallback.root_media_requests[0].source_start_seconds, 0);
   assert.equal(fallback.root_media_requests[0].source_end_seconds, 5);
+  assert.equal(fallback.root_media_requests[0].presentation.mode, "companion");
+  assert.equal(fallback.root_media_requests[0].presentation.frame, "desktop-window");
+  assert.equal(fallback.root_media_requests[0].placement.width, fallback.root_media_requests[0].placement.height);
+  assert.ok(fallback.root_media_requests[0].placement.width < context.plan.format.width);
   assert.equal(validateHyperFramesRoot(fallback.html, shot, context.plan.format).length, 0);
 });
 
@@ -124,6 +131,11 @@ test("recovers a previously rejected frame with a local fallback and does not bu
   assert.equal(result.fallbacks, 1);
   assert.equal(result.frames[0].fallback, true);
   assert.match(await readFile(path.join(workspace, "production", "frames", "shot-1.json"), "utf8"), /deterministic fallback/);
+  for (let index = 0; index < 4; index += 1) {
+    const local = await fallbackFramesForVerification(workspace, { failed: ["inspect:shot-1"], qa: path.join(workspace, "missing-qa") });
+    assert.equal(local.repaired.length, 1);
+  }
+  assert.deepEqual(calls, ["shot-2"], "repeated local QA passes never submit another provider response");
 });
 
 test("waits for sibling frame jobs to settle before reporting a delegated failure", async () => {
@@ -171,6 +183,7 @@ function frameBundle(id, duration) {
     root_media_requests: [{
       resource_id: "screen", kind: "video", start_seconds: 0, end_seconds: duration,
       source_start_seconds: 0, source_end_seconds: duration, volume: 0,
+      presentation: { mode: "companion", frame: "desktop-window", enter: "slide-up", exit: "slide-down", motion_blur_px: 12 },
       placement: { x: 80, y: 180, width: 920, height: 720, object_fit: "cover", border_radius: 32, z_index: 2, treatment: "proof window" }
     }],
     evidence_ids: ["ev-1"], visible_copy: ["Proof"], preserve: ["proof hierarchy"]
@@ -188,7 +201,7 @@ function fixture() {
   };
   const shot = (id, start, end) => ({
     id, start_seconds: start, end_seconds: end, purpose: "Show proof", voiceover: "Proof.", on_screen_text: ["Proof"], evidence_ids: ["ev-1"], resource_ids: ["screen"],
-    presenter: { visible: false, placement: "offstage", size: "none", treatment: "none" },
+    presenter: { mode: "voiceover", visible: false, placement: "offstage", size: "none", treatment: "none" },
     visual: { description: "Proof develops", composition: "Asymmetric", typography: "Display", background: "Field", foreground: "Proof", motion: "Reveal then settle", internal_reveals: [{ at_seconds: 1, action: "reveal", easing_intent: "fast settle", emphasis: "proof" }] },
     transition_out: "match", sfx: []
   });

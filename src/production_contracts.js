@@ -122,6 +122,7 @@ export const PRODUCTION_PLAN_SCHEMA = strictObject({
       evidence_ids: stringArray,
       resource_ids: stringArray,
       presenter: strictObject({
+        mode: { type: "string", enum: ["anchor", "companion", "voiceover"] },
         visible: { type: "boolean" },
         placement: string,
         size: string,
@@ -190,6 +191,13 @@ export const FRAME_BUNDLE_SCHEMA = strictObject({
       source_start_seconds: { type: ["number", "null"], minimum: 0 },
       source_end_seconds: { type: ["number", "null"], exclusiveMinimum: 0 },
       volume: { type: "number", minimum: 0, maximum: 1 },
+      presentation: strictObject({
+        mode: { type: "string", enum: ["anchor", "companion"] },
+        frame: { type: "string", enum: ["none", "desktop-window"] },
+        enter: { type: "string", enum: ["cut", "slide-up", "slide-left", "slide-right", "scale-in"] },
+        exit: { type: "string", enum: ["cut", "slide-down", "slide-left", "slide-right", "scale-out"] },
+        motion_blur_px: { type: "number", minimum: 0, maximum: 40 }
+      }),
       placement: strictObject({
         x: { type: "number" },
         y: { type: "number" },
@@ -247,7 +255,9 @@ export function validateProductionPlan(plan, context = {}) {
   }
   const seen = new Set();
   const presenterIds = idsForRole(context.resourceRoles, "presenter");
+  const presenterModes = new Set();
   let visiblePresenterShots = 0;
+  let voiceoverOnlyShots = 0;
   let cursor = 0;
   for (const [index, shot] of (plan.shots ?? []).entries()) {
     const label = `shots[${index}]`;
@@ -271,6 +281,14 @@ export function validateProductionPlan(plan, context = {}) {
     }
     checkReferences(errors, `${label}.evidence_ids`, shot?.evidence_ids, context.evidenceIds);
     checkReferences(errors, `${label}.resource_ids`, shot?.resource_ids, context.resourceIds);
+    const presenterMode = shot?.presenter?.mode;
+    if (presenterMode) presenterModes.add(presenterMode);
+    if (presenterMode === "voiceover") {
+      voiceoverOnlyShots += 1;
+      if (shot.presenter.visible) errors.push(`${label} presenter.mode voiceover requires visible=false`);
+    } else if (presenterMode && !shot.presenter.visible) {
+      errors.push(`${label} presenter.mode ${presenterMode} requires visible=true`);
+    }
     if (shot?.presenter?.visible) {
       visiblePresenterShots += 1;
       if (context.resourceRoles && !shot.resource_ids?.some((id) => presenterIds.has(id))) errors.push(`${label} marks presenter visible without a presenter resource_id`);
@@ -278,6 +296,8 @@ export function validateProductionPlan(plan, context = {}) {
     cursor = end;
   }
   if (presenterIds.size && !visiblePresenterShots) errors.push("at least one shot must show the supplied presenter");
+  if (presenterIds.size && duration > 20 && plan.shots.length > 2 && !voiceoverOnlyShots) errors.push("presenter-led videos longer than 20 seconds require at least one presenter.mode voiceover shot");
+  if (presenterIds.size && duration > 20 && presenterModes.size < 2) errors.push("presenter-led videos longer than 20 seconds must use at least two presenter visual modes");
   if (Number.isFinite(duration) && Math.abs(cursor - duration) > 0.05) errors.push(`shots must cover the full duration (expected ${duration}, got ${cursor})`);
   for (const [index, claim] of (plan.claims ?? []).entries()) {
     if (claim?.confidence !== "creative" && !claim?.evidence_ids?.length) errors.push(`claims[${index}] requires evidence_ids unless confidence is creative`);
@@ -363,6 +383,7 @@ export function validateFrameBundle(bundle, context = {}) {
   checkReferences(errors, "root_media_requests.resource_id", (bundle.root_media_requests ?? []).map((entry) => entry.resource_id), context.resourceIds);
   const allowedShotResources = context.shot ? new Set(context.shot.resource_ids ?? []) : null;
   const presenterIds = idsForRole(context.resourceRoles, "presenter");
+  const voiceoverIds = idsForRole(context.resourceRoles, "voiceover");
   for (const [index, request] of (bundle.root_media_requests ?? []).entries()) {
     if (!(request.end_seconds > request.start_seconds)) errors.push(`root_media_requests[${index}] must have end_seconds > start_seconds`);
     if (request.source_end_seconds != null && request.source_start_seconds != null && !(request.source_end_seconds > request.source_start_seconds)) {
@@ -374,11 +395,16 @@ export function validateFrameBundle(bundle, context = {}) {
       if (Math.abs(slotDuration - sourceDuration) > .05) errors.push(`root_media_requests[${index}] source range must match its output duration; HyperFrames does not infer retiming`);
     }
     if (allowedShotResources && !allowedShotResources.has(request.resource_id)) errors.push(`root_media_requests[${index}] uses a resource not approved for this shot: ${request.resource_id}`);
+    if (voiceoverIds.has(request.resource_id)) errors.push(`root_media_requests[${index}] must not mount the authoritative voiceover resource as visual media; use the presenter resource`);
     if (shotDuration != null && (request.start_seconds < 0 || request.end_seconds > shotDuration + .05)) errors.push(`root_media_requests[${index}] falls outside the shot-local duration ${shotDuration}`);
     if (context.shot && presenterIds.has(request.resource_id)) {
       const expectedSourceStart = Number(context.shot.start_seconds) + Number(request.start_seconds);
       const actualSourceStart = Number(request.source_start_seconds ?? 0);
       if (Math.abs(actualSourceStart - expectedSourceStart) > .05) errors.push(`root_media_requests[${index}] presenter source_start_seconds must follow the continuous production timeline (expected ${expectedSourceStart}, got ${actualSourceStart})`);
+      if (context.shot.presenter?.mode === "voiceover") errors.push(`root_media_requests[${index}] must not mount presenter video during presenter.mode voiceover`);
+      if (context.shot.presenter?.mode && context.shot.presenter.mode !== "voiceover" && request.presentation?.mode !== context.shot.presenter.mode) {
+        errors.push(`root_media_requests[${index}] presentation.mode must match shot presenter.mode ${context.shot.presenter.mode}`);
+      }
     }
     if (context.format && (request.placement.x >= context.format.width || request.placement.y >= context.format.height || request.placement.x + request.placement.width <= 0 || request.placement.y + request.placement.height <= 0)) {
       errors.push(`root_media_requests[${index}] placement does not intersect the ${context.format.width}x${context.format.height} canvas`);

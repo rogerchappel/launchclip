@@ -22,6 +22,8 @@ HyperFrames contract:
 - Give every timeline-visible class="clip" element a stable, descriptive, shot-prefixed id for Studio editing and motion inspection.
 - Put a full-bleed background on a child layer rather than the composition root; root backgrounds can disappear during frame compositing. Use only declared @font-face families or renderer-safe generic families such as Arial, Georgia, or Courier New; do not name an unavailable platform font.
 - Do not include audio or video elements. Request those through root_media_requests; the assembler owns media playback.
+- Treat presenter media as a root visual object. For presenter.mode anchor or companion, request exactly one presenter video and include presentation.mode matching the shot, frame="desktop-window" unless the director explicitly requests no chrome, a seek-safe enter/exit preset, and motion_blur_px. For presenter.mode voiceover, request no presenter video; the authoritative audio continues independently.
+- Anchor means the presenter is the primary framed visual. Companion means a smaller framed presenter window shares the canvas with proof or motion graphics. Presenter placement is allowed to change between top, middle, and bottom across shots.
 - Presenter video follows one continuous production timeline even when its placement changes. Set presenter source_start_seconds to the shot's global start_seconds plus the request's shot-local start_seconds; never restart a presenter take at zero on a later shot.
 - Do not fetch, use timers, Date.now, Math.random, requestAnimationFrame, or browser storage.
 - Use only supplied local resource paths. If a requested visual asset is unavailable, design a native HTML/CSS/SVG treatment instead of inventing a path.
@@ -108,7 +110,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   let resumeResponseId = null;
   if (!current) await store.add({ id: jobId, kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash, max_attempts: Number(options.maxAttempts ?? 3) });
   else if (current.status === "failed" && existing?.input_hash === inputHash && isSemanticValidationFailure(current.error)) {
-    await store.retry(jobId, { inputHash });
+    await store.reconfigure(jobId, { input_hash: inputHash });
     await store.markRunning(jobId, { provider: "local", response_id: existing.remote?.response_id ?? null, status: "fallback" });
     return persistFallbackFrame({ workspace, intake, evidence, plan, shot, store, jobId, reason: current.error, responseId: existing.remote?.response_id ?? null });
   }
@@ -199,11 +201,13 @@ export function sanitizeFrameBundle(bundle) {
 
 export function buildFallbackFrame({ intake, plan, shot }) {
   const duration = Number(shot.end_seconds) - Number(shot.start_seconds);
-  const presenter = intake.resources.find((entry) => entry.role === "presenter" && entry.type === "video" && shot.resource_ids.includes(entry.id));
+  const presenterMode = ["anchor", "companion"].includes(shot.presenter?.mode) ? shot.presenter.mode : shot.presenter?.visible ? "companion" : "voiceover";
+  const presenter = presenterMode === "voiceover" ? null : intake.resources.find((entry) => entry.role === "presenter" && entry.type === "video" && shot.resource_ids.includes(entry.id));
+  const presenterLayout = presenter ? fallbackPresenterLayout(plan.format, shot, presenterMode) : null;
   const copy = (shot.on_screen_text ?? []).filter(Boolean).slice(0, 3);
   const visibleCopy = copy.length ? copy : [shot.purpose ?? "Continue"];
   const cardId = `${shot.id}-fallback-card`;
-  const lineHtml = visibleCopy.map((line, index) => `<div class="fallback-line fallback-line-${index + 1}">${escapeHtml(line)}</div>`).join("\n        ");
+  const lineHtml = visibleCopy.map((line, index) => `<div id="${shot.id}-fallback-line-${index + 1}" class="fallback-line fallback-line-${index + 1}">${escapeHtml(line)}</div>`).join("\n        ");
   const backdrop = presenter
     ? "linear-gradient(180deg, rgba(7,12,18,.34) 0%, rgba(7,12,18,.08) 42%, rgba(7,12,18,.78) 100%)"
     : "linear-gradient(145deg, #07121b 0%, #102536 55%, #081018 100%)";
@@ -212,13 +216,19 @@ export function buildFallbackFrame({ intake, plan, shot }) {
   <style>
     #root{position:relative;width:${Number(plan.format.width)}px;height:${Number(plan.format.height)}px;overflow:hidden;color:#f7f8fa;font-family:Arial,sans-serif}
     #${shot.id}-fallback-backdrop{position:absolute;inset:0;background:${backdrop}}
-    #${cardId}{position:absolute;left:7%;right:7%;bottom:9%;padding:34px 36px 38px;border-left:8px solid #58d7f7;background:rgba(8,14,21,.72);box-shadow:0 24px 80px rgba(0,0,0,.34)}
-    #${cardId} .fallback-line{font-size:${plan.format.height > plan.format.width ? 76 : 58}px;font-weight:800;line-height:1.02;letter-spacing:-.035em;text-wrap:balance}
-    #${cardId} .fallback-line+.fallback-line{margin-top:10px}
-    #${cardId} .fallback-line-3{color:#ffbd59}
+    #${shot.id}-fallback-grid{position:absolute;inset:-10%;opacity:.22;background-image:linear-gradient(rgba(88,215,247,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(88,215,247,.12) 1px,transparent 1px);background-size:72px 72px}
+    #${shot.id}-fallback-rail{position:absolute;left:6%;top:7%;width:4px;height:86%;transform-origin:top;background:linear-gradient(180deg,#58d7f7,rgba(88,215,247,0));box-shadow:0 0 26px rgba(88,215,247,.62)}
+    #${shot.id}-fallback-index{position:absolute;right:7%;top:6%;font:700 20px/1 "Courier New",monospace;letter-spacing:.16em;color:rgba(247,248,250,.55)}
+    #${cardId}{position:absolute;left:9%;right:7%;${presenterLayout?.cardEdge ?? "top:24%;"}display:grid;gap:14px;perspective:1200px}
+    #${cardId} .fallback-line{padding:28px 30px;border:1px solid rgba(235,244,249,.2);border-left:8px solid #58d7f7;border-radius:18px;background:linear-gradient(135deg,rgba(8,14,21,.92),rgba(16,28,37,.78));box-shadow:0 22px 60px rgba(0,0,0,.28);font-size:${plan.format.height > plan.format.width ? 66 : 54}px;font-weight:800;line-height:1.02;letter-spacing:-.035em;text-wrap:balance}
+    #${cardId} .fallback-line-2{margin-left:5%;border-left-color:#a6ef67}
+    #${cardId} .fallback-line-3{margin-left:10%;border-left-color:#ffbd59;color:#ffcf7d}
   </style>
   <div id="root" data-composition-id="${shot.id}" data-start="0" data-duration="${number(duration)}" data-width="${Number(plan.format.width)}" data-height="${Number(plan.format.height)}">
     <div id="${shot.id}-fallback-backdrop" class="clip" data-start="0" data-duration="${number(duration)}"></div>
+    <div id="${shot.id}-fallback-grid" class="clip" data-start="0" data-duration="${number(duration)}" data-layout-allow-overflow="true"></div>
+    <div id="${shot.id}-fallback-rail" class="clip" data-start="0" data-duration="${number(duration)}"></div>
+    <div id="${shot.id}-fallback-index" class="clip" data-start="0" data-duration="${number(duration)}">${escapeHtml(shot.id.toUpperCase())}</div>
     <div id="${cardId}" class="clip" data-start="0" data-duration="${number(duration)}">
       ${lineHtml}
     </div>
@@ -226,7 +236,11 @@ export function buildFallbackFrame({ intake, plan, shot }) {
   <script>
     window.__timelines=window.__timelines||{};
     const timeline=gsap.timeline({paused:true});
-    timeline.fromTo("#${cardId}",{opacity:0,y:24},{opacity:1,y:0,duration:.35,ease:"power2.out"},.05);
+    timeline.fromTo("#${shot.id}-fallback-grid",{opacity:0,x:-40,rotation:-4},{opacity:.22,x:0,rotation:-4,duration:.7,ease:"power2.out"},0);
+    timeline.fromTo("#${shot.id}-fallback-rail",{opacity:0,scaleY:0},{opacity:1,scaleY:1,duration:.55,ease:"power3.out"},.05);
+    timeline.fromTo("#${shot.id}-fallback-index",{opacity:0,x:24},{opacity:1,x:0,duration:.35,ease:"power2.out"},.12);
+    timeline.fromTo("#${cardId} .fallback-line",{opacity:0,x:90,y:20,rotationY:-8},{opacity:1,x:0,y:0,rotationY:0,duration:.5,ease:"power3.out",stagger:.16},.16);
+    timeline.to("#${shot.id}-fallback-grid",{x:36,y:-22,duration:${number(Math.max(.8, duration - .7))},ease:"none"},.7);
     window.__timelines["${shot.id}"]=timeline;
   </script>
 </template></body></html>`;
@@ -238,10 +252,17 @@ export function buildFallbackFrame({ intake, plan, shot }) {
     source_start_seconds: Number(shot.start_seconds),
     source_end_seconds: Number(shot.end_seconds),
     volume: 0,
+    presentation: {
+      mode: presenterMode,
+      frame: "desktop-window",
+      enter: presenterLayout.enter,
+      exit: presenterLayout.exit,
+      motion_blur_px: 16
+    },
     placement: {
-      x: 0, y: 0, width: Number(plan.format.width), height: Number(plan.format.height),
-      object_fit: "cover", border_radius: 0, z_index: 1,
-      treatment: "deterministic presenter fallback"
+      x: presenterLayout.x, y: presenterLayout.y, width: presenterLayout.size, height: presenterLayout.size,
+      object_fit: "cover", border_radius: 28, z_index: 20,
+      treatment: `${presenterMode} desktop-window presenter object`
     }
   }] : [];
   return {
@@ -254,6 +275,21 @@ export function buildFallbackFrame({ intake, plan, shot }) {
     visible_copy: visibleCopy,
     preserve: ["deterministic fallback", ...visibleCopy]
   };
+}
+
+function fallbackPresenterLayout(format, shot, mode) {
+  const width = Number(format.width);
+  const height = Number(format.height);
+  const seed = [...String(shot.id)].reduce((sum, character) => sum + character.charCodeAt(0), 0);
+  const slot = seed % 3;
+  const size = Math.round(Math.min(width * (mode === "anchor" ? .82 : .58), height * (mode === "anchor" ? .46 : .34)));
+  const margin = Math.max(48, Math.round(width * .065));
+  const x = slot === 1 && mode === "companion" ? margin : slot === 2 && mode === "companion" ? width - size - margin : Math.round((width - size) / 2);
+  const y = slot === 0 ? Math.round(height * .1) : slot === 1 ? Math.round((height - size) / 2) : height - size - Math.round(height * .09);
+  const enter = slot === 0 ? "slide-up" : slot === 1 ? "slide-left" : "slide-right";
+  const exit = slot === 0 ? "slide-down" : slot === 1 ? "slide-left" : "slide-right";
+  const cardEdge = y + size > height * .66 ? "top:8%;" : "bottom:8%;";
+  return { x, y, size, enter, exit, cardEdge };
 }
 
 export async function fallbackFramesForVerification(workspacePath, verification) {
@@ -290,7 +326,7 @@ export async function fallbackFramesForVerification(workspacePath, verification)
     if (!current) continue;
     if (current.status === "succeeded") await store.markStaleFrom([jobId]);
     const stale = store.get(jobId);
-    if (stale.status === "failed" || stale.status === "stale") await store.retry(jobId, { inputHash: stale.input_hash });
+    if (stale.status === "failed" || stale.status === "stale") await store.reconfigure(jobId, { input_hash: stale.input_hash });
     else if (stale.status !== "pending") continue;
     await store.markRunning(jobId, { provider: "local", response_id: current.remote?.response_id ?? null, status: "verification-fallback" });
     repaired.push(await persistFallbackFrame({
