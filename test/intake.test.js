@@ -102,12 +102,32 @@ test("expands a resource directory into stable file-level resources", async () =
   await mkdir(path.join(recordings, "flow"), { recursive: true });
   await writeFile(path.join(recordings, "cover.png"), "image");
   await writeFile(path.join(recordings, "flow", "demo.mp4"), "video");
+  await writeFile(path.join(recordings, "assets.json"), JSON.stringify({ assets: { "cover.png": { usage: "logo", entities: ["Launchclip"], tags: ["identity"], priority: 90, license: "project-owned" } } }));
   await writeFile(path.join(recordings, ".DS_Store"), "ignored");
 
   const intake = await buildIntake("A SaaS launch", { kind: "product", resource: recordings, out: path.join(temp, "out") }, {});
   assert.deepEqual(intake.resources.map((entry) => entry.type), ["image", "video"]);
   assert.deepEqual(intake.resources.map((entry) => path.basename(entry.location)), ["cover.png", "demo.mp4"]);
   assert.equal(new Set(intake.resources.map((entry) => entry.id)).size, 2);
+  assert.deepEqual(intake.resources[0].catalog, { collection: "screen-recordings", relative_path: "cover.png", usage: "logo", entity_hints: ["launchclip"], tags: ["identity"], priority: 90, license: "project-owned", source: "manifest" });
+  assert.equal(intake.resources[1].catalog.usage, "product-demo");
+  assert.equal(intake.resources[1].catalog.source, "auto");
+});
+
+test("accepts an assets alias and a reusable style specification", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-style-intake-"));
+  const assets = path.join(temp, "assets");
+  const style = path.join(temp, "frame.md");
+  await mkdir(path.join(assets, "logos"), { recursive: true });
+  await writeFile(path.join(assets, "logos", "anthropic.svg"), "<svg></svg>");
+  await writeFile(style, "---\ncolors:\n  background: '#f4f0e8'\n---\nSoft grid editorial.\n");
+  const intake = await buildIntake("AI update", { kind: "topic", assets, style: "soft-grid-editorial", "style-file": style, out: path.join(temp, "out") }, {});
+  assert.equal(intake.resources.length, 1);
+  assert.equal(intake.resources[0].catalog.usage, "logo");
+  assert.deepEqual(intake.resources[0].catalog.entity_hints, ["anthropic"]);
+  assert.equal(intake.brief.style.family, "soft-grid-editorial");
+  assert.equal(intake.brief.style.source, "file");
+  assert.match(intake.brief.style.specification, /Soft grid editorial/);
 });
 
 test("writes production/intake.json", async () => {

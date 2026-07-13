@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream, existsSync } from "node:fs";
-import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export const INTAKE_SCHEMA_VERSION = "launchclip.intake.v1";
@@ -77,7 +77,7 @@ export async function buildIntake(source, flags = {}, env = process.env) {
     if (type === "document" || type === "text") resources.push(...await describeResourceEntries(value, "supporting", resources.length));
   }
   for (const [role, entries] of [
-    ["supporting", values(flags.resource)],
+    ["supporting", [...values(flags.resource), ...values(flags.assets)]],
     ["reference", values(flags.reference)],
     ["voiceover", values(flags.voiceover)],
     ["voiceover-transcript", values(flags.transcript)],
@@ -95,6 +95,7 @@ export async function buildIntake(source, flags = {}, env = process.env) {
   }
   const slug = sourceSlug(value, sourceKind);
   const workspace = path.resolve(flags.out ?? path.join(".launchclip", slug));
+  const style = await describeStyle(flags);
   return {
     schema_version: INTAKE_SCHEMA_VERSION,
     created_at: new Date().toISOString(),
@@ -111,7 +112,8 @@ export async function buildIntake(source, flags = {}, env = process.env) {
       cta: nullableString(flags.cta ?? flags["cta-url"]),
       language: String(flags.language ?? "en"),
       duration_seconds: durationSeconds,
-      aspect
+      aspect,
+      style
     },
     model: {
       provider: "openai",
@@ -132,11 +134,80 @@ export async function buildIntake(source, flags = {}, env = process.env) {
 
 async function describeResourceEntries(value, role, startIndex) {
   const described = await describeResource(value, role, startIndex);
-  if (described.type !== "directory") return [described];
+  if (described.type !== "directory") return [{ ...described, catalog: resourceCatalog(described.location, null, null) }];
   const files = await walkResourceDirectory(described.location);
   if (!files.length) throw new Error(`Resource directory contains no files: ${described.location}`);
   if (files.length > 512) throw new Error(`Resource directory exceeds the 512-file intake limit: ${described.location}`);
-  return Promise.all(files.map((filePath, index) => describeResource(filePath, role, startIndex + index)));
+  const manifestPath = files.find((filePath) => path.relative(described.location, filePath).split(path.sep).join("/").toLowerCase() === "assets.json");
+  const manifest = manifestPath ? await readAssetManifest(manifestPath) : null;
+  const assets = files.filter((filePath) => filePath !== manifestPath);
+  if (!assets.length) throw new Error(`Resource directory contains no media assets: ${described.location}`);
+  return Promise.all(assets.map(async (filePath, index) => ({
+    ...await describeResource(filePath, role, startIndex + index),
+    catalog: resourceCatalog(filePath, described.location, manifest)
+  })));
+}
+
+async function describeStyle(flags) {
+  const requestedFamily = nullableString(flags.style) ?? "auto";
+  const file = nullableString(flags["style-file"]);
+  const reference = nullableString(flags["style-reference"]);
+  if (file) {
+    const location = path.resolve(file);
+    if (!existsSync(location)) throw new Error(`Style file does not exist: ${file}`);
+    return { family: requestedFamily === "auto" ? "custom" : requestedFamily, source: "file", specification: await readFile(location, "utf8"), specification_path: location, reference };
+  }
+  if (reference) return { family: requestedFamily, source: "reference", specification: null, specification_path: null, reference: localLocation(reference) };
+  return { family: requestedFamily, source: requestedFamily === "auto" ? "auto" : "preset", specification: null, specification_path: null, reference: null };
+}
+
+async function readAssetManifest(filePath) {
+  let manifest;
+  try { manifest = JSON.parse(await readFile(filePath, "utf8")); }
+  catch (error) { throw new Error(`Invalid asset manifest ${filePath}: ${error.message}`); }
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) throw new Error(`Asset manifest must be a JSON object: ${filePath}`);
+  if (manifest.assets != null && (typeof manifest.assets !== "object" || Array.isArray(manifest.assets))) throw new Error(`Asset manifest assets must be a path-keyed object: ${filePath}`);
+  return manifest;
+}
+
+function resourceCatalog(location, collectionRoot, manifest) {
+  if (/^https?:\/\//i.test(String(location))) {
+    return { collection: null, relative_path: null, usage: "remote-reference", entity_hints: filenameTokens(new URL(location).pathname), tags: [], priority: 50, license: null, source: "auto" };
+  }
+  const relativePath = collectionRoot ? path.relative(collectionRoot, location).split(path.sep).join("/") : path.basename(location);
+  const override = manifest?.assets?.[relativePath] ?? {};
+  const tokens = filenameTokens(relativePath);
+  const usage = String(override.usage ?? inferAssetUsage(relativePath));
+  return {
+    collection: collectionRoot ? path.basename(collectionRoot) : null,
+    relative_path: relativePath,
+    usage,
+    entity_hints: stringList(override.entities ?? override.entity_hints ?? tokens.filter((token) => !GENERIC_ASSET_TOKENS.has(token))),
+    tags: stringList(override.tags ?? tokens),
+    priority: Number.isFinite(Number(override.priority)) ? Number(override.priority) : 50,
+    license: nullableString(override.license),
+    source: Object.keys(override).length ? "manifest" : "auto"
+  };
+}
+
+const GENERIC_ASSET_TOKENS = new Set(["asset", "assets", "brand", "brands", "image", "images", "logo", "logos", "icon", "icons", "screen", "screenshot", "screenshots", "clip", "clips", "video", "videos", "demo"]);
+
+function inferAssetUsage(value) {
+  const normalized = String(value).toLowerCase();
+  if (/(?:^|\/)(?:logos?|marks?)(?:\/|$)|(?:^|[-_.])logo(?:[-_.]|$)/.test(normalized)) return "logo";
+  if (/(?:screenshots?|captures?)/.test(normalized)) return "screenshot";
+  if (/(?:^|\/)(?:icons?)(?:\/|$)|(?:^|[-_.])icon(?:[-_.]|$)/.test(normalized)) return "icon";
+  if (/(?:demos?|product[-_ ]?clips?|recordings?)/.test(normalized)) return "product-demo";
+  return "supporting";
+}
+
+function filenameTokens(value) {
+  return [...new Set(String(value).toLowerCase().replace(/\.[a-z0-9]+$/i, "").split(/[^a-z0-9]+/).filter((token) => token.length > 1))];
+}
+
+function stringList(value) {
+  const entries = Array.isArray(value) ? value : value == null ? [] : [value];
+  return [...new Set(entries.map((entry) => String(entry).trim().toLowerCase()).filter(Boolean))];
 }
 
 async function walkResourceDirectory(root) {
