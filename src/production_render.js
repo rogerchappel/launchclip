@@ -12,14 +12,16 @@ import { critiqueProduction } from "./production_critic.js";
 import { semanticVisualReport, validateSemanticVisualPlan } from "./semantic_visuals.js";
 
 const execFileAsync = promisify(execFile);
-const VERIFICATION_SCHEMA = "launchclip.production-verification.v3";
-const VERIFICATION_SUITE = "production-verify.v3";
+const VERIFICATION_SCHEMA = "launchclip.production-verification.v4";
+const VERIFICATION_SUITE = "production-verify.v4";
 
 export class ProductionVerificationError extends Error {
   constructor(verification) {
     super(`HyperFrames verification failed: ${verification.failed.join(", ")}. Review ${verification.qa}.`);
     this.name = "ProductionVerificationError";
-    this.code = "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED";
+    this.code = verification.infrastructure_failed?.length
+      ? "LAUNCHCLIP_PRODUCTION_INFRASTRUCTURE_FAILED"
+      : "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED";
     this.verification = verification;
   }
 }
@@ -71,6 +73,7 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
       plan: { duration_seconds: plan.format?.duration_seconds, width: plan.format?.width, height: plan.format?.height },
       checks: { semantic: { ok: false, exit_code: 1, strict_warning_count: 0 } },
       failed: ["semantic"],
+      infrastructure_failed: [],
       snapshots,
       cacheable: false,
       artifacts: [await describeReceiptFile(workspace, path.join(qaDir, "semantic.json"))],
@@ -103,6 +106,9 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
   checks.snapshot = await capture(run, "npx", ["hyperframes", "snapshot", "--frames", String(options.snapshotFrames ?? 12), "--output", snapshots, project], { cwd: project });
   await writeFile(path.join(qaDir, "snapshot.json"), `${JSON.stringify(checks.snapshot, null, 2)}\n`);
   const failed = Object.entries(checks).filter(([, result]) => !result.ok).map(([name]) => name);
+  const infrastructureFailed = Object.entries(checks)
+    .filter(([, result]) => !result.ok && result.failure_kind === "infrastructure")
+    .map(([name]) => name);
   const postInputs = await buildVerificationInputs(workspace, project, options, toolchain);
   if (postInputs.input_hash !== inputs.input_hash) failed.push("inputs_changed_during_verification");
   const artifacts = await collectVerificationArtifacts(workspace, qaDir, plan);
@@ -115,8 +121,15 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
     inputs: inputs.value,
     project,
     plan: { duration_seconds: plan.format.duration_seconds, width: plan.format.width, height: plan.format.height },
-    checks: Object.fromEntries(Object.entries(checks).map(([name, result]) => [name, { ok: result.ok, exit_code: result.exit_code, strict_warning_count: result.strict_warning_count ?? 0 }])),
+    checks: Object.fromEntries(Object.entries(checks).map(([name, result]) => [name, {
+      ok: result.ok,
+      exit_code: result.exit_code,
+      strict_warning_count: result.strict_warning_count ?? 0,
+      ...(result.failure_kind ? { failure_kind: result.failure_kind } : {}),
+      ...(result.error ? { error: result.error } : {})
+    }])),
     failed,
+    infrastructure_failed: infrastructureFailed,
     snapshots,
     cacheable: Boolean(toolchain && snapshotArtifacts.files.length),
     artifacts,
@@ -301,6 +314,7 @@ function verificationResult({ workspace, project, qaDir, snapshots, receipt, cac
     snapshots,
     checks: receipt.checks,
     failed: receipt.failed,
+    infrastructure_failed: receipt.infrastructure_failed ?? [],
     input_hash: receipt.input_hash,
     inputs: receipt.inputs,
     cached
@@ -499,13 +513,35 @@ async function capture(run, command, args, options) {
     const result = await run(command, args, options);
     return { ok: true, exit_code: Number(result.exitCode ?? result.exit_code ?? 0), stdout: parseOutput(result.stdout), stderr: String(result.stderr ?? "") };
   } catch (error) {
+    const stdout = parseOutput(error.stdout);
+    const stderr = String(error.stderr ?? error.message ?? "").slice(0, 20_000);
+    const failureKind = classifyCommandFailure(stdout, stderr);
     return {
       ok: false,
       exit_code: Number(error.code ?? error.exitCode ?? 1),
-      stdout: parseOutput(error.stdout),
-      stderr: String(error.stderr ?? error.message ?? "").slice(0, 20_000)
+      stdout,
+      stderr,
+      failure_kind: failureKind,
+      error: compactCommandError(stdout, stderr)
     };
   }
+}
+
+export function classifyCommandFailure(stdout, stderr) {
+  const text = `${typeof stdout === "string" ? stdout : JSON.stringify(stdout ?? "")}\n${stderr ?? ""}`.toLowerCase();
+  return [
+    /spec version .+ is not supported/,
+    /upgrade (?:the )?hyperframes cli/,
+    /unknown (?:option|command)/,
+    /command not found|executable not found|spawn .+ enoent|\benoent\b/,
+    /browser executable .+ not found|failed to launch (?:the )?browser|could not find (?:a )?(?:chrome|chromium)/,
+    /npm err!|could not determine executable to run/
+  ].some((pattern) => pattern.test(text)) ? "infrastructure" : "content";
+}
+
+function compactCommandError(stdout, stderr) {
+  const value = String(stderr || (typeof stdout === "string" ? stdout : JSON.stringify(stdout ?? ""))).trim();
+  return value.slice(0, 1000);
 }
 
 function parseOutput(value) {

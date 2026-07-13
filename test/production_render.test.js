@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { ProductionVerificationError, assertVerificationFresh, renderDraftProduction, renderProduction, verifyProduction, verifySemanticArtifacts, verifyShotCompositions } from "../src/production_render.js";
+import { ProductionVerificationError, assertVerificationFresh, classifyCommandFailure, renderDraftProduction, renderProduction, verifyProduction, verifySemanticArtifacts, verifyShotCompositions } from "../src/production_render.js";
 
 test("runs lint, browser validation, transition-aware inspection, and assembled snapshots", async () => {
   const workspace = await fixture();
@@ -83,7 +83,7 @@ test("reuses a content-addressed verification receipt with intact reports and sn
   assert.equal(second.cached, true);
   assert.deepEqual(commands, ["lint", "validate", "inspect", "snapshot"]);
   const receipt = JSON.parse(await readFile(path.join(workspace, "production", "qa", "verification.json"), "utf8"));
-  assert.equal(receipt.schema_version, "launchclip.production-verification.v3");
+  assert.equal(receipt.schema_version, "launchclip.production-verification.v4");
   assert.equal(receipt.status, "passed");
   assert.equal(receipt.cacheable, true);
   assert.equal(receipt.snapshot_artifacts.files.length, 1);
@@ -142,6 +142,31 @@ test("blocks production when a shot-local motion assertion fails", async () => {
   const report = JSON.parse(await readFile(path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json"), "utf8"));
   assert.equal(report.ok, false);
   assert.equal(report.stdout.issues[0].code, "motion_selector_missing");
+});
+
+test("classifies unsupported verifier contracts as infrastructure failures", async () => {
+  const workspace = await fixture();
+  await addShotFixture(workspace);
+  const run = async (_command, args) => {
+    if (args[1] === "inspect" && args.at(-1).includes("shot-inspect")) {
+      const error = new Error("unsupported motion contract");
+      error.code = 1;
+      error.stderr = "spec version 2 is not supported — upgrade the HyperFrames CLI";
+      throw error;
+    }
+    return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
+  };
+  await assert.rejects(() => verifyProduction(workspace, {}, { run }), (error) => {
+    assert.ok(error instanceof ProductionVerificationError);
+    assert.equal(error.code, "LAUNCHCLIP_PRODUCTION_INFRASTRUCTURE_FAILED");
+    assert.deepEqual(error.verification.infrastructure_failed, ["inspect:shot-1"]);
+    assert.equal(error.verification.checks["inspect:shot-1"].failure_kind, "infrastructure");
+    return true;
+  });
+  const receipt = JSON.parse(await readFile(path.join(workspace, "production", "qa", "verification.json"), "utf8"));
+  assert.deepEqual(receipt.infrastructure_failed, ["inspect:shot-1"]);
+  assert.match(receipt.checks["inspect:shot-1"].error, /spec version 2/i);
+  assert.equal(classifyCommandFailure({ issues: [{ code: "motion_selector_missing" }] }, ""), "content");
 });
 
 test("blocks orphan SFX before launching browser verification", async () => {
@@ -303,6 +328,6 @@ async function addShotFixture(workspace) {
     }]
   })}\n`);
   await writeFile(path.join(compositions, "shot-1.html"), '<!doctype html><html><body><template><style>#root{position:absolute;inset:0}</style><div id="root" data-composition-id="shot-1" data-start="0" data-duration="10" data-width="1080" data-height="1920"><img id="proof" src="assets/proof.png"></div><script>const timeline=gsap.timeline({paused:true});window.__timelines=window.__timelines||{};window.__timelines["shot-1"]=timeline;</script></template></body></html>');
-  await writeFile(path.join(compositions, "shot-1.motion.json"), `${JSON.stringify({ version: 2, duration: 10, assertions: [{ kind: "appearsBy", selector: "#proof", bySec: 1 }], events: [{ event_id: "shot-1-proof-lock", object_id: "proof-node", selector: "#proof", at_seconds: 1, property: "opacity", visible_change: true }] })}\n`);
+  await writeFile(path.join(compositions, "shot-1.motion.json"), `${JSON.stringify({ version: 1, duration: 10, assertions: [{ kind: "appearsBy", selector: "#proof", bySec: 1 }], events: [{ event_id: "shot-1-proof-lock", object_id: "proof-node", selector: "#proof", at_seconds: 1, property: "opacity", visible_change: true }] })}\n`);
   await writeFile(path.join(assets, "proof.png"), "proof-image");
 }
