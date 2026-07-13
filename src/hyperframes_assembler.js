@@ -4,10 +4,15 @@ import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/
 import path from "node:path";
 import { readFrameSelection, safeShotFile, validateHyperFramesRoot } from "./frame_director.js";
 import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
+import { ensureTextContainment } from "./hyperframes_text.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
 
 export { ensureTimelineRegistration } from "./hyperframes_timeline.js";
+
+const SHOT_LAYER_BASE = 100;
+const ROOT_MEDIA_LAYER_GAP = 100;
+const ROOT_MEDIA_RELATIVE_LAYER_MAX = 99;
 
 export async function assembleHyperFrames(workspacePath, options = {}) {
   const workspace = path.resolve(workspacePath);
@@ -37,7 +42,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   const dependencies = plan.shots.map((shot) => `frame:${shot.id}`);
   for (const dependency of dependencies) if (store.get(dependency)?.status !== "succeeded") throw new Error(`Frame job must succeed before assembly: ${dependency}`);
   const extraAudio = await describeExtraAudio(options);
-  const inputHash = semanticHash({ intake, plan, bundles, fallbacks, extraAudio, assembler: "hyperframes-assembler.v11" });
+  const inputHash = semanticHash({ intake, plan, bundles, fallbacks, extraAudio, assembler: "hyperframes-assembler.v14" });
   const jobId = "hyperframes-assembly";
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
@@ -76,7 +81,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
     for (const audio of extraAudio) assetMap.set(audio.id, await freezeFile(audio.id, audio.path, assetsDir));
 
     for (const bundle of bundles) {
-      let html = applyFrameCsp(ensureTimelineRegistration(bundle.html, bundle.shot_id));
+      let html = applyFrameCsp(ensureTextContainment(ensureTimelineRegistration(bundle.html, bundle.shot_id), bundle.shot_id));
       for (const resource of intake.resources) {
         const frozen = assetMap.get(resource.id);
         if (frozen && resource.location) html = html.split(resource.location).join(`assets/${frozen.file}`);
@@ -148,6 +153,7 @@ export function rootMotionSpec(plan, bundles) {
 export function renderRoot({ plan, bundles, assetMap, extraAudio = [], fallbacks = [], transitions = buildShotTransitions(plan) }) {
   const chrome = presenterChromeStyle(plan.design?.style_dna);
   const shotById = new Map(plan.shots.map((shot) => [shot.id, shot]));
+  const rootMediaLayerBase = SHOT_LAYER_BASE + plan.shots.length + ROOT_MEDIA_LAYER_GAP;
   const media = [];
   const mediaMotion = [];
   let mediaIndex = 0;
@@ -156,7 +162,14 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [], fallbacks
     for (const [index, request] of bundle.root_media_requests.entries()) {
       const asset = assetMap.get(request.resource_id);
       if (!asset) throw new Error(`Frame ${bundle.shot_id} requested unavailable local media: ${request.resource_id}`);
-      const rendered = renderMedia({ id: `${bundle.shot_id}-media-${index + 1}`, request, asset, globalStart: shot.start_seconds + request.start_seconds, track: 10 + mediaIndex });
+      const rendered = renderMedia({
+        id: `${bundle.shot_id}-media-${index + 1}`,
+        request,
+        asset,
+        globalStart: shot.start_seconds + request.start_seconds,
+        track: 10 + mediaIndex,
+        layerBase: rootMediaLayerBase
+      });
       media.push(...rendered.elements);
       mediaMotion.push(rendered.motion);
       mediaIndex += 1;
@@ -172,7 +185,8 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [], fallbacks
     const transition = transitionByOutgoing.get(shot.id);
     const extension = transition?.kind === "flow" ? transition.duration_seconds : -.001;
     const duration = Math.min(plan.format.duration_seconds - shot.start_seconds, shot.end_seconds - shot.start_seconds + extension);
-    return `<div id="mount-${escapeAttr(shot.id)}" class="clip shot-mount" data-composition-id="${escapeAttr(shot.id)}" data-composition-src="compositions/${escapeAttr(shot.id)}.html" data-start="${number(shot.start_seconds)}" data-duration="${number(Math.max(.001, duration))}" data-track-index="${100 + index}" data-width="${plan.format.width}" data-height="${plan.format.height}" style="z-index:${100 + index}"></div>`;
+    const layer = SHOT_LAYER_BASE + index;
+    return `<div id="mount-${escapeAttr(shot.id)}" class="clip shot-mount" data-composition-id="${escapeAttr(shot.id)}" data-composition-src="compositions/${escapeAttr(shot.id)}.html" data-start="${number(shot.start_seconds)}" data-duration="${number(Math.max(.001, duration))}" data-track-index="${layer}" data-width="${plan.format.width}" data-height="${plan.format.height}" style="z-index:${layer}"></div>`;
   });
   const transitionMotion = renderShotTransitionMotion(plan, transitions);
   return `<!doctype html>
@@ -270,23 +284,25 @@ export function applyFrameCsp(html) {
   return `${policy}\n${source}`;
 }
 
-function renderMedia({ id, request, asset, globalStart, track }) {
+function renderMedia({ id, request, asset, globalStart, track, layerBase }) {
   const placement = request.placement;
+  const requestedLayer = Math.max(0, Math.min(ROOT_MEDIA_RELATIVE_LAYER_MAX, Number(placement.z_index)));
+  const mediaLayer = layerBase + requestedLayer;
   const style = [
     `left:${number(placement.x)}px`, `top:${number(placement.y)}px`,
     `width:${number(placement.width)}px`, `height:${number(placement.height)}px`,
     `object-fit:${placement.object_fit}`, `border-radius:${number(placement.border_radius)}px`,
-    `z-index:${placement.z_index}`
+    `z-index:${mediaLayer}`
   ].join(";");
   const duration = request.end_seconds - request.start_seconds;
   const mediaStart = request.source_start_seconds ?? 0;
   const presentation = request.presentation ?? { mode: "companion", frame: "none", enter: "cut", exit: "cut", motion_blur_px: 0 };
-  const common = `id="${escapeAttr(id)}" class="clip root-media root-media--${escapeAttr(presentation.mode)}" src="assets/${escapeAttr(asset.file)}" data-start="${number(globalStart)}" data-duration="${number(duration)}" data-media-start="${number(mediaStart)}" data-volume="${number(request.volume)}" data-track-index="${Number(track)}" style="${style}" data-treatment="${escapeAttr(placement.treatment)}" data-presentation-mode="${escapeAttr(presentation.mode)}"`;
+  const common = `id="${escapeAttr(id)}" class="clip root-media root-media--${escapeAttr(presentation.mode)}" src="assets/${escapeAttr(asset.file)}" data-start="${number(globalStart)}" data-duration="${number(duration)}" data-media-start="${number(mediaStart)}" data-volume="${number(request.volume)}" data-track-index="${Number(track)}" style="${style}" data-treatment="${escapeAttr(placement.treatment)}" data-presentation-mode="${escapeAttr(presentation.mode)}" data-layer-role="presenter"`;
   const videoAudio = request.volume > 0 ? `data-has-audio="true"` : "muted";
   const mediaElement = request.kind === "video" ? `<video ${common} ${videoAudio} playsinline></video>` : `<audio ${common}></audio>`;
   const frameId = `${id}-frame`;
   const frameElement = request.kind === "video" && presentation.frame === "desktop-window"
-    ? `<div id="${escapeAttr(frameId)}" class="clip root-media-frame" data-start="${number(globalStart)}" data-duration="${number(duration)}" data-track-index="${Number(500 + track)}" data-layout-allow-occlusion="true" style="left:${number(placement.x)}px;top:${number(placement.y)}px;width:${number(placement.width)}px;height:${number(placement.height)}px;border-radius:${number(placement.border_radius)}px;z-index:${number(placement.z_index + 1)}"><div class="root-media-window-bar" aria-hidden="true"><span class="root-media-window-dot root-media-window-dot--close"></span><span class="root-media-window-dot root-media-window-dot--minimize"></span><span class="root-media-window-dot root-media-window-dot--maximize"></span></div></div>`
+    ? `<div id="${escapeAttr(frameId)}" class="clip root-media-frame" data-start="${number(globalStart)}" data-duration="${number(duration)}" data-track-index="${Number(500 + track)}" data-layout-allow-occlusion="true" data-layer-role="presenter-chrome" style="left:${number(placement.x)}px;top:${number(placement.y)}px;width:${number(placement.width)}px;height:${number(placement.height)}px;border-radius:${number(placement.border_radius)}px;z-index:${number(mediaLayer + 1)}"><div class="root-media-window-bar" aria-hidden="true"><span class="root-media-window-dot root-media-window-dot--close"></span><span class="root-media-window-dot root-media-window-dot--minimize"></span><span class="root-media-window-dot root-media-window-dot--maximize"></span></div></div>`
     : null;
   return {
     elements: frameElement ? [mediaElement, frameElement] : [mediaElement],
