@@ -22,6 +22,7 @@ Every planned shot.visual object and event remains part of the repair contract. 
 
 export async function repairProduction(workspacePath, options = {}, adapters = {}) {
   const workspace = path.resolve(workspacePath);
+  if (options.verification?.infrastructure_failed?.length) throw infrastructureRepairError(options.verification.infrastructure_failed);
   const qaDir = path.join(workspace, PRODUCTION_PATHS.qa);
   const [intake, evidence, plan, critique] = await Promise.all([
     readJson(path.join(workspace, PRODUCTION_PATHS.intake)),
@@ -209,6 +210,7 @@ export async function collectDeterministicRepairFindings(workspacePath, plan) {
     if (reportInfo && reportInfo.mtimeMs >= frameInfo.mtimeMs) {
       const report = await readJson(reportPath);
       if (report.ok === false) {
+        if (report.failure_kind === "infrastructure") throw infrastructureRepairError([`inspect:${shot.id}`]);
         const inspectIssues = Array.isArray(report.stdout?.issues)
           ? report.stdout.issues.filter((issue) => issue?.severity === "error")
           : [];
@@ -245,6 +247,13 @@ export async function collectDeterministicRepairFindings(workspacePath, plan) {
     });
   }
   return findings;
+}
+
+function infrastructureRepairError(failures) {
+  const error = new Error(`Production repair is blocked because verification failed in the toolchain: ${failures.join(", ")}. Fix the verifier environment and rerun verification.`);
+  error.code = "LAUNCHCLIP_PRODUCTION_INFRASTRUCTURE_FAILED";
+  error.infrastructure_failed = failures;
+  return error;
 }
 
 function uniqueIssues(issues) {
