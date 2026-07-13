@@ -5,12 +5,13 @@ import { runDirect } from "./director.js";
 import { preprocessPresenter } from "./presenter_preprocess.js";
 import { writeIntake } from "./intake.js";
 import { runProductionStage } from "./production_cli.js";
+import { createCostTracker } from "./cost_tracker.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-media", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-critique", "production-repair", "production-render", "produce"]);
 const COMMANDS = new Set(["intake", ...PRODUCTION_COMMANDS, "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
-  const { stdout = process.stdout } = io;
+  const { stdout = process.stdout, fetch: baseFetch = globalThis.fetch } = io;
   const [command, firstArg, ...rest] = argv;
   if (!command || command === "--help" || command === "-h") {
     stdout.write(help());
@@ -21,45 +22,59 @@ export async function runCli(argv, io = {}) {
   }
 
   const flags = parseFlags(rest);
-  let result;
-  if (command === "intake") {
-    result = await writeIntake(required(firstArg, "source"), flags);
-  } else if (PRODUCTION_COMMANDS.has(command)) {
-    result = await runProductionStage(command, required(firstArg, command === "produce" ? "source" : "workspace path"), flags);
-  } else if (command === "init") {
-    result = await initWorkspace(required(firstArg, "repo path"), flags);
-  } else if (command === "demo") {
-    result = await runDemo(required(firstArg, "repo path"), flags);
-  } else if (command === "plan") {
-    result = await planVideo(required(firstArg, "workspace path"), flags);
-  } else if (command === "captions") {
-    result = await writeCaptions(required(firstArg, "workspace path"), flags);
-  } else if (command === "render") {
-    result = await renderVideo(required(firstArg, "workspace path"), flags);
-  } else if (command === "analyze-render") {
-    result = await analyzeRender(required(firstArg, "workspace path"), flags);
-  } else if (command === "submit-review") {
-    result = await submitReview(required(firstArg, "workspace path"), flags);
-  } else if (command === "review") {
-    result = await writeReview(required(firstArg, "workspace path"), flags);
-  } else if (command === "validate") {
-    result = await validateWorkspace(required(firstArg, "workspace path"), { ...flags, write: true });
-  } else if (command === "run") {
-    result = await runPacket(required(firstArg, "repo path"), flags);
-  } else if (command === "script") {
-    result = await writeTeleprompter(required(firstArg, "workspace path"), flags);
-  } else if (command === "align") {
-    result = await alignRecording(required(firstArg, "workspace path"), flags);
-  } else if (command === "motion-render") {
-    result = await renderMotion(required(firstArg, "workspace path"), flags);
-  } else if (command === "music") {
-    result = await generateMusic(required(firstArg, "workspace path"), flags);
-  } else if (command === "direct") {
-    result = await runDirect(required(firstArg, "workspace path"), flags);
-  } else if (command === "preprocess-presenter") {
-    result = await preprocessPresenter(required(firstArg, "presenter media path"), flags);
+  const tracker = createCostTracker({ fetch: baseFetch });
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = tracker.fetch;
+  try {
+    let result;
+    if (command === "intake") {
+      result = await writeIntake(required(firstArg, "source"), flags);
+    } else if (PRODUCTION_COMMANDS.has(command)) {
+      result = await runProductionStage(command, required(firstArg, command === "produce" ? "source" : "workspace path"), flags);
+    } else if (command === "init") {
+      result = await initWorkspace(required(firstArg, "repo path"), flags);
+    } else if (command === "demo") {
+      result = await runDemo(required(firstArg, "repo path"), flags);
+    } else if (command === "plan") {
+      result = await planVideo(required(firstArg, "workspace path"), flags);
+    } else if (command === "captions") {
+      result = await writeCaptions(required(firstArg, "workspace path"), flags);
+    } else if (command === "render") {
+      result = await renderVideo(required(firstArg, "workspace path"), flags);
+    } else if (command === "analyze-render") {
+      result = await analyzeRender(required(firstArg, "workspace path"), flags);
+    } else if (command === "submit-review") {
+      result = await submitReview(required(firstArg, "workspace path"), flags);
+    } else if (command === "review") {
+      result = await writeReview(required(firstArg, "workspace path"), flags);
+    } else if (command === "validate") {
+      result = await validateWorkspace(required(firstArg, "workspace path"), { ...flags, write: true });
+    } else if (command === "run") {
+      result = await runPacket(required(firstArg, "repo path"), flags);
+    } else if (command === "script") {
+      result = await writeTeleprompter(required(firstArg, "workspace path"), flags);
+    } else if (command === "align") {
+      result = await alignRecording(required(firstArg, "workspace path"), flags);
+    } else if (command === "motion-render") {
+      result = await renderMotion(required(firstArg, "workspace path"), flags);
+    } else if (command === "music") {
+      result = await generateMusic(required(firstArg, "workspace path"), flags);
+    } else if (command === "direct") {
+      result = await runDirect(required(firstArg, "workspace path"), flags);
+    } else if (command === "preprocess-presenter") {
+      result = await preprocessPresenter(required(firstArg, "presenter media path"), flags);
+    }
+    const output = result && typeof result === "object" && !Array.isArray(result)
+      ? { ...result, costs: tracker.summary() }
+      : { result, costs: tracker.summary() };
+    stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+  } catch (error) {
+    const failure = error instanceof Error ? error : new Error(String(error));
+    failure.costs = tracker.summary();
+    throw failure;
+  } finally {
+    if (globalThis.fetch === tracker.fetch) globalThis.fetch = previousFetch;
   }
-  stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
 export function parseFlags(args) {
