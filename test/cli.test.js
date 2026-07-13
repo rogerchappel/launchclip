@@ -37,6 +37,13 @@ test("parses model-directed production control flags", () => {
   });
 });
 
+test("parses Studio preview controls", () => {
+  assert.deepEqual(parseFlags(["--port", "3111", "--no-open"]), {
+    port: "3111",
+    "no-open": true
+  });
+});
+
 test("includes a zero-cost tally in successful command JSON", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-cli-costs-"));
   const output = [];
@@ -83,4 +90,10 @@ test("documents independently rerunnable source and entity preparation stages", 
   assert.match(help, /resolve-entities <workspace>/);
   assert.match(help, /--brand-assets-dir path/);
   assert.match(help, /--no-trim-silence/);
+});
+
+test("documents the Studio preview approval stage", async () => {
+  const output = [];
+  await runCli(["--help"], { stdout: { write: (value) => output.push(value) } });
+  assert.match(output.join(""), /production-preview <workspace> \[--port 3002\] \[--no-open\]/);
 });
