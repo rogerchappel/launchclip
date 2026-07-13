@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { buildFallbackFrame, buildFrameInput, directFrames, safeShotFile, sanitizeFrameBundle, validateHyperFramesRoot } from "../src/frame_director.js";
+import { buildFallbackFrame, buildFrameInput, directFrames, fallbackFramesForVerification, safeShotFile, sanitizeFrameBundle, validateHyperFramesRoot } from "../src/frame_director.js";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { EVIDENCE_VERSION, FRAME_BUNDLE_SCHEMA, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
@@ -131,6 +131,11 @@ test("recovers a previously rejected frame with a local fallback and does not bu
   assert.equal(result.fallbacks, 1);
   assert.equal(result.frames[0].fallback, true);
   assert.match(await readFile(path.join(workspace, "production", "frames", "shot-1.json"), "utf8"), /deterministic fallback/);
+  for (let index = 0; index < 4; index += 1) {
+    const local = await fallbackFramesForVerification(workspace, { failed: ["inspect:shot-1"], qa: path.join(workspace, "missing-qa") });
+    assert.equal(local.repaired.length, 1);
+  }
+  assert.deepEqual(calls, ["shot-2"], "repeated local QA passes never submit another provider response");
 });
 
 test("waits for sibling frame jobs to settle before reporting a delegated failure", async () => {

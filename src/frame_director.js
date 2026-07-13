@@ -110,7 +110,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   let resumeResponseId = null;
   if (!current) await store.add({ id: jobId, kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash, max_attempts: Number(options.maxAttempts ?? 3) });
   else if (current.status === "failed" && existing?.input_hash === inputHash && isSemanticValidationFailure(current.error)) {
-    await store.retry(jobId, { inputHash });
+    await store.reconfigure(jobId, { input_hash: inputHash });
     await store.markRunning(jobId, { provider: "local", response_id: existing.remote?.response_id ?? null, status: "fallback" });
     return persistFallbackFrame({ workspace, intake, evidence, plan, shot, store, jobId, reason: current.error, responseId: existing.remote?.response_id ?? null });
   }
@@ -326,7 +326,7 @@ export async function fallbackFramesForVerification(workspacePath, verification)
     if (!current) continue;
     if (current.status === "succeeded") await store.markStaleFrom([jobId]);
     const stale = store.get(jobId);
-    if (stale.status === "failed" || stale.status === "stale") await store.retry(jobId, { inputHash: stale.input_hash });
+    if (stale.status === "failed" || stale.status === "stale") await store.reconfigure(jobId, { input_hash: stale.input_hash });
     else if (stale.status !== "pending") continue;
     await store.markRunning(jobId, { provider: "local", response_id: current.remote?.response_id ?? null, status: "verification-fallback" });
     repaired.push(await persistFallbackFrame({
