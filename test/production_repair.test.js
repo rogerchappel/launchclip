@@ -195,7 +195,10 @@ function bundle(id, copy = "Proof") {
   return {
     schema_version: FRAME_BUNDLE_VERSION, shot_id: id,
     html: `<!doctype html><html><head></head><body><template><style>#root{position:absolute;inset:0}</style><div id="root" data-composition-id="${id}" data-start="0" data-duration="5" data-width="1080" data-height="1920"><div id="${id}-proof" class="clip" data-start="0" data-duration="5">${copy}</div></div><script>window.__timelines=window.__timelines||{};const timeline=gsap.timeline({paused:true});window.__timelines["${id}"]=timeline;</script></template></body></html>`,
-    motion: { assertions: [{ selector: `#${id}-proof`, appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: true }] },
+    motion: {
+      assertions: [{ selector: `#${id}-proof`, appears_by_seconds: 1, order: 1, must_stay_in_frame: true, must_remain_live: true }],
+      events: [{ event_id: `${id}-proof-lock`, object_id: "proof-node", selector: `#${id}-proof`, at_seconds: 1, property: "opacity", visible_change: true }]
+    },
     root_media_requests: [], evidence_ids: ["ev-1"], visible_copy: [copy], preserve: ["exact copy"]
   };
 }
@@ -206,7 +209,19 @@ async function fixture(options = {}) {
   const frames = path.join(production, "frames");
   const snapshots = path.join(production, "qa", "snapshots");
   await Promise.all([mkdir(frames, { recursive: true }), mkdir(snapshots, { recursive: true })]);
-  const shot = (id, start, end) => ({ id, start_seconds: start, end_seconds: end, evidence_ids: ["ev-1"], resource_ids: [] });
+  const shot = (id, start, end) => ({
+    id, start_seconds: start, end_seconds: end, evidence_ids: ["ev-1"], resource_ids: [],
+    visual: {
+      representation: "diagram",
+      objects: [
+        { id: "proof-field", kind: "decoration", layer: "background", asset_resource_id: null },
+        { id: "proof-node", kind: "diagram-node", layer: "midground", asset_resource_id: null },
+        { id: "proof-label", kind: "text", layer: "foreground", asset_resource_id: null }
+      ],
+      events: [{ id: `${id}-proof-lock`, at_seconds: 1, target_ids: ["proof-node"], sfx_eligible: false }],
+      continuity: { sequence_id: "proof-sequence", handoff: end < 10 ? "continue" : "resolve", inherits_object_ids: start ? ["proof-node"] : [], hands_off_object_ids: end < 10 ? ["proof-node"] : [], entry_velocity: start ? 320 : 0, exit_velocity: end < 10 ? 320 : 0 }
+    }
+  });
   const plan = { design: { concept: "Proof" }, format: { width: 1080, height: 1920 }, shots: [shot("shot-1", 0, 5), shot("shot-2", 5, 10)] };
   await writeFile(path.join(production, "intake.json"), `${JSON.stringify({ resources: [] })}\n`);
   await writeFile(path.join(production, "evidence.json"), `${JSON.stringify({ items: [{ id: "ev-1", title: "README", provenance: "README.md" }] })}\n`);
