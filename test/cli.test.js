@@ -74,3 +74,13 @@ test("attaches the accrued cost tally to command failures", async () => {
     }
   );
 });
+
+test("documents independently rerunnable source and entity preparation stages", async () => {
+  const output = [];
+  await runCli(["--help"], { stdout: { write: (value) => output.push(value) } });
+  const help = output.join("");
+  assert.match(help, /source-preprocess <workspace>/);
+  assert.match(help, /resolve-entities <workspace>/);
+  assert.match(help, /--brand-assets-dir path/);
+  assert.match(help, /--no-trim-silence/);
+});
