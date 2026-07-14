@@ -533,8 +533,13 @@ function motionOptions(plan, options) {
       width: plan.format.width,
       height: plan.format.height,
       duration_tolerance_seconds: Number(options.durationToleranceSeconds ?? .15),
-      maximum_hold_ratio: Number(options.maximumHoldRatio ?? .985),
-      minimum_bursts_per_minute: Number(options.minimumBurstsPerMinute ?? 4)
+      maximum_hold_ratio: Number(options.maximumHoldRatio ?? .94),
+      minimum_bursts_per_minute: Number(options.minimumBurstsPerMinute ?? 8),
+      minimum_change_energy_p50: Number(options.minimumChangeEnergyP50 ?? .35),
+      minimum_flow_velocity_p90: Number(options.minimumFlowVelocityP90 ?? 2),
+      maximum_first_motion_seconds: Number(options.maximumFirstMotionSeconds ?? .65),
+      hook_window_seconds: Number(options.hookWindowSeconds ?? 4),
+      minimum_hook_events: Number(options.minimumHookEvents ?? 2)
     }
   };
 }

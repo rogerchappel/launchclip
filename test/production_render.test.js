@@ -278,6 +278,13 @@ test("renders only after verification then runs frame-by-frame motion gates", as
   assert.equal(result.status, "awaiting-human-review");
   assert.equal(commands.at(-1), "render");
   assert.equal(motionInput.options.expected.width, 1080);
+  assert.equal(motionInput.options.expected.maximum_hold_ratio, .94);
+  assert.equal(motionInput.options.expected.minimum_bursts_per_minute, 8);
+  assert.equal(motionInput.options.expected.minimum_change_energy_p50, .35);
+  assert.equal(motionInput.options.expected.minimum_flow_velocity_p90, 2);
+  assert.equal(motionInput.options.expected.maximum_first_motion_seconds, .65);
+  assert.equal(motionInput.options.expected.hook_window_seconds, 4);
+  assert.equal(motionInput.options.expected.minimum_hook_events, 2);
   assert.deepEqual(motionInput.options.references, ["/tmp/reference.mp4", "/tmp/staged-reference.mp4"]);
   assert.equal(JSON.parse(await readFile(result.audio, "utf8")).status, "not-requested");
 });
