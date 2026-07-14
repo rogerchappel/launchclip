@@ -25,15 +25,25 @@ test("delegates shots concurrently, repairs invalid HTML, and writes modular fra
   let peak = 0;
   let frameInstructions;
   const attempts = new Map();
+  const initialWaiters = [];
   const client = {
     runStructured: async (options) => {
       frameInstructions = options.instructions;
-      active += 1;
-      peak = Math.max(peak, active);
-      await new Promise((resolve) => setTimeout(resolve, 10));
       const input = JSON.parse(options.input);
       const count = (attempts.get(input.shot.id) ?? 0) + 1;
       attempts.set(input.shot.id, count);
+      active += 1;
+      peak = Math.max(peak, active);
+      if (count === 1) {
+        await new Promise((resolve) => {
+          const timeout = setTimeout(resolve, 250);
+          initialWaiters.push(() => {
+            clearTimeout(timeout);
+            resolve();
+          });
+          if (initialWaiters.length === 2) initialWaiters.splice(0).forEach((release) => release());
+        });
+      }
       active -= 1;
       const bundle = frameBundle(input.shot.id, input.shot.duration_seconds);
       if (input.shot.id === "shot-1" && count === 1) bundle.html = bundle.html.replace('data-start="0"', 'data-start="1"');
