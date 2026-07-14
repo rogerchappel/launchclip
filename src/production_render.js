@@ -181,10 +181,16 @@ export async function verifySemanticArtifacts(projectPath, plan) {
   const project = path.resolve(projectPath);
   const errors = validateSemanticVisualPlan(plan);
   const renderedEvents = [];
+  const frameHtml = [];
   for (const shot of plan.shots ?? []) {
     if (!shot.visual) continue;
+    const htmlPath = path.join(project, "compositions", `${shot.id}.html`);
     const motionPath = path.join(project, "compositions", `${shot.id}.motion.json`);
-    let motion;
+    let motion, html;
+    try { html = await readFile(htmlPath, "utf8"); frameHtml.push({ shot_id: shot.id, html }); }
+    catch (error) {
+      errors.push(`shot ${shot.id} is missing its assembled HTML composition: ${error.code ?? error.message}`);
+    }
     try { motion = JSON.parse(await readFile(motionPath, "utf8")); }
     catch (error) {
       errors.push(`shot ${shot.id} is missing its assembled motion event sidecar: ${error.code ?? error.message}`);
@@ -199,6 +205,7 @@ export async function verifySemanticArtifacts(projectPath, plan) {
     }
     for (const cue of shot.sfx ?? []) if (!actual.has(cue.event_id)) errors.push(`shot ${shot.id} SFX ${cue.cue} is orphaned from rendered event ${cue.event_id}`);
   }
+  errors.push(...plannedTypographyErrors(plan, frameHtml));
   return {
     ok: errors.length === 0,
     exit_code: errors.length ? 1 : 0,
@@ -206,6 +213,28 @@ export async function verifySemanticArtifacts(projectPath, plan) {
     stdout: { ...semanticVisualReport(plan), rendered_events: renderedEvents, errors },
     stderr: ""
   };
+}
+
+export function plannedTypographyErrors(plan, frames) {
+  const roles = Object.entries(plan?.design?.style_dna?.typography ?? {})
+    .map(([role, family]) => [role, String(family ?? "").trim()])
+    .filter(([, family]) => family);
+  if (!roles.length) return [];
+  const css = frames.map((entry) => styleDeclarations(entry.html)).join("\n");
+  return roles.flatMap(([role, family]) => {
+    const escaped = family.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const declaration = new RegExp(`(?:font(?:-family)?|--[a-z0-9_-]+)\\s*:[^;}]*["']?${escaped}(?:["']|\\s|,|;|}|$)`, "i");
+    return declaration.test(css) ? [] : [`planned typography role ${role} requires family ${JSON.stringify(family)}, but no assembled frame declares it`];
+  });
+}
+
+function styleDeclarations(html) {
+  const source = String(html ?? "");
+  return [
+    ...[...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((match) => match[1]),
+    ...[...source.matchAll(/\bstyle\s*=\s*["']([^"']*)["']/gi)].map((match) => match[1]),
+    ...[...source.matchAll(/\bdata-font-family\s*=\s*["']([^"']+)["']/gi)].map((match) => `font-family:${match[1]};`)
+  ].join("\n");
 }
 
 function renderShotInspectionRoot(shot, format, duration) {

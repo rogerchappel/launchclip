@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { ProductionVerificationError, assertVerificationFresh, classifyCommandFailure, renderDraftProduction, renderProduction, verifyProduction, verifySemanticArtifacts, verifyShotCompositions } from "../src/production_render.js";
+import { ProductionVerificationError, assertVerificationFresh, classifyCommandFailure, plannedTypographyErrors, renderDraftProduction, renderProduction, verifyProduction, verifySemanticArtifacts, verifyShotCompositions } from "../src/production_render.js";
 
 test("runs lint, browser validation, transition-aware checks, and assembled snapshots", async () => {
   const workspace = await fixture();
@@ -207,6 +207,18 @@ test("blocks orphan SFX before launching browser verification", async () => {
   assert.equal(commands, 0);
   const report = JSON.parse(await readFile(path.join(workspace, "production", "qa", "semantic.json"), "utf8"));
   assert.ok(report.stdout.errors.some((error) => error.includes("orphaned")));
+});
+
+test("fails closed when authored frames silently replace the planned type system", async () => {
+  const plan = { design: { style_dna: { typography: { display: "Silkscreen", body: "Atkinson Hyperlegible", metadata: "IBM Plex Mono" } } } };
+  const generic = [{ shot_id: "shot-1", html: '<style>.title{font-family:Arial,sans-serif}.meta{font:700 24px/1 "Courier New",monospace}</style>' }];
+  assert.deepEqual(plannedTypographyErrors(plan, generic), [
+    'planned typography role display requires family "Silkscreen", but no assembled frame declares it',
+    'planned typography role body requires family "Atkinson Hyperlegible", but no assembled frame declares it',
+    'planned typography role metadata requires family "IBM Plex Mono", but no assembled frame declares it'
+  ]);
+  const faithful = [{ shot_id: "shot-1", html: '<style>:root{--display:"Silkscreen";--body:"Atkinson Hyperlegible"}.title{font-family:var(--display)}.copy{font-family:var(--body)}.meta{font:500 24px/1 "IBM Plex Mono"}</style>' }];
+  assert.deepEqual(plannedTypographyErrors(plan, faithful), []);
 });
 
 test("blocks final rendering without approval and records failed HyperFrames checks", async () => {
