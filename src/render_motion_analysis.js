@@ -256,7 +256,49 @@ export function evaluateMotionQuality(metrics, expected = {}) {
   if (!metrics.frame_count) findings.push(finding("frames", "blocking", "No frame-difference samples were produced."));
   if (metrics.motion.hold_ratio > Number(expected.maximum_hold_ratio ?? 0.985)) findings.push(finding("motion", "major", `Frame-difference analysis reports ${(metrics.motion.hold_ratio * 100).toFixed(1)}% near-static frames.`));
   if (metrics.motion_bursts_per_minute < Number(expected.minimum_bursts_per_minute ?? 4)) findings.push(finding("motion", "major", `Only ${metrics.motion_bursts_per_minute.toFixed(1)} meaningful motion bursts per minute were detected.`));
+  if (expected.minimum_change_energy_p50 != null && Number(metrics.motion?.change_energy?.p50 ?? 0) < Number(expected.minimum_change_energy_p50)) {
+    findings.push(finding("motion", "major", `Median frame-change energy is ${Number(metrics.motion?.change_energy?.p50 ?? 0).toFixed(2)}; expected at least ${Number(expected.minimum_change_energy_p50).toFixed(2)}.`));
+  }
+  if (expected.minimum_flow_velocity_p90 != null && Number(metrics.optical_flow?.velocity_pixels_per_second?.p90 ?? 0) < Number(expected.minimum_flow_velocity_p90)) {
+    findings.push(finding("motion", "major", `90th-percentile motion velocity is ${Number(metrics.optical_flow?.velocity_pixels_per_second?.p90 ?? 0).toFixed(1)} px/s; expected at least ${Number(expected.minimum_flow_velocity_p90).toFixed(1)} px/s.`));
+  }
+  if (expected.minimum_cut_rate_per_minute != null && Number(metrics.cut_rate_per_minute ?? 0) < Number(expected.minimum_cut_rate_per_minute)) {
+    findings.push(finding("editing", "major", `Only ${Number(metrics.cut_rate_per_minute ?? 0).toFixed(1)} cuts per minute were detected; expected at least ${Number(expected.minimum_cut_rate_per_minute).toFixed(1)}.`));
+  }
+  const firstMotion = firstMeaningfulMotionSeconds(metrics);
+  if (expected.maximum_first_motion_seconds != null && (firstMotion == null || firstMotion > Number(expected.maximum_first_motion_seconds))) {
+    findings.push(finding("hook", "major", firstMotion == null
+      ? "No meaningful motion was detected in the opening."
+      : `The first meaningful motion arrives at ${firstMotion.toFixed(2)}s; expected it by ${Number(expected.maximum_first_motion_seconds).toFixed(2)}s.`));
+  }
+  if (expected.minimum_hook_events != null) {
+    const window = Number(expected.hook_window_seconds ?? 4);
+    const events = hookEventSeconds(metrics, window);
+    if (events.length < Number(expected.minimum_hook_events)) {
+      findings.push(finding("hook", "major", `Only ${events.length} distinct motion/cut event${events.length === 1 ? "" : "s"} landed in the first ${window.toFixed(1)}s; expected at least ${Number(expected.minimum_hook_events)}.`));
+    }
+  }
   return { ok: !findings.some((entry) => entry.severity === "blocking" || entry.severity === "major"), findings };
+}
+
+export function hookEventSeconds(metrics, windowSeconds = 4, minimumGapSeconds = .2) {
+  const events = [
+    ...(metrics.cuts ?? []),
+    ...(metrics.motion?.bursts ?? []).map((entry) => Number(entry.start_seconds))
+  ].map(Number).filter((time) => Number.isFinite(time) && time >= 0 && time <= windowSeconds).sort((a, b) => a - b);
+  return events.reduce((distinct, time) => {
+    if (!distinct.length || time - distinct.at(-1) >= minimumGapSeconds) distinct.push(time);
+    return distinct;
+  }, []);
+}
+
+function firstMeaningfulMotionSeconds(metrics) {
+  const burst = (metrics.motion?.bursts ?? []).map((entry) => Number(entry.start_seconds)).filter(Number.isFinite).sort((a, b) => a - b)[0];
+  if (Number.isFinite(burst)) return burst;
+  const threshold = Number(metrics.motion?.hold_threshold ?? metrics.motion?.burst_threshold);
+  if (!Number.isFinite(threshold)) return null;
+  const sample = (metrics.motion?.frame_difference ?? []).find((entry) => Number(entry.energy) > threshold);
+  return sample ? Number(sample.at_seconds) : null;
 }
 
 export async function writeMotionReport(videoPath, outputPath, options = {}, adapters = {}) {
