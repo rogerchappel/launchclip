@@ -15,7 +15,9 @@ completely. It is the self-contained runtime contract for this workflow.
 ## Preserve the cost boundary
 
 - Perform research synthesis, scripting, art direction, HTML authoring, visual
-  review, and repair in the current agent session.
+  review, and repair in the current agent session. The active subscription
+  agent is the director, compositor, and critic; do not hand those jobs back to
+  a metered LaunchClip model stage.
 - Use local HTML, CSS, SVG, supplied media, FFmpeg, and the HyperFrames CLI by
   default.
 - Do not run `launchclip produce`, `creative-plan`, `direct-frames`,
@@ -28,6 +30,9 @@ completely. It is the self-contained runtime contract for this workflow.
 - Never treat a ChatGPT, Codex, or Claude login as an API credential. OAuth
   subscription access does not populate `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
   or `ELEVENLABS_API_KEY` for subprocesses.
+- Local deterministic tools, including FFmpeg, `ffprobe`, local Whisper or
+  Parakeet transcription, and the HyperFrames browser/render runtime, stay
+  inside this boundary.
 
 ## Conduct the compact intake
 
@@ -75,12 +80,43 @@ composition:
   assets, motion development, transition, and audio intent
 - `DESIGN.md`: project-specific palette roles, typography, composition logic,
   image treatment, motion character, and forbidden motifs
+- `SOURCE.md`: media probes, silence-trim receipt, transcript location, overview
+  contact sheet, dense opening strip, detected cut points, and any reference
+  cadence observations
+- `HOOKS.md`: three truthful opening treatments, the selected treatment, the
+  immediate promise, and the material changes planned inside the first four
+  seconds
+- `QUALITY.md`: project-specific pass/fail targets for typography, hierarchy,
+  hook timing, change cadence, transition variety, motion physics, safe areas,
+  source fidelity, and final artifact probing
 
 Use supplied narration as authoritative. Do not silently rewrite it. Avoid
 inventing product capabilities, performance numbers, testimonials, research
 findings, or repository behavior. References may guide pacing or editorial
 structure, but do not copy their footage, audio, likeness, branding, or exact
 design.
+
+## Analyze supplied media before designing
+
+When the user supplies audio or video, inspect the real temporal structure
+before writing the storyboard:
+
+- Probe streams, duration, dimensions, frame rate, codecs, and audio presence.
+- Detect boundary silence and trim only the leading/trailing silence. Preserve
+  internal pauses unless the user asked for editorial tightening. Keep a small
+  speech handle so consonants and breaths are not clipped.
+- Transcribe locally when narration drives the edit. Treat the supplied words
+  and timings as authoritative.
+- Generate and inspect an overview contact sheet plus a dense first-four-second
+  strip. For references, also inspect frames around detected cuts and major
+  motion changes instead of relying on evenly spaced thumbnails alone.
+- Record the measured cut rate, hold pattern, first meaningful motion, and the
+  visual registers used: presenter, typography, UI/proof, diagram, spatial
+  transition, or full-frame reset.
+
+Do this analysis with local tooling from the bundled reference. Never submit
+private footage to an external transcription or vision API without explicit
+permission.
 
 ## Design the video
 
@@ -98,6 +134,31 @@ of unrelated title cards. For every scene:
 - Use semantic HTML objects, SVG, diagrams, charts, or UI reconstructions before
   seeking generated raster imagery.
 
+Meet this default retention and craft floor unless the brief deliberately calls
+for a quieter treatment:
+
+- Make frame zero intentional and establish the promise within one second.
+- Land at least two distinct material changes in the first four seconds. A
+  color flicker or a caption word changing does not count as a material change.
+- Change visual register, composition, evidence state, camera framing, or
+  information density every two to four seconds; do not merely swap card copy.
+- Use at least three visual registers across the piece and avoid repeating the
+  same register more than twice consecutively.
+- Define exact display, body, and metadata type families. Use genuine weight,
+  scale, tracking, width, and case contrast; fail the review if a generic font
+  silently replaces the planned family.
+- Give primary, secondary, and ambient motion different amplitudes and tempos.
+  Entries normally decelerate into place; exits accelerate away. Use overshoot
+  only for emphasis, not every element.
+- Select transitions by meaning: hard cut for contrast, push for continuation,
+  whip for speed, zoom for scale change, morph for identity, and aperture/mask
+  for focus. Do not disguise one generic crossfade with different names.
+- Use directional blur or brief ghost trails only while velocity is high, then
+  return to a crisp settle. Prefer transforms, masks, SVG paths, and layered
+  depth over permanent CSS blur.
+- Keep primary copy readable at delivery size. Long body text belongs in the
+  narration or a deliberate reading beat, not a fleeting overlay.
+
 Do not imitate a named living artist or clone a person's voice or likeness.
 
 ## Author and repair
@@ -106,14 +167,20 @@ Follow the scaffold, composition contract, and commands in the bundled
 reference. Work in this order:
 
 1. Verify Node.js, FFmpeg, and HyperFrames availability.
-2. Scaffold a blank project without installing any skill pack.
-3. Copy or link only approved assets into the project using stable local paths.
-4. Author the composition and a motion sidecar from the frozen storyboard.
-5. Run static lint early.
-6. Run the browser check with snapshots.
-7. Inspect every generated overview image, not only the command exit code.
-8. Repair the smallest responsible scene, then rerun the failed gate.
-9. Repeat until checks pass and the visual result matches the brief.
+2. Probe, trim, transcribe, and temporally inspect supplied media locally.
+3. Scaffold a blank project without installing any skill pack.
+4. Copy or link only approved assets into the project using stable local paths.
+5. Freeze the brief, source analysis, hook choice, storyboard, design system,
+   and quality targets.
+6. Author the composition and a motion sidecar from those frozen artifacts.
+7. Run static lint early.
+8. Run strict browser checks with transition and dense-hook snapshots.
+9. Inspect every generated overview image, not only the command exit code.
+10. Review the opening, every transition boundary, every major type state, and
+    the final frame at delivery scale. Scrub adjacent frames when a snapshot
+    suggests clipping, popping, or a discontinuity.
+11. Repair the smallest responsible scene, then rerun the failed gate.
+12. Repeat until checks pass and the visible result satisfies `QUALITY.md`.
 
 Do not weaken checks, mark accidental overlaps as intentional, or use draft
 rendering to conceal a composition defect. Keep all motion deterministic and
