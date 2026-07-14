@@ -7,6 +7,7 @@ import { OpenAIResponsesClient } from "./openai_responses.js";
 import { ElevenLabsMediaProvider } from "./production_media.js";
 import { PRODUCTION_PATHS } from "./production_contracts.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
+import { analyzeRenderMotion } from "./render_motion_analysis.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -29,9 +30,9 @@ export const MEDIA_ANALYSIS_SCHEMA = strictObject({
   quality_warnings: { type: "array", items: { type: "string" } }
 });
 
-const ANALYST_INSTRUCTIONS = `Analyze one user-supplied visual resource for a video creative director. The image may be a contact sheet ordered left-to-right, top-to-bottom.
+const ANALYST_INSTRUCTIONS = `Analyze one user-supplied visual resource for a video creative director. Images may include an evenly sampled overview, a dense first-four-second hook strip, and a cut-boundary strip, all ordered left-to-right then top-to-bottom.
 
-Describe what is visibly present, the sequence of UI states or actions, readable text, proof the asset can honestly support, useful narrative beats, and quality limitations. Do not invent product behavior beyond the pixels. Reference footage can inspire editing but cannot substantiate factual claims. Return only the strict JSON.`;
+Use the supplied real duration, sheet timing, cut times, and motion-burst times when assigning segment timestamps. Never normalize an unknown sequence into placeholder seconds. Describe what is visibly present, the sequence of UI states or actions, readable text, proof the asset can honestly support, useful narrative beats, hook construction, edit cadence, and quality limitations. Do not invent product behavior beyond the pixels. Reference footage can inspire editing but cannot substantiate factual claims. Return only the strict JSON.`;
 
 export async function analyzeSourceMedia(workspacePath, options = {}, adapters = {}) {
   const workspace = path.resolve(workspacePath);
@@ -41,7 +42,7 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
   const derivedEvidencePath = path.join(mediaDir, "evidence.json");
   const [intake, evidence] = await Promise.all([readJson(intakePath), readJson(evidencePath)]);
   const sourceEvidence = { ...evidence, items: evidence.items.filter((entry) => !/:transcript$|:visual-analysis$/.test(entry.id)) };
-  const inputHash = semanticHash({ intake, evidence: sourceEvidence, options: { samples: options.samples ?? 12, columns: options.columns ?? 4, reasoning: options.reasoning ?? "high", transcriptionModel: options.transcriptionModel ?? "scribe_v2", transcribeAll: Boolean(options.transcribeAll), stageRemoteReferences: options.stageRemoteReferences !== false }, stage: "source-media-analysis.v3" });
+  const inputHash = semanticHash({ intake, evidence: sourceEvidence, options: { samples: options.samples ?? 12, columns: options.columns ?? 4, hookSeconds: options.hookSeconds ?? 4, hookFps: options.hookFps ?? 4, reasoning: options.reasoning ?? "high", transcriptionModel: options.transcriptionModel ?? "scribe_v2", transcribeAll: Boolean(options.transcribeAll), stageRemoteReferences: options.stageRemoteReferences !== false }, stage: "source-media-analysis.v4" });
   const store = adapters.store ?? await ProductionJobStore.open(workspace);
   const jobId = "source-media-analysis";
   const existing = store.get(jobId);
@@ -108,16 +109,26 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
       }));
     }
     if (!["video", "image"].includes(resource.type)) continue;
-    const visualPath = resource.type === "video"
-      ? await makeContactSheet(resource, mediaDir, options, adapters)
-      : await normalizeVisualImage(resource, mediaDir, adapters);
+    const duration = metadataNumber(evidence.items.find((entry) => entry.id === `resource:${resource.id}`), "duration_seconds");
+    const visual = resource.type === "video"
+      ? await makeContactSheets(resource, mediaDir, { ...options, durationSeconds: duration }, adapters)
+      : { sheets: [{ kind: "image", path: await normalizeVisualImage(resource, mediaDir, adapters) }], temporal_profile: null };
+    const visualPath = visual.sheets[0].path;
     const result = await client.runStructured({
       model: intake.model?.id ?? "gpt-5.6",
       reasoningEffort: options.reasoning ?? "high",
       reasoningContext: "current_turn",
       instructions: ANALYST_INSTRUCTIONS,
-      input: JSON.stringify({ resource_id: resource.id, role: resource.role, type: resource.type, contact_sheet_order: resource.type === "video" ? "left-to-right then top-to-bottom, evenly sampled" : "single image" }),
-      images: [await dataImage(visualPath)],
+      input: JSON.stringify({
+        resource_id: resource.id,
+        role: resource.role,
+        type: resource.type,
+        duration_seconds: visual.temporal_profile?.duration_seconds ?? duration,
+        contact_sheet_order: resource.type === "video" ? "Each sheet is ordered left-to-right then top-to-bottom; use its timing descriptor." : "single image",
+        contact_sheets: visual.sheets.map(({ path: _path, ...sheet }) => sheet),
+        temporal_profile: visual.temporal_profile
+      }),
+      images: await Promise.all(visual.sheets.map((sheet) => dataImage(sheet.path))),
       schema: MEDIA_ANALYSIS_SCHEMA,
       schemaName: "launchclip_source_media_analysis",
       background: options.background !== false,
@@ -126,12 +137,11 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
       metadata: { resource_id: resource.id, role: resource.role }
     });
     if (result.value.resource_id !== resource.id) throw new Error(`Media analysis resource_id must be ${resource.id}`);
-    const duration = metadataNumber(evidence.items.find((entry) => entry.id === `resource:${resource.id}`), "duration_seconds");
     for (const segment of result.value.segments) {
       if (!(segment.end_seconds > segment.start_seconds)) throw new Error(`Media analysis segment must have end > start for ${resource.id}`);
       if (duration && segment.end_seconds > duration + .25) throw new Error(`Media analysis segment exceeds ${resource.id} duration`);
     }
-    analyses.push({ resource_id: resource.id, analysis: result.value, contact_sheet: visualPath, staged_from: resource.staged_from ?? null, response_id: result.response_id, model: result.model });
+    analyses.push({ resource_id: resource.id, analysis: result.value, contact_sheet: visualPath, contact_sheets: visual.sheets, temporal_profile: visual.temporal_profile, staged_from: resource.staged_from ?? null, response_id: result.response_id, model: result.model });
     newItems.push(evidenceItem({
       id: `resource:${resource.id}:visual-analysis`,
       kind: resource.role === "reference" ? "reference-visual-analysis" : "visual-media-analysis",
@@ -141,7 +151,7 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
       provenance: resource.location,
       sha256: resource.sha256,
       claimsAllowed: resource.role !== "reference",
-      metadata: [["contact_sheet", visualPath], ["response_id", result.response_id], ["model", result.model]]
+      metadata: [["contact_sheet", visualPath], ["contact_sheets", JSON.stringify(visual.sheets.map(({ path: sheetPath, ...sheet }) => ({ ...sheet, path: sheetPath })))], ["temporal_profile", visual.temporal_profile ? JSON.stringify(visual.temporal_profile) : null], ["response_id", result.response_id], ["model", result.model]]
     }));
   }
   const ids = new Set(newItems.map((entry) => entry.id));
@@ -179,23 +189,78 @@ function isSupportedVideoReference(value) {
   return /^https?:\/\/(?:www\.)?(?:youtube\.com\/(?:watch|shorts\/)|youtu\.be\/)/i.test(String(value ?? ""));
 }
 
-async function makeContactSheet(resource, mediaDir, options, adapters) {
+async function makeContactSheets(resource, mediaDir, options, adapters) {
+  if (adapters.contactSheets) return normalizeContactSheets(await adapters.contactSheets(resource.location, mediaDir, options), resource, options);
   const output = path.join(mediaDir, `${resource.id}.contact-sheet.jpg`);
   if (adapters.contactSheet) {
     await adapters.contactSheet(resource.location, output, options);
-    return output;
+    const duration = Number(options.durationSeconds) || null;
+    return {
+      sheets: [{ kind: "overview", path: output, sample_count: Number(options.samples ?? 12), start_seconds: 0, end_seconds: duration, sampling: "even" }],
+      temporal_profile: duration ? { duration_seconds: duration, cuts: [], motion_bursts: [], family: null } : null
+    };
   }
-  const duration = await probeDuration(resource.location, adapters.run ?? runCommand);
+  const duration = Number(options.durationSeconds) || await probeDuration(resource.location, adapters.run ?? runCommand);
   const samples = Number(options.samples ?? 12);
   const columns = Number(options.columns ?? 4);
   const rows = Math.ceil(samples / columns);
   const interval = Math.max(.1, duration / samples);
-  await (adapters.run ?? runCommand)("ffmpeg", [
+  const run = adapters.run ?? runCommand;
+  await run("ffmpeg", [
     "-y", "-hide_banner", "-loglevel", "error", "-i", resource.location,
     "-vf", `fps=1/${interval},scale=480:-2,tile=${columns}x${rows}:padding=8:margin=8`,
     "-frames:v", "1", output
   ]);
-  return output;
+  const motion = adapters.analyzeMotion
+    ? await adapters.analyzeMotion(resource.location, options)
+    : await analyzeRenderMotion(resource.location, {}, adapters.runRaw ? { run, runRaw: adapters.runRaw } : {});
+  const sheets = [{ kind: "overview", path: output, sample_count: samples, start_seconds: 0, end_seconds: duration, interval_seconds: interval, sampling: "even" }];
+  const hookSeconds = Math.min(duration, Number(options.hookSeconds ?? 4));
+  const hookFps = Number(options.hookFps ?? 4);
+  if (hookSeconds > .25 && hookFps > 0) {
+    const hookFrames = Math.max(1, Math.ceil(hookSeconds * hookFps));
+    const hookColumns = Math.min(4, hookFrames);
+    const hookRows = Math.ceil(hookFrames / hookColumns);
+    const hookPath = path.join(mediaDir, `${resource.id}.hook-strip.jpg`);
+    await run("ffmpeg", [
+      "-y", "-hide_banner", "-loglevel", "error", "-t", String(hookSeconds), "-i", resource.location,
+      "-vf", `fps=${hookFps},scale=480:-2,tile=${hookColumns}x${hookRows}:padding=8:margin=8:nb_frames=${hookFrames}`,
+      "-frames:v", "1", hookPath
+    ]);
+    sheets.push({ kind: "hook", path: hookPath, sample_count: hookFrames, start_seconds: 0, end_seconds: hookSeconds, interval_seconds: 1 / hookFps, sampling: "dense-hook" });
+  }
+  if (motion.cuts?.length) {
+    const cutCount = Math.min(12, motion.cuts.length);
+    const cutColumns = Math.min(4, cutCount);
+    const cutRows = Math.ceil(cutCount / cutColumns);
+    const cutPath = path.join(mediaDir, `${resource.id}.cut-strip.jpg`);
+    await run("ffmpeg", [
+      "-y", "-hide_banner", "-loglevel", "error", "-i", resource.location,
+      "-vf", `select='gte(scene,${Number(motion.cut_threshold ?? .35)})',scale=480:-2,tile=${cutColumns}x${cutRows}:padding=8:margin=8:nb_frames=${cutCount}`,
+      "-frames:v", "1", cutPath
+    ]);
+    sheets.push({ kind: "cuts", path: cutPath, sample_count: cutCount, timestamps_seconds: motion.cuts.slice(0, cutCount), sampling: "detected-cut-boundaries" });
+  }
+  return {
+    sheets,
+    temporal_profile: {
+      duration_seconds: motion.duration_seconds ?? duration,
+      cuts: motion.cuts ?? [],
+      cut_rate_per_minute: motion.cut_rate_per_minute ?? 0,
+      motion_bursts: [...(motion.motion?.bursts ?? [])].sort((left, right) => Number(right.peak_energy) - Number(left.peak_energy)).slice(0, 12),
+      motion_bursts_per_minute: motion.motion_bursts_per_minute ?? 0,
+      hold_ratio: motion.motion?.hold_ratio ?? null,
+      family: motion.family ?? null
+    }
+  };
+}
+
+function normalizeContactSheets(value, resource, options) {
+  if (!value?.sheets?.length) throw new Error(`Temporal contact-sheet adapter produced no sheets for ${resource.id}`);
+  return {
+    sheets: value.sheets.map((sheet, index) => ({ kind: String(sheet.kind ?? (index ? `detail-${index}` : "overview")), ...sheet, path: path.resolve(sheet.path) })),
+    temporal_profile: value.temporal_profile ?? (Number(options.durationSeconds) ? { duration_seconds: Number(options.durationSeconds), cuts: [], motion_bursts: [], family: null } : null)
+  };
 }
 
 async function normalizeVisualImage(resource, mediaDir, adapters) {

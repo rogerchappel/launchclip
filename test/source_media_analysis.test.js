@@ -36,6 +36,34 @@ test("transcribes authoritative video narration and gives GPT-5.6 an ordered con
   assert.ok(rehydrated.items.some((entry) => entry.kind === "visual-media-analysis"));
 });
 
+test("gives the visual analyst real hook, cut, and motion timing instead of placeholder seconds", async () => {
+  const workspace = await fixture({ role: "reference", authoritative: false });
+  let request;
+  const result = await analyzeSourceMedia(workspace, {}, {
+    client: { runStructured: async (options) => {
+      request = options;
+      return { response_id: "r", model: "gpt-5.6", value: { resource_id: "take", summary: "Temporal reference", visible_text: [], narrative_opportunities: ["front-load the promise"], segments: [{ start_seconds: 1.2, end_seconds: 3.8, description: "Hook changes register", proof_value: "Editorial reference only", motion_or_interaction: "Two fast cuts", recommended_usage: "hook cadence" }], quality_warnings: [] } };
+    } },
+    contactSheets: async (_source, directory) => {
+      const sheets = [
+        { kind: "overview", path: path.join(directory, "overview.jpg"), sample_count: 12, sampling: "even" },
+        { kind: "hook", path: path.join(directory, "hook.jpg"), sample_count: 16, interval_seconds: .25, sampling: "dense-hook" },
+        { kind: "cuts", path: path.join(directory, "cuts.jpg"), sample_count: 2, timestamps_seconds: [1.2, 2.7], sampling: "detected-cut-boundaries" }
+      ];
+      await Promise.all(sheets.map((sheet) => writeFile(sheet.path, sheet.kind)));
+      return { sheets, temporal_profile: { duration_seconds: 5, cuts: [1.2, 2.7], cut_rate_per_minute: 24, motion_bursts: [{ start_seconds: 1.15, end_seconds: 1.3, peak_energy: 42 }], motion_bursts_per_minute: 36, hold_ratio: .42, family: "rapid-hybrid" } };
+    }
+  });
+  const input = JSON.parse(request.input);
+  assert.equal(request.images.length, 3);
+  assert.equal(input.duration_seconds, 5);
+  assert.deepEqual(input.contact_sheets[2].timestamps_seconds, [1.2, 2.7]);
+  assert.equal(input.temporal_profile.motion_bursts[0].peak_energy, 42);
+  const report = JSON.parse(await readFile(result.report, "utf8"));
+  assert.equal(report.analyses[0].contact_sheets.length, 3);
+  assert.equal(report.analyses[0].temporal_profile.family, "rapid-hybrid");
+});
+
 test("requires a transcript path or Scribe credentials before planning supplied narration", async () => {
   const workspace = await fixture();
   await assert.rejects(() => analyzeSourceMedia(workspace, {}, { client: {} }), /requires --transcript or ELEVENLABS_API_KEY/);
@@ -45,7 +73,7 @@ test("recovers an interrupted aggregate source-media job", async () => {
   const workspace = await fixture({ role: "supporting", authoritative: false });
   const intake = JSON.parse(await readFile(path.join(workspace, "production", "intake.json"), "utf8"));
   const evidence = JSON.parse(await readFile(path.join(workspace, "production", "evidence.json"), "utf8"));
-  const inputHash = semanticHash({ intake, evidence, options: { samples: 12, columns: 4, reasoning: "high", transcriptionModel: "scribe_v2", transcribeAll: false, stageRemoteReferences: true }, stage: "source-media-analysis.v3" });
+  const inputHash = semanticHash({ intake, evidence, options: { samples: 12, columns: 4, hookSeconds: 4, hookFps: 4, reasoning: "high", transcriptionModel: "scribe_v2", transcribeAll: false, stageRemoteReferences: true }, stage: "source-media-analysis.v4" });
   const store = await ProductionJobStore.open(workspace);
   await store.add({ id: "source-media-analysis", kind: "source-media-analysis", depends_on: [], input_hash: inputHash });
   await store.markRunning("source-media-analysis");
