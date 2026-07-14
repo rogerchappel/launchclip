@@ -184,7 +184,7 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [], fallbacks
   const transitionByOutgoing = new Map(transitions.map((entry) => [entry.from_shot_id, entry]));
   const compositions = plan.shots.map((shot, index) => {
     const transition = transitionByOutgoing.get(shot.id);
-    const extension = transition?.kind === "flow" ? transition.duration_seconds : -.001;
+    const extension = transition && transition.kind !== "cut" ? transition.duration_seconds : -.001;
     const duration = Math.min(plan.format.duration_seconds - shot.start_seconds, shot.end_seconds - shot.start_seconds + extension);
     const layer = SHOT_LAYER_BASE + index;
     return `<div id="mount-${escapeAttr(shot.id)}" class="clip shot-mount" data-composition-id="${escapeAttr(shot.id)}" data-composition-src="compositions/${escapeAttr(shot.id)}.html" data-start="${number(shot.start_seconds)}" data-duration="${number(Math.max(.001, duration))}" data-track-index="${layer}" data-width="${plan.format.width}" data-height="${plan.format.height}" style="z-index:${layer}"></div>`;
@@ -201,7 +201,7 @@ export function renderRoot({ plan, bundles, assetMap, extraAudio = [], fallbacks
     * { box-sizing: border-box; }
     html, body { margin: 0; width: ${plan.format.width}px; height: ${plan.format.height}px; overflow: hidden; background: ${canvas}; }
     #launchclip-root { position: relative; width: 100%; height: 100%; overflow: hidden; background: ${canvas}; }
-    .shot-mount { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transform-origin: center center; will-change: transform, opacity, filter; }
+    .shot-mount { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transform-origin: center center; will-change: transform, opacity, filter, clip-path; }
     .root-media { position: absolute; display: block; overflow: hidden; transform-origin: center center; will-change: transform, opacity, filter; }
     .root-media-frame { position: absolute; pointer-events: none; overflow: hidden; border: ${chrome.borderWidth}px solid ${chrome.foreground}; background: transparent; box-shadow: ${chrome.shadow}; transform-origin: center center; will-change: transform, opacity, filter; }
     .root-media-window-bar { position: absolute; top: 0; left: 0; right: 0; height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: ${chrome.borderWidth}px solid ${chrome.foreground}; background: ${chrome.surface}; }
@@ -237,20 +237,28 @@ export function buildShotTransitions(plan) {
     const outgoing = shots[index];
     const incoming = shots[index + 1];
     const explicit = String(outgoing.transition_out ?? "");
-    const kind = /\b(?:hard\s+)?cut\b/i.test(explicit) ? "cut" : "flow";
+    const kind = classifyTransition(explicit, outgoing, incoming);
     const outgoingDuration = Number(outgoing.end_seconds) - Number(outgoing.start_seconds);
     const incomingDuration = Number(incoming.end_seconds) - Number(incoming.start_seconds);
-    const duration = kind === "cut" ? 0 : Math.min(.45, Math.max(.26, Math.min(outgoingDuration, incomingDuration) * .07));
+    const profile = transitionProfile(kind);
+    const duration = kind === "cut" ? 0 : clamp(Math.min(outgoingDuration, incomingDuration) * profile.duration_ratio, profile.minimum_duration, profile.maximum_duration);
     const cameraDirection = String(incoming.visual?.continuity?.camera_direction ?? outgoing.visual?.continuity?.camera_direction ?? "right");
+    const axis = /\b(?:up|down|vertical|descend|ascend|drop|rise)\b/i.test(`${cameraDirection} ${explicit}`) ? "y" : "x";
+    const direction = /\b(?:left|up|reverse|back|out)\b/i.test(`${cameraDirection} ${explicit}`) ? -1 : 1;
+    const dimension = axis === "y" ? Number(plan?.format?.height ?? 1920) : Number(plan?.format?.width ?? 1080);
+    const requestedBlur = Number(incoming.visual?.continuity?.motion_blur_px ?? outgoing.visual?.continuity?.motion_blur_px ?? plan?.design?.style_dna?.motion_physics?.motion_blur_px ?? 12);
     transitions.push({
       from_shot_id: outgoing.id,
       to_shot_id: incoming.id,
       at_seconds: Number(incoming.start_seconds),
       duration_seconds: Number(duration.toFixed(3)),
       kind,
-      axis: /\b(?:up|down|vertical|descend|ascend)\b/i.test(cameraDirection) ? "y" : "x",
-      direction: /\b(?:left|up|reverse|back)\b/i.test(cameraDirection) ? -1 : 1,
-      motion_blur_px: Math.min(24, Math.max(8, Number(incoming.visual?.continuity?.motion_blur_px ?? outgoing.visual?.continuity?.motion_blur_px ?? 12))),
+      axis,
+      direction,
+      distance_pixels: kind === "cut" ? 0 : Math.round(clamp(dimension * profile.distance_ratio, profile.minimum_distance, profile.maximum_distance)),
+      motion_blur_px: kind === "cut" ? 0 : Number(clamp(requestedBlur * profile.blur_multiplier, 0, 40).toFixed(2)),
+      exit_ease: profile.exit_ease,
+      entry_ease: profile.entry_ease,
       intent: explicit || "continuous canvas handoff"
     });
   }
@@ -259,22 +267,76 @@ export function buildShotTransitions(plan) {
 
 function renderShotTransitionMotion(plan, transitions) {
   if (!plan.shots?.length) return "";
-  const statements = [`timeline.set("#mount-${escapeJs(plan.shots[0].id)}",{opacity:1,x:0,y:0,scale:1,filter:"blur(0px)"},0);`];
+  const reset = { opacity: 1, x: 0, y: 0, scale: 1, filter: "blur(0px)", clipPath: "inset(0% 0% round 0px)", transformOrigin: "50% 50%" };
+  const statements = [`timeline.set("#mount-${escapeJs(plan.shots[0].id)}",${JSON.stringify(reset)},0);`];
   for (const transition of transitions) {
     const incoming = `#mount-${escapeJs(transition.to_shot_id)}`;
     if (transition.kind === "cut") {
-      statements.push(`timeline.set("${incoming}",{opacity:1,x:0,y:0,scale:1,filter:"blur(0px)"},${number(transition.at_seconds)});`);
+      statements.push(`timeline.set("${incoming}",${JSON.stringify(reset)},${number(transition.at_seconds)});`);
       continue;
     }
     const outgoing = `#mount-${escapeJs(transition.from_shot_id)}`;
-    const distance = 86 * transition.direction;
-    const outgoingState = { opacity: 1, x: transition.axis === "x" ? -distance : 0, y: transition.axis === "y" ? -distance : 0, scale: 1.018, filter: `blur(${number(transition.motion_blur_px)}px)` };
-    const incomingState = { opacity: 1, x: transition.axis === "x" ? distance : 0, y: transition.axis === "y" ? distance : 0, scale: .982, filter: `blur(${number(transition.motion_blur_px)}px)` };
-    const settled = { opacity: 1, x: 0, y: 0, scale: 1, filter: "blur(0px)", duration: transition.duration_seconds, ease: "power3.inOut" };
-    statements.push(`timeline.to("${outgoing}",{...${JSON.stringify(outgoingState)},duration:${number(transition.duration_seconds)},ease:"power3.inOut"},${number(transition.at_seconds)});`);
+    const { outgoingState, incomingState } = transitionStates(transition);
+    const settled = { ...reset, clipPath: transition.kind === "aperture" ? "circle(150% at 50% 50%)" : reset.clipPath, duration: transition.duration_seconds, ease: transition.entry_ease };
+    statements.push(`timeline.to("${outgoing}",{...${JSON.stringify(outgoingState)},duration:${number(transition.duration_seconds)},ease:"${escapeJs(transition.exit_ease)}"},${number(transition.at_seconds)});`);
     statements.push(`timeline.fromTo("${incoming}",${JSON.stringify(incomingState)},${JSON.stringify(settled)},${number(transition.at_seconds)});`);
   }
   return statements.join("\n      ");
+}
+
+function classifyTransition(intent, outgoing, incoming) {
+  const text = String(intent ?? "").toLowerCase();
+  if (/\b(?:hard\s+)?cut\b/.test(text) || outgoing.visual?.continuity?.handoff === "cut") return "cut";
+  if (/\b(?:aperture|iris|portal|door|slot)\b/.test(text)) return "aperture";
+  if (/\b(?:zoom|tunnel|corridor|enters?|inside|interior|push(?:es)?\s+in)\b/.test(text) || /camera\s+(?:follows?|travels?)\b[^.]*\bthrough\b/.test(text)) return "zoom";
+  if (/\b(?:morph|becomes?|transform|fold|unfold|collapse|split|stretch|eject|expand(?:s|ed)?\s+into)\b/.test(text)) return "morph";
+  if (/\b(?:whip(?:s|ped|ping)?|snap|swipe|sweep|chase|rush)\b/.test(text)) return "whip";
+  if (/\b(?:port)\b/.test(text)) return "aperture";
+  if (/\b(?:push|slide|pan|camera|follow|descend|ascend|drop|rise|move)\b/.test(text)) return "push";
+  const direction = String(incoming.visual?.continuity?.camera_direction ?? outgoing.visual?.continuity?.camera_direction ?? "");
+  return /\b(?:fast|whip|snap)\b/i.test(direction) ? "whip" : "push";
+}
+
+function transitionProfile(kind) {
+  return ({
+    cut: { duration_ratio: 0, minimum_duration: 0, maximum_duration: 0, distance_ratio: 0, minimum_distance: 0, maximum_distance: 0, blur_multiplier: 0, exit_ease: "none", entry_ease: "none" },
+    push: { duration_ratio: .11, minimum_duration: .32, maximum_duration: .5, distance_ratio: .16, minimum_distance: 120, maximum_distance: 320, blur_multiplier: 1, exit_ease: "power4.in", entry_ease: "expo.out" },
+    whip: { duration_ratio: .075, minimum_duration: .22, maximum_duration: .34, distance_ratio: .48, minimum_distance: 320, maximum_distance: 720, blur_multiplier: 1.8, exit_ease: "expo.in", entry_ease: "expo.out" },
+    zoom: { duration_ratio: .13, minimum_duration: .4, maximum_duration: .62, distance_ratio: .06, minimum_distance: 32, maximum_distance: 110, blur_multiplier: 1.2, exit_ease: "power4.in", entry_ease: "expo.out" },
+    morph: { duration_ratio: .14, minimum_duration: .46, maximum_duration: .7, distance_ratio: .035, minimum_distance: 24, maximum_distance: 72, blur_multiplier: .75, exit_ease: "power3.in", entry_ease: "power3.out" },
+    aperture: { duration_ratio: .12, minimum_duration: .38, maximum_duration: .58, distance_ratio: .025, minimum_distance: 16, maximum_distance: 48, blur_multiplier: .6, exit_ease: "circ.in", entry_ease: "circ.out" }
+  })[kind];
+}
+
+function transitionStates(transition) {
+  const distance = transition.distance_pixels * transition.direction;
+  const x = transition.axis === "x" ? distance : 0;
+  const y = transition.axis === "y" ? distance : 0;
+  const blur = `blur(${number(transition.motion_blur_px)}px)`;
+  if (transition.kind === "whip") return {
+    outgoingState: { opacity: .82, x: -x, y: -y, scale: 1.035, filter: blur, clipPath: "inset(0% 0% round 0px)", transformOrigin: "50% 50%" },
+    incomingState: { opacity: .78, x, y, scale: .965, filter: blur, clipPath: "inset(0% 0% round 0px)", transformOrigin: "50% 50%" }
+  };
+  if (transition.kind === "zoom") return {
+    outgoingState: { opacity: .36, x: -x, y: -y, scale: 1.16, filter: blur, clipPath: "inset(0% 0% round 0px)", transformOrigin: "50% 50%" },
+    incomingState: { opacity: .3, x, y, scale: .82, filter: blur, clipPath: "inset(0% 0% round 0px)", transformOrigin: "50% 50%" }
+  };
+  if (transition.kind === "morph") return {
+    outgoingState: { opacity: .18, x: -x, y: -y, scale: .94, filter: blur, clipPath: "inset(7% 5% round 42px)", transformOrigin: "50% 50%" },
+    incomingState: { opacity: .12, x, y, scale: 1.06, filter: blur, clipPath: "inset(11% 8% round 54px)", transformOrigin: "50% 50%" }
+  };
+  if (transition.kind === "aperture") return {
+    outgoingState: { opacity: .72, x: -x, y: -y, scale: 1.08, filter: blur, clipPath: "inset(0% 0% round 0px)", transformOrigin: "50% 50%" },
+    incomingState: { opacity: 1, x, y, scale: 1, filter: "blur(0px)", clipPath: "circle(0% at 50% 50%)", transformOrigin: "50% 50%" }
+  };
+  return {
+    outgoingState: { opacity: .92, x: -x, y: -y, scale: 1.018, filter: blur, clipPath: "inset(0% 0% round 0px)", transformOrigin: "50% 50%" },
+    incomingState: { opacity: .9, x, y, scale: .982, filter: blur, clipPath: "inset(0% 0% round 0px)", transformOrigin: "50% 50%" }
+  };
+}
+
+function clamp(value, minimum, maximum) {
+  return Math.min(maximum, Math.max(minimum, Number(value)));
 }
 
 export function applyFrameCsp(html) {

@@ -65,24 +65,44 @@ test("moves presenter video between beat-specific avatar layouts at the host roo
   assert.match(html, /root-media-window-dot--close/);
   assert.match(html, /timeline\.fromTo\("#shot-1-media-1,#shot-1-media-1-frame"/);
   assert.match(html, /"filter":"blur\(16px\)"/);
-  assert.match(html, /data-composition-src="compositions\/shot-1\.html" data-start="0" data-duration="3\.26"/);
+  assert.match(html, /data-composition-src="compositions\/shot-1\.html" data-start="0" data-duration="3\.33"/);
   assert.match(html, /timeline\.to\("#mount-shot-1"/);
   assert.match(html, /timeline\.fromTo\("#mount-shot-2"/);
-  assert.match(html, /"opacity":1,"x":-86,"y":0/);
-  assert.match(html, /"opacity":1,"x":86,"y":0/);
+  assert.match(html, /"opacity":0\.92,"x":-173,"y":0/);
+  assert.match(html, /"opacity":0\.9,"x":173,"y":0/);
+  assert.match(html, /ease:"power4\.in"/);
+  assert.match(html, /"ease":"expo\.out"/);
   assert.match(html, /#launchclip-root \{[^}]+background: #F4F0E8/);
 });
 
-test("preserves explicit cuts and derives directional flow handoffs", () => {
-  const plan = { format: { duration_seconds: 9 }, shots: [
+test("preserves explicit cuts and compiles directional transition physics", () => {
+  const plan = { format: { width: 1080, height: 1920, duration_seconds: 9 }, shots: [
     { id: "one", start_seconds: 0, end_seconds: 3, transition_out: "velocity push", visual: { continuity: { camera_direction: "down", motion_blur_px: 18 } } },
     { id: "two", start_seconds: 3, end_seconds: 6, transition_out: "hard cut", visual: { continuity: { camera_direction: "down", motion_blur_px: 18 } } },
     { id: "three", start_seconds: 6, end_seconds: 9, visual: { continuity: { camera_direction: "right" } } }
   ] };
-  assert.deepEqual(buildShotTransitions(plan).map((entry) => ({ kind: entry.kind, axis: entry.axis, duration: entry.duration_seconds })), [
-    { kind: "flow", axis: "y", duration: .26 },
-    { kind: "cut", axis: "x", duration: 0 }
+  assert.deepEqual(buildShotTransitions(plan).map((entry) => ({ kind: entry.kind, axis: entry.axis, duration: entry.duration_seconds, distance: entry.distance_pixels, exit: entry.exit_ease, entry: entry.entry_ease })), [
+    { kind: "push", axis: "y", duration: .33, distance: 307, exit: "power4.in", entry: "expo.out" },
+    { kind: "cut", axis: "x", duration: 0, distance: 0, exit: "none", entry: "none" }
   ]);
+});
+
+test("retains materially different zoom, morph, aperture, and whip handoffs", () => {
+  const plan = { format: { width: 1080, height: 1920, duration_seconds: 18 }, shots: [
+    { id: "one", start_seconds: 0, end_seconds: 3, transition_out: "Camera whips left into the next beat" },
+    { id: "two", start_seconds: 3, end_seconds: 6, transition_out: "Camera zooms through the memory tunnel" },
+    { id: "three", start_seconds: 6, end_seconds: 9, transition_out: "The panel folds and becomes the next machine" },
+    { id: "four", start_seconds: 9, end_seconds: 12, transition_out: "A shipping-door aperture reveals the result" },
+    { id: "five", start_seconds: 12, end_seconds: 15, transition_out: "hard cut" },
+    { id: "six", start_seconds: 15, end_seconds: 18 }
+  ] };
+  assert.deepEqual(buildShotTransitions(plan).map((entry) => entry.kind), ["whip", "zoom", "morph", "aperture", "cut"]);
+  const rendered = renderRoot({ plan: { ...plan, format: { ...plan.format, language: "en" }, design: { style_dna: { colors: { background: "#000" } } } }, bundles: plan.shots.map((shot) => ({ shot_id: shot.id, root_media_requests: [] })), assetMap: new Map() });
+  assert.match(rendered, /clipPath":"circle\(0% at 50% 50%\)"/);
+  assert.match(rendered, /clipPath":"circle\(150% at 50% 50%\)"/);
+  assert.match(rendered, /clipPath":"inset\(11% 8% round 54px\)"/);
+  assert.match(rendered, /ease:"expo\.in"/);
+  assert.match(rendered, /"ease":"circ\.out"/);
 });
 
 test("applies a restrictive CSP to model-authored frame documents", () => {
