@@ -12,8 +12,8 @@ import { critiqueProduction } from "./production_critic.js";
 import { semanticVisualReport, validateSemanticVisualPlan } from "./semantic_visuals.js";
 
 const execFileAsync = promisify(execFile);
-const VERIFICATION_SCHEMA = "launchclip.production-verification.v5";
-const VERIFICATION_SUITE = "production-verify.v5";
+const VERIFICATION_SCHEMA = "launchclip.production-verification.v6";
+const VERIFICATION_SUITE = "production-verify.v6";
 
 export class ProductionVerificationError extends Error {
   constructor(verification) {
@@ -85,7 +85,9 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
   for (const [name, args] of [
     ["lint", ["hyperframes", "lint", "--json", project]],
     ["validate", ["hyperframes", "validate", "--json", "--timeout", String(options.timeoutMs ?? 8000), project]],
-    ["inspect", ["hyperframes", "inspect", "--json", "--samples", String(options.inspectSamples ?? 15), "--at-transitions", project]]
+    // Keep the historical receipt key (`inspect`) stable for repair routing while
+    // using the current all-in-one HyperFrames browser contract underneath.
+    ["inspect", ["hyperframes", "check", "--json", "--samples", String(options.inspectSamples ?? 15), "--at-transitions", project]]
   ]) {
     checks[name] = enforceStructuredCheck(await capture(run, "npx", args, { cwd: project }));
     if (name === "lint" && options.strictAll !== false) {
@@ -167,7 +169,7 @@ export async function verifyShotCompositions(projectPath, qaDirPath, plan, optio
     const assetFiles = [...new Set([...html.matchAll(/\bassets\/([a-zA-Z0-9._-]+)/g)].map((match) => match[1]))];
     await Promise.all(assetFiles.map((file) => copyFile(path.join(project, "assets", file), path.join(assets, file))));
     const check = enforceStructuredCheck(await capture(run, "npx", [
-      "hyperframes", "inspect", "--json", "--samples", String(options.inspectSamples ?? 15), "--at-transitions", directory
+      "hyperframes", "check", "--json", "--samples", String(options.inspectSamples ?? 15), "--at-transitions", directory
     ], { cwd: directory }));
     await writeFile(path.join(directory, "inspect.json"), `${JSON.stringify(check, null, 2)}\n`);
     return [`inspect:${shot.id}`, check];

@@ -5,19 +5,19 @@ import path from "node:path";
 import test from "node:test";
 import { ProductionVerificationError, assertVerificationFresh, classifyCommandFailure, renderDraftProduction, renderProduction, verifyProduction, verifySemanticArtifacts, verifyShotCompositions } from "../src/production_render.js";
 
-test("runs lint, browser validation, transition-aware inspection, and assembled snapshots", async () => {
+test("runs lint, browser validation, transition-aware checks, and assembled snapshots", async () => {
   const workspace = await fixture();
   const commands = [];
   const run = async (command, args) => { commands.push([command, args]); return { stdout: args.includes("--json") ? '{"findings":[]}' : "snapshots written", stderr: "" }; };
   const result = await verifyProduction(workspace, { inspectSamples: 17, snapshotFrames: 9 }, { run });
   assert.equal(result.status, "ready");
-  assert.deepEqual(commands.map((entry) => entry[1][1]), ["lint", "validate", "inspect", "snapshot"]);
+  assert.deepEqual(commands.map((entry) => entry[1][1]), ["lint", "validate", "check", "snapshot"]);
   assert.ok(commands[2][1].includes("--at-transitions"));
   assert.ok(commands[3][1].includes("9"));
   assert.deepEqual((JSON.parse(await readFile(path.join(result.qa, "verification.json"), "utf8"))).failed, []);
 });
 
-test("runs each model-authored shot motion sidecar through an isolated native inspection", async () => {
+test("runs each model-authored shot motion sidecar through an isolated native check", async () => {
   const workspace = await fixture();
   await addShotFixture(workspace);
   const commands = [];
@@ -28,7 +28,7 @@ test("runs each model-authored shot motion sidecar through an isolated native in
     }
   });
   assert.equal(result.checks["inspect:shot-1"].ok, true);
-  const shotCommand = commands.find((entry) => entry.args[1] === "inspect" && entry.args.at(-1).includes("shot-inspect"));
+  const shotCommand = commands.find((entry) => entry.args[1] === "check" && entry.args.at(-1).includes("shot-inspect"));
   assert.ok(shotCommand);
   assert.ok(shotCommand.args.includes("--at-transitions"));
   assert.equal(shotCommand.args[shotCommand.args.indexOf("--samples") + 1], "11");
@@ -81,9 +81,9 @@ test("reuses a content-addressed verification receipt with intact reports and sn
   const second = await verifyProduction(workspace, {}, adapters);
   assert.equal(first.cached, false);
   assert.equal(second.cached, true);
-  assert.deepEqual(commands, ["lint", "validate", "inspect", "snapshot"]);
+  assert.deepEqual(commands, ["lint", "validate", "check", "snapshot"]);
   const receipt = JSON.parse(await readFile(path.join(workspace, "production", "qa", "verification.json"), "utf8"));
-  assert.equal(receipt.schema_version, "launchclip.production-verification.v5");
+  assert.equal(receipt.schema_version, "launchclip.production-verification.v6");
   assert.equal(receipt.status, "passed");
   assert.equal(receipt.cacheable, true);
   assert.equal(receipt.snapshot_artifacts.files.length, 1);
@@ -124,7 +124,7 @@ test("blocks production when a shot-local motion assertion fails", async () => {
   const workspace = await fixture();
   await addShotFixture(workspace);
   const run = async (_command, args) => {
-    if (args[1] === "inspect" && args.at(-1).includes("shot-inspect")) {
+    if (args[1] === "check" && args.at(-1).includes("shot-inspect")) {
       const error = new Error("missing selector");
       error.code = 1;
       error.stdout = JSON.stringify({ ok: false, issues: [{ code: "motion_selector_missing", severity: "error", selector: "#proof" }] });
@@ -147,7 +147,7 @@ test("blocks production when a shot-local motion assertion fails", async () => {
 test("fails closed when inspection returns structured errors with exit code zero", async () => {
   const workspace = await fixture();
   const run = async (_command, args) => ({
-    stdout: args[1] === "inspect"
+    stdout: args[1] === "check"
       ? JSON.stringify({ ok: false, issues: [{ code: "layout_overlap", severity: "error", message: "metric overlaps label" }] })
       : args.includes("--json") ? "{}" : "ok",
     stderr: ""
@@ -166,7 +166,7 @@ test("classifies unsupported verifier contracts as infrastructure failures", asy
   const workspace = await fixture();
   await addShotFixture(workspace);
   const run = async (_command, args) => {
-    if (args[1] === "inspect" && args.at(-1).includes("shot-inspect")) {
+    if (args[1] === "check" && args.at(-1).includes("shot-inspect")) {
       const error = new Error("unsupported motion contract");
       error.code = 1;
       error.stderr = "spec version 2 is not supported — upgrade the HyperFrames CLI";
@@ -213,7 +213,7 @@ test("blocks final rendering without approval and records failed HyperFrames che
   const workspace = await fixture();
   await assert.rejects(() => renderProduction(workspace), /requires explicit --approve/);
   const run = async (_command, args) => {
-    if (args[1] === "inspect") { const error = new Error("overflow"); error.code = 1; error.stdout = '{"findings":[{"severity":"error"}]}'; throw error; }
+    if (args[1] === "check") { const error = new Error("overflow"); error.code = 1; error.stdout = '{"findings":[{"severity":"error"}]}'; throw error; }
     return { stdout: "{}", stderr: "" };
   };
   await assert.rejects(() => verifyProduction(workspace, {}, { run }), /inspect/);
