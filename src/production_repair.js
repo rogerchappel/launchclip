@@ -12,7 +12,7 @@ const REPAIR_INSTRUCTIONS = `You are repairing one previously authored HyperFram
 
 Return only a small source-edit patch. Fix every supplied finding at the smallest scope. Preserve everything listed in each finding and everything in the prior bundle that does not conflict with the repair. Do not return or rewrite the complete frame bundle, complete HTML, or an unrelated component. Do not redesign unrelated elements.
 
-Each edit targets one exact source string in html, motion, root_media_requests, evidence_ids, visible_copy, or preserve. The find string must occur exactly once in that target. Include enough unchanged surrounding text to make it unique, then replace only the minimum necessary characters. Prefer changing an existing declaration, selector, assertion, or local component over replacing a large block.
+Each edit targets one exact source string in html, motion, root_media_requests, evidence_ids, visible_copy, or preserve. Exact target sources are supplied unescaped between named source markers. Copy each find string verbatim from inside the matching marker; the markers themselves are not source. The find string must occur exactly once in that target. Include enough unchanged surrounding text to make it unique, then replace only the minimum necessary characters. Prefer changing an existing declaration, selector, assertion, or local component over replacing a large block.
 
 The replacement must remain a deterministic modular HyperFrames composition: one correctly sized local-time root, class="clip" for timed elements, no remote assets, no fetches, no audio/video tags, and all media requested at the host root with structured placement. Keep exact factual copy and evidence IDs. Presenter video follows one continuous production timeline: its source_start_seconds equals the shot's global start_seconds plus the request's shot-local start_seconds, so a later layout never restarts the take at zero.
 
@@ -114,7 +114,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     if (!shot) throw new Error(`Critique references unknown shot: ${shotId}`);
     const prior = (await readFrameSelection(workspace, shotId)).bundle;
     const repairInputHash = semanticHash({
-      worker: "frame-repair.v4",
+      worker: "frame-repair.v5",
       routes: routes.map(modelRouteKey),
       max_patch_ratio: Number(options.maxPatchRatio ?? .35),
       shot,
@@ -169,16 +169,15 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
             reasoningEffort: route.reasoning,
             reasoningContext: "current_turn",
             instructions: REPAIR_INSTRUCTIONS,
-            input: JSON.stringify({
-              global_design: plan.design,
-              format: plan.format,
+            input: buildRepairInput({
+              plan,
               shot,
               findings,
-              prior_bundle: previousCandidate,
-              validation_errors_to_repair: validationErrors,
-              patch_limits: { maximum_edits: 12, maximum_changed_ratio: Number(options.maxPatchRatio ?? .35) },
-              available_resources: intake.resources.map((entry) => ({ id: entry.id, role: entry.role, type: entry.type, local_path: entry.is_remote ? null : entry.location })),
-              evidence_index: evidence.items.map((entry) => ({ id: entry.id, title: entry.title, provenance: entry.provenance }))
+              prior: previousCandidate,
+              validationErrors,
+              maxPatchRatio: options.maxPatchRatio,
+              resources: intake.resources,
+              evidenceItems: evidence.items
             }),
             images: client.supportsImages === false ? [] : images,
             schema: FRAME_PATCH_SCHEMA,
@@ -255,6 +254,40 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     blockers: unsupported.map((finding) => ({ id: finding.id, repair_scope: finding.repair_scope, instruction: finding.instruction })),
     next: "Re-run launchclip assemble and production-verify; resolve any listed blockers before production-render."
   };
+}
+
+export function buildRepairInput({ plan, shot, findings, prior, validationErrors = [], maxPatchRatio = .35, resources = [], evidenceItems = [] }) {
+  const context = {
+    global_design: plan.design,
+    format: plan.format,
+    shot,
+    findings,
+    validation_errors_to_repair: validationErrors,
+    patch_limits: { maximum_edits: 12, maximum_changed_ratio: Number(maxPatchRatio ?? .35) },
+    prior_identity: { schema_version: prior.schema_version, shot_id: prior.shot_id },
+    available_resources: resources.map((entry) => ({ id: entry.id, role: entry.role, type: entry.type })),
+    allowed_evidence_ids: evidenceItems.map((entry) => entry.id)
+  };
+  const sources = {
+    html: String(prior.html ?? ""),
+    motion: JSON.stringify(prior.motion, null, 2),
+    root_media_requests: JSON.stringify(prior.root_media_requests, null, 2),
+    evidence_ids: JSON.stringify(prior.evidence_ids, null, 2),
+    visible_copy: JSON.stringify(prior.visible_copy, null, 2),
+    preserve: JSON.stringify(prior.preserve, null, 2)
+  };
+  return [
+    "Repair context:",
+    "<launchclip-context-json>",
+    JSON.stringify(context, null, 2),
+    "</launchclip-context-json>",
+    "Exact target sources follow. Copy find strings verbatim from the matching marker; do not include the marker.",
+    ...Object.entries(sources).flatMap(([target, source]) => [
+      `<launchclip-source target="${target}">`,
+      source,
+      "</launchclip-source>"
+    ])
+  ].join("\n");
 }
 
 export function applyFramePatch(bundle, patch, options = {}) {

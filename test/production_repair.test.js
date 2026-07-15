@@ -6,7 +6,7 @@ import test from "node:test";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { modelRouteKey, parseModelRoute } from "../src/model_provider.js";
 import { FRAME_BUNDLE_VERSION } from "../src/production_contracts.js";
-import { applyFramePatch, FRAME_PATCH_VERSION, repairProduction } from "../src/production_repair.js";
+import { applyFramePatch, buildRepairInput, FRAME_PATCH_VERSION, repairProduction } from "../src/production_repair.js";
 
 test("repairs only criticised frames, preserves the frame contract, and invalidates assembly", async () => {
   const workspace = await fixture();
@@ -18,8 +18,9 @@ test("repairs only criticised frames, preserves the frame contract, and invalida
   const result = await repairProduction(workspace, { background: false, concurrency: 2 }, { client });
   assert.equal(result.status, "repaired");
   assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-2"]);
-  assert.equal(JSON.parse(request.input).findings[0].id, "f-1");
-  assert.match(JSON.stringify(JSON.parse(request.input).findings[0].preserve), /exact copy/);
+  assert.equal(repairContext(request.input).findings[0].id, "f-1");
+  assert.match(JSON.stringify(repairContext(request.input).findings[0].preserve), /exact copy/);
+  assert.match(request.input, /<launchclip-source target="html">\n<!doctype html>/i);
   assert.equal(request.images.length, 1);
   assert.match(await readFile(result.repaired[0].html, "utf8"), /Repaired proof hierarchy/);
   const store = await ProductionJobStore.open(workspace, { create: false });
@@ -65,7 +66,7 @@ test("resumes a persisted background repair response without another submission"
   const plan = JSON.parse(await readFile(path.join(workspace, "production", "plan.json"), "utf8"));
   const prior = JSON.parse(await readFile(path.join(workspace, "production", "frames", "shot-2.json"), "utf8"));
   const critique = JSON.parse(await readFile(path.join(workspace, "production", "qa", "critique.json"), "utf8"));
-  const repairInputHash = semanticHash({ worker: "frame-repair.v4", routes: [modelRouteKey(parseModelRoute({ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" }))], max_patch_ratio: .35, shot: plan.shots[1], findings: critique.findings, prior });
+  const repairInputHash = semanticHash({ worker: "frame-repair.v5", routes: [modelRouteKey(parseModelRoute({ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" }))], max_patch_ratio: .35, shot: plan.shots[1], findings: critique.findings, prior });
   await store.add({ id: "repair:shot-2", kind: "frame-repair", depends_on: ["creative-plan"], input_hash: repairInputHash });
   await store.markRunning("repair:shot-2", { provider: "openai", response_id: "repair_saved", status: "in_progress" });
   let resumed = 0;
@@ -91,7 +92,7 @@ test("repairs native shot inspection failures even when the visual critic ships"
     stderr: ""
   })}\n`);
   const client = { runStructured: async (request) => {
-    const finding = JSON.parse(request.input).findings[0];
+    const finding = repairContext(request.input).findings[0];
     assert.equal(finding.id, "native-shot-1");
     assert.match(finding.instruction, /Motion assertions must describe motion on the asserted element itself/);
     assert.match(request.instructions, /set must_remain_live false/);
@@ -186,10 +187,10 @@ test("feeds semantic validation errors back into a bounded repair retry", async 
         }
       };
     }
-    const input = JSON.parse(request.input);
+    const input = repairContext(request.input);
     assert.equal(request.metadata.attempt, 2);
     assert.match(input.validation_errors_to_repair.join(" "), /root id must be/);
-    assert.match(input.prior_bundle.html, /wrong-root/);
+    assert.match(request.input, /wrong-root/);
     return {
       response_id: "valid_repair", model: "gpt-5.6-luna", status: "completed", usage: {},
       value: {
@@ -219,7 +220,7 @@ test("converts fresh strict lint warnings into shot-scoped repair findings", asy
     stdout: { findings: [{ severity: "warning", file: path.join(workspace, "production", "hyperframes", "compositions", "shot-2.html"), message: 'GSAP tweens overlap on "#shot-2-proof" for x.' }] }
   })}\n`);
   const client = { runStructured: async (request) => {
-    const finding = JSON.parse(request.input).findings[0];
+    const finding = repairContext(request.input).findings[0];
     assert.equal(finding.shot_ids[0], "shot-2");
     assert.match(finding.instruction, /motion_tween_overlap/);
     return { response_id: "lint_repair", model: "gpt-5.6-luna", status: "completed", usage: {}, value: framePatch("shot-2", "Proof", "Lint repair") };
@@ -227,6 +228,20 @@ test("converts fresh strict lint warnings into shot-scoped repair findings", asy
   const result = await repairProduction(workspace, {}, { client });
   assert.equal(result.deterministic_findings, 1);
   assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-2"]);
+});
+
+test("presents exact repair sources unescaped outside the JSON context", () => {
+  const prior = bundle("shot-1");
+  const input = buildRepairInput({
+    plan: { design: { concept: "Proof" }, format: { width: 1080, height: 1920 } },
+    shot: { id: "shot-1" },
+    findings: [{ id: "layout-1" }],
+    prior
+  });
+  assert.equal(repairContext(input).findings[0].id, "layout-1");
+  assert.match(input, /<launchclip-source target="html">\n<!doctype html>/i);
+  assert.match(input, /<div id="root"/);
+  assert.doesNotMatch(input, /<launchclip-source target="html">\n"<!doctype html>/i);
 });
 
 test("applies exact small edits without replacing the frame bundle", () => {
@@ -287,6 +302,12 @@ function framePatch(id, before, after) {
       { target: "visible_copy", find: JSON.stringify(before), replace: JSON.stringify(after) }
     ]
   };
+}
+
+function repairContext(input) {
+  const match = String(input).match(/<launchclip-context-json>\n([\s\S]*?)\n<\/launchclip-context-json>/);
+  assert.ok(match, "repair input must contain a context JSON marker");
+  return JSON.parse(match[1]);
 }
 
 function bundle(id, copy = "Proof") {
