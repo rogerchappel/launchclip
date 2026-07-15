@@ -1,16 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { readFrameSelection, safeShotFile, validateHyperFramesRoot, writeFrameArtifacts } from "./frame_director.js";
+import { readFrameSelection, safeShotFile, sanitizeFrameBundle, validateHyperFramesRoot, writeFrameArtifacts } from "./frame_director.js";
 import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
-import { OpenAIResponsesClient } from "./openai_responses.js";
-import { FRAME_BUNDLE_SCHEMA, PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
+import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model_provider.js";
+import { PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
 import { repairProductionPlan } from "./production_plan_repair.js";
 
 const REPAIR_INSTRUCTIONS = `You are repairing one previously authored HyperFrames shot after independent review.
 
-Return a complete replacement frame-bundle JSON. Fix every supplied finding at the smallest scope. Preserve everything listed in each finding and everything in the prior bundle that does not conflict with the repair. Do not redesign unrelated elements.
+Return only a small source-edit patch. Fix every supplied finding at the smallest scope. Preserve everything listed in each finding and everything in the prior bundle that does not conflict with the repair. Do not return or rewrite the complete frame bundle, complete HTML, or an unrelated component. Do not redesign unrelated elements.
+
+Each edit targets one exact source string in html, motion, root_media_requests, evidence_ids, visible_copy, or preserve. The find string must occur exactly once in that target. Include enough unchanged surrounding text to make it unique, then replace only the minimum necessary characters. Prefer changing an existing declaration, selector, assertion, or local component over replacing a large block.
 
 The replacement must remain a deterministic modular HyperFrames composition: one correctly sized local-time root, class="clip" for timed elements, no remote assets, no fetches, no audio/video tags, and all media requested at the host root with structured placement. Keep exact factual copy and evidence IDs. Presenter video follows one continuous production timeline: its source_start_seconds equals the shot's global start_seconds plus the request's shot-local start_seconds, so a later layout never restarts the take at zero.
 
@@ -19,6 +21,33 @@ Register a paused GSAP timeline exactly on window.__timelines[shot_id]. Give eve
 Motion assertions must be truthful. When native inspection reports motion_frozen for a must_remain_live assertion, set must_remain_live false unless the asserted element itself has clearly perceptible, inspection-visible transform or opacity motion across the required interval. Do not add imperceptible drift or tiny opacity changes merely to satisfy an assertion.
 
 Every planned shot.visual object and event remains part of the repair contract. Preserve data-visual-object-id identity, return one motion.events record for every planned visible event, and ensure its selector visibly changes at the exact planned time. Never fix a composition issue by replacing semantic graphics with caption cards, and never leave an SFX-bound event without a visible target.`;
+
+export const FRAME_PATCH_VERSION = "launchclip.frame-patch.v1";
+export const FRAME_PATCH_SCHEMA = {
+  type: "object",
+  properties: {
+    schema_version: { type: "string", enum: [FRAME_PATCH_VERSION] },
+    shot_id: { type: "string", pattern: "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$" },
+    summary: { type: "string" },
+    edits: {
+      type: "array",
+      minItems: 1,
+      maxItems: 12,
+      items: {
+        type: "object",
+        properties: {
+          target: { type: "string", enum: ["html", "motion", "root_media_requests", "evidence_ids", "visible_copy", "preserve"] },
+          find: { type: "string", minLength: 1 },
+          replace: { type: "string" }
+        },
+        required: ["target", "find", "replace"],
+        additionalProperties: false
+      }
+    }
+  },
+  required: ["schema_version", "shot_id", "summary", "edits"],
+  additionalProperties: false
+};
 
 export async function repairProduction(workspacePath, options = {}, adapters = {}) {
   const workspace = path.resolve(workspacePath);
@@ -77,7 +106,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
   }
   if (!byShot.size) throw new Error(`Critique requires broader work before frame repair: ${unsupported.map((entry) => `${entry.id}:${entry.repair_scope}`).join(", ") || "no repairable shot IDs"}`);
   const store = adapters.store ?? await ProductionJobStore.open(workspace, { create: false });
-  const client = adapters.client ?? new OpenAIResponsesClient();
+  const routes = repairModelRoutes(options, intake);
   const images = await snapshotImages(path.join(qaDir, "snapshots"), Number(options.maxSnapshots ?? 8));
   const repaired = [];
   const tasks = [...byShot].map(([shotId, findings]) => async () => {
@@ -85,9 +114,9 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     if (!shot) throw new Error(`Critique references unknown shot: ${shotId}`);
     const prior = (await readFrameSelection(workspace, shotId)).bundle;
     const repairInputHash = semanticHash({
-      worker: "frame-repair.v3",
-      model: options.model ?? "gpt-5.6",
-      reasoning: options.reasoning ?? "high",
+      worker: "frame-repair.v4",
+      routes: routes.map(modelRouteKey),
+      max_patch_ratio: Number(options.maxPatchRatio ?? .35),
       shot,
       findings,
       prior
@@ -121,64 +150,97 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
       resumeResponseId = current.remote.response_id;
     } else {
       if (current.status === "failed" || current.status === "stale") await store.retry(jobId, { inputHash: repairInputHash });
-      await store.markRunning(jobId, { provider: "openai", response_id: null, status: "repairing" });
+      await store.markRunning(jobId, { provider: routes[0].provider, response_id: null, status: "repairing" });
     }
     try {
-      let previousCandidate = null;
+      let previousCandidate = prior;
       let validationErrors = [];
       const semanticAttempts = Number(options.semanticAttempts ?? 2);
       if (!Number.isInteger(semanticAttempts) || semanticAttempts <= 0) throw new Error("Repair semantic attempts must be a positive integer");
-      for (let attempt = 1; attempt <= semanticAttempts; attempt += 1) {
-        const request = {
-          model: options.model ?? "gpt-5.6",
-          reasoningEffort: options.reasoning ?? "high",
-          reasoningContext: "current_turn",
-          instructions: REPAIR_INSTRUCTIONS,
-          input: JSON.stringify({
-            global_design: plan.design,
-            format: plan.format,
-            shot,
-            findings,
-            prior_bundle: previousCandidate ?? prior,
-            validation_errors_to_repair: validationErrors,
-            available_resources: intake.resources.map((entry) => ({ id: entry.id, role: entry.role, type: entry.type, local_path: entry.is_remote ? null : entry.location })),
-            evidence_index: evidence.items.map((entry) => ({ id: entry.id, title: entry.title, provenance: entry.provenance }))
-          }),
-          images,
-          schema: FRAME_BUNDLE_SCHEMA,
-          schemaName: "launchclip_repaired_frame_bundle",
-          background: options.background !== false,
-          maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
-          promptCacheKey: "launchclip:frame-repair:v2",
-          metadata: { job_id: jobId, shot_id: shotId, repair_findings: findings.length, attempt },
-          onSubmitted: async (response) => store.markRunning(jobId, { provider: "openai", response_id: response.id, status: response.status })
-        };
-        const result = resumeResponseId ? await client.resumeStructured(resumeResponseId, request) : await client.runStructured(request);
-        resumeResponseId = null;
-        const candidate = { ...result.value, html: ensureTimelineRegistration(result.value.html, shotId) };
-        const validation = validateFrameBundle(candidate, {
-          shotId,
-          shot,
-          format: plan.format,
-          evidenceIds: evidence.items.map((entry) => entry.id),
-          resourceIds: intake.resources.map((entry) => entry.id),
-          resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
-          allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
-        });
-        validationErrors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
-        if (validationErrors.length) {
-          previousCandidate = candidate;
-          if (attempt < semanticAttempts) continue;
-          throw new Error(`Repaired frame ${shotId} failed validation: ${validationErrors.join("; ")}`);
+      let completed = false;
+      let totalAttempt = 0;
+      for (const [routeIndex, route] of routes.entries()) {
+        const client = adapters.client ?? (adapters.createClient ?? createStructuredClient)(route);
+        const attemptsForRoute = routeIndex === 0 ? semanticAttempts : 1;
+        for (let routeAttempt = 1; routeAttempt <= attemptsForRoute; routeAttempt += 1) {
+          totalAttempt += 1;
+          const request = {
+            model: route.model,
+            reasoningEffort: route.reasoning,
+            reasoningContext: "current_turn",
+            instructions: REPAIR_INSTRUCTIONS,
+            input: JSON.stringify({
+              global_design: plan.design,
+              format: plan.format,
+              shot,
+              findings,
+              prior_bundle: previousCandidate,
+              validation_errors_to_repair: validationErrors,
+              patch_limits: { maximum_edits: 12, maximum_changed_ratio: Number(options.maxPatchRatio ?? .35) },
+              available_resources: intake.resources.map((entry) => ({ id: entry.id, role: entry.role, type: entry.type, local_path: entry.is_remote ? null : entry.location })),
+              evidence_index: evidence.items.map((entry) => ({ id: entry.id, title: entry.title, provenance: entry.provenance }))
+            }),
+            images: client.supportsImages === false ? [] : images,
+            schema: FRAME_PATCH_SCHEMA,
+            schemaName: "launchclip_frame_patch",
+            background: options.background !== false,
+            maxOutputTokens: Number(options.maxOutputTokens ?? 8_000),
+            promptCacheKey: "launchclip:frame-repair-patch:v1",
+            metadata: { job_id: jobId, shot_id: shotId, repair_findings: findings.length, attempt: totalAttempt, route: routeIndex + 1 },
+            onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
+          };
+          let result;
+          try {
+            result = resumeResponseId && routeIndex === 0 && client.supportsResume !== false
+              ? await client.resumeStructured(resumeResponseId, request)
+              : await client.runStructured(request);
+            resumeResponseId = null;
+            const patched = applyFramePatch(previousCandidate, result.value, { maxPatchRatio: options.maxPatchRatio });
+            const normalized = { ...patched.bundle, html: ensureTimelineRegistration(patched.bundle.html, shotId) };
+            const sanitized = sanitizeFrameBundle(normalized, {
+              shot,
+              format: plan.format,
+              resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
+            });
+            const candidate = sanitized.bundle;
+            const validation = validateFrameBundle(candidate, {
+              shotId,
+              shot,
+              format: plan.format,
+              evidenceIds: evidence.items.map((entry) => entry.id),
+              resourceIds: intake.resources.map((entry) => entry.id),
+              resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
+              allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
+            });
+            validationErrors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
+            previousCandidate = candidate;
+            if (validationErrors.length) continue;
+            const paths = await writeFrameArtifacts(workspace, candidate);
+            await store.markRunning(jobId, { provider: route.provider, response_id: result.response_id, status: result.status });
+            const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
+            await store.replaceSucceededOutputs(canonicalJobId, outputs);
+            await store.markSucceeded(jobId, outputs, result.usage);
+            repaired.push({
+              shot_id: shotId,
+              findings: findings.map((entry) => entry.id),
+              bundle: paths[0],
+              html: paths[1],
+              response_id: result.response_id,
+              provider: route.provider,
+              model: result.model,
+              patch: { edits: result.value.edits.length, changed_ratio: patched.changedRatio },
+              cached: false
+            });
+            completed = true;
+            break;
+          } catch (error) {
+            resumeResponseId = null;
+            validationErrors = [`Patch attempt ${totalAttempt} via ${route.provider}:${route.model} failed: ${error.message}`];
+          }
         }
-        const paths = await writeFrameArtifacts(workspace, candidate);
-        await store.markRunning(jobId, { provider: "openai", response_id: result.response_id, status: result.status });
-        const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
-        await store.replaceSucceededOutputs(canonicalJobId, outputs);
-        await store.markSucceeded(jobId, outputs, result.usage);
-        repaired.push({ shot_id: shotId, findings: findings.map((entry) => entry.id), bundle: paths[0], html: paths[1], response_id: result.response_id, cached: false });
-        break;
+        if (completed) break;
       }
+      if (!completed) throw new Error(`Repaired frame ${shotId} exhausted small-patch routes: ${validationErrors.join("; ")}`);
     } catch (error) {
       if (["running", "submitted"].includes(store.get(jobId)?.status)) await store.markFailed(jobId, error);
       throw error;
@@ -193,6 +255,71 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     blockers: unsupported.map((finding) => ({ id: finding.id, repair_scope: finding.repair_scope, instruction: finding.instruction })),
     next: "Re-run launchclip assemble and production-verify; resolve any listed blockers before production-render."
   };
+}
+
+export function applyFramePatch(bundle, patch, options = {}) {
+  if (patch?.schema_version !== FRAME_PATCH_VERSION) throw patchError(`schema_version must be ${FRAME_PATCH_VERSION}`);
+  if (patch?.shot_id !== bundle?.shot_id) throw patchError(`shot_id must remain ${bundle?.shot_id}`);
+  if (!Array.isArray(patch?.edits) || !patch.edits.length || patch.edits.length > 12) throw patchError("patch must contain 1-12 edits");
+  const candidate = structuredClone(bundle);
+  const originals = new Map();
+  const sources = new Map();
+  for (const target of ["html", "motion", "root_media_requests", "evidence_ids", "visible_copy", "preserve"]) {
+    const source = target === "html" ? String(candidate.html ?? "") : JSON.stringify(candidate[target], null, 2);
+    originals.set(target, source);
+    sources.set(target, source);
+  }
+  let changedCharacters = 0;
+  for (const [index, edit] of patch.edits.entries()) {
+    if (!sources.has(edit?.target)) throw patchError(`edits[${index}] has unsupported target ${edit?.target}`);
+    const find = String(edit.find ?? "");
+    const replace = String(edit.replace ?? "");
+    if (!find) throw patchError(`edits[${index}].find must not be empty`);
+    const source = sources.get(edit.target);
+    const occurrences = countOccurrences(source, find);
+    if (occurrences !== 1) throw patchError(`edits[${index}] find string must occur exactly once in ${edit.target}; found ${occurrences}`);
+    sources.set(edit.target, source.replace(find, replace));
+    changedCharacters += Math.max(find.length, replace.length);
+  }
+  const touchedCharacters = [...new Set(patch.edits.map((edit) => edit.target))]
+    .reduce((total, target) => total + originals.get(target).length, 0);
+  const changedRatio = touchedCharacters ? changedCharacters / touchedCharacters : 1;
+  const maximum = Number(options.maxPatchRatio ?? .35);
+  if (!Number.isFinite(maximum) || maximum <= 0 || maximum > 1) throw new Error("maxPatchRatio must be greater than 0 and at most 1");
+  if (changedRatio > maximum) throw patchError(`patch changes ${(changedRatio * 100).toFixed(1)}% of its targets; maximum is ${(maximum * 100).toFixed(1)}%`);
+  candidate.html = sources.get("html");
+  for (const target of ["motion", "root_media_requests", "evidence_ids", "visible_copy", "preserve"]) {
+    try { candidate[target] = JSON.parse(sources.get(target)); }
+    catch (error) { throw patchError(`patch made ${target} invalid JSON: ${error.message}`); }
+  }
+  return { bundle: candidate, edits: patch.edits.length, changedRatio: Number(changedRatio.toFixed(4)) };
+}
+
+function repairModelRoutes(options, intake) {
+  const defaults = {
+    provider: options.provider ?? intake.model?.provider ?? "openai",
+    model: options.model ?? "gpt-5.6-luna",
+    reasoning: options.reasoning ?? "medium",
+    baseUrl: options.baseUrl,
+    supportsImages: options.supportsImages
+  };
+  return parseModelRoutes(options.routes, defaults);
+}
+
+function countOccurrences(source, value) {
+  let count = 0;
+  let cursor = 0;
+  while ((cursor = source.indexOf(value, cursor)) >= 0) {
+    count += 1;
+    cursor += Math.max(1, value.length);
+  }
+  return count;
+}
+
+function patchError(message) {
+  const error = new Error(`Invalid frame patch: ${message}`);
+  error.code = "LAUNCHCLIP_INVALID_FRAME_PATCH";
+  return error;
 }
 
 export async function collectDeterministicRepairFindings(workspacePath, plan) {
