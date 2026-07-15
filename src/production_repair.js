@@ -7,6 +7,7 @@ import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model_provider.js";
 import { PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
+import { buildRepairContextCapsule, buildRepairSourceCapsule, REPAIR_CAPSULE_VERSION } from "./repair_capsule.js";
 import { repairProductionPlan } from "./production_plan_repair.js";
 
 const REPAIR_INSTRUCTIONS = `You are repairing one previously authored HyperFrames shot after independent review.
@@ -14,6 +15,8 @@ const REPAIR_INSTRUCTIONS = `You are repairing one previously authored HyperFram
 Return only a small source-edit patch. Fix every supplied finding at the smallest scope. Preserve everything listed in each finding and everything in the prior bundle that does not conflict with the repair. Do not return or rewrite the complete frame bundle, complete HTML, or an unrelated component. Do not redesign unrelated elements.
 
 Each edit targets one exact source string in html, motion, root_media_requests, evidence_ids, visible_copy, or preserve. Exact target sources are supplied unescaped between named source markers. Copy each find string verbatim from inside the matching marker; the markers themselves are not source. The find string must occur exactly once in that target. Include enough unchanged surrounding text to make it unique, then replace only the minimum necessary characters. Prefer changing an existing declaration, selector, assertion, or local component over replacing a large block.
+
+When a source marker is labelled as an excerpt, every character inside it is copied exactly from the complete target, but unrelated parts of that target are intentionally omitted. Repair only what is visible in the supplied excerpts. Never invent an anchor from omitted source, and make an anchor unique in the complete target by including its stable selector and nearby declaration or call.
 
 The replacement must remain a deterministic modular HyperFrames composition: one correctly sized local-time root, class="clip" for timed elements, no remote assets, no fetches, no audio/video tags, and all media requested at the host root with structured placement. Keep exact factual copy and evidence IDs. Presenter video follows one continuous production timeline: its source_start_seconds equals the shot's global start_seconds plus the request's shot-local start_seconds, so a later layout never restarts the take at zero.
 
@@ -115,8 +118,9 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     if (!shot) throw new Error(`Critique references unknown shot: ${shotId}`);
     const prior = (await readFrameSelection(workspace, shotId)).bundle;
     const repairInputHash = semanticHash({
-      worker: "frame-repair.v7",
+      worker: "frame-repair.v8",
       candidate_verification: "browser-snapshot.v2",
+      repair_context: REPAIR_CAPSULE_VERSION,
       routes: routes.map(modelRouteKey),
       max_patch_ratio: Number(options.maxPatchRatio ?? .35),
       shot,
@@ -179,14 +183,15 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
               validationErrors,
               maxPatchRatio: options.maxPatchRatio,
               resources: intake.resources,
-              evidenceItems: evidence.items
+              evidenceItems: evidence.items,
+              sourceMode: route.provider === "ollama" ? "scoped" : "full"
             }),
             images: client.supportsImages === false ? [] : images,
             schema: FRAME_PATCH_SCHEMA,
             schemaName: "launchclip_frame_patch",
             background: options.background !== false,
             maxOutputTokens: Number(options.maxOutputTokens ?? 8_000),
-            promptCacheKey: "launchclip:frame-repair-patch:v1",
+            promptCacheKey: "launchclip:frame-repair-patch:v2",
             metadata: { job_id: jobId, shot_id: shotId, repair_findings: findings.length, attempt: totalAttempt, route: routeIndex + 1 },
             onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
           };
@@ -275,34 +280,55 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
   };
 }
 
-export function buildRepairInput({ plan, shot, findings, prior, validationErrors = [], maxPatchRatio = .35, resources = [], evidenceItems = [] }) {
+export function buildRepairInput({ plan, shot, findings, prior, validationErrors = [], maxPatchRatio = .35, resources = [], evidenceItems = [], sourceMode = "full" }) {
+  if (!["full", "scoped"].includes(sourceMode)) throw new Error(`Unsupported repair source mode: ${sourceMode}`);
+  const capsule = sourceMode === "scoped"
+    ? buildRepairSourceCapsule(prior, findings, validationErrors)
+    : {
+        version: "complete-source.v1",
+        selectors: [],
+        sources: {
+          html: String(prior.html ?? ""),
+          motion: JSON.stringify(prior.motion, null, 2),
+          root_media_requests: JSON.stringify(prior.root_media_requests, null, 2),
+          evidence_ids: JSON.stringify(prior.evidence_ids, null, 2),
+          visible_copy: JSON.stringify(prior.visible_copy, null, 2),
+          preserve: JSON.stringify(prior.preserve, null, 2)
+        }
+      };
+  const repairContract = sourceMode === "scoped"
+    ? buildRepairContextCapsule(plan, shot)
+    : { global_design: plan.design, shot };
   const context = {
-    global_design: plan.design,
+    global_design: repairContract.global_design,
     format: plan.format,
-    shot,
+    shot: repairContract.shot,
     findings,
     validation_errors_to_repair: validationErrors,
     patch_limits: { maximum_edits: 12, maximum_changed_ratio: Number(maxPatchRatio ?? .35) },
     prior_identity: { schema_version: prior.schema_version, shot_id: prior.shot_id },
     available_resources: resources.map((entry) => ({ id: entry.id, role: entry.role, type: entry.type })),
-    allowed_evidence_ids: evidenceItems.map((entry) => entry.id)
+    allowed_evidence_ids: evidenceItems.map((entry) => entry.id),
+    source_scope: {
+      mode: sourceMode,
+      version: capsule.version,
+      selectors: capsule.selectors,
+      exact_excerpts: sourceMode === "scoped"
+    }
   };
-  const sources = {
-    html: String(prior.html ?? ""),
-    motion: JSON.stringify(prior.motion, null, 2),
-    root_media_requests: JSON.stringify(prior.root_media_requests, null, 2),
-    evidence_ids: JSON.stringify(prior.evidence_ids, null, 2),
-    visible_copy: JSON.stringify(prior.visible_copy, null, 2),
-    preserve: JSON.stringify(prior.preserve, null, 2)
-  };
+  const sources = sourceMode === "scoped"
+    ? capsule.sources
+    : Object.entries(capsule.sources).map(([target, source]) => ({ target, source, scope: "complete", excerpt: 1, excerpts: 1 }));
   return [
     "Repair context:",
     "<launchclip-context-json>",
     JSON.stringify(context, null, 2),
     "</launchclip-context-json>",
     "Exact target sources follow. Copy find strings verbatim from the matching marker; do not include the marker.",
-    ...Object.entries(sources).flatMap(([target, source]) => [
-      `<launchclip-source target="${target}">`,
+    ...sources.flatMap(({ target, source, scope, excerpt, excerpts }) => [
+      sourceMode === "full"
+        ? `<launchclip-source target="${target}">`
+        : `<launchclip-source target="${target}" scope="${scope}" excerpt="${excerpt}/${excerpts}">`,
       source,
       "</launchclip-source>"
     ])
@@ -450,6 +476,7 @@ export async function collectDeterministicRepairFindings(workspacePath, plan, op
       evidence: `Shot-local HyperFrames inspection repair batch contains ${issues.length} of ${allIssues.length} unique blocking issue${allIssues.length === 1 ? "" : "s"}: ${issues.map(describeNativeIssue).join("; ")}`,
       repair_scope: "frame",
       instruction: `Make native shot-local inspection pass by correcting these issues: ${issues.map(describeNativeIssue).join("; ")}. Do not hide a real defect with a layout-allow annotation; use one only when the overlap or off-canvas state is visibly intentional and remains legible. Motion assertions must describe motion on the asserted element itself.`,
+      repair_targets: issues.map((issue) => ({ code: issue.code ?? "inspect_failed", selector: issue.selector ?? null, message: String(issue.message ?? "inspection failed").trim(), fix_hint: issue.fixHint ? String(issue.fixHint).trim() : null })),
       preserve: ["Factual copy and evidence grounding", "The established art direction", "Unrelated composition and motion"]
     });
   }

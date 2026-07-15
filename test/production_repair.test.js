@@ -66,7 +66,7 @@ test("resumes a persisted background repair response without another submission"
   const plan = JSON.parse(await readFile(path.join(workspace, "production", "plan.json"), "utf8"));
   const prior = JSON.parse(await readFile(path.join(workspace, "production", "frames", "shot-2.json"), "utf8"));
   const critique = JSON.parse(await readFile(path.join(workspace, "production", "qa", "critique.json"), "utf8"));
-  const repairInputHash = semanticHash({ worker: "frame-repair.v7", candidate_verification: "browser-snapshot.v2", routes: [modelRouteKey(parseModelRoute({ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" }))], max_patch_ratio: .35, shot: plan.shots[1], findings: critique.findings, prior });
+  const repairInputHash = semanticHash({ worker: "frame-repair.v8", candidate_verification: "browser-snapshot.v2", repair_context: "selector-capsule.v1", routes: [modelRouteKey(parseModelRoute({ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" }))], max_patch_ratio: .35, shot: plan.shots[1], findings: critique.findings, prior });
   await store.add({ id: "repair:shot-2", kind: "frame-repair", depends_on: ["creative-plan"], input_hash: repairInputHash });
   await store.markRunning("repair:shot-2", { provider: "openai", response_id: "repair_saved", status: "in_progress" });
   let resumed = 0;
@@ -95,6 +95,7 @@ test("repairs native shot inspection failures even when the visual critic ships"
     const finding = repairContext(request.input).findings[0];
     assert.equal(finding.id, "native-shot-1");
     assert.match(finding.instruction, /Motion assertions must describe motion on the asserted element itself/);
+    assert.deepEqual(finding.repair_targets, [{ code: "motion_frozen", selector: "#shot-1-proof", message: "The asserted node is static", fix_hint: "Animate the asserted node" }]);
     assert.match(request.instructions, /set must_remain_live false/);
     assert.match(request.instructions, /Do not add imperceptible drift/);
     assert.doesNotMatch(finding.instruction, /content_overlap/);
@@ -374,7 +375,7 @@ test("escalates from a local structural attempt to the next pinned repair route"
     createClient: (route) => ({
       supportsImages: route.provider !== "ollama",
       runStructured: async (request) => {
-        calls.push({ provider: route.provider, model: route.model, images: request.images.length });
+        calls.push({ provider: route.provider, model: route.model, images: request.images.length, sourceMode: repairContext(request.input).source_scope.mode });
         return {
           response_id: `${route.provider}_repair`, model: route.model, status: "completed", usage: {},
           value: route.provider === "ollama"
@@ -385,8 +386,8 @@ test("escalates from a local structural attempt to the next pinned repair route"
     })
   });
   assert.deepEqual(calls, [
-    { provider: "ollama", model: "qwen2.5-coder:latest", images: 0 },
-    { provider: "openai", model: "gpt-5.6-terra", images: 1 }
+    { provider: "ollama", model: "qwen2.5-coder:latest", images: 0, sourceMode: "scoped" },
+    { provider: "openai", model: "gpt-5.6-terra", images: 1, sourceMode: "full" }
   ]);
   assert.equal(result.repaired[0].provider, "openai");
   assert.equal(result.repaired[0].model, "gpt-5.6-terra");
