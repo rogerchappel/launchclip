@@ -1,4 +1,4 @@
-export const TEXT_CONTAINMENT_VERSION = "v5";
+export const TEXT_CONTAINMENT_VERSION = "v6";
 
 export function ensureTextContainment(html, shotId) {
   const source = String(html);
@@ -146,14 +146,15 @@ function textContainmentScript(shotId) {
     }
   }
   const issues = [];
+  const identity = (element) => element.id ? '#' + element.id : element.classList.length ? '.' + Array.from(element.classList).join('.') : element.tagName.toLowerCase();
   for (const element of candidates) {
-    if (ownOverflow(element)) issues.push({ kind: 'overflow-or-lines', element: element.id || element.className || element.tagName });
+    if (ownOverflow(element)) issues.push({ kind: 'overflow-or-lines', element: identity(element) });
   }
   for (const [container, elements] of groups) {
     const box = contentBox(container);
-    for (const element of elements) if (outside(element, box)) issues.push({ kind: 'unsafe-padding', element: element.id || element.className || element.tagName, container: container.id || container.className || container.tagName });
+    for (const element of elements) if (outside(element, box)) issues.push({ kind: 'unsafe-padding', element: identity(element), container: identity(container) });
     for (let index = 0; index < elements.length; index += 1) {
-      for (const other of elements.slice(index + 1)) if (overlaps(elements[index], other)) issues.push({ kind: 'text-collision', element: elements[index].id || elements[index].className || elements[index].tagName, other: other.id || other.className || other.tagName, container: container.id || container.className || container.tagName });
+      for (const other of elements.slice(index + 1)) if (overlaps(elements[index], other)) issues.push({ kind: 'text-collision', element: identity(elements[index]), other: identity(other), container: identity(container) });
     }
   }
   const adjusted = candidates.filter((element) => element.dataset.launchclipFitText === 'true').length;
@@ -162,7 +163,8 @@ function textContainmentScript(shotId) {
   root.dataset.launchclipTextUnresolved = String(issues.length);
   window.__launchclipTextContainment = window.__launchclipTextContainment || [];
   window.__launchclipTextContainment.push({ shotId: ${JSON.stringify(String(shotId))}, adjusted, unresolved: issues });
-  if (issues.length) console.warn('[LaunchClip text containment] ${String(shotId)} has ' + issues.length + ' unresolved layout issue(s): ' + JSON.stringify(issues));
+  const issueSummary = issues.map((issue) => issue.kind + '@' + issue.element + (issue.other ? '~' + issue.other : '') + (issue.container ? ' in ' + issue.container : '')).join(' | ');
+  if (issues.length) console.warn('[LaunchClip text containment] ${String(shotId)} has ' + issues.length + ' unresolved layout issue(s): ' + issueSummary);
 })();
 </script>`;
 }
