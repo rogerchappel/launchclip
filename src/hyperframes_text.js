@@ -1,11 +1,16 @@
-const TEXT_CONTAINMENT_VERSION = "v2";
+export const TEXT_CONTAINMENT_VERSION = "v5";
 
 export function ensureTextContainment(html, shotId) {
   const source = String(html);
   if (source.includes(`data-launchclip-text-containment="${TEXT_CONTAINMENT_VERSION}"`)) return source;
   if (!/<\/template\s*>/i.test(source)) throw new Error(`Frame ${shotId} is missing the closing template required for text containment`);
   const withoutLegacyGuard = source.replace(/<script\b[^>]*data-launchclip-text-containment=["']v\d+["'][^>]*>[\s\S]*?<\/script>\s*/gi, "");
-  return withoutLegacyGuard.replace(/<\/template\s*>/i, `${textContainmentScript(shotId)}\n</template>`);
+  const template = /<template\b[^>]*>/i.exec(withoutLegacyGuard);
+  const close = /<\/template\s*>/i.exec(withoutLegacyGuard);
+  const contentStart = template ? template.index + template[0].length : 0;
+  const script = /<script\b/i.exec(withoutLegacyGuard.slice(contentStart, close.index));
+  const insertion = script ? contentStart + script.index : close.index;
+  return `${withoutLegacyGuard.slice(0, insertion)}${textContainmentScript(shotId)}\n${withoutLegacyGuard.slice(insertion)}`;
 }
 
 function textContainmentScript(shotId) {
@@ -51,6 +56,10 @@ function textContainmentScript(shotId) {
   };
   const ownOverflow = (element) => {
     if (!element.clientWidth) return false;
+    const style = getComputedStyle(element);
+    const clips = style.overflowX === 'hidden' || style.overflowY === 'hidden' || style.overflowX === 'clip' || style.overflowY === 'clip';
+    const declaresLines = element.hasAttribute('data-launchclip-max-lines');
+    if (!clips && !declaresLines) return false;
     const lines = maxLines(element);
     return element.scrollWidth > element.clientWidth + 1 ||
       (element.clientHeight > 0 && element.scrollHeight > element.clientHeight + 1) ||
@@ -106,7 +115,7 @@ function textContainmentScript(shotId) {
   for (const element of candidates) {
     applyLinePolicy(element);
     const container = element.parentElement;
-    if (!isVisualContainer(container)) continue;
+    if (!isVisualContainer(container) || !container.hasAttribute('data-launchclip-safe-padding')) continue;
     if (!groups.has(container)) groups.set(container, []);
     groups.get(container).push(element);
   }
@@ -153,7 +162,7 @@ function textContainmentScript(shotId) {
   root.dataset.launchclipTextUnresolved = String(issues.length);
   window.__launchclipTextContainment = window.__launchclipTextContainment || [];
   window.__launchclipTextContainment.push({ shotId: ${JSON.stringify(String(shotId))}, adjusted, unresolved: issues });
-  if (issues.length) console.error('[LaunchClip text containment] ${String(shotId)} has ' + issues.length + ' unresolved layout issue(s)', issues);
+  if (issues.length) console.warn('[LaunchClip text containment] ${String(shotId)} has ' + issues.length + ' unresolved layout issue(s): ' + JSON.stringify(issues));
 })();
 </script>`;
 }

@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promise
 import path from "node:path";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { ensureTimelineRegistration, hasTimelineRegistration } from "./hyperframes_timeline.js";
-import { OpenAIResponsesClient } from "./openai_responses.js";
+import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model_provider.js";
 import { estimateOpenAiUsageCost } from "./cost_tracker.js";
 import { FRAME_BUNDLE_SCHEMA, FRAME_BUNDLE_VERSION, PRODUCTION_PATHS, isValidShotId, validateFrameBundle } from "./production_contracts.js";
 
@@ -64,7 +64,6 @@ export async function directFrames(workspacePath, options = {}, adapters = {}) {
   ]);
   const store = adapters.store ?? await ProductionJobStore.open(workspace, { create: false });
   if (store.get("creative-plan")?.status !== "succeeded") throw new Error("Creative plan job must succeed before frame delegation");
-  const client = adapters.client ?? new OpenAIResponsesClient();
   const requestedConcurrency = positiveInteger(options.concurrency ?? 4, "concurrency");
   const maxFrameCostUsd = options.maxFrameCostUsd == null ? null : positiveNumber(options.maxFrameCostUsd, "maxFrameCostUsd");
   const failClosed = options.allowFallback !== true;
@@ -76,8 +75,9 @@ export async function directFrames(workspacePath, options = {}, adapters = {}) {
     const shotOptions = options.pendingReasoning && existing?.status !== "succeeded"
       ? { ...options, reasoning: options.pendingReasoning }
       : options;
-    const frame = await directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, client, options: shotOptions });
-    recordFrameCost(costState, frame, intake.model?.id ?? "gpt-5.6", Number(options.maxOutputTokens ?? 36_000));
+    const shotRoutes = frameModelRoutes(shotOptions, intake);
+    const frame = await directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, routes: shotRoutes, adapters, options: shotOptions });
+    recordFrameCost(costState, frame, shotRoutes[0].model, Number(options.maxOutputTokens ?? 36_000));
     if (frame.fallback && failClosed) throw frameFallbackError(frame);
     return frame;
   });
@@ -99,6 +99,16 @@ export async function directFrames(workspacePath, options = {}, adapters = {}) {
     sanitized: frames.filter((entry) => entry.sanitized).length,
     frame_cost: frameCostSummary(costState, maxFrameCostUsd)
   };
+}
+
+function frameModelRoutes(options, intake) {
+  return parseModelRoutes(options.routes, {
+    provider: options.provider ?? intake.model?.provider ?? "openai",
+    model: options.model ?? intake.model?.id ?? "gpt-5.6",
+    reasoning: options.reasoning ?? intake.model?.reasoning_effort ?? "high",
+    baseUrl: options.baseUrl,
+    supportsImages: false
+  });
 }
 
 export function buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming = null, prior = null, errors = [] }) {
@@ -135,10 +145,13 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, narration
   });
 }
 
-async function directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, client, options }) {
+async function directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, routes, adapters, options }) {
   const jobId = `frame:${shot.id}`;
   const baseInput = buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming });
-  const inputHash = semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v4" });
+  const customRouting = options.routes != null || options.provider != null || options.model != null || options.baseUrl != null;
+  const inputHash = customRouting
+    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v5" })
+    : semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v4" });
   const existing = store.get(jobId);
   const recovered = await recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
   if (recovered) return recovered;
@@ -163,74 +176,89 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
     resumeResponseId = current.remote.response_id;
   } else if (current.status !== "pending") throw new Error(`Frame job is already ${current.status}: ${jobId}`);
 
-  if (!resumeResponseId) await store.markRunning(jobId, { provider: "openai", response_id: null, status: "running" });
+  if (!resumeResponseId) await store.markRunning(jobId, { provider: routes[0].provider, response_id: null, status: "running" });
   let prior = null;
   let errors = [];
   try {
-    for (let attempt = 1; attempt <= Number(options.semanticAttempts ?? 2); attempt += 1) {
-      const request = {
-        model: intake.model?.id ?? "gpt-5.6",
-        reasoningEffort: options.reasoning ?? "high",
-        reasoningContext: "current_turn",
-        pro: false,
-        instructions: FRAME_INSTRUCTIONS,
-        input: buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming, prior, errors }),
-        schema: FRAME_BUNDLE_SCHEMA,
-        schemaName: "launchclip_frame_bundle",
-        background: options.background !== false,
-        maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
-        promptCacheKey: "launchclip:frame-director:v3",
-        metadata: { job_id: jobId, shot_id: shot.id, attempt },
-        onSubmitted: async (response) => store.markRunning(jobId, { provider: "openai", response_id: response.id, status: response.status })
-      };
-      let result;
-      if (resumeResponseId) {
+    let totalAttempt = 0;
+    let lastResult = null;
+    for (const [routeIndex, route] of routes.entries()) {
+      const client = adapters.client ?? (adapters.createClient ?? createStructuredClient)(route);
+      const attemptsForRoute = routeIndex === 0 ? Number(options.semanticAttempts ?? 2) : 1;
+      for (let routeAttempt = 1; routeAttempt <= attemptsForRoute; routeAttempt += 1) {
+        totalAttempt += 1;
+        const request = {
+          model: route.model,
+          reasoningEffort: route.reasoning,
+          reasoningContext: "current_turn",
+          pro: false,
+          instructions: FRAME_INSTRUCTIONS,
+          input: buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming, prior, errors }),
+          schema: FRAME_BUNDLE_SCHEMA,
+          schemaName: "launchclip_frame_bundle",
+          background: options.background !== false,
+          maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
+          promptCacheKey: "launchclip:frame-director:v4",
+          metadata: { job_id: jobId, shot_id: shot.id, attempt: totalAttempt, route: routeIndex + 1 },
+          onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
+        };
+        let result;
         try {
-          result = await client.resumeStructured(resumeResponseId, request);
+          if (resumeResponseId && routeIndex === 0 && client.supportsResume !== false) {
+            try {
+              result = await client.resumeStructured(resumeResponseId, request);
+            } catch (error) {
+              if (!isCancelledResponseFailure(error)) throw error;
+              await store.markFailed(jobId, error);
+              await store.retry(jobId, { inputHash });
+              await store.markRunning(jobId, { provider: route.provider, response_id: null, status: "running" });
+              result = await client.runStructured(request);
+            }
+          } else result = await client.runStructured(request);
         } catch (error) {
-          if (!isCancelledResponseFailure(error)) throw error;
-          await store.markFailed(jobId, error);
-          await store.retry(jobId, { inputHash });
-          await store.markRunning(jobId, { provider: "openai", response_id: null, status: "running" });
-          result = await client.runStructured(request);
+          resumeResponseId = null;
+          if (routeIndex === routes.length - 1) throw error;
+          errors = [`Generation attempt ${totalAttempt} via ${route.provider}:${route.model} failed: ${error.message}`];
+          continue;
         }
-      } else result = await client.runStructured(request);
-      resumeResponseId = null;
-      await store.markRunning(jobId, { provider: "openai", response_id: result.response_id, status: result.status });
-      const normalized = { ...result.value, html: ensureTimelineRegistration(result.value.html, shot.id) };
-      const sanitized = sanitizeFrameBundle(normalized, {
-        shot,
-        format: plan.format,
-        resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
-      });
-      const candidate = sanitized.bundle;
-      const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
-      errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
-      await writeFrameAttempt(workspace, shot.id, attempt, {
-        input_hash: inputHash,
-        response_id: result.response_id,
-        model: result.model,
-        usage: result.usage,
-        repairs: sanitized.repairs,
-        errors,
-        candidate
-      });
-      if (errors.length) {
-        prior = candidate;
-        if (attempt < Number(options.semanticAttempts ?? 2)) continue;
-        return persistFallbackFrame({
-          workspace, intake, evidence, plan, shot, store, jobId,
-          reason: `Frame ${shot.id} failed semantic validation: ${errors.join("; ")}`,
-          responseId: result.response_id,
-          usage: result.usage
+        resumeResponseId = null;
+        lastResult = result;
+        await store.markRunning(jobId, { provider: route.provider, response_id: result.response_id, status: result.status });
+        const normalized = { ...result.value, html: ensureTimelineRegistration(result.value.html, shot.id) };
+        const sanitized = sanitizeFrameBundle(normalized, {
+          shot,
+          format: plan.format,
+          resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
         });
+        const candidate = sanitized.bundle;
+        const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
+        errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
+        await writeFrameAttempt(workspace, shot.id, totalAttempt, {
+          input_hash: inputHash,
+          response_id: result.response_id,
+          provider: route.provider,
+          model: result.model,
+          usage: result.usage,
+          repairs: sanitized.repairs,
+          errors,
+          candidate
+        });
+        if (errors.length) {
+          prior = candidate;
+          continue;
+        }
+        const paths = await writeFrameArtifacts(workspace, candidate);
+        const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
+        await store.markSucceeded(jobId, outputs, result.usage);
+        return { shot_id: shot.id, cached: false, sanitized: sanitized.repairs.length > 0, repairs: sanitized.repairs, bundle: paths[0], html: paths[1], motion: paths[2], response_id: result.response_id, provider: route.provider, model: result.model, usage: result.usage };
       }
-      const paths = await writeFrameArtifacts(workspace, candidate);
-      const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
-      await store.markSucceeded(jobId, outputs, result.usage);
-      return { shot_id: shot.id, cached: false, sanitized: sanitized.repairs.length > 0, repairs: sanitized.repairs, bundle: paths[0], html: paths[1], motion: paths[2], response_id: result.response_id, model: result.model, usage: result.usage };
     }
-    throw new Error(`Frame ${shot.id} exhausted semantic attempts`);
+    return persistFallbackFrame({
+      workspace, intake, evidence, plan, shot, store, jobId,
+      reason: `Frame ${shot.id} exhausted model routes: ${errors.join("; ")}`,
+      responseId: lastResult?.response_id ?? null,
+      usage: lastResult?.usage ?? {}
+    });
   } catch (error) {
     await store.markFailed(jobId, error);
     throw error;
@@ -393,6 +421,16 @@ function isCancelledResponseFailure(error) {
 
 function recordFrameCost(state, frame, fallbackModel, maxOutputTokens) {
   if (frame.cached || frame.recovered || !frame.usage) return;
+  if (frame.provider === "ollama") {
+    state.calls += 1;
+    return;
+  }
+  if (frame.provider && frame.provider !== "openai") {
+    state.calls += 1;
+    state.complete = false;
+    state.warnings.push(`Frame cost is not priced locally for provider ${frame.provider}`);
+    return;
+  }
   const model = frame.model && !String(frame.model).startsWith("local-") ? frame.model : fallbackModel;
   const estimate = estimateOpenAiUsageCost(model, frame.usage);
   state.calls += 1;

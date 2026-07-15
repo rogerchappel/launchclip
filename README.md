@@ -56,8 +56,9 @@ models:
 - [`launchclip-cli`](skills/launchclip-cli/SKILL.md) teaches an agent to operate
   the existing CLI, including `produce`, resumable production stages, the
   local-first promotion packet lane, cost receipts, and approval gates. The
-  model-directed CLI remains API-backed; a ChatGPT, Codex, or Claude OAuth login
-  is not an `OPENAI_API_KEY` or `ELEVENLABS_API_KEY`.
+  complete model-directed CLI still needs API access for planning and critique,
+  but frame authoring and repair can run through local Ollama or OpenRouter. A
+  ChatGPT, Codex, or Claude OAuth login is not an API key.
 
 The repository is also a Codex plugin: [`.codex-plugin/plugin.json`](.codex-plugin/plugin.json)
 exposes both skill directories. npm installs carry the manifest and skills but
@@ -99,6 +100,13 @@ launchclip produce https://github.com/owner/repo \
   --no-audio \
   --fast-eval
 
+# Local model first for HTML frames and small repairs; failed scenes may
+# escalate to Luna, Terra, then Sol.
+launchclip produce https://github.com/owner/repo \
+  --out .launchclip/repo-local-first \
+  --model-policy local-first \
+  --local-model qwen2.5-coder:latest
+
 # Re-render, re-analyze, and re-critique the existing assembled project only.
 launchclip production-draft .launchclip/repo-video \
   --reference-video ./reference-short.mp4
@@ -109,6 +117,28 @@ launchclip production-preview .launchclip/repo-video
 # After reviewing or editing in Studio and explicitly approving the result:
 launchclip production-render .launchclip/repo-video --approve
 ```
+
+The default `cost-aware` policy plans with Terra, authors with Luna, and
+escalates only failed scenes. `local-first` prepends Ollama. To guarantee that a
+resume cannot make a paid call, pin the repair route explicitly:
+
+```bash
+launchclip production-repair .launchclip/repo-video \
+  --repair-route ollama:qwen2.5-coder:latest@none
+```
+
+Ollama routes use its native JSON-schema API with temperature `0`, a fixed
+seed, and a 32K context by default. Override that allocation with
+`OLLAMA_CONTEXT_LENGTH` when the selected model or machine needs a different
+limit. Larger frame sources benefit from the full context but take longer to
+evaluate on small local models.
+
+Repairs are bounded, uniquely anchored source edits. Launchclip rejects broad
+HTML rewrites, applies the edit to the existing frame, and reruns the complete
+frame contract before accepting it. Each pass receives at most four blocking
+findings per shot, ranked with runtime and motion failures first, so the model
+solves a small coherent batch instead of rewriting around an entire QA report.
+Use `--repair-issues-per-shot` to lower that batch size for a difficult scene.
 
 `production-preview` starts or reuses the local HyperFrames Studio server and
 returns the editable project URL without rendering. Studio's Export control is

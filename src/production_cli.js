@@ -22,7 +22,7 @@ export async function runProductionStage(command, target, flags = {}, adapters =
   return lease(target, async () => {
     if (command === "evidence") return collectEvidence(target, evidenceOptions(flags), adapters.evidence);
     if (command === "creative-plan") return (adapters.planProduction ?? planProduction)(target, plannerOptions(flags), adapters.planner);
-    if (command === "direct-frames") return directFrames(target, frameOptions(flags), adapters.frames);
+    if (command === "direct-frames") return (adapters.directFrames ?? directFrames)(target, frameOptions(flags), adapters.frames);
     if (command === "production-audio") return produceAudio(target, audioOptions(flags), adapters.audio);
     if (command === "assemble") return assembleWithProducedAudio(target, flags);
     if (command === "production-verify") return verifyProduction(target, renderOptions(flags));
@@ -254,6 +254,7 @@ function frameOptions(flags) {
     concurrency: numberOr(flags.concurrency, 4),
     semanticAttempts: numberOr(flags["semantic-attempts"], 2),
     reasoning: flags["frame-reasoning"] ?? "high",
+    routes: stageModelRoutes(flags, "frame"),
     pendingReasoning: flags["pending-frame-reasoning"],
     maxOutputTokens: numberOr(flags["frame-max-output-tokens"], 36_000),
     maxFrameCostUsd: numberOr(flags["max-frame-cost-usd"], undefined),
@@ -275,6 +276,7 @@ function audioOptions(flags) {
 }
 
 function renderOptions(flags) {
+  const policy = modelPolicy(flags);
   return {
     approve: Boolean(flags.approve),
     output: flags.output,
@@ -290,8 +292,8 @@ function renderOptions(flags) {
     maximumHoldRatio: flags["maximum-hold-ratio"],
     minimumBurstsPerMinute: flags["minimum-bursts-per-minute"],
     musicVolume: flags["music-volume"],
-    criticModel: flags["critic-model"] ?? "gpt-5.6",
-    criticReasoning: flags["critic-reasoning"] ?? "xhigh",
+    criticModel: flags["critic-model"] ?? (policy === "quality" ? "gpt-5.6" : "gpt-5.6-terra"),
+    criticReasoning: flags["critic-reasoning"] ?? (policy === "quality" ? "xhigh" : "high"),
     criticPro: Boolean(flags["critic-pro"]),
     maxCriticSnapshots: numberOr(flags["critic-snapshots"], 12),
     background: !flags.foreground
@@ -306,24 +308,48 @@ function previewOptions(flags) {
 }
 
 function criticOptions(flags) {
+  const policy = modelPolicy(flags);
   return {
-    model: flags["critic-model"] ?? "gpt-5.6",
-    reasoning: flags["critic-reasoning"] ?? "xhigh",
+    model: flags["critic-model"] ?? (policy === "quality" ? "gpt-5.6" : "gpt-5.6-terra"),
+    reasoning: flags["critic-reasoning"] ?? (policy === "quality" ? "xhigh" : "high"),
     pro: Boolean(flags["critic-pro"]),
     maxSnapshots: numberOr(flags["critic-snapshots"], 12)
   };
 }
 
 function repairOptions(flags) {
+  const policy = modelPolicy(flags);
   return {
-    model: flags["repair-model"] ?? "gpt-5.6",
-    reasoning: flags["repair-reasoning"] ?? "high",
+    model: flags["repair-model"] ?? (policy === "quality" ? "gpt-5.6" : "gpt-5.6-luna"),
+    reasoning: flags["repair-reasoning"] ?? (policy === "quality" ? "high" : "medium"),
+    routes: stageModelRoutes(flags, "repair"),
     semanticAttempts: numberOr(flags["repair-semantic-attempts"], 2),
     maxSnapshots: numberOr(flags["repair-snapshots"], 8),
-    concurrency: numberOr(flags.concurrency, 3),
-    maxOutputTokens: numberOr(flags["repair-max-output-tokens"], 36_000),
+    concurrency: numberOr(flags.concurrency, policy === "local-first" ? 1 : 3),
+    maxOutputTokens: numberOr(flags["repair-max-output-tokens"], 8_000),
+    maxPatchRatio: ratioOr(flags["max-patch-ratio"], .35),
+    maxIssuesPerShot: numberOr(flags["repair-issues-per-shot"], 4),
     background: !flags.foreground
   };
+}
+
+function stageModelRoutes(flags, stage) {
+  const explicit = flags[`${stage}-route`];
+  if (explicit != null) return explicit;
+  const model = flags[`${stage}-model`] ?? flags.model;
+  const provider = flags[`${stage}-provider`];
+  const reasoning = flags[`${stage}-reasoning`];
+  if (model || provider) return [`${provider ?? "openai"}:${model ?? (provider === "ollama" ? flags["local-model"] ?? "qwen2.5-coder:latest" : "gpt-5.6-luna")}@${reasoning ?? "medium"}`];
+  const policy = modelPolicy(flags);
+  if (policy === "quality") return ["openai:gpt-5.6@high"];
+  const cloud = ["openai:gpt-5.6-luna@medium", "openai:gpt-5.6-terra@high", "openai:gpt-5.6@high"];
+  return policy === "local-first" ? [`ollama:${flags["local-model"] ?? "qwen2.5-coder:latest"}@none`, ...cloud] : cloud;
+}
+
+function modelPolicy(flags) {
+  const policy = String(flags["model-policy"] ?? "cost-aware").trim().toLowerCase();
+  if (!["cost-aware", "local-first", "quality"].includes(policy)) throw new Error(`Unsupported --model-policy: ${policy}. Supported: cost-aware, local-first, quality`);
+  return policy;
 }
 
 function productionFlags(flags) {
@@ -346,7 +372,7 @@ function productionFlags(flags) {
     "critic-reasoning": flags["critic-reasoning"] ?? "high",
     "critic-snapshots": flags["critic-snapshots"] ?? "8",
     "repair-reasoning": flags["repair-reasoning"] ?? "medium",
-    "repair-max-output-tokens": flags["repair-max-output-tokens"] ?? "20000",
+    "repair-max-output-tokens": flags["repair-max-output-tokens"] ?? "6000",
     "repair-semantic-attempts": flags["repair-semantic-attempts"] ?? "1",
     "repair-snapshots": flags["repair-snapshots"] ?? "6",
     "snapshot-frames": flags["snapshot-frames"] ?? "6",
@@ -360,5 +386,12 @@ function numberOr(value, fallback) {
   if (value == null) return fallback;
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) throw new Error(`Expected a positive number, received ${value}`);
+  return number;
+}
+
+function ratioOr(value, fallback) {
+  if (value == null) return fallback;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0 || number > 1) throw new Error(`Expected a ratio greater than 0 and at most 1, received ${value}`);
   return number;
 }

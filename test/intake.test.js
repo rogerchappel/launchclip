@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { buildIntake, inferSourceKind, resolveAspect, resolveReasoningEffort, writeIntake } from "../src/intake.js";
+import { buildIntake, inferSourceKind, resolveAspect, resolveModelPolicy, resolveReasoningEffort, writeIntake } from "../src/intake.js";
 import { parseFlags } from "../src/cli.js";
 
 test("collects repeated resource and reference flags", () => {
@@ -57,6 +57,8 @@ test("resolves aspect ratios and GPT-5.6 reasoning controls", () => {
   assert.equal(resolveReasoningEffort("MAX"), "max");
   assert.throws(() => resolveAspect("4:3"), /Unsupported --aspect/);
   assert.throws(() => resolveReasoningEffort("ultra"), /Unsupported --reasoning/);
+  assert.equal(resolveModelPolicy("LOCAL-FIRST"), "local-first");
+  assert.throws(() => resolveModelPolicy("mystery"), /Unsupported --model-policy/);
 });
 
 test("builds a normalized multi-resource intake", async () => {
@@ -85,7 +87,7 @@ test("builds a normalized multi-resource intake", async () => {
   assert.equal(intake.schema_version, "launchclip.intake.v1");
   assert.equal(intake.source.kind, "topic");
   assert.equal(intake.brief.duration_seconds, 75);
-  assert.equal(intake.model.id, "gpt-5.6");
+  assert.equal(intake.model.id, "gpt-5.6-terra");
   assert.equal(intake.model.reasoning_effort, "max");
   assert.equal(intake.model.reasoning_mode, "pro");
   assert.deepEqual(intake.resources.map((entry) => entry.role), ["supporting", "supporting", "voiceover", "presenter"]);
@@ -94,6 +96,16 @@ test("builds a normalized multi-resource intake", async () => {
   assert.equal(intake.resources[1].type, "url");
   assert.equal(intake.policies.supplied_voiceover_is_authoritative, true);
   assert.equal(intake.policies.presenter_requires_authorized_likeness, true);
+});
+
+test("uses Terra for planning unless quality or an explicit model is requested", async () => {
+  const costAware = await buildIntake("A product", { kind: "product" }, {});
+  const quality = await buildIntake("A product", { kind: "product", "model-policy": "quality" }, {});
+  const explicit = await buildIntake("A product", { kind: "product", model: "custom-model", reasoning: "low" }, {});
+  assert.deepEqual(costAware.model, { provider: "openai", id: "gpt-5.6-terra", reasoning_effort: "high", reasoning_mode: "standard" });
+  assert.deepEqual(quality.model, { provider: "openai", id: "gpt-5.6", reasoning_effort: "xhigh", reasoning_mode: "standard" });
+  assert.equal(explicit.model.id, "custom-model");
+  assert.equal(explicit.model.reasoning_effort, "low");
 });
 
 test("expands a resource directory into stable file-level resources", async () => {

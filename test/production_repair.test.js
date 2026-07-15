@@ -4,21 +4,23 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
+import { modelRouteKey, parseModelRoute } from "../src/model_provider.js";
 import { FRAME_BUNDLE_VERSION } from "../src/production_contracts.js";
-import { repairProduction } from "../src/production_repair.js";
+import { applyFramePatch, buildRepairInput, collectDeterministicRepairFindings, FRAME_PATCH_VERSION, repairProduction } from "../src/production_repair.js";
 
 test("repairs only criticised frames, preserves the frame contract, and invalidates assembly", async () => {
   const workspace = await fixture();
   let request;
   const client = { runStructured: async (options) => {
     request = options;
-    return { response_id: "resp_repair", model: "gpt-5.6-sol", status: "completed", usage: { total_tokens: 500 }, value: bundle("shot-2", "Repaired proof hierarchy") };
+    return { response_id: "resp_repair", model: "gpt-5.6-luna", status: "completed", usage: { total_tokens: 500 }, value: framePatch("shot-2", "Proof", "Repaired proof hierarchy") };
   } };
   const result = await repairProduction(workspace, { background: false, concurrency: 2 }, { client });
   assert.equal(result.status, "repaired");
   assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-2"]);
-  assert.equal(JSON.parse(request.input).findings[0].id, "f-1");
-  assert.match(JSON.stringify(JSON.parse(request.input).findings[0].preserve), /exact copy/);
+  assert.equal(repairContext(request.input).findings[0].id, "f-1");
+  assert.match(JSON.stringify(repairContext(request.input).findings[0].preserve), /exact copy/);
+  assert.match(request.input, /<launchclip-source target="html">\n<!doctype html>/i);
   assert.equal(request.images.length, 1);
   assert.match(await readFile(result.repaired[0].html, "utf8"), /Repaired proof hierarchy/);
   const store = await ProductionJobStore.open(workspace, { create: false });
@@ -64,13 +66,13 @@ test("resumes a persisted background repair response without another submission"
   const plan = JSON.parse(await readFile(path.join(workspace, "production", "plan.json"), "utf8"));
   const prior = JSON.parse(await readFile(path.join(workspace, "production", "frames", "shot-2.json"), "utf8"));
   const critique = JSON.parse(await readFile(path.join(workspace, "production", "qa", "critique.json"), "utf8"));
-  const repairInputHash = semanticHash({ worker: "frame-repair.v3", model: "gpt-5.6", reasoning: "high", shot: plan.shots[1], findings: critique.findings, prior });
+  const repairInputHash = semanticHash({ worker: "frame-repair.v6", routes: [modelRouteKey(parseModelRoute({ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" }))], max_patch_ratio: .35, shot: plan.shots[1], findings: critique.findings, prior });
   await store.add({ id: "repair:shot-2", kind: "frame-repair", depends_on: ["creative-plan"], input_hash: repairInputHash });
   await store.markRunning("repair:shot-2", { provider: "openai", response_id: "repair_saved", status: "in_progress" });
   let resumed = 0;
   const client = {
     runStructured: async () => { throw new Error("must not submit a duplicate repair"); },
-    resumeStructured: async (responseId) => { resumed += 1; assert.equal(responseId, "repair_saved"); return { response_id: responseId, model: "gpt-5.6", status: "completed", value: bundle("shot-2", "Resumed repair"), usage: {} }; }
+    resumeStructured: async (responseId) => { resumed += 1; assert.equal(responseId, "repair_saved"); return { response_id: responseId, model: "gpt-5.6-luna", status: "completed", value: framePatch("shot-2", "Proof", "Resumed repair"), usage: {} }; }
   };
   const result = await repairProduction(workspace, {}, { client, store });
   assert.equal(result.repaired.length, 1);
@@ -90,18 +92,41 @@ test("repairs native shot inspection failures even when the visual critic ships"
     stderr: ""
   })}\n`);
   const client = { runStructured: async (request) => {
-    const finding = JSON.parse(request.input).findings[0];
+    const finding = repairContext(request.input).findings[0];
     assert.equal(finding.id, "native-shot-1");
     assert.match(finding.instruction, /Motion assertions must describe motion on the asserted element itself/);
     assert.match(request.instructions, /set must_remain_live false/);
     assert.match(request.instructions, /Do not add imperceptible drift/);
-    assert.match(finding.instruction, /content_overlap/);
-    return { response_id: "native_repair", model: "gpt-5.6", status: "completed", usage: {}, value: bundle("shot-1", "Native repair") };
+    assert.doesNotMatch(finding.instruction, /content_overlap/);
+    return { response_id: "native_repair", model: "gpt-5.6-luna", status: "completed", usage: {}, value: framePatch("shot-1", "Proof", "Native repair") };
   } };
   const result = await repairProduction(workspace, {}, { client });
   assert.equal(result.status, "repaired");
   assert.equal(result.deterministic_findings, 1);
   assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-1"]);
+});
+
+test("batches native repair findings by blocking priority", async () => {
+  const workspace = await fixture({ verdict: "ship" });
+  const plan = JSON.parse(await readFile(path.join(workspace, "production", "plan.json"), "utf8"));
+  const reportPath = path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json");
+  await mkdir(path.dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, `${JSON.stringify({
+    ok: false,
+    stdout: {
+      runtime: { findings: [{ code: "console_error", severity: "error", message: "Runtime failed" }] },
+      motion: { findings: [{ code: "motion_out_of_order", severity: "error", message: "Order failed" }] },
+      layout: { findings: [{ code: "text_occluded", severity: "error", message: "Text hidden" }] },
+      contrast: { findings: [{ code: "contrast_aa_failure", severity: "error", message: "Contrast failed" }] },
+      findings: [{ code: "panel_out_of_canvas", severity: "warning", message: "Panel warning" }]
+    }
+  })}\n`);
+  const findings = await collectDeterministicRepairFindings(workspace, plan, { maxIssuesPerShot: 2 });
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].evidence, /contains 2 of 4 unique blocking issues/);
+  assert.match(findings[0].instruction, /console_error/);
+  assert.match(findings[0].instruction, /motion_out_of_order/);
+  assert.doesNotMatch(findings[0].instruction, /contrast_aa_failure/);
 });
 
 test("rejects infrastructure inspection failures before any paid repair call", async () => {
@@ -128,7 +153,7 @@ test("repairs deterministic failures before the first visual critique exists", a
     ok: false,
     stdout: { issues: [{ code: "motion_selector_missing", severity: "error", message: "Missing target", selector: "#shot-1-proof" }] }
   })}\n`);
-  const client = { runStructured: async () => ({ response_id: "precritic_repair", model: "gpt-5.6", status: "completed", usage: {}, value: bundle("shot-1", "Pre-critic repair") }) };
+  const client = { runStructured: async () => ({ response_id: "precritic_repair", model: "gpt-5.6-luna", status: "completed", usage: {}, value: framePatch("shot-1", "Proof", "Pre-critic repair") }) };
   const result = await repairProduction(workspace, {}, { client });
   assert.equal(result.status, "repaired");
   assert.equal(result.deterministic_findings, 1);
@@ -145,7 +170,7 @@ test("ignores an older visual critique during verification-triggered repair", as
   })}\n`);
   const result = await repairProduction(workspace, { trigger: "verification" }, {
     repairProductionPlan: async () => { throw new Error("must not replay the older critique"); },
-    client: { runStructured: async () => ({ response_id: "verification_repair", model: "gpt-5.6", status: "completed", usage: {}, value: bundle("shot-1", "Current verification repair") }) }
+    client: { runStructured: async () => ({ response_id: "verification_repair", model: "gpt-5.6-luna", status: "completed", usage: {}, value: framePatch("shot-1", "Proof", "Current verification repair") }) }
   });
   assert.equal(result.status, "repaired");
   assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-1"]);
@@ -174,14 +199,35 @@ test("feeds semantic validation errors back into a bounded repair retry", async 
       assert.equal(request.metadata.attempt, 1);
       return {
         response_id: "invalid_repair", model: "gpt-5.6", status: "completed", usage: {},
-        value: { ...bundle("shot-2", "Invalid repair"), html: bundle("shot-2").html.replaceAll('id="root"', 'id="wrong-root"').replace("#root{", "#wrong-root{") }
+        value: {
+          schema_version: FRAME_PATCH_VERSION,
+          shot_id: "shot-2",
+          summary: "Introduce an invalid root for the retry contract",
+          edits: [
+            { target: "html", find: 'id="root"', replace: 'id="wrong-root"' },
+            { target: "html", find: "#root{", replace: "#wrong-root{" }
+          ]
+        }
       };
     }
-    const input = JSON.parse(request.input);
+    const input = repairContext(request.input);
     assert.equal(request.metadata.attempt, 2);
     assert.match(input.validation_errors_to_repair.join(" "), /root id must be/);
-    assert.match(input.prior_bundle.html, /wrong-root/);
-    return { response_id: "valid_repair", model: "gpt-5.6", status: "completed", usage: {}, value: bundle("shot-2", "Valid retry") };
+    assert.match(request.input, /wrong-root/);
+    return {
+      response_id: "valid_repair", model: "gpt-5.6-luna", status: "completed", usage: {},
+      value: {
+        schema_version: FRAME_PATCH_VERSION,
+        shot_id: "shot-2",
+        summary: "Restore the root and repair the copy",
+        edits: [
+          { target: "html", find: 'id="wrong-root"', replace: 'id="root"' },
+          { target: "html", find: "#wrong-root{", replace: "#root{" },
+          { target: "html", find: ">Proof</div>", replace: ">Valid retry</div>" },
+          { target: "visible_copy", find: '"Proof"', replace: '"Valid retry"' }
+        ]
+      }
+    };
   } };
   const result = await repairProduction(workspace, { semanticAttempts: 2 }, { client });
   assert.equal(result.status, "repaired");
@@ -197,15 +243,149 @@ test("converts fresh strict lint warnings into shot-scoped repair findings", asy
     stdout: { findings: [{ severity: "warning", file: path.join(workspace, "production", "hyperframes", "compositions", "shot-2.html"), message: 'GSAP tweens overlap on "#shot-2-proof" for x.' }] }
   })}\n`);
   const client = { runStructured: async (request) => {
-    const finding = JSON.parse(request.input).findings[0];
+    const finding = repairContext(request.input).findings[0];
     assert.equal(finding.shot_ids[0], "shot-2");
     assert.match(finding.instruction, /motion_tween_overlap/);
-    return { response_id: "lint_repair", model: "gpt-5.6", status: "completed", usage: {}, value: bundle("shot-2", "Lint repair") };
+    return { response_id: "lint_repair", model: "gpt-5.6-luna", status: "completed", usage: {}, value: framePatch("shot-2", "Proof", "Lint repair") };
   } };
   const result = await repairProduction(workspace, {}, { client });
   assert.equal(result.deterministic_findings, 1);
   assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-2"]);
 });
+
+test("presents exact repair sources unescaped outside the JSON context", () => {
+  const prior = bundle("shot-1");
+  const input = buildRepairInput({
+    plan: { design: { concept: "Proof" }, format: { width: 1080, height: 1920 } },
+    shot: { id: "shot-1" },
+    findings: [{ id: "layout-1" }],
+    prior
+  });
+  assert.equal(repairContext(input).findings[0].id, "layout-1");
+  assert.match(input, /<launchclip-source target="html">\n<!doctype html>/i);
+  assert.match(input, /<div id="root"/);
+  assert.doesNotMatch(input, /<launchclip-source target="html">\n"<!doctype html>/i);
+});
+
+test("applies exact small edits without replacing the frame bundle", () => {
+  const prior = bundle("shot-1");
+  const result = applyFramePatch(prior, framePatch("shot-1", "Proof", "Focused proof"));
+  assert.match(result.bundle.html, />Focused proof<\/div>/);
+  assert.deepEqual(result.bundle.visible_copy, ["Focused proof"]);
+  assert.ok(result.changedRatio < .1);
+  assert.equal(prior.visible_copy[0], "Proof");
+});
+
+test("rejects a repair that rewrites the complete HTML target", () => {
+  const prior = bundle("shot-1");
+  assert.throws(() => applyFramePatch(prior, {
+    schema_version: FRAME_PATCH_VERSION,
+    shot_id: "shot-1",
+    summary: "Broad rewrite",
+    edits: [{ target: "html", find: prior.html, replace: prior.html.replace("Proof", "Different") }]
+  }), (error) => error.code === "LAUNCHCLIP_INVALID_FRAME_PATCH" && /maximum is 35\.0%/.test(error.message));
+});
+
+test("rejects oversized individual source edits", () => {
+  const prior = bundle("shot-1");
+  assert.throws(() => applyFramePatch(prior, {
+    schema_version: FRAME_PATCH_VERSION,
+    shot_id: "shot-1",
+    summary: "Oversized edit",
+    edits: [{ target: "html", find: "x".repeat(1_001), replace: "small" }]
+  }), /find exceeds 1000 characters/);
+  assert.throws(() => applyFramePatch(prior, {
+    schema_version: FRAME_PATCH_VERSION,
+    shot_id: "shot-1",
+    summary: "Oversized replacement",
+    edits: [{ target: "html", find: ">Proof</div>", replace: "x".repeat(1_201) }]
+  }), /replace exceeds 1200 characters/);
+});
+
+test("salvages independently valid local edits and records rejected anchors", () => {
+  const prior = bundle("shot-1");
+  const result = applyFramePatch(prior, {
+    schema_version: FRAME_PATCH_VERSION,
+    shot_id: "shot-1",
+    summary: "Apply the valid edit only",
+    edits: [
+      { target: "html", find: ">Proof</div>", replace: ">Focused proof</div>" },
+      { target: "html", find: "missing local anchor", replace: "unused" }
+    ]
+  }, { allowPartial: true });
+  assert.match(result.bundle.html, />Focused proof<\/div>/);
+  assert.equal(result.edits, 1);
+  assert.deepEqual(result.rejectedEdits, [{ index: 1, target: "html", reason: "find string must occur exactly once in html; found 0" }]);
+});
+
+test("reports a bounded rejected anchor preview when no local edit applies", () => {
+  const prior = bundle("shot-1");
+  assert.throws(() => applyFramePatch(prior, {
+    schema_version: FRAME_PATCH_VERSION,
+    shot_id: "shot-1",
+    summary: "Missed local anchor",
+    edits: [{ target: "html", find: "missing local anchor", replace: "unused" }]
+  }, { allowPartial: true }), /edit 0 html .*find="missing local anchor"/);
+});
+
+test("retargets a uniquely matched local edit without weakening exact anchors", () => {
+  const prior = bundle("shot-1");
+  const result = applyFramePatch(prior, {
+    schema_version: FRAME_PATCH_VERSION,
+    shot_id: "shot-1",
+    summary: "Correct a locally mislabeled target",
+    edits: [{ target: "motion", find: ">Proof</div>", replace: ">Focused proof</div>" }]
+  }, { allowPartial: true, allowRetarget: true });
+  assert.match(result.bundle.html, />Focused proof<\/div>/);
+  assert.equal(result.edits, 1);
+});
+
+test("escalates from a local structural attempt to the next pinned repair route", async () => {
+  const workspace = await fixture();
+  const calls = [];
+  const result = await repairProduction(workspace, {
+    routes: ["ollama:qwen2.5-coder:latest@none", "openai:gpt-5.6-terra@high"],
+    semanticAttempts: 1
+  }, {
+    createClient: (route) => ({
+      supportsImages: route.provider !== "ollama",
+      runStructured: async (request) => {
+        calls.push({ provider: route.provider, model: route.model, images: request.images.length });
+        return {
+          response_id: `${route.provider}_repair`, model: route.model, status: "completed", usage: {},
+          value: route.provider === "ollama"
+            ? { ...framePatch("shot-2", "Proof", "Local proof"), edits: [{ target: "html", find: "missing source", replace: "nothing" }] }
+            : framePatch("shot-2", "Proof", "Escalated proof")
+        };
+      }
+    })
+  });
+  assert.deepEqual(calls, [
+    { provider: "ollama", model: "qwen2.5-coder:latest", images: 0 },
+    { provider: "openai", model: "gpt-5.6-terra", images: 1 }
+  ]);
+  assert.equal(result.repaired[0].provider, "openai");
+  assert.equal(result.repaired[0].model, "gpt-5.6-terra");
+  assert.match(await readFile(result.repaired[0].html, "utf8"), /Escalated proof/);
+});
+
+function framePatch(id, before, after) {
+  return {
+    schema_version: FRAME_PATCH_VERSION,
+    shot_id: id,
+    summary: `Replace ${before} with ${after}`,
+    edits: [
+      { target: "html", find: `>${before}</div>`, replace: `>${after}</div>` },
+      { target: "visible_copy", find: JSON.stringify(before), replace: JSON.stringify(after) }
+    ]
+  };
+}
+
+function repairContext(input) {
+  const match = String(input).match(/<launchclip-context-json>\n([\s\S]*?)\n<\/launchclip-context-json>/);
+  assert.ok(match, "repair input must contain a context JSON marker");
+  return JSON.parse(match[1]);
+}
 
 function bundle(id, copy = "Proof") {
   return {

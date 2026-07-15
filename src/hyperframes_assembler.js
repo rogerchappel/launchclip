@@ -4,7 +4,7 @@ import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/
 import path from "node:path";
 import { readFrameSelection, safeShotFile, validateHyperFramesRoot } from "./frame_director.js";
 import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
-import { ensureTextContainment } from "./hyperframes_text.js";
+import { ensureTextContainment, TEXT_CONTAINMENT_VERSION } from "./hyperframes_text.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { freezeProductionFonts, injectProductionFontFaces, productionFontFamilies } from "./production_fonts.js";
 import { PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
@@ -44,7 +44,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   for (const dependency of dependencies) if (store.get(dependency)?.status !== "succeeded") throw new Error(`Frame job must succeed before assembly: ${dependency}`);
   const extraAudio = await describeExtraAudio(options);
   const fontFamilies = productionFontFamilies(plan);
-  const inputHash = semanticHash({ intake, plan, bundles, fallbacks, extraAudio, fontFamilies, assembler: "hyperframes-assembler.v17" });
+  const inputHash = semanticHash({ intake, plan, bundles, fallbacks, extraAudio, fontFamilies, assembler: "hyperframes-assembler.v17", text_containment: TEXT_CONTAINMENT_VERSION });
   const jobId = "hyperframes-assembly";
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
