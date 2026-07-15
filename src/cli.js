@@ -6,15 +6,20 @@ import { preprocessPresenter } from "./presenter_preprocess.js";
 import { writeIntake } from "./intake.js";
 import { runProductionStage } from "./production_cli.js";
 import { createCostTracker } from "./cost_tracker.js";
+import { diagnoseInstallation, VERSION } from "./doctor.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["intake", ...PRODUCTION_COMMANDS, "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "intake", ...PRODUCTION_COMMANDS, "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
-  const { stdout = process.stdout, fetch: baseFetch = globalThis.fetch } = io;
+  const { stdout = process.stdout, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation } = io;
   const [command, firstArg, ...rest] = argv;
   if (!command || command === "--help" || command === "-h") {
     stdout.write(help());
+    return;
+  }
+  if (command === "--version" || command === "-v" || command === "version") {
+    stdout.write(`${VERSION}\n`);
     return;
   }
   if (!COMMANDS.has(command)) {
@@ -27,7 +32,9 @@ export async function runCli(argv, io = {}) {
   globalThis.fetch = tracker.fetch;
   try {
     let result;
-    if (command === "intake") {
+    if (command === "doctor") {
+      result = await doctor();
+    } else if (command === "intake") {
       result = await writeIntake(required(firstArg, "source"), flags);
     } else if (PRODUCTION_COMMANDS.has(command)) {
       result = await runProductionStage(command, required(firstArg, command === "produce" ? "source" : "workspace path"), flags);
@@ -112,6 +119,8 @@ function help() {
   return `launchclip creates dry-run-first OSS promotion packets.
 
 Usage:
+  launchclip --version
+  launchclip doctor
   launchclip intake <source> [--kind repository|product|topic|voiceover] [--resource path] [--assets path] [--style auto|family] [--style-file frame.md] [--style-reference path|url] [--reference url] [--voiceover audio|video] [--transcript text] [--presenter video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
   launchclip produce <source> [intake flags] [--brand-assets-dir path] [--no-trim-silence] [--silence-duration 0.45] [--silence-padding 0.12] [--planning-mode auto|single|hierarchical] [--chapter-concurrency 3] [--plan-semantic-attempts 2] [--visual-history-dir path] [--visual-history-limit 8] [--visual-similarity-limit 0.58] [--voice-id id] [--sfx-dir path] [--concurrency 4] [--pending-frame-reasoning medium] [--max-frame-cost-usd 5] [--allow-frame-fallback] [--no-audio] [--fast-eval] [--allow-timing-drift]
   launchclip evidence <workspace>

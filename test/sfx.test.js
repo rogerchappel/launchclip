@@ -5,6 +5,10 @@ import os from "node:os";
 import path from "node:path";
 import { REQUIRED_SFX_FILES, prepareSfxPack, validateSfxPack } from "../src/sfx.js";
 
+test("SFX preparation requires an explicit workspace public directory", async () => {
+  await assert.rejects(prepareSfxPack({ allowPlaceholder: true }), /requires a workspace public directory/);
+});
+
 test("SFX pack validation fails without required named files unless placeholders are allowed", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-sfx-"));
   try {

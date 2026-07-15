@@ -4,11 +4,34 @@
 
 It is local-first and dry-run-first. V1 does not post to social platforms, queue Clutch Cut items directly, publish packages, or submit live product-videogen requests without future explicit integration and human approval.
 
+## Install
+
+LaunchClip requires Node.js 22 or newer. Local video rendering also needs
+FFmpeg/`ffprobe`; `launchclip doctor` reports the exact local capabilities
+without printing credential values.
+
+Install the published CLI from npm:
+
+```bash
+npm install --global launchclip
+launchclip --version
+launchclip doctor
+```
+
+Or build and link the CLI from source:
+
+```bash
+git clone https://github.com/rogerchappel/launchclip.git
+cd launchclip
+npm ci
+npm run release:check
+npm link
+launchclip doctor
+```
+
 ## Quickstart
 
 ```bash
-npm install
-
 launchclip run ./my-oss-tool \
   --out .launchclip/my-oss-tool \
   --demo-cmd "npm run smoke" \
@@ -36,9 +59,22 @@ models:
   model-directed CLI remains API-backed; a ChatGPT, Codex, or Claude OAuth login
   is not an `OPENAI_API_KEY` or `ELEVENLABS_API_KEY`.
 
-Install or copy the desired skill directory into the agent's skill location, or
-point the agent directly at its `SKILL.md`. The root [`SKILL.md`](SKILL.md)
-remains the compatibility workflow for the original OSS promotion packet.
+The repository is also a Codex plugin: [`.codex-plugin/plugin.json`](.codex-plugin/plugin.json)
+exposes both skill directories. npm installs carry the manifest and skills but
+do not automatically register them with an agent. For a source-based Codex
+install, load the repository as a plugin or link an individual skill into the
+shared agent skill directory:
+
+```bash
+mkdir -p "$HOME/.agents/skills"
+ln -s "$PWD/skills/launchclip-create-video" "$HOME/.agents/skills/launchclip-create-video"
+```
+
+This subscription-agent workflow uses the active agent for creative reasoning;
+it does not require `OPENAI_API_KEY`. Point another capable agent directly at
+the relevant `SKILL.md` if it uses a different skill-discovery convention. The
+root [`SKILL.md`](SKILL.md) remains the compatibility workflow for the original
+OSS promotion packet.
 
 ## Model-Directed HyperFrames Production
 
@@ -187,7 +223,9 @@ launchclip plan .launchclip/my-oss-tool --format short-30 --style premium-produc
 launchclip render .launchclip/my-oss-tool --provider hyperframes --quality high
 ```
 
-HyperFrames renders run `npx hyperframes lint`, `validate`, and `inspect --json` before producing the MP4. Use `--skip-quality-gates` only for draft iteration.
+HyperFrames renders use the CLI version bundled with LaunchClip to run `lint`,
+`validate`, and `inspect --json` before producing the MP4. Use
+`--skip-quality-gates` only for draft iteration.
 
 You can also run each stage by hand:
 

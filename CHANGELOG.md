@@ -15,5 +15,11 @@
 - Add model-output path containment, active-content/CSP isolation, native
   HyperFrames motion assertions, block-matched movement metrics, and rendered
   audio quality gates.
+- Harden npm distribution with exact renderer versions, a complete runtime
+  allowlist, and a clean consumer-install smoke test.
+- Add `launchclip --version`, `launchclip doctor`, Node.js 22/macOS CI coverage,
+  and npm/Homebrew/source release guidance.
+- Keep runtime media writes inside user workspaces and expose the subscription
+  skills through a validated Codex plugin manifest.
 
 - Added release-readiness changelog packaging and README verification guidance.

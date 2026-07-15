@@ -3,6 +3,7 @@ import { access } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { PRODUCTION_PATHS } from "./production_contracts.js";
+import { hyperframesInvocation } from "./toolchain.js";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_PORT = 3002;
@@ -62,21 +63,21 @@ export async function launchHyperFramesStudio(project, options = {}, adapters = 
       return studioResult(server, url, settings.open, false);
     }
     if (child.exitCode != null && child.exitCode !== 0) {
-      throw new Error(`HyperFrames Studio exited before it became ready (exit ${child.exitCode}). Run npx hyperframes preview ${project} directly for diagnostics.`);
+      throw new Error(`HyperFrames Studio exited before it became ready (exit ${child.exitCode}). Run launchclip doctor, then retry production-preview for diagnostics.`);
     }
     await wait(CONTEXT_POLL_INTERVAL_MS);
   }
 
   child.kill?.();
-  throw new Error(`Timed out waiting for HyperFrames Studio after ${settings.timeoutMs}ms. Run npx hyperframes preview ${project} directly for diagnostics.`);
+  throw new Error(`Timed out waiting for HyperFrames Studio after ${settings.timeoutMs}ms. Run launchclip doctor, then retry production-preview for diagnostics.`);
 }
 
 function spawnPreviewProcess(project, options) {
-  const executable = process.platform === "win32" ? "npx.cmd" : "npx";
-  const args = ["hyperframes", "preview", "--port", String(options.port)];
+  const args = ["preview", "--port", String(options.port)];
   if (options.open === false) args.push("--no-open");
   args.push(project);
-  return spawn(executable, args, {
+  const invocation = hyperframesInvocation(args);
+  return spawn(invocation.command, invocation.args, {
     cwd: project,
     detached: process.platform !== "win32",
     stdio: "ignore"
@@ -84,10 +85,9 @@ function spawnPreviewProcess(project, options) {
 }
 
 async function readPreviewContext(project) {
-  const executable = process.platform === "win32" ? "npx.cmd" : "npx";
-  const args = ["hyperframes", "preview", "--context", "--json", "--context-fields", "server", project];
+  const invocation = hyperframesInvocation(["preview", "--context", "--json", "--context-fields", "server", project]);
   try {
-    const { stdout } = await execFileAsync(executable, args, { cwd: project, timeout: 5_000, maxBuffer: 1024 * 1024 });
+    const { stdout } = await execFileAsync(invocation.command, invocation.args, { cwd: project, timeout: 5_000, maxBuffer: 1024 * 1024 });
     const payload = JSON.parse(stdout);
     return payload.ok ? payload.server ?? null : null;
   } catch (error) {

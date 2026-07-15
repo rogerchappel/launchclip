@@ -17,9 +17,16 @@ the current workflow and the decisions an operating agent must not guess.
 
 ## Runtime and credentials
 
-LaunchClip itself requires Node.js 20 or newer. Model-directed HyperFrames
-production also requires Node.js 22 or newer, FFmpeg/`ffprobe`, a working browser
-toolchain, and `npx hyperframes`.
+LaunchClip requires Node.js 22 or newer. Model-directed HyperFrames production
+also requires FFmpeg/`ffprobe` and a working browser toolchain. Packaged CLI
+commands invoke LaunchClip's pinned HyperFrames dependency rather than resolving
+an unversioned tool through `npx`.
+
+Start every new host check with:
+
+```bash
+launchclip doctor
+```
 
 Provider requirements:
 
