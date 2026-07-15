@@ -220,6 +220,19 @@ test("fails closed when authored frames silently replace the planned type system
   ]);
   const faithful = [{ shot_id: "shot-1", html: '<style>:root{--display:"Silkscreen";--body:"Atkinson Hyperlegible"}.title{font-family:var(--display)}.copy{font-family:var(--body)}.meta{font:500 24px/1 "IBM Plex Mono"}</style>' }];
   assert.deepEqual(plannedTypographyErrors(plan, faithful), []);
+
+  const describedPlan = { design: { style_dna: { typography: {
+    display: "Space Grotesk 700, tightly tracked",
+    body: "Inter 500/600 with short labels",
+    metadata: "IBM Plex Mono 500 for commands"
+  } } } };
+  const describedFaithful = [{ shot_id: "shot-1", html: '<style>.title{font-family:"Space Grotesk",sans-serif}.copy{font-family:Inter,sans-serif}.meta{font-family:"IBM Plex Mono",monospace}</style>' }];
+  assert.deepEqual(plannedTypographyErrors(describedPlan, describedFaithful), []);
+  assert.deepEqual(plannedTypographyErrors(describedPlan, generic), [
+    'planned typography role display requires family "Space Grotesk", but no assembled frame declares it',
+    'planned typography role body requires family "Inter", but no assembled frame declares it',
+    'planned typography role metadata requires family "IBM Plex Mono", but no assembled frame declares it'
+  ]);
 });
 
 test("blocks final rendering without approval and records failed HyperFrames checks", async () => {

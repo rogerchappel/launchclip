@@ -218,7 +218,7 @@ export async function verifySemanticArtifacts(projectPath, plan) {
 
 export function plannedTypographyErrors(plan, frames) {
   const roles = Object.entries(plan?.design?.style_dna?.typography ?? {})
-    .map(([role, family]) => [role, String(family ?? "").trim()])
+    .map(([role, family]) => [role, plannedTypographyFamily(family)])
     .filter(([, family]) => family);
   if (!roles.length) return [];
   const css = frames.map((entry) => styleDeclarations(entry.html)).join("\n");
@@ -227,6 +227,12 @@ export function plannedTypographyErrors(plan, frames) {
     const declaration = new RegExp(`(?:font(?:-family)?|--[a-z0-9_-]+)\\s*:[^;}]*["']?${escaped}(?:["']|\\s|,|;|}|$)`, "i");
     return declaration.test(css) ? [] : [`planned typography role ${role} requires family ${JSON.stringify(family)}, but no assembled frame declares it`];
   });
+}
+
+function plannedTypographyFamily(value) {
+  const planned = String(value ?? "").trim();
+  const described = planned.match(/^(.+?)\s+(?:[1-9]00(?:[\/\u2013-][1-9]00)?|thin|extra[- ]?light|light|regular|medium|semi[- ]?bold|bold|extra[- ]?bold|black)(?=\s|,|$)/i);
+  return String(described?.[1] ?? planned).replace(/^["']|["']$/g, "").trim();
 }
 
 function styleDeclarations(html) {
