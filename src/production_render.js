@@ -85,10 +85,9 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
   }
   for (const [name, args] of [
     ["lint", ["lint", "--json", project]],
-    ["validate", ["validate", "--json", "--timeout", String(options.timeoutMs ?? 8000), project]],
     // Keep the historical receipt key (`inspect`) stable for repair routing while
     // using the current all-in-one HyperFrames browser contract underneath.
-    ["inspect", ["check", "--json", "--samples", String(options.inspectSamples ?? 15), "--at-transitions", project]]
+    ["inspect", ["check", "--json", "--timeout", String(options.timeoutMs ?? 8000), "--samples", String(options.inspectSamples ?? 15), "--at-transitions", project]]
   ]) {
     checks[name] = enforceStructuredCheck(await captureHyperframes(run, args, { cwd: project }));
     if (name === "lint" && options.strictAll !== false) {
@@ -438,7 +437,7 @@ async function readReusableVerification(workspace, receiptPath, inputs) {
 }
 
 async function collectVerificationArtifacts(workspace, qaDir, plan) {
-  const files = ["semantic.json", "lint.json", "validate.json", "inspect.json", "snapshot.json"].map((name) => path.join(qaDir, name));
+  const files = ["semantic.json", "lint.json", "inspect.json", "snapshot.json"].map((name) => path.join(qaDir, name));
   for (const shot of plan.shots ?? []) files.push(path.join(qaDir, "shot-inspect", shot.id, "inspect.json"));
   return Promise.all(files.map((filePath) => describeReceiptFile(workspace, filePath)));
 }
