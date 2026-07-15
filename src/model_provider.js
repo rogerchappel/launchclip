@@ -148,6 +148,10 @@ export class OllamaStructuredClient extends ChatCompletionsStructuredClient {
       num_ctx: positiveInteger(options.contextTokens ?? this.contextTokens, "Ollama context length")
     };
     if (options.maxOutputTokens != null) generation.num_predict = positiveInteger(options.maxOutputTokens, "maxOutputTokens");
+    const keepAlive = options.keepAlive;
+    if (keepAlive != null && !((typeof keepAlive === "number" && Number.isFinite(keepAlive)) || (typeof keepAlive === "string" && keepAlive.trim()))) {
+      throw new Error("Ollama keepAlive must be a finite number or non-empty duration string");
+    }
     const payload = await this.request("/api/chat", {
       method: "POST",
       body: JSON.stringify({
@@ -156,6 +160,7 @@ export class OllamaStructuredClient extends ChatCompletionsStructuredClient {
         format: options.schema,
         stream: false,
         think: false,
+        ...(keepAlive == null ? {} : { keep_alive: keepAlive }),
         options: generation
       })
     });
