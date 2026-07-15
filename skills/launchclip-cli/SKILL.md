@@ -88,8 +88,10 @@ is running; it prepends the configured local coder model. Use explicit repeated
 `--frame-route` or `--repair-route` values when no unapproved cloud fallback is
 allowed. Ollama uses its native structured-output API with a deterministic 32K
 context; `OLLAMA_CONTEXT_LENGTH` can override that allocation. Repairs are
-bounded exact source edits, not complete frame rewrites. Do not raise
-`--max-patch-ratio` merely to make a failed repair pass.
+bounded exact source edits, not complete frame rewrites. Repair passes receive
+four prioritized blocking findings per shot by default; lower
+`--repair-issues-per-shot` when the local model needs a smaller fix. Do not
+raise `--max-patch-ratio` merely to make a failed repair pass.
 
 Do not pass `--allow-frame-fallback`, `--allow-timing-drift`,
 `--skip-quality-gates`, or similar escape hatches by default. Use one only when
