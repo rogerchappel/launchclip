@@ -87,6 +87,36 @@ test("preserves explicit cuts and compiles directional transition physics", () =
   ]);
 });
 
+test("compiles stable continuity as slower full-canvas travel with velocity-shaped blur", () => {
+  const presenter = { mode: "companion", visible: true, placement: "top-right", size: "small" };
+  const continuity = (handoff) => ({
+    sequence_id: "shared-proof-world", handoff,
+    inherits_object_ids: ["proof-node"], hands_off_object_ids: ["proof-node"],
+    camera_direction: "rightward", entry_velocity: 360, exit_velocity: 360, motion_blur_px: 14
+  });
+  const plan = { format: { language: "en", width: 1920, height: 1080, duration_seconds: 10 }, design: { style_dna: { colors: { background: "#000" } } }, shots: [
+    { id: "one", start_seconds: 0, end_seconds: 5, transition_out: "semantic match across the same workspace", presenter, visual: { continuity: continuity("continue") } },
+    { id: "two", start_seconds: 5, end_seconds: 10, presenter: { ...presenter }, visual: { continuity: continuity("resolve") } }
+  ] };
+  const transitions = buildShotTransitions(plan);
+  assert.deepEqual(transitions.map((entry) => ({ kind: entry.kind, duration: entry.duration_seconds, distance: entry.distance_pixels, blur: entry.motion_blur_px, exit: entry.exit_ease, entry: entry.entry_ease })), [
+    { kind: "shared-world", duration: 1.2, distance: 1920, blur: 24.5, exit: "power3.inOut", entry: "power3.inOut" }
+  ]);
+  const bundles = plan.shots.map((shot) => ({ shot_id: shot.id, root_media_requests: [] }));
+  const rendered = renderRoot({ plan, bundles, assetMap: new Map(), transitions });
+  assert.match(rendered, /data-composition-src="compositions\/one\.html" data-start="0" data-duration="6\.2"/);
+  assert.match(rendered, /"opacity":1,"x":-1920,"y":0,"scale":1/);
+  assert.match(rendered, /"opacity":1,"x":1920,"y":0,"scale":1,"filter":"blur\(0px\)"/);
+  assert.match(rendered, /"filter":"blur\(24\.5px\)",duration:0\.6,ease:"power2\.in"/);
+  assert.match(rendered, /"filter":"blur\(0px\)",duration:0\.6,ease:"power2\.out"/);
+  assert.match(rendered, /"ease":"power3\.inOut","immediateRender":false/);
+  assert.ok(rootMotionSpec(plan, bundles, transitions).assertions.every((entry) => entry.kind !== "staysInFrame"));
+
+  const changedAnchor = structuredClone(plan);
+  changedAnchor.shots[1].presenter.placement = "bottom-right";
+  assert.equal(buildShotTransitions(changedAnchor)[0].kind, "push");
+});
+
 test("retains materially different zoom, morph, aperture, and whip handoffs", () => {
   const plan = { format: { width: 1080, height: 1920, duration_seconds: 18 }, shots: [
     { id: "one", start_seconds: 0, end_seconds: 3, transition_out: "Camera whips left into the next beat" },

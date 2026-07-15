@@ -42,7 +42,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   const dependencies = plan.shots.map((shot) => `frame:${shot.id}`);
   for (const dependency of dependencies) if (store.get(dependency)?.status !== "succeeded") throw new Error(`Frame job must succeed before assembly: ${dependency}`);
   const extraAudio = await describeExtraAudio(options);
-  const inputHash = semanticHash({ intake, plan, bundles, fallbacks, extraAudio, assembler: "hyperframes-assembler.v15" });
+  const inputHash = semanticHash({ intake, plan, bundles, fallbacks, extraAudio, assembler: "hyperframes-assembler.v16" });
   const jobId = "hyperframes-assembly";
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
@@ -97,7 +97,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
     const motionPath = path.join(projectDir, "index.motion.json");
     const manifestPath = path.join(projectDir, "assembly.json");
     await writeAtomic(indexPath, html);
-    await writeAtomic(motionPath, `${JSON.stringify(rootMotionSpec(plan, bundles), null, 2)}\n`);
+    await writeAtomic(motionPath, `${JSON.stringify(rootMotionSpec(plan, bundles, transitions), null, 2)}\n`);
     await writeAtomic(manifestPath, `${JSON.stringify({
       schema_version: "launchclip.hyperframes-assembly.v1",
       duration_seconds: plan.format.duration_seconds,
@@ -137,14 +137,19 @@ export function toHyperFramesMotionSpec(bundle, duration) {
   return { version: 1, duration: Number(duration), assertions, events: structuredClone(bundle.motion?.events ?? []) };
 }
 
-export function rootMotionSpec(plan, bundles) {
+export function rootMotionSpec(plan, bundles, transitions = buildShotTransitions(plan)) {
   const assertions = [];
+  const travelingMounts = new Set(
+    transitions
+      .filter((transition) => transition.kind === "shared-world")
+      .flatMap((transition) => [transition.from_shot_id, transition.to_shot_id])
+  );
   for (const [index, shot] of plan.shots.entries()) {
     const selector = `#mount-${shot.id}`;
     const shotDuration = shot.end_seconds - shot.start_seconds;
     const mountGrace = Math.min(.5, Math.max(.3, shotDuration * .02), shotDuration * .5);
     assertions.push({ kind: "appearsBy", selector, bySec: Number((shot.start_seconds + mountGrace).toFixed(3)) });
-    assertions.push({ kind: "staysInFrame", selector });
+    if (!travelingMounts.has(shot.id)) assertions.push({ kind: "staysInFrame", selector });
     if (index > 0) assertions.push({ kind: "before", a: `#mount-${plan.shots[index - 1].id}`, b: selector });
   }
   return { version: 1, duration: plan.format.duration_seconds, assertions };
@@ -255,7 +260,7 @@ export function buildShotTransitions(plan) {
       kind,
       axis,
       direction,
-      distance_pixels: kind === "cut" ? 0 : Math.round(clamp(dimension * profile.distance_ratio, profile.minimum_distance, profile.maximum_distance)),
+      distance_pixels: kind === "cut" ? 0 : kind === "shared-world" ? Math.round(dimension) : Math.round(clamp(dimension * profile.distance_ratio, profile.minimum_distance, profile.maximum_distance)),
       motion_blur_px: kind === "cut" ? 0 : Number(clamp(requestedBlur * profile.blur_multiplier, 0, 40).toFixed(2)),
       exit_ease: profile.exit_ease,
       entry_ease: profile.entry_ease,
@@ -277,7 +282,22 @@ function renderShotTransitionMotion(plan, transitions) {
     }
     const outgoing = `#mount-${escapeJs(transition.from_shot_id)}`;
     const { outgoingState, incomingState } = transitionStates(transition);
-    const settled = { ...reset, clipPath: transition.kind === "aperture" ? "circle(150% at 50% 50%)" : reset.clipPath, duration: transition.duration_seconds, ease: transition.entry_ease };
+    if (transition.kind === "shared-world") {
+      const halfDuration = Number((transition.duration_seconds / 2).toFixed(3));
+      const movementSettled = {
+        opacity: 1, x: 0, y: 0, scale: 1,
+        clipPath: reset.clipPath, transformOrigin: reset.transformOrigin,
+        duration: transition.duration_seconds, ease: transition.entry_ease,
+        immediateRender: false
+      };
+      const pair = `${outgoing},${incoming}`;
+      statements.push(`timeline.to("${outgoing}",{...${JSON.stringify(outgoingState)},duration:${number(transition.duration_seconds)},ease:"${escapeJs(transition.exit_ease)}"},${number(transition.at_seconds)});`);
+      statements.push(`timeline.fromTo("${incoming}",${JSON.stringify(incomingState)},${JSON.stringify(movementSettled)},${number(transition.at_seconds)});`);
+      statements.push(`timeline.to("${pair}",{"filter":"blur(${number(transition.motion_blur_px)}px)",duration:${number(halfDuration)},ease:"power2.in"},${number(transition.at_seconds)});`);
+      statements.push(`timeline.to("${pair}",{"filter":"blur(0px)",duration:${number(halfDuration)},ease:"power2.out"},${number(transition.at_seconds + halfDuration)});`);
+      continue;
+    }
+    const settled = { ...reset, clipPath: transition.kind === "aperture" ? "circle(150% at 50% 50%)" : reset.clipPath, duration: transition.duration_seconds, ease: transition.entry_ease, immediateRender: false };
     statements.push(`timeline.to("${outgoing}",{...${JSON.stringify(outgoingState)},duration:${number(transition.duration_seconds)},ease:"${escapeJs(transition.exit_ease)}"},${number(transition.at_seconds)});`);
     statements.push(`timeline.fromTo("${incoming}",${JSON.stringify(incomingState)},${JSON.stringify(settled)},${number(transition.at_seconds)});`);
   }
@@ -292,14 +312,39 @@ function classifyTransition(intent, outgoing, incoming) {
   if (/\b(?:morph|becomes?|transform|fold|unfold|collapse|split|stretch|eject|expand(?:s|ed)?\s+into)\b/.test(text)) return "morph";
   if (/\b(?:whip(?:s|ped|ping)?|snap|swipe|sweep|chase|rush)\b/.test(text)) return "whip";
   if (/\b(?:port)\b/.test(text)) return "aperture";
+  if (isSharedWorldHandoff(text, outgoing, incoming)) return "shared-world";
   if (/\b(?:push|slide|pan|camera|follow|descend|ascend|drop|rise|move)\b/.test(text)) return "push";
   const direction = String(incoming.visual?.continuity?.camera_direction ?? outgoing.visual?.continuity?.camera_direction ?? "");
   return /\b(?:fast|whip|snap)\b/i.test(direction) ? "whip" : "push";
 }
 
+function isSharedWorldHandoff(text, outgoing, incoming) {
+  const outgoingContinuity = outgoing.visual?.continuity ?? {};
+  const incomingContinuity = incoming.visual?.continuity ?? {};
+  const outgoingSequence = String(outgoingContinuity.sequence_id ?? "");
+  const incomingSequence = String(incomingContinuity.sequence_id ?? "");
+  const sameSequence = outgoingSequence && incomingSequence && outgoingSequence === incomingSequence;
+  const inherited = new Set(incomingContinuity.inherits_object_ids ?? []);
+  const handsOffObject = (outgoingContinuity.hands_off_object_ids ?? []).some((id) => inherited.has(id));
+  const explicitSharedWorld = /\b(?:shared[- ]world|same (?:world|canvas|workspace)|workspace pan|continuous canvas|state continuation|semantic match|platform pass)\b/.test(text)
+    || /\bcarry\b[^.]*\b(?:next|forward|through|into)\b/.test(text)
+    || /\bfollow\b[^.]*\b(?:route|path|line|object)\b/.test(text);
+  return hasStablePresenterAnchor(outgoing.presenter, incoming.presenter)
+    && (explicitSharedWorld || (outgoingContinuity.handoff === "continue" && (sameSequence || handsOffObject)));
+}
+
+function hasStablePresenterAnchor(outgoing, incoming) {
+  if (!outgoing || !incoming) return true;
+  return outgoing.mode === incoming.mode
+    && outgoing.visible === incoming.visible
+    && outgoing.placement === incoming.placement
+    && outgoing.size === incoming.size;
+}
+
 function transitionProfile(kind) {
   return ({
     cut: { duration_ratio: 0, minimum_duration: 0, maximum_duration: 0, distance_ratio: 0, minimum_distance: 0, maximum_distance: 0, blur_multiplier: 0, exit_ease: "none", entry_ease: "none" },
+    "shared-world": { duration_ratio: .24, minimum_duration: .9, maximum_duration: 1.25, distance_ratio: 1, minimum_distance: 0, maximum_distance: 4096, blur_multiplier: 1.75, exit_ease: "power3.inOut", entry_ease: "power3.inOut" },
     push: { duration_ratio: .11, minimum_duration: .32, maximum_duration: .5, distance_ratio: .16, minimum_distance: 120, maximum_distance: 320, blur_multiplier: 1, exit_ease: "power4.in", entry_ease: "expo.out" },
     whip: { duration_ratio: .075, minimum_duration: .22, maximum_duration: .34, distance_ratio: .48, minimum_distance: 320, maximum_distance: 720, blur_multiplier: 1.8, exit_ease: "expo.in", entry_ease: "expo.out" },
     zoom: { duration_ratio: .13, minimum_duration: .4, maximum_duration: .62, distance_ratio: .06, minimum_distance: 32, maximum_distance: 110, blur_multiplier: 1.2, exit_ease: "power4.in", entry_ease: "expo.out" },
@@ -313,6 +358,10 @@ function transitionStates(transition) {
   const x = transition.axis === "x" ? distance : 0;
   const y = transition.axis === "y" ? distance : 0;
   const blur = `blur(${number(transition.motion_blur_px)}px)`;
+  if (transition.kind === "shared-world") return {
+    outgoingState: { opacity: 1, x: -x, y: -y, scale: 1, clipPath: "inset(0% 0% round 0px)", transformOrigin: "50% 50%" },
+    incomingState: { opacity: 1, x, y, scale: 1, filter: "blur(0px)", clipPath: "inset(0% 0% round 0px)", transformOrigin: "50% 50%" }
+  };
   if (transition.kind === "whip") return {
     outgoingState: { opacity: .82, x: -x, y: -y, scale: 1.035, filter: blur, clipPath: "inset(0% 0% round 0px)", transformOrigin: "50% 50%" },
     incomingState: { opacity: .78, x, y, scale: .965, filter: blur, clipPath: "inset(0% 0% round 0px)", transformOrigin: "50% 50%" }
