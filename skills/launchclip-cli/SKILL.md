@@ -16,8 +16,9 @@ Choose one lane:
 - **Subscription/OAuth agent, no model API spend:** use the separate
   `launchclip-create-video` skill. Do not call `launchclip produce`.
 - **Model-directed production:** use `produce` or its resumable production
-  stages. This lane calls metered provider APIs and creates an editable
-  HyperFrames project plus draft QA.
+  stages. Planning and visual critique use OpenAI; frame authoring and bounded
+  source-edit repairs may use OpenAI, OpenRouter, or local Ollama. This lane
+  creates an editable HyperFrames project plus draft QA.
 - **Local-first OSS promotion packet:** use `run` or the manual
   `init` → `demo` → `plan` → `captions` → `render` → `validate` → `review`
   stages. Keep provider handoffs in dry-run mode unless explicitly approved.
@@ -53,7 +54,8 @@ Before a production run, determine:
 - audience, CTA, aspect, duration, language, and creative prompt
 - supporting assets, references, supplied narration/transcript, and presenter
   footage
-- which provider credentials exist and which paid calls the user approves
+- which provider credentials or local endpoints exist and which paid calls the
+  user approves
 - whether the goal is a fast evaluation draft or a full-quality draft
 
 Ask before:
@@ -79,6 +81,13 @@ run. Use `--no-audio` to skip generated voice, music, and SFX, not to skip model
 planning, frame authoring, critique, or repairs. Treat `--max-frame-cost-usd` as
 a cumulative guard for direct-frame provider responses only, not as a total
 pipeline budget.
+
+Use `--model-policy cost-aware` by default: Terra plans, Luna authors, and only
+failed frames escalate through Terra to Sol. Use `local-first` only when Ollama
+is running; it prepends the configured local coder model. Use explicit repeated
+`--frame-route` or `--repair-route` values when no unapproved cloud fallback is
+allowed. Repairs are bounded exact source edits, not complete frame rewrites.
+Do not raise `--max-patch-ratio` merely to make a failed repair pass.
 
 Do not pass `--allow-frame-fallback`, `--allow-timing-drift`,
 `--skip-quality-gates`, or similar escape hatches by default. Use one only when

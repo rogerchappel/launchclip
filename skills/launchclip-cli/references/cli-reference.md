@@ -32,7 +32,10 @@ Provider requirements:
 
 | Capability | Requirement |
 | --- | --- |
-| creative plan, authored frames, critic, model repairs | `OPENAI_API_KEY` |
+| creative plan and visual critic | `OPENAI_API_KEY` |
+| cost-aware frame authoring and repair | `OPENAI_API_KEY`; Luna escalates to Terra/Sol only when needed |
+| local-first frame authoring or repair | a running Ollama server; no model API key for the local attempt |
+| OpenRouter frame authoring or repair | `OPENROUTER_API_KEY` |
 | generated narration and music | `ELEVENLABS_API_KEY` plus `ELEVENLABS_VOICE_ID` or `--voice-id` for narration |
 | supplied voiceover without a transcript | `ELEVENLABS_API_KEY` for transcription |
 | supplied voiceover with `--transcript` | no transcription call required |
@@ -43,6 +46,7 @@ Check presence without exposing values:
 
 ```bash
 test -n "$OPENAI_API_KEY" && echo OPENAI_API_KEY=present || echo OPENAI_API_KEY=missing
+test -n "$OPENROUTER_API_KEY" && echo OPENROUTER_API_KEY=present || echo OPENROUTER_API_KEY=missing
 test -n "$ELEVENLABS_API_KEY" && echo ELEVENLABS_API_KEY=present || echo ELEVENLABS_API_KEY=missing
 test -n "$ELEVENLABS_VOICE_ID" && echo ELEVENLABS_VOICE_ID=present || echo ELEVENLABS_VOICE_ID=missing
 ```
@@ -76,6 +80,33 @@ Resource directories are expanded into checksummed files. Hidden files and
 asset usage, entities, tags, priority, and license.
 
 ## Model-directed production
+
+Model policies:
+
+- `cost-aware` (default): Terra/high planning, Luna/medium frames and patches,
+  then Terra/high and Sol/high only for failed scenes.
+- `local-first`: prepend `ollama:qwen2.5-coder:latest@none` to frame and repair
+  routes while retaining the cloud escalation ladder.
+- `quality`: retain Sol-first authoring and repair.
+
+Pin one or more routes with repeatable
+`--frame-route provider:model@reasoning` and
+`--repair-route provider:model@reasoning`. Supported providers are `openai`,
+`openrouter`, `ollama`, and `compatible`; the generic compatible provider reads
+`OPENAI_COMPATIBLE_BASE_URL` and `OPENAI_COMPATIBLE_API_KEY`. An explicit
+single local route prevents an unapproved cloud fallback:
+
+```bash
+launchclip production-repair <workspace> \
+  --repair-route ollama:qwen2.5-coder:latest@none \
+  --max-patch-ratio 0.35
+```
+
+Repairs return exact find/replace edits against the current HTML or structured
+frame fields. A find string must occur once, the default patch may touch at
+most 35% of its targets, and the result must pass the complete frame contract.
+When a patch fails, LaunchClip feeds the exact error to the next bounded attempt
+instead of requesting a complete replacement frame.
 
 Repository example:
 
