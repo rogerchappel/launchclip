@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { readFrameSelection, safeShotFile, sanitizeFrameBundle, validateHyperFramesRoot, writeFrameArtifacts } from "./frame_director.js";
+import { verifyFrameCandidate } from "./frame_candidate_verify.js";
 import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model_provider.js";
@@ -114,7 +115,8 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     if (!shot) throw new Error(`Critique references unknown shot: ${shotId}`);
     const prior = (await readFrameSelection(workspace, shotId)).bundle;
     const repairInputHash = semanticHash({
-      worker: "frame-repair.v6",
+      worker: "frame-repair.v7",
+      candidate_verification: "browser-snapshot.v1",
       routes: routes.map(modelRouteKey),
       max_patch_ratio: Number(options.maxPatchRatio ?? .35),
       shot,
@@ -218,6 +220,16 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
             validationErrors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
             previousCandidate = candidate;
             if (validationErrors.length) continue;
+            const candidateVerification = await (adapters.verifyCandidate ?? verifyFrameCandidate)(workspace, candidate, {
+              shot,
+              format: plan.format,
+              attempt: `${totalAttempt}-${route.provider}-${route.model}`
+            }, { run: adapters.run });
+            if (!candidateVerification?.ok) {
+              if (candidateVerification?.failure_kind === "infrastructure") throw infrastructureRepairError([`candidate:${shotId}`]);
+              validationErrors = [`Candidate visual verification failed: ${candidateVerification?.error ?? "the mounted frame did not pass browser snapshots"}`];
+              continue;
+            }
             const paths = await writeFrameArtifacts(workspace, candidate);
             await store.markRunning(jobId, { provider: route.provider, response_id: result.response_id, status: result.status });
             const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
@@ -232,11 +244,13 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
               provider: route.provider,
               model: result.model,
               patch: { edits: patched.edits, rejected_edits: patched.rejectedEdits.length, changed_ratio: patched.changedRatio },
+              candidate_verification: { report: candidateVerification.report ?? null, snapshots: candidateVerification.snapshots ?? null },
               cached: false
             });
             completed = true;
             break;
           } catch (error) {
+            if (error.code === "LAUNCHCLIP_PRODUCTION_INFRASTRUCTURE_FAILED") throw error;
             resumeResponseId = null;
             validationErrors = [`Patch attempt ${totalAttempt} via ${route.provider}:${route.model} failed: ${error.message}`];
           }
