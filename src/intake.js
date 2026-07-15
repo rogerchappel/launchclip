@@ -66,8 +66,9 @@ export async function buildIntake(source, flags = {}, env = process.env) {
   const sourceKind = inferSourceKind(value, flags.kind);
   const aspect = resolveAspect(flags.aspect ?? flags.ratio ?? "16:9");
   const durationSeconds = positiveNumber(flags.duration ?? 60, "--duration");
-  const model = String(flags.model ?? env.OPENAI_VIDEO_MODEL ?? "gpt-5.6").trim();
-  const reasoningEffort = resolveReasoningEffort(flags.reasoning ?? env.OPENAI_VIDEO_REASONING ?? "xhigh");
+  const modelPolicy = resolveModelPolicy(flags["model-policy"] ?? "cost-aware");
+  const model = String(flags.model ?? env.OPENAI_VIDEO_MODEL ?? (modelPolicy === "quality" ? "gpt-5.6" : "gpt-5.6-terra")).trim();
+  const reasoningEffort = resolveReasoningEffort(flags.reasoning ?? env.OPENAI_VIDEO_REASONING ?? (modelPolicy === "quality" ? "xhigh" : "high"));
   const resources = [];
   if (sourceKind === "voiceover" && existsSync(path.resolve(value))) {
     resources.push(...await describeResourceEntries(value, "voiceover", resources.length));
@@ -253,6 +254,14 @@ export function resolveReasoningEffort(value) {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (!["none", "low", "medium", "high", "xhigh", "max"].includes(normalized)) {
     throw new Error(`Unsupported --reasoning: ${value}. Supported: none, low, medium, high, xhigh, max`);
+  }
+  return normalized;
+}
+
+export function resolveModelPolicy(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!["cost-aware", "local-first", "quality"].includes(normalized)) {
+    throw new Error(`Unsupported --model-policy: ${value}. Supported: cost-aware, local-first, quality`);
   }
   return normalized;
 }
