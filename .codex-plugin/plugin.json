@@ -1,0 +1,38 @@
+{
+  "name": "launchclip",
+  "version": "0.1.0",
+  "description": "Create reviewable launch videos and OSS promotion packets from local product evidence.",
+  "author": {
+    "name": "Roger Chappel",
+    "url": "https://github.com/rogerchappel"
+  },
+  "homepage": "https://github.com/rogerchappel/launchclip",
+  "repository": "https://github.com/rogerchappel/launchclip",
+  "license": "MIT",
+  "keywords": [
+    "cli",
+    "developer-tools",
+    "hyperframes",
+    "video"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "LaunchClip",
+    "shortDescription": "Turn product evidence into launch videos.",
+    "longDescription": "Plan, build, review, and render evidence-grounded launch videos with either subscription agents or the LaunchClip CLI.",
+    "developerName": "Roger Chappel",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write",
+      "Execute"
+    ],
+    "websiteURL": "https://github.com/rogerchappel/launchclip",
+    "defaultPrompt": [
+      "Create a launch video from this repository.",
+      "Guide me through a subscription-agent LaunchClip workflow.",
+      "Audit this LaunchClip workspace before rendering."
+    ],
+    "brandColor": "#F05A28"
+  }
+}
