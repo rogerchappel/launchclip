@@ -18,6 +18,18 @@ test("extracts exact selector-centred source for a large local repair", () => {
   assert.ok(html.reduce((total, entry) => total + entry.source.length, 0) < prior.html.length / 4);
 });
 
+test("gives a contrast repair only the exact style region", () => {
+  const filler = "<section class='unused'>Unused</section>".repeat(600);
+  const prior = bundle(`<template><style>#shot-proof{color:#777;background:#fff}</style>${filler}<div id="shot-proof">Proof</div></template>`);
+  const capsule = buildRepairSourceCapsule(prior, [{ repair_targets: [{ code: "contrast_aa_failure", selector: "#shot-proof", message: "Contrast is 2:1" }] }], [], { htmlChars: 3_000 });
+  const html = capsule.sources.filter((entry) => entry.target === "html");
+  assert.deepEqual(capsule.repair_codes, ["contrast_aa_failure"]);
+  assert.ok(html.length > 0);
+  assert.ok(html.every((entry) => entry.role === "style"));
+  assert.ok(html.some((entry) => entry.source.includes("#shot-proof{color:#777")));
+  assert.ok(html.every((entry) => !entry.source.includes('<div id="shot-proof"')));
+});
+
 test("keeps short repair targets complete", () => {
   const prior = bundle('<div id="shot-proof">Proof</div>');
   const capsule = buildRepairSourceCapsule(prior, [{ selector: "#shot-proof" }]);
@@ -45,7 +57,9 @@ test("centres runtime repair excerpts on APIs named by diagnostics", () => {
   const capsule = buildRepairSourceCapsule(prior, findings, [], { htmlChars: 3_000 });
   assert.deepEqual(collectDiagnosticTerms(findings), ["querySelector"]);
   assert.deepEqual(capsule.diagnostic_terms, ["querySelector"]);
-  assert.ok(capsule.sources.filter((entry) => entry.target === "html").some((entry) => entry.source.includes(runtime)));
+  const html = capsule.sources.filter((entry) => entry.target === "html");
+  assert.ok(html.some((entry) => entry.source.includes(runtime)));
+  assert.ok(html.every((entry) => entry.role === "script"));
 });
 
 test("compacts a local repair context without dropping visual identities or event timing", () => {

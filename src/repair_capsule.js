@@ -1,10 +1,11 @@
 const SOURCE_TARGETS = ["html", "motion", "root_media_requests", "evidence_ids", "visible_copy", "preserve"];
 
-export const REPAIR_CAPSULE_VERSION = "selector-capsule.v2";
+export const REPAIR_CAPSULE_VERSION = "selector-capsule.v3";
 
 export function buildRepairSourceCapsule(prior, findings = [], validationErrors = [], options = {}) {
   const selectors = collectRepairSelectors(findings, validationErrors);
   const diagnosticTerms = collectDiagnosticTerms(findings, validationErrors);
+  const repairCodes = collectRepairCodes(findings);
   const limits = {
     html: positiveInteger(options.htmlChars ?? 9_000, "HTML repair capsule size"),
     motion: positiveInteger(options.motionChars ?? 4_000, "motion repair capsule size")
@@ -16,19 +17,21 @@ export function buildRepairSourceCapsule(prior, findings = [], validationErrors 
     const excerpts = exactSourceExcerpts(source, [...selectorAnchors(selectors), ...diagnosticTerms], {
       maximumCharacters: limit,
       radius: target === "html" ? 620 : 420,
+      allowedRoles: target === "html" ? preferredHtmlRoles(repairCodes) : null,
       fallbackAnchors: target === "html"
         ? ["#root", "window.__timelines", "gsap.", "</template>"]
         : ["\"assertions\"", "\"events\""]
     });
     return excerpts.map((entry, index) => ({
       target,
-      source: entry,
+      source: entry.source,
+      role: entry.role,
       scope: selectors.length ? "selector" : "structural",
       excerpt: index + 1,
       excerpts: excerpts.length
     }));
   });
-  return { version: REPAIR_CAPSULE_VERSION, selectors, diagnostic_terms: diagnosticTerms, sources };
+  return { version: REPAIR_CAPSULE_VERSION, selectors, diagnostic_terms: diagnosticTerms, repair_codes: repairCodes, sources };
 }
 
 export function buildRepairContextCapsule(plan, shot) {
@@ -88,6 +91,25 @@ export function collectDiagnosticTerms(findings = [], validationErrors = []) {
   return [...terms].slice(0, 8);
 }
 
+function collectRepairCodes(findings) {
+  const codes = new Set();
+  const visit = (value, key = "") => {
+    if (value == null) return;
+    if (Array.isArray(value)) return value.forEach((entry) => visit(entry, key));
+    if (typeof value === "object") return Object.entries(value).forEach(([childKey, child]) => visit(child, childKey));
+    if (key === "code" && typeof value === "string") codes.add(value);
+  };
+  visit(findings);
+  return [...codes];
+}
+
+function preferredHtmlRoles(codes) {
+  if (codes.some((code) => code === "console_error" || code.startsWith("runtime_"))) return ["script"];
+  if (codes.length && codes.every((code) => code.startsWith("contrast_"))) return ["style"];
+  if (codes.length && codes.every((code) => code.startsWith("motion_"))) return ["script"];
+  return ["style", "markup"];
+}
+
 function exactSourceExcerpts(source, anchors, options) {
   const maximumCharacters = options.maximumCharacters;
   const radius = options.radius;
@@ -97,30 +119,50 @@ function exactSourceExcerpts(source, anchors, options) {
     let cursor = 0;
     let matches = 0;
     while ((cursor = source.indexOf(anchor, cursor)) >= 0 && matches < 4) {
-      ranges.push([Math.max(0, cursor - radius), Math.min(source.length, cursor + anchor.length + radius)]);
+      const role = sourceRoleAt(source, cursor);
+      if (!options.allowedRoles || options.allowedRoles.includes(role)) ranges.push([Math.max(0, cursor - radius), Math.min(source.length, cursor + anchor.length + radius), role]);
       cursor += Math.max(1, anchor.length);
       matches += 1;
     }
   }
-  if (!ranges.length) ranges.push([0, Math.min(source.length, maximumCharacters)]);
+  if (!ranges.length) ranges.push(fallbackRange(source, maximumCharacters, options.allowedRoles));
   ranges.sort((left, right) => left[0] - right[0]);
   const merged = [];
   for (const range of ranges) {
     const last = merged.at(-1);
-    if (last && range[0] <= last[1] + 80) last[1] = Math.max(last[1], range[1]);
+    if (last && range[2] === last[2] && range[0] <= last[1] + 80) last[1] = Math.max(last[1], range[1]);
     else merged.push([...range]);
   }
   const excerpts = [];
   let used = 0;
-  for (const [start, end] of merged) {
+  for (const [start, end, role] of merged) {
     if (used >= maximumCharacters) break;
     const remaining = maximumCharacters - used;
     const excerpt = source.slice(start, Math.min(end, start + remaining));
     if (!excerpt) continue;
-    excerpts.push(excerpt);
+    excerpts.push({ source: excerpt, role });
     used += excerpt.length;
   }
-  return excerpts.length ? excerpts : [source.slice(0, maximumCharacters)];
+  return excerpts.length ? excerpts : [{ source: source.slice(0, maximumCharacters), role: sourceRoleAt(source, 0) }];
+}
+
+function fallbackRange(source, maximumCharacters, allowedRoles) {
+  for (const role of allowedRoles ?? []) {
+    const tag = role === "style" ? "style" : role === "script" ? "script" : null;
+    if (!tag) continue;
+    const start = source.search(new RegExp(`<${tag}\\b`, "i"));
+    if (start < 0) continue;
+    const close = source.toLowerCase().indexOf(`</${tag}>`, start);
+    return [start, Math.min(source.length, close < 0 ? start + maximumCharacters : close + tag.length + 3), role];
+  }
+  return [0, Math.min(source.length, maximumCharacters), sourceRoleAt(source, 0)];
+}
+
+function sourceRoleAt(source, index) {
+  const before = source.slice(0, index).toLowerCase();
+  if (before.lastIndexOf("<style") > before.lastIndexOf("</style>")) return "style";
+  if (before.lastIndexOf("<script") > before.lastIndexOf("</script>")) return "script";
+  return "markup";
 }
 
 function selectorAnchors(selectors) {
