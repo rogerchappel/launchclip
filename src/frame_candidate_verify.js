@@ -2,6 +2,10 @@ import { execFile } from "node:child_process";
 import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { applyFrameCsp, toHyperFramesMotionSpec } from "./hyperframes_assembler.js";
+import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
+import { ensureTextContainment } from "./hyperframes_text.js";
+import { injectProductionFontFaces } from "./production_fonts.js";
 import { PRODUCTION_PATHS } from "./production_contracts.js";
 import { runHyperframes } from "./toolchain.js";
 import { analyzePng } from "./visual_snapshot.js";
@@ -27,7 +31,7 @@ export async function verifyFrameCandidate(workspacePath, bundle, options = {}, 
   }, adapters);
   const comparison = compareEvidence(candidate, baseline, options);
   const report = {
-    schema_version: "launchclip.frame-candidate-verification.v2",
+    schema_version: "launchclip.frame-candidate-verification.v3",
     shot_id: shot.id,
     attempt,
     status: comparison.ok ? "passed" : "failed",
@@ -53,11 +57,14 @@ async function captureBundle(workspace, bundle, options, adapters) {
   const assets = path.join(project, "assets");
   const snapshots = path.join(root, "snapshots");
   await Promise.all([mkdir(compositions, { recursive: true }), mkdir(assets, { recursive: true }), mkdir(snapshots, { recursive: true })]);
+  const fontCss = await assembledFontCss(workspace, bundle.shot_id);
+  const html = applyFrameCsp(ensureTextContainment(ensureTimelineRegistration(injectProductionFontFaces(bundle.html, fontCss), bundle.shot_id), bundle.shot_id));
+  const motion = toHyperFramesMotionSpec(bundle, options.duration);
   await Promise.all([
-    writeFile(path.join(compositions, "shot.html"), `${String(bundle.html).trim()}\n`),
-    writeFile(path.join(project, "index.motion.json"), `${JSON.stringify(bundle.motion, null, 2)}\n`),
+    writeFile(path.join(compositions, "shot.html"), `${html.trim()}\n`),
+    writeFile(path.join(project, "index.motion.json"), `${JSON.stringify(motion, null, 2)}\n`),
     writeFile(path.join(project, "index.html"), inspectionRoot(options.shot, options.format, options.duration)),
-    copyCandidateAssets(workspace, project, bundle.html)
+    copyCandidateAssets(workspace, project, html)
   ]);
 
   const run = adapters.run ?? runCommand;
@@ -119,7 +126,21 @@ function compareEvidence(candidate, baseline, options) {
   if (newFindings.length || worsenedFindings.length) {
     return { ok: false, failure_kind: "content", error: "Candidate introduced or worsened browser findings", detail_retention: retention == null ? null : rounded(retention), new_findings: newFindings, worsened_findings: worsenedFindings };
   }
-  return { ok: true, failure_kind: null, error: null, detail_retention: retention == null ? null : rounded(retention), new_findings: [], worsened_findings: [] };
+  const improvedFindings = [...baselineIssues].filter(([key, weight]) => !candidateIssues.has(key) || candidateIssues.get(key) < weight).map(([key]) => key);
+  if (!improvedFindings.length) {
+    return { ok: false, failure_kind: "content", error: "Candidate did not resolve or reduce any browser finding", detail_retention: retention == null ? null : rounded(retention), new_findings: [], worsened_findings: [], improved_findings: [] };
+  }
+  return { ok: true, failure_kind: null, error: null, detail_retention: retention == null ? null : rounded(retention), new_findings: [], worsened_findings: [], improved_findings: improvedFindings };
+}
+
+async function assembledFontCss(workspace, shotId) {
+  try {
+    const html = await readFile(path.join(workspace, PRODUCTION_PATHS.hyperframes, "compositions", `${shotId}.html`), "utf8");
+    return [...html.matchAll(/@font-face\s*\{[\s\S]*?\}/gi)].map((match) => match[0]).join("\n\n");
+  } catch (error) {
+    if (error.code === "ENOENT") return "";
+    throw error;
+  }
 }
 
 async function copyCandidateAssets(workspace, project, html) {
