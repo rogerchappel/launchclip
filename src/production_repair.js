@@ -211,9 +211,7 @@ export async function collectDeterministicRepairFindings(workspacePath, plan) {
       const report = await readJson(reportPath);
       if (report.ok === false) {
         if (report.failure_kind === "infrastructure") throw infrastructureRepairError([`inspect:${shot.id}`]);
-        const inspectIssues = Array.isArray(report.stdout?.issues)
-          ? report.stdout.issues.filter((issue) => issue?.severity === "error")
-          : [];
+        const inspectIssues = currentHyperFramesIssues(report.stdout);
         rawIssues.push(...(inspectIssues.length ? inspectIssues : [{
           code: "inspect_failed",
           severity: "error",
@@ -247,6 +245,16 @@ export async function collectDeterministicRepairFindings(workspacePath, plan) {
     });
   }
   return findings;
+}
+
+function currentHyperFramesIssues(stdout) {
+  const sections = [stdout?.lint, stdout?.runtime, stdout?.layout, stdout?.motion, stdout?.contrast];
+  const issues = [
+    ...(Array.isArray(stdout?.issues) ? stdout.issues : []),
+    ...(Array.isArray(stdout?.findings) ? stdout.findings : []),
+    ...sections.flatMap((section) => Array.isArray(section?.findings) ? section.findings : [])
+  ];
+  return issues.filter((issue) => ["error", "warning"].includes(String(issue?.severity ?? "").toLowerCase()));
 }
 
 function infrastructureRepairError(failures) {
