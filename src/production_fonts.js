@@ -17,6 +17,7 @@ const HYPERFRAMES_MAPPED_FAMILIES = new Set([
   "times", "times new roman", "dejavu serif", "liberation serif"
 ]);
 const GENERIC_FAMILIES = new Set(["serif", "sans-serif", "monospace", "system-ui", "ui-serif", "ui-sans-serif", "ui-monospace"]);
+const WOFF2_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 export function productionFontFamilies(plan) {
   return [...new Set(Object.values(plan?.design?.style_dna?.typography ?? {})
@@ -32,7 +33,7 @@ export async function freezeProductionFonts(families, assetsDir, options = {}) {
   const assets = [];
   for (const family of families) {
     const cssUrl = googleFontsCssUrl(family);
-    const cssResponse = await fetcher(cssUrl, { headers: { "User-Agent": "Mozilla/5.0 Chrome/131 Safari/537.36" }, signal: AbortSignal.timeout(20_000) });
+    const cssResponse = await fetcher(cssUrl, { headers: { "User-Agent": WOFF2_USER_AGENT }, signal: AbortSignal.timeout(20_000) });
     if (!cssResponse.ok) throw new Error(`Could not resolve Google Font ${family}: HTTP ${cssResponse.status}`);
     const css = await cssResponse.text();
     if (css.length > 500_000) throw new Error(`Google Font CSS was unexpectedly large for ${family}`);

@@ -257,12 +257,16 @@ test("freezes unsupported planned Google fonts into local assembly assets", asyn
   context.bundles[0].html = context.bundles[0].html.replace("#root{", '#root{font-family:"Space Grotesk";');
   await writeFixture(workspace, context);
   const requests = [];
-  const fetch = async (url) => {
+  let cssUserAgent;
+  const fetch = async (url, init = {}) => {
     requests.push(String(url));
-    if (String(url).startsWith("https://fonts.googleapis.com/")) return {
+    if (String(url).startsWith("https://fonts.googleapis.com/")) {
+      cssUserAgent = init.headers["User-Agent"];
+      return {
       ok: true,
       text: async () => '@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:700;src:url(https://fonts.gstatic.com/s/spacegrotesk/v1/latin.woff2) format("woff2");unicode-range:U+0000-00FF;}'
-    };
+      };
+    }
     return { ok: true, arrayBuffer: async () => Buffer.from("frozen-space-grotesk") };
   };
 
@@ -274,6 +278,7 @@ test("freezes unsupported planned Google fonts into local assembly assets", asyn
   const font = manifest.assets.find((entry) => entry.id === "font:space-grotesk:1");
   assert.ok(font);
   assert.equal(await readFile(path.join(result.project, font.file), "utf8"), "frozen-space-grotesk");
+  assert.match(cssUserAgent, /AppleWebKit\/537\.36[\s\S]*Chrome\/131/);
   assert.equal(requests.length, 2);
 
   const cached = await assembleHyperFrames(workspace, { fetch });
