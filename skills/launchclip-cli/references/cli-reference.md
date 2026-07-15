@@ -99,8 +99,13 @@ single local route prevents an unapproved cloud fallback:
 ```bash
 launchclip production-repair <workspace> \
   --repair-route ollama:qwen2.5-coder:latest@none \
+  --repair-issues-per-shot 4 \
   --max-patch-ratio 0.35
 ```
+
+Repair batches contain at most four blocking findings per shot, prioritized by
+runtime, motion, text/layout, then contrast. Lower
+`--repair-issues-per-shot` when a local model needs a smaller coherent fix.
 
 Local routes call Ollama's native JSON-schema endpoint with temperature `0`, a
 fixed seed, and a 32K context. Set `OLLAMA_CONTEXT_LENGTH` to override the

@@ -135,7 +135,10 @@ evaluate on small local models.
 
 Repairs are bounded, uniquely anchored source edits. Launchclip rejects broad
 HTML rewrites, applies the edit to the existing frame, and reruns the complete
-frame contract before accepting it.
+frame contract before accepting it. Each pass receives at most four blocking
+findings per shot, ranked with runtime and motion failures first, so the model
+solves a small coherent batch instead of rewriting around an entire QA report.
+Use `--repair-issues-per-shot` to lower that batch size for a difficult scene.
 
 `production-preview` starts or reuses the local HyperFrames Studio server and
 returns the editable project URL without rendering. Studio's Export control is
