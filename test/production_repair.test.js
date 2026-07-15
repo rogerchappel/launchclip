@@ -97,7 +97,7 @@ test("repairs native shot inspection failures even when the visual critic ships"
     assert.match(finding.instruction, /Motion assertions must describe motion on the asserted element itself/);
     assert.match(request.instructions, /set must_remain_live false/);
     assert.match(request.instructions, /Do not add imperceptible drift/);
-    assert.match(finding.instruction, /content_overlap/);
+    assert.doesNotMatch(finding.instruction, /content_overlap/);
     return { response_id: "native_repair", model: "gpt-5.6-luna", status: "completed", usage: {}, value: framePatch("shot-1", "Proof", "Native repair") };
   } };
   const result = await repairProduction(workspace, {}, { client });
@@ -123,7 +123,7 @@ test("batches native repair findings by blocking priority", async () => {
   })}\n`);
   const findings = await collectDeterministicRepairFindings(workspace, plan, { maxIssuesPerShot: 2 });
   assert.equal(findings.length, 1);
-  assert.match(findings[0].evidence, /contains 2 of 5 unique blocking issues/);
+  assert.match(findings[0].evidence, /contains 2 of 4 unique blocking issues/);
   assert.match(findings[0].instruction, /console_error/);
   assert.match(findings[0].instruction, /motion_out_of_order/);
   assert.doesNotMatch(findings[0].instruction, /contrast_aa_failure/);

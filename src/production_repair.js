@@ -401,7 +401,9 @@ export async function collectDeterministicRepairFindings(workspacePath, plan, op
         .filter((finding) => ["error", "warning"].includes(finding?.severity) && path.basename(String(finding.file ?? "")) === expectedFile)
         .map(lintRepairIssue));
     }
-    const allIssues = uniqueIssues(rawIssues).sort((left, right) => nativeIssueRank(left) - nativeIssueRank(right));
+    const unique = uniqueIssues(rawIssues);
+    const errors = unique.filter((issue) => String(issue?.severity ?? "").toLowerCase() === "error");
+    const allIssues = (errors.length ? errors : unique).sort((left, right) => nativeIssueRank(left) - nativeIssueRank(right));
     const issues = allIssues.slice(0, maxIssuesPerShot);
     if (!issues.length) continue;
     const codes = issues.map((issue) => String(issue.code ?? "inspect_failed"));
