@@ -318,6 +318,16 @@ test("salvages independently valid local edits and records rejected anchors", ()
   assert.deepEqual(result.rejectedEdits, [{ index: 1, target: "html", reason: "find string must occur exactly once in html; found 0" }]);
 });
 
+test("reports a bounded rejected anchor preview when no local edit applies", () => {
+  const prior = bundle("shot-1");
+  assert.throws(() => applyFramePatch(prior, {
+    schema_version: FRAME_PATCH_VERSION,
+    shot_id: "shot-1",
+    summary: "Missed local anchor",
+    edits: [{ target: "html", find: "missing local anchor", replace: "unused" }]
+  }, { allowPartial: true }), /edit 0 html .*find="missing local anchor"/);
+});
+
 test("escalates from a local structural attempt to the next pinned repair route", async () => {
   const workspace = await fixture();
   const calls = [];

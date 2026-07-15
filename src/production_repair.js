@@ -324,7 +324,13 @@ export function applyFramePatch(bundle, patch, options = {}) {
     changedCharacters += Math.max(find.length, replace.length);
     acceptedEdits.push(edit);
   }
-  if (!acceptedEdits.length) throw patchError(`no exact edits were applicable${rejectedEdits.length ? `; rejected ${rejectedEdits.length}` : ""}`);
+  if (!acceptedEdits.length) {
+    const previews = rejectedEdits.slice(0, 3).map((entry) => {
+      const find = String(patch.edits[entry.index]?.find ?? "").slice(0, 160);
+      return `edit ${entry.index} ${entry.target} ${entry.reason}; find=${JSON.stringify(find)}`;
+    });
+    throw patchError(`no exact edits were applicable${rejectedEdits.length ? `; rejected ${rejectedEdits.length}: ${previews.join(" | ")}` : ""}`);
+  }
   const touchedCharacters = [...new Set(acceptedEdits.map((edit) => edit.target))]
     .reduce((total, target) => total + originals.get(target).length, 0);
   const changedRatio = touchedCharacters ? changedCharacters / touchedCharacters : 1;
