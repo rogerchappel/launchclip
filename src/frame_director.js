@@ -240,10 +240,10 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
 export function sanitizeFrameBundle(bundle, context = {}) {
   const html = String(bundle?.html ?? "");
   let removed = 0;
-  const eventSafeHtml = html.replace(/\son[a-z][\w:-]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, () => {
+  const eventSafeHtml = html.replace(/<(?:[^"'<>]|"[^"]*"|'[^']*')+>/g, (tag) => tag.replace(/\son[a-z][\w:-]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, () => {
     removed += 1;
     return "";
-  });
+  }));
   const repairs = removed ? [{ kind: "remove-event-handler-attributes", count: removed }] : [];
   const rootRepair = repairFrameRootContract(eventSafeHtml, context);
   if (rootRepair.attributes.length) {
