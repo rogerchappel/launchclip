@@ -384,6 +384,37 @@ test("replaces a cancelled persisted response in the same run", async () => {
   assert.equal((await ProductionJobStore.open(workspace, { create: false })).get("frame:shot-1").attempt, 2);
 });
 
+test("escalates an invalid local frame to the next pinned generation route", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const calls = [];
+  const result = await directFrames(workspace, {
+    concurrency: 1,
+    semanticAttempts: 1,
+    routes: ["ollama:qwen2.5-coder:latest@none", "openai:gpt-5.6-terra@high"],
+    background: false
+  }, {
+    createClient: (route) => ({
+      runStructured: async (options) => {
+        const input = JSON.parse(options.input);
+        calls.push({ shot: input.shot.id, provider: route.provider, reasoning: options.reasoningEffort, errors: input.validation_errors_to_repair });
+        const value = frameBundle(input.shot.id, input.shot.duration_seconds);
+        if (route.provider === "ollama") value.html = value.html.replace('id="root"', 'id="wrong-root"').replace("#root{", "#wrong-root{");
+        return { response_id: `${route.provider}_${input.shot.id}`, model: route.model, status: "completed", value, usage: {} };
+      }
+    })
+  });
+  assert.equal(result.generated, 2);
+  assert.deepEqual(calls.map(({ shot, provider, reasoning }) => ({ shot, provider, reasoning })), [
+    { shot: "shot-1", provider: "ollama", reasoning: "none" },
+    { shot: "shot-1", provider: "openai", reasoning: "high" },
+    { shot: "shot-2", provider: "ollama", reasoning: "none" },
+    { shot: "shot-2", provider: "openai", reasoning: "high" }
+  ]);
+  assert.match(calls[1].errors.join(" "), /root id must be/);
+  assert.deepEqual(result.frames.map((frame) => frame.provider), ["openai", "openai"]);
+});
+
 function frameBundle(id, duration) {
   return {
     schema_version: FRAME_BUNDLE_VERSION,
