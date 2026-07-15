@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildRepairContextCapsule, buildRepairSourceCapsule, collectRepairSelectors, REPAIR_CAPSULE_VERSION } from "../src/repair_capsule.js";
+import { buildRepairContextCapsule, buildRepairSourceCapsule, collectDiagnosticTerms, collectRepairSelectors, REPAIR_CAPSULE_VERSION } from "../src/repair_capsule.js";
 
 test("extracts exact selector-centred source for a large local repair", () => {
   const filler = ".unused{color:#111}".repeat(1_500);
@@ -32,9 +32,20 @@ test("keeps short repair targets complete", () => {
 test("discovers selectors in structured findings and retry errors", () => {
   const selectors = collectRepairSelectors([
     { instruction: "Resolve overlap at #shot-card, then inspect .proof-row." },
-    { repair_targets: [{ selector: "#shot-copy" }] }
+    { repair_targets: [{ selector: "#shot-copy" }, { selector: "div.frame-title.emphasis" }] }
   ], ["Candidate failed at #shot-card"]);
-  assert.deepEqual(selectors, ["#shot-card", ".proof-row", "#shot-copy"]);
+  assert.deepEqual(selectors, ["#shot-card", ".proof-row", "#shot-copy", ".frame-title", ".emphasis"]);
+});
+
+test("centres runtime repair excerpts on APIs named by diagnostics", () => {
+  const filler = "const noop=()=>{};".repeat(1_000);
+  const runtime = "const panel=root.querySelector('.panel');panel.querySelector('.label').textContent='Ready';";
+  const prior = bundle(`<script>${filler}${runtime}${filler}</script>`);
+  const findings = [{ repair_targets: [{ code: "console_error", message: "Cannot read properties of null (reading 'querySelector')", selector: "[data-composition-id]" }] }];
+  const capsule = buildRepairSourceCapsule(prior, findings, [], { htmlChars: 3_000 });
+  assert.deepEqual(collectDiagnosticTerms(findings), ["querySelector"]);
+  assert.deepEqual(capsule.diagnostic_terms, ["querySelector"]);
+  assert.ok(capsule.sources.filter((entry) => entry.target === "html").some((entry) => entry.source.includes(runtime)));
 });
 
 test("compacts a local repair context without dropping visual identities or event timing", () => {

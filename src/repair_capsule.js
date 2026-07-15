@@ -1,9 +1,10 @@
 const SOURCE_TARGETS = ["html", "motion", "root_media_requests", "evidence_ids", "visible_copy", "preserve"];
 
-export const REPAIR_CAPSULE_VERSION = "selector-capsule.v1";
+export const REPAIR_CAPSULE_VERSION = "selector-capsule.v2";
 
 export function buildRepairSourceCapsule(prior, findings = [], validationErrors = [], options = {}) {
   const selectors = collectRepairSelectors(findings, validationErrors);
+  const diagnosticTerms = collectDiagnosticTerms(findings, validationErrors);
   const limits = {
     html: positiveInteger(options.htmlChars ?? 9_000, "HTML repair capsule size"),
     motion: positiveInteger(options.motionChars ?? 4_000, "motion repair capsule size")
@@ -12,7 +13,7 @@ export function buildRepairSourceCapsule(prior, findings = [], validationErrors 
     const source = target === "html" ? String(prior?.html ?? "") : JSON.stringify(prior?.[target], null, 2);
     const limit = limits[target];
     if (!limit || source.length <= limit) return [{ target, source, scope: "complete", excerpt: 1, excerpts: 1 }];
-    const excerpts = exactSourceExcerpts(source, selectorAnchors(selectors), {
+    const excerpts = exactSourceExcerpts(source, [...selectorAnchors(selectors), ...diagnosticTerms], {
       maximumCharacters: limit,
       radius: target === "html" ? 620 : 420,
       fallbackAnchors: target === "html"
@@ -27,7 +28,7 @@ export function buildRepairSourceCapsule(prior, findings = [], validationErrors 
       excerpts: excerpts.length
     }));
   });
-  return { version: REPAIR_CAPSULE_VERSION, selectors, sources };
+  return { version: REPAIR_CAPSULE_VERSION, selectors, diagnostic_terms: diagnosticTerms, sources };
 }
 
 export function buildRepairContextCapsule(plan, shot) {
@@ -60,7 +61,10 @@ export function collectRepairSelectors(findings = [], validationErrors = []) {
       return;
     }
     if (typeof value !== "string") return;
-    if (key === "selector" && isSimpleSelector(value)) selectors.add(value.trim());
+    if (key === "selector") {
+      if (isSimpleSelector(value)) selectors.add(value.trim());
+      else for (const match of value.matchAll(/[.#][A-Za-z_][\w-]{1,79}/g)) selectors.add(match[0]);
+    }
     for (const match of value.matchAll(/(?:^|[\s(,;:'"`])([#.][A-Za-z_][\w-]{1,79})(?=$|[.\s),;:'"`])/g)) {
       if (isSimpleSelector(match[1])) selectors.add(match[1]);
     }
@@ -68,6 +72,20 @@ export function collectRepairSelectors(findings = [], validationErrors = []) {
   visit(findings);
   visit(validationErrors);
   return [...selectors].slice(0, 12);
+}
+
+export function collectDiagnosticTerms(findings = [], validationErrors = []) {
+  const terms = new Set();
+  const visit = (value) => {
+    if (value == null) return;
+    if (Array.isArray(value)) return value.forEach(visit);
+    if (typeof value === "object") return Object.values(value).forEach(visit);
+    if (typeof value !== "string") return;
+    for (const match of value.matchAll(/\b(querySelectorAll|querySelector|getElementById|getElementsByClassName|timeline\.(?:to|from|fromTo|set)|gsap\.(?:to|from|fromTo|set))\b/g)) terms.add(match[1]);
+  };
+  visit(findings);
+  visit(validationErrors);
+  return [...terms].slice(0, 8);
 }
 
 function exactSourceExcerpts(source, anchors, options) {
