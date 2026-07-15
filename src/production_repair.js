@@ -191,6 +191,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
             schemaName: "launchclip_frame_patch",
             background: options.background !== false,
             maxOutputTokens: Number(options.maxOutputTokens ?? 8_000),
+            keepAlive: route.provider === "ollama" ? 0 : undefined,
             promptCacheKey: "launchclip:frame-repair-patch:v2",
             metadata: { job_id: jobId, shot_id: shotId, repair_findings: findings.length, attempt: totalAttempt, route: routeIndex + 1 },
             onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })

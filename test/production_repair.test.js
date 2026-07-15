@@ -375,7 +375,7 @@ test("escalates from a local structural attempt to the next pinned repair route"
     createClient: (route) => ({
       supportsImages: route.provider !== "ollama",
       runStructured: async (request) => {
-        calls.push({ provider: route.provider, model: route.model, images: request.images.length, sourceMode: repairContext(request.input).source_scope.mode });
+        calls.push({ provider: route.provider, model: route.model, images: request.images.length, sourceMode: repairContext(request.input).source_scope.mode, keepAlive: request.keepAlive });
         return {
           response_id: `${route.provider}_repair`, model: route.model, status: "completed", usage: {},
           value: route.provider === "ollama"
@@ -386,8 +386,8 @@ test("escalates from a local structural attempt to the next pinned repair route"
     })
   });
   assert.deepEqual(calls, [
-    { provider: "ollama", model: "qwen2.5-coder:latest", images: 0, sourceMode: "scoped" },
-    { provider: "openai", model: "gpt-5.6-terra", images: 1, sourceMode: "full" }
+    { provider: "ollama", model: "qwen2.5-coder:latest", images: 0, sourceMode: "scoped", keepAlive: 0 },
+    { provider: "openai", model: "gpt-5.6-terra", images: 1, sourceMode: "full", keepAlive: undefined }
   ]);
   assert.equal(result.repaired[0].provider, "openai");
   assert.equal(result.repaired[0].model, "gpt-5.6-terra");
