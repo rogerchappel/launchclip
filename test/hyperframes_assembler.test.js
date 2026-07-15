@@ -146,21 +146,21 @@ test("applies a restrictive CSP to model-authored frame documents", () => {
 test("injects deterministic text containment into subcompositions", () => {
   const source = '<html><body><template><div id="root" data-composition-id="shot-1"><div class="label">A LONG LABEL</div></div><script>window.__timelines={};</script></template></body></html>';
   const contained = ensureTextContainment(source, "shot-1");
-  assert.match(contained, /data-launchclip-text-containment="v4"/);
+  assert.match(contained, /data-launchclip-text-containment="v5"/);
   assert.match(contained, /dataset\.launchclipFitText/);
   assert.match(contained, /dataset\.launchclipTextUnresolved/);
   assert.match(contained, /data-launchclip-max-lines/);
   assert.match(contained, /data-launchclip-safe-padding/);
   assert.match(contained, /text-collision/);
-  assert.match(contained, /console\.error\('\[LaunchClip text containment\]/);
-  assert.ok(contained.indexOf('data-launchclip-text-containment="v4"') < contained.indexOf("window.__timelines"));
+  assert.match(contained, /console\.warn\('\[LaunchClip text containment\]/);
+  assert.ok(contained.indexOf('data-launchclip-text-containment="v5"') < contained.indexOf("window.__timelines"));
   assert.match(contained, /hasAttribute\('data-launchclip-max-lines'\)/);
   assert.match(contained, /container\.hasAttribute\('data-launchclip-safe-padding'\)/);
   assert.equal(ensureTextContainment(contained, "shot-1"), contained);
 
-  const upgraded = ensureTextContainment(contained.replaceAll('v4', 'v3'), "shot-1");
+  const upgraded = ensureTextContainment(contained.replaceAll('v5', 'v4'), "shot-1");
   assert.equal((upgraded.match(/data-launchclip-text-containment=/g) ?? []).length, 1);
-  assert.match(upgraded, /data-launchclip-text-containment="v4"/);
+  assert.match(upgraded, /data-launchclip-text-containment="v5"/);
   assert.match(upgraded, /JSON\.stringify\(issues\)/);
 });
 
@@ -223,7 +223,7 @@ test("freezes assets, rewrites frame paths, assembles a resumable HyperFrames pr
   assert.match(root, /src="assets\/screen\.mp4"/);
   assert.match(frame, /src="assets\/screen\.mp4"/);
   assert.match(frame, /default-src 'none'/);
-  assert.match(frame, /data-launchclip-text-containment="v4"/);
+  assert.match(frame, /data-launchclip-text-containment="v5"/);
   assert.match(frame, /<template>[\s\S]*<style>[\s\S]*#root/);
   assert.match(frame, /window\.__timelines\["shot-1"\]/);
   assert.doesNotMatch(frame, new RegExp(source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));

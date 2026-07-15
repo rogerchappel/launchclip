@@ -1,4 +1,4 @@
-export const TEXT_CONTAINMENT_VERSION = "v4";
+export const TEXT_CONTAINMENT_VERSION = "v5";
 
 export function ensureTextContainment(html, shotId) {
   const source = String(html);
@@ -162,7 +162,7 @@ function textContainmentScript(shotId) {
   root.dataset.launchclipTextUnresolved = String(issues.length);
   window.__launchclipTextContainment = window.__launchclipTextContainment || [];
   window.__launchclipTextContainment.push({ shotId: ${JSON.stringify(String(shotId))}, adjusted, unresolved: issues });
-  if (issues.length) console.error('[LaunchClip text containment] ${String(shotId)} has ' + issues.length + ' unresolved layout issue(s): ' + JSON.stringify(issues));
+  if (issues.length) console.warn('[LaunchClip text containment] ${String(shotId)} has ' + issues.length + ' unresolved layout issue(s): ' + JSON.stringify(issues));
 })();
 </script>`;
 }
