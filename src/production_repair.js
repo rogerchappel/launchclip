@@ -116,7 +116,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     const prior = (await readFrameSelection(workspace, shotId)).bundle;
     const repairInputHash = semanticHash({
       worker: "frame-repair.v7",
-      candidate_verification: "browser-snapshot.v1",
+      candidate_verification: "browser-snapshot.v2",
       routes: routes.map(modelRouteKey),
       max_patch_ratio: Number(options.maxPatchRatio ?? .35),
       shot,
@@ -223,6 +223,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
             const candidateVerification = await (adapters.verifyCandidate ?? verifyFrameCandidate)(workspace, candidate, {
               shot,
               format: plan.format,
+              baseline: prior,
               attempt: `${totalAttempt}-${route.provider}-${route.model}`
             }, { run: adapters.run });
             if (!candidateVerification?.ok) {
