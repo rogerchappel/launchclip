@@ -352,10 +352,10 @@ gate. Review `matrix-report.json` and each scenario's `production/qa/snapshots`
 before choosing a project to render.
 
 This is a **keyless** evaluation, not yet a fully network-isolated one. The
-assembled project currently loads GSAP from jsDelivr and `npx hyperframes` may
-need an existing package cache. PDF text extraction is frozen in the evaluator
-when `pdftotext` is unavailable. The report records those boundaries so it
-cannot be mistaken for credentialed creative-quality or offline proof.
+assembled project currently loads GSAP from jsDelivr. LaunchClip invokes its
+pinned HyperFrames package directly, while PDF text extraction is frozen in the
+evaluator when `pdftotext` is unavailable. The report records those boundaries
+so it cannot be mistaken for credentialed creative-quality or offline proof.
 
 ## Safety and Approval
 

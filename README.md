@@ -223,7 +223,9 @@ launchclip plan .launchclip/my-oss-tool --format short-30 --style premium-produc
 launchclip render .launchclip/my-oss-tool --provider hyperframes --quality high
 ```
 
-HyperFrames renders run `npx hyperframes lint`, `validate`, and `inspect --json` before producing the MP4. Use `--skip-quality-gates` only for draft iteration.
+HyperFrames renders use the CLI version bundled with LaunchClip to run `lint`,
+`validate`, and `inspect --json` before producing the MP4. Use
+`--skip-quality-gates` only for draft iteration.
 
 You can also run each stage by hand:
 
