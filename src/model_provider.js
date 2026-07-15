@@ -48,6 +48,7 @@ export function createStructuredClient(route, options = {}) {
       maxRetries: options.maxRetries
     });
   }
+  if (normalized.provider === "ollama") return new OllamaStructuredClient({ ...normalized, ...options });
   return new ChatCompletionsStructuredClient({ ...normalized, ...options });
 }
 
@@ -131,6 +132,39 @@ export class ChatCompletionsStructuredClient {
   }
 }
 
+export class OllamaStructuredClient extends ChatCompletionsStructuredClient {
+  constructor(options = {}) {
+    super(options);
+    this.contextTokens = positiveInteger(options.contextTokens ?? process.env.OLLAMA_CONTEXT_LENGTH ?? 32_768, "Ollama context length");
+  }
+
+  async runStructured(options = {}) {
+    if (!options.schema || !options.schemaName) throw new Error("Structured responses require schema and schemaName");
+    const model = String(options.model ?? this.model ?? "").trim();
+    if (!model) throw new Error("Structured responses require a model");
+    const generation = {
+      temperature: Number(options.temperature ?? 0),
+      seed: Number(options.seed ?? 0),
+      num_ctx: positiveInteger(options.contextTokens ?? this.contextTokens, "Ollama context length")
+    };
+    if (options.maxOutputTokens != null) generation.num_predict = positiveInteger(options.maxOutputTokens, "maxOutputTokens");
+    const payload = await this.request("/api/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        model,
+        messages: buildMessages(options.instructions, options.input, []),
+        format: options.schema,
+        stream: false,
+        think: false,
+        options: generation
+      })
+    });
+    const result = ollamaStructuredResult(payload, model);
+    await options.onSubmitted?.({ id: result.response_id, status: result.status, model: result.model });
+    return result;
+  }
+}
+
 function normalizeRoute(route = {}) {
   const provider = PROVIDER_ALIASES.get(String(route.provider ?? "openai").trim().toLowerCase()) ?? String(route.provider ?? "openai").trim().toLowerCase();
   if (!["openai", "openrouter", "ollama", "compatible"].includes(provider)) throw new Error(`Unsupported model provider: ${provider}`);
@@ -161,7 +195,7 @@ function defaultModel(provider) {
 function providerBaseUrl(provider) {
   if (provider === "openai") return process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
   if (provider === "openrouter") return process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1";
-  if (provider === "ollama") return process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1";
+  if (provider === "ollama") return process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
   return process.env.OPENAI_COMPATIBLE_BASE_URL ?? "";
 }
 
@@ -215,6 +249,31 @@ function chatStructuredResult(payload, fallbackModel) {
       cached_tokens: Number(usage.prompt_tokens_details?.cached_tokens ?? usage.input_tokens_details?.cached_tokens ?? 0),
       cache_write_tokens: 0,
       reasoning_tokens: Number(usage.completion_tokens_details?.reasoning_tokens ?? usage.output_tokens_details?.reasoning_tokens ?? 0)
+    },
+    reasoning: null
+  };
+}
+
+function ollamaStructuredResult(payload, fallbackModel) {
+  const text = payload?.message?.content;
+  if (typeof text !== "string" || !text.trim()) throw new Error("Ollama chat response contained no structured output text");
+  let value;
+  try { value = JSON.parse(text); }
+  catch (error) { throw new Error(`Ollama structured output was not valid JSON: ${error.message}`); }
+  const inputTokens = Number(payload?.prompt_eval_count ?? 0);
+  const outputTokens = Number(payload?.eval_count ?? 0);
+  return {
+    response_id: payload?.id ?? `ollama-${randomUUID()}`,
+    model: payload?.model ?? fallbackModel,
+    status: payload?.done === false ? "incomplete" : "completed",
+    value,
+    usage: {
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      total_tokens: inputTokens + outputTokens,
+      cached_tokens: 0,
+      cache_write_tokens: 0,
+      reasoning_tokens: 0
     },
     reasoning: null
   };

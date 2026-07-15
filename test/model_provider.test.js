@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ChatCompletionsStructuredClient, createStructuredClient, modelRouteKey, parseModelRoute, parseModelRoutes } from "../src/model_provider.js";
+import { OllamaStructuredClient, createStructuredClient, modelRouteKey, parseModelRoute, parseModelRoutes } from "../src/model_provider.js";
 
 test("parses provider, model tag, and reasoning without losing model colons", () => {
   assert.deepEqual(modelRouteKey(parseModelRoute("ollama:qwen2.5-coder:latest@none")), {
     provider: "ollama",
     model: "qwen2.5-coder:latest",
     reasoning: "none",
-    base_url: "http://localhost:11434/v1",
+    base_url: "http://localhost:11434",
     supports_images: false
   });
   assert.deepEqual(parseModelRoutes(["openai:gpt-5.6-luna@medium", "openrouter:kwaipilot/kat-coder-air-v2.5@none"]).map(modelRouteKey), [
@@ -16,18 +16,19 @@ test("parses provider, model tag, and reasoning without losing model colons", ()
   ]);
 });
 
-test("sends strict structured output to an Ollama-compatible chat endpoint", async () => {
+test("sends deterministic structured output to Ollama with a coding-sized context", async () => {
   let request;
-  const client = new ChatCompletionsStructuredClient({
+  const client = new OllamaStructuredClient({
     provider: "ollama",
     model: "qwen2.5-coder:latest",
     fetch: async (url, init) => {
       request = { url, init, body: JSON.parse(init.body) };
       return new Response(JSON.stringify({
-        id: "chatcmpl_local",
         model: "qwen2.5-coder:latest",
-        choices: [{ message: { content: JSON.stringify({ ok: true }) } }],
-        usage: { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25 }
+        message: { role: "assistant", content: JSON.stringify({ ok: true }) },
+        done: true,
+        prompt_eval_count: 20,
+        eval_count: 5
       }), { status: 200, headers: { "content-type": "application/json" } });
     }
   });
@@ -39,14 +40,19 @@ test("sends strict structured output to an Ollama-compatible chat endpoint", asy
     schemaName: "probe",
     maxOutputTokens: 100
   });
-  assert.equal(request.url, "http://localhost:11434/v1/chat/completions");
-  assert.equal(request.body.temperature, 0);
-  assert.equal(request.body.response_format.json_schema.strict, true);
+  assert.equal(request.url, "http://localhost:11434/api/chat");
+  assert.deepEqual(request.body.format, { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"], additionalProperties: false });
+  assert.deepEqual(request.body.options, { temperature: 0, seed: 0, num_ctx: 32768, num_predict: 100 });
+  assert.equal(request.body.think, false);
   assert.equal(request.body.messages[1].content, "Fix this.");
   assert.equal(request.init.headers.Authorization, undefined);
   assert.deepEqual(result.value, { ok: true });
   assert.equal(result.usage.total_tokens, 25);
   assert.equal(client.supportsImages, false);
+});
+
+test("creates the native Ollama client for local routes", () => {
+  assert.ok(createStructuredClient("ollama:qwen2.5-coder:latest@none") instanceof OllamaStructuredClient);
 });
 
 test("pins OpenRouter parameters and disables provider fallback", async () => {
