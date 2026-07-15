@@ -223,6 +223,7 @@ test("freezes assets, rewrites frame paths, assembles a resumable HyperFrames pr
   assert.match(root, /src="assets\/screen\.mp4"/);
   assert.match(frame, /src="assets\/screen\.mp4"/);
   assert.match(frame, /default-src 'none'/);
+  assert.match(frame, /data-launchclip-text-containment="v4"/);
   assert.match(frame, /<template>[\s\S]*<style>[\s\S]*#root/);
   assert.match(frame, /window\.__timelines\["shot-1"\]/);
   assert.doesNotMatch(frame, new RegExp(source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));

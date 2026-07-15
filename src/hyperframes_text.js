@@ -1,4 +1,4 @@
-const TEXT_CONTAINMENT_VERSION = "v4";
+export const TEXT_CONTAINMENT_VERSION = "v4";
 
 export function ensureTextContainment(html, shotId) {
   const source = String(html);
