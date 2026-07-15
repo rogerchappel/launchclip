@@ -66,7 +66,7 @@ test("resumes a persisted background repair response without another submission"
   const plan = JSON.parse(await readFile(path.join(workspace, "production", "plan.json"), "utf8"));
   const prior = JSON.parse(await readFile(path.join(workspace, "production", "frames", "shot-2.json"), "utf8"));
   const critique = JSON.parse(await readFile(path.join(workspace, "production", "qa", "critique.json"), "utf8"));
-  const repairInputHash = semanticHash({ worker: "frame-repair.v7", candidate_verification: "browser-snapshot.v2", routes: [modelRouteKey(parseModelRoute({ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" }))], max_patch_ratio: .35, shot: plan.shots[1], findings: critique.findings, prior });
+  const repairInputHash = semanticHash({ worker: "frame-repair.v8", candidate_verification: "browser-snapshot.v3", repair_context: "selector-capsule.v4", routes: [modelRouteKey(parseModelRoute({ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" }))], max_patch_ratio: .35, shot: plan.shots[1], findings: critique.findings, prior });
   await store.add({ id: "repair:shot-2", kind: "frame-repair", depends_on: ["creative-plan"], input_hash: repairInputHash });
   await store.markRunning("repair:shot-2", { provider: "openai", response_id: "repair_saved", status: "in_progress" });
   let resumed = 0;
@@ -95,6 +95,7 @@ test("repairs native shot inspection failures even when the visual critic ships"
     const finding = repairContext(request.input).findings[0];
     assert.equal(finding.id, "native-shot-1");
     assert.match(finding.instruction, /Motion assertions must describe motion on the asserted element itself/);
+    assert.deepEqual(finding.repair_targets, [{ code: "motion_frozen", selector: "#shot-1-proof", message: "The asserted node is static", fix_hint: "Animate the asserted node" }]);
     assert.match(request.instructions, /set must_remain_live false/);
     assert.match(request.instructions, /Do not add imperceptible drift/);
     assert.doesNotMatch(finding.instruction, /content_overlap/);
@@ -127,6 +128,27 @@ test("batches native repair findings by blocking priority", async () => {
   assert.match(findings[0].instruction, /console_error/);
   assert.match(findings[0].instruction, /motion_out_of_order/);
   assert.doesNotMatch(findings[0].instruction, /contrast_aa_failure/);
+});
+
+test("preserves native geometry and contrast evidence for a scoped repair", async () => {
+  const workspace = await fixture({ verdict: "ship" });
+  const plan = JSON.parse(await readFile(path.join(workspace, "production", "plan.json"), "utf8"));
+  const reportPath = path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json");
+  await mkdir(path.dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, `${JSON.stringify({
+    ok: false,
+    stdout: { layout: { findings: [{
+      code: "text_occluded", severity: "error", selector: ".frame-title", containerSelector: ".evidence-chip",
+      text: "Evidence-backed script", coveredFraction: .33, rect: { left: 20, top: 30, width: 300, height: 40 },
+      message: "Text is hidden beneath an opaque element.", fixHint: "Give the text its own zone."
+    }] } }
+  })}\n`);
+  const [finding] = await collectDeterministicRepairFindings(workspace, plan, { maxIssuesPerShot: 1 });
+  assert.match(finding.instruction, /covered by \.evidence-chip/);
+  assert.match(finding.instruction, /Evidence-backed script/);
+  assert.deepEqual(finding.repair_targets[0].rect, { left: 20, top: 30, width: 300, height: 40 });
+  assert.equal(finding.repair_targets[0].covered_fraction, .33);
+  assert.equal(finding.repair_targets[0].container_selector, ".evidence-chip");
 });
 
 test("rejects infrastructure inspection failures before any paid repair call", async () => {
@@ -291,6 +313,20 @@ test("presents exact repair sources unescaped outside the JSON context", () => {
   assert.doesNotMatch(input, /<launchclip-source target="html">\n"<!doctype html>/i);
 });
 
+test("presents preferred exact anchors to scoped local repairs", () => {
+  const prior = bundle("shot-1");
+  const input = buildRepairInput({
+    plan: { design: { concept: "Proof" }, format: { width: 1080, height: 1920 } },
+    shot: { id: "shot-1", visual: { objects: [], events: [] } },
+    findings: [{ repair_targets: [{ code: "text_box_overflow", selector: "#shot-1-proof", message: "Text extends outside its box" }] }],
+    prior,
+    sourceMode: "scoped"
+  });
+  assert.match(input, /<launchclip-anchor target="html" role="markup" index="1">/);
+  assert.match(input, /<div id="shot-1-proof" class="clip" data-start="0" data-duration="5">/);
+  assert.match(input, /Preferred exact anchors follow/);
+});
+
 test("applies exact small edits without replacing the frame bundle", () => {
   const prior = bundle("shot-1");
   const result = applyFramePatch(prior, framePatch("shot-1", "Proof", "Focused proof"));
@@ -374,7 +410,7 @@ test("escalates from a local structural attempt to the next pinned repair route"
     createClient: (route) => ({
       supportsImages: route.provider !== "ollama",
       runStructured: async (request) => {
-        calls.push({ provider: route.provider, model: route.model, images: request.images.length });
+        calls.push({ provider: route.provider, model: route.model, images: request.images.length, sourceMode: repairContext(request.input).source_scope.mode, keepAlive: request.keepAlive });
         return {
           response_id: `${route.provider}_repair`, model: route.model, status: "completed", usage: {},
           value: route.provider === "ollama"
@@ -385,8 +421,8 @@ test("escalates from a local structural attempt to the next pinned repair route"
     })
   });
   assert.deepEqual(calls, [
-    { provider: "ollama", model: "qwen2.5-coder:latest", images: 0 },
-    { provider: "openai", model: "gpt-5.6-terra", images: 1 }
+    { provider: "ollama", model: "qwen2.5-coder:latest", images: 0, sourceMode: "scoped", keepAlive: 0 },
+    { provider: "openai", model: "gpt-5.6-terra", images: 1, sourceMode: "full", keepAlive: undefined }
   ]);
   assert.equal(result.repaired[0].provider, "openai");
   assert.equal(result.repaired[0].model, "gpt-5.6-terra");

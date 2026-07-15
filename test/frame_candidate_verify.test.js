@@ -52,14 +52,53 @@ test("reports the actionable nested HyperFrames finding", async () => {
   assert.equal(result.error, "motion assertion is invalid");
 });
 
-test("accepts an incremental candidate that retains but does not worsen baseline findings", async () => {
+test("rejects an incremental candidate that does not improve a baseline finding", async () => {
   const workspace = await fixture();
   const run = comparativeRun((role) => role === "baseline" || role === "candidate"
     ? [{ severity: "error", code: "motion_frozen", selector: "#proof", message: "proof is static" }]
     : []);
   const result = await verifyFrameCandidate(workspace, bundle(), { ...context("incremental-1"), baseline: bundle() }, { run });
-  assert.equal(result.ok, true);
+  assert.equal(result.ok, false);
+  assert.match(result.error, /did not resolve or reduce/);
   assert.deepEqual(JSON.parse(await readFile(result.report, "utf8")).comparison.new_findings, []);
+});
+
+test("accepts an incremental candidate that resolves one baseline finding", async () => {
+  const workspace = await fixture();
+  const run = comparativeRun((role) => role === "baseline"
+    ? [
+        { severity: "error", code: "motion_frozen", selector: "#proof", message: "proof is static" },
+        { severity: "error", code: "text_occluded", selector: "#copy", message: "copy is hidden" }
+      ]
+    : [{ severity: "error", code: "text_occluded", selector: "#copy", message: "copy is hidden" }]);
+  const result = await verifyFrameCandidate(workspace, bundle(), { ...context("incremental-improved-1"), baseline: bundle() }, { run });
+  assert.equal(result.ok, true);
+  assert.deepEqual(JSON.parse(await readFile(result.report, "utf8")).comparison.improved_findings, ["motion_frozen|#proof"]);
+});
+
+test("stages candidates with assembled fonts and native HyperFrames motion", async () => {
+  const workspace = await fixture();
+  const assembled = path.join(workspace, "production", "hyperframes", "compositions");
+  await mkdir(assembled, { recursive: true });
+  await writeFile(path.join(assembled, "shot-1.html"), '<style>@font-face { font-family: "Proof Sans"; src: url("assets/proof.woff2") format("woff2"); }</style>');
+  await writeFile(path.join(workspace, "production", "hyperframes", "assets", "proof.woff2"), "font");
+  const candidate = { ...bundle(), motion: { assertions: [{ selector: "#proof", appears_by_seconds: 1, order: null, must_stay_in_frame: true, must_remain_live: false }], events: [] } };
+  const run = async (_command, args) => {
+    if (args[1] === "check") {
+      const project = String(args.at(-1));
+      const [html, motion] = await Promise.all([
+        readFile(path.join(project, "compositions", "shot.html"), "utf8"),
+        readFile(path.join(project, "index.motion.json"), "utf8").then(JSON.parse)
+      ]);
+      assert.match(html, /font-family: "Proof Sans"/);
+      assert.match(html, /data-launchclip-text-containment="v6"/);
+      assert.deepEqual(motion.assertions.map((entry) => entry.kind), ["appearsBy", "staysInFrame"]);
+      return { stdout: JSON.stringify({ ok: true, findings: [] }), stderr: "" };
+    }
+    return snapshotRun("detailed")(_command, args);
+  };
+  const result = await verifyFrameCandidate(workspace, candidate, context("assembled-contract-1"), { run });
+  assert.equal(result.ok, true);
 });
 
 test("rejects an incremental candidate that introduces a browser finding", async () => {
