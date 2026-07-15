@@ -102,6 +102,12 @@ launchclip production-repair <workspace> \
   --max-patch-ratio 0.35
 ```
 
+Local routes call Ollama's native JSON-schema endpoint with temperature `0`, a
+fixed seed, and a 32K context. Set `OLLAMA_CONTEXT_LENGTH` to override the
+allocation. Keep the context large enough for the complete frame source and QA
+findings; reducing it may speed prompt evaluation but can truncate the exact
+source strings needed by a repair.
+
 Repairs return exact find/replace edits against the current HTML or structured
 frame fields. A find string must occur once, the default patch may touch at
 most 35% of its targets, and the result must pass the complete frame contract.

@@ -127,6 +127,12 @@ launchclip production-repair .launchclip/repo-video \
   --repair-route ollama:qwen2.5-coder:latest@none
 ```
 
+Ollama routes use its native JSON-schema API with temperature `0`, a fixed
+seed, and a 32K context by default. Override that allocation with
+`OLLAMA_CONTEXT_LENGTH` when the selected model or machine needs a different
+limit. Larger frame sources benefit from the full context but take longer to
+evaluate on small local models.
+
 Repairs are bounded, uniquely anchored source edits. Launchclip rejects broad
 HTML rewrites, applies the edit to the existing frame, and reruns the complete
 frame contract before accepting it.
