@@ -165,6 +165,11 @@ of unrelated title cards. For every scene:
   transformation, comparison, traversal, focus shift, or state change.
 - Maintain continuity through color, type, spatial anchors, object handoffs, or
   transition logic.
+- Classify adjacent beats before choosing a transition. When the idea and
+  presenter layout continue, treat both scenes as positions in one shared
+  world: keep stable anchors such as the presenter, frame, or navigation rail
+  fixed and pan the graphic plane between them. Reserve full resets for a real
+  topic, scale, or emotional change.
 - Reserve safe areas for captions and platform UI when applicable.
 - For every presenter-plus-graphic scene, declare a presenter-safe area and a
   non-overlapping graphic zone in `STORYBOARD.md`. Pan or crop the presenter
@@ -197,6 +202,11 @@ for a quieter treatment:
   drift, foreground parallax, or surface breathing. Motion should continue
   through holds without turning every scene into a loop. Couple brief blur to
   fast pans, pushes, or zooms and resolve it fully when movement settles.
+- For shared-world travel, move outgoing and incoming planes concurrently with
+  one continuous `inOut` position curve. Shape blur as a velocity envelope:
+  crisp at departure, strongest near the midpoint, and fully crisp at the
+  settle. Extend the outgoing clip through the complete move so it cannot pop
+  away before the transition finishes.
 - Select transitions by meaning: hard cut for contrast, push for continuation,
   whip for speed, zoom for scale change, morph for identity, and aperture/mask
   for focus. Do not disguise one generic crossfade with different names.
@@ -221,7 +231,9 @@ reference. Work in this order:
    and quality targets.
 6. Author the composition and a motion sidecar from those frozen artifacts.
 7. Run static lint early.
-8. Run strict browser checks with transition and dense-hook snapshots.
+8. Run strict browser checks with transition and dense-hook snapshots. Sample
+   shared-world moves at departure, early acceleration, peak speed, late
+   deceleration, and settle rather than checking only their endpoints.
 9. Inspect every generated overview image, not only the command exit code.
 10. Review the opening, every transition boundary, every major type state, and
     the final frame at delivery scale. Scrub adjacent frames when a snapshot
