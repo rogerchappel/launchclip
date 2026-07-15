@@ -1,4 +1,4 @@
-const TEXT_CONTAINMENT_VERSION = "v3";
+const TEXT_CONTAINMENT_VERSION = "v4";
 
 export function ensureTextContainment(html, shotId) {
   const source = String(html);
@@ -56,6 +56,10 @@ function textContainmentScript(shotId) {
   };
   const ownOverflow = (element) => {
     if (!element.clientWidth) return false;
+    const style = getComputedStyle(element);
+    const clips = style.overflowX === 'hidden' || style.overflowY === 'hidden' || style.overflowX === 'clip' || style.overflowY === 'clip';
+    const declaresLines = element.hasAttribute('data-launchclip-max-lines');
+    if (!clips && !declaresLines) return false;
     const lines = maxLines(element);
     return element.scrollWidth > element.clientWidth + 1 ||
       (element.clientHeight > 0 && element.scrollHeight > element.clientHeight + 1) ||
@@ -111,7 +115,7 @@ function textContainmentScript(shotId) {
   for (const element of candidates) {
     applyLinePolicy(element);
     const container = element.parentElement;
-    if (!isVisualContainer(container)) continue;
+    if (!isVisualContainer(container) || !container.hasAttribute('data-launchclip-safe-padding')) continue;
     if (!groups.has(container)) groups.set(container, []);
     groups.get(container).push(element);
   }

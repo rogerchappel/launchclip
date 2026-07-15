@@ -146,19 +146,21 @@ test("applies a restrictive CSP to model-authored frame documents", () => {
 test("injects deterministic text containment into subcompositions", () => {
   const source = '<html><body><template><div id="root" data-composition-id="shot-1"><div class="label">A LONG LABEL</div></div><script>window.__timelines={};</script></template></body></html>';
   const contained = ensureTextContainment(source, "shot-1");
-  assert.match(contained, /data-launchclip-text-containment="v3"/);
+  assert.match(contained, /data-launchclip-text-containment="v4"/);
   assert.match(contained, /dataset\.launchclipFitText/);
   assert.match(contained, /dataset\.launchclipTextUnresolved/);
   assert.match(contained, /data-launchclip-max-lines/);
   assert.match(contained, /data-launchclip-safe-padding/);
   assert.match(contained, /text-collision/);
   assert.match(contained, /console\.error\('\[LaunchClip text containment\]/);
-  assert.ok(contained.indexOf('data-launchclip-text-containment="v3"') < contained.indexOf("window.__timelines"));
+  assert.ok(contained.indexOf('data-launchclip-text-containment="v4"') < contained.indexOf("window.__timelines"));
+  assert.match(contained, /hasAttribute\('data-launchclip-max-lines'\)/);
+  assert.match(contained, /container\.hasAttribute\('data-launchclip-safe-padding'\)/);
   assert.equal(ensureTextContainment(contained, "shot-1"), contained);
 
-  const upgraded = ensureTextContainment(contained.replaceAll('v3', 'v2'), "shot-1");
+  const upgraded = ensureTextContainment(contained.replaceAll('v4', 'v3'), "shot-1");
   assert.equal((upgraded.match(/data-launchclip-text-containment=/g) ?? []).length, 1);
-  assert.match(upgraded, /data-launchclip-text-containment="v3"/);
+  assert.match(upgraded, /data-launchclip-text-containment="v4"/);
   assert.match(upgraded, /JSON\.stringify\(issues\)/);
 });
 
