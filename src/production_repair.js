@@ -488,7 +488,7 @@ export async function collectDeterministicRepairFindings(workspacePath, plan, op
       evidence: `Shot-local HyperFrames inspection repair batch contains ${issues.length} of ${allIssues.length} unique blocking issue${allIssues.length === 1 ? "" : "s"}: ${issues.map(describeNativeIssue).join("; ")}`,
       repair_scope: "frame",
       instruction: `Make native shot-local inspection pass by correcting these issues: ${issues.map(describeNativeIssue).join("; ")}. Do not hide a real defect with a layout-allow annotation; use one only when the overlap or off-canvas state is visibly intentional and remains legible. Motion assertions must describe motion on the asserted element itself.`,
-      repair_targets: issues.map((issue) => ({ code: issue.code ?? "inspect_failed", selector: issue.selector ?? null, message: String(issue.message ?? "inspection failed").trim(), fix_hint: issue.fixHint ? String(issue.fixHint).trim() : null })),
+      repair_targets: issues.map(repairTarget),
       preserve: ["Factual copy and evidence grounding", "The established art direction", "Unrelated composition and motion"]
     });
   }
@@ -535,7 +535,35 @@ function uniqueIssues(issues) {
 function describeNativeIssue(issue) {
   const selector = issue.selector ? ` at ${issue.selector}` : "";
   const hint = issue.fixHint ? ` (${String(issue.fixHint).trim()})` : "";
-  return `${issue.code ?? "inspect_failed"}${selector}: ${String(issue.message ?? "inspection failed").trim()}${hint}`;
+  const coveredBy = issue.containerSelector ? ` covered by ${issue.containerSelector}` : "";
+  const text = issue.text ? ` for text ${JSON.stringify(String(issue.text).slice(0, 160))}` : "";
+  const suggested = issue.suggestedColor ? `; suggested color ${issue.suggestedColor}` : "";
+  return `${issue.code ?? "inspect_failed"}${selector}${coveredBy}${text}: ${String(issue.message ?? "inspection failed").trim()}${suggested}${hint}`;
+}
+
+function repairTarget(issue) {
+  const target = {
+    code: issue.code ?? "inspect_failed",
+    selector: issue.selector ?? null,
+    message: String(issue.message ?? "inspection failed").trim(),
+    fix_hint: issue.fixHint ? String(issue.fixHint).trim() : null
+  };
+  const optional = {
+    container_selector: issue.containerSelector,
+    text: issue.text,
+    covered_fraction: issue.coveredFraction,
+    rect: issue.rect,
+    suggested_color: issue.suggestedColor,
+    foreground_color: issue.fg,
+    background_color: issue.bg,
+    contrast_ratio: issue.ratio,
+    required_contrast_ratio: issue.requiredRatio,
+    first_seen_seconds: issue.firstSeen,
+    last_seen_seconds: issue.lastSeen,
+    occurrences: issue.occurrences
+  };
+  for (const [key, value] of Object.entries(optional)) if (value != null) target[key] = value;
+  return target;
 }
 
 function lintRepairIssue(finding) {

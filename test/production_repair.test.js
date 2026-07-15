@@ -130,6 +130,27 @@ test("batches native repair findings by blocking priority", async () => {
   assert.doesNotMatch(findings[0].instruction, /contrast_aa_failure/);
 });
 
+test("preserves native geometry and contrast evidence for a scoped repair", async () => {
+  const workspace = await fixture({ verdict: "ship" });
+  const plan = JSON.parse(await readFile(path.join(workspace, "production", "plan.json"), "utf8"));
+  const reportPath = path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json");
+  await mkdir(path.dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, `${JSON.stringify({
+    ok: false,
+    stdout: { layout: { findings: [{
+      code: "text_occluded", severity: "error", selector: ".frame-title", containerSelector: ".evidence-chip",
+      text: "Evidence-backed script", coveredFraction: .33, rect: { left: 20, top: 30, width: 300, height: 40 },
+      message: "Text is hidden beneath an opaque element.", fixHint: "Give the text its own zone."
+    }] } }
+  })}\n`);
+  const [finding] = await collectDeterministicRepairFindings(workspace, plan, { maxIssuesPerShot: 1 });
+  assert.match(finding.instruction, /covered by \.evidence-chip/);
+  assert.match(finding.instruction, /Evidence-backed script/);
+  assert.deepEqual(finding.repair_targets[0].rect, { left: 20, top: 30, width: 300, height: 40 });
+  assert.equal(finding.repair_targets[0].covered_fraction, .33);
+  assert.equal(finding.repair_targets[0].container_selector, ".evidence-chip");
+});
+
 test("rejects infrastructure inspection failures before any paid repair call", async () => {
   const workspace = await fixture({ verdict: "ship" });
   const reportPath = path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json");
