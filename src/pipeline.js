@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { requestElevenLabsMusic, resolveElevenLabsMusicModel, resolveMusicPrompt } from "./music.js";
 import { prepareSfxPack } from "./sfx.js";
+import { hyperframesInvocation } from "./toolchain.js";
 
 const execFileAsync = promisify(execFile);
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -371,7 +372,6 @@ async function renderHyperframes(out, flags = {}) {
     ? await runHyperframesQualityGates(projectDir, flags)
     : await writeSkippedHyperframesQualityReport(projectDir);
   const renderArgs = [
-    "hyperframes",
     "render",
     ".",
     "--output",
@@ -383,7 +383,8 @@ async function renderHyperframes(out, flags = {}) {
   if (flags.format) renderArgs.push("--format", String(flags.format));
   if (flags.strict) renderArgs.push("--strict");
   if (flags["strict-all"]) renderArgs.push("--strict-all");
-  await execFileAsync("npx", renderArgs, { cwd: projectDir, maxBuffer: 1024 * 1024 * 16 });
+  const renderInvocation = hyperframesInvocation(renderArgs);
+  await execFileAsync(renderInvocation.command, renderInvocation.args, { cwd: projectDir, maxBuffer: 1024 * 1024 * 16 });
   const audio = await applyPostRenderAudio(out, output, flags, { defaultVoiceover: true, defaultMusic: false, defaultSfx: true });
   await execFileAsync("ffmpeg", [
     "-y",
@@ -424,11 +425,12 @@ async function runHyperframesQualityGates(projectDir, flags = {}) {
   const results = [];
   for (const command of commands) {
     const startedAt = new Date().toISOString();
+    const invocation = hyperframesInvocation(command.args);
     try {
-      const result = await execFileAsync("npx", command.args, { cwd: projectDir, maxBuffer: 1024 * 1024 * 16 });
+      const result = await execFileAsync(invocation.command, invocation.args, { cwd: projectDir, maxBuffer: 1024 * 1024 * 16 });
       results.push({
         name: command.name,
-        command: ["npx", ...command.args].join(" "),
+        command: invocation.display.join(" "),
         status: "passed",
         started_at: startedAt,
         finished_at: new Date().toISOString(),
@@ -438,7 +440,7 @@ async function runHyperframesQualityGates(projectDir, flags = {}) {
     } catch (error) {
       const failed = {
         name: command.name,
-        command: ["npx", ...command.args].join(" "),
+        command: invocation.display.join(" "),
         status: "failed",
         started_at: startedAt,
         finished_at: new Date().toISOString(),
@@ -479,12 +481,12 @@ async function writeSkippedHyperframesQualityReport(projectDir) {
 }
 
 function hyperframesQualityGateCommands(flags = {}) {
-  const inspectArgs = ["hyperframes", "inspect", "--json"];
+  const inspectArgs = ["inspect", "--json"];
   if (flags["inspect-samples"]) inspectArgs.push("--samples", String(flags["inspect-samples"]));
   if (flags["inspect-at"]) inspectArgs.push("--at", String(flags["inspect-at"]));
   return [
-    { name: "lint", args: ["hyperframes", "lint"] },
-    { name: "validate", args: ["hyperframes", "validate"] },
+    { name: "lint", args: ["lint"] },
+    { name: "validate", args: ["validate"] },
     { name: "inspect", args: inspectArgs }
   ];
 }
