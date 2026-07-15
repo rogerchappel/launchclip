@@ -243,13 +243,18 @@ test("fast eval keeps full QA while lowering provider and sampling budgets", asy
   assert.equal(received.plan.semanticAttempts, 2);
   assert.deepEqual({
     reasoning: received.frames.reasoning,
+    routes: received.frames.routes,
     pendingReasoning: received.frames.pendingReasoning,
     max: received.frames.maxOutputTokens,
     attempts: received.frames.semanticAttempts,
     concurrency: received.frames.concurrency,
     maxCost: received.frames.maxFrameCostUsd,
     allowFallback: received.frames.allowFallback
-  }, { reasoning: "medium", pendingReasoning: "medium", max: 20000, attempts: 1, concurrency: 1, maxCost: 5, allowFallback: false });
+  }, {
+    reasoning: "medium",
+    routes: ["openai:gpt-5.6-luna@medium", "openai:gpt-5.6-terra@high", "openai:gpt-5.6@high"],
+    pendingReasoning: "medium", max: 20000, attempts: 1, concurrency: 1, maxCost: 5, allowFallback: false
+  });
   assert.equal(received.draft.snapshotFrames, 6);
   assert.equal(received.draft.inspectSamples, 9);
   assert.equal(received.draft.shotInspectConcurrency, 3);
@@ -304,6 +309,28 @@ test("routes production repair with scoped model controls", async () => {
   assert.equal(received.options.semanticAttempts, 3);
   assert.equal(received.options.maxSnapshots, 6);
   assert.equal(received.options.concurrency, 2);
+  assert.deepEqual(received.options.routes, ["openai:gpt-5.6@xhigh"]);
+  assert.equal(received.options.maxPatchRatio, .35);
+});
+
+test("routes local-first generation and bounded local patch repair explicitly", async () => {
+  const received = {};
+  await runProductionStage("direct-frames", "/tmp/workspace", { "model-policy": "local-first", "local-model": "qwen2.5-coder:latest" }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    directFrames: async (_workspace, options) => { received.frames = options; return { status: "ready" }; }
+  });
+  await runProductionStage("production-repair", "/tmp/workspace", { "repair-route": "ollama:qwen2.5-coder:latest@none", "max-patch-ratio": "0.2" }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    repairProduction: async (_workspace, options) => { received.repair = options; return { status: "repaired" }; }
+  });
+  assert.deepEqual(received.frames.routes, [
+    "ollama:qwen2.5-coder:latest@none",
+    "openai:gpt-5.6-luna@medium",
+    "openai:gpt-5.6-terra@high",
+    "openai:gpt-5.6@high"
+  ]);
+  assert.deepEqual(received.repair.routes, "ollama:qwen2.5-coder:latest@none");
+  assert.equal(received.repair.maxPatchRatio, .2);
 });
 
 test("routes an independently rerunnable analyzed draft stage", async () => {
