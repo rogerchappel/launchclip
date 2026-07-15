@@ -11,6 +11,7 @@ test("runs lint, browser validation, transition-aware checks, and assembled snap
   const run = async (command, args) => { commands.push([command, args]); return { stdout: args.includes("--json") ? '{"findings":[]}' : "snapshots written", stderr: "" }; };
   const result = await verifyProduction(workspace, { inspectSamples: 17, snapshotFrames: 9 }, { run });
   assert.equal(result.status, "ready");
+  assert.ok(commands.every(([command, args]) => command === process.execPath && args[0].endsWith("hyperframes/dist/cli.js")));
   assert.deepEqual(commands.map((entry) => entry[1][1]), ["lint", "validate", "check", "snapshot"]);
   assert.ok(commands[2][1].includes("--at-transitions"));
   assert.ok(commands[3][1].includes("9"));

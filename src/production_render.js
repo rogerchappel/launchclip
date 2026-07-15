@@ -10,6 +10,7 @@ import { writeAudioReport } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
 import { critiqueProduction } from "./production_critic.js";
 import { semanticVisualReport, validateSemanticVisualPlan } from "./semantic_visuals.js";
+import { runHyperframes } from "./toolchain.js";
 
 const execFileAsync = promisify(execFile);
 const VERIFICATION_SCHEMA = "launchclip.production-verification.v6";
@@ -83,13 +84,13 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
     throw new ProductionVerificationError(verificationResult({ workspace, project, qaDir, snapshots, receipt: summary, cached: false }));
   }
   for (const [name, args] of [
-    ["lint", ["hyperframes", "lint", "--json", project]],
-    ["validate", ["hyperframes", "validate", "--json", "--timeout", String(options.timeoutMs ?? 8000), project]],
+    ["lint", ["lint", "--json", project]],
+    ["validate", ["validate", "--json", "--timeout", String(options.timeoutMs ?? 8000), project]],
     // Keep the historical receipt key (`inspect`) stable for repair routing while
     // using the current all-in-one HyperFrames browser contract underneath.
-    ["inspect", ["hyperframes", "check", "--json", "--samples", String(options.inspectSamples ?? 15), "--at-transitions", project]]
+    ["inspect", ["check", "--json", "--samples", String(options.inspectSamples ?? 15), "--at-transitions", project]]
   ]) {
-    checks[name] = enforceStructuredCheck(await capture(run, "npx", args, { cwd: project }));
+    checks[name] = enforceStructuredCheck(await captureHyperframes(run, args, { cwd: project }));
     if (name === "lint" && options.strictAll !== false) {
       const findings = checks[name].stdout?.findings ?? [];
       const warningCount = Number(checks[name].stdout?.warningCount ?? findings.filter((entry) => entry.severity === "warning").length);
@@ -105,7 +106,7 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
     inspectSamples: options.inspectSamples,
     concurrency: options.shotInspectConcurrency
   }));
-  checks.snapshot = await capture(run, "npx", ["hyperframes", "snapshot", "--frames", String(options.snapshotFrames ?? 12), "--output", snapshots, project], { cwd: project });
+  checks.snapshot = await captureHyperframes(run, ["snapshot", "--frames", String(options.snapshotFrames ?? 12), "--output", snapshots, project], { cwd: project });
   await writeFile(path.join(qaDir, "snapshot.json"), `${JSON.stringify(checks.snapshot, null, 2)}\n`);
   const failed = Object.entries(checks).filter(([, result]) => !result.ok).map(([name]) => name);
   const infrastructureFailed = Object.entries(checks)
@@ -168,8 +169,8 @@ export async function verifyShotCompositions(projectPath, qaDirPath, plan, optio
     ]);
     const assetFiles = [...new Set([...html.matchAll(/\bassets\/([a-zA-Z0-9._-]+)/g)].map((match) => match[1]))];
     await Promise.all(assetFiles.map((file) => copyFile(path.join(project, "assets", file), path.join(assets, file))));
-    const check = enforceStructuredCheck(await capture(run, "npx", [
-      "hyperframes", "check", "--json", "--samples", String(options.inspectSamples ?? 15), "--at-transitions", directory
+    const check = enforceStructuredCheck(await captureHyperframes(run, [
+      "check", "--json", "--samples", String(options.inspectSamples ?? 15), "--at-transitions", directory
     ], { cwd: directory }));
     await writeFile(path.join(directory, "inspect.json"), `${JSON.stringify(check, null, 2)}\n`);
     return [`inspect:${shot.id}`, check];
@@ -291,8 +292,8 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
   const output = path.resolve(requestedOutput ?? path.join(renderDir, profile.outputName));
   await mkdir(path.dirname(output), { recursive: true });
   const run = adapters.run ?? runCommand;
-  const render = await capture(run, "npx", [
-    "hyperframes", "render", "--output", output,
+  const render = await captureHyperframes(run, [
+    "render", "--output", output,
     "--quality", String(profile.quality),
     "--workers", String(options.workers ?? "auto"),
     "--strict-all", "--skill", "product-launch-video", project
@@ -388,8 +389,8 @@ async function resolveVerifierFingerprint(project, adapters) {
   }
   if (adapters.run) return null;
   try {
-    const info = parseOutput((await runCommand("npx", ["hyperframes", "info", "--json", project], { cwd: project })).stdout);
-    const browserResult = await runCommand("npx", ["hyperframes", "browser", "path"], { cwd: project });
+    const info = parseOutput((await runHyperframes(runCommand, ["info", "--json", project], { cwd: project })).stdout);
+    const browserResult = await runHyperframes(runCommand, ["browser", "path"], { cwd: project });
     const browserPath = String(browserResult.stdout ?? "").trim().split(/\r?\n/).filter(Boolean).at(-1);
     if (!info?._meta?.version || !browserPath) return null;
     const browserVersion = String((await runCommand(browserPath, ["--version"], { cwd: project })).stdout ?? "").trim();
@@ -404,6 +405,10 @@ async function resolveVerifierFingerprint(project, adapters) {
   } catch {
     return null;
   }
+}
+
+function captureHyperframes(run, args, options) {
+  return capture(() => runHyperframes(run, args, options), "hyperframes", args, options);
 }
 
 async function readReusableVerification(workspace, receiptPath, inputs) {
