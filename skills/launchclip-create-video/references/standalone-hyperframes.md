@@ -7,7 +7,9 @@ pack. HyperFrames renders a deterministic HTML composition into video.
 
 - [Prerequisites](#prerequisites)
 - [Scaffold without the skill pack](#scaffold-without-the-skill-pack)
+- [Local source preparation](#local-source-preparation)
 - [Composition contract](#composition-contract)
+- [Design and motion quality contract](#design-and-motion-quality-contract)
 - [Motion sidecar](#motion-sidecar)
 - [Verification loop](#verification-loop)
 - [Preview and approval](#preview-and-approval)
@@ -52,6 +54,62 @@ Preserve the generated project metadata. Keep planning files at the project
 root, approved media under `assets/`, reusable scene files under
 `compositions/`, and renders under `renders/`.
 
+## Local source preparation
+
+Probe supplied media before editing:
+
+```bash
+ffprobe -v error \
+  -show_entries format=duration,size:stream=index,codec_type,codec_name,width,height,avg_frame_rate,sample_rate,channels \
+  -of json <input>
+```
+
+Detect boundary silence locally. Start with `-30dB` and a half-second minimum,
+then inspect the reported boundaries rather than copying them blindly:
+
+```bash
+ffmpeg -hide_banner -i <input> \
+  -af silencedetect=noise=-30dB:d=0.5 \
+  -f null - 2>&1
+```
+
+Trim leading/trailing silence with a small speech handle. Re-encode when a
+precise non-keyframe boundary matters; preserve internal pauses:
+
+```bash
+ffmpeg -ss <start-with-handle> -to <end-with-handle> -i <input> \
+  -c:v libx264 -crf 18 -preset medium \
+  -c:a aac -b:a 192k -movflags +faststart \
+  <project>/assets/source-trimmed.mp4
+```
+
+For narration-led edits, transcribe on the host with a local ASR engine:
+
+```bash
+npx hyperframes transcribe <project>/assets/source-trimmed.mp4 \
+  --dir <project> --engine auto --model small.en --json
+```
+
+`auto` uses local Parakeet when installed and otherwise local Whisper. Do not
+replace this with a paid transcription API in subscription mode.
+
+Generate two views of the source: a whole-piece overview and a dense opening
+strip. Adjust the overview step and tile geometry for the duration and aspect:
+
+```bash
+ffmpeg -i <project>/assets/source-trimmed.mp4 \
+  -vf "fps=1/<overview-step>,scale=480:-2,tile=4x3" -frames:v 1 \
+  <project>/source-overview.jpg
+
+ffmpeg -ss 0 -t 4 -i <project>/assets/source-trimmed.mp4 \
+  -vf "fps=2,scale=480:-2,tile=4x2" -frames:v 1 \
+  <project>/source-hook-strip.jpg
+```
+
+For a reference video, detect probable cuts and inspect a frame immediately
+before, at, and after each relevant boundary. Record observations in
+`SOURCE.md`; do not infer edit rhythm from a single contact sheet.
+
 ## Composition contract
 
 Author the top-level `index.html` as a standalone composition:
@@ -92,9 +150,60 @@ HyperFrames owns media playback:
 - Use local, approved asset paths. Do not leave provider URLs or expiring URLs
   in the composition.
 
+For presenter-plus-graphic layouts, measure the source focal point and compute
+the crop against the target rectangle. Given a source crop
+`(u0, v0, u1, v1)`, source dimensions `(sw, sh)`, scale `s`, and target origin
+`(tx, ty)`, place the direct-child media at `x = tx - u0*s` and
+`y = ty - v0*s`. Express the clip inset as percentages of the untransformed
+source: top `v0/sh`, right `(sw-u1)/sw`, bottom `(sh-v1)/sh`, and left `u0/sw`.
+This keeps the transformed crop flush with the intended panel instead of
+creating a dead band. Recompute the crop when scale or focal point changes.
+
+Place music and cue audio as direct children too. Keep supplied presenter audio
+at full program level, start music conservatively around `data-volume="0.10"`
+to `"0.18"`, and give each SFX a timed clip whose start matches a visible
+event. Resolve provider media to project-local files before preview or render.
+When beat alignment is useful, precompute `BEATS.json` locally and author exact
+timeline positions from that frozen data; do not perform live audio analysis at
+render time.
+
 For modular scenes, each file in `compositions/` must wrap its root in a
 `<template>`. Put its styles and scripts inside that template. The host slot's
 composition id, the inner root id, and its timeline key must match exactly.
+
+## Design and motion quality contract
+
+Treat `DESIGN.md`, `HOOKS.md`, and `QUALITY.md` as executable creative
+constraints:
+
+- Package exact font files under `assets/fonts/` and declare them with
+  `@font-face`, or use another deterministic family proven available on the
+  render host. Use three explicit roles: display, body, and metadata. A silent
+  fallback to Arial, Helvetica, Times, or generic monospace is a failed review
+  unless the design deliberately specifies it.
+- Establish hierarchy through type scale, width, weight, tracking, space, and
+  contrast. Keep one dominant reading target per frame.
+- Build foreground, subject, and atmospheric depth as separate layers so
+  camera movement has parallax instead of looking like a flat slide.
+- Use transforms for primary movement. Match exit acceleration to the next
+  scene's entry direction when objects or camera energy continue across a cut.
+- Use distinct easing characters: `expo.out` or `power4.out` for decisive
+  acquisition, `power2.inOut` for controlled travel, `back.out(1.2)` for rare
+  emphasis, and accelerating `.in` curves for exits. Linear motion is reserved
+  for mechanical or intentionally constant movement.
+- Simulate motion blur with short-lived directional blur, stretched duplicates,
+  or low-opacity ghost layers tied to velocity. Blur must resolve to zero at the
+  settle frame so text and UI remain sharp.
+- Reserve hard cuts for contrast. Pushes preserve direction, zooms change scale,
+  morphs preserve identity, whips create an energetic discontinuity, and masks
+  redirect focus. Each must have a visibly different spatial behavior.
+- The first frame must already communicate an intentional state. The first
+  second states the promise, and the first four seconds contain at least two
+  meaningful changes in layout, evidence, framing, or visual register.
+
+Prefer a small authored scene grammar over a rigid template: presenter anchor,
+presenter-plus-proof split, full-frame diagram, kinetic type reset, evidence/UI
+focus, and closing lockup. Reuse the design system, not the same layout.
 
 ## Motion sidecar
 
@@ -126,7 +235,7 @@ npx hyperframes lint <project> --json
 Then run the browser, layout, motion, contrast, and snapshot gate:
 
 ```bash
-npx hyperframes check <project> --json --snapshots --at-transitions
+npx hyperframes check <project> --json --strict --snapshots --at-transitions
 ```
 
 Inspect the resulting PNG overview and finding crops with the available image
@@ -138,6 +247,10 @@ viewer. Check first, midpoint, transition-boundary, and final frames for:
 - blank or static scenes
 - weak hierarchy, repetitive layouts, or generic filler
 - discontinuities between adjacent scenes
+- late hook acquisition, a motionless opening, or fewer than two meaningful
+  first-four-second changes
+- repeated card templates, identical easing on every object, permanent blur,
+  and generic-font substitution
 
 Do not use layout allow-attributes unless the overlap, occlusion, or overflow is
 deliberate and documented in the storyboard.
@@ -148,6 +261,18 @@ visual smoke test:
 ```bash
 npx hyperframes snapshot <project> --at <comma-separated-midpoints>
 ```
+
+Also sample the hook densely and inspect both sides of high-energy transitions:
+
+```bash
+npx hyperframes snapshot <project> \
+  --at 0,0.25,0.5,0.75,1,1.5,2,2.5,3,4,<transition-times>
+```
+
+View snapshots at delivery size. An overview can hide weak hierarchy, tiny
+type, one-frame overlaps, or a blur that never resolves. When a transition is
+suspect, snapshot neighboring times in 50-100 ms increments and repair the
+timeline rather than accepting the artifact.
 
 ## Preview and approval
 

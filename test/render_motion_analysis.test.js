@@ -7,6 +7,7 @@ import {
   classifyMotionFamily,
   compareMotionProfiles,
   evaluateMotionQuality,
+  hookEventSeconds,
   parseMetadataSeries
 } from "../src/render_motion_analysis.js";
 
@@ -90,6 +91,33 @@ test("quality gates exact duration, dimensions, dead motion, and missing samples
   const result = evaluateMotionQuality({ duration_seconds: 9, width: 720, height: 1280, frame_count: 0, motion_bursts_per_minute: 0, motion: { hold_ratio: 1 } }, { duration_seconds: 10, width: 1080, height: 1920 });
   assert.equal(result.ok, false);
   assert.deepEqual(new Set(result.findings.map((entry) => entry.category)), new Set(["duration", "dimensions", "frames", "motion"]));
+});
+
+test("quality gates opening cadence, frame energy, and velocity", () => {
+  const metrics = {
+    duration_seconds: 30, width: 1080, height: 1920, frame_count: 900,
+    cuts: [3.8], cut_rate_per_minute: 2, motion_bursts_per_minute: 8,
+    motion: {
+      hold_ratio: .7,
+      hold_threshold: .2,
+      change_energy: { p50: .15 },
+      bursts: [{ start_seconds: 1.1 }, { start_seconds: 1.18 }, { start_seconds: 3.7 }],
+      frame_difference: []
+    },
+    optical_flow: { velocity_pixels_per_second: { p90: 1.5 } }
+  };
+  assert.deepEqual(hookEventSeconds(metrics, 4), [1.1, 3.7]);
+  const result = evaluateMotionQuality(metrics, {
+    maximum_first_motion_seconds: .5,
+    minimum_hook_events: 3,
+    hook_window_seconds: 4,
+    minimum_change_energy_p50: .5,
+    minimum_flow_velocity_p90: 4,
+    minimum_cut_rate_per_minute: 4
+  });
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.findings.map((entry) => entry.category), ["motion", "motion", "editing", "hook", "hook"]);
+  assert.match(result.findings.at(-1).message, /Only 2 distinct/);
 });
 
 function metadata(key, values) {

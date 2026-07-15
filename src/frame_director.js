@@ -16,13 +16,13 @@ HyperFrames contract:
 - Inside the template, use one root with id="root" and data-composition-id equal to shot_id, data-start="0", the supplied data-duration, width, and height. Style that root with #root, never a root class selector.
 - Prefix every non-root element id with "shot_id-" so mounted scenes cannot collide. Motion assertion selectors use those prefixed ids.
 - Visual timeline elements use class="clip" with local data-start and data-duration values.
-- GSAP is already available as a global. Do not import libraries, fonts, or remote assets. Keep animation seek-safe and deterministic.
+- GSAP is already available as a global. Do not import libraries, remote font stylesheets, or remote assets. Keep animation seek-safe and deterministic.
 - Create the GSAP timeline paused and register it exactly with: window.__timelines = window.__timelines || {}; window.__timelines[shot_id] = timeline. Do not use alternate registry names.
 - Do not declare an initial CSS transform on any selector that GSAP animates. Set initial transform state with gsap.set so one system owns the full transform.
 - Animate transforms and opacity for movement. Never tween font-size, width, height, top, left, padding, or other layout/reflow properties; author the final readable size in CSS and reveal it with transform/opacity.
 - Never apply non-uniform scaleX/scaleY to text, a text-bearing component, or a container with semantic content. Uniform scale is allowed for whole components; non-uniform scaling is reserved for text-free decorative bars, masks, and primitives.
 - Give every timeline-visible class="clip" element a stable, descriptive, shot-prefixed id for Studio editing and motion inspection.
-- Put a full-bleed background on a child layer rather than the composition root; root backgrounds can disappear during frame compositing. Use only declared @font-face families or renderer-safe generic families such as Arial, Georgia, or Courier New; do not name an unavailable platform font.
+- Put a full-bleed background on a child layer rather than the composition root; root backgrounds can disappear during frame compositing. Treat every family named in global_design.style_dna.typography as an available, compiler-resolved family and use those names exactly for their declared roles. HyperFrames deterministically embeds mapped and Google Fonts during compile/render. Use a local @font-face only when a supplied font resource provides its exact path; never add a remote stylesheet, invent a font path, or replace planned typography with Arial, Georgia, or Courier New unless the plan explicitly names that generic family.
 - Do not include audio or video elements. Request those through root_media_requests; the assembler owns media playback.
 - Treat presenter media as a root visual object. For presenter.mode anchor or companion, request exactly one presenter video and include presentation.mode matching the shot, frame="desktop-window" unless the director explicitly requests no chrome, a seek-safe enter/exit preset, and motion_blur_px. For presenter.mode voiceover, request no presenter video; the authoritative audio continues independently.
 - Anchor means the presenter is the primary framed visual. Companion means a smaller framed presenter window shares the canvas with proof or motion graphics. Presenter placement is allowed to change between top, middle, and bottom across shots.
@@ -138,7 +138,7 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, narration
 async function directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, client, options }) {
   const jobId = `frame:${shot.id}`;
   const baseInput = buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming });
-  const inputHash = semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v3" });
+  const inputHash = semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v4" });
   const existing = store.get(jobId);
   const recovered = await recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
   if (recovered) return recovered;

@@ -12,8 +12,8 @@ import { critiqueProduction } from "./production_critic.js";
 import { semanticVisualReport, validateSemanticVisualPlan } from "./semantic_visuals.js";
 
 const execFileAsync = promisify(execFile);
-const VERIFICATION_SCHEMA = "launchclip.production-verification.v5";
-const VERIFICATION_SUITE = "production-verify.v5";
+const VERIFICATION_SCHEMA = "launchclip.production-verification.v6";
+const VERIFICATION_SUITE = "production-verify.v6";
 
 export class ProductionVerificationError extends Error {
   constructor(verification) {
@@ -85,7 +85,9 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
   for (const [name, args] of [
     ["lint", ["hyperframes", "lint", "--json", project]],
     ["validate", ["hyperframes", "validate", "--json", "--timeout", String(options.timeoutMs ?? 8000), project]],
-    ["inspect", ["hyperframes", "inspect", "--json", "--samples", String(options.inspectSamples ?? 15), "--at-transitions", project]]
+    // Keep the historical receipt key (`inspect`) stable for repair routing while
+    // using the current all-in-one HyperFrames browser contract underneath.
+    ["inspect", ["hyperframes", "check", "--json", "--samples", String(options.inspectSamples ?? 15), "--at-transitions", project]]
   ]) {
     checks[name] = enforceStructuredCheck(await capture(run, "npx", args, { cwd: project }));
     if (name === "lint" && options.strictAll !== false) {
@@ -167,7 +169,7 @@ export async function verifyShotCompositions(projectPath, qaDirPath, plan, optio
     const assetFiles = [...new Set([...html.matchAll(/\bassets\/([a-zA-Z0-9._-]+)/g)].map((match) => match[1]))];
     await Promise.all(assetFiles.map((file) => copyFile(path.join(project, "assets", file), path.join(assets, file))));
     const check = enforceStructuredCheck(await capture(run, "npx", [
-      "hyperframes", "inspect", "--json", "--samples", String(options.inspectSamples ?? 15), "--at-transitions", directory
+      "hyperframes", "check", "--json", "--samples", String(options.inspectSamples ?? 15), "--at-transitions", directory
     ], { cwd: directory }));
     await writeFile(path.join(directory, "inspect.json"), `${JSON.stringify(check, null, 2)}\n`);
     return [`inspect:${shot.id}`, check];
@@ -179,10 +181,16 @@ export async function verifySemanticArtifacts(projectPath, plan) {
   const project = path.resolve(projectPath);
   const errors = validateSemanticVisualPlan(plan);
   const renderedEvents = [];
+  const frameHtml = [];
   for (const shot of plan.shots ?? []) {
     if (!shot.visual) continue;
+    const htmlPath = path.join(project, "compositions", `${shot.id}.html`);
     const motionPath = path.join(project, "compositions", `${shot.id}.motion.json`);
-    let motion;
+    let motion, html;
+    try { html = await readFile(htmlPath, "utf8"); frameHtml.push({ shot_id: shot.id, html }); }
+    catch (error) {
+      errors.push(`shot ${shot.id} is missing its assembled HTML composition: ${error.code ?? error.message}`);
+    }
     try { motion = JSON.parse(await readFile(motionPath, "utf8")); }
     catch (error) {
       errors.push(`shot ${shot.id} is missing its assembled motion event sidecar: ${error.code ?? error.message}`);
@@ -197,6 +205,7 @@ export async function verifySemanticArtifacts(projectPath, plan) {
     }
     for (const cue of shot.sfx ?? []) if (!actual.has(cue.event_id)) errors.push(`shot ${shot.id} SFX ${cue.cue} is orphaned from rendered event ${cue.event_id}`);
   }
+  errors.push(...plannedTypographyErrors(plan, frameHtml));
   return {
     ok: errors.length === 0,
     exit_code: errors.length ? 1 : 0,
@@ -204,6 +213,28 @@ export async function verifySemanticArtifacts(projectPath, plan) {
     stdout: { ...semanticVisualReport(plan), rendered_events: renderedEvents, errors },
     stderr: ""
   };
+}
+
+export function plannedTypographyErrors(plan, frames) {
+  const roles = Object.entries(plan?.design?.style_dna?.typography ?? {})
+    .map(([role, family]) => [role, String(family ?? "").trim()])
+    .filter(([, family]) => family);
+  if (!roles.length) return [];
+  const css = frames.map((entry) => styleDeclarations(entry.html)).join("\n");
+  return roles.flatMap(([role, family]) => {
+    const escaped = family.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const declaration = new RegExp(`(?:font(?:-family)?|--[a-z0-9_-]+)\\s*:[^;}]*["']?${escaped}(?:["']|\\s|,|;|}|$)`, "i");
+    return declaration.test(css) ? [] : [`planned typography role ${role} requires family ${JSON.stringify(family)}, but no assembled frame declares it`];
+  });
+}
+
+function styleDeclarations(html) {
+  const source = String(html ?? "");
+  return [
+    ...[...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((match) => match[1]),
+    ...[...source.matchAll(/\bstyle\s*=\s*["']([^"']*)["']/gi)].map((match) => match[1]),
+    ...[...source.matchAll(/\bdata-font-family\s*=\s*["']([^"']+)["']/gi)].map((match) => `font-family:${match[1]};`)
+  ].join("\n");
 }
 
 function renderShotInspectionRoot(shot, format, duration) {
@@ -502,8 +533,13 @@ function motionOptions(plan, options) {
       width: plan.format.width,
       height: plan.format.height,
       duration_tolerance_seconds: Number(options.durationToleranceSeconds ?? .15),
-      maximum_hold_ratio: Number(options.maximumHoldRatio ?? .985),
-      minimum_bursts_per_minute: Number(options.minimumBurstsPerMinute ?? 4)
+      maximum_hold_ratio: Number(options.maximumHoldRatio ?? .94),
+      minimum_bursts_per_minute: Number(options.minimumBurstsPerMinute ?? 8),
+      minimum_change_energy_p50: Number(options.minimumChangeEnergyP50 ?? .35),
+      minimum_flow_velocity_p90: Number(options.minimumFlowVelocityP90 ?? 2),
+      maximum_first_motion_seconds: Number(options.maximumFirstMotionSeconds ?? .65),
+      hook_window_seconds: Number(options.hookWindowSeconds ?? 4),
+      minimum_hook_events: Number(options.minimumHookEvents ?? 2)
     }
   };
 }

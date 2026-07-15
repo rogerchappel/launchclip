@@ -15,7 +15,9 @@ completely. It is the self-contained runtime contract for this workflow.
 ## Preserve the cost boundary
 
 - Perform research synthesis, scripting, art direction, HTML authoring, visual
-  review, and repair in the current agent session.
+  review, and repair in the current agent session. The active subscription
+  agent is the director, compositor, and critic; do not hand those jobs back to
+  a metered LaunchClip model stage.
 - Use local HTML, CSS, SVG, supplied media, FFmpeg, and the HyperFrames CLI by
   default.
 - Do not run `launchclip produce`, `creative-plan`, `direct-frames`,
@@ -28,6 +30,9 @@ completely. It is the self-contained runtime contract for this workflow.
 - Never treat a ChatGPT, Codex, or Claude login as an API credential. OAuth
   subscription access does not populate `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
   or `ELEVENLABS_API_KEY` for subprocesses.
+- Local deterministic tools, including FFmpeg, `ffprobe`, local Whisper or
+  Parakeet transcription, and the HyperFrames browser/render runtime, stay
+  inside this boundary.
 
 ## Conduct the compact intake
 
@@ -38,9 +43,11 @@ missing decisions, using no more than three grouped questions:
    understand, feel, or do afterward?
 2. **Delivery:** Where will it be published, and are there required duration,
    aspect ratio, language, or deadline constraints?
-3. **Materials:** Which logos, screenshots, recordings, script/voiceover,
-   presenter footage, music, references, or style rules may be used? Confirm
-   permission for any likeness, voice, private material, or reference analysis.
+3. **Materials and audio:** Which logos, screenshots, recordings,
+   script/voiceover, presenter footage, references, or style rules may be used?
+   Ask once whether the edit should include music and sound effects. When sound
+   effects are wanted, ask for the local SFX folder. Confirm permission for any
+   likeness, voice, private material, reference analysis, or paid music call.
 
 Do not ask for fields that can be sensibly defaulted. Use these defaults and
 state them:
@@ -52,12 +59,42 @@ state them:
 - duration: 45 seconds for a short promo or explainer
 - language: the user's language
 - output: `.launchclip/agent-<source-slug>` in the active workspace
-- audio: supplied audio when present; otherwise a silent/music-free edit unless
-  the user approves a local or external audio option
+- audio: preserve supplied speech; ask once about music and SFX when the user
+  has not already decided. Never silently spend provider credits.
 
 If the source itself is missing, ask for it before proceeding. Otherwise keep
 working after the compact intake; do not turn each creative choice into another
 approval round.
+
+## Resolve music and sound effects deliberately
+
+Treat music and SFX as separate choices. Record the decision, provider, local
+source, expected cost boundary, and permission in `BRIEF.md` before resolving
+audio.
+
+- **Music:** support none, a supplied track, or user-approved ElevenLabs music.
+  ElevenLabs consumes credits, so require explicit opt-in before the request.
+  Check only whether `ELEVENLABS_API_KEY` is present in the process environment
+  or an approved workspace `.env`; never print the value. A file existing does
+  not load it automatically, so export just that variable for the generation
+  subprocess. Generate one instrumental bed sized to the edit, leaving
+  midrange space for narration and requesting a clean ending. Do not use an
+  OpenAI key for subscription-mode orchestration or music.
+- **Sound effects:** support none or a user-approved local folder. Recursively
+  inventory `.wav`, `.mp3`, `.m4a`, `.aac`, `.ogg`, and `.flac` files, then copy
+  only selected cues into the project. Match cues by semantic filename and
+  audition them locally. Do not assume a private machine path in the reusable
+  skill. Do not call ElevenLabs Sound Effects merely because the music provider
+  was approved; that requires a separate explicit request.
+- Bind each SFX to a visible event such as a cut, lock, strike, impact, or
+  object handoff. Use a small cue vocabulary and avoid decorating every beat.
+- When the track has a stable pulse, derive a beat map locally and save it as
+  `BEATS.json`. Move selected scene boundaries or internal accents to nearby
+  beats when speech timing permits; narration remains authoritative. Avoid
+  continuous beat pulsing that competes with the presenter.
+- Start a music bed around 10-18% under supplied speech and SFX around 20-35%,
+  then audition the mix. Fade or duck the bed around dense speech and the final
+  spoken line. Keep every resolved file local and deterministic.
 
 ## Freeze the brief and evidence
 
@@ -75,12 +112,46 @@ composition:
   assets, motion development, transition, and audio intent
 - `DESIGN.md`: project-specific palette roles, typography, composition logic,
   image treatment, motion character, and forbidden motifs
+- `SOURCE.md`: media probes, silence-trim receipt, transcript location, overview
+  contact sheet, dense opening strip, detected cut points, and any reference
+  cadence observations
+- `HOOKS.md`: three truthful opening treatments, the selected treatment, the
+  immediate promise, and the material changes planned inside the first four
+  seconds
+- `QUALITY.md`: project-specific pass/fail targets for typography, hierarchy,
+  hook timing, change cadence, transition variety, motion physics, safe areas,
+  source fidelity, and final artifact probing
 
 Use supplied narration as authoritative. Do not silently rewrite it. Avoid
 inventing product capabilities, performance numbers, testimonials, research
 findings, or repository behavior. References may guide pacing or editorial
 structure, but do not copy their footage, audio, likeness, branding, or exact
 design.
+
+## Analyze supplied media before designing
+
+When the user supplies audio or video, inspect the real temporal structure
+before writing the storyboard:
+
+- Probe streams, duration, dimensions, frame rate, codecs, and audio presence.
+- Detect boundary silence and trim only the leading/trailing silence. Preserve
+  internal pauses unless the user asked for editorial tightening. Keep a small
+  speech handle so consonants and breaths are not clipped.
+- Transcribe locally when narration drives the edit. Treat the supplied words
+  and timings as authoritative.
+- Generate and inspect an overview contact sheet plus a dense first-four-second
+  strip. For references, also inspect frames around detected cuts and major
+  motion changes instead of relying on evenly spaced thumbnails alone.
+- For presenter footage, inspect representative frames across the full take and
+  record the approximate face box, gaze direction, and usable negative space in
+  `SOURCE.md`. Treat that region as a presenter-safe area, not as background.
+- Record the measured cut rate, hold pattern, first meaningful motion, and the
+  visual registers used: presenter, typography, UI/proof, diagram, spatial
+  transition, or full-frame reset.
+
+Do this analysis with local tooling from the bundled reference. Never submit
+private footage to an external transcription or vision API without explicit
+permission.
 
 ## Design the video
 
@@ -94,9 +165,56 @@ of unrelated title cards. For every scene:
   transformation, comparison, traversal, focus shift, or state change.
 - Maintain continuity through color, type, spatial anchors, object handoffs, or
   transition logic.
+- Classify adjacent beats before choosing a transition. When the idea and
+  presenter layout continue, treat both scenes as positions in one shared
+  world: keep stable anchors such as the presenter, frame, or navigation rail
+  fixed and pan the graphic plane between them. Reserve full resets for a real
+  topic, scale, or emotional change.
 - Reserve safe areas for captions and platform UI when applicable.
+- For every presenter-plus-graphic scene, declare a presenter-safe area and a
+  non-overlapping graphic zone in `STORYBOARD.md`. Pan or crop the presenter
+  into the opposite zone before placing a panel. If neither side has usable
+  negative space, use a true split, compact picture-in-picture, or full-frame
+  graphic cut instead of covering the face.
+- Derive split crops from the target rectangle and presenter focal point. The
+  transformed crop must fill the entire target bounds with no black or dead
+  band; validate the first, middle, and last frame of every split state.
 - Use semantic HTML objects, SVG, diagrams, charts, or UI reconstructions before
   seeking generated raster imagery.
+
+Meet this default retention and craft floor unless the brief deliberately calls
+for a quieter treatment:
+
+- Make frame zero intentional and establish the promise within one second.
+- Land at least two distinct material changes in the first four seconds. A
+  color flicker or a caption word changing does not count as a material change.
+- Change visual register, composition, evidence state, camera framing, or
+  information density every two to four seconds; do not merely swap card copy.
+- Use at least three visual registers across the piece and avoid repeating the
+  same register more than twice consecutively.
+- Define exact display, body, and metadata type families. Use genuine weight,
+  scale, tracking, width, and case contrast; fail the review if a generic font
+  silently replaces the planned family.
+- Give primary, secondary, and ambient motion different amplitudes and tempos.
+  Entries normally decelerate into place; exits accelerate away. Use overshoot
+  only for emphasis, not every element.
+- Keep an evolving canvas between major beats with finite, low-amplitude camera
+  drift, foreground parallax, or surface breathing. Motion should continue
+  through holds without turning every scene into a loop. Couple brief blur to
+  fast pans, pushes, or zooms and resolve it fully when movement settles.
+- For shared-world travel, move outgoing and incoming planes concurrently with
+  one continuous `inOut` position curve. Shape blur as a velocity envelope:
+  crisp at departure, strongest near the midpoint, and fully crisp at the
+  settle. Extend the outgoing clip through the complete move so it cannot pop
+  away before the transition finishes.
+- Select transitions by meaning: hard cut for contrast, push for continuation,
+  whip for speed, zoom for scale change, morph for identity, and aperture/mask
+  for focus. Do not disguise one generic crossfade with different names.
+- Use directional blur or brief ghost trails only while velocity is high, then
+  return to a crisp settle. Prefer transforms, masks, SVG paths, and layered
+  depth over permanent CSS blur.
+- Keep primary copy readable at delivery size. Long body text belongs in the
+  narration or a deliberate reading beat, not a fleeting overlay.
 
 Do not imitate a named living artist or clone a person's voice or likeness.
 
@@ -106,14 +224,22 @@ Follow the scaffold, composition contract, and commands in the bundled
 reference. Work in this order:
 
 1. Verify Node.js, FFmpeg, and HyperFrames availability.
-2. Scaffold a blank project without installing any skill pack.
-3. Copy or link only approved assets into the project using stable local paths.
-4. Author the composition and a motion sidecar from the frozen storyboard.
-5. Run static lint early.
-6. Run the browser check with snapshots.
-7. Inspect every generated overview image, not only the command exit code.
-8. Repair the smallest responsible scene, then rerun the failed gate.
-9. Repeat until checks pass and the visual result matches the brief.
+2. Probe, trim, transcribe, and temporally inspect supplied media locally.
+3. Scaffold a blank project without installing any skill pack.
+4. Copy or link only approved assets into the project using stable local paths.
+5. Freeze the brief, source analysis, hook choice, storyboard, design system,
+   and quality targets.
+6. Author the composition and a motion sidecar from those frozen artifacts.
+7. Run static lint early.
+8. Run strict browser checks with transition and dense-hook snapshots. Sample
+   shared-world moves at departure, early acceleration, peak speed, late
+   deceleration, and settle rather than checking only their endpoints.
+9. Inspect every generated overview image, not only the command exit code.
+10. Review the opening, every transition boundary, every major type state, and
+    the final frame at delivery scale. Scrub adjacent frames when a snapshot
+    suggests clipping, popping, or a discontinuity.
+11. Repair the smallest responsible scene, then rerun the failed gate.
+12. Repeat until checks pass and the visible result satisfies `QUALITY.md`.
 
 Do not weaken checks, mark accidental overlaps as intentional, or use draft
 rendering to conceal a composition defect. Keep all motion deterministic and
