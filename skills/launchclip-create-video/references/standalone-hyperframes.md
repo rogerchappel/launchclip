@@ -150,6 +150,23 @@ HyperFrames owns media playback:
 - Use local, approved asset paths. Do not leave provider URLs or expiring URLs
   in the composition.
 
+For presenter-plus-graphic layouts, measure the source focal point and compute
+the crop against the target rectangle. Given a source crop
+`(u0, v0, u1, v1)`, source dimensions `(sw, sh)`, scale `s`, and target origin
+`(tx, ty)`, place the direct-child media at `x = tx - u0*s` and
+`y = ty - v0*s`. Express the clip inset as percentages of the untransformed
+source: top `v0/sh`, right `(sw-u1)/sw`, bottom `(sh-v1)/sh`, and left `u0/sw`.
+This keeps the transformed crop flush with the intended panel instead of
+creating a dead band. Recompute the crop when scale or focal point changes.
+
+Place music and cue audio as direct children too. Keep supplied presenter audio
+at full program level, start music conservatively around `data-volume="0.10"`
+to `"0.18"`, and give each SFX a timed clip whose start matches a visible
+event. Resolve provider media to project-local files before preview or render.
+When beat alignment is useful, precompute `BEATS.json` locally and author exact
+timeline positions from that frozen data; do not perform live audio analysis at
+render time.
+
 For modular scenes, each file in `compositions/` must wrap its root in a
 `<template>`. Put its styles and scripts inside that template. The host slot's
 composition id, the inner root id, and its timeline key must match exactly.
