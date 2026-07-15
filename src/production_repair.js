@@ -61,7 +61,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
       ? Promise.resolve({ verdict: "ship", findings: [] })
       : readOptionalJson(path.join(qaDir, "critique.json"), { verdict: "ship", findings: [] })
   ]);
-  const deterministicFindings = await collectDeterministicRepairFindings(workspace, plan);
+  const deterministicFindings = await collectDeterministicRepairFindings(workspace, plan, { maxIssuesPerShot: options.maxIssuesPerShot });
   if (critique.verdict === "ship" && !deterministicFindings.length) {
     return { stage: "production-repair", status: "not-needed", repaired: [], deterministic_findings: 0 };
   }
@@ -366,8 +366,10 @@ function patchError(message) {
   return error;
 }
 
-export async function collectDeterministicRepairFindings(workspacePath, plan) {
+export async function collectDeterministicRepairFindings(workspacePath, plan, options = {}) {
   const workspace = path.resolve(workspacePath);
+  const maxIssuesPerShot = Number(options.maxIssuesPerShot ?? 4);
+  if (!Number.isInteger(maxIssuesPerShot) || maxIssuesPerShot <= 0) throw new Error("Repair issues per shot must be a positive integer");
   const findings = [];
   const lintPath = path.join(workspace, PRODUCTION_PATHS.qa, "lint.json");
   const lintInfo = await optionalStat(lintPath);
@@ -399,7 +401,8 @@ export async function collectDeterministicRepairFindings(workspacePath, plan) {
         .filter((finding) => ["error", "warning"].includes(finding?.severity) && path.basename(String(finding.file ?? "")) === expectedFile)
         .map(lintRepairIssue));
     }
-    const issues = uniqueIssues(rawIssues);
+    const allIssues = uniqueIssues(rawIssues).sort((left, right) => nativeIssueRank(left) - nativeIssueRank(right));
+    const issues = allIssues.slice(0, maxIssuesPerShot);
     if (!issues.length) continue;
     const codes = issues.map((issue) => String(issue.code ?? "inspect_failed"));
     findings.push({
@@ -409,13 +412,23 @@ export async function collectDeterministicRepairFindings(workspacePath, plan) {
       shot_ids: [shot.id],
       start_seconds: Number.isFinite(Number(shot.start_seconds)) ? Number(shot.start_seconds) : null,
       end_seconds: Number.isFinite(Number(shot.end_seconds)) ? Number(shot.end_seconds) : null,
-      evidence: `Shot-local HyperFrames inspection failed with ${issues.length} unique blocking issue${issues.length === 1 ? "" : "s"}: ${issues.map(describeNativeIssue).join("; ")}`,
+      evidence: `Shot-local HyperFrames inspection repair batch contains ${issues.length} of ${allIssues.length} unique blocking issue${allIssues.length === 1 ? "" : "s"}: ${issues.map(describeNativeIssue).join("; ")}`,
       repair_scope: "frame",
       instruction: `Make native shot-local inspection pass by correcting these issues: ${issues.map(describeNativeIssue).join("; ")}. Do not hide a real defect with a layout-allow annotation; use one only when the overlap or off-canvas state is visibly intentional and remains legible. Motion assertions must describe motion on the asserted element itself.`,
       preserve: ["Factual copy and evidence grounding", "The established art direction", "Unrelated composition and motion"]
     });
   }
   return findings;
+}
+
+function nativeIssueRank(issue) {
+  const severity = String(issue?.severity ?? "").toLowerCase() === "error" ? 0 : 10;
+  const code = String(issue?.code ?? "");
+  if (code === "console_error") return severity;
+  if (code.startsWith("motion_")) return severity + 1;
+  if (code.includes("text") || code.includes("overlap") || code.includes("overflow") || code.includes("occluded")) return severity + 2;
+  if (code.includes("contrast")) return severity + 3;
+  return severity + 4;
 }
 
 function currentHyperFramesIssues(stdout) {

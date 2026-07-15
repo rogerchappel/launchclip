@@ -328,6 +328,7 @@ function repairOptions(flags) {
     concurrency: numberOr(flags.concurrency, policy === "local-first" ? 1 : 3),
     maxOutputTokens: numberOr(flags["repair-max-output-tokens"], 8_000),
     maxPatchRatio: ratioOr(flags["max-patch-ratio"], .35),
+    maxIssuesPerShot: numberOr(flags["repair-issues-per-shot"], 4),
     background: !flags.foreground
   };
 }

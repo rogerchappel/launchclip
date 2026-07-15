@@ -311,6 +311,7 @@ test("routes production repair with scoped model controls", async () => {
   assert.equal(received.options.concurrency, 2);
   assert.deepEqual(received.options.routes, ["openai:gpt-5.6@xhigh"]);
   assert.equal(received.options.maxPatchRatio, .35);
+  assert.equal(received.options.maxIssuesPerShot, 4);
 });
 
 test("routes local-first generation and bounded local patch repair explicitly", async () => {
@@ -331,6 +332,7 @@ test("routes local-first generation and bounded local patch repair explicitly", 
   ]);
   assert.deepEqual(received.repair.routes, "ollama:qwen2.5-coder:latest@none");
   assert.equal(received.repair.maxPatchRatio, .2);
+  assert.equal(received.repair.maxIssuesPerShot, 4);
 });
 
 test("routes an independently rerunnable analyzed draft stage", async () => {
