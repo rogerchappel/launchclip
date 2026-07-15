@@ -5,8 +5,8 @@ export const REPAIR_CAPSULE_VERSION = "selector-capsule.v1";
 export function buildRepairSourceCapsule(prior, findings = [], validationErrors = [], options = {}) {
   const selectors = collectRepairSelectors(findings, validationErrors);
   const limits = {
-    html: positiveInteger(options.htmlChars ?? 12_000, "HTML repair capsule size"),
-    motion: positiveInteger(options.motionChars ?? 6_000, "motion repair capsule size")
+    html: positiveInteger(options.htmlChars ?? 9_000, "HTML repair capsule size"),
+    motion: positiveInteger(options.motionChars ?? 4_000, "motion repair capsule size")
   };
   const sources = SOURCE_TARGETS.flatMap((target) => {
     const source = target === "html" ? String(prior?.html ?? "") : JSON.stringify(prior?.[target], null, 2);
@@ -28,6 +28,23 @@ export function buildRepairSourceCapsule(prior, findings = [], validationErrors 
     }));
   });
   return { version: REPAIR_CAPSULE_VERSION, selectors, sources };
+}
+
+export function buildRepairContextCapsule(plan, shot) {
+  const design = plan?.design ?? {};
+  const visual = shot?.visual ?? {};
+  return {
+    global_design: selectFields(design, ["concept", "art_direction", "palette_roles", "typography", "texture", "composition_logic", "motion_character", "density"]),
+    shot: {
+      ...selectFields(shot, ["id", "start_seconds", "end_seconds", "purpose", "on_screen_text", "evidence_ids", "resource_ids", "presenter", "sfx"]),
+      visual: {
+        ...selectFields(visual, ["description", "concept", "representation", "composition", "typography", "motion"]),
+        objects: (visual.objects ?? []).map((entry) => selectFields(entry, ["id", "kind", "meaning", "layer", "asset_resource_id", "lifecycle"])),
+        events: (visual.events ?? []).map((entry) => selectFields(entry, ["id", "at_seconds", "target_ids", "action", "motion_verb", "visible_change", "sfx_eligible"])),
+        continuity: visual.continuity ?? null
+      }
+    }
+  };
 }
 
 export function collectRepairSelectors(findings = [], validationErrors = []) {
@@ -108,6 +125,10 @@ function selectorAnchors(selectors) {
 
 function isSimpleSelector(value) {
   return /^[#.][A-Za-z_][\w-]{1,79}$/.test(String(value).trim());
+}
+
+function selectFields(value, fields) {
+  return Object.fromEntries(fields.filter((field) => value?.[field] !== undefined).map((field) => [field, value[field]]));
 }
 
 function positiveInteger(value, label) {

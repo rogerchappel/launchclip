@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildRepairSourceCapsule, collectRepairSelectors, REPAIR_CAPSULE_VERSION } from "../src/repair_capsule.js";
+import { buildRepairContextCapsule, buildRepairSourceCapsule, collectRepairSelectors, REPAIR_CAPSULE_VERSION } from "../src/repair_capsule.js";
 
 test("extracts exact selector-centred source for a large local repair", () => {
   const filler = ".unused{color:#111}".repeat(1_500);
@@ -35,6 +35,27 @@ test("discovers selectors in structured findings and retry errors", () => {
     { repair_targets: [{ selector: "#shot-copy" }] }
   ], ["Candidate failed at #shot-card"]);
   assert.deepEqual(selectors, ["#shot-card", ".proof-row", "#shot-copy"]);
+});
+
+test("compacts a local repair context without dropping visual identities or event timing", () => {
+  const capsule = buildRepairContextCapsule({
+    design: { concept: "Proof", palette_roles: { ink: "#111" }, style_dna: { forbidden_motifs: ["large", "cloud-only", "payload"] } }
+  }, {
+    id: "shot-1", start_seconds: 0, end_seconds: 5, purpose: "Show proof", voiceover: "Long narration is already frozen elsewhere.",
+    on_screen_text: ["Proof"], transition_out: { description: "Not needed for a local selector repair" },
+    visual: {
+      description: "A proof node locks into place.", internal_reveals: [{ at_seconds: 2, action: "Redundant with events" }],
+      objects: [{ id: "proof-node", kind: "diagram-node", meaning: "Evidence", layer: "foreground", lifecycle: "enter", extra: "omit" }],
+      events: [{ id: "proof-lock", at_seconds: 2, target_ids: ["proof-node"], action: "Lock", motion_verb: "settle", visible_change: "transform", easing_intent: "omit" }]
+    }
+  });
+  assert.equal(capsule.global_design.concept, "Proof");
+  assert.equal(capsule.global_design.style_dna, undefined);
+  assert.equal(capsule.shot.voiceover, undefined);
+  assert.equal(capsule.shot.visual.internal_reveals, undefined);
+  assert.deepEqual(capsule.shot.visual.objects, [{ id: "proof-node", kind: "diagram-node", meaning: "Evidence", layer: "foreground", lifecycle: "enter" }]);
+  assert.deepEqual(capsule.shot.visual.events[0].target_ids, ["proof-node"]);
+  assert.equal(capsule.shot.visual.events[0].at_seconds, 2);
 });
 
 function bundle(html) {
