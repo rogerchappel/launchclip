@@ -392,11 +392,11 @@ test("direct record mode writes script and waits for a take without an LLM key",
 
 test("proof capture writes renderer-ready real receipt cards", async () => {
   const temp = await makeDirectWorkspace();
-  const publicRoot = path.join(temp, "public");
+  const publicRoot = path.join(temp, "video", "public");
   try {
     await mkdir(path.join(temp, "video"), { recursive: true });
     await writeFile(path.join(temp, "video", "script.json"), "{}\n");
-    const proof = await captureProofAssets(temp, { publicRoot });
+    const proof = await captureProofAssets(temp);
     assert.equal(proof.assets.length, 3);
     assert.equal(proof.terminal.command, "npm run smoke");
     assert.match(proof.terminal.output, /sample-tool smoke passed/);

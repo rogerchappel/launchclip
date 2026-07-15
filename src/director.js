@@ -5,7 +5,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { validateTimeline, MOTION_TIMELINE_VERSION } from "../motion-engine/schema.js";
 import { lintTimeline } from "../motion-engine/lint.js";
 import { renderCatalog } from "../motion-engine/catalog.js";
@@ -14,8 +13,8 @@ import { alignRecording, renderMotion } from "./talking_head.js";
 import { writeViralScript } from "./script_writer.js";
 import { generateMusic, resolveMusicPrompt, shouldAutoGenerateMusic } from "./music.js";
 import { captureProofAssets } from "./proof_capture.js";
+import { PACKAGE_PUBLIC_ROOT, stageBundledPublicAssets } from "./runtime_paths.js";
 
-const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MODEL = "claude-opus-4-8";
 const MAX_ATTEMPTS = 4;
 
@@ -246,7 +245,8 @@ export async function parseDirection(client, promptText, assetPaths = []) {
 
 // ElevenLabs TTS + scribe alignment: a fully autonomous voice path. Returns
 // { voicePath (renderer-relative), words } with REAL timings to align to.
-export async function synthesizeVoice(scriptText, { log = () => {} } = {}) {
+export async function synthesizeVoice(scriptText, { publicRoot, log = () => {} } = {}) {
+  if (!publicRoot) throw new Error("synthesizeVoice requires a workspace public root");
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key) throw new Error("ELEVENLABS_API_KEY is required for --voice tts");
   const voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
@@ -258,7 +258,7 @@ export async function synthesizeVoice(scriptText, { log = () => {} } = {}) {
   });
   if (!ttsResponse.ok) throw new Error(`ElevenLabs TTS failed (${ttsResponse.status}): ${(await ttsResponse.text()).slice(0, 200)}`);
   const audio = Buffer.from(await ttsResponse.arrayBuffer());
-  const voiceDir = path.join(PACKAGE_ROOT, "public", "voice");
+  const voiceDir = path.join(path.resolve(publicRoot), "voice");
   await mkdir(voiceDir, { recursive: true });
   const fileName = `tts-${Date.now()}.mp3`;
   await writeFile(path.join(voiceDir, fileName), audio);
@@ -513,10 +513,10 @@ export function normalizeCritique(critique) {
 
 // Scan known public/ dirs + an optional assets dir into a manifest of
 // renderer-resolvable paths.
-export function scanAssets(extraDir = null) {
+export function scanAssets(extraDir = null, publicRoot = PACKAGE_PUBLIC_ROOT) {
   const assets = [];
   const add = (dir, kind, prefix) => {
-    const full = path.join(PACKAGE_ROOT, "public", dir);
+    const full = path.join(path.resolve(publicRoot), dir);
     if (!existsSync(full)) return;
     for (const file of readdirSync(full)) {
       if (file === "talking-head.mp4") continue; // generated stand-in, never directable
@@ -601,6 +601,8 @@ export async function runDirect(out, flags = {}) {
     };
   }
 
+  const publicRoot = await stageBundledPublicAssets(out);
+
   let baseSrc = null;
   let voiceoverSrc = null;
   if (voice === "record" && flags.take && !isPublicAssetPath(flags.take)) {
@@ -620,7 +622,7 @@ export async function runDirect(out, flags = {}) {
       baseSrc = flags.take;
     }
   } else if (scriptText && voice === "tts") {
-    const synthesized = await synthesizeVoice(scriptText, { log });
+    const synthesized = await synthesizeVoice(scriptText, { publicRoot, log });
     words = synthesized.words;
     flags["voice-src"] = synthesized.voicePath;
     await mkdir(path.join(out, "video"), { recursive: true });
@@ -639,10 +641,10 @@ export async function runDirect(out, flags = {}) {
 
   baseSrc = baseSrc ?? (isPublicAssetPath(flags.take) ? flags.take : null);
   voiceoverSrc = flags["voice-src"] ?? baseSrc;
-  const musicSrc = flags.music ?? (existsSync(path.join(PACKAGE_ROOT, "public", "music", "golden-bed.mp3")) ? "music/golden-bed.mp3" : "");
+  const musicSrc = flags.music ?? (existsSync(path.join(publicRoot, "music", "golden-bed.mp3")) ? "music/golden-bed.mp3" : "");
 
-  const proof = await captureProofAssets(out, { log });
-  const assets = mergeAssetManifests(scanAssets(flags.assets ?? null), proof.assets);
+  const proof = await captureProofAssets(out, { publicRoot, log });
+  const assets = mergeAssetManifests(scanAssets(flags.assets ?? null, publicRoot), proof.assets);
   log(`assets: ${assets.length} | words: ${words.length} | duration: ${durationSeconds}s | preset: ${preset}`);
 
   // Anthropic (default) or OpenAI, by key/flag. It is intentionally created

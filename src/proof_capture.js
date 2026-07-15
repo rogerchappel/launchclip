@@ -2,12 +2,11 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { workspacePublicRoot } from "./runtime_paths.js";
 
-const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-export async function captureProofAssets(workspacePath, { publicRoot = path.join(PACKAGE_ROOT, "public"), log = () => {} } = {}) {
+export async function captureProofAssets(workspacePath, { publicRoot, log = () => {} } = {}) {
   const out = path.resolve(workspacePath);
+  const resolvedPublicRoot = path.resolve(publicRoot ?? workspacePublicRoot(out));
   const manifest = await optionalJson(path.join(out, "launchclip.json"));
   const terminal = await optionalText(path.join(out, "demo", "terminal.txt"));
   const receipt = await optionalJson(path.join(out, "demo", "command-receipt.json"));
@@ -19,7 +18,7 @@ export async function captureProofAssets(workspacePath, { publicRoot = path.join
   const status = cleanText(receipt?.status || (terminal ? "captured" : "planned"), 20);
   const artifacts = packetArtifacts(out, receipt);
   const slug = `${slugify(repoName)}-${hashPath(out)}`;
-  const shotsDir = path.join(publicRoot, "shots");
+  const shotsDir = path.join(resolvedPublicRoot, "shots");
   await mkdir(shotsDir, { recursive: true });
   await mkdir(path.join(out, "video"), { recursive: true });
 
