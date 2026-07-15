@@ -28,7 +28,7 @@ export const FRAME_PATCH_SCHEMA = {
   properties: {
     schema_version: { type: "string", enum: [FRAME_PATCH_VERSION] },
     shot_id: { type: "string", pattern: "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$" },
-    summary: { type: "string" },
+    summary: { type: "string", maxLength: 500 },
     edits: {
       type: "array",
       minItems: 1,
@@ -37,8 +37,8 @@ export const FRAME_PATCH_SCHEMA = {
         type: "object",
         properties: {
           target: { type: "string", enum: ["html", "motion", "root_media_requests", "evidence_ids", "visible_copy", "preserve"] },
-          find: { type: "string", minLength: 1 },
-          replace: { type: "string" }
+          find: { type: "string", minLength: 1, maxLength: 1_000 },
+          replace: { type: "string", maxLength: 1_200 }
         },
         required: ["target", "find", "replace"],
         additionalProperties: false
@@ -308,6 +308,8 @@ export function applyFramePatch(bundle, patch, options = {}) {
     const find = String(edit.find ?? "");
     const replace = String(edit.replace ?? "");
     if (!find) throw patchError(`edits[${index}].find must not be empty`);
+    if (find.length > 1_000) throw patchError(`edits[${index}].find exceeds 1000 characters`);
+    if (replace.length > 1_200) throw patchError(`edits[${index}].replace exceeds 1200 characters`);
     const source = sources.get(edit.target);
     const occurrences = countOccurrences(source, find);
     if (occurrences !== 1) throw patchError(`edits[${index}] find string must occur exactly once in ${edit.target}; found ${occurrences}`);

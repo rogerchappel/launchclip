@@ -263,6 +263,22 @@ test("rejects a repair that rewrites the complete HTML target", () => {
   }), (error) => error.code === "LAUNCHCLIP_INVALID_FRAME_PATCH" && /maximum is 35\.0%/.test(error.message));
 });
 
+test("rejects oversized individual source edits", () => {
+  const prior = bundle("shot-1");
+  assert.throws(() => applyFramePatch(prior, {
+    schema_version: FRAME_PATCH_VERSION,
+    shot_id: "shot-1",
+    summary: "Oversized edit",
+    edits: [{ target: "html", find: "x".repeat(1_001), replace: "small" }]
+  }), /find exceeds 1000 characters/);
+  assert.throws(() => applyFramePatch(prior, {
+    schema_version: FRAME_PATCH_VERSION,
+    shot_id: "shot-1",
+    summary: "Oversized replacement",
+    edits: [{ target: "html", find: ">Proof</div>", replace: "x".repeat(1_201) }]
+  }), /replace exceeds 1200 characters/);
+});
+
 test("escalates from a local structural attempt to the next pinned repair route", async () => {
   const workspace = await fixture();
   const calls = [];
