@@ -17,16 +17,46 @@ export async function verifyFrameCandidate(workspacePath, bundle, options = {}, 
   if (!(duration > 0) || !(Number(format?.width) > 0) || !(Number(format?.height) > 0)) throw new Error("Candidate verification requires a valid shot duration and canvas");
   const attempt = safeSegment(options.attempt ?? "latest");
   const root = path.join(workspace, PRODUCTION_PATHS.qa, "candidate-verify", shot.id, attempt);
+  await rm(root, { recursive: true, force: true });
+  await mkdir(root, { recursive: true });
+  const baseline = options.baseline ? await captureBundle(workspace, options.baseline, {
+    ...options, shot, format, duration, root: path.join(root, "baseline"), compareContentFailures: true
+  }, adapters) : null;
+  const candidate = await captureBundle(workspace, bundle, {
+    ...options, shot, format, duration, root: path.join(root, "candidate"), compareContentFailures: Boolean(baseline)
+  }, adapters);
+  const comparison = compareEvidence(candidate, baseline, options);
+  const report = {
+    schema_version: "launchclip.frame-candidate-verification.v2",
+    shot_id: shot.id,
+    attempt,
+    status: comparison.ok ? "passed" : "failed",
+    comparison,
+    baseline,
+    candidate
+  };
+  await writeFile(path.join(root, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
+  return {
+    ok: comparison.ok,
+    failure_kind: comparison.failure_kind,
+    error: comparison.error,
+    report: path.join(root, "report.json"),
+    snapshots: candidate.snapshots,
+    frames: candidate.visual.frames
+  };
+}
+
+async function captureBundle(workspace, bundle, options, adapters) {
+  const root = options.root;
   const project = path.join(root, "project");
   const compositions = path.join(project, "compositions");
   const assets = path.join(project, "assets");
   const snapshots = path.join(root, "snapshots");
-  await rm(root, { recursive: true, force: true });
   await Promise.all([mkdir(compositions, { recursive: true }), mkdir(assets, { recursive: true }), mkdir(snapshots, { recursive: true })]);
   await Promise.all([
     writeFile(path.join(compositions, "shot.html"), `${String(bundle.html).trim()}\n`),
     writeFile(path.join(project, "index.motion.json"), `${JSON.stringify(bundle.motion, null, 2)}\n`),
-    writeFile(path.join(project, "index.html"), inspectionRoot(shot, format, duration)),
+    writeFile(path.join(project, "index.html"), inspectionRoot(options.shot, options.format, options.duration)),
     copyCandidateAssets(workspace, project, bundle.html)
   ]);
 
@@ -35,8 +65,9 @@ export async function verifyFrameCandidate(workspacePath, bundle, options = {}, 
     "check", "--json", "--samples", String(options.samples ?? 9), "--at-transitions",
     "--frame-check", "severity=error;seek=.2,.5,.8;tol=2", project
   ], project);
-  const snapshot = check.ok ? await capture(run, [
-    "snapshot", "--at", sampleTimes(duration).join(","), "--no-end", "--output", snapshots, "--describe", "false", project
+  const shouldSnapshot = check.ok || (options.compareContentFailures && check.failure_kind === "content");
+  const snapshot = shouldSnapshot ? await capture(run, [
+    "snapshot", "--at", sampleTimes(options.duration).join(","), "--no-end", "--output", snapshots, "--describe", "false", project
   ], project) : { ok: false, exit_code: null, stdout: null, stderr: "Skipped because candidate check failed", failure_kind: check.failure_kind };
   let frames = [];
   let analysisError = null;
@@ -56,24 +87,39 @@ export async function verifyFrameCandidate(workspacePath, bundle, options = {}, 
     }
   }
   const allBlank = frames.length > 0 && frames.every((frame) => frame.blank);
-  const report = {
-    schema_version: "launchclip.frame-candidate-verification.v1",
-    shot_id: shot.id,
-    attempt,
-    status: check.ok && snapshot.ok && !analysisError && !allBlank ? "passed" : "failed",
+  return {
     check,
     snapshot,
-    visual: { ok: frames.length > 0 && !allBlank, all_blank: allBlank, error: analysisError, frames }
-  };
-  await writeFile(path.join(root, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
-  return {
-    ok: report.status === "passed",
-    failure_kind: check.failure_kind ?? snapshot.failure_kind ?? (analysisError ? "infrastructure" : allBlank ? "content" : null),
-    error: check.error ?? snapshot.error ?? analysisError ?? (allBlank ? "All sampled candidate frames are visually blank" : null),
-    report: path.join(root, "report.json"),
     snapshots,
-    frames
+    visual: { ok: frames.length > 0 && !allBlank && !analysisError, all_blank: allBlank, error: analysisError, frames, detail_score: detailScore(frames) }
   };
+}
+
+function compareEvidence(candidate, baseline, options) {
+  const infrastructure = [baseline, candidate].filter(Boolean).find((entry) => entry.check.failure_kind === "infrastructure" || entry.snapshot.failure_kind === "infrastructure" || entry.visual.error);
+  if (infrastructure) return { ok: false, failure_kind: "infrastructure", error: infrastructure.check.error ?? infrastructure.snapshot.error ?? infrastructure.visual.error };
+  if (!baseline && !candidate.check.ok) return { ok: false, failure_kind: candidate.check.failure_kind ?? "content", error: candidate.check.error ?? "Candidate browser check failed" };
+  if (!candidate.snapshot.ok) return { ok: false, failure_kind: candidate.snapshot.failure_kind ?? "content", error: candidate.snapshot.error ?? "Candidate snapshots failed" };
+  if (!candidate.visual.ok) return { ok: false, failure_kind: "content", error: candidate.visual.all_blank ? "All sampled candidate frames are visually blank" : candidate.visual.error ?? "Candidate snapshots contain no measurable visual detail" };
+
+  const minimumRetention = Number(options.minimumDetailRetention ?? .2);
+  const retention = baseline?.visual.ok && baseline.visual.detail_score > 0 ? candidate.visual.detail_score / baseline.visual.detail_score : null;
+  if (retention != null && retention < minimumRetention) {
+    return { ok: false, failure_kind: "content", error: `Candidate retained only ${(retention * 100).toFixed(1)}% of baseline visual detail`, detail_retention: rounded(retention) };
+  }
+  if (candidate.check.ok) return { ok: true, failure_kind: null, error: null, detail_retention: retention == null ? null : rounded(retention), new_findings: [], worsened_findings: [] };
+  if (!baseline || baseline.check.ok || baseline.check.failure_kind !== "content") {
+    return { ok: false, failure_kind: candidate.check.failure_kind ?? "content", error: candidate.check.error ?? "Candidate browser check failed" };
+  }
+  const baselineIssues = issueWeights(baseline.check.stdout);
+  const candidateIssues = issueWeights(candidate.check.stdout);
+  if (!baselineIssues.size || !candidateIssues.size) return { ok: false, failure_kind: "content", error: candidate.check.error ?? "Candidate browser check could not be compared with its baseline" };
+  const newFindings = [...candidateIssues.keys()].filter((key) => !baselineIssues.has(key));
+  const worsenedFindings = [...candidateIssues].filter(([key, weight]) => baselineIssues.has(key) && weight > baselineIssues.get(key)).map(([key]) => key);
+  if (newFindings.length || worsenedFindings.length) {
+    return { ok: false, failure_kind: "content", error: "Candidate introduced or worsened browser findings", detail_retention: retention == null ? null : rounded(retention), new_findings: newFindings, worsened_findings: worsenedFindings };
+  }
+  return { ok: true, failure_kind: null, error: null, detail_retention: retention == null ? null : rounded(retention), new_findings: [], worsened_findings: [] };
 }
 
 async function copyCandidateAssets(workspace, project, html) {
@@ -99,8 +145,16 @@ async function capture(run, args, cwd) {
 
 function structuredBlocking(stdout) {
   if (!stdout || typeof stdout !== "object") return null;
+  const findings = blockingFindings(stdout);
+  const blocking = findings.find((entry) => typeof entry === "string" || ["error", "blocking", "fatal"].includes(String(entry?.severity ?? "").toLowerCase()));
+  if (stdout.ok !== false && !(Number(stdout.errorCount ?? stdout.error_count ?? 0) > 0) && !blocking) return null;
+  return String(typeof blocking === "string" ? blocking : blocking?.message ?? blocking?.code ?? "Candidate check reported an error").slice(0, 1_000);
+}
+
+function blockingFindings(stdout) {
+  if (!stdout || typeof stdout !== "object") return [];
   const sections = [stdout.lint, stdout.runtime, stdout.layout, stdout.motion, stdout.contrast];
-  const findings = [
+  return [
     ...(Array.isArray(stdout.issues) ? stdout.issues : []),
     ...(Array.isArray(stdout.findings) ? stdout.findings : []),
     ...(Array.isArray(stdout.errors) ? stdout.errors : []),
@@ -109,10 +163,32 @@ function structuredBlocking(stdout) {
       ...(Array.isArray(section?.findings) ? section.findings : []),
       ...(Array.isArray(section?.errors) ? section.errors : [])
     ])
-  ];
-  const blocking = findings.find((entry) => typeof entry === "string" || ["error", "blocking", "fatal"].includes(String(entry?.severity ?? "").toLowerCase()));
-  if (stdout.ok !== false && !(Number(stdout.errorCount ?? stdout.error_count ?? 0) > 0) && !blocking) return null;
-  return String(typeof blocking === "string" ? blocking : blocking?.message ?? blocking?.code ?? "Candidate check reported an error").slice(0, 1_000);
+  ].filter((entry) => typeof entry === "string" || ["error", "blocking", "fatal"].includes(String(entry?.severity ?? "").toLowerCase()));
+}
+
+function issueWeights(stdout) {
+  const weights = new Map();
+  for (const finding of blockingFindings(stdout)) {
+    const key = typeof finding === "string"
+      ? `error|global|${finding.slice(0, 120)}`
+      : `${finding.code ?? "error"}|${finding.selector ?? "global"}`;
+    const unresolved = String(typeof finding === "string" ? finding : finding.message ?? "").match(/(\d+) unresolved layout issue/i);
+    const weight = unresolved ? Number(unresolved[1]) : 1;
+    weights.set(key, (weights.get(key) ?? 0) + weight);
+  }
+  return weights;
+}
+
+function detailScore(frames) {
+  if (!frames.length) return 0;
+  return rounded(frames.reduce((total, frame) => total
+    + Number(frame.foreground_ratio ?? 0)
+    + Number(frame.edge_ratio ?? 0) * 2
+    + Math.min(1, Number(frame.luma_standard_deviation ?? 0) / 64), 0) / frames.length);
+}
+
+function rounded(value) {
+  return Number(Number(value).toFixed(6));
 }
 
 function commandFailureKind(stdout, stderr) {

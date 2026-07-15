@@ -52,6 +52,29 @@ test("reports the actionable nested HyperFrames finding", async () => {
   assert.equal(result.error, "motion assertion is invalid");
 });
 
+test("accepts an incremental candidate that retains but does not worsen baseline findings", async () => {
+  const workspace = await fixture();
+  const run = comparativeRun((role) => role === "baseline" || role === "candidate"
+    ? [{ severity: "error", code: "motion_frozen", selector: "#proof", message: "proof is static" }]
+    : []);
+  const result = await verifyFrameCandidate(workspace, bundle(), { ...context("incremental-1"), baseline: bundle() }, { run });
+  assert.equal(result.ok, true);
+  assert.deepEqual(JSON.parse(await readFile(result.report, "utf8")).comparison.new_findings, []);
+});
+
+test("rejects an incremental candidate that introduces a browser finding", async () => {
+  const workspace = await fixture();
+  const run = comparativeRun((role) => role === "baseline"
+    ? [{ severity: "error", code: "motion_frozen", selector: "#proof", message: "proof is static" }]
+    : [
+        { severity: "error", code: "motion_frozen", selector: "#proof", message: "proof is static" },
+        { severity: "error", code: "console_error", selector: "[data-composition-id]", message: "runtime failed" }
+      ]);
+  const result = await verifyFrameCandidate(workspace, bundle(), { ...context("regression-1"), baseline: bundle() }, { run });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /introduced or worsened/);
+});
+
 function context(attempt) {
   return { attempt, shot: { id: "shot-1", start_seconds: 0, end_seconds: 5 }, format: { width: 1080, height: 1920, language: "en" } };
 }
@@ -82,6 +105,24 @@ function snapshotRun(kind) {
           ? png(30, 50, () => [238, 232, 216, 255])
           : png(30, 50, (x, y) => x > 4 && x < 25 && y > 10 && y < 40 ? [20, 24, 30, 255] : [238, 232, 216, 255]);
         await writeFile(path.join(output, `frame-0${index}-at-${index}s.png`), image);
+      }
+      return { stdout: "snapshots saved", stderr: "" };
+    }
+    throw new Error(`Unexpected command: ${command}`);
+  };
+}
+
+function comparativeRun(findingsFor) {
+  return async (_command, args) => {
+    const command = args[1];
+    const project = String(args.at(-1));
+    const role = project.includes(`${path.sep}baseline${path.sep}`) ? "baseline" : "candidate";
+    if (command === "check") return { stdout: JSON.stringify({ ok: false, motion: { findings: findingsFor(role) } }), stderr: "" };
+    if (command === "snapshot") {
+      const output = args[args.indexOf("--output") + 1];
+      await mkdir(output, { recursive: true });
+      for (let index = 0; index < 3; index += 1) {
+        await writeFile(path.join(output, `frame-0${index}-at-${index}s.png`), png(30, 50, (x, y) => x > 4 && x < 25 && y > 10 && y < 40 ? [20, 24, 30, 255] : [238, 232, 216, 255]));
       }
       return { stdout: "snapshots saved", stderr: "" };
     }
