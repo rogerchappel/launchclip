@@ -46,14 +46,15 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
     "@react-three/fiber": "9.6.1",
-    "@remotion/cli": "4.0.475",
-    "@remotion/google-fonts": "^4.0.475",
-    "@remotion/motion-blur": "^4.0.475",
-    "@remotion/three": "4.0.475",
-    "@remotion/transitions": "4.0.475",
+    "@remotion/cli": "4.0.489",
+    "@remotion/google-fonts": "4.0.489",
+    "@remotion/motion-blur": "4.0.489",
+    "@remotion/three": "4.0.489",
+    "@remotion/transitions": "4.0.489",
+    "hyperframes": "0.7.58",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "remotion": "4.0.475",
+    "remotion": "4.0.489",
     "three": "0.184.0"
   },
   "bugs": {
