@@ -7,13 +7,12 @@ import { promisify } from "node:util";
 import { copyFile, mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { validateTimeline } from "../motion-engine/schema.js";
 import { buildHeuristicTimeline } from "../motion-engine/heuristics.js";
+import { PACKAGE_ROOT, stageBundledPublicAssets } from "./runtime_paths.js";
 import { prepareSfxPack } from "./sfx.js";
 
 const execFileAsync = promisify(execFile);
-const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export async function writeTeleprompter(out, flags = {}) {
   const wpm = Number(flags.wpm ?? 150);
@@ -70,7 +69,8 @@ export async function alignRecording(out, flags = {}) {
 
   const durationSeconds = await probeDuration(media);
   const baseName = `talking-head-${path.basename(media).replace(/[^a-zA-Z0-9.-]/g, "_")}`;
-  const publicBase = path.join(PACKAGE_ROOT, "public", "base");
+  const publicRoot = await stageBundledPublicAssets(out);
+  const publicBase = path.join(publicRoot, "base");
   await mkdir(publicBase, { recursive: true });
   await copyFile(media, path.join(publicBase, baseName));
 
@@ -103,11 +103,13 @@ export async function renderMotion(out, flags = {}) {
   const timeline = JSON.parse(await readFile(timelinePath, "utf8"));
   const result = validateTimeline(timeline);
   if (!result.ok) throw new Error(`Timeline invalid: ${result.errors.join("; ")}`);
+  const publicRoot = await stageBundledPublicAssets(out);
 
   const enableSfx = flags.sfx !== "off";
   const sfx = enableSfx
     ? await prepareSfxPack({
         sfxDir: flags["sfx-dir"],
+        publicDir: publicRoot,
         allowPlaceholder: Boolean(flags["allow-placeholder-sfx"])
       })
     : null;
@@ -118,7 +120,22 @@ export async function renderMotion(out, flags = {}) {
   const entryPoint = path.join(PACKAGE_ROOT, "remotion", "index.jsx");
   await execFileAsync(
     "npx",
-    ["remotion", "render", entryPoint, "MotionGolden", output, "--props", propsPath, "--overwrite", "--codec", "h264", "--log", "warn"],
+    [
+      "remotion",
+      "render",
+      entryPoint,
+      "MotionGolden",
+      output,
+      "--props",
+      propsPath,
+      "--public-dir",
+      publicRoot,
+      "--overwrite",
+      "--codec",
+      "h264",
+      "--log",
+      "warn"
+    ],
     { cwd: PACKAGE_ROOT, maxBuffer: 1024 * 1024 * 16 }
   );
   return { stage: "motion-render", video: output, props: propsPath, sfx, warnings: result.warnings };

@@ -1,8 +1,5 @@
 import { access, copyFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export const REQUIRED_SFX_FILES = [
   "fast_whoosh.wav",
@@ -28,8 +25,9 @@ export async function validateSfxPack(dir) {
   return { ok: missing.length === 0, dir, missing, required: REQUIRED_SFX_FILES };
 }
 
-export async function prepareSfxPack({ sfxDir = null, publicDir = path.join(PACKAGE_ROOT, "public"), allowPlaceholder = false } = {}) {
-  const targetDir = path.join(publicDir, "sfx");
+export async function prepareSfxPack({ sfxDir = null, publicDir, allowPlaceholder = false } = {}) {
+  if (!publicDir) throw new Error("prepareSfxPack requires a workspace public directory.");
+  const targetDir = path.join(path.resolve(publicDir), "sfx");
   const sourceDir = sfxDir ? path.resolve(sfxDir) : targetDir;
   const initial = await validateSfxPack(sourceDir);
 

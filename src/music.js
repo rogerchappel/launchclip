@@ -1,12 +1,11 @@
 // Music bed generation via the ElevenLabs Music API. Local-first: writes an
-// mp3 into public/music/ and (optionally) wires it into a motion timeline.
+// mp3 into the workspace's video/public/music/ and (optionally) wires it into a
+// motion timeline.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+import { workspacePublicRoot } from "./runtime_paths.js";
 
 export const DEFAULT_MUSIC_PROMPT =
   "Retro 80s synthwave with a fat punchy beat and retro computer game energy: " +
@@ -68,7 +67,11 @@ export async function generateMusic(out, flags = {}) {
 
   const prompt = String(flags.prompt ?? DEFAULT_MUSIC_PROMPT);
   const fileName = String(flags.output ?? "music/bed.mp3");
-  const target = path.join(PACKAGE_ROOT, "public", fileName);
+  const publicRoot = workspacePublicRoot(out);
+  const target = path.resolve(publicRoot, fileName);
+  if (!target.startsWith(`${publicRoot}${path.sep}`)) {
+    throw new Error("Music output must stay inside the workspace video/public directory.");
+  }
   if (existsSync(target) && !flags.force) {
     const wired = await wireMusicTimeline({ timeline, timelinePath, fileName, flags });
     return { stage: "music", music: target, skipped: "exists (use --force to regenerate)", prompt, timeline: wired ? timelinePath : null };
