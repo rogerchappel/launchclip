@@ -18,6 +18,8 @@ Each edit targets one exact source string in html, motion, root_media_requests, 
 
 When a source marker is labelled as an excerpt, every character inside it is copied exactly from the complete target, but unrelated parts of that target are intentionally omitted. Repair only what is visible in the supplied excerpts. Never invent an anchor from omitted source, and make an anchor unique in the complete target by including its stable selector and nearby declaration or call.
 
+When preferred anchor markers are supplied, copy the find string from one anchor verbatim. You may extend it with adjacent characters from the matching source excerpt to make it unique, but never shorten it inaccurately or splice separate anchors, excerpts, CSS rules, tags, or statements together.
+
 The replacement must remain a deterministic modular HyperFrames composition: one correctly sized local-time root, class="clip" for timed elements, no remote assets, no fetches, no audio/video tags, and all media requested at the host root with structured placement. Keep exact factual copy and evidence IDs. Presenter video follows one continuous production timeline: its source_start_seconds equals the shot's global start_seconds plus the request's shot-local start_seconds, so a later layout never restarts the take at zero.
 
 Register a paused GSAP timeline exactly on window.__timelines[shot_id]. Give every timeline-visible clip a stable descriptive ID. Style the root by its ID, not a root class. Use only declared @font-face families or Arial, Georgia, or Courier New. Never tween font-size, width, height, top, left, padding, or other reflow properties; use transform and opacity, with initial transforms owned by gsap.set rather than CSS.
@@ -320,11 +322,20 @@ export function buildRepairInput({ plan, shot, findings, prior, validationErrors
   const sources = sourceMode === "scoped"
     ? capsule.sources
     : Object.entries(capsule.sources).map(([target, source]) => ({ target, source, scope: "complete", excerpt: 1, excerpts: 1 }));
+  const anchors = sourceMode === "scoped" ? capsule.anchors : [];
   return [
     "Repair context:",
     "<launchclip-context-json>",
     JSON.stringify(context, null, 2),
     "</launchclip-context-json>",
+    ...(anchors.length ? [
+      "Preferred exact anchors follow. Copy one anchor verbatim for an edit find string; do not include the marker.",
+      ...anchors.flatMap(({ target, role, source }, index) => [
+        `<launchclip-anchor target="${target}" role="${role}" index="${index + 1}">`,
+        source,
+        "</launchclip-anchor>"
+      ])
+    ] : []),
     "Exact target sources follow. Copy find strings verbatim from the matching marker; do not include the marker.",
     ...sources.flatMap(({ target, source, scope, excerpt, excerpts }) => [
       sourceMode === "full"

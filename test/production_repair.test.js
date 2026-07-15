@@ -292,6 +292,20 @@ test("presents exact repair sources unescaped outside the JSON context", () => {
   assert.doesNotMatch(input, /<launchclip-source target="html">\n"<!doctype html>/i);
 });
 
+test("presents preferred exact anchors to scoped local repairs", () => {
+  const prior = bundle("shot-1");
+  const input = buildRepairInput({
+    plan: { design: { concept: "Proof" }, format: { width: 1080, height: 1920 } },
+    shot: { id: "shot-1", visual: { objects: [], events: [] } },
+    findings: [{ repair_targets: [{ code: "text_box_overflow", selector: "#shot-1-proof", message: "Text extends outside its box" }] }],
+    prior,
+    sourceMode: "scoped"
+  });
+  assert.match(input, /<launchclip-anchor target="html" role="markup" index="1">/);
+  assert.match(input, /<div id="shot-1-proof" class="clip" data-start="0" data-duration="5">/);
+  assert.match(input, /Preferred exact anchors follow/);
+});
+
 test("applies exact small edits without replacing the frame bundle", () => {
   const prior = bundle("shot-1");
   const result = applyFramePatch(prior, framePatch("shot-1", "Proof", "Focused proof"));
