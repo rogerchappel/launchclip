@@ -39,16 +39,28 @@ test("existing generated music still wires into a motion timeline", async () => 
       timelinePath,
       `${JSON.stringify({ version: "motion.timeline.v1", duration_seconds: 12, audio: { music: "" } }, null, 2)}\n`
     );
-    const target = path.join(process.cwd(), "public", "music", "unit-test-bed.mp3");
+    const target = path.join(temp, "video", "public", "music", "unit-test-bed.mp3");
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, "not a real mp3, just an existing file sentinel");
 
     const result = await generateMusic(temp, { timeline: timelinePath, output: "music/unit-test-bed.mp3", volume: 0.11 });
     const timeline = JSON.parse(await readFile(timelinePath, "utf8"));
     assert.equal(result.skipped, "exists (use --force to regenerate)");
+    assert.equal(result.music, target);
     assert.equal(timeline.audio.music, "music/unit-test-bed.mp3");
     assert.equal(timeline.audio.music_volume, 0.11);
-    await rm(target, { force: true });
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("music output cannot escape the workspace public directory", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-music-"));
+  try {
+    await assert.rejects(
+      generateMusic(temp, { duration: 12, output: "../../outside.mp3" }),
+      /must stay inside the workspace/
+    );
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
