@@ -121,7 +121,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     const prior = (await readFrameSelection(workspace, shotId)).bundle;
     const repairInputHash = semanticHash({
       worker: "frame-repair.v8",
-      candidate_verification: "browser-snapshot.v2",
+      candidate_verification: "browser-snapshot.v3",
       repair_context: REPAIR_CAPSULE_VERSION,
       routes: routes.map(modelRouteKey),
       max_patch_ratio: Number(options.maxPatchRatio ?? .35),
