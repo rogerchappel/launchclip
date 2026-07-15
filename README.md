@@ -195,6 +195,11 @@ See [the model-directed pipeline](docs/MODEL_DIRECTED_VIDEO.md) for
 artifact contracts, provider requirements, reference analysis, and repair
 semantics.
 
+For a short OSS promotion recording outline, see
+[docs/promo/oss-packet-demo-brief.md](docs/promo/oss-packet-demo-brief.md). For
+review-gated draft post copy, see
+[docs/promo/social-hooks.md](docs/promo/social-hooks.md).
+
 Resource directories are expanded into checksummed file-level inputs. Supported
 YouTube references are staged locally with `yt-dlp` (15-minute limit) for visual,
 transcript, pacing, and frame-motion analysis, then kept out of the final media
