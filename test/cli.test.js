@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { parseFlags, runCli } from "../src/cli.js";
+import { diagnoseInstallation, VERSION } from "../src/doctor.js";
 
 test("parses boolean and value flags", () => {
   assert.deepEqual(parseFlags(["--provider", "hyperframes", "--dry-run", "--allow-placeholder-sfx", "--no-music", "--strict-all", "--inspect-samples", "15"]), {
@@ -18,6 +19,35 @@ test("parses boolean and value flags", () => {
 
 test("requires flag values", () => {
   assert.throws(() => parseFlags(["--out"]), /Missing value/);
+});
+
+test("prints the package version without initializing runtime services", async () => {
+  const output = [];
+  await runCli(["--version"], { stdout: { write: (value) => output.push(value) } });
+  assert.equal(output.join(""), `${VERSION}\n`);
+});
+
+test("doctor reports package, tool, and credential readiness without exposing secrets", async () => {
+  const report = await diagnoseInstallation({
+    nodeVersion: "v21.9.0",
+    env: { OPENAI_API_KEY: "do-not-print-this" },
+    commandAvailable: async (command) => command === "ffmpeg",
+    fileAvailable: async () => true
+  });
+  assert.equal(report.status, "not-ready");
+  assert.equal(report.runtime.supported, false);
+  assert.equal(report.tools.ffmpeg.available, true);
+  assert.equal(report.tools.ffprobe.available, false);
+  assert.equal(report.credentials.openai_api_key, true);
+  assert.equal(report.modes.subscription_agent.requires_api_key, false);
+  assert.equal(JSON.stringify(report).includes("do-not-print-this"), false);
+
+  const output = [];
+  await runCli(["doctor"], {
+    stdout: { write: (value) => output.push(value) },
+    doctor: async () => report
+  });
+  assert.equal(JSON.parse(output.join("")).stage, "doctor");
 });
 
 test("parses model-directed production control flags", () => {
