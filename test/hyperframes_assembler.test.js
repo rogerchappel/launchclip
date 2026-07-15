@@ -244,6 +244,43 @@ test("freezes assets, rewrites frame paths, assembles a resumable HyperFrames pr
 
 });
 
+test("freezes unsupported planned Google fonts into local assembly assets", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-assembly-fonts-"));
+  const source = path.join(workspace, "screen.mp4");
+  await writeFile(source, "fake-media");
+  const context = fixture(source);
+  context.plan.design.style_dna.typography = {
+    display: "Space Grotesk 700, tightly tracked",
+    body: "Inter 500/600 with short labels",
+    metadata: "IBM Plex Mono 500 for commands"
+  };
+  context.bundles[0].html = context.bundles[0].html.replace("#root{", '#root{font-family:"Space Grotesk";');
+  await writeFixture(workspace, context);
+  const requests = [];
+  const fetch = async (url) => {
+    requests.push(String(url));
+    if (String(url).startsWith("https://fonts.googleapis.com/")) return {
+      ok: true,
+      text: async () => '@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:700;src:url(https://fonts.gstatic.com/s/spacegrotesk/v1/latin.woff2) format("woff2");unicode-range:U+0000-00FF;}'
+    };
+    return { ok: true, arrayBuffer: async () => Buffer.from("frozen-space-grotesk") };
+  };
+
+  const result = await assembleHyperFrames(workspace, { fetch });
+  const frame = await readFile(path.join(result.project, "compositions", "shot-1.html"), "utf8");
+  assert.match(frame, /@font-face[\s\S]*font-family: "Space Grotesk"/);
+  assert.match(frame, /src: url\("assets\/font-space-grotesk-700-normal-[a-f0-9]{12}\.woff2"\)/);
+  const manifest = JSON.parse(await readFile(result.manifest, "utf8"));
+  const font = manifest.assets.find((entry) => entry.id === "font:space-grotesk:1");
+  assert.ok(font);
+  assert.equal(await readFile(path.join(result.project, font.file), "utf8"), "frozen-space-grotesk");
+  assert.equal(requests.length, 2);
+
+  const cached = await assembleHyperFrames(workspace, { fetch });
+  assert.equal(cached.cached, true);
+  assert.equal(requests.length, 2);
+});
+
 test("recovers an interrupted HyperFrames assembly", async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-assembly-recovery-"));
   const source = path.join(workspace, "screen.mp4");
