@@ -28,6 +28,7 @@ test("gives a contrast repair only the exact style region", () => {
   assert.ok(html.every((entry) => entry.role === "style"));
   assert.ok(html.some((entry) => entry.source.includes("#shot-proof{color:#777")));
   assert.ok(html.every((entry) => !entry.source.includes('<div id="shot-proof"')));
+  assert.ok(capsule.anchors.some((entry) => entry.source === "#shot-proof{color:#777;background:#fff}"));
 });
 
 test("keeps short repair targets complete", () => {
@@ -60,6 +61,7 @@ test("centres runtime repair excerpts on APIs named by diagnostics", () => {
   const html = capsule.sources.filter((entry) => entry.target === "html");
   assert.ok(html.some((entry) => entry.source.includes(runtime)));
   assert.ok(html.every((entry) => entry.role === "script"));
+  assert.ok(capsule.anchors.some((entry) => entry.source === "const panel=root.querySelector('.panel');"));
 });
 
 test("compacts a local repair context without dropping visual identities or event timing", () => {

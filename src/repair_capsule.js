@@ -1,6 +1,6 @@
 const SOURCE_TARGETS = ["html", "motion", "root_media_requests", "evidence_ids", "visible_copy", "preserve"];
 
-export const REPAIR_CAPSULE_VERSION = "selector-capsule.v3";
+export const REPAIR_CAPSULE_VERSION = "selector-capsule.v4";
 
 export function buildRepairSourceCapsule(prior, findings = [], validationErrors = [], options = {}) {
   const selectors = collectRepairSelectors(findings, validationErrors);
@@ -10,6 +10,7 @@ export function buildRepairSourceCapsule(prior, findings = [], validationErrors 
     html: positiveInteger(options.htmlChars ?? 9_000, "HTML repair capsule size"),
     motion: positiveInteger(options.motionChars ?? 4_000, "motion repair capsule size")
   };
+  const htmlRoles = preferredHtmlRoles(repairCodes);
   const sources = SOURCE_TARGETS.flatMap((target) => {
     const source = target === "html" ? String(prior?.html ?? "") : JSON.stringify(prior?.[target], null, 2);
     const limit = limits[target];
@@ -17,7 +18,7 @@ export function buildRepairSourceCapsule(prior, findings = [], validationErrors 
     const excerpts = exactSourceExcerpts(source, [...selectorAnchors(selectors), ...diagnosticTerms], {
       maximumCharacters: limit,
       radius: target === "html" ? 620 : 420,
-      allowedRoles: target === "html" ? preferredHtmlRoles(repairCodes) : null,
+      allowedRoles: target === "html" ? htmlRoles : null,
       fallbackAnchors: target === "html"
         ? ["#root", "window.__timelines", "gsap.", "</template>"]
         : ["\"assertions\"", "\"events\""]
@@ -31,7 +32,8 @@ export function buildRepairSourceCapsule(prior, findings = [], validationErrors 
       excerpts: excerpts.length
     }));
   });
-  return { version: REPAIR_CAPSULE_VERSION, selectors, diagnostic_terms: diagnosticTerms, repair_codes: repairCodes, sources };
+  const anchors = exactAnchorCandidates(String(prior?.html ?? ""), [...selectorAnchors(selectors), ...diagnosticTerms], htmlRoles);
+  return { version: REPAIR_CAPSULE_VERSION, selectors, diagnostic_terms: diagnosticTerms, repair_codes: repairCodes, anchors, sources };
 }
 
 export function buildRepairContextCapsule(plan, shot) {
@@ -163,6 +165,64 @@ function sourceRoleAt(source, index) {
   if (before.lastIndexOf("<style") > before.lastIndexOf("</style>")) return "style";
   if (before.lastIndexOf("<script") > before.lastIndexOf("</script>")) return "script";
   return "markup";
+}
+
+function exactAnchorCandidates(source, anchors, allowedRoles) {
+  const candidates = [];
+  for (const anchor of anchors) {
+    let cursor = 0;
+    let matches = 0;
+    while ((cursor = source.indexOf(anchor, cursor)) >= 0 && matches < 4) {
+      const role = sourceRoleAt(source, cursor);
+      if (allowedRoles.includes(role)) {
+        const candidate = role === "style"
+          ? cssRuleAt(source, cursor)
+          : role === "script" ? scriptStatementAt(source, cursor) : openingTagAt(source, cursor);
+        if (candidate && candidate.length <= 1_000 && countOccurrences(source, candidate) === 1 && !candidates.some((entry) => entry.source === candidate)) {
+          candidates.push({ target: "html", role, source: candidate });
+        }
+      }
+      cursor += Math.max(1, anchor.length);
+      matches += 1;
+    }
+  }
+  return candidates.slice(0, 12);
+}
+
+function cssRuleAt(source, index) {
+  const styleStart = Math.max(source.lastIndexOf("<style", index), source.lastIndexOf("}", index) + 1);
+  const open = source.indexOf("{", styleStart);
+  const close = source.indexOf("}", Math.max(index, open));
+  if (open < 0 || close < 0 || index > close) return null;
+  const tagEnd = source.indexOf(">", styleStart);
+  const start = styleStart === source.lastIndexOf("<style", index) && tagEnd >= 0 ? tagEnd + 1 : styleStart;
+  return source.slice(start, close + 1).trim();
+}
+
+function scriptStatementAt(source, index) {
+  const scriptOpen = source.lastIndexOf("<script", index);
+  const tagEnd = source.indexOf(">", scriptOpen);
+  const delimiter = Math.max(source.lastIndexOf(";", index), source.lastIndexOf("{", index), tagEnd);
+  const end = source.indexOf(";", index);
+  if (end < 0) return null;
+  return source.slice(delimiter + 1, end + 1).trim();
+}
+
+function openingTagAt(source, index) {
+  const start = source.lastIndexOf("<", index);
+  const end = source.indexOf(">", index);
+  if (start < 0 || end < 0) return null;
+  return source.slice(start, end + 1);
+}
+
+function countOccurrences(source, value) {
+  let count = 0;
+  let cursor = 0;
+  while ((cursor = source.indexOf(value, cursor)) >= 0) {
+    count += 1;
+    cursor += Math.max(1, value.length);
+  }
+  return count;
 }
 
 function selectorAnchors(selectors) {
