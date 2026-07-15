@@ -1,17 +1,17 @@
 {
   "name": "launchclip",
   "version": "0.1.0",
-  "description": "Local-first OSS promotion packet orchestrator.",
+  "description": "Create reviewable launch videos and OSS promotion packets from local product evidence.",
   "type": "module",
   "bin": {
-    "launchclip": "./bin/launchclip.js"
+    "launchclip": "bin/launchclip.js"
   },
   "scripts": {
     "test": "node --test",
     "smoke": "node ./scripts/smoke.js",
     "check": "npm test && npm run smoke",
     "eval:production": "node ./src/production_eval.js",
-    "package:smoke": "npm pack --dry-run",
+    "package:smoke": "node ./scripts/package-smoke.js",
     "release:check": "npm run check && npm run package:smoke"
   },
   "keywords": [
@@ -19,7 +19,10 @@
     "promotion",
     "video",
     "captions",
-    "product-videogen"
+    "cli",
+    "hyperframes",
+    "product-videogen",
+    "agent-skills"
   ],
   "author": "Roger Chappel",
   "license": "MIT",
@@ -28,10 +31,14 @@
     "url": "git+https://github.com/rogerchappel/launchclip.git"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "files": [
+    ".codex-plugin",
     "bin",
+    "examples/motion/golden-timeline.json",
+    "motion-engine",
+    "public",
     "remotion",
     "src",
     "docs",
@@ -60,5 +67,8 @@
   "bugs": {
     "url": "https://github.com/rogerchappel/launchclip/issues"
   },
-  "homepage": "https://github.com/rogerchappel/launchclip#readme"
+  "homepage": "https://github.com/rogerchappel/launchclip#readme",
+  "publishConfig": {
+    "access": "public"
+  }
 }
