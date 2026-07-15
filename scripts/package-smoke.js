@@ -49,8 +49,12 @@ try {
 
   const bin = path.join(consumer, "node_modules", ".bin", "launchclip");
   await access(bin, constants.X_OK);
+  const version = await run(bin, ["--version"], consumer);
+  if (version.stdout.trim() !== artifact.version) throw new Error("Installed CLI version does not match the tarball.");
   const help = await run(bin, ["--help"], consumer);
   if (!help.stdout.includes("launchclip creates")) throw new Error("Installed CLI help output was not recognized.");
+  const doctor = JSON.parse((await run(bin, ["doctor"], consumer)).stdout);
+  if (!doctor.package?.complete) throw new Error(`Installed CLI doctor is missing: ${doctor.package?.missing?.join(", ")}`);
   await run(bin, ["init", source, "--out", workspace], consumer);
   await access(path.join(workspace, "launchclip.json"));
 
