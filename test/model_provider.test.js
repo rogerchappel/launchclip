@@ -38,11 +38,13 @@ test("sends deterministic structured output to Ollama with a coding-sized contex
     images: [{ url: "data:image/png;base64,AAAA", detail: "original" }],
     schema: { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"], additionalProperties: false },
     schemaName: "probe",
-    maxOutputTokens: 100
+    maxOutputTokens: 100,
+    keepAlive: 0
   });
   assert.equal(request.url, "http://localhost:11434/api/chat");
   assert.deepEqual(request.body.format, { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"], additionalProperties: false });
   assert.deepEqual(request.body.options, { temperature: 0, seed: 0, num_ctx: 32768, num_predict: 100 });
+  assert.equal(request.body.keep_alive, 0);
   assert.equal(request.body.think, false);
   assert.equal(request.body.messages[1].content, "Fix this.");
   assert.equal(request.init.headers.Authorization, undefined);
