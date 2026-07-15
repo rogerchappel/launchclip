@@ -114,7 +114,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     if (!shot) throw new Error(`Critique references unknown shot: ${shotId}`);
     const prior = (await readFrameSelection(workspace, shotId)).bundle;
     const repairInputHash = semanticHash({
-      worker: "frame-repair.v5",
+      worker: "frame-repair.v6",
       routes: routes.map(modelRouteKey),
       max_patch_ratio: Number(options.maxPatchRatio ?? .35),
       shot,
@@ -194,7 +194,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
               ? await client.resumeStructured(resumeResponseId, request)
               : await client.runStructured(request);
             resumeResponseId = null;
-            const patched = applyFramePatch(previousCandidate, result.value, { maxPatchRatio: options.maxPatchRatio });
+            const patched = applyFramePatch(previousCandidate, result.value, { maxPatchRatio: options.maxPatchRatio, allowPartial: route.provider === "ollama" });
             const normalized = { ...patched.bundle, html: ensureTimelineRegistration(patched.bundle.html, shotId) };
             const sanitized = sanitizeFrameBundle(normalized, {
               shot,
@@ -227,7 +227,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
               response_id: result.response_id,
               provider: route.provider,
               model: result.model,
-              patch: { edits: result.value.edits.length, changed_ratio: patched.changedRatio },
+              patch: { edits: patched.edits, rejected_edits: patched.rejectedEdits.length, changed_ratio: patched.changedRatio },
               cached: false
             });
             completed = true;
@@ -297,6 +297,8 @@ export function applyFramePatch(bundle, patch, options = {}) {
   const candidate = structuredClone(bundle);
   const originals = new Map();
   const sources = new Map();
+  const rejectedEdits = [];
+  const acceptedEdits = [];
   for (const target of ["html", "motion", "root_media_requests", "evidence_ids", "visible_copy", "preserve"]) {
     const source = target === "html" ? String(candidate.html ?? "") : JSON.stringify(candidate[target], null, 2);
     originals.set(target, source);
@@ -312,11 +314,18 @@ export function applyFramePatch(bundle, patch, options = {}) {
     if (replace.length > 1_200) throw patchError(`edits[${index}].replace exceeds 1200 characters`);
     const source = sources.get(edit.target);
     const occurrences = countOccurrences(source, find);
-    if (occurrences !== 1) throw patchError(`edits[${index}] find string must occur exactly once in ${edit.target}; found ${occurrences}`);
+    if (occurrences !== 1) {
+      const reason = `find string must occur exactly once in ${edit.target}; found ${occurrences}`;
+      if (!options.allowPartial) throw patchError(`edits[${index}] ${reason}`);
+      rejectedEdits.push({ index, target: edit.target, reason });
+      continue;
+    }
     sources.set(edit.target, source.replace(find, replace));
     changedCharacters += Math.max(find.length, replace.length);
+    acceptedEdits.push(edit);
   }
-  const touchedCharacters = [...new Set(patch.edits.map((edit) => edit.target))]
+  if (!acceptedEdits.length) throw patchError(`no exact edits were applicable${rejectedEdits.length ? `; rejected ${rejectedEdits.length}` : ""}`);
+  const touchedCharacters = [...new Set(acceptedEdits.map((edit) => edit.target))]
     .reduce((total, target) => total + originals.get(target).length, 0);
   const changedRatio = touchedCharacters ? changedCharacters / touchedCharacters : 1;
   const maximum = Number(options.maxPatchRatio ?? .35);
@@ -327,7 +336,7 @@ export function applyFramePatch(bundle, patch, options = {}) {
     try { candidate[target] = JSON.parse(sources.get(target)); }
     catch (error) { throw patchError(`patch made ${target} invalid JSON: ${error.message}`); }
   }
-  return { bundle: candidate, edits: patch.edits.length, changedRatio: Number(changedRatio.toFixed(4)) };
+  return { bundle: candidate, edits: acceptedEdits.length, rejectedEdits, changedRatio: Number(changedRatio.toFixed(4)) };
 }
 
 function repairModelRoutes(options, intake) {

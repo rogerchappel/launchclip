@@ -66,7 +66,7 @@ test("resumes a persisted background repair response without another submission"
   const plan = JSON.parse(await readFile(path.join(workspace, "production", "plan.json"), "utf8"));
   const prior = JSON.parse(await readFile(path.join(workspace, "production", "frames", "shot-2.json"), "utf8"));
   const critique = JSON.parse(await readFile(path.join(workspace, "production", "qa", "critique.json"), "utf8"));
-  const repairInputHash = semanticHash({ worker: "frame-repair.v5", routes: [modelRouteKey(parseModelRoute({ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" }))], max_patch_ratio: .35, shot: plan.shots[1], findings: critique.findings, prior });
+  const repairInputHash = semanticHash({ worker: "frame-repair.v6", routes: [modelRouteKey(parseModelRoute({ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" }))], max_patch_ratio: .35, shot: plan.shots[1], findings: critique.findings, prior });
   await store.add({ id: "repair:shot-2", kind: "frame-repair", depends_on: ["creative-plan"], input_hash: repairInputHash });
   await store.markRunning("repair:shot-2", { provider: "openai", response_id: "repair_saved", status: "in_progress" });
   let resumed = 0;
@@ -277,6 +277,22 @@ test("rejects oversized individual source edits", () => {
     summary: "Oversized replacement",
     edits: [{ target: "html", find: ">Proof</div>", replace: "x".repeat(1_201) }]
   }), /replace exceeds 1200 characters/);
+});
+
+test("salvages independently valid local edits and records rejected anchors", () => {
+  const prior = bundle("shot-1");
+  const result = applyFramePatch(prior, {
+    schema_version: FRAME_PATCH_VERSION,
+    shot_id: "shot-1",
+    summary: "Apply the valid edit only",
+    edits: [
+      { target: "html", find: ">Proof</div>", replace: ">Focused proof</div>" },
+      { target: "html", find: "missing local anchor", replace: "unused" }
+    ]
+  }, { allowPartial: true });
+  assert.match(result.bundle.html, />Focused proof<\/div>/);
+  assert.equal(result.edits, 1);
+  assert.deepEqual(result.rejectedEdits, [{ index: 1, target: "html", reason: "find string must occur exactly once in html; found 0" }]);
 });
 
 test("escalates from a local structural attempt to the next pinned repair route", async () => {
