@@ -328,6 +328,18 @@ test("reports a bounded rejected anchor preview when no local edit applies", () 
   }, { allowPartial: true }), /edit 0 html .*find="missing local anchor"/);
 });
 
+test("retargets a uniquely matched local edit without weakening exact anchors", () => {
+  const prior = bundle("shot-1");
+  const result = applyFramePatch(prior, {
+    schema_version: FRAME_PATCH_VERSION,
+    shot_id: "shot-1",
+    summary: "Correct a locally mislabeled target",
+    edits: [{ target: "motion", find: ">Proof</div>", replace: ">Focused proof</div>" }]
+  }, { allowPartial: true, allowRetarget: true });
+  assert.match(result.bundle.html, />Focused proof<\/div>/);
+  assert.equal(result.edits, 1);
+});
+
 test("escalates from a local structural attempt to the next pinned repair route", async () => {
   const workspace = await fixture();
   const calls = [];

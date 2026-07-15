@@ -194,7 +194,11 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
               ? await client.resumeStructured(resumeResponseId, request)
               : await client.runStructured(request);
             resumeResponseId = null;
-            const patched = applyFramePatch(previousCandidate, result.value, { maxPatchRatio: options.maxPatchRatio, allowPartial: route.provider === "ollama" });
+            const patched = applyFramePatch(previousCandidate, result.value, {
+              maxPatchRatio: options.maxPatchRatio,
+              allowPartial: route.provider === "ollama",
+              allowRetarget: route.provider === "ollama"
+            });
             const normalized = { ...patched.bundle, html: ensureTimelineRegistration(patched.bundle.html, shotId) };
             const sanitized = sanitizeFrameBundle(normalized, {
               shot,
@@ -312,17 +316,25 @@ export function applyFramePatch(bundle, patch, options = {}) {
     if (!find) throw patchError(`edits[${index}].find must not be empty`);
     if (find.length > 1_000) throw patchError(`edits[${index}].find exceeds 1000 characters`);
     if (replace.length > 1_200) throw patchError(`edits[${index}].replace exceeds 1200 characters`);
-    const source = sources.get(edit.target);
-    const occurrences = countOccurrences(source, find);
+    let target = edit.target;
+    let source = sources.get(target);
+    let occurrences = countOccurrences(source, find);
+    if (occurrences === 0 && options.allowRetarget) {
+      const matches = [...sources].filter(([, candidate]) => countOccurrences(candidate, find) === 1);
+      if (matches.length === 1) {
+        [target, source] = matches[0];
+        occurrences = 1;
+      }
+    }
     if (occurrences !== 1) {
       const reason = `find string must occur exactly once in ${edit.target}; found ${occurrences}`;
       if (!options.allowPartial) throw patchError(`edits[${index}] ${reason}`);
       rejectedEdits.push({ index, target: edit.target, reason });
       continue;
     }
-    sources.set(edit.target, source.replace(find, replace));
+    sources.set(target, source.replace(find, replace));
     changedCharacters += Math.max(find.length, replace.length);
-    acceptedEdits.push(edit);
+    acceptedEdits.push(target === edit.target ? edit : { ...edit, target });
   }
   if (!acceptedEdits.length) {
     const previews = rejectedEdits.slice(0, 3).map((entry) => {
