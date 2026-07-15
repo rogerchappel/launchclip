@@ -6,6 +6,7 @@ import { readFrameSelection, safeShotFile, validateHyperFramesRoot } from "./fra
 import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
 import { ensureTextContainment } from "./hyperframes_text.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
+import { freezeProductionFonts, injectProductionFontFaces, productionFontFamilies } from "./production_fonts.js";
 import { PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
 
 export { ensureTimelineRegistration } from "./hyperframes_timeline.js";
@@ -42,7 +43,8 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   const dependencies = plan.shots.map((shot) => `frame:${shot.id}`);
   for (const dependency of dependencies) if (store.get(dependency)?.status !== "succeeded") throw new Error(`Frame job must succeed before assembly: ${dependency}`);
   const extraAudio = await describeExtraAudio(options);
-  const inputHash = semanticHash({ intake, plan, bundles, fallbacks, extraAudio, assembler: "hyperframes-assembler.v16" });
+  const fontFamilies = productionFontFamilies(plan);
+  const inputHash = semanticHash({ intake, plan, bundles, fallbacks, extraAudio, fontFamilies, assembler: "hyperframes-assembler.v17" });
   const jobId = "hyperframes-assembly";
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
@@ -79,9 +81,11 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
     await Promise.all([mkdir(compositionsDir, { recursive: true }), mkdir(assetsDir, { recursive: true })]);
     const assetMap = await freezeResources(intake.resources, assetsDir);
     for (const audio of extraAudio) assetMap.set(audio.id, await freezeFile(audio.id, audio.path, assetsDir));
+    const fonts = await freezeProductionFonts(fontFamilies, assetsDir, { fetch: options.fetch });
+    for (const font of fonts.assets) assetMap.set(font.id, font);
 
     for (const bundle of bundles) {
-      let html = applyFrameCsp(ensureTextContainment(ensureTimelineRegistration(bundle.html, bundle.shot_id), bundle.shot_id));
+      let html = applyFrameCsp(ensureTextContainment(ensureTimelineRegistration(injectProductionFontFaces(bundle.html, fonts.css), bundle.shot_id), bundle.shot_id));
       for (const resource of intake.resources) {
         const frozen = assetMap.get(resource.id);
         if (frozen && resource.location) html = html.split(resource.location).join(`assets/${frozen.file}`);

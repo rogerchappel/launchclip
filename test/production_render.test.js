@@ -5,16 +5,17 @@ import path from "node:path";
 import test from "node:test";
 import { ProductionVerificationError, assertVerificationFresh, classifyCommandFailure, plannedTypographyErrors, renderDraftProduction, renderProduction, verifyProduction, verifySemanticArtifacts, verifyShotCompositions } from "../src/production_render.js";
 
-test("runs lint, browser validation, transition-aware checks, and assembled snapshots", async () => {
+test("runs lint, the current transition-aware browser check, and assembled snapshots", async () => {
   const workspace = await fixture();
   const commands = [];
   const run = async (command, args) => { commands.push([command, args]); return { stdout: args.includes("--json") ? '{"findings":[]}' : "snapshots written", stderr: "" }; };
   const result = await verifyProduction(workspace, { inspectSamples: 17, snapshotFrames: 9 }, { run });
   assert.equal(result.status, "ready");
   assert.ok(commands.every(([command, args]) => command === process.execPath && args[0].endsWith("hyperframes/dist/cli.js")));
-  assert.deepEqual(commands.map((entry) => entry[1][1]), ["lint", "validate", "check", "snapshot"]);
-  assert.ok(commands[2][1].includes("--at-transitions"));
-  assert.ok(commands[3][1].includes("9"));
+  assert.deepEqual(commands.map((entry) => entry[1][1]), ["lint", "check", "snapshot"]);
+  assert.ok(commands[1][1].includes("--at-transitions"));
+  assert.ok(commands[1][1].includes("--timeout"));
+  assert.ok(commands[2][1].includes("9"));
   assert.deepEqual((JSON.parse(await readFile(path.join(result.qa, "verification.json"), "utf8"))).failed, []);
 });
 
@@ -82,7 +83,7 @@ test("reuses a content-addressed verification receipt with intact reports and sn
   const second = await verifyProduction(workspace, {}, adapters);
   assert.equal(first.cached, false);
   assert.equal(second.cached, true);
-  assert.deepEqual(commands, ["lint", "validate", "check", "snapshot"]);
+  assert.deepEqual(commands, ["lint", "check", "snapshot"]);
   const receipt = JSON.parse(await readFile(path.join(workspace, "production", "qa", "verification.json"), "utf8"));
   assert.equal(receipt.schema_version, "launchclip.production-verification.v6");
   assert.equal(receipt.status, "passed");
@@ -103,11 +104,11 @@ test("invalidates verification reuse when project content or a receipt artifact 
   await writeFile(path.join(workspace, "production", "qa", "lint.json"), "tampered\n");
   const afterTamper = await verifyProduction(workspace, {}, adapters);
   assert.equal(afterTamper.cached, false);
-  assert.equal(commands, 8);
+  assert.equal(commands, 6);
   await writeFile(path.join(workspace, "production", "hyperframes", "index.html"), '<div data-composition-id="main" data-duration="10" data-width="1080" data-height="1920">changed</div>');
   const afterProjectChange = await verifyProduction(workspace, {}, adapters);
   assert.equal(afterProjectChange.cached, false);
-  assert.equal(commands, 12);
+  assert.equal(commands, 9);
 });
 
 test("rejects a verification receipt when the assembled project changes before render", async () => {
@@ -220,6 +221,19 @@ test("fails closed when authored frames silently replace the planned type system
   ]);
   const faithful = [{ shot_id: "shot-1", html: '<style>:root{--display:"Silkscreen";--body:"Atkinson Hyperlegible"}.title{font-family:var(--display)}.copy{font-family:var(--body)}.meta{font:500 24px/1 "IBM Plex Mono"}</style>' }];
   assert.deepEqual(plannedTypographyErrors(plan, faithful), []);
+
+  const describedPlan = { design: { style_dna: { typography: {
+    display: "Space Grotesk 700, tightly tracked",
+    body: "Inter 500/600 with short labels",
+    metadata: "IBM Plex Mono 500 for commands"
+  } } } };
+  const describedFaithful = [{ shot_id: "shot-1", html: '<style>.title{font-family:"Space Grotesk",sans-serif}.copy{font-family:Inter,sans-serif}.meta{font-family:"IBM Plex Mono",monospace}</style>' }];
+  assert.deepEqual(plannedTypographyErrors(describedPlan, describedFaithful), []);
+  assert.deepEqual(plannedTypographyErrors(describedPlan, generic), [
+    'planned typography role display requires family "Space Grotesk", but no assembled frame declares it',
+    'planned typography role body requires family "Inter", but no assembled frame declares it',
+    'planned typography role metadata requires family "IBM Plex Mono", but no assembled frame declares it'
+  ]);
 });
 
 test("blocks final rendering without approval and records failed HyperFrames checks", async () => {

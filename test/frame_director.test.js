@@ -104,9 +104,11 @@ test("contains model-authored shot artifact paths", () => {
 test("removes event-handler attributes locally without changing visible button copy", () => {
   const bundle = frameBundle("shot-1", 5);
   bundle.html = bundle.html.replace(">Proof</div>", ' onclick="doSomething()">Do something</div>');
+  bundle.html = bundle.html.replace("const timeline", "const one=(s)=>root.querySelector(s);const timeline");
   const sanitized = sanitizeFrameBundle(bundle);
   assert.doesNotMatch(sanitized.bundle.html, /onclick=/i);
   assert.match(sanitized.bundle.html, />Do something<\/div>/);
+  assert.match(sanitized.bundle.html, /const one=\(s\)=>root\.querySelector\(s\)/);
   assert.deepEqual(sanitized.repairs, [{ kind: "remove-event-handler-attributes", count: 1 }]);
 });
 

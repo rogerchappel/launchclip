@@ -83,10 +83,10 @@ test("repairs native shot inspection failures even when the visual critic ships"
   await mkdir(path.dirname(reportPath), { recursive: true });
   await writeFile(reportPath, `${JSON.stringify({
     ok: false,
-    stdout: { issues: [
-      { code: "motion_frozen", severity: "error", message: "The asserted node is static", selector: "#shot-1-proof", fixHint: "Animate the asserted node" },
-      { code: "content_overlap", severity: "warning", message: "Possible overlap", selector: "#shot-1-proof" }
-    ] },
+    stdout: {
+      motion: { findings: [{ code: "motion_frozen", severity: "error", message: "The asserted node is static", selector: "#shot-1-proof", fixHint: "Animate the asserted node" }] },
+      layout: { findings: [{ code: "content_overlap", severity: "warning", message: "Possible overlap", selector: "#shot-1-proof" }] }
+    },
     stderr: ""
   })}\n`);
   const client = { runStructured: async (request) => {
@@ -95,7 +95,7 @@ test("repairs native shot inspection failures even when the visual critic ships"
     assert.match(finding.instruction, /Motion assertions must describe motion on the asserted element itself/);
     assert.match(request.instructions, /set must_remain_live false/);
     assert.match(request.instructions, /Do not add imperceptible drift/);
-    assert.doesNotMatch(finding.instruction, /content_overlap/);
+    assert.match(finding.instruction, /content_overlap/);
     return { response_id: "native_repair", model: "gpt-5.6", status: "completed", usage: {}, value: bundle("shot-1", "Native repair") };
   } };
   const result = await repairProduction(workspace, {}, { client });
