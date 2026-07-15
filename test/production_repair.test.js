@@ -6,7 +6,7 @@ import test from "node:test";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { modelRouteKey, parseModelRoute } from "../src/model_provider.js";
 import { FRAME_BUNDLE_VERSION } from "../src/production_contracts.js";
-import { applyFramePatch, buildRepairInput, FRAME_PATCH_VERSION, repairProduction } from "../src/production_repair.js";
+import { applyFramePatch, buildRepairInput, collectDeterministicRepairFindings, FRAME_PATCH_VERSION, repairProduction } from "../src/production_repair.js";
 
 test("repairs only criticised frames, preserves the frame contract, and invalidates assembly", async () => {
   const workspace = await fixture();
@@ -104,6 +104,29 @@ test("repairs native shot inspection failures even when the visual critic ships"
   assert.equal(result.status, "repaired");
   assert.equal(result.deterministic_findings, 1);
   assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-1"]);
+});
+
+test("batches native repair findings by blocking priority", async () => {
+  const workspace = await fixture({ verdict: "ship" });
+  const plan = JSON.parse(await readFile(path.join(workspace, "production", "plan.json"), "utf8"));
+  const reportPath = path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json");
+  await mkdir(path.dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, `${JSON.stringify({
+    ok: false,
+    stdout: {
+      runtime: { findings: [{ code: "console_error", severity: "error", message: "Runtime failed" }] },
+      motion: { findings: [{ code: "motion_out_of_order", severity: "error", message: "Order failed" }] },
+      layout: { findings: [{ code: "text_occluded", severity: "error", message: "Text hidden" }] },
+      contrast: { findings: [{ code: "contrast_aa_failure", severity: "error", message: "Contrast failed" }] },
+      findings: [{ code: "panel_out_of_canvas", severity: "warning", message: "Panel warning" }]
+    }
+  })}\n`);
+  const findings = await collectDeterministicRepairFindings(workspace, plan, { maxIssuesPerShot: 2 });
+  assert.equal(findings.length, 1);
+  assert.match(findings[0].evidence, /contains 2 of 5 unique blocking issues/);
+  assert.match(findings[0].instruction, /console_error/);
+  assert.match(findings[0].instruction, /motion_out_of_order/);
+  assert.doesNotMatch(findings[0].instruction, /contrast_aa_failure/);
 });
 
 test("rejects infrastructure inspection failures before any paid repair call", async () => {
