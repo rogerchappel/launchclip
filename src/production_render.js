@@ -5,7 +5,7 @@ import { copyFile, lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, 
 import path from "node:path";
 import { promisify } from "node:util";
 import { semanticHash } from "./job_store.js";
-import { isValidShotId, PRODUCTION_PATHS } from "./production_contracts.js";
+import { DEFAULT_NARRATED_MUSIC_VOLUME, isValidShotId, PRODUCTION_PATHS } from "./production_contracts.js";
 import { writeAudioReport } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
 import { critiqueProduction } from "./production_critic.js";
@@ -320,8 +320,8 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
   const audioManifest = await readOptionalJson(audioManifestPath);
   const audio = audioManifest
     ? adapters.writeAudioReport
-      ? await adapters.writeAudioReport(output, audioManifestPath, audioPath, { musicVolume: Number(options.musicVolume ?? .16) })
-      : await writeAudioReport(output, audioManifestPath, audioPath, { musicVolume: Number(options.musicVolume ?? .16) }, adapters.audio)
+      ? await adapters.writeAudioReport(output, audioManifestPath, audioPath, { musicVolume: Number(options.musicVolume ?? DEFAULT_NARRATED_MUSIC_VOLUME) })
+      : await writeAudioReport(output, audioManifestPath, audioPath, { musicVolume: Number(options.musicVolume ?? DEFAULT_NARRATED_MUSIC_VOLUME) }, adapters.audio)
     : { schema_version: "launchclip.render-audio.v1", status: "not-requested", quality: { ok: true, findings: [] } };
   if (!audioManifest) await writeFile(audioPath, `${JSON.stringify(audio, null, 2)}\n`);
   if (profile.enforceQuality && !audio.quality.ok) throw new Error(`Rendered video failed audio quality gates. Review ${audioPath}.`);
@@ -546,6 +546,7 @@ function motionOptions(plan, options) {
       maximum_hold_ratio: Number(options.maximumHoldRatio ?? .94),
       minimum_bursts_per_minute: Number(options.minimumBurstsPerMinute ?? 8),
       minimum_change_energy_p50: Number(options.minimumChangeEnergyP50 ?? .35),
+      minimum_change_energy_p50_by_family: { "developing-card": Number(options.minimumDevelopingCardEnergyP50 ?? .15) },
       minimum_flow_velocity_p90: Number(options.minimumFlowVelocityP90 ?? 2),
       maximum_first_motion_seconds: Number(options.maximumFirstMotionSeconds ?? .65),
       hook_window_seconds: Number(options.hookWindowSeconds ?? 4),

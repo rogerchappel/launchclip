@@ -60,6 +60,7 @@ test("runs the delegated production DAG in dependency order and stops for approv
   assert.equal(calls[8][1].noMusic, true);
   assert.equal(calls[8][1].noSfx, true);
   assert.equal(calls[10][1].voiceover, "/tmp/voice.mp3");
+  assert.equal(calls[10][1].musicVolume, 0.35);
   assert.match(result.next, /production-render/);
 });
 

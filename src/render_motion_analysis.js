@@ -256,8 +256,11 @@ export function evaluateMotionQuality(metrics, expected = {}) {
   if (!metrics.frame_count) findings.push(finding("frames", "blocking", "No frame-difference samples were produced."));
   if (metrics.motion.hold_ratio > Number(expected.maximum_hold_ratio ?? 0.985)) findings.push(finding("motion", "major", `Frame-difference analysis reports ${(metrics.motion.hold_ratio * 100).toFixed(1)}% near-static frames.`));
   if (metrics.motion_bursts_per_minute < Number(expected.minimum_bursts_per_minute ?? 4)) findings.push(finding("motion", "major", `Only ${metrics.motion_bursts_per_minute.toFixed(1)} meaningful motion bursts per minute were detected.`));
-  if (expected.minimum_change_energy_p50 != null && Number(metrics.motion?.change_energy?.p50 ?? 0) < Number(expected.minimum_change_energy_p50)) {
-    findings.push(finding("motion", "major", `Median frame-change energy is ${Number(metrics.motion?.change_energy?.p50 ?? 0).toFixed(2)}; expected at least ${Number(expected.minimum_change_energy_p50).toFixed(2)}.`));
+  const motionFamily = metrics.family ?? classifyMotionFamily(metrics);
+  const familyEnergyFloor = expected.minimum_change_energy_p50_by_family?.[motionFamily];
+  const minimumChangeEnergy = familyEnergyFloor ?? expected.minimum_change_energy_p50;
+  if (minimumChangeEnergy != null && Number(metrics.motion?.change_energy?.p50 ?? 0) < Number(minimumChangeEnergy)) {
+    findings.push(finding("motion", "major", `Median frame-change energy is ${Number(metrics.motion?.change_energy?.p50 ?? 0).toFixed(2)}; expected at least ${Number(minimumChangeEnergy).toFixed(2)} for ${motionFamily}.`));
   }
   if (expected.minimum_flow_velocity_p90 != null && Number(metrics.optical_flow?.velocity_pixels_per_second?.p90 ?? 0) < Number(expected.minimum_flow_velocity_p90)) {
     findings.push(finding("motion", "major", `90th-percentile motion velocity is ${Number(metrics.optical_flow?.velocity_pixels_per_second?.p90 ?? 0).toFixed(1)} px/s; expected at least ${Number(expected.minimum_flow_velocity_p90).toFixed(1)} px/s.`));

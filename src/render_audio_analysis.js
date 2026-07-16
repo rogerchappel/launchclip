@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { DEFAULT_NARRATED_MUSIC_VOLUME } from "./production_contracts.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -25,7 +26,7 @@ export async function analyzeProductionAudio(videoPath, manifestPath, options = 
     expected_audio: expectedAudio,
     stream: audioStream,
     output,
-    sources: { voiceover, music, music_gain_db: round(20 * Math.log10(Number(options.musicVolume ?? .16))) },
+    sources: { voiceover, music, music_gain_db: round(20 * Math.log10(Number(options.musicVolume ?? DEFAULT_NARRATED_MUSIC_VOLUME))) },
     cues,
   };
   report.quality = evaluateAudioQuality(report, options);
@@ -49,6 +50,7 @@ export function evaluateAudioQuality(report, options = {}) {
     const adjustedMusic = report.sources.music.integrated_lufs + report.sources.music_gain_db;
     const margin = report.sources.voiceover.integrated_lufs - adjustedMusic;
     if (margin < Number(options.minimumVoiceMusicMarginDb ?? 6)) findings.push(finding("masking", "major", `Estimated voice-to-music margin is ${round(margin)} dB; expected at least ${options.minimumVoiceMusicMarginDb ?? 6} dB.`));
+    if (margin > Number(options.maximumVoiceMusicMarginDb ?? 14)) findings.push(finding("music-presence", "major", `Estimated voice-to-music margin is ${round(margin)} dB; expected at most ${options.maximumVoiceMusicMarginDb ?? 14} dB so the music bed remains audible.`));
   }
   if (report.sources.voiceover && report.output?.silence_ratio > Number(options.maximumNarratedSilenceRatio ?? .25)) {
     findings.push(finding("silence", "major", `Rendered audio is near-silent for ${(report.output.silence_ratio * 100).toFixed(1)}% of analyzed windows while narration is expected.`));

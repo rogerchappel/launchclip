@@ -130,7 +130,7 @@ Usage:
   launchclip creative-plan <workspace> [--planning-mode auto|single|hierarchical] [--hierarchical-threshold 180] [--chapter-concurrency 3] [--plan-semantic-attempts 2] [--visual-history-dir path] [--visual-history-limit 8] [--visual-similarity-limit 0.58] [--max-output-tokens 48000] [--foreground]
   launchclip production-audio <workspace> [--voice-id id] [--music-model music_v2] [--sfx-dir path] [--no-voice] [--no-music] [--no-sfx]
   launchclip direct-frames <workspace> [--model-policy cost-aware|local-first|quality] [--frame-route provider:model@reasoning] [--concurrency 4] [--semantic-attempts 2] [--pending-frame-reasoning medium] [--max-frame-cost-usd amount] [--allow-frame-fallback]
-  launchclip assemble <workspace> [--music-volume 0.16]
+  launchclip assemble <workspace> [--music-volume 0.35]
   launchclip production-verify <workspace> [--inspect-samples 15] [--shot-inspect-concurrency 2] [--snapshot-frames 12]
   launchclip production-draft <workspace> [--draft-quality draft] [--shot-inspect-concurrency 2] [--reference-video local.mp4]
   launchclip production-preview <workspace> [--port 3002] [--no-open]
