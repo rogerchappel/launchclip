@@ -66,7 +66,7 @@ test("resumes a persisted background repair response without another submission"
   const plan = JSON.parse(await readFile(path.join(workspace, "production", "plan.json"), "utf8"));
   const prior = JSON.parse(await readFile(path.join(workspace, "production", "frames", "shot-2.json"), "utf8"));
   const critique = JSON.parse(await readFile(path.join(workspace, "production", "qa", "critique.json"), "utf8"));
-  const repairInputHash = semanticHash({ worker: "frame-repair.v8", candidate_verification: "browser-snapshot.v3", repair_context: "selector-capsule.v4", routes: [modelRouteKey(parseModelRoute({ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" }))], max_patch_ratio: .35, shot: plan.shots[1], findings: critique.findings, prior });
+  const repairInputHash = semanticHash({ worker: "frame-repair.v9", candidate_verification: "browser-snapshot.v3", repair_context: "selector-capsule.v4", routes: [modelRouteKey(parseModelRoute({ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" }))], max_output_tokens: 8_000, max_patch_ratio: .35, shot: plan.shots[1], findings: critique.findings, prior });
   await store.add({ id: "repair:shot-2", kind: "frame-repair", depends_on: ["creative-plan"], input_hash: repairInputHash });
   await store.markRunning("repair:shot-2", { provider: "openai", response_id: "repair_saved", status: "in_progress" });
   let resumed = 0;
@@ -279,6 +279,45 @@ test("preserves the canonical frame when candidate snapshots reject a repair", a
   assert.equal(store.get("frame:shot-2").status, "succeeded");
   assert.equal(store.get("repair:shot-2").status, "failed");
   assert.equal(store.get("hyperframes-assembly").status, "succeeded");
+});
+
+test("treats a larger repair output budget as a fresh bounded attempt", async () => {
+  const workspace = await fixture();
+  await assert.rejects(() => runRepair(workspace, {
+    semanticAttempts: 1,
+    maxAttempts: 1,
+    maxOutputTokens: 800
+  }, {
+    client: { runStructured: async () => { throw new Error("output budget exhausted"); } }
+  }), /output budget exhausted/);
+
+  const failedStore = await ProductionJobStore.open(workspace, { create: false });
+  assert.equal(failedStore.get("repair:shot-2").attempt, 1);
+  assert.equal(failedStore.get("repair:shot-2").status, "failed");
+
+  let receivedBudget;
+  const result = await runRepair(workspace, {
+    semanticAttempts: 1,
+    maxAttempts: 1,
+    maxOutputTokens: 4_000
+  }, {
+    client: { runStructured: async (request) => {
+      receivedBudget = request.maxOutputTokens;
+      return {
+        response_id: "larger_budget_repair",
+        model: "gpt-5.6-luna",
+        status: "completed",
+        usage: {},
+        value: framePatch("shot-2", "Proof", "Recovered proof")
+      };
+    } }
+  });
+
+  assert.equal(receivedBudget, 4_000);
+  assert.equal(result.repaired.length, 1);
+  const recoveredStore = await ProductionJobStore.open(workspace, { create: false });
+  assert.equal(recoveredStore.get("repair:shot-2").attempt, 1);
+  assert.equal(recoveredStore.get("repair:shot-2").status, "succeeded");
 });
 
 test("converts fresh strict lint warnings into shot-scoped repair findings", async () => {

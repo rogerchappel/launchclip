@@ -120,10 +120,11 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     if (!shot) throw new Error(`Critique references unknown shot: ${shotId}`);
     const prior = (await readFrameSelection(workspace, shotId)).bundle;
     const repairInputHash = semanticHash({
-      worker: "frame-repair.v8",
+      worker: "frame-repair.v9",
       candidate_verification: "browser-snapshot.v3",
       repair_context: REPAIR_CAPSULE_VERSION,
       routes: routes.map(modelRouteKey),
+      max_output_tokens: Number(options.maxOutputTokens ?? 8_000),
       max_patch_ratio: Number(options.maxPatchRatio ?? .35),
       shot,
       findings,
