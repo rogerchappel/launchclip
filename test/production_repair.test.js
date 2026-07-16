@@ -66,7 +66,7 @@ test("resumes a persisted background repair response without another submission"
   const plan = JSON.parse(await readFile(path.join(workspace, "production", "plan.json"), "utf8"));
   const prior = JSON.parse(await readFile(path.join(workspace, "production", "frames", "shot-2.json"), "utf8"));
   const critique = JSON.parse(await readFile(path.join(workspace, "production", "qa", "critique.json"), "utf8"));
-  const repairInputHash = semanticHash({ worker: "frame-repair.v9", candidate_verification: "browser-snapshot.v3", repair_context: "selector-capsule.v4", routes: [modelRouteKey(parseModelRoute({ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" }))], max_output_tokens: 8_000, max_patch_ratio: .35, shot: plan.shots[1], findings: critique.findings, prior });
+  const repairInputHash = semanticHash({ worker: "frame-repair.v10", candidate_verification: "browser-snapshot.v3", repair_context: "selector-capsule.v4", routes: [modelRouteKey(parseModelRoute({ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" }))], source_mode: "provider-default", max_output_tokens: 8_000, max_patch_ratio: .35, shot: plan.shots[1], findings: critique.findings, prior });
   await store.add({ id: "repair:shot-2", kind: "frame-repair", depends_on: ["creative-plan"], input_hash: repairInputHash });
   await store.markRunning("repair:shot-2", { provider: "openai", response_id: "repair_saved", status: "in_progress" });
   let resumed = 0;
@@ -466,6 +466,33 @@ test("escalates from a local structural attempt to the next pinned repair route"
   assert.equal(result.repaired[0].provider, "openai");
   assert.equal(result.repaired[0].model, "gpt-5.6-terra");
   assert.match(await readFile(result.repaired[0].html, "utf8"), /Escalated proof/);
+});
+
+test("uses scoped source capsules for remote repair routes when requested", async () => {
+  const workspace = await fixture();
+  let sourceMode;
+  const result = await runRepair(workspace, {
+    routes: ["openrouter:tencent/hy3:free@none"],
+    sourceMode: "scoped",
+    semanticAttempts: 1
+  }, {
+    createClient: () => ({
+      supportsImages: false,
+      runStructured: async (request) => {
+        sourceMode = repairContext(request.input).source_scope.mode;
+        return {
+          response_id: "scoped_remote_repair",
+          model: "tencent/hy3:free",
+          status: "completed",
+          usage: {},
+          value: framePatch("shot-2", "Proof", "Scoped proof")
+        };
+      }
+    })
+  });
+  assert.equal(sourceMode, "scoped");
+  assert.equal(result.repaired[0].provider, "openrouter");
+  assert.match(await readFile(result.repaired[0].html, "utf8"), /Scoped proof/);
 });
 
 function runRepair(workspace, options = {}, adapters = {}) {
