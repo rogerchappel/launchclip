@@ -120,6 +120,21 @@ test("quality gates opening cadence, frame energy, and velocity", () => {
   assert.match(result.findings.at(-1).message, /Only 2 distinct/);
 });
 
+test("quality uses a family-specific motion floor for developing cards", () => {
+  const metrics = {
+    duration_seconds: 45, width: 1080, height: 1920, frame_count: 1350,
+    cuts: [14.6], cut_rate_per_minute: 1.33, motion_bursts_per_minute: 43.97,
+    motion: { hold_ratio: .58, change_energy: { p50: .19 }, bursts: [], frame_difference: [] }
+  };
+  const result = evaluateMotionQuality(metrics, {
+    minimum_change_energy_p50: .35,
+    minimum_change_energy_p50_by_family: { "developing-card": .15 }
+  });
+  assert.equal(classifyMotionFamily(metrics), "developing-card");
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.findings, []);
+});
+
 function metadata(key, values) {
   return values.map((value, frame) => `frame:${frame} pts:${frame}\n${key}=${value}`).join("\n");
 }
