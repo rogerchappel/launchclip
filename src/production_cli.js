@@ -329,6 +329,7 @@ function repairOptions(flags) {
     maxOutputTokens: numberOr(flags["repair-max-output-tokens"], 8_000),
     maxPatchRatio: ratioOr(flags["max-patch-ratio"], .35),
     maxIssuesPerShot: numberOr(flags["repair-issues-per-shot"], 4),
+    supportsImages: flags["repair-text-only"] ? false : undefined,
     background: !flags.foreground
   };
 }
