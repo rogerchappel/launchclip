@@ -14,11 +14,13 @@ import { prepareSourceMedia } from "./production_source_media.js";
 import { withProductionLease } from "./job_store.js";
 import { resolveProductionEntities } from "./entity_resolution.js";
 import { openProductionPreview } from "./production_preview.js";
+import { runProductionReview } from "./production_review.js";
 import { DEFAULT_NARRATED_MUSIC_VOLUME } from "./production_contracts.js";
 
 export async function runProductionStage(command, target, flags = {}, adapters = {}) {
   if (command === "produce") return runProduction(target, flags, adapters);
   flags = productionFlags(flags);
+  if (command === "production-review") return runInteractiveProductionReview(target, flags, adapters);
   const lease = adapters.withProductionLease ?? withProductionLease;
   return lease(target, async () => {
     if (command === "evidence") return collectEvidence(target, evidenceOptions(flags), adapters.evidence);
@@ -29,8 +31,8 @@ export async function runProductionStage(command, target, flags = {}, adapters =
     if (command === "production-verify") return verifyProduction(target, renderOptions(flags));
     if (command === "production-draft") return (adapters.renderDraftProduction ?? renderDraftProduction)(target, renderOptions(flags), adapters.render);
     if (command === "production-preview") return (adapters.openProductionPreview ?? openProductionPreview)(target, previewOptions(flags), adapters.preview);
-    if (command === "production-render") return renderProduction(target, renderOptions(flags));
-    if (command === "production-critique") return critiqueProduction(target, criticOptions(flags));
+    if (command === "production-render") return (adapters.renderProduction ?? renderProduction)(target, renderOptions(flags), adapters.render);
+    if (command === "production-critique") return (adapters.critiqueProduction ?? critiqueProduction)(target, criticOptions(flags), adapters.critic);
     if (command === "production-repair") return (adapters.repairProduction ?? repairProduction)(target, await standaloneRepairOptions(target, flags, adapters), adapters.repair);
     if (command === "source-media") return (adapters.analyzeSourceMedia ?? analyzeSourceMedia)(target, mediaAnalysisOptions(flags), adapters.mediaAnalysis);
     if (command === "source-preprocess") return (adapters.prepareSourceMedia ?? prepareSourceMedia)(target, sourcePreprocessOptions(flags), adapters.sourcePreprocess);
@@ -75,11 +77,97 @@ export async function runProduction(source, flags = {}, adapters = {}) {
   const normalized = await (adapters.buildIntake ?? buildIntake)(source, flags);
   const workspace = path.resolve(normalized.workspace);
   const lease = adapters.withProductionLease ?? withProductionLease;
-  return lease(workspace, async () => {
+  const production = await lease(workspace, async () => {
     const intake = adapters.writeIntake ? await adapters.writeIntake(source, flags) : await writeIntakeManifest(normalized);
     if (path.resolve(intake.workspace) !== workspace) throw new Error(`Intake workspace changed after lease acquisition: expected ${workspace}, got ${intake.workspace}`);
     return runProductionInWorkspace(workspace, flags, adapters);
   });
+  if (!flags.review) return production;
+  return runInteractiveProductionReview(workspace, flags, adapters, production);
+}
+
+async function runInteractiveProductionReview(workspacePath, flags, adapters, initial = null) {
+  const workspace = path.resolve(workspacePath);
+  const lease = adapters.withProductionLease ?? withProductionLease;
+  return (adapters.runProductionReview ?? runProductionReview)(workspace, { initial }, {
+    ...adapters.review,
+    openPreview: (target) => (adapters.openProductionPreview ?? openProductionPreview)(target, previewOptions(flags), adapters.preview),
+    approve: (target) => lease(target, () => (adapters.renderProduction ?? renderProduction)(target, { ...renderOptions(flags), approve: true }, adapters.render)),
+    revise: (target, request) => lease(target, () => reviseProduction(target, flags, request, adapters)),
+    getStatus: (target) => readProductionReviewStatus(target)
+  });
+}
+
+async function reviseProduction(workspace, flags, request, adapters) {
+  let requestedCritique = null;
+  if (request.humanReviewRequest) {
+    requestedCritique = await (adapters.critiqueProduction ?? critiqueProduction)(workspace, {
+      ...criticOptions(flags),
+      humanReviewRequest: request.humanReviewRequest
+    }, adapters.critic);
+  }
+  const inferred = await standaloneRepairOptions(workspace, flags, adapters);
+  const repair = await (adapters.repairProduction ?? repairProduction)(workspace, {
+    ...inferred,
+    ...(request.humanReviewRequest ? { trigger: "critique", verification: null } : {})
+  }, adapters.repair);
+  if (!repair.repaired?.length && !repair.actions?.plan_revised) {
+    return {
+      stage: "production-review-revision",
+      status: repair.status === "not-needed" ? "awaiting-approval" : "needs-repair",
+      workspace,
+      requested_critique: requestedCritique,
+      repair,
+      draft: null
+    };
+  }
+  let audio = null;
+  let frames = null;
+  if (repair.actions?.plan_revised) {
+    const noAudio = Boolean(flags["no-audio"]);
+    audio = await (adapters.produceAudio ?? produceAudio)(workspace, {
+      ...audioOptions(flags),
+      noVoice: noAudio || Boolean(flags["no-voice"]),
+      noMusic: noAudio || Boolean(flags["no-music"]),
+      noSfx: noAudio || Boolean(flags["no-sfx"])
+    }, adapters.audio);
+    if (audio.status === "needs-retiming" && !flags["allow-timing-drift"]) {
+      throw new Error(`${audio.warnings.join(" ")} Revised narration timing still requires another plan repair.`);
+    }
+    frames = await (adapters.directFrames ?? directFrames)(workspace, frameOptions(flags), adapters.frames);
+  }
+  const assembly = adapters.assembleHyperFrames
+    ? await adapters.assembleHyperFrames(workspace, await producedAssemblyOptions(workspace, flags))
+    : await assembleWithProducedAudio(workspace, flags);
+  const draft = await (adapters.renderDraftProduction ?? renderDraftProduction)(workspace, renderOptions(flags), adapters.render);
+  return {
+    stage: "production-review-revision",
+    status: draft.status === "ready" && draft.critique?.verdict === "ship" ? "awaiting-approval" : "needs-repair",
+    workspace,
+    requested_critique: requestedCritique,
+    repair,
+    audio,
+    frames: frames ? { generated: frames.generated, cached: frames.cached } : null,
+    assembly,
+    draft,
+    critique: draft.critique
+  };
+}
+
+async function readProductionReviewStatus(workspacePath) {
+  const workspace = path.resolve(workspacePath);
+  const [verification, critique] = await Promise.all([
+    readOptionalJson(path.join(workspace, "production", "qa", "verification.json")),
+    readOptionalJson(path.join(workspace, "production", "qa", "critique.json"))
+  ]);
+  const ready = verification?.status === "passed" && critique?.verdict === "ship";
+  return {
+    stage: "production-review-status",
+    status: ready ? "awaiting-approval" : "needs-repair",
+    workspace,
+    verification: verification ? { status: verification.status, failed: verification.failed ?? [] } : null,
+    critique: critique ? { verdict: critique.verdict, findings: critique.findings?.length ?? 0, summary: critique.summary ?? null } : null
+  };
 }
 
 async function runProductionInWorkspace(workspace, flags, adapters) {
@@ -202,18 +290,22 @@ function sourcePreprocessOptions(flags) {
 }
 
 async function assembleWithProducedAudio(workspace, flags) {
+  return assembleHyperFrames(workspace, await producedAssemblyOptions(workspace, flags));
+}
+
+async function producedAssemblyOptions(workspace, flags) {
   let audio = null;
   try {
     audio = JSON.parse(await readFile(path.join(path.resolve(workspace), "production", "media", "manifest.json"), "utf8"));
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
-  return assembleHyperFrames(workspace, {
+  return {
     voiceover: audio?.voiceover?.path,
     music: audio?.music?.path,
     sfxManifest: audio?.sfx_manifest,
     musicVolume: numberOr(flags["music-volume"], DEFAULT_NARRATED_MUSIC_VOLUME)
-  });
+  };
 }
 
 function evidenceOptions(flags) {
@@ -397,4 +489,13 @@ function ratioOr(value, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0 || number > 1) throw new Error(`Expected a ratio greater than 0 and at most 1, received ${value}`);
   return number;
+}
+
+async function readOptionalJson(filePath) {
+  try {
+    return JSON.parse(await readFile(filePath, "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
 }
