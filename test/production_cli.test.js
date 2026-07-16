@@ -64,6 +64,62 @@ test("runs the delegated production DAG in dependency order and stops for approv
   assert.match(result.next, /production-render/);
 });
 
+test("continues produce into review only when explicitly requested", async () => {
+  const calls = [];
+  const adapters = {
+    withProductionLease: async (_workspace, operation) => { calls.push("lease"); return operation(); },
+    buildIntake: async () => ({ workspace: "/tmp/workspace" }),
+    writeIntake: async () => ({ workspace: "/tmp/workspace" }),
+    prepareSourceMedia: async () => ({}), collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), resolveProductionEntities: async () => ({}), planProduction: async () => ({}),
+    produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
+    directFrames: async () => ({ generated: 1, cached: 0 }),
+    assembleHyperFrames: async () => ({}),
+    renderDraftProduction: async () => ({ status: "ready", video: "/tmp/draft.mp4", verification: { snapshots: "/tmp/snapshots" }, critique: { verdict: "ship" } }),
+    runProductionReview: async (workspace, options) => {
+      calls.push("review");
+      assert.equal(workspace, "/tmp/workspace");
+      assert.equal(options.initial.status, "awaiting-approval");
+      return { stage: "production-review", status: "awaiting-approval", action: "saved" };
+    }
+  };
+  const result = await runProduction("owner/repo", { review: true }, adapters);
+  assert.equal(result.stage, "production-review");
+  assert.deepEqual(calls, ["lease", "review"]);
+});
+
+test("wires review changes through critique, repair, rebuild, and approved render", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-production-review-"));
+  const calls = [];
+  const result = await runProductionStage("production-review", workspace, { port: "3555" }, {
+    withProductionLease: async (_workspace, operation) => { calls.push("lease"); return operation(); },
+    runProductionReview: async (target, options, controls) => {
+      assert.equal(options.initial, null);
+      assert.equal((await controls.getStatus(target)).status, "needs-repair");
+      await controls.openPreview(target);
+      const revision = await controls.revise(target, { humanReviewRequest: "Increase the title size." });
+      assert.equal(revision.status, "awaiting-approval");
+      return controls.approve(target);
+    },
+    openProductionPreview: async (_target, options) => { calls.push(["preview", options]); return { status: "awaiting-approval" }; },
+    critiqueProduction: async (_target, options) => { calls.push(["critique", options.humanReviewRequest]); return { verdict: "repair", findings: 1 }; },
+    repairProduction: async (_target, options) => { calls.push(["repair", options.trigger]); return { status: "repaired", repaired: [{ shot_id: "shot-1" }] }; },
+    assembleHyperFrames: async () => { calls.push("assemble"); return { status: "ready" }; },
+    renderDraftProduction: async () => { calls.push("draft"); return { status: "ready", critique: { verdict: "ship", findings: 0 } }; },
+    renderProduction: async (_target, options) => { calls.push(["render", options.approve]); return { status: "awaiting-human-review", video: "/tmp/final.mp4" }; }
+  });
+  assert.equal(result.status, "awaiting-human-review");
+  assert.deepEqual(calls, [
+    ["preview", { port: "3555", open: true }],
+    "lease",
+    ["critique", "Increase the title size."],
+    ["repair", "critique"],
+    "assemble",
+    "draft",
+    "lease",
+    ["render", true]
+  ]);
+});
+
 test("runs bounded critic-directed repairs before asking for human approval", async () => {
   const calls = [];
   let drafts = 0;

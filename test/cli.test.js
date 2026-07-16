@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -69,9 +69,10 @@ test("parses model-directed production control flags", () => {
 });
 
 test("parses Studio preview controls", () => {
-  assert.deepEqual(parseFlags(["--port", "3111", "--no-open"]), {
+  assert.deepEqual(parseFlags(["--port", "3111", "--no-open", "--review"]), {
     port: "3111",
-    "no-open": true
+    "no-open": true,
+    review: true
   });
 });
 
@@ -128,4 +129,22 @@ test("documents the Studio preview approval stage", async () => {
   await runCli(["--help"], { stdout: { write: (value) => output.push(value) } });
   assert.match(output.join(""), /production-preview <workspace> \[--port 3002\] \[--no-open\]/);
   assert.match(output.join(""), /production-repair <workspace>.*\[--repair-scoped-source\]/);
+  assert.match(output.join(""), /produce <source>.*\[--review\]/);
+  assert.match(output.join(""), /review <workspace> \[--port 3002\]/);
+});
+
+test("routes review to the interactive production flow for production workspaces", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-cli-review-"));
+  await mkdir(path.join(workspace, "production"));
+  await writeFile(path.join(workspace, "production", "intake.json"), "{}\n");
+  const output = [];
+  const result = { stage: "production-review", status: "awaiting-approval", action: "saved" };
+  await runCli(["review", workspace, "--no-open"], {
+    stdout: { write: (value) => output.push(value) },
+    productionAdapters: { runProductionReview: async (_target, _options, controls) => {
+      assert.equal(typeof controls.openPreview, "function");
+      return result;
+    } }
+  });
+  assert.equal(JSON.parse(output.join("")).stage, "production-review");
 });
