@@ -97,7 +97,7 @@ function formatStatus(value) {
 function reviewResult(workspace, action, preview, latest, render) {
   return {
     stage: "production-review",
-    status: render?.status ?? "awaiting-approval",
+    status: render?.status ?? latest?.status ?? "awaiting-approval",
     action,
     workspace,
     studio: preview?.studio ?? null,

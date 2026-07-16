@@ -48,7 +48,7 @@ test("saves an unfinished review for a later resume", async () => {
     getStatus: async () => ({ status: "needs-repair", critique: { verdict: "repair", findings: 2 } }),
     openPreview: async () => ({ studio: { url: "http://localhost:3002" } })
   });
-  assert.equal(result.status, "awaiting-approval");
+  assert.equal(result.status, "needs-repair");
   assert.equal(result.action, "saved");
   assert.match(result.next, /launchclip review \/tmp\/review-later/);
 });
