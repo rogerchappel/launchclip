@@ -128,12 +128,20 @@ launchclip production-render .launchclip/repo-video --approve
 
 The default `cost-aware` policy plans with Terra, authors with Luna, and
 escalates only failed scenes. `local-first` prepends Ollama. To guarantee that a
-resume cannot make a paid call, pin the repair route explicitly:
+review resume cannot make a paid model call, pin both the independent critic
+and repair routes to OpenRouter's live free-model router:
 
 ```bash
-launchclip production-repair .launchclip/repo-video \
-  --repair-route ollama:qwen2.5-coder:latest@none
+launchclip review .launchclip/repo-video \
+  --critic-route openrouter:openrouter/free@none \
+  --repair-route openrouter:openrouter/free@none
 ```
+
+OpenRouter selects an eligible free model at request time, so Launchclip does
+not maintain a changing list of promotional model IDs. A pinned critic route is
+singular to keep the final editorial verdict independent and reproducible at
+the recorded provider/model response. For local-only repair, continue to use
+`--repair-route ollama:qwen2.5-coder:latest@none`.
 
 Ollama routes use its native JSON-schema API with temperature `0`, a fixed
 seed, and a 32K context by default. Override that allocation with

@@ -106,12 +106,17 @@ launchclip direct-frames <workspace> --concurrency 4
 launchclip assemble <workspace>
 launchclip production-verify <workspace> --shot-inspect-concurrency 3
 launchclip production-draft <workspace> \
-  --reference-video ./reference-short.mp4
-launchclip production-critique <workspace>
+  --reference-video ./reference-short.mp4 \
+  --critic-route openrouter:openrouter/free@none
+launchclip production-critique <workspace> \
+  --critic-route openrouter:openrouter/free@none
 launchclip production-repair <workspace> --repair-semantic-attempts 2
 launchclip production-preview <workspace> --port 3002
-launchclip review <workspace> --port 3002
+launchclip review <workspace> --port 3002 \
+  --critic-route openrouter:openrouter/free@none \
+  --repair-route openrouter:openrouter/free@none
 launchclip production-render <workspace> --approve \
+  --critic-route openrouter:openrouter/free@none \
   --reference-video ./reference-short.mp4
 ```
 
@@ -311,6 +316,14 @@ or repair runs while the terminal is waiting for a decision, and the workspace
 lease is held only around an actual mutation. `launchclip review <workspace>`
 resumes the same control loop later. In non-interactive environments, use the
 independent preview and render commands instead.
+
+The critic is provider-routable without changing its strict schema or editorial
+contract. `--critic-route` accepts exactly one pinned route; `--repair-route`
+may still use the bounded repair fallback sequence. To use OpenRouter's current
+free pool without maintaining a model list, pass
+`openrouter:openrouter/free@none` for both routes. OpenRouter records the actual
+free model selected in each response and Launchclip preserves that model in its
+critique and repair receipts.
 
 After encoding, Launchclip measures per-frame luminance difference, stillness,
 motion bursts, cut cadence, and shot duration. A separate block-matching pass
