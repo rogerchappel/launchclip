@@ -546,6 +546,7 @@ function motionOptions(plan, options) {
       maximum_hold_ratio: Number(options.maximumHoldRatio ?? .94),
       minimum_bursts_per_minute: Number(options.minimumBurstsPerMinute ?? 8),
       minimum_change_energy_p50: Number(options.minimumChangeEnergyP50 ?? .35),
+      minimum_change_energy_p50_by_family: { "developing-card": Number(options.minimumDevelopingCardEnergyP50 ?? .15) },
       minimum_flow_velocity_p90: Number(options.minimumFlowVelocityP90 ?? 2),
       maximum_first_motion_seconds: Number(options.maximumFirstMotionSeconds ?? .65),
       hook_window_seconds: Number(options.hookWindowSeconds ?? 4),
