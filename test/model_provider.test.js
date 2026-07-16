@@ -77,8 +77,9 @@ test("allows provider fallback for the dynamic OpenRouter free route", async () 
       return new Response(JSON.stringify({ model: "example/free-model:free", choices: [{ message: { content: "{\"ok\":true}" } }] }), { status: 200 });
     }
   });
-  const result = await client.runStructured({ schema: { type: "object" }, schemaName: "result", input: "go" });
+  const result = await client.runStructured({ schema: { type: "object" }, schemaName: "result", input: "go", reasoningEffort: "none" });
   assert.deepEqual(body.provider, { require_parameters: true, allow_fallbacks: true });
+  assert.deepEqual(body.reasoning, { effort: "none" });
   assert.equal(result.model, "example/free-model:free");
 });
 

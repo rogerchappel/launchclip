@@ -85,7 +85,9 @@ export class ChatCompletionsStructuredClient {
     if (options.maxOutputTokens != null) body.max_tokens = positiveInteger(options.maxOutputTokens, "maxOutputTokens");
     if (this.provider === "openrouter") {
       body.provider = { require_parameters: true, allow_fallbacks: model === "openrouter/free" };
-      if (options.reasoningEffort && options.reasoningEffort !== "none") body.reasoning = { effort: options.reasoningEffort };
+      if (options.reasoningEffort && (options.reasoningEffort !== "none" || model === "openrouter/free")) {
+        body.reasoning = { effort: options.reasoningEffort };
+      }
     }
     const payload = await this.request("/chat/completions", { method: "POST", body: JSON.stringify(body) });
     const result = chatStructuredResult(payload, model);
