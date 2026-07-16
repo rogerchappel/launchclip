@@ -120,7 +120,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     if (!shot) throw new Error(`Critique references unknown shot: ${shotId}`);
     const prior = (await readFrameSelection(workspace, shotId)).bundle;
     const repairInputHash = semanticHash({
-      worker: "frame-repair.v10",
+      worker: "frame-repair.v11",
       candidate_verification: "browser-snapshot.v3",
       repair_context: REPAIR_CAPSULE_VERSION,
       routes: routes.map(modelRouteKey),
@@ -171,6 +171,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
       let totalAttempt = 0;
       for (const [routeIndex, route] of routes.entries()) {
         const client = adapters.client ?? (adapters.createClient ?? createStructuredClient)(route);
+        const sourceMode = options.sourceMode ?? (route.provider === "ollama" ? "scoped" : "full");
         const attemptsForRoute = routeIndex === 0 ? semanticAttempts : 1;
         for (let routeAttempt = 1; routeAttempt <= attemptsForRoute; routeAttempt += 1) {
           totalAttempt += 1;
@@ -188,7 +189,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
               maxPatchRatio: options.maxPatchRatio,
               resources: intake.resources,
               evidenceItems: evidence.items,
-              sourceMode: options.sourceMode ?? (route.provider === "ollama" ? "scoped" : "full")
+              sourceMode
             }),
             images: client.supportsImages === false ? [] : images,
             schema: FRAME_PATCH_SCHEMA,
@@ -208,8 +209,8 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
             resumeResponseId = null;
             const patched = applyFramePatch(previousCandidate, result.value, {
               maxPatchRatio: options.maxPatchRatio,
-              allowPartial: route.provider === "ollama",
-              allowRetarget: route.provider === "ollama"
+              allowPartial: sourceMode === "scoped",
+              allowRetarget: sourceMode === "scoped"
             });
             const normalized = { ...patched.bundle, html: ensureTimelineRegistration(patched.bundle.html, shotId) };
             const sanitized = sanitizeFrameBundle(normalized, {
