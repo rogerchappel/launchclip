@@ -385,6 +385,7 @@ function renderOptions(flags) {
     maximumHoldRatio: flags["maximum-hold-ratio"],
     minimumBurstsPerMinute: flags["minimum-bursts-per-minute"],
     musicVolume: flags["music-volume"],
+    criticRoute: singleModelRoute(flags["critic-route"], "--critic-route"),
     criticModel: flags["critic-model"] ?? (policy === "quality" ? "gpt-5.6" : "gpt-5.6-terra"),
     criticReasoning: flags["critic-reasoning"] ?? (policy === "quality" ? "xhigh" : "high"),
     criticPro: Boolean(flags["critic-pro"]),
@@ -403,6 +404,7 @@ function previewOptions(flags) {
 function criticOptions(flags) {
   const policy = modelPolicy(flags);
   return {
+    route: singleModelRoute(flags["critic-route"], "--critic-route"),
     model: flags["critic-model"] ?? (policy === "quality" ? "gpt-5.6" : "gpt-5.6-terra"),
     reasoning: flags["critic-reasoning"] ?? (policy === "quality" ? "xhigh" : "high"),
     pro: Boolean(flags["critic-pro"]),
@@ -489,6 +491,11 @@ function ratioOr(value, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0 || number > 1) throw new Error(`Expected a ratio greater than 0 and at most 1, received ${value}`);
   return number;
+}
+
+function singleModelRoute(value, label) {
+  if (Array.isArray(value)) throw new Error(`${label} accepts one pinned route`);
+  return value;
 }
 
 async function readOptionalJson(filePath) {

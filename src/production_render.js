@@ -557,6 +557,7 @@ function motionOptions(plan, options) {
 
 function criticOptions(options) {
   return {
+    route: options.criticRoute,
     model: options.criticModel ?? "gpt-5.6",
     reasoning: options.criticReasoning ?? "xhigh",
     pro: Boolean(options.criticPro),
