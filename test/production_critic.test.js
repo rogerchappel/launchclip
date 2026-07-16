@@ -69,6 +69,72 @@ test("turns a human review request into bounded typed repair findings", async ()
   assert.match(request.instructions, /binding desired change/);
 });
 
+test("routes the independent critic through a pinned OpenRouter free model", async () => {
+  const workspace = await fixture();
+  let route;
+  let request;
+  const result = await critiqueProduction(workspace, { route: "openrouter:openrouter/free@none" }, {
+    createClient: (value) => {
+      route = value;
+      return { runStructured: async (options) => {
+        request = options;
+        return {
+          response_id: "resp_free_critic",
+          model: "example/visual-critic:free",
+          usage: { total_tokens: 900 },
+          value: { schema_version: CRITIQUE_VERSION, verdict: "ship", summary: "The draft is ready.", findings: [] }
+        };
+      } };
+    }
+  });
+  assert.equal(route.provider, "openrouter");
+  assert.equal(route.model, "openrouter/free");
+  assert.equal(route.reasoning, "none");
+  assert.equal(request.model, "openrouter/free");
+  assert.equal(request.reasoningEffort, "none");
+  assert.equal(result.model, "example/visual-critic:free");
+});
+
+test("compacts raw temporal samples before sending a production critique", async () => {
+  const workspace = await fixture();
+  const qa = path.join(workspace, "production", "qa");
+  await writeFile(path.join(qa, "motion.json"), `${JSON.stringify({
+    family: "rapid-hybrid",
+    motion: { frame_count: 3, frame_difference: [0.1, 0.2] },
+    optical_flow: { tracked_frame_pairs: 2, samples: [{ velocity: 1 }, { velocity: 2 }] }
+  })}\n`);
+  await writeFile(path.join(qa, "audio.json"), `${JSON.stringify({
+    expected_audio: true,
+    output: { integrated_lufs: -14, peaks: [{ at_seconds: 0, peak_dbfs: -4 }] },
+    sources: { voiceover: { integrated_lufs: -15, peaks: [{ at_seconds: 0, peak_dbfs: -5 }] }, music_gain_db: -18 },
+    quality: { ok: true, findings: [] }
+  })}\n`);
+  await writeFile(path.join(qa, "inspect.json"), `${JSON.stringify({
+    ok: true,
+    stdout: { layout: { ok: true, infoCount: 1, findings: [{ severity: "info", code: "detail" }], samples: [{ at: 0 }, { at: 1 }] } }
+  })}\n`);
+  let request;
+  await critiqueProduction(workspace, {}, { client: { runStructured: async (options) => {
+    request = options;
+    return {
+      response_id: "resp_compact",
+      model: "gpt-5.6-sol",
+      usage: {},
+      value: { schema_version: CRITIQUE_VERSION, verdict: "ship", summary: "Ready.", findings: [] }
+    };
+  } } });
+  const input = JSON.parse(request.input);
+  assert.equal(input.temporal_motion_analysis.motion.frame_difference, undefined);
+  assert.equal(input.temporal_motion_analysis.motion.frame_difference_sample_count, 2);
+  assert.equal(input.temporal_motion_analysis.optical_flow.sample_count, 2);
+  assert.equal(input.time_aligned_audio_analysis.output.peaks, undefined);
+  assert.equal(input.time_aligned_audio_analysis.output.peaks_sample_count, 1);
+  assert.equal(input.time_aligned_audio_analysis.sources.voiceover.peaks_sample_count, 1);
+  assert.equal(input.deterministic_reports.inspect.stdout.layout.samples, undefined);
+  assert.equal(input.deterministic_reports.inspect.stdout.layout.sample_count, 2);
+  assert.equal(input.deterministic_reports.inspect.stdout.layout.omitted_info_findings, 1);
+});
+
 test("rejects a critic that ignores a human review request", async () => {
   const workspace = await fixture();
   await assert.rejects(() => critiqueProduction(workspace, { humanReviewRequest: "Make the title larger." }, {

@@ -91,7 +91,8 @@ Model policies:
 
 Pin one or more routes with repeatable
 `--frame-route provider:model@reasoning` and
-`--repair-route provider:model@reasoning`. Supported providers are `openai`,
+`--repair-route provider:model@reasoning`. Pin the independent visual critic to
+one route with `--critic-route provider:model@reasoning`. Supported providers are `openai`,
 `openrouter`, `ollama`, and `compatible`; the generic compatible provider reads
 `OPENAI_COMPATIBLE_BASE_URL` and `OPENAI_COMPATIBLE_API_KEY`. An explicit
 single local route prevents an unapproved cloud fallback:
@@ -102,6 +103,19 @@ launchclip production-repair <workspace> \
   --repair-issues-per-shot 4 \
   --max-patch-ratio 0.35
 ```
+
+For a no-maintenance free review lane, use OpenRouter's dynamic free router for
+both the critic and repair stages:
+
+```bash
+launchclip review <workspace> \
+  --critic-route openrouter:openrouter/free@none \
+  --repair-route openrouter:openrouter/free@none
+```
+
+The critic accepts one route so a final verdict never silently falls through a
+provider ladder. OpenRouter chooses an eligible free model at request time and
+the receipt records the concrete model it selected.
 
 Repair batches contain at most four blocking findings per shot, prioritized by
 runtime, motion, text/layout, then contrast. Lower

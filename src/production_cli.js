@@ -385,6 +385,7 @@ function renderOptions(flags) {
     maximumHoldRatio: flags["maximum-hold-ratio"],
     minimumBurstsPerMinute: flags["minimum-bursts-per-minute"],
     musicVolume: flags["music-volume"],
+    criticRoute: singleModelRoute(flags["critic-route"], "--critic-route"),
     criticModel: flags["critic-model"] ?? (policy === "quality" ? "gpt-5.6" : "gpt-5.6-terra"),
     criticReasoning: flags["critic-reasoning"] ?? (policy === "quality" ? "xhigh" : "high"),
     criticPro: Boolean(flags["critic-pro"]),
@@ -403,6 +404,7 @@ function previewOptions(flags) {
 function criticOptions(flags) {
   const policy = modelPolicy(flags);
   return {
+    route: singleModelRoute(flags["critic-route"], "--critic-route"),
     model: flags["critic-model"] ?? (policy === "quality" ? "gpt-5.6" : "gpt-5.6-terra"),
     reasoning: flags["critic-reasoning"] ?? (policy === "quality" ? "xhigh" : "high"),
     pro: Boolean(flags["critic-pro"]),
@@ -412,20 +414,27 @@ function criticOptions(flags) {
 
 function repairOptions(flags) {
   const policy = modelPolicy(flags);
+  const routes = stageModelRoutes(flags, "repair");
+  const leanFreeRoute = isDynamicOpenRouterFreeRoute(routes);
   return {
     model: flags["repair-model"] ?? (policy === "quality" ? "gpt-5.6" : "gpt-5.6-luna"),
     reasoning: flags["repair-reasoning"] ?? (policy === "quality" ? "high" : "medium"),
-    routes: stageModelRoutes(flags, "repair"),
+    routes,
     semanticAttempts: numberOr(flags["repair-semantic-attempts"], 2),
     maxSnapshots: numberOr(flags["repair-snapshots"], 8),
     concurrency: numberOr(flags.concurrency, policy === "local-first" ? 1 : 3),
     maxOutputTokens: numberOr(flags["repair-max-output-tokens"], 8_000),
     maxPatchRatio: ratioOr(flags["max-patch-ratio"], .35),
     maxIssuesPerShot: numberOr(flags["repair-issues-per-shot"], 4),
-    supportsImages: flags["repair-text-only"] ? false : undefined,
-    sourceMode: flags["repair-scoped-source"] ? "scoped" : undefined,
+    supportsImages: flags["repair-text-only"] || leanFreeRoute ? false : undefined,
+    sourceMode: flags["repair-scoped-source"] || leanFreeRoute ? "scoped" : undefined,
     background: !flags.foreground
   };
+}
+
+function isDynamicOpenRouterFreeRoute(routes) {
+  const values = Array.isArray(routes) ? routes : [routes];
+  return values.length === 1 && /^openrouter:openrouter\/free(?:@|$)/i.test(String(values[0] ?? ""));
 }
 
 function stageModelRoutes(flags, stage) {
@@ -489,6 +498,11 @@ function ratioOr(value, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0 || number > 1) throw new Error(`Expected a ratio greater than 0 and at most 1, received ${value}`);
   return number;
+}
+
+function singleModelRoute(value, label) {
+  if (Array.isArray(value)) throw new Error(`${label} accepts one pinned route`);
+  return value;
 }
 
 async function readOptionalJson(filePath) {

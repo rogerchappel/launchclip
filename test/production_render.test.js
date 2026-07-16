@@ -111,6 +111,27 @@ test("invalidates verification reuse when project content or a receipt artifact 
   assert.equal(commands, 9);
 });
 
+test("ignores HyperFrames runtime caches when content-addressing verification", async () => {
+  const workspace = await fixture();
+  const project = path.join(workspace, "production", "hyperframes");
+  const run = async (_command, args) => {
+    if (args[1] === "check") {
+      await mkdir(path.join(project, ".thumbnails"), { recursive: true });
+      await writeFile(path.join(project, ".thumbnails", "preview.jpg"), `generated-${Date.now()}`);
+      await mkdir(path.join(project, ".waveform-cache"), { recursive: true });
+      await writeFile(path.join(project, ".waveform-cache", "voice.json"), `generated-${Date.now()}`);
+    }
+    if (args[1] === "snapshot") await writeFile(path.join(args[args.indexOf("--output") + 1], "frame-00.png"), "snapshot");
+    return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
+  };
+  const result = await verifyProduction(workspace, {}, {
+    run,
+    verifierFingerprint: { hyperframes_cli: "test", browser: "test", node: "test", platform: "test", arch: "test" }
+  });
+  assert.equal(result.status, "ready");
+  assert.deepEqual(result.failed, []);
+});
+
 test("rejects a verification receipt when the assembled project changes before render", async () => {
   const workspace = await fixture();
   const run = async (_command, args) => {
@@ -281,14 +302,15 @@ test("renders only after verification then runs frame-by-frame motion gates", as
   const commands = [];
   const run = async (_command, args) => { commands.push(args[1]); return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" }; };
   let motionInput;
-  const result = await renderProduction(workspace, { approve: true, references: ["/tmp/reference.mp4"] }, {
+  let criticInput;
+  const result = await renderProduction(workspace, { approve: true, references: ["/tmp/reference.mp4"], criticRoute: "openrouter:openrouter/free@none" }, {
     run,
     writeMotionReport: async (video, output, options) => {
       motionInput = { video, output, options };
       await writeFile(output, "{}\n");
       return { quality: { ok: true }, family: "rapid-hybrid" };
     },
-    critiqueProduction: async () => ({ verdict: "ship", status: "approved" })
+    critiqueProduction: async (_workspace, options) => { criticInput = options; return { verdict: "ship", status: "approved" }; }
   });
   assert.equal(result.status, "awaiting-human-review");
   assert.equal(commands.at(-1), "render");
@@ -302,6 +324,7 @@ test("renders only after verification then runs frame-by-frame motion gates", as
   assert.equal(motionInput.options.expected.hook_window_seconds, 4);
   assert.equal(motionInput.options.expected.minimum_hook_events, 2);
   assert.deepEqual(motionInput.options.references, ["/tmp/reference.mp4", "/tmp/staged-reference.mp4"]);
+  assert.equal(criticInput.route, "openrouter:openrouter/free@none");
   assert.equal(JSON.parse(await readFile(result.audio, "utf8")).status, "not-requested");
 });
 
