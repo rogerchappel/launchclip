@@ -1,6 +1,6 @@
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { OpenAIResponsesClient } from "./openai_responses.js";
+import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { CRITIQUE_SCHEMA, PRODUCTION_PATHS, validateCritique } from "./production_contracts.js";
 
 const CRITIC_INSTRUCTIONS = `You are the independent final editor and motion-design critic. Decide whether this rendered production should ship, receive targeted repairs, or be replanned.
@@ -40,10 +40,15 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
   const images = await Promise.all(snapshots.map(dataImage));
   const evidenceById = new Map(evidence.items.map((entry) => [entry.id, entry]));
   const evidenceIndex = evidence.items.map((entry) => ({ id: entry.id, kind: entry.kind, role: entry.role, title: entry.title, content: String(entry.content ?? "").slice(0, 6_000), provenance: entry.provenance, claims_allowed: entry.claims_allowed }));
-  const client = adapters.client ?? new OpenAIResponsesClient();
-  const result = await client.runStructured({
+  const route = parseModelRoute(options.route, {
+    provider: "openai",
     model: options.model ?? "gpt-5.6",
-    reasoningEffort: options.reasoning ?? "xhigh",
+    reasoning: options.reasoning ?? "xhigh"
+  });
+  const client = adapters.client ?? (adapters.createClient ?? createStructuredClient)(route);
+  const result = await client.runStructured({
+    model: route.model,
+    reasoningEffort: route.reasoning,
     reasoningContext: "current_turn",
     pro: Boolean(options.pro),
     instructions: CRITIC_INSTRUCTIONS,
@@ -80,9 +85,9 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
   });
   const critique = applyVisualNoveltyFinding(result.value, visualFingerprint, plan.shots.map((shot) => shot.id));
   const validation = validateCritique(critique, plan.shots.map((shot) => shot.id));
-  if (!validation.ok) throw new Error(`GPT-5.6 production critique failed validation: ${validation.errors.join("; ")}`);
+  if (!validation.ok) throw new Error(`Production critique failed validation: ${validation.errors.join("; ")}`);
   if (critique.verdict === "ship" && critique.findings.some((finding) => finding.severity === "major")) {
-    throw new Error("GPT-5.6 production critique cannot ship with major findings");
+    throw new Error("Production critique cannot ship with major findings");
   }
   if (humanReviewRequest && (critique.verdict === "ship" || !critique.findings.length)) {
     throw new Error("Production critique must translate a human review request into at least one repair finding");

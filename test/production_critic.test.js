@@ -69,6 +69,32 @@ test("turns a human review request into bounded typed repair findings", async ()
   assert.match(request.instructions, /binding desired change/);
 });
 
+test("routes the independent critic through a pinned OpenRouter free model", async () => {
+  const workspace = await fixture();
+  let route;
+  let request;
+  const result = await critiqueProduction(workspace, { route: "openrouter:openrouter/free@none" }, {
+    createClient: (value) => {
+      route = value;
+      return { runStructured: async (options) => {
+        request = options;
+        return {
+          response_id: "resp_free_critic",
+          model: "example/visual-critic:free",
+          usage: { total_tokens: 900 },
+          value: { schema_version: CRITIQUE_VERSION, verdict: "ship", summary: "The draft is ready.", findings: [] }
+        };
+      } };
+    }
+  });
+  assert.equal(route.provider, "openrouter");
+  assert.equal(route.model, "openrouter/free");
+  assert.equal(route.reasoning, "none");
+  assert.equal(request.model, "openrouter/free");
+  assert.equal(request.reasoningEffort, "none");
+  assert.equal(result.model, "example/visual-critic:free");
+});
+
 test("rejects a critic that ignores a human review request", async () => {
   const workspace = await fixture();
   await assert.rejects(() => critiqueProduction(workspace, { humanReviewRequest: "Make the title larger." }, {
