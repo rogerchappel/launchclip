@@ -60,7 +60,10 @@ test("rejects an incremental candidate that does not improve a baseline finding"
   const result = await verifyFrameCandidate(workspace, bundle(), { ...context("incremental-1"), baseline: bundle() }, { run });
   assert.equal(result.ok, false);
   assert.match(result.error, /did not resolve or reduce/);
-  assert.deepEqual(JSON.parse(await readFile(result.report, "utf8")).comparison.new_findings, []);
+  assert.match(result.error, /motion_frozen on #proof: proof is static/);
+  const comparison = JSON.parse(await readFile(result.report, "utf8")).comparison;
+  assert.deepEqual(comparison.new_findings, []);
+  assert.deepEqual(comparison.remaining_findings, ["motion_frozen on #proof: proof is static"]);
 });
 
 test("accepts an incremental candidate that resolves one baseline finding", async () => {

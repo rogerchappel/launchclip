@@ -128,7 +128,9 @@ function compareEvidence(candidate, baseline, options) {
   }
   const improvedFindings = [...baselineIssues].filter(([key, weight]) => !candidateIssues.has(key) || candidateIssues.get(key) < weight).map(([key]) => key);
   if (!improvedFindings.length) {
-    return { ok: false, failure_kind: "content", error: "Candidate did not resolve or reduce any browser finding", detail_retention: retention == null ? null : rounded(retention), new_findings: [], worsened_findings: [], improved_findings: [] };
+    const remainingFindings = issueSummaries(candidate.check.stdout, [...candidateIssues.keys()]);
+    const detail = remainingFindings.length ? ` Remaining: ${remainingFindings.join("; ")}` : "";
+    return { ok: false, failure_kind: "content", error: `Candidate did not resolve or reduce any browser finding.${detail}`.slice(0, 1_500), detail_retention: retention == null ? null : rounded(retention), new_findings: [], worsened_findings: [], improved_findings: [], remaining_findings: remainingFindings };
   }
   return { ok: true, failure_kind: null, error: null, detail_retention: retention == null ? null : rounded(retention), new_findings: [], worsened_findings: [], improved_findings: improvedFindings };
 }
@@ -190,14 +192,38 @@ function blockingFindings(stdout) {
 function issueWeights(stdout) {
   const weights = new Map();
   for (const finding of blockingFindings(stdout)) {
-    const key = typeof finding === "string"
-      ? `error|global|${finding.slice(0, 120)}`
-      : `${finding.code ?? "error"}|${finding.selector ?? "global"}`;
+    const key = issueKey(finding);
     const unresolved = String(typeof finding === "string" ? finding : finding.message ?? "").match(/(\d+) unresolved layout issue/i);
     const weight = unresolved ? Number(unresolved[1]) : 1;
     weights.set(key, (weights.get(key) ?? 0) + weight);
   }
   return weights;
+}
+
+function issueSummaries(stdout, keys, limit = 3) {
+  const remaining = new Set(keys);
+  const summaries = [];
+  for (const finding of blockingFindings(stdout)) {
+    const key = issueKey(finding);
+    if (!remaining.has(key)) continue;
+    remaining.delete(key);
+    if (typeof finding === "string") summaries.push(finding.slice(0, 300));
+    else {
+      const selector = finding.selector ? ` on ${finding.selector}` : "";
+      const time = Number.isFinite(Number(finding.time)) ? ` at ${Number(finding.time)}s` : "";
+      const message = finding.message ? `: ${finding.message}` : "";
+      const fix = finding.fixHint ? ` Fix: ${finding.fixHint}` : "";
+      summaries.push(`${finding.code ?? "error"}${selector}${time}${message}${fix}`.slice(0, 500));
+    }
+    if (summaries.length >= limit) break;
+  }
+  return summaries;
+}
+
+function issueKey(finding) {
+  return typeof finding === "string"
+    ? `error|global|${finding.slice(0, 120)}`
+    : `${finding.code ?? "error"}|${finding.selector ?? "global"}`;
 }
 
 function detailScore(frames) {
