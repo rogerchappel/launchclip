@@ -120,6 +120,24 @@ test("wires review changes through critique, repair, rebuild, and approved rende
   ]);
 });
 
+test("blocks a human-request critic call when review verification failed in infrastructure", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-review-infrastructure-"));
+  const qa = path.join(workspace, "production", "qa");
+  await mkdir(qa, { recursive: true });
+  await writeFile(path.join(qa, "verification.json"), JSON.stringify({
+    status: "failed",
+    failed: ["inspect:shot-1"],
+    infrastructure_failed: ["inspect:shot-1"]
+  }));
+  let criticCalls = 0;
+  await assert.rejects(() => runProductionStage("production-review", workspace, {}, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    runProductionReview: async (target, _options, controls) => controls.revise(target, { humanReviewRequest: "Make the title larger." }),
+    critiqueProduction: async () => { criticCalls += 1; }
+  }), (error) => error.code === "LAUNCHCLIP_PRODUCTION_INFRASTRUCTURE_FAILED");
+  assert.equal(criticCalls, 0);
+});
+
 test("runs bounded critic-directed repairs before asking for human approval", async () => {
   const calls = [];
   let drafts = 0;

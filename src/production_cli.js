@@ -99,6 +99,7 @@ async function runInteractiveProductionReview(workspacePath, flags, adapters, in
 }
 
 async function reviseProduction(workspace, flags, request, adapters) {
+  const inferred = await standaloneRepairOptions(workspace, flags, adapters);
   let requestedCritique = null;
   if (request.humanReviewRequest) {
     requestedCritique = await (adapters.critiqueProduction ?? critiqueProduction)(workspace, {
@@ -106,7 +107,6 @@ async function reviseProduction(workspace, flags, request, adapters) {
       humanReviewRequest: request.humanReviewRequest
     }, adapters.critic);
   }
-  const inferred = await standaloneRepairOptions(workspace, flags, adapters);
   const repair = await (adapters.repairProduction ?? repairProduction)(workspace, {
     ...inferred,
     ...(request.humanReviewRequest ? { trigger: "critique", verification: null } : {})
