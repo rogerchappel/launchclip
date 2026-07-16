@@ -7,7 +7,7 @@ import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
 import { ensureTextContainment, TEXT_CONTAINMENT_VERSION } from "./hyperframes_text.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { freezeProductionFonts, injectProductionFontFaces, productionFontFamilies } from "./production_fonts.js";
-import { PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
+import { DEFAULT_NARRATED_MUSIC_VOLUME, PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
 
 export { ensureTimelineRegistration } from "./hyperframes_timeline.js";
 
@@ -480,7 +480,7 @@ async function describeExtraAudio(options) {
   const output = [];
   for (const [id, value, volume, track] of [
     ["voiceover", options.voiceover, 1, 80],
-    ["music", options.music, Number(options.musicVolume ?? 0.16), 70]
+    ["music", options.music, Number(options.musicVolume ?? DEFAULT_NARRATED_MUSIC_VOLUME), 70]
   ]) {
     if (!value) continue;
     const filePath = path.resolve(value);

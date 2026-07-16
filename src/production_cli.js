@@ -14,6 +14,7 @@ import { prepareSourceMedia } from "./production_source_media.js";
 import { withProductionLease } from "./job_store.js";
 import { resolveProductionEntities } from "./entity_resolution.js";
 import { openProductionPreview } from "./production_preview.js";
+import { DEFAULT_NARRATED_MUSIC_VOLUME } from "./production_contracts.js";
 
 export async function runProductionStage(command, target, flags = {}, adapters = {}) {
   if (command === "produce") return runProduction(target, flags, adapters);
@@ -103,7 +104,7 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
     voiceover: audio.voiceover,
     music: audio.music,
     sfxManifest: audio.sfx,
-    musicVolume: numberOr(flags["music-volume"], 0.16)
+    musicVolume: numberOr(flags["music-volume"], DEFAULT_NARRATED_MUSIC_VOLUME)
   };
   let assembly = await (adapters.assembleHyperFrames ?? assembleHyperFrames)(workspace, assemblyOptions);
   let draft = null;
@@ -156,7 +157,7 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
         voiceover: audio.voiceover,
         music: audio.music,
         sfxManifest: audio.sfx,
-        musicVolume: numberOr(flags["music-volume"], 0.16)
+        musicVolume: numberOr(flags["music-volume"], DEFAULT_NARRATED_MUSIC_VOLUME)
       };
     }
     assembly = await (adapters.assembleHyperFrames ?? assembleHyperFrames)(workspace, assemblyOptions);
@@ -211,7 +212,7 @@ async function assembleWithProducedAudio(workspace, flags) {
     voiceover: audio?.voiceover?.path,
     music: audio?.music?.path,
     sfxManifest: audio?.sfx_manifest,
-    musicVolume: numberOr(flags["music-volume"], 0.16)
+    musicVolume: numberOr(flags["music-volume"], DEFAULT_NARRATED_MUSIC_VOLUME)
   });
 }
 
