@@ -233,11 +233,19 @@ function buildMessages(instructions, input, images = []) {
 }
 
 function chatStructuredResult(payload, fallbackModel) {
-  const content = payload?.choices?.[0]?.message?.content;
+  const choice = payload?.choices?.[0] ?? {};
+  const content = choice?.message?.content;
   const text = typeof content === "string"
     ? content
     : Array.isArray(content) ? content.map((entry) => entry?.text ?? "").join("") : "";
-  if (!text.trim()) throw new Error("Chat completion contained no structured output text");
+  if (!text.trim()) {
+    const usage = payload?.usage ?? {};
+    const model = sanitize(payload?.model ?? fallbackModel ?? "unknown").slice(0, 200);
+    const finishReason = sanitize(choice?.finish_reason ?? "unknown").slice(0, 80);
+    const completionTokens = Number(usage.completion_tokens ?? usage.output_tokens ?? 0);
+    const reasoningTokens = Number(usage.completion_tokens_details?.reasoning_tokens ?? usage.output_tokens_details?.reasoning_tokens ?? 0);
+    throw new Error(`Chat completion contained no structured output text (model=${model}, finish_reason=${finishReason}, completion_tokens=${completionTokens}, reasoning_tokens=${reasoningTokens})`);
+  }
   let value;
   try { value = JSON.parse(text); }
   catch (error) { throw new Error(`Chat completion structured output was not valid JSON: ${error.message}`); }
