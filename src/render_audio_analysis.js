@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { DEFAULT_NARRATED_MUSIC_VOLUME } from "./production_contracts.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -25,7 +26,7 @@ export async function analyzeProductionAudio(videoPath, manifestPath, options = 
     expected_audio: expectedAudio,
     stream: audioStream,
     output,
-    sources: { voiceover, music, music_gain_db: round(20 * Math.log10(Number(options.musicVolume ?? .16))) },
+    sources: { voiceover, music, music_gain_db: round(20 * Math.log10(Number(options.musicVolume ?? DEFAULT_NARRATED_MUSIC_VOLUME))) },
     cues,
   };
   report.quality = evaluateAudioQuality(report, options);

@@ -11,7 +11,7 @@ import { collectEvidence } from "./evidence.js";
 import { directFrames } from "./frame_director.js";
 import { buildIntake, writeIntakeManifest } from "./intake.js";
 import { produceAudio } from "./production_audio.js";
-import { PRODUCTION_PLAN_VERSION } from "./production_contracts.js";
+import { DEFAULT_NARRATED_MUSIC_VOLUME, PRODUCTION_PLAN_VERSION } from "./production_contracts.js";
 import { verifyProduction } from "./production_render.js";
 import { analyzeSourceMedia } from "./source_media_analysis.js";
 
@@ -184,7 +184,7 @@ async function executeEvaluationScenario(definition, options, adapters) {
     voiceover: audioResult.voiceover,
     music: audioResult.music,
     sfxManifest: audioResult.sfx,
-    musicVolume: 0.16
+    musicVolume: DEFAULT_NARRATED_MUSIC_VOLUME
   });
   const verifier = adapters.verifyProduction ?? verifyProduction;
   const verificationOptions = {
