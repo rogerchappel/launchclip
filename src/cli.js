@@ -58,12 +58,13 @@ export async function runCli(argv, io = {}) {
       result = await submitReview(required(firstArg, "workspace path"), flags);
     } else if (command === "review") {
       const workspace = required(firstArg, "workspace path");
-      result = await isProductionReviewWorkspace(workspace)
-        ? runProductionStage("production-review", workspace, flags, {
+      const productionReview = await isProductionReviewWorkspace(workspace);
+      result = productionReview
+        ? await runProductionStage("production-review", workspace, flags, {
             ...productionAdapters,
             review: { input: stdin, output: stderr, ...productionAdapters.review }
           })
-        : writeReview(workspace, flags);
+        : await writeReview(workspace, flags);
     } else if (command === "validate") {
       result = await validateWorkspace(required(firstArg, "workspace path"), { ...flags, write: true });
     } else if (command === "run") {
