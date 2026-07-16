@@ -412,6 +412,17 @@ test("routes local-first generation and bounded local patch repair explicitly", 
   assert.equal(received.repair.maxIssuesPerShot, 4);
 });
 
+test("automatically uses the lean repair capsule for OpenRouter's dynamic free route", async () => {
+  let received;
+  await runProductionStage("production-repair", "/tmp/workspace", { "repair-route": "openrouter:openrouter/free@none" }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    repairProduction: async (_workspace, options) => { received = options; return { status: "repaired" }; }
+  });
+  assert.equal(received.routes, "openrouter:openrouter/free@none");
+  assert.equal(received.supportsImages, false);
+  assert.equal(received.sourceMode, "scoped");
+});
+
 test("routes an independently rerunnable analyzed draft stage", async () => {
   let received;
   const result = await runProductionStage("production-draft", "/tmp/workspace", { "draft-quality": "draft", "reference-video": "/tmp/reference.mp4", "critic-route": "openrouter:openrouter/free@none", "shot-inspect-concurrency": "4" }, {

@@ -143,6 +143,11 @@ singular to keep the final editorial verdict independent and reproducible at
 the recorded provider/model response. For local-only repair, continue to use
 `--repair-route ollama:qwen2.5-coder:latest@none`.
 
+The dynamic free repair route automatically uses LaunchClip's compact,
+text-only repair capsule so the live free pool is not excluded by unnecessary
+context or image requirements. Exact patches still pass native browser
+verification before replacing a frame.
+
 Ollama routes use its native JSON-schema API with temperature `0`, a fixed
 seed, and a 32K context by default. Override that allocation with
 `OLLAMA_CONTEXT_LENGTH` when the selected model or machine needs a different

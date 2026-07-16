@@ -414,20 +414,27 @@ function criticOptions(flags) {
 
 function repairOptions(flags) {
   const policy = modelPolicy(flags);
+  const routes = stageModelRoutes(flags, "repair");
+  const leanFreeRoute = isDynamicOpenRouterFreeRoute(routes);
   return {
     model: flags["repair-model"] ?? (policy === "quality" ? "gpt-5.6" : "gpt-5.6-luna"),
     reasoning: flags["repair-reasoning"] ?? (policy === "quality" ? "high" : "medium"),
-    routes: stageModelRoutes(flags, "repair"),
+    routes,
     semanticAttempts: numberOr(flags["repair-semantic-attempts"], 2),
     maxSnapshots: numberOr(flags["repair-snapshots"], 8),
     concurrency: numberOr(flags.concurrency, policy === "local-first" ? 1 : 3),
     maxOutputTokens: numberOr(flags["repair-max-output-tokens"], 8_000),
     maxPatchRatio: ratioOr(flags["max-patch-ratio"], .35),
     maxIssuesPerShot: numberOr(flags["repair-issues-per-shot"], 4),
-    supportsImages: flags["repair-text-only"] ? false : undefined,
-    sourceMode: flags["repair-scoped-source"] ? "scoped" : undefined,
+    supportsImages: flags["repair-text-only"] || leanFreeRoute ? false : undefined,
+    sourceMode: flags["repair-scoped-source"] || leanFreeRoute ? "scoped" : undefined,
     background: !flags.foreground
   };
+}
+
+function isDynamicOpenRouterFreeRoute(routes) {
+  const values = Array.isArray(routes) ? routes : [routes];
+  return values.length === 1 && /^openrouter:openrouter\/free(?:@|$)/i.test(String(values[0] ?? ""));
 }
 
 function stageModelRoutes(flags, stage) {
