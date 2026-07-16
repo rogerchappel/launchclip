@@ -94,6 +94,14 @@ launchclip produce https://github.com/owner/repo \
   --duration 45 \
   --voice-id "$ELEVENLABS_VOICE_ID"
 
+# Hands-off production through the human approval boundary. This opens Studio
+# when the verified draft is ready and keeps an approval/repair menu in the
+# same terminal.
+launchclip produce https://github.com/owner/repo \
+  --out .launchclip/repo-video \
+  --aspect 9:16 \
+  --review
+
 # Faster evaluation with smaller model/snapshot budgets; completed stages resume.
 launchclip produce https://github.com/owner/repo \
   --out .launchclip/repo-fast-eval \
@@ -146,6 +154,20 @@ useful for ad hoc previews, but it is not a Launchclip approval signal or final
 artifact. After approval, `production-render --approve` re-verifies any Studio
 edits, runs the strict final render, and records Launchclip's motion, audio, and
 critic results.
+
+With `produce --review`, Launchclip performs that handoff in one process. The
+terminal can approve and render, accept a free-form change request, run the
+current automatic repair findings, reopen Studio, or save and exit. A change
+request is first converted by the visual critic into the same typed, bounded
+repair findings used by automatic QA; it does not bypass frame, assembly, or
+render verification. Resume an unfinished production review with:
+
+```bash
+launchclip review .launchclip/repo-video
+```
+
+For compatibility, `review` still writes `REVIEW.md` when the target is a
+legacy promotion-packet workspace rather than a model-directed production.
 
 For a supplied avatar/presenter take, pass the media as both the authoritative
 voice source and presenter resource when appropriate:
@@ -218,9 +240,10 @@ from the assembled motion sidecar or a sound has no visible consequence.
 The command creates an editable assembled project, analyzed draft, independent
 critic report, and up to two bounded repair passes. Final rendering requires the
 explicit `--approve` flag and still returns for human review; it never publishes.
-Use `production-preview <workspace>` to open the assembled project in Studio
-before granting that approval. Do not treat Studio Export as completion of the
-Launchclip final-render stage.
+Use `produce --review` for the integrated Studio and terminal approval loop, or
+`production-preview <workspace>` and `production-render <workspace> --approve`
+as independently rerunnable stages. Do not treat Studio Export as completion
+of the Launchclip final-render stage.
 See [the model-directed pipeline](docs/MODEL_DIRECTED_VIDEO.md) for
 artifact contracts, provider requirements, reference analysis, and repair
 semantics.

@@ -57,7 +57,8 @@ launchclip produce https://github.com/owner/repo \
   --prompt "Explain why this changes agent workflows" \
   --resource ./screenshots \
   --aspect 9:16 \
-  --duration 60
+  --duration 60 \
+  --review
 
 # SaaS/product narrative from footage and brand resources
 launchclip produce https://product.example \
@@ -109,6 +110,7 @@ launchclip production-draft <workspace> \
 launchclip production-critique <workspace>
 launchclip production-repair <workspace> --repair-semantic-attempts 2
 launchclip production-preview <workspace> --port 3002
+launchclip review <workspace> --port 3002
 launchclip production-render <workspace> --approve \
   --reference-video ./reference-short.mp4
 ```
@@ -289,6 +291,26 @@ run Launchclip's final motion, audio, or critic gates. The user approves the
 reviewed state separately, then `production-render <workspace> --approve`
 re-verifies the assembled project before encoding. If verification or a later
 repair changes the approved state, return to Studio and obtain fresh approval.
+
+`produce --review` combines those stages without weakening the boundary. It
+opens Studio after the draft, then keeps this menu in the invoking terminal:
+
+```text
+[A] Approve and render
+[C] Request changes
+[R] Run automatic repair
+[O] Reopen Studio
+[Q] Save and exit
+```
+
+Approve still runs the exact `production-render --approve` verification and
+quality path. Request changes asks for free-form reviewer direction, has the
+visual critic turn it into typed shot/plan findings, applies the normal bounded
+repair route, rebuilds the draft, and leaves Studio to hot reload it. No render
+or repair runs while the terminal is waiting for a decision, and the workspace
+lease is held only around an actual mutation. `launchclip review <workspace>`
+resumes the same control loop later. In non-interactive environments, use the
+independent preview and render commands instead.
 
 After encoding, Launchclip measures per-frame luminance difference, stillness,
 motion bursts, cut cadence, and shot duration. A separate block-matching pass
