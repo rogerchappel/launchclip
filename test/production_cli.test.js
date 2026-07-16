@@ -299,7 +299,7 @@ test("blocks assembly when measured narration timing requires a replan", async (
 
 test("routes production repair with scoped model controls", async () => {
   let received;
-  const result = await runProductionStage("production-repair", "/tmp/workspace", { "repair-model": "gpt-5.6", "repair-reasoning": "xhigh", "repair-semantic-attempts": "3", "repair-snapshots": "6", concurrency: "2" }, {
+  const result = await runProductionStage("production-repair", "/tmp/workspace", { "repair-model": "gpt-5.6", "repair-reasoning": "xhigh", "repair-semantic-attempts": "3", "repair-snapshots": "6", "repair-text-only": true, concurrency: "2" }, {
     withProductionLease: async (_workspace, operation) => operation(),
     repairProduction: async (workspace, options) => { received = { workspace, options }; return { status: "repaired" }; }
   });
@@ -312,6 +312,7 @@ test("routes production repair with scoped model controls", async () => {
   assert.deepEqual(received.options.routes, ["openai:gpt-5.6@xhigh"]);
   assert.equal(received.options.maxPatchRatio, .35);
   assert.equal(received.options.maxIssuesPerShot, 4);
+  assert.equal(received.options.supportsImages, false);
 });
 
 test("routes local-first generation and bounded local patch repair explicitly", async () => {
