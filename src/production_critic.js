@@ -16,12 +16,14 @@ Rules:
 - A finding must name observable evidence, affected shot IDs, the smallest repair scope, a concrete instruction, and what must be preserved.
 - Use replan only when repairing frames cannot solve the narrative or timing problem.
 - Ship only when there are no blocking or major findings.
+- When human_review_request is present, treat it as a binding desired change. Translate it into the smallest actionable typed findings, grounded in the supplied plan and snapshots. Do not return ship without at least one finding.
 
 Return only the strict production-critique JSON.`;
 
 export async function critiqueProduction(workspacePath, options = {}, adapters = {}) {
   const workspace = path.resolve(workspacePath);
   const qaDir = path.join(workspace, PRODUCTION_PATHS.qa);
+  const humanReviewRequest = normalizeHumanReviewRequest(options.humanReviewRequest);
   const [plan, evidence, verification, motion, audio, lint, validate, inspect, visualFingerprint] = await Promise.all([
     readJson(path.join(workspace, PRODUCTION_PATHS.plan)),
     readJson(path.join(workspace, PRODUCTION_PATHS.evidence)),
@@ -65,6 +67,7 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
         frame_difference_sample_count_path: "temporal_motion_analysis.motion.frame_count"
       },
       visual_novelty_assessment: visualFingerprint?.novelty_assessment ?? null,
+      human_review_request: humanReviewRequest,
       snapshot_order: snapshots.map((entry) => path.basename(entry))
     }),
     images,
@@ -81,11 +84,22 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
   if (critique.verdict === "ship" && critique.findings.some((finding) => finding.severity === "major")) {
     throw new Error("GPT-5.6 production critique cannot ship with major findings");
   }
+  if (humanReviewRequest && (critique.verdict === "ship" || !critique.findings.length)) {
+    throw new Error("Production critique must translate a human review request into at least one repair finding");
+  }
   const critiquePath = path.join(qaDir, "critique.json");
   const markdownPath = path.join(qaDir, "CRITIQUE.md");
   await writeFile(critiquePath, `${JSON.stringify({ ...critique, response_id: result.response_id, model: result.model, usage: result.usage }, null, 2)}\n`);
   await writeFile(markdownPath, renderCritique(critique));
   return { stage: "production-critique", status: critique.verdict === "ship" ? "approved" : "needs-repair", verdict: critique.verdict, critique: critiquePath, markdown: markdownPath, findings: critique.findings.length, response_id: result.response_id, model: result.model };
+}
+
+function normalizeHumanReviewRequest(value) {
+  if (value == null) return null;
+  const request = String(value).trim();
+  if (!request) throw new Error("Human review request cannot be empty");
+  if (request.length > 8_000) throw new Error("Human review request cannot exceed 8000 characters");
+  return request;
 }
 
 export function applyVisualNoveltyFinding(critique, fingerprint, shotIds = []) {

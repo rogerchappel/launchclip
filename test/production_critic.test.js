@@ -31,7 +31,54 @@ test("gives an independent GPT-5.6 critic the plan, QA evidence, motion profile,
   assert.equal(input.evidence_index[0].content, "The README proves the workflow.");
   assert.equal(input.claim_support[0].evidence[0].id, "ev-1");
   assert.deepEqual(input.snapshot_order, ["001.png", "002.png"]);
+  assert.equal(input.human_review_request, null);
   assert.match(await readFile(result.markdown, "utf8"), /Reduce presenter occupancy/);
+});
+
+test("turns a human review request into bounded typed repair findings", async () => {
+  const workspace = await fixture();
+  let request;
+  const client = { runStructured: async (options) => {
+    request = options;
+    return {
+      response_id: "resp_human_review",
+      model: "gpt-5.6-terra",
+      usage: {},
+      value: {
+        schema_version: CRITIQUE_VERSION,
+        verdict: "repair",
+        summary: "The reviewer requested more legible supporting text.",
+        findings: [{
+          id: "human-review-1",
+          severity: "major",
+          category: "typography",
+          shot_ids: ["shot-2"],
+          start_seconds: 5,
+          end_seconds: 8,
+          evidence: "The supporting copy in shot 2 is too small in the supplied snapshot.",
+          repair_scope: "frame",
+          instruction: "Increase the supporting copy size and reduce its word count.",
+          preserve: ["headline", "evidence grounding"]
+        }]
+      }
+    };
+  } };
+  const result = await critiqueProduction(workspace, { humanReviewRequest: "Make the small copy readable on a phone and use fewer words." }, { client });
+  assert.equal(result.verdict, "repair");
+  assert.equal(JSON.parse(request.input).human_review_request, "Make the small copy readable on a phone and use fewer words.");
+  assert.match(request.instructions, /binding desired change/);
+});
+
+test("rejects a critic that ignores a human review request", async () => {
+  const workspace = await fixture();
+  await assert.rejects(() => critiqueProduction(workspace, { humanReviewRequest: "Make the title larger." }, {
+    client: { runStructured: async () => ({
+      response_id: "resp_ignored_review",
+      model: "gpt-5.6-terra",
+      usage: {},
+      value: { schema_version: CRITIQUE_VERSION, verdict: "ship", summary: "No changes needed.", findings: [] }
+    }) }
+  }), /must translate a human review request/);
 });
 
 test("rejects unknown shots and a ship verdict containing major findings", async () => {

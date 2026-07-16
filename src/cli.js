@@ -5,6 +5,7 @@ import { runDirect } from "./director.js";
 import { preprocessPresenter } from "./presenter_preprocess.js";
 import { writeIntake } from "./intake.js";
 import { runProductionStage } from "./production_cli.js";
+import { isProductionReviewWorkspace } from "./production_review.js";
 import { createCostTracker } from "./cost_tracker.js";
 import { diagnoseInstallation, VERSION } from "./doctor.js";
 
@@ -12,7 +13,7 @@ const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-me
 const COMMANDS = new Set(["doctor", "intake", ...PRODUCTION_COMMANDS, "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
-  const { stdout = process.stdout, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation } = io;
+  const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {} } = io;
   const [command, firstArg, ...rest] = argv;
   if (!command || command === "--help" || command === "-h") {
     stdout.write(help());
@@ -37,7 +38,10 @@ export async function runCli(argv, io = {}) {
     } else if (command === "intake") {
       result = await writeIntake(required(firstArg, "source"), flags);
     } else if (PRODUCTION_COMMANDS.has(command)) {
-      result = await runProductionStage(command, required(firstArg, command === "produce" ? "source" : "workspace path"), flags);
+      result = await runProductionStage(command, required(firstArg, command === "produce" ? "source" : "workspace path"), flags, {
+        ...productionAdapters,
+        review: { input: stdin, output: stderr, ...productionAdapters.review }
+      });
     } else if (command === "init") {
       result = await initWorkspace(required(firstArg, "repo path"), flags);
     } else if (command === "demo") {
@@ -53,7 +57,14 @@ export async function runCli(argv, io = {}) {
     } else if (command === "submit-review") {
       result = await submitReview(required(firstArg, "workspace path"), flags);
     } else if (command === "review") {
-      result = await writeReview(required(firstArg, "workspace path"), flags);
+      const workspace = required(firstArg, "workspace path");
+      const productionReview = await isProductionReviewWorkspace(workspace);
+      result = productionReview
+        ? await runProductionStage("production-review", workspace, flags, {
+            ...productionAdapters,
+            review: { input: stdin, output: stderr, ...productionAdapters.review }
+          })
+        : await writeReview(workspace, flags);
     } else if (command === "validate") {
       result = await validateWorkspace(required(firstArg, "workspace path"), { ...flags, write: true });
     } else if (command === "run") {
@@ -92,7 +103,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro") {
+    if (name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro") {
       flags[name] = true;
       continue;
     }
@@ -122,7 +133,7 @@ Usage:
   launchclip --version
   launchclip doctor
   launchclip intake <source> [--kind repository|product|topic|voiceover] [--resource path] [--assets path] [--style auto|family] [--style-file frame.md] [--style-reference path|url] [--reference url] [--voiceover audio|video] [--transcript text] [--presenter video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
-  launchclip produce <source> [intake flags] [--model-policy cost-aware|local-first|quality] [--local-model qwen2.5-coder:latest] [--frame-route provider:model@reasoning] [--repair-route provider:model@reasoning] [--brand-assets-dir path] [--no-trim-silence] [--planning-mode auto|single|hierarchical] [--voice-id id] [--sfx-dir path] [--concurrency 4] [--max-frame-cost-usd 5] [--allow-frame-fallback] [--no-audio] [--fast-eval] [--allow-timing-drift]
+  launchclip produce <source> [intake flags] [--review] [--model-policy cost-aware|local-first|quality] [--local-model qwen2.5-coder:latest] [--frame-route provider:model@reasoning] [--repair-route provider:model@reasoning] [--brand-assets-dir path] [--no-trim-silence] [--planning-mode auto|single|hierarchical] [--voice-id id] [--sfx-dir path] [--concurrency 4] [--max-frame-cost-usd 5] [--allow-frame-fallback] [--no-audio] [--fast-eval] [--allow-timing-drift]
   launchclip evidence <workspace>
   launchclip source-preprocess <workspace> [--no-trim-silence] [--silence-duration 0.45] [--silence-padding 0.12]
   launchclip source-media <workspace> [--media-samples 12] [--media-reasoning high] [--transcribe-all]
@@ -134,6 +145,7 @@ Usage:
   launchclip production-verify <workspace> [--inspect-samples 15] [--shot-inspect-concurrency 2] [--snapshot-frames 12]
   launchclip production-draft <workspace> [--draft-quality draft] [--shot-inspect-concurrency 2] [--reference-video local.mp4]
   launchclip production-preview <workspace> [--port 3002] [--no-open]
+  launchclip review <workspace> [--port 3002] [--no-open] [production repair and render flags]
   launchclip production-critique <workspace> [--critic-reasoning xhigh] [--critic-pro]
   launchclip production-repair <workspace> [--model-policy cost-aware|local-first|quality] [--repair-route provider:model@reasoning] [--repair-text-only] [--repair-scoped-source] [--repair-semantic-attempts 2] [--repair-snapshots 8] [--repair-issues-per-shot 4] [--max-patch-ratio 0.35]
   launchclip production-render <workspace> --approve [--quality high] [--shot-inspect-concurrency 2] [--reference-video local.mp4]
