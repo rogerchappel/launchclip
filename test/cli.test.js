@@ -130,7 +130,9 @@ test("documents the Studio preview approval stage", async () => {
   assert.match(output.join(""), /production-preview <workspace> \[--port 3002\] \[--no-open\]/);
   assert.match(output.join(""), /production-repair <workspace>.*\[--repair-scoped-source\]/);
   assert.match(output.join(""), /produce <source>.*\[--review\]/);
+  assert.match(output.join(""), /produce <source>.*\[--critic-route provider:model@reasoning\]/);
   assert.match(output.join(""), /review <workspace> \[--port 3002\]/);
+  assert.match(output.join(""), /production-critique <workspace> \[--critic-route provider:model@reasoning\]/);
 });
 
 test("routes review to the interactive production flow for production workspaces", async () => {

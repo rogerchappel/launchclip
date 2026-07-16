@@ -90,7 +90,7 @@ test("continues produce into review only when explicitly requested", async () =>
 test("wires review changes through critique, repair, rebuild, and approved render", async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-production-review-"));
   const calls = [];
-  const result = await runProductionStage("production-review", workspace, { port: "3555" }, {
+  const result = await runProductionStage("production-review", workspace, { port: "3555", "critic-route": "openrouter:openrouter/free@none" }, {
     withProductionLease: async (_workspace, operation) => { calls.push("lease"); return operation(); },
     runProductionReview: async (target, options, controls) => {
       assert.equal(options.initial, null);
@@ -101,11 +101,11 @@ test("wires review changes through critique, repair, rebuild, and approved rende
       return controls.approve(target);
     },
     openProductionPreview: async (_target, options) => { calls.push(["preview", options]); return { status: "awaiting-approval" }; },
-    critiqueProduction: async (_target, options) => { calls.push(["critique", options.humanReviewRequest]); return { verdict: "repair", findings: 1 }; },
+    critiqueProduction: async (_target, options) => { assert.equal(options.route, "openrouter:openrouter/free@none"); calls.push(["critique", options.humanReviewRequest]); return { verdict: "repair", findings: 1 }; },
     repairProduction: async (_target, options) => { calls.push(["repair", options.trigger]); return { status: "repaired", repaired: [{ shot_id: "shot-1" }] }; },
     assembleHyperFrames: async () => { calls.push("assemble"); return { status: "ready" }; },
     renderDraftProduction: async () => { calls.push("draft"); return { status: "ready", critique: { verdict: "ship", findings: 0 } }; },
-    renderProduction: async (_target, options) => { calls.push(["render", options.approve]); return { status: "awaiting-human-review", video: "/tmp/final.mp4" }; }
+    renderProduction: async (_target, options) => { assert.equal(options.criticRoute, "openrouter:openrouter/free@none"); calls.push(["render", options.approve]); return { status: "awaiting-human-review", video: "/tmp/final.mp4" }; }
   });
   assert.equal(result.status, "awaiting-human-review");
   assert.deepEqual(calls, [
@@ -414,7 +414,7 @@ test("routes local-first generation and bounded local patch repair explicitly", 
 
 test("routes an independently rerunnable analyzed draft stage", async () => {
   let received;
-  const result = await runProductionStage("production-draft", "/tmp/workspace", { "draft-quality": "draft", "reference-video": "/tmp/reference.mp4", "shot-inspect-concurrency": "4" }, {
+  const result = await runProductionStage("production-draft", "/tmp/workspace", { "draft-quality": "draft", "reference-video": "/tmp/reference.mp4", "critic-route": "openrouter:openrouter/free@none", "shot-inspect-concurrency": "4" }, {
     withProductionLease: async (_workspace, operation) => operation(),
     renderDraftProduction: async (workspace, options) => { received = { workspace, options }; return { status: "ready", video: "/tmp/draft.mp4" }; }
   });
@@ -422,7 +422,17 @@ test("routes an independently rerunnable analyzed draft stage", async () => {
   assert.equal(received.workspace, "/tmp/workspace");
   assert.equal(received.options.draftQuality, "draft");
   assert.equal(received.options.references, "/tmp/reference.mp4");
+  assert.equal(received.options.criticRoute, "openrouter:openrouter/free@none");
   assert.equal(received.options.shotInspectConcurrency, 4);
+});
+
+test("rejects multiple critic routes because an independent verdict must be pinned", async () => {
+  await assert.rejects(() => runProductionStage("production-critique", "/tmp/workspace", {
+    "critic-route": ["openrouter:first/free@none", "openrouter:second/free@none"]
+  }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    critiqueProduction: async () => ({ status: "approved" })
+  }), /--critic-route accepts one pinned route/);
 });
 
 test("opens the assembled project in Studio and returns an explicit approval handoff", async () => {
