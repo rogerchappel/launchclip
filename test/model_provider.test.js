@@ -77,9 +77,38 @@ test("allows provider fallback for the dynamic OpenRouter free route", async () 
       return new Response(JSON.stringify({ model: "example/free-model:free", choices: [{ message: { content: "{\"ok\":true}" } }] }), { status: 200 });
     }
   });
-  const result = await client.runStructured({ schema: { type: "object" }, schemaName: "result", input: "go" });
+  const result = await client.runStructured({ schema: { type: "object" }, schemaName: "result", input: "go", reasoningEffort: "none" });
   assert.deepEqual(body.provider, { require_parameters: true, allow_fallbacks: true });
+  assert.deepEqual(body.reasoning, { effort: "none" });
   assert.equal(result.model, "example/free-model:free");
+});
+
+test("reports safe provider metadata when a structured completion is empty", async () => {
+  const client = createStructuredClient({ provider: "openrouter", model: "openrouter/free", reasoning: "none", apiKey: "router-test" }, {
+    fetch: async () => new Response(JSON.stringify({
+      model: "example/reasoning-model:free",
+      choices: [{ finish_reason: "length", message: { content: "" } }],
+      usage: {
+        completion_tokens: 4_000,
+        completion_tokens_details: { reasoning_tokens: 4_000 }
+      }
+    }), { status: 200 })
+  });
+  await assert.rejects(
+    () => client.runStructured({ schema: { type: "object" }, schemaName: "result", input: "go" }),
+    /model=example\/reasoning-model:free, finish_reason=length, completion_tokens=4000, reasoning_tokens=4000/
+  );
+});
+
+test("accepts a single fenced JSON object from compatible chat providers", async () => {
+  const client = createStructuredClient({ provider: "openrouter", model: "openrouter/free", reasoning: "none", apiKey: "router-test" }, {
+    fetch: async () => new Response(JSON.stringify({
+      model: "example/free-model:free",
+      choices: [{ finish_reason: "stop", message: { content: "```json\n{\"ok\":true}\n```" } }]
+    }), { status: 200 })
+  });
+  const result = await client.runStructured({ schema: { type: "object" }, schemaName: "result", input: "go" });
+  assert.deepEqual(result.value, { ok: true });
 });
 
 test("rejects unsupported providers before a request", () => {

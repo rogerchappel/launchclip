@@ -85,7 +85,9 @@ export class ChatCompletionsStructuredClient {
     if (options.maxOutputTokens != null) body.max_tokens = positiveInteger(options.maxOutputTokens, "maxOutputTokens");
     if (this.provider === "openrouter") {
       body.provider = { require_parameters: true, allow_fallbacks: model === "openrouter/free" };
-      if (options.reasoningEffort && options.reasoningEffort !== "none") body.reasoning = { effort: options.reasoningEffort };
+      if (options.reasoningEffort && (options.reasoningEffort !== "none" || model === "openrouter/free")) {
+        body.reasoning = { effort: options.reasoningEffort };
+      }
     }
     const payload = await this.request("/chat/completions", { method: "POST", body: JSON.stringify(body) });
     const result = chatStructuredResult(payload, model);
@@ -233,13 +235,21 @@ function buildMessages(instructions, input, images = []) {
 }
 
 function chatStructuredResult(payload, fallbackModel) {
-  const content = payload?.choices?.[0]?.message?.content;
+  const choice = payload?.choices?.[0] ?? {};
+  const content = choice?.message?.content;
   const text = typeof content === "string"
     ? content
     : Array.isArray(content) ? content.map((entry) => entry?.text ?? "").join("") : "";
-  if (!text.trim()) throw new Error("Chat completion contained no structured output text");
+  if (!text.trim()) {
+    const usage = payload?.usage ?? {};
+    const model = sanitize(payload?.model ?? fallbackModel ?? "unknown").slice(0, 200);
+    const finishReason = sanitize(choice?.finish_reason ?? "unknown").slice(0, 80);
+    const completionTokens = Number(usage.completion_tokens ?? usage.output_tokens ?? 0);
+    const reasoningTokens = Number(usage.completion_tokens_details?.reasoning_tokens ?? usage.output_tokens_details?.reasoning_tokens ?? 0);
+    throw new Error(`Chat completion contained no structured output text (model=${model}, finish_reason=${finishReason}, completion_tokens=${completionTokens}, reasoning_tokens=${reasoningTokens})`);
+  }
   let value;
-  try { value = JSON.parse(text); }
+  try { value = JSON.parse(stripJsonFence(text)); }
   catch (error) { throw new Error(`Chat completion structured output was not valid JSON: ${error.message}`); }
   const usage = payload?.usage ?? {};
   return {
@@ -257,6 +267,12 @@ function chatStructuredResult(payload, fallbackModel) {
     },
     reasoning: null
   };
+}
+
+function stripJsonFence(text) {
+  const trimmed = String(text).trim();
+  const match = trimmed.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i);
+  return match ? match[1].trim() : trimmed;
 }
 
 function ollamaStructuredResult(payload, fallbackModel) {

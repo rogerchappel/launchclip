@@ -330,6 +330,7 @@ function repairOptions(flags) {
     maxPatchRatio: ratioOr(flags["max-patch-ratio"], .35),
     maxIssuesPerShot: numberOr(flags["repair-issues-per-shot"], 4),
     supportsImages: flags["repair-text-only"] ? false : undefined,
+    sourceMode: flags["repair-scoped-source"] ? "scoped" : undefined,
     background: !flags.foreground
   };
 }
