@@ -36,6 +36,22 @@ test("blocks a missing audio stream when the manifest expects audio", () => {
   assert.equal(quality.findings[0].severity, "blocking");
 });
 
+test("rejects a music bed that is effectively inaudible beneath narration", () => {
+  const quality = evaluateAudioQuality({
+    expected_audio: true,
+    stream: { codec_type: "audio" },
+    output: null,
+    sources: {
+      voiceover: { integrated_lufs: -26 },
+      music: { integrated_lufs: -26 },
+      music_gain_db: -16
+    },
+    cues: []
+  });
+  assert.equal(quality.ok, false);
+  assert.equal(quality.findings[0].category, "music-presence");
+});
+
 test("does not require an audio stream for an empty SFX manifest", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "launchclip-silent-qa-"));
   const sfxPath = path.join(directory, "sfx.json");
