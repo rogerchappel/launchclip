@@ -99,6 +99,17 @@ test("reports safe provider metadata when a structured completion is empty", asy
   );
 });
 
+test("accepts a single fenced JSON object from compatible chat providers", async () => {
+  const client = createStructuredClient({ provider: "openrouter", model: "openrouter/free", reasoning: "none", apiKey: "router-test" }, {
+    fetch: async () => new Response(JSON.stringify({
+      model: "example/free-model:free",
+      choices: [{ finish_reason: "stop", message: { content: "```json\n{\"ok\":true}\n```" } }]
+    }), { status: 200 })
+  });
+  const result = await client.runStructured({ schema: { type: "object" }, schemaName: "result", input: "go" });
+  assert.deepEqual(result.value, { ok: true });
+});
+
 test("rejects unsupported providers before a request", () => {
   assert.throws(() => parseModelRoute("mystery:model@low"), /Unsupported model provider/);
 });

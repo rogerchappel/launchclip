@@ -247,7 +247,7 @@ function chatStructuredResult(payload, fallbackModel) {
     throw new Error(`Chat completion contained no structured output text (model=${model}, finish_reason=${finishReason}, completion_tokens=${completionTokens}, reasoning_tokens=${reasoningTokens})`);
   }
   let value;
-  try { value = JSON.parse(text); }
+  try { value = JSON.parse(stripJsonFence(text)); }
   catch (error) { throw new Error(`Chat completion structured output was not valid JSON: ${error.message}`); }
   const usage = payload?.usage ?? {};
   return {
@@ -265,6 +265,12 @@ function chatStructuredResult(payload, fallbackModel) {
     },
     reasoning: null
   };
+}
+
+function stripJsonFence(text) {
+  const trimmed = String(text).trim();
+  const match = trimmed.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i);
+  return match ? match[1].trim() : trimmed;
 }
 
 function ollamaStructuredResult(payload, fallbackModel) {
