@@ -63,9 +63,9 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
       evidence_index: evidenceIndex,
       claim_support: plan.claims.map((claim) => ({ claim: claim.text, confidence: claim.confidence, qualifier: claim.qualifier, evidence: claim.evidence_ids.map((id) => evidenceById.get(id)).filter(Boolean).map((entry) => ({ id: entry.id, content: String(entry.content ?? "").slice(0, 6_000), provenance: entry.provenance, claims_allowed: entry.claims_allowed })) })),
       deterministic_verification: verification,
-      deterministic_reports: { lint, validate, inspect },
-      temporal_motion_analysis: motion,
-      time_aligned_audio_analysis: audio,
+      deterministic_reports: { lint, validate, inspect: compactInspectReport(inspect) },
+      temporal_motion_analysis: compactMotionAnalysis(motion),
+      time_aligned_audio_analysis: compactAudioAnalysis(audio),
       production_expectations: {
         audio: audio?.expected_audio === true ? "required" : audio?.expected_audio === false ? "intentionally-silent" : "unknown",
         encoded_frame_count_path: "temporal_motion_analysis.frame_count",
@@ -97,6 +97,58 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
   await writeFile(critiquePath, `${JSON.stringify({ ...critique, response_id: result.response_id, model: result.model, usage: result.usage }, null, 2)}\n`);
   await writeFile(markdownPath, renderCritique(critique));
   return { stage: "production-critique", status: critique.verdict === "ship" ? "approved" : "needs-repair", verdict: critique.verdict, critique: critiquePath, markdown: markdownPath, findings: critique.findings.length, response_id: result.response_id, model: result.model };
+}
+
+function compactMotionAnalysis(report) {
+  if (!report || typeof report !== "object") return report;
+  return {
+    ...report,
+    motion: compactObject(report.motion, ["frame_difference"]),
+    optical_flow: compactObject(report.optical_flow, ["samples"])
+  };
+}
+
+function compactAudioAnalysis(report) {
+  if (!report || typeof report !== "object") return report;
+  const sources = report.sources && typeof report.sources === "object"
+    ? Object.fromEntries(Object.entries(report.sources).map(([key, value]) => [key, compactObject(value, ["peaks"])]))
+    : report.sources;
+  return {
+    ...report,
+    output: compactObject(report.output, ["peaks"]),
+    sources
+  };
+}
+
+function compactInspectReport(report) {
+  if (!report || typeof report !== "object" || !report.stdout || typeof report.stdout !== "object") return report;
+  const stdout = { ...report.stdout };
+  for (const key of ["runtime", "lint", "contrast", "layout", "motion"]) {
+    const section = stdout[key];
+    if (!section || typeof section !== "object") continue;
+    const findings = Array.isArray(section.findings) ? section.findings : null;
+    const samples = Array.isArray(section.samples) ? section.samples : null;
+    stdout[key] = {
+      ...section,
+      ...(findings ? {
+        findings: findings.filter((finding) => finding?.severity !== "info"),
+        omitted_info_findings: findings.filter((finding) => finding?.severity === "info").length
+      } : {}),
+      ...(samples ? { samples: undefined, sample_count: samples.length } : {})
+    };
+  }
+  return { ...report, stdout };
+}
+
+function compactObject(value, omittedKeys) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const compact = { ...value };
+  for (const key of omittedKeys) {
+    if (!Array.isArray(compact[key])) continue;
+    compact[key === "samples" ? "sample_count" : `${key}_sample_count`] = compact[key].length;
+    delete compact[key];
+  }
+  return compact;
 }
 
 function normalizeHumanReviewRequest(value) {
