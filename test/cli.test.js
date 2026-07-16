@@ -51,11 +51,12 @@ test("doctor reports package, tool, and credential readiness without exposing se
 });
 
 test("parses model-directed production control flags", () => {
-  assert.deepEqual(parseFlags(["--no-audio", "--fast-eval", "--allow-timing-drift", "--allow-frame-fallback", "--foreground", "--approve", "--concurrency", "4", "--max-frame-cost-usd", "7.5", "--voice-id", "voice_1", "--assets", "./brand", "--style", "soft-grid-editorial", "--style-file", "./frame.md"]), {
+  assert.deepEqual(parseFlags(["--no-audio", "--fast-eval", "--allow-timing-drift", "--allow-frame-fallback", "--repair-scoped-source", "--foreground", "--approve", "--concurrency", "4", "--max-frame-cost-usd", "7.5", "--voice-id", "voice_1", "--assets", "./brand", "--style", "soft-grid-editorial", "--style-file", "./frame.md"]), {
     "no-audio": true,
     "fast-eval": true,
     "allow-timing-drift": true,
     "allow-frame-fallback": true,
+    "repair-scoped-source": true,
     foreground: true,
     approve: true,
     concurrency: "4",
@@ -126,4 +127,5 @@ test("documents the Studio preview approval stage", async () => {
   const output = [];
   await runCli(["--help"], { stdout: { write: (value) => output.push(value) } });
   assert.match(output.join(""), /production-preview <workspace> \[--port 3002\] \[--no-open\]/);
+  assert.match(output.join(""), /production-repair <workspace>.*\[--repair-scoped-source\]/);
 });
