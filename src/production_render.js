@@ -15,6 +15,7 @@ import { runHyperframes } from "./toolchain.js";
 const execFileAsync = promisify(execFile);
 const VERIFICATION_SCHEMA = "launchclip.production-verification.v6";
 const VERIFICATION_SUITE = "production-verify.v6";
+const HYPERFRAMES_RUNTIME_DIRECTORIES = new Set([".thumbnails", ".waveform-cache"]);
 
 export class ProductionVerificationError extends Error {
   constructor(verification) {
@@ -497,6 +498,7 @@ async function sha256Tree(directory) {
     const entries = await readdir(current, { withFileTypes: true });
     entries.sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
+      if (entry.isDirectory() && HYPERFRAMES_RUNTIME_DIRECTORIES.has(entry.name)) continue;
       const filePath = path.join(current, entry.name);
       if (entry.isSymbolicLink()) throw new Error(`Verification input tree cannot contain symlinks: ${filePath}`);
       if (entry.isDirectory()) await visit(filePath);

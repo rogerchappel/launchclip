@@ -111,6 +111,27 @@ test("invalidates verification reuse when project content or a receipt artifact 
   assert.equal(commands, 9);
 });
 
+test("ignores HyperFrames runtime caches when content-addressing verification", async () => {
+  const workspace = await fixture();
+  const project = path.join(workspace, "production", "hyperframes");
+  const run = async (_command, args) => {
+    if (args[1] === "check") {
+      await mkdir(path.join(project, ".thumbnails"), { recursive: true });
+      await writeFile(path.join(project, ".thumbnails", "preview.jpg"), `generated-${Date.now()}`);
+      await mkdir(path.join(project, ".waveform-cache"), { recursive: true });
+      await writeFile(path.join(project, ".waveform-cache", "voice.json"), `generated-${Date.now()}`);
+    }
+    if (args[1] === "snapshot") await writeFile(path.join(args[args.indexOf("--output") + 1], "frame-00.png"), "snapshot");
+    return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
+  };
+  const result = await verifyProduction(workspace, {}, {
+    run,
+    verifierFingerprint: { hyperframes_cli: "test", browser: "test", node: "test", platform: "test", arch: "test" }
+  });
+  assert.equal(result.status, "ready");
+  assert.deepEqual(result.failed, []);
+});
+
 test("rejects a verification receipt when the assembled project changes before render", async () => {
   const workspace = await fixture();
   const run = async (_command, args) => {
