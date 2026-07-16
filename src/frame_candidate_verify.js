@@ -203,7 +203,8 @@ function issueWeights(stdout) {
 function issueSummaries(stdout, keys, limit = 3) {
   const remaining = new Set(keys);
   const summaries = [];
-  for (const finding of blockingFindings(stdout)) {
+  const findings = blockingFindings(stdout).sort((left, right) => issueFeedbackRank(left) - issueFeedbackRank(right));
+  for (const finding of findings) {
     const key = issueKey(finding);
     if (!remaining.has(key)) continue;
     remaining.delete(key);
@@ -218,6 +219,15 @@ function issueSummaries(stdout, keys, limit = 3) {
     if (summaries.length >= limit) break;
   }
   return summaries;
+}
+
+function issueFeedbackRank(finding) {
+  const code = String(typeof finding === "string" ? "error" : finding.code ?? "error");
+  if (code === "console_error" || code.startsWith("runtime_")) return 0;
+  if (code.startsWith("motion_")) return 1;
+  if (code.includes("text") || code.includes("overlap") || code.includes("overflow") || code.includes("occluded")) return 2;
+  if (code.includes("contrast")) return 3;
+  return 4;
 }
 
 function issueKey(finding) {

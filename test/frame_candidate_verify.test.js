@@ -55,7 +55,10 @@ test("reports the actionable nested HyperFrames finding", async () => {
 test("rejects an incremental candidate that does not improve a baseline finding", async () => {
   const workspace = await fixture();
   const run = comparativeRun((role) => role === "baseline" || role === "candidate"
-    ? [{ severity: "error", code: "motion_frozen", selector: "#proof", message: "proof is static" }]
+    ? [
+        { severity: "error", code: "text_box_overflow", selector: "#copy", message: "copy overflows" },
+        { severity: "error", code: "motion_frozen", selector: "#proof", message: "proof is static" }
+      ]
     : []);
   const result = await verifyFrameCandidate(workspace, bundle(), { ...context("incremental-1"), baseline: bundle() }, { run });
   assert.equal(result.ok, false);
@@ -63,7 +66,10 @@ test("rejects an incremental candidate that does not improve a baseline finding"
   assert.match(result.error, /motion_frozen on #proof: proof is static/);
   const comparison = JSON.parse(await readFile(result.report, "utf8")).comparison;
   assert.deepEqual(comparison.new_findings, []);
-  assert.deepEqual(comparison.remaining_findings, ["motion_frozen on #proof: proof is static"]);
+  assert.deepEqual(comparison.remaining_findings, [
+    "motion_frozen on #proof: proof is static",
+    "text_box_overflow on #copy: copy overflows"
+  ]);
 });
 
 test("accepts an incremental candidate that resolves one baseline finding", async () => {
