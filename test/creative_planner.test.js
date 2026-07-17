@@ -89,6 +89,21 @@ test("runs GPT-5.6 planning, validates the plan, writes artifacts, and caches ve
   assert.equal(calls.length, 2, "changing model configuration invalidates the cached plan");
 });
 
+test("creates the planning client from the intake provider route", async () => {
+  const intake = sampleIntake();
+  intake.model = { provider: "openrouter", id: "openrouter/free", reasoning_effort: "none", reasoning_mode: "standard" };
+  const workspace = await tempWorkspace(intake);
+  let route;
+  const result = await planProduction(workspace, {}, {
+    createClient: (received) => {
+      route = received;
+      return { runStructured: async () => ({ response_id: "free-plan", model: "free-planner", status: "completed", value: samplePlan(), usage: {} }) };
+    }
+  });
+  assert.equal(result.response_id, "free-plan");
+  assert.deepEqual(route, { provider: "openrouter", model: "openrouter/free", reasoning: "none", supportsImages: false });
+});
+
 test("feeds a failed plan and exact validator errors into one bounded semantic repair", async () => {
   const workspace = await tempWorkspace(sampleIntake());
   const inputs = [];
