@@ -412,6 +412,64 @@ test("routes local-first generation and bounded local patch repair explicitly", 
   assert.equal(received.repair.maxIssuesPerShot, 4);
 });
 
+test("discovers ranked free frame models, clamps output, and records the accepted author", async () => {
+  let frameOptions;
+  let recordedOutcome;
+  const selection = {
+    source: "ranked",
+    state_path: "/tmp/free-model-state.json",
+    selected_model: "tencent/hy3:free",
+    verified_free_at: "2026-07-17T00:00:00.000Z",
+    max_completion_tokens: 32_768,
+    routes: ["openrouter:tencent/hy3:free@none", "openrouter:google/gemma-code:free@none"],
+    candidates: [{ id: "tencent/hy3:free", score: 40, coverage: .9 }, { id: "google/gemma-code:free", score: 34, coverage: .1 }],
+    warnings: []
+  };
+  const result = await runProductionStage("direct-frames", "/tmp/workspace", {
+    "model-policy": "free",
+    "free-model-candidates": "5",
+    "frame-max-output-tokens": "36000"
+  }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    selectOpenRouterFreeModels: async (options) => {
+      assert.equal(options.topK, "5");
+      assert.equal(options.role, "visual-code-author");
+      return selection;
+    },
+    directFrames: async (_workspace, options) => {
+      frameOptions = options;
+      return { status: "ready", generated: 1, cached: 0, frames: [{ provider: "openrouter", model: "google/gemma-code:free" }] };
+    },
+    recordOpenRouterFreeModelOutcome: async (_selection, outcome) => {
+      recordedOutcome = outcome;
+      return { ...selection, source: "observed-winner", selected_model: "google/gemma-code:free" };
+    }
+  });
+  assert.deepEqual(frameOptions.routes, selection.routes);
+  assert.equal(frameOptions.maxOutputTokens, 32_768);
+  assert.equal(frameOptions.fallbackMode, "error");
+  assert.equal(frameOptions.allowFallback, false);
+  assert.equal(recordedOutcome.result.frames[0].model, "google/gemma-code:free");
+  assert.equal(result.free_model_selection.selected_model, "google/gemma-code:free");
+  assert.equal(result.free_model_selection.source, "observed-winner");
+});
+
+test("keeps critic and repair routes on OpenRouter free under the free policy", async () => {
+  const received = {};
+  await runProductionStage("production-critique", "/tmp/workspace", { "model-policy": "free" }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    critiqueProduction: async (_workspace, options) => { received.critic = options; return { status: "approved" }; }
+  });
+  await runProductionStage("production-repair", "/tmp/workspace", { "model-policy": "free" }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    repairProduction: async (_workspace, options) => { received.repair = options; return { status: "repaired" }; }
+  });
+  assert.equal(received.critic.route, "openrouter:openrouter/free@none");
+  assert.deepEqual(received.repair.routes, ["openrouter:openrouter/free@none"]);
+  assert.equal(received.repair.supportsImages, false);
+  assert.equal(received.repair.sourceMode, "scoped");
+});
+
 test("automatically uses the lean repair capsule for OpenRouter's dynamic free route", async () => {
   let received;
   await runProductionStage("production-repair", "/tmp/workspace", { "repair-route": "openrouter:openrouter/free@none" }, {
