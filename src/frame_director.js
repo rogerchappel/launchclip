@@ -52,6 +52,22 @@ HyperFrames contract:
 - Keep essential text and proof inside the frame at all times. Preserve exact visible copy and factual meaning.
 - The first and last rendered frame must be intentional, including when mounted next to neighboring shots.`;
 
+const LEAN_FRAME_INSTRUCTIONS = `You are a senior motion designer authoring one original HyperFrames shot. Return only strict frame-bundle JSON matching the supplied schema.
+
+Required host contract:
+- html is one sub-composition document with exactly one <template>. Put every live <style>, root, and <script> inside it.
+- Use one root: id="root", no root class, data-composition-id=shot_id, data-start="0", supplied data-duration, data-width, and data-height. Include a #root{...} style rule.
+- Prefix every other id with "shot_id-". Give timeline-visible elements class="clip", local data-start/data-duration, and stable ids.
+- GSAP is global. Create one paused seek-safe timeline and register it as window.__timelines[shot_id]. Use gsap.set for initial transforms; animate transform/opacity rather than layout properties.
+- Do not import, fetch, use timers/randomness/storage, or include audio/video elements. Request supplied media through root_media_requests only.
+
+Creative contract:
+- Treat global_design.style_dna and shot.visual as binding. Build the declared diagram, comparison, process, timeline, or data form—not a headline over decoration.
+- Preserve readable non-overlapping zones, deliberate spacing, exact palette/type roles, and the planned motion/continuity. Keep copy brief and visual.
+- Use supplied evidence only for grounded labels, metrics, and claims. Use only supplied resource paths; otherwise draw native HTML/CSS/SVG.
+- motion.assertions selectors must exist. motion.events must use exact planned visual object ids and event ids. Keep event times inside the shot.
+- Return schema_version, shot_id, html, motion, preserve, root_media_requests, evidence_ids, and visible_copy. Do not add a type field.`;
+
 export const FALLBACK_FRAMES_PATH = "production/fallbacks";
 
 export async function directFrames(workspacePath, options = {}, adapters = {}) {
@@ -111,7 +127,7 @@ function frameModelRoutes(options, intake) {
   });
 }
 
-export function buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming = null, prior = null, errors = [] }) {
+export function buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming = null, prior = null, errors = [], lean = false }) {
   const neighbors = [plan.shots[index - 1], plan.shots[index + 1]].filter(Boolean).map((entry) => ({
     id: entry.id,
     purpose: entry.purpose,
@@ -119,7 +135,7 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, narration
     visual_description: entry.visual.description,
     representation: entry.visual.representation,
     continuity: entry.visual.continuity,
-    objects: entry.visual.objects
+    ...(lean ? {} : { objects: entry.visual.objects })
   }));
   const evidenceById = new Map(evidence.items.map((entry) => [entry.id, entry]));
   const resourceById = new Map(intake.resources.map((entry) => [entry.id, entry]));
@@ -131,12 +147,26 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, narration
     shot_end_seconds: Math.min(shot.end_seconds - shot.start_seconds, Number(word.end) - shot.start_seconds)
   }));
   return JSON.stringify({
-    global_design: plan.design,
+    global_design: lean ? {
+      concept: plan.design.concept,
+      art_direction: plan.design.art_direction,
+      style_dna: plan.design.style_dna
+    } : plan.design,
     format: plan.format,
-    project: plan.project,
+    project: lean ? {
+      title: plan.project.title,
+      thesis: plan.project.thesis,
+      audience_promise: plan.project.audience_promise,
+      angle: plan.project.angle
+    } : plan.project,
     shot: { ...shot, duration_seconds: shot.end_seconds - shot.start_seconds },
     neighbors,
-    evidence: shot.evidence_ids.map((id) => evidenceById.get(id)).filter(Boolean).map((entry) => ({ id: entry.id, title: entry.title, content: entry.content, provenance: entry.provenance })),
+    evidence: shot.evidence_ids.map((id) => evidenceById.get(id)).filter(Boolean).map((entry) => ({
+      id: entry.id,
+      title: entry.title,
+      content: lean ? compactText(entry.content, 1_800) : entry.content,
+      provenance: entry.provenance
+    })),
     resources: shot.resource_ids.map((id) => resourceById.get(id)).filter(Boolean).map((entry) => ({ id: entry.id, role: entry.role, type: entry.type, local_path: entry.is_remote ? null : entry.location, remote: entry.is_remote, catalog: entry.catalog ?? null })),
     narration_timing: narrationTiming ? { duration_seconds: narrationTiming.duration_seconds, words: timedWords } : null,
     frame_responsibility: "Own visual HTML and motion for this shot only. Request media; do not mount it.",
@@ -147,7 +177,7 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, narration
 
 async function directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, routes, adapters, options }) {
   const jobId = `frame:${shot.id}`;
-  const baseInput = buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming });
+  const baseInput = buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming, lean: options.leanPrompt });
   const customRouting = options.routes != null || options.provider != null || options.model != null || options.baseUrl != null;
   const inputHash = customRouting
     ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v5" })
@@ -195,8 +225,8 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
           reasoningEffort: route.reasoning,
           reasoningContext: "current_turn",
           pro: false,
-          instructions: FRAME_INSTRUCTIONS,
-          input: buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming, prior, errors }),
+          instructions: options.leanPrompt ? LEAN_FRAME_INSTRUCTIONS : FRAME_INSTRUCTIONS,
+          input: buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming, prior, errors, lean: options.leanPrompt }),
           schema: FRAME_BUNDLE_SCHEMA,
           schemaName: "launchclip_frame_bundle",
           background: options.background !== false,
@@ -885,6 +915,12 @@ async function writeAtomic(filePath, content) {
   const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(tempPath, content, { mode: 0o600 });
   await rename(tempPath, filePath);
+}
+
+function compactText(value, limit) {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit - 16).trimEnd()}… [truncated]`;
 }
 
 function positiveInteger(value, label) {

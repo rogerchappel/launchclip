@@ -18,6 +18,21 @@ test("gives each delegated frame only its shot, neighbors, grounded evidence, an
   assert.deepEqual(input.narration_timing.words, [{ word: "Proof", global_start_seconds: 1.5, global_end_seconds: 2, shot_start_seconds: 1.5, shot_end_seconds: 2 }]);
 });
 
+test("builds a compact free-model brief without dropping shot or style truth", () => {
+  const context = fixture();
+  context.evidence.items[0].content = "Grounded proof ".repeat(500);
+  const full = buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0 });
+  const lean = buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0, lean: true });
+  const parsed = JSON.parse(lean);
+
+  assert.ok(lean.length < full.length / 2);
+  assert.equal(parsed.shot.id, "shot-1");
+  assert.equal(parsed.global_design.style_dna.family, "soft-grid-editorial");
+  assert.equal(parsed.evidence[0].id, "ev-1");
+  assert.ok(parsed.evidence[0].content.length <= 1_800);
+  assert.equal(parsed.neighbors[0].objects, undefined);
+});
+
 test("delegates shots concurrently, repairs invalid HTML, and writes modular frame artifacts", async () => {
   const context = fixture();
   const workspace = await workspaceFixture(context);
