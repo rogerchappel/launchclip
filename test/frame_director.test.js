@@ -176,6 +176,24 @@ test("adds host root styling and removes only a redundant frame type locally", (
   assert.deepEqual(validateHyperFramesRoot(sanitized.bundle.html, context.plan.shots[0], context.plan.format), []);
 });
 
+test("wraps an unambiguous live scene and converts a global shot start to local zero", () => {
+  const context = fixture();
+  const shot = context.plan.shots[1];
+  const bundle = frameBundle(shot.id, 5);
+  const live = bundle.html.match(/<template>([\s\S]*)<\/template>/)[1];
+  bundle.html = `<html><head></head><body>${live.replace("</div><script>", "<template></template></div><script>").replace('data-start="0"', 'data-start="5"')}</body></html>`;
+
+  const sanitized = sanitizeFrameBundle(bundle, { shot, format: context.plan.format });
+
+  assert.match(sanitized.bundle.html, /^<template><style>#root/);
+  assert.match(sanitized.bundle.html, /data-start="0"/);
+  assert.deepEqual(sanitized.repairs, [
+    { kind: "wrap-live-frame-in-template" },
+    { kind: "normalize-root-contract-attributes", attributes: ["data-start"] }
+  ]);
+  assert.deepEqual(validateHyperFramesRoot(sanitized.bundle.html, shot, context.plan.format), []);
+});
+
 test("builds a deterministic presenter fallback that satisfies the frame contract", () => {
   const context = fixture();
   const shot = { ...context.plan.shots[0], presenter: { mode: "companion", visible: true }, resource_ids: ["presenter"] };
