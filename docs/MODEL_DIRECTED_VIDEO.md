@@ -268,6 +268,15 @@ Each frame author receives only:
 - relevant evidence and staged assets
 - canvas size, caption/presenter keep-out regions, and HyperFrames rules
 
+Under the OpenRouter free policy, each shot first receives a compact LLM visual
+blueprint. The blueprint binds percentage-based layout zones, planned object
+IDs and selectors, typography scale, occupied-area target, exact copy, and
+motion beats. A second LLM request implements that smaller handoff. Scene lanes
+run concurrently—three by default—while blueprint and implementation remain
+sequential within a lane. Fail-closed scheduling lets in-flight scenes save
+their receipts but stops assigning untouched scenes after the first blocking
+failure, so resuming reuses completed work.
+
 This keeps the design contextual without giving one request an unbounded output
 surface. The assembler owns media tracks, frame timing, transitions, and the
 root composition. Model-authored documents run behind a restrictive CSP and an

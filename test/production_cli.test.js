@@ -454,6 +454,14 @@ test("discovers ranked free frame models, clamps output, and records the accepte
   assert.deepEqual(frameOptions.routes, selection.routes);
   assert.equal(probeOptions.timeoutMs, 15_000);
   assert.equal(frameOptions.leanPrompt, true);
+  assert.equal(frameOptions.sceneBlueprint, true);
+  assert.equal(frameOptions.failClosedConcurrency, 3);
+  assert.equal(frameOptions.blueprintSemanticAttempts, 2);
+  assert.equal(frameOptions.blueprintMaxOutputTokens, 3_000);
+  assert.equal(frameOptions.blueprintTemperature, .45);
+  assert.equal(frameOptions.blueprintRepairTemperature, .15);
+  assert.equal(frameOptions.frameTemperature, .4);
+  assert.equal(frameOptions.frameRepairTemperature, .1);
   assert.equal(frameOptions.maxOutputTokens, 32_768);
   assert.equal(frameOptions.fallbackMode, "error");
   assert.equal(frameOptions.allowFallback, false);

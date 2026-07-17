@@ -333,8 +333,16 @@ async function runFrameDirection(workspace, flags, adapters) {
   });
   options.routes = selection.routes;
   options.leanPrompt = true;
+  options.sceneBlueprint = true;
   options.fallbackMode = "error";
   options.allowFallback = false;
+  options.failClosedConcurrency = Math.min(options.concurrency, numberOr(flags["free-scene-concurrency"], 3));
+  options.blueprintSemanticAttempts = numberOr(flags["blueprint-semantic-attempts"], 2);
+  options.blueprintMaxOutputTokens = numberOr(flags["blueprint-max-output-tokens"], 3_000);
+  options.blueprintTemperature = numberOr(flags["blueprint-temperature"], .45);
+  options.blueprintRepairTemperature = numberOr(flags["blueprint-repair-temperature"], .15);
+  options.frameTemperature = numberOr(flags["frame-temperature"], .4);
+  options.frameRepairTemperature = numberOr(flags["frame-repair-temperature"], .1);
   if (Number.isFinite(Number(selection.max_completion_tokens)) && Number(selection.max_completion_tokens) > 0) {
     options.maxOutputTokens = Math.min(options.maxOutputTokens, Number(selection.max_completion_tokens));
   }

@@ -165,6 +165,15 @@ change the shortlist size, or `--free-model-state` to choose another state file.
 Free frame mode fails without writing a deterministic substitute and never
 falls through to a paid model route.
 
+Free frame authoring uses two smaller LLM requests per scene: a compact visual
+blueprint fixes zones, semantic object selectors, phone-readable type scale,
+density, and motion beats; a second request implements that blueprint as the
+HyperFrames bundle. Independent scenes run in parallel with a fail-closed
+default cap of three, already-running scenes preserve their receipts, and no
+new scene starts after a blocking failure. Use `--free-scene-concurrency` to
+lower the cap for a rate-limited endpoint. Blueprint and implementation repairs
+use lower temperatures than their original creative passes.
+
 To keep a review free while using another production policy, pin both the
 independent critic and repair routes to OpenRouter's live free-model router:
 

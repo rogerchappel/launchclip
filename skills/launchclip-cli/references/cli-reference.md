@@ -90,6 +90,11 @@ Model policies:
 - `local-first`: prepend `ollama:qwen2.5-coder:latest@none` to frame and repair
   routes while retaining the cloud escalation ladder.
 - `quality`: retain Sol-first authoring and repair.
+- `free`: rank and live-probe explicit OpenRouter `:free` frame models, then
+  author each shot through a compact LLM blueprint and a second LLM
+  implementation request. Independent shots run fail-closed with up to three
+  concurrent lanes by default. Lower `--free-scene-concurrency` when a free
+  endpoint returns rate limits; do not increase it merely to retry faster.
 
 Pin one or more routes with repeatable
 `--frame-route provider:model@reasoning` and
@@ -255,6 +260,7 @@ Important model-directed paths:
     SCRIPT.md
     STORYBOARD.md
     frames/
+      .blueprints/
     hyperframes/
       index.html
       assembly.json
