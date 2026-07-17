@@ -130,6 +130,7 @@ test("documents independently rerunnable source and entity preparation stages", 
 test("documents the Studio preview approval stage", async () => {
   const output = [];
   await runCli(["--help"], { stdout: { write: (value) => output.push(value) } });
+  assert.match(output.join(""), /--heygen-avatar generated\.mp4/);
   assert.match(output.join(""), /production-preview <workspace> \[--port 3002\] \[--no-open\]/);
   assert.match(output.join(""), /production-repair <workspace>.*\[--repair-scoped-source\]/);
   assert.match(output.join(""), /produce <source>.*\[--review\]/);

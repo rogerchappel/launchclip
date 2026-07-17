@@ -222,6 +222,22 @@ launchclip produce "Product workflow" \
   --aspect 16:9
 ```
 
+For a downloaded HeyGen result, `--heygen-avatar` is the equivalent shorthand:
+
+```bash
+launchclip produce ./brief.md \
+  --heygen-avatar ./heygen-avatar.mp4 \
+  --transcript ./heygen-avatar.txt \
+  --assets ./brand-assets \
+  --prompt "Keep the avatar visible around the evidence"
+```
+
+The local avatar video replaces separate `--voiceover` and `--presenter`
+inputs: its audio becomes authoritative narration and its picture becomes the
+beat-positioned presenter source. The original brief, repository, or URL still
+supplies evidence. This shortcut consumes an already-generated video; it does
+not call HeyGen or use HeyGen credentials.
+
 `--assets` accepts a file or directory and is an intent-revealing alias for
 supporting resources. Directories are catalogued automatically from filenames
 and folder structure. An optional `assets.json` can override usage, entity

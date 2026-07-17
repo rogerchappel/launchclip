@@ -63,6 +63,7 @@ export async function writeIntakeManifest(intake) {
 export async function buildIntake(source, flags = {}, env = process.env) {
   const value = String(source ?? "").trim();
   if (!value) throw new Error("Missing source");
+  const heygenAvatar = resolveHeygenAvatarFlag(flags);
   const sourceKind = inferSourceKind(value, flags.kind);
   const aspect = resolveAspect(flags.aspect ?? flags.ratio ?? "16:9");
   const durationSeconds = positiveNumber(flags.duration ?? 60, "--duration");
@@ -81,14 +82,20 @@ export async function buildIntake(source, flags = {}, env = process.env) {
   for (const [role, entries] of [
     ["supporting", [...values(flags.resource), ...values(flags.assets)]],
     ["reference", values(flags.reference)],
-    ["voiceover", values(flags.voiceover)],
+    ["voiceover", heygenAvatar ? [heygenAvatar] : values(flags.voiceover)],
     ["voiceover-transcript", values(flags.transcript)],
-    ["presenter", values(flags.presenter)]
+    ["presenter", heygenAvatar ? [heygenAvatar] : values(flags.presenter)]
   ]) {
     for (const entry of entries) {
       for (const described of await describeResourceEntries(entry, role, resources.length)) {
         if (!resources.some((resource) => resource.role === described.role && resource.location === described.location)) resources.push(described);
       }
+    }
+  }
+  if (heygenAvatar) {
+    const avatarResources = resources.filter((entry) => entry.source === heygenAvatar && ["voiceover", "presenter"].includes(entry.role));
+    if (avatarResources.length !== 2 || avatarResources.some((entry) => entry.is_remote || entry.type !== "video")) {
+      throw new Error("--heygen-avatar must be one local video file (.mp4, .mov, .webm, or .mkv)");
     }
   }
   const videoVoiceover = resources.find((entry) => entry.role === "voiceover" && entry.type === "video");
@@ -132,6 +139,16 @@ export async function buildIntake(source, flags = {}, env = process.env) {
       external_publish_allowed: false
     }
   };
+}
+
+function resolveHeygenAvatarFlag(flags) {
+  const entries = values(flags["heygen-avatar"]).map((entry) => String(entry ?? "").trim()).filter(Boolean);
+  if (entries.length > 1) throw new Error("--heygen-avatar accepts exactly one generated avatar video");
+  if (!entries.length) return null;
+  if (values(flags.voiceover).length || values(flags.presenter).length) {
+    throw new Error("--heygen-avatar replaces --voiceover and --presenter; do not combine them");
+  }
+  return entries[0];
 }
 
 async function describeResourceEntries(value, role, startIndex) {
