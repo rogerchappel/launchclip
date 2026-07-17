@@ -37,6 +37,19 @@ test("revises a plan within hard constraints, archives revisions, and invalidate
   assert.equal(store.get("hyperframes-assembly").status, "stale");
 });
 
+test("creates plan-repair clients from the configured provider route", async () => {
+  const workspace = await fixture();
+  let route;
+  const result = await repairProductionPlan(workspace, findings(), { provider: "openrouter", model: "openrouter/free", reasoning: "none" }, {
+    createClient: (received) => {
+      route = received;
+      return { runStructured: async () => ({ response_id: "free-repair", model: "free-planner", status: "completed", usage: {}, value: plan() }) };
+    }
+  });
+  assert.equal(result.response_id, "free-repair");
+  assert.deepEqual(route, { provider: "openrouter", model: "openrouter/free", reasoning: "none", supportsImages: false });
+});
+
 test("feeds invalid plan constraints into one bounded semantic retry", async () => {
   const workspace = await fixture();
   let calls = 0;

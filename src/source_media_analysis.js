@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { OpenAIResponsesClient } from "./openai_responses.js";
+import { createStructuredClient } from "./model_provider.js";
 import { ElevenLabsMediaProvider } from "./production_media.js";
 import { PRODUCTION_PATHS } from "./production_contracts.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
@@ -84,7 +84,14 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
   const needsTranscript = intake.policies?.supplied_voiceover_is_authoritative && !evidence.items.some((entry) => entry.kind === "voiceover-transcript");
   const transcriber = adapters.transcriber ?? (process.env.ELEVENLABS_API_KEY ? new ElevenLabsMediaProvider() : null);
   if (needsTranscript && !transcriber) throw new Error("Supplied voiceover requires --transcript or ELEVENLABS_API_KEY for Scribe transcription");
-  const client = adapters.client ?? (resources.some((entry) => ["video", "image"].includes(entry.type)) ? new OpenAIResponsesClient() : null);
+  const client = adapters.client ?? (resources.some((entry) => ["video", "image"].includes(entry.type))
+    ? (adapters.createClient ?? createStructuredClient)({
+        provider: intake.model?.provider ?? "openai",
+        model: intake.model?.id ?? "gpt-5.6",
+        reasoning: options.reasoning ?? intake.model?.reasoning_effort ?? "high",
+        supportsImages: true
+      })
+    : null);
   const newItems = [];
   const analyses = [];
 
@@ -116,7 +123,7 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
     const visualPath = visual.sheets[0].path;
     const result = await client.runStructured({
       model: intake.model?.id ?? "gpt-5.6",
-      reasoningEffort: options.reasoning ?? "high",
+      reasoningEffort: options.reasoning ?? intake.model?.reasoning_effort ?? "high",
       reasoningContext: "current_turn",
       instructions: ANALYST_INSTRUCTIONS,
       input: JSON.stringify({

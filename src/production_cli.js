@@ -16,6 +16,7 @@ import { resolveProductionEntities } from "./entity_resolution.js";
 import { openProductionPreview } from "./production_preview.js";
 import { runProductionReview } from "./production_review.js";
 import { DEFAULT_NARRATED_MUSIC_VOLUME } from "./production_contracts.js";
+import { recordOpenRouterFreeModelOutcome, selectOpenRouterFreeModels } from "./free_model_selector.js";
 
 export async function runProductionStage(command, target, flags = {}, adapters = {}) {
   if (command === "produce") return runProduction(target, flags, adapters);
@@ -25,7 +26,7 @@ export async function runProductionStage(command, target, flags = {}, adapters =
   return lease(target, async () => {
     if (command === "evidence") return collectEvidence(target, evidenceOptions(flags), adapters.evidence);
     if (command === "creative-plan") return (adapters.planProduction ?? planProduction)(target, plannerOptions(flags), adapters.planner);
-    if (command === "direct-frames") return (adapters.directFrames ?? directFrames)(target, frameOptions(flags), adapters.frames);
+    if (command === "direct-frames") return runFrameDirection(target, flags, adapters);
     if (command === "production-audio") return produceAudio(target, audioOptions(flags), adapters.audio);
     if (command === "assemble") return assembleWithProducedAudio(target, flags);
     if (command === "production-verify") return verifyProduction(target, renderOptions(flags));
@@ -134,7 +135,7 @@ async function reviseProduction(workspace, flags, request, adapters) {
     if (audio.status === "needs-retiming" && !flags["allow-timing-drift"]) {
       throw new Error(`${audio.warnings.join(" ")} Revised narration timing still requires another plan repair.`);
     }
-    frames = await (adapters.directFrames ?? directFrames)(workspace, frameOptions(flags), adapters.frames);
+    frames = await runFrameDirection(workspace, flags, adapters);
   }
   const assembly = adapters.assembleHyperFrames
     ? await adapters.assembleHyperFrames(workspace, await producedAssemblyOptions(workspace, flags))
@@ -147,7 +148,7 @@ async function reviseProduction(workspace, flags, request, adapters) {
     requested_critique: requestedCritique,
     repair,
     audio,
-    frames: frames ? { generated: frames.generated, cached: frames.cached } : null,
+    frames: frames ? { generated: frames.generated, cached: frames.cached, ...(frames.free_model_selection ? { free_model_selection: frames.free_model_selection } : {}) } : null,
     assembly,
     draft,
     critique: draft.critique
@@ -187,7 +188,7 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
   if (audio.status === "needs-retiming" && !flags["allow-timing-drift"]) {
     throw new Error(`${audio.warnings.join(" ")} Re-run creative planning with measured narration timing, or pass --allow-timing-drift to inspect the draft.`);
   }
-  let frames = await (adapters.directFrames ?? directFrames)(workspace, frameOptions(flags), adapters.frames);
+  let frames = await runFrameDirection(workspace, flags, adapters);
   let assemblyOptions = {
     voiceover: audio.voiceover,
     music: audio.music,
@@ -240,7 +241,7 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
       if (audio.status === "needs-retiming" && !flags["allow-timing-drift"]) {
         throw new Error(`${audio.warnings.join(" ")} Revised narration timing still requires another plan repair.`);
       }
-      frames = await (adapters.directFrames ?? directFrames)(workspace, frameOptions(flags), adapters.frames);
+      frames = await runFrameDirection(workspace, flags, adapters);
       assemblyOptions = {
         voiceover: audio.voiceover,
         music: audio.music,
@@ -251,6 +252,9 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
     assembly = await (adapters.assembleHyperFrames ?? assembleHyperFrames)(workspace, assemblyOptions);
   }
   const readyForApproval = draft?.status === "ready" && critique?.verdict === "ship";
+  if (!readyForApproval && ["repair", "replan"].includes(critique?.verdict)) {
+    frames = await rotateCritiqueRejectedFreeModel(frames, adapters);
+  }
   return {
     stage: "produce",
     status: readyForApproval ? "awaiting-approval" : "needs-repair",
@@ -261,7 +265,7 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
     entity_resolution: entityResolution,
     plan,
     audio,
-    frames: { generated: frames.generated, cached: frames.cached },
+    frames: { generated: frames.generated, cached: frames.cached, ...(frames.free_model_selection ? { free_model_selection: frames.free_model_selection } : {}) },
     assembly,
     draft,
     verification,
@@ -305,6 +309,82 @@ async function producedAssemblyOptions(workspace, flags) {
     music: audio?.music?.path,
     sfxManifest: audio?.sfx_manifest,
     musicVolume: numberOr(flags["music-volume"], DEFAULT_NARRATED_MUSIC_VOLUME)
+  };
+}
+
+async function runFrameDirection(workspace, flags, adapters) {
+  const direct = adapters.directFrames ?? directFrames;
+  const options = frameOptions(flags);
+  if (!usesDiscoveredFreeFrames(flags)) return direct(workspace, options, adapters.frames);
+
+  const selectModels = adapters.selectOpenRouterFreeModels ?? selectOpenRouterFreeModels;
+  const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
+  const selection = await selectModels({
+    statePath: flags["free-model-state"],
+    topK: flags["free-model-candidates"] ?? 5,
+    refresh: Boolean(flags["refresh-free-models"]),
+    role: "visual-code-author",
+    contract: "frame-director.v5"
+  });
+  if (!selection?.routes?.length) throw new Error("OpenRouter free-model selection returned no frame-authoring routes");
+  options.routes = selection.routes;
+  options.fallbackMode = "error";
+  options.allowFallback = false;
+  if (Number.isFinite(Number(selection.max_completion_tokens)) && Number(selection.max_completion_tokens) > 0) {
+    options.maxOutputTokens = Math.min(options.maxOutputTokens, Number(selection.max_completion_tokens));
+  }
+  try {
+    const result = await direct(workspace, options, adapters.frames);
+    let recorded = selection;
+    try {
+      recorded = await recordOutcome(selection, { result }) ?? selection;
+    } catch (error) {
+      recorded = { ...selection, warnings: [...(selection.warnings ?? []), `Could not update free-model outcome state: ${error.message}`] };
+    }
+    return { ...result, free_model_selection: freeModelSelectionSummary(recorded) };
+  } catch (error) {
+    try {
+      await recordOutcome(selection, { error });
+    } catch (stateError) {
+      error.free_model_state_error = stateError.message;
+    }
+    throw error;
+  }
+}
+
+async function rotateCritiqueRejectedFreeModel(frames, adapters) {
+  if (!frames?.free_model_selection?.state_path) return frames;
+  const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
+  try {
+    const selection = await recordOutcome(frames.free_model_selection, { error: new Error("The authored frames did not pass production critique") });
+    return { ...frames, free_model_selection: freeModelSelectionSummary(selection ?? frames.free_model_selection) };
+  } catch (error) {
+    return {
+      ...frames,
+      free_model_selection: {
+        ...frames.free_model_selection,
+        warnings: [...(frames.free_model_selection.warnings ?? []), `Could not rotate the critique-rejected free model: ${error.message}`]
+      }
+    };
+  }
+}
+
+function usesDiscoveredFreeFrames(flags) {
+  return modelPolicy(flags) === "free"
+    && flags["frame-route"] == null
+    && flags["frame-model"] == null
+    && flags["frame-provider"] == null
+    && flags.model == null;
+}
+
+function freeModelSelectionSummary(selection) {
+  return {
+    source: selection.source,
+    state_path: selection.state_path,
+    selected_model: selection.selected_model,
+    verified_free_at: selection.verified_free_at,
+    candidates: (selection.candidates ?? []).map((candidate) => ({ id: candidate.id, score: candidate.score, coverage: candidate.coverage })),
+    warnings: [...(selection.warnings ?? [])]
   };
 }
 
@@ -385,7 +465,7 @@ function renderOptions(flags) {
     maximumHoldRatio: flags["maximum-hold-ratio"],
     minimumBurstsPerMinute: flags["minimum-bursts-per-minute"],
     musicVolume: flags["music-volume"],
-    criticRoute: singleModelRoute(flags["critic-route"], "--critic-route"),
+    criticRoute: singleModelRoute(flags["critic-route"] ?? (policy === "free" ? "openrouter:openrouter/free@none" : undefined), "--critic-route"),
     criticModel: flags["critic-model"] ?? (policy === "quality" ? "gpt-5.6" : "gpt-5.6-terra"),
     criticReasoning: flags["critic-reasoning"] ?? (policy === "quality" ? "xhigh" : "high"),
     criticPro: Boolean(flags["critic-pro"]),
@@ -404,7 +484,7 @@ function previewOptions(flags) {
 function criticOptions(flags) {
   const policy = modelPolicy(flags);
   return {
-    route: singleModelRoute(flags["critic-route"], "--critic-route"),
+    route: singleModelRoute(flags["critic-route"] ?? (policy === "free" ? "openrouter:openrouter/free@none" : undefined), "--critic-route"),
     model: flags["critic-model"] ?? (policy === "quality" ? "gpt-5.6" : "gpt-5.6-terra"),
     reasoning: flags["critic-reasoning"] ?? (policy === "quality" ? "xhigh" : "high"),
     pro: Boolean(flags["critic-pro"]),
@@ -417,8 +497,9 @@ function repairOptions(flags) {
   const routes = stageModelRoutes(flags, "repair");
   const leanFreeRoute = isDynamicOpenRouterFreeRoute(routes);
   return {
-    model: flags["repair-model"] ?? (policy === "quality" ? "gpt-5.6" : "gpt-5.6-luna"),
-    reasoning: flags["repair-reasoning"] ?? (policy === "quality" ? "high" : "medium"),
+    provider: flags["repair-provider"] ?? (policy === "free" ? "openrouter" : undefined),
+    model: flags["repair-model"] ?? (policy === "free" ? "openrouter/free" : policy === "quality" ? "gpt-5.6" : "gpt-5.6-luna"),
+    reasoning: flags["repair-reasoning"] ?? (policy === "free" ? "none" : policy === "quality" ? "high" : "medium"),
     routes,
     semanticAttempts: numberOr(flags["repair-semantic-attempts"], 2),
     maxSnapshots: numberOr(flags["repair-snapshots"], 8),
@@ -446,13 +527,14 @@ function stageModelRoutes(flags, stage) {
   if (model || provider) return [`${provider ?? "openai"}:${model ?? (provider === "ollama" ? flags["local-model"] ?? "qwen2.5-coder:latest" : "gpt-5.6-luna")}@${reasoning ?? "medium"}`];
   const policy = modelPolicy(flags);
   if (policy === "quality") return ["openai:gpt-5.6@high"];
+  if (policy === "free") return ["openrouter:openrouter/free@none"];
   const cloud = ["openai:gpt-5.6-luna@medium", "openai:gpt-5.6-terra@high", "openai:gpt-5.6@high"];
   return policy === "local-first" ? [`ollama:${flags["local-model"] ?? "qwen2.5-coder:latest"}@none`, ...cloud] : cloud;
 }
 
 function modelPolicy(flags) {
   const policy = String(flags["model-policy"] ?? "cost-aware").trim().toLowerCase();
-  if (!["cost-aware", "local-first", "quality"].includes(policy)) throw new Error(`Unsupported --model-policy: ${policy}. Supported: cost-aware, local-first, quality`);
+  if (!["cost-aware", "local-first", "quality", "free"].includes(policy)) throw new Error(`Unsupported --model-policy: ${policy}. Supported: cost-aware, local-first, quality, free`);
   return policy;
 }
 

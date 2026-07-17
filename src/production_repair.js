@@ -80,6 +80,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     : findings.filter((finding) => broadScopes.has(finding.repair_scope));
   if (broadFindings.length) {
     const planRepair = await (adapters.repairProductionPlan ?? repairProductionPlan)(workspace, broadFindings, {
+      provider: options.provider,
       model: options.model,
       reasoning: options.reasoning,
       semanticAttempts: options.semanticAttempts,

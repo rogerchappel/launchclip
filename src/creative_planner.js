@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
-import { OpenAIResponsesClient } from "./openai_responses.js";
+import { createStructuredClient } from "./model_provider.js";
 import {
   PRODUCTION_PATHS,
   PRODUCTION_PLAN_SCHEMA,
@@ -72,7 +72,7 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
     const hierarchicalPlanner = adapters.planLongFormProduction ?? (await import("./long_form_planner.js")).planLongFormProduction;
     const plannerAdapters = { store };
     if (adapters.client) plannerAdapters.client = adapters.client;
-    else if (!adapters.planLongFormProduction) plannerAdapters.client = new OpenAIResponsesClient();
+    else if (!adapters.planLongFormProduction) plannerAdapters.client = planningClient(intake, adapters);
     return hierarchicalPlanner(workspace, { intake, evidence, suppliedNarration, sfxCatalog, noveltyContext, entityResolution, options }, plannerAdapters);
   }
   const input = buildPlanningInput(intake, evidence, suppliedNarration, { ...options, sfxCatalog, noveltyContext, entityResolution });
@@ -101,8 +101,8 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
     throw new Error(`Creative plan job is already ${current.status}: ${jobId}`);
   }
 
-  const client = adapters.client ?? new OpenAIResponsesClient();
-  if (!resumeResponseId) await store.markRunning(jobId, { provider: "openai", response_id: null, status: "running" });
+  const client = adapters.client ?? planningClient(intake, adapters);
+  if (!resumeResponseId) await store.markRunning(jobId, { provider: intake.model?.provider ?? "openai", response_id: null, status: "running" });
   const validationContext = {
     evidenceIds: evidence.items.map((entry) => entry.id),
     claimEligibleEvidenceIds: evidence.items.filter((entry) => entry.claims_allowed && entry.role !== "reference").map((entry) => entry.id),
@@ -185,6 +185,15 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
     await store.markFailed(jobId, error);
     throw error;
   }
+}
+
+function planningClient(intake, adapters) {
+  return (adapters.createClient ?? createStructuredClient)({
+    provider: intake.model?.provider ?? "openai",
+    model: intake.model?.id ?? "gpt-5.6",
+    reasoning: intake.model?.reasoning_effort ?? "xhigh",
+    supportsImages: false
+  });
 }
 
 export function resolvePlanningMode(value = "auto", durationSeconds, thresholdSeconds = 180) {
