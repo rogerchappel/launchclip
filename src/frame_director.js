@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_INSTRUCTIONS, FRAME_BLUEPRINT_SCHEMA, FRAME_BLUEPRINT_VERSION, validateFrameBlueprint } from "./frame_blueprint.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { ensureTimelineRegistration, hasTimelineRegistration } from "./hyperframes_timeline.js";
 import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model_provider.js";
@@ -62,7 +63,8 @@ Required host contract:
 - Do not import, fetch, use timers/randomness/storage, or include audio/video elements. Request supplied media through root_media_requests only.
 
 Creative contract:
-- Treat global_design.style_dna and shot.visual as binding. Build the declared diagram, comparison, process, timeline, or data form—not a headline over decoration.
+- When scene_blueprint is supplied, treat its zones, selectors, typography, density, visible copy, and motion beats as a binding LLM-authored implementation plan.
+- Treat global_design.style_dna and the supplied shot or shot_contract visual as binding. Build the declared diagram, comparison, process, timeline, or data form—not a headline over decoration.
 - Preserve readable non-overlapping zones, deliberate spacing, exact palette/type roles, and the planned motion/continuity. Keep copy brief and visual.
 - Use supplied evidence only for grounded labels, metrics, and claims. Use only supplied resource paths; otherwise draw native HTML/CSS/SVG.
 - motion.assertions selectors must exist. motion.events must use exact planned visual object ids and event ids. Keep event times inside the shot.
@@ -182,10 +184,12 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, narration
 
 async function directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, routes, adapters, options }) {
   const jobId = `frame:${shot.id}`;
-  const baseInput = buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming });
+  const baseInput = options.sceneBlueprint
+    ? buildFrameBlueprintInput({ intake, evidence, plan, shot, index, narrationTiming })
+    : buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming });
   const customRouting = options.routes != null || options.provider != null || options.model != null || options.baseUrl != null;
   const inputHash = customRouting
-    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v5" })
+    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, worker: options.sceneBlueprint ? "frame-director.v6" : "frame-director.v5" })
     : semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v4" });
   const existing = store.get(jobId);
   const recovered = await recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
@@ -218,9 +222,15 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   let prior = null;
   let errors = [];
   try {
+    const blueprint = options.sceneBlueprint
+      ? await resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, routes, adapters, options, inputHash, jobId })
+      : null;
+    const authorRoutes = blueprint?.route_index > 0
+      ? [routes[blueprint.route_index], ...routes.filter((_, routeIndex) => routeIndex !== blueprint.route_index)]
+      : routes;
     let totalAttempt = 0;
     let lastResult = null;
-    for (const [routeIndex, route] of routes.entries()) {
+    for (const [routeIndex, route] of authorRoutes.entries()) {
       const client = adapters.client ?? (adapters.createClient ?? createStructuredClient)(route);
       const attemptsForRoute = routeIndex === 0 ? Number(options.semanticAttempts ?? 2) : 1;
       for (let routeAttempt = 1; routeAttempt <= attemptsForRoute; routeAttempt += 1) {
@@ -231,11 +241,14 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
           reasoningContext: "current_turn",
           pro: false,
           instructions: options.leanPrompt ? LEAN_FRAME_INSTRUCTIONS : FRAME_INSTRUCTIONS,
-          input: buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming, prior, errors, lean: options.leanPrompt }),
+          input: blueprint
+            ? buildBlueprintFrameInput({ intake, evidence, plan, shot, index, narrationTiming, blueprint: blueprint.value, prior, errors })
+            : buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming, prior, errors, lean: options.leanPrompt }),
           schema: FRAME_BUNDLE_SCHEMA,
           schemaName: "launchclip_frame_bundle",
           background: options.background !== false,
           maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
+          ...(blueprint ? { temperature: Number(routeAttempt === 1 ? options.frameTemperature ?? .4 : options.frameRepairTemperature ?? .1) } : {}),
           promptCacheKey: "launchclip:frame-director:v4",
           metadata: { job_id: jobId, shot_id: shot.id, attempt: totalAttempt, route: routeIndex + 1 },
           onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
@@ -286,8 +299,22 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         }
         const paths = await writeFrameArtifacts(workspace, candidate);
         const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
-        await store.markSucceeded(jobId, outputs, result.usage);
-        return { shot_id: shot.id, cached: false, sanitized: sanitized.repairs.length > 0, repairs: sanitized.repairs, bundle: paths[0], html: paths[1], motion: paths[2], response_id: result.response_id, provider: route.provider, model: result.model, usage: result.usage };
+        const usage = mergeUsage(blueprint?.generated ? blueprint.usage : null, result.usage);
+        await store.markSucceeded(jobId, outputs, usage);
+        return {
+          shot_id: shot.id,
+          cached: false,
+          sanitized: sanitized.repairs.length > 0,
+          repairs: sanitized.repairs,
+          bundle: paths[0],
+          html: paths[1],
+          motion: paths[2],
+          response_id: result.response_id,
+          provider: route.provider,
+          model: result.model,
+          usage,
+          ...(blueprint ? { blueprint: { path: blueprint.path, response_id: blueprint.response_id, provider: blueprint.provider, model: blueprint.model, cached: !blueprint.generated } } : {})
+        };
       }
     }
     const reason = `Frame ${shot.id} exhausted model routes: ${errors.join("; ")}`;
@@ -302,6 +329,89 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
     await store.markFailed(jobId, error);
     throw error;
   }
+}
+
+async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, routes, adapters, options, inputHash, jobId }) {
+  const blueprintPath = safeShotFile(path.join(workspace, PRODUCTION_PATHS.frames, ".blueprints"), shot.id, ".json");
+  const stored = await readStoredBlueprint(blueprintPath, inputHash, shot);
+  if (stored) return { ...stored, value: stored.blueprint, path: blueprintPath, generated: false, route_index: matchingRouteIndex(routes, stored) };
+
+  const semanticAttempts = positiveInteger(options.blueprintSemanticAttempts ?? 2, "blueprintSemanticAttempts");
+  const generationErrors = [];
+  let prior = null;
+  let validationErrors = [];
+  for (const [routeIndex, route] of routes.entries()) {
+    const client = adapters.client ?? (adapters.createClient ?? createStructuredClient)(route);
+    const attemptsForRoute = routeIndex === 0 ? semanticAttempts : 1;
+    for (let routeAttempt = 1; routeAttempt <= attemptsForRoute; routeAttempt += 1) {
+      const request = {
+        model: route.model,
+        reasoningEffort: route.reasoning,
+        reasoningContext: "current_turn",
+        pro: false,
+        instructions: FRAME_BLUEPRINT_INSTRUCTIONS,
+        input: buildFrameBlueprintInput({ intake, evidence, plan, shot, index, narrationTiming, prior, errors: validationErrors }),
+        schema: FRAME_BLUEPRINT_SCHEMA,
+        schemaName: "launchclip_frame_blueprint",
+        background: options.background !== false,
+        maxOutputTokens: Number(options.blueprintMaxOutputTokens ?? 3_000),
+        temperature: Number(routeAttempt === 1 ? options.blueprintTemperature ?? .45 : options.blueprintRepairTemperature ?? .15),
+        promptCacheKey: "launchclip:frame-blueprint:v1",
+        metadata: { job_id: jobId, shot_id: shot.id, stage: "blueprint", attempt: routeAttempt, route: routeIndex + 1 },
+        onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
+      };
+      let result;
+      try {
+        result = await client.runStructured(request);
+      } catch (error) {
+        generationErrors.push(`Blueprint attempt ${routeAttempt} via ${route.provider}:${route.model} failed: ${error.message}`);
+        break;
+      }
+      await store.markRunning(jobId, { provider: route.provider, response_id: result.response_id, status: result.status });
+      const validation = validateFrameBlueprint(result.value, shot);
+      if (!validation.ok) {
+        prior = result.value;
+        validationErrors = validation.errors;
+        generationErrors.push(`Blueprint attempt ${routeAttempt} via ${route.provider}:${route.model} was invalid: ${validation.errors.join("; ")}`);
+        continue;
+      }
+      const record = {
+        input_hash: inputHash,
+        response_id: result.response_id,
+        provider: route.provider,
+        model: result.model,
+        usage: result.usage,
+        blueprint: result.value
+      };
+      await writeAtomic(blueprintPath, `${JSON.stringify(record, null, 2)}\n`);
+      return { ...record, value: result.value, path: blueprintPath, generated: true, route_index: routeIndex };
+    }
+  }
+  const error = new Error(`Frame blueprint ${shot.id} exhausted model routes: ${generationErrors.join("; ")}`);
+  error.code = "LAUNCHCLIP_FRAME_BLUEPRINT_ROUTES_EXHAUSTED";
+  error.shot_id = shot.id;
+  throw error;
+}
+
+async function readStoredBlueprint(filePath, inputHash, shot) {
+  try {
+    const record = JSON.parse(await readFile(filePath, "utf8"));
+    if (record?.input_hash !== inputHash) return null;
+    return validateFrameBlueprint(record?.blueprint, shot).ok ? record : null;
+  } catch (error) {
+    if (error.code === "ENOENT" || error instanceof SyntaxError) return null;
+    throw error;
+  }
+}
+
+function matchingRouteIndex(routes, record) {
+  const index = routes.findIndex((route) => route.provider === record?.provider && (route.model === record?.model || String(record?.model ?? "").replace(/:free$/, "") === String(route.model ?? "").replace(/:free$/, "")));
+  return index < 0 ? 0 : index;
+}
+
+function mergeUsage(...items) {
+  const keys = ["input_tokens", "output_tokens", "total_tokens", "cached_tokens", "cache_write_tokens", "reasoning_tokens"];
+  return Object.fromEntries(keys.map((key) => [key, items.reduce((sum, item) => sum + Number(item?.[key] ?? 0), 0)]));
 }
 
 export function sanitizeFrameBundle(bundle, context = {}) {

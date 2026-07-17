@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { FRAME_BLUEPRINT_VERSION } from "../src/frame_blueprint.js";
 import { buildFallbackFrame, buildFrameInput, directFrames, fallbackFramesForVerification, safeShotFile, sanitizeFrameBundle, validateHyperFramesRoot } from "../src/frame_director.js";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { EVIDENCE_VERSION, FRAME_BUNDLE_SCHEMA, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
@@ -407,6 +408,87 @@ test("runs fail-closed scenes concurrently but stops scheduling after the first 
   const store = await ProductionJobStore.open(workspace, { create: false });
   assert.equal(store.get("frame:shot-2").status, "succeeded");
   assert.equal(store.get("frame:shot-3"), null);
+});
+
+test("authors parallel scenes from compact LLM blueprints and preserves their receipts", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const calls = [];
+  const blueprintAttempts = new Map();
+  const client = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    calls.push({ schema: options.schemaName, shot: input.shot?.id ?? input.shot_contract?.id, temperature: options.temperature, input });
+    if (options.schemaName === "launchclip_frame_blueprint") {
+      const shot = input.shot;
+      const attempt = (blueprintAttempts.get(shot.id) ?? 0) + 1;
+      blueprintAttempts.set(shot.id, attempt);
+      if (shot.id === "shot-1" && attempt === 2) {
+        assert.ok(input.prior_blueprint);
+        assert.match(input.validation_errors_to_repair.join(" "), /proof-label/);
+      }
+      const elements = shot.visual.objects.map((object, index) => ({
+        object_id: object.id,
+        selector: `#${shot.id}-${object.id}`,
+        zone_id: index === 0 ? "field" : "hero",
+        visual_form: `${object.kind} expressed as a concrete editorial game object`,
+        priority: object.kind === "diagram-node" ? "primary" : "supporting"
+      }));
+      if (shot.id === "shot-1" && attempt === 1) elements.pop();
+      const event = shot.visual.events[0];
+      const target = elements.find((entry) => entry.object_id === event.target_ids[0]);
+      return {
+        response_id: `blueprint_${shot.id}`,
+        model: "google/gemma-code:free",
+        status: "completed",
+        value: {
+          schema_version: FRAME_BLUEPRINT_VERSION,
+          shot_id: shot.id,
+          composition_strategy: "A dense editorial game board resolves the proof across the full phone canvas.",
+          zones: [
+            { id: "field", purpose: "Background evidence field", x_percent: 0, y_percent: 0, width_percent: 100, height_percent: 100, layer: "background" },
+            { id: "hero", purpose: "Primary proof and labels", x_percent: 8, y_percent: 14, width_percent: 84, height_percent: 72, layer: "foreground" }
+          ],
+          elements,
+          typography: { display_px: 112, body_px: 42, metadata_px: 24, maximum_text_lines: 2 },
+          motion_beats: [{ event_id: event.id, object_id: event.target_ids[0], selector: target.selector, at_seconds: event.at_seconds, action: "Reveal and lock the proof into place" }],
+          visible_copy: shot.on_screen_text,
+          density: { target_occupied_percent: 68, minimum_semantic_objects: 2, focal_element_selector: target.selector },
+          implementation_notes: ["Use the canvas instead of floating a small card in empty space"]
+        },
+        usage: { input_tokens: 100, output_tokens: 50, total_tokens: 150 }
+      };
+    }
+    const shot = input.shot_contract;
+    assert.equal(input.scene_blueprint.shot_id, shot.id);
+    assert.equal(input.shot, undefined);
+    assert.ok(input.narration_anchors.length <= 8);
+    return {
+      response_id: `frame_${shot.id}`,
+      model: "google/gemma-code:free",
+      status: "completed",
+      value: frameBundle(shot.id, shot.duration_seconds),
+      usage: { input_tokens: 200, output_tokens: 100, total_tokens: 300 }
+    };
+  } };
+
+  const result = await directFrames(workspace, {
+    concurrency: 3,
+    failClosedConcurrency: 2,
+    sceneBlueprint: true,
+    leanPrompt: true,
+    fallbackMode: "error",
+    routes: ["openrouter:google/gemma-code:free@none"],
+    background: false
+  }, { client });
+
+  assert.equal(result.generated, 2);
+  assert.equal(calls.filter((entry) => entry.schema === "launchclip_frame_blueprint").length, 3);
+  assert.equal(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").length, 2);
+  assert.deepEqual(calls.filter((entry) => entry.schema === "launchclip_frame_blueprint").map((entry) => entry.temperature).sort(), [.15, .45, .45]);
+  assert.deepEqual(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").map((entry) => entry.temperature), [.4, .4]);
+  assert.deepEqual(result.frames.map((entry) => entry.usage.total_tokens), [450, 450]);
+  assert.ok(result.frames.every((entry) => entry.blueprint.cached === false));
+  assert.match(await readFile(result.frames[0].blueprint.path, "utf8"), /launchclip\.frame-blueprint\.v1/);
 });
 
 test("can exhaust LLM routes without writing a deterministic visual fallback", async () => {

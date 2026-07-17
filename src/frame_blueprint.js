@@ -89,7 +89,7 @@ This blueprint is a binding handoff to a second LLM that will write the HTML and
 - Preserve exact supplied on-screen copy and evidence. Do not add claims.
 - Keep the concept original while obeying the supplied style DNA, continuity, and transition direction.`;
 
-export function buildFrameBlueprintInput({ intake, evidence, plan, shot, index, narrationTiming = null }) {
+export function buildFrameBlueprintInput({ intake, evidence, plan, shot, index, narrationTiming = null, prior = null, errors = [] }) {
   return JSON.stringify({
     global_design: {
       concept: plan.design.concept,
@@ -106,7 +106,9 @@ export function buildFrameBlueprintInput({ intake, evidence, plan, shot, index, 
     narration_anchors: narrationAnchors(narrationTiming, shot),
     required_object_ids: (shot.visual?.objects ?? []).map((entry) => entry.id),
     required_events: (shot.visual?.events ?? []).map((entry) => ({ id: entry.id, target_ids: entry.target_ids, at_seconds: entry.at_seconds })),
-    required_selector_prefix: `#${shot.id}-`
+    required_selector_prefix: `#${shot.id}-`,
+    prior_blueprint: prior,
+    validation_errors_to_repair: errors
   });
 }
 
