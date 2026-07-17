@@ -2,11 +2,13 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { createStructuredClient } from "./model_provider.js";
 
 const STATE_SCHEMA_VERSION = "launchclip.openrouter-free-models.v1";
 const DEFAULT_ROLE = "visual-code-author";
 const DEFAULT_CONTRACT = "frame-director.v5";
 const DEFAULT_TOP_K = 5;
+const DEFAULT_PROBE_TIMEOUT_MS = 15_000;
 const REQUIRED_CONTEXT_TOKENS = 64_000;
 const DESIGN_WEIGHTS = new Map([
   ["website", .30],
@@ -103,6 +105,68 @@ export async function recordOpenRouterFreeModelOutcome(selection, outcome = {}, 
   }
   await writeState(statePath, state);
   return selectionFromState(statePath, state, winner ? "observed-winner" : outcome.error ? "rotated-after-failure" : selection.source);
+}
+
+export async function probeOpenRouterFreeModels(selection, options = {}) {
+  if (!selection?.state_path || !selection?.candidates?.length) throw freeModelError("OpenRouter free-model probing requires a persisted candidate selection");
+  const statePath = path.resolve(options.statePath ?? selection.state_path);
+  const state = await readState(statePath);
+  if (!state?.candidates?.length) throw freeModelError("OpenRouter free-model probe state contains no candidates");
+  const createClient = options.createClient ?? createStructuredClient;
+  const timeoutMs = positiveInteger(options.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS, "probe timeoutMs");
+  const now = options.now ?? (() => new Date());
+  const candidateIds = selection.candidates.map((candidate) => candidate.id).filter((id) => state.candidates.some((candidate) => candidate.id === id));
+  const failures = [];
+
+  for (const [index, id] of candidateIds.entries()) {
+    const candidate = state.candidates.find((entry) => entry.id === id);
+    try {
+      const client = createClient(`openrouter:${id}@none`, { requestTimeoutMs: timeoutMs, maxRetries: 0, apiKey: options.apiKey });
+      const result = await client.runStructured({
+        instructions: "You are a LaunchClip model availability probe. Follow the tiny JSON schema exactly.",
+        input: "Confirm that this endpoint can produce structured output for a coding task.",
+        schema: {
+          type: "object",
+          properties: { ok: { type: "boolean" } },
+          required: ["ok"],
+          additionalProperties: false
+        },
+        schemaName: "launchclip_free_model_probe",
+        maxOutputTokens: 32,
+        reasoningEffort: "none"
+      });
+      if (result?.value?.ok !== true) throw new Error("probe response did not confirm structured-output support");
+      const probedAt = now().toISOString();
+      state.selected_model = candidate.id;
+      state.selected_canonical_slug = candidate.canonical_slug;
+      state.live_probe_at = probedAt;
+      state.candidates = moveCandidateFirst(state.candidates, candidate.id).map((entry) => entry.id === candidate.id
+        ? { ...entry, probe_successes: Number(entry.probe_successes ?? 0) + 1, consecutive_probe_failures: 0, last_probe_at: probedAt, last_probe_error: null }
+        : entry);
+      await writeState(statePath, state);
+      return selectionFromState(statePath, state, "live-probe");
+    } catch (error) {
+      const probedAt = now().toISOString();
+      const message = sanitizeProbeError(error);
+      failures.push(`${id}: ${message}`);
+      state.candidates = state.candidates.map((entry) => entry.id === id
+        ? {
+            ...entry,
+            probe_failures: Number(entry.probe_failures ?? 0) + 1,
+            consecutive_probe_failures: Number(entry.consecutive_probe_failures ?? 0) + 1,
+            last_probe_at: probedAt,
+            last_probe_error: message
+          }
+        : entry);
+      const nextId = candidateIds[index + 1] ?? null;
+      state.selected_model = nextId;
+      state.selected_canonical_slug = state.candidates.find((entry) => entry.id === nextId)?.canonical_slug ?? null;
+      if (nextId) state.candidates = moveCandidateFirst(state.candidates, nextId);
+      await writeState(statePath, state);
+    }
+  }
+
+  throw freeModelError(`No ranked OpenRouter free model passed the live structured-output probe: ${failures.join("; ")}`);
 }
 
 function isEligibleFreeModel(model) {
@@ -320,4 +384,10 @@ function freeModelError(message) {
   const error = new Error(message);
   error.code = "LAUNCHCLIP_OPENROUTER_FREE_MODELS";
   return error;
+}
+
+function sanitizeProbeError(error) {
+  return String(error?.message ?? error ?? "unknown probe failure")
+    .replace(/\b(?:sk|sess)-[a-z0-9_-]{12,}\b/gi, "[REDACTED]")
+    .slice(0, 500);
 }

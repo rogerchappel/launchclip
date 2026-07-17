@@ -3,7 +3,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { rankOpenRouterFreeModels, recordOpenRouterFreeModelOutcome, selectOpenRouterFreeModels } from "../src/free_model_selector.js";
+import { probeOpenRouterFreeModels, rankOpenRouterFreeModels, recordOpenRouterFreeModelOutcome, selectOpenRouterFreeModels } from "../src/free_model_selector.js";
 
 test("ranks free structured-output models for visual code instead of parameter count", () => {
   const ranked = rankOpenRouterFreeModels([
@@ -79,6 +79,40 @@ test("promotes the model that authored accepted frames and rotates after a faile
   assert.equal(rotated.selected_model, "qwen/qwen-coder:free");
   const state = JSON.parse(await readFile(statePath, "utf8"));
   assert.equal(state.candidates.find((entry) => entry.id === "google/gemma-code:free").failures, 1);
+});
+
+test("probes ranked candidates and persists the first live structured-output route", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "launchclip-free-probe-"));
+  const statePath = path.join(directory, "state.json");
+  const catalog = [
+    model("google/gemma-code:free", { coding: 55 }),
+    model("qwen/qwen-coder:free", { coding: 50 })
+  ];
+  const fetch = async (url) => jsonResponse(url.endsWith("/models") ? { data: catalog } : { data: [] });
+  const selected = await selectOpenRouterFreeModels({ fetch, apiKey: "test", statePath, topK: 2 });
+  const attempts = [];
+  const probed = await probeOpenRouterFreeModels(selected, {
+    timeoutMs: 25,
+    now: () => new Date("2026-07-17T01:02:03Z"),
+    createClient: (route, options) => ({
+      runStructured: async (request) => {
+        attempts.push({ route, options, request });
+        if (route.includes("gemma")) throw new Error("No endpoints found that can handle the requested parameters");
+        return { model: "qwen/qwen-coder:free", value: { ok: true } };
+      }
+    })
+  });
+  assert.deepEqual(attempts.map((entry) => entry.route), ["openrouter:google/gemma-code:free@none", "openrouter:qwen/qwen-coder:free@none"]);
+  assert.equal(attempts[0].options.requestTimeoutMs, 25);
+  assert.equal(attempts[0].options.maxRetries, 0);
+  assert.equal(attempts[0].request.maxOutputTokens, 32);
+  assert.equal(probed.source, "live-probe");
+  assert.equal(probed.selected_model, "qwen/qwen-coder:free");
+  assert.equal(probed.routes[0], "openrouter:qwen/qwen-coder:free@none");
+  const state = JSON.parse(await readFile(statePath, "utf8"));
+  assert.equal(state.candidates.find((entry) => entry.id === "google/gemma-code:free").probe_failures, 1);
+  assert.equal(state.candidates.find((entry) => entry.id === "qwen/qwen-coder:free").probe_successes, 1);
+  assert.equal(state.live_probe_at, "2026-07-17T01:02:03.000Z");
 });
 
 function model(id, options = {}) {
