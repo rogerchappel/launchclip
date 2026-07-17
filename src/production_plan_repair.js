@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { compactEvidence, writePlanArtifacts } from "./creative_planner.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
-import { OpenAIResponsesClient } from "./openai_responses.js";
+import { createStructuredClient } from "./model_provider.js";
 import { PRODUCTION_PATHS, PRODUCTION_PLAN_SCHEMA, normalizeProductionPlanTiming, validateProductionPlan } from "./production_contracts.js";
 import { VISUAL_NOVELTY_CONTEXT_PATH, writeVisualFingerprint } from "./visual_novelty.js";
 
@@ -31,6 +31,7 @@ export async function repairProductionPlan(workspacePath, findings, options = {}
     ? evidence.items.find((entry) => entry.kind === "voiceover-transcript" && entry.role === "voiceover")?.content?.trim() ?? null
     : null;
   if (intake.policies?.supplied_voiceover_is_authoritative && !suppliedTranscript) throw new Error("Plan repair requires the authoritative supplied transcript");
+  const provider = options.provider ?? intake.model?.provider ?? "openai";
   const model = options.model ?? intake.model?.id ?? "gpt-5.6";
   const reasoning = options.reasoning ?? intake.model?.reasoning_effort ?? "xhigh";
   const compactedEvidence = compactEvidence(evidence.items, options.evidenceChars);
@@ -64,10 +65,10 @@ export async function repairProductionPlan(workspacePath, findings, options = {}
     resumeResponseId = current.remote.response_id;
   } else {
     if (current.status === "failed" || current.status === "stale") await store.retry(jobId, { inputHash });
-    await store.markRunning(jobId, { provider: "openai", response_id: null, status: "repairing" });
+    await store.markRunning(jobId, { provider, response_id: null, status: "repairing" });
   }
 
-  const client = adapters.client ?? new OpenAIResponsesClient();
+  const client = adapters.client ?? (adapters.createClient ?? createStructuredClient)({ provider, model, reasoning, supportsImages: false });
   const validationContext = {
     evidenceIds: evidence.items.map((entry) => entry.id),
     claimEligibleEvidenceIds: evidence.items.filter((entry) => entry.claims_allowed && entry.role !== "reference").map((entry) => entry.id),
