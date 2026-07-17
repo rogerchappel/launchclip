@@ -166,6 +166,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   let resumeResponseId = null;
   if (!current) await store.add({ id: jobId, kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash, max_attempts: Number(options.maxAttempts ?? 3) });
   else if (current.status === "failed" && existing?.input_hash === inputHash && isSemanticValidationFailure(current.error)) {
+    if (options.fallbackMode === "error") throw frameRoutesExhaustedError(shot.id, [current.error]);
     await store.reconfigure(jobId, { input_hash: inputHash });
     await store.markRunning(jobId, { provider: "local", response_id: existing.remote?.response_id ?? null, status: "fallback" });
     return persistFallbackFrame({ workspace, intake, evidence, plan, shot, store, jobId, reason: current.error, responseId: existing.remote?.response_id ?? null });
@@ -253,9 +254,11 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         return { shot_id: shot.id, cached: false, sanitized: sanitized.repairs.length > 0, repairs: sanitized.repairs, bundle: paths[0], html: paths[1], motion: paths[2], response_id: result.response_id, provider: route.provider, model: result.model, usage: result.usage };
       }
     }
+    const reason = `Frame ${shot.id} exhausted model routes: ${errors.join("; ")}`;
+    if (options.fallbackMode === "error") throw frameRoutesExhaustedError(shot.id, errors);
     return persistFallbackFrame({
       workspace, intake, evidence, plan, shot, store, jobId,
-      reason: `Frame ${shot.id} exhausted model routes: ${errors.join("; ")}`,
+      reason,
       responseId: lastResult?.response_id ?? null,
       usage: lastResult?.usage ?? {}
     });
@@ -465,6 +468,14 @@ function frameFallbackError(frame) {
   const error = new Error(`Frame ${frame.shot_id} selected a deterministic fallback; production stopped before starting another frame. Fix or resume the paid candidate, or explicitly pass --allow-frame-fallback.`);
   error.code = "LAUNCHCLIP_FRAME_FALLBACK_BLOCKED";
   error.frame = frame;
+  return error;
+}
+
+function frameRoutesExhaustedError(shotId, errors) {
+  const detail = errors.filter(Boolean).join("; ") || "no candidate satisfied the frame contract";
+  const error = new Error(`Frame ${shotId} exhausted model routes without a valid authored frame: ${detail}`);
+  error.code = "LAUNCHCLIP_FRAME_MODEL_ROUTES_EXHAUSTED";
+  error.shot_id = shotId;
   return error;
 }
 

@@ -301,6 +301,26 @@ test("fails closed on fallback and does not start a later frame", async () => {
   assert.deepEqual(calls, ["shot-1"]);
 });
 
+test("can exhaust LLM routes without writing a deterministic visual fallback", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const calls = [];
+  const client = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    calls.push(input.shot.id);
+    const bundle = frameBundle(input.shot.id, input.shot.duration_seconds);
+    bundle.html = bundle.html.replace('data-start="0"', 'data-start="1"');
+    return { response_id: `resp_${input.shot.id}`, model: "free-coder", status: "completed", value: bundle, usage: {} };
+  } };
+
+  await assert.rejects(
+    () => directFrames(workspace, { concurrency: 2, semanticAttempts: 1, fallbackMode: "error", background: false }, { client }),
+    (error) => error.code === "LAUNCHCLIP_FRAME_MODEL_ROUTES_EXHAUSTED" && /shot-1/.test(error.message)
+  );
+  assert.deepEqual(calls, ["shot-1"]);
+  await assert.rejects(() => readFile(path.join(workspace, "production", "fallbacks", "shot-1.json")), (error) => error.code === "ENOENT");
+});
+
 test("stops before the next frame after the observed dollar limit is reached", async () => {
   const context = fixture();
   const workspace = await workspaceFixture(context);
