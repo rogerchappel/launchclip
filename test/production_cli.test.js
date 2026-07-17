@@ -466,6 +466,9 @@ test("keeps critic and repair routes on OpenRouter free under the free policy", 
   });
   assert.equal(received.critic.route, "openrouter:openrouter/free@none");
   assert.deepEqual(received.repair.routes, ["openrouter:openrouter/free@none"]);
+  assert.equal(received.repair.provider, "openrouter");
+  assert.equal(received.repair.model, "openrouter/free");
+  assert.equal(received.repair.reasoning, "none");
   assert.equal(received.repair.supportsImages, false);
   assert.equal(received.repair.sourceMode, "scoped");
 });

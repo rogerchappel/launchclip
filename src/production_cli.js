@@ -497,8 +497,9 @@ function repairOptions(flags) {
   const routes = stageModelRoutes(flags, "repair");
   const leanFreeRoute = isDynamicOpenRouterFreeRoute(routes);
   return {
-    model: flags["repair-model"] ?? (policy === "quality" ? "gpt-5.6" : "gpt-5.6-luna"),
-    reasoning: flags["repair-reasoning"] ?? (policy === "quality" ? "high" : "medium"),
+    provider: flags["repair-provider"] ?? (policy === "free" ? "openrouter" : undefined),
+    model: flags["repair-model"] ?? (policy === "free" ? "openrouter/free" : policy === "quality" ? "gpt-5.6" : "gpt-5.6-luna"),
+    reasoning: flags["repair-reasoning"] ?? (policy === "free" ? "none" : policy === "quality" ? "high" : "medium"),
     routes,
     semanticAttempts: numberOr(flags["repair-semantic-attempts"], 2),
     maxSnapshots: numberOr(flags["repair-snapshots"], 8),
