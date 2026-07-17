@@ -29,6 +29,15 @@ npm link
 launchclip doctor
 ```
 
+## Licensing
+
+LaunchClip's own source code is available under the MIT License. Its rendering
+stack includes separately licensed dependencies. In particular, Remotion uses
+the Remotion License, whose terms depend on the user or organisation. Review
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and the current dependency
+terms before organisational or commercial use; LaunchClip does not relicense
+third-party packages.
+
 ## Quickstart
 
 ```bash

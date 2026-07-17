@@ -1,6 +1,6 @@
 {
   "name": "launchclip",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Create reviewable launch videos and OSS promotion packets from local product evidence.",
   "type": "module",
   "bin": {
@@ -48,6 +48,7 @@
     "SKILL.md",
     "README.md",
     "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
     "SECURITY.md",
     "CHANGELOG.md",
     "CONTRIBUTING.md"
