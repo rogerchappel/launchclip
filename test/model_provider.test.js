@@ -111,6 +111,36 @@ test("accepts a single fenced JSON object from compatible chat providers", async
   assert.deepEqual(result.value, { ok: true });
 });
 
+test("times out a silent pinned free route without retrying it", async () => {
+  let calls = 0;
+  const client = createStructuredClient({ provider: "openrouter", model: "example/silent:free", reasoning: "none", apiKey: "router-test" }, {
+    requestTimeoutMs: 10,
+    fetch: async (_url, init) => {
+      calls += 1;
+      await new Promise((_resolve, reject) => init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true }));
+    }
+  });
+  await assert.rejects(
+    () => client.runStructured({ schema: { type: "object" }, schemaName: "result", input: "go" }),
+    (error) => error.code === "LAUNCHCLIP_PROVIDER_TIMEOUT" && /timed out after 10ms/.test(error.message)
+  );
+  assert.equal(calls, 1);
+});
+
+test("reports the same bounded timeout when a response body stalls after headers", async () => {
+  const client = createStructuredClient({ provider: "openrouter", model: "example/stalled-body:free", reasoning: "none", apiKey: "router-test" }, {
+    requestTimeoutMs: 10,
+    fetch: async (_url, init) => ({
+      ok: true,
+      text: async () => new Promise((_resolve, reject) => init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true }))
+    })
+  });
+  await assert.rejects(
+    () => client.runStructured({ schema: { type: "object" }, schemaName: "result", input: "go" }),
+    (error) => error.code === "LAUNCHCLIP_PROVIDER_TIMEOUT" && /timed out after 10ms/.test(error.message)
+  );
+});
+
 test("rejects unsupported providers before a request", () => {
   assert.throws(() => parseModelRoute("mystery:model@low"), /Unsupported model provider/);
 });

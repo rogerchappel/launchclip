@@ -62,7 +62,12 @@ export class ChatCompletionsStructuredClient {
     if (!this.apiKey && route.provider !== "ollama") throw new Error(`${providerApiKeyName(route.provider)} is not set`);
     this.fetch = options.fetch ?? globalThis.fetch;
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
-    this.maxRetries = Number(options.maxRetries ?? 2);
+    const freeOpenRouterRoute = isFreeOpenRouterRoute(route);
+    this.maxRetries = Number(options.maxRetries ?? (freeOpenRouterRoute ? 0 : 2));
+    this.requestTimeoutMs = nonNegativeInteger(
+      options.requestTimeoutMs ?? (freeOpenRouterRoute ? process.env.LAUNCHCLIP_OPENROUTER_FREE_TIMEOUT_MS ?? 120_000 : 0),
+      "requestTimeoutMs"
+    );
     this.supportsResume = false;
     this.supportsImages = route.supportsImages;
     this.reasoning = route.reasoning;
@@ -104,9 +109,13 @@ export class ChatCompletionsStructuredClient {
   async request(endpoint, init) {
     for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
       let response;
+      let payload;
+      const timeoutSignal = this.requestTimeoutMs > 0 ? AbortSignal.timeout(this.requestTimeoutMs) : null;
+      const signal = init.signal && timeoutSignal ? AbortSignal.any([init.signal, timeoutSignal]) : init.signal ?? timeoutSignal ?? undefined;
       try {
         response = await this.fetch(`${this.baseUrl}${endpoint}`, {
           ...init,
+          signal,
           headers: {
             "Content-Type": "application/json",
             ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
@@ -115,12 +124,19 @@ export class ChatCompletionsStructuredClient {
             ...(init.headers ?? {})
           }
         });
+        payload = await parseResponseBody(response);
       } catch (error) {
-        if (attempt >= this.maxRetries) throw new Error(`${this.provider} request failed: ${sanitize(error?.message ?? error)}`);
+        if (attempt >= this.maxRetries) {
+          if (timeoutSignal?.aborted) {
+            const timeoutError = new Error(`${this.provider} request timed out after ${this.requestTimeoutMs}ms`);
+            timeoutError.code = "LAUNCHCLIP_PROVIDER_TIMEOUT";
+            throw timeoutError;
+          }
+          throw new Error(`${this.provider} request failed: ${sanitize(error?.message ?? error)}`);
+        }
         await this.sleep(retryDelayMs(null, attempt));
         continue;
       }
-      const payload = await parseResponseBody(response);
       if (response.ok) return payload;
       const retryable = response.status === 408 || response.status === 409 || response.status === 429 || response.status >= 500;
       if (retryable && attempt < this.maxRetries) {
@@ -317,6 +333,16 @@ function positiveInteger(value, label) {
   const number = Number(value);
   if (!Number.isInteger(number) || number <= 0) throw new Error(`${label} must be a positive integer`);
   return number;
+}
+
+function nonNegativeInteger(value, label) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 0) throw new Error(`${label} must be a non-negative integer`);
+  return number;
+}
+
+function isFreeOpenRouterRoute(route) {
+  return route.provider === "openrouter" && (route.model === "openrouter/free" || route.model.endsWith(":free"));
 }
 
 function sanitize(value) {

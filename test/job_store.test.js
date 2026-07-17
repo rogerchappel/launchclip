@@ -181,6 +181,14 @@ test("workspace lease heartbeat prevents an active long run from being stolen af
   }, { ttlMs: 20, heartbeatMs: 5 });
 });
 
+test("workspace lease immediately recovers a fresh lock owned by a dead process", async () => {
+  const workspace = await tempWorkspace();
+  const lockPath = path.join(workspace, "production", ".launchclip.lock");
+  await writeFile(lockPath, `${JSON.stringify({ pid: 2_147_483_647, token: "stale", acquired_at: new Date().toISOString() })}\n`);
+  const value = await withProductionLease(workspace, async () => "recovered");
+  assert.equal(value, "recovered");
+});
+
 test("rejects dependency cycles and output paths outside the workspace", async () => {
   const workspace = await tempWorkspace();
   const storePath = path.join(workspace, "production", "jobs.json");

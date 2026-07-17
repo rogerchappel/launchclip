@@ -52,6 +52,22 @@ HyperFrames contract:
 - Keep essential text and proof inside the frame at all times. Preserve exact visible copy and factual meaning.
 - The first and last rendered frame must be intentional, including when mounted next to neighboring shots.`;
 
+const LEAN_FRAME_INSTRUCTIONS = `You are a senior motion designer authoring one original HyperFrames shot. Return only strict frame-bundle JSON matching the supplied schema.
+
+Required host contract:
+- html is one sub-composition document with exactly one <template>. Put every live <style>, root, and <script> inside it.
+- Use one root: id="root", no root class, data-composition-id=shot_id, data-start="0", supplied data-duration, data-width, and data-height. Include a #root{...} style rule.
+- Prefix every other id with "shot_id-". Give timeline-visible elements class="clip", local data-start/data-duration, and stable ids.
+- GSAP is global. Create one paused seek-safe timeline and register it as window.__timelines[shot_id]. Use gsap.set for initial transforms; animate transform/opacity rather than layout properties.
+- Do not import, fetch, use timers/randomness/storage, or include audio/video elements. Request supplied media through root_media_requests only.
+
+Creative contract:
+- Treat global_design.style_dna and shot.visual as binding. Build the declared diagram, comparison, process, timeline, or data form—not a headline over decoration.
+- Preserve readable non-overlapping zones, deliberate spacing, exact palette/type roles, and the planned motion/continuity. Keep copy brief and visual.
+- Use supplied evidence only for grounded labels, metrics, and claims. Use only supplied resource paths; otherwise draw native HTML/CSS/SVG.
+- motion.assertions selectors must exist. motion.events must use exact planned visual object ids and event ids. Keep event times inside the shot.
+- Return schema_version, shot_id, html, motion, preserve, root_media_requests, evidence_ids, and visible_copy. Do not add a type field.`;
+
 export const FALLBACK_FRAMES_PATH = "production/fallbacks";
 
 export async function directFrames(workspacePath, options = {}, adapters = {}) {
@@ -111,7 +127,7 @@ function frameModelRoutes(options, intake) {
   });
 }
 
-export function buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming = null, prior = null, errors = [] }) {
+export function buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming = null, prior = null, errors = [], lean = false }) {
   const neighbors = [plan.shots[index - 1], plan.shots[index + 1]].filter(Boolean).map((entry) => ({
     id: entry.id,
     purpose: entry.purpose,
@@ -119,7 +135,7 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, narration
     visual_description: entry.visual.description,
     representation: entry.visual.representation,
     continuity: entry.visual.continuity,
-    objects: entry.visual.objects
+    ...(lean ? {} : { objects: entry.visual.objects })
   }));
   const evidenceById = new Map(evidence.items.map((entry) => [entry.id, entry]));
   const resourceById = new Map(intake.resources.map((entry) => [entry.id, entry]));
@@ -131,12 +147,26 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, narration
     shot_end_seconds: Math.min(shot.end_seconds - shot.start_seconds, Number(word.end) - shot.start_seconds)
   }));
   return JSON.stringify({
-    global_design: plan.design,
+    global_design: lean ? {
+      concept: plan.design.concept,
+      art_direction: plan.design.art_direction,
+      style_dna: plan.design.style_dna
+    } : plan.design,
     format: plan.format,
-    project: plan.project,
+    project: lean ? {
+      title: plan.project.title,
+      thesis: plan.project.thesis,
+      audience_promise: plan.project.audience_promise,
+      angle: plan.project.angle
+    } : plan.project,
     shot: { ...shot, duration_seconds: shot.end_seconds - shot.start_seconds },
     neighbors,
-    evidence: shot.evidence_ids.map((id) => evidenceById.get(id)).filter(Boolean).map((entry) => ({ id: entry.id, title: entry.title, content: entry.content, provenance: entry.provenance })),
+    evidence: shot.evidence_ids.map((id) => evidenceById.get(id)).filter(Boolean).map((entry) => ({
+      id: entry.id,
+      title: entry.title,
+      content: lean ? compactText(entry.content, 1_800) : entry.content,
+      provenance: entry.provenance
+    })),
     resources: shot.resource_ids.map((id) => resourceById.get(id)).filter(Boolean).map((entry) => ({ id: entry.id, role: entry.role, type: entry.type, local_path: entry.is_remote ? null : entry.location, remote: entry.is_remote, catalog: entry.catalog ?? null })),
     narration_timing: narrationTiming ? { duration_seconds: narrationTiming.duration_seconds, words: timedWords } : null,
     frame_responsibility: "Own visual HTML and motion for this shot only. Request media; do not mount it.",
@@ -173,8 +203,10 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   }
   else if (current.status === "failed" || current.status === "stale") await store.retry(jobId, { inputHash });
   else if (current.status === "running" || current.status === "submitted") {
-    if (!current.remote?.response_id) throw new Error(`Frame job is ${current.status} without a resumable response id: ${jobId}`);
-    resumeResponseId = current.remote.response_id;
+    if (!current.remote?.response_id) {
+      await store.markFailed(jobId, new Error(`Recovered interrupted frame job without a resumable response id: ${jobId}`));
+      await store.retry(jobId, { inputHash });
+    } else resumeResponseId = current.remote.response_id;
   } else if (current.status !== "pending") throw new Error(`Frame job is already ${current.status}: ${jobId}`);
 
   if (!resumeResponseId) await store.markRunning(jobId, { provider: routes[0].provider, response_id: null, status: "running" });
@@ -193,8 +225,8 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
           reasoningEffort: route.reasoning,
           reasoningContext: "current_turn",
           pro: false,
-          instructions: FRAME_INSTRUCTIONS,
-          input: buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming, prior, errors }),
+          instructions: options.leanPrompt ? LEAN_FRAME_INSTRUCTIONS : FRAME_INSTRUCTIONS,
+          input: buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming, prior, errors, lean: options.leanPrompt }),
           schema: FRAME_BUNDLE_SCHEMA,
           schemaName: "launchclip_frame_bundle",
           background: options.background !== false,
@@ -218,9 +250,8 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
           } else result = await client.runStructured(request);
         } catch (error) {
           resumeResponseId = null;
-          if (routeIndex === routes.length - 1) throw error;
-          errors = [`Generation attempt ${totalAttempt} via ${route.provider}:${route.model} failed: ${error.message}`];
-          continue;
+          errors.push(`Generation attempt ${totalAttempt} via ${route.provider}:${route.model} failed: ${error.message}`);
+          break;
         }
         resumeResponseId = null;
         lastResult = result;
@@ -255,7 +286,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
       }
     }
     const reason = `Frame ${shot.id} exhausted model routes: ${errors.join("; ")}`;
-    if (options.fallbackMode === "error") throw frameRoutesExhaustedError(shot.id, errors);
+    if (!lastResult || options.fallbackMode === "error") throw frameRoutesExhaustedError(shot.id, errors);
     return persistFallbackFrame({
       workspace, intake, evidence, plan, shot, store, jobId,
       reason,
@@ -270,16 +301,28 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
 
 export function sanitizeFrameBundle(bundle, context = {}) {
   const html = String(bundle?.html ?? "");
+  const transportRepair = repairTemplateTransport(html);
+  const timelineSafeHtml = context.shot?.id ? ensureTimelineRegistration(transportRepair.html, context.shot.id) : transportRepair.html;
   let removed = 0;
-  const eventSafeHtml = html.replace(/<(?:[^"'<>]|"[^"]*"|'[^']*')+>/g, (tag) => tag.replace(/\son[a-z][\w:-]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, () => {
+  const eventSafeHtml = timelineSafeHtml.replace(/<(?:[^"'<>]|"[^"]*"|'[^']*')+>/g, (tag) => tag.replace(/\son[a-z][\w:-]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, () => {
     removed += 1;
     return "";
   }));
-  const repairs = removed ? [{ kind: "remove-event-handler-attributes", count: removed }] : [];
+  const repairs = transportRepair.repaired ? [{ kind: "wrap-live-frame-in-template" }] : [];
+  if (removed) repairs.push({ kind: "remove-event-handler-attributes", count: removed });
+  const normalizedBundle = { ...bundle };
+  if (normalizedBundle.type != null && normalizedBundle.type === normalizedBundle.schema_version) {
+    delete normalizedBundle.type;
+    repairs.push({ kind: "remove-redundant-frame-type" });
+  }
   const rootRepair = repairFrameRootContract(eventSafeHtml, context);
   if (rootRepair.attributes.length) {
     repairs.push({ kind: "add-missing-root-contract-attributes", attributes: rootRepair.attributes });
   }
+  if (rootRepair.normalizedAttributes.length) {
+    repairs.push({ kind: "normalize-root-contract-attributes", attributes: rootRepair.normalizedAttributes });
+  }
+  if (rootRepair.addedRootStyle) repairs.push({ kind: "add-missing-root-style" });
   const resourceRoles = context.resourceRoles instanceof Map ? context.resourceRoles : new Map(Object.entries(context.resourceRoles ?? {}));
   const rootMediaRequests = [];
   for (const request of bundle?.root_media_requests ?? []) {
@@ -294,15 +337,28 @@ export function sanitizeFrameBundle(bundle, context = {}) {
     });
   }
   return {
-    bundle: { ...bundle, html: rootRepair.html, root_media_requests: rootMediaRequests },
+    bundle: { ...normalizedBundle, html: rootRepair.html, root_media_requests: rootMediaRequests },
     repairs
   };
+}
+
+function repairTemplateTransport(html) {
+  const source = String(html ?? "");
+  const templates = [...source.matchAll(/<template\b[^>]*>([\s\S]*?)<\/template>/gi)];
+  if (templates.length > 1 || (templates.length === 1 && templates[0][1].trim())) return { html: source, repaired: false };
+  const live = source
+    .replace(/<!doctype[^>]*>/gi, "")
+    .replace(/<template\b[^>]*>\s*<\/template>/gi, "")
+    .replace(/<\/?(?:html|head|body)\b[^>]*>/gi, "")
+    .trim();
+  if (!/<[^>]+\bid=["']root["']/i.test(live) || !/<style\b/i.test(live) || !/<script\b/i.test(live)) return { html: source, repaired: false };
+  return { html: `<template>${live}</template>`, repaired: true };
 }
 
 function repairFrameRootContract(html, context = {}) {
   const source = String(html ?? "");
   const templates = [...source.matchAll(/<template\b[^>]*>([\s\S]*?)<\/template>/gi)];
-  if (templates.length !== 1) return { html: source, attributes: [] };
+  if (templates.length !== 1) return { html: source, attributes: [], normalizedAttributes: [], addedRootStyle: false };
   const template = templates[0][1];
   const shotId = context.shot?.id;
   const byRootId = template.match(/<[a-z][\w:-]*\b[^>]*\bid\s*=\s*["']root["'][^>]*>/i);
@@ -310,9 +366,16 @@ function repairFrameRootContract(html, context = {}) {
     ? template.match(new RegExp(`<[a-z][\\w:-]*\\b[^>]*\\bdata-composition-id\\s*=\\s*["']${escapeRegExp(shotId)}["'][^>]*>`, "i"))
     : null;
   const match = byRootId ?? byCompositionId;
-  if (!match) return { html: source, attributes: [] };
+  if (!match) return { html: source, attributes: [], normalizedAttributes: [], addedRootStyle: false };
 
-  const root = match[0];
+  const originalRoot = match[0];
+  let root = originalRoot;
+  const normalizedAttributes = [];
+  const authoredStart = root.match(/\bdata-start\s*=\s*["']([^"']+)["']/i)?.[1];
+  if (Number(context.shot?.start_seconds) !== 0 && Number(authoredStart) === Number(context.shot?.start_seconds)) {
+    root = root.replace(/\bdata-start\s*=\s*(["'])[^"']+\1/i, 'data-start="0"');
+    normalizedAttributes.push("data-start");
+  }
   const additions = [];
   const addMissing = (name, value) => {
     if (value == null || new RegExp(`\\b${escapeRegExp(name)}\\s*=`, "i").test(root)) return;
@@ -325,15 +388,19 @@ function repairFrameRootContract(html, context = {}) {
   addMissing("data-duration", Number.isFinite(duration) && duration > 0 ? number(duration) : null);
   addMissing("data-width", Number.isFinite(Number(context.format?.width)) && Number(context.format.width) > 0 ? Number(context.format.width) : null);
   addMissing("data-height", Number.isFinite(Number(context.format?.height)) && Number(context.format.height) > 0 ? Number(context.format.height) : null);
-  if (!additions.length) return { html: source, attributes: [] };
-
   const attributes = additions.map(([name]) => name);
   const serialized = additions.map(([name, value]) => `${name}="${escapeHtml(value)}"`).join(" ");
-  const repairedRoot = root.replace(/\s*(\/?>)$/, ` ${serialized}$1`);
+  const repairedRoot = additions.length ? root.replace(/\s*(\/?>)$/, ` ${serialized}$1`) : root;
   const rootOffset = templates[0].index + templates[0][0].indexOf(template) + match.index;
+  const changedRoot = repairedRoot !== originalRoot;
+  let repairedHtml = changedRoot ? `${source.slice(0, rootOffset)}${repairedRoot}${source.slice(rootOffset + originalRoot.length)}` : source;
+  const addedRootStyle = !/#root\s*\{/i.test(template);
+  if (addedRootStyle) repairedHtml = repairedHtml.replace(/(<template\b[^>]*>)/i, "$1<style>#root{position:relative;overflow:hidden}</style>");
   return {
-    html: `${source.slice(0, rootOffset)}${repairedRoot}${source.slice(rootOffset + root.length)}`,
-    attributes
+    html: repairedHtml,
+    attributes,
+    normalizedAttributes,
+    addedRootStyle
   };
 }
 
@@ -341,7 +408,7 @@ async function recoverStoredFrameAttempt({ workspace, intake, evidence, plan, sh
   if (!existing || existing.input_hash !== inputHash) return null;
   if (!new Set(["failed", "running", "submitted", "succeeded"]).has(existing.status)) return null;
   if (existing.status === "succeeded" && !hasFallbackFrameOutputs(existing)) return null;
-  const record = await readLatestFrameAttempt(workspace, shot.id);
+  const record = await readLatestFrameAttempt(workspace, shot.id, inputHash);
   if (!record?.candidate || (record.input_hash && record.input_hash !== inputHash)) return null;
   if (["running", "submitted"].includes(existing.status) && record.response_id !== existing.remote?.response_id) return null;
   const sanitized = sanitizeFrameBundle(record.candidate, {
@@ -376,7 +443,7 @@ async function recoverStoredFrameAttempt({ workspace, intake, evidence, plan, sh
   };
 }
 
-async function readLatestFrameAttempt(workspace, shotId) {
+async function readLatestFrameAttempt(workspace, shotId, inputHash = null) {
   const directory = path.join(workspace, PRODUCTION_PATHS.frames, ".attempts");
   let names;
   try {
@@ -393,7 +460,9 @@ async function readLatestFrameAttempt(workspace, shotId) {
     .sort((left, right) => right.attempt - left.attempt);
   for (const entry of candidates) {
     try {
-      return await readJson(path.join(directory, entry.name));
+      const record = await readJson(path.join(directory, entry.name));
+      if (inputHash && record.input_hash && record.input_hash !== inputHash) continue;
+      return record;
     } catch (error) {
       if (error instanceof SyntaxError) continue;
       throw error;
@@ -874,6 +943,12 @@ async function writeAtomic(filePath, content) {
   const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(tempPath, content, { mode: 0o600 });
   await rename(tempPath, filePath);
+}
+
+function compactText(value, limit) {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit - 16).trimEnd()}… [truncated]`;
 }
 
 function positiveInteger(value, label) {

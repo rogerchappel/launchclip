@@ -16,7 +16,7 @@ import { resolveProductionEntities } from "./entity_resolution.js";
 import { openProductionPreview } from "./production_preview.js";
 import { runProductionReview } from "./production_review.js";
 import { DEFAULT_NARRATED_MUSIC_VOLUME } from "./production_contracts.js";
-import { recordOpenRouterFreeModelOutcome, selectOpenRouterFreeModels } from "./free_model_selector.js";
+import { probeOpenRouterFreeModels, recordOpenRouterFreeModelOutcome, selectOpenRouterFreeModels } from "./free_model_selector.js";
 
 export async function runProductionStage(command, target, flags = {}, adapters = {}) {
   if (command === "produce") return runProduction(target, flags, adapters);
@@ -318,8 +318,9 @@ async function runFrameDirection(workspace, flags, adapters) {
   if (!usesDiscoveredFreeFrames(flags)) return direct(workspace, options, adapters.frames);
 
   const selectModels = adapters.selectOpenRouterFreeModels ?? selectOpenRouterFreeModels;
+  const probeModels = adapters.probeOpenRouterFreeModels ?? probeOpenRouterFreeModels;
   const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
-  const selection = await selectModels({
+  let selection = await selectModels({
     statePath: flags["free-model-state"],
     topK: flags["free-model-candidates"] ?? 5,
     refresh: Boolean(flags["refresh-free-models"]),
@@ -327,7 +328,11 @@ async function runFrameDirection(workspace, flags, adapters) {
     contract: "frame-director.v5"
   });
   if (!selection?.routes?.length) throw new Error("OpenRouter free-model selection returned no frame-authoring routes");
+  selection = await probeModels(selection, {
+    timeoutMs: numberOr(flags["free-model-probe-timeout-ms"], 15_000)
+  });
   options.routes = selection.routes;
+  options.leanPrompt = true;
   options.fallbackMode = "error";
   options.allowFallback = false;
   if (Number.isFinite(Number(selection.max_completion_tokens)) && Number(selection.max_completion_tokens) > 0) {

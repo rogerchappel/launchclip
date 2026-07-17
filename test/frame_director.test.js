@@ -18,6 +18,21 @@ test("gives each delegated frame only its shot, neighbors, grounded evidence, an
   assert.deepEqual(input.narration_timing.words, [{ word: "Proof", global_start_seconds: 1.5, global_end_seconds: 2, shot_start_seconds: 1.5, shot_end_seconds: 2 }]);
 });
 
+test("builds a compact free-model brief without dropping shot or style truth", () => {
+  const context = fixture();
+  context.evidence.items[0].content = "Grounded proof ".repeat(500);
+  const full = buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0 });
+  const lean = buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0, lean: true });
+  const parsed = JSON.parse(lean);
+
+  assert.ok(lean.length < full.length / 2);
+  assert.equal(parsed.shot.id, "shot-1");
+  assert.equal(parsed.global_design.style_dna.family, "soft-grid-editorial");
+  assert.equal(parsed.evidence[0].id, "ev-1");
+  assert.ok(parsed.evidence[0].content.length <= 1_800);
+  assert.equal(parsed.neighbors[0].objects, undefined);
+});
+
 test("delegates shots concurrently, repairs invalid HTML, and writes modular frame artifacts", async () => {
   const context = fixture();
   const workspace = await workspaceFixture(context);
@@ -147,6 +162,38 @@ test("adds missing authoritative root contract attributes locally without overwr
   assert.ok(validateHyperFramesRoot(preserved.bundle.html, context.plan.shots[0], context.plan.format).some((error) => error.includes("data-width")));
 });
 
+test("adds host root styling and removes only a redundant frame type locally", () => {
+  const context = fixture();
+  const bundle = frameBundle("shot-1", 5);
+  bundle.type = bundle.schema_version;
+  bundle.html = bundle.html.replace("<style>#root{position:absolute;inset:0}</style>", "");
+
+  const sanitized = sanitizeFrameBundle(bundle, { shot: context.plan.shots[0], format: context.plan.format });
+
+  assert.equal(sanitized.bundle.type, undefined);
+  assert.match(sanitized.bundle.html, /<template><style>#root\{position:relative;overflow:hidden\}<\/style>/);
+  assert.deepEqual(sanitized.repairs, [{ kind: "remove-redundant-frame-type" }, { kind: "add-missing-root-style" }]);
+  assert.deepEqual(validateHyperFramesRoot(sanitized.bundle.html, context.plan.shots[0], context.plan.format), []);
+});
+
+test("wraps an unambiguous live scene and converts a global shot start to local zero", () => {
+  const context = fixture();
+  const shot = context.plan.shots[1];
+  const bundle = frameBundle(shot.id, 5);
+  const live = bundle.html.match(/<template>([\s\S]*)<\/template>/)[1];
+  bundle.html = `<html><head></head><body>${live.replace("</div><script>", "<template></template></div><script>").replace('data-start="0"', 'data-start="5"')}</body></html>`;
+
+  const sanitized = sanitizeFrameBundle(bundle, { shot, format: context.plan.format });
+
+  assert.match(sanitized.bundle.html, /^<template><style>#root/);
+  assert.match(sanitized.bundle.html, /data-start="0"/);
+  assert.deepEqual(sanitized.repairs, [
+    { kind: "wrap-live-frame-in-template" },
+    { kind: "normalize-root-contract-attributes", attributes: ["data-start"] }
+  ]);
+  assert.deepEqual(validateHyperFramesRoot(sanitized.bundle.html, shot, context.plan.format), []);
+});
+
 test("builds a deterministic presenter fallback that satisfies the frame contract", () => {
   const context = fixture();
   const shot = { ...context.plan.shots[0], presenter: { mode: "companion", visible: true }, resource_ids: ["presenter"] };
@@ -204,7 +251,7 @@ test("recovers a previously rejected frame with a local fallback and does not bu
   assert.deepEqual(calls, ["shot-2"], "repeated local QA passes never submit another provider response");
 });
 
-test("promotes a paid frame attempt after a deterministic media-role repair", async () => {
+test("promotes the newest matching frame attempt past a different route attempt", async () => {
   const context = fixture();
   context.intake.resources.push({ id: "voiceover", role: "voiceover", type: "video", location: "/tmp/voiceover.mp4", is_remote: false, sha256: "v" });
   context.plan.shots[0].resource_ids = ["voiceover"];
@@ -225,6 +272,7 @@ test("promotes a paid frame attempt after a deterministic media-role repair", as
   const attempts = path.join(workspace, "production", "frames", ".attempts");
   await mkdir(attempts, { recursive: true });
   await writeFile(path.join(attempts, "shot-1-attempt-1.json"), `${JSON.stringify({ input_hash: inputHash, response_id: "resp_spent", model: "gpt-5.6-sol", usage: { total_tokens: 100 }, candidate })}\n`);
+  await writeFile(path.join(attempts, "shot-1-attempt-2.json"), `${JSON.stringify({ input_hash: "different-route-hash", response_id: "resp_other", model: "other-model", usage: {}, candidate: frameBundle("shot-1", 5) })}\n`);
   const calls = [];
   const client = { runStructured: async (options) => {
     const input = JSON.parse(options.input);
@@ -277,6 +325,29 @@ test("resumes a persisted background frame response without submitting it twice"
   assert.equal(submitted, 1, "only the second shot needs a new response");
 });
 
+test("retries an interrupted frame job that has no resumable response id", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  const baseInput = buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0 });
+  const inputHash = semanticHash({ input: baseInput, model: context.intake.model, reasoning: "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v4" });
+  await store.add({ id: "frame:shot-1", kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash });
+  await store.markRunning("frame:shot-1", { provider: "openrouter", response_id: null, status: "running" });
+  const calls = [];
+  const client = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    calls.push(input.shot.id);
+    return { response_id: `fresh_${input.shot.id}`, model: "example/free:free", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: {} };
+  } };
+
+  await directFrames(workspace, { concurrency: 2, background: false }, { client });
+
+  assert.deepEqual(calls.sort(), ["shot-1", "shot-2"]);
+  const recovered = (await ProductionJobStore.open(workspace, { create: false })).get("frame:shot-1");
+  assert.equal(recovered.status, "succeeded");
+  assert.equal(recovered.attempt, 2);
+});
+
 test("fails closed on fallback and does not start a later frame", async () => {
   const context = fixture();
   const workspace = await workspaceFixture(context);
@@ -319,6 +390,25 @@ test("can exhaust LLM routes without writing a deterministic visual fallback", a
   );
   assert.deepEqual(calls, ["shot-1"]);
   await assert.rejects(() => readFile(path.join(workspace, "production", "fallbacks", "shot-1.json")), (error) => error.code === "ENOENT");
+});
+
+test("rotates after provider failures and reports every attempted model", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const routes = ["openrouter:first/free:free@none", "openrouter:second/free:free@none"];
+  const attempted = [];
+  await assert.rejects(
+    () => directFrames(workspace, { routes, concurrency: 1, semanticAttempts: 2, fallbackMode: "error", background: false }, {
+      createClient: (route) => ({ runStructured: async () => {
+        attempted.push(route.model);
+        throw new Error(`${route.model} unavailable`);
+      } })
+    }),
+    (error) => error.code === "LAUNCHCLIP_FRAME_MODEL_ROUTES_EXHAUSTED"
+      && /first\/free:free unavailable/.test(error.message)
+      && /second\/free:free unavailable/.test(error.message)
+  );
+  assert.deepEqual(attempted, ["first/free:free", "second/free:free"], "transport failures rotate routes without consuming semantic-repair attempts");
 });
 
 test("stops before the next frame after the observed dollar limit is reached", async () => {

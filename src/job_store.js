@@ -246,7 +246,8 @@ export async function withProductionLease(workspace, fn, options = {}) {
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
     const info = await stat(lockPath);
-    if (Date.now() - info.mtimeMs <= ttlMs) throw new Error(`Production workspace is already locked: ${resolved}`);
+    const ownerAlive = await lockOwnerIsAlive(lockPath);
+    if (ownerAlive !== false && Date.now() - info.mtimeMs <= ttlMs) throw new Error(`Production workspace is already locked: ${resolved}`);
     await unlink(lockPath);
     handle = await open(lockPath, "wx", 0o600);
   }
@@ -268,6 +269,25 @@ export async function withProductionLease(workspace, fn, options = {}) {
     let owned = false;
     try { owned = JSON.parse(await readFile(lockPath, "utf8")).token === token; } catch (error) { if (error.code !== "ENOENT") throw error; }
     if (owned) await unlink(lockPath).catch((error) => { if (error.code !== "ENOENT") throw error; });
+  }
+}
+
+async function lockOwnerIsAlive(lockPath) {
+  let pid;
+  try {
+    pid = Number(JSON.parse(await readFile(lockPath, "utf8"))?.pid);
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    return null;
+  }
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error.code === "ESRCH") return false;
+    if (error.code === "EPERM") return true;
+    throw error;
   }
 }
 

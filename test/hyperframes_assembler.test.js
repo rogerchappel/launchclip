@@ -187,6 +187,12 @@ test("canonicalizes model-authored GSAP timelines into the HyperFrames registry"
   const repairedTopLevel = ensureTimelineRegistration(topLevel, "shot-1");
   assert.equal((repairedTopLevel.match(/<script>/g) ?? []).length, 1);
   assert.ok(repairedTopLevel.indexOf('window.__timelines["shot-1"]') < repairedTopLevel.indexOf("</script>"));
+
+  const objectLiteral = '<template><div data-composition-id="shot-1"></div><script>window.__timelines = { "shot-1": gsap.timeline({ paused: true }); };</script></template>';
+  const repairedObjectLiteral = ensureTimelineRegistration(objectLiteral, "shot-1");
+  assert.match(repairedObjectLiteral, /const launchclipTimeline = gsap\.timeline\(\{ paused: true \}\)/);
+  assert.match(repairedObjectLiteral, /window\.__timelines\["shot-1"\] = launchclipTimeline/);
+  assert.doesNotMatch(repairedObjectLiteral, /gsap\.timeline\(\{ paused: true \}\);\s*\}/);
 });
 
 test("translates model motion intent into discoverable HyperFrames assertions", () => {
