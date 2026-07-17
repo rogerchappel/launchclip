@@ -110,6 +110,30 @@ For a reference video, detect probable cuts and inspect a frame immediately
 before, at, and after each relevant boundary. Record observations in
 `SOURCE.md`; do not infer edit rhythm from a single contact sheet.
 
+### Downloaded HeyGen avatar handoff
+
+For an already-generated, authorized HeyGen video, keep the original brief,
+repository, URL, or research document as the evidence source and promote the
+local avatar MP4 to production media. Prepare it exactly like other presenter
+footage, then extract one continuous narration track:
+
+```bash
+ffmpeg -i <project>/assets/heygen-avatar-prepared.mp4 \
+  -vn -c:a aac -b:a 192k \
+  <project>/assets/heygen-avatar-voiceover.m4a
+```
+
+Mount the extracted audio once as a direct child of the top-level composition
+root. Mount the prepared avatar video as muted direct-root clips only for the
+scenes where the presenter is visible. Each clip's media offset must follow the
+continuous narration timeline; do not restart the avatar at every scene. This
+allows full-frame graphics during voiceover scenes without interrupting speech
+and prevents duplicate audio when presenter layouts overlap at transitions.
+
+Do not leave a HeyGen download URL in the composition, call the HeyGen API, or
+request credentials in this workflow. Confirm likeness authorization and the
+final spoken script before authoring around the file.
+
 ## Composition contract
 
 Author the top-level `index.html` as a standalone composition:

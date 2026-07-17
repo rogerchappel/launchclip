@@ -1,6 +1,6 @@
 ---
 name: launchclip-cli
-description: Operate, explain, troubleshoot, or automate the LaunchClip CLI for repository, product, topic, voiceover, presenter, and promotion-packet video workflows. Use when an agent needs to choose LaunchClip commands, prepare inputs, run or resume the model-directed production pipeline, inspect costs and artifacts, validate a workspace, render after approval, or use the legacy dry-run packet lane. Distinguish API-backed CLI production from the separate subscription-agent workflow.
+description: Operate, explain, troubleshoot, or automate the LaunchClip CLI for repository, product, topic, voiceover, presenter, downloaded HeyGen-avatar, and promotion-packet video workflows. Use when an agent needs to choose LaunchClip commands, prepare inputs, run or resume the model-directed production pipeline, inspect costs and artifacts, validate a workspace, render after approval, or use the legacy dry-run packet lane. Distinguish API-backed CLI production from the separate subscription-agent workflow.
 ---
 
 # LaunchClip CLI
@@ -69,6 +69,30 @@ Ask before:
 
 Never print or persist secrets. Report only whether a required environment
 variable is present.
+
+## Promote a downloaded HeyGen avatar
+
+When the user supplies an already-generated, authorized HeyGen video, use the
+single local-file shortcut:
+
+```bash
+launchclip produce <source> \
+  --heygen-avatar ./heygen-avatar.mp4 \
+  --transcript ./heygen-avatar.txt \
+  --out .launchclip/<slug>
+```
+
+The primary `<source>` remains the factual evidence source. The avatar video's
+audio becomes authoritative narration, and the same video becomes the
+beat-positioned presenter resource. Do not also pass `--voiceover` or
+`--presenter`; the CLI rejects that ambiguous combination. A transcript is
+optional only when the user has approved and configured the transcription
+provider call.
+
+This flag consumes a local output file. It does not generate an avatar, call
+HeyGen, read HeyGen credentials, or authorize use of a likeness. Confirm that
+the video is local, authorized, and contains the intended final speech before
+starting model-directed production.
 
 ## Run the smallest useful command
 
