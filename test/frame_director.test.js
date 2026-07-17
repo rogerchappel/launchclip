@@ -344,6 +344,25 @@ test("can exhaust LLM routes without writing a deterministic visual fallback", a
   await assert.rejects(() => readFile(path.join(workspace, "production", "fallbacks", "shot-1.json")), (error) => error.code === "ENOENT");
 });
 
+test("rotates after provider failures and reports every attempted model", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const routes = ["openrouter:first/free:free@none", "openrouter:second/free:free@none"];
+  const attempted = [];
+  await assert.rejects(
+    () => directFrames(workspace, { routes, concurrency: 1, semanticAttempts: 1, fallbackMode: "error", background: false }, {
+      createClient: (route) => ({ runStructured: async () => {
+        attempted.push(route.model);
+        throw new Error(`${route.model} unavailable`);
+      } })
+    }),
+    (error) => error.code === "LAUNCHCLIP_FRAME_MODEL_ROUTES_EXHAUSTED"
+      && /first\/free:free unavailable/.test(error.message)
+      && /second\/free:free unavailable/.test(error.message)
+  );
+  assert.deepEqual(attempted, ["first/free:free", "second/free:free"]);
+});
+
 test("stops before the next frame after the observed dollar limit is reached", async () => {
   const context = fixture();
   const workspace = await workspaceFixture(context);

@@ -220,8 +220,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
           } else result = await client.runStructured(request);
         } catch (error) {
           resumeResponseId = null;
-          if (routeIndex === routes.length - 1) throw error;
-          errors = [`Generation attempt ${totalAttempt} via ${route.provider}:${route.model} failed: ${error.message}`];
+          errors.push(`Generation attempt ${totalAttempt} via ${route.provider}:${route.model} failed: ${error.message}`);
           continue;
         }
         resumeResponseId = null;
@@ -257,7 +256,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
       }
     }
     const reason = `Frame ${shot.id} exhausted model routes: ${errors.join("; ")}`;
-    if (options.fallbackMode === "error") throw frameRoutesExhaustedError(shot.id, errors);
+    if (!lastResult || options.fallbackMode === "error") throw frameRoutesExhaustedError(shot.id, errors);
     return persistFallbackFrame({
       workspace, intake, evidence, plan, shot, store, jobId,
       reason,
