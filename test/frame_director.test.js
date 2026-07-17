@@ -218,7 +218,7 @@ test("recovers a previously rejected frame with a local fallback and does not bu
   assert.deepEqual(calls, ["shot-2"], "repeated local QA passes never submit another provider response");
 });
 
-test("promotes a paid frame attempt after a deterministic media-role repair", async () => {
+test("promotes the newest matching frame attempt past a different route attempt", async () => {
   const context = fixture();
   context.intake.resources.push({ id: "voiceover", role: "voiceover", type: "video", location: "/tmp/voiceover.mp4", is_remote: false, sha256: "v" });
   context.plan.shots[0].resource_ids = ["voiceover"];
@@ -239,6 +239,7 @@ test("promotes a paid frame attempt after a deterministic media-role repair", as
   const attempts = path.join(workspace, "production", "frames", ".attempts");
   await mkdir(attempts, { recursive: true });
   await writeFile(path.join(attempts, "shot-1-attempt-1.json"), `${JSON.stringify({ input_hash: inputHash, response_id: "resp_spent", model: "gpt-5.6-sol", usage: { total_tokens: 100 }, candidate })}\n`);
+  await writeFile(path.join(attempts, "shot-1-attempt-2.json"), `${JSON.stringify({ input_hash: "different-route-hash", response_id: "resp_other", model: "other-model", usage: {}, candidate: frameBundle("shot-1", 5) })}\n`);
   const calls = [];
   const client = { runStructured: async (options) => {
     const input = JSON.parse(options.input);

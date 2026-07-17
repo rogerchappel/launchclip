@@ -350,7 +350,7 @@ async function recoverStoredFrameAttempt({ workspace, intake, evidence, plan, sh
   if (!existing || existing.input_hash !== inputHash) return null;
   if (!new Set(["failed", "running", "submitted", "succeeded"]).has(existing.status)) return null;
   if (existing.status === "succeeded" && !hasFallbackFrameOutputs(existing)) return null;
-  const record = await readLatestFrameAttempt(workspace, shot.id);
+  const record = await readLatestFrameAttempt(workspace, shot.id, inputHash);
   if (!record?.candidate || (record.input_hash && record.input_hash !== inputHash)) return null;
   if (["running", "submitted"].includes(existing.status) && record.response_id !== existing.remote?.response_id) return null;
   const sanitized = sanitizeFrameBundle(record.candidate, {
@@ -385,7 +385,7 @@ async function recoverStoredFrameAttempt({ workspace, intake, evidence, plan, sh
   };
 }
 
-async function readLatestFrameAttempt(workspace, shotId) {
+async function readLatestFrameAttempt(workspace, shotId, inputHash = null) {
   const directory = path.join(workspace, PRODUCTION_PATHS.frames, ".attempts");
   let names;
   try {
@@ -402,7 +402,9 @@ async function readLatestFrameAttempt(workspace, shotId) {
     .sort((left, right) => right.attempt - left.attempt);
   for (const entry of candidates) {
     try {
-      return await readJson(path.join(directory, entry.name));
+      const record = await readJson(path.join(directory, entry.name));
+      if (inputHash && record.input_hash && record.input_hash !== inputHash) continue;
+      return record;
     } catch (error) {
       if (error instanceof SyntaxError) continue;
       throw error;
