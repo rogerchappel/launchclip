@@ -1,6 +1,6 @@
 ---
 name: launchclip-create-video
-description: Create an end-to-end HyperFrames video with the current subscription agent as the creative and orchestration layer. Use when a user wants a video, promo, explainer, product story, repository walkthrough, or social clip from a URL, repository, topic, brief, script, or supplied media while avoiding LaunchClip's metered model pipeline and not depending on HyperFrames plugin skills. Ask a compact intake, author the editable composition, verify it locally, obtain preview approval, and render the final file.
+description: Create an end-to-end HyperFrames video with the current subscription agent as the creative and orchestration layer. Use when a user wants a video, promo, explainer, product story, repository walkthrough, or social clip from a URL, repository, topic, brief, script, supplied media, or a downloaded HeyGen avatar while avoiding LaunchClip's metered model pipeline and not depending on HyperFrames plugin skills. Ask a compact intake, author the editable composition, verify it locally, obtain preview approval, and render the final file.
 ---
 
 # LaunchClip Create Video
@@ -65,6 +65,32 @@ state them:
 If the source itself is missing, ask for it before proceeding. Otherwise keep
 working after the compact intake; do not turn each creative choice into another
 approval round.
+
+## Promote a downloaded HeyGen avatar
+
+When the user supplies an already-generated, authorized HeyGen MP4, treat it as
+the production's presenter-and-narration source:
+
+- Keep the original brief, repository, URL, or research source as evidence.
+- Treat the avatar's spoken audio as authoritative; do not rewrite or replace
+  it unless the user explicitly requests a new script or voice.
+- Copy the video into the project, probe it, trim boundary silence only, and
+  transcribe it locally when no transcript is supplied.
+- Extract one continuous local narration track from the prepared video. Mount
+  that audio once at the composition root for the whole edit.
+- Mount muted video segments as direct root children for presenter-visible
+  scenes. Preserve continuous source time across segments; use the same video
+  for anchor, split, inset, and companion layouts, and omit it only for a
+  deliberate voiceover scene.
+- Inspect the face box, gaze, and negative space before defining graphic zones.
+  Never cover the face merely to preserve a planned layout.
+
+Do not call HeyGen, request HeyGen credentials, or assume the subscription
+agent includes HeyGen generation. If the user wants a new avatar generated,
+pause and obtain explicit provider, likeness, upload, cost, and script approval.
+This local-file handoff is the subscription-skill equivalent of the CLI's
+`--heygen-avatar` flag; do not invoke the metered LaunchClip production lane to
+simulate it.
 
 ## Resolve music and sound effects deliberately
 
