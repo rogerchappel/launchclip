@@ -428,6 +428,10 @@ function recordFrameCost(state, frame, fallbackModel, maxOutputTokens) {
     state.calls += 1;
     return;
   }
+  if (frame.provider === "openrouter" && String(fallbackModel ?? "").endsWith(":free")) {
+    state.calls += 1;
+    return;
+  }
   if (frame.provider && frame.provider !== "openai") {
     state.calls += 1;
     state.complete = false;

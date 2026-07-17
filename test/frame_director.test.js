@@ -344,6 +344,25 @@ test("stops before the next frame after the observed dollar limit is reached", a
   assert.deepEqual(calls, ["shot-1"]);
 });
 
+test("treats explicitly pinned OpenRouter free routes as zero observed frame cost", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const client = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    return { response_id: `free_${input.shot.id}`, model: "vendor/free-coder", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: { input_tokens: 100, output_tokens: 100 } };
+  } };
+  const result = await directFrames(workspace, {
+    routes: ["openrouter:vendor/free-coder:free@none"],
+    maxFrameCostUsd: .001,
+    allowFallback: true,
+    background: false
+  }, { client });
+  assert.equal(result.generated, 2);
+  assert.equal(result.frame_cost.estimated_usd, 0);
+  assert.equal(result.frame_cost.complete, true);
+  assert.equal(result.frame_cost.provider_calls_observed, 2);
+});
+
 test("uses a reasoning override only for unfinished frames", async () => {
   const context = fixture();
   const workspace = await workspaceFixture(context);
