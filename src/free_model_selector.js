@@ -9,6 +9,7 @@ const DEFAULT_ROLE = "visual-code-author";
 const DEFAULT_CONTRACT = "frame-director.v5";
 const DEFAULT_TOP_K = 5;
 const DEFAULT_PROBE_TIMEOUT_MS = 15_000;
+const DEFAULT_PROBE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const REQUIRED_CONTEXT_TOKENS = 64_000;
 const DESIGN_WEIGHTS = new Map([
   ["website", .30],
@@ -115,11 +116,16 @@ export async function probeOpenRouterFreeModels(selection, options = {}) {
   const createClient = options.createClient ?? createStructuredClient;
   const timeoutMs = positiveInteger(options.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS, "probe timeoutMs");
   const now = options.now ?? (() => new Date());
+  const cacheTtlMs = positiveInteger(options.cacheTtlMs ?? DEFAULT_PROBE_CACHE_TTL_MS, "probe cacheTtlMs");
+  const probeStartedAt = now();
   const candidateIds = selection.candidates.map((candidate) => candidate.id).filter((id) => state.candidates.some((candidate) => candidate.id === id));
-  const failures = [];
-  const liveIds = [];
+  const recentlyProbed = (candidate) => Number.isFinite(Date.parse(candidate.last_probe_at)) && probeStartedAt.getTime() - Date.parse(candidate.last_probe_at) <= cacheTtlMs;
+  const cached = candidateIds.map((id) => state.candidates.find((candidate) => candidate.id === id)).filter(recentlyProbed);
+  const liveIds = cached.filter((candidate) => candidate.last_probe_error == null && Number(candidate.probe_successes ?? 0) > 0).map((candidate) => candidate.id);
+  const failures = cached.filter((candidate) => candidate.last_probe_error != null).map((candidate) => `${candidate.id}: ${candidate.last_probe_error}`);
+  const probeIds = candidateIds.filter((id) => !cached.some((candidate) => candidate.id === id));
 
-  for (const [index, id] of candidateIds.entries()) {
+  for (const [index, id] of probeIds.entries()) {
     const candidate = state.candidates.find((entry) => entry.id === id);
     try {
       const client = createClient(`openrouter:${id}@none`, { requestTimeoutMs: timeoutMs, maxRetries: 0, apiKey: options.apiKey });
@@ -159,7 +165,7 @@ export async function probeOpenRouterFreeModels(selection, options = {}) {
             last_probe_error: message
           }
         : entry);
-      const nextId = liveIds[0] ?? candidateIds[index + 1] ?? null;
+      const nextId = liveIds[0] ?? probeIds[index + 1] ?? null;
       state.selected_model = nextId;
       state.selected_canonical_slug = state.candidates.find((entry) => entry.id === nextId)?.canonical_slug ?? null;
       await writeState(statePath, state);
@@ -172,7 +178,7 @@ export async function probeOpenRouterFreeModels(selection, options = {}) {
   state.selected_model = liveIds[0];
   state.selected_canonical_slug = state.candidates[0].canonical_slug;
   await writeState(statePath, state);
-  return selectionFromState(statePath, state, "live-probe", liveIds);
+  return selectionFromState(statePath, state, probeIds.length ? "live-probe" : "cached-live-probe", liveIds);
 }
 
 function isEligibleFreeModel(model) {

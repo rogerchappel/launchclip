@@ -114,6 +114,14 @@ test("probes ranked candidates and persists the first live structured-output rou
   assert.equal(state.candidates.find((entry) => entry.id === "google/gemma-code:free").probe_failures, 1);
   assert.equal(state.candidates.find((entry) => entry.id === "qwen/qwen-coder:free").probe_successes, 1);
   assert.equal(state.live_probe_at, "2026-07-17T01:02:03.000Z");
+
+  const cached = await probeOpenRouterFreeModels(probed, {
+    cacheTtlMs: 6 * 60 * 60 * 1000,
+    now: () => new Date("2026-07-17T02:02:03Z"),
+    createClient: () => { throw new Error("recent probe results should be reused"); }
+  });
+  assert.equal(cached.source, "cached-live-probe");
+  assert.deepEqual(cached.routes, ["openrouter:qwen/qwen-coder:free@none"]);
 });
 
 function model(id, options = {}) {
