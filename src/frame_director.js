@@ -177,7 +177,7 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, narration
 
 async function directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, routes, adapters, options }) {
   const jobId = `frame:${shot.id}`;
-  const baseInput = buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming, lean: options.leanPrompt });
+  const baseInput = buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming });
   const customRouting = options.routes != null || options.provider != null || options.model != null || options.baseUrl != null;
   const inputHash = customRouting
     ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v5" })

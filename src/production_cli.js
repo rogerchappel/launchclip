@@ -332,6 +332,7 @@ async function runFrameDirection(workspace, flags, adapters) {
     timeoutMs: numberOr(flags["free-model-probe-timeout-ms"], 15_000)
   });
   options.routes = selection.routes;
+  options.leanPrompt = true;
   options.fallbackMode = "error";
   options.allowFallback = false;
   if (Number.isFinite(Number(selection.max_completion_tokens)) && Number(selection.max_completion_tokens) > 0) {
