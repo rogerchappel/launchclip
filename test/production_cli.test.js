@@ -414,6 +414,7 @@ test("routes local-first generation and bounded local patch repair explicitly", 
 
 test("discovers ranked free frame models, clamps output, and records the accepted author", async () => {
   let frameOptions;
+  let probeOptions;
   let recordedOutcome;
   const selection = {
     source: "ranked",
@@ -436,6 +437,11 @@ test("discovers ranked free frame models, clamps output, and records the accepte
       assert.equal(options.role, "visual-code-author");
       return selection;
     },
+    probeOpenRouterFreeModels: async (received, options) => {
+      assert.equal(received, selection);
+      probeOptions = options;
+      return { ...selection, source: "live-probe" };
+    },
     directFrames: async (_workspace, options) => {
       frameOptions = options;
       return { status: "ready", generated: 1, cached: 0, frames: [{ provider: "openrouter", model: "google/gemma-code:free" }] };
@@ -446,6 +452,7 @@ test("discovers ranked free frame models, clamps output, and records the accepte
     }
   });
   assert.deepEqual(frameOptions.routes, selection.routes);
+  assert.equal(probeOptions.timeoutMs, 15_000);
   assert.equal(frameOptions.maxOutputTokens, 32_768);
   assert.equal(frameOptions.fallbackMode, "error");
   assert.equal(frameOptions.allowFallback, false);
