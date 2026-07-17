@@ -117,6 +117,7 @@ export async function probeOpenRouterFreeModels(selection, options = {}) {
   const now = options.now ?? (() => new Date());
   const candidateIds = selection.candidates.map((candidate) => candidate.id).filter((id) => state.candidates.some((candidate) => candidate.id === id));
   const failures = [];
+  const liveIds = [];
 
   for (const [index, id] of candidateIds.entries()) {
     const candidate = state.candidates.find((entry) => entry.id === id);
@@ -137,14 +138,14 @@ export async function probeOpenRouterFreeModels(selection, options = {}) {
       });
       if (result?.value?.ok !== true) throw new Error("probe response did not confirm structured-output support");
       const probedAt = now().toISOString();
-      state.selected_model = candidate.id;
-      state.selected_canonical_slug = candidate.canonical_slug;
+      liveIds.push(candidate.id);
+      state.selected_model = liveIds[0];
+      state.selected_canonical_slug = state.candidates.find((entry) => entry.id === liveIds[0])?.canonical_slug ?? null;
       state.live_probe_at = probedAt;
-      state.candidates = moveCandidateFirst(state.candidates, candidate.id).map((entry) => entry.id === candidate.id
+      state.candidates = state.candidates.map((entry) => entry.id === candidate.id
         ? { ...entry, probe_successes: Number(entry.probe_successes ?? 0) + 1, consecutive_probe_failures: 0, last_probe_at: probedAt, last_probe_error: null }
         : entry);
       await writeState(statePath, state);
-      return selectionFromState(statePath, state, "live-probe");
     } catch (error) {
       const probedAt = now().toISOString();
       const message = sanitizeProbeError(error);
@@ -158,15 +159,20 @@ export async function probeOpenRouterFreeModels(selection, options = {}) {
             last_probe_error: message
           }
         : entry);
-      const nextId = candidateIds[index + 1] ?? null;
+      const nextId = liveIds[0] ?? candidateIds[index + 1] ?? null;
       state.selected_model = nextId;
       state.selected_canonical_slug = state.candidates.find((entry) => entry.id === nextId)?.canonical_slug ?? null;
-      if (nextId) state.candidates = moveCandidateFirst(state.candidates, nextId);
       await writeState(statePath, state);
     }
   }
 
-  throw freeModelError(`No ranked OpenRouter free model passed the live structured-output probe: ${failures.join("; ")}`);
+  if (!liveIds.length) throw freeModelError(`No ranked OpenRouter free model passed the live structured-output probe: ${failures.join("; ")}`);
+  const live = new Set(liveIds);
+  state.candidates = [...liveIds.map((id) => state.candidates.find((candidate) => candidate.id === id)), ...state.candidates.filter((candidate) => !live.has(candidate.id))];
+  state.selected_model = liveIds[0];
+  state.selected_canonical_slug = state.candidates[0].canonical_slug;
+  await writeState(statePath, state);
+  return selectionFromState(statePath, state, "live-probe", liveIds);
 }
 
 function isEligibleFreeModel(model) {
@@ -322,14 +328,15 @@ function modelIdsMatch(candidate, value) {
   return model === candidate.id || model === candidate.canonical_slug || model.replace(/:free$/, "") === candidate.id.replace(/:free$/, "");
 }
 
-function selectionFromState(statePath, state, source) {
-  const knownLimits = state.candidates.map((candidate) => candidate.max_completion_tokens).filter((value) => Number.isFinite(value) && value > 0);
+function selectionFromState(statePath, state, source, routeIds = null) {
+  const routeCandidates = routeIds ? routeIds.map((id) => state.candidates.find((candidate) => candidate.id === id)).filter(Boolean) : state.candidates;
+  const knownLimits = routeCandidates.map((candidate) => candidate.max_completion_tokens).filter((value) => Number.isFinite(value) && value > 0);
   return {
     source,
     state_path: statePath,
     selected_model: state.selected_model,
     verified_free_at: state.verified_free_at,
-    routes: state.candidates.map((candidate) => `openrouter:${candidate.id}@none`),
+    routes: routeCandidates.map((candidate) => `openrouter:${candidate.id}@none`),
     candidates: structuredClone(state.candidates),
     max_completion_tokens: knownLimits.length ? Math.min(...knownLimits) : null,
     warnings: [...(state.warnings ?? [])]

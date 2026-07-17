@@ -109,6 +109,7 @@ test("probes ranked candidates and persists the first live structured-output rou
   assert.equal(probed.source, "live-probe");
   assert.equal(probed.selected_model, "qwen/qwen-coder:free");
   assert.equal(probed.routes[0], "openrouter:qwen/qwen-coder:free@none");
+  assert.equal(probed.routes.length, 1, "probe-failed candidates are excluded from the build routes");
   const state = JSON.parse(await readFile(statePath, "utf8"));
   assert.equal(state.candidates.find((entry) => entry.id === "google/gemma-code:free").probe_failures, 1);
   assert.equal(state.candidates.find((entry) => entry.id === "qwen/qwen-coder:free").probe_successes, 1);
