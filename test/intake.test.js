@@ -29,6 +29,36 @@ test("accepts authoritative transcripts and voiceover video sources", async () =
   assert.equal(intake.policies.presenter_requires_authorized_likeness, true);
 });
 
+test("promotes a supplied HeyGen avatar video to authoritative voiceover and presenter media", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "launchclip-heygen-avatar-"));
+  const avatar = path.join(directory, "heygen-avatar.mp4");
+  const transcript = path.join(directory, "heygen-avatar.txt");
+  const audioOnly = path.join(directory, "heygen-avatar.wav");
+  await writeFile(avatar, "avatar video fixture");
+  await writeFile(transcript, "The generated presenter narration.");
+  await writeFile(audioOnly, "audio fixture");
+
+  const intake = await buildIntake("Product workflow", {
+    "heygen-avatar": avatar,
+    transcript,
+    out: path.join(directory, "out")
+  }, {});
+
+  assert.equal(intake.source.kind, "topic");
+  assert.deepEqual(intake.resources.map((entry) => entry.role), ["voiceover", "voiceover-transcript", "presenter"]);
+  assert.deepEqual(intake.resources.filter((entry) => entry.type === "video").map((entry) => entry.location), [avatar, avatar]);
+  assert.equal(intake.policies.supplied_voiceover_is_authoritative, true);
+  assert.equal(intake.policies.presenter_requires_authorized_likeness, true);
+  await assert.rejects(
+    buildIntake("Product workflow", { "heygen-avatar": avatar, presenter: avatar }, {}),
+    /replaces --voiceover and --presenter/
+  );
+  await assert.rejects(
+    buildIntake("Product workflow", { "heygen-avatar": audioOnly }, {}),
+    /must be one local video file/
+  );
+});
+
 test("infers supported source kinds", () => {
   assert.equal(inferSourceKind("https://github.com/openai/openai-node"), "repository");
   assert.equal(inferSourceKind("openai/openai-node"), "repository");
