@@ -221,7 +221,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         } catch (error) {
           resumeResponseId = null;
           errors.push(`Generation attempt ${totalAttempt} via ${route.provider}:${route.model} failed: ${error.message}`);
-          continue;
+          break;
         }
         resumeResponseId = null;
         lastResult = result;

@@ -350,7 +350,7 @@ test("rotates after provider failures and reports every attempted model", async 
   const routes = ["openrouter:first/free:free@none", "openrouter:second/free:free@none"];
   const attempted = [];
   await assert.rejects(
-    () => directFrames(workspace, { routes, concurrency: 1, semanticAttempts: 1, fallbackMode: "error", background: false }, {
+    () => directFrames(workspace, { routes, concurrency: 1, semanticAttempts: 2, fallbackMode: "error", background: false }, {
       createClient: (route) => ({ runStructured: async () => {
         attempted.push(route.model);
         throw new Error(`${route.model} unavailable`);
@@ -360,7 +360,7 @@ test("rotates after provider failures and reports every attempted model", async 
       && /first\/free:free unavailable/.test(error.message)
       && /second\/free:free unavailable/.test(error.message)
   );
-  assert.deepEqual(attempted, ["first/free:free", "second/free:free"]);
+  assert.deepEqual(attempted, ["first/free:free", "second/free:free"], "transport failures rotate routes without consuming semantic-repair attempts");
 });
 
 test("stops before the next frame after the observed dollar limit is reached", async () => {
