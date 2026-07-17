@@ -20,7 +20,7 @@ The real benchmark is not the biggest model. It is the most intelligence per gig
 
 ## Delivery
 
-- Target: approximately 90 seconds at a measured, curious pace.
+- Target: approximately 110 seconds at a measured, curious pace, matching the generated Roger Social narration.
 - Voice: confident technical narrator; warm, conversational, lightly playful; never breathless.
 - Emphasize: “cheat code”, “3.9 gigabytes”, each “checkpoint”, “eleven tokens per second”, and the final question.
 - Pronounce: FP16 as “F P sixteen”; MLX as “M L X”; CUDA as “coo-duh”; RTX as “R T X”.
