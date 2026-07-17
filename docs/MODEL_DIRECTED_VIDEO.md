@@ -82,6 +82,12 @@ launchclip produce ./brief.md \
   --presenter ./avatar-take.mp4 \
   --prompt "Keep the presenter visible; move them around the evidence"
 
+# A downloaded HeyGen video can replace both narration and presenter inputs
+launchclip produce ./brief.md \
+  --heygen-avatar ./heygen-avatar.mp4 \
+  --transcript ./heygen-avatar.txt \
+  --prompt "Keep the avatar visible; move it around the evidence"
+
 # Long-form: outline once, expand chapters concurrently, stitch deterministically
 launchclip produce ./research \
   --kind topic \
@@ -94,6 +100,12 @@ launchclip produce ./research \
 The command writes a workspace, renders and analyzes an editable draft, asks an
 independent critic to judge it, and performs up to two bounded repair passes by
 default. Final high-quality rendering remains an explicit approval step.
+
+`--heygen-avatar` accepts one local video and is mutually exclusive with
+`--voiceover` and `--presenter`. It does not generate the avatar or access the
+HeyGen API; it promotes the supplied video's audio to authoritative narration
+and its picture to the presenter source while retaining the primary source for
+evidence.
 
 Every stage can also be resumed directly:
 

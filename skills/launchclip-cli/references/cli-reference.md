@@ -71,6 +71,8 @@ Common intake flags:
 - `--voiceover`: authoritative narration audio or video
 - `--transcript`: transcript for supplied narration
 - `--presenter`: authorized presenter/avatar video
+- `--heygen-avatar`: one downloaded, authorized HeyGen video that replaces both
+  `--voiceover` and `--presenter`; this does not call the HeyGen API
 - `--style auto|<family>`, `--style-file`, `--style-reference`
 - `--aspect 9:16|16:9|1:1`, `--duration <seconds>`, `--language <code>`
 - `--out <workspace>`
@@ -169,6 +171,21 @@ launchclip produce "Product workflow" \
   --aspect 16:9 \
   --out .launchclip/presenter-video
 ```
+
+Downloaded HeyGen avatar shorthand:
+
+```bash
+launchclip produce ./brief.md \
+  --heygen-avatar ./heygen-avatar.mp4 \
+  --transcript ./heygen-avatar.txt \
+  --assets ./brand-assets \
+  --out .launchclip/heygen-presenter
+```
+
+The avatar's audio becomes authoritative narration and the same video is
+mounted as the beat-positioned presenter. The primary source remains available
+for evidence. `--heygen-avatar` is mutually exclusive with explicit
+`--voiceover` and `--presenter` flags.
 
 For work at or above 180 seconds, planning defaults to a hierarchical outline
 and concurrent chapter expansion. Override explicitly with
