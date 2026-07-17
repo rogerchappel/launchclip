@@ -277,10 +277,16 @@ export function sanitizeFrameBundle(bundle, context = {}) {
     return "";
   }));
   const repairs = removed ? [{ kind: "remove-event-handler-attributes", count: removed }] : [];
+  const normalizedBundle = { ...bundle };
+  if (normalizedBundle.type != null && normalizedBundle.type === normalizedBundle.schema_version) {
+    delete normalizedBundle.type;
+    repairs.push({ kind: "remove-redundant-frame-type" });
+  }
   const rootRepair = repairFrameRootContract(eventSafeHtml, context);
   if (rootRepair.attributes.length) {
     repairs.push({ kind: "add-missing-root-contract-attributes", attributes: rootRepair.attributes });
   }
+  if (rootRepair.addedRootStyle) repairs.push({ kind: "add-missing-root-style" });
   const resourceRoles = context.resourceRoles instanceof Map ? context.resourceRoles : new Map(Object.entries(context.resourceRoles ?? {}));
   const rootMediaRequests = [];
   for (const request of bundle?.root_media_requests ?? []) {
@@ -295,7 +301,7 @@ export function sanitizeFrameBundle(bundle, context = {}) {
     });
   }
   return {
-    bundle: { ...bundle, html: rootRepair.html, root_media_requests: rootMediaRequests },
+    bundle: { ...normalizedBundle, html: rootRepair.html, root_media_requests: rootMediaRequests },
     repairs
   };
 }
@@ -303,7 +309,7 @@ export function sanitizeFrameBundle(bundle, context = {}) {
 function repairFrameRootContract(html, context = {}) {
   const source = String(html ?? "");
   const templates = [...source.matchAll(/<template\b[^>]*>([\s\S]*?)<\/template>/gi)];
-  if (templates.length !== 1) return { html: source, attributes: [] };
+  if (templates.length !== 1) return { html: source, attributes: [], addedRootStyle: false };
   const template = templates[0][1];
   const shotId = context.shot?.id;
   const byRootId = template.match(/<[a-z][\w:-]*\b[^>]*\bid\s*=\s*["']root["'][^>]*>/i);
@@ -311,7 +317,7 @@ function repairFrameRootContract(html, context = {}) {
     ? template.match(new RegExp(`<[a-z][\\w:-]*\\b[^>]*\\bdata-composition-id\\s*=\\s*["']${escapeRegExp(shotId)}["'][^>]*>`, "i"))
     : null;
   const match = byRootId ?? byCompositionId;
-  if (!match) return { html: source, attributes: [] };
+  if (!match) return { html: source, attributes: [], addedRootStyle: false };
 
   const root = match[0];
   const additions = [];
@@ -326,15 +332,17 @@ function repairFrameRootContract(html, context = {}) {
   addMissing("data-duration", Number.isFinite(duration) && duration > 0 ? number(duration) : null);
   addMissing("data-width", Number.isFinite(Number(context.format?.width)) && Number(context.format.width) > 0 ? Number(context.format.width) : null);
   addMissing("data-height", Number.isFinite(Number(context.format?.height)) && Number(context.format.height) > 0 ? Number(context.format.height) : null);
-  if (!additions.length) return { html: source, attributes: [] };
-
   const attributes = additions.map(([name]) => name);
   const serialized = additions.map(([name, value]) => `${name}="${escapeHtml(value)}"`).join(" ");
-  const repairedRoot = root.replace(/\s*(\/?>)$/, ` ${serialized}$1`);
+  const repairedRoot = additions.length ? root.replace(/\s*(\/?>)$/, ` ${serialized}$1`) : root;
   const rootOffset = templates[0].index + templates[0][0].indexOf(template) + match.index;
+  let repairedHtml = additions.length ? `${source.slice(0, rootOffset)}${repairedRoot}${source.slice(rootOffset + root.length)}` : source;
+  const addedRootStyle = !/#root\s*\{/i.test(template);
+  if (addedRootStyle) repairedHtml = repairedHtml.replace(/(<template\b[^>]*>)/i, "$1<style>#root{position:relative;overflow:hidden}</style>");
   return {
-    html: `${source.slice(0, rootOffset)}${repairedRoot}${source.slice(rootOffset + root.length)}`,
-    attributes
+    html: repairedHtml,
+    attributes,
+    addedRootStyle
   };
 }
 

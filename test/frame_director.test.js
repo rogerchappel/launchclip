@@ -147,6 +147,20 @@ test("adds missing authoritative root contract attributes locally without overwr
   assert.ok(validateHyperFramesRoot(preserved.bundle.html, context.plan.shots[0], context.plan.format).some((error) => error.includes("data-width")));
 });
 
+test("adds host root styling and removes only a redundant frame type locally", () => {
+  const context = fixture();
+  const bundle = frameBundle("shot-1", 5);
+  bundle.type = bundle.schema_version;
+  bundle.html = bundle.html.replace("<style>#root{position:absolute;inset:0}</style>", "");
+
+  const sanitized = sanitizeFrameBundle(bundle, { shot: context.plan.shots[0], format: context.plan.format });
+
+  assert.equal(sanitized.bundle.type, undefined);
+  assert.match(sanitized.bundle.html, /<template><style>#root\{position:relative;overflow:hidden\}<\/style>/);
+  assert.deepEqual(sanitized.repairs, [{ kind: "remove-redundant-frame-type" }, { kind: "add-missing-root-style" }]);
+  assert.deepEqual(validateHyperFramesRoot(sanitized.bundle.html, context.plan.shots[0], context.plan.format), []);
+});
+
 test("builds a deterministic presenter fallback that satisfies the frame contract", () => {
   const context = fixture();
   const shot = { ...context.plan.shots[0], presenter: { mode: "companion", visible: true }, resource_ids: ["presenter"] };
