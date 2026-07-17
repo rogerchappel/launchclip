@@ -109,6 +109,7 @@ export class ChatCompletionsStructuredClient {
   async request(endpoint, init) {
     for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
       let response;
+      let payload;
       const timeoutSignal = this.requestTimeoutMs > 0 ? AbortSignal.timeout(this.requestTimeoutMs) : null;
       const signal = init.signal && timeoutSignal ? AbortSignal.any([init.signal, timeoutSignal]) : init.signal ?? timeoutSignal ?? undefined;
       try {
@@ -123,6 +124,7 @@ export class ChatCompletionsStructuredClient {
             ...(init.headers ?? {})
           }
         });
+        payload = await parseResponseBody(response);
       } catch (error) {
         if (attempt >= this.maxRetries) {
           if (timeoutSignal?.aborted) {
@@ -135,7 +137,6 @@ export class ChatCompletionsStructuredClient {
         await this.sleep(retryDelayMs(null, attempt));
         continue;
       }
-      const payload = await parseResponseBody(response);
       if (response.ok) return payload;
       const retryable = response.status === 408 || response.status === 409 || response.status === 429 || response.status >= 500;
       if (retryable && attempt < this.maxRetries) {
