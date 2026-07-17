@@ -146,7 +146,7 @@ Usage:
   launchclip production-draft <workspace> [--draft-quality draft] [--critic-route provider:model@reasoning] [--shot-inspect-concurrency 2] [--reference-video local.mp4]
   launchclip production-preview <workspace> [--port 3002] [--no-open]
   launchclip review <workspace> [--model-policy free] [--port 3002] [--no-open] [--critic-route provider:model@reasoning] [--repair-route provider:model@reasoning]
-  launchclip production-critique <workspace> [--model-policy free] [--critic-route provider:model@reasoning] [--critic-reasoning xhigh] [--critic-pro]
+  launchclip production-critique <workspace> [--critic-route provider:model@reasoning] [--model-policy free] [--critic-reasoning xhigh] [--critic-pro]
   launchclip production-repair <workspace> [--model-policy cost-aware|local-first|quality|free] [--repair-route provider:model@reasoning] [--repair-text-only] [--repair-scoped-source] [--repair-semantic-attempts 2] [--repair-snapshots 8] [--repair-issues-per-shot 4] [--max-patch-ratio 0.35]
   launchclip production-render <workspace> --approve [--quality high] [--critic-route provider:model@reasoning] [--shot-inspect-concurrency 2] [--reference-video local.mp4]
   launchclip init <repo> --out <workspace>
