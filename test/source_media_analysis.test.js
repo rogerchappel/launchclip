@@ -36,6 +36,23 @@ test("transcribes authoritative video narration and gives GPT-5.6 an ordered con
   assert.ok(rehydrated.items.some((entry) => entry.kind === "visual-media-analysis"));
 });
 
+test("creates the visual-analysis client from the intake provider route", async () => {
+  const workspace = await fixture({ role: "supporting", authoritative: false });
+  const intakePath = path.join(workspace, "production", "intake.json");
+  const intake = JSON.parse(await readFile(intakePath, "utf8"));
+  intake.model = { provider: "openrouter", id: "openrouter/free", reasoning_effort: "none" };
+  await writeFile(intakePath, `${JSON.stringify(intake, null, 2)}\n`);
+  let route;
+  await analyzeSourceMedia(workspace, {}, {
+    createClient: (received) => {
+      route = received;
+      return { runStructured: async () => ({ response_id: "free-media", model: "free-vision", value: { resource_id: "take", summary: "Visible product", visible_text: [], narrative_opportunities: [], segments: [], quality_warnings: [] } }) };
+    },
+    contactSheet: async (_source, output) => writeFile(output, "contact-sheet")
+  });
+  assert.deepEqual(route, { provider: "openrouter", model: "openrouter/free", reasoning: "none", supportsImages: true });
+});
+
 test("gives the visual analyst real hook, cut, and motion timing instead of placeholder seconds", async () => {
   const workspace = await fixture({ role: "reference", authoritative: false });
   let request;
