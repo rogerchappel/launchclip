@@ -51,12 +51,15 @@ test("doctor reports package, tool, and credential readiness without exposing se
 });
 
 test("parses model-directed production control flags", () => {
-  assert.deepEqual(parseFlags(["--no-audio", "--fast-eval", "--allow-timing-drift", "--allow-frame-fallback", "--repair-scoped-source", "--foreground", "--approve", "--concurrency", "4", "--max-frame-cost-usd", "7.5", "--voice-id", "voice_1", "--assets", "./brand", "--style", "soft-grid-editorial", "--style-file", "./frame.md"]), {
+  assert.deepEqual(parseFlags(["--no-audio", "--fast-eval", "--allow-timing-drift", "--allow-frame-fallback", "--repair-scoped-source", "--refresh-free-models", "--free-model-candidates", "5", "--free-model-state", "./free-models.json", "--foreground", "--approve", "--concurrency", "4", "--max-frame-cost-usd", "7.5", "--voice-id", "voice_1", "--assets", "./brand", "--style", "soft-grid-editorial", "--style-file", "./frame.md"]), {
     "no-audio": true,
     "fast-eval": true,
     "allow-timing-drift": true,
     "allow-frame-fallback": true,
     "repair-scoped-source": true,
+    "refresh-free-models": true,
+    "free-model-candidates": "5",
+    "free-model-state": "./free-models.json",
     foreground: true,
     approve: true,
     concurrency: "4",

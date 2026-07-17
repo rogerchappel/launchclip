@@ -115,6 +115,12 @@ launchclip produce https://github.com/owner/repo \
   --model-policy local-first \
   --local-model qwen2.5-coder:latest
 
+# Keep model calls on OpenRouter's current free pool. Frame HTML uses a
+# benchmark-ranked, locally remembered shortlist rather than a random free model.
+launchclip produce https://github.com/owner/repo \
+  --out .launchclip/repo-free \
+  --model-policy free
+
 # Re-render, re-analyze, and re-critique the existing assembled project only.
 launchclip production-draft .launchclip/repo-video \
   --reference-video ./reference-short.mp4
@@ -127,9 +133,31 @@ launchclip production-render .launchclip/repo-video --approve
 ```
 
 The default `cost-aware` policy plans with Terra, authors with Luna, and
-escalates only failed scenes. `local-first` prepends Ollama. To guarantee that a
-review resume cannot make a paid model call, pin both the independent critic
-and repair routes to OpenRouter's live free-model router:
+escalates only failed scenes. `local-first` prepends Ollama. The `free` policy
+keeps planning, source analysis, frame authoring, critique, and repair on
+OpenRouter free model IDs. It requires `OPENROUTER_API_KEY`; ElevenLabs voice,
+music, and transcription remain separately billed when enabled.
+
+For visual code authoring, LaunchClip polls OpenRouter's model catalog, requires
+an explicit `:free` ID with zero prompt and completion prices, and filters for
+the text, context, and structured-output contract the frame director needs. It
+then ranks candidates with Design Arena website, UI-component, code-category,
+and data-visualization results plus the Artificial Analysis coding index. Model
+family names such as Qwen, Gemma, and Nemotron are only weak fallback evidence;
+parameter count is not used as a quality score.
+
+The top five are stored in `~/.launchclip/openrouter-free-models.json`. The
+winner remains sticky while the catalog still reports that exact SKU as free.
+An accepted frame author is promoted; exhausted routes or a production that
+still fails visual critique rotate the winner. If the saved winner disappears
+or stops being free, LaunchClip discovers and ranks the pool again. Use
+`--refresh-free-models` to force a new ranking, `--free-model-candidates` to
+change the shortlist size, or `--free-model-state` to choose another state file.
+Free frame mode fails without writing a deterministic substitute and never
+falls through to a paid model route.
+
+To keep a review free while using another production policy, pin both the
+independent critic and repair routes to OpenRouter's live free-model router:
 
 ```bash
 launchclip review .launchclip/repo-video \
@@ -137,11 +165,9 @@ launchclip review .launchclip/repo-video \
   --repair-route openrouter:openrouter/free@none
 ```
 
-OpenRouter selects an eligible free model at request time, so Launchclip does
-not maintain a changing list of promotional model IDs. A pinned critic route is
-singular to keep the final editorial verdict independent and reproducible at
-the recorded provider/model response. For local-only repair, continue to use
-`--repair-route ollama:qwen2.5-coder:latest@none`.
+The dynamic critic route remains singular so the final editorial verdict is
+independent and records the actual provider/model response. For local-only
+repair, continue to use `--repair-route ollama:qwen2.5-coder:latest@none`.
 
 The dynamic free repair route automatically uses LaunchClip's compact,
 text-only repair capsule so the live free pool is not excluded by unnecessary
