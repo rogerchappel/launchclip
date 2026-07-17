@@ -277,6 +277,29 @@ test("resumes a persisted background frame response without submitting it twice"
   assert.equal(submitted, 1, "only the second shot needs a new response");
 });
 
+test("retries an interrupted frame job that has no resumable response id", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  const baseInput = buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0 });
+  const inputHash = semanticHash({ input: baseInput, model: context.intake.model, reasoning: "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v4" });
+  await store.add({ id: "frame:shot-1", kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash });
+  await store.markRunning("frame:shot-1", { provider: "openrouter", response_id: null, status: "running" });
+  const calls = [];
+  const client = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    calls.push(input.shot.id);
+    return { response_id: `fresh_${input.shot.id}`, model: "example/free:free", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: {} };
+  } };
+
+  await directFrames(workspace, { concurrency: 2, background: false }, { client });
+
+  assert.deepEqual(calls.sort(), ["shot-1", "shot-2"]);
+  const recovered = (await ProductionJobStore.open(workspace, { create: false })).get("frame:shot-1");
+  assert.equal(recovered.status, "succeeded");
+  assert.equal(recovered.attempt, 2);
+});
+
 test("fails closed on fallback and does not start a later frame", async () => {
   const context = fixture();
   const workspace = await workspaceFixture(context);

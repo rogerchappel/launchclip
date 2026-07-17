@@ -173,8 +173,10 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   }
   else if (current.status === "failed" || current.status === "stale") await store.retry(jobId, { inputHash });
   else if (current.status === "running" || current.status === "submitted") {
-    if (!current.remote?.response_id) throw new Error(`Frame job is ${current.status} without a resumable response id: ${jobId}`);
-    resumeResponseId = current.remote.response_id;
+    if (!current.remote?.response_id) {
+      await store.markFailed(jobId, new Error(`Recovered interrupted frame job without a resumable response id: ${jobId}`));
+      await store.retry(jobId, { inputHash });
+    } else resumeResponseId = current.remote.response_id;
   } else if (current.status !== "pending") throw new Error(`Frame job is already ${current.status}: ${jobId}`);
 
   if (!resumeResponseId) await store.markRunning(jobId, { provider: routes[0].provider, response_id: null, status: "running" });
