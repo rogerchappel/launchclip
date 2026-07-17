@@ -83,7 +83,12 @@ export async function directFrames(workspacePath, options = {}, adapters = {}) {
   const requestedConcurrency = positiveInteger(options.concurrency ?? 4, "concurrency");
   const maxFrameCostUsd = options.maxFrameCostUsd == null ? null : positiveNumber(options.maxFrameCostUsd, "maxFrameCostUsd");
   const failClosed = options.allowFallback !== true;
-  const concurrency = failClosed || maxFrameCostUsd != null ? 1 : requestedConcurrency;
+  const failClosedConcurrency = positiveInteger(options.failClosedConcurrency ?? 1, "failClosedConcurrency");
+  const concurrency = maxFrameCostUsd != null
+    ? 1
+    : failClosed
+      ? Math.min(requestedConcurrency, failClosedConcurrency)
+      : requestedConcurrency;
   const costState = { estimatedUsd: 0, calls: 0, complete: true, warnings: [], outputTokenLimitBreaches: [] };
   const tasks = plan.shots.map((shot, index) => async () => {
     assertFrameBudget(costState, maxFrameCostUsd);
@@ -99,7 +104,7 @@ export async function directFrames(workspacePath, options = {}, adapters = {}) {
   });
   let frames;
   try {
-    frames = await runPool(tasks, concurrency);
+    frames = await runPool(tasks, concurrency, { stopOnError: failClosed });
   } catch (error) {
     error.frame_cost = frameCostSummary(costState, maxFrameCostUsd);
     throw error;
@@ -907,18 +912,24 @@ export function safeShotFile(directory, shotId, suffix) {
   return output;
 }
 
-async function runPool(tasks, concurrency) {
+async function runPool(tasks, concurrency, options = {}) {
   const output = new Array(tasks.length);
   let cursor = 0;
+  let stopped = false;
+  let firstFailure = null;
   const worker = async () => {
-    while (cursor < tasks.length) {
+    while (!stopped && cursor < tasks.length) {
       const index = cursor++;
-      output[index] = await tasks[index]();
+      try {
+        output[index] = await tasks[index]();
+      } catch (error) {
+        firstFailure ??= error;
+        if (options.stopOnError) stopped = true;
+      }
     }
   };
-  const settled = await Promise.allSettled(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
-  const failed = settled.find((entry) => entry.status === "rejected");
-  if (failed) throw failed.reason;
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
+  if (firstFailure) throw firstFailure;
   return output;
 }
 

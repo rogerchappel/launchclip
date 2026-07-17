@@ -372,6 +372,43 @@ test("fails closed on fallback and does not start a later frame", async () => {
   assert.deepEqual(calls, ["shot-1"]);
 });
 
+test("runs fail-closed scenes concurrently but stops scheduling after the first failure", async () => {
+  const context = fixture();
+  const third = structuredClone(context.plan.shots[1]);
+  third.id = "shot-3";
+  third.start_seconds = 10;
+  third.end_seconds = 15;
+  third.visual.events[0].id = "shot-3-reveal";
+  third.transition_out = "cut";
+  context.plan.shots.push(third);
+  context.plan.format.duration_seconds = 15;
+  const workspace = await workspaceFixture(context);
+  const calls = [];
+  let siblingFinished = false;
+  const client = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    calls.push(input.shot.id);
+    if (input.shot.id === "shot-1") {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      throw new Error("first parallel worker failed");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    siblingFinished = true;
+    return { response_id: `resp_${input.shot.id}`, model: "free-coder", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: {} };
+  } };
+
+  await assert.rejects(
+    () => directFrames(workspace, { concurrency: 3, failClosedConcurrency: 2, fallbackMode: "error", background: false }, { client }),
+    /first parallel worker failed/
+  );
+
+  assert.deepEqual(calls.sort(), ["shot-1", "shot-2"]);
+  assert.equal(siblingFinished, true);
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  assert.equal(store.get("frame:shot-2").status, "succeeded");
+  assert.equal(store.get("frame:shot-3"), null);
+});
+
 test("can exhaust LLM routes without writing a deterministic visual fallback", async () => {
   const context = fixture();
   const workspace = await workspaceFixture(context);
