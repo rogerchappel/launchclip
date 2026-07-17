@@ -67,8 +67,9 @@ export async function buildIntake(source, flags = {}, env = process.env) {
   const aspect = resolveAspect(flags.aspect ?? flags.ratio ?? "16:9");
   const durationSeconds = positiveNumber(flags.duration ?? 60, "--duration");
   const modelPolicy = resolveModelPolicy(flags["model-policy"] ?? "cost-aware");
-  const model = String(flags.model ?? env.OPENAI_VIDEO_MODEL ?? (modelPolicy === "quality" ? "gpt-5.6" : "gpt-5.6-terra")).trim();
-  const reasoningEffort = resolveReasoningEffort(flags.reasoning ?? env.OPENAI_VIDEO_REASONING ?? (modelPolicy === "quality" ? "xhigh" : "high"));
+  const modelProvider = modelPolicy === "free" ? "openrouter" : "openai";
+  const model = String(flags.model ?? (modelPolicy === "free" ? "openrouter/free" : env.OPENAI_VIDEO_MODEL ?? (modelPolicy === "quality" ? "gpt-5.6" : "gpt-5.6-terra"))).trim();
+  const reasoningEffort = resolveReasoningEffort(flags.reasoning ?? (modelPolicy === "free" ? "none" : env.OPENAI_VIDEO_REASONING ?? (modelPolicy === "quality" ? "xhigh" : "high")));
   const resources = [];
   if (sourceKind === "voiceover" && existsSync(path.resolve(value))) {
     resources.push(...await describeResourceEntries(value, "voiceover", resources.length));
@@ -117,7 +118,7 @@ export async function buildIntake(source, flags = {}, env = process.env) {
       style
     },
     model: {
-      provider: "openai",
+      provider: modelProvider,
       id: model,
       reasoning_effort: reasoningEffort,
       reasoning_mode: flags.pro ? "pro" : "standard"
@@ -260,8 +261,8 @@ export function resolveReasoningEffort(value) {
 
 export function resolveModelPolicy(value) {
   const normalized = String(value ?? "").trim().toLowerCase();
-  if (!["cost-aware", "local-first", "quality"].includes(normalized)) {
-    throw new Error(`Unsupported --model-policy: ${value}. Supported: cost-aware, local-first, quality`);
+  if (!["cost-aware", "local-first", "quality", "free"].includes(normalized)) {
+    throw new Error(`Unsupported --model-policy: ${value}. Supported: cost-aware, local-first, quality, free`);
   }
   return normalized;
 }

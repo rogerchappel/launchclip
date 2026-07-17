@@ -58,6 +58,7 @@ test("resolves aspect ratios and GPT-5.6 reasoning controls", () => {
   assert.throws(() => resolveAspect("4:3"), /Unsupported --aspect/);
   assert.throws(() => resolveReasoningEffort("ultra"), /Unsupported --reasoning/);
   assert.equal(resolveModelPolicy("LOCAL-FIRST"), "local-first");
+  assert.equal(resolveModelPolicy("FREE"), "free");
   assert.throws(() => resolveModelPolicy("mystery"), /Unsupported --model-policy/);
 });
 
@@ -106,6 +107,11 @@ test("uses Terra for planning unless quality or an explicit model is requested",
   assert.deepEqual(quality.model, { provider: "openai", id: "gpt-5.6", reasoning_effort: "xhigh", reasoning_mode: "standard" });
   assert.equal(explicit.model.id, "custom-model");
   assert.equal(explicit.model.reasoning_effort, "low");
+});
+
+test("keeps free-policy planning on OpenRouter's free router", async () => {
+  const intake = await buildIntake("A product", { kind: "product", "model-policy": "free" }, {});
+  assert.deepEqual(intake.model, { provider: "openrouter", id: "openrouter/free", reasoning_effort: "none", reasoning_mode: "standard" });
 });
 
 test("expands a resource directory into stable file-level resources", async () => {
