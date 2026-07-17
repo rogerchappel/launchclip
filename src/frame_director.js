@@ -302,8 +302,9 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
 export function sanitizeFrameBundle(bundle, context = {}) {
   const html = String(bundle?.html ?? "");
   const transportRepair = repairTemplateTransport(html);
+  const timelineSafeHtml = context.shot?.id ? ensureTimelineRegistration(transportRepair.html, context.shot.id) : transportRepair.html;
   let removed = 0;
-  const eventSafeHtml = transportRepair.html.replace(/<(?:[^"'<>]|"[^"]*"|'[^']*')+>/g, (tag) => tag.replace(/\son[a-z][\w:-]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, () => {
+  const eventSafeHtml = timelineSafeHtml.replace(/<(?:[^"'<>]|"[^"]*"|'[^']*')+>/g, (tag) => tag.replace(/\son[a-z][\w:-]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, () => {
     removed += 1;
     return "";
   }));

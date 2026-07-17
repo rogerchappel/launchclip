@@ -1,5 +1,5 @@
 export function ensureTimelineRegistration(html, compositionId) {
-  const source = stripLegacyDuplicateRegistration(String(html), compositionId);
+  const source = stripLegacyDuplicateRegistration(canonicalizeObjectTimeline(String(html), compositionId), compositionId);
   if (hasTimelineRegistration(source, compositionId)) return source;
   const variables = [...source.matchAll(/(?:const|let|var)\s+([a-zA-Z_$][\w$]*)\s*=\s*gsap\.timeline\s*\(/g)];
   const variable = variables.at(-1);
@@ -18,6 +18,12 @@ export function ensureTimelineRegistration(html, compositionId) {
   const registration = `<script>\n${statements}\n</script>`;
   if (/<\/template>/i.test(source)) return source.replace(/<\/template>/i, `${registration}\n</template>`);
   return /<\/body>/i.test(source) ? source.replace(/<\/body>/i, `${registration}\n</body>`) : `${source}\n${registration}`;
+}
+
+function canonicalizeObjectTimeline(source, compositionId) {
+  const id = escapeRegExp(compositionId);
+  const pattern = new RegExp(`window\\.__timelines\\s*=\\s*\\{\\s*(?:["']${id}["']|${id})\\s*:\\s*gsap\\.timeline\\s*(\\([^;]*?\\))\\s*;?\\s*\\}\\s*;?`, "g");
+  return source.replace(pattern, (_match, args) => `const launchclipTimeline = gsap.timeline${args};\nwindow.__timelines = window.__timelines || {};\nlaunchclipTimeline.pause(0);\nwindow.__timelines[${JSON.stringify(compositionId)}] = launchclipTimeline;`);
 }
 
 function stripLegacyDuplicateRegistration(source, compositionId) {
