@@ -135,6 +135,23 @@ test("canonicalizes model event ids and preserves their SFX bindings without a p
   assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).ok, true);
 });
 
+test("normalizes lossless planner bookkeeping without another model call", () => {
+  const plan = samplePlan();
+  plan.narration.target_wpm = 0;
+  plan.shots[0].sfx[0].at_seconds = 4;
+  plan.shots[0].visual.objects.forEach((object) => { object.layer = "foreground"; });
+  plan.shots[0].visual.continuity.hands_off_object_ids = ["missing", "proof-node"];
+  plan.shots[1].visual.continuity.inherits_object_ids = [];
+  const normalized = normalizeProductionPlanTiming(plan);
+  assert.ok(normalized.narration.target_wpm >= 60);
+  assert.equal(normalized.shots[0].sfx[0].at_seconds, normalized.shots[0].visual.events[0].at_seconds);
+  assert.ok(new Set(normalized.shots[0].visual.objects.map((object) => object.layer)).size >= 2);
+  assert.deepEqual(normalized.shots[0].visual.continuity.hands_off_object_ids, ["proof-node"]);
+  assert.deepEqual(normalized.shots[1].visual.continuity.inherits_object_ids, ["proof-node"]);
+  assert.equal(plan.narration.target_wpm, 0, "does not mutate the model response");
+  assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).ok, true);
+});
+
 test("frame bundles request root media without owning media tags", () => {
   const bundle = sampleFrameBundle();
   assert.deepEqual(validateFrameBundle(bundle, { shotId: "shot-1", evidenceIds: ["ev-1"], resourceIds: ["res-1"] }), { ok: true, errors: [] });

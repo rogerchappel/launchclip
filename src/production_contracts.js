@@ -414,18 +414,52 @@ export function validateProductionPlan(plan, context = {}) {
 
 export function normalizeProductionPlanTiming(plan) {
   const normalized = structuredClone(plan);
+  const targetWpm = Number(normalized?.narration?.target_wpm);
+  if (normalized?.narration && !(targetWpm >= 60 && targetWpm <= 260)) {
+    const words = String(normalized.narration.full_text ?? "").trim().split(/\s+/).filter(Boolean).length;
+    const duration = Number(normalized?.format?.duration_seconds);
+    if (words > 0 && duration > 0) normalized.narration.target_wpm = Math.max(60, Math.min(260, Math.round(words * 60 / duration)));
+  }
   for (const shot of normalized?.shots ?? []) {
     normalizeShotEventIds(shot);
     const start = Number(shot.start_seconds);
     const end = Number(shot.end_seconds);
     const duration = end - start;
-    if (!Number.isFinite(start) || !Number.isFinite(end) || duration <= 0 || start <= 0) continue;
-    for (const timed of [...(shot.visual?.internal_reveals ?? []), ...(shot.visual?.events ?? []), ...(shot.sfx ?? [])]) {
-      const at = Number(timed.at_seconds);
-      if (at > duration + .001 && at >= start - .001 && at <= end + .001) timed.at_seconds = Math.round((at - start) * 1000) / 1000;
+    if (Number.isFinite(start) && Number.isFinite(end) && duration > 0 && start > 0) {
+      for (const timed of [...(shot.visual?.internal_reveals ?? []), ...(shot.visual?.events ?? []), ...(shot.sfx ?? [])]) {
+        const at = Number(timed.at_seconds);
+        if (at > duration + .001 && at >= start - .001 && at <= end + .001) timed.at_seconds = Math.round((at - start) * 1000) / 1000;
+      }
     }
+    const events = new Map((shot.visual?.events ?? []).map((event) => [event.id, event]));
+    for (const cue of shot.sfx ?? []) {
+      const event = events.get(cue.event_id);
+      if (event && Number.isFinite(Number(event.at_seconds))) cue.at_seconds = Number(event.at_seconds);
+    }
+    normalizeObjectLayers(shot.visual?.objects);
   }
+  normalizeContinuityHandoffs(normalized?.shots ?? []);
   return normalized;
+}
+
+function normalizeObjectLayers(objects) {
+  if (!Array.isArray(objects) || objects.length < 2 || new Set(objects.map((object) => object.layer)).size >= 2) return;
+  const backdrop = objects.find((object) => ["decoration", "container"].includes(object.kind)) ?? objects[0];
+  const focal = objects.find((object) => object !== backdrop && !["decoration", "container"].includes(object.kind)) ?? objects[1];
+  backdrop.layer = "background";
+  focal.layer = focal.kind === "text" ? "foreground" : "midground";
+}
+
+function normalizeContinuityHandoffs(shots) {
+  for (let index = 1; index < shots.length; index += 1) {
+    const previous = shots[index - 1]?.visual?.continuity;
+    const current = shots[index]?.visual?.continuity;
+    if (!previous || !current || previous.sequence_id !== current.sequence_id || !["continue", "transform"].includes(previous.handoff)) continue;
+    const currentObjects = new Set((shots[index].visual?.objects ?? []).map((object) => object.id));
+    const shared = (previous.hands_off_object_ids ?? []).filter((id) => currentObjects.has(id));
+    previous.hands_off_object_ids = shared;
+    current.inherits_object_ids = [...new Set([...(current.inherits_object_ids ?? []), ...shared])];
+  }
 }
 
 function normalizeShotEventIds(shot) {
