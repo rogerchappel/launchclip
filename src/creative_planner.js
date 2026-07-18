@@ -201,11 +201,31 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
 }
 
 function normalizePlanForAvailableResources(plan, intake) {
-  const hasPresenter = intake.resources.some((entry) => entry.role === "presenter" && ["video", "image"].includes(entry.type));
-  if (hasPresenter) return plan;
-  return {
+  const availableResourceIds = new Set(intake.resources.map((entry) => entry.id));
+  const normalizeResourceId = (id) => {
+    if (availableResourceIds.has(id)) return id;
+    const unprefixed = String(id ?? "").replace(/^resource:/, "");
+    return availableResourceIds.has(unprefixed) ? unprefixed : id;
+  };
+  const normalized = {
     ...plan,
     shots: plan.shots.map((shot) => ({
+      ...shot,
+      resource_ids: [...new Set(shot.resource_ids.map(normalizeResourceId))],
+      visual: {
+        ...shot.visual,
+        objects: shot.visual.objects.map((object) => ({
+          ...object,
+          asset_resource_id: object.asset_resource_id == null ? null : normalizeResourceId(object.asset_resource_id)
+        }))
+      }
+    }))
+  };
+  const hasPresenter = intake.resources.some((entry) => entry.role === "presenter" && ["video", "image"].includes(entry.type));
+  if (hasPresenter) return normalized;
+  return {
+    ...normalized,
+    shots: normalized.shots.map((shot) => ({
       ...shot,
       presenter: {
         ...shot.presenter,

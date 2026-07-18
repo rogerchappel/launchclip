@@ -210,6 +210,20 @@ test("normalizes impossible presenter visibility when no presenter asset exists"
   assert.deepEqual(written.shots[0].presenter, { mode: "voiceover", visible: false, placement: "offstage", size: "none", treatment: "framed" });
 });
 
+test("normalizes evidence-style prefixes on valid intake resource ids", async () => {
+  const workspace = await tempWorkspace(sampleIntake());
+  const plan = samplePlan();
+  plan.shots[0].resource_ids = ["resource:screen", "resource:screen"];
+  plan.shots[0].visual.objects[0].asset_resource_id = "resource:screen";
+  const result = await planProduction(workspace, {}, {
+    client: { runStructured: async () => ({ response_id: "prefixed-resources", model: "free-planner", status: "completed", value: plan, usage: {} }) }
+  });
+  const written = JSON.parse(await readFile(result.plan, "utf8"));
+  assert.deepEqual(written.shots[0].resource_ids, ["screen"]);
+  assert.equal(written.shots[0].visual.objects[0].asset_resource_id, "screen");
+  assert.equal(result.semantic_attempts, 1);
+});
+
 test("stops semantic repair at the configured bound", async () => {
   const workspace = await tempWorkspace(sampleIntake());
   let calls = 0;
