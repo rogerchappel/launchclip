@@ -205,6 +205,8 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
     ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, worker: options.sceneBlueprint ? "frame-director.v8" : "frame-director.v5" })
     : semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v4" });
   const existing = store.get(jobId);
+  const resanitized = await resanitizeStoredFrame({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
+  if (resanitized) return resanitized;
   const recovered = await recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
   if (recovered) return recovered;
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
@@ -342,6 +344,42 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
     await store.markFailed(jobId, error);
     throw error;
   }
+}
+
+async function resanitizeStoredFrame({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash }) {
+  if (existing?.status !== "succeeded" || existing.input_hash !== inputHash || hasFallbackFrameOutputs(existing)) return null;
+  const bundlePath = safeShotFile(path.join(workspace, PRODUCTION_PATHS.frames), shot.id, ".json");
+  let storedBundle;
+  try {
+    storedBundle = await readJson(bundlePath);
+  } catch (error) {
+    if (error.code === "ENOENT" || error instanceof SyntaxError) return null;
+    throw error;
+  }
+  const sanitized = sanitizeFrameBundle(storedBundle, {
+    shot,
+    format: plan.format,
+    resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
+  });
+  if (!sanitized.repairs.length) return null;
+  const candidate = sanitized.bundle;
+  const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
+  const errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
+  if (errors.length) return null;
+  const paths = await writeFrameArtifacts(workspace, candidate);
+  const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
+  await store.replaceSucceededOutputs(jobId, outputs);
+  return {
+    shot_id: shot.id,
+    cached: false,
+    recovered: true,
+    sanitized: true,
+    repairs: sanitized.repairs,
+    bundle: paths[0], html: paths[1], motion: paths[2],
+    response_id: existing.remote?.response_id ?? null,
+    provider: existing.remote?.provider ?? null,
+    usage: existing.usage ?? {}
+  };
 }
 
 async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, routes, adapters, options, inputHash, jobId }) {

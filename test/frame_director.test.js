@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { FRAME_BLUEPRINT_VERSION } from "../src/frame_blueprint.js";
 import { buildFallbackFrame, buildFrameInput, directFrames, fallbackFramesForVerification, safeShotFile, sanitizeFrameBundle, validateHyperFramesRoot } from "../src/frame_director.js";
-import { ProductionJobStore, semanticHash } from "../src/job_store.js";
+import { describeJobOutput, ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { EVIDENCE_VERSION, FRAME_BUNDLE_SCHEMA, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
 test("gives each delegated frame only its shot, neighbors, grounded evidence, and resources", () => {
@@ -521,7 +521,7 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
     };
   } };
 
-  const result = await directFrames(workspace, {
+  const runOptions = {
     concurrency: 3,
     failClosedConcurrency: 2,
     sceneBlueprint: true,
@@ -529,7 +529,8 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
     fallbackMode: "error",
     routes: ["openrouter:google/gemma-code:free@none"],
     background: false
-  }, { client });
+  };
+  const result = await directFrames(workspace, runOptions, { client });
 
   assert.equal(result.generated, 2);
   assert.equal(calls.filter((entry) => entry.schema === "launchclip_frame_blueprint").length, 3);
@@ -551,6 +552,21 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
   const frameStore = await ProductionJobStore.open(workspace, { create: false });
   assert.equal(blueprintRecord.blueprint.schema_version, FRAME_BLUEPRINT_VERSION);
   assert.notEqual(blueprintRecord.input_hash, frameStore.get("frame:shot-1").input_hash);
+
+  const storedBundle = JSON.parse(await readFile(result.frames[0].bundle, "utf8"));
+  storedBundle.html = `<!doctype html><html><head></head><body>${storedBundle.html}</body></html>`;
+  await writeFile(result.frames[0].bundle, `${JSON.stringify(storedBundle, null, 2)}\n`);
+  await writeFile(result.frames[0].html, `${storedBundle.html}\n`);
+  const refreshedOutputs = await Promise.all([result.frames[0].bundle, result.frames[0].html, result.frames[0].motion].map((filePath) => describeJobOutput(workspace, filePath)));
+  await frameStore.replaceSucceededOutputs("frame:shot-1", refreshedOutputs);
+  const callsBeforeCacheRecovery = calls.length;
+
+  const recovered = await directFrames(workspace, runOptions, { client });
+
+  assert.equal(calls.length, callsBeforeCacheRecovery);
+  assert.equal(recovered.frames[0].recovered, true);
+  assert.deepEqual(recovered.frames[0].repairs, [{ kind: "remove-document-wrapper" }]);
+  assert.equal(recovered.frames[1].cached, true);
 });
 
 test("can exhaust LLM routes without writing a deterministic visual fallback", async () => {
