@@ -404,20 +404,43 @@ export function repairLockedSupportingMotionLiterals(html, beats = []) {
   const opening = repairMissingOpeningMotionPosition(html, beats);
   let source = opening.html;
   let immediateRenderAdded = 0;
+  let unplannedPropertiesRemoved = 0;
   const pattern = /\b(?:tl|timeline)\.fromTo\(\s*(['"])(#[^'"]+)\1\s*,\s*\{([^{}]*)\}\s*,\s*\{([^{}]*)\}\s*,\s*(-?(?:\d+\.?\d*|\.\d+))\s*\)/g;
   const matches = [...source.matchAll(pattern)];
   for (const match of matches.reverse()) {
-    const beat = beats.find((entry) => entry?.window_id !== "opening" && entry?.selector === match[2] && nearlyEqual(entry?.at_seconds, match[5]));
-    if (!beat || /\bimmediateRender\s*:/.test(match[4])) continue;
+    const beat = beats.find((entry) => entry?.selector === match[2] && nearlyEqual(entry?.at_seconds, match[5]));
+    if (!beat) continue;
+    const locked = new Set((beat.changes ?? []).map((change) => change.property));
+    const disallowed = new Set(["opacity", "x", "y", "scale", "rotation"].filter((property) => !locked.has(property)));
+    const from = stripFlatProperties(match[3], disallowed);
+    const to = stripFlatProperties(match[4], disallowed);
+    unplannedPropertiesRemoved += from.removed + to.removed;
+    let toBody = to.source;
+    if (beat.window_id !== "opening" && !/\bimmediateRender\s*:/.test(toBody)) {
+      toBody = `${toBody}${toBody.trim() && !toBody.trim().endsWith(",") ? "," : ""}immediateRender:false`;
+      immediateRenderAdded += 1;
+    }
+    if (from.source === match[3] && toBody === match[4]) continue;
+    const fromLiteral = `{${match[3]}}`;
     const toLiteral = `{${match[4]}}`;
-    const toIndex = match[0].lastIndexOf(toLiteral);
-    if (toIndex < 0) continue;
-    const insertion = match.index + toIndex + toLiteral.length - 1;
-    const separator = match[4].trim().endsWith(",") ? "" : ",";
-    source = `${source.slice(0, insertion)}${separator}immediateRender:false${source.slice(insertion)}`;
-    immediateRenderAdded += 1;
+    const fromIndex = match[0].indexOf(fromLiteral);
+    const toIndex = match[0].indexOf(toLiteral, fromIndex + fromLiteral.length);
+    if (fromIndex < 0 || toIndex < 0) continue;
+    const repairedCall = `${match[0].slice(0, fromIndex)}{${from.source}}${match[0].slice(fromIndex + fromLiteral.length, toIndex)}{${toBody}}${match[0].slice(toIndex + toLiteral.length)}`;
+    source = `${source.slice(0, match.index)}${repairedCall}${source.slice(match.index + match[0].length)}`;
   }
-  return { html: source, opening_position_added: opening.repaired, immediate_render_added: immediateRenderAdded };
+  return { html: source, opening_position_added: opening.repaired, immediate_render_added: immediateRenderAdded, unplanned_properties_removed: unplannedPropertiesRemoved };
+}
+
+function stripFlatProperties(source, disallowed) {
+  let removed = 0;
+  const parts = String(source ?? "").split(",").filter((part) => {
+    const key = part.match(/^\s*([A-Za-z_$][\w$]*)\s*:/)?.[1];
+    if (!key || !disallowed.has(key)) return true;
+    removed += 1;
+    return false;
+  });
+  return { source: parts.join(","), removed };
 }
 
 function parseFromToCalls(html) {

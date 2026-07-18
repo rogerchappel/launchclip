@@ -300,15 +300,18 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
           resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
         });
         const selectorAlignment = blueprint ? alignFrameSelectorsToBlueprint(sanitized.bundle, blueprint.value) : { bundle: sanitized.bundle, mappings: [] };
+        const eventTimingAlignment = alignFrameEventTiming(selectorAlignment.bundle, shot);
         const lockedMotionRepair = blueprint
-          ? repairLockedSupportingMotionLiterals(selectorAlignment.bundle.html, blueprint.value.supporting_motion_beats)
-          : { html: selectorAlignment.bundle.html, opening_position_added: false, immediate_render_added: 0 };
-        const candidate = { ...selectorAlignment.bundle, html: lockedMotionRepair.html };
+          ? repairLockedSupportingMotionLiterals(eventTimingAlignment.bundle.html, blueprint.value.supporting_motion_beats)
+          : { html: eventTimingAlignment.bundle.html, opening_position_added: false, immediate_render_added: 0, unplanned_properties_removed: 0 };
+        const candidate = { ...eventTimingAlignment.bundle, html: lockedMotionRepair.html };
         const repairs = [
           ...sanitized.repairs,
           ...(selectorAlignment.mappings.length ? [{ kind: "align-frame-selectors-to-blueprint", mappings: selectorAlignment.mappings }] : []),
           ...(lockedMotionRepair.opening_position_added ? [{ kind: "add-explicit-opening-motion-position", at_seconds: 0 }] : []),
-          ...(lockedMotionRepair.immediate_render_added ? [{ kind: "add-locked-immediate-render-flags", count: lockedMotionRepair.immediate_render_added }] : [])
+          ...(lockedMotionRepair.immediate_render_added ? [{ kind: "add-locked-immediate-render-flags", count: lockedMotionRepair.immediate_render_added }] : []),
+          ...(lockedMotionRepair.unplanned_properties_removed ? [{ kind: "remove-unplanned-locked-motion-properties", count: lockedMotionRepair.unplanned_properties_removed }] : []),
+          ...(eventTimingAlignment.aligned.length ? [{ kind: "align-frame-event-timing", events: eventTimingAlignment.aligned }] : [])
         ];
         const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
         errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format), ...(blueprint ? validateLockedSupportingMotion(candidate.html, blueprint.value.supporting_motion_beats) : [])];
@@ -725,16 +728,28 @@ async function recoverStoredFrameAttempt({ workspace, intake, evidence, plan, sh
       format: plan.format,
       resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
     });
-    const candidate = sanitized.bundle;
+    const eventTimingAlignment = alignFrameEventTiming(sanitized.bundle, shot);
+    const lockedMotionRepair = repairLockedSupportingMotionLiterals(eventTimingAlignment.bundle.html, supportingMotion);
+    const candidate = { ...eventTimingAlignment.bundle, html: lockedMotionRepair.html };
     const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
     const errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format), ...validateLockedSupportingMotion(candidate.html, supportingMotion)];
     if (!errors.length) {
-      accepted = { record, sanitized, candidate };
+      accepted = {
+        record,
+        candidate,
+        repairs: [
+          ...sanitized.repairs,
+          ...(eventTimingAlignment.aligned.length ? [{ kind: "align-frame-event-timing", events: eventTimingAlignment.aligned }] : []),
+          ...(lockedMotionRepair.opening_position_added ? [{ kind: "add-explicit-opening-motion-position", at_seconds: 0 }] : []),
+          ...(lockedMotionRepair.immediate_render_added ? [{ kind: "add-locked-immediate-render-flags", count: lockedMotionRepair.immediate_render_added }] : []),
+          ...(lockedMotionRepair.unplanned_properties_removed ? [{ kind: "remove-unplanned-locked-motion-properties", count: lockedMotionRepair.unplanned_properties_removed }] : [])
+        ]
+      };
       break;
     }
   }
   if (!accepted) return null;
-  const { record, sanitized, candidate } = accepted;
+  const { record, repairs, candidate } = accepted;
   const paths = await writeFrameArtifacts(workspace, candidate);
   const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
   let current = store.get(jobId);
@@ -756,13 +771,25 @@ async function recoverStoredFrameAttempt({ workspace, intake, evidence, plan, sh
     shot_id: shot.id,
     cached: false,
     recovered: true,
-    sanitized: sanitized.repairs.length > 0,
-    repairs: sanitized.repairs,
+    sanitized: repairs.length > 0,
+    repairs,
     bundle: paths[0], html: paths[1], motion: paths[2],
     response_id: record.response_id ?? existing.remote?.response_id ?? null,
     model: record.model ?? "stored-frame-candidate",
     usage: record.usage ?? existing.usage ?? {}
   };
+}
+
+function alignFrameEventTiming(bundle, shot) {
+  const planned = new Map((shot?.visual?.events ?? []).map((event) => [event.id, Number(event.at_seconds)]));
+  const aligned = [];
+  const events = (bundle.motion?.events ?? []).map((event) => {
+    const atSeconds = planned.get(event.event_id);
+    if (!Number.isFinite(atSeconds) || Number(event.at_seconds) === atSeconds) return event;
+    aligned.push({ event_id: event.event_id, from_seconds: Number(event.at_seconds), to_seconds: atSeconds });
+    return { ...event, at_seconds: atSeconds };
+  });
+  return { bundle: { ...bundle, motion: { ...bundle.motion, events } }, aligned };
 }
 
 async function readFrameAttempts(workspace, shotId) {

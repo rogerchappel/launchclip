@@ -544,8 +544,10 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
     assert.ok(input.narration_anchors.length <= 8);
     const value = frameBundle(shot.id, shot.duration_seconds);
     value.html = blueprintFrameHtml(shot.id, shot.duration_seconds, input.scene_blueprint);
+    value.html = value.html.replace(/(\.fromTo\([^,]+,\{)/, "$1rotation:12,");
     value.motion.assertions[0].selector = input.scene_blueprint.motion_beats[0].selector;
     value.motion.events[0].selector = input.scene_blueprint.motion_beats[0].selector;
+    value.motion.events[0].at_seconds += .25;
     return {
       response_id: `frame_${shot.id}`,
       model: "google/gemma-code:free",
@@ -588,6 +590,8 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => entry.prompt_cache_key === "launchclip:frame-director:v9"));
   assert.deepEqual(result.frames.map((entry) => entry.usage.total_tokens), [450, 450]);
   assert.ok(result.frames.every((entry) => entry.blueprint.cached === false));
+  assert.ok(result.frames.every((entry) => entry.repairs.some((repair) => repair.kind === "align-frame-event-timing")));
+  assert.ok(result.frames.every((entry) => entry.repairs.some((repair) => repair.kind === "remove-unplanned-locked-motion-properties")));
   const blueprintRecord = JSON.parse(await readFile(result.frames[0].blueprint.path, "utf8"));
   const frameStore = await ProductionJobStore.open(workspace, { create: false });
   assert.equal(blueprintRecord.blueprint.schema_version, FRAME_BLUEPRINT_VERSION);
