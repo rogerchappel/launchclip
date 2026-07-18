@@ -472,32 +472,97 @@ test("discovers ranked free frame models, clamps output, and records the accepte
 
 test("keeps critic and repair routes on OpenRouter free under the free policy", async () => {
   const received = {};
+  const selection = {
+    source: "sticky-state",
+    state_path: "/tmp/free-model-state.json",
+    selected_model: "tencent/hy3:free",
+    verified_free_at: "2026-07-17T00:00:00.000Z",
+    routes: ["openrouter:tencent/hy3:free@none", "openrouter:google/gemma-code:free@none"],
+    candidates: [{ id: "tencent/hy3:free", score: 40, coverage: .9 }, { id: "google/gemma-code:free", score: 34, coverage: .1 }],
+    warnings: []
+  };
   await runProductionStage("production-critique", "/tmp/workspace", { "model-policy": "free" }, {
     withProductionLease: async (_workspace, operation) => operation(),
     critiqueProduction: async (_workspace, options) => { received.critic = options; return { status: "approved" }; }
   });
   await runProductionStage("production-repair", "/tmp/workspace", { "model-policy": "free" }, {
     withProductionLease: async (_workspace, operation) => operation(),
-    repairProduction: async (_workspace, options) => { received.repair = options; return { status: "repaired" }; }
+    selectOpenRouterFreeModels: async (options) => {
+      assert.equal(options.role, "visual-code-author");
+      assert.equal(options.refresh, false);
+      return selection;
+    },
+    probeOpenRouterFreeModels: async (receivedSelection) => {
+      assert.equal(receivedSelection, selection);
+      return { ...selection, source: "cached-live-probe" };
+    },
+    repairProduction: async (_workspace, options) => {
+      received.repair = options;
+      return { status: "repaired", repaired: [{ provider: "openrouter", model: "tencent/hy3:free" }] };
+    },
+    recordOpenRouterFreeModelOutcome: async (receivedSelection, outcome) => {
+      assert.equal(receivedSelection.source, "cached-live-probe");
+      assert.equal(outcome.result.frames[0].model, "tencent/hy3:free");
+      return receivedSelection;
+    }
   });
   assert.equal(received.critic.route, "openrouter:openrouter/free@none");
-  assert.deepEqual(received.repair.routes, ["openrouter:openrouter/free@none"]);
+  assert.deepEqual(received.repair.routes, selection.routes);
   assert.equal(received.repair.provider, "openrouter");
-  assert.equal(received.repair.model, "openrouter/free");
+  assert.equal(received.repair.model, "tencent/hy3:free");
   assert.equal(received.repair.reasoning, "none");
   assert.equal(received.repair.supportsImages, false);
   assert.equal(received.repair.sourceMode, "scoped");
 });
 
-test("automatically uses the lean repair capsule for OpenRouter's dynamic free route", async () => {
+test("automatically uses the lean repair capsule for pinned OpenRouter free routes", async () => {
   let received;
-  await runProductionStage("production-repair", "/tmp/workspace", { "repair-route": "openrouter:openrouter/free@none" }, {
+  await runProductionStage("production-repair", "/tmp/workspace", { "repair-route": "openrouter:tencent/hy3:free@none" }, {
     withProductionLease: async (_workspace, operation) => operation(),
+    selectOpenRouterFreeModels: async () => { throw new Error("explicit repair routes must not trigger discovery"); },
     repairProduction: async (_workspace, options) => { received = options; return { status: "repaired" }; }
   });
-  assert.equal(received.routes, "openrouter:openrouter/free@none");
+  assert.equal(received.routes, "openrouter:tencent/hy3:free@none");
   assert.equal(received.supportsImages, false);
   assert.equal(received.sourceMode, "scoped");
+});
+
+test("refreshes the free-model ranking when every sticky candidate stops probing", async () => {
+  const selections = [];
+  let frameOptions;
+  const sticky = {
+    source: "sticky-state",
+    state_path: "/tmp/free-model-state.json",
+    selected_model: "retired/model:free",
+    routes: ["openrouter:retired/model:free@none"],
+    candidates: [{ id: "retired/model:free", score: 40, coverage: .9 }],
+    warnings: []
+  };
+  const refreshed = {
+    ...sticky,
+    source: "ranked",
+    selected_model: "google/gemma-code:free",
+    routes: ["openrouter:google/gemma-code:free@none"],
+    candidates: [{ id: "google/gemma-code:free", score: 36, coverage: .8 }]
+  };
+  await runProductionStage("direct-frames", "/tmp/workspace", { "model-policy": "free" }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    selectOpenRouterFreeModels: async (options) => {
+      selections.push(options);
+      return options.refresh ? refreshed : sticky;
+    },
+    probeOpenRouterFreeModels: async (selection) => {
+      if (selection === sticky) throw new Error("the sticky candidate is no longer available");
+      return { ...refreshed, source: "live-probe" };
+    },
+    directFrames: async (_workspace, options) => {
+      frameOptions = options;
+      return { status: "ready", generated: 1, cached: 0, frames: [{ provider: "openrouter", model: "google/gemma-code:free" }] };
+    },
+    recordOpenRouterFreeModelOutcome: async (selection) => selection
+  });
+  assert.deepEqual(selections.map((options) => options.refresh), [false, true]);
+  assert.deepEqual(frameOptions.routes, refreshed.routes);
 });
 
 test("routes an independently rerunnable analyzed draft stage", async () => {
