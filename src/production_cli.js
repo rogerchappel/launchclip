@@ -7,7 +7,7 @@ import { buildIntake, writeIntakeManifest } from "./intake.js";
 import { planProduction } from "./creative_planner.js";
 import { produceAudio } from "./production_audio.js";
 import { assertVerificationFresh, renderDraftProduction, renderProduction, verifyProduction } from "./production_render.js";
-import { critiqueProduction } from "./production_critic.js";
+import { critiqueProduction, FREE_VISION_UNAVAILABLE_CODE } from "./production_critic.js";
 import { repairProduction } from "./production_repair.js";
 import { analyzeSourceMedia } from "./source_media_analysis.js";
 import { prepareSourceMedia } from "./production_source_media.js";
@@ -245,7 +245,15 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
       break;
     }
     if (trigger === "verification" && repairs.length > 0 && !visionReviewRequested) {
-      critique = await (adapters.critiqueProduction ?? critiqueProduction)(workspace, criticOptions(flags), adapters.critic);
+      try {
+        critique = await (adapters.critiqueProduction ?? critiqueProduction)(workspace, criticOptions(flags), adapters.critic);
+      } catch (error) {
+        if (flags["model-policy"] !== "free" || error?.code !== FREE_VISION_UNAVAILABLE_CODE) throw error;
+        draft = await renderVisionSupervisedDraft(workspace, flags, adapters, error);
+        verification = draft.verification;
+        critique = draft.critique;
+        break;
+      }
       visionReviewRequested = true;
       if (!["repair", "replan"].includes(critique.verdict)) {
         draft = await renderVisionSupervisedDraft(workspace, flags, adapters);
@@ -307,10 +315,12 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
   };
 }
 
-function renderVisionSupervisedDraft(workspace, flags, adapters) {
+function renderVisionSupervisedDraft(workspace, flags, adapters, visionUnavailableError = null) {
   return (adapters.renderDraftProduction ?? renderDraftProduction)(workspace, {
     ...renderOptions(flags),
-    allowContentVerificationFailures: true
+    allowContentVerificationFailures: true,
+    allowFreeVisionUnavailable: flags["model-policy"] === "free",
+    ...(visionUnavailableError ? { visionUnavailableError } : {})
   }, adapters.render);
 }
 

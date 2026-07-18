@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { runProduction, runProductionStage } from "../src/production_cli.js";
+import { FREE_VISION_UNAVAILABLE_CODE } from "../src/production_critic.js";
 import { prepareSourceMedia } from "../src/production_source_media.js";
 import { launchHyperFramesStudio, openProductionPreview } from "../src/production_preview.js";
 
@@ -288,6 +289,37 @@ test("uses visual critique to direct the final bounded repair pass", async () =>
   assert.equal(result.status, "awaiting-approval");
   assert.deepEqual(repairTriggers, ["verification", "critique"]);
   assert.deepEqual(calls, ["assemble", "draft", "repair", "assemble", "draft", "vision-critique", "repair", "assemble", "draft"]);
+});
+
+test("encodes the best free draft when every vision critic route is unavailable", async () => {
+  const calls = [];
+  let drafts = 0;
+  const unavailable = new Error("all free vision routes timed out");
+  unavailable.code = FREE_VISION_UNAVAILABLE_CODE;
+  const adapters = {
+    withProductionLease: async (_workspace, operation) => operation(),
+    buildIntake: async () => ({ workspace: "/tmp/workspace" }), writeIntake: async () => ({ workspace: "/tmp/workspace" }), prepareSourceMedia: async () => ({ status: "not-applicable" }),
+    collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), resolveProductionEntities: async () => ({}), planProduction: async () => ({}),
+    produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
+    directFrames: async () => ({ generated: 1, cached: 0 }),
+    assembleHyperFrames: async () => { calls.push("assemble"); return {}; },
+    renderDraftProduction: async (_workspace, options) => {
+      calls.push(options.visionUnavailableError ? "vision-unavailable-draft" : "draft");
+      drafts += 1;
+      if (!options.visionUnavailableError) throw Object.assign(new Error("browser QA finding"), { code: "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED", verification: { status: "failed", failed: ["inspect:shot-1"], qa: "/tmp/qa" } });
+      assert.equal(options.allowContentVerificationFailures, true);
+      assert.equal(options.allowFreeVisionUnavailable, true);
+      return { status: "needs-repair", video: "/tmp/draft.mp4", verification: { status: "failed", failed: ["inspect:shot-1"] }, critique: { verdict: "unavailable" } };
+    },
+    critiqueProduction: async () => { calls.push("vision-critique"); throw unavailable; },
+    repairProduction: async () => { calls.push("repair"); return { status: "repaired", repaired: [{ shot_id: "shot-1" }] }; }
+  };
+  const result = await runProduction("owner/repo", { "model-policy": "free", "max-repair-passes": "2" }, adapters);
+  assert.equal(drafts, 3);
+  assert.equal(result.status, "needs-repair");
+  assert.equal(result.draft.video, "/tmp/draft.mp4");
+  assert.equal(result.critique.verdict, "unavailable");
+  assert.deepEqual(calls, ["assemble", "draft", "repair", "assemble", "draft", "vision-critique", "vision-unavailable-draft"]);
 });
 
 test("executes the full audio, frame, assembly, and draft closure after a replan verdict", async () => {
