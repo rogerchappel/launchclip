@@ -728,15 +728,19 @@ async function optionalStat(filePath) {
 async function runPool(tasks, concurrency) {
   if (!Number.isInteger(concurrency) || concurrency <= 0) throw new Error("Repair concurrency must be a positive integer");
   let cursor = 0;
+  const failures = [];
   const worker = async () => {
     while (cursor < tasks.length) {
       const index = cursor++;
-      await tasks[index]();
+      try {
+        await tasks[index]();
+      } catch (error) {
+        failures.push({ index, error });
+      }
     }
   };
-  const settled = await Promise.allSettled(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
-  const failed = settled.find((entry) => entry.status === "rejected");
-  if (failed) throw failed.reason;
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
+  if (failures.length) throw failures.sort((left, right) => left.index - right.index)[0].error;
 }
 
 async function snapshotImages(directory, limit) {
