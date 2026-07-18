@@ -78,12 +78,14 @@ async function runProductionRepair(workspace, flags, options, adapters) {
   if (!usesDiscoveredFreeRepair(flags)) return repair(workspace, options, adapters.repair);
 
   const selection = await selectLiveOpenRouterFreeModels(flags, adapters);
+  const repairRoutes = [...selection.routes];
+  if (!repairRoutes.some((route) => /^openrouter:openrouter\/free(?:@|$)/i.test(route))) repairRoutes.push("openrouter:openrouter/free@none");
   const selectedOptions = {
     ...options,
     provider: "openrouter",
     model: selection.selected_model,
     reasoning: "none",
-    routes: selection.routes,
+    routes: repairRoutes,
     supportsImages: false,
     sourceMode: "scoped"
   };
