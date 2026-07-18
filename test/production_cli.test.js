@@ -513,11 +513,7 @@ test("keeps critic and repair routes on OpenRouter free under the free policy", 
       received.repair = options;
       return { status: "repaired", repaired: [{ provider: "openrouter", model: "tencent/hy3:free" }] };
     },
-    recordOpenRouterFreeModelOutcome: async (receivedSelection, outcome) => {
-      assert.equal(receivedSelection.source, "cached-live-probe");
-      assert.equal(outcome.result.frames[0].model, "tencent/hy3:free");
-      return receivedSelection;
-    }
+    recordOpenRouterFreeModelOutcome: async () => { throw new Error("repair outcomes must not change the frame-author ranking"); }
   });
   assert.equal(received.critic.route, "openrouter:openrouter/free@none");
   assert.equal(received.critic.selectFreeVision, true);

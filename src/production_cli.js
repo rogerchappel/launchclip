@@ -89,24 +89,8 @@ async function runProductionRepair(workspace, flags, options, adapters) {
     supportsImages: false,
     sourceMode: "scoped"
   };
-  const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
-  try {
-    const result = await repair(workspace, selectedOptions, adapters.repair);
-    let recorded = selection;
-    try {
-      recorded = await recordOutcome(selection, { result: { frames: result.repaired ?? [] } }) ?? selection;
-    } catch (error) {
-      recorded = { ...selection, warnings: [...(selection.warnings ?? []), `Could not update free-model repair outcome state: ${error.message}`] };
-    }
-    return { ...result, free_model_selection: freeModelSelectionSummary(recorded) };
-  } catch (error) {
-    try {
-      await recordOutcome(selection, { error });
-    } catch (stateError) {
-      error.free_model_state_error = stateError.message;
-    }
-    throw error;
-  }
+  const result = await repair(workspace, selectedOptions, adapters.repair);
+  return { ...result, free_model_selection: freeModelSelectionSummary(selection) };
 }
 
 export async function runProduction(source, flags = {}, adapters = {}) {
