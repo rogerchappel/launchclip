@@ -106,7 +106,7 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
       result = await runCriticRequest(route, request, adapters);
     }
   }
-  const critique = applyVisualNoveltyFinding(result.value, visualFingerprint, plan.shots.map((shot) => shot.id));
+  const critique = applyVisualNoveltyFinding(normalizeCritiqueTiming(result.value, plan.shots), visualFingerprint, plan.shots.map((shot) => shot.id));
   const validation = validateCritique(critique, plan.shots.map((shot) => shot.id));
   if (!validation.ok) throw new Error(`Production critique failed validation: ${validation.errors.join("; ")}`);
   if (critique.verdict === "ship" && critique.findings.some((finding) => finding.severity === "major")) {
@@ -164,6 +164,24 @@ function freeVisionSelectionSummary(selection) {
     verified_free_at: selection.verified_free_at,
     candidates: (selection.candidates ?? []).map((candidate) => ({ id: candidate.id, score: candidate.score, coverage: candidate.coverage })),
     warnings: [...(selection.warnings ?? [])]
+  };
+}
+
+function normalizeCritiqueTiming(critique, shots) {
+  const byId = new Map((shots ?? []).map((shot) => [shot.id, shot]));
+  return {
+    ...critique,
+    findings: (critique?.findings ?? []).map((finding) => {
+      if (finding.start_seconds == null || finding.end_seconds == null || Number(finding.end_seconds) > Number(finding.start_seconds)) return finding;
+      const affected = (finding.shot_ids ?? []).map((id) => byId.get(id)).filter(Boolean);
+      if (!affected.length) return finding;
+      const shotStart = Math.min(...affected.map((shot) => Number(shot.start_seconds)));
+      const shotEnd = Math.max(...affected.map((shot) => Number(shot.end_seconds)));
+      if (!Number.isFinite(shotStart) || !Number.isFinite(shotEnd) || shotEnd <= shotStart) return finding;
+      const requestedStart = Number(finding.start_seconds);
+      const start = Number.isFinite(requestedStart) && requestedStart >= shotStart && requestedStart < shotEnd ? requestedStart : shotStart;
+      return { ...finding, start_seconds: start, end_seconds: shotEnd };
+    })
   };
 }
 

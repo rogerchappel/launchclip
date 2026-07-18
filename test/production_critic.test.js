@@ -100,6 +100,28 @@ test("turns a human review request into bounded typed repair findings", async ()
   assert.match(request.instructions, /binding desired change/);
 });
 
+test("normalizes a zero-length free-model finding to its affected shot", async () => {
+  const workspace = await fixture();
+  const result = await critiqueProduction(workspace, {}, { client: { runStructured: async () => ({
+    response_id: "resp_normalized_timing",
+    model: "example/free-vision-model",
+    usage: {},
+    value: {
+      schema_version: CRITIQUE_VERSION,
+      verdict: "repair",
+      summary: "The second scene needs one visual adjustment.",
+      findings: [{
+        id: "timing-1", severity: "major", category: "composition", shot_ids: ["shot-2"],
+        start_seconds: 8, end_seconds: 8, evidence: "The visual hierarchy collapses at this frame.",
+        repair_scope: "frame", instruction: "Restore a dominant proof object.", preserve: ["narration"]
+      }]
+    }
+  }) } });
+  const critique = JSON.parse(await readFile(result.critique, "utf8"));
+  assert.equal(critique.findings[0].start_seconds, 8);
+  assert.equal(critique.findings[0].end_seconds, 10);
+});
+
 test("routes the independent critic through a pinned OpenRouter free model", async () => {
   const workspace = await fixture();
   let route;
