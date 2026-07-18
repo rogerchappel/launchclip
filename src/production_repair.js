@@ -26,7 +26,11 @@ Register a paused GSAP timeline exactly on window.__timelines[shot_id]. Give eve
 
 Motion assertions must be truthful. When native inspection reports motion_frozen for a must_remain_live assertion, set must_remain_live false unless the asserted element itself has clearly perceptible, inspection-visible transform or opacity motion across the required interval. Do not add imperceptible drift or tiny opacity changes merely to satisfy an assertion.
 
-Every planned shot.visual object and event remains part of the repair contract. Preserve data-visual-object-id identity, return one motion.events record for every planned visible event, and ensure its selector visibly changes at the exact planned time. Never fix a composition issue by replacing semantic graphics with caption cards, and never leave an SFX-bound event without a visible target.`;
+Every planned shot.visual object and event remains part of the repair contract. Preserve data-visual-object-id identity, return one motion.events record for every planned visible event, and ensure its selector visibly changes at the exact planned time. Never fix a composition issue by replacing semantic graphics with caption cards, and never leave an SFX-bound event without a visible target.
+
+The repair context contains locked_motion_contract. Treat every listed motion.events event_id, object_id, selector, and at_seconds as immutable. Never change those fields, even when fixing appears-late, out-of-order, missing-selector, contrast, or layout findings. Fix the matching HTML element, clip data-start/data-duration, CSS geometry, or GSAP call so the locked selector visibly changes at the locked time. A descendant selector is not an acceptable substitute.
+
+Do not edit the motion target for a layout, contrast, typography, or geometry-only finding. For a motion assertion finding, edit only the specific assertion field named by the evidence; the locked motion.events ledger still remains unchanged. Before returning, compare every proposed motion edit against locked_motion_contract and remove any edit that changes a locked event field.`;
 
 export const FRAME_PATCH_VERSION = "launchclip.frame-patch.v1";
 export const FRAME_PATCH_SCHEMA = {
@@ -121,7 +125,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     if (!shot) throw new Error(`Critique references unknown shot: ${shotId}`);
     const prior = (await readFrameSelection(workspace, shotId)).bundle;
     const repairInputHash = semanticHash({
-      worker: "frame-repair.v11",
+      worker: "frame-repair.v12",
       candidate_verification: "browser-snapshot.v3",
       repair_context: REPAIR_CAPSULE_VERSION,
       routes: routes.map(modelRouteKey),
@@ -186,6 +190,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
               shot,
               findings,
               prior: previousCandidate,
+              lockedPrior: prior,
               validationErrors,
               maxPatchRatio: options.maxPatchRatio,
               resources: intake.resources,
@@ -198,7 +203,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
             background: options.background !== false,
             maxOutputTokens: Number(options.maxOutputTokens ?? 8_000),
             keepAlive: route.provider === "ollama" ? 0 : undefined,
-            promptCacheKey: "launchclip:frame-repair-patch:v2",
+            promptCacheKey: "launchclip:frame-repair-patch:v3",
             metadata: { job_id: jobId, shot_id: shotId, repair_findings: findings.length, attempt: totalAttempt, route: routeIndex + 1 },
             onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
           };
@@ -287,7 +292,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
   };
 }
 
-export function buildRepairInput({ plan, shot, findings, prior, validationErrors = [], maxPatchRatio = .35, resources = [], evidenceItems = [], sourceMode = "full" }) {
+export function buildRepairInput({ plan, shot, findings, prior, lockedPrior = prior, validationErrors = [], maxPatchRatio = .35, resources = [], evidenceItems = [], sourceMode = "full" }) {
   if (!["full", "scoped"].includes(sourceMode)) throw new Error(`Unsupported repair source mode: ${sourceMode}`);
   const capsule = sourceMode === "scoped"
     ? buildRepairSourceCapsule(prior, findings, validationErrors)
@@ -314,6 +319,12 @@ export function buildRepairInput({ plan, shot, findings, prior, validationErrors
     validation_errors_to_repair: validationErrors,
     patch_limits: { maximum_edits: 12, maximum_changed_ratio: Number(maxPatchRatio ?? .35) },
     prior_identity: { schema_version: prior.schema_version, shot_id: prior.shot_id },
+    locked_motion_contract: {
+      immutable_event_fields: ["event_id", "object_id", "selector", "at_seconds"],
+      planned_events: (shot?.visual?.events ?? []).map((event) => ({ event_id: event.id, target_object_ids: event.target_ids, at_seconds: event.at_seconds })),
+      authored_events: (lockedPrior?.motion?.events ?? []).map((event) => ({ event_id: event.event_id, object_id: event.object_id, selector: event.selector, at_seconds: event.at_seconds })),
+      rule: "Preserve authored event identity, selector, and timing. Repair the HTML clip or GSAP implementation so the locked selector changes at the locked time."
+    },
     available_resources: resources.map((entry) => ({ id: entry.id, role: entry.role, type: entry.type })),
     allowed_evidence_ids: evidenceItems.map((entry) => entry.id),
     source_scope: {
