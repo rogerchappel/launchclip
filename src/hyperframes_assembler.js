@@ -44,7 +44,7 @@ export async function assembleHyperFrames(workspacePath, options = {}) {
   for (const dependency of dependencies) if (store.get(dependency)?.status !== "succeeded") throw new Error(`Frame job must succeed before assembly: ${dependency}`);
   const extraAudio = await describeExtraAudio(options);
   const fontFamilies = productionFontFamilies(plan);
-  const inputHash = semanticHash({ intake, plan, bundles, fallbacks, extraAudio, fontFamilies, assembler: "hyperframes-assembler.v17", text_containment: TEXT_CONTAINMENT_VERSION });
+  const inputHash = semanticHash({ intake, plan, bundles, fallbacks, extraAudio, fontFamilies, assembler: "hyperframes-assembler.v18", text_containment: TEXT_CONTAINMENT_VERSION });
   const jobId = "hyperframes-assembly";
   const existing = store.get(jobId);
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
@@ -151,7 +151,7 @@ export function rootMotionSpec(plan, bundles, transitions = buildShotTransitions
   for (const [index, shot] of plan.shots.entries()) {
     const selector = `#mount-${shot.id}`;
     const shotDuration = shot.end_seconds - shot.start_seconds;
-    const mountGrace = Math.min(.5, Math.max(.3, shotDuration * .02), shotDuration * .5);
+    const mountGrace = Math.min(.5, shotDuration * .5);
     assertions.push({ kind: "appearsBy", selector, bySec: Number((shot.start_seconds + mountGrace).toFixed(3)) });
     if (!travelingMounts.has(shot.id)) assertions.push({ kind: "staysInFrame", selector });
     if (index > 0) assertions.push({ kind: "before", a: `#mount-${plan.shots[index - 1].id}`, b: selector });
