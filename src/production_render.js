@@ -293,7 +293,13 @@ export async function renderDraftProduction(workspacePath, options = {}, adapter
 
 async function renderAnalyzedProduction(workspacePath, options, adapters, profile) {
   const workspace = path.resolve(workspacePath);
-  const verification = await verifyProduction(workspace, options, adapters);
+  let verification;
+  try {
+    verification = await verifyProduction(workspace, options, adapters);
+  } catch (error) {
+    if (profile.stage !== "production-draft" || !options.allowContentVerificationFailures || !isSupervisableContentVerification(error)) throw error;
+    verification = error.verification;
+  }
   await assertVerificationFresh(workspace, verification, options);
   const project = verification.project;
   const qaDir = verification.qa;
@@ -343,9 +349,21 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
     motion: motionPath,
     audio: audioPath,
     family: motion.family,
+    verification_supervision: verification.status === "failed"
+      ? { mode: "vision-supervised-draft", failed: verification.failed }
+      : null,
     fallbacks: assembly ? { count: assembly.fallback_count ?? 0, full: Boolean(assembly.full_fallback), shots: assembly.fallbacks ?? [] } : null,
     critique
   };
+}
+
+function isSupervisableContentVerification(error) {
+  const verification = error?.verification;
+  const failed = verification?.failed ?? [];
+  return error?.code === "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED"
+    && !verification?.infrastructure_failed?.length
+    && failed.length > 0
+    && failed.every((name) => name === "inspect" || String(name).startsWith("inspect:"));
 }
 
 export async function assertVerificationFresh(workspacePath, verification, options = {}) {

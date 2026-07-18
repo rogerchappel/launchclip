@@ -365,6 +365,24 @@ test("renders a temporally analyzed draft before approval", async () => {
   assert.equal(renderArgs[renderArgs.indexOf("--quality") + 1], "draft");
 });
 
+test("renders a vision-supervised draft after bounded browser-content findings", async () => {
+  const workspace = await fixture();
+  const commands = [];
+  const result = await renderDraftProduction(workspace, { allowContentVerificationFailures: true }, {
+    run: async (_command, args) => {
+      commands.push(args[1]);
+      if (args[1] === "check") return { stdout: JSON.stringify({ ok: false, layout: { findings: [{ severity: "error", code: "panel_out_of_canvas", message: "panel clips by two pixels" }] } }), stderr: "" };
+      return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
+    },
+    writeMotionReport: async (_video, output) => { await writeFile(output, "{}\n"); return { quality: { ok: true }, family: "developing-card" }; },
+    critiqueProduction: async () => ({ verdict: "ship", status: "approved" })
+  });
+  assert.equal(result.status, "ready");
+  assert.equal(result.verification.status, "failed");
+  assert.deepEqual(result.verification_supervision, { mode: "vision-supervised-draft", failed: ["inspect"] });
+  assert.ok(commands.includes("render"));
+});
+
 test("reuses unchanged native QA while still encoding and analyzing each draft", async () => {
   const workspace = await fixture();
   const commands = [];
