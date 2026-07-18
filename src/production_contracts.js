@@ -419,6 +419,7 @@ export function normalizeProductionPlanTiming(plan) {
       Object.entries(normalized.design.style_dna.typography).map(([role, family]) => [role, normalizeTypographyFamily(family, role)])
     );
   }
+  if (Array.isArray(normalized?.shots)) normalized.shots = removeContainedShots(normalized.shots);
   const targetWpm = Number(normalized?.narration?.target_wpm);
   if (normalized?.narration && !(targetWpm >= 60 && targetWpm <= 260)) {
     const words = String(normalized.narration.full_text ?? "").trim().split(/\s+/).filter(Boolean).length;
@@ -431,10 +432,13 @@ export function normalizeProductionPlanTiming(plan) {
     const start = Number(shot.start_seconds);
     const end = Number(shot.end_seconds);
     const duration = end - start;
-    if (Number.isFinite(start) && Number.isFinite(end) && duration > 0 && start > 0) {
+    if (Number.isFinite(start) && Number.isFinite(end) && duration > 0) {
       for (const timed of [...(shot.visual?.internal_reveals ?? []), ...(shot.visual?.events ?? []), ...(shot.sfx ?? [])]) {
         const at = Number(timed.at_seconds);
-        if (at > duration + .001 && at >= start - .001 && at <= end + .001) timed.at_seconds = Math.round((at - start) * 1000) / 1000;
+        if (at > duration + .001) {
+          const shotLocal = start > 0 && at >= start - .001 ? at - start : at;
+          timed.at_seconds = Math.round(Math.max(0, Math.min(shotLocal, Math.max(0, duration - .1))) * 1000) / 1000;
+        }
       }
     }
     const events = new Map((shot.visual?.events ?? []).map((event) => [event.id, event]));
@@ -454,6 +458,18 @@ function normalizeObjectLayers(objects) {
   const focal = objects.find((object) => object !== backdrop && !["decoration", "container"].includes(object.kind)) ?? objects[1];
   backdrop.layer = "background";
   focal.layer = focal.kind === "text" ? "foreground" : "midground";
+}
+
+function removeContainedShots(shots) {
+  const kept = [];
+  for (const shot of shots) {
+    const previous = kept.at(-1);
+    const contained = previous
+      && Number(shot.start_seconds) >= Number(previous.start_seconds) - .001
+      && Number(shot.end_seconds) <= Number(previous.end_seconds) + .001;
+    if (!contained) kept.push(shot);
+  }
+  return kept;
 }
 
 function normalizeTypographyFamily(value, role) {

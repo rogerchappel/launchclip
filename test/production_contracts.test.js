@@ -118,6 +118,30 @@ test("canonicalizes unambiguous global reveal and SFX timestamps into shot-local
   assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).ok, true);
 });
 
+test("clamps overrun global beats and removes a fully contained trailing hold", () => {
+  const plan = samplePlan();
+  plan.shots[0].visual.internal_reveals[0].at_seconds = 7;
+  plan.shots[0].visual.events[0].at_seconds = 7;
+  plan.shots[0].sfx[0].at_seconds = 7;
+  const contained = structuredClone(plan.shots[1]);
+  contained.id = "shot-contained-hold";
+  contained.start_seconds = 9.9;
+  contained.end_seconds = 10;
+  contained.visual.events = [];
+  contained.visual.internal_reveals = [];
+  contained.sfx = [];
+  plan.shots.push(contained);
+
+  const normalized = normalizeProductionPlanTiming(plan);
+
+  assert.equal(normalized.shots.length, 2);
+  assert.equal(normalized.shots[0].visual.internal_reveals[0].at_seconds, 4.9);
+  assert.equal(normalized.shots[0].visual.events[0].at_seconds, 4.9);
+  assert.equal(normalized.shots[0].sfx[0].at_seconds, 4.9);
+  assert.equal(plan.shots.length, 3, "does not mutate the model response");
+  assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).ok, true);
+});
+
 test("canonicalizes model event ids and preserves their SFX bindings without a provider repair", () => {
   const plan = samplePlan();
   plan.shots[0].visual.events.push({
