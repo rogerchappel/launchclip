@@ -14,6 +14,10 @@ const REPAIR_INSTRUCTIONS = `You are repairing one previously authored HyperFram
 
 Return only a small source-edit patch. Fix every supplied finding at the smallest scope. Preserve everything listed in each finding and everything in the prior bundle that does not conflict with the repair. Do not return or rewrite the complete frame bundle, complete HTML, or an unrelated component. Do not redesign unrelated elements.
 
+Treat findings[].repair_targets as an acceptance checklist. Every listed target must be covered by a concrete edit, unless one shared CSS edit clearly fixes several targets; enumerate that coverage in summary. Do not spend an edit on a speculative cause while leaving a listed selector, text, or assertion unchanged.
+
+For contrast_aa_failure, edit the actual text rule and copy suggested_color exactly when supplied. When the selector is a generated DOM path, locate the rule from the supplied text and foreground color. Never return a contrast repair that leaves the failing foreground color unchanged. For text_occluded by a full-canvas decorative container, give the affected semantic element or its closest semantic parent an explicit higher z-index; editing only the decorative covering element is insufficient. For content_overlap, separate the named blocks with real geometry, sizing, gap, or wrapping changes rather than an allow annotation. For motion_appears_late, make the locked selector cross visible opacity before the stated deadline by editing its HTML clip/state or GSAP implementation, without changing the locked event ledger.
+
 Each edit targets one exact source string in html, motion, root_media_requests, evidence_ids, visible_copy, or preserve. Exact target sources are supplied unescaped between named source markers. Copy each find string verbatim from inside the matching marker; the markers themselves are not source. The find string must occur exactly once in that target. Include enough unchanged surrounding text to make it unique, then replace only the minimum necessary characters. Prefer changing an existing declaration, selector, assertion, or local component over replacing a large block.
 
 When a source marker is labelled as an excerpt, every character inside it is copied exactly from the complete target, but unrelated parts of that target are intentionally omitted. Repair only what is visible in the supplied excerpts. Never invent an anchor from omitted source, and make an anchor unique in the complete target by including its stable selector and nearby declaration or call.
@@ -125,7 +129,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     if (!shot) throw new Error(`Critique references unknown shot: ${shotId}`);
     const prior = (await readFrameSelection(workspace, shotId)).bundle;
     const repairInputHash = semanticHash({
-      worker: "frame-repair.v12",
+      worker: "frame-repair.v13",
       candidate_verification: "browser-snapshot.v3",
       repair_context: REPAIR_CAPSULE_VERSION,
       routes: routes.map(modelRouteKey),
@@ -203,7 +207,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
             background: options.background !== false,
             maxOutputTokens: Number(options.maxOutputTokens ?? 8_000),
             keepAlive: route.provider === "ollama" ? 0 : undefined,
-            promptCacheKey: "launchclip:frame-repair-patch:v3",
+            promptCacheKey: "launchclip:frame-repair-patch:v4",
             metadata: { job_id: jobId, shot_id: shotId, repair_findings: findings.length, attempt: totalAttempt, route: routeIndex + 1 },
             onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
           };
