@@ -452,7 +452,7 @@ test("runs fail-closed scenes concurrently but stops scheduling after the first 
     /first parallel worker failed/
   );
 
-  assert.deepEqual(calls.sort(), ["shot-1", "shot-2"]);
+  assert.deepEqual(calls.sort(), ["shot-1", "shot-1", "shot-2"]);
   assert.equal(siblingFinished, true);
   const store = await ProductionJobStore.open(workspace, { create: false });
   assert.equal(store.get("frame:shot-2").status, "succeeded");
@@ -620,7 +620,7 @@ test("can exhaust LLM routes without writing a deterministic visual fallback", a
   await assert.rejects(() => readFile(path.join(workspace, "production", "fallbacks", "shot-1.json")), (error) => error.code === "ENOENT");
 });
 
-test("rotates after provider failures and reports every attempted model", async () => {
+test("retries the primary route once before rotating after provider failures", async () => {
   const context = fixture();
   const workspace = await workspaceFixture(context);
   const routes = ["openrouter:first/free:free@none", "openrouter:second/free:free@none"];
@@ -636,7 +636,7 @@ test("rotates after provider failures and reports every attempted model", async 
       && /first\/free:free unavailable/.test(error.message)
       && /second\/free:free unavailable/.test(error.message)
   );
-  assert.deepEqual(attempted, ["first/free:free", "second/free:free"], "transport failures rotate routes without consuming semantic-repair attempts");
+  assert.deepEqual(attempted, ["first/free:free", "first/free:free", "second/free:free"]);
 });
 
 test("stops before the next frame after the observed dollar limit is reached", async () => {

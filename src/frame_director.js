@@ -287,6 +287,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         } catch (error) {
           resumeResponseId = null;
           errors.push(`Generation attempt ${totalAttempt} via ${route.provider}:${route.model} failed: ${error.message}`);
+          if (routeAttempt < attemptsForRoute) continue;
           break;
         }
         resumeResponseId = null;
@@ -428,6 +429,7 @@ async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, 
         result = await client.runStructured(request);
       } catch (error) {
         generationErrors.push(`Blueprint attempt ${routeAttempt} via ${route.provider}:${route.model} failed: ${error.message}`);
+        if (routeAttempt < attemptsForRoute) continue;
         break;
       }
       await store.markRunning(jobId, { provider: route.provider, response_id: result.response_id, status: result.status });
