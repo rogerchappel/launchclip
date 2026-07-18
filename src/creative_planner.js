@@ -267,6 +267,7 @@ async function planningRuntime(intake, options, adapters) {
   }
   let selection = await selectFreePlannerModels(options, adapters);
   let route = parseModelRoute(selection.routes[0], { supportsImages: false });
+  const maximumRouteAttempts = Math.max(1, Number(selection.candidates?.length ?? options.freeModelCandidates ?? 5));
   const clientOptions = { requestTimeoutMs: Number(options.freeModelRequestTimeoutMs ?? 180_000), maxRetries: 0 };
   let client = createClient(route, clientOptions);
   const failedModelIds = new Set();
@@ -290,31 +291,18 @@ async function planningRuntime(intake, options, adapters) {
   return {
     client: {
       runStructured: async (request) => {
-        try {
-          return await client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
-        } catch (error) {
-          if (isMalformedStructuredResponse(error)) {
-            try {
-              return await client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
-            } catch (retryError) {
-              error = retryError;
-            }
-          }
-          await rotate(error);
+        for (let attempt = 1; attempt <= maximumRouteAttempts; attempt += 1) {
           try {
             return await client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
-          } catch (fallbackError) {
-            if (isMalformedStructuredResponse(fallbackError)) {
-              try {
-                return await client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
-              } catch (retryError) {
-                fallbackError = retryError;
-              }
+          } catch (error) {
+            if (attempt >= maximumRouteAttempts) {
+              await recordFailure(error);
+              throw error;
             }
-            await recordFailure(fallbackError);
-            throw fallbackError;
+            await rotate(error);
           }
         }
+        throw new Error("Free planner exhausted ranked routes");
       },
       resumeStructured: (responseId, request) => client.resumeStructured(responseId, { ...request, model: route.model, reasoningEffort: route.reasoning })
     },
@@ -324,10 +312,6 @@ async function planningRuntime(intake, options, adapters) {
     selection: () => selection,
     rotate
   };
-}
-
-function isMalformedStructuredResponse(error) {
-  return /structured output (?:was not valid JSON|text)|contained no structured output|Unexpected end of JSON|Expected ',' or '}'/i.test(String(error?.message ?? error));
 }
 
 async function selectFreePlannerModels(options, adapters) {

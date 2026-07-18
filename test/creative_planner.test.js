@@ -142,32 +142,36 @@ test("rotates to the next proven free planner after a full request failure", asy
   assert.equal(result.free_model_selection.selected_model, "google/gemma-4-26b-a4b-it:free");
 });
 
-test("retries one malformed structured response on the fallback planner", async () => {
+test("rotates malformed structured output to the next ranked planner without repeating a model", async () => {
   const intake = sampleIntake();
   intake.model = { provider: "openrouter", id: "openrouter/free", reasoning_effort: "none", reasoning_mode: "standard" };
   const workspace = await tempWorkspace(intake);
   const selected = freeSelection(path.join(workspace, "free-model-state.json"));
-  const fallback = {
+  const second = {
     ...selected,
     selected_model: "google/gemma-4-26b-a4b-it:free",
-    routes: ["openrouter:google/gemma-4-26b-a4b-it:free@none"]
+    routes: ["openrouter:google/gemma-4-26b-a4b-it:free@none"],
+    candidates: [...selected.candidates, { id: "qwen/qwen3-coder:free", score: 30, coverage: 0.5 }]
+  };
+  const third = {
+    ...second,
+    selected_model: "qwen/qwen3-coder:free",
+    routes: ["openrouter:qwen/qwen3-coder:free@none"]
   };
   const routes = [];
-  let fallbackAttempts = 0;
   const result = await planProduction(workspace, {}, {
-    selectOpenRouterFreeModels: async () => selected,
-    probeOpenRouterFreeModels: async (_selection, options) => options.excludeIds ? fallback : { ...selected, routes: [selected.routes[0]] },
-    recordOpenRouterFreeModelOutcome: async () => fallback,
+    selectOpenRouterFreeModels: async () => ({ ...selected, candidates: third.candidates }),
+    probeOpenRouterFreeModels: async (_selection, options) => options.excludeIds?.includes("google/gemma-4-26b-a4b-it:free") ? third : options.excludeIds ? second : { ...selected, candidates: third.candidates, routes: [selected.routes[0]] },
+    recordOpenRouterFreeModelOutcome: async (selection) => selection.selected_model === "tencent/hy3:free" ? second : third,
     createClient: (route) => ({ runStructured: async () => {
       routes.push(route.model);
       if (route.model === "tencent/hy3:free") throw new Error("planner timed out");
-      fallbackAttempts += 1;
-      if (fallbackAttempts === 1) throw new Error("Chat completion structured output was not valid JSON: Unexpected end of JSON input");
-      return { response_id: "free-plan-retried-fallback", model: route.model, status: "completed", value: samplePlan(), usage: {} };
+      if (route.model === "google/gemma-4-26b-a4b-it:free") throw new Error("Chat completion structured output was not valid JSON: Unexpected end of JSON input");
+      return { response_id: "free-plan-third-route", model: route.model, status: "completed", value: samplePlan(), usage: {} };
     } })
   });
-  assert.deepEqual(routes, ["tencent/hy3:free", "google/gemma-4-26b-a4b-it:free", "google/gemma-4-26b-a4b-it:free"]);
-  assert.equal(result.response_id, "free-plan-retried-fallback");
+  assert.deepEqual(routes, ["tencent/hy3:free", "google/gemma-4-26b-a4b-it:free", "qwen/qwen3-coder:free"]);
+  assert.equal(result.response_id, "free-plan-third-route");
 });
 
 test("hands an invalid free plan and exact validator errors to the next model once", async () => {
