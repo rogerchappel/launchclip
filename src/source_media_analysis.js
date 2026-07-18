@@ -82,7 +82,8 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
     resources.push(staged);
     stagedReferences.push({ resource_id: resource.id, source_url: resource.location, local_path: stagedPath });
   }
-  const needsTranscript = intake.policies?.supplied_voiceover_is_authoritative && !evidence.items.some((entry) => entry.kind === "voiceover-transcript");
+  const hasVoiceoverTranscript = evidence.items.some((entry) => entry.kind === "voiceover-transcript" && entry.role === "voiceover");
+  const needsTranscript = intake.policies?.supplied_voiceover_is_authoritative && !hasVoiceoverTranscript;
   const transcriber = adapters.transcriber ?? (process.env.ELEVENLABS_API_KEY ? new ElevenLabsMediaProvider() : null);
   if (needsTranscript && !transcriber) throw new Error("Supplied voiceover requires --transcript or ELEVENLABS_API_KEY for Scribe transcription");
   let freeVisionSelection = !adapters.client && usesDiscoveredFreeVision(intake, options)
@@ -100,7 +101,9 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
   const analyses = [];
 
   for (const resource of resources) {
-    if ((resource.role === "voiceover" || resource.role === "reference" || options.transcribeAll) && ["video", "audio"].includes(resource.type) && transcriber) {
+    const shouldTranscribe = (resource.role === "voiceover" || resource.role === "reference" || options.transcribeAll)
+      && !(resource.role === "voiceover" && hasVoiceoverTranscript);
+    if (shouldTranscribe && ["video", "audio"].includes(resource.type) && transcriber) {
       const transcript = await transcriber.transcribe({ filePath: resource.location, modelId: options.transcriptionModel ?? "scribe_v2", languageCode: intake.brief.language });
       const wordsPath = path.join(mediaDir, `${resource.id}.words.json`);
       await writeAtomic(wordsPath, `${JSON.stringify(transcript.words, null, 2)}\n`);

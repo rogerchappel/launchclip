@@ -123,6 +123,20 @@ test("requires a transcript path or Scribe credentials before planning supplied 
   await assert.rejects(() => analyzeSourceMedia(workspace, {}, { client: {} }), /requires --transcript or ELEVENLABS_API_KEY/);
 });
 
+test("does not retranscribe authoritative voiceover when supplied transcript evidence exists", async () => {
+  const workspace = await fixture();
+  const evidencePath = path.join(workspace, "production", "evidence.json");
+  const evidence = JSON.parse(await readFile(evidencePath, "utf8"));
+  evidence.items.push({ id: "resource:take:transcript", kind: "voiceover-transcript", role: "voiceover", title: "Supplied transcript", content: "Exact supplied words.", provenance: "take.txt", claims_allowed: false, metadata: [] });
+  await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
+  const result = await analyzeSourceMedia(workspace, {}, {
+    transcriber: { transcribe: async () => { throw new Error("supplied transcript must be reused"); } },
+    client: { runStructured: async () => ({ response_id: "r", model: "gpt-5.6", value: { resource_id: "take", summary: "Visible product", visible_text: [], narrative_opportunities: [], segments: [], quality_warnings: [] } }) },
+    contactSheet: async (_source, output) => writeFile(output, "contact-sheet")
+  });
+  assert.equal(result.transcripts, 0);
+});
+
 test("recovers an interrupted aggregate source-media job", async () => {
   const workspace = await fixture({ role: "supporting", authoritative: false });
   const intake = JSON.parse(await readFile(path.join(workspace, "production", "intake.json"), "utf8"));
