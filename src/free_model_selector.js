@@ -8,6 +8,9 @@ const STATE_SCHEMA_VERSION = "launchclip.openrouter-free-models.v1";
 const DEFAULT_ROLE = "visual-code-author";
 const DEFAULT_CONTRACT = "frame-director.v5";
 const DEFAULT_TOP_K = 5;
+const DEFAULT_VISION_ROLE = "vision-critic";
+const DEFAULT_VISION_CONTRACT = "production-critic.v2";
+const DEFAULT_VISION_TOP_K = 3;
 const DEFAULT_PROBE_TIMEOUT_MS = 15_000;
 const DEFAULT_PROBE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const REQUIRED_CONTEXT_TOKENS = 64_000;
@@ -18,18 +21,35 @@ const DESIGN_WEIGHTS = new Map([
   ["dataviz", .15]
 ]);
 const CODING_WEIGHT = .10;
+const VISION_PROBE_IMAGE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAIAAAAt/+nTAAAACXBIWXMAAAABAAAAAQBPJcTWAAAATElEQVR4nO3PMQ2AUBTAQEhwwYoNJKD/L4hBxeOWnoAm3c9nbZPe6x7tH6P1HzSgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oDWgNaA1oH1/WgL6gdNJ4QAAAABJRU5ErkJggg==";
 
 export function defaultFreeModelStatePath(env = process.env) {
   return path.resolve(env.LAUNCHCLIP_FREE_MODEL_STATE ?? path.join(os.homedir(), ".launchclip", "openrouter-free-models.json"));
 }
 
+export function defaultFreeVisionModelStatePath(env = process.env) {
+  return path.resolve(env.LAUNCHCLIP_FREE_VISION_MODEL_STATE ?? path.join(os.homedir(), ".launchclip", "openrouter-free-vision-models.json"));
+}
+
 export function rankOpenRouterFreeModels(models, benchmarkItems = [], options = {}) {
   const benchmarkIndex = indexUnifiedBenchmarks(benchmarkItems);
   return models
-    .filter(isEligibleFreeModel)
-    .map((model) => scoreModel(model, benchmarkIndex.get(model.canonical_slug ?? model.id)))
-    .sort((left, right) => right.score - left.score || right.coverage - left.coverage || right.family_prior - left.family_prior || left.id.localeCompare(right.id))
+    .filter((model) => isEligibleFreeModel(model, options))
+    .map((model) => scoreModel(model, benchmarkIndex.get(model.canonical_slug ?? model.id), options))
+    .sort((left, right) => right.score - left.score || right.coverage - left.coverage || right.capacity_prior - left.capacity_prior || right.family_prior - left.family_prior || left.id.localeCompare(right.id))
     .slice(0, positiveInteger(options.topK ?? DEFAULT_TOP_K, "topK"));
+}
+
+export async function selectOpenRouterFreeVisionModels(options = {}) {
+  return selectOpenRouterFreeModels({
+    ...options,
+    statePath: options.statePath ?? defaultFreeVisionModelStatePath(),
+    topK: options.topK ?? DEFAULT_VISION_TOP_K,
+    role: DEFAULT_VISION_ROLE,
+    contract: DEFAULT_VISION_CONTRACT,
+    scoringRole: DEFAULT_VISION_ROLE,
+    requiredInputModalities: ["image", "text"]
+  });
 }
 
 export async function selectOpenRouterFreeModels(options = {}) {
@@ -40,6 +60,7 @@ export async function selectOpenRouterFreeModels(options = {}) {
   const statePath = path.resolve(options.statePath ?? defaultFreeModelStatePath());
   const role = String(options.role ?? DEFAULT_ROLE);
   const contract = String(options.contract ?? DEFAULT_CONTRACT);
+  const requiredInputModalities = Array.isArray(options.requiredInputModalities) ? options.requiredInputModalities : [];
   const topK = positiveInteger(options.topK ?? DEFAULT_TOP_K, "topK");
   const now = (options.now ?? (() => new Date()))().toISOString();
   const previous = await readState(statePath);
@@ -59,12 +80,12 @@ export async function selectOpenRouterFreeModels(options = {}) {
   const headers = openRouterHeaders(apiKey);
   const catalog = await fetchJson(fetchImpl, `${baseUrl}/models`, { headers }, "OpenRouter model catalog");
   const models = Array.isArray(catalog?.data) ? catalog.data : [];
-  const eligible = models.filter(isEligibleFreeModel);
+  const eligible = models.filter((model) => isEligibleFreeModel(model, { requiredInputModalities }));
   if (!eligible.length) throw freeModelError("OpenRouter currently exposes no free text models compatible with LaunchClip structured frame authoring");
 
   const benchmarks = await fetchBenchmarks(fetchImpl, baseUrl, headers, Boolean(apiKey));
   const warnings = benchmarks.warnings;
-  const candidates = rankOpenRouterFreeModels(eligible, benchmarks.data, { topK });
+  const candidates = rankOpenRouterFreeModels(eligible, benchmarks.data, { topK, requiredInputModalities, scoringRole: options.scoringRole });
   if (!candidates.length) throw freeModelError("OpenRouter free models were found, but none could be ranked for LaunchClip frame authoring");
 
   const selected = candidates[0];
@@ -128,25 +149,28 @@ export async function probeOpenRouterFreeModels(selection, options = {}) {
   const liveIds = cached.filter((candidate) => candidate.last_probe_error == null && Number(candidate.probe_successes ?? 0) > 0).map((candidate) => candidate.id);
   const failures = cached.filter((candidate) => candidate.last_probe_error != null).map((candidate) => `${candidate.id}: ${candidate.last_probe_error}`);
   const probeIds = candidateIds.filter((id) => !cached.some((candidate) => candidate.id === id));
+  const probe = options.probe ?? {};
 
   for (const [index, id] of probeIds.entries()) {
     const candidate = state.candidates.find((entry) => entry.id === id);
     try {
       const client = createClient(`openrouter:${id}@none`, { requestTimeoutMs: timeoutMs, maxRetries: 0, apiKey: options.apiKey });
       const result = await client.runStructured({
-        instructions: "You are a LaunchClip model availability probe. Follow the tiny JSON schema exactly.",
-        input: "Confirm that this endpoint can produce structured output for a coding task.",
-        schema: {
+        instructions: probe.instructions ?? "You are a LaunchClip model availability probe. Follow the tiny JSON schema exactly.",
+        input: probe.input ?? "Confirm that this endpoint can produce structured output for a coding task.",
+        images: probe.images ?? [],
+        schema: probe.schema ?? {
           type: "object",
           properties: { ok: { type: "boolean" } },
           required: ["ok"],
           additionalProperties: false
         },
-        schemaName: "launchclip_free_model_probe",
-        maxOutputTokens: 32,
+        schemaName: probe.schemaName ?? "launchclip_free_model_probe",
+        maxOutputTokens: Number(probe.maxOutputTokens ?? 32),
         reasoningEffort: "none"
       });
-      if (result?.value?.ok !== true) throw new Error("probe response did not confirm structured-output support");
+      const valid = typeof probe.validate === "function" ? probe.validate(result?.value) : result?.value?.ok === true;
+      if (!valid) throw new Error(probe.failureMessage ?? "probe response did not confirm structured-output support");
       const probedAt = now().toISOString();
       liveIds.push(candidate.id);
       state.selected_model = liveIds[0];
@@ -185,8 +209,33 @@ export async function probeOpenRouterFreeModels(selection, options = {}) {
   return selectionFromState(statePath, state, probeIds.length ? "live-probe" : "cached-live-probe", liveIds);
 }
 
-function isEligibleFreeModel(model) {
+export async function probeOpenRouterFreeVisionModels(selection, options = {}) {
+  return probeOpenRouterFreeModels(selection, {
+    ...options,
+    probe: {
+      instructions: "Inspect the attached two-panel image. Return only the dominant color of the left and right panels using the supplied enum values.",
+      input: "Report the two panel colors in left-to-right order. Do not infer them from text; use the image.",
+      images: [{ url: VISION_PROBE_IMAGE, detail: "low" }],
+      schema: {
+        type: "object",
+        properties: {
+          left_panel: { type: "string", enum: ["blue", "orange", "red", "green"] },
+          right_panel: { type: "string", enum: ["blue", "orange", "red", "green"] }
+        },
+        required: ["left_panel", "right_panel"],
+        additionalProperties: false
+      },
+      schemaName: "launchclip_free_vision_probe",
+      maxOutputTokens: 48,
+      validate: (value) => value?.left_panel === "blue" && value?.right_panel === "orange",
+      failureMessage: "vision probe did not correctly inspect the supplied image"
+    }
+  });
+}
+
+function isEligibleFreeModel(model, options = {}) {
   const id = String(model?.id ?? "");
+  const input = model?.architecture?.input_modalities ?? [];
   const output = model?.architecture?.output_modalities ?? [];
   const parameters = new Set(model?.supported_parameters ?? []);
   const context = Number(model?.context_length ?? 0);
@@ -194,13 +243,14 @@ function isEligibleFreeModel(model) {
     && id !== "openrouter/free"
     && zeroPrice(model?.pricing?.prompt)
     && zeroPrice(model?.pricing?.completion)
+    && (options.requiredInputModalities ?? []).every((modality) => input.includes(modality))
     && (output.includes("text") || /text\s*$/.test(String(model?.architecture?.modality ?? "")))
     && context >= REQUIRED_CONTEXT_TOKENS
     && (parameters.has("structured_outputs") || parameters.has("response_format"))
     && !/(?:safety|guard|moderation|embedding)/i.test(`${id} ${model?.name ?? ""}`);
 }
 
-function scoreModel(model, unified = null) {
+function scoreModel(model, unified = null, options = {}) {
   const design = new Map();
   for (const entry of model?.benchmarks?.design_arena ?? []) {
     if (entry?.arena === "models" && DESIGN_WEIGHTS.has(entry.category)) design.set(entry.category, Number(entry.win_rate));
@@ -219,16 +269,17 @@ function scoreModel(model, unified = null) {
     availableWeight += weight;
   }
   const coding = Number(unified?.artificial?.coding_index ?? model?.benchmarks?.artificial_analysis?.coding_index);
-  if (Number.isFinite(coding)) {
+  if (options.scoringRole !== DEFAULT_VISION_ROLE && Number.isFinite(coding)) {
     metrics.coding = coding;
     weighted += coding * CODING_WEIGHT;
     availableWeight += CODING_WEIGHT;
   }
   const coverage = Math.min(1, availableWeight);
   const prior = familyPrior(model.id);
+  const capacityPrior = options.scoringRole === DEFAULT_VISION_ROLE ? modelCapacityPrior(model.id) : 0;
   const score = availableWeight > 0
     ? (weighted / availableWeight) * (.75 + (.25 * coverage))
-    : prior;
+    : prior + capacityPrior;
   return {
     id: model.id,
     name: model.name ?? model.id,
@@ -236,11 +287,17 @@ function scoreModel(model, unified = null) {
     score: round(score),
     coverage: round(coverage),
     family_prior: prior,
+    capacity_prior: capacityPrior,
     context_length: Number(model.context_length),
     max_completion_tokens: finitePositive(model?.top_provider?.max_completion_tokens),
     supports_structured_output: true,
     metrics
   };
+}
+
+function modelCapacityPrior(id) {
+  const matches = [...String(id).matchAll(/(?:^|[-_/])(\d+(?:\.\d+)?)b(?:[-_/]|$)/gi)].map((match) => Number(match[1])).filter(Number.isFinite);
+  return matches.length ? round(Math.min(10, Math.max(...matches) / 4)) : 0;
 }
 
 function indexUnifiedBenchmarks(items) {
