@@ -315,7 +315,7 @@ test("recovers a previously rejected frame with a local fallback and does not bu
   assert.deepEqual(calls, ["shot-2"], "repeated local QA passes never submit another provider response");
 });
 
-test("promotes the newest matching frame attempt past a different route attempt", async () => {
+test("promotes a matching accepted attempt after the discovered route order changes", async () => {
   const context = fixture();
   context.intake.resources.push({ id: "voiceover", role: "voiceover", type: "video", location: "/tmp/voiceover.mp4", is_remote: false, sha256: "v" });
   context.plan.shots[0].resource_ids = ["voiceover"];
@@ -328,9 +328,9 @@ test("promotes the newest matching frame attempt past a different route attempt"
     schema: FRAME_BUNDLE_SCHEMA,
     worker: "frame-director.v4"
   });
-  await store.add({ id: "frame:shot-1", kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash });
+  await store.add({ id: "frame:shot-1", kind: "frame", depends_on: ["creative-plan"], input_hash: "different-current-route-hash" });
   await store.markRunning("frame:shot-1", { provider: "openai", response_id: "resp_spent", status: "completed" });
-  await store.markFailed("frame:shot-1", new Error("Frame shot-1 failed semantic validation: root_media_requests[0] must not mount the authoritative voiceover resource as visual media; use the presenter resource"));
+  await store.markSucceeded("frame:shot-1");
   const candidate = frameBundle("shot-1", 5);
   candidate.root_media_requests[0] = { ...candidate.root_media_requests[0], resource_id: "voiceover", kind: "audio", volume: 1 };
   const attempts = path.join(workspace, "production", "frames", ".attempts");
@@ -344,7 +344,7 @@ test("promotes the newest matching frame attempt past a different route attempt"
     return { response_id: "resp_fresh", model: "gpt-5.6", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: {} };
   } };
 
-  const result = await directFrames(workspace, { concurrency: 2, background: false }, { client });
+  const result = await directFrames(workspace, { concurrency: 2, background: false, stableRouteCache: true }, { client });
 
   assert.deepEqual(calls, ["shot-2"]);
   assert.equal(result.frames[0].recovered, true);

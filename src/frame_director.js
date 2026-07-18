@@ -210,7 +210,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   const existing = store.get(jobId);
   const resanitized = await resanitizeStoredFrame({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
   if (resanitized) return resanitized;
-  const recovered = await recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
+  const recovered = await recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash, stableRouteCache: options.stableRouteCache });
   if (recovered) return recovered;
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
     const verification = await store.verifyOutputs(jobId);
@@ -704,13 +704,14 @@ function repairFrameRootContract(html, context = {}) {
   };
 }
 
-async function recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash }) {
-  if (!existing || existing.input_hash !== inputHash) return null;
+async function recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash, stableRouteCache = false }) {
+  if (!existing) return null;
+  if (existing.input_hash !== inputHash && !stableRouteCache) return null;
   if (!new Set(["failed", "running", "submitted", "succeeded"]).has(existing.status)) return null;
-  if (existing.status === "succeeded" && !hasFallbackFrameOutputs(existing)) return null;
+  if (existing.status === "succeeded" && existing.input_hash === inputHash && !hasFallbackFrameOutputs(existing)) return null;
   const record = await readLatestFrameAttempt(workspace, shot.id, inputHash);
   if (!record?.candidate || (record.input_hash && record.input_hash !== inputHash)) return null;
-  if (["running", "submitted"].includes(existing.status) && record.response_id !== existing.remote?.response_id) return null;
+  if (existing.input_hash === inputHash && ["running", "submitted"].includes(existing.status) && record.response_id !== existing.remote?.response_id) return null;
   const sanitized = sanitizeFrameBundle(record.candidate, {
     shot,
     format: plan.format,
@@ -722,12 +723,19 @@ async function recoverStoredFrameAttempt({ workspace, intake, evidence, plan, sh
   if (errors.length) return null;
   const paths = await writeFrameArtifacts(workspace, candidate);
   const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
-  if (existing.status === "succeeded") await store.replaceSucceededOutputs(jobId, outputs);
+  let current = store.get(jobId);
+  if (current.input_hash !== inputHash) {
+    if (current.status !== "stale") await store.markStaleFrom([jobId]);
+    await store.reconfigure(jobId, { input_hash: inputHash });
+    current = store.get(jobId);
+  }
+  if (current.status === "succeeded") await store.replaceSucceededOutputs(jobId, outputs);
   else {
-    if (existing.status === "failed") {
+    if (["failed", "stale"].includes(current.status)) {
       await store.reconfigure(jobId, { input_hash: inputHash });
-      await store.markRunning(jobId, { provider: "local", response_id: record.response_id ?? existing.remote?.response_id ?? null, status: "recovered" });
+      current = store.get(jobId);
     }
+    if (current.status === "pending") await store.markRunning(jobId, { provider: "local", response_id: record.response_id ?? existing.remote?.response_id ?? null, status: "recovered" });
     await store.markSucceeded(jobId, outputs, record.usage ?? existing.usage ?? {});
   }
   return {
