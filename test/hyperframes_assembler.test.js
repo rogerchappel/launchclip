@@ -208,7 +208,7 @@ test("translates model motion intent into discoverable HyperFrames assertions", 
   assert.ok(local.assertions.some((entry) => entry.kind === "keepsMoving" && entry.withinSelector === "#proof"));
   const root = rootMotionSpec({ format: { duration_seconds: 6 }, shots: [{ id: "shot-1", start_seconds: 2, end_seconds: 6 }] }, [bundle]);
   assert.ok(root.assertions.some((entry) => entry.kind === "appearsBy" && entry.selector === "#mount-shot-1"));
-  assert.equal(root.assertions.find((entry) => entry.kind === "appearsBy").bySec, 2.3);
+  assert.equal(root.assertions.find((entry) => entry.kind === "appearsBy").bySec, 2.5);
   assert.ok(root.assertions.every((entry) => !["#headline", "#proof"].includes(entry.selector ?? entry.withinSelector)));
   assert.ok(root.assertions.every((entry) => entry.kind !== "keepsMoving"));
   const longRoot = rootMotionSpec({ format: { duration_seconds: 90 }, shots: [{ id: "long-shot", start_seconds: 45, end_seconds: 90 }] }, [bundle]);

@@ -417,7 +417,7 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
   const blueprintAttempts = new Map();
   const client = { runStructured: async (options) => {
     const input = JSON.parse(options.input);
-    calls.push({ schema: options.schemaName, shot: input.shot?.id ?? input.shot_contract?.id, temperature: options.temperature, input });
+    calls.push({ schema: options.schemaName, shot: input.shot?.id ?? input.shot_contract?.id, temperature: options.temperature, input, instructions: options.instructions, prompt_cache_key: options.promptCacheKey });
     if (options.schemaName === "launchclip_frame_blueprint") {
       const shot = input.shot;
       const attempt = (blueprintAttempts.get(shot.id) ?? 0) + 1;
@@ -486,6 +486,9 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
   assert.equal(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").length, 2);
   assert.deepEqual(calls.filter((entry) => entry.schema === "launchclip_frame_blueprint").map((entry) => entry.temperature).sort(), [.15, .45, .45]);
   assert.deepEqual(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").map((entry) => entry.temperature), [.4, .4]);
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Never declare CSS transform on an element that GSAP animates/.test(entry.instructions)));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Set must_remain_live=false for reveal-then-settle elements/.test(entry.instructions)));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => entry.prompt_cache_key === "launchclip:frame-director:v5"));
   assert.deepEqual(result.frames.map((entry) => entry.usage.total_tokens), [450, 450]);
   assert.ok(result.frames.every((entry) => entry.blueprint.cached === false));
   assert.match(await readFile(result.frames[0].blueprint.path, "utf8"), /launchclip\.frame-blueprint\.v1/);

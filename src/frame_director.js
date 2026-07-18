@@ -59,7 +59,9 @@ Required host contract:
 - html is one sub-composition document with exactly one <template>. Put every live <style>, root, and <script> inside it.
 - Use one root: id="root", no root class, data-composition-id=shot_id, data-start="0", supplied data-duration, data-width, and data-height. Include a #root{...} style rule.
 - Prefix every other id with "shot_id-". Give timeline-visible elements class="clip", local data-start/data-duration, and stable ids.
-- GSAP is global. Create one paused seek-safe timeline and register it as window.__timelines[shot_id]. Use gsap.set for initial transforms; animate transform/opacity rather than layout properties.
+- GSAP is global. Create one paused seek-safe timeline and register it as window.__timelines[shot_id]. Animate transform/opacity rather than layout properties.
+- Never declare CSS transform on an element that GSAP animates. Put static centering/rotation on a non-animated wrapper, or give GSAP complete ownership with xPercent/yPercent/scale in gsap.set and every related tween. Do not split one element's transform state between CSS and GSAP.
+- Use gsap.set for every animated element's initial transform and opacity. Never apply non-uniform scaleX/scaleY to text or a text-bearing container.
 - Do not import, fetch, use timers/randomness/storage, or include audio/video elements. Request supplied media through root_media_requests only.
 
 Creative contract:
@@ -67,7 +69,8 @@ Creative contract:
 - Treat global_design.style_dna and the supplied shot or shot_contract visual as binding. Build the declared diagram, comparison, process, timeline, or data form—not a headline over decoration.
 - Preserve readable non-overlapping zones, deliberate spacing, exact palette/type roles, and the planned motion/continuity. Keep copy brief and visual.
 - Use supplied evidence only for grounded labels, metrics, and claims. Use only supplied resource paths; otherwise draw native HTML/CSS/SVG.
-- motion.assertions selectors must exist. motion.events must use exact planned visual object ids and event ids. Keep event times inside the shot.
+- motion.assertions selectors must be existing shot-prefixed ids and describe observable behavior. Set must_remain_live=false for reveal-then-settle elements; use true only when that exact element or its descendants visibly keep moving with no static window longer than one third of the shot. Give appears_by_seconds a conservative buffer after its entrance.
+- motion.events must use exact planned visual object ids and event ids. Keep event times inside the shot.
 - Return schema_version, shot_id, html, motion, preserve, root_media_requests, evidence_ids, and visible_copy. Do not add a type field.`;
 
 export const FALLBACK_FRAMES_PATH = "production/fallbacks";
@@ -189,7 +192,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
     : buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming });
   const customRouting = options.routes != null || options.provider != null || options.model != null || options.baseUrl != null;
   const inputHash = customRouting
-    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, worker: options.sceneBlueprint ? "frame-director.v6" : "frame-director.v5" })
+    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, worker: options.sceneBlueprint ? "frame-director.v7" : "frame-director.v5" })
     : semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v4" });
   const existing = store.get(jobId);
   const recovered = await recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
@@ -249,7 +252,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
           background: options.background !== false,
           maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
           ...(blueprint ? { temperature: Number(routeAttempt === 1 ? options.frameTemperature ?? .4 : options.frameRepairTemperature ?? .1) } : {}),
-          promptCacheKey: "launchclip:frame-director:v4",
+          promptCacheKey: options.leanPrompt ? "launchclip:frame-director:v5" : "launchclip:frame-director:v4",
           metadata: { job_id: jobId, shot_id: shot.id, attempt: totalAttempt, route: routeIndex + 1 },
           onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
         };
