@@ -18,6 +18,14 @@ const LARGE_AREA_CHANGE_MAGNITUDES = {
   rotation: 9
 };
 
+const LARGE_AREA_CHANGE_EXAMPLES = [
+  { property: "x", from_value: -108, to_value: 0 },
+  { property: "y", from_value: 108, to_value: 0 },
+  { property: "scale", from_value: .82, to_value: 1 },
+  { property: "rotation", from_value: -12, to_value: 0 },
+  { property: "opacity", from_value: .45, to_value: 1 }
+];
+
 const SUPPORTING_EASES = ["none", "power1.inOut", "power3.out", "expo.out"];
 const SUPPORTING_PATTERNS = ["camera-push", "panel-travel", "group-settle", "semantic-emphasis", "handoff"];
 
@@ -133,7 +141,7 @@ This blueprint is a binding handoff to a second LLM that will write the HTML and
 - Map every planned shot.visual.objects id exactly once to a unique DOM selector beginning #shot_id-. Do not invent or omit semantic object ids.
 - Map every planned shot.visual.events id exactly once, using one of its target object ids and the selector assigned to that object. Preserve the planned time.
 - Map every supplied supporting_motion_contract window exactly once in supporting_motion_beats. Start inside the narrow window and keep duration between its minimum_duration_seconds and maximum_duration_seconds. These are additional visual actions on planned objects, not new claims, SFX cues, or shot.visual.events.
-- Give every supporting beat exact non-equal numeric from/to values in changes. At least one change per beat must meet the window's large_area_minimum_change_magnitudes. Opening must use a hook-scale x, y, scale, or rotation change, begin by 0.1s, and be visibly underway before 0.65s; opacity alone is not an opening hook.
+- Give every supporting beat exact non-equal numeric from/to values in changes. For reliable compliance, copy at least one complete property/from_value/to_value object exactly from that window's copy_one_large_area_change array. Opening must choose x, y, scale, or rotation rather than opacity, begin by 0.1s, and be visibly underway before 0.65s.
 - Estimate affected_canvas_percent from the target selector's final authored footprint, not from its zone or parent. Meet each window's minimum_affected_canvas_percent and keep at least half the beats on targets covering a substantial visible region. Size the selected wrapper accordingly in the implementation; do not claim large coverage for a small label or chip.
 - Choose a simple motion_pattern that fits one literal fromTo: camera-push or panel-travel for large regions, group-settle for a visible component cluster, semantic-emphasis for a proof object, and handoff near the close. The opening and development should move the composition, not merely a small annotation.
 - Use the exact supplied ease. Opening uses power3.out or expo.out for a fast readable arrival. Longer development and closing beats use none or power1.inOut so the movement stays active across the full interval rather than decelerating into a near-static hold.
@@ -286,7 +294,7 @@ export function validateFrameBlueprint(blueprint, shot) {
       if (delta >= LARGE_AREA_CHANGE_MAGNITUDES[change.property]) largeAreaMagnitude = true;
     }
     if (changes.length && !perceptibleMagnitude) errors.push(`supporting_motion_beats[${index}] requires at least one change at the minimum perceptible magnitude`);
-    if (changes.length && !largeAreaMagnitude) errors.push(`supporting_motion_beats[${index}] requires one large-area change at the supplied minimum magnitude`);
+    if (changes.length && !largeAreaMagnitude) errors.push(`supporting_motion_beats[${index}] must copy one complete object from supporting_motion_contract.windows.${window?.id ?? "unknown"}.copy_one_large_area_change`);
     if (window?.id === "opening") {
       if (atSeconds > .1 + .05) errors.push(`supporting_motion_beats[${index}] opening must begin by 0.1 seconds`);
       if (!["entrance", "semantic-reveal"].includes(beat?.intent)) errors.push(`supporting_motion_beats[${index}] opening intent must be entrance or semantic-reveal`);
@@ -334,6 +342,7 @@ function supportingMotionContract(shot, anchors = []) {
       maximum_duration_seconds: rounded(Math.max(.05, maximumDuration)),
       minimum_affected_canvas_percent: opening ? 30 : 18,
       large_area_minimum_change_magnitudes: LARGE_AREA_CHANGE_MAGNITUDES,
+      copy_one_large_area_change: LARGE_AREA_CHANGE_EXAMPLES.filter((entry) => !opening || entry.property !== "opacity"),
       recommended_eases: opening ? ["power3.out", "expo.out"] : ["none", "power1.inOut"],
       intent: opening ? "Move a large visible region immediately with a hook-scale transform" : closing ? "Sustain visible semantic motion into the handoff" : "Develop a semantic object with sustained visible motion while narration advances",
       ...(overlappingAnchors.length ? { narration_cue: compactText(overlappingAnchors.map((entry) => entry.text).join(" "), 120) } : {})

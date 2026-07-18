@@ -17,6 +17,13 @@ test("builds a compact blueprint packet and a smaller implementation handoff", (
   assert.equal(blueprintInput.supporting_motion_contract.windows[0].minimum_duration_seconds, .55);
   assert.equal(blueprintInput.supporting_motion_contract.windows[0].minimum_affected_canvas_percent, 30);
   assert.deepEqual(blueprintInput.supporting_motion_contract.windows[1].recommended_eases, ["none", "power1.inOut"]);
+  assert.deepEqual(blueprintInput.supporting_motion_contract.windows[0].copy_one_large_area_change, [
+    { property: "x", from_value: -108, to_value: 0 },
+    { property: "y", from_value: 108, to_value: 0 },
+    { property: "scale", from_value: .82, to_value: 1 },
+    { property: "rotation", from_value: -12, to_value: 0 }
+  ]);
+  assert.deepEqual(blueprintInput.supporting_motion_contract.windows[1].copy_one_large_area_change.at(-1), { property: "opacity", from_value: .45, to_value: 1 });
   assert.equal(blueprintInput.supporting_motion_contract.opening_hook_magnitudes.x, 64);
   assert.equal(blueprintInput.supporting_motion_contract.large_area_minimum_change_magnitudes.x, 96);
   assert.ok(blueprintInput.evidence[0].content.length <= 1_200);
@@ -53,7 +60,7 @@ test("validates complete object, event, selector, timing, copy, and density hand
   assert.match(validation.errors.join("\n"), /at_seconds must be inside opening/);
   assert.match(validation.errors.join("\n"), /requires at least one change at the minimum perceptible magnitude/);
   assert.match(validation.errors.join("\n"), /opening requires a hook-scale/);
-  assert.match(validation.errors.join("\n"), /requires one large-area change/);
+  assert.match(validation.errors.join("\n"), /must copy one complete object/);
   assert.match(validation.errors.join("\n"), /affected_canvas_percent must be at least 30/);
   assert.match(validation.errors.join("\n"), /ease must be one of power3\.out, expo\.out/);
   assert.match(validation.errors.join("\n"), /object_id is not planned: evidence-grid/);
