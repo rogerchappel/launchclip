@@ -199,6 +199,17 @@ test("feeds a failed plan and exact validator errors into one bounded semantic r
   assert.ok(store.get("creative-plan").outputs.some((entry) => entry.path.includes("plans/.attempts/creative-plan-attempt-1.json")));
 });
 
+test("normalizes impossible presenter visibility when no presenter asset exists", async () => {
+  const workspace = await tempWorkspace(sampleIntake());
+  const plan = samplePlan();
+  plan.shots[0].presenter = { mode: "companion", visible: true, placement: "bottom", size: "small", treatment: "framed" };
+  const result = await planProduction(workspace, {}, {
+    client: { runStructured: async () => ({ response_id: "no-presenter", model: "gpt-5.6", status: "completed", value: plan, usage: {} }) }
+  });
+  const written = JSON.parse(await readFile(result.plan, "utf8"));
+  assert.deepEqual(written.shots[0].presenter, { mode: "voiceover", visible: false, placement: "offstage", size: "none", treatment: "framed" });
+});
+
 test("stops semantic repair at the configured bound", async () => {
   const workspace = await tempWorkspace(sampleIntake());
   let calls = 0;

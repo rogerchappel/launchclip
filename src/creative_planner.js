@@ -149,7 +149,7 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
       };
       const result = resumeResponseId ? await client.resumeStructured(resumeResponseId, request) : await client.runStructured(request);
       resumeResponseId = null;
-      const plan = normalizeProductionPlanTiming(result.value);
+      const plan = normalizePlanForAvailableResources(normalizeProductionPlanTiming(result.value), intake);
       const validation = validateProductionPlan(plan, validationContext);
       validationErrors = validation.errors;
       await store.markRunning(jobId, { provider: runtime.provider(), response_id: result.response_id, status: result.status });
@@ -198,6 +198,24 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
     await store.markFailed(jobId, error);
     throw error;
   }
+}
+
+function normalizePlanForAvailableResources(plan, intake) {
+  const hasPresenter = intake.resources.some((entry) => entry.role === "presenter" && ["video", "image"].includes(entry.type));
+  if (hasPresenter) return plan;
+  return {
+    ...plan,
+    shots: plan.shots.map((shot) => ({
+      ...shot,
+      presenter: {
+        ...shot.presenter,
+        mode: "voiceover",
+        visible: false,
+        placement: "offstage",
+        size: "none"
+      }
+    }))
+  };
 }
 
 function directPlanningRuntime(intake, client) {
