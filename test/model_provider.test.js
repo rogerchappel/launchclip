@@ -69,7 +69,7 @@ test("pins OpenRouter parameters and disables provider fallback", async () => {
   assert.deepEqual(body.provider, { require_parameters: true, allow_fallbacks: false });
 });
 
-test("allows provider fallback for the dynamic OpenRouter free route", async () => {
+test("allows prompt-validated provider fallback for the dynamic OpenRouter free route", async () => {
   let body;
   const client = createStructuredClient({ provider: "openrouter", model: "openrouter/free", reasoning: "none", apiKey: "router-test" }, {
     fetch: async (_url, init) => {
@@ -78,7 +78,7 @@ test("allows provider fallback for the dynamic OpenRouter free route", async () 
     }
   });
   const result = await client.runStructured({ schema: { type: "object" }, schemaName: "result", input: "go", reasoningEffort: "none" });
-  assert.deepEqual(body.provider, { require_parameters: true, allow_fallbacks: true });
+  assert.deepEqual(body.provider, { require_parameters: false, allow_fallbacks: true });
   assert.deepEqual(body.reasoning, { effort: "none" });
   assert.equal(result.model, "example/free-model:free");
 });

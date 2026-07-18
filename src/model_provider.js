@@ -89,7 +89,8 @@ export class ChatCompletionsStructuredClient {
     };
     if (options.maxOutputTokens != null) body.max_tokens = positiveInteger(options.maxOutputTokens, "maxOutputTokens");
     if (this.provider === "openrouter") {
-      body.provider = { require_parameters: true, allow_fallbacks: model === "openrouter/free" };
+      const dynamicFreeRouter = model === "openrouter/free";
+      body.provider = { require_parameters: !dynamicFreeRouter, allow_fallbacks: dynamicFreeRouter };
       if (options.reasoningEffort && (options.reasoningEffort !== "none" || model === "openrouter/free")) {
         body.reasoning = { effort: options.reasoningEffort };
       }
