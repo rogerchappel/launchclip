@@ -161,6 +161,20 @@ test("aligns unambiguous authored selectors to their blueprint object ids", () =
   assert.equal(aligned.bundle.motion.events[0].selector, "#shot-1-proof");
 });
 
+test("infers a blueprint selector from a unique assertion suffix when no event targets the object", () => {
+  const bundle = frameBundle("shot-1", 5);
+  bundle.html = bundle.html.split("shot-1-proof").join("shot-1-register");
+  bundle.motion.assertions[0].selector = "#shot-1-register";
+  bundle.motion.events = [];
+  const aligned = alignFrameSelectorsToBlueprint(bundle, {
+    elements: [{ object_id: "s1-register", selector: "#shot-1-s1-register" }]
+  });
+
+  assert.deepEqual(aligned.mappings, [{ object_id: "s1-register", from: "#shot-1-register", to: "#shot-1-s1-register" }]);
+  assert.match(aligned.bundle.html, /id="shot-1-s1-register"/);
+  assert.equal(aligned.bundle.motion.assertions[0].selector, "#shot-1-s1-register");
+});
+
 test("adds missing authoritative root contract attributes locally without overwriting authored values", () => {
   const context = fixture();
   const bundle = frameBundle("shot-1", 5);

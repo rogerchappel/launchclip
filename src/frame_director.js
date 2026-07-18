@@ -535,11 +535,22 @@ export function sanitizeFrameBundle(bundle, context = {}) {
 export function alignFrameSelectorsToBlueprint(bundle, blueprint) {
   const desiredByObject = new Map((blueprint?.elements ?? []).map((element) => [element.object_id, element.selector]));
   const observedByObject = new Map((bundle?.motion?.events ?? []).map((event) => [event.object_id, event.selector]));
+  const observedSelectors = [...new Set([...(bundle?.motion?.events ?? []), ...(bundle?.motion?.assertions ?? [])].map((entry) => entry.selector).filter(Boolean))];
   const prefix = `#${bundle?.shot_id}-`;
   const originalHtml = String(bundle?.html ?? "");
   const mappings = [];
   for (const [objectId, desired] of desiredByObject.entries()) {
-    const observed = observedByObject.get(objectId);
+    let observed = observedByObject.get(objectId);
+    if (!observed && desired?.startsWith(prefix)) {
+      const canonical = (value) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+      const desiredTail = canonical(desired.slice(prefix.length));
+      const inferred = observedSelectors.filter((selector) => {
+        if (!selector.startsWith(prefix) || mappings.some((entry) => entry.from === selector)) return false;
+        const observedTail = canonical(selector.slice(prefix.length));
+        return observedTail.length >= 4 && (desiredTail.endsWith(observedTail) || observedTail.endsWith(desiredTail));
+      });
+      if (inferred.length === 1) observed = inferred[0];
+    }
     if (!observed || observed === desired || !observed.startsWith(prefix) || !desired.startsWith(prefix)) continue;
     const observedId = observed.slice(1);
     const desiredId = desired.slice(1);
