@@ -509,6 +509,42 @@ test("discovers ranked free frame models, clamps output, and records the accepte
   assert.equal(result.free_model_selection.source, "observed-winner");
 });
 
+test("probes untried free frame candidates after a partial pool failure in the same command", async () => {
+  const first = {
+    source: "live-probe", state_path: "/tmp/free-model-state.json", selected_model: "tencent/hy3:free", verified_free_at: "2026-07-17T00:00:00.000Z",
+    routes: ["openrouter:tencent/hy3:free@none", "openrouter:google/gemma-code:free@none"],
+    candidates: [{ id: "tencent/hy3:free" }, { id: "google/gemma-code:free" }, { id: "qwen/qwen3-coder:free" }], warnings: []
+  };
+  const next = { ...first, source: "live-probe", selected_model: "qwen/qwen3-coder:free", routes: ["openrouter:qwen/qwen3-coder:free@none"] };
+  const directRoutes = [];
+  const outcomes = [];
+  let probes = 0;
+  const result = await runProductionStage("direct-frames", "/tmp/workspace", { "model-policy": "free" }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    selectOpenRouterFreeModels: async () => first,
+    probeOpenRouterFreeModels: async (_selection, options) => {
+      probes += 1;
+      if (probes === 1) return first;
+      assert.deepEqual(options.excludeIds.sort(), ["google/gemma-code:free", "tencent/hy3:free"]);
+      assert.equal(options.stopAfterFirstSuccess, true);
+      return next;
+    },
+    directFrames: async (_workspace, options) => {
+      directRoutes.push([...options.routes]);
+      if (directRoutes.length === 1) throw new Error("Frame s8 exhausted model routes");
+      return { status: "ready", frames: [{ provider: "openrouter", model: "tencent/hy3:free", recovered: true }, { provider: "openrouter", model: "qwen/qwen3-coder:free" }] };
+    },
+    recordOpenRouterFreeModelOutcome: async (selection, outcome) => {
+      outcomes.push(outcome);
+      return outcome.error ? { ...selection, source: "rotated-after-failure" } : next;
+    }
+  });
+  assert.deepEqual(directRoutes, [first.routes, next.routes]);
+  assert.equal(outcomes[0].error.message, "Frame s8 exhausted model routes");
+  assert.deepEqual(outcomes[1].result.frames.map((frame) => frame.model), ["qwen/qwen3-coder:free"]);
+  assert.equal(result.free_model_selection.selected_model, "qwen/qwen3-coder:free");
+});
+
 test("keeps critic and repair routes on OpenRouter free under the free policy", async () => {
   const received = {};
   const selection = {

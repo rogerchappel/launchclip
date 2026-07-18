@@ -352,7 +352,8 @@ async function runFrameDirection(workspace, flags, adapters) {
   if (!usesDiscoveredFreeFrames(flags)) return direct(workspace, options, adapters.frames);
 
   const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
-  const selection = await selectLiveOpenRouterFreeModels(flags, adapters);
+  const probeModels = adapters.probeOpenRouterFreeModels ?? probeOpenRouterFreeModels;
+  let selection = await selectLiveOpenRouterFreeModels(flags, adapters);
   options.routes = selection.routes;
   options.stableRouteCache = true;
   options.leanPrompt = true;
@@ -369,23 +370,49 @@ async function runFrameDirection(workspace, flags, adapters) {
   if (Number.isFinite(Number(selection.max_completion_tokens)) && Number(selection.max_completion_tokens) > 0) {
     options.maxOutputTokens = Math.min(options.maxOutputTokens, Number(selection.max_completion_tokens));
   }
-  try {
-    const result = await direct(workspace, options, adapters.frames);
-    let recorded = selection;
+  const attemptedModelIds = new Set(selection.routes.map(openRouterRouteModelId));
+  while (true) {
     try {
-      recorded = await recordOutcome(selection, { result }) ?? selection;
+      const result = await direct(workspace, options, adapters.frames);
+      const observedResult = { ...result, frames: (result.frames ?? []).filter((frame) => !frame.recovered) };
+      let recorded = selection;
+      try {
+        recorded = await recordOutcome(selection, { result: observedResult }) ?? selection;
+      } catch (error) {
+        recorded = { ...selection, warnings: [...(selection.warnings ?? []), `Could not update free-model outcome state: ${error.message}`] };
+      }
+      return { ...result, free_model_selection: freeModelSelectionSummary(recorded) };
     } catch (error) {
-      recorded = { ...selection, warnings: [...(selection.warnings ?? []), `Could not update free-model outcome state: ${error.message}`] };
+      let rotated = selection;
+      try {
+        rotated = await recordOutcome(selection, { error }) ?? selection;
+      } catch (stateError) {
+        error.free_model_state_error = stateError.message;
+      }
+      const remaining = (rotated.candidates ?? []).filter((candidate) => !attemptedModelIds.has(candidate.id));
+      if (!remaining.length) throw error;
+      try {
+        selection = await probeModels(rotated, {
+          timeoutMs: numberOr(flags["free-model-probe-timeout-ms"], 15_000),
+          excludeIds: [...attemptedModelIds],
+          stopAfterFirstSuccess: true
+        });
+      } catch (probeError) {
+        error.free_model_probe_error = probeError.message;
+        throw error;
+      }
+      options.routes = selection.routes.filter((route) => !attemptedModelIds.has(openRouterRouteModelId(route)));
+      if (!options.routes.length) throw error;
+      if (Number.isFinite(Number(selection.max_completion_tokens)) && Number(selection.max_completion_tokens) > 0) {
+        options.maxOutputTokens = Math.min(options.maxOutputTokens, Number(selection.max_completion_tokens));
+      }
+      for (const route of options.routes) attemptedModelIds.add(openRouterRouteModelId(route));
     }
-    return { ...result, free_model_selection: freeModelSelectionSummary(recorded) };
-  } catch (error) {
-    try {
-      await recordOutcome(selection, { error });
-    } catch (stateError) {
-      error.free_model_state_error = stateError.message;
-    }
-    throw error;
   }
+}
+
+function openRouterRouteModelId(route) {
+  return String(route).replace(/^openrouter:/, "").replace(/@[^@]+$/, "");
 }
 
 async function rotateCritiqueRejectedFreeModel(frames, adapters) {
