@@ -9,10 +9,15 @@ import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model
 import { PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
 import { buildRepairContextCapsule, buildRepairSourceCapsule, REPAIR_CAPSULE_VERSION } from "./repair_capsule.js";
 import { repairProductionPlan } from "./production_plan_repair.js";
+import { validateLockedSupportingMotion } from "./frame_blueprint.js";
 
 const REPAIR_INSTRUCTIONS = `You are repairing one previously authored HyperFrames shot after independent review.
 
 Return only a small source-edit patch. Fix every supplied finding at the smallest scope. Preserve everything listed in each finding and everything in the prior bundle that does not conflict with the repair. Do not return or rewrite the complete frame bundle, complete HTML, or an unrelated component. Do not redesign unrelated elements.
+
+Treat findings[].repair_targets as an acceptance checklist. Every listed target must be covered by a concrete edit, unless one shared CSS edit clearly fixes several targets; enumerate that coverage in summary. Do not spend an edit on a speculative cause while leaving a listed selector, text, or assertion unchanged.
+
+For contrast_aa_failure, edit the actual text rule and copy suggested_color exactly when supplied. When the selector is a generated DOM path, locate the rule from the supplied text and foreground color. Never return a contrast repair that leaves the failing foreground color unchanged. For text_occluded by a full-canvas decorative container, give the affected semantic element or its closest semantic parent an explicit higher z-index; editing only the decorative covering element is insufficient. For content_overlap, separate the named blocks with real geometry, sizing, gap, or wrapping changes rather than an allow annotation. For motion_appears_late, make the locked selector cross visible opacity before the stated deadline by editing its HTML clip/state or GSAP implementation, without changing the locked event ledger.
 
 Each edit targets one exact source string in html, motion, root_media_requests, evidence_ids, visible_copy, or preserve. Exact target sources are supplied unescaped between named source markers. Copy each find string verbatim from inside the matching marker; the markers themselves are not source. The find string must occur exactly once in that target. Include enough unchanged surrounding text to make it unique, then replace only the minimum necessary characters. Prefer changing an existing declaration, selector, assertion, or local component over replacing a large block.
 
@@ -26,7 +31,11 @@ Register a paused GSAP timeline exactly on window.__timelines[shot_id]. Give eve
 
 Motion assertions must be truthful. When native inspection reports motion_frozen for a must_remain_live assertion, set must_remain_live false unless the asserted element itself has clearly perceptible, inspection-visible transform or opacity motion across the required interval. Do not add imperceptible drift or tiny opacity changes merely to satisfy an assertion.
 
-Every planned shot.visual object and event remains part of the repair contract. Preserve data-visual-object-id identity, return one motion.events record for every planned visible event, and ensure its selector visibly changes at the exact planned time. Never fix a composition issue by replacing semantic graphics with caption cards, and never leave an SFX-bound event without a visible target.`;
+Every planned shot.visual object and event remains part of the repair contract. Preserve data-visual-object-id identity, return one motion.events record for every planned visible event, and ensure its selector visibly changes at the exact planned time. Never fix a composition issue by replacing semantic graphics with caption cards, and never leave an SFX-bound event without a visible target.
+
+The repair context contains locked_motion_contract. Treat every listed motion.events event_id, object_id, selector, and at_seconds as immutable. Treat every supporting_motion_beats selector, at_seconds, duration_seconds, ease, changes, and later-beat immediateRender:false as immutable too: never delete, zero, weaken, retime, retarget, or add transform/opacity properties to those fromTo calls. When a supporting beat travels off-frame, move or resize its authored resting CSS geometry so the exact locked travel remains visible. Never change those fields, even when fixing appears-late, out-of-order, missing-selector, contrast, or layout findings. Fix the matching HTML element, clip data-start/data-duration, CSS geometry, or GSAP call so the locked selector visibly changes at the locked time. A descendant selector is not an acceptable substitute.
+
+Do not edit the motion target for a layout, contrast, typography, or geometry-only finding. For a motion assertion finding, edit only the specific assertion field named by the evidence; the locked motion.events ledger still remains unchanged. Before returning, compare every proposed motion edit against locked_motion_contract and remove any edit that changes a locked event field.`;
 
 export const FRAME_PATCH_VERSION = "launchclip.frame-patch.v1";
 export const FRAME_PATCH_SCHEMA = {
@@ -120,8 +129,10 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     const shot = plan.shots.find((entry) => entry.id === shotId);
     if (!shot) throw new Error(`Critique references unknown shot: ${shotId}`);
     const prior = (await readFrameSelection(workspace, shotId)).bundle;
+    const blueprintRecord = await readOptionalJson(path.join(workspace, PRODUCTION_PATHS.frames, ".blueprints", `${shotId}.json`), null);
+    const lockedSupportingMotion = Array.isArray(blueprintRecord?.blueprint?.supporting_motion_beats) ? blueprintRecord.blueprint.supporting_motion_beats : [];
     const repairInputHash = semanticHash({
-      worker: "frame-repair.v11",
+      worker: "frame-repair.v14",
       candidate_verification: "browser-snapshot.v3",
       repair_context: REPAIR_CAPSULE_VERSION,
       routes: routes.map(modelRouteKey),
@@ -130,7 +141,8 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
       max_patch_ratio: Number(options.maxPatchRatio ?? .35),
       shot,
       findings,
-      prior
+      prior,
+      locked_supporting_motion: lockedSupportingMotion
     });
     const canonicalJobId = `frame:${shotId}`;
     const canonical = store.get(canonicalJobId);
@@ -186,6 +198,8 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
               shot,
               findings,
               prior: previousCandidate,
+              lockedPrior: prior,
+              lockedSupportingMotion,
               validationErrors,
               maxPatchRatio: options.maxPatchRatio,
               resources: intake.resources,
@@ -198,7 +212,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
             background: options.background !== false,
             maxOutputTokens: Number(options.maxOutputTokens ?? 8_000),
             keepAlive: route.provider === "ollama" ? 0 : undefined,
-            promptCacheKey: "launchclip:frame-repair-patch:v2",
+            promptCacheKey: "launchclip:frame-repair-patch:v5",
             metadata: { job_id: jobId, shot_id: shotId, repair_findings: findings.length, attempt: totalAttempt, route: routeIndex + 1 },
             onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
           };
@@ -229,7 +243,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
               resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
               allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
             });
-            validationErrors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
+            validationErrors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format), ...validateLockedSupportingMotion(candidate.html, lockedSupportingMotion)];
             previousCandidate = candidate;
             if (validationErrors.length) continue;
             const candidateVerification = await (adapters.verifyCandidate ?? verifyFrameCandidate)(workspace, candidate, {
@@ -287,7 +301,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
   };
 }
 
-export function buildRepairInput({ plan, shot, findings, prior, validationErrors = [], maxPatchRatio = .35, resources = [], evidenceItems = [], sourceMode = "full" }) {
+export function buildRepairInput({ plan, shot, findings, prior, lockedPrior = prior, lockedSupportingMotion = [], validationErrors = [], maxPatchRatio = .35, resources = [], evidenceItems = [], sourceMode = "full" }) {
   if (!["full", "scoped"].includes(sourceMode)) throw new Error(`Unsupported repair source mode: ${sourceMode}`);
   const capsule = sourceMode === "scoped"
     ? buildRepairSourceCapsule(prior, findings, validationErrors)
@@ -314,6 +328,20 @@ export function buildRepairInput({ plan, shot, findings, prior, validationErrors
     validation_errors_to_repair: validationErrors,
     patch_limits: { maximum_edits: 12, maximum_changed_ratio: Number(maxPatchRatio ?? .35) },
     prior_identity: { schema_version: prior.schema_version, shot_id: prior.shot_id },
+    locked_motion_contract: {
+      immutable_event_fields: ["event_id", "object_id", "selector", "at_seconds"],
+      planned_events: (shot?.visual?.events ?? []).map((event) => ({ event_id: event.id, target_object_ids: event.target_ids, at_seconds: event.at_seconds })),
+      authored_events: (lockedPrior?.motion?.events ?? []).map((event) => ({ event_id: event.event_id, object_id: event.object_id, selector: event.selector, at_seconds: event.at_seconds })),
+      supporting_motion_beats: lockedSupportingMotion.map((beat) => ({
+        window_id: beat.window_id,
+        selector: beat.selector,
+        at_seconds: beat.at_seconds,
+        duration_seconds: beat.duration_seconds,
+        ease: beat.ease,
+        changes: beat.changes
+      })),
+      rule: "Preserve authored event identity, selector, and timing plus every supporting fromTo selector, time, duration, ease, and numeric state. Repair CSS geometry around locked motion rather than weakening it."
+    },
     available_resources: resources.map((entry) => ({ id: entry.id, role: entry.role, type: entry.type })),
     allowed_evidence_ids: evidenceItems.map((entry) => entry.id),
     source_scope: {

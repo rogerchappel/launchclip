@@ -480,9 +480,12 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
           at_seconds: window.start_seconds,
           duration_seconds: window.minimum_duration_seconds,
           intent: index === 0 ? "entrance" : "emphasis",
+          motion_pattern: index === 0 ? "group-settle" : "handoff",
+          affected_canvas_percent: window.minimum_affected_canvas_percent,
+          ease: window.recommended_eases[0],
           changes: index === 0
             ? [{ property: "opacity", from_value: 0, to_value: 1 }, { property: "scale", from_value: .86, to_value: 1 }]
-            : [{ property: "y", from_value: 64, to_value: 0 }, { property: "opacity", from_value: .5, to_value: 1 }],
+            : [{ property: "y", from_value: 96, to_value: 0 }, { property: "opacity", from_value: .5, to_value: 1 }],
           action: index === 0 ? "Spring the semantic proof into its authored state" : "Lift and emphasize the next semantic label"
         };
       });
@@ -514,11 +517,15 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
     assert.equal(input.scene_blueprint.supporting_motion_beats.length, 2);
     assert.equal(input.shot, undefined);
     assert.ok(input.narration_anchors.length <= 8);
+    const value = frameBundle(shot.id, shot.duration_seconds);
+    value.html = blueprintFrameHtml(shot.id, shot.duration_seconds, input.scene_blueprint);
+    value.motion.assertions[0].selector = input.scene_blueprint.motion_beats[0].selector;
+    value.motion.events[0].selector = input.scene_blueprint.motion_beats[0].selector;
     return {
       response_id: `frame_${shot.id}`,
       model: "google/gemma-code:free",
       status: "completed",
-      value: frameBundle(shot.id, shot.duration_seconds),
+      value,
       usage: { input_tokens: 200, output_tokens: 100, total_tokens: 300 }
     };
   } };
@@ -540,17 +547,20 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
   assert.equal(calls.length, 5);
   assert.deepEqual(calls.filter((entry) => entry.schema === "launchclip_frame_blueprint").map((entry) => entry.temperature).sort(), [.15, .45, .45]);
   assert.deepEqual(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").map((entry) => entry.temperature), [.4, .4]);
-  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_blueprint").every((entry) => entry.prompt_cache_key === "launchclip:frame-blueprint:v4"));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_blueprint").every((entry) => entry.prompt_cache_key === "launchclip:frame-blueprint:v5"));
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Never declare CSS transform on an element that GSAP animates/.test(entry.instructions)));
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Set must_remain_live=false for reveal-then-settle elements/.test(entry.instructions)));
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Implement every scene_blueprint\.supporting_motion_beats entry/.test(entry.instructions)));
-  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /as one tl\.fromTo/.test(entry.instructions)));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /as one literal tl\.fromTo/.test(entry.instructions)));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Do not retarget a descendant/.test(entry.instructions)));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /occupies at least affected_canvas_percent/.test(entry.instructions)));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /compare every supporting beat mechanically/.test(entry.instructions)));
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /opening beat begins by 0\.1s/.test(entry.instructions)));
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /not new semantic timeline events/.test(entry.instructions)));
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /at least 4\.5:1 for normal text and 3:1 for large text/.test(entry.instructions)));
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Do not use negative top offsets/.test(entry.instructions)));
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /must never cross or cover a label/.test(entry.instructions)));
-  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => entry.prompt_cache_key === "launchclip:frame-director:v8"));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => entry.prompt_cache_key === "launchclip:frame-director:v9"));
   assert.deepEqual(result.frames.map((entry) => entry.usage.total_tokens), [450, 450]);
   assert.ok(result.frames.every((entry) => entry.blueprint.cached === false));
   const blueprintRecord = JSON.parse(await readFile(result.frames[0].blueprint.path, "utf8"));
@@ -763,6 +773,21 @@ function frameBundle(id, duration) {
     }],
     evidence_ids: ["ev-1"], visible_copy: ["Proof"], preserve: ["proof hierarchy"]
   };
+}
+
+function blueprintFrameHtml(id, duration, blueprint) {
+  const elements = blueprint.elements.map((element) => `<div id="${element.selector.slice(1)}" class="clip" data-start="0" data-duration="${duration}">${element.object_id}</div>`).join("");
+  const calls = blueprint.supporting_motion_beats.map((beat, index) => {
+    const from = Object.fromEntries(beat.changes.map((change) => [change.property, change.from_value]));
+    const to = Object.fromEntries(beat.changes.map((change) => [change.property, change.to_value]));
+    Object.assign(to, { duration: beat.duration_seconds, ease: beat.ease }, index ? { immediateRender: false } : {});
+    return `tl.fromTo(${JSON.stringify(beat.selector)},${objectLiteral(from)},${objectLiteral(to)},${beat.at_seconds});`;
+  }).join("");
+  return `<template><style>#root{position:absolute;inset:0}</style><div id="root" data-composition-id="${id}" data-start="0" data-duration="${duration}" data-width="1080" data-height="1920">${elements}</div><script>window.__timelines=window.__timelines||{};var tl=gsap.timeline({paused:true});${calls}window.__timelines["${id}"]=tl;</script></template>`;
+}
+
+function objectLiteral(value) {
+  return `{${Object.entries(value).map(([key, entry]) => `${key}:${JSON.stringify(entry)}`).join(",")}}`;
 }
 
 function fixture() {

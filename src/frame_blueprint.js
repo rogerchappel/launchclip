@@ -1,6 +1,6 @@
 import { SHOT_ID_PATTERN } from "./production_contracts.js";
 
-export const FRAME_BLUEPRINT_VERSION = "launchclip.frame-blueprint.v3";
+export const FRAME_BLUEPRINT_VERSION = "launchclip.frame-blueprint.v4";
 
 const SUPPORTING_CHANGE_LIMITS = {
   opacity: { minimum: 0, maximum: 1, minimumDelta: .25, hookDelta: null },
@@ -9,6 +9,25 @@ const SUPPORTING_CHANGE_LIMITS = {
   scale: { minimum: .2, maximum: 2.5, minimumDelta: .06, hookDelta: .1 },
   rotation: { minimum: -360, maximum: 360, minimumDelta: 5, hookDelta: 8 }
 };
+
+const LARGE_AREA_CHANGE_MAGNITUDES = {
+  opacity: .45,
+  x: 96,
+  y: 96,
+  scale: .14,
+  rotation: 9
+};
+
+const LARGE_AREA_CHANGE_EXAMPLES = [
+  { property: "x", from_value: -108, to_value: 0 },
+  { property: "y", from_value: 108, to_value: 0 },
+  { property: "scale", from_value: .82, to_value: 1 },
+  { property: "rotation", from_value: -12, to_value: 0 },
+  { property: "opacity", from_value: .45, to_value: 1 }
+];
+
+const SUPPORTING_EASES = ["none", "power1.inOut", "power3.out", "expo.out"];
+const SUPPORTING_PATTERNS = ["camera-push", "panel-travel", "group-settle", "semantic-emphasis", "handoff"];
 
 const string = { type: "string" };
 const shotId = { type: "string", pattern: SHOT_ID_PATTERN };
@@ -80,6 +99,9 @@ export const FRAME_BLUEPRINT_SCHEMA = strictObject({
       at_seconds: { type: "number", minimum: 0 },
       duration_seconds: { type: "number", minimum: 0.05, maximum: 3.5, description: "Must not exceed the selected window's maximum_duration_seconds." },
       intent: { type: "string", enum: ["entrance", "semantic-reveal", "emphasis", "progression", "exit"] },
+      motion_pattern: { type: "string", enum: SUPPORTING_PATTERNS, description: "A simple area-changing motion primitive that the implementation can express with one seek-safe fromTo." },
+      affected_canvas_percent: { type: "integer", minimum: 12, maximum: 90, description: "Estimated visible canvas area occupied by the exact target selector at its authored resting state." },
+      ease: { type: "string", enum: SUPPORTING_EASES, description: "Exact GSAP ease for the implementation. Long development beats prefer none or power1.inOut so motion remains visible across the interval." },
       changes: {
         type: "array",
         minItems: 1,
@@ -119,7 +141,10 @@ This blueprint is a binding handoff to a second LLM that will write the HTML and
 - Map every planned shot.visual.objects id exactly once to a unique DOM selector beginning #shot_id-. Do not invent or omit semantic object ids.
 - Map every planned shot.visual.events id exactly once, using one of its target object ids and the selector assigned to that object. Preserve the planned time.
 - Map every supplied supporting_motion_contract window exactly once in supporting_motion_beats. Start inside the narrow window and keep duration between its minimum_duration_seconds and maximum_duration_seconds. These are additional visual actions on planned objects, not new claims, SFX cues, or shot.visual.events.
-- Give every supporting beat exact non-equal numeric from/to values in changes. At least one change per beat must meet its per-property minimum magnitude; a second property may provide a subtler companion adjustment. Opening must use a hook-scale x, y, scale, or rotation change, begin by 0.1s, and be visibly underway before 0.65s; opacity alone is not an opening hook.
+- Give every supporting beat exact non-equal numeric from/to values in changes. For reliable compliance, copy at least one complete property/from_value/to_value object exactly from that window's copy_one_large_area_change array. Opening must choose x, y, scale, or rotation rather than opacity, begin by 0.1s, and be visibly underway before 0.65s.
+- Estimate affected_canvas_percent from the target selector's final authored footprint, not from its zone or parent. Meet each window's minimum_affected_canvas_percent and keep at least half the beats on targets covering a substantial visible region. Size the selected wrapper accordingly in the implementation; do not claim large coverage for a small label or chip.
+- Choose a simple motion_pattern that fits one literal fromTo: camera-push or panel-travel for large regions, group-settle for a visible component cluster, semantic-emphasis for a proof object, and handoff near the close. The opening and development should move the composition, not merely a small annotation.
+- Use the exact supplied ease. Opening uses power3.out or expo.out for a fast readable arrival. Longer development and closing beats use none or power1.inOut so the movement stays active across the full interval rather than decelerating into a near-static hold.
 - Distribute supporting targets where the object set allows it and target non-container semantic objects at least minimum_semantic_beats times. Do not spend most development windows on decorative background fades.
 - Use 2-4 coherent motion patterns across the scene, such as transform entrances, staggered reveals, path/progress development, or restrained emphasis. The windows deliberately cover more than half the scene: use their full authored duration, preserve the final readable state, and never tween layout properties or create endless drift.
 - Use concrete visual forms that express the declared diagram, comparison, process, timeline, data view, or spatial metaphor. Avoid a sparse headline floating over decoration and avoid generic card grids unless the plan explicitly calls for them.
@@ -222,6 +247,7 @@ export function validateFrameBlueprint(blueprint, shot) {
   const supportingBeats = Array.isArray(blueprint?.supporting_motion_beats) ? blueprint.supporting_motion_beats : [];
   const seenWindows = new Set();
   let semanticSupportingBeats = 0;
+  let largeAreaBeats = 0;
   for (const [index, beat] of supportingBeats.entries()) {
     const window = supportingWindows.get(beat?.window_id);
     if (!window) errors.push(`supporting_motion_beats[${index}].window_id is not required: ${beat?.window_id}`);
@@ -234,16 +260,22 @@ export function validateFrameBlueprint(blueprint, shot) {
     if (element && beat?.selector !== element.selector) errors.push(`supporting_motion_beats[${index}].selector must match ${beat?.object_id}`);
     const atSeconds = Number(beat?.at_seconds);
     const beatDuration = Number(beat?.duration_seconds);
+    const affectedCanvasPercent = Number(beat?.affected_canvas_percent);
     if (window && (!Number.isFinite(atSeconds) || atSeconds < window.start_seconds - .05 || atSeconds > window.end_seconds + .05)) {
       errors.push(`supporting_motion_beats[${index}].at_seconds must be inside ${window.id} (${window.start_seconds}-${window.end_seconds})`);
     }
     if (!Number.isFinite(beatDuration) || beatDuration < .05 || beatDuration > 3.5 || (window && (beatDuration < window.minimum_duration_seconds - .05 || beatDuration > window.maximum_duration_seconds + .05)) || atSeconds + beatDuration > duration + .05) {
       errors.push(`supporting_motion_beats[${index}].duration_seconds must finish inside the shot`);
     }
+    if (!Number.isFinite(affectedCanvasPercent) || (window && affectedCanvasPercent < window.minimum_affected_canvas_percent)) {
+      errors.push(`supporting_motion_beats[${index}].affected_canvas_percent must be at least ${window?.minimum_affected_canvas_percent ?? 12}`);
+    } else if (affectedCanvasPercent >= 18) largeAreaBeats += 1;
+    if (window && !window.recommended_eases.includes(beat?.ease)) errors.push(`supporting_motion_beats[${index}].ease must be one of ${window.recommended_eases.join(", ")}`);
     const changes = Array.isArray(beat?.changes) ? beat.changes : [];
     const seenProperties = new Set();
     let perceptibleMagnitude = false;
     let openingMagnitude = false;
+    let largeAreaMagnitude = false;
     for (const [changeIndex, change] of changes.entries()) {
       const limits = SUPPORTING_CHANGE_LIMITS[change?.property];
       if (!limits) continue;
@@ -259,11 +291,12 @@ export function validateFrameBlueprint(blueprint, shot) {
       }
       if (delta >= limits.minimumDelta) perceptibleMagnitude = true;
       if (limits.hookDelta != null && delta >= limits.hookDelta) openingMagnitude = true;
+      if (delta >= LARGE_AREA_CHANGE_MAGNITUDES[change.property]) largeAreaMagnitude = true;
     }
     if (changes.length && !perceptibleMagnitude) errors.push(`supporting_motion_beats[${index}] requires at least one change at the minimum perceptible magnitude`);
+    if (changes.length && !largeAreaMagnitude) errors.push(`supporting_motion_beats[${index}] must copy one complete object from supporting_motion_contract.windows.${window?.id ?? "unknown"}.copy_one_large_area_change`);
     if (window?.id === "opening") {
       if (atSeconds > .1 + .05) errors.push(`supporting_motion_beats[${index}] opening must begin by 0.1 seconds`);
-      if (!["entrance", "semantic-reveal"].includes(beat?.intent)) errors.push(`supporting_motion_beats[${index}] opening intent must be entrance or semantic-reveal`);
       if (!openingMagnitude) errors.push(`supporting_motion_beats[${index}] opening requires a hook-scale x, y, scale, or rotation change`);
     }
   }
@@ -271,6 +304,7 @@ export function validateFrameBlueprint(blueprint, shot) {
   if (supportingBeats.length && semanticSupportingBeats < Math.ceil(supportingContract.minimum_semantic_beats)) {
     errors.push(`supporting_motion_beats must target semantic objects at least ${supportingContract.minimum_semantic_beats} times`);
   }
+  if (supportingBeats.length && largeAreaBeats < Math.ceil(supportingBeats.length / 2)) errors.push(`supporting_motion_beats must move a substantial visible region in at least ${Math.ceil(supportingBeats.length / 2)} beats`);
 
   for (const copy of shot?.on_screen_text ?? []) {
     if (!(blueprint?.visible_copy ?? []).includes(copy)) errors.push(`visible_copy must preserve: ${copy}`);
@@ -280,6 +314,53 @@ export function validateFrameBlueprint(blueprint, shot) {
   const semanticObjectCount = [...plannedObjects.values()].filter((entry) => entry.kind !== "decoration").length;
   if (Number(blueprint?.density?.minimum_semantic_objects) < semanticObjectCount) errors.push(`density.minimum_semantic_objects must be at least ${semanticObjectCount}`);
   return { ok: errors.length === 0, errors };
+}
+
+export function validateLockedSupportingMotion(html, beats = []) {
+  if (!Array.isArray(beats) || !beats.length) return [];
+  const calls = parseFromToCalls(html);
+  const errors = [];
+  for (const beat of beats) {
+    const at = Number(beat?.at_seconds);
+    const call = calls.find((entry) => entry.selector === beat?.selector && nearlyEqual(entry.at, at));
+    const label = `${beat?.window_id ?? "supporting"}:${beat?.selector ?? "unknown"}@${beat?.at_seconds}`;
+    if (!call) {
+      errors.push(`locked supporting motion ${label} must remain one literal fromTo call`);
+      continue;
+    }
+    if (!nearlyEqual(call.to.duration, Number(beat?.duration_seconds))) errors.push(`locked supporting motion ${label} duration must remain ${beat?.duration_seconds}`);
+    if (call.to.ease !== beat?.ease) errors.push(`locked supporting motion ${label} ease must remain ${beat?.ease}`);
+    const changes = Array.isArray(beat?.changes) ? beat.changes : [];
+    const lockedProperties = new Set(changes.map((change) => change.property));
+    for (const change of changes) {
+      if (!nearlyEqual(call.from[change.property], Number(change.from_value))) errors.push(`locked supporting motion ${label} ${change.property} from_value must remain ${change.from_value}`);
+      if (!nearlyEqual(call.to[change.property], Number(change.to_value))) errors.push(`locked supporting motion ${label} ${change.property} to_value must remain ${change.to_value}`);
+    }
+    const animatedProperties = new Set(["opacity", "x", "y", "scale", "rotation"]);
+    for (const property of [...Object.keys(call.from), ...Object.keys(call.to)]) {
+      if (animatedProperties.has(property) && !lockedProperties.has(property)) errors.push(`locked supporting motion ${label} must not add ${property}`);
+    }
+    if (String(beat?.window_id) !== "opening" && call.to.immediateRender !== false) errors.push(`locked supporting motion ${label} must keep immediateRender:false`);
+  }
+  return [...new Set(errors)];
+}
+
+function parseFromToCalls(html) {
+  const calls = [];
+  const pattern = /\b(?:tl|timeline)\.fromTo\(\s*(['"])(#[^'"]+)\1\s*,\s*\{([^{}]*)\}\s*,\s*\{([^{}]*)\}\s*,\s*(-?(?:\d+\.?\d*|\.\d+))\s*\)/g;
+  for (const match of String(html ?? "").matchAll(pattern)) calls.push({ selector: match[2], from: parseFlatObject(match[3]), to: parseFlatObject(match[4]), at: Number(match[5]) });
+  return calls;
+}
+
+function parseFlatObject(source) {
+  const value = {};
+  const pattern = /([A-Za-z_$][\w$]*)\s*:\s*(?:(['"])(.*?)\2|(-?(?:\d+\.?\d*|\.\d+))|(true|false))/g;
+  for (const match of String(source ?? "").matchAll(pattern)) value[match[1]] = match[3] ?? (match[4] != null ? Number(match[4]) : match[5] === "true");
+  return value;
+}
+
+function nearlyEqual(left, right) {
+  return Number.isFinite(Number(left)) && Number.isFinite(Number(right)) && Math.abs(Number(left) - Number(right)) <= .001;
 }
 
 function supportingMotionContract(shot, anchors = []) {
@@ -304,6 +385,10 @@ function supportingMotionContract(shot, anchors = []) {
       end_seconds: rounded(endSeconds),
       minimum_duration_seconds: rounded(Math.max(.05, minimumDuration)),
       maximum_duration_seconds: rounded(Math.max(.05, maximumDuration)),
+      minimum_affected_canvas_percent: opening ? 30 : 18,
+      large_area_minimum_change_magnitudes: LARGE_AREA_CHANGE_MAGNITUDES,
+      copy_one_large_area_change: LARGE_AREA_CHANGE_EXAMPLES.filter((entry) => !opening || entry.property !== "opacity"),
+      recommended_eases: opening ? ["power3.out", "expo.out"] : ["none", "power1.inOut"],
       intent: opening ? "Move a large visible region immediately with a hook-scale transform" : closing ? "Sustain visible semantic motion into the handoff" : "Develop a semantic object with sustained visible motion while narration advances",
       ...(overlappingAnchors.length ? { narration_cue: compactText(overlappingAnchors.map((entry) => entry.text).join(" "), 120) } : {})
     };
@@ -312,6 +397,7 @@ function supportingMotionContract(shot, anchors = []) {
     required_supporting_beats: beatCount,
     minimum_semantic_beats: semanticObjectCount ? Math.ceil(beatCount / 2) : 0,
     minimum_change_magnitudes: Object.fromEntries(Object.entries(SUPPORTING_CHANGE_LIMITS).map(([property, limits]) => [property, limits.minimumDelta])),
+    large_area_minimum_change_magnitudes: LARGE_AREA_CHANGE_MAGNITUDES,
     opening_hook_magnitudes: Object.fromEntries(Object.entries(SUPPORTING_CHANGE_LIMITS).filter(([, limits]) => limits.hookDelta != null).map(([property, limits]) => [property, limits.hookDelta])),
     rule: "Return exactly one sustained supporting_motion_beat per window with explicit non-equal numeric changes. Planned motion_beats remain separate timeline/SFX events.",
     windows

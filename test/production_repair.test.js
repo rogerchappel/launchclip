@@ -6,6 +6,7 @@ import test from "node:test";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { modelRouteKey, parseModelRoute } from "../src/model_provider.js";
 import { FRAME_BUNDLE_VERSION } from "../src/production_contracts.js";
+import { validateLockedSupportingMotion } from "../src/frame_blueprint.js";
 import { applyFramePatch, buildRepairInput, collectDeterministicRepairFindings, FRAME_PATCH_VERSION, repairProduction } from "../src/production_repair.js";
 
 test("repairs only criticised frames, preserves the frame contract, and invalidates assembly", async () => {
@@ -20,6 +21,11 @@ test("repairs only criticised frames, preserves the frame contract, and invalida
   assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-2"]);
   assert.equal(repairContext(request.input).findings[0].id, "f-1");
   assert.match(JSON.stringify(repairContext(request.input).findings[0].preserve), /exact copy/);
+  assert.match(request.instructions, /locked_motion_contract/);
+  assert.match(request.instructions, /A descendant selector is not an acceptable substitute/);
+  assert.match(request.instructions, /repair_targets as an acceptance checklist/);
+  assert.match(request.instructions, /copy suggested_color exactly/);
+  assert.match(request.instructions, /editing only the decorative covering element is insufficient/);
   assert.match(request.input, /<launchclip-source target="html">\n<!doctype html>/i);
   assert.equal(request.images.length, 1);
   assert.match(await readFile(result.repaired[0].html, "utf8"), /Repaired proof hierarchy/);
@@ -66,7 +72,7 @@ test("resumes a persisted background repair response without another submission"
   const plan = JSON.parse(await readFile(path.join(workspace, "production", "plan.json"), "utf8"));
   const prior = JSON.parse(await readFile(path.join(workspace, "production", "frames", "shot-2.json"), "utf8"));
   const critique = JSON.parse(await readFile(path.join(workspace, "production", "qa", "critique.json"), "utf8"));
-  const repairInputHash = semanticHash({ worker: "frame-repair.v11", candidate_verification: "browser-snapshot.v3", repair_context: "selector-capsule.v4", routes: [modelRouteKey(parseModelRoute({ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" }))], source_mode: "provider-default", max_output_tokens: 8_000, max_patch_ratio: .35, shot: plan.shots[1], findings: critique.findings, prior });
+  const repairInputHash = semanticHash({ worker: "frame-repair.v14", candidate_verification: "browser-snapshot.v3", repair_context: "selector-capsule.v4", routes: [modelRouteKey(parseModelRoute({ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" }))], source_mode: "provider-default", max_output_tokens: 8_000, max_patch_ratio: .35, shot: plan.shots[1], findings: critique.findings, prior, locked_supporting_motion: [] });
   await store.add({ id: "repair:shot-2", kind: "frame-repair", depends_on: ["creative-plan"], input_hash: repairInputHash });
   await store.markRunning("repair:shot-2", { provider: "openai", response_id: "repair_saved", status: "in_progress" });
   let resumed = 0;
@@ -149,6 +155,20 @@ test("preserves native geometry and contrast evidence for a scoped repair", asyn
   assert.deepEqual(finding.repair_targets[0].rect, { left: 20, top: 30, width: 300, height: 40 });
   assert.equal(finding.repair_targets[0].covered_fraction, .33);
   assert.equal(finding.repair_targets[0].container_selector, ".evidence-chip");
+});
+
+test("locks blueprint supporting motion through repair input and candidate validation", () => {
+  const beat = {
+    window_id: "development-1", selector: "#shot-1-proof", at_seconds: 1.5, duration_seconds: 2.4, ease: "none",
+    changes: [{ property: "x", from_value: -108, to_value: 0 }, { property: "opacity", from_value: .45, to_value: 1 }]
+  };
+  const valid = `<script>var tl=gsap.timeline({paused:true});tl.fromTo('#shot-1-proof',{x:-108,opacity:.45},{x:0,opacity:1,duration:2.4,ease:'none',immediateRender:false},1.5);</script>`;
+  const weakened = `<script>var tl=gsap.timeline({paused:true});tl.fromTo('#shot-1-proof',{x:0,opacity:1},{x:0,opacity:1,duration:2.4,ease:'none'},1.5);</script>`;
+
+  assert.deepEqual(validateLockedSupportingMotion(valid, [beat]), []);
+  assert.match(validateLockedSupportingMotion(weakened, [beat]).join("\n"), /x from_value must remain -108/);
+  assert.match(validateLockedSupportingMotion(weakened, [beat]).join("\n"), /opacity from_value must remain 0.45/);
+  assert.match(validateLockedSupportingMotion(weakened, [beat]).join("\n"), /immediateRender:false/);
 });
 
 test("rejects infrastructure inspection failures before any paid repair call", async () => {
@@ -347,6 +367,8 @@ test("presents exact repair sources unescaped outside the JSON context", () => {
     prior
   });
   assert.equal(repairContext(input).findings[0].id, "layout-1");
+  assert.deepEqual(repairContext(input).locked_motion_contract.authored_events, [{ event_id: "shot-1-proof-lock", object_id: "proof-node", selector: "#shot-1-proof", at_seconds: 1 }]);
+  assert.deepEqual(repairContext(input).locked_motion_contract.immutable_event_fields, ["event_id", "object_id", "selector", "at_seconds"]);
   assert.match(input, /<launchclip-source target="html">\n<!doctype html>/i);
   assert.match(input, /<div id="root"/);
   assert.doesNotMatch(input, /<launchclip-source target="html">\n"<!doctype html>/i);

@@ -15,7 +15,17 @@ test("builds a compact blueprint packet and a smaller implementation handoff", (
   assert.equal(blueprintInput.supporting_motion_contract.windows[0].start_seconds, 0);
   assert.ok(blueprintInput.supporting_motion_contract.windows[0].end_seconds <= .1);
   assert.equal(blueprintInput.supporting_motion_contract.windows[0].minimum_duration_seconds, .55);
+  assert.equal(blueprintInput.supporting_motion_contract.windows[0].minimum_affected_canvas_percent, 30);
+  assert.deepEqual(blueprintInput.supporting_motion_contract.windows[1].recommended_eases, ["none", "power1.inOut"]);
+  assert.deepEqual(blueprintInput.supporting_motion_contract.windows[0].copy_one_large_area_change, [
+    { property: "x", from_value: -108, to_value: 0 },
+    { property: "y", from_value: 108, to_value: 0 },
+    { property: "scale", from_value: .82, to_value: 1 },
+    { property: "rotation", from_value: -12, to_value: 0 }
+  ]);
+  assert.deepEqual(blueprintInput.supporting_motion_contract.windows[1].copy_one_large_area_change.at(-1), { property: "opacity", from_value: .45, to_value: 1 });
   assert.equal(blueprintInput.supporting_motion_contract.opening_hook_magnitudes.x, 64);
+  assert.equal(blueprintInput.supporting_motion_contract.large_area_minimum_change_magnitudes.x, 96);
   assert.ok(blueprintInput.evidence[0].content.length <= 1_200);
   assert.ok(blueprintInput.narration_anchors.length <= 8);
   assert.equal(implementationInput.scene_blueprint.schema_version, FRAME_BLUEPRINT_VERSION);
@@ -34,6 +44,8 @@ test("validates complete object, event, selector, timing, copy, and density hand
   invalid.motion_beats[0].at_seconds = 4;
   invalid.supporting_motion_beats[0].at_seconds = 2;
   invalid.supporting_motion_beats[0].changes = [{ property: "opacity", from_value: 0, to_value: .1 }];
+  invalid.supporting_motion_beats[0].affected_canvas_percent = 12;
+  invalid.supporting_motion_beats[0].ease = "none";
   invalid.supporting_motion_beats[0].object_id = "evidence-grid";
   invalid.supporting_motion_beats[1].object_id = "evidence-grid";
   invalid.visible_copy = [];
@@ -48,11 +60,23 @@ test("validates complete object, event, selector, timing, copy, and density hand
   assert.match(validation.errors.join("\n"), /at_seconds must be inside opening/);
   assert.match(validation.errors.join("\n"), /requires at least one change at the minimum perceptible magnitude/);
   assert.match(validation.errors.join("\n"), /opening requires a hook-scale/);
+  assert.match(validation.errors.join("\n"), /must copy one complete object/);
+  assert.match(validation.errors.join("\n"), /affected_canvas_percent must be at least 30/);
+  assert.match(validation.errors.join("\n"), /ease must be one of power3\.out, expo\.out/);
   assert.match(validation.errors.join("\n"), /object_id is not planned: evidence-grid/);
   assert.match(validation.errors.join("\n"), /target semantic objects at least 1 times/);
   assert.match(validation.errors.join("\n"), /visible_copy must preserve: Proof/);
   assert.match(validation.errors.join("\n"), /focal_element_selector is unknown/);
   assert.match(validation.errors.join("\n"), /minimum_semantic_objects must be at least 2/);
+});
+
+test("accepts creative opening metadata when the measurable hook contract passes", () => {
+  const { shot } = fixture();
+  const blueprint = validBlueprint();
+  blueprint.supporting_motion_beats[0].intent = "emphasis";
+  blueprint.density.focal_element_selector = "#shot-1-label";
+
+  assert.deepEqual(validateFrameBlueprint(blueprint, shot), { ok: true, errors: [] });
 });
 
 function validBlueprint() {
@@ -71,8 +95,8 @@ function validBlueprint() {
     typography: { display_px: 112, body_px: 42, metadata_px: 24, maximum_text_lines: 2 },
     motion_beats: [{ event_id: "shot-1-reveal", object_id: "proof-node", selector: "#shot-1-proof", at_seconds: 1, action: "Scale and fade the proof node into its final measured position" }],
     supporting_motion_beats: [
-      { window_id: "opening", object_id: "proof-node", selector: "#shot-1-proof", at_seconds: .1, duration_seconds: .6, intent: "entrance", changes: [{ property: "opacity", from_value: 0, to_value: 1 }, { property: "scale", from_value: .86, to_value: 1 }], action: "Spring the proof node from 0.86 scale and zero opacity into its authored static state" },
-      { window_id: "closing", object_id: "proof-label", selector: "#shot-1-label", at_seconds: 2.5, duration_seconds: 2.25, intent: "emphasis", changes: [{ property: "y", from_value: 64, to_value: 0 }, { property: "opacity", from_value: .5, to_value: 1 }], action: "Lift and resolve the exact-copy label with a sustained opacity rise" }
+      { window_id: "opening", object_id: "proof-node", selector: "#shot-1-proof", at_seconds: .1, duration_seconds: .6, intent: "entrance", motion_pattern: "group-settle", affected_canvas_percent: 42, ease: "power3.out", changes: [{ property: "opacity", from_value: 0, to_value: 1 }, { property: "scale", from_value: .86, to_value: 1 }], action: "Spring the proof node from 0.86 scale and zero opacity into its authored static state" },
+      { window_id: "closing", object_id: "proof-label", selector: "#shot-1-label", at_seconds: 2.5, duration_seconds: 2.25, intent: "emphasis", motion_pattern: "handoff", affected_canvas_percent: 22, ease: "none", changes: [{ property: "y", from_value: 96, to_value: 0 }, { property: "opacity", from_value: .5, to_value: 1 }], action: "Lift and resolve the exact-copy label with a sustained opacity rise" }
     ],
     visible_copy: ["Proof"],
     density: { target_occupied_percent: 62, minimum_semantic_objects: 2, focal_element_selector: "#shot-1-proof" },
