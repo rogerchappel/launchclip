@@ -12,20 +12,31 @@ test("creates a user-owned style pack from a video project", async () => {
   const source = path.join(cwd, "video");
   try {
     await mkdir(path.join(source, ".hyperframes"), { recursive: true });
-    await mkdir(path.join(source, "assets", "fonts"), { recursive: true });
+    await mkdir(path.join(source, "style", "fonts"), { recursive: true });
+    await mkdir(path.join(source, "style", "assets"), { recursive: true });
     await writeFile(path.join(source, "frame.md"), "# User-authored AI news style\n");
     await writeFile(path.join(source, ".hyperframes", "caption-skin.html"), "<template>captions</template>\n");
-    await writeFile(path.join(source, "assets", "fonts", "Editorial.ttf"), "font fixture");
+    await writeFile(path.join(source, "style", "frame.md"), "# Previous generation\n");
+    await writeFile(path.join(source, "style", "fonts", "Editorial.ttf"), "font fixture");
+    await writeFile(path.join(source, "style", "assets", "texture.svg"), "<svg/>\n");
+    await writeFile(path.join(source, "style", "audio.md"), "Use restrained chiptune accents.\n");
+    await writeFile(path.join(source, "style", "style.json"), `${JSON.stringify({
+      schema_version: STYLE_PACK_SCHEMA_VERSION,
+      name: "previous-style",
+      files: { specification: "frame.md", caption_skin: null, fonts: "fonts", assets: "assets" }
+    }, null, 2)}\n`);
 
     const created = await createStylePack("ai-news", { cwd, from: source });
     assert.equal(created.path, path.join(cwd, ".launchclip", "styles", "ai-news"));
-    assert.deepEqual(created.files, ["style.json", "frame.md", "caption-skin.html", "fonts/"]);
+    assert.deepEqual(created.files, ["style.json", "frame.md", "caption-skin.html", "fonts/", "assets/", "audio.md"]);
 
     const manifest = JSON.parse(await readFile(path.join(created.path, "style.json"), "utf8"));
     assert.equal(manifest.schema_version, STYLE_PACK_SCHEMA_VERSION);
     assert.equal(manifest.name, "ai-news");
     assert.equal(manifest.source.kind, "video-project");
     assert.equal(await readFile(path.join(created.path, "frame.md"), "utf8"), "# User-authored AI news style\n");
+    assert.equal(await readFile(path.join(created.path, "assets", "texture.svg"), "utf8"), "<svg/>\n");
+    assert.equal(await readFile(path.join(created.path, "audio.md"), "utf8"), "Use restrained chiptune accents.\n");
 
     const loaded = await loadStylePack(created.path);
     assert.equal(loaded.name, "ai-news");

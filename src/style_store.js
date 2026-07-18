@@ -30,6 +30,10 @@ export async function createStylePack(name, options = {}) {
   if (existsSync(destination) && !options.force) throw new Error(`Style pack already exists: ${styleName}. Pass --force to replace it`);
 
   const sourcePack = await loadStylePack(source, { requireManifest: false }).catch(() => null);
+  const embeddedPack = sourcePack?.manifest
+    ? null
+    : await loadStylePack(path.join(source, "style"), { requireManifest: true }).catch(() => null);
+  const inheritedPack = sourcePack?.manifest ? sourcePack : embeddedPack;
   const specificationSource = sourcePack?.specification_path ?? findExisting(source, SPECIFICATION_CANDIDATES);
   if (!specificationSource) throw new Error(`Style source has no frame.md or DESIGN.md: ${sourceValue}`);
 
@@ -39,20 +43,21 @@ export async function createStylePack(name, options = {}) {
     await copyFile(specificationSource, path.join(staging, "frame.md"));
     const copied = ["frame.md"];
 
-    const captionSource = sourcePack?.caption_skin_path ?? findExisting(source, CAPTION_CANDIDATES);
+    const captionSource = sourcePack?.caption_skin_path ?? embeddedPack?.caption_skin_path ?? findExisting(source, CAPTION_CANDIDATES);
     if (captionSource) {
       await copyFile(captionSource, path.join(staging, "caption-skin.html"));
       copied.push("caption-skin.html");
     }
 
-    const fontsSource = findDirectory(sourcePack?.path ?? source, ["fonts", path.join("assets", "fonts")]);
+    const fontsSource = findDirectory(source, ["fonts", path.join("assets", "fonts")])
+      ?? findDirectory(inheritedPack?.path ?? source, ["fonts", path.join("assets", "fonts")]);
     if (fontsSource) {
       await cp(fontsSource, path.join(staging, "fonts"), { recursive: true, errorOnExist: true });
       copied.push("fonts/");
     }
 
-    if (sourcePack?.manifest) {
-      const assetsSource = findDirectory(sourcePack.path, ["assets"]);
+    if (inheritedPack?.manifest) {
+      const assetsSource = findDirectory(inheritedPack.path, ["assets"]);
       if (assetsSource) {
         await cp(assetsSource, path.join(staging, "assets"), { recursive: true, errorOnExist: true });
         copied.push("assets/");
@@ -60,8 +65,10 @@ export async function createStylePack(name, options = {}) {
     }
 
     for (const file of OPTIONAL_TEXT_FILES) {
-      const optionalSource = path.join(source, file);
-      if (!existsSync(optionalSource) || !(await stat(optionalSource)).isFile()) continue;
+      const localSource = path.join(source, file);
+      const inheritedSource = inheritedPack ? path.join(inheritedPack.path, file) : null;
+      const optionalSource = existsSync(localSource) ? localSource : inheritedSource;
+      if (!optionalSource || !existsSync(optionalSource) || !(await stat(optionalSource)).isFile()) continue;
       await copyFile(optionalSource, path.join(staging, file));
       copied.push(file);
     }
