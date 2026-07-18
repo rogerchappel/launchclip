@@ -400,6 +400,26 @@ export function repairMissingOpeningMotionPosition(html, beats = []) {
   return { html: source, repaired: false };
 }
 
+export function repairLockedSupportingMotionLiterals(html, beats = []) {
+  const opening = repairMissingOpeningMotionPosition(html, beats);
+  let source = opening.html;
+  let immediateRenderAdded = 0;
+  const pattern = /\b(?:tl|timeline)\.fromTo\(\s*(['"])(#[^'"]+)\1\s*,\s*\{([^{}]*)\}\s*,\s*\{([^{}]*)\}\s*,\s*(-?(?:\d+\.?\d*|\.\d+))\s*\)/g;
+  const matches = [...source.matchAll(pattern)];
+  for (const match of matches.reverse()) {
+    const beat = beats.find((entry) => entry?.window_id !== "opening" && entry?.selector === match[2] && nearlyEqual(entry?.at_seconds, match[5]));
+    if (!beat || /\bimmediateRender\s*:/.test(match[4])) continue;
+    const toLiteral = `{${match[4]}}`;
+    const toIndex = match[0].lastIndexOf(toLiteral);
+    if (toIndex < 0) continue;
+    const insertion = match.index + toIndex + toLiteral.length - 1;
+    const separator = match[4].trim().endsWith(",") ? "" : ",";
+    source = `${source.slice(0, insertion)}${separator}immediateRender:false${source.slice(insertion)}`;
+    immediateRenderAdded += 1;
+  }
+  return { html: source, opening_position_added: opening.repaired, immediate_render_added: immediateRenderAdded };
+}
+
 function parseFromToCalls(html) {
   const calls = [];
   const pattern = /\b(?:tl|timeline)\.fromTo\(\s*(['"])(#[^'"]+)\1\s*,\s*\{([^{}]*)\}\s*,\s*\{([^{}]*)\}\s*,\s*(-?(?:\d+\.?\d*|\.\d+))\s*\)/g;

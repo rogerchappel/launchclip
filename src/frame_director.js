@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_INSTRUCTIONS, FRAME_BLUEPRINT_SCHEMA, FRAME_BLUEPRINT_VERSION, normalizeFrameBlueprint, repairMissingOpeningMotionPosition, validateFrameBlueprint, validateLockedSupportingMotion } from "./frame_blueprint.js";
+import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_INSTRUCTIONS, FRAME_BLUEPRINT_SCHEMA, FRAME_BLUEPRINT_VERSION, normalizeFrameBlueprint, repairLockedSupportingMotionLiterals, validateFrameBlueprint, validateLockedSupportingMotion } from "./frame_blueprint.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { ensureTimelineRegistration, hasTimelineRegistration } from "./hyperframes_timeline.js";
 import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model_provider.js";
@@ -301,13 +301,14 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         });
         const selectorAlignment = blueprint ? alignFrameSelectorsToBlueprint(sanitized.bundle, blueprint.value) : { bundle: sanitized.bundle, mappings: [] };
         const lockedMotionRepair = blueprint
-          ? repairMissingOpeningMotionPosition(selectorAlignment.bundle.html, blueprint.value.supporting_motion_beats)
-          : { html: selectorAlignment.bundle.html, repaired: false };
+          ? repairLockedSupportingMotionLiterals(selectorAlignment.bundle.html, blueprint.value.supporting_motion_beats)
+          : { html: selectorAlignment.bundle.html, opening_position_added: false, immediate_render_added: 0 };
         const candidate = { ...selectorAlignment.bundle, html: lockedMotionRepair.html };
         const repairs = [
           ...sanitized.repairs,
           ...(selectorAlignment.mappings.length ? [{ kind: "align-frame-selectors-to-blueprint", mappings: selectorAlignment.mappings }] : []),
-          ...(lockedMotionRepair.repaired ? [{ kind: "add-explicit-opening-motion-position", at_seconds: 0 }] : [])
+          ...(lockedMotionRepair.opening_position_added ? [{ kind: "add-explicit-opening-motion-position", at_seconds: 0 }] : []),
+          ...(lockedMotionRepair.immediate_render_added ? [{ kind: "add-locked-immediate-render-flags", count: lockedMotionRepair.immediate_render_added }] : [])
         ];
         const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
         errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format), ...(blueprint ? validateLockedSupportingMotion(candidate.html, blueprint.value.supporting_motion_beats) : [])];

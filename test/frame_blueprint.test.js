@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_VERSION, normalizeFrameBlueprint, repairMissingOpeningMotionPosition, validateFrameBlueprint, validateLockedSupportingMotion } from "../src/frame_blueprint.js";
+import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_VERSION, normalizeFrameBlueprint, repairLockedSupportingMotionLiterals, repairMissingOpeningMotionPosition, validateFrameBlueprint, validateLockedSupportingMotion } from "../src/frame_blueprint.js";
 
 test("builds a compact blueprint packet and a smaller implementation handoff", () => {
   const context = fixture();
@@ -116,6 +116,17 @@ test("makes an omitted position explicit only for the first locked opening tween
   assert.deepEqual(validateLockedSupportingMotion(repaired.html, [beat]), []);
   const afterEarlierTween = html.replace("gsap.set", "tl.set");
   assert.equal(repairMissingOpeningMotionPosition(afterEarlierTween, [beat]).repaired, false);
+});
+
+test("adds only the required immediateRender flag to a matching later locked tween", () => {
+  const beats = validBlueprint().supporting_motion_beats;
+  const html = `<script>const tl=gsap.timeline({paused:true});tl.fromTo("#shot-1-proof",{opacity:0,scale:.86},{opacity:1,scale:1,duration:.6,ease:"power3.out"},.1);tl.fromTo("#shot-1-label",{y:96,opacity:.5},{y:0,opacity:1,duration:2.25,ease:"none"},2.5);</script>`;
+
+  const repaired = repairLockedSupportingMotionLiterals(html, beats);
+
+  assert.equal(repaired.immediate_render_added, 1);
+  assert.match(repaired.html, /ease:"none",immediateRender:false},2\.5/);
+  assert.deepEqual(validateLockedSupportingMotion(repaired.html, beats), []);
 });
 
 function validBlueprint() {
