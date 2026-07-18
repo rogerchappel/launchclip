@@ -66,8 +66,10 @@ Required host contract:
 
 Creative contract:
 - When scene_blueprint is supplied, treat its zones, selectors, typography, density, visible copy, planned motion beats, and supporting motion beats as a binding LLM-authored implementation plan.
-- Implement every scene_blueprint.supporting_motion_beats entry as one tl.fromTo on the single paused GSAP timeline. Use its exact selector, start time, duration, and every numeric changes.from_value/changes.to_value. Later beats use immediateRender:false. Never replace an exact from/to state with tl.to, a same-value tween, or a weaker decorative substitute.
-- A supporting beat's target must be visible for its full interval: when the selector is itself class="clip", set data-start no later than the beat start and data-duration through the beat end. The opening beat begins by 0.1s and must produce a large visible transform before 0.65s; do not hide it behind a later clip start.
+- Implement every scene_blueprint.supporting_motion_beats entry as one literal tl.fromTo on the single paused GSAP timeline. Use its exact selector, start time, duration, ease, and only the numeric properties listed in changes. Do not retarget a descendant, substitute a nearby selector, reverse from/to values, add unplanned properties, or weaken the values. Later beats use immediateRender:false; the frame-zero opening beat must own its explicit from-state without immediateRender:false.
+- Make the exact target selector a real motion wrapper whose resting bounding box occupies at least affected_canvas_percent of the 1080x1920 frame. The wrapper may contain labels and primitives, but its transform must move the visible region as one composition-level unit. A small child, lamp, chip, or annotation never substitutes for the planned wrapper.
+- A supporting beat's target must be visible for its full interval: when the selector is itself class="clip", set data-start no later than the beat start and data-duration through the beat end. The opening beat begins by 0.1s and must produce a large visible transform before 0.65s; do not hide it behind a later clip start. For development and closing, preserve the supplied none or power1.inOut ease so meaningful motion continues through the interval.
+- Before returning, compare every supporting beat mechanically against the HTML: there must be exactly one tl.fromTo call on the literal selector with the literal at_seconds, duration_seconds, ease, and all exact from/to values. The call must not contain transform or opacity properties absent from changes.
 - Supporting motion beats are scene choreography, not new semantic timeline events: do not copy them into motion.events, invent SFX cues for them, or add claims. motion.events remains an exact implementation of shot_contract.visual.events.
 - Keep supporting tweens seek-safe and finite. Establish required initial state with gsap.set, preserve the static authored end state, and never overlap writes to the same property on the same selector.
 - Treat global_design.style_dna and the supplied shot or shot_contract visual as binding. Build the declared diagram, comparison, process, timeline, or data form—not a headline over decoration.
@@ -200,10 +202,10 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
     : buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming });
   const customRouting = options.routes != null || options.provider != null || options.model != null || options.baseUrl != null;
   const blueprintInputHash = options.sceneBlueprint
-    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BLUEPRINT_SCHEMA, worker: "frame-blueprint.v4" })
+    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BLUEPRINT_SCHEMA, worker: "frame-blueprint.v5" })
     : null;
   const inputHash = customRouting
-    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, worker: options.sceneBlueprint ? "frame-director.v9" : "frame-director.v5" })
+    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, worker: options.sceneBlueprint ? "frame-director.v10" : "frame-director.v5" })
     : semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v4" });
   const existing = store.get(jobId);
   const resanitized = await resanitizeStoredFrame({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
@@ -265,7 +267,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
           background: options.background !== false,
           maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
           ...(blueprint ? { temperature: Number(routeAttempt === 1 ? options.frameTemperature ?? .4 : options.frameRepairTemperature ?? .1) } : {}),
-          promptCacheKey: options.leanPrompt ? "launchclip:frame-director:v8" : "launchclip:frame-director:v4",
+          promptCacheKey: options.leanPrompt ? "launchclip:frame-director:v9" : "launchclip:frame-director:v4",
           metadata: { job_id: jobId, shot_id: shot.id, attempt: totalAttempt, route: routeIndex + 1 },
           onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
         };
@@ -408,7 +410,7 @@ async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, 
         background: options.background !== false,
         maxOutputTokens: Number(options.blueprintMaxOutputTokens ?? 3_000),
         temperature: Number(routeAttempt === 1 ? options.blueprintTemperature ?? .45 : options.blueprintRepairTemperature ?? .15),
-        promptCacheKey: "launchclip:frame-blueprint:v4",
+        promptCacheKey: "launchclip:frame-blueprint:v5",
         metadata: { job_id: jobId, shot_id: shot.id, stage: "blueprint", attempt: routeAttempt, route: routeIndex + 1 },
         onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
       };
