@@ -314,7 +314,12 @@ test("encodes the best free draft when every vision critic route is unavailable"
     critiqueProduction: async () => { calls.push("vision-critique"); throw unavailable; },
     repairProduction: async () => { calls.push("repair"); return { status: "repaired", repaired: [{ shot_id: "shot-1" }] }; }
   };
-  const result = await runProduction("owner/repo", { "model-policy": "free", "max-repair-passes": "2" }, adapters);
+  const result = await runProduction("owner/repo", {
+    "model-policy": "free",
+    "frame-route": "openrouter:test/free@none",
+    "repair-route": "openrouter:test/free@none",
+    "max-repair-passes": "2"
+  }, adapters);
   assert.equal(drafts, 3);
   assert.equal(result.status, "needs-repair");
   assert.equal(result.draft.video, "/tmp/draft.mp4");
