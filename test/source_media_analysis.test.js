@@ -86,8 +86,36 @@ test("rotates visual source analysis when the selected free vision model fails",
     } }),
     contactSheet: async (_source, output) => writeFile(output, "contact-sheet")
   });
-  assert.deepEqual(routes, ["google/gemma-4-31b-it:free", "google/gemma-4-26b-a4b-it:free"]);
+  assert.deepEqual(routes, ["google/gemma-4-31b-it:free", "google/gemma-4-31b-it:free", "google/gemma-4-26b-a4b-it:free"]);
   assert.equal(result.free_model_selection.selected_model, "google/gemma-4-26b-a4b-it:free");
+});
+
+test("keeps a proven free vision model when a transient source analysis retry succeeds", async () => {
+  const workspace = await fixture({ role: "supporting", authoritative: false });
+  const intakePath = path.join(workspace, "production", "intake.json");
+  const intake = JSON.parse(await readFile(intakePath, "utf8"));
+  intake.model = { provider: "openrouter", id: "openrouter/free", reasoning_effort: "none" };
+  await writeFile(intakePath, `${JSON.stringify(intake, null, 2)}\n`);
+  const selected = visionSelection(path.join(workspace, "vision-state.json"));
+  let attempts = 0;
+  let rotations = 0;
+  const result = await analyzeSourceMedia(workspace, {}, {
+    selectOpenRouterFreeVisionModels: async () => selected,
+    probeOpenRouterFreeVisionModels: async () => ({ ...selected, source: "live-probe", routes: [selected.routes[0]] }),
+    recordOpenRouterFreeModelOutcome: async () => {
+      rotations += 1;
+      return selected;
+    },
+    createClient: (route) => ({ runStructured: async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("temporary vision capacity failure");
+      return { response_id: "free-media-retry", model: route.model, value: { resource_id: "take", summary: "Visible product", visible_text: [], narrative_opportunities: [], segments: [], quality_warnings: [] } };
+    } }),
+    contactSheet: async (_source, output) => writeFile(output, "contact-sheet")
+  });
+  assert.equal(attempts, 2);
+  assert.equal(rotations, 0);
+  assert.equal(result.free_model_selection.selected_model, "google/gemma-4-31b-it:free");
 });
 
 test("gives the visual analyst real hook, cut, and motion timing instead of placeholder seconds", async () => {

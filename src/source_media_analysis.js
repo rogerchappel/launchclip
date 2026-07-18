@@ -155,17 +155,21 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
       result = await client.runStructured(request);
     } catch (error) {
       if (!freeVisionSelection || adapters.client) throw error;
-      const failedModel = freeVisionSelection.selected_model;
-      const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
-      const probeModels = adapters.probeOpenRouterFreeVisionModels ?? probeOpenRouterFreeVisionModels;
-      const rotated = await recordOutcome(freeVisionSelection, { error });
-      freeVisionSelection = await probeModels(rotated, {
-        timeoutMs: Number(options.freeVisionProbeTimeoutMs ?? 15_000),
-        excludeIds: [failedModel]
-      });
-      route = parseModelRoute(freeVisionSelection.routes[0]);
-      client = createClient(route);
-      result = await client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
+      try {
+        result = await client.runStructured(request);
+      } catch (retryError) {
+        const failedModel = freeVisionSelection.selected_model;
+        const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
+        const probeModels = adapters.probeOpenRouterFreeVisionModels ?? probeOpenRouterFreeVisionModels;
+        const rotated = await recordOutcome(freeVisionSelection, { error: retryError });
+        freeVisionSelection = await probeModels(rotated, {
+          timeoutMs: Number(options.freeVisionProbeTimeoutMs ?? 15_000),
+          excludeIds: [failedModel]
+        });
+        route = parseModelRoute(freeVisionSelection.routes[0]);
+        client = createClient(route);
+        result = await client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
+      }
     }
     if (result.value.resource_id !== resource.id) throw new Error(`Media analysis resource_id must be ${resource.id}`);
     for (const segment of result.value.segments) {
