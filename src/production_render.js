@@ -308,12 +308,17 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
   const output = path.resolve(requestedOutput ?? path.join(renderDir, profile.outputName));
   await mkdir(path.dirname(output), { recursive: true });
   const run = adapters.run ?? runCommand;
-  const render = await captureHyperframes(run, [
+  const visionSupervisedDraft = profile.stage === "production-draft"
+    && options.allowContentVerificationFailures
+    && verification.status === "failed";
+  const renderArgs = [
     "render", "--output", output,
     "--quality", String(profile.quality),
-    "--workers", String(options.workers ?? "auto"),
-    "--strict-all", "--skill", "product-launch-video", project
-  ], { cwd: project });
+    "--workers", String(options.workers ?? "auto")
+  ];
+  if (!visionSupervisedDraft) renderArgs.push("--strict-all");
+  renderArgs.push("--skill", "product-launch-video", project);
+  const render = await captureHyperframes(run, renderArgs, { cwd: project });
   await writeFile(path.join(qaDir, profile.logName), `${JSON.stringify(render, null, 2)}\n`);
   if (!render.ok) throw new Error(`HyperFrames render failed. Review ${path.join(qaDir, profile.logName)}.`);
 

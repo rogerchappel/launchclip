@@ -363,6 +363,7 @@ test("renders a temporally analyzed draft before approval", async () => {
   assert.equal(result.status, "ready");
   assert.match(result.video, /production\/renders\/draft\.mp4$/);
   assert.equal(renderArgs[renderArgs.indexOf("--quality") + 1], "draft");
+  assert.equal(renderArgs.includes("--strict-all"), true);
 });
 
 test("renders a vision-supervised draft after bounded browser-content findings", async () => {
@@ -370,7 +371,7 @@ test("renders a vision-supervised draft after bounded browser-content findings",
   const commands = [];
   const result = await renderDraftProduction(workspace, { allowContentVerificationFailures: true }, {
     run: async (_command, args) => {
-      commands.push(args[1]);
+      commands.push(args);
       if (args[1] === "lint") return { stdout: JSON.stringify({ warningCount: 1, findings: [{ severity: "warning", code: "overlapping_gsap_tweens", message: "two tweens meet at the same boundary" }] }), stderr: "" };
       if (args[1] === "check") return { stdout: JSON.stringify({ ok: false, layout: { findings: [{ severity: "error", code: "panel_out_of_canvas", message: "panel clips by two pixels" }] } }), stderr: "" };
       return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
@@ -381,7 +382,9 @@ test("renders a vision-supervised draft after bounded browser-content findings",
   assert.equal(result.status, "ready");
   assert.equal(result.verification.status, "failed");
   assert.deepEqual(result.verification_supervision, { mode: "vision-supervised-draft", failed: ["lint", "inspect"] });
-  assert.ok(commands.includes("render"));
+  const renderArgs = commands.find((args) => args[1] === "render");
+  assert.ok(renderArgs);
+  assert.equal(renderArgs.includes("--strict-all"), false);
 });
 
 test("reuses unchanged native QA while still encoding and analyzing each draft", async () => {
