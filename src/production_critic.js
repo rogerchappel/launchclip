@@ -12,6 +12,8 @@ Rules:
 - Inspect the actual pixels before judging visual quality. Do not infer that a planned element is visible, legible, well-composed, or stylistically successful merely because the plan or HTML says it should be.
 - visual_evidence maps the ordered source frames to shot IDs and timestamps. Contact sheets preserve that same order and label their frame times. Review every covered shot before returning ship.
 - Treat clipped or off-canvas content, phone-unreadable text, excessive unused space, weak focal scale, accidental overlap, repeated near-identical frames, and visible drift from the requested art direction as concrete visual evidence when present.
+- Treat deterministic reports as supporting diagnostics, not a substitute for looking at the rendered pixels. Corroborate a reported issue in the supplied frames or temporal evidence before turning it into a finding; do not echo every browser warning into the critique.
+- Clip mounts and transition wrappers may intentionally enter or leave the canvas at a shot boundary. Do not call this subject drift or canvas overflow unless the focal content is visibly clipped during its readable hold. Repeated identical mount-level warnings at successive shot boundaries are transition evidence, not proof that every scene is broken.
 - Do not invent defects for shots that are not represented. Use temporal measurements, not guesses between stills, for motion claims that the supplied frames cannot prove.
 - Technical validity is not creative quality. A clean DOM can still be dull, generic, illegible, or narratively weak.
 - Do not demand a fixed house style. Judge whether this video's chosen art direction is coherent, original, and appropriate to its subject.

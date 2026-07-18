@@ -28,6 +28,8 @@ test("gives an independent GPT-5.6 critic the plan, QA evidence, motion profile,
   assert.equal(input.production_expectations.encoded_frame_count_path, "temporal_motion_analysis.frame_count");
   assert.match(request.instructions, /intentionally-silent/);
   assert.match(request.instructions, /adjacent-frame difference samples/);
+  assert.match(request.instructions, /supporting diagnostics, not a substitute/);
+  assert.match(request.instructions, /transition wrappers may intentionally enter or leave the canvas/);
   assert.equal(input.deterministic_reports.inspect.stdout.issueCount, 1);
   assert.equal(input.evidence_index[0].content, "The README proves the workflow.");
   assert.equal(input.claim_support[0].evidence[0].id, "ev-1");
