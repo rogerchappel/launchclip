@@ -5,9 +5,13 @@ import { CRITIQUE_SCHEMA, PRODUCTION_PATHS, validateCritique } from "./productio
 
 const CRITIC_INSTRUCTIONS = `You are the independent final editor and motion-design critic. Decide whether this rendered production should ship, receive targeted repairs, or be replanned.
 
-Judge the supplied snapshots and measurements against the actual production plan and its rubric. Inspect narrative clarity, factual grounding, visual hierarchy, typography, composition, asset use, presenter placement, shot-to-shot continuity, motion intent, pacing, and audio strategy.
+Judge the supplied rendered-pixel evidence and measurements against the actual production plan and its rubric. Inspect narrative clarity, factual grounding, visual hierarchy, typography, composition, asset use, presenter placement, shot-to-shot continuity, motion intent, pacing, and audio strategy.
 
 Rules:
+- Inspect the actual pixels before judging visual quality. Do not infer that a planned element is visible, legible, well-composed, or stylistically successful merely because the plan or HTML says it should be.
+- visual_evidence maps the ordered source frames to shot IDs and timestamps. Contact sheets preserve that same order and label their frame times. Review every covered shot before returning ship.
+- Treat clipped or off-canvas content, phone-unreadable text, excessive unused space, weak focal scale, accidental overlap, repeated near-identical frames, and visible drift from the requested art direction as concrete visual evidence when present.
+- Do not invent defects for shots that are not represented. Use temporal measurements, not guesses between stills, for motion claims that the supplied frames cannot prove.
 - Technical validity is not creative quality. A clean DOM can still be dull, generic, illegible, or narratively weak.
 - Do not demand a fixed house style. Judge whether this video's chosen art direction is coherent, original, and appropriate to its subject.
 - Use motion metrics as temporal evidence. Do not treat raw RGB or pixel similarity to unrelated references as a quality target.
@@ -35,9 +39,9 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
     readOptionalJson(path.join(qaDir, "inspect.json")),
     readOptionalJson(path.join(workspace, "production", "plans", "visual-fingerprint.json"))
   ]);
-  const snapshots = await snapshotPaths(verification.snapshots ?? path.join(qaDir, "snapshots"), Number(options.maxSnapshots ?? 12));
-  if (!snapshots.length) throw new Error("Production critique requires rendered snapshots");
-  const images = await Promise.all(snapshots.map(dataImage));
+  const visualEvidence = await buildVisualEvidence(verification.snapshots ?? path.join(qaDir, "snapshots"), plan.shots, Number(options.maxSnapshots ?? 12));
+  if (!visualEvidence.images.length) throw new Error("Production critique requires rendered snapshots");
+  const images = await Promise.all(visualEvidence.images.map((entry) => dataImage(entry.path, entry.detail)));
   const evidenceById = new Map(evidence.items.map((entry) => [entry.id, entry]));
   const evidenceIndex = evidence.items.map((entry) => ({ id: entry.id, kind: entry.kind, role: entry.role, title: entry.title, content: String(entry.content ?? "").slice(0, 6_000), provenance: entry.provenance, claims_allowed: entry.claims_allowed }));
   const route = parseModelRoute(options.route, {
@@ -73,7 +77,8 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
       },
       visual_novelty_assessment: visualFingerprint?.novelty_assessment ?? null,
       human_review_request: humanReviewRequest,
-      snapshot_order: snapshots.map((entry) => path.basename(entry))
+      visual_evidence: visualEvidence.manifest,
+      snapshot_order: visualEvidence.images.map((entry) => path.basename(entry.path))
     }),
     images,
     schema: CRITIQUE_SCHEMA,
@@ -94,9 +99,16 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
   }
   const critiquePath = path.join(qaDir, "critique.json");
   const markdownPath = path.join(qaDir, "CRITIQUE.md");
-  await writeFile(critiquePath, `${JSON.stringify({ ...critique, response_id: result.response_id, model: result.model, usage: result.usage }, null, 2)}\n`);
+  const visualEvidenceReceipt = {
+    mode: visualEvidence.manifest.mode,
+    image_count: visualEvidence.images.length,
+    frame_count: visualEvidence.manifest.frames.length,
+    covered_shot_ids: visualEvidence.manifest.covered_shot_ids,
+    reused_verification_snapshots: true
+  };
+  await writeFile(critiquePath, `${JSON.stringify({ ...critique, response_id: result.response_id, model: result.model, usage: result.usage, visual_evidence: visualEvidenceReceipt }, null, 2)}\n`);
   await writeFile(markdownPath, renderCritique(critique));
-  return { stage: "production-critique", status: critique.verdict === "ship" ? "approved" : "needs-repair", verdict: critique.verdict, critique: critiquePath, markdown: markdownPath, findings: critique.findings.length, response_id: result.response_id, model: result.model };
+  return { stage: "production-critique", status: critique.verdict === "ship" ? "approved" : "needs-repair", verdict: critique.verdict, critique: critiquePath, markdown: markdownPath, findings: critique.findings.length, response_id: result.response_id, model: result.model, visual_evidence: visualEvidenceReceipt };
 }
 
 function compactMotionAnalysis(report) {
@@ -192,15 +204,89 @@ function renderCritique(critique) {
   return `${lines.join("\n")}\n`;
 }
 
-async function snapshotPaths(directory, limit) {
+async function buildVisualEvidence(directory, shots = [], limit = 12) {
   const entries = await readdir(directory, { withFileTypes: true });
-  return entries.filter((entry) => entry.isFile() && /\.(?:png|jpe?g|webp)$/i.test(entry.name)).map((entry) => path.join(directory, entry.name)).sort().slice(0, limit);
+  const imagePaths = entries
+    .filter((entry) => entry.isFile() && /\.(?:png|jpe?g|webp)$/i.test(entry.name))
+    .map((entry) => path.join(directory, entry.name))
+    .sort();
+  const contactSheets = imagePaths.filter((entry) => /(?:^|\/)contact-sheet(?:-|\.)/i.test(entry));
+  const sourceFrames = imagePaths.filter((entry) => !contactSheets.includes(entry)).map((entry, index) => frameEvidence(entry, index, shots));
+  const selectedFrames = selectBalancedFrames(sourceFrames, shots, limit);
+  const useContactSheets = contactSheets.length > 0 && sourceFrames.length > 0;
+  const images = useContactSheets
+    ? contactSheets.map((entry) => ({ path: entry, detail: "high", kind: "contact-sheet" }))
+    : selectedFrames.map((entry) => ({ path: entry.path, detail: "low", kind: "frame" }));
+  const manifestFrames = useContactSheets ? sourceFrames : selectedFrames;
+  return {
+    images,
+    manifest: {
+      mode: useContactSheets ? "contact-sheets" : "balanced-frames",
+      image_count: images.length,
+      frame_count: manifestFrames.length,
+      covered_shot_ids: [...new Set(manifestFrames.map((entry) => entry.shot_id).filter(Boolean))],
+      images: images.map((entry, index) => ({ image_index: index, file: path.basename(entry.path), kind: entry.kind, detail: entry.detail })),
+      frames: manifestFrames.map((entry, index) => ({ frame_index: index, file: path.basename(entry.path), at_seconds: entry.at_seconds, shot_id: entry.shot_id }))
+    }
+  };
 }
 
-async function dataImage(filePath) {
+function frameEvidence(filePath, index, shots) {
+  const match = path.basename(filePath).match(/-at-([0-9]+(?:\.[0-9]+)?)s\.(?:png|jpe?g|webp)$/i);
+  const atSeconds = match ? Number(match[1]) : null;
+  return { path: filePath, source_index: index, at_seconds: atSeconds, shot_id: shotAtSeconds(shots, atSeconds) };
+}
+
+function shotAtSeconds(shots, atSeconds) {
+  if (!Number.isFinite(atSeconds)) return null;
+  for (const [index, shot] of (shots ?? []).entries()) {
+    const start = Number(shot?.start_seconds);
+    const end = Number(shot?.end_seconds);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+    if (atSeconds >= start - .001 && (atSeconds < end - .001 || index === shots.length - 1 && atSeconds <= end + .15)) return shot.id ?? null;
+  }
+  return null;
+}
+
+function selectBalancedFrames(frames, shots, limit) {
+  const maximum = Math.max(1, Math.floor(Number(limit) || 1));
+  if (frames.length <= maximum) return frames;
+  const timed = frames.filter((entry) => Number.isFinite(entry.at_seconds));
+  if (!timed.length) return evenlySelect(frames, maximum);
+  const validShots = (shots ?? []).filter((shot) => Number.isFinite(Number(shot?.start_seconds)) && Number.isFinite(Number(shot?.end_seconds)) && Number(shot.end_seconds) > Number(shot.start_seconds));
+  const selectedShots = validShots.length <= maximum ? validShots : evenlySelect(validShots, maximum);
+  const selected = [];
+  for (const [index, shot] of selectedShots.entries()) {
+    const candidates = timed.filter((entry) => entry.shot_id === shot.id);
+    if (!candidates.length) continue;
+    const target = index === 0 ? Number(shot.start_seconds) : (Number(shot.start_seconds) + Number(shot.end_seconds)) / 2;
+    const closest = [...candidates].sort((left, right) => Math.abs(left.at_seconds - target) - Math.abs(right.at_seconds - target) || left.source_index - right.source_index)[0];
+    if (!selected.includes(closest)) selected.push(closest);
+  }
+  while (selected.length < maximum) {
+    const candidates = timed.filter((entry) => !selected.includes(entry));
+    if (!candidates.length) break;
+    const next = candidates.sort((left, right) => temporalCoverage(right, selected) - temporalCoverage(left, selected) || left.source_index - right.source_index)[0];
+    selected.push(next);
+  }
+  return selected.sort((left, right) => left.source_index - right.source_index).slice(0, maximum);
+}
+
+function temporalCoverage(candidate, selected) {
+  if (!selected.length) return Infinity;
+  return Math.min(...selected.map((entry) => Math.abs(candidate.at_seconds - entry.at_seconds)));
+}
+
+function evenlySelect(values, count) {
+  if (values.length <= count) return [...values];
+  if (count === 1) return [values[0]];
+  return Array.from({ length: count }, (_, index) => values[Math.round(index * (values.length - 1) / (count - 1))]);
+}
+
+async function dataImage(filePath, detail = "low") {
   const extension = path.extname(filePath).toLowerCase();
   const mime = extension === ".png" ? "image/png" : extension === ".webp" ? "image/webp" : "image/jpeg";
-  return { url: `data:${mime};base64,${(await readFile(filePath)).toString("base64")}`, detail: "original" };
+  return { url: `data:${mime};base64,${(await readFile(filePath)).toString("base64")}`, detail };
 }
 
 async function readJson(filePath) {

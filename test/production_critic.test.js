@@ -20,6 +20,7 @@ test("gives an independent GPT-5.6 critic the plan, QA evidence, motion profile,
   assert.equal(request.reasoningEffort, "xhigh");
   assert.equal(request.images.length, 2);
   assert.match(request.images[0].url, /^data:image\/png;base64,/);
+  assert.equal(request.images[0].detail, "low");
   const input = JSON.parse(request.input);
   assert.equal(input.temporal_motion_analysis.family, "rapid-hybrid");
   assert.equal(input.time_aligned_audio_analysis.output.integrated_lufs, -14);
@@ -31,8 +32,38 @@ test("gives an independent GPT-5.6 critic the plan, QA evidence, motion profile,
   assert.equal(input.evidence_index[0].content, "The README proves the workflow.");
   assert.equal(input.claim_support[0].evidence[0].id, "ev-1");
   assert.deepEqual(input.snapshot_order, ["001.png", "002.png"]);
+  assert.equal(input.visual_evidence.mode, "balanced-frames");
+  assert.equal(input.visual_evidence.image_count, 2);
   assert.equal(input.human_review_request, null);
+  assert.equal(result.visual_evidence.reused_verification_snapshots, true);
   assert.match(await readFile(result.markdown, "utf8"), /Reduce presenter occupancy/);
+});
+
+test("reuses compact contact sheets and maps their source frames to scenes", async () => {
+  const workspace = await fixture();
+  const snapshots = path.join(workspace, "production", "qa", "snapshots");
+  await writeFile(path.join(snapshots, "contact-sheet-1.jpg"), "sheet");
+  await writeFile(path.join(snapshots, "frame-00-at-0.0s.png"), "opening");
+  await writeFile(path.join(snapshots, "frame-01-at-7.5s.png"), "second scene");
+  let request;
+  const result = await critiqueProduction(workspace, {}, { client: { runStructured: async (options) => {
+    request = options;
+    return {
+      response_id: "resp_contact_sheet",
+      model: "gpt-5.6-sol",
+      usage: {},
+      value: { schema_version: CRITIQUE_VERSION, verdict: "ship", summary: "The rendered evidence is ready.", findings: [] }
+    };
+  } } });
+  const input = JSON.parse(request.input);
+  assert.equal(request.images.length, 1);
+  assert.equal(request.images[0].detail, "high");
+  assert.deepEqual(input.snapshot_order, ["contact-sheet-1.jpg"]);
+  assert.equal(input.visual_evidence.mode, "contact-sheets");
+  assert.deepEqual(input.visual_evidence.covered_shot_ids, ["shot-1", "shot-2"]);
+  assert.deepEqual(input.visual_evidence.frames.filter((entry) => entry.shot_id).map((entry) => [entry.at_seconds, entry.shot_id]), [[0, "shot-1"], [7.5, "shot-2"]]);
+  assert.equal(result.visual_evidence.image_count, 1);
+  assert.equal(JSON.parse(await readFile(result.critique, "utf8")).visual_evidence.mode, "contact-sheets");
 });
 
 test("turns a human review request into bounded typed repair findings", async () => {
@@ -173,7 +204,7 @@ async function fixture() {
   await mkdir(snapshots, { recursive: true });
   await writeFile(path.join(workspace, "production", "plan.json"), `${JSON.stringify({
     project: { title: "Proof" }, format: { duration_seconds: 10 }, design: { concept: "Evidence" }, narration: { full_text: "Proof." }, claims: [{ text: "The workflow is proven", confidence: "verified", qualifier: null, evidence_ids: ["ev-1"] }], rubric: [],
-    shots: [{ id: "shot-1" }, { id: "shot-2" }]
+    shots: [{ id: "shot-1", start_seconds: 0, end_seconds: 5 }, { id: "shot-2", start_seconds: 5, end_seconds: 10 }]
   })}\n`);
   await writeFile(path.join(workspace, "production", "evidence.json"), `${JSON.stringify({ items: [{ id: "ev-1", kind: "repository-readme", role: "primary", title: "README", content: "The README proves the workflow.", provenance: "README.md", claims_allowed: true }] })}\n`);
   await writeFile(path.join(qa, "verification.json"), `${JSON.stringify({ failed: [], snapshots })}\n`);
