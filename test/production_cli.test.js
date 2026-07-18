@@ -507,6 +507,9 @@ test("keeps critic and repair routes on OpenRouter free under the free policy", 
     }
   });
   assert.equal(received.critic.route, "openrouter:openrouter/free@none");
+  assert.equal(received.critic.selectFreeVision, true);
+  assert.equal(received.critic.freeVisionCandidates, 3);
+  assert.equal(received.critic.freeVisionProbeTimeoutMs, 15_000);
   assert.deepEqual(received.repair.routes, [...selection.routes, "openrouter:openrouter/free@none"]);
   assert.equal(received.repair.provider, "openrouter");
   assert.equal(received.repair.model, "tencent/hy3:free");
@@ -576,7 +579,28 @@ test("routes an independently rerunnable analyzed draft stage", async () => {
   assert.equal(received.options.draftQuality, "draft");
   assert.equal(received.options.references, "/tmp/reference.mp4");
   assert.equal(received.options.criticRoute, "openrouter:openrouter/free@none");
+  assert.equal(received.options.selectFreeVision, false);
   assert.equal(received.options.shotInspectConcurrency, 4);
+});
+
+test("enables discovered vision critique for a free draft without an explicit critic", async () => {
+  let received;
+  await runProductionStage("production-draft", "/tmp/workspace", {
+    "model-policy": "free",
+    "free-vision-model-candidates": "2",
+    "free-vision-model-state": "/tmp/vision-state.json",
+    "refresh-free-vision-models": true
+  }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    renderDraftProduction: async (_workspace, options) => {
+      received = options;
+      return { status: "ready", video: "/tmp/draft.mp4" };
+    }
+  });
+  assert.equal(received.selectFreeVision, true);
+  assert.equal(received.freeVisionCandidates, 2);
+  assert.equal(received.freeVisionStatePath, "/tmp/vision-state.json");
+  assert.equal(received.refreshFreeVisionModels, true);
 });
 
 test("rejects multiple critic routes because an independent verdict must be pinned", async () => {

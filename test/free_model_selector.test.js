@@ -56,6 +56,27 @@ test("selects and visually probes a separate free image critic", async () => {
   assert.equal(state.candidates.find((entry) => entry.id.includes("31b")).last_probe_error, "vision probe did not correctly inspect the supplied image");
 });
 
+test("stops vision probing after the first candidate proves image understanding", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "launchclip-free-vision-first-"));
+  const statePath = path.join(directory, "vision-state.json");
+  const catalog = [
+    model("google/gemma-4-31b-it:free", { input: ["image", "text"] }),
+    model("google/gemma-4-26b-a4b-it:free", { input: ["image", "text"] })
+  ];
+  const fetch = async (url) => jsonResponse(url.endsWith("/models") ? { data: catalog } : { data: [] });
+  const selected = await selectOpenRouterFreeVisionModels({ fetch, apiKey: "test", statePath });
+  const attempts = [];
+  const probed = await probeOpenRouterFreeVisionModels(selected, {
+    createClient: (route) => ({ runStructured: async () => {
+      attempts.push(route);
+      return { value: { left_panel: "blue", right_panel: "orange" } };
+    } })
+  });
+  assert.deepEqual(attempts, ["openrouter:google/gemma-4-31b-it:free@none"]);
+  assert.equal(probed.selected_model, "google/gemma-4-31b-it:free");
+  assert.deepEqual(probed.routes, ["openrouter:google/gemma-4-31b-it:free@none"]);
+});
+
 test("keeps a verified winner sticky without catalog access and reranks on refresh", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "launchclip-free-models-"));
   const statePath = path.join(directory, "state.json");

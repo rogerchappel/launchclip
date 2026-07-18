@@ -126,6 +126,92 @@ test("routes the independent critic through a pinned OpenRouter free model", asy
   assert.equal(result.model, "example/visual-critic:free");
 });
 
+test("selects and records a proven free vision critic before reviewing pixels", async () => {
+  const workspace = await fixture();
+  const statePath = path.join(workspace, "vision-state.json");
+  const ranked = visionSelection(statePath);
+  let selectionOptions;
+  let probeOptions;
+  let route;
+  let request;
+  const result = await critiqueProduction(workspace, {
+    selectFreeVision: true,
+    freeVisionStatePath: statePath,
+    freeVisionCandidates: 2,
+    freeVisionProbeTimeoutMs: 25
+  }, {
+    selectOpenRouterFreeVisionModels: async (options) => {
+      selectionOptions = options;
+      return ranked;
+    },
+    probeOpenRouterFreeVisionModels: async (selection, options) => {
+      assert.equal(selection, ranked);
+      probeOptions = options;
+      return { ...ranked, source: "live-probe", routes: [ranked.routes[0]] };
+    },
+    createClient: (value) => {
+      route = value;
+      return { runStructured: async (options) => {
+        request = options;
+        return {
+          response_id: "resp_selected_vision",
+          model: ranked.selected_model,
+          usage: {},
+          value: { schema_version: CRITIQUE_VERSION, verdict: "ship", summary: "The rendered pixels are ready.", findings: [] }
+        };
+      } };
+    }
+  });
+  assert.deepEqual(selectionOptions, { statePath, topK: 2, refresh: false });
+  assert.deepEqual(probeOptions, { timeoutMs: 25 });
+  assert.equal(route.model, "google/gemma-4-31b-it:free");
+  assert.equal(request.model, "google/gemma-4-31b-it:free");
+  assert.equal(request.promptCacheKey, "launchclip:production-critic:v2");
+  assert.equal(result.free_model_selection.selected_model, "google/gemma-4-31b-it:free");
+  assert.equal(JSON.parse(await readFile(result.critique, "utf8")).free_model_selection.source, "live-probe");
+});
+
+test("rotates to the next proven vision model when the selected critic fails", async () => {
+  const workspace = await fixture();
+  const ranked = visionSelection(path.join(workspace, "vision-state.json"));
+  const rotated = {
+    ...ranked,
+    source: "rotated-after-failure",
+    selected_model: "google/gemma-4-26b-a4b-it:free",
+    routes: ["openrouter:google/gemma-4-26b-a4b-it:free@none"],
+    candidates: [...ranked.candidates].reverse()
+  };
+  const routes = [];
+  const result = await critiqueProduction(workspace, { selectFreeVision: true }, {
+    selectOpenRouterFreeVisionModels: async () => ranked,
+    probeOpenRouterFreeVisionModels: async (selection, options) => {
+      if (options.excludeIds) {
+        assert.equal(selection, rotated);
+        assert.deepEqual(options.excludeIds, ["google/gemma-4-31b-it:free"]);
+        return { ...rotated, source: "live-probe" };
+      }
+      return { ...ranked, source: "live-probe", routes: [ranked.routes[0]] };
+    },
+    recordOpenRouterFreeModelOutcome: async (selection, outcome) => {
+      assert.equal(selection.selected_model, "google/gemma-4-31b-it:free");
+      assert.match(outcome.error.message, /critic endpoint failed/);
+      return rotated;
+    },
+    createClient: (route) => ({ runStructured: async () => {
+      routes.push(route.model);
+      if (route.model.includes("31b")) throw new Error("critic endpoint failed");
+      return {
+        response_id: "resp_fallback_vision",
+        model: route.model,
+        usage: {},
+        value: { schema_version: CRITIQUE_VERSION, verdict: "ship", summary: "The fallback critic reviewed the pixels.", findings: [] }
+      };
+    } })
+  });
+  assert.deepEqual(routes, ["google/gemma-4-31b-it:free", "google/gemma-4-26b-a4b-it:free"]);
+  assert.equal(result.free_model_selection.selected_model, "google/gemma-4-26b-a4b-it:free");
+});
+
 test("compacts raw temporal samples before sending a production critique", async () => {
   const workspace = await fixture();
   const qa = path.join(workspace, "production", "qa");
@@ -216,4 +302,19 @@ async function fixture() {
   await writeFile(path.join(snapshots, "002.png"), "second");
   await writeFile(path.join(snapshots, "001.png"), "first");
   return workspace;
+}
+
+function visionSelection(statePath) {
+  return {
+    source: "ranked",
+    state_path: statePath,
+    selected_model: "google/gemma-4-31b-it:free",
+    verified_free_at: "2026-07-18T00:00:00.000Z",
+    routes: ["openrouter:google/gemma-4-31b-it:free@none", "openrouter:google/gemma-4-26b-a4b-it:free@none"],
+    candidates: [
+      { id: "google/gemma-4-31b-it:free", score: 18.75, coverage: 0 },
+      { id: "google/gemma-4-26b-a4b-it:free", score: 17.5, coverage: 0 }
+    ],
+    warnings: []
+  };
 }
