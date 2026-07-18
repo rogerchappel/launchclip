@@ -363,7 +363,9 @@ function isSupervisableContentVerification(error) {
   return error?.code === "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED"
     && !verification?.infrastructure_failed?.length
     && failed.length > 0
-    && failed.every((name) => name === "inspect" || String(name).startsWith("inspect:"));
+    && failed.every((name) => name === "inspect"
+      || String(name).startsWith("inspect:")
+      || (name === "lint" && Number(verification?.checks?.lint?.strict_warning_count ?? 0) > 0 && !verification?.checks?.lint?.failure_kind));
 }
 
 export async function assertVerificationFresh(workspacePath, verification, options = {}) {
