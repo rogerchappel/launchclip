@@ -507,7 +507,7 @@ test("keeps critic and repair routes on OpenRouter free under the free policy", 
     }
   });
   assert.equal(received.critic.route, "openrouter:openrouter/free@none");
-  assert.deepEqual(received.repair.routes, selection.routes);
+  assert.deepEqual(received.repair.routes, [...selection.routes, "openrouter:openrouter/free@none"]);
   assert.equal(received.repair.provider, "openrouter");
   assert.equal(received.repair.model, "tencent/hy3:free");
   assert.equal(received.repair.reasoning, "none");
