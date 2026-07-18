@@ -543,7 +543,10 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => entry.prompt_cache_key === "launchclip:frame-director:v7"));
   assert.deepEqual(result.frames.map((entry) => entry.usage.total_tokens), [450, 450]);
   assert.ok(result.frames.every((entry) => entry.blueprint.cached === false));
-  assert.match(await readFile(result.frames[0].blueprint.path, "utf8"), /launchclip\.frame-blueprint\.v2/);
+  const blueprintRecord = JSON.parse(await readFile(result.frames[0].blueprint.path, "utf8"));
+  const frameStore = await ProductionJobStore.open(workspace, { create: false });
+  assert.equal(blueprintRecord.blueprint.schema_version, FRAME_BLUEPRINT_VERSION);
+  assert.notEqual(blueprintRecord.input_hash, frameStore.get("frame:shot-1").input_hash);
 });
 
 test("can exhaust LLM routes without writing a deterministic visual fallback", async () => {

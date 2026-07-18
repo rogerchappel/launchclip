@@ -198,6 +198,9 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
     ? buildFrameBlueprintInput({ intake, evidence, plan, shot, index, narrationTiming })
     : buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming });
   const customRouting = options.routes != null || options.provider != null || options.model != null || options.baseUrl != null;
+  const blueprintInputHash = options.sceneBlueprint
+    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BLUEPRINT_SCHEMA, worker: "frame-blueprint.v2" })
+    : null;
   const inputHash = customRouting
     ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, worker: options.sceneBlueprint ? "frame-director.v8" : "frame-director.v5" })
     : semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v4" });
@@ -233,7 +236,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   let errors = [];
   try {
     const blueprint = options.sceneBlueprint
-      ? await resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, routes, adapters, options, inputHash, jobId })
+      ? await resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, routes, adapters, options, inputHash: blueprintInputHash, jobId })
       : null;
     const authorRoutes = blueprint?.route_index > 0
       ? [routes[blueprint.route_index], ...routes.filter((_, routeIndex) => routeIndex !== blueprint.route_index)]
