@@ -421,15 +421,20 @@ function mergeUsage(...items) {
 }
 
 export function sanitizeFrameBundle(bundle, context = {}) {
-  const html = String(bundle?.html ?? "");
-  const transportRepair = repairTemplateTransport(html);
+  const stylesheetRepair = removeExternalStylesheetImports(bundle?.html);
+  const transportRepair = repairTemplateTransport(stylesheetRepair.html);
   const timelineSafeHtml = context.shot?.id ? ensureTimelineRegistration(transportRepair.html, context.shot.id) : transportRepair.html;
   let removed = 0;
   const eventSafeHtml = timelineSafeHtml.replace(/<(?:[^"'<>]|"[^"]*"|'[^']*')+>/g, (tag) => tag.replace(/\son[a-z][\w:-]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, () => {
     removed += 1;
     return "";
   }));
-  const repairs = transportRepair.repaired ? [{ kind: "wrap-live-frame-in-template" }] : [];
+  const repairs = [];
+  if (stylesheetRepair.removed) repairs.push({ kind: "remove-external-stylesheet-imports", count: stylesheetRepair.removed });
+  if (transportRepair.wrapped) repairs.push({ kind: "wrap-live-frame-in-template" });
+  if (transportRepair.movedStyles || transportRepair.movedScripts) {
+    repairs.push({ kind: "move-live-blocks-into-template", styles: transportRepair.movedStyles, scripts: transportRepair.movedScripts });
+  }
   if (removed) repairs.push({ kind: "remove-event-handler-attributes", count: removed });
   const normalizedBundle = { ...bundle };
   if (normalizedBundle.type != null && normalizedBundle.type === normalizedBundle.schema_version) {
@@ -463,17 +468,60 @@ export function sanitizeFrameBundle(bundle, context = {}) {
   };
 }
 
+function removeExternalStylesheetImports(html) {
+  let removed = 0;
+  const source = String(html ?? "")
+    .replace(/@import\s+(?:url\(\s*(?:"[^"]*"|'[^']*'|[^)]*)\s*\)|"[^"]*"|'[^']*')[^;]*;/gi, () => {
+      removed += 1;
+      return "";
+    })
+    .replace(/<link\b(?=[^>]*\brel\s*=\s*(?:["'][^"']*\bstylesheet\b[^"']*["']|stylesheet\b))[^>]*>/gi, () => {
+      removed += 1;
+      return "";
+    });
+  return { html: source, removed };
+}
+
 function repairTemplateTransport(html) {
   const source = String(html ?? "");
   const templates = [...source.matchAll(/<template\b[^>]*>([\s\S]*?)<\/template>/gi)];
-  if (templates.length > 1 || (templates.length === 1 && templates[0][1].trim())) return { html: source, repaired: false };
+  if (templates.length > 1) return { html: source, wrapped: false, movedStyles: 0, movedScripts: 0 };
+  if (templates.length === 1 && templates[0][1].trim()) {
+    const template = templates[0];
+    const before = source.slice(0, template.index);
+    const after = source.slice(template.index + template[0].length);
+    const beforeBlocks = extractLiveBlocks(before);
+    const afterBlocks = extractLiveBlocks(after);
+    const styles = [...beforeBlocks.styles, ...afterBlocks.styles];
+    const scripts = [...beforeBlocks.scripts, ...afterBlocks.scripts];
+    if (!styles.length && !scripts.length) return { html: source, wrapped: false, movedStyles: 0, movedScripts: 0 };
+    const opening = template[0].match(/^<template\b[^>]*>/i)?.[0] ?? "<template>";
+    const rebuilt = `${opening}${styles.join("")}${template[1]}${scripts.join("")}</template>`;
+    return {
+      html: `${beforeBlocks.html}${rebuilt}${afterBlocks.html}`,
+      wrapped: false,
+      movedStyles: styles.length,
+      movedScripts: scripts.length
+    };
+  }
   const live = source
     .replace(/<!doctype[^>]*>/gi, "")
     .replace(/<template\b[^>]*>\s*<\/template>/gi, "")
     .replace(/<\/?(?:html|head|body)\b[^>]*>/gi, "")
     .trim();
-  if (!/<[^>]+\bid=["']root["']/i.test(live) || !/<style\b/i.test(live) || !/<script\b/i.test(live)) return { html: source, repaired: false };
-  return { html: `<template>${live}</template>`, repaired: true };
+  if (!/<[^>]+\bid=["']root["']/i.test(live) || !/<style\b/i.test(live) || !/<script\b/i.test(live)) return { html: source, wrapped: false, movedStyles: 0, movedScripts: 0 };
+  return { html: `<template>${live}</template>`, wrapped: true, movedStyles: 0, movedScripts: 0 };
+}
+
+function extractLiveBlocks(source) {
+  const styles = [];
+  const scripts = [];
+  const html = String(source ?? "").replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, (block, tag) => {
+    if (String(tag).toLowerCase() === "style") styles.push(block);
+    else scripts.push(block);
+    return "";
+  });
+  return { html, styles, scripts };
 }
 
 function repairFrameRootContract(html, context = {}) {
