@@ -359,7 +359,7 @@ async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, 
         background: options.background !== false,
         maxOutputTokens: Number(options.blueprintMaxOutputTokens ?? 3_000),
         temperature: Number(routeAttempt === 1 ? options.blueprintTemperature ?? .45 : options.blueprintRepairTemperature ?? .15),
-        promptCacheKey: "launchclip:frame-blueprint:v1",
+        promptCacheKey: "launchclip:frame-blueprint:v2",
         metadata: { job_id: jobId, shot_id: shot.id, stage: "blueprint", attempt: routeAttempt, route: routeIndex + 1 },
         onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
       };

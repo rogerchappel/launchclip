@@ -1,6 +1,6 @@
 import { SHOT_ID_PATTERN } from "./production_contracts.js";
 
-export const FRAME_BLUEPRINT_VERSION = "launchclip.frame-blueprint.v1";
+export const FRAME_BLUEPRINT_VERSION = "launchclip.frame-blueprint.v2";
 
 const string = { type: "string" };
 const shotId = { type: "string", pattern: SHOT_ID_PATTERN };
@@ -60,6 +60,27 @@ export const FRAME_BLUEPRINT_SCHEMA = strictObject({
       action: { type: "string", minLength: 1, maxLength: 240 }
     })
   },
+  supporting_motion_beats: {
+    type: "array",
+    minItems: 1,
+    maxItems: 6,
+    description: "One LLM-directed micro-motion beat for every supplied supporting-motion window. These beats animate planned objects without inventing timeline events or claims.",
+    items: strictObject({
+      window_id: { type: "string", pattern: "^[a-z][a-z0-9-]{0,39}$", description: "An exact id from supporting_motion_contract.windows." },
+      object_id: { ...shotId, description: "One exact object id from shot.visual.objects." },
+      selector: { type: "string", pattern: "^#[a-z0-9][a-z0-9_-]{0,127}$" },
+      at_seconds: { type: "number", minimum: 0 },
+      duration_seconds: { type: "number", minimum: 0.05, maximum: 3.5, description: "Must not exceed the selected window's maximum_duration_seconds." },
+      intent: { type: "string", enum: ["entrance", "semantic-reveal", "emphasis", "progression", "ambient", "exit"] },
+      properties: {
+        type: "array",
+        minItems: 1,
+        maxItems: 2,
+        items: { type: "string", enum: ["opacity", "x", "y", "scale", "rotation", "color", "backgroundColor", "borderRadius"] }
+      },
+      action: { type: "string", minLength: 1, maxLength: 240, description: "A concrete seek-safe GSAP action with a perceptible visual change." }
+    })
+  },
   visible_copy: {
     type: "array",
     items: string,
@@ -84,12 +105,16 @@ This blueprint is a binding handoff to a second LLM that will write the HTML and
 - Reserve deliberate percentage-based zones across the full canvas before placing elements. Keep essential regions non-overlapping and inside 0-100% bounds.
 - Map every planned shot.visual.objects id exactly once to a unique DOM selector beginning #shot_id-. Do not invent or omit semantic object ids.
 - Map every planned shot.visual.events id exactly once, using one of its target object ids and the selector assigned to that object. Preserve the planned time.
+- Map every supplied supporting_motion_contract window exactly once in supporting_motion_beats. Keep its time inside the window and its duration at or below maximum_duration_seconds. These are additional visual micro-actions on planned objects, not new claims, SFX cues, or shot.visual.events.
+- Choose the target, intent, allowed properties, duration, and concrete action. Distribute attention across the composition, target semantic objects for at least half the supporting beats, and make the change perceptible rather than decorative sub-pixel drift.
+- Use 2-4 coherent motion patterns across the scene, such as transform entrances, staggered reveals, path/progress development, restrained emphasis, or finite ambient motion. Preserve the authored static end state and never tween layout properties.
 - Use concrete visual forms that express the declared diagram, comparison, process, timeline, data view, or spatial metaphor. Avoid a sparse headline floating over decoration and avoid generic card grids unless the plan explicitly calls for them.
 - Plan phone-readable typography and a meaningful occupied-area target. The fullest frame should feel composed, not empty.
 - Preserve exact supplied on-screen copy and evidence. Do not add claims.
 - Keep the concept original while obeying the supplied style DNA, continuity, and transition direction.`;
 
 export function buildFrameBlueprintInput({ intake, evidence, plan, shot, index, narrationTiming = null, prior = null, errors = [] }) {
+  const anchors = narrationAnchors(narrationTiming, shot);
   return JSON.stringify({
     global_design: {
       concept: plan.design.concept,
@@ -103,9 +128,10 @@ export function buildFrameBlueprintInput({ intake, evidence, plan, shot, index, 
     neighbors: compactNeighbors(plan.shots, index),
     evidence: compactEvidence(evidence, shot, 1_200),
     resources: compactResources(intake, shot),
-    narration_anchors: narrationAnchors(narrationTiming, shot),
+    narration_anchors: anchors,
     required_object_ids: (shot.visual?.objects ?? []).map((entry) => entry.id),
     required_events: (shot.visual?.events ?? []).map((entry) => ({ id: entry.id, target_ids: entry.target_ids, at_seconds: entry.at_seconds })),
+    supporting_motion_contract: supportingMotionContract(shot, anchors),
     required_selector_prefix: `#${shot.id}-`,
     prior_blueprint: prior,
     validation_errors_to_repair: errors
@@ -177,6 +203,35 @@ export function validateFrameBlueprint(blueprint, shot) {
   }
   for (const id of plannedEvents.keys()) if (!seenEvents.has(id)) errors.push(`motion_beats must include planned event: ${id}`);
 
+  const supportingContract = supportingMotionContract(shot);
+  const supportingWindows = new Map(supportingContract.windows.map((entry) => [entry.id, entry]));
+  const supportingBeats = Array.isArray(blueprint?.supporting_motion_beats) ? blueprint.supporting_motion_beats : [];
+  const seenWindows = new Set();
+  let semanticSupportingBeats = 0;
+  for (const [index, beat] of supportingBeats.entries()) {
+    const window = supportingWindows.get(beat?.window_id);
+    if (!window) errors.push(`supporting_motion_beats[${index}].window_id is not required: ${beat?.window_id}`);
+    if (seenWindows.has(beat?.window_id)) errors.push(`supporting_motion_beats[${index}].window_id must be unique: ${beat?.window_id}`);
+    seenWindows.add(beat?.window_id);
+    const object = plannedObjects.get(beat?.object_id);
+    if (!object) errors.push(`supporting_motion_beats[${index}].object_id is not planned: ${beat?.object_id}`);
+    if (object && object.kind !== "decoration") semanticSupportingBeats += 1;
+    const element = elementByObject.get(beat?.object_id);
+    if (element && beat?.selector !== element.selector) errors.push(`supporting_motion_beats[${index}].selector must match ${beat?.object_id}`);
+    const atSeconds = Number(beat?.at_seconds);
+    const beatDuration = Number(beat?.duration_seconds);
+    if (window && (!Number.isFinite(atSeconds) || atSeconds < window.start_seconds - .05 || atSeconds > window.end_seconds + .05)) {
+      errors.push(`supporting_motion_beats[${index}].at_seconds must be inside ${window.id} (${window.start_seconds}-${window.end_seconds})`);
+    }
+    if (!Number.isFinite(beatDuration) || beatDuration < .05 || beatDuration > 3.5 || (window && beatDuration > window.maximum_duration_seconds + .05) || atSeconds + beatDuration > duration + .05) {
+      errors.push(`supporting_motion_beats[${index}].duration_seconds must finish inside the shot`);
+    }
+  }
+  for (const id of supportingWindows.keys()) if (!seenWindows.has(id)) errors.push(`supporting_motion_beats must include window: ${id}`);
+  if (supportingBeats.length && semanticSupportingBeats < Math.ceil(supportingContract.minimum_semantic_beats)) {
+    errors.push(`supporting_motion_beats must target semantic objects at least ${supportingContract.minimum_semantic_beats} times`);
+  }
+
   for (const copy of shot?.on_screen_text ?? []) {
     if (!(blueprint?.visible_copy ?? []).includes(copy)) errors.push(`visible_copy must preserve: ${copy}`);
   }
@@ -185,6 +240,42 @@ export function validateFrameBlueprint(blueprint, shot) {
   const semanticObjectCount = [...plannedObjects.values()].filter((entry) => entry.kind !== "decoration").length;
   if (Number(blueprint?.density?.minimum_semantic_objects) < semanticObjectCount) errors.push(`density.minimum_semantic_objects must be at least ${semanticObjectCount}`);
   return { ok: errors.length === 0, errors };
+}
+
+function supportingMotionContract(shot, anchors = []) {
+  const duration = Math.max(.2, Number(shot?.end_seconds) - Number(shot?.start_seconds));
+  const plannedEventCount = (shot?.visual?.events ?? []).length;
+  const minimumTotalBeats = Math.max(duration >= 2 ? 3 : 2, Math.ceil(duration / 3.75));
+  const beatCount = Math.max(1, Math.min(6, minimumTotalBeats - plannedEventCount));
+  const windows = Array.from({ length: beatCount }, (_, index) => {
+    const segmentStart = duration * index / beatCount;
+    const segmentEnd = duration * (index + 1) / beatCount;
+    const inset = Math.min(.25, Math.max(.05, (segmentEnd - segmentStart) * .08));
+    const startSeconds = index === 0 ? Math.min(.15, duration * .1) : segmentStart + inset;
+    const completionReserve = Math.min(.8, Math.max(.05, duration * .2));
+    const endSeconds = index === 0
+      ? Math.max(startSeconds, Math.min(.8, segmentEnd - inset, duration - completionReserve))
+      : Math.max(startSeconds, Math.min(duration - completionReserve, segmentEnd - inset));
+    const overlappingAnchors = anchors.filter((anchor) => Number(anchor.end_seconds) >= startSeconds && Number(anchor.start_seconds) <= endSeconds);
+    return {
+      id: index === 0 ? "opening" : index === beatCount - 1 ? "closing" : `development-${index}`,
+      start_seconds: rounded(startSeconds),
+      end_seconds: rounded(endSeconds),
+      maximum_duration_seconds: rounded(Math.max(.05, Math.min(3.5, duration - endSeconds))),
+      intent: index === 0 ? "Create an immediate visual hook" : index === beatCount - 1 ? "Sustain attention and prepare the handoff" : "Develop the scene while narration advances",
+      ...(overlappingAnchors.length ? { narration_cue: compactText(overlappingAnchors.map((entry) => entry.text).join(" "), 120) } : {})
+    };
+  });
+  return {
+    required_supporting_beats: beatCount,
+    minimum_semantic_beats: Math.ceil(beatCount / 2),
+    rule: "Return exactly one supporting_motion_beat per window. Planned motion_beats remain separate timeline/SFX events.",
+    windows
+  };
+}
+
+function rounded(value) {
+  return Number(Number(value).toFixed(2));
 }
 
 function compactProject(project = {}) {
