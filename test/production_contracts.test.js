@@ -170,6 +170,21 @@ test("normalizes lossless planner bookkeeping without another model call", () =>
   assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).ok, true);
 });
 
+test("maps descriptive typography directions to renderable family names", () => {
+  const plan = samplePlan();
+  plan.design.style_dna.typography = {
+    display: "editorial serif blunt weight for headlines",
+    body: "uppercase monospaced with tracking for system labels",
+    metadata: "tiny mono status top: LOCAL MODE"
+  };
+
+  const normalized = normalizeProductionPlanTiming(plan);
+
+  assert.deepEqual(normalized.design.style_dna.typography, { display: "Georgia", body: "Courier New", metadata: "Courier New" });
+  assert.equal(plan.design.style_dna.typography.display, "editorial serif blunt weight for headlines", "does not mutate the model response");
+  assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).ok, true);
+});
+
 test("frame bundles request root media without owning media tags", () => {
   const bundle = sampleFrameBundle();
   assert.deepEqual(validateFrameBundle(bundle, { shotId: "shot-1", evidenceIds: ["ev-1"], resourceIds: ["res-1"] }), { ok: true, errors: [] });

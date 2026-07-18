@@ -414,6 +414,11 @@ export function validateProductionPlan(plan, context = {}) {
 
 export function normalizeProductionPlanTiming(plan) {
   const normalized = structuredClone(plan);
+  if (normalized?.design?.style_dna?.typography) {
+    normalized.design.style_dna.typography = Object.fromEntries(
+      Object.entries(normalized.design.style_dna.typography).map(([role, family]) => [role, normalizeTypographyFamily(family, role)])
+    );
+  }
   const targetWpm = Number(normalized?.narration?.target_wpm);
   if (normalized?.narration && !(targetWpm >= 60 && targetWpm <= 260)) {
     const words = String(normalized.narration.full_text ?? "").trim().split(/\s+/).filter(Boolean).length;
@@ -449,6 +454,17 @@ function normalizeObjectLayers(objects) {
   const focal = objects.find((object) => object !== backdrop && !["decoration", "container"].includes(object.kind)) ?? objects[1];
   backdrop.layer = "background";
   focal.layer = focal.kind === "text" ? "foreground" : "midground";
+}
+
+function normalizeTypographyFamily(value, role) {
+  const planned = String(value ?? "").trim();
+  const namedWithWeight = planned.match(/^(.+?)\s+(?:[1-9]00(?:[\/\u2013-][1-9]00)?|thin|extra[- ]?light|light|regular|medium|semi[- ]?bold|bold|extra[- ]?bold|black)(?=\s|,|$)/i);
+  if (namedWithWeight) return namedWithWeight[1].replace(/^["']|["']$/g, "").trim();
+  const descriptive = planned.split(/\s+/).length > 3 || /\b(?:headline|labels?|status|tracking|weight|figures|readouts?|top:|bottom|for)\b/i.test(planned);
+  if (!descriptive) return planned;
+  if (/\b(?:mono|monospaced|slab|tabular|code)\b/i.test(planned)) return "Courier New";
+  if (/\b(?:serif|editorial)\b/i.test(planned)) return "Georgia";
+  return role === "metadata" ? "Courier New" : "Arial";
 }
 
 function normalizeContinuityHandoffs(shots) {
