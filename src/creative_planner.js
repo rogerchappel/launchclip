@@ -293,10 +293,24 @@ async function planningRuntime(intake, options, adapters) {
         try {
           return await client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
         } catch (error) {
+          if (isMalformedStructuredResponse(error)) {
+            try {
+              return await client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
+            } catch (retryError) {
+              error = retryError;
+            }
+          }
           await rotate(error);
           try {
             return await client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
           } catch (fallbackError) {
+            if (isMalformedStructuredResponse(fallbackError)) {
+              try {
+                return await client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
+              } catch (retryError) {
+                fallbackError = retryError;
+              }
+            }
             await recordFailure(fallbackError);
             throw fallbackError;
           }
@@ -310,6 +324,10 @@ async function planningRuntime(intake, options, adapters) {
     selection: () => selection,
     rotate
   };
+}
+
+function isMalformedStructuredResponse(error) {
+  return /structured output (?:was not valid JSON|text)|contained no structured output|Unexpected end of JSON|Expected ',' or '}'/i.test(String(error?.message ?? error));
 }
 
 async function selectFreePlannerModels(options, adapters) {
