@@ -135,6 +135,24 @@ test("canonicalizes model event ids and preserves their SFX bindings without a p
   assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).ok, true);
 });
 
+test("resolves punctuation aliases and clear plural groups in event targets", () => {
+  const plan = samplePlan();
+  const shot = plan.shots[0];
+  const template = shot.visual.objects[1];
+  shot.visual.objects.push(
+    { ...template, id: "cart-3-9" },
+    { ...template, id: "s5-bar85" },
+    { ...template, id: "s5-bar80" }
+  );
+  shot.visual.events[0].target_ids = ["cart-3.9", "s5-bars"];
+
+  const normalized = normalizeProductionPlanTiming(plan);
+
+  assert.deepEqual(normalized.shots[0].visual.events[0].target_ids, ["cart-3-9", "s5-bar85", "s5-bar80"]);
+  assert.deepEqual(plan.shots[0].visual.events[0].target_ids, ["cart-3.9", "s5-bars"], "does not mutate the model response");
+  assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).errors.some((error) => /targets unknown object/.test(error)), false);
+});
+
 test("normalizes lossless planner bookkeeping without another model call", () => {
   const plan = samplePlan();
   plan.narration.target_wpm = 0;

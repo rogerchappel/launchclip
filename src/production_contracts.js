@@ -422,6 +422,7 @@ export function normalizeProductionPlanTiming(plan) {
   }
   for (const shot of normalized?.shots ?? []) {
     normalizeShotEventIds(shot);
+    normalizeEventTargetIds(shot);
     const start = Number(shot.start_seconds);
     const end = Number(shot.end_seconds);
     const duration = end - start;
@@ -484,6 +485,23 @@ function normalizeShotEventIds(shot) {
   for (const cue of shot.sfx ?? []) {
     const replacement = replacements.get(String(cue?.event_id ?? ""));
     if (replacement) cue.event_id = replacement;
+  }
+}
+
+function normalizeEventTargetIds(shot) {
+  const objectIds = (shot?.visual?.objects ?? []).map((object) => object.id);
+  const known = new Set(objectIds);
+  const canonical = (value) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  for (const event of shot?.visual?.events ?? []) {
+    event.target_ids = [...new Set((event.target_ids ?? []).flatMap((targetId) => {
+      if (known.has(targetId)) return [targetId];
+      const targetKey = canonical(targetId);
+      const exact = objectIds.filter((objectId) => canonical(objectId) === targetKey);
+      if (exact.length === 1) return exact;
+      const groupStem = targetKey.endsWith("s") ? targetKey.slice(0, -1) : targetKey;
+      const group = objectIds.filter((objectId) => canonical(objectId).startsWith(groupStem));
+      return group.length >= 2 ? group : [targetId];
+    }))];
   }
 }
 
