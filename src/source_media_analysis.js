@@ -3,7 +3,8 @@ import { execFile } from "node:child_process";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { createStructuredClient } from "./model_provider.js";
+import { probeOpenRouterFreeVisionModels, recordOpenRouterFreeModelOutcome, selectOpenRouterFreeVisionModels } from "./free_model_selector.js";
+import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { ElevenLabsMediaProvider } from "./production_media.js";
 import { PRODUCTION_PATHS } from "./production_contracts.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
@@ -55,7 +56,7 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
       currentEvidence.items = [...currentEvidence.items.filter((entry) => !derivedIds.has(entry.id)), ...derived.items];
       await writeAtomic(evidencePath, `${JSON.stringify(currentEvidence, null, 2)}\n`);
       const report = await readJson(path.join(workspace, "production", "source-media", "analysis.json"));
-      return { stage: "source-media-analysis", status: "ready", workspace, evidence: evidencePath, report: path.join(workspace, "production", "source-media", "analysis.json"), reference_videos: (report.staged_references ?? []).map((entry) => entry.local_path), resources: report.summary?.resources ?? report.analyses.length, analyses: report.analyses.length, transcripts: report.summary?.transcripts ?? 0, cached: true };
+      return { stage: "source-media-analysis", status: "ready", workspace, evidence: evidencePath, report: path.join(workspace, "production", "source-media", "analysis.json"), reference_videos: (report.staged_references ?? []).map((entry) => entry.local_path), resources: report.summary?.resources ?? report.analyses.length, analyses: report.analyses.length, transcripts: report.summary?.transcripts ?? 0, cached: true, ...(report.free_model_selection ? { free_model_selection: report.free_model_selection } : {}) };
     }
     await store.markStaleFrom([jobId]);
   } else if (existing && existing.input_hash !== inputHash) await store.markStaleFrom([jobId]);
@@ -84,14 +85,17 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
   const needsTranscript = intake.policies?.supplied_voiceover_is_authoritative && !evidence.items.some((entry) => entry.kind === "voiceover-transcript");
   const transcriber = adapters.transcriber ?? (process.env.ELEVENLABS_API_KEY ? new ElevenLabsMediaProvider() : null);
   if (needsTranscript && !transcriber) throw new Error("Supplied voiceover requires --transcript or ELEVENLABS_API_KEY for Scribe transcription");
-  const client = adapters.client ?? (resources.some((entry) => ["video", "image"].includes(entry.type))
-    ? (adapters.createClient ?? createStructuredClient)({
-        provider: intake.model?.provider ?? "openai",
-        model: intake.model?.id ?? "gpt-5.6",
-        reasoning: options.reasoning ?? intake.model?.reasoning_effort ?? "high",
-        supportsImages: true
-      })
-    : null);
+  let freeVisionSelection = !adapters.client && usesDiscoveredFreeVision(intake, options)
+    ? await selectFreeVisionAnalyst(options, adapters)
+    : null;
+  let route = parseModelRoute(freeVisionSelection?.routes?.[0], {
+    provider: intake.model?.provider ?? "openai",
+    model: intake.model?.id ?? "gpt-5.6",
+    reasoning: options.reasoning ?? intake.model?.reasoning_effort ?? "high",
+    supportsImages: true
+  });
+  const createClient = adapters.createClient ?? createStructuredClient;
+  let client = adapters.client ?? (resources.some((entry) => ["video", "image"].includes(entry.type)) ? createClient(route) : null);
   const newItems = [];
   const analyses = [];
 
@@ -121,9 +125,9 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
       ? await makeContactSheets(resource, mediaDir, { ...options, durationSeconds: duration }, adapters)
       : { sheets: [{ kind: "image", path: await normalizeVisualImage(resource, mediaDir, adapters) }], temporal_profile: null };
     const visualPath = visual.sheets[0].path;
-    const result = await client.runStructured({
-      model: intake.model?.id ?? "gpt-5.6",
-      reasoningEffort: options.reasoning ?? intake.model?.reasoning_effort ?? "high",
+    const request = {
+      model: route.model,
+      reasoningEffort: route.reasoning,
       reasoningContext: "current_turn",
       instructions: ANALYST_INSTRUCTIONS,
       input: JSON.stringify({
@@ -142,7 +146,24 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
       maxOutputTokens: Number(options.maxOutputTokens ?? 12_000),
       promptCacheKey: "launchclip:source-media-analysis:v1",
       metadata: { resource_id: resource.id, role: resource.role }
-    });
+    };
+    let result;
+    try {
+      result = await client.runStructured(request);
+    } catch (error) {
+      if (!freeVisionSelection || adapters.client) throw error;
+      const failedModel = freeVisionSelection.selected_model;
+      const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
+      const probeModels = adapters.probeOpenRouterFreeVisionModels ?? probeOpenRouterFreeVisionModels;
+      const rotated = await recordOutcome(freeVisionSelection, { error });
+      freeVisionSelection = await probeModels(rotated, {
+        timeoutMs: Number(options.freeVisionProbeTimeoutMs ?? 15_000),
+        excludeIds: [failedModel]
+      });
+      route = parseModelRoute(freeVisionSelection.routes[0]);
+      client = createClient(route);
+      result = await client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
+    }
     if (result.value.resource_id !== resource.id) throw new Error(`Media analysis resource_id must be ${resource.id}`);
     for (const segment of result.value.segments) {
       if (!(segment.end_seconds > segment.start_seconds)) throw new Error(`Media analysis segment must have end > start for ${resource.id}`);
@@ -167,15 +188,52 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
   await writeAtomic(derivedEvidencePath, `${JSON.stringify({ schema_version: "launchclip.source-media-evidence.v1", items: newItems }, null, 2)}\n`);
   const reportPath = path.join(mediaDir, "analysis.json");
   const transcriptCount = newItems.filter((entry) => /transcript$/.test(entry.kind)).length;
-  await writeAtomic(reportPath, `${JSON.stringify({ schema_version: "launchclip.source-media-analysis.v1", analyses, staged_references: stagedReferences, summary: { resources: resources.length, analyses: analyses.length, transcripts: transcriptCount } }, null, 2)}\n`);
+  const freeVisionReceipt = freeVisionSelection ? freeVisionSelectionSummary(freeVisionSelection) : null;
+  await writeAtomic(reportPath, `${JSON.stringify({ schema_version: "launchclip.source-media-analysis.v1", analyses, staged_references: stagedReferences, summary: { resources: resources.length, analyses: analyses.length, transcripts: transcriptCount }, ...(freeVisionReceipt ? { free_model_selection: freeVisionReceipt } : {}) }, null, 2)}\n`);
   const candidates = [derivedEvidencePath, reportPath, ...stagedReferences.map((entry) => entry.local_path), ...newItems.flatMap((entry) => entry.metadata.filter((item) => item.key === "words_path").map((item) => item.value))];
   const outputs = await Promise.all([...new Set(candidates)].map((filePath) => describeJobOutput(workspace, filePath)));
   await store.markSucceeded(jobId, outputs);
-  return { stage: "source-media-analysis", status: "ready", workspace, evidence: evidencePath, report: reportPath, reference_videos: stagedReferences.map((entry) => entry.local_path), resources: resources.length, analyses: analyses.length, transcripts: transcriptCount, cached: false };
+  return { stage: "source-media-analysis", status: "ready", workspace, evidence: evidencePath, report: reportPath, reference_videos: stagedReferences.map((entry) => entry.local_path), resources: resources.length, analyses: analyses.length, transcripts: transcriptCount, cached: false, ...(freeVisionReceipt ? { free_model_selection: freeVisionReceipt } : {}) };
   } catch (error) {
     await store.markFailed(jobId, error);
     throw error;
   }
+}
+
+function usesDiscoveredFreeVision(intake, options) {
+  return options.selectFreeVision !== false
+    && intake.model?.provider === "openrouter"
+    && intake.model?.id === "openrouter/free";
+}
+
+async function selectFreeVisionAnalyst(options, adapters) {
+  const selectModels = adapters.selectOpenRouterFreeVisionModels ?? selectOpenRouterFreeVisionModels;
+  const probeModels = adapters.probeOpenRouterFreeVisionModels ?? probeOpenRouterFreeVisionModels;
+  const selectionOptions = {
+    statePath: options.freeVisionStatePath,
+    topK: options.freeVisionCandidates ?? 3,
+    refresh: Boolean(options.refreshFreeVisionModels)
+  };
+  let selection = await selectModels(selectionOptions);
+  const probeOptions = { timeoutMs: Number(options.freeVisionProbeTimeoutMs ?? 15_000) };
+  try {
+    return await probeModels(selection, probeOptions);
+  } catch (error) {
+    if (selectionOptions.refresh) throw error;
+    selection = await selectModels({ ...selectionOptions, refresh: true });
+    return probeModels(selection, probeOptions);
+  }
+}
+
+function freeVisionSelectionSummary(selection) {
+  return {
+    source: selection.source,
+    state_path: selection.state_path,
+    selected_model: selection.selected_model,
+    verified_free_at: selection.verified_free_at,
+    candidates: (selection.candidates ?? []).map((candidate) => ({ id: candidate.id, score: candidate.score, coverage: candidate.coverage })),
+    warnings: [...(selection.warnings ?? [])]
+  };
 }
 
 async function stageVideoReference(resource, mediaDir, run) {

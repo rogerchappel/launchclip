@@ -43,14 +43,51 @@ test("creates the visual-analysis client from the intake provider route", async 
   intake.model = { provider: "openrouter", id: "openrouter/free", reasoning_effort: "none" };
   await writeFile(intakePath, `${JSON.stringify(intake, null, 2)}\n`);
   let route;
-  await analyzeSourceMedia(workspace, {}, {
+  const selected = visionSelection(path.join(workspace, "vision-state.json"));
+  const result = await analyzeSourceMedia(workspace, {}, {
+    selectOpenRouterFreeVisionModels: async () => selected,
+    probeOpenRouterFreeVisionModels: async () => ({ ...selected, source: "live-probe", routes: [selected.routes[0]] }),
     createClient: (received) => {
       route = received;
       return { runStructured: async () => ({ response_id: "free-media", model: "free-vision", value: { resource_id: "take", summary: "Visible product", visible_text: [], narrative_opportunities: [], segments: [], quality_warnings: [] } }) };
     },
     contactSheet: async (_source, output) => writeFile(output, "contact-sheet")
   });
-  assert.deepEqual(route, { provider: "openrouter", model: "openrouter/free", reasoning: "none", supportsImages: true });
+  assert.equal(route.provider, "openrouter");
+  assert.equal(route.model, "google/gemma-4-31b-it:free");
+  assert.equal(route.reasoning, "none");
+  assert.equal(result.free_model_selection.selected_model, "google/gemma-4-31b-it:free");
+});
+
+test("rotates visual source analysis when the selected free vision model fails", async () => {
+  const workspace = await fixture({ role: "supporting", authoritative: false });
+  const intakePath = path.join(workspace, "production", "intake.json");
+  const intake = JSON.parse(await readFile(intakePath, "utf8"));
+  intake.model = { provider: "openrouter", id: "openrouter/free", reasoning_effort: "none" };
+  await writeFile(intakePath, `${JSON.stringify(intake, null, 2)}\n`);
+  const selected = visionSelection(path.join(workspace, "vision-state.json"));
+  const fallback = {
+    ...selected,
+    selected_model: "google/gemma-4-26b-a4b-it:free",
+    routes: ["openrouter:google/gemma-4-26b-a4b-it:free@none"]
+  };
+  const routes = [];
+  const result = await analyzeSourceMedia(workspace, {}, {
+    selectOpenRouterFreeVisionModels: async () => selected,
+    probeOpenRouterFreeVisionModels: async (_selection, options) => options.excludeIds ? fallback : { ...selected, routes: [selected.routes[0]] },
+    recordOpenRouterFreeModelOutcome: async (_selection, outcome) => {
+      assert.match(outcome.error.message, /vision endpoint failed/);
+      return fallback;
+    },
+    createClient: (route) => ({ runStructured: async () => {
+      routes.push(route.model);
+      if (route.model.includes("31b")) throw new Error("vision endpoint failed");
+      return { response_id: "free-media-fallback", model: route.model, value: { resource_id: "take", summary: "Visible product", visible_text: [], narrative_opportunities: [], segments: [], quality_warnings: [] } };
+    } }),
+    contactSheet: async (_source, output) => writeFile(output, "contact-sheet")
+  });
+  assert.deepEqual(routes, ["google/gemma-4-31b-it:free", "google/gemma-4-26b-a4b-it:free"]);
+  assert.equal(result.free_model_selection.selected_model, "google/gemma-4-26b-a4b-it:free");
 });
 
 test("gives the visual analyst real hook, cut, and motion timing instead of placeholder seconds", async () => {
@@ -141,6 +178,21 @@ test("stages a remote YouTube reference for visual and transcript analysis", asy
   assert.equal(transcript.claims_allowed, false);
   assert.equal(transcript.metadata.find((entry) => entry.key === "word_count").value, "2");
 });
+
+function visionSelection(statePath) {
+  return {
+    source: "ranked",
+    state_path: statePath,
+    selected_model: "google/gemma-4-31b-it:free",
+    verified_free_at: "2026-07-18T00:00:00.000Z",
+    routes: ["openrouter:google/gemma-4-31b-it:free@none", "openrouter:google/gemma-4-26b-a4b-it:free@none"],
+    candidates: [
+      { id: "google/gemma-4-31b-it:free", score: 18.75, coverage: 0 },
+      { id: "google/gemma-4-26b-a4b-it:free", score: 17.5, coverage: 0 }
+    ],
+    warnings: []
+  };
+}
 
 async function fixture(options = {}) {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-source-media-"));
