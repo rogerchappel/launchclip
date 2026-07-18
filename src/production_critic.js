@@ -106,7 +106,7 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
       result = await runCriticRequest(route, request, adapters);
     }
   }
-  const critique = applyVisualNoveltyFinding(normalizeCritiqueTiming(result.value, plan.shots), visualFingerprint, plan.shots.map((shot) => shot.id));
+  const critique = applyVisualNoveltyFinding(normalizeCritiqueTiming(normalizeCritiqueShape(result.value), plan.shots), visualFingerprint, plan.shots.map((shot) => shot.id));
   const validation = validateCritique(critique, plan.shots.map((shot) => shot.id));
   if (!validation.ok) throw new Error(`Production critique failed validation: ${validation.errors.join("; ")}`);
   if (critique.verdict === "ship" && critique.findings.some((finding) => finding.severity === "major")) {
@@ -164,6 +164,26 @@ function freeVisionSelectionSummary(selection) {
     verified_free_at: selection.verified_free_at,
     candidates: (selection.candidates ?? []).map((candidate) => ({ id: candidate.id, score: candidate.score, coverage: candidate.coverage })),
     warnings: [...(selection.warnings ?? [])]
+  };
+}
+
+function normalizeCritiqueShape(critique) {
+  return {
+    schema_version: critique?.schema_version,
+    verdict: critique?.verdict,
+    summary: critique?.summary,
+    findings: (critique?.findings ?? []).map((finding) => ({
+      id: finding?.id,
+      severity: finding?.severity,
+      category: finding?.category,
+      shot_ids: finding?.shot_ids,
+      start_seconds: finding?.start_seconds,
+      end_seconds: finding?.end_seconds,
+      evidence: finding?.evidence,
+      repair_scope: finding?.repair_scope,
+      instruction: finding?.instruction,
+      preserve: finding?.preserve
+    }))
   };
 }
 
