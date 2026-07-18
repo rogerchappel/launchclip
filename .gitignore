@@ -2,7 +2,9 @@
 /node_modules/
 
 # LaunchClip workspaces and generated output
-/.launchclip/
+/.launchclip/*
+!/.launchclip/styles/
+!/.launchclip/styles/**
 /out/
 /reference/
 /examples/
