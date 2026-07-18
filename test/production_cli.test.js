@@ -354,6 +354,18 @@ test("routes explicit hierarchical, repair, and visual novelty planning controls
   assert.equal(received.visualSimilarityLimit, 0.42);
 });
 
+test("uses a compact bounded planning capsule for free models", async () => {
+  let received;
+  await runProductionStage("creative-plan", "/tmp/workspace", { "model-policy": "free" }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    planProduction: async (_workspace, options) => { received = options; return { status: "ready" }; }
+  });
+  assert.equal(received.maxOutputTokens, 20_000);
+  assert.equal(received.evidenceChars, 48_000);
+  assert.equal(received.freeModelRequestTimeoutMs, 180_000);
+  assert.equal(received.freeSemanticFallbacks, 1);
+});
+
 test("blocks assembly when measured narration timing requires a replan", async () => {
   let framesCalled = false;
   const adapters = {

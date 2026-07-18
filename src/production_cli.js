@@ -484,9 +484,11 @@ function mediaAnalysisOptions(flags) {
 }
 
 function plannerOptions(flags) {
+  const free = modelPolicy(flags) === "free";
   return {
     background: !flags.foreground,
-    maxOutputTokens: numberOr(flags["max-output-tokens"], 48_000),
+    maxOutputTokens: numberOr(flags["max-output-tokens"], free ? 20_000 : 48_000),
+    evidenceChars: numberOr(flags["plan-evidence-chars"], free ? 48_000 : 220_000),
     maxAttempts: numberOr(flags["max-attempts"], 3),
     semanticAttempts: numberOr(flags["plan-semantic-attempts"], 2),
     planningMode: flags["planning-mode"] ?? "auto",
@@ -501,6 +503,8 @@ function plannerOptions(flags) {
     freeModelCandidates: numberOr(flags["free-model-candidates"], 5),
     refreshFreeModels: Boolean(flags["refresh-free-models"]),
     freeModelProbeTimeoutMs: numberOr(flags["free-model-probe-timeout-ms"], 15_000),
+    freeModelRequestTimeoutMs: numberOr(flags["free-model-request-timeout-ms"], 180_000),
+    freeSemanticFallbacks: numberOr(flags["free-plan-semantic-fallbacks"], 1),
     sfxDir: flags["sfx-dir"]
   };
 }
