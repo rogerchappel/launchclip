@@ -23,7 +23,7 @@ test("ranks free structured-output models for visual code instead of parameter c
   assert.equal(ranked[2].family_prior, 12);
 });
 
-test("keeps a verified winner sticky and reranks only after it leaves the free catalog", async () => {
+test("keeps a verified winner sticky without catalog access and reranks on refresh", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "launchclip-free-models-"));
   const statePath = path.join(directory, "state.json");
   let catalog = [
@@ -31,26 +31,33 @@ test("keeps a verified winner sticky and reranks only after it leaves the free c
     model("google/gemma-code:free", { coding: 45 }),
     model("nvidia/nemotron-code:free", { coding: 42 })
   ];
+  let catalogCalls = 0;
   let benchmarkCalls = 0;
   const fetch = async (url) => {
-    if (url.endsWith("/models")) return jsonResponse({ data: catalog });
+    if (url.endsWith("/models")) {
+      catalogCalls += 1;
+      return jsonResponse({ data: catalog });
+    }
     benchmarkCalls += 1;
     return jsonResponse({ data: [] });
   };
   const first = await selectOpenRouterFreeModels({ fetch, apiKey: "test", statePath, topK: 2, now: () => new Date("2026-07-17T00:00:00Z") });
   assert.equal(first.source, "ranked");
   assert.equal(first.selected_model, "qwen/qwen-coder:free");
+  assert.equal(catalogCalls, 1);
   assert.equal(benchmarkCalls, 1);
 
-  const sticky = await selectOpenRouterFreeModels({ fetch, apiKey: "test", statePath, topK: 2, now: () => new Date("2026-07-20T00:00:00Z") });
-  assert.equal(sticky.source, "sticky");
+  const sticky = await selectOpenRouterFreeModels({ fetch: async () => { throw new Error("sticky selection must not fetch the catalog"); }, apiKey: "test", statePath, topK: 2, now: () => new Date("2026-07-20T00:00:00Z") });
+  assert.equal(sticky.source, "sticky-state");
   assert.equal(sticky.selected_model, "qwen/qwen-coder:free");
+  assert.equal(catalogCalls, 1);
   assert.equal(benchmarkCalls, 1);
 
   catalog = catalog.filter((entry) => entry.id !== "qwen/qwen-coder:free");
-  const reranked = await selectOpenRouterFreeModels({ fetch, apiKey: "test", statePath, topK: 2, now: () => new Date("2026-07-21T00:00:00Z") });
+  const reranked = await selectOpenRouterFreeModels({ fetch, apiKey: "test", statePath, topK: 2, refresh: true, now: () => new Date("2026-07-21T00:00:00Z") });
   assert.equal(reranked.source, "ranked");
   assert.equal(reranked.selected_model, "google/gemma-code:free");
+  assert.equal(catalogCalls, 2);
   assert.equal(benchmarkCalls, 2);
   assert.equal(JSON.parse(await readFile(statePath, "utf8")).verified_free_at, "2026-07-21T00:00:00.000Z");
 });
