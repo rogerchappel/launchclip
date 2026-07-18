@@ -13,7 +13,9 @@ test("builds a compact blueprint packet and a smaller implementation handoff", (
   assert.equal(blueprintInput.supporting_motion_contract.required_supporting_beats, 2);
   assert.deepEqual(blueprintInput.supporting_motion_contract.windows.map((entry) => entry.id), ["opening", "closing"]);
   assert.equal(blueprintInput.supporting_motion_contract.windows[0].start_seconds, 0);
-  assert.ok(blueprintInput.supporting_motion_contract.windows[0].end_seconds <= .8);
+  assert.ok(blueprintInput.supporting_motion_contract.windows[0].end_seconds <= .1);
+  assert.equal(blueprintInput.supporting_motion_contract.windows[0].minimum_duration_seconds, .55);
+  assert.equal(blueprintInput.supporting_motion_contract.opening_hook_magnitudes.x, 64);
   assert.ok(blueprintInput.evidence[0].content.length <= 1_200);
   assert.ok(blueprintInput.narration_anchors.length <= 8);
   assert.equal(implementationInput.scene_blueprint.schema_version, FRAME_BLUEPRINT_VERSION);
@@ -31,6 +33,7 @@ test("validates complete object, event, selector, timing, copy, and density hand
   invalid.elements.pop();
   invalid.motion_beats[0].at_seconds = 4;
   invalid.supporting_motion_beats[0].at_seconds = 2;
+  invalid.supporting_motion_beats[0].changes = [{ property: "opacity", from_value: 0, to_value: .1 }];
   invalid.supporting_motion_beats[0].object_id = "evidence-grid";
   invalid.supporting_motion_beats[1].object_id = "evidence-grid";
   invalid.visible_copy = [];
@@ -43,8 +46,11 @@ test("validates complete object, event, selector, timing, copy, and density hand
   assert.match(validation.errors.join("\n"), /elements must include planned object: proof-label/);
   assert.match(validation.errors.join("\n"), /at_seconds must preserve 1/);
   assert.match(validation.errors.join("\n"), /at_seconds must be inside opening/);
+  assert.match(validation.errors.join("\n"), /opacity delta must be at least 0.25/);
+  assert.match(validation.errors.join("\n"), /opening requires a hook-scale/);
   assert.match(validation.errors.join("\n"), /object_id is not planned: evidence-grid/);
-  assert.match(validation.errors.join("\n"), /target semantic objects at least 1 times/);
+  assert.match(validation.errors.join("\n"), /target semantic objects at least 2 times/);
+  assert.match(validation.errors.join("\n"), /may target evidence-grid at most 1 times/);
   assert.match(validation.errors.join("\n"), /visible_copy must preserve: Proof/);
   assert.match(validation.errors.join("\n"), /focal_element_selector is unknown/);
   assert.match(validation.errors.join("\n"), /minimum_semantic_objects must be at least 2/);
@@ -66,8 +72,8 @@ function validBlueprint() {
     typography: { display_px: 112, body_px: 42, metadata_px: 24, maximum_text_lines: 2 },
     motion_beats: [{ event_id: "shot-1-reveal", object_id: "proof-node", selector: "#shot-1-proof", at_seconds: 1, action: "Scale and fade the proof node into its final measured position" }],
     supporting_motion_beats: [
-      { window_id: "opening", object_id: "proof-node", selector: "#shot-1-proof", at_seconds: .15, duration_seconds: .6, intent: "entrance", properties: ["opacity", "scale"], action: "Spring the proof node from 0.88 scale and zero opacity into its authored static state" },
-      { window_id: "closing", object_id: "proof-label", selector: "#shot-1-label", at_seconds: 3, duration_seconds: .8, intent: "emphasis", properties: ["y", "opacity"], action: "Lift and resolve the exact-copy label with a restrained opacity rise" }
+      { window_id: "opening", object_id: "proof-node", selector: "#shot-1-proof", at_seconds: .1, duration_seconds: .6, intent: "entrance", changes: [{ property: "opacity", from_value: 0, to_value: 1 }, { property: "scale", from_value: .86, to_value: 1 }], action: "Spring the proof node from 0.86 scale and zero opacity into its authored static state" },
+      { window_id: "closing", object_id: "proof-label", selector: "#shot-1-label", at_seconds: 2.5, duration_seconds: 2.25, intent: "emphasis", changes: [{ property: "y", from_value: 64, to_value: 0 }, { property: "opacity", from_value: .5, to_value: 1 }], action: "Lift and resolve the exact-copy label with a sustained opacity rise" }
     ],
     visible_copy: ["Proof"],
     density: { target_occupied_percent: 62, minimum_semantic_objects: 2, focal_element_selector: "#shot-1-proof" },
