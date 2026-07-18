@@ -298,12 +298,14 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
           format: plan.format,
           resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
         });
+        const selectorAlignment = blueprint ? alignFrameSelectorsToBlueprint(sanitized.bundle, blueprint.value) : { bundle: sanitized.bundle, mappings: [] };
         const lockedMotionRepair = blueprint
-          ? repairMissingOpeningMotionPosition(sanitized.bundle.html, blueprint.value.supporting_motion_beats)
-          : { html: sanitized.bundle.html, repaired: false };
-        const candidate = { ...sanitized.bundle, html: lockedMotionRepair.html };
+          ? repairMissingOpeningMotionPosition(selectorAlignment.bundle.html, blueprint.value.supporting_motion_beats)
+          : { html: selectorAlignment.bundle.html, repaired: false };
+        const candidate = { ...selectorAlignment.bundle, html: lockedMotionRepair.html };
         const repairs = [
           ...sanitized.repairs,
+          ...(selectorAlignment.mappings.length ? [{ kind: "align-frame-selectors-to-blueprint", mappings: selectorAlignment.mappings }] : []),
           ...(lockedMotionRepair.repaired ? [{ kind: "add-explicit-opening-motion-position", at_seconds: 0 }] : [])
         ];
         const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
@@ -524,6 +526,43 @@ export function sanitizeFrameBundle(bundle, context = {}) {
   return {
     bundle: { ...normalizedBundle, html: rootRepair.html, root_media_requests: rootMediaRequests },
     repairs
+  };
+}
+
+export function alignFrameSelectorsToBlueprint(bundle, blueprint) {
+  const desiredByObject = new Map((blueprint?.elements ?? []).map((element) => [element.object_id, element.selector]));
+  const observedByObject = new Map((bundle?.motion?.events ?? []).map((event) => [event.object_id, event.selector]));
+  const prefix = `#${bundle?.shot_id}-`;
+  const originalHtml = String(bundle?.html ?? "");
+  const mappings = [];
+  for (const [objectId, desired] of desiredByObject.entries()) {
+    const observed = observedByObject.get(objectId);
+    if (!observed || observed === desired || !observed.startsWith(prefix) || !desired.startsWith(prefix)) continue;
+    const observedId = observed.slice(1);
+    const desiredId = desired.slice(1);
+    if (!new RegExp(`\\bid\\s*=\\s*["']${escapeRegExp(observedId)}["']`, "i").test(originalHtml)) continue;
+    if (new RegExp(`\\bid\\s*=\\s*["']${escapeRegExp(desiredId)}["']`, "i").test(originalHtml)) continue;
+    mappings.push({ object_id: objectId, from: observed, to: desired });
+  }
+  let html = originalHtml;
+  for (const mapping of [...mappings].sort((left, right) => right.from.length - left.from.length)) {
+    html = html.split(mapping.from.slice(1)).join(mapping.to.slice(1));
+  }
+  const alignSelector = (selector) => {
+    const mapping = mappings.find((entry) => String(selector ?? "").startsWith(entry.from));
+    return mapping ? `${mapping.to}${String(selector).slice(mapping.from.length)}` : selector;
+  };
+  return {
+    bundle: {
+      ...bundle,
+      html,
+      motion: {
+        ...bundle.motion,
+        assertions: (bundle.motion?.assertions ?? []).map((assertion) => ({ ...assertion, selector: alignSelector(assertion.selector) })),
+        events: (bundle.motion?.events ?? []).map((event) => ({ ...event, selector: alignSelector(event.selector) }))
+      }
+    },
+    mappings
   };
 }
 

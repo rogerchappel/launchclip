@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { FRAME_BLUEPRINT_VERSION } from "../src/frame_blueprint.js";
-import { buildFallbackFrame, buildFrameInput, directFrames, fallbackFramesForVerification, safeShotFile, sanitizeFrameBundle, validateHyperFramesRoot } from "../src/frame_director.js";
+import { alignFrameSelectorsToBlueprint, buildFallbackFrame, buildFrameInput, directFrames, fallbackFramesForVerification, safeShotFile, sanitizeFrameBundle, validateHyperFramesRoot } from "../src/frame_director.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { EVIDENCE_VERSION, FRAME_BUNDLE_SCHEMA, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
@@ -143,6 +143,22 @@ test("removes authoritative voiceover requests from the frame bundle locally", (
     resource_id: "voiceover",
     presenter_mode: "voiceover"
   }]);
+});
+
+test("aligns unambiguous authored selectors to their blueprint object ids", () => {
+  const bundle = frameBundle("shot-1", 5);
+  bundle.html = bundle.html.split("shot-1-proof").join("shot-1-node");
+  bundle.motion.assertions[0].selector = "#shot-1-node";
+  bundle.motion.events[0].selector = "#shot-1-node";
+  const aligned = alignFrameSelectorsToBlueprint(bundle, {
+    elements: [{ object_id: "proof-node", selector: "#shot-1-proof" }]
+  });
+
+  assert.deepEqual(aligned.mappings, [{ object_id: "proof-node", from: "#shot-1-node", to: "#shot-1-proof" }]);
+  assert.match(aligned.bundle.html, /id="shot-1-proof"/);
+  assert.doesNotMatch(aligned.bundle.html, /shot-1-node/);
+  assert.equal(aligned.bundle.motion.assertions[0].selector, "#shot-1-proof");
+  assert.equal(aligned.bundle.motion.events[0].selector, "#shot-1-proof");
 });
 
 test("adds missing authoritative root contract attributes locally without overwriting authored values", () => {
