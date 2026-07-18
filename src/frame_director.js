@@ -706,21 +706,35 @@ function repairFrameRootContract(html, context = {}) {
 
 async function recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash, stableRouteCache = false }) {
   if (!existing) return null;
-  if (existing.input_hash !== inputHash && !stableRouteCache) return null;
   if (!new Set(["failed", "running", "submitted", "succeeded"]).has(existing.status)) return null;
+  if (existing.input_hash !== inputHash && !stableRouteCache) return null;
   if (existing.status === "succeeded" && existing.input_hash === inputHash && !hasFallbackFrameOutputs(existing)) return null;
-  const record = await readLatestFrameAttempt(workspace, shot.id, inputHash);
-  if (!record?.candidate || (record.input_hash && record.input_hash !== inputHash)) return null;
-  if (existing.input_hash === inputHash && ["running", "submitted"].includes(existing.status) && record.response_id !== existing.remote?.response_id) return null;
-  const sanitized = sanitizeFrameBundle(record.candidate, {
-    shot,
-    format: plan.format,
-    resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
-  });
-  const candidate = sanitized.bundle;
-  const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
-  const errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
-  if (errors.length) return null;
+  const records = await readFrameAttempts(workspace, shot.id);
+  const ordered = [
+    ...records.filter((record) => record.input_hash === inputHash),
+    ...(stableRouteCache ? records.filter((record) => record.input_hash !== inputHash) : [])
+  ];
+  const blueprint = await readStoredBlueprintForRecovery(workspace, shot.id);
+  const supportingMotion = Array.isArray(blueprint?.supporting_motion_beats) ? blueprint.supporting_motion_beats : [];
+  let accepted = null;
+  for (const record of ordered) {
+    if (!record?.candidate) continue;
+    if (existing.input_hash === inputHash && ["running", "submitted"].includes(existing.status) && record.input_hash === inputHash && record.response_id !== existing.remote?.response_id) continue;
+    const sanitized = sanitizeFrameBundle(record.candidate, {
+      shot,
+      format: plan.format,
+      resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
+    });
+    const candidate = sanitized.bundle;
+    const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
+    const errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format), ...validateLockedSupportingMotion(candidate.html, supportingMotion)];
+    if (!errors.length) {
+      accepted = { record, sanitized, candidate };
+      break;
+    }
+  }
+  if (!accepted) return null;
+  const { record, sanitized, candidate } = accepted;
   const paths = await writeFrameArtifacts(workspace, candidate);
   const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
   let current = store.get(jobId);
@@ -751,13 +765,13 @@ async function recoverStoredFrameAttempt({ workspace, intake, evidence, plan, sh
   };
 }
 
-async function readLatestFrameAttempt(workspace, shotId, inputHash = null) {
+async function readFrameAttempts(workspace, shotId) {
   const directory = path.join(workspace, PRODUCTION_PATHS.frames, ".attempts");
   let names;
   try {
     names = await readdir(directory);
   } catch (error) {
-    if (error.code === "ENOENT") return null;
+    if (error.code === "ENOENT") return [];
     throw error;
   }
   const prefix = `${shotId}-attempt-`;
@@ -766,17 +780,26 @@ async function readLatestFrameAttempt(workspace, shotId, inputHash = null) {
     .map((name) => ({ name, attempt: Number(name.slice(prefix.length, -".json".length)) }))
     .filter((entry) => Number.isInteger(entry.attempt) && entry.attempt > 0)
     .sort((left, right) => right.attempt - left.attempt);
+  const records = [];
   for (const entry of candidates) {
     try {
       const record = await readJson(path.join(directory, entry.name));
-      if (inputHash && record.input_hash && record.input_hash !== inputHash) continue;
-      return record;
+      records.push(record);
     } catch (error) {
       if (error instanceof SyntaxError) continue;
       throw error;
     }
   }
-  return null;
+  return records;
+}
+
+async function readStoredBlueprintForRecovery(workspace, shotId) {
+  try {
+    return (await readJson(safeShotFile(path.join(workspace, PRODUCTION_PATHS.frames, ".blueprints"), shotId, ".json")))?.blueprint ?? null;
+  } catch (error) {
+    if (error.code === "ENOENT" || error instanceof SyntaxError) return null;
+    throw error;
+  }
 }
 
 function frameValidationContext({ intake, evidence, plan, shot }) {

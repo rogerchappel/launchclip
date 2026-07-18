@@ -321,13 +321,6 @@ test("promotes a matching accepted attempt after the discovered route order chan
   context.plan.shots[0].resource_ids = ["voiceover"];
   const workspace = await workspaceFixture(context);
   const store = await ProductionJobStore.open(workspace, { create: false });
-  const inputHash = semanticHash({
-    input: buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0 }),
-    model: context.intake.model,
-    reasoning: "high",
-    schema: FRAME_BUNDLE_SCHEMA,
-    worker: "frame-director.v4"
-  });
   await store.add({ id: "frame:shot-1", kind: "frame", depends_on: ["creative-plan"], input_hash: "different-current-route-hash" });
   await store.markRunning("frame:shot-1", { provider: "openai", response_id: "resp_spent", status: "completed" });
   await store.markSucceeded("frame:shot-1");
@@ -335,8 +328,10 @@ test("promotes a matching accepted attempt after the discovered route order chan
   candidate.root_media_requests[0] = { ...candidate.root_media_requests[0], resource_id: "voiceover", kind: "audio", volume: 1 };
   const attempts = path.join(workspace, "production", "frames", ".attempts");
   await mkdir(attempts, { recursive: true });
-  await writeFile(path.join(attempts, "shot-1-attempt-1.json"), `${JSON.stringify({ input_hash: inputHash, response_id: "resp_spent", model: "gpt-5.6-sol", usage: { total_tokens: 100 }, candidate })}\n`);
-  await writeFile(path.join(attempts, "shot-1-attempt-2.json"), `${JSON.stringify({ input_hash: "different-route-hash", response_id: "resp_other", model: "other-model", usage: {}, candidate: frameBundle("shot-1", 5) })}\n`);
+  await writeFile(path.join(attempts, "shot-1-attempt-1.json"), `${JSON.stringify({ input_hash: "old-discovered-route-hash", response_id: "resp_spent", model: "gpt-5.6-sol", usage: { total_tokens: 100 }, candidate })}\n`);
+  const incompatible = frameBundle("shot-1", 5);
+  incompatible.html = incompatible.html.replace('data-start="0"', 'data-start="1"');
+  await writeFile(path.join(attempts, "shot-1-attempt-2.json"), `${JSON.stringify({ input_hash: "different-route-hash", response_id: "resp_other", model: "other-model", usage: {}, candidate: incompatible })}\n`);
   const calls = [];
   const client = { runStructured: async (options) => {
     const input = JSON.parse(options.input);
