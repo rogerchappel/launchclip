@@ -73,11 +73,20 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
   await mkdir(mediaDir, { recursive: true });
   const resources = intake.resources.filter((entry) => !entry.is_remote && ["video", "image", "audio"].includes(entry.type));
   const stagedReferences = [];
+  const referenceWarnings = [];
   for (const resource of intake.resources.filter((entry) => entry.role === "reference" && entry.is_remote && isSupportedVideoReference(entry.location))) {
     if (options.stageRemoteReferences === false) continue;
-    const stagedPath = adapters.stageReference
-      ? await adapters.stageReference(resource, mediaDir, options)
-      : await stageVideoReference(resource, mediaDir, adapters.run ?? runCommand);
+    let stagedPath;
+    try {
+      stagedPath = adapters.stageReference
+        ? await adapters.stageReference(resource, mediaDir, options)
+        : await stageVideoReference(resource, mediaDir, adapters.run ?? runCommand);
+    } catch (error) {
+      const warning = { resource_id: resource.id, source_url: resource.location, error: String(error?.message ?? error) };
+      referenceWarnings.push(warning);
+      evidence.warnings = [...(evidence.warnings ?? []), `Creative reference ${resource.id} was unavailable and was not used: ${warning.error}`];
+      continue;
+    }
     const staged = { ...resource, type: "video", location: stagedPath, is_remote: false, staged_from: resource.location };
     resources.push(staged);
     stagedReferences.push({ resource_id: resource.id, source_url: resource.location, local_path: stagedPath });
@@ -196,11 +205,11 @@ export async function analyzeSourceMedia(workspacePath, options = {}, adapters =
   const reportPath = path.join(mediaDir, "analysis.json");
   const transcriptCount = newItems.filter((entry) => /transcript$/.test(entry.kind)).length;
   const freeVisionReceipt = freeVisionSelection ? freeVisionSelectionSummary(freeVisionSelection) : null;
-  await writeAtomic(reportPath, `${JSON.stringify({ schema_version: "launchclip.source-media-analysis.v1", analyses, staged_references: stagedReferences, summary: { resources: resources.length, analyses: analyses.length, transcripts: transcriptCount }, ...(freeVisionReceipt ? { free_model_selection: freeVisionReceipt } : {}) }, null, 2)}\n`);
+  await writeAtomic(reportPath, `${JSON.stringify({ schema_version: "launchclip.source-media-analysis.v1", analyses, staged_references: stagedReferences, reference_warnings: referenceWarnings, summary: { resources: resources.length, analyses: analyses.length, transcripts: transcriptCount }, ...(freeVisionReceipt ? { free_model_selection: freeVisionReceipt } : {}) }, null, 2)}\n`);
   const candidates = [derivedEvidencePath, reportPath, ...stagedReferences.map((entry) => entry.local_path), ...newItems.flatMap((entry) => entry.metadata.filter((item) => item.key === "words_path").map((item) => item.value))];
   const outputs = await Promise.all([...new Set(candidates)].map((filePath) => describeJobOutput(workspace, filePath)));
   await store.markSucceeded(jobId, outputs);
-  return { stage: "source-media-analysis", status: "ready", workspace, evidence: evidencePath, report: reportPath, reference_videos: stagedReferences.map((entry) => entry.local_path), resources: resources.length, analyses: analyses.length, transcripts: transcriptCount, cached: false, ...(freeVisionReceipt ? { free_model_selection: freeVisionReceipt } : {}) };
+  return { stage: "source-media-analysis", status: "ready", workspace, evidence: evidencePath, report: reportPath, reference_videos: stagedReferences.map((entry) => entry.local_path), reference_warnings: referenceWarnings.length, resources: resources.length, analyses: analyses.length, transcripts: transcriptCount, cached: false, ...(freeVisionReceipt ? { free_model_selection: freeVisionReceipt } : {}) };
   } catch (error) {
     await store.markFailed(jobId, error);
     throw error;
@@ -247,14 +256,23 @@ async function stageVideoReference(resource, mediaDir, run) {
   const directory = path.join(mediaDir, "references");
   await mkdir(directory, { recursive: true });
   const output = path.join(directory, `${resource.id}.mp4`);
-  await run("yt-dlp", [
-    "--no-playlist", "--match-filter", "duration <= 900",
-    "--format", "bv*[height<=1080]+ba/b[height<=1080]",
-    "--merge-output-format", "mp4", "--output", output, resource.location
-  ]);
-  const info = await stat(output);
-  if (!info.isFile() || !info.size) throw new Error(`Reference staging produced no video: ${resource.location}`);
-  return output;
+  const common = ["--no-playlist", "--match-filter", "duration <= 900", "--merge-output-format", "mp4", "--output", output];
+  const attempts = [
+    [...common, "--format", "bv*[height<=1080]+ba/b[height<=1080]", resource.location],
+    [...common, "--force-overwrites", "--extractor-args", "youtube:player_client=android_vr", "--format", "b[height<=1080]/b", resource.location]
+  ];
+  let failure;
+  for (const args of attempts) {
+    try {
+      await run("yt-dlp", args);
+      const info = await stat(output);
+      if (!info.isFile() || !info.size) throw new Error(`Reference staging produced no video: ${resource.location}`);
+      return output;
+    } catch (error) {
+      failure = error;
+    }
+  }
+  throw new Error(`Reference staging failed after ${attempts.length} download strategies: ${failure?.message ?? failure}`);
 }
 
 function isSupportedVideoReference(value) {

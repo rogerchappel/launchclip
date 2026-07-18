@@ -221,6 +221,35 @@ test("stages a remote YouTube reference for visual and transcript analysis", asy
   assert.equal(transcript.metadata.find((entry) => entry.key === "word_count").value, "2");
 });
 
+test("retries a YouTube reference with the compatible single-stream client", async () => {
+  const workspace = await fixture({ role: "reference", authoritative: false, remote: true });
+  const attempts = [];
+  const result = await analyzeSourceMedia(workspace, {}, {
+    client: { runStructured: async () => ({ response_id: "r", model: "vision", value: { resource_id: "take", summary: "Reference", visible_text: [], narrative_opportunities: [], segments: [], quality_warnings: [] } }) },
+    transcriber: { transcribe: async () => ({ provider: "elevenlabs", text: "Reference", words: [], language_code: "en" }) },
+    run: async (command, args) => {
+      assert.equal(command, "yt-dlp");
+      attempts.push(args);
+      if (attempts.length === 1) throw new Error("HTTP Error 403: Forbidden");
+      await writeFile(args[args.indexOf("--output") + 1], "video");
+    },
+    contactSheet: async (_source, output) => writeFile(output, "sheet")
+  });
+  assert.equal(attempts.length, 2);
+  assert.equal(attempts[1][attempts[1].indexOf("--extractor-args") + 1], "youtube:player_client=android_vr");
+  assert.equal(result.reference_videos.length, 1);
+});
+
+test("continues without an unavailable creative reference", async () => {
+  const workspace = await fixture({ role: "reference", authoritative: false, remote: true });
+  const result = await analyzeSourceMedia(workspace, {}, { stageReference: async () => { throw new Error("reference host unavailable"); } });
+  assert.equal(result.status, "ready");
+  assert.equal(result.reference_warnings, 1);
+  assert.deepEqual(result.reference_videos, []);
+  const report = JSON.parse(await readFile(result.report, "utf8"));
+  assert.match(report.reference_warnings[0].error, /reference host unavailable/);
+});
+
 function visionSelection(statePath) {
   return {
     source: "ranked",
