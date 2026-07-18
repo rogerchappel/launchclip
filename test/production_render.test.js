@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { ProductionVerificationError, assertVerificationFresh, classifyCommandFailure, plannedTypographyErrors, renderDraftProduction, renderProduction, verifyProduction, verifySemanticArtifacts, verifyShotCompositions } from "../src/production_render.js";
+import { FREE_VISION_UNAVAILABLE_CODE } from "../src/production_critic.js";
 
 test("runs lint, the current transition-aware browser check, and assembled snapshots", async () => {
   const workspace = await fixture();
@@ -385,6 +386,27 @@ test("renders a vision-supervised draft after bounded browser-content findings",
   const renderArgs = commands.find((args) => args[1] === "render");
   assert.ok(renderArgs);
   assert.equal(renderArgs.includes("--strict-all"), false);
+});
+
+test("keeps an encoded draft when every free vision route is unavailable", async () => {
+  const workspace = await fixture();
+  const error = new Error("all free vision routes timed out");
+  error.code = FREE_VISION_UNAVAILABLE_CODE;
+  let criticCalls = 0;
+  const result = await renderDraftProduction(workspace, {
+    allowFreeVisionUnavailable: true,
+    visionUnavailableError: error
+  }, {
+    run: async (_command, args) => ({ stdout: args.includes("--json") ? "{}" : "ok", stderr: "" }),
+    writeMotionReport: async (_video, output) => { await writeFile(output, "{}\n"); return { quality: { ok: true }, family: "developing-card" }; },
+    critiqueProduction: async () => { criticCalls += 1; return { verdict: "ship" }; }
+  });
+  assert.equal(criticCalls, 0);
+  assert.equal(result.status, "needs-repair");
+  assert.equal(result.critique.verdict, "unavailable");
+  assert.equal(result.critique.retryable, true);
+  assert.match(result.video, /production\/renders\/draft\.mp4$/);
+  assert.equal(JSON.parse(await readFile(result.critique.critique, "utf8")).error_code, FREE_VISION_UNAVAILABLE_CODE);
 });
 
 test("reuses unchanged native QA while still encoding and analyzing each draft", async () => {

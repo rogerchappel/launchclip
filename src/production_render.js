@@ -8,7 +8,7 @@ import { semanticHash } from "./job_store.js";
 import { DEFAULT_NARRATED_MUSIC_VOLUME, isValidShotId, PRODUCTION_PATHS } from "./production_contracts.js";
 import { writeAudioReport } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
-import { critiqueProduction } from "./production_critic.js";
+import { critiqueProduction, FREE_VISION_UNAVAILABLE_CODE } from "./production_critic.js";
 import { semanticVisualReport, validateSemanticVisualPlan } from "./semantic_visuals.js";
 import { runHyperframes } from "./toolchain.js";
 
@@ -341,9 +341,19 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
     : { schema_version: "launchclip.render-audio.v1", status: "not-requested", quality: { ok: true, findings: [] } };
   if (!audioManifest) await writeFile(audioPath, `${JSON.stringify(audio, null, 2)}\n`);
   if (profile.enforceQuality && !audio.quality.ok) throw new Error(`Rendered video failed audio quality gates. Review ${audioPath}.`);
-  const critique = adapters.critiqueProduction
-    ? await adapters.critiqueProduction(workspace, criticOptions(options))
-    : await critiqueProduction(workspace, criticOptions(options), adapters.critic);
+  let critique;
+  if (options.visionUnavailableError) {
+    critique = await writeFreeVisionUnavailableReceipt(qaDir, options.visionUnavailableError);
+  } else {
+    try {
+      critique = adapters.critiqueProduction
+        ? await adapters.critiqueProduction(workspace, criticOptions(options))
+        : await critiqueProduction(workspace, criticOptions(options), adapters.critic);
+    } catch (error) {
+      if (!options.allowFreeVisionUnavailable || error?.code !== FREE_VISION_UNAVAILABLE_CODE) throw error;
+      critique = await writeFreeVisionUnavailableReceipt(qaDir, error);
+    }
+  }
   const assembly = await readOptionalJson(path.join(project, "assembly.json"));
   return {
     stage: profile.stage,
@@ -360,6 +370,24 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
     fallbacks: assembly ? { count: assembly.fallback_count ?? 0, full: Boolean(assembly.full_fallback), shots: assembly.fallbacks ?? [] } : null,
     critique
   };
+}
+
+async function writeFreeVisionUnavailableReceipt(qaDir, error) {
+  const receiptPath = path.join(qaDir, "vision-unavailable.json");
+  const receipt = {
+    schema_version: "launchclip.free-vision-unavailable.v1",
+    stage: "production-critique",
+    status: "unavailable",
+    verdict: "unavailable",
+    summary: "The draft was encoded after deterministic browser, motion, and audio analysis, but every current OpenRouter free vision route was unavailable. Human visual review is still required.",
+    error_code: error?.code ?? FREE_VISION_UNAVAILABLE_CODE,
+    retryable: true,
+    findings: 0,
+    model: null,
+    critique: receiptPath
+  };
+  await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
+  return receipt;
 }
 
 function isSupervisableContentVerification(error) {
