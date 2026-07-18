@@ -7,6 +7,7 @@ the current workflow and the decisions an operating agent must not guess.
 
 - [Runtime and credentials](#runtime-and-credentials)
 - [Input flags](#input-flags)
+- [Project-local style packs](#project-local-style-packs)
 - [Model-directed production](#model-directed-production)
 - [Resume and repair commands](#resume-and-repair-commands)
 - [Workspace artifacts](#workspace-artifacts)
@@ -73,13 +74,38 @@ Common intake flags:
 - `--presenter`: authorized presenter/avatar video
 - `--heygen-avatar`: one downloaded, authorized HeyGen video that replaces both
   `--voiceover` and `--presenter`; this does not call the HeyGen API
-- `--style auto|<family>`, `--style-file`, `--style-reference`
+- `--style auto|<family>|<pack-name>|<pack-path>`, `--style-file`,
+  `--style-reference`, `--style-root`
 - `--aspect 9:16|16:9|1:1`, `--duration <seconds>`, `--language <code>`
 - `--out <workspace>`
 
 Resource directories are expanded into checksummed files. Hidden files and
 `node_modules` are ignored. An optional `assets.json` may annotate individual
 asset usage, entities, tags, priority, and license.
+
+## Project-local style packs
+
+Reusable styles belong to the user and default to
+`.launchclip/styles/<name>`. LaunchClip has no built-in channel-style registry.
+Create a pack only from an existing video project or style directory:
+
+```bash
+launchclip style create ai-news --from .launchclip/agent-ai-story
+launchclip style list
+launchclip style show ai-news
+```
+
+`style save` is an alias for `style create`. Neither command invents a design,
+and neither overwrites an existing pack unless `--force` is explicit. Use
+`--root <directory>` on style-management commands or `--style-root <directory>`
+on intake/production to override the default location.
+
+The pack freezes `frame.md` plus an available caption skin, local fonts, audio
+notes, and style assets. Resolution priority is an explicit `--style-file`,
+then a matching pack name or directory passed to `--style`, then the existing
+free-form style-family behavior. This keeps old commands compatible. Commit
+`.launchclip/styles/**` when the channel identity should travel with the
+project; other `.launchclip` workspaces remain generated output.
 
 ## Model-directed production
 

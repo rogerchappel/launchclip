@@ -305,6 +305,24 @@ direction. The generated plan freezes exact colors, type roles, shape and
 diagram language, presenter treatment, motion physics, transitions, and
 forbidden motifs while leaving composition driven by each narrated concept.
 
+Reusable, user-owned styles live in `.launchclip/styles/<name>`. LaunchClip does
+not ship or invent channel presets: save the design system from a completed
+video or another style directory, then track that small pack with the project:
+
+```bash
+launchclip style create ai-news --from .launchclip/agent-ai-story
+launchclip style list
+launchclip produce ./brief.md --kind topic --style ai-news --out .launchclip/next-story
+```
+
+A pack contains `style.json`, `frame.md`, and any available caption skin, fonts,
+audio notes, or style assets. `--style-file` has highest priority. Otherwise a
+`--style` value that names a local pack or directory loads it; a name with no
+matching pack remains a free-form creative family for backward compatibility.
+Use `--style-root` to read packs from a non-default directory. Generated
+`.launchclip` workspaces remain ignored by Git, while `.launchclip/styles/**` is
+intentionally trackable so a repository can keep its own visual identity.
+
 Every planned shot carries semantic visual objects, continuity handoffs, and
 named visible events. SFX cues must bind to those events, and production
 verification stops before browser or render work if a planned event is missing
