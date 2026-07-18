@@ -422,6 +422,14 @@ function usesDiscoveredFreeRepair(flags) {
     && flags.model == null;
 }
 
+function usesDiscoveredFreeCritic(flags) {
+  return modelPolicy(flags) === "free"
+    && flags["critic-route"] == null
+    && flags["critic-model"] == null
+    && flags["critic-provider"] == null
+    && flags.model == null;
+}
+
 async function selectLiveOpenRouterFreeModels(flags, adapters) {
   const selectModels = adapters.selectOpenRouterFreeModels ?? selectOpenRouterFreeModels;
   const probeModels = adapters.probeOpenRouterFreeModels ?? probeOpenRouterFreeModels;
@@ -538,6 +546,11 @@ function renderOptions(flags) {
     criticReasoning: flags["critic-reasoning"] ?? (policy === "quality" ? "xhigh" : "high"),
     criticPro: Boolean(flags["critic-pro"]),
     maxCriticSnapshots: numberOr(flags["critic-snapshots"], 12),
+    selectFreeVision: usesDiscoveredFreeCritic(flags),
+    freeVisionStatePath: flags["free-vision-model-state"],
+    freeVisionCandidates: numberOr(flags["free-vision-model-candidates"], 3),
+    refreshFreeVisionModels: Boolean(flags["refresh-free-vision-models"] || flags["refresh-free-models"]),
+    freeVisionProbeTimeoutMs: numberOr(flags["free-vision-probe-timeout-ms"], 15_000),
     background: !flags.foreground
   };
 }
@@ -556,7 +569,12 @@ function criticOptions(flags) {
     model: flags["critic-model"] ?? (policy === "quality" ? "gpt-5.6" : "gpt-5.6-terra"),
     reasoning: flags["critic-reasoning"] ?? (policy === "quality" ? "xhigh" : "high"),
     pro: Boolean(flags["critic-pro"]),
-    maxSnapshots: numberOr(flags["critic-snapshots"], 12)
+    maxSnapshots: numberOr(flags["critic-snapshots"], 12),
+    selectFreeVision: usesDiscoveredFreeCritic(flags),
+    freeVisionStatePath: flags["free-vision-model-state"],
+    freeVisionCandidates: numberOr(flags["free-vision-model-candidates"], 3),
+    refreshFreeVisionModels: Boolean(flags["refresh-free-vision-models"] || flags["refresh-free-models"]),
+    freeVisionProbeTimeoutMs: numberOr(flags["free-vision-probe-timeout-ms"], 15_000)
   };
 }
 

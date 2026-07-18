@@ -1,5 +1,6 @@
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { probeOpenRouterFreeVisionModels, recordOpenRouterFreeModelOutcome, selectOpenRouterFreeVisionModels } from "./free_model_selector.js";
 import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { CRITIQUE_SCHEMA, PRODUCTION_PATHS, validateCritique } from "./production_contracts.js";
 
@@ -44,14 +45,13 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
   const images = await Promise.all(visualEvidence.images.map((entry) => dataImage(entry.path, entry.detail)));
   const evidenceById = new Map(evidence.items.map((entry) => [entry.id, entry]));
   const evidenceIndex = evidence.items.map((entry) => ({ id: entry.id, kind: entry.kind, role: entry.role, title: entry.title, content: String(entry.content ?? "").slice(0, 6_000), provenance: entry.provenance, claims_allowed: entry.claims_allowed }));
-  const route = parseModelRoute(options.route, {
+  let freeVisionSelection = options.selectFreeVision ? await selectFreeVisionCritic(options, adapters) : null;
+  let route = parseModelRoute(freeVisionSelection?.routes?.[0] ?? options.route, {
     provider: "openai",
     model: options.model ?? "gpt-5.6",
     reasoning: options.reasoning ?? "xhigh"
   });
-  const client = adapters.client ?? (adapters.createClient ?? createStructuredClient)(route);
-  const result = await client.runStructured({
-    model: route.model,
+  const request = {
     reasoningEffort: route.reasoning,
     reasoningContext: "current_turn",
     pro: Boolean(options.pro),
@@ -85,9 +85,23 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
     schemaName: "launchclip_production_critique",
     background: options.background !== false,
     maxOutputTokens: Number(options.maxOutputTokens ?? 20_000),
-    promptCacheKey: "launchclip:production-critic:v1",
+    promptCacheKey: "launchclip:production-critic:v2",
     metadata: { job_id: "production-critique", shots: plan.shots.length }
-  });
+  };
+  let result;
+  try {
+    result = await runCriticRequest(route, request, adapters);
+  } catch (error) {
+    if (!freeVisionSelection || adapters.client) throw error;
+    const failedModel = freeVisionSelection.selected_model;
+    const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
+    const probeModels = adapters.probeOpenRouterFreeVisionModels ?? probeOpenRouterFreeVisionModels;
+    const rotated = await recordOutcome(freeVisionSelection, { error });
+    freeVisionSelection = await probeModels(rotated, { timeoutMs: Number(options.freeVisionProbeTimeoutMs ?? 15_000), excludeIds: [failedModel] });
+    route = parseModelRoute(freeVisionSelection.routes[0]);
+    request.reasoningEffort = route.reasoning;
+    result = await runCriticRequest(route, request, adapters);
+  }
   const critique = applyVisualNoveltyFinding(result.value, visualFingerprint, plan.shots.map((shot) => shot.id));
   const validation = validateCritique(critique, plan.shots.map((shot) => shot.id));
   if (!validation.ok) throw new Error(`Production critique failed validation: ${validation.errors.join("; ")}`);
@@ -106,9 +120,47 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
     covered_shot_ids: visualEvidence.manifest.covered_shot_ids,
     reused_verification_snapshots: true
   };
-  await writeFile(critiquePath, `${JSON.stringify({ ...critique, response_id: result.response_id, model: result.model, usage: result.usage, visual_evidence: visualEvidenceReceipt }, null, 2)}\n`);
+  const freeVisionReceipt = freeVisionSelection ? freeVisionSelectionSummary(freeVisionSelection) : null;
+  await writeFile(critiquePath, `${JSON.stringify({ ...critique, response_id: result.response_id, model: result.model, usage: result.usage, visual_evidence: visualEvidenceReceipt, ...(freeVisionReceipt ? { free_model_selection: freeVisionReceipt } : {}) }, null, 2)}\n`);
   await writeFile(markdownPath, renderCritique(critique));
-  return { stage: "production-critique", status: critique.verdict === "ship" ? "approved" : "needs-repair", verdict: critique.verdict, critique: critiquePath, markdown: markdownPath, findings: critique.findings.length, response_id: result.response_id, model: result.model, visual_evidence: visualEvidenceReceipt };
+  return { stage: "production-critique", status: critique.verdict === "ship" ? "approved" : "needs-repair", verdict: critique.verdict, critique: critiquePath, markdown: markdownPath, findings: critique.findings.length, response_id: result.response_id, model: result.model, visual_evidence: visualEvidenceReceipt, ...(freeVisionReceipt ? { free_model_selection: freeVisionReceipt } : {}) };
+}
+
+async function selectFreeVisionCritic(options, adapters) {
+  const selectModels = adapters.selectOpenRouterFreeVisionModels ?? selectOpenRouterFreeVisionModels;
+  const probeModels = adapters.probeOpenRouterFreeVisionModels ?? probeOpenRouterFreeVisionModels;
+  const selectionOptions = {
+    statePath: options.freeVisionStatePath,
+    topK: options.freeVisionCandidates ?? 3,
+    refresh: Boolean(options.refreshFreeVisionModels)
+  };
+  let selection = await selectModels(selectionOptions);
+  if (!selection?.routes?.length) throw new Error("OpenRouter free vision-model selection returned no routes");
+  const probeOptions = { timeoutMs: Number(options.freeVisionProbeTimeoutMs ?? 15_000) };
+  try {
+    return await probeModels(selection, probeOptions);
+  } catch (error) {
+    if (selectionOptions.refresh) throw error;
+    selection = await selectModels({ ...selectionOptions, refresh: true });
+    if (!selection?.routes?.length) throw new Error("OpenRouter free vision-model refresh returned no routes", { cause: error });
+    return probeModels(selection, probeOptions);
+  }
+}
+
+async function runCriticRequest(route, request, adapters) {
+  const client = adapters.client ?? (adapters.createClient ?? createStructuredClient)(route);
+  return client.runStructured({ ...request, model: route.model });
+}
+
+function freeVisionSelectionSummary(selection) {
+  return {
+    source: selection.source,
+    state_path: selection.state_path,
+    selected_model: selection.selected_model,
+    verified_free_at: selection.verified_free_at,
+    candidates: (selection.candidates ?? []).map((candidate) => ({ id: candidate.id, score: candidate.score, coverage: candidate.coverage })),
+    warnings: [...(selection.warnings ?? [])]
+  };
 }
 
 function compactMotionAnalysis(report) {
