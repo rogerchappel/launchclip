@@ -65,9 +65,16 @@ Required host contract:
 - Do not import, fetch, use timers/randomness/storage, or include audio/video elements. Request supplied media through root_media_requests only.
 
 Creative contract:
-- When scene_blueprint is supplied, treat its zones, selectors, typography, density, visible copy, and motion beats as a binding LLM-authored implementation plan.
+- When scene_blueprint is supplied, treat its zones, selectors, typography, density, visible copy, planned motion beats, and supporting motion beats as a binding LLM-authored implementation plan.
+- Implement every scene_blueprint.supporting_motion_beats entry on the single paused GSAP timeline. Use its exact selector and start time, keep its duration within the authored value, restrict the tween to its listed properties, and make the described change visibly perceptible.
+- Supporting motion beats are scene choreography, not new semantic timeline events: do not copy them into motion.events, invent SFX cues for them, or add claims. motion.events remains an exact implementation of shot_contract.visual.events.
+- Keep supporting tweens seek-safe and finite. Establish required initial state with gsap.set, preserve the static authored end state, and never overlap writes to the same property on the same selector.
 - Treat global_design.style_dna and the supplied shot or shot_contract visual as binding. Build the declared diagram, comparison, process, timeline, or data form—not a headline over decoration.
 - Preserve readable non-overlapping zones, deliberate spacing, exact palette/type roles, and the planned motion/continuity. Keep copy brief and visual.
+- Every final text/surface pairing must meet WCAG AA: at least 4.5:1 for normal text and 3:1 for large text. Use the dark foreground on pale/accent fills or a dedicated contrasting plate; never rely on low opacity accent text over another colored surface.
+- Keep labels, values, and annotations inside a parent whose authored height includes them. Do not use negative top offsets to park text outside a rail, bar, card, or clipped container.
+- Give semantic text its own stacking layer above bars, fills, tiles, and decorative overlays. An opaque animated primitive must never cross or cover a label or numeric value.
+- CSS must contain no transform declaration on a selector that GSAP sets or tweens, including neutral transform:translateX(0), scale(1), or rotate(0). Put static transforms on a wrapper that GSAP never targets.
 - Use supplied evidence only for grounded labels, metrics, and claims. Use only supplied resource paths; otherwise draw native HTML/CSS/SVG.
 - motion.assertions selectors must be existing shot-prefixed ids and describe observable behavior. Set must_remain_live=false for reveal-then-settle elements; use true only when that exact element or its descendants visibly keep moving with no static window longer than one third of the shot. Give appears_by_seconds a conservative buffer after its entrance.
 - motion.events must use exact planned visual object ids and event ids. Keep event times inside the shot.
@@ -191,10 +198,15 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
     ? buildFrameBlueprintInput({ intake, evidence, plan, shot, index, narrationTiming })
     : buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming });
   const customRouting = options.routes != null || options.provider != null || options.model != null || options.baseUrl != null;
+  const blueprintInputHash = options.sceneBlueprint
+    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BLUEPRINT_SCHEMA, worker: "frame-blueprint.v2" })
+    : null;
   const inputHash = customRouting
-    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, worker: options.sceneBlueprint ? "frame-director.v7" : "frame-director.v5" })
+    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, worker: options.sceneBlueprint ? "frame-director.v8" : "frame-director.v5" })
     : semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v4" });
   const existing = store.get(jobId);
+  const resanitized = await resanitizeStoredFrame({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
+  if (resanitized) return resanitized;
   const recovered = await recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
   if (recovered) return recovered;
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
@@ -226,7 +238,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   let errors = [];
   try {
     const blueprint = options.sceneBlueprint
-      ? await resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, routes, adapters, options, inputHash, jobId })
+      ? await resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, routes, adapters, options, inputHash: blueprintInputHash, jobId })
       : null;
     const authorRoutes = blueprint?.route_index > 0
       ? [routes[blueprint.route_index], ...routes.filter((_, routeIndex) => routeIndex !== blueprint.route_index)]
@@ -252,7 +264,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
           background: options.background !== false,
           maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
           ...(blueprint ? { temperature: Number(routeAttempt === 1 ? options.frameTemperature ?? .4 : options.frameRepairTemperature ?? .1) } : {}),
-          promptCacheKey: options.leanPrompt ? "launchclip:frame-director:v5" : "launchclip:frame-director:v4",
+          promptCacheKey: options.leanPrompt ? "launchclip:frame-director:v7" : "launchclip:frame-director:v4",
           metadata: { job_id: jobId, shot_id: shot.id, attempt: totalAttempt, route: routeIndex + 1 },
           onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
         };
@@ -334,6 +346,42 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   }
 }
 
+async function resanitizeStoredFrame({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash }) {
+  if (existing?.status !== "succeeded" || existing.input_hash !== inputHash || hasFallbackFrameOutputs(existing)) return null;
+  const bundlePath = safeShotFile(path.join(workspace, PRODUCTION_PATHS.frames), shot.id, ".json");
+  let storedBundle;
+  try {
+    storedBundle = await readJson(bundlePath);
+  } catch (error) {
+    if (error.code === "ENOENT" || error instanceof SyntaxError) return null;
+    throw error;
+  }
+  const sanitized = sanitizeFrameBundle(storedBundle, {
+    shot,
+    format: plan.format,
+    resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
+  });
+  if (!sanitized.repairs.length) return null;
+  const candidate = sanitized.bundle;
+  const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
+  const errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
+  if (errors.length) return null;
+  const paths = await writeFrameArtifacts(workspace, candidate);
+  const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
+  await store.replaceSucceededOutputs(jobId, outputs);
+  return {
+    shot_id: shot.id,
+    cached: false,
+    recovered: true,
+    sanitized: true,
+    repairs: sanitized.repairs,
+    bundle: paths[0], html: paths[1], motion: paths[2],
+    response_id: existing.remote?.response_id ?? null,
+    provider: existing.remote?.provider ?? null,
+    usage: existing.usage ?? {}
+  };
+}
+
 async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, routes, adapters, options, inputHash, jobId }) {
   const blueprintPath = safeShotFile(path.join(workspace, PRODUCTION_PATHS.frames, ".blueprints"), shot.id, ".json");
   const stored = await readStoredBlueprint(blueprintPath, inputHash, shot);
@@ -359,7 +407,7 @@ async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, 
         background: options.background !== false,
         maxOutputTokens: Number(options.blueprintMaxOutputTokens ?? 3_000),
         temperature: Number(routeAttempt === 1 ? options.blueprintTemperature ?? .45 : options.blueprintRepairTemperature ?? .15),
-        promptCacheKey: "launchclip:frame-blueprint:v1",
+        promptCacheKey: "launchclip:frame-blueprint:v2",
         metadata: { job_id: jobId, shot_id: shot.id, stage: "blueprint", attempt: routeAttempt, route: routeIndex + 1 },
         onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
       };
@@ -418,15 +466,23 @@ function mergeUsage(...items) {
 }
 
 export function sanitizeFrameBundle(bundle, context = {}) {
-  const html = String(bundle?.html ?? "");
-  const transportRepair = repairTemplateTransport(html);
+  const transformRepair = removeNeutralCssTransforms(bundle?.html);
+  const stylesheetRepair = removeExternalStylesheetImports(transformRepair.html);
+  const transportRepair = repairTemplateTransport(stylesheetRepair.html);
   const timelineSafeHtml = context.shot?.id ? ensureTimelineRegistration(transportRepair.html, context.shot.id) : transportRepair.html;
   let removed = 0;
   const eventSafeHtml = timelineSafeHtml.replace(/<(?:[^"'<>]|"[^"]*"|'[^']*')+>/g, (tag) => tag.replace(/\son[a-z][\w:-]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, () => {
     removed += 1;
     return "";
   }));
-  const repairs = transportRepair.repaired ? [{ kind: "wrap-live-frame-in-template" }] : [];
+  const repairs = [];
+  if (transformRepair.removed) repairs.push({ kind: "remove-neutral-css-transforms", count: transformRepair.removed });
+  if (stylesheetRepair.removed) repairs.push({ kind: "remove-external-stylesheet-imports", count: stylesheetRepair.removed });
+  if (transportRepair.wrapped) repairs.push({ kind: "wrap-live-frame-in-template" });
+  if (transportRepair.movedStyles || transportRepair.movedScripts) {
+    repairs.push({ kind: "move-live-blocks-into-template", styles: transportRepair.movedStyles, scripts: transportRepair.movedScripts });
+  }
+  if (transportRepair.strippedDocument) repairs.push({ kind: "remove-document-wrapper" });
   if (removed) repairs.push({ kind: "remove-event-handler-attributes", count: removed });
   const normalizedBundle = { ...bundle };
   if (normalizedBundle.type != null && normalizedBundle.type === normalizedBundle.schema_version) {
@@ -460,17 +516,79 @@ export function sanitizeFrameBundle(bundle, context = {}) {
   };
 }
 
+function removeNeutralCssTransforms(html) {
+  const zero = "0(?:px|%|em|rem|vw|vh)?";
+  const neutralTransform = new RegExp(`\\btransform\\s*:\\s*(?:translate(?:X|Y)?\\(\\s*${zero}(?:\\s*,\\s*${zero})?\\s*\\)|scale(?:X|Y)?\\(\\s*1\\s*\\)|rotate\\(\\s*0(?:deg|rad|turn)?\\s*\\))\\s*;?`, "gi");
+  let removed = 0;
+  const source = String(html ?? "").replace(neutralTransform, () => {
+    removed += 1;
+    return "";
+  });
+  return { html: source, removed };
+}
+
+function removeExternalStylesheetImports(html) {
+  let removed = 0;
+  const source = String(html ?? "")
+    .replace(/@import\s+(?:url\(\s*(?:"[^"]*"|'[^']*'|[^)]*)\s*\)|"[^"]*"|'[^']*')[^;]*;/gi, () => {
+      removed += 1;
+      return "";
+    })
+    .replace(/<link\b(?=[^>]*\brel\s*=\s*(?:["'][^"']*\bstylesheet\b[^"']*["']|stylesheet\b))[^>]*>/gi, () => {
+      removed += 1;
+      return "";
+    });
+  return { html: source, removed };
+}
+
 function repairTemplateTransport(html) {
   const source = String(html ?? "");
   const templates = [...source.matchAll(/<template\b[^>]*>([\s\S]*?)<\/template>/gi)];
-  if (templates.length > 1 || (templates.length === 1 && templates[0][1].trim())) return { html: source, repaired: false };
+  if (templates.length > 1) return { html: source, wrapped: false, movedStyles: 0, movedScripts: 0, strippedDocument: false };
+  if (templates.length === 1 && templates[0][1].trim()) {
+    const template = templates[0];
+    const before = source.slice(0, template.index);
+    const after = source.slice(template.index + template[0].length);
+    const beforeBlocks = extractLiveBlocks(before);
+    const afterBlocks = extractLiveBlocks(after);
+    const styles = [...beforeBlocks.styles, ...afterBlocks.styles];
+    const scripts = [...beforeBlocks.scripts, ...afterBlocks.scripts];
+    const strippedOutside = `${beforeBlocks.html}${afterBlocks.html}`
+      .replace(/<!doctype[^>]*>/gi, "")
+      .replace(/<\/?(?:html|head|body)\b[^>]*>/gi, "")
+      .replace(/<meta\b[^>]*>/gi, "")
+      .replace(/<title\b[^>]*>[\s\S]*?<\/title>/gi, "")
+      .trim();
+    const strippedDocument = strippedOutside.length === 0 && `${beforeBlocks.html}${afterBlocks.html}`.trim().length > 0;
+    if (!styles.length && !scripts.length && !strippedDocument) return { html: source, wrapped: false, movedStyles: 0, movedScripts: 0, strippedDocument: false };
+    const opening = template[0].match(/^<template\b[^>]*>/i)?.[0] ?? "<template>";
+    const rebuilt = `${opening}${styles.join("")}${template[1]}${scripts.join("")}</template>`;
+    return {
+      html: strippedDocument ? rebuilt : `${beforeBlocks.html}${rebuilt}${afterBlocks.html}`,
+      wrapped: false,
+      movedStyles: styles.length,
+      movedScripts: scripts.length,
+      strippedDocument
+    };
+  }
   const live = source
     .replace(/<!doctype[^>]*>/gi, "")
     .replace(/<template\b[^>]*>\s*<\/template>/gi, "")
     .replace(/<\/?(?:html|head|body)\b[^>]*>/gi, "")
     .trim();
-  if (!/<[^>]+\bid=["']root["']/i.test(live) || !/<style\b/i.test(live) || !/<script\b/i.test(live)) return { html: source, repaired: false };
-  return { html: `<template>${live}</template>`, repaired: true };
+  if (!/<[^>]+\bid=["']root["']/i.test(live) || !/<style\b/i.test(live) || !/<script\b/i.test(live)) return { html: source, wrapped: false, movedStyles: 0, movedScripts: 0, strippedDocument: false };
+  return { html: `<template>${live}</template>`, wrapped: true, movedStyles: 0, movedScripts: 0, strippedDocument: false };
+}
+
+function extractLiveBlocks(source) {
+  const styles = [];
+  const scripts = [];
+  const html = String(source ?? "").replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, (block, tag) => {
+    if (String(tag).toLowerCase() === "style") styles.push(block);
+    else scripts.push(block);
+    return "";
+  });
+  return { html, styles, scripts };
 }
 
 function repairFrameRootContract(html, context = {}) {

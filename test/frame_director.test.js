@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { FRAME_BLUEPRINT_VERSION } from "../src/frame_blueprint.js";
 import { buildFallbackFrame, buildFrameInput, directFrames, fallbackFramesForVerification, safeShotFile, sanitizeFrameBundle, validateHyperFramesRoot } from "../src/frame_director.js";
-import { ProductionJobStore, semanticHash } from "../src/job_store.js";
+import { describeJobOutput, ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { EVIDENCE_VERSION, FRAME_BUNDLE_SCHEMA, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
 test("gives each delegated frame only its shot, neighbors, grounded evidence, and resources", () => {
@@ -125,7 +125,7 @@ test("removes event-handler attributes locally without changing visible button c
   assert.doesNotMatch(sanitized.bundle.html, /onclick=/i);
   assert.match(sanitized.bundle.html, />Do something<\/div>/);
   assert.match(sanitized.bundle.html, /const one=\(s\)=>root\.querySelector\(s\)/);
-  assert.deepEqual(sanitized.repairs, [{ kind: "remove-event-handler-attributes", count: 1 }]);
+  assert.deepEqual(sanitized.repairs, [{ kind: "remove-document-wrapper" }, { kind: "remove-event-handler-attributes", count: 1 }]);
 });
 
 test("removes authoritative voiceover requests from the frame bundle locally", () => {
@@ -137,6 +137,8 @@ test("removes authoritative voiceover requests from the frame bundle locally", (
   });
   assert.deepEqual(sanitized.bundle.root_media_requests, []);
   assert.deepEqual(sanitized.repairs, [{
+    kind: "remove-document-wrapper"
+  }, {
     kind: "remove-authoritative-voiceover-root-media",
     resource_id: "voiceover",
     presenter_mode: "voiceover"
@@ -151,7 +153,7 @@ test("adds missing authoritative root contract attributes locally without overwr
   const sanitized = sanitizeFrameBundle(bundle, { shot: context.plan.shots[0], format: context.plan.format });
 
   assert.match(sanitized.bundle.html, /id="root" data-composition-id="shot-1" data-start="0" data-duration="5" data-width="1080" data-height="1920"/);
-  assert.deepEqual(sanitized.repairs, [{
+  assert.deepEqual(sanitized.repairs, [{ kind: "remove-document-wrapper" }, {
     kind: "add-missing-root-contract-attributes",
     attributes: ["data-start", "data-duration", "data-width", "data-height"]
   }]);
@@ -173,7 +175,7 @@ test("adds host root styling and removes only a redundant frame type locally", (
 
   assert.equal(sanitized.bundle.type, undefined);
   assert.match(sanitized.bundle.html, /<template><style>#root\{position:relative;overflow:hidden\}<\/style>/);
-  assert.deepEqual(sanitized.repairs, [{ kind: "remove-redundant-frame-type" }, { kind: "add-missing-root-style" }]);
+  assert.deepEqual(sanitized.repairs, [{ kind: "remove-document-wrapper" }, { kind: "remove-redundant-frame-type" }, { kind: "add-missing-root-style" }]);
   assert.deepEqual(validateHyperFramesRoot(sanitized.bundle.html, context.plan.shots[0], context.plan.format), []);
 });
 
@@ -193,6 +195,37 @@ test("wraps an unambiguous live scene and converts a global shot start to local 
     { kind: "normalize-root-contract-attributes", attributes: ["data-start"] }
   ]);
   assert.deepEqual(validateHyperFramesRoot(sanitized.bundle.html, shot, context.plan.format), []);
+});
+
+test("salvages a framed scene with an external font import and live head styles", () => {
+  const context = fixture();
+  const shot = context.plan.shots[0];
+  const bundle = frameBundle(shot.id, 5);
+  const remoteFont = "https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;1,700&display=swap";
+  bundle.html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>@import url('${remoteFont}');#shot-1-proof{color:#fff}</style></head><body>${bundle.html}</body></html>`;
+
+  const sanitized = sanitizeFrameBundle(bundle, { shot, format: context.plan.format });
+
+  assert.doesNotMatch(sanitized.bundle.html, /@import|fonts\.googleapis\.com/i);
+  assert.doesNotMatch(sanitized.bundle.html, /<\/?(?:html|head|body)\b/i);
+  assert.match(sanitized.bundle.html, /<template><style>#shot-1-proof\{color:#fff\}<\/style><style>#root/);
+  assert.deepEqual(sanitized.repairs, [
+    { kind: "remove-external-stylesheet-imports", count: 1 },
+    { kind: "move-live-blocks-into-template", styles: 1, scripts: 0 },
+    { kind: "remove-document-wrapper" }
+  ]);
+  assert.deepEqual(validateHyperFramesRoot(sanitized.bundle.html, shot, context.plan.format), []);
+});
+
+test("removes only visually neutral CSS transforms before GSAP owns the element", () => {
+  const bundle = frameBundle("shot-1", 5);
+  bundle.html = bundle.html.replace("#root{", ".mask{transform:translateX(0)}.scaled{transform:scale(.9)}#root{");
+
+  const sanitized = sanitizeFrameBundle(bundle);
+
+  assert.doesNotMatch(sanitized.bundle.html, /transform:translateX\(0\)/);
+  assert.match(sanitized.bundle.html, /\.scaled\{transform:scale\(\.9\)\}/);
+  assert.deepEqual(sanitized.repairs, [{ kind: "remove-neutral-css-transforms", count: 1 }, { kind: "remove-document-wrapper" }]);
 });
 
 test("builds a deterministic presenter fallback that satisfies the frame contract", () => {
@@ -436,6 +469,21 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
       if (shot.id === "shot-1" && attempt === 1) elements.pop();
       const event = shot.visual.events[0];
       const target = elements.find((entry) => entry.object_id === event.target_ids[0]);
+      const semanticTargets = shot.visual.objects.filter((entry) => entry.kind !== "decoration");
+      const supportingMotionBeats = input.supporting_motion_contract.windows.map((window, index) => {
+        const object = semanticTargets[index % semanticTargets.length];
+        const element = elements.find((entry) => entry.object_id === object.id);
+        return {
+          window_id: window.id,
+          object_id: object.id,
+          selector: element?.selector ?? `#${shot.id}-${object.id}`,
+          at_seconds: window.start_seconds,
+          duration_seconds: Math.min(.6, window.maximum_duration_seconds),
+          intent: index === 0 ? "entrance" : "emphasis",
+          properties: index === 0 ? ["opacity", "scale"] : ["y", "opacity"],
+          action: index === 0 ? "Spring the semantic proof into its authored state" : "Lift and emphasize the next semantic label"
+        };
+      });
       return {
         response_id: `blueprint_${shot.id}`,
         model: "google/gemma-code:free",
@@ -451,6 +499,7 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
           elements,
           typography: { display_px: 112, body_px: 42, metadata_px: 24, maximum_text_lines: 2 },
           motion_beats: [{ event_id: event.id, object_id: event.target_ids[0], selector: target.selector, at_seconds: event.at_seconds, action: "Reveal and lock the proof into place" }],
+          supporting_motion_beats: supportingMotionBeats,
           visible_copy: shot.on_screen_text,
           density: { target_occupied_percent: 68, minimum_semantic_objects: 2, focal_element_selector: target.selector },
           implementation_notes: ["Use the canvas instead of floating a small card in empty space"]
@@ -460,6 +509,7 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
     }
     const shot = input.shot_contract;
     assert.equal(input.scene_blueprint.shot_id, shot.id);
+    assert.equal(input.scene_blueprint.supporting_motion_beats.length, 2);
     assert.equal(input.shot, undefined);
     assert.ok(input.narration_anchors.length <= 8);
     return {
@@ -471,7 +521,7 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
     };
   } };
 
-  const result = await directFrames(workspace, {
+  const runOptions = {
     concurrency: 3,
     failClosedConcurrency: 2,
     sceneBlueprint: true,
@@ -479,19 +529,44 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
     fallbackMode: "error",
     routes: ["openrouter:google/gemma-code:free@none"],
     background: false
-  }, { client });
+  };
+  const result = await directFrames(workspace, runOptions, { client });
 
   assert.equal(result.generated, 2);
   assert.equal(calls.filter((entry) => entry.schema === "launchclip_frame_blueprint").length, 3);
   assert.equal(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").length, 2);
+  assert.equal(calls.length, 5);
   assert.deepEqual(calls.filter((entry) => entry.schema === "launchclip_frame_blueprint").map((entry) => entry.temperature).sort(), [.15, .45, .45]);
   assert.deepEqual(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").map((entry) => entry.temperature), [.4, .4]);
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Never declare CSS transform on an element that GSAP animates/.test(entry.instructions)));
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Set must_remain_live=false for reveal-then-settle elements/.test(entry.instructions)));
-  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => entry.prompt_cache_key === "launchclip:frame-director:v5"));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Implement every scene_blueprint\.supporting_motion_beats entry/.test(entry.instructions)));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /not new semantic timeline events/.test(entry.instructions)));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /at least 4\.5:1 for normal text and 3:1 for large text/.test(entry.instructions)));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Do not use negative top offsets/.test(entry.instructions)));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /must never cross or cover a label/.test(entry.instructions)));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => entry.prompt_cache_key === "launchclip:frame-director:v7"));
   assert.deepEqual(result.frames.map((entry) => entry.usage.total_tokens), [450, 450]);
   assert.ok(result.frames.every((entry) => entry.blueprint.cached === false));
-  assert.match(await readFile(result.frames[0].blueprint.path, "utf8"), /launchclip\.frame-blueprint\.v1/);
+  const blueprintRecord = JSON.parse(await readFile(result.frames[0].blueprint.path, "utf8"));
+  const frameStore = await ProductionJobStore.open(workspace, { create: false });
+  assert.equal(blueprintRecord.blueprint.schema_version, FRAME_BLUEPRINT_VERSION);
+  assert.notEqual(blueprintRecord.input_hash, frameStore.get("frame:shot-1").input_hash);
+
+  const storedBundle = JSON.parse(await readFile(result.frames[0].bundle, "utf8"));
+  storedBundle.html = `<!doctype html><html><head></head><body>${storedBundle.html}</body></html>`;
+  await writeFile(result.frames[0].bundle, `${JSON.stringify(storedBundle, null, 2)}\n`);
+  await writeFile(result.frames[0].html, `${storedBundle.html}\n`);
+  const refreshedOutputs = await Promise.all([result.frames[0].bundle, result.frames[0].html, result.frames[0].motion].map((filePath) => describeJobOutput(workspace, filePath)));
+  await frameStore.replaceSucceededOutputs("frame:shot-1", refreshedOutputs);
+  const callsBeforeCacheRecovery = calls.length;
+
+  const recovered = await directFrames(workspace, runOptions, { client });
+
+  assert.equal(calls.length, callsBeforeCacheRecovery);
+  assert.equal(recovered.frames[0].recovered, true);
+  assert.deepEqual(recovered.frames[0].repairs, [{ kind: "remove-document-wrapper" }]);
+  assert.equal(recovered.frames[1].cached, true);
 });
 
 test("can exhaust LLM routes without writing a deterministic visual fallback", async () => {

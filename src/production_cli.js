@@ -34,7 +34,7 @@ export async function runProductionStage(command, target, flags = {}, adapters =
     if (command === "production-preview") return (adapters.openProductionPreview ?? openProductionPreview)(target, previewOptions(flags), adapters.preview);
     if (command === "production-render") return (adapters.renderProduction ?? renderProduction)(target, renderOptions(flags), adapters.render);
     if (command === "production-critique") return (adapters.critiqueProduction ?? critiqueProduction)(target, criticOptions(flags), adapters.critic);
-    if (command === "production-repair") return (adapters.repairProduction ?? repairProduction)(target, await standaloneRepairOptions(target, flags, adapters), adapters.repair);
+    if (command === "production-repair") return runProductionRepair(target, flags, await standaloneRepairOptions(target, flags, adapters), adapters);
     if (command === "source-media") return (adapters.analyzeSourceMedia ?? analyzeSourceMedia)(target, mediaAnalysisOptions(flags), adapters.mediaAnalysis);
     if (command === "source-preprocess") return (adapters.prepareSourceMedia ?? prepareSourceMedia)(target, sourcePreprocessOptions(flags), adapters.sourcePreprocess);
     if (command === "resolve-entities") return (adapters.resolveProductionEntities ?? resolveProductionEntities)(target, entityOptions(flags));
@@ -73,6 +73,40 @@ async function standaloneRepairOptions(workspacePath, flags, adapters) {
   return { ...options, trigger: "verification", verification };
 }
 
+async function runProductionRepair(workspace, flags, options, adapters) {
+  const repair = adapters.repairProduction ?? repairProduction;
+  if (!usesDiscoveredFreeRepair(flags)) return repair(workspace, options, adapters.repair);
+
+  const selection = await selectLiveOpenRouterFreeModels(flags, adapters);
+  const selectedOptions = {
+    ...options,
+    provider: "openrouter",
+    model: selection.selected_model,
+    reasoning: "none",
+    routes: selection.routes,
+    supportsImages: false,
+    sourceMode: "scoped"
+  };
+  const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
+  try {
+    const result = await repair(workspace, selectedOptions, adapters.repair);
+    let recorded = selection;
+    try {
+      recorded = await recordOutcome(selection, { result: { frames: result.repaired ?? [] } }) ?? selection;
+    } catch (error) {
+      recorded = { ...selection, warnings: [...(selection.warnings ?? []), `Could not update free-model repair outcome state: ${error.message}`] };
+    }
+    return { ...result, free_model_selection: freeModelSelectionSummary(recorded) };
+  } catch (error) {
+    try {
+      await recordOutcome(selection, { error });
+    } catch (stateError) {
+      error.free_model_state_error = stateError.message;
+    }
+    throw error;
+  }
+}
+
 export async function runProduction(source, flags = {}, adapters = {}) {
   flags = productionFlags(flags);
   const normalized = await (adapters.buildIntake ?? buildIntake)(source, flags);
@@ -108,10 +142,10 @@ async function reviseProduction(workspace, flags, request, adapters) {
       humanReviewRequest: request.humanReviewRequest
     }, adapters.critic);
   }
-  const repair = await (adapters.repairProduction ?? repairProduction)(workspace, {
+  const repair = await runProductionRepair(workspace, flags, {
     ...inferred,
     ...(request.humanReviewRequest ? { trigger: "critique", verification: null } : {})
-  }, adapters.repair);
+  }, adapters);
   if (!repair.repaired?.length && !repair.actions?.plan_revised) {
     return {
       stage: "production-review-revision",
@@ -228,11 +262,11 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
       trigger = "verification";
     }
     if (repairs.length >= maximumRepairPasses) break;
-    const repair = await (adapters.repairProduction ?? repairProduction)(workspace, {
+    const repair = await runProductionRepair(workspace, flags, {
       ...repairOptions(flags),
       trigger,
       verification
-    }, adapters.repair);
+    }, adapters);
     repairs.push({ pass: repairs.length + 1, trigger, ...repair });
     if (!repair.repaired?.length && !repair.actions?.plan_revised) break;
     if (repair.actions?.plan_revised) {
@@ -317,20 +351,8 @@ async function runFrameDirection(workspace, flags, adapters) {
   const options = frameOptions(flags);
   if (!usesDiscoveredFreeFrames(flags)) return direct(workspace, options, adapters.frames);
 
-  const selectModels = adapters.selectOpenRouterFreeModels ?? selectOpenRouterFreeModels;
-  const probeModels = adapters.probeOpenRouterFreeModels ?? probeOpenRouterFreeModels;
   const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
-  let selection = await selectModels({
-    statePath: flags["free-model-state"],
-    topK: flags["free-model-candidates"] ?? 5,
-    refresh: Boolean(flags["refresh-free-models"]),
-    role: "visual-code-author",
-    contract: "frame-director.v5"
-  });
-  if (!selection?.routes?.length) throw new Error("OpenRouter free-model selection returned no frame-authoring routes");
-  selection = await probeModels(selection, {
-    timeoutMs: numberOr(flags["free-model-probe-timeout-ms"], 15_000)
-  });
+  const selection = await selectLiveOpenRouterFreeModels(flags, adapters);
   options.routes = selection.routes;
   options.leanPrompt = true;
   options.sceneBlueprint = true;
@@ -388,6 +410,37 @@ function usesDiscoveredFreeFrames(flags) {
     && flags["frame-model"] == null
     && flags["frame-provider"] == null
     && flags.model == null;
+}
+
+function usesDiscoveredFreeRepair(flags) {
+  return modelPolicy(flags) === "free"
+    && flags["repair-route"] == null
+    && flags["repair-model"] == null
+    && flags["repair-provider"] == null
+    && flags.model == null;
+}
+
+async function selectLiveOpenRouterFreeModels(flags, adapters) {
+  const selectModels = adapters.selectOpenRouterFreeModels ?? selectOpenRouterFreeModels;
+  const probeModels = adapters.probeOpenRouterFreeModels ?? probeOpenRouterFreeModels;
+  const selectionOptions = {
+    statePath: flags["free-model-state"],
+    topK: flags["free-model-candidates"] ?? 5,
+    refresh: Boolean(flags["refresh-free-models"]),
+    role: "visual-code-author",
+    contract: "frame-director.v5"
+  };
+  let selection = await selectModels(selectionOptions);
+  if (!selection?.routes?.length) throw new Error("OpenRouter free-model selection returned no visual-code routes");
+  const probeOptions = { timeoutMs: numberOr(flags["free-model-probe-timeout-ms"], 15_000) };
+  try {
+    return await probeModels(selection, probeOptions);
+  } catch (error) {
+    if (selectionOptions.refresh) throw error;
+    selection = await selectModels({ ...selectionOptions, refresh: true });
+    if (!selection?.routes?.length) throw new Error("OpenRouter free-model refresh returned no visual-code routes", { cause: error });
+    return probeModels(selection, probeOptions);
+  }
 }
 
 function freeModelSelectionSummary(selection) {
@@ -508,7 +561,7 @@ function criticOptions(flags) {
 function repairOptions(flags) {
   const policy = modelPolicy(flags);
   const routes = stageModelRoutes(flags, "repair");
-  const leanFreeRoute = isDynamicOpenRouterFreeRoute(routes);
+  const leanFreeRoute = isOpenRouterFreeRoute(routes);
   return {
     provider: flags["repair-provider"] ?? (policy === "free" ? "openrouter" : undefined),
     model: flags["repair-model"] ?? (policy === "free" ? "openrouter/free" : policy === "quality" ? "gpt-5.6" : "gpt-5.6-luna"),
@@ -526,9 +579,9 @@ function repairOptions(flags) {
   };
 }
 
-function isDynamicOpenRouterFreeRoute(routes) {
+function isOpenRouterFreeRoute(routes) {
   const values = Array.isArray(routes) ? routes : [routes];
-  return values.length === 1 && /^openrouter:openrouter\/free(?:@|$)/i.test(String(values[0] ?? ""));
+  return values.length > 0 && values.every((route) => /^openrouter:(?:openrouter\/free|[^@]+:free)(?:@|$)/i.test(String(route ?? "")));
 }
 
 function stageModelRoutes(flags, stage) {

@@ -42,28 +42,32 @@ export async function selectOpenRouterFreeModels(options = {}) {
   const contract = String(options.contract ?? DEFAULT_CONTRACT);
   const topK = positiveInteger(options.topK ?? DEFAULT_TOP_K, "topK");
   const now = (options.now ?? (() => new Date()))().toISOString();
+  const previous = await readState(statePath);
+  const reusableState = !options.refresh && previous?.schema_version === STATE_SCHEMA_VERSION && previous.role === role && previous.contract === contract
+    ? previous
+    : null;
+  if (reusableState?.candidates?.length) {
+    const candidates = moveCandidateFirst(reusableState.candidates, reusableState.selected_model).slice(0, topK);
+    const selected = candidates.find((candidate) => candidate.id === reusableState.selected_model) ?? candidates[0];
+    return selectionFromState(statePath, {
+      ...reusableState,
+      selected_model: selected.id,
+      selected_canonical_slug: selected.canonical_slug,
+      candidates
+    }, "sticky-state");
+  }
   const headers = openRouterHeaders(apiKey);
   const catalog = await fetchJson(fetchImpl, `${baseUrl}/models`, { headers }, "OpenRouter model catalog");
   const models = Array.isArray(catalog?.data) ? catalog.data : [];
   const eligible = models.filter(isEligibleFreeModel);
   if (!eligible.length) throw freeModelError("OpenRouter currently exposes no free text models compatible with LaunchClip structured frame authoring");
 
-  const previous = await readState(statePath);
-  const reusable = !options.refresh && previous?.schema_version === STATE_SCHEMA_VERSION && previous.role === role && previous.contract === contract
-    ? eligible.find((model) => model.id === previous.selected_model)
-    : null;
-  let warnings = [];
-  let candidates = reusable ? reuseCandidates(previous.candidates, eligible, topK) : [];
-  if (candidates.length < topK) {
-    const benchmarks = await fetchBenchmarks(fetchImpl, baseUrl, headers, Boolean(apiKey));
-    warnings = benchmarks.warnings;
-    const ranked = rankOpenRouterFreeModels(eligible, benchmarks.data, { topK: Math.max(topK, eligible.length) });
-    candidates = mergeCandidates(candidates, ranked, topK);
-  }
+  const benchmarks = await fetchBenchmarks(fetchImpl, baseUrl, headers, Boolean(apiKey));
+  const warnings = benchmarks.warnings;
+  const candidates = rankOpenRouterFreeModels(eligible, benchmarks.data, { topK });
   if (!candidates.length) throw freeModelError("OpenRouter free models were found, but none could be ranked for LaunchClip frame authoring");
-  if (reusable) candidates = moveCandidateFirst(candidates, reusable.id);
 
-  const selected = reusable ? candidates.find((candidate) => candidate.id === reusable.id) ?? candidates[0] : candidates[0];
+  const selected = candidates[0];
   const state = {
     schema_version: STATE_SCHEMA_VERSION,
     role,
@@ -71,12 +75,12 @@ export async function selectOpenRouterFreeModels(options = {}) {
     selected_model: selected.id,
     selected_canonical_slug: selected.canonical_slug,
     verified_free_at: now,
-    ranked_at: reusable ? previous.ranked_at : now,
+    ranked_at: now,
     candidates: candidates.map((candidate) => mergeCandidateHistory(candidate, previous?.candidates)),
     warnings
   };
   await writeState(statePath, state);
-  return selectionFromState(statePath, state, reusable ? "sticky" : "ranked");
+  return selectionFromState(statePath, state, "ranked");
 }
 
 export async function recordOpenRouterFreeModelOutcome(selection, outcome = {}, options = {}) {
@@ -286,20 +290,6 @@ function openRouterHeaders(apiKey) {
     ...(process.env.OPENROUTER_HTTP_REFERER ? { "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER } : {}),
     ...(process.env.OPENROUTER_APP_NAME ? { "X-OpenRouter-Title": process.env.OPENROUTER_APP_NAME } : {})
   };
-}
-
-function reuseCandidates(stored, eligible, topK) {
-  const eligibleById = new Map(eligible.map((model) => [model.id, model]));
-  return (stored ?? [])
-    .filter((candidate) => eligibleById.has(candidate.id))
-    .slice(0, topK)
-    .map((candidate) => ({ ...candidate, name: eligibleById.get(candidate.id).name ?? candidate.name }));
-}
-
-function mergeCandidates(first, second, topK) {
-  const merged = new Map();
-  for (const candidate of [...first, ...second]) if (!merged.has(candidate.id)) merged.set(candidate.id, candidate);
-  return [...merged.values()].slice(0, topK);
 }
 
 function mergeCandidateHistory(candidate, previous = []) {
