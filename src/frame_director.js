@@ -421,7 +421,8 @@ function mergeUsage(...items) {
 }
 
 export function sanitizeFrameBundle(bundle, context = {}) {
-  const stylesheetRepair = removeExternalStylesheetImports(bundle?.html);
+  const transformRepair = removeNeutralCssTransforms(bundle?.html);
+  const stylesheetRepair = removeExternalStylesheetImports(transformRepair.html);
   const transportRepair = repairTemplateTransport(stylesheetRepair.html);
   const timelineSafeHtml = context.shot?.id ? ensureTimelineRegistration(transportRepair.html, context.shot.id) : transportRepair.html;
   let removed = 0;
@@ -430,6 +431,7 @@ export function sanitizeFrameBundle(bundle, context = {}) {
     return "";
   }));
   const repairs = [];
+  if (transformRepair.removed) repairs.push({ kind: "remove-neutral-css-transforms", count: transformRepair.removed });
   if (stylesheetRepair.removed) repairs.push({ kind: "remove-external-stylesheet-imports", count: stylesheetRepair.removed });
   if (transportRepair.wrapped) repairs.push({ kind: "wrap-live-frame-in-template" });
   if (transportRepair.movedStyles || transportRepair.movedScripts) {
@@ -466,6 +468,17 @@ export function sanitizeFrameBundle(bundle, context = {}) {
     bundle: { ...normalizedBundle, html: rootRepair.html, root_media_requests: rootMediaRequests },
     repairs
   };
+}
+
+function removeNeutralCssTransforms(html) {
+  const zero = "0(?:px|%|em|rem|vw|vh)?";
+  const neutralTransform = new RegExp(`\\btransform\\s*:\\s*(?:translate(?:X|Y)?\\(\\s*${zero}(?:\\s*,\\s*${zero})?\\s*\\)|scale(?:X|Y)?\\(\\s*1\\s*\\)|rotate\\(\\s*0(?:deg|rad|turn)?\\s*\\))\\s*;?`, "gi");
+  let removed = 0;
+  const source = String(html ?? "").replace(neutralTransform, () => {
+    removed += 1;
+    return "";
+  });
+  return { html: source, removed };
 }
 
 function removeExternalStylesheetImports(html) {

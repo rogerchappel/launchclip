@@ -213,6 +213,17 @@ test("salvages a framed scene with an external font import and live head styles"
   assert.deepEqual(validateHyperFramesRoot(sanitized.bundle.html, shot, context.plan.format), []);
 });
 
+test("removes only visually neutral CSS transforms before GSAP owns the element", () => {
+  const bundle = frameBundle("shot-1", 5);
+  bundle.html = bundle.html.replace("#root{", ".mask{transform:translateX(0)}.scaled{transform:scale(.9)}#root{");
+
+  const sanitized = sanitizeFrameBundle(bundle);
+
+  assert.doesNotMatch(sanitized.bundle.html, /transform:translateX\(0\)/);
+  assert.match(sanitized.bundle.html, /\.scaled\{transform:scale\(\.9\)\}/);
+  assert.deepEqual(sanitized.repairs, [{ kind: "remove-neutral-css-transforms", count: 1 }]);
+});
+
 test("builds a deterministic presenter fallback that satisfies the frame contract", () => {
   const context = fixture();
   const shot = { ...context.plan.shots[0], presenter: { mode: "companion", visible: true }, resource_ids: ["presenter"] };
