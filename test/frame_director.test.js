@@ -125,7 +125,7 @@ test("removes event-handler attributes locally without changing visible button c
   assert.doesNotMatch(sanitized.bundle.html, /onclick=/i);
   assert.match(sanitized.bundle.html, />Do something<\/div>/);
   assert.match(sanitized.bundle.html, /const one=\(s\)=>root\.querySelector\(s\)/);
-  assert.deepEqual(sanitized.repairs, [{ kind: "remove-event-handler-attributes", count: 1 }]);
+  assert.deepEqual(sanitized.repairs, [{ kind: "remove-document-wrapper" }, { kind: "remove-event-handler-attributes", count: 1 }]);
 });
 
 test("removes authoritative voiceover requests from the frame bundle locally", () => {
@@ -137,6 +137,8 @@ test("removes authoritative voiceover requests from the frame bundle locally", (
   });
   assert.deepEqual(sanitized.bundle.root_media_requests, []);
   assert.deepEqual(sanitized.repairs, [{
+    kind: "remove-document-wrapper"
+  }, {
     kind: "remove-authoritative-voiceover-root-media",
     resource_id: "voiceover",
     presenter_mode: "voiceover"
@@ -151,7 +153,7 @@ test("adds missing authoritative root contract attributes locally without overwr
   const sanitized = sanitizeFrameBundle(bundle, { shot: context.plan.shots[0], format: context.plan.format });
 
   assert.match(sanitized.bundle.html, /id="root" data-composition-id="shot-1" data-start="0" data-duration="5" data-width="1080" data-height="1920"/);
-  assert.deepEqual(sanitized.repairs, [{
+  assert.deepEqual(sanitized.repairs, [{ kind: "remove-document-wrapper" }, {
     kind: "add-missing-root-contract-attributes",
     attributes: ["data-start", "data-duration", "data-width", "data-height"]
   }]);
@@ -173,7 +175,7 @@ test("adds host root styling and removes only a redundant frame type locally", (
 
   assert.equal(sanitized.bundle.type, undefined);
   assert.match(sanitized.bundle.html, /<template><style>#root\{position:relative;overflow:hidden\}<\/style>/);
-  assert.deepEqual(sanitized.repairs, [{ kind: "remove-redundant-frame-type" }, { kind: "add-missing-root-style" }]);
+  assert.deepEqual(sanitized.repairs, [{ kind: "remove-document-wrapper" }, { kind: "remove-redundant-frame-type" }, { kind: "add-missing-root-style" }]);
   assert.deepEqual(validateHyperFramesRoot(sanitized.bundle.html, context.plan.shots[0], context.plan.format), []);
 });
 
@@ -205,10 +207,12 @@ test("salvages a framed scene with an external font import and live head styles"
   const sanitized = sanitizeFrameBundle(bundle, { shot, format: context.plan.format });
 
   assert.doesNotMatch(sanitized.bundle.html, /@import|fonts\.googleapis\.com/i);
+  assert.doesNotMatch(sanitized.bundle.html, /<\/?(?:html|head|body)\b/i);
   assert.match(sanitized.bundle.html, /<template><style>#shot-1-proof\{color:#fff\}<\/style><style>#root/);
   assert.deepEqual(sanitized.repairs, [
     { kind: "remove-external-stylesheet-imports", count: 1 },
-    { kind: "move-live-blocks-into-template", styles: 1, scripts: 0 }
+    { kind: "move-live-blocks-into-template", styles: 1, scripts: 0 },
+    { kind: "remove-document-wrapper" }
   ]);
   assert.deepEqual(validateHyperFramesRoot(sanitized.bundle.html, shot, context.plan.format), []);
 });
@@ -221,7 +225,7 @@ test("removes only visually neutral CSS transforms before GSAP owns the element"
 
   assert.doesNotMatch(sanitized.bundle.html, /transform:translateX\(0\)/);
   assert.match(sanitized.bundle.html, /\.scaled\{transform:scale\(\.9\)\}/);
-  assert.deepEqual(sanitized.repairs, [{ kind: "remove-neutral-css-transforms", count: 1 }]);
+  assert.deepEqual(sanitized.repairs, [{ kind: "remove-neutral-css-transforms", count: 1 }, { kind: "remove-document-wrapper" }]);
 });
 
 test("builds a deterministic presenter fallback that satisfies the frame contract", () => {

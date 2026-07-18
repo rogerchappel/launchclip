@@ -444,6 +444,7 @@ export function sanitizeFrameBundle(bundle, context = {}) {
   if (transportRepair.movedStyles || transportRepair.movedScripts) {
     repairs.push({ kind: "move-live-blocks-into-template", styles: transportRepair.movedStyles, scripts: transportRepair.movedScripts });
   }
+  if (transportRepair.strippedDocument) repairs.push({ kind: "remove-document-wrapper" });
   if (removed) repairs.push({ kind: "remove-event-handler-attributes", count: removed });
   const normalizedBundle = { ...bundle };
   if (normalizedBundle.type != null && normalizedBundle.type === normalizedBundle.schema_version) {
@@ -505,7 +506,7 @@ function removeExternalStylesheetImports(html) {
 function repairTemplateTransport(html) {
   const source = String(html ?? "");
   const templates = [...source.matchAll(/<template\b[^>]*>([\s\S]*?)<\/template>/gi)];
-  if (templates.length > 1) return { html: source, wrapped: false, movedStyles: 0, movedScripts: 0 };
+  if (templates.length > 1) return { html: source, wrapped: false, movedStyles: 0, movedScripts: 0, strippedDocument: false };
   if (templates.length === 1 && templates[0][1].trim()) {
     const template = templates[0];
     const before = source.slice(0, template.index);
@@ -514,14 +515,20 @@ function repairTemplateTransport(html) {
     const afterBlocks = extractLiveBlocks(after);
     const styles = [...beforeBlocks.styles, ...afterBlocks.styles];
     const scripts = [...beforeBlocks.scripts, ...afterBlocks.scripts];
-    if (!styles.length && !scripts.length) return { html: source, wrapped: false, movedStyles: 0, movedScripts: 0 };
+    const strippedOutside = `${beforeBlocks.html}${afterBlocks.html}`
+      .replace(/<!doctype[^>]*>/gi, "")
+      .replace(/<\/?(?:html|head|body)\b[^>]*>/gi, "")
+      .trim();
+    const strippedDocument = strippedOutside.length === 0 && `${beforeBlocks.html}${afterBlocks.html}`.trim().length > 0;
+    if (!styles.length && !scripts.length && !strippedDocument) return { html: source, wrapped: false, movedStyles: 0, movedScripts: 0, strippedDocument: false };
     const opening = template[0].match(/^<template\b[^>]*>/i)?.[0] ?? "<template>";
     const rebuilt = `${opening}${styles.join("")}${template[1]}${scripts.join("")}</template>`;
     return {
-      html: `${beforeBlocks.html}${rebuilt}${afterBlocks.html}`,
+      html: strippedDocument ? rebuilt : `${beforeBlocks.html}${rebuilt}${afterBlocks.html}`,
       wrapped: false,
       movedStyles: styles.length,
-      movedScripts: scripts.length
+      movedScripts: scripts.length,
+      strippedDocument
     };
   }
   const live = source
@@ -529,8 +536,8 @@ function repairTemplateTransport(html) {
     .replace(/<template\b[^>]*>\s*<\/template>/gi, "")
     .replace(/<\/?(?:html|head|body)\b[^>]*>/gi, "")
     .trim();
-  if (!/<[^>]+\bid=["']root["']/i.test(live) || !/<style\b/i.test(live) || !/<script\b/i.test(live)) return { html: source, wrapped: false, movedStyles: 0, movedScripts: 0 };
-  return { html: `<template>${live}</template>`, wrapped: true, movedStyles: 0, movedScripts: 0 };
+  if (!/<[^>]+\bid=["']root["']/i.test(live) || !/<style\b/i.test(live) || !/<script\b/i.test(live)) return { html: source, wrapped: false, movedStyles: 0, movedScripts: 0, strippedDocument: false };
+  return { html: `<template>${live}</template>`, wrapped: true, movedStyles: 0, movedScripts: 0, strippedDocument: false };
 }
 
 function extractLiveBlocks(source) {
