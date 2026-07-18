@@ -193,6 +193,7 @@ test("selects and records a proven free vision critic before reviewing pixels", 
   assert.equal(route.model, "google/gemma-4-31b-it:free");
   assert.equal(request.model, "google/gemma-4-31b-it:free");
   assert.equal(request.promptCacheKey, "launchclip:production-critic:v2");
+  assert.equal(request.maxOutputTokens, 4_000);
   assert.equal(result.free_model_selection.selected_model, "google/gemma-4-31b-it:free");
   assert.equal(JSON.parse(await readFile(result.critique, "utf8")).free_model_selection.source, "live-probe");
 });
@@ -342,8 +343,11 @@ test("compacts raw temporal samples before sending a production critique", async
     quality: { ok: true, findings: [] }
   })}\n`);
   await writeFile(path.join(qa, "inspect.json"), `${JSON.stringify({
-    ok: true,
-    stdout: { layout: { ok: true, infoCount: 1, findings: [{ severity: "info", code: "detail" }], samples: [{ at: 0 }, { at: 1 }] } }
+    ok: false,
+    stdout: { layout: { ok: false, errorCount: 1, infoCount: 1, findings: [
+      { severity: "info", code: "detail" },
+      { severity: "error", code: "blocking", selector: "#bad", message: "Visible text is clipped.", rect: { left: -50 }, sourceFile: "/tmp/private.html", occurrences: 2 }
+    ], samples: [{ at: 0 }, { at: 1 }] } }
   })}\n`);
   let request;
   await critiqueProduction(workspace, {}, { client: { runStructured: async (options) => {
@@ -365,6 +369,15 @@ test("compacts raw temporal samples before sending a production critique", async
   assert.equal(input.deterministic_reports.inspect.stdout.layout.samples, undefined);
   assert.equal(input.deterministic_reports.inspect.stdout.layout.sample_count, 2);
   assert.equal(input.deterministic_reports.inspect.stdout.layout.omitted_info_findings, 1);
+  assert.deepEqual(input.deterministic_reports.inspect.stdout.layout.findings[0], {
+    code: "blocking",
+    severity: "error",
+    selector: "#bad",
+    message: "Visible text is clipped.",
+    occurrences: 2
+  });
+  assert.deepEqual(input.deterministic_verification.failed, []);
+  assert.equal(input.deterministic_verification.snapshots, undefined);
 });
 
 test("rejects a critic that ignores a human review request", async () => {

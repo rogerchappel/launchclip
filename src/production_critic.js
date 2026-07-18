@@ -70,7 +70,7 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
       claims: plan.claims,
       evidence_index: evidenceIndex,
       claim_support: plan.claims.map((claim) => ({ claim: claim.text, confidence: claim.confidence, qualifier: claim.qualifier, evidence: claim.evidence_ids.map((id) => evidenceById.get(id)).filter(Boolean).map((entry) => ({ id: entry.id, content: String(entry.content ?? "").slice(0, 6_000), provenance: entry.provenance, claims_allowed: entry.claims_allowed })) })),
-      deterministic_verification: verification,
+      deterministic_verification: compactVerificationReport(verification),
       deterministic_reports: { lint, validate, inspect: compactInspectReport(inspect) },
       temporal_motion_analysis: compactMotionAnalysis(motion),
       time_aligned_audio_analysis: compactAudioAnalysis(audio),
@@ -88,7 +88,7 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
     schema: CRITIQUE_SCHEMA,
     schemaName: "launchclip_production_critique",
     background: options.background !== false,
-    maxOutputTokens: Number(options.maxOutputTokens ?? 20_000),
+    maxOutputTokens: Number(options.maxOutputTokens ?? (route.provider === "openrouter" && (route.model === "openrouter/free" || route.model.endsWith(":free")) ? 4_000 : 20_000)),
     promptCacheKey: "launchclip:production-critic:v2",
     metadata: { job_id: "production-critique", shots: plan.shots.length }
   };
@@ -278,13 +278,53 @@ function compactInspectReport(report) {
     stdout[key] = {
       ...section,
       ...(findings ? {
-        findings: findings.filter((finding) => finding?.severity !== "info"),
+        findings: compactBrowserFindings(findings.filter((finding) => finding?.severity !== "info")),
         omitted_info_findings: findings.filter((finding) => finding?.severity === "info").length
       } : {}),
       ...(samples ? { samples: undefined, sample_count: samples.length } : {})
     };
   }
   return { ...report, stdout };
+}
+
+function compactVerificationReport(report) {
+  if (!report || typeof report !== "object") return report;
+  const checks = report.checks && typeof report.checks === "object"
+    ? Object.fromEntries(Object.entries(report.checks).map(([name, check]) => [name, {
+      ok: check?.ok,
+      exit_code: check?.exit_code,
+      strict_warning_count: check?.strict_warning_count,
+      failure_kind: check?.failure_kind
+    }]))
+    : report.checks;
+  return {
+    schema_version: report.schema_version,
+    status: report.status,
+    plan: report.plan,
+    checks,
+    failed: report.failed ?? [],
+    infrastructure_failed: report.infrastructure_failed ?? [],
+    snapshot_file_count: report.snapshot_artifacts?.files?.length ?? null
+  };
+}
+
+function compactBrowserFindings(findings) {
+  const unique = new Map();
+  for (const finding of findings ?? []) {
+    const compact = {
+      code: finding?.code,
+      severity: finding?.severity,
+      selector: finding?.selector,
+      text: finding?.text,
+      message: finding?.message,
+      first_seen: finding?.firstSeen ?? finding?.time,
+      last_seen: finding?.lastSeen ?? finding?.time,
+      occurrences: finding?.occurrences
+    };
+    const key = [compact.code, compact.severity, compact.selector, compact.text, compact.message].join("|");
+    if (!unique.has(key)) unique.set(key, compact);
+  }
+  return [...unique.values()].slice(0, 80);
 }
 
 function compactObject(value, omittedKeys) {
