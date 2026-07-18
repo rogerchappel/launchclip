@@ -517,11 +517,15 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
     assert.equal(input.scene_blueprint.supporting_motion_beats.length, 2);
     assert.equal(input.shot, undefined);
     assert.ok(input.narration_anchors.length <= 8);
+    const value = frameBundle(shot.id, shot.duration_seconds);
+    value.html = blueprintFrameHtml(shot.id, shot.duration_seconds, input.scene_blueprint);
+    value.motion.assertions[0].selector = input.scene_blueprint.motion_beats[0].selector;
+    value.motion.events[0].selector = input.scene_blueprint.motion_beats[0].selector;
     return {
       response_id: `frame_${shot.id}`,
       model: "google/gemma-code:free",
       status: "completed",
-      value: frameBundle(shot.id, shot.duration_seconds),
+      value,
       usage: { input_tokens: 200, output_tokens: 100, total_tokens: 300 }
     };
   } };
@@ -769,6 +773,21 @@ function frameBundle(id, duration) {
     }],
     evidence_ids: ["ev-1"], visible_copy: ["Proof"], preserve: ["proof hierarchy"]
   };
+}
+
+function blueprintFrameHtml(id, duration, blueprint) {
+  const elements = blueprint.elements.map((element) => `<div id="${element.selector.slice(1)}" class="clip" data-start="0" data-duration="${duration}">${element.object_id}</div>`).join("");
+  const calls = blueprint.supporting_motion_beats.map((beat, index) => {
+    const from = Object.fromEntries(beat.changes.map((change) => [change.property, change.from_value]));
+    const to = Object.fromEntries(beat.changes.map((change) => [change.property, change.to_value]));
+    Object.assign(to, { duration: beat.duration_seconds, ease: beat.ease }, index ? { immediateRender: false } : {});
+    return `tl.fromTo(${JSON.stringify(beat.selector)},${objectLiteral(from)},${objectLiteral(to)},${beat.at_seconds});`;
+  }).join("");
+  return `<template><style>#root{position:absolute;inset:0}</style><div id="root" data-composition-id="${id}" data-start="0" data-duration="${duration}" data-width="1080" data-height="1920">${elements}</div><script>window.__timelines=window.__timelines||{};var tl=gsap.timeline({paused:true});${calls}window.__timelines["${id}"]=tl;</script></template>`;
+}
+
+function objectLiteral(value) {
+  return `{${Object.entries(value).map(([key, entry]) => `${key}:${JSON.stringify(entry)}`).join(",")}}`;
 }
 
 function fixture() {

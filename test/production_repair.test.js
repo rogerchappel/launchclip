@@ -6,7 +6,8 @@ import test from "node:test";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { modelRouteKey, parseModelRoute } from "../src/model_provider.js";
 import { FRAME_BUNDLE_VERSION } from "../src/production_contracts.js";
-import { applyFramePatch, buildRepairInput, collectDeterministicRepairFindings, FRAME_PATCH_VERSION, repairProduction, validateLockedSupportingMotion } from "../src/production_repair.js";
+import { validateLockedSupportingMotion } from "../src/frame_blueprint.js";
+import { applyFramePatch, buildRepairInput, collectDeterministicRepairFindings, FRAME_PATCH_VERSION, repairProduction } from "../src/production_repair.js";
 
 test("repairs only criticised frames, preserves the frame contract, and invalidates assembly", async () => {
   const workspace = await fixture();
