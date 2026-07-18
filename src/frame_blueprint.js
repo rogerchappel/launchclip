@@ -119,7 +119,7 @@ This blueprint is a binding handoff to a second LLM that will write the HTML and
 - Map every planned shot.visual.objects id exactly once to a unique DOM selector beginning #shot_id-. Do not invent or omit semantic object ids.
 - Map every planned shot.visual.events id exactly once, using one of its target object ids and the selector assigned to that object. Preserve the planned time.
 - Map every supplied supporting_motion_contract window exactly once in supporting_motion_beats. Start inside the narrow window and keep duration between its minimum_duration_seconds and maximum_duration_seconds. These are additional visual actions on planned objects, not new claims, SFX cues, or shot.visual.events.
-- Give every supporting beat exact non-equal numeric from/to values in changes. Respect the per-property minimum magnitude in the contract. Opening must use a hook-scale x, y, scale, or rotation change, begin by 0.1s, and be visibly underway before 0.65s; opacity alone is not an opening hook.
+- Give every supporting beat exact non-equal numeric from/to values in changes. At least one change per beat must meet its per-property minimum magnitude; a second property may provide a subtler companion adjustment. Opening must use a hook-scale x, y, scale, or rotation change, begin by 0.1s, and be visibly underway before 0.65s; opacity alone is not an opening hook.
 - Distribute supporting targets where the object set allows it and target non-container semantic objects at least minimum_semantic_beats times. Do not spend most development windows on decorative background fades.
 - Use 2-4 coherent motion patterns across the scene, such as transform entrances, staggered reveals, path/progress development, or restrained emphasis. The windows deliberately cover more than half the scene: use their full authored duration, preserve the final readable state, and never tween layout properties or create endless drift.
 - Use concrete visual forms that express the declared diagram, comparison, process, timeline, data view, or spatial metaphor. Avoid a sparse headline floating over decoration and avoid generic card grids unless the plan explicitly calls for them.
@@ -242,6 +242,7 @@ export function validateFrameBlueprint(blueprint, shot) {
     }
     const changes = Array.isArray(beat?.changes) ? beat.changes : [];
     const seenProperties = new Set();
+    let perceptibleMagnitude = false;
     let openingMagnitude = false;
     for (const [changeIndex, change] of changes.entries()) {
       const limits = SUPPORTING_CHANGE_LIMITS[change?.property];
@@ -253,11 +254,13 @@ export function validateFrameBlueprint(blueprint, shot) {
       const delta = Math.abs(toValue - fromValue);
       if (!Number.isFinite(fromValue) || !Number.isFinite(toValue) || fromValue < limits.minimum || fromValue > limits.maximum || toValue < limits.minimum || toValue > limits.maximum) {
         errors.push(`supporting_motion_beats[${index}].changes[${changeIndex}] has invalid ${change.property} values`);
-      } else if (delta < limits.minimumDelta) {
-        errors.push(`supporting_motion_beats[${index}].changes[${changeIndex}] ${change.property} delta must be at least ${limits.minimumDelta}`);
+      } else if (delta < .001) {
+        errors.push(`supporting_motion_beats[${index}].changes[${changeIndex}] ${change.property} must not be a no-op`);
       }
+      if (delta >= limits.minimumDelta) perceptibleMagnitude = true;
       if (limits.hookDelta != null && delta >= limits.hookDelta) openingMagnitude = true;
     }
+    if (changes.length && !perceptibleMagnitude) errors.push(`supporting_motion_beats[${index}] requires at least one change at the minimum perceptible magnitude`);
     if (window?.id === "opening") {
       if (atSeconds > .1 + .05) errors.push(`supporting_motion_beats[${index}] opening must begin by 0.1 seconds`);
       if (!["entrance", "semantic-reveal"].includes(beat?.intent)) errors.push(`supporting_motion_beats[${index}] opening intent must be entrance or semantic-reveal`);
