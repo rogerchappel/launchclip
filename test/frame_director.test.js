@@ -537,7 +537,10 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Set must_remain_live=false for reveal-then-settle elements/.test(entry.instructions)));
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Implement every scene_blueprint\.supporting_motion_beats entry/.test(entry.instructions)));
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /not new semantic timeline events/.test(entry.instructions)));
-  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => entry.prompt_cache_key === "launchclip:frame-director:v6"));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /at least 4\.5:1 for normal text and 3:1 for large text/.test(entry.instructions)));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Do not use negative top offsets/.test(entry.instructions)));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /must never cross or cover a label/.test(entry.instructions)));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => entry.prompt_cache_key === "launchclip:frame-director:v7"));
   assert.deepEqual(result.frames.map((entry) => entry.usage.total_tokens), [450, 450]);
   assert.ok(result.frames.every((entry) => entry.blueprint.cached === false));
   assert.match(await readFile(result.frames[0].blueprint.path, "utf8"), /launchclip\.frame-blueprint\.v2/);

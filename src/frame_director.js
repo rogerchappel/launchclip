@@ -71,6 +71,10 @@ Creative contract:
 - Keep supporting tweens seek-safe and finite. Establish required initial state with gsap.set, preserve the static authored end state, and never overlap writes to the same property on the same selector.
 - Treat global_design.style_dna and the supplied shot or shot_contract visual as binding. Build the declared diagram, comparison, process, timeline, or data form—not a headline over decoration.
 - Preserve readable non-overlapping zones, deliberate spacing, exact palette/type roles, and the planned motion/continuity. Keep copy brief and visual.
+- Every final text/surface pairing must meet WCAG AA: at least 4.5:1 for normal text and 3:1 for large text. Use the dark foreground on pale/accent fills or a dedicated contrasting plate; never rely on low opacity accent text over another colored surface.
+- Keep labels, values, and annotations inside a parent whose authored height includes them. Do not use negative top offsets to park text outside a rail, bar, card, or clipped container.
+- Give semantic text its own stacking layer above bars, fills, tiles, and decorative overlays. An opaque animated primitive must never cross or cover a label or numeric value.
+- CSS must contain no transform declaration on a selector that GSAP sets or tweens, including neutral transform:translateX(0), scale(1), or rotate(0). Put static transforms on a wrapper that GSAP never targets.
 - Use supplied evidence only for grounded labels, metrics, and claims. Use only supplied resource paths; otherwise draw native HTML/CSS/SVG.
 - motion.assertions selectors must be existing shot-prefixed ids and describe observable behavior. Set must_remain_live=false for reveal-then-settle elements; use true only when that exact element or its descendants visibly keep moving with no static window longer than one third of the shot. Give appears_by_seconds a conservative buffer after its entrance.
 - motion.events must use exact planned visual object ids and event ids. Keep event times inside the shot.
@@ -195,7 +199,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
     : buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming });
   const customRouting = options.routes != null || options.provider != null || options.model != null || options.baseUrl != null;
   const inputHash = customRouting
-    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, worker: options.sceneBlueprint ? "frame-director.v7" : "frame-director.v5" })
+    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, worker: options.sceneBlueprint ? "frame-director.v8" : "frame-director.v5" })
     : semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v4" });
   const existing = store.get(jobId);
   const recovered = await recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
@@ -255,7 +259,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
           background: options.background !== false,
           maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
           ...(blueprint ? { temperature: Number(routeAttempt === 1 ? options.frameTemperature ?? .4 : options.frameRepairTemperature ?? .1) } : {}),
-          promptCacheKey: options.leanPrompt ? "launchclip:frame-director:v6" : "launchclip:frame-director:v4",
+          promptCacheKey: options.leanPrompt ? "launchclip:frame-director:v7" : "launchclip:frame-director:v4",
           metadata: { job_id: jobId, shot_id: shot.id, attempt: totalAttempt, route: routeIndex + 1 },
           onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
         };
