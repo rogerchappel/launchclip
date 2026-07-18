@@ -31,7 +31,7 @@ export async function verifyFrameCandidate(workspacePath, bundle, options = {}, 
   }, adapters);
   const comparison = compareEvidence(candidate, baseline, options);
   const report = {
-    schema_version: "launchclip.frame-candidate-verification.v3",
+    schema_version: "launchclip.frame-candidate-verification.v4",
     shot_id: shot.id,
     attempt,
     status: comparison.ok ? "passed" : "failed",
@@ -123,16 +123,46 @@ function compareEvidence(candidate, baseline, options) {
   if (!baselineIssues.size || !candidateIssues.size) return { ok: false, failure_kind: "content", error: candidate.check.error ?? "Candidate browser check could not be compared with its baseline" };
   const newFindings = [...candidateIssues.keys()].filter((key) => !baselineIssues.has(key));
   const worsenedFindings = [...candidateIssues].filter(([key, weight]) => baselineIssues.has(key) && weight > baselineIssues.get(key)).map(([key]) => key);
-  if (newFindings.length || worsenedFindings.length) {
-    return { ok: false, failure_kind: "content", error: "Candidate introduced or worsened browser findings", detail_retention: retention == null ? null : rounded(retention), new_findings: newFindings, worsened_findings: worsenedFindings };
-  }
   const improvedFindings = [...baselineIssues].filter(([key, weight]) => !candidateIssues.has(key) || candidateIssues.get(key) < weight).map(([key]) => key);
+  const baselineIssueScore = sumWeights(baselineIssues);
+  const candidateIssueScore = sumWeights(candidateIssues);
+  const maximumIssueScoreRatio = Number(options.maximumIssueScoreRatio ?? .8);
+  const regressions = [...newFindings, ...worsenedFindings];
+  const criticalRegressions = regressions.filter(criticalIssueKey);
+  const acceptsBoundedTradeoff = improvedFindings.length > 0
+    && !criticalRegressions.length
+    && candidateIssueScore < baselineIssueScore
+    && candidateIssueScore <= baselineIssueScore * maximumIssueScoreRatio;
+  if (regressions.length && !acceptsBoundedTradeoff) {
+    return {
+      ok: false,
+      failure_kind: "content",
+      error: "Candidate introduced or worsened browser findings without a sufficient net improvement",
+      detail_retention: retention == null ? null : rounded(retention),
+      new_findings: newFindings,
+      worsened_findings: worsenedFindings,
+      critical_regressions: criticalRegressions,
+      baseline_issue_score: rounded(baselineIssueScore),
+      candidate_issue_score: rounded(candidateIssueScore)
+    };
+  }
   if (!improvedFindings.length) {
     const remainingFindings = issueSummaries(candidate.check.stdout, [...candidateIssues.keys()]);
     const detail = remainingFindings.length ? ` Remaining: ${remainingFindings.join("; ")}` : "";
     return { ok: false, failure_kind: "content", error: `Candidate did not resolve or reduce any browser finding.${detail}`.slice(0, 1_500), detail_retention: retention == null ? null : rounded(retention), new_findings: [], worsened_findings: [], improved_findings: [], remaining_findings: remainingFindings };
   }
-  return { ok: true, failure_kind: null, error: null, detail_retention: retention == null ? null : rounded(retention), new_findings: [], worsened_findings: [], improved_findings: improvedFindings };
+  return {
+    ok: true,
+    failure_kind: null,
+    error: null,
+    detail_retention: retention == null ? null : rounded(retention),
+    new_findings: newFindings,
+    worsened_findings: worsenedFindings,
+    improved_findings: improvedFindings,
+    accepted_tradeoffs: regressions,
+    baseline_issue_score: rounded(baselineIssueScore),
+    candidate_issue_score: rounded(candidateIssueScore)
+  };
 }
 
 async function assembledFontCss(workspace, shotId) {
@@ -193,11 +223,42 @@ function issueWeights(stdout) {
   const weights = new Map();
   for (const finding of blockingFindings(stdout)) {
     const key = issueKey(finding);
-    const unresolved = String(typeof finding === "string" ? finding : finding.message ?? "").match(/(\d+) unresolved layout issue/i);
-    const weight = unresolved ? Number(unresolved[1]) : 1;
+    const weight = issueWeight(finding);
     weights.set(key, (weights.get(key) ?? 0) + weight);
   }
   return weights;
+}
+
+function issueWeight(finding) {
+  const message = String(typeof finding === "string" ? finding : finding.message ?? "");
+  const unresolved = message.match(/(\d+) unresolved layout issue/i);
+  if (unresolved) return Number(unresolved[1]);
+  const code = String(typeof finding === "string" ? "error" : finding.code ?? "error").toLowerCase();
+  if (code === "console_error" || code.startsWith("runtime_") || code === "motion_spec_invalid") return 100;
+  let weight = 1;
+  if (code === "motion_appears_late") {
+    const timing = message.match(/appears at\s+(-?[\d.]+)s.*visible by\s+(-?[\d.]+)s/i);
+    weight = 1 + (timing ? Math.max(0, Number(timing[1]) - Number(timing[2])) : 1);
+  } else if (code === "motion_off_frame" || code === "motion_frozen") weight = 3;
+  else if (code === "motion_out_of_order") weight = 1;
+  else if (code.includes("occluded")) weight = 2 + Math.max(0, Number(finding?.coveredFraction ?? 0)) * 3;
+  else if (code.includes("overlap") || code.includes("overflow")) weight = 2;
+  else if (code.includes("contrast")) {
+    const ratio = Number(finding?.ratio);
+    const required = Number(finding?.requiredRatio);
+    weight = 1 + (Number.isFinite(ratio) && Number.isFinite(required) ? Math.max(0, required - ratio) : 1);
+  }
+  const occurrences = Math.max(1, Number(finding?.occurrences ?? 1));
+  return weight * Math.min(2, 1 + Math.log2(occurrences) / 8);
+}
+
+function sumWeights(weights) {
+  return [...weights.values()].reduce((total, weight) => total + weight, 0);
+}
+
+function criticalIssueKey(key) {
+  const code = String(key).split("|", 1)[0];
+  return code === "console_error" || code.startsWith("runtime_") || code === "motion_spec_invalid";
 }
 
 function issueSummaries(stdout, keys, limit = 3) {
