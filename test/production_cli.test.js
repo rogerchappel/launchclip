@@ -240,7 +240,7 @@ test("blocks standalone paid repair for a recorded infrastructure failure", asyn
   assert.equal(repairCalls, 0);
 });
 
-test("stops a persistent verification repair loop at the configured bound", async () => {
+test("renders a vision-supervised draft at the persistent repair bound", async () => {
   const calls = [];
   const adapters = {
     withProductionLease: async (_workspace, operation) => operation(),
@@ -249,19 +249,45 @@ test("stops a persistent verification repair loop at the configured bound", asyn
     produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
     directFrames: async () => ({ generated: 1, cached: 0 }),
     assembleHyperFrames: async () => { calls.push("assemble"); return {}; },
-    renderDraftProduction: async () => {
-      calls.push("draft");
+    renderDraftProduction: async (_workspace, options) => {
+      calls.push(options.allowContentVerificationFailures ? "supervised-draft" : "draft");
+      if (options.allowContentVerificationFailures) return { status: "ready", video: "/tmp/draft.mp4", verification: { status: "failed", failed: ["inspect:shot-1"], snapshots: "/tmp/snapshots" }, critique: { verdict: "ship" } };
       throw Object.assign(new Error("still failing"), { code: "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED", verification: { status: "failed", failed: ["inspect:shot-1"], qa: "/tmp/qa" } });
     },
     fallbackFramesForVerification: async () => ({ status: "not-applicable", repaired: [] }),
     repairProduction: async () => { calls.push("repair"); return { status: "repaired", repaired: [{ shot_id: "shot-1" }] }; }
   };
   const result = await runProduction("owner/repo", { "max-repair-passes": "1" }, adapters);
-  assert.equal(result.status, "needs-repair");
-  assert.equal(result.draft, null);
+  assert.equal(result.status, "awaiting-approval");
+  assert.equal(result.draft.video, "/tmp/draft.mp4");
   assert.equal(result.repairs.length, 1);
-  assert.deepEqual(calls, ["assemble", "draft", "repair", "assemble", "draft"]);
-  assert.match(result.next, /\/tmp\/qa/);
+  assert.deepEqual(calls, ["assemble", "draft", "repair", "assemble", "draft", "supervised-draft"]);
+  assert.match(result.next, /\/tmp\/draft\.mp4/);
+});
+
+test("uses visual critique to direct the final bounded repair pass", async () => {
+  const calls = [];
+  const repairTriggers = [];
+  let drafts = 0;
+  const adapters = {
+    withProductionLease: async (_workspace, operation) => operation(),
+    buildIntake: async () => ({ workspace: "/tmp/workspace" }), writeIntake: async () => ({ workspace: "/tmp/workspace" }), prepareSourceMedia: async () => ({ status: "not-applicable" }),
+    collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), resolveProductionEntities: async () => ({}), planProduction: async () => ({}),
+    produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
+    directFrames: async () => ({ generated: 1, cached: 0 }),
+    assembleHyperFrames: async () => { calls.push("assemble"); return {}; },
+    renderDraftProduction: async () => {
+      calls.push("draft"); drafts += 1;
+      if (drafts <= 2) throw Object.assign(new Error("browser QA finding"), { code: "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED", verification: { status: "failed", failed: ["inspect:shot-1"], qa: "/tmp/qa" } });
+      return { status: "ready", video: "/tmp/draft.mp4", verification: { status: "ready", snapshots: "/tmp/snapshots" }, critique: { verdict: "ship" } };
+    },
+    critiqueProduction: async () => { calls.push("vision-critique"); return { verdict: "repair", findings: 1 }; },
+    repairProduction: async (_workspace, options) => { calls.push("repair"); repairTriggers.push(options.trigger); return { status: "repaired", repaired: [{ shot_id: "shot-1" }] }; }
+  };
+  const result = await runProduction("owner/repo", { "max-repair-passes": "2" }, adapters);
+  assert.equal(result.status, "awaiting-approval");
+  assert.deepEqual(repairTriggers, ["verification", "critique"]);
+  assert.deepEqual(calls, ["assemble", "draft", "repair", "assemble", "draft", "vision-critique", "repair", "assemble", "draft"]);
 });
 
 test("executes the full audio, frame, assembly, and draft closure after a replan verdict", async () => {

@@ -222,6 +222,7 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
   const repairs = [];
   const localRepairs = [];
   const maximumRepairPasses = numberOr(flags["max-repair-passes"], 2);
+  let visionReviewRequested = false;
   while (true) {
     let trigger;
     try {
@@ -237,7 +238,23 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
       verification = error.verification;
       trigger = "verification";
     }
-    if (repairs.length >= maximumRepairPasses) break;
+    if (repairs.length >= maximumRepairPasses) {
+      draft = await renderVisionSupervisedDraft(workspace, flags, adapters);
+      verification = draft.verification;
+      critique = draft.critique;
+      break;
+    }
+    if (trigger === "verification" && repairs.length > 0 && !visionReviewRequested) {
+      critique = await (adapters.critiqueProduction ?? critiqueProduction)(workspace, criticOptions(flags), adapters.critic);
+      visionReviewRequested = true;
+      if (!["repair", "replan"].includes(critique.verdict)) {
+        draft = await renderVisionSupervisedDraft(workspace, flags, adapters);
+        verification = draft.verification;
+        critique = draft.critique;
+        break;
+      }
+      trigger = "critique";
+    }
     const repair = await runProductionRepair(workspace, flags, {
       ...repairOptions(flags),
       trigger,
@@ -288,6 +305,13 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
         ? `Review ${verification.qa}; run production-repair after resolving any unscoped verification findings.`
         : `Review ${critique?.critique ?? "production/qa/critique.json"}; resolve remaining findings before final approval.`
   };
+}
+
+function renderVisionSupervisedDraft(workspace, flags, adapters) {
+  return (adapters.renderDraftProduction ?? renderDraftProduction)(workspace, {
+    ...renderOptions(flags),
+    allowContentVerificationFailures: true
+  }, adapters.render);
 }
 
 function entityOptions(flags) {
