@@ -1,6 +1,14 @@
 import { SHOT_ID_PATTERN } from "./production_contracts.js";
 
-export const FRAME_BLUEPRINT_VERSION = "launchclip.frame-blueprint.v2";
+export const FRAME_BLUEPRINT_VERSION = "launchclip.frame-blueprint.v3";
+
+const SUPPORTING_CHANGE_LIMITS = {
+  opacity: { minimum: 0, maximum: 1, minimumDelta: .25, hookDelta: null },
+  x: { minimum: -1080, maximum: 1080, minimumDelta: 36, hookDelta: 64 },
+  y: { minimum: -1920, maximum: 1920, minimumDelta: 36, hookDelta: 64 },
+  scale: { minimum: .2, maximum: 2.5, minimumDelta: .06, hookDelta: .1 },
+  rotation: { minimum: -360, maximum: 360, minimumDelta: 5, hookDelta: 8 }
+};
 
 const string = { type: "string" };
 const shotId = { type: "string", pattern: SHOT_ID_PATTERN };
@@ -71,12 +79,17 @@ export const FRAME_BLUEPRINT_SCHEMA = strictObject({
       selector: { type: "string", pattern: "^#[a-z0-9][a-z0-9_-]{0,127}$" },
       at_seconds: { type: "number", minimum: 0 },
       duration_seconds: { type: "number", minimum: 0.05, maximum: 3.5, description: "Must not exceed the selected window's maximum_duration_seconds." },
-      intent: { type: "string", enum: ["entrance", "semantic-reveal", "emphasis", "progression", "ambient", "exit"] },
-      properties: {
+      intent: { type: "string", enum: ["entrance", "semantic-reveal", "emphasis", "progression", "exit"] },
+      changes: {
         type: "array",
         minItems: 1,
         maxItems: 2,
-        items: { type: "string", enum: ["opacity", "x", "y", "scale", "rotation", "color", "backgroundColor", "borderRadius"] }
+        description: "Exact non-equal numeric states for one or two perceptible transform/opacity changes. The implementation uses these values in tl.fromTo.",
+        items: strictObject({
+          property: { type: "string", enum: Object.keys(SUPPORTING_CHANGE_LIMITS) },
+          from_value: { type: "number", minimum: -1920, maximum: 1920 },
+          to_value: { type: "number", minimum: -1920, maximum: 1920 }
+        })
       },
       action: { type: "string", minLength: 1, maxLength: 240, description: "A concrete seek-safe GSAP action with a perceptible visual change." }
     })
@@ -105,9 +118,10 @@ This blueprint is a binding handoff to a second LLM that will write the HTML and
 - Reserve deliberate percentage-based zones across the full canvas before placing elements. Keep essential regions non-overlapping and inside 0-100% bounds.
 - Map every planned shot.visual.objects id exactly once to a unique DOM selector beginning #shot_id-. Do not invent or omit semantic object ids.
 - Map every planned shot.visual.events id exactly once, using one of its target object ids and the selector assigned to that object. Preserve the planned time.
-- Map every supplied supporting_motion_contract window exactly once in supporting_motion_beats. Keep its time inside the window and its duration at or below maximum_duration_seconds. These are additional visual micro-actions on planned objects, not new claims, SFX cues, or shot.visual.events.
-- Choose the target, intent, allowed properties, duration, and concrete action. Distribute attention across the composition, target semantic objects for at least half the supporting beats, and make the change perceptible rather than decorative sub-pixel drift.
-- Use 2-4 coherent motion patterns across the scene, such as transform entrances, staggered reveals, path/progress development, restrained emphasis, or finite ambient motion. Preserve the authored static end state and never tween layout properties.
+- Map every supplied supporting_motion_contract window exactly once in supporting_motion_beats. Start inside the narrow window and keep duration between its minimum_duration_seconds and maximum_duration_seconds. These are additional visual actions on planned objects, not new claims, SFX cues, or shot.visual.events.
+- Give every supporting beat exact non-equal numeric from/to values in changes. Respect the per-property minimum magnitude in the contract. Opening must use a hook-scale x, y, scale, or rotation change, begin by 0.1s, and be visibly underway before 0.65s; opacity alone is not an opening hook.
+- Distribute supporting targets according to maximum_repeats_per_object and target non-container semantic objects at least minimum_semantic_beats times. Do not spend development windows on decorative background fades.
+- Use 2-4 coherent motion patterns across the scene, such as transform entrances, staggered reveals, path/progress development, or restrained emphasis. The windows deliberately cover more than half the scene: use their full authored duration, preserve the final readable state, and never tween layout properties or create endless drift.
 - Use concrete visual forms that express the declared diagram, comparison, process, timeline, data view, or spatial metaphor. Avoid a sparse headline floating over decoration and avoid generic card grids unless the plan explicitly calls for them.
 - Plan phone-readable typography and a meaningful occupied-area target. The fullest frame should feel composed, not empty.
 - Preserve exact supplied on-screen copy and evidence. Do not add claims.
@@ -207,6 +221,7 @@ export function validateFrameBlueprint(blueprint, shot) {
   const supportingWindows = new Map(supportingContract.windows.map((entry) => [entry.id, entry]));
   const supportingBeats = Array.isArray(blueprint?.supporting_motion_beats) ? blueprint.supporting_motion_beats : [];
   const seenWindows = new Set();
+  const supportingTargetCounts = new Map();
   let semanticSupportingBeats = 0;
   for (const [index, beat] of supportingBeats.entries()) {
     const window = supportingWindows.get(beat?.window_id);
@@ -215,7 +230,8 @@ export function validateFrameBlueprint(blueprint, shot) {
     seenWindows.add(beat?.window_id);
     const object = plannedObjects.get(beat?.object_id);
     if (!object) errors.push(`supporting_motion_beats[${index}].object_id is not planned: ${beat?.object_id}`);
-    if (object && object.kind !== "decoration") semanticSupportingBeats += 1;
+    if (object && !["container", "decoration"].includes(object.kind)) semanticSupportingBeats += 1;
+    supportingTargetCounts.set(beat?.object_id, (supportingTargetCounts.get(beat?.object_id) ?? 0) + 1);
     const element = elementByObject.get(beat?.object_id);
     if (element && beat?.selector !== element.selector) errors.push(`supporting_motion_beats[${index}].selector must match ${beat?.object_id}`);
     const atSeconds = Number(beat?.at_seconds);
@@ -223,13 +239,39 @@ export function validateFrameBlueprint(blueprint, shot) {
     if (window && (!Number.isFinite(atSeconds) || atSeconds < window.start_seconds - .05 || atSeconds > window.end_seconds + .05)) {
       errors.push(`supporting_motion_beats[${index}].at_seconds must be inside ${window.id} (${window.start_seconds}-${window.end_seconds})`);
     }
-    if (!Number.isFinite(beatDuration) || beatDuration < .05 || beatDuration > 3.5 || (window && beatDuration > window.maximum_duration_seconds + .05) || atSeconds + beatDuration > duration + .05) {
+    if (!Number.isFinite(beatDuration) || beatDuration < .05 || beatDuration > 3.5 || (window && (beatDuration < window.minimum_duration_seconds - .05 || beatDuration > window.maximum_duration_seconds + .05)) || atSeconds + beatDuration > duration + .05) {
       errors.push(`supporting_motion_beats[${index}].duration_seconds must finish inside the shot`);
+    }
+    const changes = Array.isArray(beat?.changes) ? beat.changes : [];
+    const seenProperties = new Set();
+    let openingMagnitude = false;
+    for (const [changeIndex, change] of changes.entries()) {
+      const limits = SUPPORTING_CHANGE_LIMITS[change?.property];
+      if (!limits) continue;
+      if (seenProperties.has(change.property)) errors.push(`supporting_motion_beats[${index}].changes[${changeIndex}].property must be unique: ${change.property}`);
+      seenProperties.add(change.property);
+      const fromValue = Number(change?.from_value);
+      const toValue = Number(change?.to_value);
+      const delta = Math.abs(toValue - fromValue);
+      if (!Number.isFinite(fromValue) || !Number.isFinite(toValue) || fromValue < limits.minimum || fromValue > limits.maximum || toValue < limits.minimum || toValue > limits.maximum) {
+        errors.push(`supporting_motion_beats[${index}].changes[${changeIndex}] has invalid ${change.property} values`);
+      } else if (delta < limits.minimumDelta) {
+        errors.push(`supporting_motion_beats[${index}].changes[${changeIndex}] ${change.property} delta must be at least ${limits.minimumDelta}`);
+      }
+      if (limits.hookDelta != null && delta >= limits.hookDelta) openingMagnitude = true;
+    }
+    if (window?.id === "opening") {
+      if (atSeconds > .1 + .05) errors.push(`supporting_motion_beats[${index}] opening must begin by 0.1 seconds`);
+      if (!["entrance", "semantic-reveal"].includes(beat?.intent)) errors.push(`supporting_motion_beats[${index}] opening intent must be entrance or semantic-reveal`);
+      if (!openingMagnitude) errors.push(`supporting_motion_beats[${index}] opening requires a hook-scale x, y, scale, or rotation change`);
     }
   }
   for (const id of supportingWindows.keys()) if (!seenWindows.has(id)) errors.push(`supporting_motion_beats must include window: ${id}`);
   if (supportingBeats.length && semanticSupportingBeats < Math.ceil(supportingContract.minimum_semantic_beats)) {
     errors.push(`supporting_motion_beats must target semantic objects at least ${supportingContract.minimum_semantic_beats} times`);
+  }
+  for (const [objectId, count] of supportingTargetCounts) {
+    if (count > supportingContract.maximum_repeats_per_object) errors.push(`supporting_motion_beats may target ${objectId} at most ${supportingContract.maximum_repeats_per_object} times`);
   }
 
   for (const copy of shot?.on_screen_text ?? []) {
@@ -244,31 +286,38 @@ export function validateFrameBlueprint(blueprint, shot) {
 
 function supportingMotionContract(shot, anchors = []) {
   const duration = Math.max(.2, Number(shot?.end_seconds) - Number(shot?.start_seconds));
-  const plannedEventCount = (shot?.visual?.events ?? []).length;
-  const minimumTotalBeats = Math.max(duration >= 2 ? 3 : 2, Math.ceil(duration / 3.75));
-  const beatCount = Math.max(1, Math.min(6, minimumTotalBeats - plannedEventCount));
+  const beatCount = Math.max(1, Math.min(6, Math.max(duration >= 8 ? 3 : 2, Math.ceil(duration / 3.5))));
+  const semanticObjectCount = (shot?.visual?.objects ?? []).filter((entry) => !["container", "decoration"].includes(entry.kind)).length;
+  const usableObjectCount = Math.max(1, (shot?.visual?.objects ?? []).filter((entry) => entry.kind !== "decoration").length);
   const windows = Array.from({ length: beatCount }, (_, index) => {
     const segmentStart = duration * index / beatCount;
     const segmentEnd = duration * (index + 1) / beatCount;
     const startSeconds = segmentStart;
-    const completionReserve = Math.min(.8, Math.max(.05, duration * .2));
-    const endSeconds = index === 0
-      ? Math.max(startSeconds, Math.min(.8, segmentEnd, duration - completionReserve))
-      : Math.max(startSeconds, Math.min(duration - completionReserve, segmentEnd));
-    const overlappingAnchors = anchors.filter((anchor) => Number(anchor.end_seconds) >= startSeconds && Number(anchor.start_seconds) <= endSeconds);
+    const segmentDuration = segmentEnd - segmentStart;
+    const opening = index === 0;
+    const closing = index === beatCount - 1;
+    const availableDuration = Math.max(.05, duration - segmentStart);
+    const minimumDuration = opening ? Math.min(.55, duration) : Math.min(availableDuration, closing ? 2.4 : 2.8, Math.max(.8, segmentDuration * .65));
+    const maximumDuration = opening ? Math.min(.65, duration) : Math.min(3.5, Math.max(minimumDuration, segmentDuration * .9));
+    const endSeconds = opening ? Math.min(.1, Math.max(0, duration - minimumDuration)) : Math.min(segmentStart + Math.min(.35, segmentDuration * .1), duration - minimumDuration);
+    const overlappingAnchors = anchors.filter((anchor) => Number(anchor.end_seconds) >= segmentStart && Number(anchor.start_seconds) <= segmentEnd);
     return {
-      id: index === 0 ? "opening" : index === beatCount - 1 ? "closing" : `development-${index}`,
+      id: opening ? "opening" : closing ? "closing" : `development-${index}`,
       start_seconds: rounded(startSeconds),
       end_seconds: rounded(endSeconds),
-      maximum_duration_seconds: rounded(Math.max(.05, Math.min(3.5, duration - endSeconds))),
-      intent: index === 0 ? "Create an immediate visual hook" : index === beatCount - 1 ? "Sustain attention and prepare the handoff" : "Develop the scene while narration advances",
+      minimum_duration_seconds: rounded(Math.max(.05, minimumDuration)),
+      maximum_duration_seconds: rounded(Math.max(.05, maximumDuration)),
+      intent: opening ? "Move a large visible region immediately with a hook-scale transform" : closing ? "Sustain visible semantic motion into the handoff" : "Develop a semantic object with sustained visible motion while narration advances",
       ...(overlappingAnchors.length ? { narration_cue: compactText(overlappingAnchors.map((entry) => entry.text).join(" "), 120) } : {})
     };
   });
   return {
     required_supporting_beats: beatCount,
-    minimum_semantic_beats: Math.ceil(beatCount / 2),
-    rule: "Return exactly one supporting_motion_beat per window. Planned motion_beats remain separate timeline/SFX events.",
+    minimum_semantic_beats: semanticObjectCount ? Math.ceil(beatCount * 2 / 3) : 0,
+    maximum_repeats_per_object: Math.ceil(beatCount / usableObjectCount),
+    minimum_change_magnitudes: Object.fromEntries(Object.entries(SUPPORTING_CHANGE_LIMITS).map(([property, limits]) => [property, limits.minimumDelta])),
+    opening_hook_magnitudes: Object.fromEntries(Object.entries(SUPPORTING_CHANGE_LIMITS).filter(([, limits]) => limits.hookDelta != null).map(([property, limits]) => [property, limits.hookDelta])),
+    rule: "Return exactly one sustained supporting_motion_beat per window with explicit non-equal numeric changes. Planned motion_beats remain separate timeline/SFX events.",
     windows
   };
 }
