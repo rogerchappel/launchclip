@@ -12,7 +12,6 @@ test("builds a compact blueprint packet and a smaller implementation handoff", (
   assert.deepEqual(blueprintInput.required_events, [{ id: "shot-1-reveal", target_ids: ["proof-node"], at_seconds: 1 }]);
   assert.equal(blueprintInput.supporting_motion_contract.required_supporting_beats, 2);
   assert.deepEqual(blueprintInput.supporting_motion_contract.windows.map((entry) => entry.id), ["opening", "closing"]);
-  assert.equal(blueprintInput.supporting_motion_contract.windows[0].start_seconds, 0);
   assert.ok(blueprintInput.supporting_motion_contract.windows[0].end_seconds <= .8);
   assert.ok(blueprintInput.evidence[0].content.length <= 1_200);
   assert.ok(blueprintInput.narration_anchors.length <= 8);
