@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_VERSION, normalizeFrameBlueprint, validateFrameBlueprint } from "../src/frame_blueprint.js";
+import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_VERSION, normalizeFrameBlueprint, repairMissingOpeningMotionPosition, validateFrameBlueprint, validateLockedSupportingMotion } from "../src/frame_blueprint.js";
 
 test("builds a compact blueprint packet and a smaller implementation handoff", () => {
   const context = fixture();
@@ -102,6 +102,20 @@ test("normalizes mechanical free-model blueprint drift without replacing its vis
   }]);
   assert.equal(normalized.density.minimum_semantic_objects, 2);
   assert.deepEqual(validateFrameBlueprint(normalized, shot), { ok: true, errors: [] });
+});
+
+test("makes an omitted position explicit only for the first locked opening tween", () => {
+  const beat = validBlueprint().supporting_motion_beats[0];
+  beat.at_seconds = 0;
+  const html = `<script>const tl=gsap.timeline({paused:true});gsap.set("#shot-1-proof",{scale:.86});tl.fromTo("#shot-1-proof",{opacity:0,scale:.86},{opacity:1,scale:1,duration:.6,ease:"power3.out"});</script>`;
+
+  const repaired = repairMissingOpeningMotionPosition(html, [beat]);
+
+  assert.equal(repaired.repaired, true);
+  assert.match(repaired.html, /ease:"power3\.out"},0\)/);
+  assert.deepEqual(validateLockedSupportingMotion(repaired.html, [beat]), []);
+  const afterEarlierTween = html.replace("gsap.set", "tl.set");
+  assert.equal(repairMissingOpeningMotionPosition(afterEarlierTween, [beat]).repaired, false);
 });
 
 function validBlueprint() {

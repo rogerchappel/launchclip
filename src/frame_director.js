@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_INSTRUCTIONS, FRAME_BLUEPRINT_SCHEMA, FRAME_BLUEPRINT_VERSION, normalizeFrameBlueprint, validateFrameBlueprint, validateLockedSupportingMotion } from "./frame_blueprint.js";
+import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_INSTRUCTIONS, FRAME_BLUEPRINT_SCHEMA, FRAME_BLUEPRINT_VERSION, normalizeFrameBlueprint, repairMissingOpeningMotionPosition, validateFrameBlueprint, validateLockedSupportingMotion } from "./frame_blueprint.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { ensureTimelineRegistration, hasTimelineRegistration } from "./hyperframes_timeline.js";
 import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model_provider.js";
@@ -298,7 +298,14 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
           format: plan.format,
           resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
         });
-        const candidate = sanitized.bundle;
+        const lockedMotionRepair = blueprint
+          ? repairMissingOpeningMotionPosition(sanitized.bundle.html, blueprint.value.supporting_motion_beats)
+          : { html: sanitized.bundle.html, repaired: false };
+        const candidate = { ...sanitized.bundle, html: lockedMotionRepair.html };
+        const repairs = [
+          ...sanitized.repairs,
+          ...(lockedMotionRepair.repaired ? [{ kind: "add-explicit-opening-motion-position", at_seconds: 0 }] : [])
+        ];
         const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
         errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format), ...(blueprint ? validateLockedSupportingMotion(candidate.html, blueprint.value.supporting_motion_beats) : [])];
         await writeFrameAttempt(workspace, shot.id, totalAttempt, {
@@ -307,7 +314,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
           provider: route.provider,
           model: result.model,
           usage: result.usage,
-          repairs: sanitized.repairs,
+          repairs,
           errors,
           candidate
         });
@@ -322,8 +329,8 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         return {
           shot_id: shot.id,
           cached: false,
-          sanitized: sanitized.repairs.length > 0,
-          repairs: sanitized.repairs,
+          sanitized: repairs.length > 0,
+          repairs,
           bundle: paths[0],
           html: paths[1],
           motion: paths[2],

@@ -382,6 +382,24 @@ export function validateLockedSupportingMotion(html, beats = []) {
   return [...new Set(errors)];
 }
 
+export function repairMissingOpeningMotionPosition(html, beats = []) {
+  const source = String(html ?? "");
+  const opening = beats.find((beat) => beat?.window_id === "opening" && nearlyEqual(beat?.at_seconds, 0));
+  if (!opening) return { html: source, repaired: false };
+  const pattern = /\b(tl|timeline)\.fromTo\(\s*(['"])(#[^'"]+)\2\s*,\s*\{[^{}]*\}\s*,\s*\{[^{}]*\}\s*\)/g;
+  for (const match of source.matchAll(pattern)) {
+    if (match[3] !== opening.selector) continue;
+    const earlierTimelineMutation = new RegExp(`\\b${match[1]}\\.(?:to|from|fromTo|set|add|call)\\s*\\(`).test(source.slice(0, match.index));
+    if (earlierTimelineMutation) return { html: source, repaired: false };
+    const repairedCall = match[0].replace(/\)$/, ",0)");
+    return {
+      html: `${source.slice(0, match.index)}${repairedCall}${source.slice(match.index + match[0].length)}`,
+      repaired: true
+    };
+  }
+  return { html: source, repaired: false };
+}
+
 function parseFromToCalls(html) {
   const calls = [];
   const pattern = /\b(?:tl|timeline)\.fromTo\(\s*(['"])(#[^'"]+)\1\s*,\s*\{([^{}]*)\}\s*,\s*\{([^{}]*)\}\s*,\s*(-?(?:\d+\.?\d*|\.\d+))\s*\)/g;
