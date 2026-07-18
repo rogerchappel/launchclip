@@ -46,7 +46,7 @@ test("validates complete object, event, selector, timing, copy, and density hand
   assert.match(validation.errors.join("\n"), /elements must include planned object: proof-label/);
   assert.match(validation.errors.join("\n"), /at_seconds must preserve 1/);
   assert.match(validation.errors.join("\n"), /at_seconds must be inside opening/);
-  assert.match(validation.errors.join("\n"), /opacity delta must be at least 0.25/);
+  assert.match(validation.errors.join("\n"), /requires at least one change at the minimum perceptible magnitude/);
   assert.match(validation.errors.join("\n"), /opening requires a hook-scale/);
   assert.match(validation.errors.join("\n"), /object_id is not planned: evidence-grid/);
   assert.match(validation.errors.join("\n"), /target semantic objects at least 1 times/);
