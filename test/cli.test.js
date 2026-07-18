@@ -124,6 +124,10 @@ test("creates and discovers project-local style packs", async () => {
   try {
     await mkdir(source, { recursive: true });
     await writeFile(path.join(source, "frame.md"), "# AI news channel\n");
+    await assert.rejects(
+      () => runCli(["style", "create", "--from", source, "--root", root], { stdout: { write: () => {} } }),
+      /Missing style name/
+    );
 
     const createOutput = [];
     await runCli(["style", "create", "ai-news", "--from", source, "--root", root], { stdout: { write: (value) => createOutput.push(value) } });

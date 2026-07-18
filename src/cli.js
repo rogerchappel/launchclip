@@ -127,7 +127,8 @@ function parseStyleInvocation(action, rest) {
   if (!action) throw new Error("Missing style action; use create, save, list, or show");
   if (!new Set(["create", "save", "list", "show"]).has(action)) throw new Error(`Unknown style action: ${action}`);
   const takesName = action !== "list";
-  return { action, name: takesName ? rest[0] : null, flagArgs: takesName ? rest.slice(1) : rest };
+  const hasName = takesName && rest[0] && !rest[0].startsWith("--");
+  return { action, name: hasName ? rest[0] : null, flagArgs: hasName ? rest.slice(1) : rest };
 }
 
 export function parseFlags(args) {
