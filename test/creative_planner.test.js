@@ -94,14 +94,49 @@ test("creates the planning client from the intake provider route", async () => {
   intake.model = { provider: "openrouter", id: "openrouter/free", reasoning_effort: "none", reasoning_mode: "standard" };
   const workspace = await tempWorkspace(intake);
   let route;
+  const selected = freeSelection(path.join(workspace, "free-model-state.json"));
   const result = await planProduction(workspace, {}, {
+    selectOpenRouterFreeModels: async () => selected,
+    probeOpenRouterFreeModels: async () => ({ ...selected, source: "live-probe", routes: [selected.routes[0]] }),
     createClient: (received) => {
       route = received;
       return { runStructured: async () => ({ response_id: "free-plan", model: "free-planner", status: "completed", value: samplePlan(), usage: {} }) };
     }
   });
   assert.equal(result.response_id, "free-plan");
-  assert.deepEqual(route, { provider: "openrouter", model: "openrouter/free", reasoning: "none", supportsImages: false });
+  assert.equal(route.provider, "openrouter");
+  assert.equal(route.model, "tencent/hy3:free");
+  assert.equal(route.reasoning, "none");
+  assert.equal(result.free_model_selection.selected_model, "tencent/hy3:free");
+});
+
+test("rotates to the next proven free planner after a full request failure", async () => {
+  const intake = sampleIntake();
+  intake.model = { provider: "openrouter", id: "openrouter/free", reasoning_effort: "none", reasoning_mode: "standard" };
+  const workspace = await tempWorkspace(intake);
+  const selected = freeSelection(path.join(workspace, "free-model-state.json"));
+  const fallback = {
+    ...selected,
+    source: "rotated-after-failure",
+    selected_model: "google/gemma-4-26b-a4b-it:free",
+    routes: ["openrouter:google/gemma-4-26b-a4b-it:free@none"]
+  };
+  const routes = [];
+  const result = await planProduction(workspace, {}, {
+    selectOpenRouterFreeModels: async () => selected,
+    probeOpenRouterFreeModels: async (_selection, options) => options.excludeIds ? fallback : { ...selected, routes: [selected.routes[0]] },
+    recordOpenRouterFreeModelOutcome: async (_selection, outcome) => {
+      assert.match(outcome.error.message, /planner timed out/);
+      return fallback;
+    },
+    createClient: (route) => ({ runStructured: async () => {
+      routes.push(route.model);
+      if (route.model === "tencent/hy3:free") throw new Error("planner timed out");
+      return { response_id: "free-plan-fallback", model: route.model, status: "completed", value: samplePlan(), usage: {} };
+    } })
+  });
+  assert.deepEqual(routes, ["tencent/hy3:free", "google/gemma-4-26b-a4b-it:free"]);
+  assert.equal(result.free_model_selection.selected_model, "google/gemma-4-26b-a4b-it:free");
 });
 
 test("feeds a failed plan and exact validator errors into one bounded semantic repair", async () => {
@@ -267,6 +302,21 @@ function samplePlan() {
     claims: [{ text: "Evidence becomes motion", evidence_ids: ["ev-1"], confidence: "verified", qualifier: null }],
     shots: [shot("shot-1", 0, 5, "Proof becomes the story."), shot("shot-2", 5, 10, "Then the result lands.")],
     rubric: [{ id: "rubric-1", criterion: "Every hold develops", measurement: "No more than two seconds without a semantic reveal or intentional reading hold", severity: "major" }]
+  };
+}
+
+function freeSelection(statePath) {
+  return {
+    source: "ranked",
+    state_path: statePath,
+    selected_model: "tencent/hy3:free",
+    verified_free_at: "2026-07-18T00:00:00.000Z",
+    routes: ["openrouter:tencent/hy3:free@none", "openrouter:google/gemma-4-26b-a4b-it:free@none"],
+    candidates: [
+      { id: "tencent/hy3:free", score: 40, coverage: 0.9 },
+      { id: "google/gemma-4-26b-a4b-it:free", score: 34, coverage: 0.1 }
+    ],
+    warnings: []
   };
 }
 

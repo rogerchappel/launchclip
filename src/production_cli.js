@@ -475,6 +475,10 @@ function mediaAnalysisOptions(flags) {
     reasoning: flags["media-reasoning"] ?? "high",
     transcriptionModel: flags["transcription-model"] ?? "scribe_v2",
     transcribeAll: Boolean(flags["transcribe-all"]),
+    freeVisionStatePath: flags["free-vision-model-state"],
+    freeVisionCandidates: numberOr(flags["free-vision-model-candidates"], 3),
+    refreshFreeVisionModels: Boolean(flags["refresh-free-vision-models"] || flags["refresh-free-models"]),
+    freeVisionProbeTimeoutMs: numberOr(flags["free-vision-probe-timeout-ms"], 15_000),
     background: !flags.foreground
   };
 }
@@ -493,6 +497,10 @@ function plannerOptions(flags) {
     visualHistoryDir: flags["visual-history-dir"],
     visualHistoryLimit: numberOr(flags["visual-history-limit"], 8),
     visualSimilarityLimit: numberOr(flags["visual-similarity-limit"], 0.58),
+    freeModelStatePath: flags["free-model-state"],
+    freeModelCandidates: numberOr(flags["free-model-candidates"], 5),
+    refreshFreeModels: Boolean(flags["refresh-free-models"]),
+    freeModelProbeTimeoutMs: numberOr(flags["free-model-probe-timeout-ms"], 15_000),
     sfxDir: flags["sfx-dir"]
   };
 }

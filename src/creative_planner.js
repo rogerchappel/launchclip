@@ -3,7 +3,8 @@ import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
-import { createStructuredClient } from "./model_provider.js";
+import { probeOpenRouterFreeModels, recordOpenRouterFreeModelOutcome, selectOpenRouterFreeModels } from "./free_model_selector.js";
+import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import {
   PRODUCTION_PATHS,
   PRODUCTION_PLAN_SCHEMA,
@@ -72,7 +73,7 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
     const hierarchicalPlanner = adapters.planLongFormProduction ?? (await import("./long_form_planner.js")).planLongFormProduction;
     const plannerAdapters = { store };
     if (adapters.client) plannerAdapters.client = adapters.client;
-    else if (!adapters.planLongFormProduction) plannerAdapters.client = planningClient(intake, adapters);
+    else if (!adapters.planLongFormProduction) plannerAdapters.client = (await planningRuntime(intake, options, adapters)).client;
     return hierarchicalPlanner(workspace, { intake, evidence, suppliedNarration, sfxCatalog, noveltyContext, entityResolution, options }, plannerAdapters);
   }
   const input = buildPlanningInput(intake, evidence, suppliedNarration, { ...options, sfxCatalog, noveltyContext, entityResolution });
@@ -101,8 +102,11 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
     throw new Error(`Creative plan job is already ${current.status}: ${jobId}`);
   }
 
-  const client = adapters.client ?? planningClient(intake, adapters);
-  if (!resumeResponseId) await store.markRunning(jobId, { provider: intake.model?.provider ?? "openai", response_id: null, status: "running" });
+  const runtime = adapters.client
+    ? directPlanningRuntime(intake, adapters.client)
+    : await planningRuntime(intake, options, adapters);
+  const client = runtime.client;
+  if (!resumeResponseId) await store.markRunning(jobId, { provider: runtime.provider(), response_id: null, status: "running" });
   const validationContext = {
     evidenceIds: evidence.items.map((entry) => entry.id),
     claimEligibleEvidenceIds: evidence.items.filter((entry) => entry.claims_allowed && entry.role !== "reference").map((entry) => entry.id),
@@ -122,8 +126,8 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
   try {
     for (let attempt = 1; attempt <= semanticAttempts; attempt += 1) {
       const request = {
-        model: intake.model?.id ?? "gpt-5.6",
-        reasoningEffort: intake.model?.reasoning_effort ?? "xhigh",
+        model: runtime.model(),
+        reasoningEffort: runtime.reasoning(),
         reasoningContext: "current_turn",
         pro: intake.model?.reasoning_mode === "pro",
         instructions: PLANNER_INSTRUCTIONS,
@@ -138,14 +142,14 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
         maxOutputTokens: Number(options.maxOutputTokens ?? 48_000),
         promptCacheKey: "launchclip:creative-planner:v2",
         metadata: { job_id: jobId, source_kind: intake.source.kind, aspect: intake.brief.aspect.id, attempt },
-        onSubmitted: async (response) => store.markRunning(jobId, { provider: "openai", response_id: response.id, status: response.status })
+        onSubmitted: async (response) => store.markRunning(jobId, { provider: runtime.provider(), response_id: response.id, status: response.status })
       };
       const result = resumeResponseId ? await client.resumeStructured(resumeResponseId, request) : await client.runStructured(request);
       resumeResponseId = null;
       const plan = normalizeProductionPlanTiming(result.value);
       const validation = validateProductionPlan(plan, validationContext);
       validationErrors = validation.errors;
-      await store.markRunning(jobId, { provider: "openai", response_id: result.response_id, status: result.status });
+      await store.markRunning(jobId, { provider: runtime.provider(), response_id: result.response_id, status: result.status });
       attemptPaths.push(await writePlanAttempt(workspace, jobId, attempt, {
         response_id: result.response_id,
         model: result.model,
@@ -177,7 +181,8 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
         model: result.model,
         usage: result.usage,
         semantic_attempts: attempt,
-        cached: false
+        cached: false,
+        ...(runtime.selection() ? { free_model_selection: freeModelSelectionSummary(runtime.selection()) } : {})
       };
     }
     throw new Error("Creative plan exhausted semantic attempts");
@@ -187,13 +192,95 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
   }
 }
 
-function planningClient(intake, adapters) {
-  return (adapters.createClient ?? createStructuredClient)({
+function directPlanningRuntime(intake, client) {
+  const route = parseModelRoute({
     provider: intake.model?.provider ?? "openai",
     model: intake.model?.id ?? "gpt-5.6",
     reasoning: intake.model?.reasoning_effort ?? "xhigh",
     supportsImages: false
   });
+  return {
+    client,
+    provider: () => route.provider,
+    model: () => route.model,
+    reasoning: () => route.reasoning,
+    selection: () => null
+  };
+}
+
+async function planningRuntime(intake, options, adapters) {
+  const defaultRoute = parseModelRoute({
+    provider: intake.model?.provider ?? "openai",
+    model: intake.model?.id ?? "gpt-5.6",
+    reasoning: intake.model?.reasoning_effort ?? "xhigh",
+    supportsImages: false
+  });
+  const createClient = adapters.createClient ?? createStructuredClient;
+  if (defaultRoute.provider !== "openrouter" || defaultRoute.model !== "openrouter/free" || options.selectFreeModels === false) {
+    return directPlanningRuntime(intake, createClient(defaultRoute));
+  }
+  let selection = await selectFreePlannerModels(options, adapters);
+  let route = parseModelRoute(selection.routes[0], { supportsImages: false });
+  let client = createClient(route);
+  return {
+    client: {
+      runStructured: async (request) => {
+        try {
+          return await client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
+        } catch (error) {
+          const failedModel = selection.selected_model;
+          const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
+          const probeModels = adapters.probeOpenRouterFreeModels ?? probeOpenRouterFreeModels;
+          const rotated = await recordOutcome(selection, { error });
+          selection = await probeModels(rotated, {
+            timeoutMs: Number(options.freeModelProbeTimeoutMs ?? 15_000),
+            excludeIds: [failedModel],
+            stopAfterFirstSuccess: true
+          });
+          route = parseModelRoute(selection.routes[0], { supportsImages: false });
+          client = createClient(route);
+          return client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
+        }
+      },
+      resumeStructured: (responseId, request) => client.resumeStructured(responseId, { ...request, model: route.model, reasoningEffort: route.reasoning })
+    },
+    provider: () => route.provider,
+    model: () => route.model,
+    reasoning: () => route.reasoning,
+    selection: () => selection
+  };
+}
+
+async function selectFreePlannerModels(options, adapters) {
+  const selectModels = adapters.selectOpenRouterFreeModels ?? selectOpenRouterFreeModels;
+  const probeModels = adapters.probeOpenRouterFreeModels ?? probeOpenRouterFreeModels;
+  const selectionOptions = {
+    statePath: options.freeModelStatePath,
+    topK: options.freeModelCandidates ?? 5,
+    refresh: Boolean(options.refreshFreeModels),
+    role: "visual-code-author",
+    contract: "frame-director.v5"
+  };
+  let selection = await selectModels(selectionOptions);
+  const probeOptions = { timeoutMs: Number(options.freeModelProbeTimeoutMs ?? 15_000), stopAfterFirstSuccess: true };
+  try {
+    return await probeModels(selection, probeOptions);
+  } catch (error) {
+    if (selectionOptions.refresh) throw error;
+    selection = await selectModels({ ...selectionOptions, refresh: true });
+    return probeModels(selection, probeOptions);
+  }
+}
+
+function freeModelSelectionSummary(selection) {
+  return {
+    source: selection.source,
+    state_path: selection.state_path,
+    selected_model: selection.selected_model,
+    verified_free_at: selection.verified_free_at,
+    candidates: (selection.candidates ?? []).map((candidate) => ({ id: candidate.id, score: candidate.score, coverage: candidate.coverage })),
+    warnings: [...(selection.warnings ?? [])]
+  };
 }
 
 export function resolvePlanningMode(value = "auto", durationSeconds, thresholdSeconds = 180) {
