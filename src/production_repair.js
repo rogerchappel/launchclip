@@ -9,6 +9,7 @@ import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model
 import { PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
 import { buildRepairContextCapsule, buildRepairSourceCapsule, REPAIR_CAPSULE_VERSION } from "./repair_capsule.js";
 import { repairProductionPlan } from "./production_plan_repair.js";
+import { validateLockedSupportingMotion } from "./frame_blueprint.js";
 
 const REPAIR_INSTRUCTIONS = `You are repairing one previously authored HyperFrames shot after independent review.
 
@@ -376,55 +377,6 @@ export function buildRepairInput({ plan, shot, findings, prior, lockedPrior = pr
       "</launchclip-source>"
     ])
   ].join("\n");
-}
-
-export function validateLockedSupportingMotion(html, beats = []) {
-  if (!Array.isArray(beats) || !beats.length) return [];
-  const calls = parseFromToCalls(html);
-  const errors = [];
-  for (const beat of beats) {
-    const at = Number(beat?.at_seconds);
-    const call = calls.find((entry) => entry.selector === beat?.selector && nearlyEqual(entry.at, at));
-    const label = `${beat?.window_id ?? "supporting"}:${beat?.selector ?? "unknown"}@${beat?.at_seconds}`;
-    if (!call) {
-      errors.push(`locked supporting motion ${label} must remain one literal fromTo call`);
-      continue;
-    }
-    if (!nearlyEqual(call.to.duration, Number(beat?.duration_seconds))) errors.push(`locked supporting motion ${label} duration must remain ${beat?.duration_seconds}`);
-    if (call.to.ease !== beat?.ease) errors.push(`locked supporting motion ${label} ease must remain ${beat?.ease}`);
-    const changes = Array.isArray(beat?.changes) ? beat.changes : [];
-    const lockedProperties = new Set(changes.map((change) => change.property));
-    for (const change of changes) {
-      if (!nearlyEqual(call.from[change.property], Number(change.from_value))) errors.push(`locked supporting motion ${label} ${change.property} from_value must remain ${change.from_value}`);
-      if (!nearlyEqual(call.to[change.property], Number(change.to_value))) errors.push(`locked supporting motion ${label} ${change.property} to_value must remain ${change.to_value}`);
-    }
-    const animatedProperties = new Set(["opacity", "x", "y", "scale", "rotation"]);
-    for (const property of [...Object.keys(call.from), ...Object.keys(call.to)]) {
-      if (animatedProperties.has(property) && !lockedProperties.has(property)) errors.push(`locked supporting motion ${label} must not add ${property}`);
-    }
-    if (String(beat?.window_id) !== "opening" && call.to.immediateRender !== false) errors.push(`locked supporting motion ${label} must keep immediateRender:false`);
-  }
-  return [...new Set(errors)];
-}
-
-function parseFromToCalls(html) {
-  const calls = [];
-  const pattern = /\b(?:tl|timeline)\.fromTo\(\s*(['"])(#[^'"]+)\1\s*,\s*\{([^{}]*)\}\s*,\s*\{([^{}]*)\}\s*,\s*(-?(?:\d+\.?\d*|\.\d+))\s*\)/g;
-  for (const match of String(html ?? "").matchAll(pattern)) {
-    calls.push({ selector: match[2], from: parseFlatObject(match[3]), to: parseFlatObject(match[4]), at: Number(match[5]) });
-  }
-  return calls;
-}
-
-function parseFlatObject(source) {
-  const value = {};
-  const pattern = /([A-Za-z_$][\w$]*)\s*:\s*(?:(['"])(.*?)\2|(-?(?:\d+\.?\d*|\.\d+))|(true|false))/g;
-  for (const match of String(source ?? "").matchAll(pattern)) value[match[1]] = match[3] ?? (match[4] != null ? Number(match[4]) : match[5] === "true");
-  return value;
-}
-
-function nearlyEqual(left, right) {
-  return Number.isFinite(Number(left)) && Number.isFinite(Number(right)) && Math.abs(Number(left) - Number(right)) <= .001;
 }
 
 export function applyFramePatch(bundle, patch, options = {}) {

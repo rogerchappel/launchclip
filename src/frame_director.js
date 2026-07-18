@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_INSTRUCTIONS, FRAME_BLUEPRINT_SCHEMA, FRAME_BLUEPRINT_VERSION, validateFrameBlueprint } from "./frame_blueprint.js";
+import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_INSTRUCTIONS, FRAME_BLUEPRINT_SCHEMA, FRAME_BLUEPRINT_VERSION, validateFrameBlueprint, validateLockedSupportingMotion } from "./frame_blueprint.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { ensureTimelineRegistration, hasTimelineRegistration } from "./hyperframes_timeline.js";
 import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model_provider.js";
@@ -205,7 +205,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
     ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BLUEPRINT_SCHEMA, worker: "frame-blueprint.v5" })
     : null;
   const inputHash = customRouting
-    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, worker: options.sceneBlueprint ? "frame-director.v10" : "frame-director.v5" })
+    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, worker: options.sceneBlueprint ? "frame-director.v11" : "frame-director.v5" })
     : semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v4" });
   const existing = store.get(jobId);
   const resanitized = await resanitizeStoredFrame({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
@@ -300,7 +300,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         });
         const candidate = sanitized.bundle;
         const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
-        errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
+        errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format), ...(blueprint ? validateLockedSupportingMotion(candidate.html, blueprint.value.supporting_motion_beats) : [])];
         await writeFrameAttempt(workspace, shot.id, totalAttempt, {
           input_hash: inputHash,
           response_id: result.response_id,
