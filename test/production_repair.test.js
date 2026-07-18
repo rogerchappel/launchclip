@@ -524,6 +524,36 @@ test("uses scoped source capsules for remote repair routes when requested", asyn
   assert.match(await readFile(result.repaired[0].html, "utf8"), /Scoped proof/);
 });
 
+test("regenerates one complete scene when a free scoped patch cannot pass", async () => {
+  const workspace = await fixture();
+  const schemas = [];
+  const client = { supportsImages: false, runStructured: async (request) => {
+    schemas.push(request.schemaName);
+    if (request.schemaName === "launchclip_frame_patch") {
+      return {
+        response_id: "bad_patch", model: "tencent/hy3:free", status: "completed", usage: {},
+        value: {
+          schema_version: FRAME_PATCH_VERSION,
+          shot_id: "shot-2",
+          summary: "Patch with an unusable anchor",
+          edits: [{ target: "html", find: "not-in-the-source", replace: "still-not-in-the-source" }]
+        }
+      };
+    }
+    assert.equal(request.schemaName, "launchclip_repaired_frame_bundle");
+    assert.match(request.input, /validation_errors_to_repair/);
+    return { response_id: "regenerated", model: "tencent/hy3:free", status: "completed", usage: {}, value: bundle("shot-2", "Regenerated proof") };
+  } };
+  const result = await runRepair(workspace, {
+    sourceMode: "scoped",
+    semanticAttempts: 1,
+    routes: ["openrouter:tencent/hy3:free@none", "openrouter:google/gemma-4-26b-a4b-it:free@none"]
+  }, { client });
+  assert.deepEqual(schemas, ["launchclip_frame_patch", "launchclip_repaired_frame_bundle"]);
+  assert.equal(result.repaired[0].regeneration.full_frame, true);
+  assert.match(await readFile(result.repaired[0].html, "utf8"), /Regenerated proof/);
+});
+
 function runRepair(workspace, options = {}, adapters = {}) {
   return repairProduction(workspace, options, {
     verifyCandidate: async () => ({ ok: true, report: "/tmp/candidate-report.json", snapshots: "/tmp/candidate-snapshots" }),
@@ -580,7 +610,7 @@ async function fixture(options = {}) {
       continuity: { sequence_id: "proof-sequence", handoff: end < 10 ? "continue" : "resolve", inherits_object_ids: start ? ["proof-node"] : [], hands_off_object_ids: end < 10 ? ["proof-node"] : [], entry_velocity: start ? 320 : 0, exit_velocity: end < 10 ? 320 : 0 }
     }
   });
-  const plan = { design: { concept: "Proof" }, format: { width: 1080, height: 1920 }, shots: [shot("shot-1", 0, 5), shot("shot-2", 5, 10)] };
+  const plan = { project: { title: "Proof", thesis: "Show proof", audience_promise: "Clarity", angle: "Evidence" }, design: { concept: "Proof" }, format: { width: 1080, height: 1920 }, shots: [shot("shot-1", 0, 5), shot("shot-2", 5, 10)] };
   await writeFile(path.join(production, "intake.json"), `${JSON.stringify({ resources: [] })}\n`);
   await writeFile(path.join(production, "evidence.json"), `${JSON.stringify({ items: [{ id: "ev-1", title: "README", provenance: "README.md" }] })}\n`);
   await writeFile(path.join(production, "plan.json"), `${JSON.stringify(plan)}\n`);

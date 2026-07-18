@@ -53,7 +53,7 @@ HyperFrames contract:
 - Keep essential text and proof inside the frame at all times. Preserve exact visible copy and factual meaning.
 - The first and last rendered frame must be intentional, including when mounted next to neighboring shots.`;
 
-const LEAN_FRAME_INSTRUCTIONS = `You are a senior motion designer authoring one original HyperFrames shot. Return only strict frame-bundle JSON matching the supplied schema.
+export const LEAN_FRAME_INSTRUCTIONS = `You are a senior motion designer authoring one original HyperFrames shot. Return only strict frame-bundle JSON matching the supplied schema.
 
 Required host contract:
 - html is one sub-composition document with exactly one <template>. Put every live <style>, root, and <script> inside it.
