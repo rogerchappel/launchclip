@@ -28,6 +28,7 @@ Rules:
 Return only the strict production-critique JSON.`;
 
 const OPENROUTER_FREE_VISION_FALLBACK = "openrouter:openrouter/free@none";
+export const FREE_VISION_UNAVAILABLE_CODE = "LAUNCHCLIP_FREE_VISION_UNAVAILABLE";
 
 export async function critiqueProduction(workspacePath, options = {}, adapters = {}) {
   const workspace = path.resolve(workspacePath);
@@ -49,7 +50,14 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
   const images = await Promise.all(visualEvidence.images.map((entry) => dataImage(entry.path, entry.detail)));
   const evidenceById = new Map(evidence.items.map((entry) => [entry.id, entry]));
   const evidenceIndex = evidence.items.map((entry) => ({ id: entry.id, kind: entry.kind, role: entry.role, title: entry.title, content: String(entry.content ?? "").slice(0, 6_000), provenance: entry.provenance, claims_allowed: entry.claims_allowed }));
-  let freeVisionSelection = options.selectFreeVision ? await selectFreeVisionCritic(options, adapters) : null;
+  let freeVisionSelection = null;
+  if (options.selectFreeVision) {
+    try {
+      freeVisionSelection = await selectFreeVisionCritic(options, adapters);
+    } catch (error) {
+      throw freeVisionUnavailableError(error?.message ?? "OpenRouter free vision selection failed", error);
+    }
+  }
   let route = parseModelRoute(freeVisionSelection?.routes?.[0] ?? options.route, {
     provider: "openai",
     model: options.model ?? "gpt-5.6",
@@ -132,7 +140,7 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
           failures.push(`${route.model}: ${String(fallbackError?.message ?? fallbackError).slice(0, 500)}`);
         }
       }
-      if (!result) throw new Error(`All OpenRouter free vision critic routes failed: ${failures.join("; ")}`, { cause: retryError });
+      if (!result) throw freeVisionUnavailableError(`All OpenRouter free vision critic routes failed: ${failures.join("; ")}`, retryError);
     }
   }
   const critique = applyVisualNoveltyFinding(normalizeCritiqueTiming(normalizeCritiqueShape(result.value), plan.shots), visualFingerprint, plan.shots.map((shot) => shot.id));
@@ -157,6 +165,12 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
   await writeFile(critiquePath, `${JSON.stringify({ ...critique, response_id: result.response_id, model: result.model, usage: result.usage, visual_evidence: visualEvidenceReceipt, ...(freeVisionReceipt ? { free_model_selection: freeVisionReceipt } : {}) }, null, 2)}\n`);
   await writeFile(markdownPath, renderCritique(critique));
   return { stage: "production-critique", status: critique.verdict === "ship" ? "approved" : "needs-repair", verdict: critique.verdict, critique: critiquePath, markdown: markdownPath, findings: critique.findings.length, response_id: result.response_id, model: result.model, visual_evidence: visualEvidenceReceipt, ...(freeVisionReceipt ? { free_model_selection: freeVisionReceipt } : {}) };
+}
+
+function freeVisionUnavailableError(message, cause) {
+  const error = new Error(message, { cause });
+  error.code = FREE_VISION_UNAVAILABLE_CODE;
+  return error;
 }
 
 async function selectFreeVisionCritic(options, adapters) {

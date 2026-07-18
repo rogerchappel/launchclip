@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { applyVisualNoveltyFinding, critiqueProduction } from "../src/production_critic.js";
+import { applyVisualNoveltyFinding, critiqueProduction, FREE_VISION_UNAVAILABLE_CODE } from "../src/production_critic.js";
 import { CRITIQUE_VERSION } from "../src/production_contracts.js";
 
 test("gives an independent GPT-5.6 critic the plan, QA evidence, motion profile, and ordered snapshots", async () => {
@@ -326,6 +326,21 @@ test("attempts ranked vision routes when every live probe is temporarily unavail
   assert.equal(selects, 2);
   assert.equal(result.free_model_selection.source, "probe-degraded");
   assert.match(result.free_model_selection.warnings[0], /attempting ranked routes directly/);
+});
+
+test("classifies exhausted ranked and router vision routes as unavailable", async () => {
+  const workspace = await fixture();
+  const ranked = visionSelection(path.join(workspace, "vision-state.json"));
+  await assert.rejects(() => critiqueProduction(workspace, { selectFreeVision: true }, {
+    selectOpenRouterFreeVisionModels: async () => ranked,
+    probeOpenRouterFreeVisionModels: async (selection) => ({ ...selection, routes: [selection.routes[0]] }),
+    recordOpenRouterFreeModelOutcome: async () => ({ ...ranked, selected_model: ranked.candidates[1].id, routes: [ranked.routes[1]] }),
+    createClient: () => ({ runStructured: async () => { throw new Error("vision endpoint unavailable"); } })
+  }), (error) => {
+    assert.equal(error.code, FREE_VISION_UNAVAILABLE_CODE);
+    assert.match(error.message, /All OpenRouter free vision critic routes failed/);
+    return true;
+  });
 });
 
 test("compacts raw temporal samples before sending a production critique", async () => {
