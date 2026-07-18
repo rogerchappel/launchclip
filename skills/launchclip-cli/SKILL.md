@@ -1,6 +1,6 @@
 ---
 name: launchclip-cli
-description: Operate, explain, troubleshoot, or automate the LaunchClip CLI for repository, product, topic, voiceover, presenter, downloaded HeyGen-avatar, and promotion-packet video workflows. Use when an agent needs to choose LaunchClip commands, prepare inputs, run or resume the model-directed production pipeline, inspect costs and artifacts, validate a workspace, render after approval, or use the legacy dry-run packet lane. Distinguish API-backed CLI production from the separate subscription-agent workflow.
+description: Operate, explain, troubleshoot, or automate the LaunchClip CLI for repository, product, topic, voiceover, presenter, downloaded HeyGen-avatar, user-owned project style packs, and promotion-packet video workflows. Use when an agent needs to choose LaunchClip commands, prepare inputs, create or reuse a project-local style, run or resume the model-directed production pipeline, inspect costs and artifacts, validate a workspace, render after approval, or use the legacy dry-run packet lane. Distinguish API-backed CLI production from the separate subscription-agent workflow.
 ---
 
 # LaunchClip CLI
@@ -69,6 +69,27 @@ Ask before:
 
 Never print or persist secrets. Report only whether a required environment
 variable is present.
+
+## Resolve user-owned styles
+
+Look for reusable styles in `.launchclip/styles/<name>`. Verify a named pack
+with `launchclip style show <name>` before production, then pass the same name
+to `--style`. Use an explicit pack path when it lives elsewhere. An unmatched
+name remains free-form creative direction; do not silently replace it with a
+built-in channel preset.
+
+Create a pack only from a completed video project or another pack:
+
+```bash
+launchclip style create ai-news --from .launchclip/approved-ai-video
+launchclip produce ./next-brief.md --kind topic --style ai-news \
+  --out .launchclip/next-ai-video
+```
+
+Style management is local and makes no model calls. Do not overwrite a pack
+unless the user explicitly authorizes `--force`. Keep `.launchclip/styles/**`
+in source control when the visual identity should be shared; leave generated
+video workspaces ignored.
 
 ## Promote a downloaded HeyGen avatar
 

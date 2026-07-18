@@ -1,6 +1,6 @@
 ---
 name: launchclip-create-video
-description: Create an end-to-end HyperFrames video with the current subscription agent as the creative and orchestration layer. Use when a user wants a video, promo, explainer, product story, repository walkthrough, or social clip from a URL, repository, topic, brief, script, supplied media, or a downloaded HeyGen avatar while avoiding LaunchClip's metered model pipeline and not depending on HyperFrames plugin skills. Ask a compact intake, author the editable composition, verify it locally, obtain preview approval, and render the final file.
+description: Create an end-to-end HyperFrames video with the current subscription agent as the creative and orchestration layer. Use when a user wants a video, promo, explainer, product story, repository walkthrough, or social clip from a URL, repository, topic, brief, script, supplied media, a user-owned project style pack, or a downloaded HeyGen avatar while avoiding LaunchClip's metered model pipeline and not depending on HyperFrames plugin skills. Ask a compact intake, author the editable composition, verify it locally, obtain preview approval, and render the final file.
 ---
 
 # LaunchClip Create Video
@@ -65,6 +65,28 @@ state them:
 If the source itself is missing, ask for it before proceeding. Otherwise keep
 working after the compact intake; do not turn each creative choice into another
 approval round.
+
+## Reuse a project-local style pack
+
+Treat `.launchclip/styles/<name>` as the default home for a user's reusable
+channel or series identity. When the user names a style, resolve an explicit
+directory first, then that project-local path. If a pack exists:
+
+- Read `style.json` and the complete `frame.md` before designing.
+- Inspect any caption skin, fonts, audio notes, and assets named by the pack.
+- Copy the resolved pack into the output project's `style/` directory so the
+  composition and later render do not depend on mutable external files.
+- Record the pack name and source path in `BRIEF.md`. Translate its palette,
+  type roles, graphic language, motion character, and forbidden motifs into
+  the project-specific `DESIGN.md`; keep scene composition driven by this
+  video's content rather than cloning the previous edit.
+
+If no pack exists, treat the requested words as creative direction and design
+an original system for the video. Do not substitute a built-in branded preset.
+After an approved video, create a reusable pack only when the user asks, using
+`launchclip style create <name> --from <output-project>`. This local management
+command makes no model calls. Never overwrite an existing pack without explicit
+`--force` approval.
 
 ## Promote a downloaded HeyGen avatar
 
