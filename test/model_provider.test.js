@@ -111,6 +111,16 @@ test("accepts a single fenced JSON object from compatible chat providers", async
   assert.deepEqual(result.value, { ok: true });
 });
 
+test("accepts CRLF or an omitted closing fence around one structured object", async () => {
+  const responses = ["```json\r\n{\"ok\":true}\r\n```", "```json\r\n{\"ok\":true}"];
+  const client = createStructuredClient({ provider: "openrouter", model: "openrouter/free", reasoning: "none", apiKey: "router-test" }, {
+    fetch: async () => new Response(JSON.stringify({ choices: [{ message: { content: responses.shift() } }] }), { status: 200 })
+  });
+  const request = { schema: { type: "object" }, schemaName: "result", input: "go" };
+  assert.deepEqual((await client.runStructured(request)).value, { ok: true });
+  assert.deepEqual((await client.runStructured(request)).value, { ok: true });
+});
+
 test("times out a silent pinned free route without retrying it", async () => {
   let calls = 0;
   const client = createStructuredClient({ provider: "openrouter", model: "example/silent:free", reasoning: "none", apiKey: "router-test" }, {

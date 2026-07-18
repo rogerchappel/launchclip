@@ -293,8 +293,10 @@ function chatStructuredResult(payload, fallbackModel) {
 
 function stripJsonFence(text) {
   const trimmed = String(text).trim();
-  const match = trimmed.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i);
-  return match ? match[1].trim() : trimmed;
+  const opening = trimmed.match(/^```(?:json)?[^\S\r\n]*(?:\r?\n)?/i);
+  if (!opening) return trimmed;
+  const body = trimmed.slice(opening[0].length);
+  return body.replace(/\r?\n```[^\S\r\n]*$/i, "").trim();
 }
 
 function ollamaStructuredResult(payload, fallbackModel) {
