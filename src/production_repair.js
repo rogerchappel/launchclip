@@ -128,7 +128,8 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
   const routes = repairModelRoutes(options, intake);
   const images = await snapshotImages(path.join(qaDir, "snapshots"), Number(options.maxSnapshots ?? 8));
   const repaired = [];
-  const tasks = [...byShot].map(([shotId, findings]) => async () => {
+  const repairEntries = [...byShot];
+  const tasks = repairEntries.map(([shotId, findings]) => async () => {
     const shotIndex = plan.shots.findIndex((entry) => entry.id === shotId);
     const shot = plan.shots[shotIndex];
     if (!shot) throw new Error(`Critique references unknown shot: ${shotId}`);
@@ -306,13 +307,22 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
       throw error;
     }
   });
-  await runPool(tasks, Number(options.concurrency ?? 3));
+  const failures = await runPool(tasks, Number(options.concurrency ?? 3));
+  if (failures.length && !repaired.length) throw failures[0].error;
+  const failedRepairs = failures.map(({ index, error }) => ({
+    id: `repair:${repairEntries[index][0]}`,
+    repair_scope: "frame",
+    instruction: error.message
+  }));
   return {
     stage: "production-repair",
-    status: unsupported.length ? "partially-repaired" : "repaired",
+    status: unsupported.length || failedRepairs.length ? "partially-repaired" : "repaired",
     repaired,
     deterministic_findings: deterministicFindings.length,
-    blockers: unsupported.map((finding) => ({ id: finding.id, repair_scope: finding.repair_scope, instruction: finding.instruction })),
+    blockers: [
+      ...unsupported.map((finding) => ({ id: finding.id, repair_scope: finding.repair_scope, instruction: finding.instruction })),
+      ...failedRepairs
+    ],
     next: "Re-run launchclip assemble and production-verify; resolve any listed blockers before production-render."
   };
 }
@@ -740,7 +750,7 @@ async function runPool(tasks, concurrency) {
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
-  if (failures.length) throw failures.sort((left, right) => left.index - right.index)[0].error;
+  return failures.sort((left, right) => left.index - right.index);
 }
 
 async function snapshotImages(directory, limit) {

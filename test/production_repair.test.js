@@ -569,7 +569,7 @@ test("regenerates one complete scene when a free scoped patch cannot pass", asyn
   assert.match(await readFile(result.repaired[0].html, "utf8"), /Regenerated proof/);
 });
 
-test("continues repairing later scenes after an earlier scene exhausts its routes", async () => {
+test("returns partial progress after an earlier scene exhausts its routes", async () => {
   const workspace = await fixture();
   const critiquePath = path.join(workspace, "production", "qa", "critique.json");
   const critique = JSON.parse(await readFile(critiquePath, "utf8"));
@@ -578,14 +578,18 @@ test("continues repairing later scenes after an earlier scene exhausts its route
     { ...critique.findings[0], id: "repair-second", shot_ids: ["shot-2"] }
   ];
   await writeFile(critiquePath, `${JSON.stringify(critique)}\n`);
-  await assert.rejects(() => repairProduction(workspace, { concurrency: 1, semanticAttempts: 1, fullRegeneration: false }, {
+  const result = await repairProduction(workspace, { concurrency: 1, semanticAttempts: 1, fullRegeneration: false }, {
     client: { runStructured: async (request) => {
       const shotId = repairContext(request.input).shot.id;
       if (shotId === "shot-1") throw new Error("first scene unavailable");
       return { response_id: "later_scene", model: "gpt-5.6-luna", status: "completed", usage: {}, value: framePatch("shot-2", "Proof", "Later scene repaired") };
     } },
     verifyCandidate: async () => ({ ok: true })
-  }), /first scene unavailable/);
+  });
+  assert.equal(result.status, "partially-repaired");
+  assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-2"]);
+  assert.deepEqual(result.blockers.map((entry) => entry.id), ["repair:shot-1"]);
+  assert.match(result.blockers[0].instruction, /first scene unavailable/);
   assert.match(await readFile(path.join(workspace, "production", "frames", "shot-2.html"), "utf8"), /Later scene repaired/);
 });
 
