@@ -229,21 +229,25 @@ async function planningRuntime(intake, options, adapters) {
   }
   let selection = await selectFreePlannerModels(options, adapters);
   let route = parseModelRoute(selection.routes[0], { supportsImages: false });
-  let client = createClient(route);
+  const clientOptions = { requestTimeoutMs: Number(options.freeModelRequestTimeoutMs ?? 180_000), maxRetries: 0 };
+  let client = createClient(route, clientOptions);
   const failedModelIds = new Set();
-  const rotate = async (error) => {
+  const recordFailure = async (error) => {
     const failedModel = selection.selected_model;
     failedModelIds.add(failedModel);
     const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
+    return recordOutcome(selection, { error });
+  };
+  const rotate = async (error) => {
     const probeModels = adapters.probeOpenRouterFreeModels ?? probeOpenRouterFreeModels;
-    const rotated = await recordOutcome(selection, { error });
+    const rotated = await recordFailure(error);
     selection = await probeModels(rotated, {
       timeoutMs: Number(options.freeModelProbeTimeoutMs ?? 15_000),
       excludeIds: [...failedModelIds],
       stopAfterFirstSuccess: true
     });
     route = parseModelRoute(selection.routes[0], { supportsImages: false });
-    client = createClient(route);
+    client = createClient(route, clientOptions);
   };
   return {
     client: {
@@ -252,7 +256,12 @@ async function planningRuntime(intake, options, adapters) {
           return await client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
         } catch (error) {
           await rotate(error);
-          return client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
+          try {
+            return await client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
+          } catch (fallbackError) {
+            await recordFailure(fallbackError);
+            throw fallbackError;
+          }
         }
       },
       resumeStructured: (responseId, request) => client.resumeStructured(responseId, { ...request, model: route.model, reasoningEffort: route.reasoning })

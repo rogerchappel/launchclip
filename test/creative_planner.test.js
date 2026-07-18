@@ -94,12 +94,14 @@ test("creates the planning client from the intake provider route", async () => {
   intake.model = { provider: "openrouter", id: "openrouter/free", reasoning_effort: "none", reasoning_mode: "standard" };
   const workspace = await tempWorkspace(intake);
   let route;
+  let clientOptions;
   const selected = freeSelection(path.join(workspace, "free-model-state.json"));
   const result = await planProduction(workspace, {}, {
     selectOpenRouterFreeModels: async () => selected,
     probeOpenRouterFreeModels: async () => ({ ...selected, source: "live-probe", routes: [selected.routes[0]] }),
-    createClient: (received) => {
+    createClient: (received, options) => {
       route = received;
+      clientOptions = options;
       return { runStructured: async () => ({ response_id: "free-plan", model: "free-planner", status: "completed", value: samplePlan(), usage: {} }) };
     }
   });
@@ -107,6 +109,7 @@ test("creates the planning client from the intake provider route", async () => {
   assert.equal(route.provider, "openrouter");
   assert.equal(route.model, "tencent/hy3:free");
   assert.equal(route.reasoning, "none");
+  assert.deepEqual(clientOptions, { requestTimeoutMs: 180_000, maxRetries: 0 });
   assert.equal(result.free_model_selection.selected_model, "tencent/hy3:free");
 });
 
