@@ -49,8 +49,7 @@ test("validates complete object, event, selector, timing, copy, and density hand
   assert.match(validation.errors.join("\n"), /opacity delta must be at least 0.25/);
   assert.match(validation.errors.join("\n"), /opening requires a hook-scale/);
   assert.match(validation.errors.join("\n"), /object_id is not planned: evidence-grid/);
-  assert.match(validation.errors.join("\n"), /target semantic objects at least 2 times/);
-  assert.match(validation.errors.join("\n"), /may target evidence-grid at most 1 times/);
+  assert.match(validation.errors.join("\n"), /target semantic objects at least 1 times/);
   assert.match(validation.errors.join("\n"), /visible_copy must preserve: Proof/);
   assert.match(validation.errors.join("\n"), /focal_element_selector is unknown/);
   assert.match(validation.errors.join("\n"), /minimum_semantic_objects must be at least 2/);
