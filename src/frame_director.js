@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_INSTRUCTIONS, FRAME_BLUEPRINT_SCHEMA, FRAME_BLUEPRINT_VERSION, validateFrameBlueprint, validateLockedSupportingMotion } from "./frame_blueprint.js";
+import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_INSTRUCTIONS, FRAME_BLUEPRINT_SCHEMA, FRAME_BLUEPRINT_VERSION, normalizeFrameBlueprint, validateFrameBlueprint, validateLockedSupportingMotion } from "./frame_blueprint.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { ensureTimelineRegistration, hasTimelineRegistration } from "./hyperframes_timeline.js";
 import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model_provider.js";
@@ -422,9 +422,10 @@ async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, 
         break;
       }
       await store.markRunning(jobId, { provider: route.provider, response_id: result.response_id, status: result.status });
-      const validation = validateFrameBlueprint(result.value, shot);
+      const candidate = normalizeFrameBlueprint(result.value, shot);
+      const validation = validateFrameBlueprint(candidate, shot);
       if (!validation.ok) {
-        prior = result.value;
+        prior = candidate;
         validationErrors = validation.errors;
         generationErrors.push(`Blueprint attempt ${routeAttempt} via ${route.provider}:${route.model} was invalid: ${validation.errors.join("; ")}`);
         continue;
@@ -435,10 +436,10 @@ async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, 
         provider: route.provider,
         model: result.model,
         usage: result.usage,
-        blueprint: result.value
+        blueprint: candidate
       };
       await writeAtomic(blueprintPath, `${JSON.stringify(record, null, 2)}\n`);
-      return { ...record, value: result.value, path: blueprintPath, generated: true, route_index: routeIndex };
+      return { ...record, value: candidate, path: blueprintPath, generated: true, route_index: routeIndex };
     }
   }
   const error = new Error(`Frame blueprint ${shot.id} exhausted model routes: ${generationErrors.join("; ")}`);

@@ -316,6 +316,43 @@ export function validateFrameBlueprint(blueprint, shot) {
   return { ok: errors.length === 0, errors };
 }
 
+export function normalizeFrameBlueprint(blueprint, shot) {
+  const normalized = structuredClone(blueprint);
+  normalized.zones = (normalized.zones ?? []).map((zone) => {
+    const width = Number(zone.width_percent);
+    const height = Number(zone.height_percent);
+    return {
+      ...zone,
+      x_percent: Math.max(0, Math.min(Number(zone.x_percent), 100 - width)),
+      y_percent: Math.max(0, Math.min(Number(zone.y_percent), 100 - height))
+    };
+  });
+
+  const elements = new Map((normalized.elements ?? []).map((entry) => [entry.object_id, entry]));
+  const availableBeats = [...(normalized.motion_beats ?? [])];
+  normalized.motion_beats = (shot?.visual?.events ?? []).map((event) => {
+    let index = availableBeats.findIndex((beat) => beat.event_id === event.id);
+    if (index < 0) index = availableBeats.findIndex((beat) => String(beat.event_id ?? "").startsWith(`${event.id}-`));
+    if (index < 0) index = availableBeats.findIndex((beat) => (event.target_ids ?? []).includes(beat.object_id));
+    const candidate = index < 0 ? null : availableBeats.splice(index, 1)[0];
+    const objectId = (event.target_ids ?? []).includes(candidate?.object_id) ? candidate.object_id : event.target_ids?.[0];
+    return {
+      event_id: event.id,
+      object_id: objectId,
+      selector: elements.get(objectId)?.selector ?? candidate?.selector,
+      at_seconds: event.at_seconds,
+      action: candidate?.action ?? `Reveal ${objectId} at the planned visual beat`
+    };
+  });
+
+  const semanticObjectCount = (shot?.visual?.objects ?? []).filter((entry) => entry.kind !== "decoration").length;
+  normalized.density = {
+    ...normalized.density,
+    minimum_semantic_objects: Math.max(Number(normalized.density?.minimum_semantic_objects ?? 0), semanticObjectCount)
+  };
+  return normalized;
+}
+
 export function validateLockedSupportingMotion(html, beats = []) {
   if (!Array.isArray(beats) || !beats.length) return [];
   const calls = parseFromToCalls(html);

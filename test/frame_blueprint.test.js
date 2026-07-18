@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_VERSION, validateFrameBlueprint } from "../src/frame_blueprint.js";
+import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_VERSION, normalizeFrameBlueprint, validateFrameBlueprint } from "../src/frame_blueprint.js";
 
 test("builds a compact blueprint packet and a smaller implementation handoff", () => {
   const context = fixture();
@@ -77,6 +77,31 @@ test("accepts creative opening metadata when the measurable hook contract passes
   blueprint.density.focal_element_selector = "#shot-1-label";
 
   assert.deepEqual(validateFrameBlueprint(blueprint, shot), { ok: true, errors: [] });
+});
+
+test("normalizes mechanical free-model blueprint drift without replacing its visual intent", () => {
+  const { shot } = fixture();
+  const blueprint = validBlueprint();
+  blueprint.zones[1].y_percent = 95;
+  blueprint.motion_beats = [
+    { ...blueprint.motion_beats[0], event_id: "shot-1-reveal-proof", action: "Drop the authored proof node into its final position" },
+    { ...blueprint.motion_beats[0], event_id: "shot-1-reveal-label", object_id: "proof-label", selector: "#shot-1-label" }
+  ];
+  blueprint.density.minimum_semantic_objects = 1;
+
+  const normalized = normalizeFrameBlueprint(blueprint, shot);
+
+  assert.equal(blueprint.zones[1].y_percent, 95, "normalization does not mutate the model response");
+  assert.equal(normalized.zones[1].y_percent, 88);
+  assert.deepEqual(normalized.motion_beats, [{
+    event_id: "shot-1-reveal",
+    object_id: "proof-node",
+    selector: "#shot-1-proof",
+    at_seconds: 1,
+    action: "Drop the authored proof node into its final position"
+  }]);
+  assert.equal(normalized.density.minimum_semantic_objects, 2);
+  assert.deepEqual(validateFrameBlueprint(normalized, shot), { ok: true, errors: [] });
 });
 
 function validBlueprint() {
