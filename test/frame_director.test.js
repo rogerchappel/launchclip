@@ -202,7 +202,7 @@ test("salvages a framed scene with an external font import and live head styles"
   const shot = context.plan.shots[0];
   const bundle = frameBundle(shot.id, 5);
   const remoteFont = "https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;1,700&display=swap";
-  bundle.html = `<!DOCTYPE html><html><head><style>@import url('${remoteFont}');#shot-1-proof{color:#fff}</style></head><body>${bundle.html}</body></html>`;
+  bundle.html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>@import url('${remoteFont}');#shot-1-proof{color:#fff}</style></head><body>${bundle.html}</body></html>`;
 
   const sanitized = sanitizeFrameBundle(bundle, { shot, format: context.plan.format });
 

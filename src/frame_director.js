@@ -556,6 +556,8 @@ function repairTemplateTransport(html) {
     const strippedOutside = `${beforeBlocks.html}${afterBlocks.html}`
       .replace(/<!doctype[^>]*>/gi, "")
       .replace(/<\/?(?:html|head|body)\b[^>]*>/gi, "")
+      .replace(/<meta\b[^>]*>/gi, "")
+      .replace(/<title\b[^>]*>[\s\S]*?<\/title>/gi, "")
       .trim();
     const strippedDocument = strippedOutside.length === 0 && `${beforeBlocks.html}${afterBlocks.html}`.trim().length > 0;
     if (!styles.length && !scripts.length && !strippedDocument) return { html: source, wrapped: false, movedStyles: 0, movedScripts: 0, strippedDocument: false };
