@@ -65,7 +65,10 @@ Required host contract:
 - Do not import, fetch, use timers/randomness/storage, or include audio/video elements. Request supplied media through root_media_requests only.
 
 Creative contract:
-- When scene_blueprint is supplied, treat its zones, selectors, typography, density, visible copy, and motion beats as a binding LLM-authored implementation plan.
+- When scene_blueprint is supplied, treat its zones, selectors, typography, density, visible copy, planned motion beats, and supporting motion beats as a binding LLM-authored implementation plan.
+- Implement every scene_blueprint.supporting_motion_beats entry on the single paused GSAP timeline. Use its exact selector and start time, keep its duration within the authored value, restrict the tween to its listed properties, and make the described change visibly perceptible.
+- Supporting motion beats are scene choreography, not new semantic timeline events: do not copy them into motion.events, invent SFX cues for them, or add claims. motion.events remains an exact implementation of shot_contract.visual.events.
+- Keep supporting tweens seek-safe and finite. Establish required initial state with gsap.set, preserve the static authored end state, and never overlap writes to the same property on the same selector.
 - Treat global_design.style_dna and the supplied shot or shot_contract visual as binding. Build the declared diagram, comparison, process, timeline, or data form—not a headline over decoration.
 - Preserve readable non-overlapping zones, deliberate spacing, exact palette/type roles, and the planned motion/continuity. Keep copy brief and visual.
 - Use supplied evidence only for grounded labels, metrics, and claims. Use only supplied resource paths; otherwise draw native HTML/CSS/SVG.
@@ -252,7 +255,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
           background: options.background !== false,
           maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
           ...(blueprint ? { temperature: Number(routeAttempt === 1 ? options.frameTemperature ?? .4 : options.frameRepairTemperature ?? .1) } : {}),
-          promptCacheKey: options.leanPrompt ? "launchclip:frame-director:v5" : "launchclip:frame-director:v4",
+          promptCacheKey: options.leanPrompt ? "launchclip:frame-director:v6" : "launchclip:frame-director:v4",
           metadata: { job_id: jobId, shot_id: shot.id, attempt: totalAttempt, route: routeIndex + 1 },
           onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
         };

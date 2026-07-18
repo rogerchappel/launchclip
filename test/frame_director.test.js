@@ -436,6 +436,21 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
       if (shot.id === "shot-1" && attempt === 1) elements.pop();
       const event = shot.visual.events[0];
       const target = elements.find((entry) => entry.object_id === event.target_ids[0]);
+      const semanticTargets = shot.visual.objects.filter((entry) => entry.kind !== "decoration");
+      const supportingMotionBeats = input.supporting_motion_contract.windows.map((window, index) => {
+        const object = semanticTargets[index % semanticTargets.length];
+        const element = elements.find((entry) => entry.object_id === object.id);
+        return {
+          window_id: window.id,
+          object_id: object.id,
+          selector: element?.selector ?? `#${shot.id}-${object.id}`,
+          at_seconds: window.start_seconds,
+          duration_seconds: Math.min(.6, window.maximum_duration_seconds),
+          intent: index === 0 ? "entrance" : "emphasis",
+          properties: index === 0 ? ["opacity", "scale"] : ["y", "opacity"],
+          action: index === 0 ? "Spring the semantic proof into its authored state" : "Lift and emphasize the next semantic label"
+        };
+      });
       return {
         response_id: `blueprint_${shot.id}`,
         model: "google/gemma-code:free",
@@ -451,6 +466,7 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
           elements,
           typography: { display_px: 112, body_px: 42, metadata_px: 24, maximum_text_lines: 2 },
           motion_beats: [{ event_id: event.id, object_id: event.target_ids[0], selector: target.selector, at_seconds: event.at_seconds, action: "Reveal and lock the proof into place" }],
+          supporting_motion_beats: supportingMotionBeats,
           visible_copy: shot.on_screen_text,
           density: { target_occupied_percent: 68, minimum_semantic_objects: 2, focal_element_selector: target.selector },
           implementation_notes: ["Use the canvas instead of floating a small card in empty space"]
@@ -460,6 +476,7 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
     }
     const shot = input.shot_contract;
     assert.equal(input.scene_blueprint.shot_id, shot.id);
+    assert.equal(input.scene_blueprint.supporting_motion_beats.length, 2);
     assert.equal(input.shot, undefined);
     assert.ok(input.narration_anchors.length <= 8);
     return {
@@ -484,14 +501,17 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
   assert.equal(result.generated, 2);
   assert.equal(calls.filter((entry) => entry.schema === "launchclip_frame_blueprint").length, 3);
   assert.equal(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").length, 2);
+  assert.equal(calls.length, 5);
   assert.deepEqual(calls.filter((entry) => entry.schema === "launchclip_frame_blueprint").map((entry) => entry.temperature).sort(), [.15, .45, .45]);
   assert.deepEqual(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").map((entry) => entry.temperature), [.4, .4]);
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Never declare CSS transform on an element that GSAP animates/.test(entry.instructions)));
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Set must_remain_live=false for reveal-then-settle elements/.test(entry.instructions)));
-  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => entry.prompt_cache_key === "launchclip:frame-director:v5"));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Implement every scene_blueprint\.supporting_motion_beats entry/.test(entry.instructions)));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /not new semantic timeline events/.test(entry.instructions)));
+  assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => entry.prompt_cache_key === "launchclip:frame-director:v6"));
   assert.deepEqual(result.frames.map((entry) => entry.usage.total_tokens), [450, 450]);
   assert.ok(result.frames.every((entry) => entry.blueprint.cached === false));
-  assert.match(await readFile(result.frames[0].blueprint.path, "utf8"), /launchclip\.frame-blueprint\.v1/);
+  assert.match(await readFile(result.frames[0].blueprint.path, "utf8"), /launchclip\.frame-blueprint\.v2/);
 });
 
 test("can exhaust LLM routes without writing a deterministic visual fallback", async () => {
