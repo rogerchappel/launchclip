@@ -297,9 +297,7 @@ export function validateFrameBlueprint(blueprint, shot) {
     if (changes.length && !largeAreaMagnitude) errors.push(`supporting_motion_beats[${index}] must copy one complete object from supporting_motion_contract.windows.${window?.id ?? "unknown"}.copy_one_large_area_change`);
     if (window?.id === "opening") {
       if (atSeconds > .1 + .05) errors.push(`supporting_motion_beats[${index}] opening must begin by 0.1 seconds`);
-      if (!["entrance", "semantic-reveal"].includes(beat?.intent)) errors.push(`supporting_motion_beats[${index}] opening intent must be entrance or semantic-reveal`);
       if (!openingMagnitude) errors.push(`supporting_motion_beats[${index}] opening requires a hook-scale x, y, scale, or rotation change`);
-      if (beat?.selector !== blueprint?.density?.focal_element_selector) errors.push(`supporting_motion_beats[${index}] opening selector must match density.focal_element_selector`);
     }
   }
   for (const id of supportingWindows.keys()) if (!seenWindows.has(id)) errors.push(`supporting_motion_beats must include window: ${id}`);

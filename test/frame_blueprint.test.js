@@ -70,6 +70,15 @@ test("validates complete object, event, selector, timing, copy, and density hand
   assert.match(validation.errors.join("\n"), /minimum_semantic_objects must be at least 2/);
 });
 
+test("accepts creative opening metadata when the measurable hook contract passes", () => {
+  const { shot } = fixture();
+  const blueprint = validBlueprint();
+  blueprint.supporting_motion_beats[0].intent = "emphasis";
+  blueprint.density.focal_element_selector = "#shot-1-label";
+
+  assert.deepEqual(validateFrameBlueprint(blueprint, shot), { ok: true, errors: [] });
+});
+
 function validBlueprint() {
   return {
     schema_version: FRAME_BLUEPRINT_VERSION,
