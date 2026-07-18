@@ -117,6 +117,36 @@ test("attaches the accrued cost tally to command failures", async () => {
   );
 });
 
+test("creates and discovers project-local style packs", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "launchclip-cli-style-"));
+  const source = path.join(temp, "finished-video");
+  const root = path.join(temp, ".launchclip", "styles");
+  try {
+    await mkdir(source, { recursive: true });
+    await writeFile(path.join(source, "frame.md"), "# AI news channel\n");
+
+    const createOutput = [];
+    await runCli(["style", "create", "ai-news", "--from", source, "--root", root], { stdout: { write: (value) => createOutput.push(value) } });
+    const created = JSON.parse(createOutput.join(""));
+    assert.equal(created.action, "create");
+    assert.equal(created.path, path.join(root, "ai-news"));
+    assert.equal(created.costs.total_usd, 0);
+
+    const listOutput = [];
+    await runCli(["style", "list", "--root", root], { stdout: { write: (value) => listOutput.push(value) } });
+    const listed = JSON.parse(listOutput.join(""));
+    assert.deepEqual(listed.styles.map((style) => style.name), ["ai-news"]);
+
+    const showOutput = [];
+    await runCli(["style", "show", "ai-news", "--root", root], { stdout: { write: (value) => showOutput.push(value) } });
+    const shown = JSON.parse(showOutput.join(""));
+    assert.equal(shown.name, "ai-news");
+    assert.equal(shown.specification, path.join(root, "ai-news", "frame.md"));
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("documents independently rerunnable source and entity preparation stages", async () => {
   const output = [];
   await runCli(["--help"], { stdout: { write: (value) => output.push(value) } });
@@ -125,6 +155,8 @@ test("documents independently rerunnable source and entity preparation stages", 
   assert.match(help, /resolve-entities <workspace>/);
   assert.match(help, /--brand-assets-dir path/);
   assert.match(help, /--no-trim-silence/);
+  assert.match(help, /style create <name>/);
+  assert.match(help, /--style-root \.launchclip\/styles/);
 });
 
 test("documents the Studio preview approval stage", async () => {

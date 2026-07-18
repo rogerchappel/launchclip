@@ -8,9 +8,10 @@ import { runProductionStage } from "./production_cli.js";
 import { isProductionReviewWorkspace } from "./production_review.js";
 import { createCostTracker } from "./cost_tracker.js";
 import { diagnoseInstallation, VERSION } from "./doctor.js";
+import { createStylePack, listStylePacks, projectStyleRoot, resolveStylePack } from "./style_store.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "intake", ...PRODUCTION_COMMANDS, "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "style", "intake", ...PRODUCTION_COMMANDS, "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {} } = io;
@@ -27,7 +28,8 @@ export async function runCli(argv, io = {}) {
     throw new Error(`Unknown command: ${command}\n\n${help()}`);
   }
 
-  const flags = parseFlags(rest);
+  const styleInvocation = command === "style" ? parseStyleInvocation(firstArg, rest) : null;
+  const flags = parseFlags(styleInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
@@ -35,6 +37,8 @@ export async function runCli(argv, io = {}) {
     let result;
     if (command === "doctor") {
       result = await doctor();
+    } else if (command === "style") {
+      result = await runStyleCommand(styleInvocation.action, styleInvocation.name, flags);
     } else if (command === "intake") {
       result = await writeIntake(required(firstArg, "source"), flags);
     } else if (PRODUCTION_COMMANDS.has(command)) {
@@ -95,6 +99,37 @@ export async function runCli(argv, io = {}) {
   }
 }
 
+async function runStyleCommand(action, name, flags) {
+  const root = flags.root ?? flags["style-root"];
+  if (action === "create" || action === "save") {
+    const result = await createStylePack(required(name, "style name"), { from: flags.from, root, force: Boolean(flags.force) });
+    return { ...result, action };
+  }
+  if (action === "list") {
+    return { stage: "style", action, status: "ready", root: projectStyleRoot({ root }), styles: await listStylePacks({ root }) };
+  }
+  const pack = await resolveStylePack(required(name, "style name or path"), { root });
+  if (!pack) throw new Error(`Style pack does not exist: ${name}`);
+  return {
+    stage: "style",
+    action: "show",
+    status: "ready",
+    name: pack.name,
+    path: pack.path,
+    manifest: pack.manifest,
+    specification: pack.specification_path,
+    caption_skin: pack.caption_skin_path,
+    fonts: pack.fonts
+  };
+}
+
+function parseStyleInvocation(action, rest) {
+  if (!action) throw new Error("Missing style action; use create, save, list, or show");
+  if (!new Set(["create", "save", "list", "show"]).has(action)) throw new Error(`Unknown style action: ${action}`);
+  const takesName = action !== "list";
+  return { action, name: takesName ? rest[0] : null, flagArgs: takesName ? rest.slice(1) : rest };
+}
+
 export function parseFlags(args) {
   const flags = {};
   for (let index = 0; index < args.length; index += 1) {
@@ -132,7 +167,11 @@ function help() {
 Usage:
   launchclip --version
   launchclip doctor
-  launchclip intake <source> [--kind repository|product|topic|voiceover] [--resource path] [--assets path] [--style auto|family] [--style-file frame.md] [--style-reference path|url] [--reference url] [--voiceover audio|video] [--transcript text] [--presenter video] [--heygen-avatar video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
+  launchclip style create <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]
+  launchclip style save <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]
+  launchclip style list [--root .launchclip/styles]
+  launchclip style show <name|path> [--root .launchclip/styles]
+  launchclip intake <source> [--kind repository|product|topic|voiceover] [--resource path] [--assets path] [--style auto|family|name|path] [--style-root .launchclip/styles] [--style-file frame.md] [--style-reference path|url] [--reference url] [--voiceover audio|video] [--transcript text] [--presenter video] [--heygen-avatar video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
   launchclip produce <source> [intake flags] [--heygen-avatar generated.mp4] [--review] [--model-policy cost-aware|local-first|quality|free] [--free-model-candidates 5] [--free-model-state path] [--free-vision-model-candidates 3] [--free-vision-model-state path] [--refresh-free-models] [--free-scene-concurrency 3] [--local-model qwen2.5-coder:latest] [--frame-route provider:model@reasoning] [--critic-route provider:model@reasoning] [--repair-route provider:model@reasoning] [--brand-assets-dir path] [--no-trim-silence] [--planning-mode auto|single|hierarchical] [--voice-id id] [--sfx-dir path] [--concurrency 4] [--max-frame-cost-usd 5] [--allow-frame-fallback] [--no-audio] [--fast-eval] [--allow-timing-drift]
   launchclip evidence <workspace>
   launchclip source-preprocess <workspace> [--no-trim-silence] [--silence-duration 0.45] [--silence-padding 0.12]
