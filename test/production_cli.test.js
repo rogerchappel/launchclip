@@ -165,7 +165,7 @@ test("runs bounded critic-directed repairs before asking for human approval", as
   assert.equal(result.repairs[0].trigger, "critique");
 });
 
-test("automatically repairs deterministic verification failures before rendering a draft", async () => {
+test("automatically routes verification failures through model-authored repair", async () => {
   const calls = [];
   let repairOptions;
   let drafts = 0;
@@ -188,15 +188,15 @@ test("automatically repairs deterministic verification failures before rendering
       }
       return { status: "ready", video: "/tmp/draft.mp4", verification: { status: "ready", snapshots: "/tmp/snapshots" }, critique: { verdict: "ship" } };
     },
-    fallbackFramesForVerification: async (_workspace, options) => { calls.push("local-fallback"); repairOptions = options; return { status: "repaired", repaired: [{ shot_id: "shot-2" }] }; },
-    repairProduction: async () => { calls.push("paid-repair"); return { status: "repaired", repaired: [] }; }
+    fallbackFramesForVerification: async () => { throw new Error("must not replace authored frames with deterministic fallbacks"); },
+    repairProduction: async (_workspace, options) => { calls.push("model-repair"); repairOptions = options; return { status: "repaired", repaired: [{ shot_id: "shot-2" }] }; }
   };
   const result = await runProduction("owner/repo", {}, adapters);
   assert.equal(result.status, "awaiting-approval");
-  assert.deepEqual(calls, ["assemble", "draft", "local-fallback", "assemble", "draft"]);
-  assert.equal(result.repairs.length, 0);
-  assert.equal(result.local_repairs.length, 1);
-  assert.deepEqual(repairOptions.failed, ["inspect:shot-2"]);
+  assert.deepEqual(calls, ["assemble", "draft", "model-repair", "assemble", "draft"]);
+  assert.equal(result.repairs.length, 1);
+  assert.equal(result.local_repairs.length, 0);
+  assert.deepEqual(repairOptions.verification.failed, ["inspect:shot-2"]);
 });
 
 test("stops infrastructure verification failures without fallback or paid repair calls", async () => {

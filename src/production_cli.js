@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { collectEvidence } from "./evidence.js";
-import { directFrames, fallbackFramesForVerification } from "./frame_director.js";
+import { directFrames } from "./frame_director.js";
 import { assembleHyperFrames } from "./hyperframes_assembler.js";
 import { buildIntake, writeIntakeManifest } from "./intake.js";
 import { planProduction } from "./creative_planner.js";
@@ -237,7 +237,6 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
   let critique = null;
   const repairs = [];
   const localRepairs = [];
-  let localVerificationRepairApplied = false;
   const maximumRepairPasses = numberOr(flags["max-repair-passes"], 2);
   while (true) {
     let trigger;
@@ -252,15 +251,6 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
       draft = null;
       critique = null;
       verification = error.verification;
-      if (!localVerificationRepairApplied) {
-        const localRepair = await (adapters.fallbackFramesForVerification ?? fallbackFramesForVerification)(workspace, verification);
-        localVerificationRepairApplied = true;
-        if (localRepair.repaired?.length) {
-          localRepairs.push(localRepair);
-          assembly = await (adapters.assembleHyperFrames ?? assembleHyperFrames)(workspace, assemblyOptions);
-          continue;
-        }
-      }
       trigger = "verification";
     }
     if (repairs.length >= maximumRepairPasses) break;
