@@ -346,6 +346,7 @@ async function runFrameDirection(workspace, flags, adapters) {
   const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
   const selection = await selectLiveOpenRouterFreeModels(flags, adapters);
   options.routes = selection.routes;
+  options.stableRouteCache = true;
   options.leanPrompt = true;
   options.sceneBlueprint = true;
   options.fallbackMode = "error";

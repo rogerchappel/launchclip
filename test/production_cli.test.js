@@ -464,6 +464,7 @@ test("discovers ranked free frame models, clamps output, and records the accepte
     }
   });
   assert.deepEqual(frameOptions.routes, selection.routes);
+  assert.equal(frameOptions.stableRouteCache, true);
   assert.equal(probeOptions.timeoutMs, 15_000);
   assert.equal(frameOptions.leanPrompt, true);
   assert.equal(frameOptions.sceneBlueprint, true);
