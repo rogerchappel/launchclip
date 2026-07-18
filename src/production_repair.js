@@ -136,7 +136,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     const blueprintRecord = await readOptionalJson(path.join(workspace, PRODUCTION_PATHS.frames, ".blueprints", `${shotId}.json`), null);
     const lockedSupportingMotion = Array.isArray(blueprintRecord?.blueprint?.supporting_motion_beats) ? blueprintRecord.blueprint.supporting_motion_beats : [];
     const repairInputHash = semanticHash({
-      worker: "frame-repair.v14",
+      worker: "frame-repair.v15",
       candidate_verification: "browser-snapshot.v3",
       repair_context: REPAIR_CAPSULE_VERSION,
       routes: routes.map(modelRouteKey),
@@ -218,7 +218,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
             background: options.background !== false,
             maxOutputTokens: Number(options.maxOutputTokens ?? 8_000),
             keepAlive: route.provider === "ollama" ? 0 : undefined,
-            promptCacheKey: "launchclip:frame-repair-patch:v5",
+            promptCacheKey: "launchclip:frame-repair-patch:v6",
             metadata: { job_id: jobId, shot_id: shotId, repair_findings: findings.length, attempt: totalAttempt, route: routeIndex + 1 },
             onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
           };
