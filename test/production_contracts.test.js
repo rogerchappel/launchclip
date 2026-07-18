@@ -118,6 +118,30 @@ test("canonicalizes unambiguous global reveal and SFX timestamps into shot-local
   assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).ok, true);
 });
 
+test("clamps overrun global beats and removes a fully contained trailing hold", () => {
+  const plan = samplePlan();
+  plan.shots[0].visual.internal_reveals[0].at_seconds = 7;
+  plan.shots[0].visual.events[0].at_seconds = 7;
+  plan.shots[0].sfx[0].at_seconds = 7;
+  const contained = structuredClone(plan.shots[1]);
+  contained.id = "shot-contained-hold";
+  contained.start_seconds = 9.9;
+  contained.end_seconds = 10;
+  contained.visual.events = [];
+  contained.visual.internal_reveals = [];
+  contained.sfx = [];
+  plan.shots.push(contained);
+
+  const normalized = normalizeProductionPlanTiming(plan);
+
+  assert.equal(normalized.shots.length, 2);
+  assert.equal(normalized.shots[0].visual.internal_reveals[0].at_seconds, 4.9);
+  assert.equal(normalized.shots[0].visual.events[0].at_seconds, 4.9);
+  assert.equal(normalized.shots[0].sfx[0].at_seconds, 4.9);
+  assert.equal(plan.shots.length, 3, "does not mutate the model response");
+  assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).ok, true);
+});
+
 test("canonicalizes model event ids and preserves their SFX bindings without a provider repair", () => {
   const plan = samplePlan();
   plan.shots[0].visual.events.push({
@@ -132,6 +156,56 @@ test("canonicalizes model event ids and preserves their SFX bindings without a p
   assert.equal(normalized.shots[0].visual.events[1].id, "shot-1-proof-lands");
   assert.equal(normalized.shots[0].sfx[0].event_id, "shot-1-proof-appears");
   assert.equal(plan.shots[0].visual.events[0].id, "proof appears", "does not mutate the model response");
+  assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).ok, true);
+});
+
+test("resolves punctuation aliases and clear plural groups in event targets", () => {
+  const plan = samplePlan();
+  const shot = plan.shots[0];
+  const template = shot.visual.objects[1];
+  shot.visual.objects.push(
+    { ...template, id: "cart-3-9" },
+    { ...template, id: "s5-bar85" },
+    { ...template, id: "s5-bar80" }
+  );
+  shot.visual.events[0].target_ids = ["cart-3.9", "s5-bars"];
+
+  const normalized = normalizeProductionPlanTiming(plan);
+
+  assert.deepEqual(normalized.shots[0].visual.events[0].target_ids, ["cart-3-9", "s5-bar85", "s5-bar80"]);
+  assert.deepEqual(plan.shots[0].visual.events[0].target_ids, ["cart-3.9", "s5-bars"], "does not mutate the model response");
+  assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).errors.some((error) => /targets unknown object/.test(error)), false);
+});
+
+test("normalizes lossless planner bookkeeping without another model call", () => {
+  const plan = samplePlan();
+  plan.narration.target_wpm = 0;
+  plan.shots[0].sfx[0].at_seconds = 4;
+  plan.shots[0].visual.objects.forEach((object) => { object.layer = "foreground"; });
+  plan.shots[0].visual.continuity.hands_off_object_ids = ["missing", "proof-node"];
+  plan.shots[1].visual.continuity.inherits_object_ids = [];
+  const normalized = normalizeProductionPlanTiming(plan);
+  assert.ok(normalized.narration.target_wpm >= 60);
+  assert.equal(normalized.shots[0].sfx[0].at_seconds, normalized.shots[0].visual.events[0].at_seconds);
+  assert.ok(new Set(normalized.shots[0].visual.objects.map((object) => object.layer)).size >= 2);
+  assert.deepEqual(normalized.shots[0].visual.continuity.hands_off_object_ids, ["proof-node"]);
+  assert.deepEqual(normalized.shots[1].visual.continuity.inherits_object_ids, ["proof-node"]);
+  assert.equal(plan.narration.target_wpm, 0, "does not mutate the model response");
+  assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).ok, true);
+});
+
+test("maps descriptive typography directions to renderable family names", () => {
+  const plan = samplePlan();
+  plan.design.style_dna.typography = {
+    display: "editorial serif blunt weight for headlines",
+    body: "uppercase monospaced with tracking for system labels",
+    metadata: "tiny mono status top: LOCAL MODE"
+  };
+
+  const normalized = normalizeProductionPlanTiming(plan);
+
+  assert.deepEqual(normalized.design.style_dna.typography, { display: "Georgia", body: "Courier New", metadata: "Courier New" });
+  assert.equal(plan.design.style_dna.typography.display, "editorial serif blunt weight for headlines", "does not mutate the model response");
   assert.equal(validateProductionPlan(normalized, { evidenceIds: ["ev-1"], resourceIds: ["res-1"] }).ok, true);
 });
 

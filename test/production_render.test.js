@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { ProductionVerificationError, assertVerificationFresh, classifyCommandFailure, plannedTypographyErrors, renderDraftProduction, renderProduction, verifyProduction, verifySemanticArtifacts, verifyShotCompositions } from "../src/production_render.js";
+import { FREE_VISION_UNAVAILABLE_CODE } from "../src/production_critic.js";
 
 test("runs lint, the current transition-aware browser check, and assembled snapshots", async () => {
   const workspace = await fixture();
@@ -89,6 +90,28 @@ test("reuses a content-addressed verification receipt with intact reports and sn
   assert.equal(receipt.status, "passed");
   assert.equal(receipt.cacheable, true);
   assert.equal(receipt.snapshot_artifacts.files.length, 1);
+});
+
+test("reuses unchanged content-failure evidence for the next repair pass", async () => {
+  const workspace = await fixture();
+  await addShotFixture(workspace);
+  const commands = [];
+  const run = async (_command, args) => {
+    commands.push(args[1]);
+    if (args[1] === "snapshot") await writeFile(path.join(args[args.indexOf("--output") + 1], "frame-00.png"), "snapshot");
+    if (args[1] === "check" && args.at(-1).includes("shot-inspect")) {
+      const error = new Error("missing selector");
+      error.code = 1;
+      error.stdout = JSON.stringify({ ok: false, issues: [{ code: "motion_selector_missing", severity: "error", selector: "#proof" }] });
+      throw error;
+    }
+    return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
+  };
+  const adapters = { run, verifierFingerprint: { hyperframes_cli: "test", browser: "test", node: "test", platform: "test", arch: "test" } };
+  await assert.rejects(() => verifyProduction(workspace, {}, adapters), (error) => error.verification.cached === false);
+  const firstCommands = [...commands];
+  await assert.rejects(() => verifyProduction(workspace, {}, adapters), (error) => error.verification.cached === true);
+  assert.deepEqual(commands, firstCommands);
 });
 
 test("invalidates verification reuse when project content or a receipt artifact changes", async () => {
@@ -341,6 +364,49 @@ test("renders a temporally analyzed draft before approval", async () => {
   assert.equal(result.status, "ready");
   assert.match(result.video, /production\/renders\/draft\.mp4$/);
   assert.equal(renderArgs[renderArgs.indexOf("--quality") + 1], "draft");
+  assert.equal(renderArgs.includes("--strict-all"), true);
+});
+
+test("renders a vision-supervised draft after bounded browser-content findings", async () => {
+  const workspace = await fixture();
+  const commands = [];
+  const result = await renderDraftProduction(workspace, { allowContentVerificationFailures: true }, {
+    run: async (_command, args) => {
+      commands.push(args);
+      if (args[1] === "lint") return { stdout: JSON.stringify({ warningCount: 1, findings: [{ severity: "warning", code: "overlapping_gsap_tweens", message: "two tweens meet at the same boundary" }] }), stderr: "" };
+      if (args[1] === "check") return { stdout: JSON.stringify({ ok: false, layout: { findings: [{ severity: "error", code: "panel_out_of_canvas", message: "panel clips by two pixels" }] } }), stderr: "" };
+      return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
+    },
+    writeMotionReport: async (_video, output) => { await writeFile(output, "{}\n"); return { quality: { ok: true }, family: "developing-card" }; },
+    critiqueProduction: async () => ({ verdict: "ship", status: "approved" })
+  });
+  assert.equal(result.status, "ready");
+  assert.equal(result.verification.status, "failed");
+  assert.deepEqual(result.verification_supervision, { mode: "vision-supervised-draft", failed: ["lint", "inspect"] });
+  const renderArgs = commands.find((args) => args[1] === "render");
+  assert.ok(renderArgs);
+  assert.equal(renderArgs.includes("--strict-all"), false);
+});
+
+test("keeps an encoded draft when every free vision route is unavailable", async () => {
+  const workspace = await fixture();
+  const error = new Error("all free vision routes timed out");
+  error.code = FREE_VISION_UNAVAILABLE_CODE;
+  let criticCalls = 0;
+  const result = await renderDraftProduction(workspace, {
+    allowFreeVisionUnavailable: true,
+    visionUnavailableError: error
+  }, {
+    run: async (_command, args) => ({ stdout: args.includes("--json") ? "{}" : "ok", stderr: "" }),
+    writeMotionReport: async (_video, output) => { await writeFile(output, "{}\n"); return { quality: { ok: true }, family: "developing-card" }; },
+    critiqueProduction: async () => { criticCalls += 1; return { verdict: "ship" }; }
+  });
+  assert.equal(criticCalls, 0);
+  assert.equal(result.status, "needs-repair");
+  assert.equal(result.critique.verdict, "unavailable");
+  assert.equal(result.critique.retryable, true);
+  assert.match(result.video, /production\/renders\/draft\.mp4$/);
+  assert.equal(JSON.parse(await readFile(result.critique.critique, "utf8")).error_code, FREE_VISION_UNAVAILABLE_CODE);
 });
 
 test("reuses unchanged native QA while still encoding and analyzing each draft", async () => {

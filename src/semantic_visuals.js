@@ -45,7 +45,7 @@ export function validateSemanticVisualPlan(plan) {
     const contentObjects = objects.filter((object) => CONTENT_OBJECT_KINDS.has(object.kind));
     const textOnly = TEXT_ONLY_REPRESENTATIONS.has(visual.representation) || objects.every((object) => ["text", "decoration", "container"].includes(object.kind));
     if (textOnly) textOnlyDuration += Math.max(0, duration);
-    if (["companion", "voiceover"].includes(shot.presenter?.mode) && !contentObjects.length) errors.push(`${label} must include a content-bearing visual object beyond presenter and text`);
+    if (["companion", "voiceover"].includes(shot.presenter?.mode) && !contentObjects.length) errors.push(`${label} must include a content-bearing visual object beyond presenter and text; use object kind asset, logo, diagram-node, connector, metric, timeline, or process (container does not count)`);
 
     for (const [cueIndex, cue] of (shot.sfx ?? []).entries()) {
       const event = events.find((candidate) => candidate.id === cue.event_id);

@@ -89,7 +89,8 @@ export class ChatCompletionsStructuredClient {
     };
     if (options.maxOutputTokens != null) body.max_tokens = positiveInteger(options.maxOutputTokens, "maxOutputTokens");
     if (this.provider === "openrouter") {
-      body.provider = { require_parameters: true, allow_fallbacks: model === "openrouter/free" };
+      const dynamicFreeRouter = model === "openrouter/free";
+      body.provider = { require_parameters: !dynamicFreeRouter, allow_fallbacks: dynamicFreeRouter };
       if (options.reasoningEffort && (options.reasoningEffort !== "none" || model === "openrouter/free")) {
         body.reasoning = { effort: options.reasoningEffort };
       }
@@ -293,8 +294,10 @@ function chatStructuredResult(payload, fallbackModel) {
 
 function stripJsonFence(text) {
   const trimmed = String(text).trim();
-  const match = trimmed.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i);
-  return match ? match[1].trim() : trimmed;
+  const opening = trimmed.match(/^```(?:json)?[^\S\r\n]*(?:\r?\n)?/i);
+  if (!opening) return trimmed;
+  const body = trimmed.slice(opening[0].length);
+  return body.replace(/\r?\n```[^\S\r\n]*$/i, "").trim();
 }
 
 function ollamaStructuredResult(payload, fallbackModel) {

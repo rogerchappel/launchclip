@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_VERSION, validateFrameBlueprint } from "../src/frame_blueprint.js";
+import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_VERSION, normalizeFrameBlueprint, repairLockedSupportingMotionLiterals, repairMissingOpeningMotionPosition, validateFrameBlueprint, validateLockedSupportingMotion } from "../src/frame_blueprint.js";
 
 test("builds a compact blueprint packet and a smaller implementation handoff", () => {
   const context = fixture();
@@ -77,6 +77,56 @@ test("accepts creative opening metadata when the measurable hook contract passes
   blueprint.density.focal_element_selector = "#shot-1-label";
 
   assert.deepEqual(validateFrameBlueprint(blueprint, shot), { ok: true, errors: [] });
+});
+
+test("normalizes mechanical free-model blueprint drift without replacing its visual intent", () => {
+  const { shot } = fixture();
+  const blueprint = validBlueprint();
+  blueprint.zones[1].y_percent = 95;
+  blueprint.motion_beats = [
+    { ...blueprint.motion_beats[0], event_id: "shot-1-reveal-proof", action: "Drop the authored proof node into its final position" },
+    { ...blueprint.motion_beats[0], event_id: "shot-1-reveal-label", object_id: "proof-label", selector: "#shot-1-label" }
+  ];
+  blueprint.density.minimum_semantic_objects = 1;
+
+  const normalized = normalizeFrameBlueprint(blueprint, shot);
+
+  assert.equal(blueprint.zones[1].y_percent, 95, "normalization does not mutate the model response");
+  assert.equal(normalized.zones[1].y_percent, 88);
+  assert.deepEqual(normalized.motion_beats, [{
+    event_id: "shot-1-reveal",
+    object_id: "proof-node",
+    selector: "#shot-1-proof",
+    at_seconds: 1,
+    action: "Drop the authored proof node into its final position"
+  }]);
+  assert.equal(normalized.density.minimum_semantic_objects, 2);
+  assert.deepEqual(validateFrameBlueprint(normalized, shot), { ok: true, errors: [] });
+});
+
+test("makes an omitted position explicit only for the first locked opening tween", () => {
+  const beat = validBlueprint().supporting_motion_beats[0];
+  beat.at_seconds = 0;
+  const html = `<script>const tl=gsap.timeline({paused:true});gsap.set("#shot-1-proof",{scale:.86});tl.fromTo("#shot-1-proof",{opacity:0,scale:.86},{opacity:1,scale:1,duration:.6,ease:"power3.out"});</script>`;
+
+  const repaired = repairMissingOpeningMotionPosition(html, [beat]);
+
+  assert.equal(repaired.repaired, true);
+  assert.match(repaired.html, /ease:"power3\.out"},0\)/);
+  assert.deepEqual(validateLockedSupportingMotion(repaired.html, [beat]), []);
+  const afterEarlierTween = html.replace("gsap.set", "tl.set");
+  assert.equal(repairMissingOpeningMotionPosition(afterEarlierTween, [beat]).repaired, false);
+});
+
+test("adds only the required immediateRender flag to a matching later locked tween", () => {
+  const beats = validBlueprint().supporting_motion_beats;
+  const html = `<script>const tl=gsap.timeline({paused:true});tl.fromTo("#shot-1-proof",{opacity:0,scale:.86},{opacity:1,scale:1,duration:.6,ease:"power3.out"},.1);tl.fromTo("#shot-1-label",{y:96,opacity:.5},{y:0,opacity:1,duration:2.25,ease:"none"},2.5);</script>`;
+
+  const repaired = repairLockedSupportingMotionLiterals(html, beats);
+
+  assert.equal(repaired.immediate_render_added, 1);
+  assert.match(repaired.html, /ease:"none",immediateRender:false},2\.5/);
+  assert.deepEqual(validateLockedSupportingMotion(repaired.html, beats), []);
 });
 
 function validBlueprint() {

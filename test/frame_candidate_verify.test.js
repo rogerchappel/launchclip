@@ -85,6 +85,25 @@ test("accepts an incremental candidate that resolves one baseline finding", asyn
   assert.deepEqual(JSON.parse(await readFile(result.report, "utf8")).comparison.improved_findings, ["motion_frozen|#proof"]);
 });
 
+test("accepts a bounded timing tradeoff when the candidate is a clear net improvement", async () => {
+  const workspace = await fixture();
+  const run = comparativeRun((role) => role === "baseline"
+    ? [
+        { severity: "error", code: "motion_appears_late", selector: "#title", message: "appears at 9.2s but should be visible by 0s" },
+        { severity: "error", code: "motion_off_frame", selector: "#title", message: "title drifts off the canvas" }
+      ]
+    : [
+        { severity: "error", code: "motion_appears_late", selector: "#title", message: "appears at 0.1s but should be visible by 0s" },
+        { severity: "error", code: "motion_appears_late", selector: "#phone", message: "appears at 0.1s but should be visible by 0s" },
+        { severity: "error", code: "motion_out_of_order", selector: "#phone", message: "phone and title appear together at 0.1s" }
+      ]);
+  const result = await verifyFrameCandidate(workspace, bundle(), { ...context("net-improvement-1"), baseline: bundle() }, { run });
+  assert.equal(result.ok, true);
+  const comparison = JSON.parse(await readFile(result.report, "utf8")).comparison;
+  assert.ok(comparison.candidate_issue_score < comparison.baseline_issue_score);
+  assert.deepEqual(comparison.accepted_tradeoffs, ["motion_appears_late|#phone", "motion_out_of_order|#phone"]);
+});
+
 test("stages candidates with assembled fonts and native HyperFrames motion", async () => {
   const workspace = await fixture();
   const assembled = path.join(workspace, "production", "hyperframes", "compositions");

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { runProduction, runProductionStage } from "../src/production_cli.js";
+import { FREE_VISION_UNAVAILABLE_CODE } from "../src/production_critic.js";
 import { prepareSourceMedia } from "../src/production_source_media.js";
 import { launchHyperFramesStudio, openProductionPreview } from "../src/production_preview.js";
 
@@ -60,7 +61,7 @@ test("runs the delegated production DAG in dependency order and stops for approv
   assert.equal(calls[8][1].noMusic, true);
   assert.equal(calls[8][1].noSfx, true);
   assert.equal(calls[10][1].voiceover, "/tmp/voice.mp3");
-  assert.equal(calls[10][1].musicVolume, 0.35);
+  assert.equal(calls[10][1].musicVolume, 0.15);
   assert.match(result.next, /production-render/);
 });
 
@@ -165,7 +166,7 @@ test("runs bounded critic-directed repairs before asking for human approval", as
   assert.equal(result.repairs[0].trigger, "critique");
 });
 
-test("automatically repairs deterministic verification failures before rendering a draft", async () => {
+test("automatically routes verification failures through model-authored repair", async () => {
   const calls = [];
   let repairOptions;
   let drafts = 0;
@@ -188,15 +189,15 @@ test("automatically repairs deterministic verification failures before rendering
       }
       return { status: "ready", video: "/tmp/draft.mp4", verification: { status: "ready", snapshots: "/tmp/snapshots" }, critique: { verdict: "ship" } };
     },
-    fallbackFramesForVerification: async (_workspace, options) => { calls.push("local-fallback"); repairOptions = options; return { status: "repaired", repaired: [{ shot_id: "shot-2" }] }; },
-    repairProduction: async () => { calls.push("paid-repair"); return { status: "repaired", repaired: [] }; }
+    fallbackFramesForVerification: async () => { throw new Error("must not replace authored frames with deterministic fallbacks"); },
+    repairProduction: async (_workspace, options) => { calls.push("model-repair"); repairOptions = options; return { status: "repaired", repaired: [{ shot_id: "shot-2" }] }; }
   };
   const result = await runProduction("owner/repo", {}, adapters);
   assert.equal(result.status, "awaiting-approval");
-  assert.deepEqual(calls, ["assemble", "draft", "local-fallback", "assemble", "draft"]);
-  assert.equal(result.repairs.length, 0);
-  assert.equal(result.local_repairs.length, 1);
-  assert.deepEqual(repairOptions.failed, ["inspect:shot-2"]);
+  assert.deepEqual(calls, ["assemble", "draft", "model-repair", "assemble", "draft"]);
+  assert.equal(result.repairs.length, 1);
+  assert.equal(result.local_repairs.length, 0);
+  assert.deepEqual(repairOptions.verification.failed, ["inspect:shot-2"]);
 });
 
 test("stops infrastructure verification failures without fallback or paid repair calls", async () => {
@@ -240,7 +241,7 @@ test("blocks standalone paid repair for a recorded infrastructure failure", asyn
   assert.equal(repairCalls, 0);
 });
 
-test("stops a persistent verification repair loop at the configured bound", async () => {
+test("renders a vision-supervised draft at the persistent repair bound", async () => {
   const calls = [];
   const adapters = {
     withProductionLease: async (_workspace, operation) => operation(),
@@ -249,19 +250,81 @@ test("stops a persistent verification repair loop at the configured bound", asyn
     produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
     directFrames: async () => ({ generated: 1, cached: 0 }),
     assembleHyperFrames: async () => { calls.push("assemble"); return {}; },
-    renderDraftProduction: async () => {
-      calls.push("draft");
+    renderDraftProduction: async (_workspace, options) => {
+      calls.push(options.allowContentVerificationFailures ? "supervised-draft" : "draft");
+      if (options.allowContentVerificationFailures) return { status: "ready", video: "/tmp/draft.mp4", verification: { status: "failed", failed: ["inspect:shot-1"], snapshots: "/tmp/snapshots" }, critique: { verdict: "ship" } };
       throw Object.assign(new Error("still failing"), { code: "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED", verification: { status: "failed", failed: ["inspect:shot-1"], qa: "/tmp/qa" } });
     },
     fallbackFramesForVerification: async () => ({ status: "not-applicable", repaired: [] }),
     repairProduction: async () => { calls.push("repair"); return { status: "repaired", repaired: [{ shot_id: "shot-1" }] }; }
   };
   const result = await runProduction("owner/repo", { "max-repair-passes": "1" }, adapters);
-  assert.equal(result.status, "needs-repair");
-  assert.equal(result.draft, null);
+  assert.equal(result.status, "awaiting-approval");
+  assert.equal(result.draft.video, "/tmp/draft.mp4");
   assert.equal(result.repairs.length, 1);
-  assert.deepEqual(calls, ["assemble", "draft", "repair", "assemble", "draft"]);
-  assert.match(result.next, /\/tmp\/qa/);
+  assert.deepEqual(calls, ["assemble", "draft", "repair", "assemble", "draft", "supervised-draft"]);
+  assert.match(result.next, /\/tmp\/draft\.mp4/);
+});
+
+test("uses visual critique to direct the final bounded repair pass", async () => {
+  const calls = [];
+  const repairTriggers = [];
+  let drafts = 0;
+  const adapters = {
+    withProductionLease: async (_workspace, operation) => operation(),
+    buildIntake: async () => ({ workspace: "/tmp/workspace" }), writeIntake: async () => ({ workspace: "/tmp/workspace" }), prepareSourceMedia: async () => ({ status: "not-applicable" }),
+    collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), resolveProductionEntities: async () => ({}), planProduction: async () => ({}),
+    produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
+    directFrames: async () => ({ generated: 1, cached: 0 }),
+    assembleHyperFrames: async () => { calls.push("assemble"); return {}; },
+    renderDraftProduction: async () => {
+      calls.push("draft"); drafts += 1;
+      if (drafts <= 2) throw Object.assign(new Error("browser QA finding"), { code: "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED", verification: { status: "failed", failed: ["inspect:shot-1"], qa: "/tmp/qa" } });
+      return { status: "ready", video: "/tmp/draft.mp4", verification: { status: "ready", snapshots: "/tmp/snapshots" }, critique: { verdict: "ship" } };
+    },
+    critiqueProduction: async () => { calls.push("vision-critique"); return { verdict: "repair", findings: 1 }; },
+    repairProduction: async (_workspace, options) => { calls.push("repair"); repairTriggers.push(options.trigger); return { status: "repaired", repaired: [{ shot_id: "shot-1" }] }; }
+  };
+  const result = await runProduction("owner/repo", { "max-repair-passes": "2" }, adapters);
+  assert.equal(result.status, "awaiting-approval");
+  assert.deepEqual(repairTriggers, ["verification", "critique"]);
+  assert.deepEqual(calls, ["assemble", "draft", "repair", "assemble", "draft", "vision-critique", "repair", "assemble", "draft"]);
+});
+
+test("encodes the best free draft when every vision critic route is unavailable", async () => {
+  const calls = [];
+  let drafts = 0;
+  const unavailable = new Error("all free vision routes timed out");
+  unavailable.code = FREE_VISION_UNAVAILABLE_CODE;
+  const adapters = {
+    withProductionLease: async (_workspace, operation) => operation(),
+    buildIntake: async () => ({ workspace: "/tmp/workspace" }), writeIntake: async () => ({ workspace: "/tmp/workspace" }), prepareSourceMedia: async () => ({ status: "not-applicable" }),
+    collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), resolveProductionEntities: async () => ({}), planProduction: async () => ({}),
+    produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
+    directFrames: async () => ({ generated: 1, cached: 0 }),
+    assembleHyperFrames: async () => { calls.push("assemble"); return {}; },
+    renderDraftProduction: async (_workspace, options) => {
+      calls.push(options.visionUnavailableError ? "vision-unavailable-draft" : "draft");
+      drafts += 1;
+      if (!options.visionUnavailableError) throw Object.assign(new Error("browser QA finding"), { code: "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED", verification: { status: "failed", failed: ["inspect:shot-1"], qa: "/tmp/qa" } });
+      assert.equal(options.allowContentVerificationFailures, true);
+      assert.equal(options.allowFreeVisionUnavailable, true);
+      return { status: "needs-repair", video: "/tmp/draft.mp4", verification: { status: "failed", failed: ["inspect:shot-1"] }, critique: { verdict: "unavailable" } };
+    },
+    critiqueProduction: async () => { calls.push("vision-critique"); throw unavailable; },
+    repairProduction: async () => { calls.push("repair"); return { status: "repaired", repaired: [{ shot_id: "shot-1" }] }; }
+  };
+  const result = await runProduction("owner/repo", {
+    "model-policy": "free",
+    "frame-route": "openrouter:test/free@none",
+    "repair-route": "openrouter:test/free@none",
+    "max-repair-passes": "2"
+  }, adapters);
+  assert.equal(drafts, 3);
+  assert.equal(result.status, "needs-repair");
+  assert.equal(result.draft.video, "/tmp/draft.mp4");
+  assert.equal(result.critique.verdict, "unavailable");
+  assert.deepEqual(calls, ["assemble", "draft", "repair", "assemble", "draft", "vision-critique", "vision-unavailable-draft"]);
 });
 
 test("executes the full audio, frame, assembly, and draft closure after a replan verdict", async () => {
@@ -352,6 +415,18 @@ test("routes explicit hierarchical, repair, and visual novelty planning controls
   assert.equal(received.visualHistoryDir, "/tmp/brand-history");
   assert.equal(received.visualHistoryLimit, 12);
   assert.equal(received.visualSimilarityLimit, 0.42);
+});
+
+test("uses a compact bounded planning capsule for free models", async () => {
+  let received;
+  await runProductionStage("creative-plan", "/tmp/workspace", { "model-policy": "free" }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    planProduction: async (_workspace, options) => { received = options; return { status: "ready" }; }
+  });
+  assert.equal(received.maxOutputTokens, 20_000);
+  assert.equal(received.evidenceChars, 48_000);
+  assert.equal(received.freeModelRequestTimeoutMs, 180_000);
+  assert.equal(received.freeSemanticFallbacks, 1);
 });
 
 test("blocks assembly when measured narration timing requires a replan", async () => {
@@ -452,6 +527,7 @@ test("discovers ranked free frame models, clamps output, and records the accepte
     }
   });
   assert.deepEqual(frameOptions.routes, selection.routes);
+  assert.equal(frameOptions.stableRouteCache, true);
   assert.equal(probeOptions.timeoutMs, 15_000);
   assert.equal(frameOptions.leanPrompt, true);
   assert.equal(frameOptions.sceneBlueprint, true);
@@ -468,6 +544,42 @@ test("discovers ranked free frame models, clamps output, and records the accepte
   assert.equal(recordedOutcome.result.frames[0].model, "google/gemma-code:free");
   assert.equal(result.free_model_selection.selected_model, "google/gemma-code:free");
   assert.equal(result.free_model_selection.source, "observed-winner");
+});
+
+test("probes untried free frame candidates after a partial pool failure in the same command", async () => {
+  const first = {
+    source: "live-probe", state_path: "/tmp/free-model-state.json", selected_model: "tencent/hy3:free", verified_free_at: "2026-07-17T00:00:00.000Z",
+    routes: ["openrouter:tencent/hy3:free@none", "openrouter:google/gemma-code:free@none"],
+    candidates: [{ id: "tencent/hy3:free" }, { id: "google/gemma-code:free" }, { id: "qwen/qwen3-coder:free" }], warnings: []
+  };
+  const next = { ...first, source: "live-probe", selected_model: "qwen/qwen3-coder:free", routes: ["openrouter:qwen/qwen3-coder:free@none"] };
+  const directRoutes = [];
+  const outcomes = [];
+  let probes = 0;
+  const result = await runProductionStage("direct-frames", "/tmp/workspace", { "model-policy": "free" }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    selectOpenRouterFreeModels: async () => first,
+    probeOpenRouterFreeModels: async (_selection, options) => {
+      probes += 1;
+      if (probes === 1) return first;
+      assert.deepEqual(options.excludeIds.sort(), ["google/gemma-code:free", "tencent/hy3:free"]);
+      assert.equal(options.stopAfterFirstSuccess, true);
+      return next;
+    },
+    directFrames: async (_workspace, options) => {
+      directRoutes.push([...options.routes]);
+      if (directRoutes.length === 1) throw new Error("Frame s8 exhausted model routes");
+      return { status: "ready", frames: [{ provider: "openrouter", model: "tencent/hy3:free", recovered: true }, { provider: "openrouter", model: "qwen/qwen3-coder:free" }] };
+    },
+    recordOpenRouterFreeModelOutcome: async (selection, outcome) => {
+      outcomes.push(outcome);
+      return outcome.error ? { ...selection, source: "rotated-after-failure" } : next;
+    }
+  });
+  assert.deepEqual(directRoutes, [first.routes, next.routes]);
+  assert.equal(outcomes[0].error.message, "Frame s8 exhausted model routes");
+  assert.deepEqual(outcomes[1].result.frames.map((frame) => frame.model), ["qwen/qwen3-coder:free"]);
+  assert.equal(result.free_model_selection.selected_model, "qwen/qwen3-coder:free");
 });
 
 test("keeps critic and repair routes on OpenRouter free under the free policy", async () => {
@@ -500,13 +612,12 @@ test("keeps critic and repair routes on OpenRouter free under the free policy", 
       received.repair = options;
       return { status: "repaired", repaired: [{ provider: "openrouter", model: "tencent/hy3:free" }] };
     },
-    recordOpenRouterFreeModelOutcome: async (receivedSelection, outcome) => {
-      assert.equal(receivedSelection.source, "cached-live-probe");
-      assert.equal(outcome.result.frames[0].model, "tencent/hy3:free");
-      return receivedSelection;
-    }
+    recordOpenRouterFreeModelOutcome: async () => { throw new Error("repair outcomes must not change the frame-author ranking"); }
   });
   assert.equal(received.critic.route, "openrouter:openrouter/free@none");
+  assert.equal(received.critic.selectFreeVision, true);
+  assert.equal(received.critic.freeVisionCandidates, 3);
+  assert.equal(received.critic.freeVisionProbeTimeoutMs, 15_000);
   assert.deepEqual(received.repair.routes, [...selection.routes, "openrouter:openrouter/free@none"]);
   assert.equal(received.repair.provider, "openrouter");
   assert.equal(received.repair.model, "tencent/hy3:free");
@@ -576,7 +687,28 @@ test("routes an independently rerunnable analyzed draft stage", async () => {
   assert.equal(received.options.draftQuality, "draft");
   assert.equal(received.options.references, "/tmp/reference.mp4");
   assert.equal(received.options.criticRoute, "openrouter:openrouter/free@none");
+  assert.equal(received.options.selectFreeVision, false);
   assert.equal(received.options.shotInspectConcurrency, 4);
+});
+
+test("enables discovered vision critique for a free draft without an explicit critic", async () => {
+  let received;
+  await runProductionStage("production-draft", "/tmp/workspace", {
+    "model-policy": "free",
+    "free-vision-model-candidates": "2",
+    "free-vision-model-state": "/tmp/vision-state.json",
+    "refresh-free-vision-models": true
+  }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    renderDraftProduction: async (_workspace, options) => {
+      received = options;
+      return { status: "ready", video: "/tmp/draft.mp4" };
+    }
+  });
+  assert.equal(received.selectFreeVision, true);
+  assert.equal(received.freeVisionCandidates, 2);
+  assert.equal(received.freeVisionStatePath, "/tmp/vision-state.json");
+  assert.equal(received.refreshFreeVisionModels, true);
 });
 
 test("rejects multiple critic routes because an independent verdict must be pinned", async () => {

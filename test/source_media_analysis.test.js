@@ -43,14 +43,79 @@ test("creates the visual-analysis client from the intake provider route", async 
   intake.model = { provider: "openrouter", id: "openrouter/free", reasoning_effort: "none" };
   await writeFile(intakePath, `${JSON.stringify(intake, null, 2)}\n`);
   let route;
-  await analyzeSourceMedia(workspace, {}, {
+  const selected = visionSelection(path.join(workspace, "vision-state.json"));
+  const result = await analyzeSourceMedia(workspace, {}, {
+    selectOpenRouterFreeVisionModels: async () => selected,
+    probeOpenRouterFreeVisionModels: async () => ({ ...selected, source: "live-probe", routes: [selected.routes[0]] }),
     createClient: (received) => {
       route = received;
       return { runStructured: async () => ({ response_id: "free-media", model: "free-vision", value: { resource_id: "take", summary: "Visible product", visible_text: [], narrative_opportunities: [], segments: [], quality_warnings: [] } }) };
     },
     contactSheet: async (_source, output) => writeFile(output, "contact-sheet")
   });
-  assert.deepEqual(route, { provider: "openrouter", model: "openrouter/free", reasoning: "none", supportsImages: true });
+  assert.equal(route.provider, "openrouter");
+  assert.equal(route.model, "google/gemma-4-31b-it:free");
+  assert.equal(route.reasoning, "none");
+  assert.equal(result.free_model_selection.selected_model, "google/gemma-4-31b-it:free");
+});
+
+test("rotates visual source analysis when the selected free vision model fails", async () => {
+  const workspace = await fixture({ role: "supporting", authoritative: false });
+  const intakePath = path.join(workspace, "production", "intake.json");
+  const intake = JSON.parse(await readFile(intakePath, "utf8"));
+  intake.model = { provider: "openrouter", id: "openrouter/free", reasoning_effort: "none" };
+  await writeFile(intakePath, `${JSON.stringify(intake, null, 2)}\n`);
+  const selected = visionSelection(path.join(workspace, "vision-state.json"));
+  const fallback = {
+    ...selected,
+    selected_model: "google/gemma-4-26b-a4b-it:free",
+    routes: ["openrouter:google/gemma-4-26b-a4b-it:free@none"]
+  };
+  const routes = [];
+  const result = await analyzeSourceMedia(workspace, {}, {
+    selectOpenRouterFreeVisionModels: async () => selected,
+    probeOpenRouterFreeVisionModels: async (_selection, options) => options.excludeIds ? fallback : { ...selected, routes: [selected.routes[0]] },
+    recordOpenRouterFreeModelOutcome: async (_selection, outcome) => {
+      assert.match(outcome.error.message, /vision endpoint failed/);
+      return fallback;
+    },
+    createClient: (route) => ({ runStructured: async () => {
+      routes.push(route.model);
+      if (route.model.includes("31b")) throw new Error("vision endpoint failed");
+      return { response_id: "free-media-fallback", model: route.model, value: { resource_id: "take", summary: "Visible product", visible_text: [], narrative_opportunities: [], segments: [], quality_warnings: [] } };
+    } }),
+    contactSheet: async (_source, output) => writeFile(output, "contact-sheet")
+  });
+  assert.deepEqual(routes, ["google/gemma-4-31b-it:free", "google/gemma-4-31b-it:free", "google/gemma-4-26b-a4b-it:free"]);
+  assert.equal(result.free_model_selection.selected_model, "google/gemma-4-26b-a4b-it:free");
+});
+
+test("keeps a proven free vision model when a transient source analysis retry succeeds", async () => {
+  const workspace = await fixture({ role: "supporting", authoritative: false });
+  const intakePath = path.join(workspace, "production", "intake.json");
+  const intake = JSON.parse(await readFile(intakePath, "utf8"));
+  intake.model = { provider: "openrouter", id: "openrouter/free", reasoning_effort: "none" };
+  await writeFile(intakePath, `${JSON.stringify(intake, null, 2)}\n`);
+  const selected = visionSelection(path.join(workspace, "vision-state.json"));
+  let attempts = 0;
+  let rotations = 0;
+  const result = await analyzeSourceMedia(workspace, {}, {
+    selectOpenRouterFreeVisionModels: async () => selected,
+    probeOpenRouterFreeVisionModels: async () => ({ ...selected, source: "live-probe", routes: [selected.routes[0]] }),
+    recordOpenRouterFreeModelOutcome: async () => {
+      rotations += 1;
+      return selected;
+    },
+    createClient: (route) => ({ runStructured: async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("temporary vision capacity failure");
+      return { response_id: "free-media-retry", model: route.model, value: { resource_id: "take", summary: "Visible product", visible_text: [], narrative_opportunities: [], segments: [], quality_warnings: [] } };
+    } }),
+    contactSheet: async (_source, output) => writeFile(output, "contact-sheet")
+  });
+  assert.equal(attempts, 2);
+  assert.equal(rotations, 0);
+  assert.equal(result.free_model_selection.selected_model, "google/gemma-4-31b-it:free");
 });
 
 test("gives the visual analyst real hook, cut, and motion timing instead of placeholder seconds", async () => {
@@ -84,6 +149,20 @@ test("gives the visual analyst real hook, cut, and motion timing instead of plac
 test("requires a transcript path or Scribe credentials before planning supplied narration", async () => {
   const workspace = await fixture();
   await assert.rejects(() => analyzeSourceMedia(workspace, {}, { client: {} }), /requires --transcript or ELEVENLABS_API_KEY/);
+});
+
+test("does not retranscribe authoritative voiceover when supplied transcript evidence exists", async () => {
+  const workspace = await fixture();
+  const evidencePath = path.join(workspace, "production", "evidence.json");
+  const evidence = JSON.parse(await readFile(evidencePath, "utf8"));
+  evidence.items.push({ id: "resource:take:transcript", kind: "voiceover-transcript", role: "voiceover", title: "Supplied transcript", content: "Exact supplied words.", provenance: "take.txt", claims_allowed: false, metadata: [] });
+  await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
+  const result = await analyzeSourceMedia(workspace, {}, {
+    transcriber: { transcribe: async () => { throw new Error("supplied transcript must be reused"); } },
+    client: { runStructured: async () => ({ response_id: "r", model: "gpt-5.6", value: { resource_id: "take", summary: "Visible product", visible_text: [], narrative_opportunities: [], segments: [], quality_warnings: [] } }) },
+    contactSheet: async (_source, output) => writeFile(output, "contact-sheet")
+  });
+  assert.equal(result.transcripts, 0);
 });
 
 test("recovers an interrupted aggregate source-media job", async () => {
@@ -141,6 +220,50 @@ test("stages a remote YouTube reference for visual and transcript analysis", asy
   assert.equal(transcript.claims_allowed, false);
   assert.equal(transcript.metadata.find((entry) => entry.key === "word_count").value, "2");
 });
+
+test("retries a YouTube reference with the compatible single-stream client", async () => {
+  const workspace = await fixture({ role: "reference", authoritative: false, remote: true });
+  const attempts = [];
+  const result = await analyzeSourceMedia(workspace, {}, {
+    client: { runStructured: async () => ({ response_id: "r", model: "vision", value: { resource_id: "take", summary: "Reference", visible_text: [], narrative_opportunities: [], segments: [], quality_warnings: [] } }) },
+    transcriber: { transcribe: async () => ({ provider: "elevenlabs", text: "Reference", words: [], language_code: "en" }) },
+    run: async (command, args) => {
+      assert.equal(command, "yt-dlp");
+      attempts.push(args);
+      if (attempts.length === 1) throw new Error("HTTP Error 403: Forbidden");
+      await writeFile(args[args.indexOf("--output") + 1], "video");
+    },
+    contactSheet: async (_source, output) => writeFile(output, "sheet")
+  });
+  assert.equal(attempts.length, 2);
+  assert.equal(attempts[1][attempts[1].indexOf("--extractor-args") + 1], "youtube:player_client=android_vr");
+  assert.equal(result.reference_videos.length, 1);
+});
+
+test("continues without an unavailable creative reference", async () => {
+  const workspace = await fixture({ role: "reference", authoritative: false, remote: true });
+  const result = await analyzeSourceMedia(workspace, {}, { stageReference: async () => { throw new Error("reference host unavailable"); } });
+  assert.equal(result.status, "ready");
+  assert.equal(result.reference_warnings, 1);
+  assert.deepEqual(result.reference_videos, []);
+  const report = JSON.parse(await readFile(result.report, "utf8"));
+  assert.match(report.reference_warnings[0].error, /reference host unavailable/);
+});
+
+function visionSelection(statePath) {
+  return {
+    source: "ranked",
+    state_path: statePath,
+    selected_model: "google/gemma-4-31b-it:free",
+    verified_free_at: "2026-07-18T00:00:00.000Z",
+    routes: ["openrouter:google/gemma-4-31b-it:free@none", "openrouter:google/gemma-4-26b-a4b-it:free@none"],
+    candidates: [
+      { id: "google/gemma-4-31b-it:free", score: 18.75, coverage: 0 },
+      { id: "google/gemma-4-26b-a4b-it:free", score: 17.5, coverage: 0 }
+    ],
+    warnings: []
+  };
+}
 
 async function fixture(options = {}) {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-source-media-"));

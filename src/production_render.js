@@ -8,7 +8,7 @@ import { semanticHash } from "./job_store.js";
 import { DEFAULT_NARRATED_MUSIC_VOLUME, isValidShotId, PRODUCTION_PATHS } from "./production_contracts.js";
 import { writeAudioReport } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
-import { critiqueProduction } from "./production_critic.js";
+import { critiqueProduction, FREE_VISION_UNAVAILABLE_CODE } from "./production_critic.js";
 import { semanticVisualReport, validateSemanticVisualPlan } from "./semantic_visuals.js";
 import { runHyperframes } from "./toolchain.js";
 
@@ -42,7 +42,11 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
   const cached = !options.forceVerification && toolchain
     ? await readReusableVerification(workspace, receiptPath, inputs)
     : null;
-  if (cached) return verificationResult({ workspace, project, qaDir, snapshots, receipt: cached, cached: true });
+  if (cached) {
+    const result = verificationResult({ workspace, project, qaDir, snapshots, receipt: cached, cached: true });
+    if (result.status === "failed") throw new ProductionVerificationError(result);
+    return result;
+  }
   await Promise.all([
     rm(path.join(qaDir, "shot-inspect"), { recursive: true, force: true }),
     rm(snapshots, { recursive: true, force: true })
@@ -289,7 +293,13 @@ export async function renderDraftProduction(workspacePath, options = {}, adapter
 
 async function renderAnalyzedProduction(workspacePath, options, adapters, profile) {
   const workspace = path.resolve(workspacePath);
-  const verification = await verifyProduction(workspace, options, adapters);
+  let verification;
+  try {
+    verification = await verifyProduction(workspace, options, adapters);
+  } catch (error) {
+    if (profile.stage !== "production-draft" || !options.allowContentVerificationFailures || !isSupervisableContentVerification(error)) throw error;
+    verification = error.verification;
+  }
   await assertVerificationFresh(workspace, verification, options);
   const project = verification.project;
   const qaDir = verification.qa;
@@ -298,12 +308,17 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
   const output = path.resolve(requestedOutput ?? path.join(renderDir, profile.outputName));
   await mkdir(path.dirname(output), { recursive: true });
   const run = adapters.run ?? runCommand;
-  const render = await captureHyperframes(run, [
+  const visionSupervisedDraft = profile.stage === "production-draft"
+    && options.allowContentVerificationFailures
+    && verification.status === "failed";
+  const renderArgs = [
     "render", "--output", output,
     "--quality", String(profile.quality),
-    "--workers", String(options.workers ?? "auto"),
-    "--strict-all", "--skill", "product-launch-video", project
-  ], { cwd: project });
+    "--workers", String(options.workers ?? "auto")
+  ];
+  if (!visionSupervisedDraft) renderArgs.push("--strict-all");
+  renderArgs.push("--skill", "product-launch-video", project);
+  const render = await captureHyperframes(run, renderArgs, { cwd: project });
   await writeFile(path.join(qaDir, profile.logName), `${JSON.stringify(render, null, 2)}\n`);
   if (!render.ok) throw new Error(`HyperFrames render failed. Review ${path.join(qaDir, profile.logName)}.`);
 
@@ -326,9 +341,19 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
     : { schema_version: "launchclip.render-audio.v1", status: "not-requested", quality: { ok: true, findings: [] } };
   if (!audioManifest) await writeFile(audioPath, `${JSON.stringify(audio, null, 2)}\n`);
   if (profile.enforceQuality && !audio.quality.ok) throw new Error(`Rendered video failed audio quality gates. Review ${audioPath}.`);
-  const critique = adapters.critiqueProduction
-    ? await adapters.critiqueProduction(workspace, criticOptions(options))
-    : await critiqueProduction(workspace, criticOptions(options), adapters.critic);
+  let critique;
+  if (options.visionUnavailableError) {
+    critique = await writeFreeVisionUnavailableReceipt(qaDir, options.visionUnavailableError);
+  } else {
+    try {
+      critique = adapters.critiqueProduction
+        ? await adapters.critiqueProduction(workspace, criticOptions(options))
+        : await critiqueProduction(workspace, criticOptions(options), adapters.critic);
+    } catch (error) {
+      if (!options.allowFreeVisionUnavailable || error?.code !== FREE_VISION_UNAVAILABLE_CODE) throw error;
+      critique = await writeFreeVisionUnavailableReceipt(qaDir, error);
+    }
+  }
   const assembly = await readOptionalJson(path.join(project, "assembly.json"));
   return {
     stage: profile.stage,
@@ -339,9 +364,41 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
     motion: motionPath,
     audio: audioPath,
     family: motion.family,
+    verification_supervision: verification.status === "failed"
+      ? { mode: "vision-supervised-draft", failed: verification.failed }
+      : null,
     fallbacks: assembly ? { count: assembly.fallback_count ?? 0, full: Boolean(assembly.full_fallback), shots: assembly.fallbacks ?? [] } : null,
     critique
   };
+}
+
+async function writeFreeVisionUnavailableReceipt(qaDir, error) {
+  const receiptPath = path.join(qaDir, "vision-unavailable.json");
+  const receipt = {
+    schema_version: "launchclip.free-vision-unavailable.v1",
+    stage: "production-critique",
+    status: "unavailable",
+    verdict: "unavailable",
+    summary: "The draft was encoded after deterministic browser, motion, and audio analysis, but every current OpenRouter free vision route was unavailable. Human visual review is still required.",
+    error_code: error?.code ?? FREE_VISION_UNAVAILABLE_CODE,
+    retryable: true,
+    findings: 0,
+    model: null,
+    critique: receiptPath
+  };
+  await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
+  return receipt;
+}
+
+function isSupervisableContentVerification(error) {
+  const verification = error?.verification;
+  const failed = verification?.failed ?? [];
+  return error?.code === "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED"
+    && !verification?.infrastructure_failed?.length
+    && failed.length > 0
+    && failed.every((name) => name === "inspect"
+      || String(name).startsWith("inspect:")
+      || (name === "lint" && Number(verification?.checks?.lint?.strict_warning_count ?? 0) > 0 && !verification?.checks?.lint?.failure_kind));
 }
 
 export async function assertVerificationFresh(workspacePath, verification, options = {}) {
@@ -419,9 +476,11 @@ function captureHyperframes(run, args, options) {
 
 async function readReusableVerification(workspace, receiptPath, inputs) {
   const receipt = await readOptionalJson(receiptPath);
-  if (!receipt || receipt.schema_version !== VERIFICATION_SCHEMA || receipt.status !== "passed" || receipt.cacheable !== true) return null;
+  if (!receipt || receipt.schema_version !== VERIFICATION_SCHEMA || !["passed", "failed"].includes(receipt.status) || receipt.cacheable !== true) return null;
   if (receipt.input_hash !== inputs.input_hash || semanticHash(receipt.inputs) !== inputs.input_hash) return null;
-  if (!Array.isArray(receipt.failed) || receipt.failed.length || !receipt.checks || Object.values(receipt.checks).some((check) => check?.ok !== true)) return null;
+  if (!Array.isArray(receipt.failed) || !receipt.checks || receipt.infrastructure_failed?.length) return null;
+  if (receipt.status === "passed" && (receipt.failed.length || Object.values(receipt.checks).some((check) => check?.ok !== true))) return null;
+  if (receipt.status === "failed" && (!receipt.failed.length || receipt.failed.some((name) => receipt.checks[name]?.ok !== false))) return null;
   if (!Array.isArray(receipt.artifacts) || receipt.artifacts.length < 4) return null;
   if (!(await allReceiptFilesMatch(workspace, receipt.artifacts))) return null;
   const snapshotReceipt = receipt.snapshot_artifacts;

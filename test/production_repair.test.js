@@ -72,7 +72,7 @@ test("resumes a persisted background repair response without another submission"
   const plan = JSON.parse(await readFile(path.join(workspace, "production", "plan.json"), "utf8"));
   const prior = JSON.parse(await readFile(path.join(workspace, "production", "frames", "shot-2.json"), "utf8"));
   const critique = JSON.parse(await readFile(path.join(workspace, "production", "qa", "critique.json"), "utf8"));
-  const repairInputHash = semanticHash({ worker: "frame-repair.v14", candidate_verification: "browser-snapshot.v3", repair_context: "selector-capsule.v4", routes: [modelRouteKey(parseModelRoute({ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" }))], source_mode: "provider-default", max_output_tokens: 8_000, max_patch_ratio: .35, shot: plan.shots[1], findings: critique.findings, prior, locked_supporting_motion: [] });
+  const repairInputHash = semanticHash({ worker: "frame-repair.v16", candidate_verification: "browser-snapshot.v4", repair_context: "selector-capsule.v4", routes: [modelRouteKey(parseModelRoute({ provider: "openai", model: "gpt-5.6-luna", reasoning: "medium" }))], source_mode: "provider-default", max_output_tokens: 8_000, max_patch_ratio: .35, shot: plan.shots[1], findings: critique.findings, prior, locked_supporting_motion: [] });
   await store.add({ id: "repair:shot-2", kind: "frame-repair", depends_on: ["creative-plan"], input_hash: repairInputHash });
   await store.markRunning("repair:shot-2", { provider: "openai", response_id: "repair_saved", status: "in_progress" });
   let resumed = 0;
@@ -169,6 +169,18 @@ test("locks blueprint supporting motion through repair input and candidate valid
   assert.match(validateLockedSupportingMotion(weakened, [beat]).join("\n"), /x from_value must remain -108/);
   assert.match(validateLockedSupportingMotion(weakened, [beat]).join("\n"), /opacity from_value must remain 0.45/);
   assert.match(validateLockedSupportingMotion(weakened, [beat]).join("\n"), /immediateRender:false/);
+});
+
+test("allows a QA patch to replace non-semantic supporting choreography", async () => {
+  const workspace = await fixture();
+  const blueprints = path.join(workspace, "production", "frames", ".blueprints");
+  await mkdir(blueprints, { recursive: true });
+  await writeFile(path.join(blueprints, "shot-2.json"), `${JSON.stringify({ blueprint: { supporting_motion_beats: [{ window_id: "opening", selector: "#shot-2-proof", at_seconds: 0, duration_seconds: 1, ease: "expo.out", changes: [{ property: "x", from_value: -108, to_value: 0 }] }] } })}\n`);
+  const result = await runRepair(workspace, {}, {
+    client: { runStructured: async () => ({ response_id: "qa_motion_patch", model: "gpt-5.6-luna", status: "completed", usage: {}, value: framePatch("shot-2", "Proof", "QA motion repair") }) }
+  });
+  assert.equal(result.repaired.length, 1);
+  assert.match(await readFile(result.repaired[0].html, "utf8"), /QA motion repair/);
 });
 
 test("rejects infrastructure inspection failures before any paid repair call", async () => {
@@ -524,6 +536,63 @@ test("uses scoped source capsules for remote repair routes when requested", asyn
   assert.match(await readFile(result.repaired[0].html, "utf8"), /Scoped proof/);
 });
 
+test("regenerates one complete scene when a free scoped patch cannot pass", async () => {
+  const workspace = await fixture();
+  const blueprints = path.join(workspace, "production", "frames", ".blueprints");
+  await mkdir(blueprints, { recursive: true });
+  await writeFile(path.join(blueprints, "shot-2.json"), `${JSON.stringify({ blueprint: { supporting_motion_beats: [{ window_id: "opening", selector: "#shot-2-proof", at_seconds: 0, duration_seconds: 1, ease: "expo.out", changes: [{ property: "x", from_value: -108, to_value: 0 }] }] } })}\n`);
+  const schemas = [];
+  const client = { supportsImages: false, runStructured: async (request) => {
+    schemas.push(request.schemaName);
+    if (request.schemaName === "launchclip_frame_patch") {
+      return {
+        response_id: "bad_patch", model: "tencent/hy3:free", status: "completed", usage: {},
+        value: {
+          schema_version: FRAME_PATCH_VERSION,
+          shot_id: "shot-2",
+          summary: "Patch with an unusable anchor",
+          edits: [{ target: "html", find: "not-in-the-source", replace: "still-not-in-the-source" }]
+        }
+      };
+    }
+    assert.equal(request.schemaName, "launchclip_repaired_frame_bundle");
+    assert.match(request.input, /validation_errors_to_repair/);
+    return { response_id: "regenerated", model: "tencent/hy3:free", status: "completed", usage: {}, value: bundle("shot-2", "Regenerated proof") };
+  } };
+  const result = await runRepair(workspace, {
+    sourceMode: "scoped",
+    semanticAttempts: 1,
+    routes: ["openrouter:tencent/hy3:free@none", "openrouter:google/gemma-4-26b-a4b-it:free@none"]
+  }, { client });
+  assert.deepEqual(schemas, ["launchclip_frame_patch", "launchclip_repaired_frame_bundle"]);
+  assert.equal(result.repaired[0].regeneration.full_frame, true);
+  assert.match(await readFile(result.repaired[0].html, "utf8"), /Regenerated proof/);
+});
+
+test("returns partial progress after an earlier scene exhausts its routes", async () => {
+  const workspace = await fixture();
+  const critiquePath = path.join(workspace, "production", "qa", "critique.json");
+  const critique = JSON.parse(await readFile(critiquePath, "utf8"));
+  critique.findings = [
+    { ...critique.findings[0], id: "fail-first", shot_ids: ["shot-1"] },
+    { ...critique.findings[0], id: "repair-second", shot_ids: ["shot-2"] }
+  ];
+  await writeFile(critiquePath, `${JSON.stringify(critique)}\n`);
+  const result = await repairProduction(workspace, { concurrency: 1, semanticAttempts: 1, fullRegeneration: false }, {
+    client: { runStructured: async (request) => {
+      const shotId = repairContext(request.input).shot.id;
+      if (shotId === "shot-1") throw new Error("first scene unavailable");
+      return { response_id: "later_scene", model: "gpt-5.6-luna", status: "completed", usage: {}, value: framePatch("shot-2", "Proof", "Later scene repaired") };
+    } },
+    verifyCandidate: async () => ({ ok: true })
+  });
+  assert.equal(result.status, "partially-repaired");
+  assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-2"]);
+  assert.deepEqual(result.blockers.map((entry) => entry.id), ["repair:shot-1"]);
+  assert.match(result.blockers[0].instruction, /first scene unavailable/);
+  assert.match(await readFile(path.join(workspace, "production", "frames", "shot-2.html"), "utf8"), /Later scene repaired/);
+});
+
 function runRepair(workspace, options = {}, adapters = {}) {
   return repairProduction(workspace, options, {
     verifyCandidate: async () => ({ ok: true, report: "/tmp/candidate-report.json", snapshots: "/tmp/candidate-snapshots" }),
@@ -580,7 +649,7 @@ async function fixture(options = {}) {
       continuity: { sequence_id: "proof-sequence", handoff: end < 10 ? "continue" : "resolve", inherits_object_ids: start ? ["proof-node"] : [], hands_off_object_ids: end < 10 ? ["proof-node"] : [], entry_velocity: start ? 320 : 0, exit_velocity: end < 10 ? 320 : 0 }
     }
   });
-  const plan = { design: { concept: "Proof" }, format: { width: 1080, height: 1920 }, shots: [shot("shot-1", 0, 5), shot("shot-2", 5, 10)] };
+  const plan = { project: { title: "Proof", thesis: "Show proof", audience_promise: "Clarity", angle: "Evidence" }, design: { concept: "Proof" }, format: { width: 1080, height: 1920 }, shots: [shot("shot-1", 0, 5), shot("shot-2", 5, 10)] };
   await writeFile(path.join(production, "intake.json"), `${JSON.stringify({ resources: [] })}\n`);
   await writeFile(path.join(production, "evidence.json"), `${JSON.stringify({ items: [{ id: "ev-1", title: "README", provenance: "README.md" }] })}\n`);
   await writeFile(path.join(production, "plan.json"), `${JSON.stringify(plan)}\n`);

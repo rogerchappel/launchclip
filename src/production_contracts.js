@@ -5,7 +5,7 @@ export const FRAME_BUNDLE_VERSION = "launchclip.frame-bundle.v2";
 export const CRITIQUE_VERSION = "launchclip.production-critique.v1";
 export const EVIDENCE_VERSION = "launchclip.evidence.v1";
 export const SHOT_ID_PATTERN = "^[a-z0-9][a-z0-9_-]{0,63}$";
-export const DEFAULT_NARRATED_MUSIC_VOLUME = 0.35;
+export const DEFAULT_NARRATED_MUSIC_VOLUME = 0.15;
 
 export const PRODUCTION_PATHS = Object.freeze({
   intake: "production/intake.json",
@@ -414,18 +414,85 @@ export function validateProductionPlan(plan, context = {}) {
 
 export function normalizeProductionPlanTiming(plan) {
   const normalized = structuredClone(plan);
+  if (normalized?.design?.style_dna?.typography) {
+    normalized.design.style_dna.typography = Object.fromEntries(
+      Object.entries(normalized.design.style_dna.typography).map(([role, family]) => [role, normalizeTypographyFamily(family, role)])
+    );
+  }
+  if (Array.isArray(normalized?.shots)) normalized.shots = removeContainedShots(normalized.shots);
+  const targetWpm = Number(normalized?.narration?.target_wpm);
+  if (normalized?.narration && !(targetWpm >= 60 && targetWpm <= 260)) {
+    const words = String(normalized.narration.full_text ?? "").trim().split(/\s+/).filter(Boolean).length;
+    const duration = Number(normalized?.format?.duration_seconds);
+    if (words > 0 && duration > 0) normalized.narration.target_wpm = Math.max(60, Math.min(260, Math.round(words * 60 / duration)));
+  }
   for (const shot of normalized?.shots ?? []) {
     normalizeShotEventIds(shot);
+    normalizeEventTargetIds(shot);
     const start = Number(shot.start_seconds);
     const end = Number(shot.end_seconds);
     const duration = end - start;
-    if (!Number.isFinite(start) || !Number.isFinite(end) || duration <= 0 || start <= 0) continue;
-    for (const timed of [...(shot.visual?.internal_reveals ?? []), ...(shot.visual?.events ?? []), ...(shot.sfx ?? [])]) {
-      const at = Number(timed.at_seconds);
-      if (at > duration + .001 && at >= start - .001 && at <= end + .001) timed.at_seconds = Math.round((at - start) * 1000) / 1000;
+    if (Number.isFinite(start) && Number.isFinite(end) && duration > 0) {
+      for (const timed of [...(shot.visual?.internal_reveals ?? []), ...(shot.visual?.events ?? []), ...(shot.sfx ?? [])]) {
+        const at = Number(timed.at_seconds);
+        if (at > duration + .001) {
+          const shotLocal = start > 0 && at >= start - .001 ? at - start : at;
+          timed.at_seconds = Math.round(Math.max(0, Math.min(shotLocal, Math.max(0, duration - .1))) * 1000) / 1000;
+        }
+      }
     }
+    const events = new Map((shot.visual?.events ?? []).map((event) => [event.id, event]));
+    for (const cue of shot.sfx ?? []) {
+      const event = events.get(cue.event_id);
+      if (event && Number.isFinite(Number(event.at_seconds))) cue.at_seconds = Number(event.at_seconds);
+    }
+    normalizeObjectLayers(shot.visual?.objects);
   }
+  normalizeContinuityHandoffs(normalized?.shots ?? []);
   return normalized;
+}
+
+function normalizeObjectLayers(objects) {
+  if (!Array.isArray(objects) || objects.length < 2 || new Set(objects.map((object) => object.layer)).size >= 2) return;
+  const backdrop = objects.find((object) => ["decoration", "container"].includes(object.kind)) ?? objects[0];
+  const focal = objects.find((object) => object !== backdrop && !["decoration", "container"].includes(object.kind)) ?? objects[1];
+  backdrop.layer = "background";
+  focal.layer = focal.kind === "text" ? "foreground" : "midground";
+}
+
+function removeContainedShots(shots) {
+  const kept = [];
+  for (const shot of shots) {
+    const previous = kept.at(-1);
+    const contained = previous
+      && Number(shot.start_seconds) >= Number(previous.start_seconds) - .001
+      && Number(shot.end_seconds) <= Number(previous.end_seconds) + .001;
+    if (!contained) kept.push(shot);
+  }
+  return kept;
+}
+
+function normalizeTypographyFamily(value, role) {
+  const planned = String(value ?? "").trim();
+  const namedWithWeight = planned.match(/^(.+?)\s+(?:[1-9]00(?:[\/\u2013-][1-9]00)?|thin|extra[- ]?light|light|regular|medium|semi[- ]?bold|bold|extra[- ]?bold|black)(?=\s|,|$)/i);
+  if (namedWithWeight) return namedWithWeight[1].replace(/^["']|["']$/g, "").trim();
+  const descriptive = planned.split(/\s+/).length > 3 || /\b(?:headline|labels?|status|tracking|weight|figures|readouts?|top:|bottom|for)\b/i.test(planned);
+  if (!descriptive) return planned;
+  if (/\b(?:mono|monospaced|slab|tabular|code)\b/i.test(planned)) return "Courier New";
+  if (/\b(?:serif|editorial)\b/i.test(planned)) return "Georgia";
+  return role === "metadata" ? "Courier New" : "Arial";
+}
+
+function normalizeContinuityHandoffs(shots) {
+  for (let index = 1; index < shots.length; index += 1) {
+    const previous = shots[index - 1]?.visual?.continuity;
+    const current = shots[index]?.visual?.continuity;
+    if (!previous || !current || previous.sequence_id !== current.sequence_id || !["continue", "transform"].includes(previous.handoff)) continue;
+    const currentObjects = new Set((shots[index].visual?.objects ?? []).map((object) => object.id));
+    const shared = (previous.hands_off_object_ids ?? []).filter((id) => currentObjects.has(id));
+    previous.hands_off_object_ids = shared;
+    current.inherits_object_ids = [...new Set([...(current.inherits_object_ids ?? []), ...shared])];
+  }
 }
 
 function normalizeShotEventIds(shot) {
@@ -450,6 +517,23 @@ function normalizeShotEventIds(shot) {
   for (const cue of shot.sfx ?? []) {
     const replacement = replacements.get(String(cue?.event_id ?? ""));
     if (replacement) cue.event_id = replacement;
+  }
+}
+
+function normalizeEventTargetIds(shot) {
+  const objectIds = (shot?.visual?.objects ?? []).map((object) => object.id);
+  const known = new Set(objectIds);
+  const canonical = (value) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  for (const event of shot?.visual?.events ?? []) {
+    event.target_ids = [...new Set((event.target_ids ?? []).flatMap((targetId) => {
+      if (known.has(targetId)) return [targetId];
+      const targetKey = canonical(targetId);
+      const exact = objectIds.filter((objectId) => canonical(objectId) === targetKey);
+      if (exact.length === 1) return exact;
+      const groupStem = targetKey.endsWith("s") ? targetKey.slice(0, -1) : targetKey;
+      const group = objectIds.filter((objectId) => canonical(objectId).startsWith(groupStem));
+      return group.length >= 2 ? group : [targetId];
+    }))];
   }
 }
 

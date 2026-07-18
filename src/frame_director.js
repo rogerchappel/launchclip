@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_INSTRUCTIONS, FRAME_BLUEPRINT_SCHEMA, FRAME_BLUEPRINT_VERSION, validateFrameBlueprint, validateLockedSupportingMotion } from "./frame_blueprint.js";
+import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_INSTRUCTIONS, FRAME_BLUEPRINT_SCHEMA, FRAME_BLUEPRINT_VERSION, normalizeFrameBlueprint, repairLockedSupportingMotionLiterals, validateFrameBlueprint, validateLockedSupportingMotion } from "./frame_blueprint.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { ensureTimelineRegistration, hasTimelineRegistration } from "./hyperframes_timeline.js";
 import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model_provider.js";
@@ -53,7 +53,7 @@ HyperFrames contract:
 - Keep essential text and proof inside the frame at all times. Preserve exact visible copy and factual meaning.
 - The first and last rendered frame must be intentional, including when mounted next to neighboring shots.`;
 
-const LEAN_FRAME_INSTRUCTIONS = `You are a senior motion designer authoring one original HyperFrames shot. Return only strict frame-bundle JSON matching the supplied schema.
+export const LEAN_FRAME_INSTRUCTIONS = `You are a senior motion designer authoring one original HyperFrames shot. Return only strict frame-bundle JSON matching the supplied schema.
 
 Required host contract:
 - html is one sub-composition document with exactly one <template>. Put every live <style>, root, and <script> inside it.
@@ -210,7 +210,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   const existing = store.get(jobId);
   const resanitized = await resanitizeStoredFrame({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
   if (resanitized) return resanitized;
-  const recovered = await recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
+  const recovered = await recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash, stableRouteCache: options.stableRouteCache });
   if (recovered) return recovered;
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
     const verification = await store.verifyOutputs(jobId);
@@ -287,6 +287,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         } catch (error) {
           resumeResponseId = null;
           errors.push(`Generation attempt ${totalAttempt} via ${route.provider}:${route.model} failed: ${error.message}`);
+          if (routeAttempt < attemptsForRoute) continue;
           break;
         }
         resumeResponseId = null;
@@ -298,7 +299,20 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
           format: plan.format,
           resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
         });
-        const candidate = sanitized.bundle;
+        const selectorAlignment = blueprint ? alignFrameSelectorsToBlueprint(sanitized.bundle, blueprint.value) : { bundle: sanitized.bundle, mappings: [] };
+        const eventTimingAlignment = alignFrameEventTiming(selectorAlignment.bundle, shot);
+        const lockedMotionRepair = blueprint
+          ? repairLockedSupportingMotionLiterals(eventTimingAlignment.bundle.html, blueprint.value.supporting_motion_beats)
+          : { html: eventTimingAlignment.bundle.html, opening_position_added: false, immediate_render_added: 0, unplanned_properties_removed: 0 };
+        const candidate = { ...eventTimingAlignment.bundle, html: lockedMotionRepair.html };
+        const repairs = [
+          ...sanitized.repairs,
+          ...(selectorAlignment.mappings.length ? [{ kind: "align-frame-selectors-to-blueprint", mappings: selectorAlignment.mappings }] : []),
+          ...(lockedMotionRepair.opening_position_added ? [{ kind: "add-explicit-opening-motion-position", at_seconds: 0 }] : []),
+          ...(lockedMotionRepair.immediate_render_added ? [{ kind: "add-locked-immediate-render-flags", count: lockedMotionRepair.immediate_render_added }] : []),
+          ...(lockedMotionRepair.unplanned_properties_removed ? [{ kind: "remove-unplanned-locked-motion-properties", count: lockedMotionRepair.unplanned_properties_removed }] : []),
+          ...(eventTimingAlignment.aligned.length ? [{ kind: "align-frame-event-timing", events: eventTimingAlignment.aligned }] : [])
+        ];
         const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
         errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format), ...(blueprint ? validateLockedSupportingMotion(candidate.html, blueprint.value.supporting_motion_beats) : [])];
         await writeFrameAttempt(workspace, shot.id, totalAttempt, {
@@ -307,7 +321,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
           provider: route.provider,
           model: result.model,
           usage: result.usage,
-          repairs: sanitized.repairs,
+          repairs,
           errors,
           candidate
         });
@@ -322,8 +336,8 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         return {
           shot_id: shot.id,
           cached: false,
-          sanitized: sanitized.repairs.length > 0,
-          repairs: sanitized.repairs,
+          sanitized: repairs.length > 0,
+          repairs,
           bundle: paths[0],
           html: paths[1],
           motion: paths[2],
@@ -419,12 +433,14 @@ async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, 
         result = await client.runStructured(request);
       } catch (error) {
         generationErrors.push(`Blueprint attempt ${routeAttempt} via ${route.provider}:${route.model} failed: ${error.message}`);
+        if (routeAttempt < attemptsForRoute) continue;
         break;
       }
       await store.markRunning(jobId, { provider: route.provider, response_id: result.response_id, status: result.status });
-      const validation = validateFrameBlueprint(result.value, shot);
+      const candidate = normalizeFrameBlueprint(result.value, shot);
+      const validation = validateFrameBlueprint(candidate, shot);
       if (!validation.ok) {
-        prior = result.value;
+        prior = candidate;
         validationErrors = validation.errors;
         generationErrors.push(`Blueprint attempt ${routeAttempt} via ${route.provider}:${route.model} was invalid: ${validation.errors.join("; ")}`);
         continue;
@@ -435,10 +451,10 @@ async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, 
         provider: route.provider,
         model: result.model,
         usage: result.usage,
-        blueprint: result.value
+        blueprint: candidate
       };
       await writeAtomic(blueprintPath, `${JSON.stringify(record, null, 2)}\n`);
-      return { ...record, value: result.value, path: blueprintPath, generated: true, route_index: routeIndex };
+      return { ...record, value: candidate, path: blueprintPath, generated: true, route_index: routeIndex };
     }
   }
   const error = new Error(`Frame blueprint ${shot.id} exhausted model routes: ${generationErrors.join("; ")}`);
@@ -516,6 +532,54 @@ export function sanitizeFrameBundle(bundle, context = {}) {
   return {
     bundle: { ...normalizedBundle, html: rootRepair.html, root_media_requests: rootMediaRequests },
     repairs
+  };
+}
+
+export function alignFrameSelectorsToBlueprint(bundle, blueprint) {
+  const desiredByObject = new Map((blueprint?.elements ?? []).map((element) => [element.object_id, element.selector]));
+  const observedByObject = new Map((bundle?.motion?.events ?? []).map((event) => [event.object_id, event.selector]));
+  const observedSelectors = [...new Set([...(bundle?.motion?.events ?? []), ...(bundle?.motion?.assertions ?? [])].map((entry) => entry.selector).filter(Boolean))];
+  const prefix = `#${bundle?.shot_id}-`;
+  const originalHtml = String(bundle?.html ?? "");
+  const mappings = [];
+  for (const [objectId, desired] of desiredByObject.entries()) {
+    let observed = observedByObject.get(objectId);
+    if (!observed && desired?.startsWith(prefix)) {
+      const canonical = (value) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+      const desiredTail = canonical(desired.slice(prefix.length));
+      const inferred = observedSelectors.filter((selector) => {
+        if (!selector.startsWith(prefix) || mappings.some((entry) => entry.from === selector)) return false;
+        const observedTail = canonical(selector.slice(prefix.length));
+        return observedTail.length >= 4 && (desiredTail.endsWith(observedTail) || observedTail.endsWith(desiredTail));
+      });
+      if (inferred.length === 1) observed = inferred[0];
+    }
+    if (!observed || observed === desired || !observed.startsWith(prefix) || !desired.startsWith(prefix)) continue;
+    const observedId = observed.slice(1);
+    const desiredId = desired.slice(1);
+    if (!new RegExp(`\\bid\\s*=\\s*["']${escapeRegExp(observedId)}["']`, "i").test(originalHtml)) continue;
+    if (new RegExp(`\\bid\\s*=\\s*["']${escapeRegExp(desiredId)}["']`, "i").test(originalHtml)) continue;
+    mappings.push({ object_id: objectId, from: observed, to: desired });
+  }
+  let html = originalHtml;
+  for (const mapping of [...mappings].sort((left, right) => right.from.length - left.from.length)) {
+    html = html.split(mapping.from.slice(1)).join(mapping.to.slice(1));
+  }
+  const alignSelector = (selector) => {
+    const mapping = mappings.find((entry) => String(selector ?? "").startsWith(entry.from));
+    return mapping ? `${mapping.to}${String(selector).slice(mapping.from.length)}` : selector;
+  };
+  return {
+    bundle: {
+      ...bundle,
+      html,
+      motion: {
+        ...bundle.motion,
+        assertions: (bundle.motion?.assertions ?? []).map((assertion) => ({ ...assertion, selector: alignSelector(assertion.selector) })),
+        events: (bundle.motion?.events ?? []).map((event) => ({ ...event, selector: alignSelector(event.selector) }))
+      }
+    },
+    mappings
   };
 }
 
@@ -643,38 +707,72 @@ function repairFrameRootContract(html, context = {}) {
   };
 }
 
-async function recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash }) {
-  if (!existing || existing.input_hash !== inputHash) return null;
+async function recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash, stableRouteCache = false }) {
+  if (!existing) return null;
   if (!new Set(["failed", "running", "submitted", "succeeded"]).has(existing.status)) return null;
-  if (existing.status === "succeeded" && !hasFallbackFrameOutputs(existing)) return null;
-  const record = await readLatestFrameAttempt(workspace, shot.id, inputHash);
-  if (!record?.candidate || (record.input_hash && record.input_hash !== inputHash)) return null;
-  if (["running", "submitted"].includes(existing.status) && record.response_id !== existing.remote?.response_id) return null;
-  const sanitized = sanitizeFrameBundle(record.candidate, {
-    shot,
-    format: plan.format,
-    resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
-  });
-  const candidate = sanitized.bundle;
-  const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
-  const errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
-  if (errors.length) return null;
+  if (existing.input_hash !== inputHash && !stableRouteCache) return null;
+  if (existing.status === "succeeded" && existing.input_hash === inputHash && !hasFallbackFrameOutputs(existing)) return null;
+  const records = await readFrameAttempts(workspace, shot.id);
+  const ordered = [
+    ...records.filter((record) => record.input_hash === inputHash),
+    ...(stableRouteCache ? records.filter((record) => record.input_hash !== inputHash) : [])
+  ];
+  const blueprint = await readStoredBlueprintForRecovery(workspace, shot.id);
+  const supportingMotion = Array.isArray(blueprint?.supporting_motion_beats) ? blueprint.supporting_motion_beats : [];
+  let accepted = null;
+  for (const record of ordered) {
+    if (!record?.candidate) continue;
+    if (existing.input_hash === inputHash && ["running", "submitted"].includes(existing.status) && record.input_hash === inputHash && record.response_id !== existing.remote?.response_id) continue;
+    const sanitized = sanitizeFrameBundle(record.candidate, {
+      shot,
+      format: plan.format,
+      resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
+    });
+    const eventTimingAlignment = alignFrameEventTiming(sanitized.bundle, shot);
+    const lockedMotionRepair = repairLockedSupportingMotionLiterals(eventTimingAlignment.bundle.html, supportingMotion);
+    const candidate = { ...eventTimingAlignment.bundle, html: lockedMotionRepair.html };
+    const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
+    const errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format), ...validateLockedSupportingMotion(candidate.html, supportingMotion)];
+    if (!errors.length) {
+      accepted = {
+        record,
+        candidate,
+        repairs: [
+          ...sanitized.repairs,
+          ...(eventTimingAlignment.aligned.length ? [{ kind: "align-frame-event-timing", events: eventTimingAlignment.aligned }] : []),
+          ...(lockedMotionRepair.opening_position_added ? [{ kind: "add-explicit-opening-motion-position", at_seconds: 0 }] : []),
+          ...(lockedMotionRepair.immediate_render_added ? [{ kind: "add-locked-immediate-render-flags", count: lockedMotionRepair.immediate_render_added }] : []),
+          ...(lockedMotionRepair.unplanned_properties_removed ? [{ kind: "remove-unplanned-locked-motion-properties", count: lockedMotionRepair.unplanned_properties_removed }] : [])
+        ]
+      };
+      break;
+    }
+  }
+  if (!accepted) return null;
+  const { record, repairs, candidate } = accepted;
   const paths = await writeFrameArtifacts(workspace, candidate);
   const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
-  if (existing.status === "succeeded") await store.replaceSucceededOutputs(jobId, outputs);
+  let current = store.get(jobId);
+  if (current.input_hash !== inputHash) {
+    if (current.status !== "stale") await store.markStaleFrom([jobId]);
+    await store.reconfigure(jobId, { input_hash: inputHash });
+    current = store.get(jobId);
+  }
+  if (current.status === "succeeded") await store.replaceSucceededOutputs(jobId, outputs);
   else {
-    if (existing.status === "failed") {
+    if (["failed", "stale"].includes(current.status)) {
       await store.reconfigure(jobId, { input_hash: inputHash });
-      await store.markRunning(jobId, { provider: "local", response_id: record.response_id ?? existing.remote?.response_id ?? null, status: "recovered" });
+      current = store.get(jobId);
     }
+    if (current.status === "pending") await store.markRunning(jobId, { provider: "local", response_id: record.response_id ?? existing.remote?.response_id ?? null, status: "recovered" });
     await store.markSucceeded(jobId, outputs, record.usage ?? existing.usage ?? {});
   }
   return {
     shot_id: shot.id,
     cached: false,
     recovered: true,
-    sanitized: sanitized.repairs.length > 0,
-    repairs: sanitized.repairs,
+    sanitized: repairs.length > 0,
+    repairs,
     bundle: paths[0], html: paths[1], motion: paths[2],
     response_id: record.response_id ?? existing.remote?.response_id ?? null,
     model: record.model ?? "stored-frame-candidate",
@@ -682,13 +780,25 @@ async function recoverStoredFrameAttempt({ workspace, intake, evidence, plan, sh
   };
 }
 
-async function readLatestFrameAttempt(workspace, shotId, inputHash = null) {
+function alignFrameEventTiming(bundle, shot) {
+  const planned = new Map((shot?.visual?.events ?? []).map((event) => [event.id, Number(event.at_seconds)]));
+  const aligned = [];
+  const events = (bundle.motion?.events ?? []).map((event) => {
+    const atSeconds = planned.get(event.event_id);
+    if (!Number.isFinite(atSeconds) || Number(event.at_seconds) === atSeconds) return event;
+    aligned.push({ event_id: event.event_id, from_seconds: Number(event.at_seconds), to_seconds: atSeconds });
+    return { ...event, at_seconds: atSeconds };
+  });
+  return { bundle: { ...bundle, motion: { ...bundle.motion, events } }, aligned };
+}
+
+async function readFrameAttempts(workspace, shotId) {
   const directory = path.join(workspace, PRODUCTION_PATHS.frames, ".attempts");
   let names;
   try {
     names = await readdir(directory);
   } catch (error) {
-    if (error.code === "ENOENT") return null;
+    if (error.code === "ENOENT") return [];
     throw error;
   }
   const prefix = `${shotId}-attempt-`;
@@ -697,17 +807,26 @@ async function readLatestFrameAttempt(workspace, shotId, inputHash = null) {
     .map((name) => ({ name, attempt: Number(name.slice(prefix.length, -".json".length)) }))
     .filter((entry) => Number.isInteger(entry.attempt) && entry.attempt > 0)
     .sort((left, right) => right.attempt - left.attempt);
+  const records = [];
   for (const entry of candidates) {
     try {
       const record = await readJson(path.join(directory, entry.name));
-      if (inputHash && record.input_hash && record.input_hash !== inputHash) continue;
-      return record;
+      records.push(record);
     } catch (error) {
       if (error instanceof SyntaxError) continue;
       throw error;
     }
   }
-  return null;
+  return records;
+}
+
+async function readStoredBlueprintForRecovery(workspace, shotId) {
+  try {
+    return (await readJson(safeShotFile(path.join(workspace, PRODUCTION_PATHS.frames, ".blueprints"), shotId, ".json")))?.blueprint ?? null;
+  } catch (error) {
+    if (error.code === "ENOENT" || error instanceof SyntaxError) return null;
+    throw error;
+  }
 }
 
 function frameValidationContext({ intake, evidence, plan, shot }) {

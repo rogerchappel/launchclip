@@ -316,6 +316,43 @@ export function validateFrameBlueprint(blueprint, shot) {
   return { ok: errors.length === 0, errors };
 }
 
+export function normalizeFrameBlueprint(blueprint, shot) {
+  const normalized = structuredClone(blueprint);
+  normalized.zones = (normalized.zones ?? []).map((zone) => {
+    const width = Number(zone.width_percent);
+    const height = Number(zone.height_percent);
+    return {
+      ...zone,
+      x_percent: Math.max(0, Math.min(Number(zone.x_percent), 100 - width)),
+      y_percent: Math.max(0, Math.min(Number(zone.y_percent), 100 - height))
+    };
+  });
+
+  const elements = new Map((normalized.elements ?? []).map((entry) => [entry.object_id, entry]));
+  const availableBeats = [...(normalized.motion_beats ?? [])];
+  normalized.motion_beats = (shot?.visual?.events ?? []).map((event) => {
+    let index = availableBeats.findIndex((beat) => beat.event_id === event.id);
+    if (index < 0) index = availableBeats.findIndex((beat) => String(beat.event_id ?? "").startsWith(`${event.id}-`));
+    if (index < 0) index = availableBeats.findIndex((beat) => (event.target_ids ?? []).includes(beat.object_id));
+    const candidate = index < 0 ? null : availableBeats.splice(index, 1)[0];
+    const objectId = (event.target_ids ?? []).includes(candidate?.object_id) ? candidate.object_id : event.target_ids?.[0];
+    return {
+      event_id: event.id,
+      object_id: objectId,
+      selector: elements.get(objectId)?.selector ?? candidate?.selector,
+      at_seconds: event.at_seconds,
+      action: candidate?.action ?? `Reveal ${objectId} at the planned visual beat`
+    };
+  });
+
+  const semanticObjectCount = (shot?.visual?.objects ?? []).filter((entry) => entry.kind !== "decoration").length;
+  normalized.density = {
+    ...normalized.density,
+    minimum_semantic_objects: Math.max(Number(normalized.density?.minimum_semantic_objects ?? 0), semanticObjectCount)
+  };
+  return normalized;
+}
+
 export function validateLockedSupportingMotion(html, beats = []) {
   if (!Array.isArray(beats) || !beats.length) return [];
   const calls = parseFromToCalls(html);
@@ -343,6 +380,67 @@ export function validateLockedSupportingMotion(html, beats = []) {
     if (String(beat?.window_id) !== "opening" && call.to.immediateRender !== false) errors.push(`locked supporting motion ${label} must keep immediateRender:false`);
   }
   return [...new Set(errors)];
+}
+
+export function repairMissingOpeningMotionPosition(html, beats = []) {
+  const source = String(html ?? "");
+  const opening = beats.find((beat) => beat?.window_id === "opening" && nearlyEqual(beat?.at_seconds, 0));
+  if (!opening) return { html: source, repaired: false };
+  const pattern = /\b(tl|timeline)\.fromTo\(\s*(['"])(#[^'"]+)\2\s*,\s*\{[^{}]*\}\s*,\s*\{[^{}]*\}\s*\)/g;
+  for (const match of source.matchAll(pattern)) {
+    if (match[3] !== opening.selector) continue;
+    const earlierTimelineMutation = new RegExp(`\\b${match[1]}\\.(?:to|from|fromTo|set|add|call)\\s*\\(`).test(source.slice(0, match.index));
+    if (earlierTimelineMutation) return { html: source, repaired: false };
+    const repairedCall = match[0].replace(/\)$/, ",0)");
+    return {
+      html: `${source.slice(0, match.index)}${repairedCall}${source.slice(match.index + match[0].length)}`,
+      repaired: true
+    };
+  }
+  return { html: source, repaired: false };
+}
+
+export function repairLockedSupportingMotionLiterals(html, beats = []) {
+  const opening = repairMissingOpeningMotionPosition(html, beats);
+  let source = opening.html;
+  let immediateRenderAdded = 0;
+  let unplannedPropertiesRemoved = 0;
+  const pattern = /\b(?:tl|timeline)\.fromTo\(\s*(['"])(#[^'"]+)\1\s*,\s*\{([^{}]*)\}\s*,\s*\{([^{}]*)\}\s*,\s*(-?(?:\d+\.?\d*|\.\d+))\s*\)/g;
+  const matches = [...source.matchAll(pattern)];
+  for (const match of matches.reverse()) {
+    const beat = beats.find((entry) => entry?.selector === match[2] && nearlyEqual(entry?.at_seconds, match[5]));
+    if (!beat) continue;
+    const locked = new Set((beat.changes ?? []).map((change) => change.property));
+    const disallowed = new Set(["opacity", "x", "y", "scale", "rotation"].filter((property) => !locked.has(property)));
+    const from = stripFlatProperties(match[3], disallowed);
+    const to = stripFlatProperties(match[4], disallowed);
+    unplannedPropertiesRemoved += from.removed + to.removed;
+    let toBody = to.source;
+    if (beat.window_id !== "opening" && !/\bimmediateRender\s*:/.test(toBody)) {
+      toBody = `${toBody}${toBody.trim() && !toBody.trim().endsWith(",") ? "," : ""}immediateRender:false`;
+      immediateRenderAdded += 1;
+    }
+    if (from.source === match[3] && toBody === match[4]) continue;
+    const fromLiteral = `{${match[3]}}`;
+    const toLiteral = `{${match[4]}}`;
+    const fromIndex = match[0].indexOf(fromLiteral);
+    const toIndex = match[0].indexOf(toLiteral, fromIndex + fromLiteral.length);
+    if (fromIndex < 0 || toIndex < 0) continue;
+    const repairedCall = `${match[0].slice(0, fromIndex)}{${from.source}}${match[0].slice(fromIndex + fromLiteral.length, toIndex)}{${toBody}}${match[0].slice(toIndex + toLiteral.length)}`;
+    source = `${source.slice(0, match.index)}${repairedCall}${source.slice(match.index + match[0].length)}`;
+  }
+  return { html: source, opening_position_added: opening.repaired, immediate_render_added: immediateRenderAdded, unplanned_properties_removed: unplannedPropertiesRemoved };
+}
+
+function stripFlatProperties(source, disallowed) {
+  let removed = 0;
+  const parts = String(source ?? "").split(",").filter((part) => {
+    const key = part.match(/^\s*([A-Za-z_$][\w$]*)\s*:/)?.[1];
+    if (!key || !disallowed.has(key)) return true;
+    removed += 1;
+    return false;
+  });
+  return { source: parts.join(","), removed };
 }
 
 function parseFromToCalls(html) {

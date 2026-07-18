@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { FRAME_BLUEPRINT_VERSION } from "../src/frame_blueprint.js";
-import { buildFallbackFrame, buildFrameInput, directFrames, fallbackFramesForVerification, safeShotFile, sanitizeFrameBundle, validateHyperFramesRoot } from "../src/frame_director.js";
+import { alignFrameSelectorsToBlueprint, buildFallbackFrame, buildFrameInput, directFrames, fallbackFramesForVerification, safeShotFile, sanitizeFrameBundle, validateHyperFramesRoot } from "../src/frame_director.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { EVIDENCE_VERSION, FRAME_BUNDLE_SCHEMA, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
@@ -143,6 +143,36 @@ test("removes authoritative voiceover requests from the frame bundle locally", (
     resource_id: "voiceover",
     presenter_mode: "voiceover"
   }]);
+});
+
+test("aligns unambiguous authored selectors to their blueprint object ids", () => {
+  const bundle = frameBundle("shot-1", 5);
+  bundle.html = bundle.html.split("shot-1-proof").join("shot-1-node");
+  bundle.motion.assertions[0].selector = "#shot-1-node";
+  bundle.motion.events[0].selector = "#shot-1-node";
+  const aligned = alignFrameSelectorsToBlueprint(bundle, {
+    elements: [{ object_id: "proof-node", selector: "#shot-1-proof" }]
+  });
+
+  assert.deepEqual(aligned.mappings, [{ object_id: "proof-node", from: "#shot-1-node", to: "#shot-1-proof" }]);
+  assert.match(aligned.bundle.html, /id="shot-1-proof"/);
+  assert.doesNotMatch(aligned.bundle.html, /shot-1-node/);
+  assert.equal(aligned.bundle.motion.assertions[0].selector, "#shot-1-proof");
+  assert.equal(aligned.bundle.motion.events[0].selector, "#shot-1-proof");
+});
+
+test("infers a blueprint selector from a unique assertion suffix when no event targets the object", () => {
+  const bundle = frameBundle("shot-1", 5);
+  bundle.html = bundle.html.split("shot-1-proof").join("shot-1-register");
+  bundle.motion.assertions[0].selector = "#shot-1-register";
+  bundle.motion.events = [];
+  const aligned = alignFrameSelectorsToBlueprint(bundle, {
+    elements: [{ object_id: "s1-register", selector: "#shot-1-s1-register" }]
+  });
+
+  assert.deepEqual(aligned.mappings, [{ object_id: "s1-register", from: "#shot-1-register", to: "#shot-1-s1-register" }]);
+  assert.match(aligned.bundle.html, /id="shot-1-s1-register"/);
+  assert.equal(aligned.bundle.motion.assertions[0].selector, "#shot-1-s1-register");
 });
 
 test("adds missing authoritative root contract attributes locally without overwriting authored values", () => {
@@ -285,28 +315,23 @@ test("recovers a previously rejected frame with a local fallback and does not bu
   assert.deepEqual(calls, ["shot-2"], "repeated local QA passes never submit another provider response");
 });
 
-test("promotes the newest matching frame attempt past a different route attempt", async () => {
+test("promotes a matching accepted attempt after the discovered route order changes", async () => {
   const context = fixture();
   context.intake.resources.push({ id: "voiceover", role: "voiceover", type: "video", location: "/tmp/voiceover.mp4", is_remote: false, sha256: "v" });
   context.plan.shots[0].resource_ids = ["voiceover"];
   const workspace = await workspaceFixture(context);
   const store = await ProductionJobStore.open(workspace, { create: false });
-  const inputHash = semanticHash({
-    input: buildFrameInput({ ...context, shot: context.plan.shots[0], index: 0 }),
-    model: context.intake.model,
-    reasoning: "high",
-    schema: FRAME_BUNDLE_SCHEMA,
-    worker: "frame-director.v4"
-  });
-  await store.add({ id: "frame:shot-1", kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash });
+  await store.add({ id: "frame:shot-1", kind: "frame", depends_on: ["creative-plan"], input_hash: "different-current-route-hash" });
   await store.markRunning("frame:shot-1", { provider: "openai", response_id: "resp_spent", status: "completed" });
-  await store.markFailed("frame:shot-1", new Error("Frame shot-1 failed semantic validation: root_media_requests[0] must not mount the authoritative voiceover resource as visual media; use the presenter resource"));
+  await store.markSucceeded("frame:shot-1");
   const candidate = frameBundle("shot-1", 5);
   candidate.root_media_requests[0] = { ...candidate.root_media_requests[0], resource_id: "voiceover", kind: "audio", volume: 1 };
   const attempts = path.join(workspace, "production", "frames", ".attempts");
   await mkdir(attempts, { recursive: true });
-  await writeFile(path.join(attempts, "shot-1-attempt-1.json"), `${JSON.stringify({ input_hash: inputHash, response_id: "resp_spent", model: "gpt-5.6-sol", usage: { total_tokens: 100 }, candidate })}\n`);
-  await writeFile(path.join(attempts, "shot-1-attempt-2.json"), `${JSON.stringify({ input_hash: "different-route-hash", response_id: "resp_other", model: "other-model", usage: {}, candidate: frameBundle("shot-1", 5) })}\n`);
+  await writeFile(path.join(attempts, "shot-1-attempt-1.json"), `${JSON.stringify({ input_hash: "old-discovered-route-hash", response_id: "resp_spent", model: "gpt-5.6-sol", usage: { total_tokens: 100 }, candidate })}\n`);
+  const incompatible = frameBundle("shot-1", 5);
+  incompatible.html = incompatible.html.replace('data-start="0"', 'data-start="1"');
+  await writeFile(path.join(attempts, "shot-1-attempt-2.json"), `${JSON.stringify({ input_hash: "different-route-hash", response_id: "resp_other", model: "other-model", usage: {}, candidate: incompatible })}\n`);
   const calls = [];
   const client = { runStructured: async (options) => {
     const input = JSON.parse(options.input);
@@ -314,7 +339,7 @@ test("promotes the newest matching frame attempt past a different route attempt"
     return { response_id: "resp_fresh", model: "gpt-5.6", status: "completed", value: frameBundle(input.shot.id, input.shot.duration_seconds), usage: {} };
   } };
 
-  const result = await directFrames(workspace, { concurrency: 2, background: false }, { client });
+  const result = await directFrames(workspace, { concurrency: 2, background: false, stableRouteCache: true }, { client });
 
   assert.deepEqual(calls, ["shot-2"]);
   assert.equal(result.frames[0].recovered, true);
@@ -436,7 +461,7 @@ test("runs fail-closed scenes concurrently but stops scheduling after the first 
     /first parallel worker failed/
   );
 
-  assert.deepEqual(calls.sort(), ["shot-1", "shot-2"]);
+  assert.deepEqual(calls.sort(), ["shot-1", "shot-1", "shot-2"]);
   assert.equal(siblingFinished, true);
   const store = await ProductionJobStore.open(workspace, { create: false });
   assert.equal(store.get("frame:shot-2").status, "succeeded");
@@ -519,8 +544,10 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
     assert.ok(input.narration_anchors.length <= 8);
     const value = frameBundle(shot.id, shot.duration_seconds);
     value.html = blueprintFrameHtml(shot.id, shot.duration_seconds, input.scene_blueprint);
+    value.html = value.html.replace(/(\.fromTo\([^,]+,\{)/, "$1rotation:12,");
     value.motion.assertions[0].selector = input.scene_blueprint.motion_beats[0].selector;
     value.motion.events[0].selector = input.scene_blueprint.motion_beats[0].selector;
+    value.motion.events[0].at_seconds += .25;
     return {
       response_id: `frame_${shot.id}`,
       model: "google/gemma-code:free",
@@ -563,6 +590,8 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => entry.prompt_cache_key === "launchclip:frame-director:v9"));
   assert.deepEqual(result.frames.map((entry) => entry.usage.total_tokens), [450, 450]);
   assert.ok(result.frames.every((entry) => entry.blueprint.cached === false));
+  assert.ok(result.frames.every((entry) => entry.repairs.some((repair) => repair.kind === "align-frame-event-timing")));
+  assert.ok(result.frames.every((entry) => entry.repairs.some((repair) => repair.kind === "remove-unplanned-locked-motion-properties")));
   const blueprintRecord = JSON.parse(await readFile(result.frames[0].blueprint.path, "utf8"));
   const frameStore = await ProductionJobStore.open(workspace, { create: false });
   assert.equal(blueprintRecord.blueprint.schema_version, FRAME_BLUEPRINT_VERSION);
@@ -604,7 +633,7 @@ test("can exhaust LLM routes without writing a deterministic visual fallback", a
   await assert.rejects(() => readFile(path.join(workspace, "production", "fallbacks", "shot-1.json")), (error) => error.code === "ENOENT");
 });
 
-test("rotates after provider failures and reports every attempted model", async () => {
+test("retries the primary route once before rotating after provider failures", async () => {
   const context = fixture();
   const workspace = await workspaceFixture(context);
   const routes = ["openrouter:first/free:free@none", "openrouter:second/free:free@none"];
@@ -620,7 +649,7 @@ test("rotates after provider failures and reports every attempted model", async 
       && /first\/free:free unavailable/.test(error.message)
       && /second\/free:free unavailable/.test(error.message)
   );
-  assert.deepEqual(attempted, ["first/free:free", "second/free:free"], "transport failures rotate routes without consuming semantic-repair attempts");
+  assert.deepEqual(attempted, ["first/free:free", "first/free:free", "second/free:free"]);
 });
 
 test("stops before the next frame after the observed dollar limit is reached", async () => {

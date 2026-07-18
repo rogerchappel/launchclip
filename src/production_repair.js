@@ -1,15 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { readFrameSelection, safeShotFile, sanitizeFrameBundle, validateHyperFramesRoot, writeFrameArtifacts } from "./frame_director.js";
+import { buildFrameInput, LEAN_FRAME_INSTRUCTIONS, readFrameSelection, safeShotFile, sanitizeFrameBundle, validateHyperFramesRoot, writeFrameArtifacts } from "./frame_director.js";
 import { verifyFrameCandidate } from "./frame_candidate_verify.js";
 import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model_provider.js";
-import { PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
+import { FRAME_BUNDLE_SCHEMA, PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
 import { buildRepairContextCapsule, buildRepairSourceCapsule, REPAIR_CAPSULE_VERSION } from "./repair_capsule.js";
 import { repairProductionPlan } from "./production_plan_repair.js";
-import { validateLockedSupportingMotion } from "./frame_blueprint.js";
 
 const REPAIR_INSTRUCTIONS = `You are repairing one previously authored HyperFrames shot after independent review.
 
@@ -33,9 +32,13 @@ Motion assertions must be truthful. When native inspection reports motion_frozen
 
 Every planned shot.visual object and event remains part of the repair contract. Preserve data-visual-object-id identity, return one motion.events record for every planned visible event, and ensure its selector visibly changes at the exact planned time. Never fix a composition issue by replacing semantic graphics with caption cards, and never leave an SFX-bound event without a visible target.
 
-The repair context contains locked_motion_contract. Treat every listed motion.events event_id, object_id, selector, and at_seconds as immutable. Treat every supporting_motion_beats selector, at_seconds, duration_seconds, ease, changes, and later-beat immediateRender:false as immutable too: never delete, zero, weaken, retime, retarget, or add transform/opacity properties to those fromTo calls. When a supporting beat travels off-frame, move or resize its authored resting CSS geometry so the exact locked travel remains visible. Never change those fields, even when fixing appears-late, out-of-order, missing-selector, contrast, or layout findings. Fix the matching HTML element, clip data-start/data-duration, CSS geometry, or GSAP call so the locked selector visibly changes at the locked time. A descendant selector is not an acceptable substitute.
+The repair context contains locked_motion_contract. Treat every listed motion.events event_id, object_id, selector, and at_seconds as immutable. supporting_motion_beats records the prior implementation, not semantic truth. Preserve unrelated beats, but for a supplied motion finding you may adjust or replace the targeted supporting tween, assertion, clip timing, or CSS geometry when that produces a clearer seek-safe result. A descendant selector is not an acceptable substitute for a locked semantic event.
 
-Do not edit the motion target for a layout, contrast, typography, or geometry-only finding. For a motion assertion finding, edit only the specific assertion field named by the evidence; the locked motion.events ledger still remains unchanged. Before returning, compare every proposed motion edit against locked_motion_contract and remove any edit that changes a locked event field.`;
+Do not edit a motion target for a contrast or typography-only finding. The locked motion.events ledger remains unchanged. Before returning, compare every proposed motion edit against locked_motion_contract and remove any edit that changes a locked event field.`;
+
+const REGENERATION_INSTRUCTIONS = `${LEAN_FRAME_INSTRUCTIONS}
+
+This is a bounded recovery after a small exact-edit patch could not pass independent browser QA. Return a complete replacement frame bundle for this one shot. Keep the prior attempt's art direction, factual copy, evidence grounding, semantic objects, planned event identity, and continuity unless a supplied QA finding requires a local visual change. Fix every supplied QA and validation finding. Prefer robust readable geometry and simple seek-safe motion over preserving a broken implementation detail. Do not return a patch or explanation.`;
 
 export const FRAME_PATCH_VERSION = "launchclip.frame-patch.v1";
 export const FRAME_PATCH_SCHEMA = {
@@ -125,15 +128,17 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
   const routes = repairModelRoutes(options, intake);
   const images = await snapshotImages(path.join(qaDir, "snapshots"), Number(options.maxSnapshots ?? 8));
   const repaired = [];
-  const tasks = [...byShot].map(([shotId, findings]) => async () => {
-    const shot = plan.shots.find((entry) => entry.id === shotId);
+  const repairEntries = [...byShot];
+  const tasks = repairEntries.map(([shotId, findings]) => async () => {
+    const shotIndex = plan.shots.findIndex((entry) => entry.id === shotId);
+    const shot = plan.shots[shotIndex];
     if (!shot) throw new Error(`Critique references unknown shot: ${shotId}`);
     const prior = (await readFrameSelection(workspace, shotId)).bundle;
     const blueprintRecord = await readOptionalJson(path.join(workspace, PRODUCTION_PATHS.frames, ".blueprints", `${shotId}.json`), null);
     const lockedSupportingMotion = Array.isArray(blueprintRecord?.blueprint?.supporting_motion_beats) ? blueprintRecord.blueprint.supporting_motion_beats : [];
     const repairInputHash = semanticHash({
-      worker: "frame-repair.v14",
-      candidate_verification: "browser-snapshot.v3",
+      worker: "frame-repair.v16",
+      candidate_verification: "browser-snapshot.v4",
       repair_context: REPAIR_CAPSULE_VERSION,
       routes: routes.map(modelRouteKey),
       source_mode: options.sourceMode ?? "provider-default",
@@ -182,7 +187,9 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
       if (!Number.isInteger(semanticAttempts) || semanticAttempts <= 0) throw new Error("Repair semantic attempts must be a positive integer");
       let completed = false;
       let totalAttempt = 0;
-      for (const [routeIndex, route] of routes.entries()) {
+      const allowFullRegeneration = options.fullRegeneration === true || (options.fullRegeneration !== false && options.sourceMode === "scoped");
+      const patchRoutes = allowFullRegeneration ? routes.slice(0, 1) : routes;
+      for (const [routeIndex, route] of patchRoutes.entries()) {
         const client = adapters.client ?? (adapters.createClient ?? createStructuredClient)(route);
         const sourceMode = options.sourceMode ?? (route.provider === "ollama" ? "scoped" : "full");
         const attemptsForRoute = routeIndex === 0 ? semanticAttempts : 1;
@@ -212,7 +219,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
             background: options.background !== false,
             maxOutputTokens: Number(options.maxOutputTokens ?? 8_000),
             keepAlive: route.provider === "ollama" ? 0 : undefined,
-            promptCacheKey: "launchclip:frame-repair-patch:v5",
+            promptCacheKey: "launchclip:frame-repair-patch:v6",
             metadata: { job_id: jobId, shot_id: shotId, repair_findings: findings.length, attempt: totalAttempt, route: routeIndex + 1 },
             onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
           };
@@ -243,7 +250,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
               resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
               allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
             });
-            validationErrors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format), ...validateLockedSupportingMotion(candidate.html, lockedSupportingMotion)];
+            validationErrors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
             previousCandidate = candidate;
             if (validationErrors.length) continue;
             const candidateVerification = await (adapters.verifyCandidate ?? verifyFrameCandidate)(workspace, candidate, {
@@ -284,21 +291,130 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
         }
         if (completed) break;
       }
+      if (!completed && allowFullRegeneration) {
+        const regeneration = await regenerateFrameAfterPatchFailure({
+          workspace, intake, evidence, plan, shot, shotIndex, findings, prior,
+          validationErrors, routes, images, jobId, canonicalJobId, store, options, adapters
+        });
+        if (regeneration.ok) {
+          repaired.push(regeneration.repaired);
+          completed = true;
+        } else validationErrors = regeneration.errors;
+      }
       if (!completed) throw new Error(`Repaired frame ${shotId} exhausted small-patch routes: ${validationErrors.join("; ")}`);
     } catch (error) {
       if (["running", "submitted"].includes(store.get(jobId)?.status)) await store.markFailed(jobId, error);
       throw error;
     }
   });
-  await runPool(tasks, Number(options.concurrency ?? 3));
+  const failures = await runPool(tasks, Number(options.concurrency ?? 3));
+  if (failures.length && !repaired.length) throw failures[0].error;
+  const failedRepairs = failures.map(({ index, error }) => ({
+    id: `repair:${repairEntries[index][0]}`,
+    repair_scope: "frame",
+    instruction: error.message
+  }));
   return {
     stage: "production-repair",
-    status: unsupported.length ? "partially-repaired" : "repaired",
+    status: unsupported.length || failedRepairs.length ? "partially-repaired" : "repaired",
     repaired,
     deterministic_findings: deterministicFindings.length,
-    blockers: unsupported.map((finding) => ({ id: finding.id, repair_scope: finding.repair_scope, instruction: finding.instruction })),
+    blockers: [
+      ...unsupported.map((finding) => ({ id: finding.id, repair_scope: finding.repair_scope, instruction: finding.instruction })),
+      ...failedRepairs
+    ],
     next: "Re-run launchclip assemble and production-verify; resolve any listed blockers before production-render."
   };
+}
+
+async function regenerateFrameAfterPatchFailure({ workspace, intake, evidence, plan, shot, shotIndex, findings, prior, validationErrors, routes, images, jobId, canonicalJobId, store, options, adapters }) {
+  const errors = [];
+  const maximumRoutes = Number(options.fullRegenerationRoutes ?? 2);
+  if (!Number.isInteger(maximumRoutes) || maximumRoutes <= 0) throw new Error("Full-regeneration routes must be a positive integer");
+  const findingErrors = findings.flatMap((finding) => (finding.repair_targets?.length ? finding.repair_targets : [finding])
+    .map((target) => `${target.code ?? finding.id}: ${target.message ?? finding.instruction}`));
+  for (const [routeIndex, route] of routes.slice(0, maximumRoutes).entries()) {
+    const client = adapters.client ?? (adapters.createClient ?? createStructuredClient)(route);
+    const request = {
+      model: route.model,
+      reasoningEffort: route.reasoning,
+      reasoningContext: "current_turn",
+      instructions: REGENERATION_INSTRUCTIONS,
+      input: buildFrameInput({
+        intake, evidence, plan, shot, index: shotIndex, prior,
+        errors: [...findingErrors, ...validationErrors],
+        lean: true
+      }),
+      images: client.supportsImages === false ? [] : images,
+      schema: FRAME_BUNDLE_SCHEMA,
+      schemaName: "launchclip_repaired_frame_bundle",
+      background: options.background !== false,
+      maxOutputTokens: Number(options.fullRegenerationMaxOutputTokens ?? 20_000),
+      keepAlive: route.provider === "ollama" ? 0 : undefined,
+      promptCacheKey: "launchclip:frame-repair-regeneration:v1",
+      metadata: { job_id: jobId, shot_id: shot.id, recovery: "full-frame", route: routeIndex + 1 },
+      onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
+    };
+    try {
+      const result = await client.runStructured(request);
+      const normalized = { ...result.value, html: ensureTimelineRegistration(result.value?.html, shot.id) };
+      const sanitized = sanitizeFrameBundle(normalized, {
+        shot,
+        format: plan.format,
+        resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
+      });
+      const candidate = sanitized.bundle;
+      const validation = validateFrameBundle(candidate, {
+        shotId: shot.id,
+        shot,
+        format: plan.format,
+        evidenceIds: evidence.items.map((entry) => entry.id),
+        resourceIds: intake.resources.map((entry) => entry.id),
+        resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
+        allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
+      });
+      const candidateErrors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
+      if (candidateErrors.length) {
+        errors.push(`Full-frame attempt ${routeIndex + 1} via ${route.provider}:${route.model} failed validation: ${candidateErrors.join("; ")}`);
+        continue;
+      }
+      const candidateVerification = await (adapters.verifyCandidate ?? verifyFrameCandidate)(workspace, candidate, {
+        shot,
+        format: plan.format,
+        baseline: prior,
+        attempt: `regeneration-${routeIndex + 1}-${route.provider}-${route.model}`
+      }, { run: adapters.run });
+      if (!candidateVerification?.ok) {
+        if (candidateVerification?.failure_kind === "infrastructure") throw infrastructureRepairError([`candidate:${shot.id}`]);
+        errors.push(`Full-frame attempt ${routeIndex + 1} via ${route.provider}:${route.model} failed visual verification: ${candidateVerification?.error ?? "browser QA failed"}`);
+        continue;
+      }
+      const paths = await writeFrameArtifacts(workspace, candidate);
+      await store.markRunning(jobId, { provider: route.provider, response_id: result.response_id, status: result.status });
+      const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
+      await store.replaceSucceededOutputs(canonicalJobId, outputs);
+      await store.markSucceeded(jobId, outputs, result.usage);
+      return {
+        ok: true,
+        repaired: {
+          shot_id: shot.id,
+          findings: findings.map((entry) => entry.id),
+          bundle: paths[0],
+          html: paths[1],
+          response_id: result.response_id,
+          provider: route.provider,
+          model: result.model,
+          regeneration: { full_frame: true, reason: "small-patch-routes-exhausted" },
+          candidate_verification: { report: candidateVerification.report ?? null, snapshots: candidateVerification.snapshots ?? null },
+          cached: false
+        }
+      };
+    } catch (error) {
+      if (error.code === "LAUNCHCLIP_PRODUCTION_INFRASTRUCTURE_FAILED") throw error;
+      errors.push(`Full-frame attempt ${routeIndex + 1} via ${route.provider}:${route.model} failed: ${error.message}`);
+    }
+  }
+  return { ok: false, errors: errors.length ? errors : validationErrors };
 }
 
 export function buildRepairInput({ plan, shot, findings, prior, lockedPrior = prior, lockedSupportingMotion = [], validationErrors = [], maxPatchRatio = .35, resources = [], evidenceItems = [], sourceMode = "full" }) {
@@ -332,7 +448,7 @@ export function buildRepairInput({ plan, shot, findings, prior, lockedPrior = pr
       immutable_event_fields: ["event_id", "object_id", "selector", "at_seconds"],
       planned_events: (shot?.visual?.events ?? []).map((event) => ({ event_id: event.id, target_object_ids: event.target_ids, at_seconds: event.at_seconds })),
       authored_events: (lockedPrior?.motion?.events ?? []).map((event) => ({ event_id: event.event_id, object_id: event.object_id, selector: event.selector, at_seconds: event.at_seconds })),
-      supporting_motion_beats: lockedSupportingMotion.map((beat) => ({
+      prior_supporting_motion_beats: lockedSupportingMotion.map((beat) => ({
         window_id: beat.window_id,
         selector: beat.selector,
         at_seconds: beat.at_seconds,
@@ -340,7 +456,7 @@ export function buildRepairInput({ plan, shot, findings, prior, lockedPrior = pr
         ease: beat.ease,
         changes: beat.changes
       })),
-      rule: "Preserve authored event identity, selector, and timing plus every supporting fromTo selector, time, duration, ease, and numeric state. Repair CSS geometry around locked motion rather than weakening it."
+      rule: "Preserve authored semantic event identity, selector, and timing. Supporting beats are prior choreography and may change only where a supplied motion finding requires it."
     },
     available_resources: resources.map((entry) => ({ id: entry.id, role: entry.role, type: entry.type })),
     allowed_evidence_ids: evidenceItems.map((entry) => entry.id),
@@ -622,15 +738,19 @@ async function optionalStat(filePath) {
 async function runPool(tasks, concurrency) {
   if (!Number.isInteger(concurrency) || concurrency <= 0) throw new Error("Repair concurrency must be a positive integer");
   let cursor = 0;
+  const failures = [];
   const worker = async () => {
     while (cursor < tasks.length) {
       const index = cursor++;
-      await tasks[index]();
+      try {
+        await tasks[index]();
+      } catch (error) {
+        failures.push({ index, error });
+      }
     }
   };
-  const settled = await Promise.allSettled(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
-  const failed = settled.find((entry) => entry.status === "rejected");
-  if (failed) throw failed.reason;
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
+  return failures.sort((left, right) => left.index - right.index);
 }
 
 async function snapshotImages(directory, limit) {

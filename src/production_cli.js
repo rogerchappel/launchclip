@@ -1,13 +1,13 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { collectEvidence } from "./evidence.js";
-import { directFrames, fallbackFramesForVerification } from "./frame_director.js";
+import { directFrames } from "./frame_director.js";
 import { assembleHyperFrames } from "./hyperframes_assembler.js";
 import { buildIntake, writeIntakeManifest } from "./intake.js";
 import { planProduction } from "./creative_planner.js";
 import { produceAudio } from "./production_audio.js";
 import { assertVerificationFresh, renderDraftProduction, renderProduction, verifyProduction } from "./production_render.js";
-import { critiqueProduction } from "./production_critic.js";
+import { critiqueProduction, FREE_VISION_UNAVAILABLE_CODE } from "./production_critic.js";
 import { repairProduction } from "./production_repair.js";
 import { analyzeSourceMedia } from "./source_media_analysis.js";
 import { prepareSourceMedia } from "./production_source_media.js";
@@ -89,24 +89,8 @@ async function runProductionRepair(workspace, flags, options, adapters) {
     supportsImages: false,
     sourceMode: "scoped"
   };
-  const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
-  try {
-    const result = await repair(workspace, selectedOptions, adapters.repair);
-    let recorded = selection;
-    try {
-      recorded = await recordOutcome(selection, { result: { frames: result.repaired ?? [] } }) ?? selection;
-    } catch (error) {
-      recorded = { ...selection, warnings: [...(selection.warnings ?? []), `Could not update free-model repair outcome state: ${error.message}`] };
-    }
-    return { ...result, free_model_selection: freeModelSelectionSummary(recorded) };
-  } catch (error) {
-    try {
-      await recordOutcome(selection, { error });
-    } catch (stateError) {
-      error.free_model_state_error = stateError.message;
-    }
-    throw error;
-  }
+  const result = await repair(workspace, selectedOptions, adapters.repair);
+  return { ...result, free_model_selection: freeModelSelectionSummary(selection) };
 }
 
 export async function runProduction(source, flags = {}, adapters = {}) {
@@ -237,8 +221,8 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
   let critique = null;
   const repairs = [];
   const localRepairs = [];
-  let localVerificationRepairApplied = false;
   const maximumRepairPasses = numberOr(flags["max-repair-passes"], 2);
+  let visionReviewRequested = false;
   while (true) {
     let trigger;
     try {
@@ -252,18 +236,33 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
       draft = null;
       critique = null;
       verification = error.verification;
-      if (!localVerificationRepairApplied) {
-        const localRepair = await (adapters.fallbackFramesForVerification ?? fallbackFramesForVerification)(workspace, verification);
-        localVerificationRepairApplied = true;
-        if (localRepair.repaired?.length) {
-          localRepairs.push(localRepair);
-          assembly = await (adapters.assembleHyperFrames ?? assembleHyperFrames)(workspace, assemblyOptions);
-          continue;
-        }
-      }
       trigger = "verification";
     }
-    if (repairs.length >= maximumRepairPasses) break;
+    if (repairs.length >= maximumRepairPasses) {
+      draft = await renderVisionSupervisedDraft(workspace, flags, adapters);
+      verification = draft.verification;
+      critique = draft.critique;
+      break;
+    }
+    if (trigger === "verification" && repairs.length > 0 && !visionReviewRequested) {
+      try {
+        critique = await (adapters.critiqueProduction ?? critiqueProduction)(workspace, criticOptions(flags), adapters.critic);
+      } catch (error) {
+        if (flags["model-policy"] !== "free" || error?.code !== FREE_VISION_UNAVAILABLE_CODE) throw error;
+        draft = await renderVisionSupervisedDraft(workspace, flags, adapters, error);
+        verification = draft.verification;
+        critique = draft.critique;
+        break;
+      }
+      visionReviewRequested = true;
+      if (!["repair", "replan"].includes(critique.verdict)) {
+        draft = await renderVisionSupervisedDraft(workspace, flags, adapters);
+        verification = draft.verification;
+        critique = draft.critique;
+        break;
+      }
+      trigger = "critique";
+    }
     const repair = await runProductionRepair(workspace, flags, {
       ...repairOptions(flags),
       trigger,
@@ -316,6 +315,15 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
   };
 }
 
+function renderVisionSupervisedDraft(workspace, flags, adapters, visionUnavailableError = null) {
+  return (adapters.renderDraftProduction ?? renderDraftProduction)(workspace, {
+    ...renderOptions(flags),
+    allowContentVerificationFailures: true,
+    allowFreeVisionUnavailable: flags["model-policy"] === "free",
+    ...(visionUnavailableError ? { visionUnavailableError } : {})
+  }, adapters.render);
+}
+
 function entityOptions(flags) {
   return { brandAssetsDir: flags["brand-assets-dir"] };
 }
@@ -354,8 +362,10 @@ async function runFrameDirection(workspace, flags, adapters) {
   if (!usesDiscoveredFreeFrames(flags)) return direct(workspace, options, adapters.frames);
 
   const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
-  const selection = await selectLiveOpenRouterFreeModels(flags, adapters);
+  const probeModels = adapters.probeOpenRouterFreeModels ?? probeOpenRouterFreeModels;
+  let selection = await selectLiveOpenRouterFreeModels(flags, adapters);
   options.routes = selection.routes;
+  options.stableRouteCache = true;
   options.leanPrompt = true;
   options.sceneBlueprint = true;
   options.fallbackMode = "error";
@@ -370,23 +380,49 @@ async function runFrameDirection(workspace, flags, adapters) {
   if (Number.isFinite(Number(selection.max_completion_tokens)) && Number(selection.max_completion_tokens) > 0) {
     options.maxOutputTokens = Math.min(options.maxOutputTokens, Number(selection.max_completion_tokens));
   }
-  try {
-    const result = await direct(workspace, options, adapters.frames);
-    let recorded = selection;
+  const attemptedModelIds = new Set(selection.routes.map(openRouterRouteModelId));
+  while (true) {
     try {
-      recorded = await recordOutcome(selection, { result }) ?? selection;
+      const result = await direct(workspace, options, adapters.frames);
+      const observedResult = { ...result, frames: (result.frames ?? []).filter((frame) => !frame.recovered) };
+      let recorded = selection;
+      try {
+        recorded = await recordOutcome(selection, { result: observedResult }) ?? selection;
+      } catch (error) {
+        recorded = { ...selection, warnings: [...(selection.warnings ?? []), `Could not update free-model outcome state: ${error.message}`] };
+      }
+      return { ...result, free_model_selection: freeModelSelectionSummary(recorded) };
     } catch (error) {
-      recorded = { ...selection, warnings: [...(selection.warnings ?? []), `Could not update free-model outcome state: ${error.message}`] };
+      let rotated = selection;
+      try {
+        rotated = await recordOutcome(selection, { error }) ?? selection;
+      } catch (stateError) {
+        error.free_model_state_error = stateError.message;
+      }
+      const remaining = (rotated.candidates ?? []).filter((candidate) => !attemptedModelIds.has(candidate.id));
+      if (!remaining.length) throw error;
+      try {
+        selection = await probeModels(rotated, {
+          timeoutMs: numberOr(flags["free-model-probe-timeout-ms"], 15_000),
+          excludeIds: [...attemptedModelIds],
+          stopAfterFirstSuccess: true
+        });
+      } catch (probeError) {
+        error.free_model_probe_error = probeError.message;
+        throw error;
+      }
+      options.routes = selection.routes.filter((route) => !attemptedModelIds.has(openRouterRouteModelId(route)));
+      if (!options.routes.length) throw error;
+      if (Number.isFinite(Number(selection.max_completion_tokens)) && Number(selection.max_completion_tokens) > 0) {
+        options.maxOutputTokens = Math.min(options.maxOutputTokens, Number(selection.max_completion_tokens));
+      }
+      for (const route of options.routes) attemptedModelIds.add(openRouterRouteModelId(route));
     }
-    return { ...result, free_model_selection: freeModelSelectionSummary(recorded) };
-  } catch (error) {
-    try {
-      await recordOutcome(selection, { error });
-    } catch (stateError) {
-      error.free_model_state_error = stateError.message;
-    }
-    throw error;
   }
+}
+
+function openRouterRouteModelId(route) {
+  return String(route).replace(/^openrouter:/, "").replace(/@[^@]+$/, "");
 }
 
 async function rotateCritiqueRejectedFreeModel(frames, adapters) {
@@ -419,6 +455,14 @@ function usesDiscoveredFreeRepair(flags) {
     && flags["repair-route"] == null
     && flags["repair-model"] == null
     && flags["repair-provider"] == null
+    && flags.model == null;
+}
+
+function usesDiscoveredFreeCritic(flags) {
+  return modelPolicy(flags) === "free"
+    && flags["critic-route"] == null
+    && flags["critic-model"] == null
+    && flags["critic-provider"] == null
     && flags.model == null;
 }
 
@@ -467,14 +511,20 @@ function mediaAnalysisOptions(flags) {
     reasoning: flags["media-reasoning"] ?? "high",
     transcriptionModel: flags["transcription-model"] ?? "scribe_v2",
     transcribeAll: Boolean(flags["transcribe-all"]),
+    freeVisionStatePath: flags["free-vision-model-state"],
+    freeVisionCandidates: numberOr(flags["free-vision-model-candidates"], 3),
+    refreshFreeVisionModels: Boolean(flags["refresh-free-vision-models"] || flags["refresh-free-models"]),
+    freeVisionProbeTimeoutMs: numberOr(flags["free-vision-probe-timeout-ms"], 15_000),
     background: !flags.foreground
   };
 }
 
 function plannerOptions(flags) {
+  const free = modelPolicy(flags) === "free";
   return {
     background: !flags.foreground,
-    maxOutputTokens: numberOr(flags["max-output-tokens"], 48_000),
+    maxOutputTokens: numberOr(flags["max-output-tokens"], free ? 20_000 : 48_000),
+    evidenceChars: numberOr(flags["plan-evidence-chars"], free ? 48_000 : 220_000),
     maxAttempts: numberOr(flags["max-attempts"], 3),
     semanticAttempts: numberOr(flags["plan-semantic-attempts"], 2),
     planningMode: flags["planning-mode"] ?? "auto",
@@ -485,6 +535,12 @@ function plannerOptions(flags) {
     visualHistoryDir: flags["visual-history-dir"],
     visualHistoryLimit: numberOr(flags["visual-history-limit"], 8),
     visualSimilarityLimit: numberOr(flags["visual-similarity-limit"], 0.58),
+    freeModelStatePath: flags["free-model-state"],
+    freeModelCandidates: numberOr(flags["free-model-candidates"], 5),
+    refreshFreeModels: Boolean(flags["refresh-free-models"]),
+    freeModelProbeTimeoutMs: numberOr(flags["free-model-probe-timeout-ms"], 15_000),
+    freeModelRequestTimeoutMs: numberOr(flags["free-model-request-timeout-ms"], 180_000),
+    freeSemanticFallbacks: numberOr(flags["free-plan-semantic-fallbacks"], 1),
     sfxDir: flags["sfx-dir"]
   };
 }
@@ -538,6 +594,11 @@ function renderOptions(flags) {
     criticReasoning: flags["critic-reasoning"] ?? (policy === "quality" ? "xhigh" : "high"),
     criticPro: Boolean(flags["critic-pro"]),
     maxCriticSnapshots: numberOr(flags["critic-snapshots"], 12),
+    selectFreeVision: usesDiscoveredFreeCritic(flags),
+    freeVisionStatePath: flags["free-vision-model-state"],
+    freeVisionCandidates: numberOr(flags["free-vision-model-candidates"], 3),
+    refreshFreeVisionModels: Boolean(flags["refresh-free-vision-models"] || flags["refresh-free-models"]),
+    freeVisionProbeTimeoutMs: numberOr(flags["free-vision-probe-timeout-ms"], 15_000),
     background: !flags.foreground
   };
 }
@@ -556,7 +617,12 @@ function criticOptions(flags) {
     model: flags["critic-model"] ?? (policy === "quality" ? "gpt-5.6" : "gpt-5.6-terra"),
     reasoning: flags["critic-reasoning"] ?? (policy === "quality" ? "xhigh" : "high"),
     pro: Boolean(flags["critic-pro"]),
-    maxSnapshots: numberOr(flags["critic-snapshots"], 12)
+    maxSnapshots: numberOr(flags["critic-snapshots"], 12),
+    selectFreeVision: usesDiscoveredFreeCritic(flags),
+    freeVisionStatePath: flags["free-vision-model-state"],
+    freeVisionCandidates: numberOr(flags["free-vision-model-candidates"], 3),
+    refreshFreeVisionModels: Boolean(flags["refresh-free-vision-models"] || flags["refresh-free-models"]),
+    freeVisionProbeTimeoutMs: numberOr(flags["free-vision-probe-timeout-ms"], 15_000)
   };
 }
 

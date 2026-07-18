@@ -3,7 +3,8 @@ import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
-import { createStructuredClient } from "./model_provider.js";
+import { probeOpenRouterFreeModels, recordOpenRouterFreeModelOutcome, selectOpenRouterFreeModels } from "./free_model_selector.js";
+import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import {
   PRODUCTION_PATHS,
   PRODUCTION_PLAN_SCHEMA,
@@ -28,6 +29,7 @@ Rules:
 - Design motion semantically: name internal reveals, their timing, and acceleration/deceleration intent. Favor purposeful development within shots over constant cutting.
 - Translate narration into visible models, not decorated captions. For every shot, name the concept and visual world, choose a semantic representation, declare the objects that carry meaning, and author visible events that develop the idea.
 - Typography supports the visual model; it is not the visual model. Across the full runtime, kinetic-type or text-only shots may occupy at most 15%. Companion and voiceover shots require content-bearing diagrams, comparisons, timelines, processes, networks, data, media, or spatial metaphors.
+- In every companion or voiceover shot, visual.objects must include at least one kind from asset, logo, diagram-node, connector, metric, timeline, or process. Text, decoration, and container objects do not satisfy this requirement by themselves.
 - Build continuity sequences across related narration beats. Reuse stable object IDs, explicitly hand objects from one shot to the next, and match exit velocity to entry velocity within 5% so acceleration, deceleration, camera direction, and motion blur read as one continuous canvas.
 - Design style_dna before the shots. It is a project-specific design system, not a layout template: declare exact colors, type roles, shape language, background system, diagram language, presenter treatment, motion physics, transition vocabulary, and forbidden motifs. Avoid cyan-on-black and generic blue gradients unless the brief or supplied brand requires them.
 - Treat visual_novelty as a binding creative-direction contract. Keep style_dna stable while inventing a script-specific episode metaphor, representation sequence, spatial topology, motion vocabulary, transition vocabulary, and presenter rhythm. When mode=differentiate, differ from recent fingerprints across at least four axes without choosing visuals randomly. When mode=reproduce, preserve the matching fingerprint. Use creative_seed only to break ties between equally truthful concepts.
@@ -72,7 +74,7 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
     const hierarchicalPlanner = adapters.planLongFormProduction ?? (await import("./long_form_planner.js")).planLongFormProduction;
     const plannerAdapters = { store };
     if (adapters.client) plannerAdapters.client = adapters.client;
-    else if (!adapters.planLongFormProduction) plannerAdapters.client = planningClient(intake, adapters);
+    else if (!adapters.planLongFormProduction) plannerAdapters.client = (await planningRuntime(intake, options, adapters)).client;
     return hierarchicalPlanner(workspace, { intake, evidence, suppliedNarration, sfxCatalog, noveltyContext, entityResolution, options }, plannerAdapters);
   }
   const input = buildPlanningInput(intake, evidence, suppliedNarration, { ...options, sfxCatalog, noveltyContext, entityResolution });
@@ -101,8 +103,11 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
     throw new Error(`Creative plan job is already ${current.status}: ${jobId}`);
   }
 
-  const client = adapters.client ?? planningClient(intake, adapters);
-  if (!resumeResponseId) await store.markRunning(jobId, { provider: intake.model?.provider ?? "openai", response_id: null, status: "running" });
+  const runtime = adapters.client
+    ? directPlanningRuntime(intake, adapters.client)
+    : await planningRuntime(intake, options, adapters);
+  const client = runtime.client;
+  if (!resumeResponseId) await store.markRunning(jobId, { provider: runtime.provider(), response_id: null, status: "running" });
   const validationContext = {
     evidenceIds: evidence.items.map((entry) => entry.id),
     claimEligibleEvidenceIds: evidence.items.filter((entry) => entry.claims_allowed && entry.role !== "reference").map((entry) => entry.id),
@@ -119,11 +124,13 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
   let validationErrors = [];
   const attemptPaths = [];
   const semanticAttempts = positiveInteger(options.semanticAttempts ?? 2, "Creative plan semantic attempts");
+  let freeSemanticFallbacks = runtime.selection() ? positiveInteger(options.freeSemanticFallbacks ?? 1, "Free planner semantic fallbacks") : 0;
+  const maximumSemanticAttempts = semanticAttempts + freeSemanticFallbacks;
   try {
-    for (let attempt = 1; attempt <= semanticAttempts; attempt += 1) {
+    for (let attempt = 1; attempt <= maximumSemanticAttempts; attempt += 1) {
       const request = {
-        model: intake.model?.id ?? "gpt-5.6",
-        reasoningEffort: intake.model?.reasoning_effort ?? "xhigh",
+        model: runtime.model(),
+        reasoningEffort: runtime.reasoning(),
         reasoningContext: "current_turn",
         pro: intake.model?.reasoning_mode === "pro",
         instructions: PLANNER_INSTRUCTIONS,
@@ -138,14 +145,14 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
         maxOutputTokens: Number(options.maxOutputTokens ?? 48_000),
         promptCacheKey: "launchclip:creative-planner:v2",
         metadata: { job_id: jobId, source_kind: intake.source.kind, aspect: intake.brief.aspect.id, attempt },
-        onSubmitted: async (response) => store.markRunning(jobId, { provider: "openai", response_id: response.id, status: response.status })
+        onSubmitted: async (response) => store.markRunning(jobId, { provider: runtime.provider(), response_id: response.id, status: response.status })
       };
       const result = resumeResponseId ? await client.resumeStructured(resumeResponseId, request) : await client.runStructured(request);
       resumeResponseId = null;
-      const plan = normalizeProductionPlanTiming(result.value);
+      const plan = normalizePlanForAvailableResources(normalizeProductionPlanTiming(result.value), intake);
       const validation = validateProductionPlan(plan, validationContext);
       validationErrors = validation.errors;
-      await store.markRunning(jobId, { provider: "openai", response_id: result.response_id, status: result.status });
+      await store.markRunning(jobId, { provider: runtime.provider(), response_id: result.response_id, status: result.status });
       attemptPaths.push(await writePlanAttempt(workspace, jobId, attempt, {
         response_id: result.response_id,
         model: result.model,
@@ -156,7 +163,12 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
       if (!validation.ok) {
         previousCandidate = plan;
         if (attempt < semanticAttempts) continue;
-        throw new Error(`GPT-5.6 production plan failed semantic validation after ${semanticAttempts} attempts: ${validationErrors.join("; ")}`);
+        if (freeSemanticFallbacks > 0) {
+          await runtime.rotate(new Error(`Free planner failed semantic validation: ${validationErrors.join("; ")}`));
+          freeSemanticFallbacks -= 1;
+          continue;
+        }
+        throw new Error(`Production plan failed semantic validation after ${attempt} attempts: ${validationErrors.join("; ")}`);
       }
 
       const paths = await writePlanArtifacts(workspace, plan);
@@ -177,7 +189,8 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
         model: result.model,
         usage: result.usage,
         semantic_attempts: attempt,
-        cached: false
+        cached: false,
+        ...(runtime.selection() ? { free_model_selection: freeModelSelectionSummary(runtime.selection()) } : {})
       };
     }
     throw new Error("Creative plan exhausted semantic attempts");
@@ -187,13 +200,150 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
   }
 }
 
-function planningClient(intake, adapters) {
-  return (adapters.createClient ?? createStructuredClient)({
+function normalizePlanForAvailableResources(plan, intake) {
+  const availableResourceIds = new Set(intake.resources.map((entry) => entry.id));
+  const normalizeResourceId = (id) => {
+    if (availableResourceIds.has(id)) return id;
+    const unprefixed = String(id ?? "").replace(/^resource:/, "");
+    return availableResourceIds.has(unprefixed) ? unprefixed : id;
+  };
+  const normalized = {
+    ...plan,
+    shots: plan.shots.map((shot) => ({
+      ...shot,
+      resource_ids: [...new Set(shot.resource_ids.map(normalizeResourceId))],
+      visual: {
+        ...shot.visual,
+        objects: shot.visual.objects.map((object) => ({
+          ...object,
+          asset_resource_id: object.asset_resource_id == null ? null : normalizeResourceId(object.asset_resource_id)
+        }))
+      }
+    }))
+  };
+  const hasPresenter = intake.resources.some((entry) => entry.role === "presenter" && ["video", "image"].includes(entry.type));
+  if (hasPresenter) return normalized;
+  return {
+    ...normalized,
+    shots: normalized.shots.map((shot) => ({
+      ...shot,
+      presenter: {
+        ...shot.presenter,
+        mode: "voiceover",
+        visible: false,
+        placement: "offstage",
+        size: "none"
+      }
+    }))
+  };
+}
+
+function directPlanningRuntime(intake, client) {
+  const route = parseModelRoute({
     provider: intake.model?.provider ?? "openai",
     model: intake.model?.id ?? "gpt-5.6",
     reasoning: intake.model?.reasoning_effort ?? "xhigh",
     supportsImages: false
   });
+  return {
+    client,
+    provider: () => route.provider,
+    model: () => route.model,
+    reasoning: () => route.reasoning,
+    selection: () => null
+  };
+}
+
+async function planningRuntime(intake, options, adapters) {
+  const defaultRoute = parseModelRoute({
+    provider: intake.model?.provider ?? "openai",
+    model: intake.model?.id ?? "gpt-5.6",
+    reasoning: intake.model?.reasoning_effort ?? "xhigh",
+    supportsImages: false
+  });
+  const createClient = adapters.createClient ?? createStructuredClient;
+  if (defaultRoute.provider !== "openrouter" || defaultRoute.model !== "openrouter/free" || options.selectFreeModels === false) {
+    return { ...directPlanningRuntime(intake, createClient(defaultRoute)), rotate: async (error) => { throw error; } };
+  }
+  let selection = await selectFreePlannerModels(options, adapters);
+  let route = parseModelRoute(selection.routes[0], { supportsImages: false });
+  const maximumRouteAttempts = Math.max(1, Number(selection.candidates?.length ?? options.freeModelCandidates ?? 5));
+  const clientOptions = { requestTimeoutMs: Number(options.freeModelRequestTimeoutMs ?? 180_000), maxRetries: 0 };
+  let client = createClient(route, clientOptions);
+  const failedModelIds = new Set();
+  const recordFailure = async (error) => {
+    const failedModel = selection.selected_model;
+    failedModelIds.add(failedModel);
+    const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
+    return recordOutcome(selection, { error });
+  };
+  const rotate = async (error) => {
+    const probeModels = adapters.probeOpenRouterFreeModels ?? probeOpenRouterFreeModels;
+    const rotated = await recordFailure(error);
+    selection = await probeModels(rotated, {
+      timeoutMs: Number(options.freeModelProbeTimeoutMs ?? 15_000),
+      excludeIds: [...failedModelIds],
+      stopAfterFirstSuccess: true
+    });
+    route = parseModelRoute(selection.routes[0], { supportsImages: false });
+    client = createClient(route, clientOptions);
+  };
+  return {
+    client: {
+      runStructured: async (request) => {
+        for (let attempt = 1; attempt <= maximumRouteAttempts; attempt += 1) {
+          try {
+            return await client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
+          } catch (error) {
+            if (attempt >= maximumRouteAttempts) {
+              await recordFailure(error);
+              throw error;
+            }
+            await rotate(error);
+          }
+        }
+        throw new Error("Free planner exhausted ranked routes");
+      },
+      resumeStructured: (responseId, request) => client.resumeStructured(responseId, { ...request, model: route.model, reasoningEffort: route.reasoning })
+    },
+    provider: () => route.provider,
+    model: () => route.model,
+    reasoning: () => route.reasoning,
+    selection: () => selection,
+    rotate
+  };
+}
+
+async function selectFreePlannerModels(options, adapters) {
+  const selectModels = adapters.selectOpenRouterFreeModels ?? selectOpenRouterFreeModels;
+  const probeModels = adapters.probeOpenRouterFreeModels ?? probeOpenRouterFreeModels;
+  const selectionOptions = {
+    statePath: options.freeModelStatePath,
+    topK: options.freeModelCandidates ?? 5,
+    refresh: Boolean(options.refreshFreeModels),
+    role: "visual-code-author",
+    contract: "frame-director.v5"
+  };
+  let selection = await selectModels(selectionOptions);
+  const probeOptions = { timeoutMs: Number(options.freeModelProbeTimeoutMs ?? 15_000), stopAfterFirstSuccess: true };
+  try {
+    return await probeModels(selection, probeOptions);
+  } catch (error) {
+    if (selectionOptions.refresh) throw error;
+    selection = await selectModels({ ...selectionOptions, refresh: true });
+    return probeModels(selection, probeOptions);
+  }
+}
+
+function freeModelSelectionSummary(selection) {
+  return {
+    source: selection.source,
+    state_path: selection.state_path,
+    selected_model: selection.selected_model,
+    verified_free_at: selection.verified_free_at,
+    candidates: (selection.candidates ?? []).map((candidate) => ({ id: candidate.id, score: candidate.score, coverage: candidate.coverage })),
+    warnings: [...(selection.warnings ?? [])]
+  };
 }
 
 export function resolvePlanningMode(value = "auto", durationSeconds, thresholdSeconds = 180) {
