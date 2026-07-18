@@ -250,12 +250,11 @@ function supportingMotionContract(shot, anchors = []) {
   const windows = Array.from({ length: beatCount }, (_, index) => {
     const segmentStart = duration * index / beatCount;
     const segmentEnd = duration * (index + 1) / beatCount;
-    const inset = Math.min(.25, Math.max(.05, (segmentEnd - segmentStart) * .08));
-    const startSeconds = index === 0 ? Math.min(.15, duration * .1) : segmentStart + inset;
+    const startSeconds = segmentStart;
     const completionReserve = Math.min(.8, Math.max(.05, duration * .2));
     const endSeconds = index === 0
-      ? Math.max(startSeconds, Math.min(.8, segmentEnd - inset, duration - completionReserve))
-      : Math.max(startSeconds, Math.min(duration - completionReserve, segmentEnd - inset));
+      ? Math.max(startSeconds, Math.min(.8, segmentEnd, duration - completionReserve))
+      : Math.max(startSeconds, Math.min(duration - completionReserve, segmentEnd));
     const overlappingAnchors = anchors.filter((anchor) => Number(anchor.end_seconds) >= startSeconds && Number(anchor.start_seconds) <= endSeconds);
     return {
       id: index === 0 ? "opening" : index === beatCount - 1 ? "closing" : `development-${index}`,
