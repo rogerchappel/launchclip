@@ -266,6 +266,67 @@ test("keeps a proven free vision critic when a transient retry succeeds", async 
   assert.equal(result.free_model_selection.selected_model, "google/gemma-4-31b-it:free");
 });
 
+test("falls back through the ranked route and OpenRouter free vision router when probes degrade", async () => {
+  const workspace = await fixture();
+  const ranked = visionSelection(path.join(workspace, "vision-state.json"));
+  const rotated = {
+    ...ranked,
+    source: "rotated-after-failure",
+    selected_model: "google/gemma-4-26b-a4b-it:free",
+    routes: ["openrouter:google/gemma-4-26b-a4b-it:free@none"],
+    candidates: [...ranked.candidates].reverse()
+  };
+  const routes = [];
+  const result = await critiqueProduction(workspace, { selectFreeVision: true }, {
+    selectOpenRouterFreeVisionModels: async () => ranked,
+    probeOpenRouterFreeVisionModels: async (selection, options) => {
+      if (options.excludeIds) throw new Error("free vision probe temporarily unavailable");
+      return { ...selection, source: "live-probe", routes: [selection.routes[0]] };
+    },
+    recordOpenRouterFreeModelOutcome: async () => rotated,
+    createClient: (route) => ({ runStructured: async () => {
+      routes.push(route.model);
+      if (route.model !== "openrouter/free") throw new Error("ranked critic endpoint unavailable");
+      return {
+        response_id: "resp_router_fallback",
+        model: "google/gemma-4-26b-a4b-it:free",
+        usage: {},
+        value: { schema_version: CRITIQUE_VERSION, verdict: "ship", summary: "The free router reviewed the rendered pixels.", findings: [] }
+      };
+    } })
+  });
+  assert.deepEqual(routes, [
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "openrouter/free"
+  ]);
+  assert.equal(result.free_model_selection.source, "free-router-fallback");
+  assert.equal(result.free_model_selection.selected_model, "google/gemma-4-26b-a4b-it:free");
+});
+
+test("attempts ranked vision routes when every live probe is temporarily unavailable", async () => {
+  const workspace = await fixture();
+  const ranked = visionSelection(path.join(workspace, "vision-state.json"));
+  let selects = 0;
+  const result = await critiqueProduction(workspace, { selectFreeVision: true }, {
+    selectOpenRouterFreeVisionModels: async () => {
+      selects += 1;
+      return ranked;
+    },
+    probeOpenRouterFreeVisionModels: async () => { throw new Error("probe transport unavailable"); },
+    createClient: (route) => ({ runStructured: async () => ({
+      response_id: "resp_direct_ranked",
+      model: route.model,
+      usage: {},
+      value: { schema_version: CRITIQUE_VERSION, verdict: "ship", summary: "The ranked critic reviewed the rendered pixels directly.", findings: [] }
+    }) })
+  });
+  assert.equal(selects, 2);
+  assert.equal(result.free_model_selection.source, "probe-degraded");
+  assert.match(result.free_model_selection.warnings[0], /attempting ranked routes directly/);
+});
+
 test("compacts raw temporal samples before sending a production critique", async () => {
   const workspace = await fixture();
   const qa = path.join(workspace, "production", "qa");

@@ -27,6 +27,8 @@ Rules:
 
 Return only the strict production-critique JSON.`;
 
+const OPENROUTER_FREE_VISION_FALLBACK = "openrouter:openrouter/free@none";
+
 export async function critiqueProduction(workspacePath, options = {}, adapters = {}) {
   const workspace = path.resolve(workspacePath);
   const qaDir = path.join(workspace, PRODUCTION_PATHS.qa);
@@ -102,10 +104,35 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
       const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
       const probeModels = adapters.probeOpenRouterFreeVisionModels ?? probeOpenRouterFreeVisionModels;
       const rotated = await recordOutcome(freeVisionSelection, { error: retryError });
-      freeVisionSelection = await probeModels(rotated, { timeoutMs: Number(options.freeVisionProbeTimeoutMs ?? 15_000), excludeIds: [failedModel] });
-      route = parseModelRoute(freeVisionSelection.routes[0]);
-      request.reasoningEffort = route.reasoning;
-      result = await runCriticRequest(route, request, adapters);
+      try {
+        freeVisionSelection = await probeModels(rotated, { timeoutMs: Number(options.freeVisionProbeTimeoutMs ?? 15_000), excludeIds: [failedModel] });
+      } catch (probeError) {
+        freeVisionSelection = degradedFreeVisionSelection(rotated, probeError);
+      }
+      const fallbackRoutes = [...new Set([
+        freeVisionSelection.routes?.[0],
+        OPENROUTER_FREE_VISION_FALLBACK
+      ].filter(Boolean))];
+      const failures = [];
+      for (const fallbackRoute of fallbackRoutes) {
+        route = parseModelRoute(fallbackRoute);
+        request.reasoningEffort = route.reasoning;
+        try {
+          result = await runCriticRequest(route, request, adapters);
+          if (route.model === "openrouter/free") {
+            freeVisionSelection = {
+              ...freeVisionSelection,
+              source: "free-router-fallback",
+              selected_model: result.model,
+              warnings: [...(freeVisionSelection.warnings ?? []), "Ranked free vision endpoints were unavailable; OpenRouter selected the final free vision route."]
+            };
+          }
+          break;
+        } catch (fallbackError) {
+          failures.push(`${route.model}: ${String(fallbackError?.message ?? fallbackError).slice(0, 500)}`);
+        }
+      }
+      if (!result) throw new Error(`All OpenRouter free vision critic routes failed: ${failures.join("; ")}`, { cause: retryError });
     }
   }
   const critique = applyVisualNoveltyFinding(normalizeCritiqueTiming(normalizeCritiqueShape(result.value), plan.shots), visualFingerprint, plan.shots.map((shot) => shot.id));
@@ -146,11 +173,23 @@ async function selectFreeVisionCritic(options, adapters) {
   try {
     return await probeModels(selection, probeOptions);
   } catch (error) {
-    if (selectionOptions.refresh) throw error;
+    if (selectionOptions.refresh) return degradedFreeVisionSelection(selection, error);
     selection = await selectModels({ ...selectionOptions, refresh: true });
     if (!selection?.routes?.length) throw new Error("OpenRouter free vision-model refresh returned no routes", { cause: error });
-    return probeModels(selection, probeOptions);
+    try {
+      return await probeModels(selection, probeOptions);
+    } catch (refreshError) {
+      return degradedFreeVisionSelection(selection, refreshError);
+    }
   }
+}
+
+function degradedFreeVisionSelection(selection, error) {
+  return {
+    ...selection,
+    source: "probe-degraded",
+    warnings: [...(selection?.warnings ?? []), `Live vision probe unavailable; attempting ranked routes directly: ${String(error?.message ?? error).slice(0, 500)}`]
+  };
 }
 
 async function runCriticRequest(route, request, adapters) {
