@@ -200,7 +200,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
     : buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming });
   const customRouting = options.routes != null || options.provider != null || options.model != null || options.baseUrl != null;
   const blueprintInputHash = options.sceneBlueprint
-    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BLUEPRINT_SCHEMA, worker: "frame-blueprint.v3" })
+    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BLUEPRINT_SCHEMA, worker: "frame-blueprint.v4" })
     : null;
   const inputHash = customRouting
     ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, worker: options.sceneBlueprint ? "frame-director.v9" : "frame-director.v5" })
@@ -408,7 +408,7 @@ async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, 
         background: options.background !== false,
         maxOutputTokens: Number(options.blueprintMaxOutputTokens ?? 3_000),
         temperature: Number(routeAttempt === 1 ? options.blueprintTemperature ?? .45 : options.blueprintRepairTemperature ?? .15),
-        promptCacheKey: "launchclip:frame-blueprint:v3",
+        promptCacheKey: "launchclip:frame-blueprint:v4",
         metadata: { job_id: jobId, shot_id: shot.id, stage: "blueprint", attempt: routeAttempt, route: routeIndex + 1 },
         onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
       };
