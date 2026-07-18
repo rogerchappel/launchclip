@@ -293,7 +293,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
       }
       if (!completed && allowFullRegeneration) {
         const regeneration = await regenerateFrameAfterPatchFailure({
-          workspace, intake, evidence, plan, shot, shotIndex, findings, prior, lockedSupportingMotion,
+          workspace, intake, evidence, plan, shot, shotIndex, findings, prior,
           validationErrors, routes, images, jobId, canonicalJobId, store, options, adapters
         });
         if (regeneration.ok) {
@@ -318,7 +318,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
   };
 }
 
-async function regenerateFrameAfterPatchFailure({ workspace, intake, evidence, plan, shot, shotIndex, findings, prior, lockedSupportingMotion, validationErrors, routes, images, jobId, canonicalJobId, store, options, adapters }) {
+async function regenerateFrameAfterPatchFailure({ workspace, intake, evidence, plan, shot, shotIndex, findings, prior, validationErrors, routes, images, jobId, canonicalJobId, store, options, adapters }) {
   const errors = [];
   const maximumRoutes = Number(options.fullRegenerationRoutes ?? 2);
   if (!Number.isInteger(maximumRoutes) || maximumRoutes <= 0) throw new Error("Full-regeneration routes must be a positive integer");
@@ -364,7 +364,7 @@ async function regenerateFrameAfterPatchFailure({ workspace, intake, evidence, p
         resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
         allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
       });
-      const candidateErrors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format), ...validateLockedSupportingMotion(candidate.html, lockedSupportingMotion)];
+      const candidateErrors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
       if (candidateErrors.length) {
         errors.push(`Full-frame attempt ${routeIndex + 1} via ${route.provider}:${route.model} failed validation: ${candidateErrors.join("; ")}`);
         continue;

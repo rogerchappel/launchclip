@@ -526,6 +526,9 @@ test("uses scoped source capsules for remote repair routes when requested", asyn
 
 test("regenerates one complete scene when a free scoped patch cannot pass", async () => {
   const workspace = await fixture();
+  const blueprints = path.join(workspace, "production", "frames", ".blueprints");
+  await mkdir(blueprints, { recursive: true });
+  await writeFile(path.join(blueprints, "shot-2.json"), `${JSON.stringify({ blueprint: { supporting_motion_beats: [{ window_id: "opening", selector: "#shot-2-proof", at_seconds: 0, duration_seconds: 1, ease: "expo.out", changes: [{ property: "x", from_value: -108, to_value: 0 }] }] } })}\n`);
   const schemas = [];
   const client = { supportsImages: false, runStructured: async (request) => {
     schemas.push(request.schemaName);
