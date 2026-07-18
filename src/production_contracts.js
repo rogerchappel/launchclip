@@ -5,7 +5,7 @@ export const FRAME_BUNDLE_VERSION = "launchclip.frame-bundle.v2";
 export const CRITIQUE_VERSION = "launchclip.production-critique.v1";
 export const EVIDENCE_VERSION = "launchclip.evidence.v1";
 export const SHOT_ID_PATTERN = "^[a-z0-9][a-z0-9_-]{0,63}$";
-export const DEFAULT_NARRATED_MUSIC_VOLUME = 0.35;
+export const DEFAULT_NARRATED_MUSIC_VOLUME = 0.15;
 
 export const PRODUCTION_PATHS = Object.freeze({
   intake: "production/intake.json",
