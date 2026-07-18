@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createReadStream, existsSync } from "node:fs";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { resolveStylePack } from "./style_store.js";
 
 export const INTAKE_SCHEMA_VERSION = "launchclip.intake.v1";
 
@@ -175,6 +176,10 @@ async function describeStyle(flags) {
     const location = path.resolve(file);
     if (!existsSync(location)) throw new Error(`Style file does not exist: ${file}`);
     return { family: requestedFamily === "auto" ? "custom" : requestedFamily, source: "file", specification: await readFile(location, "utf8"), specification_path: location, reference };
+  }
+  const pack = await resolveStylePack(requestedFamily, { root: flags["style-root"] });
+  if (pack) {
+    return { family: pack.name, source: "file", specification: pack.specification, specification_path: pack.specification_path, reference, pack_path: pack.path };
   }
   if (reference) return { family: requestedFamily, source: "reference", specification: null, specification_path: null, reference: localLocation(reference) };
   return { family: requestedFamily, source: requestedFamily === "auto" ? "auto" : "preset", specification: null, specification_path: null, reference: null };
