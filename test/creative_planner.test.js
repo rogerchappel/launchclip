@@ -139,6 +139,40 @@ test("rotates to the next proven free planner after a full request failure", asy
   assert.equal(result.free_model_selection.selected_model, "google/gemma-4-26b-a4b-it:free");
 });
 
+test("hands an invalid free plan and exact validator errors to the next model once", async () => {
+  const intake = sampleIntake();
+  intake.model = { provider: "openrouter", id: "openrouter/free", reasoning_effort: "none", reasoning_mode: "standard" };
+  const workspace = await tempWorkspace(intake);
+  const selected = freeSelection(path.join(workspace, "free-model-state.json"));
+  const fallback = {
+    ...selected,
+    source: "rotated-after-failure",
+    selected_model: "google/gemma-4-26b-a4b-it:free",
+    routes: ["openrouter:google/gemma-4-26b-a4b-it:free@none"]
+  };
+  const calls = [];
+  const result = await planProduction(workspace, {}, {
+    selectOpenRouterFreeModels: async () => selected,
+    probeOpenRouterFreeModels: async (_selection, options) => options.excludeIds ? fallback : { ...selected, routes: [selected.routes[0]] },
+    recordOpenRouterFreeModelOutcome: async (_selection, outcome) => {
+      assert.match(outcome.error.message, /failed semantic validation/);
+      return fallback;
+    },
+    createClient: (route) => ({ runStructured: async (options) => {
+      const input = JSON.parse(options.input);
+      calls.push({ model: route.model, input });
+      const plan = samplePlan();
+      if (route.model === "tencent/hy3:free") plan.claims[0].evidence_ids = ["ref-1"];
+      return { response_id: `free-semantic-${calls.length}`, model: route.model, status: "completed", value: plan, usage: {} };
+    } })
+  });
+  assert.deepEqual(calls.map((entry) => entry.model), ["tencent/hy3:free", "tencent/hy3:free", "google/gemma-4-26b-a4b-it:free"]);
+  assert.equal(calls[2].input.prior_attempt.claims[0].evidence_ids[0], "ref-1");
+  assert.match(calls[2].input.validation_errors_to_repair.join(" "), /ineligible evidence id/);
+  assert.equal(result.semantic_attempts, 3);
+  assert.equal(result.free_model_selection.selected_model, "google/gemma-4-26b-a4b-it:free");
+});
+
 test("feeds a failed plan and exact validator errors into one bounded semantic repair", async () => {
   const workspace = await tempWorkspace(sampleIntake());
   const inputs = [];

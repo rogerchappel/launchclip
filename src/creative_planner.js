@@ -123,8 +123,10 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
   let validationErrors = [];
   const attemptPaths = [];
   const semanticAttempts = positiveInteger(options.semanticAttempts ?? 2, "Creative plan semantic attempts");
+  let freeSemanticFallbacks = runtime.selection() ? positiveInteger(options.freeSemanticFallbacks ?? 1, "Free planner semantic fallbacks") : 0;
+  const maximumSemanticAttempts = semanticAttempts + freeSemanticFallbacks;
   try {
-    for (let attempt = 1; attempt <= semanticAttempts; attempt += 1) {
+    for (let attempt = 1; attempt <= maximumSemanticAttempts; attempt += 1) {
       const request = {
         model: runtime.model(),
         reasoningEffort: runtime.reasoning(),
@@ -160,7 +162,12 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
       if (!validation.ok) {
         previousCandidate = plan;
         if (attempt < semanticAttempts) continue;
-        throw new Error(`GPT-5.6 production plan failed semantic validation after ${semanticAttempts} attempts: ${validationErrors.join("; ")}`);
+        if (freeSemanticFallbacks > 0) {
+          await runtime.rotate(new Error(`Free planner failed semantic validation: ${validationErrors.join("; ")}`));
+          freeSemanticFallbacks -= 1;
+          continue;
+        }
+        throw new Error(`Production plan failed semantic validation after ${attempt} attempts: ${validationErrors.join("; ")}`);
       }
 
       const paths = await writePlanArtifacts(workspace, plan);
@@ -217,28 +224,33 @@ async function planningRuntime(intake, options, adapters) {
   });
   const createClient = adapters.createClient ?? createStructuredClient;
   if (defaultRoute.provider !== "openrouter" || defaultRoute.model !== "openrouter/free" || options.selectFreeModels === false) {
-    return directPlanningRuntime(intake, createClient(defaultRoute));
+    return { ...directPlanningRuntime(intake, createClient(defaultRoute)), rotate: async (error) => { throw error; } };
   }
   let selection = await selectFreePlannerModels(options, adapters);
   let route = parseModelRoute(selection.routes[0], { supportsImages: false });
   let client = createClient(route);
+  const failedModelIds = new Set();
+  const rotate = async (error) => {
+    const failedModel = selection.selected_model;
+    failedModelIds.add(failedModel);
+    const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
+    const probeModels = adapters.probeOpenRouterFreeModels ?? probeOpenRouterFreeModels;
+    const rotated = await recordOutcome(selection, { error });
+    selection = await probeModels(rotated, {
+      timeoutMs: Number(options.freeModelProbeTimeoutMs ?? 15_000),
+      excludeIds: [...failedModelIds],
+      stopAfterFirstSuccess: true
+    });
+    route = parseModelRoute(selection.routes[0], { supportsImages: false });
+    client = createClient(route);
+  };
   return {
     client: {
       runStructured: async (request) => {
         try {
           return await client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
         } catch (error) {
-          const failedModel = selection.selected_model;
-          const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
-          const probeModels = adapters.probeOpenRouterFreeModels ?? probeOpenRouterFreeModels;
-          const rotated = await recordOutcome(selection, { error });
-          selection = await probeModels(rotated, {
-            timeoutMs: Number(options.freeModelProbeTimeoutMs ?? 15_000),
-            excludeIds: [failedModel],
-            stopAfterFirstSuccess: true
-          });
-          route = parseModelRoute(selection.routes[0], { supportsImages: false });
-          client = createClient(route);
+          await rotate(error);
           return client.runStructured({ ...request, model: route.model, reasoningEffort: route.reasoning });
         }
       },
@@ -247,7 +259,8 @@ async function planningRuntime(intake, options, adapters) {
     provider: () => route.provider,
     model: () => route.model,
     reasoning: () => route.reasoning,
-    selection: () => selection
+    selection: () => selection,
+    rotate
   };
 }
 
