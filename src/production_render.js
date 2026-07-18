@@ -42,7 +42,11 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
   const cached = !options.forceVerification && toolchain
     ? await readReusableVerification(workspace, receiptPath, inputs)
     : null;
-  if (cached) return verificationResult({ workspace, project, qaDir, snapshots, receipt: cached, cached: true });
+  if (cached) {
+    const result = verificationResult({ workspace, project, qaDir, snapshots, receipt: cached, cached: true });
+    if (result.status === "failed") throw new ProductionVerificationError(result);
+    return result;
+  }
   await Promise.all([
     rm(path.join(qaDir, "shot-inspect"), { recursive: true, force: true }),
     rm(snapshots, { recursive: true, force: true })
@@ -419,9 +423,11 @@ function captureHyperframes(run, args, options) {
 
 async function readReusableVerification(workspace, receiptPath, inputs) {
   const receipt = await readOptionalJson(receiptPath);
-  if (!receipt || receipt.schema_version !== VERIFICATION_SCHEMA || receipt.status !== "passed" || receipt.cacheable !== true) return null;
+  if (!receipt || receipt.schema_version !== VERIFICATION_SCHEMA || !["passed", "failed"].includes(receipt.status) || receipt.cacheable !== true) return null;
   if (receipt.input_hash !== inputs.input_hash || semanticHash(receipt.inputs) !== inputs.input_hash) return null;
-  if (!Array.isArray(receipt.failed) || receipt.failed.length || !receipt.checks || Object.values(receipt.checks).some((check) => check?.ok !== true)) return null;
+  if (!Array.isArray(receipt.failed) || !receipt.checks || receipt.infrastructure_failed?.length) return null;
+  if (receipt.status === "passed" && (receipt.failed.length || Object.values(receipt.checks).some((check) => check?.ok !== true))) return null;
+  if (receipt.status === "failed" && (!receipt.failed.length || receipt.failed.some((name) => receipt.checks[name]?.ok !== false))) return null;
   if (!Array.isArray(receipt.artifacts) || receipt.artifacts.length < 4) return null;
   if (!(await allReceiptFilesMatch(workspace, receipt.artifacts))) return null;
   const snapshotReceipt = receipt.snapshot_artifacts;

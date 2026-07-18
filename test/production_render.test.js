@@ -91,6 +91,28 @@ test("reuses a content-addressed verification receipt with intact reports and sn
   assert.equal(receipt.snapshot_artifacts.files.length, 1);
 });
 
+test("reuses unchanged content-failure evidence for the next repair pass", async () => {
+  const workspace = await fixture();
+  await addShotFixture(workspace);
+  const commands = [];
+  const run = async (_command, args) => {
+    commands.push(args[1]);
+    if (args[1] === "snapshot") await writeFile(path.join(args[args.indexOf("--output") + 1], "frame-00.png"), "snapshot");
+    if (args[1] === "check" && args.at(-1).includes("shot-inspect")) {
+      const error = new Error("missing selector");
+      error.code = 1;
+      error.stdout = JSON.stringify({ ok: false, issues: [{ code: "motion_selector_missing", severity: "error", selector: "#proof" }] });
+      throw error;
+    }
+    return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
+  };
+  const adapters = { run, verifierFingerprint: { hyperframes_cli: "test", browser: "test", node: "test", platform: "test", arch: "test" } };
+  await assert.rejects(() => verifyProduction(workspace, {}, adapters), (error) => error.verification.cached === false);
+  const firstCommands = [...commands];
+  await assert.rejects(() => verifyProduction(workspace, {}, adapters), (error) => error.verification.cached === true);
+  assert.deepEqual(commands, firstCommands);
+});
+
 test("invalidates verification reuse when project content or a receipt artifact changes", async () => {
   const workspace = await fixture();
   let commands = 0;
