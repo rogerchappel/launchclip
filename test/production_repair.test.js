@@ -171,6 +171,18 @@ test("locks blueprint supporting motion through repair input and candidate valid
   assert.match(validateLockedSupportingMotion(weakened, [beat]).join("\n"), /immediateRender:false/);
 });
 
+test("allows a QA patch to replace non-semantic supporting choreography", async () => {
+  const workspace = await fixture();
+  const blueprints = path.join(workspace, "production", "frames", ".blueprints");
+  await mkdir(blueprints, { recursive: true });
+  await writeFile(path.join(blueprints, "shot-2.json"), `${JSON.stringify({ blueprint: { supporting_motion_beats: [{ window_id: "opening", selector: "#shot-2-proof", at_seconds: 0, duration_seconds: 1, ease: "expo.out", changes: [{ property: "x", from_value: -108, to_value: 0 }] }] } })}\n`);
+  const result = await runRepair(workspace, {}, {
+    client: { runStructured: async () => ({ response_id: "qa_motion_patch", model: "gpt-5.6-luna", status: "completed", usage: {}, value: framePatch("shot-2", "Proof", "QA motion repair") }) }
+  });
+  assert.equal(result.repaired.length, 1);
+  assert.match(await readFile(result.repaired[0].html, "utf8"), /QA motion repair/);
+});
+
 test("rejects infrastructure inspection failures before any paid repair call", async () => {
   const workspace = await fixture({ verdict: "ship" });
   const reportPath = path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json");

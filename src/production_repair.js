@@ -9,7 +9,6 @@ import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model
 import { FRAME_BUNDLE_SCHEMA, PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
 import { buildRepairContextCapsule, buildRepairSourceCapsule, REPAIR_CAPSULE_VERSION } from "./repair_capsule.js";
 import { repairProductionPlan } from "./production_plan_repair.js";
-import { validateLockedSupportingMotion } from "./frame_blueprint.js";
 
 const REPAIR_INSTRUCTIONS = `You are repairing one previously authored HyperFrames shot after independent review.
 
@@ -33,9 +32,9 @@ Motion assertions must be truthful. When native inspection reports motion_frozen
 
 Every planned shot.visual object and event remains part of the repair contract. Preserve data-visual-object-id identity, return one motion.events record for every planned visible event, and ensure its selector visibly changes at the exact planned time. Never fix a composition issue by replacing semantic graphics with caption cards, and never leave an SFX-bound event without a visible target.
 
-The repair context contains locked_motion_contract. Treat every listed motion.events event_id, object_id, selector, and at_seconds as immutable. Treat every supporting_motion_beats selector, at_seconds, duration_seconds, ease, changes, and later-beat immediateRender:false as immutable too: never delete, zero, weaken, retime, retarget, or add transform/opacity properties to those fromTo calls. When a supporting beat travels off-frame, move or resize its authored resting CSS geometry so the exact locked travel remains visible. Never change those fields, even when fixing appears-late, out-of-order, missing-selector, contrast, or layout findings. Fix the matching HTML element, clip data-start/data-duration, CSS geometry, or GSAP call so the locked selector visibly changes at the locked time. A descendant selector is not an acceptable substitute.
+The repair context contains locked_motion_contract. Treat every listed motion.events event_id, object_id, selector, and at_seconds as immutable. supporting_motion_beats records the prior implementation, not semantic truth. Preserve unrelated beats, but for a supplied motion finding you may adjust or replace the targeted supporting tween, assertion, clip timing, or CSS geometry when that produces a clearer seek-safe result. A descendant selector is not an acceptable substitute for a locked semantic event.
 
-Do not edit the motion target for a layout, contrast, typography, or geometry-only finding. For a motion assertion finding, edit only the specific assertion field named by the evidence; the locked motion.events ledger still remains unchanged. Before returning, compare every proposed motion edit against locked_motion_contract and remove any edit that changes a locked event field.`;
+Do not edit a motion target for a contrast or typography-only finding. The locked motion.events ledger remains unchanged. Before returning, compare every proposed motion edit against locked_motion_contract and remove any edit that changes a locked event field.`;
 
 const REGENERATION_INSTRUCTIONS = `${LEAN_FRAME_INSTRUCTIONS}
 
@@ -250,7 +249,7 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
               resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role])),
               allowedAssetPaths: intake.resources.filter((entry) => !entry.is_remote && entry.type !== "directory").map((entry) => entry.location)
             });
-            validationErrors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format), ...validateLockedSupportingMotion(candidate.html, lockedSupportingMotion)];
+            validationErrors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format)];
             previousCandidate = candidate;
             if (validationErrors.length) continue;
             const candidateVerification = await (adapters.verifyCandidate ?? verifyFrameCandidate)(workspace, candidate, {
@@ -439,7 +438,7 @@ export function buildRepairInput({ plan, shot, findings, prior, lockedPrior = pr
       immutable_event_fields: ["event_id", "object_id", "selector", "at_seconds"],
       planned_events: (shot?.visual?.events ?? []).map((event) => ({ event_id: event.id, target_object_ids: event.target_ids, at_seconds: event.at_seconds })),
       authored_events: (lockedPrior?.motion?.events ?? []).map((event) => ({ event_id: event.event_id, object_id: event.object_id, selector: event.selector, at_seconds: event.at_seconds })),
-      supporting_motion_beats: lockedSupportingMotion.map((beat) => ({
+      prior_supporting_motion_beats: lockedSupportingMotion.map((beat) => ({
         window_id: beat.window_id,
         selector: beat.selector,
         at_seconds: beat.at_seconds,
@@ -447,7 +446,7 @@ export function buildRepairInput({ plan, shot, findings, prior, lockedPrior = pr
         ease: beat.ease,
         changes: beat.changes
       })),
-      rule: "Preserve authored event identity, selector, and timing plus every supporting fromTo selector, time, duration, ease, and numeric state. Repair CSS geometry around locked motion rather than weakening it."
+      rule: "Preserve authored semantic event identity, selector, and timing. Supporting beats are prior choreography and may change only where a supplied motion finding requires it."
     },
     available_resources: resources.map((entry) => ({ id: entry.id, role: entry.role, type: entry.type })),
     allowed_evidence_ids: evidenceItems.map((entry) => entry.id),
