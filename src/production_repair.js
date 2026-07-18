@@ -137,8 +137,8 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     const blueprintRecord = await readOptionalJson(path.join(workspace, PRODUCTION_PATHS.frames, ".blueprints", `${shotId}.json`), null);
     const lockedSupportingMotion = Array.isArray(blueprintRecord?.blueprint?.supporting_motion_beats) ? blueprintRecord.blueprint.supporting_motion_beats : [];
     const repairInputHash = semanticHash({
-      worker: "frame-repair.v15",
-      candidate_verification: "browser-snapshot.v3",
+      worker: "frame-repair.v16",
+      candidate_verification: "browser-snapshot.v4",
       repair_context: REPAIR_CAPSULE_VERSION,
       routes: routes.map(modelRouteKey),
       source_mode: options.sourceMode ?? "provider-default",
