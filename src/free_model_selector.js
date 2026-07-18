@@ -143,7 +143,8 @@ export async function probeOpenRouterFreeModels(selection, options = {}) {
   const now = options.now ?? (() => new Date());
   const cacheTtlMs = positiveInteger(options.cacheTtlMs ?? DEFAULT_PROBE_CACHE_TTL_MS, "probe cacheTtlMs");
   const probeStartedAt = now();
-  const candidateIds = selection.candidates.map((candidate) => candidate.id).filter((id) => state.candidates.some((candidate) => candidate.id === id));
+  const excludedIds = new Set(options.excludeIds ?? []);
+  const candidateIds = selection.candidates.map((candidate) => candidate.id).filter((id) => state.candidates.some((candidate) => candidate.id === id) && !excludedIds.has(id));
   const recentlyProbed = (candidate) => Number.isFinite(Date.parse(candidate.last_probe_at)) && probeStartedAt.getTime() - Date.parse(candidate.last_probe_at) <= cacheTtlMs;
   const cached = candidateIds.map((id) => state.candidates.find((candidate) => candidate.id === id)).filter(recentlyProbed);
   const liveIds = cached.filter((candidate) => candidate.last_probe_error == null && Number(candidate.probe_successes ?? 0) > 0).map((candidate) => candidate.id);
@@ -180,6 +181,7 @@ export async function probeOpenRouterFreeModels(selection, options = {}) {
         ? { ...entry, probe_successes: Number(entry.probe_successes ?? 0) + 1, consecutive_probe_failures: 0, last_probe_at: probedAt, last_probe_error: null }
         : entry);
       await writeState(statePath, state);
+      if (options.stopAfterFirstSuccess) break;
     } catch (error) {
       const probedAt = now().toISOString();
       const message = sanitizeProbeError(error);
@@ -212,6 +214,7 @@ export async function probeOpenRouterFreeModels(selection, options = {}) {
 export async function probeOpenRouterFreeVisionModels(selection, options = {}) {
   return probeOpenRouterFreeModels(selection, {
     ...options,
+    stopAfterFirstSuccess: true,
     probe: {
       instructions: "Inspect the attached two-panel image. Return only the dominant color of the left and right panels using the supplied enum values.",
       input: "Report the two panel colors in left-to-right order. Do not infer them from text; use the image.",
