@@ -208,8 +208,36 @@ test("rotates to the next proven vision model when the selected critic fails", a
       };
     } })
   });
-  assert.deepEqual(routes, ["google/gemma-4-31b-it:free", "google/gemma-4-26b-a4b-it:free"]);
+  assert.deepEqual(routes, ["google/gemma-4-31b-it:free", "google/gemma-4-31b-it:free", "google/gemma-4-26b-a4b-it:free"]);
   assert.equal(result.free_model_selection.selected_model, "google/gemma-4-26b-a4b-it:free");
+});
+
+test("keeps a proven free vision critic when a transient retry succeeds", async () => {
+  const workspace = await fixture();
+  const ranked = visionSelection(path.join(workspace, "vision-state.json"));
+  let attempts = 0;
+  let rotations = 0;
+  const result = await critiqueProduction(workspace, { selectFreeVision: true }, {
+    selectOpenRouterFreeVisionModels: async () => ranked,
+    probeOpenRouterFreeVisionModels: async () => ({ ...ranked, source: "live-probe", routes: [ranked.routes[0]] }),
+    recordOpenRouterFreeModelOutcome: async () => {
+      rotations += 1;
+      return ranked;
+    },
+    createClient: (route) => ({ runStructured: async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("temporary critic capacity failure");
+      return {
+        response_id: "resp_retried_vision",
+        model: route.model,
+        usage: {},
+        value: { schema_version: CRITIQUE_VERSION, verdict: "ship", summary: "The retried critic reviewed the pixels.", findings: [] }
+      };
+    } })
+  });
+  assert.equal(attempts, 2);
+  assert.equal(rotations, 0);
+  assert.equal(result.free_model_selection.selected_model, "google/gemma-4-31b-it:free");
 });
 
 test("compacts raw temporal samples before sending a production critique", async () => {

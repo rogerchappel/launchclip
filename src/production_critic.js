@@ -93,14 +93,18 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
     result = await runCriticRequest(route, request, adapters);
   } catch (error) {
     if (!freeVisionSelection || adapters.client) throw error;
-    const failedModel = freeVisionSelection.selected_model;
-    const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
-    const probeModels = adapters.probeOpenRouterFreeVisionModels ?? probeOpenRouterFreeVisionModels;
-    const rotated = await recordOutcome(freeVisionSelection, { error });
-    freeVisionSelection = await probeModels(rotated, { timeoutMs: Number(options.freeVisionProbeTimeoutMs ?? 15_000), excludeIds: [failedModel] });
-    route = parseModelRoute(freeVisionSelection.routes[0]);
-    request.reasoningEffort = route.reasoning;
-    result = await runCriticRequest(route, request, adapters);
+    try {
+      result = await runCriticRequest(route, request, adapters);
+    } catch (retryError) {
+      const failedModel = freeVisionSelection.selected_model;
+      const recordOutcome = adapters.recordOpenRouterFreeModelOutcome ?? recordOpenRouterFreeModelOutcome;
+      const probeModels = adapters.probeOpenRouterFreeVisionModels ?? probeOpenRouterFreeVisionModels;
+      const rotated = await recordOutcome(freeVisionSelection, { error: retryError });
+      freeVisionSelection = await probeModels(rotated, { timeoutMs: Number(options.freeVisionProbeTimeoutMs ?? 15_000), excludeIds: [failedModel] });
+      route = parseModelRoute(freeVisionSelection.routes[0]);
+      request.reasoningEffort = route.reasoning;
+      result = await runCriticRequest(route, request, adapters);
+    }
   }
   const critique = applyVisualNoveltyFinding(result.value, visualFingerprint, plan.shots.map((shot) => shot.id));
   const validation = validateCritique(critique, plan.shots.map((shot) => shot.id));
