@@ -55,10 +55,11 @@ test("judges actual rendered candidates and applies deterministic score selectio
     shot: fixturePlan().shots[0],
     candidates,
     trigger: { kind: "hook", reasons: ["opening-hook"] }
-  }, {}, { client });
+  }, { route: "openai:gpt-5.6@none", reasoning: "xhigh" }, { client });
   assert.equal(result.winner.id, "candidate-b");
   assert.equal(result.calls, 1);
   assert.equal(received.reasoningContext, "current_turn");
+  assert.equal(received.reasoningEffort, "xhigh");
   assert.equal(received.images.length, 6);
   assert.ok(received.images.every((entry) => entry.detail === "high" && entry.url.startsWith("data:image/png;base64,")));
   const input = JSON.parse(received.input);
