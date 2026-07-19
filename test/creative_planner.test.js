@@ -114,7 +114,26 @@ test("binds cinematic edit planning to the selected concept and approved retenti
   const client = { runStructured: async (request) => {
     inputs.push(JSON.parse(request.input));
     const plan = samplePlan();
-    if (inputs.length === 1) plan.narration.full_text = "The planner rewrote the approved story.";
+    if (inputs.length === 1) {
+      plan.narration.full_text = "The planner rewrote the approved story.";
+      const payoff = structuredClone(plan.shots[1]);
+      plan.shots[1].end_seconds = 7;
+      plan.shots[1].visual.continuity.handoff = "resolve";
+      plan.shots[1].visual.continuity.hands_off_object_ids = [];
+      payoff.id = "shot-3";
+      payoff.start_seconds = 7;
+      payoff.end_seconds = 10;
+      payoff.visual.continuity = {
+        ...payoff.visual.continuity,
+        sequence_id: "payoff-sequence",
+        handoff: "resolve",
+        inherits_object_ids: [],
+        hands_off_object_ids: [],
+        entry_velocity: 0,
+        exit_velocity: 0
+      };
+      plan.shots.push(payoff);
+    }
     return { response_id: `cinematic-plan-${inputs.length}`, model: "gpt-5.6", status: "completed", value: plan, usage: {} };
   } };
 
@@ -128,6 +147,7 @@ test("binds cinematic edit planning to the selected concept and approved retenti
   assert.deepEqual(inputs[0].narration.word_timing, [{ word: "Proof", start: 0.2, end: 0.6 }]);
   assert.equal(inputs[1].prior_attempt.narration.full_text, "The planner rewrote the approved story.");
   assert.match(inputs[1].validation_errors_to_repair.join(" "), /retention-story narration must be preserved exactly/);
+  assert.match(inputs[1].validation_errors_to_repair.join(" "), /seq-001.*must span 8-20 seconds; actual 7/);
 });
 
 test("creates the planning client from the intake provider route", async () => {
