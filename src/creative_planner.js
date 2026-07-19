@@ -95,7 +95,7 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
     await store.markStaleFrom([jobId]);
   }
   const current = store.get(jobId);
-  const dependencies = store.get("retention-story") ? ["retention-story"] : store.get("source-media-analysis") ? ["source-media-analysis"] : [];
+  const dependencies = store.get("cinematic-narration") ? ["cinematic-narration"] : store.get("retention-story") ? ["retention-story"] : store.get("source-media-analysis") ? ["source-media-analysis"] : [];
   let resumeResponseId = null;
   if (!current) {
     await store.add({ id: jobId, kind: "creative-plan", depends_on: dependencies, input_hash: inputHash, max_attempts: Number(options.maxAttempts ?? 3) });
@@ -367,6 +367,21 @@ export function buildPlanningInput(intake, evidence, suppliedNarration = null, o
   const evidenceBudget = Number(options.evidenceChars ?? 220_000);
   const items = compactEvidence(evidence.items, evidenceBudget);
   const narration = typeof suppliedNarration === "string" ? { transcript: suppliedNarration, words: [], duration_seconds: null } : suppliedNarration;
+  const cinematicTiming = options.cinematicNarrationTiming;
+  const narrationInput = cinematicTiming
+    ? {
+        source: options.cinematicStory?.narration?.source ?? "generated",
+        authoritative_transcript: options.cinematicStory?.narration?.full_text ?? null,
+        measured_duration_seconds: cinematicTiming.duration_seconds,
+        word_timing: cinematicTiming.words ?? [],
+        pauses: cinematicTiming.pauses ?? [],
+        beat_timings: cinematicTiming.beat_timings ?? [],
+        performance_path: cinematicTiming.voiceover?.path ?? null,
+        timing_source: cinematicTiming.timing_source
+      }
+    : narration
+      ? { source: "supplied", authoritative_transcript: narration.transcript, measured_duration_seconds: narration.duration_seconds, word_timing: narration.words }
+      : { source: "generated", authoritative_transcript: null, measured_duration_seconds: null, word_timing: [] };
   return JSON.stringify({
     brief: {
       source_kind: intake.source.kind,
@@ -374,7 +389,7 @@ export function buildPlanningInput(intake, evidence, suppliedNarration = null, o
       audience: intake.brief.audience,
       call_to_action: intake.brief.cta,
       language: intake.brief.language,
-      requested_duration_seconds: narration?.duration_seconds ?? intake.brief.duration_seconds,
+      requested_duration_seconds: cinematicTiming?.duration_seconds ?? narration?.duration_seconds ?? intake.brief.duration_seconds,
       requested_format: intake.brief.aspect,
       style: intake.brief.style ?? { family: "auto", source: "auto", specification: null, reference: null }
     },
@@ -391,9 +406,7 @@ export function buildPlanningInput(intake, evidence, suppliedNarration = null, o
       catalog: entry.catalog ?? null
     })),
     available_sfx: (options.sfxCatalog ?? []).map(String),
-    narration: narration
-      ? { source: "supplied", authoritative_transcript: narration.transcript, measured_duration_seconds: narration.duration_seconds, word_timing: narration.words }
-      : { source: "generated", authoritative_transcript: null, measured_duration_seconds: null, word_timing: [] },
+    narration: narrationInput,
     policies: intake.policies,
     evidence_warnings: evidence.warnings,
     visual_novelty: options.noveltyContext ?? null,
