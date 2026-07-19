@@ -180,6 +180,11 @@ composition:
 - `QUALITY.md`: project-specific pass/fail targets for typography, hierarchy,
   hook timing, change cadence, transition variety, motion physics, safe areas,
   source fidelity, and final artifact probing
+- `qa/rendered-candidates.json`: rendered-pixel comparison for two independent
+  opening candidates and one representative high-risk transition grammar,
+  including scores, deterministic winner, and rejection reasons
+- `qa/temporal-evidence/manifest.json`: hashed hook, sequence, transition,
+  event, and settle evidence reviewed by the fresh-context critic
 - `CINEMATIC-READINESS.json`: generated only by the local cinematic check after
   the draft, critic receipt, and all required evidence exist
 
@@ -231,6 +236,12 @@ of unrelated title cards. For every scene:
   world: keep stable anchors such as the presenter, frame, or navigation rail
   fixed and pan the graphic plane between them. Reserve full resets for a real
   topic, scale, or emotional change.
+- Group related beats into persistent 8–20 second shared worlds. For a complete
+  video shorter than eight seconds, use one full-runtime world. Keep one
+  coordinate/depth system, stable object IDs, cumulative state, camera path,
+  light, materials, entry/exit geometry, velocity, and blur envelope across
+  each world. Treat an independent full-frame DOM reset as a cut, not
+  continuity.
 - Reserve safe areas for captions and platform UI when applicable.
 - For every presenter-plus-graphic scene, declare a presenter-safe area and a
   non-overlapping graphic zone in `STORYBOARD.md`. Pan or crop the presenter
@@ -298,18 +309,25 @@ reference. Work in this order:
 6. Write and independently edit the canonical retention story.
 7. Produce or prepare narration, measure the real take, then freeze the
    storyboard, design system, music/edit grid, and quality targets.
-8. Author the composition and a motion sidecar from those frozen artifacts.
-9. Run static lint early.
-10. Run strict browser checks with transition and dense-hook snapshots. Sample
+8. Put `data-launchclip-cinematic-contract="phase-2"` on the composition root.
+   Render two independent opening candidates and two candidates for one
+   representative unproven transition grammar. Compare their real pixels and
+   motion at delivery size, choose deterministically, and preserve the
+   candidate receipt and artifacts before full authoring.
+9. Author the composition and a motion sidecar from the selected treatment and
+   frozen artifacts.
+10. Run static lint early.
+11. Run strict browser checks with transition and dense-hook snapshots. Sample
    shared-world moves at departure, early acceleration, peak speed, late
    deceleration, and settle rather than checking only their endpoints.
-11. Inspect every generated overview image, not only the command exit code.
-12. Review the opening, every transition boundary, every major type state, and
+12. Inspect every generated overview image, not only the command exit code.
+13. Review the opening, every transition boundary, every major type state, and
     the final frame at delivery scale. Scrub adjacent frames when a snapshot
     suggests clipping, popping, or a discontinuity.
-13. Render a local draft, obtain a fresh-context critic receipt, and run
+14. Render a local draft, build the hashed temporal-evidence manifest, require
+    the fresh-context critic to cite reviewed evidence IDs, and run
     `launchclip cinematic-check`.
-14. Repair the smallest responsible sequence, mix, or plan, then rerun the
+15. Repair the smallest responsible sequence, mix, or plan, then rerun the
     failed gate. Stop after three bounded passes and report `needs-repair`
     instead of weakening the contract.
 

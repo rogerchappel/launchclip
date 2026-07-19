@@ -140,6 +140,9 @@ Author the top-level `index.html` as a standalone composition:
 
 - Put one visible root element directly in `<body>` with
   `data-composition-id`, `data-duration`, `data-width`, and `data-height`.
+- Put `data-launchclip-cinematic-contract="phase-2"` on the root for every new
+  project authored by this workflow. Do not silently retrofit the marker onto
+  a legacy project that has not produced the required phase-2 evidence.
 - Give the root an explicit pixel-sized box. A `height: 100%` child is valid
   only when every ancestor has a resolved height.
 - Do not wrap the standalone root in `<template>`.
@@ -153,6 +156,10 @@ Author the top-level `index.html` as a standalone composition:
 - Put a full-frame background on an absolutely positioned child, not on the
   composition root.
 - Give every assembled DOM id a unique, composition-prefixed value.
+- Mark each shared-world plane with `data-launchclip-sequence-id`. Mark every
+  declared boundary with `data-launchclip-transition-start` and
+  `data-launchclip-transition-duration`; include stable from/to IDs when the
+  transition hands an object or plane across the boundary.
 
 Keep rendering deterministic and seek-safe:
 
@@ -222,8 +229,13 @@ constraints:
   morphs preserve identity, whips create an energetic discontinuity, and masks
   redirect focus. Each must have a visibly different spatial behavior.
 - The first frame must already communicate an intentional state. The first
-  second states the promise, and the first four seconds contain at least two
-  meaningful changes in layout, evidence, framing, or visual register.
+  second states the promise. The first four seconds contain at least three
+  meaningful changes in layout, evidence, framing, or visual register for
+  portrait, or two for landscape.
+- Keep outgoing and incoming shared-world planes alive for the full declared
+  transition duration. Use one continuous position curve and a velocity-shaped
+  blur envelope: zero blur at departure, strongest near peak speed, and zero at
+  settle. Do not remove the outgoing plane before the incoming plane settles.
 
 Prefer a small authored scene grammar over a rigid template: presenter anchor,
 presenter-plus-proof split, full-frame diagram, kinetic type reset, evidence/UI
@@ -297,6 +309,22 @@ View snapshots at delivery size. An overview can hide weak hierarchy, tiny
 type, one-frame overlaps, or a blur that never resolves. When a transition is
 suspect, snapshot neighboring times in 50-100 ms increments and repair the
 timeline rather than accepting the artifact.
+
+For a phase-2 project, build `qa/temporal-evidence/manifest.json` from exact
+samples. Clamp every timestamp to the composition duration and deduplicate it:
+
+- hook: `0,0.25,0.5,0.75,1,1.5,2,3,4`
+- ordinary boundary: immediately before, midpoint, and immediately after
+- shared-world move: before, departure, 20%, 50%, 80%, settle, and after
+- each sequence: entry, settled state, shot midpoint, planned visible event,
+  and final hold
+
+Capture both HyperFrames snapshots and frames extracted from the encoded draft;
+the latter proves the delivered artifact rather than only the browser preview.
+Give every manifest entry a stable evidence ID, role, timestamp, sequence or
+boundary ID, filename, and file hash. Fail the review when an expected file is
+missing, empty, stale relative to the draft, out of range, or not cited by the
+fresh-context critic.
 
 ## Preview and approval
 
