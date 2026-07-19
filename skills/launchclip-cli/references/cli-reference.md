@@ -128,12 +128,24 @@ Model policies:
 explicit model policy is supplied it selects `quality`, generates five distinct
 concepts, judges them independently, writes and independently edits a retention
 story, produces/measures narration before final edit planning, requires scene
-blueprints, disables deterministic frame fallback, and allows up to three
-bounded repair passes. It also requires the concept, story, narration, plan,
-frames, motion, audio, verification, and critic receipts before readiness.
+blueprints, renders two independent frame candidates for the opening and one
+highest-value proof, payoff, or continuity shot, then selects from their actual
+pixel lifecycles with a fresh vision judge. It disables deterministic frame
+fallback and allows up to three bounded repair passes. It also requires the
+concept, story, narration, plan, frames, motion, audio, verification, and critic
+receipts before readiness.
 Do not add `--model-policy cost-aware` to a cinematic example unless that
 quality tradeoff is intentional. Do not pair `--fast-eval` with a claim of
 maximum one-shot quality.
+
+The cinematic defaults are `--rendered-candidates 2` and
+`--rendered-candidate-shots 2`. Tune them only when intentionally changing the
+cost/quality tradeoff. Pin the fresh visual selector with
+`--candidate-judge-route`, `--candidate-judge-reasoning`, and
+`--candidate-judge-max-output-tokens`. A cinematic run requires both candidates
+to pass mounted-pixel verification before selection and preserves the scorecard
+under `production/qa/candidate-selection/<shot-id>/selection.json`. Standard
+production keeps one frame candidate unless explicitly overridden.
 
 Pin one or more routes with repeatable
 `--frame-route provider:model@reasoning` and
