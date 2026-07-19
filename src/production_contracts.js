@@ -10,6 +10,8 @@ export const DEFAULT_NARRATED_MUSIC_VOLUME = 0.15;
 export const PRODUCTION_PATHS = Object.freeze({
   intake: "production/intake.json",
   evidence: "production/evidence.json",
+  conceptCandidates: "production/concept-candidates.json",
+  concepts: "production/concepts.json",
   plan: "production/plan.json",
   jobs: "production/jobs.json",
   script: "production/SCRIPT.md",
