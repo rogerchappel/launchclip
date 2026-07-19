@@ -1,11 +1,11 @@
 import { execFile } from "node:child_process";
-import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { applyFrameCsp, toHyperFramesMotionSpec } from "./hyperframes_assembler.js";
+import { applyFrameCsp, renderRoot, rootMotionSpec, toHyperFramesMotionSpec } from "./hyperframes_assembler.js";
 import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
 import { ensureTextContainment } from "./hyperframes_text.js";
-import { injectProductionFontFaces } from "./production_fonts.js";
+import { freezeProductionFonts, injectProductionFontFaces, productionFontFamilies } from "./production_fonts.js";
 import { PRODUCTION_PATHS } from "./production_contracts.js";
 import { runHyperframes } from "./toolchain.js";
 import { analyzePng } from "./visual_snapshot.js";
@@ -31,7 +31,7 @@ export async function verifyFrameCandidate(workspacePath, bundle, options = {}, 
   }, adapters);
   const comparison = compareEvidence(candidate, baseline, options);
   const report = {
-    schema_version: "launchclip.frame-candidate-verification.v4",
+    schema_version: "launchclip.frame-candidate-verification.v5",
     shot_id: shot.id,
     attempt,
     status: comparison.ok ? "passed" : "failed",
@@ -57,24 +57,37 @@ async function captureBundle(workspace, bundle, options, adapters) {
   const assets = path.join(project, "assets");
   const snapshots = path.join(root, "snapshots");
   await Promise.all([mkdir(compositions, { recursive: true }), mkdir(assets, { recursive: true }), mkdir(snapshots, { recursive: true })]);
-  const fontCss = await assembledFontCss(workspace, bundle.shot_id);
-  const html = applyFrameCsp(ensureTextContainment(ensureTimelineRegistration(injectProductionFontFaces(bundle.html, fontCss), bundle.shot_id), bundle.shot_id));
-  const motion = toHyperFramesMotionSpec(bundle, options.duration);
+  const mountedBundle = { ...bundle, root_media_requests: bundle.root_media_requests ?? [] };
+  const staged = await stageCandidateAssets(assets, mountedBundle, options);
+  const fontCss = staged.fontCss || await assembledFontCss(workspace, bundle.shot_id);
+  let html = injectProductionFontFaces(mountedBundle.html, fontCss);
+  for (const [source, frozen] of staged.replacements) html = html.split(source).join(`assets/${frozen}`);
+  html = applyFrameCsp(ensureTextContainment(ensureTimelineRegistration(html, bundle.shot_id), bundle.shot_id));
+  const motion = toHyperFramesMotionSpec(mountedBundle, options.duration);
+  const shot = { ...options.shot, start_seconds: 0, end_seconds: options.duration };
+  const plan = {
+    ...(options.plan ?? {}),
+    design: options.plan?.design ?? { style_dna: {} },
+    format: { ...(options.plan?.format ?? options.format), ...options.format, duration_seconds: options.duration },
+    shots: [shot]
+  };
   await Promise.all([
-    writeFile(path.join(compositions, "shot.html"), `${html.trim()}\n`),
-    writeFile(path.join(project, "index.motion.json"), `${JSON.stringify(motion, null, 2)}\n`),
-    writeFile(path.join(project, "index.html"), inspectionRoot(options.shot, options.format, options.duration)),
+    writeFile(path.join(compositions, `${bundle.shot_id}.html`), `${html.trim()}\n`),
+    writeFile(path.join(compositions, `${bundle.shot_id}.motion.json`), `${JSON.stringify(motion, null, 2)}\n`),
+    writeFile(path.join(project, "index.motion.json"), `${JSON.stringify(rootMotionSpec(plan, [mountedBundle]), null, 2)}\n`),
+    writeFile(path.join(project, "index.html"), renderRoot({ plan, bundles: [mountedBundle], assetMap: staged.assetMap })),
     copyCandidateAssets(workspace, project, html)
   ]);
 
   const run = adapters.run ?? runCommand;
   const check = await capture(run, [
-    "check", "--json", "--samples", String(options.samples ?? 9), "--at-transitions",
-    "--frame-check", "severity=error;seek=.2,.5,.8;tol=2", project
+    "check", "--json", "--samples", String(options.samples ?? 12), "--at-transitions",
+    "--frame-check", "severity=error;seek=.05,.25,.5,.8;tol=2", project
   ], project);
   const shouldSnapshot = check.ok || (options.compareContentFailures && check.failure_kind === "content");
+  const sampledTimes = sampleTimes(options.duration);
   const snapshot = shouldSnapshot ? await capture(run, [
-    "snapshot", "--at", sampleTimes(options.duration).join(","), "--no-end", "--output", snapshots, "--describe", "false", project
+    "snapshot", "--at", sampledTimes.join(","), "--no-end", "--output", snapshots, "--describe", "false", project
   ], project) : { ok: false, exit_code: null, stdout: null, stderr: "Skipped because candidate check failed", failure_kind: check.failure_kind };
   let frames = [];
   let analysisError = null;
@@ -84,6 +97,7 @@ async function captureBundle(workspace, bundle, options, adapters) {
         .filter((entry) => entry.isFile() && /^frame-.*\.png$/i.test(entry.name))
         .map((entry) => entry.name)
         .sort();
+      if (files.length !== sampledTimes.length) analysisError = `HyperFrames snapshot produced ${files.length} frames for ${sampledTimes.length} requested timestamps`;
       frames = await Promise.all(files.map(async (name) => ({
         file: path.relative(workspace, path.join(snapshots, name)).split(path.sep).join("/"),
         ...analyzePng(await readFile(path.join(snapshots, name)), options.visualThresholds)
@@ -178,7 +192,32 @@ async function assembledFontCss(workspace, shotId) {
 async function copyCandidateAssets(workspace, project, html) {
   const names = [...new Set([...String(html ?? "").matchAll(/\bassets\/([a-zA-Z0-9._-]+)/g)].map((match) => match[1]))];
   const source = path.join(workspace, PRODUCTION_PATHS.hyperframes, "assets");
-  await Promise.all(names.map((name) => copyFile(path.join(source, name), path.join(project, "assets", name))));
+  await Promise.all(names.map(async (name) => {
+    const destination = path.join(project, "assets", name);
+    try { await access(destination); return; } catch {}
+    await copyFile(path.join(source, name), destination);
+  }));
+}
+
+async function stageCandidateAssets(assets, bundle, options) {
+  const assetMap = new Map();
+  const replacements = new Map();
+  const requestedIds = new Set((bundle.root_media_requests ?? []).map((request) => request.resource_id));
+  for (const resource of options.intake?.resources ?? []) {
+    if (resource.is_remote || resource.type === "directory" || !resource.location) continue;
+    if (!requestedIds.has(resource.id) && !String(bundle.html ?? "").includes(resource.location)) continue;
+    const extension = path.extname(resource.location).replace(/[^a-zA-Z0-9.]/g, "").slice(0, 12);
+    const file = `resource-${safeSegment(resource.id)}${extension || ""}`;
+    await copyFile(resource.location, path.join(assets, file));
+    assetMap.set(resource.id, { file });
+    replacements.set(resource.location, file);
+  }
+  for (const request of bundle.root_media_requests ?? []) {
+    if (!assetMap.has(request.resource_id)) throw new Error(`Candidate ${bundle.shot_id} requested unavailable local media: ${request.resource_id}`);
+  }
+  const fonts = await freezeProductionFonts(productionFontFamilies(options.plan), assets, { fetch: options.fetch });
+  for (const font of fonts.assets) assetMap.set(font.id, font);
+  return { assetMap, replacements, fontCss: fonts.css };
 }
 
 async function capture(run, args, cwd) {
@@ -326,37 +365,14 @@ function parseOutput(value) {
 }
 
 function sampleTimes(duration) {
-  return [.2, .5, .8].map((fraction) => Number((duration * fraction).toFixed(3)));
+  return [...new Set([0, Math.min(.25, duration * .1), duration * .25, duration * .5, duration * .8, duration - .05]
+    .map((value) => Math.max(0, Math.min(duration - .05, Number(value.toFixed(3))))))];
 }
 
 function safeSegment(value) {
   const safe = String(value).replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
   if (!safe) throw new Error("Candidate verification attempt must have a safe label");
   return safe;
-}
-
-function inspectionRoot(shot, format, duration) {
-  return `<!doctype html>
-<html lang="${escapeHtml(format.language ?? "en")}">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=${Number(format.width)}, height=${Number(format.height)}">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
-  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
-  <style>*{box-sizing:border-box}html,body{margin:0;width:${Number(format.width)}px;height:${Number(format.height)}px;overflow:hidden;background:#000}#shot-verification-root,.shot-mount{position:absolute;inset:0;width:100%;height:100%}</style>
-</head>
-<body>
-  <div id="shot-verification-root" data-composition-id="main" data-start="0" data-duration="${duration}" data-width="${Number(format.width)}" data-height="${Number(format.height)}">
-    <div id="verify-${shot.id}" class="clip shot-mount" data-composition-id="${shot.id}" data-composition-src="compositions/shot.html" data-start="0" data-duration="${duration}" data-track-index="1" data-width="${Number(format.width)}" data-height="${Number(format.height)}"></div>
-    <script>window.__timelines=window.__timelines||{};window.__timelines.main=gsap.timeline({paused:true});</script>
-  </div>
-</body>
-</html>
-`;
-}
-
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 }
 
 function runCommand(command, args, options) {

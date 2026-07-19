@@ -10,7 +10,7 @@ test("passes a checked candidate with meaningful snapshots", async () => {
   const workspace = await fixture();
   const result = await verifyFrameCandidate(workspace, bundle(), context("pass-1"), { run: snapshotRun("detailed") });
   assert.equal(result.ok, true);
-  assert.equal(result.frames.length, 3);
+  assert.equal(result.frames.length, 6);
   assert.ok(result.frames.every((frame) => frame.blank === false));
   const report = JSON.parse(await readFile(result.report, "utf8"));
   assert.equal(report.status, "passed");
@@ -115,8 +115,8 @@ test("stages candidates with assembled fonts and native HyperFrames motion", asy
     if (args[1] === "check") {
       const project = String(args.at(-1));
       const [html, motion] = await Promise.all([
-        readFile(path.join(project, "compositions", "shot.html"), "utf8"),
-        readFile(path.join(project, "index.motion.json"), "utf8").then(JSON.parse)
+        readFile(path.join(project, "compositions", "shot-1.html"), "utf8"),
+        readFile(path.join(project, "compositions", "shot-1.motion.json"), "utf8").then(JSON.parse)
       ]);
       assert.match(html, /font-family: "Proof Sans"/);
       assert.match(html, /data-launchclip-text-containment="v6"/);
@@ -126,6 +126,49 @@ test("stages candidates with assembled fonts and native HyperFrames motion", asy
     return snapshotRun("detailed")(_command, args);
   };
   const result = await verifyFrameCandidate(workspace, candidate, context("assembled-contract-1"), { run });
+  assert.equal(result.ok, true);
+});
+
+test("mounts local proof assets and root presenter media before judging pixels", async () => {
+  const workspace = await fixture();
+  const proof = path.join(workspace, "proof.png");
+  const presenter = path.join(workspace, "presenter.mov");
+  await Promise.all([writeFile(proof, "proof"), writeFile(presenter, "presenter")]);
+  const candidate = {
+    ...bundle(),
+    html: bundle().html.replace("</div><script>", `<img id="proof-image" src="${proof}"></div><script>`),
+    root_media_requests: [{
+      resource_id: "presenter", kind: "video", start_seconds: 0, end_seconds: 5,
+      source_start_seconds: 0, source_end_seconds: 5, volume: 0,
+      presentation: { mode: "companion", frame: "desktop-window", enter: "slide-up", exit: "slide-down", motion_blur_px: 12 },
+      placement: { x: 60, y: 900, width: 420, height: 620, object_fit: "cover", border_radius: 24, z_index: 20, treatment: "warm presenter window" }
+    }]
+  };
+  const options = {
+    ...context("root-media-1"),
+    intake: { resources: [
+      { id: "proof", type: "image", location: proof, is_remote: false },
+      { id: "presenter", type: "video", location: presenter, is_remote: false }
+    ] },
+    plan: { design: { style_dna: {} }, format: { width: 1080, height: 1920, duration_seconds: 5 }, shots: [] }
+  };
+  const run = async (_command, args) => {
+    if (args[1] === "check") {
+      const project = String(args.at(-1));
+      const [root, composition, rootMotion] = await Promise.all([
+        readFile(path.join(project, "index.html"), "utf8"),
+        readFile(path.join(project, "compositions", "shot-1.html"), "utf8"),
+        readFile(path.join(project, "index.motion.json"), "utf8").then(JSON.parse)
+      ]);
+      assert.match(root, /<video[^>]+src="assets\/resource-presenter\.mov"/);
+      assert.match(composition, /src="assets\/resource-proof\.png"/);
+      assert.equal(rootMotion.assertions[0].selector, "#mount-shot-1");
+      assert.equal(await readFile(path.join(project, "assets", "resource-presenter.mov"), "utf8"), "presenter");
+      return { stdout: JSON.stringify({ ok: true, findings: [] }), stderr: "" };
+    }
+    return snapshotRun("detailed")(_command, args);
+  };
+  const result = await verifyFrameCandidate(workspace, candidate, options, { run });
   assert.equal(result.ok, true);
 });
 
@@ -167,11 +210,12 @@ function snapshotRun(kind) {
     if (command === "snapshot") {
       const output = args[args.indexOf("--output") + 1];
       await mkdir(output, { recursive: true });
-      for (let index = 0; index < 3; index += 1) {
+      const timestamps = args[args.indexOf("--at") + 1].split(",");
+      for (const [index, timestamp] of timestamps.entries()) {
         const image = kind === "blank"
           ? png(30, 50, () => [238, 232, 216, 255])
           : png(30, 50, (x, y) => x > 4 && x < 25 && y > 10 && y < 40 ? [20, 24, 30, 255] : [238, 232, 216, 255]);
-        await writeFile(path.join(output, `frame-0${index}-at-${index}s.png`), image);
+        await writeFile(path.join(output, `frame-${String(index).padStart(2, "0")}-at-${timestamp}s.png`), image);
       }
       return { stdout: "snapshots saved", stderr: "" };
     }
@@ -188,8 +232,9 @@ function comparativeRun(findingsFor) {
     if (command === "snapshot") {
       const output = args[args.indexOf("--output") + 1];
       await mkdir(output, { recursive: true });
-      for (let index = 0; index < 3; index += 1) {
-        await writeFile(path.join(output, `frame-0${index}-at-${index}s.png`), png(30, 50, (x, y) => x > 4 && x < 25 && y > 10 && y < 40 ? [20, 24, 30, 255] : [238, 232, 216, 255]));
+      const timestamps = args[args.indexOf("--at") + 1].split(",");
+      for (const [index, timestamp] of timestamps.entries()) {
+        await writeFile(path.join(output, `frame-${String(index).padStart(2, "0")}-at-${timestamp}s.png`), png(30, 50, (x, y) => x > 4 && x < 25 && y > 10 && y < 40 ? [20, 24, 30, 255] : [238, 232, 216, 255]));
       }
       return { stdout: "snapshots saved", stderr: "" };
     }
