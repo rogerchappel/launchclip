@@ -139,6 +139,33 @@ test("uses Terra for planning unless quality or an explicit model is requested",
   assert.equal(explicit.model.reasoning_effort, "low");
 });
 
+test("enables an opt-in cinematic portrait profile with quality planning defaults", async () => {
+  const intake = await buildIntake("A product", {
+    kind: "product",
+    profile: "cinematic",
+    aspect: "9:16",
+    duration: 45
+  }, {});
+
+  assert.equal(intake.profile.id, "cinematic");
+  assert.equal(intake.profile.lane, "portrait-short");
+  assert.equal(intake.profile.planning.concept_candidates, 5);
+  assert.equal(intake.profile.planning.narration_timing_before_edit, true);
+  assert.equal(intake.profile.planning.require_frame_blueprints, true);
+  assert.equal(intake.profile.craft.minimum_hook_material_changes, 3);
+  assert.equal(intake.profile.craft.maximum_material_change_gap_seconds, 2);
+  assert.deepEqual(intake.profile.readiness.required_receipts, ["plan", "frames", "motion", "audio", "verification", "critic"]);
+  assert.deepEqual(intake.model, { provider: "openai", id: "gpt-5.6", reasoning_effort: "xhigh", reasoning_mode: "standard" });
+});
+
+test("keeps the standard profile behavior unchanged and rejects unknown profiles", async () => {
+  const intake = await buildIntake("A product", { kind: "product" }, {});
+  assert.equal(intake.profile.id, "standard");
+  assert.equal(intake.profile.one_shot, false);
+  assert.equal(intake.model.id, "gpt-5.6-terra");
+  await assert.rejects(buildIntake("A product", { kind: "product", profile: "viral" }, {}), /Unsupported --profile/);
+});
+
 test("keeps free-policy planning on OpenRouter's free router", async () => {
   const intake = await buildIntake("A product", { kind: "product", "model-policy": "free" }, {});
   assert.deepEqual(intake.model, { provider: "openrouter", id: "openrouter/free", reasoning_effort: "none", reasoning_mode: "standard" });
