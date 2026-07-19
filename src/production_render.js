@@ -9,6 +9,7 @@ import { DEFAULT_NARRATED_MUSIC_VOLUME, isValidShotId, PRODUCTION_PATHS } from "
 import { writeAudioReport } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
 import { critiqueProduction, FREE_VISION_UNAVAILABLE_CODE } from "./production_critic.js";
+import { assessCinematicReadiness } from "./production_readiness.js";
 import { semanticVisualReport, validateSemanticVisualPlan } from "./semantic_visuals.js";
 import { runHyperframes } from "./toolchain.js";
 
@@ -323,9 +324,11 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
   if (!render.ok) throw new Error(`HyperFrames render failed. Review ${path.join(qaDir, profile.logName)}.`);
 
   const plan = JSON.parse(await readFile(path.join(workspace, PRODUCTION_PATHS.plan), "utf8"));
+  const intake = await readOptionalJson(path.join(workspace, PRODUCTION_PATHS.intake));
+  const cinematic = options.enforceCinematicReadiness === true || intake?.profile?.id === "cinematic";
   const sourceMedia = await readOptionalJson(path.join(workspace, "production", "source-media", "analysis.json"));
   const references = [...new Set([...values(options.references), ...(sourceMedia?.staged_references ?? []).map((entry) => entry.local_path)].filter(Boolean).map((entry) => path.resolve(entry)))];
-  const analysisOptions = motionOptions(plan, { ...options, references });
+  const analysisOptions = motionOptions(plan, { ...options, references }, cinematic ? intake?.profile : null);
   const motionPath = path.join(qaDir, "motion.json");
   const motion = adapters.writeMotionReport
     ? await adapters.writeMotionReport(output, motionPath, analysisOptions)
@@ -355,9 +358,19 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
     }
   }
   const assembly = await readOptionalJson(path.join(project, "assembly.json"));
+  let readiness = null;
+  if (cinematic) {
+    const readinessPath = path.join(qaDir, "cinematic-readiness.json");
+    readiness = {
+      ...assessCinematicReadiness({ plan, verification, motion, audio, critique, assembly }),
+      receipt: readinessPath
+    };
+    await writeAtomic(readinessPath, `${JSON.stringify(readiness, null, 2)}\n`);
+  }
+  const qualityReady = critique.verdict === "ship" && motion.quality.ok && audio.quality.ok && (!readiness || readiness.ok);
   return {
     stage: profile.stage,
-    status: critique.verdict === "ship" && motion.quality.ok && audio.quality.ok ? profile.successStatus : "needs-repair",
+    status: qualityReady ? profile.successStatus : "needs-repair",
     workspace,
     video: output,
     verification,
@@ -368,6 +381,7 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
       ? { mode: "vision-supervised-draft", failed: verification.failed }
       : null,
     fallbacks: assembly ? { count: assembly.fallback_count ?? 0, full: Boolean(assembly.full_fallback), shots: assembly.fallbacks ?? [] } : null,
+    readiness,
     critique
   };
 }
@@ -596,7 +610,9 @@ async function readOptionalJson(filePath) {
   try { return JSON.parse(await readFile(filePath, "utf8")); } catch (error) { if (error.code === "ENOENT") return null; throw error; }
 }
 
-function motionOptions(plan, options) {
+function motionOptions(plan, options, productionProfile = null) {
+  const cinematic = productionProfile?.id === "cinematic";
+  const craft = productionProfile?.craft ?? {};
   return {
     references: values(options.references).map((entry) => path.resolve(entry)),
     expected: {
@@ -604,14 +620,14 @@ function motionOptions(plan, options) {
       width: plan.format.width,
       height: plan.format.height,
       duration_tolerance_seconds: Number(options.durationToleranceSeconds ?? .15),
-      maximum_hold_ratio: Number(options.maximumHoldRatio ?? .94),
-      minimum_bursts_per_minute: Number(options.minimumBurstsPerMinute ?? 8),
+      maximum_hold_ratio: Number(options.maximumHoldRatio ?? (cinematic ? .8 : .94)),
+      minimum_bursts_per_minute: Number(options.minimumBurstsPerMinute ?? (cinematic ? 20 : 8)),
       minimum_change_energy_p50: Number(options.minimumChangeEnergyP50 ?? .35),
       minimum_change_energy_p50_by_family: { "developing-card": Number(options.minimumDevelopingCardEnergyP50 ?? .15) },
       minimum_flow_velocity_p90: Number(options.minimumFlowVelocityP90 ?? 2),
-      maximum_first_motion_seconds: Number(options.maximumFirstMotionSeconds ?? .65),
-      hook_window_seconds: Number(options.hookWindowSeconds ?? 4),
-      minimum_hook_events: Number(options.minimumHookEvents ?? 2)
+      maximum_first_motion_seconds: Number(options.maximumFirstMotionSeconds ?? (cinematic ? .35 : .65)),
+      hook_window_seconds: Number(options.hookWindowSeconds ?? craft.hook_window_seconds ?? 4),
+      minimum_hook_events: Number(options.minimumHookEvents ?? craft.minimum_hook_material_changes ?? 2)
     }
   };
 }
