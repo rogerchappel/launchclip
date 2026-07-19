@@ -92,8 +92,13 @@ test("runs the cinematic creative funnel and premium frame contract in one comma
   assert.equal(calls[8][1].noVoice, true);
   assert.equal(calls[9][1].sceneBlueprint, true);
   assert.equal(calls[9][1].sequenceBlueprint, true);
+  assert.equal(calls[9][1].renderedCandidates, 2);
+  assert.equal(calls[9][1].candidateTournamentShots, 2);
+  assert.equal(calls[9][1].candidateJudgeRoute, "openai:gpt-5.6@high");
+  assert.equal(calls[9][1].candidateJudgeMaxOutputTokens, 5_000);
   assert.equal(calls[9][1].sequenceMaxOutputTokens, 8_000);
   assert.equal(calls[9][1].allowFallback, false);
+  assert.equal(calls[9][1].fallbackMode, "error");
   assert.equal(calls[9][1].routes[0], "openai:gpt-5.6@high");
   assert.equal(result.creative_funnel.concepts.selected_id, "concept-1");
 });
@@ -577,7 +582,11 @@ test("resumes cinematic frame stages from the persisted workspace profile", asyn
   });
   assert.equal(received.sceneBlueprint, true);
   assert.equal(received.sequenceBlueprint, true);
+  assert.equal(received.renderedCandidates, 2);
+  assert.equal(received.candidateTournamentShots, 2);
+  assert.equal(received.candidateJudgeRoute, "openai:gpt-5.6@high");
   assert.equal(received.allowFallback, false);
+  assert.equal(received.fallbackMode, "error");
   assert.deepEqual(received.routes, ["openai:gpt-5.6@high"]);
 });
 
@@ -626,6 +635,7 @@ test("discovers ranked free frame models, clamps output, and records the accepte
   assert.equal(frameOptions.leanPrompt, true);
   assert.equal(frameOptions.sceneBlueprint, true);
   assert.equal(frameOptions.sequenceBlueprint, false);
+  assert.equal(frameOptions.renderedCandidates, 1);
   assert.equal(frameOptions.failClosedConcurrency, 3);
   assert.equal(frameOptions.blueprintSemanticAttempts, 2);
   assert.equal(frameOptions.blueprintMaxOutputTokens, 3_000);
