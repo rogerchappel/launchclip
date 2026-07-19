@@ -230,6 +230,45 @@ test("ignores an older visual critique during verification-triggered repair", as
   assert.deepEqual(result.repaired.map((entry) => entry.shot_id), ["shot-1"]);
 });
 
+test("routes current cinematic motion readiness through plan repair and ignores older critique", async () => {
+  const workspace = await fixture({ verdict: "replan" });
+  let received;
+  const result = await runRepair(workspace, {
+    trigger: "readiness",
+    renderQualityFindings: [readinessFinding({ id: "readiness-motion", category: "motion", repairScope: "plan", instruction: "Replan the opening motion cadence." })]
+  }, {
+    repairProductionPlan: async (_workspace, findings) => { received = findings; return { status: "ready" }; }
+  });
+  assert.equal(result.status, "replanned");
+  assert.deepEqual(received.map((entry) => entry.id), ["readiness-motion"]);
+  assert.equal(result.render_quality_findings, 1);
+  assert.equal(result.deterministic_findings, 0);
+});
+
+test("routes current cinematic audio readiness through audio regeneration", async () => {
+  const workspace = await fixture({ verdict: "ship" });
+  let received;
+  const result = await runRepair(workspace, {
+    trigger: "readiness",
+    renderQualityFindings: [readinessFinding({ id: "readiness-audio", category: "audio", repairScope: "audio", instruction: "Repair voice masking." })]
+  }, {
+    repairProductionPlan: async (_workspace, findings) => { received = findings; return { status: "ready" }; }
+  });
+  assert.equal(result.actions.audio, "regenerate");
+  assert.deepEqual(received.map((entry) => entry.repair_scope), ["audio"]);
+});
+
+test("rejects malformed or unknown-shot readiness findings before a repair model call", async () => {
+  const workspace = await fixture({ verdict: "ship" });
+  let calls = 0;
+  const finding = readinessFinding({ id: "bad-frame", category: "mount", repairScope: "frames", instruction: "Replace fallback." });
+  finding.shot_ids = ["missing-shot"];
+  await assert.rejects(() => runRepair(workspace, { trigger: "readiness", renderQualityFindings: [finding] }, {
+    client: { runStructured: async () => { calls += 1; } }
+  }), /unknown shot: missing-shot/);
+  assert.equal(calls, 0);
+});
+
 test("ignores shot inspection reports older than the frame they describe", async () => {
   const workspace = await fixture({ verdict: "ship" });
   const reportPath = path.join(workspace, "production", "qa", "shot-inspect", "shot-1", "inspect.json");
@@ -609,6 +648,21 @@ function framePatch(id, before, after) {
       { target: "html", find: `>${before}</div>`, replace: `>${after}</div>` },
       { target: "visible_copy", find: JSON.stringify(before), replace: JSON.stringify(after) }
     ]
+  };
+}
+
+function readinessFinding({ id, category, repairScope, instruction }) {
+  return {
+    id,
+    severity: "major",
+    category,
+    shot_ids: [],
+    start_seconds: null,
+    end_seconds: null,
+    evidence: instruction,
+    repair_scope: repairScope,
+    instruction,
+    preserve: ["approved narration"]
   };
 }
 
