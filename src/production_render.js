@@ -326,6 +326,11 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
   const plan = JSON.parse(await readFile(path.join(workspace, PRODUCTION_PATHS.plan), "utf8"));
   const intake = await readOptionalJson(path.join(workspace, PRODUCTION_PATHS.intake));
   const cinematic = options.enforceCinematicReadiness === true || intake?.profile?.id === "cinematic";
+  const [concepts, story, narration] = cinematic ? await Promise.all([
+    readOptionalJson(path.join(workspace, PRODUCTION_PATHS.concepts)),
+    readOptionalJson(path.join(workspace, PRODUCTION_PATHS.story)),
+    readOptionalJson(path.join(workspace, "production", "media", "cinematic-narration.json"))
+  ]) : [null, null, null];
   const sourceMedia = await readOptionalJson(path.join(workspace, "production", "source-media", "analysis.json"));
   const references = [...new Set([...values(options.references), ...(sourceMedia?.staged_references ?? []).map((entry) => entry.local_path)].filter(Boolean).map((entry) => path.resolve(entry)))];
   const analysisOptions = motionOptions(plan, { ...options, references }, cinematic ? intake?.profile : null);
@@ -362,7 +367,7 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
   if (cinematic) {
     const readinessPath = path.join(qaDir, "cinematic-readiness.json");
     readiness = {
-      ...assessCinematicReadiness({ plan, verification, motion, audio, critique, assembly }),
+      ...assessCinematicReadiness({ concepts, story, narration, plan, verification, motion, audio, critique, assembly }),
       receipt: readinessPath
     };
     await writeAtomic(readinessPath, `${JSON.stringify(readiness, null, 2)}\n`);
