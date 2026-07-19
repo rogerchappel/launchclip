@@ -12,6 +12,9 @@ export const PRODUCTION_PATHS = Object.freeze({
   evidence: "production/evidence.json",
   conceptCandidates: "production/concept-candidates.json",
   concepts: "production/concepts.json",
+  storyDraft: "production/plans/story.draft.json",
+  storyReview: "production/plans/story-review.json",
+  story: "production/story.json",
   plan: "production/plan.json",
   jobs: "production/jobs.json",
   script: "production/SCRIPT.md",
@@ -401,6 +404,12 @@ export function validateProductionPlan(plan, context = {}) {
   }
   if (plan.narration?.source === "supplied" && context.suppliedTranscript && plan.narration.full_text !== context.suppliedTranscript) {
     errors.push("supplied narration must be preserved exactly");
+  }
+  if (context.requiredNarrationTranscript != null && plan.narration?.full_text !== context.requiredNarrationTranscript) {
+    errors.push("cinematic retention-story narration must be preserved exactly");
+  }
+  if (context.requiredNarrationSource && plan.narration?.source !== context.requiredNarrationSource) {
+    errors.push(`narration.source must match cinematic retention story source ${context.requiredNarrationSource}`);
   }
   if (context.requestedCta) {
     const requested = normalizeCopy(context.requestedCta);
