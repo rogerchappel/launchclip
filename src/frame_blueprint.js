@@ -150,9 +150,11 @@ This blueprint is a binding handoff to a second LLM that will write the HTML and
 - Use concrete visual forms that express the declared diagram, comparison, process, timeline, data view, or spatial metaphor. Avoid a sparse headline floating over decoration and avoid generic card grids unless the plan explicitly calls for them.
 - Plan phone-readable typography and a meaningful occupied-area target. The fullest frame should feel composed, not empty.
 - Preserve exact supplied on-screen copy and evidence. Do not add claims.
-- Keep the concept original while obeying the supplied style DNA, continuity, and transition direction.`;
+- Keep the concept original while obeying the supplied style DNA, continuity, and transition direction.
+- When sequence_contract is supplied, it is frozen production design. Preserve its coordinate system, perspective, camera path, light direction, materials, object geometry, accumulated state, and typed boundary physics exactly. Dress the current shot inside that world; do not reinterpret it as a new layout.
+- When previous_scene_blueprint is supplied, continue its concrete spatial and motion decisions into the current shot wherever the sequence contract hands an object or camera move forward.`;
 
-export function buildFrameBlueprintInput({ intake, evidence, plan, shot, index, narrationTiming = null, prior = null, errors = [] }) {
+export function buildFrameBlueprintInput({ intake, evidence, plan, shot, index, narrationTiming = null, sequence = null, sequenceContract = null, previousSceneBlueprint = null, prior = null, errors = [] }) {
   const anchors = narrationAnchors(narrationTiming, shot);
   return JSON.stringify({
     global_design: {
@@ -165,6 +167,11 @@ export function buildFrameBlueprintInput({ intake, evidence, plan, shot, index, 
     project: compactProject(plan.project),
     shot: compactShot(shot),
     neighbors: compactNeighbors(plan.shots, index),
+    ...(sequenceContract ? {
+      sequence_contract: sequenceContract,
+      sequence_shots: compactSequenceShots(sequence),
+      previous_scene_blueprint: previousSceneBlueprint
+    } : {}),
     evidence: compactEvidence(evidence, shot, 1_200),
     resources: compactResources(intake, shot),
     narration_anchors: anchors,
@@ -177,7 +184,7 @@ export function buildFrameBlueprintInput({ intake, evidence, plan, shot, index, 
   });
 }
 
-export function buildBlueprintFrameInput({ intake, evidence, plan, shot, index, blueprint, narrationTiming = null, prior = null, errors = [] }) {
+export function buildBlueprintFrameInput({ intake, evidence, plan, shot, index, blueprint, narrationTiming = null, sequence = null, sequenceContract = null, previousSceneBlueprint = null, prior = null, errors = [] }) {
   return JSON.stringify({
     global_design: {
       concept: plan.design.concept,
@@ -189,6 +196,11 @@ export function buildBlueprintFrameInput({ intake, evidence, plan, shot, index, 
     shot_contract: compactShot(shot),
     scene_blueprint: blueprint,
     neighbors: compactNeighbors(plan.shots, index),
+    ...(sequenceContract ? {
+      sequence_contract: sequenceContract,
+      sequence_shots: compactSequenceShots(sequence),
+      previous_scene_blueprint: previousSceneBlueprint
+    } : {}),
     evidence: compactEvidence(evidence, shot, 800),
     resources: compactResources(intake, shot),
     narration_anchors: narrationAnchors(narrationTiming, shot),
@@ -532,6 +544,20 @@ function compactNeighbors(shots = [], index = 0) {
     id: entry.id,
     purpose: entry.purpose,
     representation: entry.visual?.representation,
+    continuity: entry.visual?.continuity,
+    transition_out: entry.transition_out
+  }));
+}
+
+function compactSequenceShots(sequence) {
+  return (sequence?.shots ?? []).map((entry) => ({
+    id: entry.id,
+    start_seconds: entry.start_seconds,
+    end_seconds: entry.end_seconds,
+    purpose: entry.purpose,
+    representation: entry.visual?.representation,
+    objects: entry.visual?.objects,
+    events: entry.visual?.events,
     continuity: entry.visual?.continuity,
     transition_out: entry.transition_out
   }));
