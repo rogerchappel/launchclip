@@ -95,12 +95,20 @@ export function buildTemporalEvidenceSchedule(durationSeconds, boundaries = []) 
       });
     }
   }
+  const finalHold = {
+    evidence_id: "final-hold",
+    role: "final-hold",
+    at_seconds: rounded(finalSample),
+    boundary_id: null,
+    sequence_id: null
+  };
   return {
     duration_seconds: duration,
     hook,
     transitions,
-    entries: [...hook, ...transitions],
-    timestamps: uniqueNumbers([...hook, ...transitions].map((entry) => entry.at_seconds)),
+    final_hold: finalHold,
+    entries: [...hook, ...transitions, finalHold],
+    timestamps: uniqueNumbers([...hook, ...transitions, finalHold].map((entry) => entry.at_seconds)),
     shared_world_roles: [...SHARED_WORLD_ROLES]
   };
 }

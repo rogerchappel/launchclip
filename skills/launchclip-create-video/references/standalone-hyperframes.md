@@ -320,8 +320,12 @@ samples. Clamp every timestamp to the composition duration and deduplicate it:
 - ordinary boundary: 0.05 seconds before, midpoint, and 0.05 seconds after
 - shared-world move: 0.05 seconds before, departure, 20%, 50%, 80%, settle,
   and 0.05 seconds after
-- each sequence: entry, settled state, shot midpoint, planned visible event,
-  and final hold
+- final hold: 0.05 seconds before the composition duration
+
+Also capture useful sequence entry, settled-state, shot-midpoint, and planned
+visible-event samples when they add evidence beyond the required schedule.
+These supplemental entries are not substitutes for hook, boundary, or
+final-hold samples.
 
 Capture both a HyperFrames snapshot and a frame extracted from the encoded
 draft for every required sample; the latter proves the delivered artifact

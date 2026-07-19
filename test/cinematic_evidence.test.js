@@ -24,6 +24,7 @@ test("clamps and deduplicates the dense hook schedule", () => {
   const schedule = buildTemporalEvidenceSchedule(1);
   assert.deepEqual(schedule.hook.map((entry) => entry.at_seconds), [0, .25, .5, .75, .95]);
   assert.deepEqual(schedule.timestamps, [0, .25, .5, .75, .95]);
+  assert.deepEqual(schedule.final_hold, { evidence_id: "final-hold", role: "final-hold", at_seconds: .95, boundary_id: null, sequence_id: null });
 });
 
 test("derives all seven shared-world transition roles", () => {
