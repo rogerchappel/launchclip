@@ -1,4 +1,4 @@
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export const TEMPORAL_EVIDENCE_VERSION = "launchclip.temporal-evidence.v1";
@@ -86,6 +86,7 @@ export function buildTemporalEvidencePlan(plan, assembly = {}, options = {}) {
 export async function captureTemporalEvidence({ project, qaDir, plan, assembly = {}, snapshot, options = {} }) {
   if (typeof snapshot !== "function") throw new Error("Temporal evidence capture requires a snapshot adapter");
   const frames = path.resolve(options.output ?? path.join(qaDir, "snapshots"));
+  await assertOwnedFramesDirectory(qaDir, frames);
   await rm(frames, { recursive: true, force: true });
   await mkdir(frames, { recursive: true });
   const evidence = buildTemporalEvidencePlan(plan, assembly, options);
@@ -129,6 +130,24 @@ export async function captureTemporalEvidence({ project, qaDir, plan, assembly =
     manifest: manifestPath,
     evidence: describedEvidence
   };
+}
+
+async function assertOwnedFramesDirectory(qaDir, frames) {
+  const qa = path.resolve(qaDir);
+  const relative = path.relative(qa, frames);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("Temporal evidence frames must use an owned subdirectory inside the QA directory");
+  let current = qa;
+  for (const segment of relative.split(path.sep)) {
+    current = path.join(current, segment);
+    try {
+      const info = await lstat(current);
+      if (info.isSymbolicLink()) throw new Error("Temporal evidence frames must not traverse a symbolic link");
+      if (current !== frames && !info.isDirectory()) throw new Error("Temporal evidence frame parent must be a directory");
+    } catch (error) {
+      if (error.code === "ENOENT") break;
+      throw error;
+    }
+  }
 }
 
 function boundOptionalEvidence(points, maximum) {

@@ -5,6 +5,26 @@ import path from "node:path";
 import test from "node:test";
 import { ProductionVerificationError, assertVerificationFresh, classifyCommandFailure, plannedTypographyErrors, renderDraftProduction, renderProduction, verifyProduction, verifySemanticArtifacts, verifyShotCompositions } from "../src/production_render.js";
 import { FREE_VISION_UNAVAILABLE_CODE } from "../src/production_critic.js";
+import { captureTemporalEvidence } from "../src/temporal_evidence.js";
+
+test("rejects temporal snapshot output outside QA before deleting it", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "launchclip-temporal-output-"));
+  const qa = path.join(root, "qa");
+  const outside = path.join(root, "outside");
+  const sentinel = path.join(outside, "keep.txt");
+  await Promise.all([mkdir(qa, { recursive: true }), mkdir(outside, { recursive: true })]);
+  await writeFile(sentinel, "keep");
+  let snapshotCalled = false;
+  await assert.rejects(() => captureTemporalEvidence({
+    project: path.join(root, "project"),
+    qaDir: qa,
+    plan: { format: { duration_seconds: 5 }, shots: [] },
+    snapshot: async () => { snapshotCalled = true; return { ok: true }; },
+    options: { output: outside }
+  }), /owned subdirectory inside the QA directory/);
+  assert.equal(snapshotCalled, false);
+  assert.equal(await readFile(sentinel, "utf8"), "keep");
+});
 
 test("runs lint, transition-aware browser checks, and exact temporal snapshots", async () => {
   const workspace = await fixture();
