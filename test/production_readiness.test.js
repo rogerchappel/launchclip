@@ -14,8 +14,10 @@ test("passes only when every cinematic readiness gate has current evidence", () 
 test("fails closed when required verification, analysis, or critique evidence is missing", () => {
   const result = assessCinematicReadiness({ plan: {} });
   assert.equal(result.ok, false);
-  assert.deepEqual(result.blockers.map((entry) => entry.gate), ["verification", "motion", "audio", "critic"]);
+  assert.deepEqual(result.blockers.map((entry) => entry.gate), ["verification", "motion", "audio", "critic", "fallbacks"]);
   assert.equal(result.gates.verification.status, "missing");
+  assert.equal(result.gates.fallbacks.status, "missing");
+  assert.equal(result.repair_findings.length, 0);
 });
 
 test("normalizes hook, motion, editing, and audio failures into typed repair findings", () => {

@@ -49,8 +49,9 @@ export function assessCinematicReadiness({ plan, verification, motion, audio, cr
   else if (!criticOk && !new Set(["repair", "replan"]).has(critique.verdict)) blockers.push(blocker("critic-unavailable", "critic", `Independent visual critique is ${critique.verdict ?? "unavailable"}.`));
 
   const fallbackCount = Number(assembly?.fallback_count ?? assembly?.fallbacks?.length ?? 0);
-  const fallbackOk = options.zeroFallbacks === false || fallbackCount === 0;
-  if (!fallbackOk) {
+  const fallbackOk = options.zeroFallbacks === false || Boolean(assembly) && fallbackCount === 0;
+  if (!assembly) blockers.push(blocker("assembly-missing", "fallbacks", "Assembly provenance is missing, so zero-fallback authorship cannot be verified."));
+  else if (!fallbackOk) {
     const shotIds = [...new Set((assembly?.fallbacks ?? []).map((entry) => entry.shot_id).filter(Boolean))];
     repairFindings.push(qualityFinding({
       id: "readiness-fallbacks",
@@ -70,7 +71,7 @@ export function assessCinematicReadiness({ plan, verification, motion, audio, cr
     motion: gate(motionOk, motion?.quality ? motionOk ? "passed" : "failed" : "missing", motionFindings.length),
     audio: gate(audioOk, audio?.quality ? audioOk ? "passed" : "failed" : "missing", audioFindings.length),
     critic: gate(criticOk, critique?.verdict ?? "missing", Array.isArray(critique?.findings) ? critique.findings.length : Number(critique?.findings ?? 0)),
-    fallbacks: gate(fallbackOk, fallbackOk ? "passed" : "failed", fallbackCount)
+    fallbacks: gate(fallbackOk, !assembly ? "missing" : fallbackOk ? "passed" : "failed", fallbackCount)
   };
   const ok = Object.values(gates).every((entry) => entry.ok) && blockers.length === 0 && repairFindings.length === 0;
   return {
