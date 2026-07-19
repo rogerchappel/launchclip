@@ -140,6 +140,9 @@ Author the top-level `index.html` as a standalone composition:
 
 - Put one visible root element directly in `<body>` with
   `data-composition-id`, `data-duration`, `data-width`, and `data-height`.
+- Put `data-launchclip-cinematic-contract="phase-2"` on the root for every new
+  project authored by this workflow. Do not silently retrofit the marker onto
+  a legacy project that has not produced the required phase-2 evidence.
 - Give the root an explicit pixel-sized box. A `height: 100%` child is valid
   only when every ancestor has a resolved height.
 - Do not wrap the standalone root in `<template>`.
@@ -153,6 +156,13 @@ Author the top-level `index.html` as a standalone composition:
 - Put a full-frame background on an absolutely positioned child, not on the
   composition root.
 - Give every assembled DOM id a unique, composition-prefixed value.
+- Mark each shared-world plane with `data-launchclip-sequence-id`. Mark every
+  declared boundary with `data-launchclip-boundary-id`,
+  `data-launchclip-transition-kind="ordinary|shared-world"`,
+  `data-launchclip-transition-start`, and
+  `data-launchclip-transition-duration`. When an object or plane is handed
+  across the boundary, put its stable IDs in `data-launchclip-transition-from`
+  and `data-launchclip-transition-to`.
 
 Keep rendering deterministic and seek-safe:
 
@@ -197,7 +207,7 @@ composition id, the inner root id, and its timeline key must match exactly.
 
 ## Design and motion quality contract
 
-Treat `DESIGN.md`, `HOOKS.md`, and `QUALITY.md` as executable creative
+Treat `DESIGN.md`, `STORYBOARD.md`, and `QUALITY.md` as executable creative
 constraints:
 
 - Package exact font files under `assets/fonts/` and declare them with
@@ -222,8 +232,13 @@ constraints:
   morphs preserve identity, whips create an energetic discontinuity, and masks
   redirect focus. Each must have a visibly different spatial behavior.
 - The first frame must already communicate an intentional state. The first
-  second states the promise, and the first four seconds contain at least two
-  meaningful changes in layout, evidence, framing, or visual register.
+  second states the promise. The first four seconds contain at least three
+  meaningful changes in layout, evidence, framing, or visual register for
+  portrait, or two for landscape.
+- Keep outgoing and incoming shared-world planes alive for the full declared
+  transition duration. Use one continuous position curve and a velocity-shaped
+  blur envelope: zero blur at departure, strongest near peak speed, and zero at
+  settle. Do not remove the outgoing plane before the incoming plane settles.
 
 Prefer a small authored scene grammar over a rigid template: presenter anchor,
 presenter-plus-proof split, full-frame diagram, kinetic type reset, evidence/UI
@@ -297,6 +312,76 @@ View snapshots at delivery size. An overview can hide weak hierarchy, tiny
 type, one-frame overlaps, or a blur that never resolves. When a transition is
 suspect, snapshot neighboring times in 50-100 ms increments and repair the
 timeline rather than accepting the artifact.
+
+For a phase-2 project, build `qa/temporal-evidence/manifest.json` from exact
+samples. Clamp every timestamp to the composition duration and deduplicate it:
+
+- hook: `0,0.25,0.5,0.75,1,1.5,2,3,4`
+- ordinary boundary: 0.05 seconds before, midpoint, and 0.05 seconds after
+- shared-world move: 0.05 seconds before, departure, 20%, 50%, 80%, settle,
+  and 0.05 seconds after
+- final hold: 0.05 seconds before the composition duration
+
+Also capture useful sequence entry, settled-state, shot-midpoint, and planned
+visible-event samples when they add evidence beyond the required schedule.
+These supplemental entries are not substitutes for hook, boundary, or
+final-hold samples.
+
+Capture both a HyperFrames snapshot and a frame extracted from the encoded
+draft for every required sample; the latter proves the delivered artifact
+rather than only the browser preview. Use this manifest shape:
+
+```bash
+npx --yes hyperframes@0.7.58 snapshot <project> --at <comma-separated-schedule>
+ffmpeg -hide_banner -loglevel error -i <project>/renders/draft.mp4 \
+  -ss <at-seconds> -frames:v 1 -y \
+  <project>/qa/temporal-evidence/<sample-id>-encoded-draft.png
+```
+
+Copy or rename each HyperFrames result to
+`qa/temporal-evidence/<sample-id>-hyperframes.png`, then hash the current draft
+and every evidence file. Do not reuse the browser snapshot as encoded-draft
+evidence.
+
+```json
+{
+  "schema_version": "launchclip.subscription-temporal-evidence.v1",
+  "video_sha256": "<sha256-of-renders/draft.mp4>",
+  "entries": [
+    {
+      "sample_id": "hook-001",
+      "evidence_id": "hook-001-hyperframes",
+      "source": "hyperframes",
+      "role": "hook",
+      "at_seconds": 0,
+      "sequence_id": null,
+      "boundary_id": null,
+      "file": "qa/temporal-evidence/hook-001-hyperframes.png",
+      "sha256": "<sha256-of-this-image>"
+    },
+    {
+      "sample_id": "hook-001",
+      "evidence_id": "hook-001-encoded-draft",
+      "source": "encoded-draft",
+      "role": "hook",
+      "at_seconds": 0,
+      "sequence_id": null,
+      "boundary_id": null,
+      "file": "qa/temporal-evidence/hook-001-encoded-draft.png",
+      "sha256": "<sha256-of-this-image>"
+    }
+  ]
+}
+```
+
+Give each scheduled sample a stable `sample_id` and exactly two uniquely named
+evidence entries, one for each source. Copy the schedule's role, timestamp,
+sequence ID, and boundary ID exactly; use `null` when an ID does not apply.
+Additional sequence/event samples are allowed, but they also need unique
+evidence IDs, valid files and hashes, and critic review. Fail the review when an
+expected source is missing, a file is empty, the current draft hash changed, an
+artifact hash is stale, a timestamp is out of range, or the fresh-context
+critic did not list every evidence ID it reviewed.
 
 ## Preview and approval
 

@@ -11,6 +11,8 @@ Judge the supplied rendered-pixel evidence and measurements against the actual p
 Rules:
 - Inspect the actual pixels before judging visual quality. Do not infer that a planned element is visible, legible, well-composed, or stylistically successful merely because the plan or HTML says it should be.
 - visual_evidence maps the ordered source frames to shot IDs and timestamps. Contact sheets preserve that same order and label their frame times. Review every covered shot before returning ship.
+- visual_evidence temporal roles are binding pixel evidence. Review hook frames in order and review every transition before/mid/after strip as one motion boundary; cite its temporal evidence IDs in the finding evidence.
+- Report a visible transition defect with category=mount, repair_scope=assembly, and both adjacent shot IDs. Preserve coherent frames on either side and ask for the smallest change to boundary kind, timing, velocity, blur, easing, mask, or shared-object geometry.
 - Treat clipped or off-canvas content, phone-unreadable text, excessive unused space, weak focal scale, accidental overlap, repeated near-identical frames, and visible drift from the requested art direction as concrete visual evidence when present.
 - Treat deterministic reports as supporting diagnostics, not a substitute for looking at the rendered pixels. Corroborate a reported issue in the supplied frames or temporal evidence before turning it into a finding; do not echo every browser warning into the critique.
 - Clip mounts and transition wrappers may intentionally enter or leave the canvas at a shot boundary. Do not call this subject drift or canvas overflow unless the focal content is visibly clipped during its readable hold. Repeated identical mount-level warnings at successive shot boundaries are transition evidence, not proof that every scene is broken.
@@ -34,7 +36,7 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
   const workspace = path.resolve(workspacePath);
   const qaDir = path.join(workspace, PRODUCTION_PATHS.qa);
   const humanReviewRequest = normalizeHumanReviewRequest(options.humanReviewRequest);
-  const [plan, evidence, verification, motion, audio, lint, validate, inspect, visualFingerprint] = await Promise.all([
+  const [plan, evidence, verification, motion, audio, lint, validate, inspect, visualFingerprint, temporalEvidence] = await Promise.all([
     readJson(path.join(workspace, PRODUCTION_PATHS.plan)),
     readJson(path.join(workspace, PRODUCTION_PATHS.evidence)),
     readJson(path.join(qaDir, "verification.json")),
@@ -43,9 +45,10 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
     readOptionalJson(path.join(qaDir, "lint.json")),
     readOptionalJson(path.join(qaDir, "validate.json")),
     readOptionalJson(path.join(qaDir, "inspect.json")),
-    readOptionalJson(path.join(workspace, "production", "plans", "visual-fingerprint.json"))
+    readOptionalJson(path.join(workspace, "production", "plans", "visual-fingerprint.json")),
+    readOptionalJson(path.join(qaDir, "temporal-evidence.json"))
   ]);
-  const visualEvidence = await buildVisualEvidence(verification.snapshots ?? path.join(qaDir, "snapshots"), plan.shots, Number(options.maxSnapshots ?? 12));
+  const visualEvidence = await buildVisualEvidence(verification.snapshots ?? path.join(qaDir, "snapshots"), plan.shots, Number(options.maxSnapshots ?? 12), temporalEvidence);
   if (!visualEvidence.images.length) throw new Error("Production critique requires rendered snapshots");
   const images = await Promise.all(visualEvidence.images.map((entry) => dataImage(entry.path, entry.detail)));
   const evidenceById = new Map(evidence.items.map((entry) => [entry.id, entry]));
@@ -97,7 +100,7 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
     schemaName: "launchclip_production_critique",
     background: options.background !== false,
     maxOutputTokens: Number(options.maxOutputTokens ?? (route.provider === "openrouter" && (route.model === "openrouter/free" || route.model.endsWith(":free")) ? 4_000 : 20_000)),
-    promptCacheKey: "launchclip:production-critic:v2",
+    promptCacheKey: "launchclip:production-critic:v3",
     metadata: { job_id: "production-critique", shots: plan.shots.length }
   };
   let result;
@@ -158,6 +161,8 @@ export async function critiqueProduction(workspacePath, options = {}, adapters =
     mode: visualEvidence.manifest.mode,
     image_count: visualEvidence.images.length,
     frame_count: visualEvidence.manifest.frames.length,
+    critical_frame_count: visualEvidence.manifest.critical_frame_count,
+    transition_frame_count: visualEvidence.manifest.transition_frame_count,
     covered_shot_ids: visualEvidence.manifest.covered_shot_ids,
     reused_verification_snapshots: true
   };
@@ -393,37 +398,104 @@ function renderCritique(critique) {
   return `${lines.join("\n")}\n`;
 }
 
-async function buildVisualEvidence(directory, shots = [], limit = 12) {
+async function buildVisualEvidence(directory, shots = [], limit = 12, temporalEvidence = null) {
   const entries = await readdir(directory, { withFileTypes: true });
   const imagePaths = entries
     .filter((entry) => entry.isFile() && /\.(?:png|jpe?g|webp)$/i.test(entry.name))
     .map((entry) => path.join(directory, entry.name))
     .sort();
   const contactSheets = imagePaths.filter((entry) => /(?:^|\/)contact-sheet(?:-|\.)/i.test(entry));
-  const sourceFrames = imagePaths.filter((entry) => !contactSheets.includes(entry)).map((entry, index) => frameEvidence(entry, index, shots));
-  const selectedFrames = selectBalancedFrames(sourceFrames, shots, limit);
-  const useContactSheets = contactSheets.length > 0 && sourceFrames.length > 0;
-  const images = useContactSheets
-    ? contactSheets.map((entry) => ({ path: entry, detail: "high", kind: "contact-sheet" }))
-    : selectedFrames.map((entry) => ({ path: entry.path, detail: "low", kind: "frame" }));
-  const manifestFrames = useContactSheets ? sourceFrames : selectedFrames;
+  const temporalByFile = temporalEvidenceMap(temporalEvidence, imagePaths);
+  const sourceFrames = imagePaths
+    .filter((entry) => !contactSheets.includes(entry))
+    .map((entry, index) => frameEvidence(entry, index, shots, temporalByFile.get(path.basename(entry))));
+  const overview = contactSheets.slice(0, 1).map((entry) => ({ path: entry, detail: "high", kind: "contact-sheet" }));
+  const selectedFrames = selectHybridFrames(sourceFrames, shots, limit, overview.length);
+  const images = [
+    ...overview,
+    ...selectedFrames.map((entry) => ({
+      path: entry.path,
+      detail: isKeyTemporalFrame(entry) ? "high" : "low",
+      kind: isKeyTemporalFrame(entry) ? "temporal-frame" : "frame",
+      evidence_id: entry.evidence_id
+    }))
+  ];
+  const imageIndex = new Map(images.map((entry, index) => [entry.path, index]));
+  const mode = temporalByFile.size ? "hybrid-temporal" : overview.length ? "hybrid-contact" : "balanced-frames";
   return {
     images,
     manifest: {
-      mode: useContactSheets ? "contact-sheets" : "balanced-frames",
+      mode,
       image_count: images.length,
-      frame_count: manifestFrames.length,
-      covered_shot_ids: [...new Set(manifestFrames.map((entry) => entry.shot_id).filter(Boolean))],
-      images: images.map((entry, index) => ({ image_index: index, file: path.basename(entry.path), kind: entry.kind, detail: entry.detail })),
-      frames: manifestFrames.map((entry, index) => ({ frame_index: index, file: path.basename(entry.path), at_seconds: entry.at_seconds, shot_id: entry.shot_id }))
+      frame_count: sourceFrames.length,
+      critical_frame_count: sourceFrames.filter(isCriticalTemporalFrame).length,
+      transition_frame_count: sourceFrames.filter((entry) => entry.roles.some((role) => role.type === "transition")).length,
+      covered_shot_ids: [...new Set(sourceFrames.map((entry) => entry.shot_id).filter(Boolean))],
+      images: images.map((entry, index) => ({ image_index: index, file: path.basename(entry.path), kind: entry.kind, detail: entry.detail, evidence_id: entry.evidence_id ?? null })),
+      frames: sourceFrames.map((entry, index) => ({
+        frame_index: index,
+        image_index: imageIndex.get(entry.path) ?? null,
+        selected: imageIndex.has(entry.path),
+        file: path.basename(entry.path),
+        evidence_id: entry.evidence_id,
+        at_seconds: entry.at_seconds,
+        shot_id: entry.shot_id,
+        sequence_id: entry.sequence_id,
+        roles: entry.roles
+      }))
     }
   };
 }
 
-function frameEvidence(filePath, index, shots) {
+function frameEvidence(filePath, index, shots, temporal = null) {
   const match = path.basename(filePath).match(/-at-([0-9]+(?:\.[0-9]+)?)s\.(?:png|jpe?g|webp)$/i);
-  const atSeconds = match ? Number(match[1]) : null;
-  return { path: filePath, source_index: index, at_seconds: atSeconds, shot_id: shotAtSeconds(shots, atSeconds) };
+  const atSeconds = Number.isFinite(Number(temporal?.timestamp_seconds)) ? Number(temporal.timestamp_seconds) : match ? Number(match[1]) : null;
+  return {
+    path: filePath,
+    source_index: index,
+    evidence_id: temporal?.evidence_id ?? null,
+    at_seconds: atSeconds,
+    shot_id: temporal?.shot_id ?? shotAtSeconds(shots, atSeconds),
+    sequence_id: temporal?.sequence_id ?? null,
+    roles: Array.isArray(temporal?.roles) ? temporal.roles : []
+  };
+}
+
+function temporalEvidenceMap(manifest, imagePaths) {
+  if (!manifest) return new Map();
+  if (manifest.status !== "passed" || !Array.isArray(manifest.evidence)) throw new Error("Production critique requires passed temporal evidence");
+  const available = new Set(imagePaths.map((entry) => path.basename(entry)));
+  const mapped = new Map();
+  for (const entry of manifest.evidence) {
+    const file = path.basename(String(entry?.file ?? ""));
+    if (!file || !available.has(file)) throw new Error(`Temporal evidence frame is missing from verified snapshots: ${entry?.evidence_id ?? file}`);
+    if (mapped.has(file)) throw new Error(`Temporal evidence references the same frame more than once: ${file}`);
+    mapped.set(file, entry);
+  }
+  return mapped;
+}
+
+function selectHybridFrames(frames, shots, limit, overviewCount) {
+  const maximum = Math.max(1, Math.floor(Number(limit) || 1) - overviewCount);
+  const critical = frames.filter(isCriticalTemporalFrame);
+  const selected = [...critical];
+  const remaining = Math.max(0, maximum - selected.length);
+  if (remaining) {
+    const sequenceKeys = frames.filter((entry) => !selected.includes(entry) && entry.roles.some((role) => ["sequence-entry", "sequence-settle"].includes(role.type)));
+    selected.push(...evenlySelect(sequenceKeys, Math.min(sequenceKeys.length, Math.ceil(remaining / 2))));
+  }
+  const openSlots = Math.max(0, maximum - selected.length);
+  if (openSlots) selected.push(...selectBalancedFrames(frames.filter((entry) => !selected.includes(entry)), shots, openSlots));
+  if (!selected.length && frames.length) selected.push(...selectBalancedFrames(frames, shots, 1));
+  return [...new Set(selected)].sort((left, right) => left.source_index - right.source_index);
+}
+
+function isCriticalTemporalFrame(entry) {
+  return entry.roles.some((role) => role.type === "hook" || role.type === "transition");
+}
+
+function isKeyTemporalFrame(entry) {
+  return entry.roles.some((role) => ["hook", "transition", "sequence-entry", "sequence-settle"].includes(role.type));
 }
 
 function shotAtSeconds(shots, atSeconds) {

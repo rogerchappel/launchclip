@@ -11,6 +11,7 @@ import {
   normalizeProductionPlanTiming,
   validateProductionPlan
 } from "./production_contracts.js";
+import { buildAuthoringSequences, validateAuthoringSequenceDurations } from "./frame_sequence.js";
 import { VISUAL_NOVELTY_CONTEXT_PATH, loadVisualNoveltyContext, writeVisualFingerprint } from "./visual_novelty.js";
 
 const PLANNER_INSTRUCTIONS = `You are the creative director, narrative editor, and motion-design lead for one excellent video.
@@ -33,6 +34,7 @@ Rules:
 - Typography supports the visual model; it is not the visual model. Across the full runtime, kinetic-type or text-only shots may occupy at most 15%. Companion and voiceover shots require content-bearing diagrams, comparisons, timelines, processes, networks, data, media, or spatial metaphors.
 - In every companion or voiceover shot, visual.objects must include at least one kind from asset, logo, diagram-node, connector, metric, timeline, or process. Text, decoration, and container objects do not satisfy this requirement by themselves.
 - Build continuity sequences across related narration beats. Reuse stable object IDs, explicitly hand objects from one shot to the next, and match exit velocity to entry velocity within 5% so acceleration, deceleration, camera direction, and motion blur read as one continuous canvas.
+- When cinematic_profile is present, make each non-trivial continuity run span 8-20 seconds (or the full runtime when the video is shorter than 8 seconds). Keep related adjacent shots in one sequence with continue/transform handoffs until a meaningful visual resolve; do not manufacture short slide-like sequences by changing sequence_id at every cut.
 - Design style_dna before the shots. It is a project-specific design system, not a layout template: declare exact colors, type roles, shape language, background system, diagram language, presenter treatment, motion physics, transition vocabulary, and forbidden motifs. Avoid cyan-on-black and generic blue gradients unless the brief or supplied brand requires them.
 - Treat visual_novelty as a binding creative-direction contract. Keep style_dna stable while inventing a script-specific episode metaphor, representation sequence, spatial topology, motion vocabulary, transition vocabulary, and presenter rhythm. When mode=differentiate, differ from recent fingerprints across at least four axes without choosing visuals randomly. When mode=reproduce, preserve the matching fingerprint. Use creative_seed only to break ties between equally truthful concepts.
 - Treat resource catalog metadata as semantic guidance. Bind logos, screenshots, icons, and clips only when the asset meaning matches the narration; otherwise build truthful native HTML/CSS/SVG diagrams.
@@ -83,7 +85,7 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
     return hierarchicalPlanner(workspace, { intake, evidence, suppliedNarration, sfxCatalog, noveltyContext, entityResolution, options }, plannerAdapters);
   }
   const input = buildPlanningInput(intake, evidence, suppliedNarration, { ...options, sfxCatalog, noveltyContext, entityResolution, cinematicStory, cinematicConcepts, cinematicNarrationTiming });
-  const inputHash = semanticHash({ input, model: intake.model, schema: PRODUCTION_PLAN_SCHEMA, planner: "creative-planner.v1" });
+  const inputHash = semanticHash({ input, model: intake.model, schema: PRODUCTION_PLAN_SCHEMA, planner: "creative-planner.v2" });
   const store = adapters.store ?? await ProductionJobStore.open(workspace);
   const jobId = String(options.jobId ?? "creative-plan");
   const existing = store.get(jobId);
@@ -150,7 +152,7 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
         schemaName: "launchclip_production_plan",
         background: options.background !== false,
         maxOutputTokens: Number(options.maxOutputTokens ?? 48_000),
-        promptCacheKey: "launchclip:creative-planner:v2",
+        promptCacheKey: "launchclip:creative-planner:v3",
         metadata: { job_id: jobId, source_kind: intake.source.kind, aspect: intake.brief.aspect.id, attempt },
         onSubmitted: async (response) => store.markRunning(jobId, { provider: runtime.provider(), response_id: response.id, status: response.status })
       };
@@ -158,7 +160,10 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
       resumeResponseId = null;
       const plan = normalizePlanForAvailableResources(normalizeProductionPlanTiming(result.value), intake);
       const validation = validateProductionPlan(plan, validationContext);
-      validationErrors = validation.errors;
+      const sequenceErrors = cinematicStory
+        ? validateAuthoringSequenceDurations(buildAuthoringSequences(plan), Number(plan.format?.duration_seconds))
+        : [];
+      validationErrors = [...validation.errors, ...sequenceErrors];
       await store.markRunning(jobId, { provider: runtime.provider(), response_id: result.response_id, status: result.status });
       attemptPaths.push(await writePlanAttempt(workspace, jobId, attempt, {
         response_id: result.response_id,
@@ -167,7 +172,7 @@ export async function planProduction(workspacePath, options = {}, adapters = {})
         errors: validationErrors,
         candidate: plan
       }));
-      if (!validation.ok) {
+      if (validationErrors.length) {
         previousCandidate = plan;
         if (attempt < semanticAttempts) continue;
         if (freeSemanticFallbacks > 0) {

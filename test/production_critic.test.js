@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -44,6 +44,7 @@ test("gives an independent GPT-5.6 critic the plan, QA evidence, motion profile,
 test("reuses compact contact sheets and maps their source frames to scenes", async () => {
   const workspace = await fixture();
   const snapshots = path.join(workspace, "production", "qa", "snapshots");
+  await Promise.all([rm(path.join(snapshots, "001.png")), rm(path.join(snapshots, "002.png"))]);
   await writeFile(path.join(snapshots, "contact-sheet-1.jpg"), "sheet");
   await writeFile(path.join(snapshots, "frame-00-at-0.0s.png"), "opening");
   await writeFile(path.join(snapshots, "frame-01-at-7.5s.png"), "second scene");
@@ -58,14 +59,60 @@ test("reuses compact contact sheets and maps their source frames to scenes", asy
     };
   } } });
   const input = JSON.parse(request.input);
-  assert.equal(request.images.length, 1);
+  assert.equal(request.images.length, 3);
   assert.equal(request.images[0].detail, "high");
-  assert.deepEqual(input.snapshot_order, ["contact-sheet-1.jpg"]);
-  assert.equal(input.visual_evidence.mode, "contact-sheets");
+  assert.deepEqual(request.images.slice(1).map((entry) => entry.detail), ["low", "low"]);
+  assert.deepEqual(input.snapshot_order, ["contact-sheet-1.jpg", "frame-00-at-0.0s.png", "frame-01-at-7.5s.png"]);
+  assert.equal(input.visual_evidence.mode, "hybrid-contact");
   assert.deepEqual(input.visual_evidence.covered_shot_ids, ["shot-1", "shot-2"]);
   assert.deepEqual(input.visual_evidence.frames.filter((entry) => entry.shot_id).map((entry) => [entry.at_seconds, entry.shot_id]), [[0, "shot-1"], [7.5, "shot-2"]]);
-  assert.equal(result.visual_evidence.image_count, 1);
-  assert.equal(JSON.parse(await readFile(result.critique, "utf8")).visual_evidence.mode, "contact-sheets");
+  assert.equal(result.visual_evidence.image_count, 3);
+  assert.equal(JSON.parse(await readFile(result.critique, "utf8")).visual_evidence.mode, "hybrid-contact");
+});
+
+test("always gives the critic high-detail hook and transition strips alongside the overview", async () => {
+  const workspace = await fixture();
+  const qa = path.join(workspace, "production", "qa");
+  const snapshots = path.join(qa, "snapshots");
+  await Promise.all([rm(path.join(snapshots, "001.png")), rm(path.join(snapshots, "002.png"))]);
+  const frames = [
+    ["frame-00-at-0.0s.png", "temporal-001", 0, "shot-1", [{ type: "hook" }]],
+    ["frame-01-at-4.9s.png", "temporal-002", 4.92, "shot-1", [{ type: "transition", phase: "before", from_shot_id: "shot-1", to_shot_id: "shot-2" }]],
+    ["frame-02-at-5.2s.png", "temporal-003", 5.2, "shot-2", [{ type: "transition", phase: "mid", from_shot_id: "shot-1", to_shot_id: "shot-2" }]],
+    ["frame-03-at-5.5s.png", "temporal-004", 5.48, "shot-2", [{ type: "transition", phase: "after", from_shot_id: "shot-1", to_shot_id: "shot-2" }]]
+  ];
+  await Promise.all([
+    writeFile(path.join(snapshots, "contact-sheet-1.jpg"), "overview"),
+    ...frames.map(([file]) => writeFile(path.join(snapshots, file), file))
+  ]);
+  await writeFile(path.join(qa, "temporal-evidence.json"), `${JSON.stringify({
+    schema_version: "launchclip.temporal-evidence.v1",
+    status: "passed",
+    evidence: frames.map(([file, evidence_id, timestamp_seconds, shot_id, roles]) => ({
+      evidence_id, timestamp_seconds, shot_id, sequence_id: "proof-sequence", roles, file: `snapshots/${file}`
+    }))
+  })}\n`);
+  let request;
+  const result = await critiqueProduction(workspace, { maxSnapshots: 2 }, { client: { runStructured: async (options) => {
+    request = options;
+    return {
+      response_id: "resp_temporal_hybrid",
+      model: "gpt-5.6-sol",
+      usage: {},
+      value: { schema_version: CRITIQUE_VERSION, verdict: "ship", summary: "The rendered boundaries are ready.", findings: [] }
+    };
+  } } });
+  const input = JSON.parse(request.input);
+  assert.equal(request.images.length, 5, "critical temporal evidence is not dropped by a small generic-frame budget");
+  assert.deepEqual(request.images.map((entry) => entry.detail), ["high", "high", "high", "high", "high"]);
+  assert.deepEqual(input.snapshot_order, ["contact-sheet-1.jpg", ...frames.map(([file]) => file)]);
+  assert.equal(input.visual_evidence.mode, "hybrid-temporal");
+  assert.equal(input.visual_evidence.critical_frame_count, 4);
+  assert.equal(input.visual_evidence.transition_frame_count, 3);
+  assert.deepEqual(input.visual_evidence.frames[2].roles[0], { type: "transition", phase: "mid", from_shot_id: "shot-1", to_shot_id: "shot-2" });
+  assert.ok(input.visual_evidence.frames.every((entry) => entry.selected && Number.isInteger(entry.image_index)));
+  assert.match(request.instructions, /category=mount, repair_scope=assembly/);
+  assert.equal(result.visual_evidence.transition_frame_count, 3);
 });
 
 test("turns a human review request into bounded typed repair findings", async () => {
@@ -192,7 +239,7 @@ test("selects and records a proven free vision critic before reviewing pixels", 
   assert.deepEqual(probeOptions, { timeoutMs: 25 });
   assert.equal(route.model, "google/gemma-4-31b-it:free");
   assert.equal(request.model, "google/gemma-4-31b-it:free");
-  assert.equal(request.promptCacheKey, "launchclip:production-critic:v2");
+  assert.equal(request.promptCacheKey, "launchclip:production-critic:v3");
   assert.equal(request.maxOutputTokens, 4_000);
   assert.equal(result.free_model_selection.selected_model, "google/gemma-4-31b-it:free");
   assert.equal(JSON.parse(await readFile(result.critique, "utf8")).free_model_selection.source, "live-probe");

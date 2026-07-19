@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { FRAME_BLUEPRINT_VERSION } from "../src/frame_blueprint.js";
+import { FRAME_SEQUENCE_VERSION } from "../src/frame_sequence.js";
 import { alignFrameSelectorsToBlueprint, buildFallbackFrame, buildFrameInput, directFrames, fallbackFramesForVerification, safeShotFile, sanitizeFrameBundle, validateHyperFramesRoot } from "../src/frame_director.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { EVIDENCE_VERSION, FRAME_BUNDLE_SCHEMA, FRAME_BUNDLE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
@@ -588,7 +589,9 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Do not use negative top offsets/.test(entry.instructions)));
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /must never cross or cover a label/.test(entry.instructions)));
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => entry.prompt_cache_key === "launchclip:frame-director:v9"));
-  assert.deepEqual(result.frames.map((entry) => entry.usage.total_tokens), [450, 450]);
+  assert.deepEqual(result.frames.map((entry) => entry.usage.total_tokens), [600, 450]);
+  assert.deepEqual(result.frames.map((entry) => entry.calls), [3, 2]);
+  assert.equal(result.frame_cost.provider_calls_observed, 5);
   assert.ok(result.frames.every((entry) => entry.blueprint.cached === false));
   assert.ok(result.frames.every((entry) => entry.repairs.some((repair) => repair.kind === "align-frame-event-timing")));
   assert.ok(result.frames.every((entry) => entry.repairs.some((repair) => repair.kind === "remove-unplanned-locked-motion-properties")));
@@ -611,6 +614,175 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
   assert.equal(recovered.frames[0].recovered, true);
   assert.deepEqual(recovered.frames[0].repairs, [{ kind: "remove-document-wrapper" }]);
   assert.equal(recovered.frames[1].cached, true);
+});
+
+test("authors a cinematic continuity run in order against one cached shared-world contract", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const calls = [];
+  const client = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    calls.push({ schema: options.schemaName, shot: input.shot?.id ?? input.shot_contract?.id ?? null, input });
+    if (options.schemaName === "launchclip_frame_sequence") {
+      return { response_id: "sequence-1", model: "gpt-5.6-sol", status: "completed", value: frameSequenceForInput(input), usage: { input_tokens: 80, output_tokens: 40, total_tokens: 120 } };
+    }
+    if (options.schemaName === "launchclip_frame_blueprint") {
+      assert.equal(input.sequence_contract.authoring_sequence_id, "seq-001");
+      if (input.shot.id === "shot-1") assert.equal(input.previous_scene_blueprint, null);
+      else assert.equal(input.previous_scene_blueprint.shot_id, "shot-1");
+      return { response_id: `blueprint-${input.shot.id}`, model: "gpt-5.6-sol", status: "completed", value: frameBlueprintForInput(input), usage: { input_tokens: 100, output_tokens: 50, total_tokens: 150 } };
+    }
+    const shot = input.shot_contract;
+    assert.equal(input.sequence_contract.authoring_sequence_id, "seq-001");
+    if (shot.id === "shot-2") assert.equal(input.previous_scene_blueprint.shot_id, "shot-1");
+    const value = frameBundle(shot.id, shot.duration_seconds);
+    value.html = blueprintFrameHtml(shot.id, shot.duration_seconds, input.scene_blueprint);
+    value.motion.assertions[0].selector = input.scene_blueprint.motion_beats[0].selector;
+    value.motion.events[0].selector = input.scene_blueprint.motion_beats[0].selector;
+    return { response_id: `frame-${shot.id}`, model: "gpt-5.6-sol", status: "completed", value, usage: { input_tokens: 200, output_tokens: 100, total_tokens: 300 } };
+  } };
+
+  const options = { sequenceBlueprint: true, sceneBlueprint: true, concurrency: 4, background: false };
+  const result = await directFrames(workspace, options, { client });
+
+  assert.deepEqual(calls.map((entry) => `${entry.schema}:${entry.shot ?? "world"}`), [
+    "launchclip_frame_sequence:world",
+    "launchclip_frame_blueprint:shot-1",
+    "launchclip_frame_bundle:shot-1",
+    "launchclip_frame_blueprint:shot-2",
+    "launchclip_frame_bundle:shot-2"
+  ]);
+  assert.equal(result.generated, 2);
+  assert.deepEqual(result.sequences, {
+    groups: 1,
+    contracted: 1,
+    generated: 1,
+    cached: 0,
+    receipts: [{
+      authoring_sequence_id: "seq-001",
+      sequence_id: "proof-sequence",
+      shot_ids: ["shot-1", "shot-2"],
+      path: path.join(workspace, "production", "frames", ".sequences", "seq-001.json"),
+      cached: false,
+      response_id: "sequence-1",
+      model: "gpt-5.6-sol"
+    }]
+  });
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  assert.equal(store.get("sequence:seq-001").status, "succeeded");
+  assert.deepEqual(store.get("frame:shot-1").depends_on, ["sequence:seq-001"]);
+  assert.deepEqual(store.get("frame:shot-2").depends_on, ["sequence:seq-001"]);
+
+  const callCount = calls.length;
+  const cached = await directFrames(workspace, options, { client });
+  assert.equal(calls.length, callCount);
+  assert.equal(cached.cached, 2);
+  assert.equal(cached.sequences.cached, 1);
+});
+
+test("renders independent high-value candidates, judges pixels, and caches the winning receipt", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const authorCalls = [];
+  const verificationCalls = new Map();
+  let judgeCalls = 0;
+  const client = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    const variant = input.candidate_variant;
+    authorCalls.push({
+      shot_id: input.shot.id,
+      candidate_id: variant?.id ?? null,
+      prior: input.prior_attempt,
+      errors: input.validation_errors_to_repair
+    });
+    const attempt = authorCalls.filter((entry) => entry.candidate_id === variant?.id).length;
+    const value = frameBundle(input.shot.id, input.shot.duration_seconds);
+    if (variant) value.html = value.html.replace('id="root"', `id="root" data-variant="${variant.index}-${attempt}"`);
+    return {
+      response_id: `author-${input.shot.id}-${variant?.index ?? 0}-${attempt}`,
+      model: "gpt-5.6-sol",
+      status: "completed",
+      value,
+      usage: { input_tokens: 6, output_tokens: 4, total_tokens: 10 }
+    };
+  } };
+  const verify = async (_workspace, bundle, options) => {
+    const variant = bundle.html.match(/data-variant="([^"]+)"/)?.[1];
+    const count = (verificationCalls.get(variant?.slice(0, 1)) ?? 0) + 1;
+    verificationCalls.set(variant?.slice(0, 1), count);
+    const report = path.join(workspace, "production", "qa", "candidate-verify", options.shot.id, options.attempt, "report.json");
+    await mkdir(path.dirname(report), { recursive: true });
+    const failed = variant?.startsWith("1-") && count === 1;
+    await writeFile(report, `${JSON.stringify({ status: failed ? "failed" : "passed" })}\n`);
+    return {
+      ok: !failed,
+      failure_kind: failed ? "content" : null,
+      error: failed ? "opening hierarchy is too flat" : null,
+      report,
+      snapshots: path.dirname(report),
+      frames: [{ file: path.relative(workspace, report), foreground_ratio: .4 }]
+    };
+  };
+  const judge = async (_workspace, { candidates, trigger }) => {
+    judgeCalls += 1;
+    assert.deepEqual(candidates.map((entry) => entry.id), ["shot-1-candidate-01", "shot-1-candidate-02"]);
+    assert.equal(trigger.kind, "hook");
+    assert.match(candidates[0].bundle.html, judgeCalls === 1 ? /data-variant="1-2"/ : /data-variant="1-\d+"/);
+    assert.match(candidates[1].bundle.html, judgeCalls === 1 ? /data-variant="2-1"/ : /data-variant="2-\d+"/);
+    const receipt = path.join(workspace, "production", "qa", "candidate-selection", "shot-1", "selection.json");
+    await mkdir(path.dirname(receipt), { recursive: true });
+    await writeFile(receipt, `${JSON.stringify({
+      schema_version: "launchclip.frame-candidate-selection.v1",
+      shot_id: "shot-1",
+      method: "fresh-vision-scorecard",
+      candidate_order: candidates.map((entry) => entry.id),
+      selected_candidate_id: candidates[1].id
+    })}\n`);
+    return {
+      winner: candidates[1],
+      receipt,
+      method: "fresh-vision-scorecard",
+      provider: "openai",
+      model: "gpt-5.6",
+      response_id: "judge-1",
+      usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+      calls: 1
+    };
+  };
+
+  const options = { renderedCandidates: 2, candidateTournamentShots: 1, semanticAttempts: 2, concurrency: 1, background: false };
+  const result = await directFrames(workspace, options, { client, verifyFrameCandidate: verify, judgeRenderedFrameCandidates: judge });
+
+  assert.equal(judgeCalls, 1);
+  assert.deepEqual(authorCalls.slice(0, 3).map((entry) => entry.candidate_id), ["shot-1-candidate-01", "shot-1-candidate-01", "shot-1-candidate-02"]);
+  assert.equal(authorCalls[1].prior.shot_id, "shot-1");
+  assert.match(authorCalls[1].errors.join(" "), /opening hierarchy is too flat/);
+  assert.equal(authorCalls[2].prior, null);
+  assert.deepEqual(authorCalls[2].errors, []);
+  assert.match(await readFile(result.frames[0].html, "utf8"), /data-variant="2-1"/);
+  assert.equal(result.frames[0].usage.total_tokens, 35);
+  assert.equal(result.frames[0].calls, 4);
+  assert.equal(result.frame_cost.provider_calls_observed, 5);
+  assert.deepEqual(result.candidate_tournaments, {
+    requested_shots: 1,
+    completed_shots: 1,
+    receipts: [path.join(workspace, "production", "qa", "candidate-selection", "shot-1", "selection.json")]
+  });
+
+  const callCount = authorCalls.length;
+  const cached = await directFrames(workspace, options, { client, verifyFrameCandidate: verify, judgeRenderedFrameCandidates: judge });
+  assert.equal(authorCalls.length, callCount);
+  assert.equal(judgeCalls, 1);
+  assert.equal(cached.frames[0].cached, true);
+  assert.equal(cached.frames[0].candidate_selection.selected_candidate_id, "shot-1-candidate-02");
+  assert.equal(cached.candidate_tournaments.completed_shots, 1);
+
+  const retuned = await directFrames(workspace, { ...options, candidateJudgeReasoning: "xhigh" }, { client, verifyFrameCandidate: verify, judgeRenderedFrameCandidates: judge });
+  assert.equal(retuned.frames[0].cached, false);
+  assert.equal(judgeCalls, 2);
+  const rebudgeted = await directFrames(workspace, { ...options, candidateJudgeReasoning: "xhigh", candidateJudgeMaxOutputTokens: 6_000 }, { client, verifyFrameCandidate: verify, judgeRenderedFrameCandidates: judge });
+  assert.equal(rebudgeted.frames[0].cached, false);
+  assert.equal(judgeCalls, 3);
 });
 
 test("can exhaust LLM routes without writing a deterministic visual fallback", async () => {
@@ -817,6 +989,131 @@ function blueprintFrameHtml(id, duration, blueprint) {
 
 function objectLiteral(value) {
   return `{${Object.entries(value).map(([key, entry]) => `${key}:${JSON.stringify(entry)}`).join(",")}}`;
+}
+
+function frameSequenceForInput(input) {
+  const sequence = input.authoring_sequence;
+  const plannedObjects = new Map();
+  for (const shot of input.shots) {
+    for (const object of shot.visual.objects) {
+      const entry = plannedObjects.get(object.id) ?? { kind: object.kind, shotIds: [] };
+      entry.shotIds.push(shot.id);
+      plannedObjects.set(object.id, entry);
+    }
+  }
+  return {
+    schema_version: FRAME_SEQUENCE_VERSION,
+    authoring_sequence_id: sequence.authoring_sequence_id,
+    sequence_id: sequence.sequence_id,
+    shot_ids: sequence.shot_ids,
+    start_seconds: sequence.start_seconds,
+    end_seconds: sequence.end_seconds,
+    duration_seconds: sequence.duration_seconds,
+    experience: "One evidence field travels continuously into a resolved proof state.",
+    world: {
+      spatial_model: "A deep editorial evidence field",
+      coordinate_system: "Normalized left-to-right proof axis",
+      perspective: "Subtle 900px camera perspective",
+      camera_path: "Continuous rightward dolly",
+      light_direction: "Upper-left warm key",
+      material_language: "Ivory paper, dark ink, coral proof markers",
+      grade: "Warm editorial contrast",
+      background_system: "Persistent moving evidence grid",
+      depth_planes: ["grid", "proof", "labels"]
+    },
+    objects: [...plannedObjects].map(([objectId, object]) => ({
+      object_id: objectId,
+      kind: object.kind,
+      visual_identity: `${objectId} keeps one stable editorial form`,
+      material: "Ivory paper with dark ink",
+      light_response: "Upper-left key and grounded lower-right shadow",
+      states: object.shotIds.map((shotId, index) => ({
+        shot_id: shotId,
+        rect: { x_percent: 10 + index * 20, y_percent: 20, width_percent: 35, height_percent: 30 },
+        scale: 1,
+        rotation_degrees: 0,
+        depth_plane: object.kind === "decoration" ? "grid" : object.kind === "text" ? "labels" : "proof",
+        lifecycle: index ? "transform" : "enter"
+      }))
+    })),
+    shot_states: input.shots.map((shot, index) => ({
+      shot_id: shot.id,
+      accumulated_state: index ? "The proof is resolved" : "The evidence field opens",
+      entry_frame: index ? "The inherited proof node arrives on the same axis" : "The evidence field is already moving",
+      exit_frame: index ? "The proof settles sharply" : "The proof node travels into the next shot",
+      camera_entry: { x_percent: index * 12, y_percent: 0, scale: 1, rotation_degrees: 0, depth: index },
+      camera_exit: { x_percent: (index + 1) * 12, y_percent: 0, scale: 1.04, rotation_degrees: 0, depth: index + 1 },
+      intentional_reset: index === 0
+    })),
+    boundaries: input.required_boundaries.map((boundary) => ({
+      from_shot_id: boundary.from_shot_id,
+      to_shot_id: boundary.to_shot_id,
+      handoff_kind: "shared-element",
+      from_object_id: boundary.shared_object_ids[0],
+      to_object_id: boundary.shared_object_ids[0],
+      from_rect: { x_percent: 60, y_percent: 35, width_percent: 24, height_percent: 24 },
+      to_rect: { x_percent: 16, y_percent: 35, width_percent: 24, height_percent: 24 },
+      axis: "x",
+      direction: 1,
+      duration_seconds: .5,
+      exit_velocity: boundary.exit_velocity,
+      entry_velocity: boundary.entry_velocity,
+      motion_blur_px: boundary.motion_blur_px,
+      camera_path: "Continue the rightward dolly",
+      velocity_curve: "power3.in into power3.out",
+      blur_curve: "0 to planned blur to 0",
+      mask_or_shape_path: "none",
+      background_behavior: "Keep the evidence grid continuous"
+    }))
+  };
+}
+
+function frameBlueprintForInput(input) {
+  const shot = input.shot;
+  const elements = shot.visual.objects.map((object, index) => ({
+    object_id: object.id,
+    selector: `#${shot.id}-${object.id}`,
+    zone_id: index === 0 ? "field" : "hero",
+    visual_form: `${object.kind} rendered inside the frozen sequence world`,
+    priority: object.kind === "diagram-node" ? "primary" : "supporting"
+  }));
+  const event = shot.visual.events[0];
+  const eventTarget = elements.find((entry) => entry.object_id === event.target_ids[0]);
+  const semanticTargets = shot.visual.objects.filter((entry) => entry.kind !== "decoration");
+  return {
+    schema_version: FRAME_BLUEPRINT_VERSION,
+    shot_id: shot.id,
+    composition_strategy: "Continue the frozen editorial evidence world and advance its proof state.",
+    zones: [
+      { id: "field", purpose: "Persistent sequence field", x_percent: 0, y_percent: 0, width_percent: 100, height_percent: 100, layer: "background" },
+      { id: "hero", purpose: "Proof and readable labels", x_percent: 8, y_percent: 14, width_percent: 84, height_percent: 72, layer: "foreground" }
+    ],
+    elements,
+    typography: { display_px: 112, body_px: 42, metadata_px: 24, maximum_text_lines: 2 },
+    motion_beats: [{ event_id: event.id, object_id: event.target_ids[0], selector: eventTarget.selector, at_seconds: event.at_seconds, action: "Reveal and lock the proof" }],
+    supporting_motion_beats: input.supporting_motion_contract.windows.map((window, index) => {
+      const object = semanticTargets[index % semanticTargets.length];
+      const element = elements.find((entry) => entry.object_id === object.id);
+      return {
+        window_id: window.id,
+        object_id: object.id,
+        selector: element.selector,
+        at_seconds: window.start_seconds,
+        duration_seconds: window.minimum_duration_seconds,
+        intent: index === 0 ? "entrance" : "emphasis",
+        motion_pattern: index === 0 ? "group-settle" : "handoff",
+        affected_canvas_percent: window.minimum_affected_canvas_percent,
+        ease: window.recommended_eases[0],
+        changes: index === 0
+          ? [{ property: "opacity", from_value: 0, to_value: 1 }, { property: "scale", from_value: .86, to_value: 1 }]
+          : [{ property: "y", from_value: 96, to_value: 0 }, { property: "opacity", from_value: .5, to_value: 1 }],
+        action: index === 0 ? "Settle the proof field into view" : "Carry the semantic label into the handoff"
+      };
+    }),
+    visible_copy: shot.on_screen_text,
+    density: { target_occupied_percent: 68, minimum_semantic_objects: 2, focal_element_selector: eventTarget.selector },
+    implementation_notes: ["Preserve the shared coordinate system and upper-left light"]
+  };
 }
 
 function fixture() {

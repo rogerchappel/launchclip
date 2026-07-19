@@ -2,6 +2,14 @@ import { execFile } from "node:child_process";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import {
+  SUBSCRIPTION_CINEMATIC_CONTRACT,
+  buildTemporalEvidenceSchedule,
+  parseDeclaredSequenceBoundaries,
+  readCinematicContractMarker,
+  validateRenderedCandidateReceipt,
+  validateTemporalEvidenceManifest
+} from "./cinematic_evidence.js";
 import { assessCinematicReadiness } from "./production_readiness.js";
 import { resolveProductionProfile } from "./production_profiles.js";
 import { analyzeProductionAudio, evaluateAudioQuality } from "./render_audio_analysis.js";
@@ -21,7 +29,7 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
   const qaDir = projectFile(project, options.qaDir ?? "qa/cinematic");
   await mkdir(qaDir, { recursive: true });
 
-  const verification = adapters.verifyProject
+  let verification = adapters.verifyProject
     ? await adapters.verifyProject(project, qaDir, options)
     : await verifyProject(project, qaDir, options, adapters);
   await writeJson(path.join(qaDir, "verification.json"), verification);
@@ -69,6 +77,13 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
     readOptionalJson(projectFile(project, options.narration ?? "NARRATION.json")),
     readOptionalJson(projectFile(project, options.critique ?? "qa/critic.json"))
   ]);
+  const contractMarker = readCinematicContractMarker(html);
+  let phase2Evidence = null;
+  if (contractMarker) {
+    phase2Evidence = await verifyPhase2Evidence(project, html, duration, video, critique, contractMarker, options);
+    verification = augmentVerification(verification, phase2Evidence.checks);
+  }
+  await writeJson(path.join(qaDir, "verification.json"), verification);
   const readinessPath = projectFile(project, options.output ?? "CINEMATIC-READINESS.json");
   const readiness = {
     ...assessCinematicReadiness({
@@ -99,7 +114,94 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
     readiness: readinessPath,
     gates: readiness.gates,
     blockers: readiness.blockers,
-    repair_findings: readiness.repair_findings
+    repair_findings: readiness.repair_findings,
+    ...(phase2Evidence ? { cinematic_contract: phase2Evidence.summary } : {})
+  };
+}
+
+async function verifyPhase2Evidence(project, html, duration, video, critique, marker, options) {
+  const boundaryValidation = parseDeclaredSequenceBoundaries(html, duration);
+  const schedule = buildTemporalEvidenceSchedule(duration, boundaryValidation.boundaries);
+  const [candidateReceipt, temporalManifest] = await Promise.all([
+    readOptionalJson(projectFile(project, options.renderedCandidatesReceipt ?? "qa/rendered-candidates.json")),
+    readOptionalJson(projectFile(project, options.temporalEvidenceManifest ?? "qa/temporal-evidence/manifest.json"))
+  ]);
+  const contract = marker === SUBSCRIPTION_CINEMATIC_CONTRACT
+    ? { ok: true, errors: [] }
+    : { ok: false, errors: [`Unsupported cinematic contract marker: ${marker}`] };
+  const boundaryErrors = [...boundaryValidation.errors];
+  if (boundaryValidation.ok && !boundaryValidation.boundaries.length) boundaryErrors.push("Phase-2 requires at least one declared transition boundary");
+  const sharedWorldCount = boundaryValidation.boundaries.filter((entry) => entry.kind === "shared-world").length;
+  if (boundaryValidation.ok && boundaryValidation.boundaries.length && !sharedWorldCount) boundaryErrors.push("Phase-2 requires at least one declared shared-world boundary");
+  const boundaries = {
+    ok: boundaryErrors.length === 0,
+    errors: boundaryErrors,
+    count: boundaryValidation.boundaries.length,
+    shared_world_count: sharedWorldCount
+  };
+  const renderedCandidates = candidateReceipt
+    ? await validateRenderedCandidateReceipt(project, candidateReceipt, { boundaryIds: boundaryValidation.boundaries.map((entry) => entry.boundary_id) })
+    : { ok: false, errors: ["Phase-2 rendered candidate receipt is missing"], candidate_count: 0, artifacts: [] };
+  const temporal = temporalManifest
+    ? await validateTemporalEvidenceManifest(project, temporalManifest, video, schedule)
+    : { ok: false, errors: ["Phase-2 temporal evidence manifest is missing"], entry_count: 0, expected_count: schedule.entries.length };
+  const criticCitations = validateCriticCitations(critique, temporalManifest);
+  const checks = {
+    cinematic_contract: compactEvidenceCheck(contract),
+    declared_boundaries: compactEvidenceCheck(boundaries),
+    rendered_candidates: compactEvidenceCheck(renderedCandidates),
+    temporal_evidence: compactEvidenceCheck(temporal),
+    critic_citations: compactEvidenceCheck(criticCitations)
+  };
+  return {
+    checks,
+    summary: {
+      marker,
+      status: Object.values(checks).every((entry) => entry.ok) ? "passed" : "failed",
+      boundary_count: boundaryValidation.boundaries.length,
+      shared_world_boundary_count: sharedWorldCount,
+      expected_temporal_samples: schedule.entries.length,
+      candidate_comparison_count: renderedCandidates.comparison_count ?? 0,
+      candidate_count: renderedCandidates.candidate_count ?? 0,
+      temporal_entry_count: temporal.entry_count ?? 0
+    }
+  };
+}
+
+function validateCriticCitations(critique, manifest) {
+  const findings = Array.isArray(critique?.findings) ? critique.findings : [];
+  const evidenceIds = new Set((manifest?.entries ?? []).map((entry) => entry?.evidence_id ?? entry?.id).filter(Boolean));
+  const reviewed = Array.isArray(critique?.evidence_ids_reviewed) ? critique.evidence_ids_reviewed : [];
+  const reviewedIds = new Set(reviewed.filter((entry) => typeof entry === "string" && entry));
+  const errors = [];
+  if (!reviewedIds.size) errors.push("critic cites no reviewed temporal evidence IDs");
+  const unknownReviewed = [...reviewedIds].filter((id) => !evidenceIds.has(id));
+  if (unknownReviewed.length) errors.push(`critic cites unknown reviewed evidence IDs: ${unknownReviewed.join(", ")}`);
+  const unreviewed = [...evidenceIds].filter((id) => !reviewedIds.has(id));
+  if (unreviewed.length) errors.push(`critic did not review every temporal artifact: ${unreviewed.join(", ")}`);
+  for (const [index, finding] of findings.entries()) {
+    const cited = Array.isArray(finding?.evidence_ids) ? finding.evidence_ids : [];
+    if (!cited.length) errors.push(`critic finding ${index + 1} cites no temporal evidence IDs`);
+    else if (cited.some((id) => !evidenceIds.has(id))) errors.push(`critic finding ${index + 1} cites unknown temporal evidence IDs`);
+  }
+  return { ok: errors.length === 0, errors, finding_count: findings.length, evidence_count: evidenceIds.size, reviewed_count: reviewedIds.size };
+}
+
+function compactEvidenceCheck(value) {
+  return { ...value, ok: value.ok === true };
+}
+
+function augmentVerification(verification, phase2Checks) {
+  const failed = [...new Set([
+    ...(verification?.failed ?? []),
+    ...Object.entries(phase2Checks).filter(([, value]) => !value.ok).map(([name]) => name)
+  ])];
+  return {
+    ...verification,
+    schema_version: verification?.schema_version ?? "launchclip.subscription-verification.v1",
+    status: failed.length ? "failed" : "passed",
+    checks: { ...(verification?.checks ?? {}), ...phase2Checks },
+    failed
   };
 }
 

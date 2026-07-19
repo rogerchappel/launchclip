@@ -612,6 +612,7 @@ function cinematicNarrationOptions(flags) {
 
 function frameOptions(flags) {
   const cinematic = String(flags.profile ?? "").toLowerCase() === "cinematic";
+  const policy = modelPolicy(flags);
   return {
     background: !flags.foreground,
     concurrency: numberOr(flags.concurrency, 4),
@@ -622,7 +623,18 @@ function frameOptions(flags) {
     maxOutputTokens: numberOr(flags["frame-max-output-tokens"], 36_000),
     maxFrameCostUsd: numberOr(flags["max-frame-cost-usd"], undefined),
     allowFallback: cinematic ? false : Boolean(flags["allow-frame-fallback"]),
+    fallbackMode: cinematic ? "error" : undefined,
     sceneBlueprint: cinematic,
+    sequenceBlueprint: cinematic,
+    renderedCandidates: numberOr(flags["rendered-candidates"], cinematic ? 2 : 1),
+    candidateTournamentShots: numberOr(flags["rendered-candidate-shots"], 2),
+    candidateJudgeRoute: singleModelRoute(flags["candidate-judge-route"] ?? (policy === "free" ? "openrouter:openrouter/free@none" : "openai:gpt-5.6@high"), "--candidate-judge-route"),
+    candidateJudgeReasoning: flags["candidate-judge-reasoning"],
+    candidateJudgeMaxOutputTokens: numberOr(flags["candidate-judge-max-output-tokens"], 5_000),
+    sequenceSemanticAttempts: numberOr(flags["sequence-semantic-attempts"], 2),
+    sequenceMaxOutputTokens: numberOr(flags["sequence-max-output-tokens"], 8_000),
+    sequenceTemperature: numberOr(flags["sequence-temperature"], .45),
+    sequenceRepairTemperature: numberOr(flags["sequence-repair-temperature"], .15),
     blueprintSemanticAttempts: numberOr(flags["blueprint-semantic-attempts"], 2),
     blueprintMaxOutputTokens: numberOr(flags["blueprint-max-output-tokens"], 3_000)
   };

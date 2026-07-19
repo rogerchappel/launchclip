@@ -175,6 +175,15 @@ test("documents the Studio preview approval stage", async () => {
   assert.match(output.join(""), /production-critique <workspace> \[--critic-route provider:model@reasoning\]/);
 });
 
+test("documents cinematic rendered-candidate controls", async () => {
+  const output = [];
+  await runCli(["--help"], { stdout: { write: (value) => output.push(value) } });
+  const help = output.join("");
+  assert.match(help, /produce <source>.*\[--rendered-candidates 2\].*\[--rendered-candidate-shots 2\]/);
+  assert.match(help, /direct-frames <workspace>.*\[--profile standard\|cinematic\].*\[--candidate-judge-route provider:model@reasoning\]/);
+  assert.match(help, /\[--candidate-judge-reasoning high\].*\[--candidate-judge-max-output-tokens 5000\]/);
+});
+
 test("routes review to the interactive production flow for production workspaces", async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-cli-review-"));
   await mkdir(path.join(workspace, "production"));

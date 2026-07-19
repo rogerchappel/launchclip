@@ -269,6 +269,8 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
             const candidateVerification = await (adapters.verifyCandidate ?? verifyFrameCandidate)(workspace, candidate, {
               shot,
               format: plan.format,
+              intake,
+              plan,
               baseline: prior,
               attempt: `${totalAttempt}-${route.provider}-${route.model}`
             }, { run: adapters.run });
@@ -395,6 +397,8 @@ async function regenerateFrameAfterPatchFailure({ workspace, intake, evidence, p
       const candidateVerification = await (adapters.verifyCandidate ?? verifyFrameCandidate)(workspace, candidate, {
         shot,
         format: plan.format,
+        intake,
+        plan,
         baseline: prior,
         attempt: `regeneration-${routeIndex + 1}-${route.provider}-${route.model}`
       }, { run: adapters.run });

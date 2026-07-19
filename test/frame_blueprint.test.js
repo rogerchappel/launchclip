@@ -34,6 +34,63 @@ test("builds a compact blueprint packet and a smaller implementation handoff", (
   assert.ok(implementationInput.evidence[0].content.length <= 800);
 });
 
+test("carries one frozen sequence world and the prior accepted scene into both authoring handoffs", () => {
+  const context = fixture();
+  const nextShot = {
+    ...structuredClone(context.shot),
+    id: "shot-2",
+    start_seconds: 5,
+    end_seconds: 10,
+    visual: {
+      ...structuredClone(context.shot.visual),
+      continuity: { sequence_id: "proof-world", handoff: "resolve", inherits_object_ids: ["proof-node"], hands_off_object_ids: [] }
+    }
+  };
+  context.plan.shots.push(nextShot);
+  const sequence = {
+    authoring_sequence_id: "seq-001",
+    sequence_id: "proof-world",
+    shots: context.plan.shots,
+    shot_ids: ["shot-1", "shot-2"],
+    start_seconds: 0,
+    end_seconds: 10,
+    duration_seconds: 10
+  };
+  const sequenceContract = {
+    schema_version: "launchclip.frame-sequence.v1",
+    authoring_sequence_id: "seq-001",
+    sequence_id: "proof-world",
+    shot_ids: sequence.shot_ids,
+    world: { coordinate_system: "one continuous evidence axis", light_direction: "upper left" },
+    boundaries: [{ from_shot_id: "shot-1", to_shot_id: "shot-2", handoff_kind: "shared-element" }]
+  };
+  const previousSceneBlueprint = validBlueprint();
+  const authoring = JSON.parse(buildFrameBlueprintInput({
+    ...context,
+    shot: nextShot,
+    index: 1,
+    sequence,
+    sequenceContract,
+    previousSceneBlueprint
+  }));
+  const implementation = JSON.parse(buildBlueprintFrameInput({
+    ...context,
+    shot: nextShot,
+    index: 1,
+    blueprint: { ...validBlueprint(), shot_id: "shot-2" },
+    sequence,
+    sequenceContract,
+    previousSceneBlueprint
+  }));
+
+  for (const packet of [authoring, implementation]) {
+    assert.equal(packet.sequence_contract.authoring_sequence_id, "seq-001");
+    assert.deepEqual(packet.sequence_shots.map((entry) => entry.id), ["shot-1", "shot-2"]);
+    assert.equal(packet.previous_scene_blueprint.shot_id, "shot-1");
+  }
+  assert.equal(JSON.parse(buildFrameBlueprintInput(context)).sequence_contract, undefined);
+});
+
 test("validates complete object, event, selector, timing, copy, and density handoffs", () => {
   const { shot } = fixture();
   assert.deepEqual(validateFrameBlueprint(validBlueprint(), shot), { ok: true, errors: [] });

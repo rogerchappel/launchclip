@@ -12,6 +12,7 @@ fresh subscription subagent. Use LaunchClip only for the local
 - [Write and edit the retention story](#write-and-edit-the-retention-story)
 - [Time the real narration before the edit](#time-the-real-narration-before-the-edit)
 - [Plan continuous visual sequences](#plan-continuous-visual-sequences)
+- [Render critical candidates](#render-critical-candidates)
 - [Direct sound and music](#direct-sound-and-music)
 - [Render, judge, and gate the draft](#render-judge-and-gate-the-draft)
 - [Repair without lowering the floor](#repair-without-lowering-the-floor)
@@ -118,6 +119,71 @@ is frozen. Include spoken anchor, viewer question, visual noun, internal motion,
 transition geometry, SFX event, music state, safe areas, and entry/exit state for
 every sequence.
 
+## Render critical candidates
+
+Before full authoring, render two independent local candidates for the opening
+and two for one representative unproven high-risk boundary. Keep the selected
+story, factual evidence, style system, sequence physics, and visible promise
+fixed, but give each candidate a different first-principles composition and
+camera solution. Candidate B must not repair, imitate, or average candidate A.
+
+Compare actual pixels and motion at delivery size, not prose plans or source
+code. Score scroll stop, promise/proof comprehension, mobile hierarchy,
+art-direction specificity, depth/materiality, temporal development,
+shared-object continuity, velocity/blur shape, crisp settle, and implementation
+feasibility. Select deterministically by score and original candidate order.
+Reject blank, invalid, generic, slideshow-like, unreadable, or discontinuous
+candidates before comparison.
+
+Preserve candidate snapshots or draft slices under
+`qa/rendered-candidates/<candidate-id>/` and write
+`qa/rendered-candidates.json` with candidate IDs, artifact paths, scores,
+winner, preserve notes, and why every rejected candidate lost. Do not continue
+when either required comparison has fewer than two admissible candidates.
+
+Use `schema_version: "launchclip.subscription-rendered-candidates.v2"` and a
+`comparisons` array containing at least one `kind: "opening"` comparison and
+one `kind: "transition"` comparison. The transition comparison's `boundary_id`
+must match a declared composition boundary. Every comparison must contain:
+
+- a unique `id`, `judging_basis: "rendered-pixels-and-motion"`, ordered
+  `candidate_order`, deterministic `selected_candidate_id`, and non-empty
+  `selection_rationale`
+- at least two candidates with unique `id` and `render_id`,
+  `admissible: true`, and a non-empty rejection reason for every loser
+- one encoded candidate clip or at least three lifecycle images per candidate;
+  record every artifact as `{ "file": "project-relative/path", "sha256":
+  "actual-file-hash" }`
+- 0–10 candidate scores named `scroll_stop`,
+  `promise_or_proof_clarity`, `mobile_hierarchy`,
+  `art_direction_specificity`, `depth_materiality`, `temporal_development`,
+  `continuity`, `velocity_blur_shape`, `crisp_settle`, and
+  `implementation_feasibility`
+
+Choose the highest mean score and break a tie by `candidate_order`.
+`cinematic-check` recomputes that result, verifies the hashes and media
+signatures, rejects duplicate render IDs or identical artifact sets, and
+requires four admissible candidates across the opening and transition
+comparisons. The receipt can audit separate renders, but it cannot prove
+creative independence by itself; Candidate B must still be authored from the
+frozen brief without Candidate A in context.
+
+Render each isolated candidate with the same delivery geometry and sampling
+times. Preserve either the encoded candidate clip or at least its entry, peak
+motion, and settled frames:
+
+```bash
+npx --yes hyperframes@0.7.58 snapshot <candidate-project> \
+  --at <entry-seconds>,<peak-seconds>,<settle-seconds>
+npx --yes hyperframes@0.7.58 render <candidate-project> \
+  --quality draft --strict \
+  --output <project>/qa/rendered-candidates/<candidate-id>/candidate.mp4
+```
+
+Use separate candidate project state or restore the frozen pre-candidate state
+before authoring Candidate B. Do not let Candidate A's HTML, images, critic
+notes, or validation errors enter Candidate B's context.
+
 ## Direct sound and music
 
 Preserve narration as the primary information layer. If music is approved,
@@ -157,11 +223,33 @@ frames, dense opening strip, before/mid/after transition frames, typography
 crops, and the actual draft when video inspection is available. Require it to
 judge hook comprehension, causal clarity, proof, art direction, continuity,
 motion physics/blur, transition meaning, timing, typography, source fidelity,
-audio, payoff, and mobile readability. Save strict JSON at `qa/critic.json`:
+audio, payoff, and mobile readability. Give every reviewed frame or strip a
+stable evidence ID and require each finding to cite those IDs. Save strict JSON
+at `qa/critic.json`:
 
 ```json
-{ "verdict": "ship", "findings": [], "summary": "Fresh-context review." }
+{
+  "verdict": "ship",
+  "findings": [],
+  "summary": "Fresh-context review of every required temporal artifact.",
+  "evidence_ids_reviewed": [
+    "hook-001-hyperframes",
+    "hook-001-encoded-draft"
+  ]
+}
 ```
+
+List every evidence ID in the temporal manifest under
+`evidence_ids_reviewed`, including both sources for each scheduled sample. A
+non-empty finding must also contain `evidence_ids` naming the exact artifacts
+that support it. A clean `ship` verdict without complete evidence coverage
+fails the phase-2 gate.
+
+Use `verdict: "repair"` or `"replan"` for a failed review. Every finding must
+contain a stable `id`, `severity: "blocking|major|minor"`, a concise `category`,
+an actionable `message`, and a non-empty `evidence_ids` array. Add timing or
+sequence identifiers when known; do not invent them when the evidence cannot
+localize the defect.
 
 Use `repair` or `replan` and actionable findings when it is not ready. Then run
 the model-free local gate from a LaunchClip checkout or installed CLI:
