@@ -23,7 +23,12 @@ try {
     "public/icons/check.svg",
     "remotion/index.jsx",
     "skills/launchclip-cli/SKILL.md",
-    "skills/launchclip-create-video/SKILL.md"
+    "skills/launchclip-cli/agents/openai.yaml",
+    "skills/launchclip-cli/references/cli-reference.md",
+    "skills/launchclip-create-video/SKILL.md",
+    "skills/launchclip-create-video/agents/openai.yaml",
+    "skills/launchclip-create-video/references/cinematic-production.md",
+    "skills/launchclip-create-video/references/standalone-hyperframes.md"
   ];
   const packedFiles = new Set(artifact.files.map((entry) => entry.path));
   const missing = expectedFiles.filter((file) => !packedFiles.has(file));
