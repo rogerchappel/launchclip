@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -93,6 +93,13 @@ test("requires independent opening and transition rendered-candidate comparisons
   const reusedPixels = structuredClone(receipt);
   reusedPixels.comparisons[1].candidates[0].artifacts = structuredClone(reusedPixels.comparisons[0].candidates[0].artifacts);
   assert.match((await validateRenderedCandidateReceipt(project, reusedPixels, { boundaryIds: ["boundary-1"] })).errors.join(" "), /reuses rendered pixels from opening-a in opening/);
+  const outside = await mkdtemp(path.join(os.tmpdir(), "launchclip-outside-evidence-"));
+  const outsidePixels = renderedPng("outside");
+  await writeFile(path.join(outside, "outside.png"), outsidePixels);
+  await symlink(path.join(outside, "outside.png"), path.join(project, "qa", "rendered-candidates", "outside.png"));
+  const symlinkedPixels = structuredClone(receipt);
+  symlinkedPixels.comparisons[0].candidates[0].artifacts[0] = { file: "qa/rendered-candidates/outside.png", sha256: hash(outsidePixels) };
+  assert.match((await validateRenderedCandidateReceipt(project, symlinkedPixels, { boundaryIds: ["boundary-1"] })).errors.join(" "), /path escapes project through a symbolic link/);
   const textArtifact = structuredClone(receipt);
   const text = "not rendered pixels";
   await writeFile(path.join(project, textArtifact.comparisons[0].candidates[0].artifacts[0].file), text);

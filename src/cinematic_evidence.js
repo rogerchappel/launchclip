@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 
 export const SUBSCRIPTION_CINEMATIC_CONTRACT = "phase-2";
@@ -157,7 +157,7 @@ export async function validateRenderedCandidateReceipt(projectPath, receipt, opt
         const file = artifact.file;
         if (!artifact.sha256) errors.push(`candidate artifact has no SHA-256: ${file}`);
         try {
-          const resolved = containedProjectFile(project, file);
+          const resolved = await containedProjectFile(project, file);
           const info = await stat(resolved);
           if (!info.isFile() || info.size <= 0) errors.push(`candidate artifact is empty: ${file}`);
           else {
@@ -191,11 +191,14 @@ export async function validateRenderedCandidateReceipt(projectPath, receipt, opt
 
 export async function validateTemporalEvidenceManifest(projectPath, manifest, videoPath, schedule) {
   const project = path.resolve(projectPath);
-  const video = containedOrAbsoluteProjectFile(project, videoPath);
   const errors = [];
   if (manifest?.schema_version !== SUBSCRIPTION_TEMPORAL_EVIDENCE_VERSION) errors.push(`temporal evidence schema_version must be ${SUBSCRIPTION_TEMPORAL_EVIDENCE_VERSION}`);
+  let video = null;
   let videoHash = null;
-  try { videoHash = await sha256(video); } catch (error) { errors.push(`draft video is unavailable: ${error.message}`); }
+  try {
+    video = await containedOrAbsoluteProjectFile(project, videoPath);
+    videoHash = await sha256(video);
+  } catch (error) { errors.push(`draft video is unavailable: ${error.message}`); }
   if (!manifest?.video_sha256 || manifest.video_sha256 !== videoHash) errors.push("temporal evidence does not match the current encoded draft");
   const entries = Array.isArray(manifest?.entries) ? manifest.entries : [];
   const evidenceIds = entries.map((entry) => entry?.evidence_id ?? entry?.id).filter(Boolean);
@@ -229,7 +232,7 @@ export async function validateTemporalEvidenceManifest(projectPath, manifest, vi
     const id = entry?.evidence_id ?? entry?.id ?? "(unknown)";
     if (!entry?.file) { errors.push(`${id} has no filename`); continue; }
     try {
-      const file = containedProjectFile(project, entry.file);
+      const file = await containedProjectFile(project, entry.file);
       const info = await stat(file);
       if (!info.isFile() || info.size <= 0) errors.push(`${id} is empty`);
       const bytes = await readFile(file);
@@ -296,18 +299,25 @@ function renderedMediaKind(bytes) {
   return bytes.subarray(4, 8).toString("ascii") === "ftyp" ? "video" : null;
 }
 
-function containedProjectFile(project, value) {
+async function containedProjectFile(project, value) {
   const resolved = path.resolve(project, String(value ?? ""));
   const relative = path.relative(project, resolved);
   if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) throw new Error(`path escapes project: ${value}`);
-  return resolved;
+  return realContainedProjectFile(project, resolved, value);
 }
 
-function containedOrAbsoluteProjectFile(project, value) {
+async function containedOrAbsoluteProjectFile(project, value) {
   const resolved = path.isAbsolute(String(value)) ? path.resolve(String(value)) : path.resolve(project, String(value));
   const relative = path.relative(project, resolved);
   if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error(`path escapes project: ${value}`);
-  return resolved;
+  return realContainedProjectFile(project, resolved, value);
+}
+
+async function realContainedProjectFile(project, resolved, value) {
+  const [realProject, realFile] = await Promise.all([realpath(project), realpath(resolved)]);
+  const relative = path.relative(realProject, realFile);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) throw new Error(`path escapes project through a symbolic link: ${value}`);
+  return realFile;
 }
 
 function attribute(tag, name) {
