@@ -14,7 +14,8 @@ test("passes only when every cinematic readiness gate has current evidence", () 
 test("fails closed when required verification, analysis, or critique evidence is missing", () => {
   const result = assessCinematicReadiness({ plan: {} });
   assert.equal(result.ok, false);
-  assert.deepEqual(result.blockers.map((entry) => entry.gate), ["verification", "motion", "audio", "critic", "fallbacks"]);
+  assert.deepEqual(result.blockers.map((entry) => entry.gate), ["concepts", "story", "narration", "verification", "motion", "audio", "critic", "fallbacks"]);
+  assert.equal(result.gates.concepts.status, "missing");
   assert.equal(result.gates.verification.status, "missing");
   assert.equal(result.gates.fallbacks.status, "missing");
   assert.equal(result.repair_findings.length, 0);
@@ -58,6 +59,9 @@ test("rejects deterministic fallbacks and targets only their authored scenes", (
 
 function passingInput() {
   return {
+    concepts: { selected_id: "concept-1" },
+    story: { concept_id: "concept-1" },
+    narration: { duration_seconds: 10, words: [] },
     plan: { shots: [{ id: "shot-1" }] },
     verification: { status: "passed", failed: [] },
     motion: { quality: { ok: true, findings: [] } },

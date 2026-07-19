@@ -2,9 +2,14 @@ export const CINEMATIC_READINESS_VERSION = "launchclip.cinematic-readiness.v1";
 
 const STRUCTURAL_MOTION_CATEGORIES = new Set(["duration", "dimensions", "frames"]);
 
-export function assessCinematicReadiness({ plan, verification, motion, audio, critique, assembly } = {}, options = {}) {
+export function assessCinematicReadiness({ concepts, story, narration, plan, verification, motion, audio, critique, assembly } = {}, options = {}) {
   const blockers = [];
   const repairFindings = [];
+  for (const [id, value, message] of [
+    ["concepts", concepts, "Selected concept tournament receipt is missing."],
+    ["story", story, "Approved retention-story receipt is missing."],
+    ["narration", narration, "Measured cinematic narration receipt is missing."]
+  ]) if (!value) blockers.push(blocker(`${id}-missing`, id, message));
   const verificationOk = Boolean(verification && new Set(["ready", "passed"]).has(verification.status));
   if (!verification) blockers.push(blocker("verification-missing", "verification", "Native verification receipt is missing."));
   else if (!verificationOk) blockers.push(blocker("verification-failed", "verification", `Native verification is ${verification.status ?? "unknown"}: ${(verification.failed ?? []).join(", ") || "unspecified failure"}.`));
@@ -66,6 +71,9 @@ export function assessCinematicReadiness({ plan, verification, motion, audio, cr
   if (!plan) blockers.push(blocker("plan-missing", "plan", "Production plan is missing."));
 
   const gates = {
+    concepts: gate(Boolean(concepts), concepts ? "present" : "missing", 0),
+    story: gate(Boolean(story), story ? "present" : "missing", 0),
+    narration: gate(Boolean(narration), narration ? "present" : "missing", 0),
     plan: gate(Boolean(plan), plan ? "present" : "missing", 0),
     verification: gate(verificationOk, verification?.status ?? "missing", verification?.failed?.length ?? 0),
     motion: gate(motionOk, motion?.quality ? motionOk ? "passed" : "failed" : "missing", motionFindings.length),
