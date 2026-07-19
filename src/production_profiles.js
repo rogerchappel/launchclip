@@ -59,7 +59,7 @@ export function resolveProductionProfile(value = "standard", { aspect, durationS
     },
     readiness: {
       maximum_repair_passes: 3,
-      required_receipts: ["plan", "frames", "motion", "audio", "verification", "critic"]
+      required_receipts: ["concepts", "story", "narration", "plan", "frames", "motion", "audio", "verification", "critic"]
     }
   };
 }
