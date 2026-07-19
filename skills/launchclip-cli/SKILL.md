@@ -1,6 +1,6 @@
 ---
 name: launchclip-cli
-description: Operate, explain, troubleshoot, or automate the LaunchClip CLI for repository, product, topic, voiceover, presenter, downloaded HeyGen-avatar, user-owned project style packs, and promotion-packet video workflows. Use when an agent needs to choose LaunchClip commands, prepare inputs, create or reuse a project-local style, run or resume the model-directed production pipeline, inspect costs and artifacts, validate a workspace, render after approval, or use the legacy dry-run packet lane. Distinguish API-backed CLI production from the separate subscription-agent workflow.
+description: Operate, explain, troubleshoot, or automate the LaunchClip CLI for repository, product, topic, voiceover, presenter, downloaded HeyGen-avatar, cinematic one-shot, user-owned project style packs, and promotion-packet video workflows. Use when an agent needs to choose LaunchClip commands, prepare inputs, create or reuse a project-local style, run or resume the model-directed production pipeline, inspect costs and artifacts, validate a workspace, render after approval, or use the legacy dry-run packet lane. Distinguish API-backed CLI production from the separate subscription-agent workflow.
 ---
 
 # LaunchClip CLI
@@ -29,6 +29,18 @@ Choose one lane:
 If the desired lane is ambiguous, explain the cost and output difference and
 ask one concise question. Do not infer that a ChatGPT, Codex, or Claude login
 authorizes API billing.
+
+For a request such as “cinematic,” “stunning,” “best one-shot,” or “maximize
+retention,” select the API-backed cinematic profile, not a product-launch
+specialization:
+
+```bash
+launchclip produce <source> --profile cinematic --out .launchclip/<slug>
+```
+
+The profile is source-agnostic and works for portrait or landscape output. It
+raises the craft floor; it cannot guarantee views, distribution, or audience
+fit outside the evidence available to the run.
 
 ## Resolve the executable
 
@@ -121,14 +133,19 @@ Prefer a single `produce` command for a new model-directed production and stage
 commands for a resume or repair. Reuse the same workspace so receipt-backed
 stages can cache valid artifacts.
 
-Use `--fast-eval` to reduce provider and snapshot budgets, not to claim a free
-run. Use `--no-audio` to skip generated voice, music, and SFX, not to skip model
+Use `--fast-eval` to reduce provider, repair, and snapshot budgets, not to claim
+a free or cinematic-ready run. Do not combine it with a request for maximum
+one-shot quality. Use `--no-audio` to skip generated voice, music, and SFX, not to skip model
 planning, frame authoring, critique, or repairs. Treat `--max-frame-cost-usd` as
 a cumulative guard for direct-frame provider responses only, not as a total
 pipeline budget.
 
-Use `--model-policy cost-aware` by default: Terra plans, Luna authors, and only
-failed frames escalate through Terra to Sol. Use `local-first` only when Ollama
+Use `--model-policy cost-aware` for standard production: Terra plans, Luna
+authors, and only failed frames escalate through Terra to Sol. Do not pass a
+model policy for cinematic production unless the user explicitly requests a
+different cost/quality tradeoff; `--profile cinematic` automatically selects
+the quality policy, and an explicit cost-aware/free/local-first policy weakens
+that default. Use `local-first` only when Ollama
 is running; it prepends the configured local coder model. Use explicit repeated
 `--frame-route` or `--repair-route` values when no unapproved cloud fallback is
 allowed. Ollama uses its native structured-output API with a deterministic 32K
@@ -151,17 +168,21 @@ The CLI returns structured JSON. Check at minimum:
 - `costs.total_usd`, `costs.complete`, per-provider totals, and warnings
 - stage-specific warnings and cached/generated counts
 - verification and critic verdicts
+- `production/qa/cinematic-readiness.json` and every gate when the profile is
+  cinematic
 - the exact draft, snapshot, QA, or review paths
 
 Do not claim success when the command produced `needs-repair`, incomplete cost
-classification, stale verification, or an infrastructure failure. Fix
+classification, stale verification, a failed/missing cinematic readiness
+receipt, or an infrastructure failure. Fix
 toolchain failures before invoking model repair; provider repair cannot fix a
 missing browser, FFmpeg, or HyperFrames installation.
 
 ## Respect final approval
 
-`produce` stops at an analyzed draft. When verification is fresh and the
-independent critic says the draft is ready, run
+`produce` stops at an analyzed draft. For cinematic work, require fresh native
+verification, a critic `ship` verdict, zero authored-frame fallbacks, passing
+motion/audio gates, and `cinematic-readiness.json` with `ok: true`. Only then run
 `production-preview <workspace>` to open the editable project in HyperFrames
 Studio and return its URL. Treat Studio as a review and editing surface: its
 Export action is an ad hoc HyperFrames render, not LaunchClip approval or the
