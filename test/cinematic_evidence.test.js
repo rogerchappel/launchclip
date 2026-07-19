@@ -49,26 +49,32 @@ test("rejects invalid and out-of-range declared boundaries", () => {
   assert.match(parsed.errors.join(" "), /extends beyond/);
 });
 
-test("requires two real rendered candidate artifacts and a valid selected ID", async () => {
+test("requires independent opening and transition rendered-candidate comparisons", async () => {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-candidate-evidence-"));
   await mkdir(path.join(project, "qa", "rendered-candidates"), { recursive: true });
-  await Promise.all([
-    writeFile(path.join(project, "qa", "rendered-candidates", "a.png"), "candidate-a"),
-    writeFile(path.join(project, "qa", "rendered-candidates", "b.png"), "candidate-b")
-  ]);
+  await Promise.all(["opening-a", "opening-b", "transition-a", "transition-b"].map((id) =>
+    writeFile(path.join(project, "qa", "rendered-candidates", `${id}.png`), id)
+  ));
   const receipt = {
     schema_version: SUBSCRIPTION_CANDIDATE_RECEIPT_VERSION,
-    selected_candidate_id: "candidate-b",
-    candidates: [
-      { id: "candidate-a", artifacts: ["qa/rendered-candidates/a.png"] },
-      { id: "candidate-b", artifacts: ["qa/rendered-candidates/b.png"] }
+    comparisons: [
+      comparison("opening", "opening", ["opening-a", "opening-b"], "opening-b"),
+      comparison("handoff-1", "transition", ["transition-a", "transition-b"], "transition-a", "boundary-1")
     ]
   };
-  assert.equal((await validateRenderedCandidateReceipt(project, receipt)).ok, true);
-  assert.equal((await validateRenderedCandidateReceipt(project, { ...receipt, selected_candidate_id: "missing" })).ok, false);
+  const valid = await validateRenderedCandidateReceipt(project, receipt, { boundaryIds: ["boundary-1"] });
+  assert.equal(valid.ok, true);
+  assert.equal(valid.comparison_count, 2);
+  assert.equal(valid.candidate_count, 4);
+  assert.equal((await validateRenderedCandidateReceipt(project, {
+    schema_version: SUBSCRIPTION_CANDIDATE_RECEIPT_VERSION,
+    selected_candidate_id: "opening-b",
+    candidates: receipt.comparisons[0].candidates
+  })).ok, false);
+  assert.equal((await validateRenderedCandidateReceipt(project, receipt, { boundaryIds: ["other-boundary"] })).ok, false);
 });
 
-test("validates hashed browser and encoded-draft temporal evidence", async () => {
+test("requires hashed browser and encoded-draft evidence for every temporal sample", async () => {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-temporal-evidence-"));
   const evidenceDir = path.join(project, "qa", "temporal-evidence");
   await mkdir(path.join(project, "renders"), { recursive: true });
@@ -77,11 +83,14 @@ test("validates hashed browser and encoded-draft temporal evidence", async () =>
   await writeFile(video, "draft-video");
   const schedule = buildTemporalEvidenceSchedule(.3);
   const entries = [];
-  for (const [index, expected] of schedule.entries.entries()) {
-    const file = path.join(evidenceDir, `${expected.evidence_id}.png`);
-    const content = `frame-${index}`;
-    await writeFile(file, content);
-    entries.push({ ...expected, file: path.relative(project, file), sha256: hash(content), source: index % 2 ? "encoded-draft" : "hyperframes" });
+  for (const expected of schedule.entries) {
+    for (const source of ["hyperframes", "encoded-draft"]) {
+      const evidenceId = `${expected.evidence_id}-${source}`;
+      const file = path.join(evidenceDir, `${evidenceId}.png`);
+      const content = `frame-${evidenceId}`;
+      await writeFile(file, content);
+      entries.push({ ...expected, sample_id: expected.evidence_id, evidence_id: evidenceId, source, file: path.relative(project, file), sha256: hash(content) });
+    }
   }
   const manifest = {
     schema_version: SUBSCRIPTION_TEMPORAL_EVIDENCE_VERSION,
@@ -89,8 +98,41 @@ test("validates hashed browser and encoded-draft temporal evidence", async () =>
     entries
   };
   assert.equal((await validateTemporalEvidenceManifest(project, manifest, video, schedule)).ok, true);
+  assert.equal((await validateTemporalEvidenceManifest(project, { ...manifest, entries: entries.slice(1) }, video, schedule)).ok, false);
   assert.equal((await validateTemporalEvidenceManifest(project, { ...manifest, video_sha256: "stale" }, video, schedule)).ok, false);
 });
+
+function comparison(id, kind, candidateIds, selectedId, boundaryId) {
+  return {
+    id,
+    kind,
+    ...(boundaryId ? { boundary_id: boundaryId } : {}),
+    judging_basis: "rendered-pixels-and-motion",
+    selected_candidate_id: selectedId,
+    selection_rationale: `${selectedId} has the strongest rendered lifecycle.`,
+    candidates: candidateIds.map((candidateId) => ({
+      id: candidateId,
+      artifacts: [`qa/rendered-candidates/${candidateId}.png`],
+      scores: candidateScores(8),
+      ...(candidateId === selectedId ? {} : { rejection_reasons: ["Weaker hierarchy at delivery size."] })
+    }))
+  };
+}
+
+function candidateScores(value) {
+  return {
+    scroll_stop: value,
+    promise_or_proof_clarity: value,
+    mobile_hierarchy: value,
+    art_direction_specificity: value,
+    depth_materiality: value,
+    temporal_development: value,
+    continuity: value,
+    velocity_blur_shape: value,
+    crisp_settle: value,
+    implementation_feasibility: value
+  };
+}
 
 function hash(value) {
   return createHash("sha256").update(value).digest("hex");

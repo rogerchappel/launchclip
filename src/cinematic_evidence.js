@@ -7,6 +7,19 @@ export const SUBSCRIPTION_CANDIDATE_RECEIPT_VERSION = "launchclip.subscription-r
 export const SUBSCRIPTION_TEMPORAL_EVIDENCE_VERSION = "launchclip.subscription-temporal-evidence.v1";
 
 const SHARED_WORLD_ROLES = ["before", "departure", "early-acceleration", "peak-speed", "late-deceleration", "settle", "after"];
+const CANDIDATE_SCORE_FIELDS = [
+  "scroll_stop",
+  "promise_or_proof_clarity",
+  "mobile_hierarchy",
+  "art_direction_specificity",
+  "depth_materiality",
+  "temporal_development",
+  "continuity",
+  "velocity_blur_shape",
+  "crisp_settle",
+  "implementation_feasibility"
+];
+const TEMPORAL_EVIDENCE_SOURCES = ["hyperframes", "encoded-draft"];
 
 export function readCinematicContractMarker(html) {
   const root = [...String(html ?? "").matchAll(/<[a-z][^>]*\bdata-composition-id\s*=\s*["'][^"']+["'][^>]*>/gi)][0]?.[0];
@@ -91,32 +104,55 @@ export function buildTemporalEvidenceSchedule(durationSeconds, boundaries = []) 
   };
 }
 
-export async function validateRenderedCandidateReceipt(projectPath, receipt) {
+export async function validateRenderedCandidateReceipt(projectPath, receipt, options = {}) {
   const project = path.resolve(projectPath);
   const errors = [];
   if (receipt?.schema_version !== SUBSCRIPTION_CANDIDATE_RECEIPT_VERSION) errors.push(`candidate receipt schema_version must be ${SUBSCRIPTION_CANDIDATE_RECEIPT_VERSION}`);
-  const candidates = Array.isArray(receipt?.candidates) ? receipt.candidates : [];
-  const selectedId = receipt?.selected_candidate_id ?? receipt?.selected_id;
-  if (candidates.length < 2) errors.push("candidate receipt requires at least two candidates");
-  const ids = candidates.map((entry) => entry?.id).filter(Boolean);
-  if (ids.length !== candidates.length || new Set(ids).size !== ids.length) errors.push("candidate IDs must be present and unique");
-  if (!selectedId || !ids.includes(selectedId)) errors.push("selected candidate ID must reference a supplied candidate");
+  const comparisons = Array.isArray(receipt?.comparisons) ? receipt.comparisons : [];
+  if (comparisons.length < 2) errors.push("candidate receipt requires opening and transition comparisons");
+  const comparisonIds = comparisons.map((entry) => entry?.id).filter(Boolean);
+  if (comparisonIds.length !== comparisons.length || new Set(comparisonIds).size !== comparisonIds.length) errors.push("candidate comparison IDs must be present and unique");
+  const kinds = new Set(comparisons.map((entry) => entry?.kind));
+  if (!kinds.has("opening")) errors.push("candidate receipt requires an opening comparison");
+  if (!kinds.has("transition")) errors.push("candidate receipt requires a transition comparison");
+  const declaredBoundaryIds = Array.isArray(options.boundaryIds) ? new Set(options.boundaryIds) : null;
   const artifacts = [];
-  for (const candidate of candidates) {
-    const files = candidateArtifactFiles(candidate);
-    if (!files.length) errors.push(`candidate ${candidate?.id ?? "(unknown)"} has no rendered pixel artifacts`);
-    for (const file of files) {
-      try {
-        const resolved = containedProjectFile(project, file);
-        const info = await stat(resolved);
-        if (!info.isFile() || info.size <= 0) errors.push(`candidate artifact is empty: ${file}`);
-        else artifacts.push(path.relative(project, resolved).split(path.sep).join("/"));
-      } catch (error) {
-        errors.push(`candidate artifact is unavailable: ${file} (${error.message})`);
+  let candidateCount = 0;
+  for (const comparison of comparisons) {
+    const comparisonId = comparison?.id ?? "(unknown)";
+    if (!new Set(["opening", "transition"]).has(comparison?.kind)) errors.push(`candidate comparison ${comparisonId} has an unsupported kind`);
+    if (comparison?.judging_basis !== "rendered-pixels-and-motion") errors.push(`candidate comparison ${comparisonId} must judge rendered pixels and motion`);
+    if (typeof comparison?.selection_rationale !== "string" || !comparison.selection_rationale.trim()) errors.push(`candidate comparison ${comparisonId} requires a selection rationale`);
+    if (comparison?.kind === "transition") {
+      if (typeof comparison?.boundary_id !== "string" || !comparison.boundary_id.trim()) errors.push(`transition comparison ${comparisonId} requires a boundary ID`);
+      else if (declaredBoundaryIds && !declaredBoundaryIds.has(comparison.boundary_id)) errors.push(`transition comparison ${comparisonId} references an undeclared boundary ID`);
+    }
+    const candidates = Array.isArray(comparison?.candidates) ? comparison.candidates : [];
+    candidateCount += candidates.length;
+    if (candidates.length < 2) errors.push(`candidate comparison ${comparisonId} requires at least two candidates`);
+    const ids = candidates.map((entry) => entry?.id).filter(Boolean);
+    if (ids.length !== candidates.length || new Set(ids).size !== ids.length) errors.push(`candidate IDs in ${comparisonId} must be present and unique`);
+    const selectedId = comparison?.selected_candidate_id ?? comparison?.selected_id;
+    if (!selectedId || !ids.includes(selectedId)) errors.push(`selected candidate ID in ${comparisonId} must reference a supplied candidate`);
+    for (const candidate of candidates) {
+      const candidateId = candidate?.id ?? "(unknown)";
+      validateCandidateScores(candidate, comparisonId, errors);
+      if (candidateId !== selectedId && !candidateRejectionReasons(candidate).length) errors.push(`rejected candidate ${candidateId} in ${comparisonId} requires a rejection reason`);
+      const files = candidateArtifactFiles(candidate);
+      if (!files.length) errors.push(`candidate ${candidateId} in ${comparisonId} has no rendered pixel artifacts`);
+      for (const file of files) {
+        try {
+          const resolved = containedProjectFile(project, file);
+          const info = await stat(resolved);
+          if (!info.isFile() || info.size <= 0) errors.push(`candidate artifact is empty: ${file}`);
+          else artifacts.push(path.relative(project, resolved).split(path.sep).join("/"));
+        } catch (error) {
+          errors.push(`candidate artifact is unavailable: ${file} (${error.message})`);
+        }
       }
     }
   }
-  return { ok: errors.length === 0, errors, selected_id: selectedId ?? null, candidate_count: candidates.length, artifacts };
+  return { ok: errors.length === 0, errors, comparison_count: comparisons.length, candidate_count: candidateCount, artifacts };
 }
 
 export async function validateTemporalEvidenceManifest(projectPath, manifest, videoPath, schedule) {
@@ -128,19 +164,30 @@ export async function validateTemporalEvidenceManifest(projectPath, manifest, vi
   try { videoHash = await sha256(video); } catch (error) { errors.push(`draft video is unavailable: ${error.message}`); }
   if (!manifest?.video_sha256 || manifest.video_sha256 !== videoHash) errors.push("temporal evidence does not match the current encoded draft");
   const entries = Array.isArray(manifest?.entries) ? manifest.entries : [];
-  const byId = new Map(entries.map((entry) => [entry?.evidence_id ?? entry?.id, entry]));
-  const sources = new Set(entries.map((entry) => entry?.source));
-  if (!sources.has("hyperframes")) errors.push("temporal evidence requires HyperFrames snapshot artifacts");
-  if (!sources.has("encoded-draft")) errors.push("temporal evidence requires encoded-draft frame artifacts");
+  const evidenceIds = entries.map((entry) => entry?.evidence_id ?? entry?.id).filter(Boolean);
+  if (evidenceIds.length !== entries.length || new Set(evidenceIds).size !== evidenceIds.length) errors.push("temporal evidence IDs must be present and unique");
+  const bySample = new Map();
+  for (const entry of entries) {
+    const evidenceId = entry?.evidence_id ?? entry?.id ?? "(unknown)";
+    const sampleId = entry?.sample_id;
+    if (typeof sampleId !== "string" || !sampleId) errors.push(`${evidenceId} has no sample ID`);
+    else bySample.set(sampleId, [...(bySample.get(sampleId) ?? []), entry]);
+    if (!TEMPORAL_EVIDENCE_SOURCES.includes(entry?.source)) errors.push(`${evidenceId} has an unsupported evidence source`);
+  }
   for (const expected of schedule?.entries ?? []) {
-    const entry = byId.get(expected.evidence_id);
-    if (!entry) {
-      errors.push(`temporal evidence is missing ${expected.evidence_id}`);
-      continue;
+    const samples = bySample.get(expected.evidence_id) ?? [];
+    for (const source of TEMPORAL_EVIDENCE_SOURCES) {
+      const matches = samples.filter((entry) => entry?.source === source);
+      if (matches.length !== 1) {
+        errors.push(`temporal evidence ${expected.evidence_id} requires exactly one ${source} artifact`);
+        continue;
+      }
+      const entry = matches[0];
+      if (entry.role !== expected.role) errors.push(`${entry.evidence_id} has the wrong role`);
+      if (Math.abs(Number(entry.at_seconds) - expected.at_seconds) > .011) errors.push(`${entry.evidence_id} has the wrong timestamp`);
+      if ((entry.boundary_id ?? null) !== expected.boundary_id) errors.push(`${entry.evidence_id} has the wrong boundary ID`);
+      if ((entry.sequence_id ?? null) !== expected.sequence_id) errors.push(`${entry.evidence_id} has the wrong sequence ID`);
     }
-    if (entry.role !== expected.role) errors.push(`${expected.evidence_id} has the wrong role`);
-    if (Math.abs(Number(entry.at_seconds) - expected.at_seconds) > .011) errors.push(`${expected.evidence_id} has the wrong timestamp`);
-    if ((entry.boundary_id ?? null) !== expected.boundary_id) errors.push(`${expected.evidence_id} has the wrong boundary ID`);
   }
   for (const entry of entries) {
     const id = entry?.evidence_id ?? entry?.id ?? "(unknown)";
@@ -155,7 +202,28 @@ export async function validateTemporalEvidenceManifest(projectPath, manifest, vi
       errors.push(`${id} is unavailable: ${error.message}`);
     }
   }
-  return { ok: errors.length === 0, errors, entry_count: entries.length, expected_count: schedule?.entries?.length ?? 0, video_sha256: videoHash };
+  return {
+    ok: errors.length === 0,
+    errors,
+    entry_count: entries.length,
+    expected_count: (schedule?.entries?.length ?? 0) * TEMPORAL_EVIDENCE_SOURCES.length,
+    sample_count: schedule?.entries?.length ?? 0,
+    video_sha256: videoHash
+  };
+}
+
+function validateCandidateScores(candidate, comparisonId, errors) {
+  const scores = candidate?.scores;
+  for (const field of CANDIDATE_SCORE_FIELDS) {
+    const value = Number(scores?.[field]);
+    if (!Number.isFinite(value) || value < 0 || value > 10) errors.push(`candidate ${candidate?.id ?? "(unknown)"} in ${comparisonId} has an invalid ${field} score`);
+  }
+}
+
+function candidateRejectionReasons(candidate) {
+  if (Array.isArray(candidate?.rejection_reasons)) return candidate.rejection_reasons.filter((entry) => typeof entry === "string" && entry.trim());
+  if (typeof candidate?.rejection_reason === "string" && candidate.rejection_reason.trim()) return [candidate.rejection_reason];
+  return [];
 }
 
 function candidateArtifactFiles(candidate) {
