@@ -65,6 +65,83 @@ test("runs the delegated production DAG in dependency order and stops for approv
   assert.match(result.next, /production-render/);
 });
 
+test("runs the cinematic creative funnel and premium frame contract in one command", async () => {
+  const calls = [];
+  const profile = { id: "cinematic", readiness: { maximum_repair_passes: 3 } };
+  const adapters = {
+    withProductionLease: async (_workspace, operation) => operation(),
+    buildIntake: async () => ({ workspace: "/tmp/cinematic-workspace", profile }),
+    writeIntake: async () => ({ workspace: "/tmp/cinematic-workspace" }),
+    prepareSourceMedia: async () => { calls.push("source-preprocess"); return {}; },
+    collectEvidence: async () => { calls.push("evidence"); return {}; },
+    analyzeSourceMedia: async () => { calls.push("source-media"); return {}; },
+    resolveProductionEntities: async () => { calls.push("entities"); return {}; },
+    planConceptTournament: async (_workspace, options) => { calls.push(["concepts", options]); return { selected_id: "concept-1" }; },
+    writeRetentionStory: async (_workspace, options) => { calls.push(["story", options]); return { concept_id: "concept-1" }; },
+    produceCinematicNarration: async (_workspace, options) => { calls.push(["narration", options]); return { duration_seconds: 44.2 }; },
+    planProduction: async () => { calls.push("plan"); return { shots: 4 }; },
+    produceAudio: async (_workspace, options) => { calls.push(["audio", options]); return { status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }; },
+    directFrames: async (_workspace, options) => { calls.push(["frames", options]); return { generated: 4, cached: 0 }; },
+    assembleHyperFrames: async () => { calls.push("assemble"); return {}; },
+    renderDraftProduction: async () => { calls.push("draft"); return { status: "ready", video: "/tmp/draft.mp4", verification: { status: "passed", snapshots: "/tmp/snapshots" }, readiness: { ok: true, status: "ready", repair_findings: [] }, critique: { verdict: "ship" } }; }
+  };
+  const result = await runProduction("A cinematic idea", { profile: "cinematic", "no-audio": true }, adapters);
+  assert.equal(result.status, "awaiting-approval");
+  assert.deepEqual(calls.map((entry) => Array.isArray(entry) ? entry[0] : entry), ["source-preprocess", "evidence", "source-media", "entities", "concepts", "story", "narration", "plan", "audio", "frames", "assemble", "draft"]);
+  assert.equal(calls[6][1].noVoice, true);
+  assert.equal(calls[8][1].noVoice, true);
+  assert.equal(calls[9][1].sceneBlueprint, true);
+  assert.equal(calls[9][1].allowFallback, false);
+  assert.equal(calls[9][1].routes[0], "openai:gpt-5.6@high");
+  assert.equal(result.creative_funnel.concepts.selected_id, "concept-1");
+});
+
+test("repairs critic-approved cinematic motion failure before approval", async () => {
+  let drafts = 0;
+  let receivedRepair;
+  const readinessFinding = {
+    id: "readiness-motion-1", severity: "major", category: "motion", shot_ids: [], start_seconds: null, end_seconds: null,
+    evidence: "Opening motion is too sparse.", repair_scope: "plan", instruction: "Replan the opening cadence.", preserve: ["approved narration"]
+  };
+  const adapters = {
+    withProductionLease: async (_workspace, operation) => operation(),
+    buildIntake: async () => ({ workspace: "/tmp/cinematic-repair", profile: { id: "cinematic" } }),
+    writeIntake: async () => ({ workspace: "/tmp/cinematic-repair" }),
+    prepareSourceMedia: async () => ({}), collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), resolveProductionEntities: async () => ({}),
+    planConceptTournament: async () => ({}), writeRetentionStory: async () => ({}), produceCinematicNarration: async () => ({}), planProduction: async () => ({}),
+    produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
+    directFrames: async () => ({ generated: 2, cached: 0 }), assembleHyperFrames: async () => ({}),
+    renderDraftProduction: async () => {
+      drafts += 1;
+      return drafts === 1
+        ? { status: "needs-repair", verification: { status: "passed" }, critique: { verdict: "ship" }, readiness: { ok: false, status: "needs-repair", repair_findings: [readinessFinding], receipt: "/tmp/readiness.json" } }
+        : { status: "ready", verification: { status: "passed" }, critique: { verdict: "ship" }, readiness: { ok: true, status: "ready", repair_findings: [] } };
+    },
+    repairProduction: async (_workspace, options) => { receivedRepair = options; return { status: "replanned", repaired: [], actions: { plan_revised: true } }; }
+  };
+  const result = await runProduction("Cinematic idea", { profile: "cinematic", "no-audio": true }, adapters);
+  assert.equal(result.status, "awaiting-approval");
+  assert.equal(result.repairs[0].trigger, "readiness");
+  assert.deepEqual(receivedRepair.renderQualityFindings, [readinessFinding]);
+  assert.equal(drafts, 2);
+});
+
+test("review status cannot approve a cinematic task with failed readiness", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-cinematic-review-status-"));
+  const qa = path.join(workspace, "production", "qa");
+  await mkdir(qa, { recursive: true });
+  await writeFile(path.join(workspace, "production", "intake.json"), JSON.stringify({ profile: { id: "cinematic" } }));
+  await writeFile(path.join(qa, "verification.json"), JSON.stringify({ status: "passed", failed: [] }));
+  await writeFile(path.join(qa, "critique.json"), JSON.stringify({ verdict: "ship", findings: [] }));
+  await writeFile(path.join(qa, "cinematic-readiness.json"), JSON.stringify({ status: "needs-repair", ok: false, blockers: [{ id: "motion" }] }));
+  const result = await runProductionStage("production-review", workspace, {}, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    runProductionReview: async (target, _options, controls) => controls.getStatus(target)
+  });
+  assert.equal(result.status, "needs-repair");
+  assert.equal(result.readiness.ok, false);
+});
+
 test("continues produce into review only when explicitly requested", async () => {
   const calls = [];
   const adapters = {
@@ -485,6 +562,20 @@ test("routes local-first generation and bounded local patch repair explicitly", 
   assert.deepEqual(received.repair.routes, "ollama:qwen2.5-coder:latest@none");
   assert.equal(received.repair.maxPatchRatio, .2);
   assert.equal(received.repair.maxIssuesPerShot, 4);
+});
+
+test("resumes cinematic frame stages from the persisted workspace profile", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-cinematic-resume-"));
+  await mkdir(path.join(workspace, "production"), { recursive: true });
+  await writeFile(path.join(workspace, "production", "intake.json"), JSON.stringify({ profile: { id: "cinematic" } }));
+  let received;
+  await runProductionStage("direct-frames", workspace, { "allow-frame-fallback": true }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    directFrames: async (_workspace, options) => { received = options; return { status: "ready" }; }
+  });
+  assert.equal(received.sceneBlueprint, true);
+  assert.equal(received.allowFallback, false);
+  assert.deepEqual(received.routes, ["openai:gpt-5.6@high"]);
 });
 
 test("discovers ranked free frame models, clamps output, and records the accepted author", async () => {

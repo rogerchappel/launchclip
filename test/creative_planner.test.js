@@ -89,6 +89,47 @@ test("runs GPT-5.6 planning, validates the plan, writes artifacts, and caches ve
   assert.equal(calls.length, 2, "changing model configuration invalidates the cached plan");
 });
 
+test("binds cinematic edit planning to the selected concept and approved retention story", async () => {
+  const intake = sampleIntake();
+  intake.profile = { id: "cinematic", craft: { target_wpm_minimum: 165, target_wpm_maximum: 180 } };
+  const workspace = await tempWorkspace(intake);
+  const story = {
+    concept_id: "concept-1",
+    format: { aspect: "9:16", width: 1080, height: 1920, duration_seconds: 10, language: "en" },
+    narration: { source: "generated", full_text: samplePlan().narration.full_text },
+    open_loop: { question: "Where does the proof go?", resolved_by_beat_id: "payoff", midpoint_rehook_beat_id: null }
+  };
+  await writeFile(path.join(workspace, "production", "story.json"), `${JSON.stringify(story, null, 2)}\n`);
+  await writeFile(path.join(workspace, "production", "concepts.json"), `${JSON.stringify({ selected_id: "concept-1", candidates: [{ id: "concept-1", title: "Evidence becomes choreography" }] }, null, 2)}\n`);
+  await mkdir(path.join(workspace, "production", "media"), { recursive: true });
+  await writeFile(path.join(workspace, "production", "media", "cinematic-narration.json"), `${JSON.stringify({
+    timing_source: "measured",
+    duration_seconds: 10,
+    words: [{ word: "Proof", start: 0.2, end: 0.6 }],
+    pauses: [{ start_seconds: 0.6, end_seconds: 0.8, duration_seconds: 0.2 }],
+    beat_timings: [{ beat_id: "hook", measured_start_seconds: 0.2, measured_end_seconds: 2 }],
+    voiceover: { path: "/tmp/measured-voice.mp3" }
+  }, null, 2)}\n`);
+  const inputs = [];
+  const client = { runStructured: async (request) => {
+    inputs.push(JSON.parse(request.input));
+    const plan = samplePlan();
+    if (inputs.length === 1) plan.narration.full_text = "The planner rewrote the approved story.";
+    return { response_id: `cinematic-plan-${inputs.length}`, model: "gpt-5.6", status: "completed", value: plan, usage: {} };
+  } };
+
+  const result = await planProduction(workspace, { semanticAttempts: 2 }, { client });
+  assert.equal(result.semantic_attempts, 2);
+  assert.equal(inputs[0].selected_concept.id, "concept-1");
+  assert.equal(inputs[0].retention_story.narration.full_text, story.narration.full_text);
+  assert.equal(inputs[0].cinematic_profile.id, "cinematic");
+  assert.equal(inputs[0].brief.requested_duration_seconds, 10);
+  assert.equal(inputs[0].narration.timing_source, "measured");
+  assert.deepEqual(inputs[0].narration.word_timing, [{ word: "Proof", start: 0.2, end: 0.6 }]);
+  assert.equal(inputs[1].prior_attempt.narration.full_text, "The planner rewrote the approved story.");
+  assert.match(inputs[1].validation_errors_to_repair.join(" "), /retention-story narration must be preserved exactly/);
+});
+
 test("creates the planning client from the intake provider route", async () => {
   const intake = sampleIntake();
   intake.model = { provider: "openrouter", id: "openrouter/free", reasoning_effort: "none", reasoning_mode: "standard" };

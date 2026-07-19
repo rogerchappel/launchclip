@@ -77,6 +77,8 @@ Common intake flags:
 - `--style auto|<family>|<pack-name>|<pack-path>`, `--style-file`,
   `--style-reference`, `--style-root`
 - `--aspect 9:16|16:9|1:1`, `--duration <seconds>`, `--language <code>`
+- `--profile standard|cinematic`; use `cinematic` for the highest one-shot
+  craft floor in portrait or landscape
 - `--out <workspace>`
 
 Resource directories are expanded into checksummed files. Hidden files and
@@ -121,6 +123,17 @@ Model policies:
   implementation request. Independent shots run fail-closed with up to three
   concurrent lanes by default. Lower `--free-scene-concurrency` when a free
   endpoint returns rate limits; do not increase it merely to retry faster.
+
+`--profile cinematic` is the premium, source-agnostic one-shot lane. When no
+explicit model policy is supplied it selects `quality`, generates five distinct
+concepts, judges them independently, writes and independently edits a retention
+story, produces/measures narration before final edit planning, requires scene
+blueprints, disables deterministic frame fallback, and allows up to three
+bounded repair passes. It also requires the concept, story, narration, plan,
+frames, motion, audio, verification, and critic receipts before readiness.
+Do not add `--model-policy cost-aware` to a cinematic example unless that
+quality tradeoff is intentional. Do not pair `--fast-eval` with a claim of
+maximum one-shot quality.
 
 Pin one or more routes with repeatable
 `--frame-route provider:model@reasoning` and
@@ -170,6 +183,7 @@ Repository example:
 
 ```bash
 launchclip produce https://github.com/owner/repo \
+  --profile cinematic \
   --out .launchclip/repo-video \
   --prompt "Lead with the workflow change" \
   --audience "developers" \
@@ -194,6 +208,7 @@ Presenter/authoritative narration example:
 
 ```bash
 launchclip produce "Product workflow" \
+  --profile cinematic \
   --voiceover ./presenter-take.mp4 \
   --transcript ./presenter-take.txt \
   --presenter ./presenter-take.mp4 \
@@ -207,6 +222,7 @@ Downloaded HeyGen avatar shorthand:
 
 ```bash
 launchclip produce ./brief.md \
+  --profile cinematic \
   --heygen-avatar ./heygen-avatar.mp4 \
   --transcript ./heygen-avatar.txt \
   --assets ./brand-assets \
@@ -228,15 +244,21 @@ needed.
 1. intake and source preprocessing
 2. evidence collection and source-media analysis
 3. reusable entity/brand resolution
-4. creative planning
-5. audio production or a no-audio manifest
-6. direct frame authoring
-7. HyperFrames assembly
-8. verification, draft render, analysis, and independent critique
-9. up to two bounded repair passes by default
+4. for cinematic work, a five-way concept tournament
+5. for cinematic work, retention-story writing and fresh-context editing
+6. for cinematic work, narration production plus measured word/beat timing
+7. final creative/edit planning against the approved story and measured take
+8. audio production or a no-audio manifest
+9. blueprint-led direct frame authoring
+10. HyperFrames assembly
+11. verification, draft render, motion/audio analysis, and independent critique
+12. typed readiness repair, up to three passes for cinematic work or two for
+    standard work
 
-It returns `awaiting-approval` only when the draft is ready and the critic
-verdict is `ship`. It does not create the final render.
+It returns `awaiting-approval` for cinematic work only when native verification,
+motion, audio, critic, zero-fallback, and every creative-receipt gate pass. A
+critic `ship` verdict alone is insufficient. It does not create the final
+render or guarantee view count.
 
 ## Resume and repair commands
 
@@ -247,6 +269,9 @@ launchclip source-preprocess <workspace>
 launchclip evidence <workspace>
 launchclip source-media <workspace>
 launchclip resolve-entities <workspace>
+launchclip concept-tournament <workspace>
+launchclip retention-story <workspace>
+launchclip cinematic-narration <workspace>
 launchclip creative-plan <workspace>
 launchclip production-audio <workspace>
 launchclip direct-frames <workspace>
@@ -282,6 +307,8 @@ Important model-directed paths:
   production/
     intake.json
     evidence.json
+    concepts.json
+    story.json
     plan.json
     SCRIPT.md
     STORYBOARD.md
@@ -291,11 +318,15 @@ Important model-directed paths:
       index.html
       assembly.json
     media/
+      cinematic-narration.json
       manifest.json
     qa/
       verification.json
+      motion.json
+      audio.json
       snapshots/
       critique.json
+      cinematic-readiness.json
     renders/
 ```
 
@@ -306,8 +337,9 @@ Treat `costs.complete: false` as an incomplete estimate and report its warnings.
 
 ## Studio review
 
-After the draft is ready and the critic verdict is `ship`, open the assembled
-project in the editable HyperFrames Studio:
+After the draft is ready, the critic verdict is `ship`, and cinematic readiness
+is `ok: true` when applicable, open the assembled project in the editable
+HyperFrames Studio:
 
 ```bash
 launchclip production-preview <workspace> [--port 3002] [--no-open]
@@ -331,6 +363,9 @@ After the user reviews the Studio state and explicitly approves:
 ```bash
 launchclip production-render <workspace> --approve --quality high
 ```
+
+The final command reruns the current verification and output analysis. Do not
+override a missing or failed cinematic readiness receipt.
 
 Do not reuse `--approve` as blanket permission to publish or upload.
 

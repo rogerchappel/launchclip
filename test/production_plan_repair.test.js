@@ -80,6 +80,20 @@ test("rejects a repair that changes authoritative supplied narration", async () 
   }), /preserved exactly/);
 });
 
+test("rejects a cinematic replan that rewrites approved generated narration", async () => {
+  const workspace = await fixture({ cinematic: true });
+  const candidate = plan();
+  candidate.narration.full_text = "The repair model silently rewrote the approved performance.";
+  let request;
+  await assert.rejects(() => repairProductionPlan(workspace, findings(), { semanticAttempts: 1 }, {
+    client: { runStructured: async (options) => { request = options; return { response_id: "bad-cinematic", model: "gpt-5.6", status: "completed", usage: {}, value: candidate }; } }
+  }), /retention-story narration must be preserved exactly/);
+  const input = JSON.parse(request.input);
+  assert.equal(input.hard_constraints.selected_concept_id, "concept-1");
+  assert.equal(input.hard_constraints.approved_narration, plan().narration.full_text);
+  assert.equal(input.hard_constraints.measured_narration_duration_seconds, 10);
+});
+
 test("caps aggregate evidence in plan-repair requests", async () => {
   const workspace = await fixture({ evidenceContent: "e".repeat(5_000) });
   let input;
@@ -132,6 +146,7 @@ async function fixture(options = {}) {
     source: { kind: "product", value: "https://example.com", location: "https://example.com" },
     brief: { prompt: "Lead with proof", audience: "founders", cta: "Try it", language: "en", duration_seconds: 10, aspect: { id: "9:16", width: 1080, height: 1920, orientation: "portrait" } },
     model: { provider: "openai", id: "gpt-5.6", reasoning_effort: "xhigh", reasoning_mode: "standard" },
+    ...(options.cinematic ? { profile: { id: "cinematic" } } : {}),
     resources: [{ id: "screen", role: "supporting", type: "video", location: "/tmp/screen.mp4", sha256: "screen" }],
     policies: { supplied_voiceover_is_authoritative: Boolean(options.suppliedTranscript), final_render_requires_human_approval: true }
   };
@@ -154,6 +169,11 @@ async function fixture(options = {}) {
     writeFile(path.join(production, "SCRIPT.md"), "script\n"),
     writeFile(path.join(production, "STORYBOARD.md"), "storyboard\n")
   ]);
+  if (options.cinematic) {
+    await mkdir(path.join(production, "media"), { recursive: true });
+    await writeFile(path.join(production, "story.json"), `${JSON.stringify({ concept_id: "concept-1", narration: { source: "generated", full_text: initial.narration.full_text } })}\n`);
+    await writeFile(path.join(production, "media", "cinematic-narration.json"), `${JSON.stringify({ duration_seconds: 10, timing_source: "measured", words: [] })}\n`);
+  }
   const store = await ProductionJobStore.open(workspace);
   await store.add({ id: "creative-plan", kind: "creative-plan", depends_on: [], input_hash: semanticHash({ initial: true }) });
   await store.markRunning("creative-plan");

@@ -6,7 +6,7 @@ import { verifyFrameCandidate } from "./frame_candidate_verify.js";
 import { ensureTimelineRegistration } from "./hyperframes_timeline.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model_provider.js";
-import { FRAME_BUNDLE_SCHEMA, PRODUCTION_PATHS, validateFrameBundle } from "./production_contracts.js";
+import { CRITIQUE_VERSION, FRAME_BUNDLE_SCHEMA, PRODUCTION_PATHS, validateCritique, validateFrameBundle } from "./production_contracts.js";
 import { buildRepairContextCapsule, buildRepairSourceCapsule, REPAIR_CAPSULE_VERSION } from "./repair_capsule.js";
 import { repairProductionPlan } from "./production_plan_repair.js";
 
@@ -75,13 +75,25 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     readJson(path.join(workspace, PRODUCTION_PATHS.intake)),
     readJson(path.join(workspace, PRODUCTION_PATHS.evidence)),
     readJson(path.join(workspace, PRODUCTION_PATHS.plan)),
-    options.trigger === "verification"
+    new Set(["verification", "readiness"]).has(options.trigger)
       ? Promise.resolve({ verdict: "ship", findings: [] })
       : readOptionalJson(path.join(qaDir, "critique.json"), { verdict: "ship", findings: [] })
   ]);
-  const deterministicFindings = await collectDeterministicRepairFindings(workspace, plan, { maxIssuesPerShot: options.maxIssuesPerShot });
+  const renderQualityFindings = options.renderQualityFindings ?? [];
+  if (!Array.isArray(renderQualityFindings)) throw new Error("renderQualityFindings must be an array");
+  if (renderQualityFindings.length) {
+    const validation = validateCritique({
+      schema_version: CRITIQUE_VERSION,
+      verdict: "repair",
+      summary: "Current deterministic cinematic readiness findings.",
+      findings: renderQualityFindings
+    }, plan.shots.map((shot) => shot.id));
+    if (!validation.ok) throw new Error(`Invalid render quality findings: ${validation.errors.join("; ")}`);
+  }
+  const nativeFindings = await collectDeterministicRepairFindings(workspace, plan, { maxIssuesPerShot: options.maxIssuesPerShot });
+  const deterministicFindings = [...nativeFindings, ...renderQualityFindings];
   if (critique.verdict === "ship" && !deterministicFindings.length) {
-    return { stage: "production-repair", status: "not-needed", repaired: [], deterministic_findings: 0 };
+    return { stage: "production-repair", status: "not-needed", repaired: [], deterministic_findings: 0, render_quality_findings: 0 };
   }
   const findings = critique.verdict === "ship"
     ? deterministicFindings
@@ -105,7 +117,8 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
       stage: "production-repair",
       status: "replanned",
       repaired: [],
-      deterministic_findings: deterministicFindings.length,
+      deterministic_findings: nativeFindings.length,
+      render_quality_findings: renderQualityFindings.length,
       plan: planRepair,
       actions: { plan_revised: true, audio: "regenerate", frames: "all", assemble: true },
       blockers: [],
@@ -318,7 +331,8 @@ export async function repairProduction(workspacePath, options = {}, adapters = {
     stage: "production-repair",
     status: unsupported.length || failedRepairs.length ? "partially-repaired" : "repaired",
     repaired,
-    deterministic_findings: deterministicFindings.length,
+    deterministic_findings: nativeFindings.length,
+    render_quality_findings: renderQualityFindings.length,
     blockers: [
       ...unsupported.map((finding) => ({ id: finding.id, repair_scope: finding.repair_scope, instruction: finding.instruction })),
       ...failedRepairs

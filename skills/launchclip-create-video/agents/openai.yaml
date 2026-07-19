@@ -1,4 +1,4 @@
 interface:
   display_name: "LaunchClip Create Video"
-  short_description: "Create videos with a subscription agent"
-  default_prompt: "Use $launchclip-create-video to turn my source material into a reviewed HyperFrames video."
+  short_description: "Create cinematic subscription-agent videos"
+  default_prompt: "Use $launchclip-create-video to turn my source into a cinematic, locally verified HyperFrames video."

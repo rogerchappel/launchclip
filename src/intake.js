@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createReadStream, existsSync } from "node:fs";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { resolveProductionProfile } from "./production_profiles.js";
 import { resolveStylePack } from "./style_store.js";
 
 export const INTAKE_SCHEMA_VERSION = "launchclip.intake.v1";
@@ -68,7 +69,8 @@ export async function buildIntake(source, flags = {}, env = process.env) {
   const sourceKind = inferSourceKind(value, flags.kind);
   const aspect = resolveAspect(flags.aspect ?? flags.ratio ?? "16:9");
   const durationSeconds = positiveNumber(flags.duration ?? 60, "--duration");
-  const modelPolicy = resolveModelPolicy(flags["model-policy"] ?? "cost-aware");
+  const profile = resolveProductionProfile(flags.profile ?? "standard", { aspect, durationSeconds });
+  const modelPolicy = resolveModelPolicy(flags["model-policy"] ?? (profile.id === "cinematic" ? "quality" : "cost-aware"));
   const modelProvider = modelPolicy === "free" ? "openrouter" : "openai";
   const model = String(flags.model ?? (modelPolicy === "free" ? "openrouter/free" : env.OPENAI_VIDEO_MODEL ?? (modelPolicy === "quality" ? "gpt-5.6" : "gpt-5.6-terra"))).trim();
   const reasoningEffort = resolveReasoningEffort(flags.reasoning ?? (modelPolicy === "free" ? "none" : env.OPENAI_VIDEO_REASONING ?? (modelPolicy === "quality" ? "xhigh" : "high")));
@@ -131,6 +133,7 @@ export async function buildIntake(source, flags = {}, env = process.env) {
       reasoning_effort: reasoningEffort,
       reasoning_mode: flags.pro ? "pro" : "standard"
     },
+    profile,
     resources,
     policies: {
       evidence_required_for_factual_claims: true,

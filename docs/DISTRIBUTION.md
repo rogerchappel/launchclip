@@ -86,9 +86,13 @@ ln -s "$PWD/skills/launchclip-create-video" "$HOME/.agents/skills/launchclip-cre
 ```
 
 `launchclip-create-video` keeps creative orchestration in the active
-subscription agent and does not invoke LaunchClip's metered model stages.
-Optional voice, music, image, or other paid providers still require explicit
-user approval and their own credentials.
+subscription agent and does not invoke LaunchClip's metered model stages. It
+runs the same cinematic funnel—five concepts, fresh-context selection,
+retention edit, narration-first timing, rendered-draft critique, and up to three
+bounded repairs—then uses the model-free `launchclip cinematic-check` command
+to write `CINEMATIC-READINESS.json` before preview. Optional voice, music,
+image, or other paid providers still require explicit user approval and their
+own credentials.
 
 ## Homebrew tap
 

@@ -365,6 +365,57 @@ test("renders a temporally analyzed draft before approval", async () => {
   assert.match(result.video, /production\/renders\/draft\.mp4$/);
   assert.equal(renderArgs[renderArgs.indexOf("--quality") + 1], "draft");
   assert.equal(renderArgs.includes("--strict-all"), true);
+  assert.equal(renderArgs.includes("--skill"), false);
+});
+
+test("writes cinematic readiness and rejects critic-approved low-motion drafts", async () => {
+  const workspace = await fixture();
+  await addCinematicReceipts(workspace);
+  await writeFile(path.join(workspace, "production", "intake.json"), `${JSON.stringify({ profile: { id: "cinematic", craft: { hook_window_seconds: 4, minimum_hook_material_changes: 3 } } })}\n`);
+  await writeFile(path.join(workspace, "production", "hyperframes", "assembly.json"), `${JSON.stringify({ fallback_count: 0, fallbacks: [] })}\n`);
+  let motionOptions;
+  const result = await renderDraftProduction(workspace, {}, {
+    run: async (_command, args) => ({ stdout: args.includes("--json") ? "{}" : "ok", stderr: "" }),
+    writeMotionReport: async (_video, output, options) => {
+      motionOptions = options;
+      const report = { quality: { ok: false, findings: [{ category: "hook", severity: "major", message: "Only one opening event landed." }] }, family: "developing-card" };
+      await writeFile(output, `${JSON.stringify(report)}\n`);
+      return report;
+    },
+    critiqueProduction: async () => ({ verdict: "ship", findings: [] })
+  });
+  assert.equal(result.status, "needs-repair");
+  assert.equal(result.readiness.ok, false);
+  assert.equal(result.readiness.gates.concepts.ok, true);
+  assert.equal(result.readiness.gates.story.ok, true);
+  assert.equal(result.readiness.gates.narration.ok, true);
+  assert.equal(result.readiness.gates.critic.ok, true);
+  assert.equal(result.readiness.repair_findings[0].repair_scope, "plan");
+  assert.equal(motionOptions.expected.maximum_hold_ratio, .8);
+  assert.equal(motionOptions.expected.minimum_bursts_per_minute, 20);
+  assert.equal(motionOptions.expected.maximum_first_motion_seconds, .35);
+  assert.equal(motionOptions.expected.minimum_hook_events, 3);
+  const receipt = JSON.parse(await readFile(path.join(workspace, "production", "qa", "cinematic-readiness.json"), "utf8"));
+  assert.equal(receipt.status, "needs-repair");
+});
+
+test("cinematic readiness cannot approve a vision-supervised native verification failure", async () => {
+  const workspace = await fixture();
+  await addCinematicReceipts(workspace);
+  await writeFile(path.join(workspace, "production", "intake.json"), `${JSON.stringify({ profile: { id: "cinematic", craft: {} } })}\n`);
+  await writeFile(path.join(workspace, "production", "hyperframes", "assembly.json"), `${JSON.stringify({ fallback_count: 0, fallbacks: [] })}\n`);
+  const result = await renderDraftProduction(workspace, { allowContentVerificationFailures: true }, {
+    run: async (_command, args) => {
+      if (args[1] === "check") return { stdout: JSON.stringify({ ok: false, findings: [{ severity: "error", code: "panel_out_of_canvas" }] }), stderr: "" };
+      return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
+    },
+    writeMotionReport: async (_video, output) => { const report = { quality: { ok: true, findings: [] }, family: "developing-card" }; await writeFile(output, `${JSON.stringify(report)}\n`); return report; },
+    critiqueProduction: async () => ({ verdict: "ship", findings: [] })
+  });
+  assert.equal(result.verification.status, "failed");
+  assert.equal(result.status, "needs-repair");
+  assert.equal(result.readiness.gates.verification.ok, false);
+  assert.equal(result.readiness.blockers[0].gate, "verification");
 });
 
 test("renders a vision-supervised draft after bounded browser-content findings", async () => {
@@ -459,6 +510,17 @@ async function fixture() {
   await writeFile(path.join(workspace, "production", "plan.json"), `${JSON.stringify({ format: { duration_seconds: 10, width: 1080, height: 1920 } })}\n`);
   await writeFile(path.join(workspace, "production", "hyperframes", "index.html"), '<div data-composition-id="main" data-duration="10" data-width="1080" data-height="1920"></div>');
   return workspace;
+}
+
+async function addCinematicReceipts(workspace) {
+  const production = path.join(workspace, "production");
+  const media = path.join(production, "media");
+  await mkdir(media, { recursive: true });
+  await Promise.all([
+    writeFile(path.join(production, "concepts.json"), `${JSON.stringify({ selected_id: "concept-1" })}\n`),
+    writeFile(path.join(production, "story.json"), `${JSON.stringify({ concept_id: "concept-1" })}\n`),
+    writeFile(path.join(media, "cinematic-narration.json"), `${JSON.stringify({ duration_seconds: 10, words: [] })}\n`)
+  ]);
 }
 
 async function addShotFixture(workspace) {

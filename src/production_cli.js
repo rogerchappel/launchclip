@@ -4,8 +4,10 @@ import { collectEvidence } from "./evidence.js";
 import { directFrames } from "./frame_director.js";
 import { assembleHyperFrames } from "./hyperframes_assembler.js";
 import { buildIntake, writeIntakeManifest } from "./intake.js";
+import { planConceptTournament } from "./concept_tournament.js";
+import { writeRetentionStory } from "./retention_story.js";
 import { planProduction } from "./creative_planner.js";
-import { produceAudio } from "./production_audio.js";
+import { produceAudio, produceCinematicNarration } from "./production_audio.js";
 import { assertVerificationFresh, renderDraftProduction, renderProduction, verifyProduction } from "./production_render.js";
 import { critiqueProduction, FREE_VISION_UNAVAILABLE_CODE } from "./production_critic.js";
 import { repairProduction } from "./production_repair.js";
@@ -20,11 +22,14 @@ import { probeOpenRouterFreeModels, recordOpenRouterFreeModelOutcome, selectOpen
 
 export async function runProductionStage(command, target, flags = {}, adapters = {}) {
   if (command === "produce") return runProduction(target, flags, adapters);
-  flags = productionFlags(flags);
+  flags = productionFlags(await persistedProductionFlags(target, flags));
   if (command === "production-review") return runInteractiveProductionReview(target, flags, adapters);
   const lease = adapters.withProductionLease ?? withProductionLease;
   return lease(target, async () => {
     if (command === "evidence") return collectEvidence(target, evidenceOptions(flags), adapters.evidence);
+    if (command === "concept-tournament") return (adapters.planConceptTournament ?? planConceptTournament)(target, conceptOptions(flags), adapters.concepts);
+    if (command === "retention-story") return (adapters.writeRetentionStory ?? writeRetentionStory)(target, storyOptions(flags), adapters.story);
+    if (command === "cinematic-narration") return (adapters.produceCinematicNarration ?? produceCinematicNarration)(target, cinematicNarrationOptions(flags), adapters.cinematicNarration);
     if (command === "creative-plan") return (adapters.planProduction ?? planProduction)(target, plannerOptions(flags), adapters.planner);
     if (command === "direct-frames") return runFrameDirection(target, flags, adapters);
     if (command === "production-audio") return produceAudio(target, audioOptions(flags), adapters.audio);
@@ -40,6 +45,12 @@ export async function runProductionStage(command, target, flags = {}, adapters =
     if (command === "resolve-entities") return (adapters.resolveProductionEntities ?? resolveProductionEntities)(target, entityOptions(flags));
     throw new Error(`Unknown production stage: ${command}`);
   });
+}
+
+async function persistedProductionFlags(workspacePath, flags) {
+  if (flags.profile != null) return flags;
+  const intake = await readOptionalJson(path.join(path.resolve(workspacePath), "production", "intake.json"));
+  return intake?.profile?.id ? { ...flags, profile: intake.profile.id } : flags;
 }
 
 async function standaloneRepairOptions(workspacePath, flags, adapters) {
@@ -101,7 +112,7 @@ export async function runProduction(source, flags = {}, adapters = {}) {
   const production = await lease(workspace, async () => {
     const intake = adapters.writeIntake ? await adapters.writeIntake(source, flags) : await writeIntakeManifest(normalized);
     if (path.resolve(intake.workspace) !== workspace) throw new Error(`Intake workspace changed after lease acquisition: expected ${workspace}, got ${intake.workspace}`);
-    return runProductionInWorkspace(workspace, flags, adapters);
+    return runProductionInWorkspace(workspace, flags, adapters, normalized);
   });
   if (!flags.review) return production;
   return runInteractiveProductionReview(workspace, flags, adapters, production);
@@ -177,27 +188,43 @@ async function reviseProduction(workspace, flags, request, adapters) {
 
 async function readProductionReviewStatus(workspacePath) {
   const workspace = path.resolve(workspacePath);
-  const [verification, critique] = await Promise.all([
+  const [intake, verification, critique, readiness] = await Promise.all([
+    readOptionalJson(path.join(workspace, "production", "intake.json")),
     readOptionalJson(path.join(workspace, "production", "qa", "verification.json")),
-    readOptionalJson(path.join(workspace, "production", "qa", "critique.json"))
+    readOptionalJson(path.join(workspace, "production", "qa", "critique.json")),
+    readOptionalJson(path.join(workspace, "production", "qa", "cinematic-readiness.json"))
   ]);
-  const ready = verification?.status === "passed" && critique?.verdict === "ship";
+  const cinematic = intake?.profile?.id === "cinematic";
+  const ready = verification?.status === "passed" && critique?.verdict === "ship" && (!cinematic || readiness?.ok === true);
   return {
     stage: "production-review-status",
     status: ready ? "awaiting-approval" : "needs-repair",
     workspace,
     verification: verification ? { status: verification.status, failed: verification.failed ?? [] } : null,
-    critique: critique ? { verdict: critique.verdict, findings: critique.findings?.length ?? 0, summary: critique.summary ?? null } : null
+    critique: critique ? { verdict: critique.verdict, findings: critique.findings?.length ?? 0, summary: critique.summary ?? null } : null,
+    readiness: cinematic ? readiness ? { status: readiness.status, ok: readiness.ok, blockers: readiness.blockers?.length ?? 0 } : null : undefined
   };
 }
 
-async function runProductionInWorkspace(workspace, flags, adapters) {
+async function runProductionInWorkspace(workspace, flags, adapters, normalizedIntake = {}) {
   const sourcePreprocess = await (adapters.prepareSourceMedia ?? prepareSourceMedia)(workspace, sourcePreprocessOptions(flags), adapters.sourcePreprocess);
   const evidence = await (adapters.collectEvidence ?? collectEvidence)(workspace, evidenceOptions(flags), adapters.evidence);
   const sourceMedia = await (adapters.analyzeSourceMedia ?? analyzeSourceMedia)(workspace, mediaAnalysisOptions(flags), adapters.mediaAnalysis);
   const entityResolution = await (adapters.resolveProductionEntities ?? resolveProductionEntities)(workspace, entityOptions(flags));
-  let plan = await (adapters.planProduction ?? planProduction)(workspace, plannerOptions(flags), adapters.planner);
+  const cinematic = normalizedIntake.profile?.id === "cinematic" || String(flags.profile ?? "").toLowerCase() === "cinematic";
   const noAudio = Boolean(flags["no-audio"]);
+  let concepts = null;
+  let story = null;
+  let narrationTiming = null;
+  if (cinematic) {
+    concepts = await (adapters.planConceptTournament ?? planConceptTournament)(workspace, conceptOptions(flags), adapters.concepts);
+    story = await (adapters.writeRetentionStory ?? writeRetentionStory)(workspace, storyOptions(flags), adapters.story);
+    narrationTiming = await (adapters.produceCinematicNarration ?? produceCinematicNarration)(workspace, {
+      ...cinematicNarrationOptions(flags),
+      noVoice: noAudio || Boolean(flags["no-voice"])
+    }, adapters.cinematicNarration);
+  }
+  let plan = await (adapters.planProduction ?? planProduction)(workspace, plannerOptions(flags), adapters.planner);
   const requestedAudioOptions = {
     ...audioOptions(flags),
     noVoice: noAudio || Boolean(flags["no-voice"]),
@@ -221,16 +248,19 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
   let critique = null;
   const repairs = [];
   const localRepairs = [];
-  const maximumRepairPasses = numberOr(flags["max-repair-passes"], 2);
+  const maximumRepairPasses = numberOr(flags["max-repair-passes"], cinematic ? 3 : 2);
   let visionReviewRequested = false;
   while (true) {
     let trigger;
+    let renderQualityFindings = [];
     try {
       draft = await (adapters.renderDraftProduction ?? renderDraftProduction)(workspace, renderOptions(flags), adapters.render);
       verification = draft.verification;
       critique = draft.critique;
-      if (!["repair", "replan"].includes(critique.verdict)) break;
-      trigger = "critique";
+      renderQualityFindings = cinematic ? draft.readiness?.repair_findings ?? [] : [];
+      if (["repair", "replan"].includes(critique.verdict)) trigger = "critique";
+      else if (cinematic && draft.readiness?.ok === false && renderQualityFindings.length) trigger = "readiness";
+      else break;
     } catch (error) {
       if (error?.code !== "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED") throw error;
       draft = null;
@@ -266,7 +296,8 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
     const repair = await runProductionRepair(workspace, flags, {
       ...repairOptions(flags),
       trigger,
-      verification
+      verification,
+      renderQualityFindings
     }, adapters);
     repairs.push({ pass: repairs.length + 1, trigger, ...repair });
     if (!repair.repaired?.length && !repair.actions?.plan_revised) break;
@@ -286,7 +317,7 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
     }
     assembly = await (adapters.assembleHyperFrames ?? assembleHyperFrames)(workspace, assemblyOptions);
   }
-  const readyForApproval = draft?.status === "ready" && critique?.verdict === "ship";
+  const readyForApproval = draft?.status === "ready" && critique?.verdict === "ship" && (!cinematic || draft?.readiness?.ok === true);
   if (!readyForApproval && ["repair", "replan"].includes(critique?.verdict)) {
     frames = await rotateCritiqueRejectedFreeModel(frames, adapters);
   }
@@ -298,6 +329,7 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
     evidence,
     source_media: sourceMedia,
     entity_resolution: entityResolution,
+    ...(cinematic ? { creative_funnel: { concepts, story, narration_timing: narrationTiming } } : {}),
     plan,
     audio,
     frames: { generated: frames.generated, cached: frames.cached, ...(frames.free_model_selection ? { free_model_selection: frames.free_model_selection } : {}) },
@@ -311,6 +343,8 @@ async function runProductionInWorkspace(workspace, flags, adapters) {
       ? `Review ${draft.video} and ${verification.snapshots}, then run launchclip production-render ${workspace} --approve.`
       : verification?.status === "failed"
         ? `Review ${verification.qa}; run production-repair after resolving any unscoped verification findings.`
+        : cinematic && draft?.readiness?.ok === false
+          ? `Review ${draft.readiness.receipt ?? "production/qa/cinematic-readiness.json"}; resolve every deterministic craft gate before final approval.`
         : `Review ${critique?.critique ?? "production/qa/critique.json"}; resolve remaining findings before final approval.`
   };
 }
@@ -545,7 +579,39 @@ function plannerOptions(flags) {
   };
 }
 
+function conceptOptions(flags) {
+  return {
+    background: !flags.foreground,
+    candidateRoute: singleModelRoute(flags["concept-route"], "--concept-route"),
+    judgeRoute: singleModelRoute(flags["concept-judge-route"], "--concept-judge-route"),
+    semanticAttempts: numberOr(flags["concept-semantic-attempts"], 2),
+    candidateMaxOutputTokens: numberOr(flags["concept-max-output-tokens"], 28_000),
+    judgeMaxOutputTokens: numberOr(flags["concept-judge-max-output-tokens"], 18_000)
+  };
+}
+
+function storyOptions(flags) {
+  return {
+    background: !flags.foreground,
+    writerRoute: singleModelRoute(flags["story-writer-route"], "--story-writer-route"),
+    editorRoute: singleModelRoute(flags["story-editor-route"], "--story-editor-route"),
+    semanticAttempts: numberOr(flags["story-semantic-attempts"], 2),
+    writerMaxOutputTokens: numberOr(flags["story-writer-max-output-tokens"], 24_000),
+    editorMaxOutputTokens: numberOr(flags["story-editor-max-output-tokens"], 30_000)
+  };
+}
+
+function cinematicNarrationOptions(flags) {
+  return {
+    noVoice: Boolean(flags["no-voice"]),
+    voiceId: flags["voice-id"],
+    voiceModel: flags["voice-model"],
+    maxNarrationChars: numberOr(flags["max-narration-chars"], undefined)
+  };
+}
+
 function frameOptions(flags) {
+  const cinematic = String(flags.profile ?? "").toLowerCase() === "cinematic";
   return {
     background: !flags.foreground,
     concurrency: numberOr(flags.concurrency, 4),
@@ -555,7 +621,10 @@ function frameOptions(flags) {
     pendingReasoning: flags["pending-frame-reasoning"],
     maxOutputTokens: numberOr(flags["frame-max-output-tokens"], 36_000),
     maxFrameCostUsd: numberOr(flags["max-frame-cost-usd"], undefined),
-    allowFallback: Boolean(flags["allow-frame-fallback"])
+    allowFallback: cinematic ? false : Boolean(flags["allow-frame-fallback"]),
+    sceneBlueprint: cinematic,
+    blueprintSemanticAttempts: numberOr(flags["blueprint-semantic-attempts"], 2),
+    blueprintMaxOutputTokens: numberOr(flags["blueprint-max-output-tokens"], 3_000)
   };
 }
 
@@ -673,32 +742,35 @@ function modelPolicy(flags) {
 }
 
 function productionFlags(flags) {
-  if (!flags["fast-eval"]) return flags;
+  const configured = String(flags.profile ?? "").toLowerCase() === "cinematic" && flags["model-policy"] == null
+    ? { ...flags, "model-policy": "quality" }
+    : flags;
+  if (!configured["fast-eval"]) return configured;
   return {
-    ...flags,
-    reasoning: flags.reasoning ?? "high",
-    "media-samples": flags["media-samples"] ?? "8",
-    "media-reasoning": flags["media-reasoning"] ?? "medium",
-    "max-output-tokens": flags["max-output-tokens"] ?? "32000",
-    "outline-max-output-tokens": flags["outline-max-output-tokens"] ?? "18000",
-    "chapter-max-output-tokens": flags["chapter-max-output-tokens"] ?? "28000",
-    "chapter-concurrency": flags["chapter-concurrency"] ?? "3",
-    "plan-semantic-attempts": flags["plan-semantic-attempts"] ?? "2",
-    "frame-reasoning": flags["frame-reasoning"] ?? "medium",
-    "frame-max-output-tokens": flags["frame-max-output-tokens"] ?? "20000",
-    "semantic-attempts": flags["semantic-attempts"] ?? "1",
-    concurrency: flags.concurrency ?? "1",
-    "max-frame-cost-usd": flags["max-frame-cost-usd"] ?? "5",
-    "critic-reasoning": flags["critic-reasoning"] ?? "high",
-    "critic-snapshots": flags["critic-snapshots"] ?? "8",
-    "repair-reasoning": flags["repair-reasoning"] ?? "medium",
-    "repair-max-output-tokens": flags["repair-max-output-tokens"] ?? "6000",
-    "repair-semantic-attempts": flags["repair-semantic-attempts"] ?? "1",
-    "repair-snapshots": flags["repair-snapshots"] ?? "6",
-    "snapshot-frames": flags["snapshot-frames"] ?? "6",
-    "inspect-samples": flags["inspect-samples"] ?? "9",
-    "shot-inspect-concurrency": flags["shot-inspect-concurrency"] ?? "3",
-    "max-repair-passes": flags["max-repair-passes"] ?? "1"
+    ...configured,
+    reasoning: configured.reasoning ?? "high",
+    "media-samples": configured["media-samples"] ?? "8",
+    "media-reasoning": configured["media-reasoning"] ?? "medium",
+    "max-output-tokens": configured["max-output-tokens"] ?? "32000",
+    "outline-max-output-tokens": configured["outline-max-output-tokens"] ?? "18000",
+    "chapter-max-output-tokens": configured["chapter-max-output-tokens"] ?? "28000",
+    "chapter-concurrency": configured["chapter-concurrency"] ?? "3",
+    "plan-semantic-attempts": configured["plan-semantic-attempts"] ?? "2",
+    "frame-reasoning": configured["frame-reasoning"] ?? "medium",
+    "frame-max-output-tokens": configured["frame-max-output-tokens"] ?? "20000",
+    "semantic-attempts": configured["semantic-attempts"] ?? "1",
+    concurrency: configured.concurrency ?? "1",
+    "max-frame-cost-usd": configured["max-frame-cost-usd"] ?? "5",
+    "critic-reasoning": configured["critic-reasoning"] ?? "high",
+    "critic-snapshots": configured["critic-snapshots"] ?? "8",
+    "repair-reasoning": configured["repair-reasoning"] ?? "medium",
+    "repair-max-output-tokens": configured["repair-max-output-tokens"] ?? "6000",
+    "repair-semantic-attempts": configured["repair-semantic-attempts"] ?? "1",
+    "repair-snapshots": configured["repair-snapshots"] ?? "6",
+    "snapshot-frames": configured["snapshot-frames"] ?? "6",
+    "inspect-samples": configured["inspect-samples"] ?? "9",
+    "shot-inspect-concurrency": configured["shot-inspect-concurrency"] ?? "3",
+    "max-repair-passes": configured["max-repair-passes"] ?? "1"
   };
 }
 
