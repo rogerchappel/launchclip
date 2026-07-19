@@ -96,6 +96,7 @@ export function buildTemporalEvidenceSchedule(durationSeconds, boundaries = []) 
     }
   }
   return {
+    duration_seconds: duration,
     hook,
     transitions,
     entries: [...hook, ...transitions],
@@ -205,9 +206,11 @@ export async function validateTemporalEvidenceManifest(projectPath, manifest, vi
   for (const entry of entries) {
     const evidenceId = entry?.evidence_id ?? entry?.id ?? "(unknown)";
     const sampleId = entry?.sample_id;
+    const timestamp = entry?.at_seconds;
     if (typeof sampleId !== "string" || !sampleId) errors.push(`${evidenceId} has no sample ID`);
     else bySample.set(sampleId, [...(bySample.get(sampleId) ?? []), entry]);
     if (!TEMPORAL_EVIDENCE_SOURCES.includes(entry?.source)) errors.push(`${evidenceId} has an unsupported evidence source`);
+    if (typeof timestamp !== "number" || !Number.isFinite(timestamp) || timestamp < 0 || timestamp > Number(schedule?.duration_seconds)) errors.push(`${evidenceId} has an out-of-range timestamp`);
   }
   for (const expected of schedule?.entries ?? []) {
     const samples = bySample.get(expected.evidence_id) ?? [];
@@ -231,8 +234,10 @@ export async function validateTemporalEvidenceManifest(projectPath, manifest, vi
       const file = containedProjectFile(project, entry.file);
       const info = await stat(file);
       if (!info.isFile() || info.size <= 0) errors.push(`${id} is empty`);
-      const hash = await sha256(file);
+      const bytes = await readFile(file);
+      const hash = createHash("sha256").update(bytes).digest("hex");
       if (!entry.sha256 || entry.sha256 !== hash) errors.push(`${id} has a stale or invalid file hash`);
+      if (renderedMediaKind(bytes) !== "image") errors.push(`${id} is not a recognized rendered image`);
     } catch (error) {
       errors.push(`${id} is unavailable: ${error.message}`);
     }

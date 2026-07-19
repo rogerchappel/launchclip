@@ -150,7 +150,7 @@ async function writePhase2Evidence(project) {
   for (const expected of schedule.entries) {
     for (const source of ["hyperframes", "encoded-draft"]) {
       const evidenceId = `${expected.evidence_id}-${source}`;
-      const content = `temporal-${evidenceId}`;
+      const content = renderedPng(`temporal-${evidenceId}`);
       const file = path.join(temporalDir, `${evidenceId}.png`);
       await writeFile(file, content);
       entries.push({

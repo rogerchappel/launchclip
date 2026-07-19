@@ -110,7 +110,7 @@ test("requires hashed browser and encoded-draft evidence for every temporal samp
     for (const source of ["hyperframes", "encoded-draft"]) {
       const evidenceId = `${expected.evidence_id}-${source}`;
       const file = path.join(evidenceDir, `${evidenceId}.png`);
-      const content = `frame-${evidenceId}`;
+      const content = renderedPng(`frame-${evidenceId}`);
       await writeFile(file, content);
       entries.push({ ...expected, sample_id: expected.evidence_id, evidence_id: evidenceId, source, file: path.relative(project, file), sha256: hash(content) });
     }
@@ -122,6 +122,9 @@ test("requires hashed browser and encoded-draft evidence for every temporal samp
   };
   assert.equal((await validateTemporalEvidenceManifest(project, manifest, video, schedule)).ok, true);
   assert.equal((await validateTemporalEvidenceManifest(project, { ...manifest, entries: entries.slice(1) }, video, schedule)).ok, false);
+  const outOfRange = structuredClone(manifest);
+  outOfRange.entries[0].at_seconds = 99;
+  assert.match((await validateTemporalEvidenceManifest(project, outOfRange, video, schedule)).errors.join(" "), /out-of-range timestamp/);
   assert.equal((await validateTemporalEvidenceManifest(project, { ...manifest, video_sha256: "stale" }, video, schedule)).ok, false);
 });
 
