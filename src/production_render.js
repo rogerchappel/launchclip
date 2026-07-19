@@ -318,7 +318,7 @@ async function renderAnalyzedProduction(workspacePath, options, adapters, profil
     "--workers", String(options.workers ?? "auto")
   ];
   if (!visionSupervisedDraft) renderArgs.push("--strict-all");
-  renderArgs.push("--skill", "product-launch-video", project);
+  renderArgs.push(project);
   const render = await captureHyperframes(run, renderArgs, { cwd: project });
   await writeFile(path.join(qaDir, profile.logName), `${JSON.stringify(render, null, 2)}\n`);
   if (!render.ok) throw new Error(`HyperFrames render failed. Review ${path.join(qaDir, profile.logName)}.`);

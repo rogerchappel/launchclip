@@ -365,6 +365,7 @@ test("renders a temporally analyzed draft before approval", async () => {
   assert.match(result.video, /production\/renders\/draft\.mp4$/);
   assert.equal(renderArgs[renderArgs.indexOf("--quality") + 1], "draft");
   assert.equal(renderArgs.includes("--strict-all"), true);
+  assert.equal(renderArgs.includes("--skill"), false);
 });
 
 test("writes cinematic readiness and rejects critic-approved low-motion drafts", async () => {
