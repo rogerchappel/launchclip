@@ -54,6 +54,7 @@ independently rerunnable.
 ```bash
 # Repository explainer
 launchclip produce https://github.com/owner/repo \
+  --profile cinematic \
   --prompt "Explain why this changes agent workflows" \
   --resource ./screenshots \
   --aspect 9:16 \
@@ -62,6 +63,7 @@ launchclip produce https://github.com/owner/repo \
 
 # SaaS/product narrative from footage and brand resources
 launchclip produce https://product.example \
+  --profile cinematic \
   --kind product \
   --resource ./recordings/onboarding.mp4 \
   --resource ./brand/logo.svg \
@@ -70,6 +72,7 @@ launchclip produce https://product.example \
 
 # Topic/research explainer
 launchclip produce "Compare the leading coding models" \
+  --profile cinematic \
   --kind topic \
   --resource ./research/paper.pdf \
   --resource ./research/notes.md \
@@ -77,6 +80,7 @@ launchclip produce "Compare the leading coding models" \
 
 # Build around supplied narration or an avatar take
 launchclip produce ./brief.md \
+  --profile cinematic \
   --voiceover ./narration.wav \
   --transcript ./narration.txt \
   --presenter ./avatar-take.mp4 \
@@ -84,12 +88,14 @@ launchclip produce ./brief.md \
 
 # A downloaded HeyGen video can replace both narration and presenter inputs
 launchclip produce ./brief.md \
+  --profile cinematic \
   --heygen-avatar ./heygen-avatar.mp4 \
   --transcript ./heygen-avatar.txt \
   --prompt "Keep the avatar visible; move it around the evidence"
 
 # Long-form: outline once, expand chapters concurrently, stitch deterministically
 launchclip produce ./research \
+  --profile cinematic \
   --kind topic \
   --duration 240 \
   --aspect 16:9 \
@@ -98,8 +104,11 @@ launchclip produce ./research \
 ```
 
 The command writes a workspace, renders and analyzes an editable draft, asks an
-independent critic to judge it, and performs up to two bounded repair passes by
-default. Final high-quality rendering remains an explicit approval step.
+independent critic to judge it, and performs up to two bounded repair passes for
+standard work or three for cinematic work. A cinematic draft reaches approval
+only when its creative receipts, native verification, motion, audio, critic,
+and zero-fallback gates all pass. Final high-quality rendering remains an
+explicit approval step.
 
 `--heygen-avatar` accepts one local video and is mutually exclusive with
 `--voiceover` and `--presenter`. It does not generate the avatar or access the
@@ -112,6 +121,10 @@ Every stage can also be resumed directly:
 ```bash
 launchclip evidence <workspace>
 launchclip source-media <workspace>
+launchclip resolve-entities <workspace>
+launchclip concept-tournament <workspace>
+launchclip retention-story <workspace>
+launchclip cinematic-narration <workspace>
 launchclip creative-plan <workspace>
 launchclip production-audio <workspace>
 launchclip direct-frames <workspace> --concurrency 4
@@ -137,7 +150,8 @@ configured. A supplied voiceover requires either `--transcript` or an
 `ELEVENLABS_API_KEY` for Scribe transcription. Generated narration additionally
 requires `ELEVENLABS_VOICE_ID` (or `--voice-id`).
 
-Use `produce --fast-eval` for the short iteration loop. It keeps the same
+Use `produce --fast-eval` for the short iteration loop, not for a claim of
+maximum one-shot quality. It keeps the same
 evidence, schema, native HyperFrames, rendered-motion, and independent-critic
 gates while reducing media samples, model output budgets, critic snapshots,
 and repair passes. Every stage is receipt-backed and resumable, so rerunning the
@@ -198,7 +212,30 @@ Every claim in a later script points back to one or more evidence ids. The model
 may create analogies and visual metaphors, but it may not turn an unverified
 claim into fact.
 
-### 3. Creative Plan
+### 3. Cinematic Concept, Story, and Narration
+
+With `--profile cinematic`, create the creative spine before the final visual
+plan:
+
+1. Generate exactly five materially different hook, causal-story, art-world,
+   motion, transition, and sound treatments.
+2. Give a fresh-context judge all five candidates and select the deterministic
+   top score after genericism, slideshow, and unsupported-clickbait penalties.
+3. Write the complete retention story with hook, promise, mechanism, proof,
+   midpoint rehook, escalation, payoff, closing reframe, and CTA/loop as the
+   duration requires.
+4. Have an independent editor return the corrected canonical story only after
+   fixed hook, compression, curiosity, clarity, proof, payoff, speakability,
+   and visuality floors pass.
+5. Generate or prepare narration and measure the real word/beat timing before
+   final shot boundaries and the edit grid are planned.
+
+These stages write `production/concepts.json`, `production/story.json`, and
+`production/media/cinematic-narration.json`. Supplied narration remains exact.
+Generated cinematic narration is not time-stretched to rescue an earlier edit;
+the edit is planned around the performance.
+
+### 4. Creative Plan
 
 Use the OpenAI Responses API with GPT-5.6 Sol and strict structured output to
 write `production/plan.json`.
@@ -226,7 +263,7 @@ Planning mode defaults to `auto`. Productions under 180 seconds use one strict
 planning call. At 180 seconds or above, Launchclip creates a resumable global
 outline, expands independent chapter jobs concurrently with frozen continuity
 anchors, and deterministically stitches their local timelines into the same
-`launchclip.production-plan.v1` contract. `--planning-mode single` and
+`launchclip.production-plan.v2` contract. `--planning-mode single` and
 `--planning-mode hierarchical` override the threshold. Supplied narration
 remains byte-for-byte authoritative through the stitch.
 
@@ -241,21 +278,21 @@ reasoning.mode: standard
 `--reasoning max` and `--pro` are opt-in quality modes. `--model` permits an
 explicit fallback or evaluation model without changing the pipeline.
 
-### 4. Script and Audio
+### 5. Script and Audio
 
 Write human-readable `SCRIPT.md` and `STORYBOARD.md` from the validated plan.
 
 - A supplied voiceover is authoritative; its real word timings drive the edit.
-- Otherwise, ElevenLabs generates the approved script in bounded sections and
-  returns word timings. Moderate duration drift is pitch-preservingly conformed
-  to the approved timeline and the word alignment is scaled with it.
+- In cinematic mode, ElevenLabs generates the approved story before the final
+  edit plan and returns measured word timings; the later audio stage reuses that
+  exact take. Standard mode retains its existing bounded conformance behavior.
 - ElevenLabs music uses the model-authored music brief and the final duration.
 - SFX are resolved from the local library by semantic intent and copied into
   the project with a manifest.
 - Provider failures leave resumable receipts and do not silently substitute a
   different voice or music choice.
 
-### 5. HyperFrames Authoring
+### 6. HyperFrames Authoring
 
 Generate a modular HyperFrames project. GPT-5.6 authors the frame-specific HTML
 and motion within the HyperFrames contract; Launchclip assembles and validates
@@ -284,7 +321,7 @@ active-content/asset allowlist. Motion intent is translated into the native
 HyperFrames `appearsBy`, `before`, `staysInFrame`, and `keepsMoving` sidecar
 contract, including a root sidecar discovered by `hyperframes inspect`.
 
-### 6. Visual Review and Repair
+### 7. Visual Review and Repair
 
 Run deterministic checks first:
 
@@ -309,7 +346,13 @@ and supplied narration. That revision then regenerates the affected audio and
 all frames, reconfigures assembly dependencies when shot IDs change, and returns
 through the same bounded verification/draft/critic loop.
 
-Final render remains human-gated. Once the draft and critic verdict are ready,
+For cinematic work, deterministic motion/audio failures enter the same typed
+repair loop even when the critic says `ship`. The readiness receipt also fails
+closed when a concept, story, narration, assembly provenance, native
+verification, motion report, audio report, or critic receipt is absent.
+
+Final render remains human-gated. Once the draft, critic verdict, and cinematic
+readiness receipt are ready,
 `production-preview <workspace>` starts or reuses HyperFrames Studio and returns
 its editable local URL with status `awaiting-approval`. Studio may create ad hoc
 exports, but its Export control is not a Launchclip approval event and does not
@@ -355,6 +398,11 @@ voice/music margin, and SFX transients at scheduled cue times. Reference
 comparison first selects a compatible editorial family and then compares
 temporal distributions and envelopes. It does not optimize RGB, SSIM, or pixel
 resemblance between unrelated visual styles.
+
+These gates establish a repeatable technical and craft floor. They improve the
+probability of a usable, retention-aware result but cannot guarantee view count;
+topic demand, audience fit, thumbnail/title packaging, channel history, and
+distribution remain external.
 
 ## Reference Quality Observations
 

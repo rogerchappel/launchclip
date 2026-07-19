@@ -1,8 +1,14 @@
 # launchclip
 
-`launchclip` turns a local OSS repo into a reviewable promotion packet: demo evidence, a short-form video plan, platform captions, and a product-videogen Review Feed dry-run payload.
+`launchclip` turns an idea or source media into an editable portrait or landscape
+video for YouTube and social media. Its premium cinematic lane separates concept
+selection, retention writing, narration performance, edit planning, visual
+authoring, sound, and rendered-output verification so the result develops as a
+film rather than a text slideshow.
 
-It is local-first and dry-run-first. V1 does not post to social platforms, queue Clutch Cut items directly, publish packages, or submit live product-videogen requests without future explicit integration and human approval.
+LaunchClip does not post, upload, publish, or treat a rendered draft as human
+approval. The original local-first OSS promotion-packet workflow remains
+available as a separate legacy lane.
 
 ## Install
 
@@ -58,10 +64,11 @@ models:
 
 - [`launchclip-create-video`](skills/launchclip-create-video/SKILL.md) extracts
   the creative orchestration into a subscription-agent workflow. Codex, Claude,
-  or another capable coding agent conducts a compact intake, plans and authors
-  the HyperFrames composition itself, runs local QA, pauses for preview
-  approval, and renders without calling Launchclip's metered model stages. It
-  is self-contained and does not require the HyperFrames plugin skill pack.
+  or another capable coding agent runs a five-concept tournament, retention
+  edit, narration-first timing, HyperFrames authoring, fresh-context critique,
+  and local cinematic readiness gate before preview approval. It does this
+  without calling LaunchClip's metered model stages or requiring the
+  HyperFrames plugin skill pack.
 - [`launchclip-cli`](skills/launchclip-cli/SKILL.md) teaches an agent to operate
   the existing CLI, including `produce`, resumable production stages, the
   local-first promotion packet lane, cost receipts, and approval gates. The
@@ -96,6 +103,7 @@ repairs, and approval gates.
 
 ```bash
 launchclip produce https://github.com/owner/repo \
+  --profile cinematic \
   --out .launchclip/repo-video \
   --prompt "Lead with the workflow change" \
   --reference https://www.youtube.com/shorts/example \
@@ -107,6 +115,7 @@ launchclip produce https://github.com/owner/repo \
 # when the verified draft is ready and keeps an approval/repair menu in the
 # same terminal.
 launchclip produce https://github.com/owner/repo \
+  --profile cinematic \
   --out .launchclip/repo-video \
   --aspect 9:16 \
   --review
@@ -141,8 +150,24 @@ launchclip production-preview .launchclip/repo-video
 launchclip production-render .launchclip/repo-video --approve
 ```
 
-The default `cost-aware` policy plans with Terra, authors with Luna, and
-escalates only failed scenes. `local-first` prepends Ollama. The `free` policy
+`--profile cinematic` is source-agnostic: use it for an idea, document,
+repository, product URL, screenshots, recording, supplied narration, or
+presenter footage. Without an explicit `--model-policy`, it selects the quality
+route and runs five concept candidates, an independent concept judge, separate
+retention writer/editor passes, measured narration before final edit planning,
+blueprint-led scene authoring, zero deterministic frame fallback, and up to
+three typed repair passes. Final approval additionally requires
+`production/qa/cinematic-readiness.json` with every creative, verification,
+motion, audio, critic, and authorship gate passing.
+
+Use the standard profile or `--fast-eval` when cost or iteration speed matters
+more than the maximum one-shot craft floor. A cinematic readiness pass raises
+technical and editorial consistency; no tool can guarantee views, audience
+fit, packaging, or distribution.
+
+The standard profile's default `cost-aware` policy plans with Terra, authors
+with Luna, and escalates only failed scenes; the cinematic profile defaults to
+`quality`. `local-first` prepends Ollama. The `free` policy
 keeps planning, source analysis, frame authoring, critique, and repair on
 OpenRouter free model IDs. It requires `OPENROUTER_API_KEY`; ElevenLabs voice,
 music, and transcription remain separately billed when enabled.
@@ -329,8 +354,10 @@ verification stops before browser or render work if a planned event is missing
 from the assembled motion sidecar or a sound has no visible consequence.
 
 The command creates an editable assembled project, analyzed draft, independent
-critic report, and up to two bounded repair passes. Final rendering requires the
-explicit `--approve` flag and still returns for human review; it never publishes.
+critic report, and up to two standard or three cinematic bounded repair passes.
+Cinematic approval also requires its fail-closed readiness receipt. Final
+rendering requires the explicit `--approve` flag and still returns for human
+review; it never publishes.
 Use `produce --review` for the integrated Studio and terminal approval loop, or
 `production-preview <workspace>` and `production-render <workspace> --approve`
 as independently rerunnable stages. Do not treat Studio Export as completion
