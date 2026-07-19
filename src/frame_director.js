@@ -6,6 +6,7 @@ import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store
 import { ensureTimelineRegistration, hasTimelineRegistration } from "./hyperframes_timeline.js";
 import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model_provider.js";
 import { estimateOpenAiUsageCost } from "./cost_tracker.js";
+import { buildAuthoringSequences, buildFrameSequenceInput, FRAME_SEQUENCE_INSTRUCTIONS, FRAME_SEQUENCE_SCHEMA, FRAME_SEQUENCE_VERSION, validateFrameSequence } from "./frame_sequence.js";
 import { FRAME_BUNDLE_SCHEMA, FRAME_BUNDLE_VERSION, PRODUCTION_PATHS, isValidShotId, validateFrameBundle } from "./production_contracts.js";
 
 const FRAME_INSTRUCTIONS = `You are a senior motion designer authoring one modular HyperFrames shot inside a larger film.
@@ -43,6 +44,7 @@ HyperFrames contract:
 - Materialize every shot.visual.objects entry as a visible object or an approved root-media request. Give authored DOM objects data-visual-object-id equal to the planned object id while keeping the actual DOM id shot-prefixed.
 - Materialize every shot.visual.events entry in motion.events. Each event must point to the real selector that visibly changes at the planned time. SFX relies on this event contract, so do not report an event that has no perceptible animation.
 - Honor shot.visual.continuity and the neighbor handoff. Persistent object IDs retain their visual identity, transform events visibly evolve them, and camera velocity/direction/blur must make related shots feel like one moving canvas rather than separate slides.
+- When sequence_contract is supplied, it is frozen production design. Preserve its coordinate system, perspective, light direction, material system, object geometry, accumulated state, camera path, and typed boundary physics exactly. Continue previous_scene_blueprint where supplied; do not reset the world or substitute a fresh layout.
 - When narration_timing is present, synchronize semantic reveals to its shot-local word timestamps instead of estimating speech timing.
 - Use transform and opacity for primary motion. Name selectors in motion assertions so inspection can verify the intended reveals.
 - Motion assertions are executable test contracts, not aspirational descriptions. Every selector must be exactly one existing shot-prefixed id, such as #shot-01-headline when shot_id is shot-01; never assert a selector that is absent from html.
@@ -73,6 +75,7 @@ Creative contract:
 - Supporting motion beats are scene choreography, not new semantic timeline events: do not copy them into motion.events, invent SFX cues for them, or add claims. motion.events remains an exact implementation of shot_contract.visual.events.
 - Keep supporting tweens seek-safe and finite. Establish required initial state with gsap.set, preserve the static authored end state, and never overlap writes to the same property on the same selector.
 - Treat global_design.style_dna and the supplied shot or shot_contract visual as binding. Build the declared diagram, comparison, process, timeline, or data form—not a headline over decoration.
+- When sequence_contract is supplied, implement this scene as one state of that frozen continuous world. Preserve its physical system and exact entry/exit geometry, and continue previous_scene_blueprint instead of inventing another visual world.
 - Preserve readable non-overlapping zones, deliberate spacing, exact palette/type roles, and the planned motion/continuity. Keep copy brief and visual.
 - Every final text/surface pairing must meet WCAG AA: at least 4.5:1 for normal text and 3:1 for large text. Use the dark foreground on pale/accent fills or a dedicated contrasting plate; never rely on low opacity accent text over another colored surface.
 - Keep labels, values, and annotations inside a parent whose authored height includes them. Do not use negative top offsets to park text outside a rail, bar, card, or clipped container.
@@ -105,21 +108,53 @@ export async function directFrames(workspacePath, options = {}, adapters = {}) {
       ? Math.min(requestedConcurrency, failClosedConcurrency)
       : requestedConcurrency;
   const costState = { estimatedUsd: 0, calls: 0, complete: true, warnings: [], outputTokenLimitBreaches: [] };
-  const tasks = plan.shots.map((shot, index) => async () => {
+  const authoringSequences = options.sequenceBlueprint
+    ? buildAuthoringSequences(plan, { enforceDuration: true })
+    : plan.shots.map((shot, index) => ({
+      authoring_sequence_id: `shot-${String(index + 1).padStart(3, "0")}`,
+      sequence_id: shot.visual?.continuity?.sequence_id ?? shot.id,
+      shots: [shot], shot_ids: [shot.id], start_seconds: shot.start_seconds, end_seconds: shot.end_seconds,
+      duration_seconds: Number((Number(shot.end_seconds) - Number(shot.start_seconds)).toFixed(3))
+    }));
+  const indexByShot = new Map(plan.shots.map((shot, index) => [shot.id, index]));
+  const sequenceReceipts = new Array(authoringSequences.length).fill(null);
+  const tasks = authoringSequences.map((sequence, sequenceIndex) => async () => {
     assertFrameBudget(costState, maxFrameCostUsd);
-    const existing = store.get(`frame:${shot.id}`);
-    const shotOptions = options.pendingReasoning && existing?.status !== "succeeded"
-      ? { ...options, reasoning: options.pendingReasoning }
-      : options;
-    const shotRoutes = frameModelRoutes(shotOptions, intake);
-    const frame = await directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, routes: shotRoutes, adapters, options: shotOptions });
-    recordFrameCost(costState, frame, shotRoutes[0].model, Number(options.maxOutputTokens ?? 36_000));
-    if (frame.fallback && failClosed) throw frameFallbackError(frame);
-    return frame;
+    const sequenceRoutes = frameModelRoutes(options, intake);
+    const sequenceContract = options.sequenceBlueprint && sequence.shots.length > 1
+      ? await resolveFrameSequence({ workspace, intake, plan, sequence, narrationTiming, store, routes: sequenceRoutes, adapters, options })
+      : null;
+    if (sequenceContract) sequenceReceipts[sequenceIndex] = {
+      authoring_sequence_id: sequence.authoring_sequence_id,
+      sequence_id: sequence.sequence_id,
+      shot_ids: sequence.shot_ids,
+      path: sequenceContract.path,
+      cached: sequenceContract.cached,
+      response_id: sequenceContract.response_id,
+      model: sequenceContract.model
+    };
+    if (sequenceContract?.generated) recordSequenceCost(costState, sequenceContract, sequenceRoutes[0].model, Number(options.sequenceMaxOutputTokens ?? 8_000));
+    const frames = [];
+    let previousSceneBlueprint = null;
+    for (const shot of sequence.shots) {
+      assertFrameBudget(costState, maxFrameCostUsd);
+      const index = indexByShot.get(shot.id);
+      const existing = store.get(`frame:${shot.id}`);
+      const shotOptions = options.pendingReasoning && existing?.status !== "succeeded"
+        ? { ...options, reasoning: options.pendingReasoning }
+        : options;
+      const shotRoutes = frameModelRoutes(shotOptions, intake);
+      const frame = await directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, sequence, sequenceContract: sequenceContract?.value ?? null, sequenceJobId: sequenceContract?.job_id ?? null, previousSceneBlueprint, store, routes: shotRoutes, adapters, options: shotOptions });
+      recordFrameCost(costState, frame, shotRoutes[0].model, Number(options.maxOutputTokens ?? 36_000));
+      if (frame.fallback && failClosed) throw frameFallbackError(frame);
+      frames.push(frame);
+      previousSceneBlueprint = options.sceneBlueprint ? await readStoredBlueprintForRecovery(workspace, shot.id) : null;
+    }
+    return frames;
   });
   let frames;
   try {
-    frames = await runPool(tasks, concurrency, { stopOnError: failClosed });
+    frames = (await runPool(tasks, concurrency, { stopOnError: failClosed })).flat();
   } catch (error) {
     error.frame_cost = frameCostSummary(costState, maxFrameCostUsd);
     throw error;
@@ -133,7 +168,16 @@ export async function directFrames(workspacePath, options = {}, adapters = {}) {
     cached: frames.filter((entry) => entry.cached).length,
     fallbacks: frames.filter((entry) => entry.fallback).length,
     sanitized: frames.filter((entry) => entry.sanitized).length,
-    frame_cost: frameCostSummary(costState, maxFrameCostUsd)
+    frame_cost: frameCostSummary(costState, maxFrameCostUsd),
+    ...(options.sequenceBlueprint ? {
+      sequences: {
+        groups: authoringSequences.length,
+        contracted: sequenceReceipts.filter(Boolean).length,
+        generated: sequenceReceipts.filter((entry) => entry && !entry.cached).length,
+        cached: sequenceReceipts.filter((entry) => entry?.cached).length,
+        receipts: sequenceReceipts.filter(Boolean)
+      }
+    } : {})
   };
 }
 
@@ -147,7 +191,104 @@ function frameModelRoutes(options, intake) {
   });
 }
 
-export function buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming = null, prior = null, errors = [], lean = false }) {
+async function resolveFrameSequence({ workspace, intake, plan, sequence, narrationTiming, store, routes, adapters, options }) {
+  const directory = path.join(workspace, PRODUCTION_PATHS.frames, ".sequences");
+  const sequencePath = safeShotFile(directory, sequence.authoring_sequence_id, ".json");
+  const input = buildFrameSequenceInput({ plan, sequence, narrationTiming });
+  const inputHash = semanticHash({ input, routes: routes.map(modelRouteKey), schema: FRAME_SEQUENCE_SCHEMA, worker: "frame-sequence.v1" });
+  const jobId = `sequence:${sequence.authoring_sequence_id}`;
+  let existing = store.get(jobId);
+  if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
+    const verification = await store.verifyOutputs(jobId);
+    if (verification.ok) {
+      const record = await readJson(sequencePath);
+      const validation = validateFrameSequence(record.sequence, sequence);
+      if (validation.ok) return { value: record.sequence, path: sequencePath, job_id: jobId, cached: true, generated: false, calls: 0, response_id: record.response_id ?? existing.remote?.response_id ?? null, provider: record.provider ?? existing.remote?.provider ?? null, model: record.model ?? null, usage: existing.usage ?? {} };
+    }
+    await store.markStaleFrom([jobId]);
+    existing = store.get(jobId);
+  } else if (existing && existing.input_hash !== inputHash) {
+    await store.markStaleFrom([jobId]);
+    existing = store.get(jobId);
+  }
+
+  let resumeResponseId = null;
+  if (!existing) await store.add({ id: jobId, kind: "frame-sequence", depends_on: ["creative-plan"], input_hash: inputHash, max_attempts: Number(options.maxAttempts ?? 3) });
+  else if (existing.status === "failed" || existing.status === "stale") await store.retry(jobId, { inputHash });
+  else if (existing.status === "running" || existing.status === "submitted") {
+    if (!existing.remote?.response_id) {
+      await store.markFailed(jobId, new Error(`Recovered interrupted sequence job without a resumable response id: ${jobId}`));
+      await store.retry(jobId, { inputHash });
+    } else resumeResponseId = existing.remote.response_id;
+  } else if (existing.status !== "pending") throw new Error(`Frame sequence job is already ${existing.status}: ${jobId}`);
+
+  if (!resumeResponseId) await store.markRunning(jobId, { provider: routes[0].provider, response_id: null, status: "running" });
+  const generationErrors = [];
+  const attemptPaths = [];
+  let previous = null;
+  let validationErrors = [];
+  let usage = {};
+  let attempt = 0;
+  try {
+    for (const [routeIndex, route] of routes.entries()) {
+      const client = adapters.client ?? (adapters.createClient ?? createStructuredClient)(route);
+      const attemptsForRoute = routeIndex === 0 ? positiveInteger(options.sequenceSemanticAttempts ?? 2, "sequenceSemanticAttempts") : 1;
+      for (let routeAttempt = 1; routeAttempt <= attemptsForRoute; routeAttempt += 1) {
+        attempt += 1;
+        const request = {
+          model: route.model,
+          reasoningEffort: route.reasoning,
+          reasoningContext: "current_turn",
+          pro: Boolean(options.pro ?? intake.model?.reasoning_mode === "pro"),
+          instructions: FRAME_SEQUENCE_INSTRUCTIONS,
+          input: buildFrameSequenceInput({ plan, sequence, narrationTiming, previous, errors: validationErrors }),
+          schema: FRAME_SEQUENCE_SCHEMA,
+          schemaName: "launchclip_frame_sequence",
+          background: options.background !== false,
+          maxOutputTokens: Number(options.sequenceMaxOutputTokens ?? 8_000),
+          temperature: Number(routeAttempt === 1 ? options.sequenceTemperature ?? .45 : options.sequenceRepairTemperature ?? .15),
+          promptCacheKey: "launchclip:frame-sequence:v1",
+          metadata: { job_id: jobId, authoring_sequence_id: sequence.authoring_sequence_id, attempt, route: routeIndex + 1 },
+          onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
+        };
+        let result;
+        try {
+          if (resumeResponseId && routeIndex === 0 && client.supportsResume !== false) result = await client.resumeStructured(resumeResponseId, request);
+          else result = await client.runStructured(request);
+        } catch (error) {
+          resumeResponseId = null;
+          generationErrors.push(`Sequence attempt ${attempt} via ${route.provider}:${route.model} failed: ${error.message}`);
+          if (routeAttempt < attemptsForRoute) continue;
+          break;
+        }
+        resumeResponseId = null;
+        usage = mergeUsage(usage, result.usage);
+        await store.markRunning(jobId, { provider: route.provider, response_id: result.response_id, status: result.status });
+        const validation = validateFrameSequence(result.value, sequence);
+        validationErrors = validation.errors;
+        const attemptPath = path.join(directory, ".attempts", `${sequence.authoring_sequence_id}-attempt-${attempt}.json`);
+        await writeAtomic(attemptPath, `${JSON.stringify({ input_hash: inputHash, response_id: result.response_id, provider: route.provider, model: result.model, usage: result.usage, errors: validationErrors, candidate: result.value }, null, 2)}\n`);
+        attemptPaths.push(attemptPath);
+        if (!validation.ok) {
+          previous = result.value;
+          generationErrors.push(`Sequence attempt ${attempt} via ${route.provider}:${route.model} was invalid: ${validation.errors.join("; ")}`);
+          continue;
+        }
+        const record = { input_hash: inputHash, response_id: result.response_id, provider: route.provider, model: result.model, usage, sequence: result.value };
+        await writeAtomic(sequencePath, `${JSON.stringify(record, null, 2)}\n`);
+        const outputs = await Promise.all([sequencePath, ...attemptPaths].map((filePath) => describeJobOutput(workspace, filePath)));
+        await store.markSucceeded(jobId, outputs, usage);
+        return { value: result.value, path: sequencePath, job_id: jobId, cached: false, generated: true, calls: attempt, response_id: result.response_id, provider: route.provider, model: result.model, usage };
+      }
+    }
+    throw Object.assign(new Error(`Frame sequence ${sequence.authoring_sequence_id} exhausted model routes: ${generationErrors.join("; ")}`), { code: "LAUNCHCLIP_FRAME_SEQUENCE_ROUTES_EXHAUSTED", authoring_sequence_id: sequence.authoring_sequence_id });
+  } catch (error) {
+    await store.markFailed(jobId, error);
+    throw error;
+  }
+}
+
+export function buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming = null, sequence = null, sequenceContract = null, previousSceneBlueprint = null, prior = null, errors = [], lean = false }) {
   const neighbors = [plan.shots[index - 1], plan.shots[index + 1]].filter(Boolean).map((entry) => ({
     id: entry.id,
     purpose: entry.purpose,
@@ -181,6 +322,11 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, narration
     } : plan.project,
     shot: { ...shot, duration_seconds: shot.end_seconds - shot.start_seconds },
     neighbors,
+    ...(sequenceContract ? {
+      sequence_contract: sequenceContract,
+      sequence_shots: (sequence?.shots ?? []).map((entry) => ({ id: entry.id, start_seconds: entry.start_seconds, end_seconds: entry.end_seconds, purpose: entry.purpose, visual: entry.visual, transition_out: entry.transition_out })),
+      previous_scene_blueprint: previousSceneBlueprint
+    } : {}),
     evidence: shot.evidence_ids.map((id) => evidenceById.get(id)).filter(Boolean).map((entry) => ({
       id: entry.id,
       title: entry.title,
@@ -195,17 +341,17 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, narration
   });
 }
 
-async function directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, routes, adapters, options }) {
+async function directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, sequence = null, sequenceContract = null, sequenceJobId = null, previousSceneBlueprint = null, store, routes, adapters, options }) {
   const jobId = `frame:${shot.id}`;
   const baseInput = options.sceneBlueprint
-    ? buildFrameBlueprintInput({ intake, evidence, plan, shot, index, narrationTiming })
-    : buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming });
+    ? buildFrameBlueprintInput({ intake, evidence, plan, shot, index, narrationTiming, sequence, sequenceContract, previousSceneBlueprint })
+    : buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming, sequence, sequenceContract, previousSceneBlueprint });
   const customRouting = options.routes != null || options.provider != null || options.model != null || options.baseUrl != null;
   const blueprintInputHash = options.sceneBlueprint
-    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BLUEPRINT_SCHEMA, worker: "frame-blueprint.v5" })
+    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BLUEPRINT_SCHEMA, worker: sequenceContract ? "frame-blueprint.v6" : "frame-blueprint.v5" })
     : null;
   const inputHash = customRouting
-    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, worker: options.sceneBlueprint ? "frame-director.v11" : "frame-director.v5" })
+    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, sequence: sequenceContract ? FRAME_SEQUENCE_VERSION : null, worker: sequenceContract ? "frame-director.v12" : options.sceneBlueprint ? "frame-director.v11" : "frame-director.v5" })
     : semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v4" });
   const existing = store.get(jobId);
   const resanitized = await resanitizeStoredFrame({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
@@ -221,14 +367,19 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   }
   const current = store.get(jobId);
   let resumeResponseId = null;
-  if (!current) await store.add({ id: jobId, kind: "frame", depends_on: ["creative-plan"], input_hash: inputHash, max_attempts: Number(options.maxAttempts ?? 3) });
+  const dependencies = [sequenceJobId ?? "creative-plan"];
+  if (!current) await store.add({ id: jobId, kind: "frame", depends_on: dependencies, input_hash: inputHash, max_attempts: Number(options.maxAttempts ?? 3) });
   else if (current.status === "failed" && existing?.input_hash === inputHash && isSemanticValidationFailure(current.error)) {
     if (options.fallbackMode === "error") throw frameRoutesExhaustedError(shot.id, [current.error]);
     await store.reconfigure(jobId, { input_hash: inputHash });
     await store.markRunning(jobId, { provider: "local", response_id: existing.remote?.response_id ?? null, status: "fallback" });
     return persistFallbackFrame({ workspace, intake, evidence, plan, shot, store, jobId, reason: current.error, responseId: existing.remote?.response_id ?? null });
   }
-  else if (current.status === "failed" || current.status === "stale") await store.retry(jobId, { inputHash });
+  else if (current.status === "failed" || current.status === "stale") {
+    const dependenciesChanged = current.depends_on.length !== dependencies.length || current.depends_on.some((dependency, dependencyIndex) => dependency !== dependencies[dependencyIndex]);
+    if (dependenciesChanged) await store.reconfigure(jobId, { depends_on: dependencies, input_hash: inputHash, max_attempts: Number(options.maxAttempts ?? 3) });
+    else await store.retry(jobId, { inputHash });
+  }
   else if (current.status === "running" || current.status === "submitted") {
     if (!current.remote?.response_id) {
       await store.markFailed(jobId, new Error(`Recovered interrupted frame job without a resumable response id: ${jobId}`));
@@ -241,7 +392,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   let errors = [];
   try {
     const blueprint = options.sceneBlueprint
-      ? await resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, routes, adapters, options, inputHash: blueprintInputHash, jobId })
+      ? await resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, index, narrationTiming, sequence, sequenceContract, previousSceneBlueprint, store, routes, adapters, options, inputHash: blueprintInputHash, jobId })
       : null;
     const authorRoutes = blueprint?.route_index > 0
       ? [routes[blueprint.route_index], ...routes.filter((_, routeIndex) => routeIndex !== blueprint.route_index)]
@@ -257,17 +408,17 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
           model: route.model,
           reasoningEffort: route.reasoning,
           reasoningContext: "current_turn",
-          pro: false,
+          pro: Boolean(options.pro ?? intake.model?.reasoning_mode === "pro"),
           instructions: options.leanPrompt ? LEAN_FRAME_INSTRUCTIONS : FRAME_INSTRUCTIONS,
           input: blueprint
-            ? buildBlueprintFrameInput({ intake, evidence, plan, shot, index, narrationTiming, blueprint: blueprint.value, prior, errors })
-            : buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming, prior, errors, lean: options.leanPrompt }),
+            ? buildBlueprintFrameInput({ intake, evidence, plan, shot, index, narrationTiming, sequence, sequenceContract, previousSceneBlueprint, blueprint: blueprint.value, prior, errors })
+            : buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming, sequence, sequenceContract, previousSceneBlueprint, prior, errors, lean: options.leanPrompt }),
           schema: FRAME_BUNDLE_SCHEMA,
           schemaName: "launchclip_frame_bundle",
           background: options.background !== false,
           maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
           ...(blueprint ? { temperature: Number(routeAttempt === 1 ? options.frameTemperature ?? .4 : options.frameRepairTemperature ?? .1) } : {}),
-          promptCacheKey: options.leanPrompt ? "launchclip:frame-director:v9" : "launchclip:frame-director:v4",
+          promptCacheKey: sequenceContract ? "launchclip:frame-director:v10" : options.leanPrompt ? "launchclip:frame-director:v9" : "launchclip:frame-director:v4",
           metadata: { job_id: jobId, shot_id: shot.id, attempt: totalAttempt, route: routeIndex + 1 },
           onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
         };
@@ -399,7 +550,7 @@ async function resanitizeStoredFrame({ workspace, intake, evidence, plan, shot, 
   };
 }
 
-async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, index, narrationTiming, store, routes, adapters, options, inputHash, jobId }) {
+async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, index, narrationTiming, sequence, sequenceContract, previousSceneBlueprint, store, routes, adapters, options, inputHash, jobId }) {
   const blueprintPath = safeShotFile(path.join(workspace, PRODUCTION_PATHS.frames, ".blueprints"), shot.id, ".json");
   const stored = await readStoredBlueprint(blueprintPath, inputHash, shot);
   if (stored) return { ...stored, value: stored.blueprint, path: blueprintPath, generated: false, route_index: matchingRouteIndex(routes, stored) };
@@ -416,15 +567,15 @@ async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, 
         model: route.model,
         reasoningEffort: route.reasoning,
         reasoningContext: "current_turn",
-        pro: false,
+        pro: Boolean(options.pro ?? intake.model?.reasoning_mode === "pro"),
         instructions: FRAME_BLUEPRINT_INSTRUCTIONS,
-        input: buildFrameBlueprintInput({ intake, evidence, plan, shot, index, narrationTiming, prior, errors: validationErrors }),
+        input: buildFrameBlueprintInput({ intake, evidence, plan, shot, index, narrationTiming, sequence, sequenceContract, previousSceneBlueprint, prior, errors: validationErrors }),
         schema: FRAME_BLUEPRINT_SCHEMA,
         schemaName: "launchclip_frame_blueprint",
         background: options.background !== false,
         maxOutputTokens: Number(options.blueprintMaxOutputTokens ?? 3_000),
         temperature: Number(routeAttempt === 1 ? options.blueprintTemperature ?? .45 : options.blueprintRepairTemperature ?? .15),
-        promptCacheKey: "launchclip:frame-blueprint:v5",
+        promptCacheKey: sequenceContract ? "launchclip:frame-blueprint:v6" : "launchclip:frame-blueprint:v5",
         metadata: { job_id: jobId, shot_id: shot.id, stage: "blueprint", attempt: routeAttempt, route: routeIndex + 1 },
         onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
       };
@@ -878,6 +1029,32 @@ function recordFrameCost(state, frame, fallbackModel, maxOutputTokens) {
       response_id: frame.response_id ?? null,
       requested_max_output_tokens: maxOutputTokens,
       reported_output_tokens: Number(frame.usage.output_tokens)
+    });
+  }
+}
+
+function recordSequenceCost(state, sequence, fallbackModel, maxOutputTokens) {
+  if (sequence.cached || !sequence.usage) return;
+  const calls = Math.max(1, Number(sequence.calls ?? 1));
+  state.calls += calls;
+  if (sequence.provider === "ollama" || sequence.provider === "openrouter" && String(fallbackModel ?? "").endsWith(":free")) return;
+  if (sequence.provider && sequence.provider !== "openai") {
+    state.complete = false;
+    state.warnings.push(`Sequence cost is not priced locally for provider ${sequence.provider}`);
+    return;
+  }
+  const model = sequence.model && !String(sequence.model).startsWith("local-") ? sequence.model : fallbackModel;
+  const estimate = estimateOpenAiUsageCost(model, sequence.usage);
+  if (estimate.estimated_usd == null) {
+    state.complete = false;
+    state.warnings.push(estimate.warning ?? `Unable to price sequence response ${sequence.response_id ?? "(unknown)"}`);
+  } else state.estimatedUsd += estimate.estimated_usd;
+  if (Number(sequence.usage.output_tokens ?? 0) > maxOutputTokens * calls) {
+    state.outputTokenLimitBreaches.push({
+      authoring_sequence_id: sequence.value?.authoring_sequence_id ?? null,
+      response_id: sequence.response_id ?? null,
+      requested_max_output_tokens: maxOutputTokens,
+      reported_output_tokens: Number(sequence.usage.output_tokens)
     });
   }
 }
