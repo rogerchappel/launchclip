@@ -251,8 +251,8 @@ function validateCandidateScores(candidate, comparisonId, errors) {
   const scores = candidate?.scores;
   let valid = true;
   for (const field of CANDIDATE_SCORE_FIELDS) {
-    const value = Number(scores?.[field]);
-    if (!Number.isFinite(value) || value < 0 || value > 10) {
+    const value = scores?.[field];
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 10) {
       valid = false;
       errors.push(`candidate ${candidate?.id ?? "(unknown)"} in ${comparisonId} has an invalid ${field} score`);
     }

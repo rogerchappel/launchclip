@@ -87,6 +87,9 @@ test("requires independent opening and transition rendered-candidate comparisons
   const staleHash = structuredClone(receipt);
   staleHash.comparisons[0].candidates[0].artifacts[0].sha256 = "stale";
   assert.match((await validateRenderedCandidateReceipt(project, staleHash, { boundaryIds: ["boundary-1"] })).errors.join(" "), /stale or invalid file hash/);
+  const nonnumericScore = structuredClone(receipt);
+  nonnumericScore.comparisons[0].candidates[0].scores.scroll_stop = null;
+  assert.match((await validateRenderedCandidateReceipt(project, nonnumericScore, { boundaryIds: ["boundary-1"] })).errors.join(" "), /invalid scroll_stop score/);
   const textArtifact = structuredClone(receipt);
   const text = "not rendered pixels";
   await writeFile(path.join(project, textArtifact.comparisons[0].candidates[0].artifacts[0].file), text);
