@@ -77,13 +77,29 @@ metadata and writes generated media only under the user's LaunchClip workspace.
 ## Subscription-agent skills
 
 `.codex-plugin/plugin.json` exposes `./skills/` for plugin-aware Codex installs.
-npm transports that manifest but does not register it with Codex by itself.
-For a source checkout, load the repository as a plugin or link the desired skill:
+npm and Homebrew transport that manifest and both skill directories, but the
+package manager does not register them with an agent by itself. The installed
+CLI can register both bundled skills with local Codex or Claude Code:
 
 ```bash
-mkdir -p "$HOME/.agents/skills"
-ln -s "$PWD/skills/launchclip-create-video" "$HOME/.agents/skills/launchclip-create-video"
+launchclip skills list
+launchclip skills install --agent codex
+launchclip skills install --agent claude
 ```
+
+Codex uses `$HOME/.agents/skills`; Claude Code uses `$HOME/.claude/skills` and
+must be version 2.1.203 or newer for symlinked skills. Both skills are installed
+by default. Select one with `--skill launchclip-create-video` or
+`--skill launchclip-cli`, and resolve the packaged source without knowing npm or
+Homebrew's layout with `launchclip skills path [skill-name]`.
+
+Installation is idempotent and preflights every selected destination before it
+creates a link. It refuses existing files, directories, and unrelated links. A
+Homebrew upgrade can move the package root; if the command recognizes an older
+LaunchClip skill link, rerun with `--force` to refresh that link. This local
+registration does not make the skill available to remote Claude Cowork/cloud
+sessions or other remote agents that cannot read the user's home directory.
+Use the platform's account, plugin, or repository distribution flow there.
 
 `launchclip-create-video` keeps creative orchestration in the active
 subscription agent and does not invoke LaunchClip's metered model stages. It
@@ -93,6 +109,11 @@ bounded repairs—then uses the model-free `launchclip cinematic-check` command
 to write `CINEMATIC-READINESS.json` before preview. Optional voice, music,
 image, or other paid providers still require explicit user approval and their
 own credentials.
+
+Local discovery behavior follows the current agent documentation:
+
+- [Codex skill locations and symlink support](https://learn.chatgpt.com/docs/build-skills)
+- [Claude Code personal skills and symlink support](https://code.claude.com/docs/en/slash-commands)
 
 ## Homebrew tap
 

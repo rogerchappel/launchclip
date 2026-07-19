@@ -60,6 +60,12 @@ try {
   if (!help.stdout.includes("launchclip creates")) throw new Error("Installed CLI help output was not recognized.");
   const doctor = JSON.parse((await run(bin, ["doctor"], consumer)).stdout);
   if (!doctor.package?.complete) throw new Error(`Installed CLI doctor is missing: ${doctor.package?.missing?.join(", ")}`);
+  const skills = JSON.parse((await run(bin, ["skills", "list"], consumer)).stdout);
+  if (skills.skills?.length !== 2 || !skills.skills.some((skill) => skill.name === "launchclip-create-video")) {
+    throw new Error("Installed CLI did not expose its bundled skills.");
+  }
+  const subscriptionSkill = JSON.parse((await run(bin, ["skills", "path", "launchclip-create-video"], consumer)).stdout);
+  await access(path.join(subscriptionSkill.path, "SKILL.md"));
   await run(bin, ["init", source, "--out", workspace], consumer);
   await access(path.join(workspace, "launchclip.json"));
 
