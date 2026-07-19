@@ -6,6 +6,7 @@ the current workflow and the decisions an operating agent must not guess.
 ## Contents
 
 - [Runtime and credentials](#runtime-and-credentials)
+- [Bundled agent skills](#bundled-agent-skills)
 - [Input flags](#input-flags)
 - [Project-local style packs](#project-local-style-packs)
 - [Model-directed production](#model-directed-production)
@@ -54,6 +55,36 @@ test -n "$ELEVENLABS_VOICE_ID" && echo ELEVENLABS_VOICE_ID=present || echo ELEVE
 
 Packaged installs must receive an authorized SFX pack with `--sfx-dir` until
 the repository pack's redistribution terms permit bundling it.
+
+## Bundled agent skills
+
+npm and Homebrew installs include `launchclip-create-video` and
+`launchclip-cli`. Inspect the installed copies without assuming a package-manager
+layout:
+
+```bash
+launchclip skills list
+launchclip skills path
+launchclip skills path launchclip-create-video
+```
+
+Register both skills with a local personal agent installation:
+
+```bash
+launchclip skills install --agent codex
+launchclip skills install --agent claude
+```
+
+Use `--skill launchclip-create-video` or `--skill launchclip-cli` to install one
+skill. Matching links are idempotent. Existing files, directories, and unrelated
+links fail closed. If a package-manager upgrade leaves an older LaunchClip link,
+repeat the command with `--force` to refresh that managed link.
+
+Codex discovers the result in `$HOME/.agents/skills` and invokes the subscription
+workflow as `$launchclip-create-video`. Claude Code discovers it in
+`$HOME/.claude/skills` and invokes it as `/launchclip-create-video`; symlinked
+skills require Claude Code 2.1.203 or newer. These personal directories are local
+and do not propagate into remote agent sessions.
 
 ## Input flags
 

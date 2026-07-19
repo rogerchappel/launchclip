@@ -77,15 +77,28 @@ models:
   ChatGPT, Codex, or Claude OAuth login is not an API key.
 
 The repository is also a Codex plugin: [`.codex-plugin/plugin.json`](.codex-plugin/plugin.json)
-exposes both skill directories. npm installs carry the manifest and skills but
-do not automatically register them with an agent. For a source-based Codex
-install, load the repository as a plugin or link an individual skill into the
-shared agent skill directory:
+exposes both skill directories. npm and Homebrew installs carry the same skills.
+Register both bundled skills with a local subscription agent by running one of:
 
 ```bash
-mkdir -p "$HOME/.agents/skills"
-ln -s "$PWD/skills/launchclip-create-video" "$HOME/.agents/skills/launchclip-create-video"
+launchclip skills install --agent codex
+launchclip skills install --agent claude
 ```
+
+Codex receives personal skill links under `$HOME/.agents/skills`; Claude Code
+receives them under `$HOME/.claude/skills`. Install only the subscription video
+workflow with `--skill launchclip-create-video`, inspect the packaged paths with
+`launchclip skills list` or `launchclip skills path`, and repeat an install
+without risk: matching links report `already-installed`. If Homebrew moves the
+package and an older LaunchClip link becomes stale, rerun with `--force`; the
+command replaces managed links but refuses files, directories, or unrelated
+links. Claude Code requires version 2.1.203 or newer to follow a symlinked skill.
+
+Invoke the workflow as `$launchclip-create-video` in Codex or
+`/launchclip-create-video` in Claude Code. These commands target local agent
+installs. Remote Claude Cowork/cloud sessions and remote agent environments do
+not read skills from the local home directory; use their account, plugin, or
+repository skill-distribution flow instead.
 
 This subscription-agent workflow uses the active agent for creative reasoning;
 it does not require `OPENAI_API_KEY`. Point another capable agent directly at
