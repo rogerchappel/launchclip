@@ -623,6 +623,11 @@ function frameOptions(flags) {
     maxFrameCostUsd: numberOr(flags["max-frame-cost-usd"], undefined),
     allowFallback: cinematic ? false : Boolean(flags["allow-frame-fallback"]),
     sceneBlueprint: cinematic,
+    sequenceBlueprint: cinematic,
+    sequenceSemanticAttempts: numberOr(flags["sequence-semantic-attempts"], 2),
+    sequenceMaxOutputTokens: numberOr(flags["sequence-max-output-tokens"], 8_000),
+    sequenceTemperature: numberOr(flags["sequence-temperature"], .45),
+    sequenceRepairTemperature: numberOr(flags["sequence-repair-temperature"], .15),
     blueprintSemanticAttempts: numberOr(flags["blueprint-semantic-attempts"], 2),
     blueprintMaxOutputTokens: numberOr(flags["blueprint-max-output-tokens"], 3_000)
   };
