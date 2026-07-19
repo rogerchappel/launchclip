@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { produceAudio } from "../src/production_audio.js";
+import { produceAudio, produceCinematicNarration } from "../src/production_audio.js";
 import { ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
 
@@ -132,8 +132,8 @@ test("recovers an interrupted aggregate audio job", async () => {
   const options = { noMusic: true, noSfx: true };
   const inputHash = semanticHash({ intake, plan, evidence, options: {
     noVoice: false, noMusic: true, noSfx: true, voiceId: null, voiceModel: null, musicModel: null,
-    sfxDir: null, words: null, maxNarrationChars: null
-  }, audio: "production-audio.v2" });
+    sfxDir: null, words: null, maxNarrationChars: null, voiceSettings: null
+  }, audio: "production-audio.v3" });
   const store = await ProductionJobStore.open(workspace, { create: false });
   await store.add({ id: "production-audio", kind: "production-audio", depends_on: ["creative-plan"], input_hash: inputHash });
   await store.markRunning("production-audio");
@@ -146,6 +146,53 @@ test("recovers an interrupted aggregate audio job", async () => {
   } });
   assert.equal(result.status, "ready");
   assert.equal(store.get("production-audio").status, "succeeded");
+});
+
+test("synthesizes cinematic narration before edit planning and reuses the measured take", async () => {
+  const workspace = await cinematicFixture();
+  const calls = [];
+  const provider = { synthesizeNarration: async (options) => {
+    calls.push(options);
+    const words = [
+      { word: "Proof", start: 0.1, end: 0.6 },
+      { word: "becomes", start: 0.75, end: 1.3 },
+      { word: "motion.", start: 1.35, end: 2.1 }
+    ];
+    await writeFile(options.outputPath, "measured voice");
+    await writeFile(options.wordsPath, `${JSON.stringify(words)}\n`);
+    return { provider: "elevenlabs", kind: "narration", path: options.outputPath, words_path: options.wordsPath, words, duration_seconds: 2.1, request_id: "cinematic-voice" };
+  } };
+  const narration = await produceCinematicNarration(workspace, {}, { provider });
+  assert.equal(narration.duration_seconds, 2.1);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].text, "Proof becomes motion.");
+  assert.equal(calls[0].voiceSettings.speed, 1.06);
+  const timing = JSON.parse(await readFile(narration.manifest, "utf8"));
+  assert.equal(timing.timing_source, "measured");
+  assert.equal(timing.words[1].word, "becomes");
+  assert.deepEqual(timing.pauses, [{ start_seconds: 0.6, end_seconds: 0.75, duration_seconds: 0.15, after_word_index: 0 }]);
+  assert.equal(timing.beat_timings[0].measured_end_seconds, 2.1);
+
+  const plan = cinematicPlan(2.1);
+  await writeFile(path.join(workspace, "production", "plan.json"), `${JSON.stringify(plan)}\n`);
+  const store = await ProductionJobStore.open(workspace, { create: false });
+  await store.add({ id: "creative-plan", kind: "creative-plan", depends_on: ["cinematic-narration"], input_hash: semanticHash(plan) });
+  await store.markRunning("creative-plan");
+  await store.markSucceeded("creative-plan");
+  const audio = await produceAudio(workspace, { noMusic: true, noSfx: true }, { store, provider: { synthesizeNarration: async () => { throw new Error("must reuse measured take"); } } });
+  assert.equal(audio.status, "ready");
+  assert.equal((await readFile(audio.voiceover)).toString(), "measured voice");
+  assert.equal(calls.length, 1);
+});
+
+test("creates an explicit editorial timing estimate for silent cinematic output", async () => {
+  const workspace = await cinematicFixture();
+  const result = await produceCinematicNarration(workspace, { noVoice: true }, {});
+  const timing = JSON.parse(await readFile(result.manifest, "utf8"));
+  assert.equal(result.timing_source, "editorial-estimate");
+  assert.equal(timing.duration_seconds, 10);
+  assert.equal(timing.word_count, 3);
+  assert.equal(timing.words[0].word, "Proof");
 });
 
 async function fixture(options = {}) {
@@ -169,4 +216,41 @@ async function fixture(options = {}) {
   await store.markRunning("creative-plan");
   await store.markSucceeded("creative-plan");
   return workspace;
+}
+
+async function cinematicFixture() {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-cinematic-audio-"));
+  await mkdir(path.join(workspace, "production"), { recursive: true });
+  const intake = {
+    profile: { id: "cinematic" },
+    resources: [],
+    brief: { duration_seconds: 10 }
+  };
+  const story = {
+    format: { duration_seconds: 10, language: "en" },
+    narration: {
+      source: "generated",
+      full_text: "Proof becomes motion.",
+      delivery: "Fast, punchy, precise.",
+      beats: [{ id: "hook", role: "hook", target_start_seconds: 0, target_end_seconds: 10, spoken_text: "Proof becomes motion." }]
+    }
+  };
+  await writeFile(path.join(workspace, "production", "intake.json"), `${JSON.stringify(intake)}\n`);
+  await writeFile(path.join(workspace, "production", "story.json"), `${JSON.stringify(story)}\n`);
+  await writeFile(path.join(workspace, "production", "evidence.json"), `${JSON.stringify({ items: [] })}\n`);
+  const store = await ProductionJobStore.open(workspace);
+  await store.add({ id: "retention-story", kind: "retention-story", depends_on: [], input_hash: semanticHash(story) });
+  await store.markRunning("retention-story");
+  await store.markSucceeded("retention-story");
+  return workspace;
+}
+
+function cinematicPlan(durationSeconds) {
+  return {
+    schema_version: PRODUCTION_PLAN_VERSION,
+    format: { duration_seconds: durationSeconds, language: "en" },
+    narration: { source: "generated", full_text: "Proof becomes motion." },
+    audio: { music_prompt: "A plan-specific pulse" },
+    shots: [{ id: "shot-1", start_seconds: 0, visual: { events: [] }, sfx: [] }]
+  };
 }
