@@ -150,6 +150,8 @@ export async function validateRenderedCandidateReceipt(projectPath, receipt, opt
       if (candidateId !== selectedId && !candidateRejectionReasons(candidate).length) errors.push(`rejected candidate ${candidateId} in ${comparisonId} requires a rejection reason`);
       const candidateArtifacts = candidateArtifactEntries(candidate);
       const candidateHashes = [];
+      let imageArtifacts = 0;
+      let videoArtifacts = 0;
       if (!candidateArtifacts.length) errors.push(`candidate ${candidateId} in ${comparisonId} has no rendered pixel artifacts`);
       for (const artifact of candidateArtifacts) {
         const file = artifact.file;
@@ -161,8 +163,11 @@ export async function validateRenderedCandidateReceipt(projectPath, receipt, opt
           else {
             const bytes = await readFile(resolved);
             const hash = createHash("sha256").update(bytes).digest("hex");
+            const mediaKind = renderedMediaKind(bytes);
             if (artifact.sha256 !== hash) errors.push(`candidate artifact has a stale or invalid file hash: ${file}`);
-            if (!isRenderedMedia(bytes)) errors.push(`candidate artifact is not a recognized rendered image or video: ${file}`);
+            if (!mediaKind) errors.push(`candidate artifact is not a recognized rendered image or video: ${file}`);
+            if (mediaKind === "image") imageArtifacts += 1;
+            if (mediaKind === "video") videoArtifacts += 1;
             candidateHashes.push(hash);
             artifacts.push(path.relative(project, resolved).split(path.sep).join("/"));
           }
@@ -170,6 +175,7 @@ export async function validateRenderedCandidateReceipt(projectPath, receipt, opt
           errors.push(`candidate artifact is unavailable: ${file} (${error.message})`);
         }
       }
+      if (!videoArtifacts && imageArtifacts < 3) errors.push(`candidate ${candidateId} in ${comparisonId} requires an encoded clip or at least three rendered lifecycle frames`);
       artifactFingerprints.push(candidateHashes.sort().join(":"));
     }
     const nonemptyFingerprints = artifactFingerprints.filter(Boolean);
@@ -278,13 +284,13 @@ function candidateArtifactEntries(candidate) {
   return [...new Map(entries.map((entry) => [entry.file, entry])).values()];
 }
 
-function isRenderedMedia(bytes) {
-  if (!Buffer.isBuffer(bytes) || bytes.length < 12) return false;
-  if (bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return true;
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return true;
-  if (bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP") return true;
-  if (["GIF87a", "GIF89a"].includes(bytes.subarray(0, 6).toString("ascii"))) return true;
-  return bytes.subarray(4, 8).toString("ascii") === "ftyp";
+function renderedMediaKind(bytes) {
+  if (!Buffer.isBuffer(bytes) || bytes.length < 12) return null;
+  if (bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image";
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image";
+  if (bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP") return "image";
+  if (["GIF87a", "GIF89a"].includes(bytes.subarray(0, 6).toString("ascii"))) return "image";
+  return bytes.subarray(4, 8).toString("ascii") === "ftyp" ? "video" : null;
 }
 
 function containedProjectFile(project, value) {

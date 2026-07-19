@@ -54,9 +54,14 @@ test("requires independent opening and transition rendered-candidate comparisons
   await mkdir(path.join(project, "qa", "rendered-candidates"), { recursive: true });
   const artifactHashes = new Map();
   await Promise.all(["opening-a", "opening-b", "transition-a", "transition-b"].map(async (id) => {
-    const bytes = renderedPng(id);
-    artifactHashes.set(id, hash(bytes));
-    await writeFile(path.join(project, "qa", "rendered-candidates", `${id}.png`), bytes);
+    const artifacts = [];
+    for (const phase of ["entry", "peak", "settle"]) {
+      const bytes = renderedPng(`${id}-${phase}`);
+      const file = `qa/rendered-candidates/${id}-${phase}.png`;
+      artifacts.push({ file, sha256: hash(bytes) });
+      await writeFile(path.join(project, file), bytes);
+    }
+    artifactHashes.set(id, artifacts);
   }));
   const receipt = {
     schema_version: SUBSCRIPTION_CANDIDATE_RECEIPT_VERSION,
@@ -130,7 +135,7 @@ function comparison(id, kind, candidateIds, selectedId, artifactHashes, boundary
       id: candidateId,
       render_id: `render-${candidateId}`,
       admissible: true,
-      artifacts: [{ file: `qa/rendered-candidates/${candidateId}.png`, sha256: artifactHashes.get(candidateId) }],
+      artifacts: artifactHashes.get(candidateId),
       scores: candidateScores(candidateId === selectedId ? 9 : 8 - index * .1),
       ...(candidateId === selectedId ? {} : { rejection_reasons: ["Weaker hierarchy at delivery size."] })
     }))

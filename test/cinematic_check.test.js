@@ -129,9 +129,14 @@ async function writePhase2Evidence(project) {
   await Promise.all([mkdir(candidateDir, { recursive: true }), mkdir(temporalDir, { recursive: true })]);
   const artifactHashes = new Map();
   await Promise.all(["opening-a", "opening-b", "transition-a", "transition-b"].map(async (id) => {
-    const bytes = renderedPng(id);
-    artifactHashes.set(id, hash(bytes));
-    await writeFile(path.join(candidateDir, `${id}.png`), bytes);
+    const artifacts = [];
+    for (const phase of ["entry", "peak", "settle"]) {
+      const bytes = renderedPng(`${id}-${phase}`);
+      const file = `qa/rendered-candidates/${id}-${phase}.png`;
+      artifacts.push({ file, sha256: hash(bytes) });
+      await writeFile(path.join(project, file), bytes);
+    }
+    artifactHashes.set(id, artifacts);
   }));
   await writeFile(path.join(project, "qa", "rendered-candidates.json"), JSON.stringify({
     schema_version: SUBSCRIPTION_CANDIDATE_RECEIPT_VERSION,
@@ -194,7 +199,7 @@ function candidateComparison(id, kind, candidateIds, selectedId, artifactHashes,
       id: candidateId,
       render_id: `render-${candidateId}`,
       admissible: true,
-      artifacts: [{ file: `qa/rendered-candidates/${candidateId}.png`, sha256: artifactHashes.get(candidateId) }],
+      artifacts: artifactHashes.get(candidateId),
       scores: candidateScores(candidateId === selectedId ? 9 : 8),
       ...(candidateId === selectedId ? {} : { rejection_reasons: ["Weaker delivery-size hierarchy."] })
     }))
