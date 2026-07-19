@@ -132,12 +132,13 @@ export async function judgeRenderedFrameCandidates(workspacePath, context, optio
   }
 
   const visualEvidence = await loadCandidateEvidence(workspace, candidates, Number(options.framesPerCandidate ?? 6));
-  const route = parseModelRoute(options.route ?? options.candidateJudgeRoute, {
+  const parsedRoute = parseModelRoute(options.route ?? options.candidateJudgeRoute, {
     provider: "openai",
     model: options.model ?? "gpt-5.6",
     reasoning: options.reasoning ?? "high",
     supportsImages: true
   });
+  const route = options.reasoning == null ? parsedRoute : parseModelRoute({ ...parsedRoute, reasoning: options.reasoning });
   if (route.supportsImages === false) throw new Error(`Rendered candidate judge route does not support images: ${route.provider}:${route.model}`);
   const client = adapters.client ?? (adapters.createClient ?? createStructuredClient)(route);
   const request = {

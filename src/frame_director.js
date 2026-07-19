@@ -375,7 +375,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
     target: candidateTarget,
     trigger: options.candidateTrigger,
     judge_route: options.candidateJudgeRoute ?? null,
-    judge_reasoning: options.candidateJudgeReasoning ?? "high",
+    judge_reasoning_override: options.candidateJudgeReasoning ?? null,
     judge_max_output_tokens: Number(options.candidateJudgeMaxOutputTokens ?? 5_000)
   };
   const inputHash = tournament
@@ -601,7 +601,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
         trigger: options.candidateTrigger
       }, {
         route: options.candidateJudgeRoute,
-        reasoning: options.candidateJudgeReasoning ?? "high",
+        reasoning: options.candidateJudgeReasoning,
         maxOutputTokens: options.candidateJudgeMaxOutputTokens ?? 5_000,
         background: options.background
       }, adapters.candidateJudge ?? {});

@@ -629,7 +629,7 @@ function frameOptions(flags) {
     renderedCandidates: numberOr(flags["rendered-candidates"], cinematic ? 2 : 1),
     candidateTournamentShots: numberOr(flags["rendered-candidate-shots"], 2),
     candidateJudgeRoute: singleModelRoute(flags["candidate-judge-route"] ?? (policy === "free" ? "openrouter:openrouter/free@none" : "openai:gpt-5.6@high"), "--candidate-judge-route"),
-    candidateJudgeReasoning: flags["candidate-judge-reasoning"] ?? (policy === "quality" ? "high" : "medium"),
+    candidateJudgeReasoning: flags["candidate-judge-reasoning"],
     candidateJudgeMaxOutputTokens: numberOr(flags["candidate-judge-max-output-tokens"], 5_000),
     sequenceSemanticAttempts: numberOr(flags["sequence-semantic-attempts"], 2),
     sequenceMaxOutputTokens: numberOr(flags["sequence-max-output-tokens"], 8_000),
