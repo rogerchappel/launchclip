@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_INSTRUCTIONS, FRAME_BLUEPRINT_SCHEMA, FRAME_BLUEPRINT_VERSION, normalizeFrameBlueprint, repairLockedSupportingMotionLiterals, validateFrameBlueprint, validateLockedSupportingMotion } from "./frame_blueprint.js";
+import { FRAME_CANDIDATE_SELECTION_VERSION, judgeRenderedFrameCandidates, selectCinematicCandidateShots } from "./frame_candidate_select.js";
+import { verifyFrameCandidate } from "./frame_candidate_verify.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { ensureTimelineRegistration, hasTimelineRegistration } from "./hyperframes_timeline.js";
 import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model_provider.js";
@@ -90,10 +92,11 @@ export const FALLBACK_FRAMES_PATH = "production/fallbacks";
 
 export async function directFrames(workspacePath, options = {}, adapters = {}) {
   const workspace = path.resolve(workspacePath);
-  const [intake, evidence, plan, narrationTiming] = await Promise.all([
+  const [intake, evidence, plan, story, narrationTiming] = await Promise.all([
     readJson(path.join(workspace, PRODUCTION_PATHS.intake)),
     readJson(path.join(workspace, PRODUCTION_PATHS.evidence)),
     readJson(path.join(workspace, PRODUCTION_PATHS.plan)),
+    readOptionalJson(path.join(workspace, PRODUCTION_PATHS.story)),
     readNarrationTiming(workspace)
   ]);
   const store = adapters.store ?? await ProductionJobStore.open(workspace, { create: false });
@@ -117,6 +120,10 @@ export async function directFrames(workspacePath, options = {}, adapters = {}) {
       duration_seconds: Number((Number(shot.end_seconds) - Number(shot.start_seconds)).toFixed(3))
     }));
   const indexByShot = new Map(plan.shots.map((shot, index) => [shot.id, index]));
+  const renderedCandidates = options.renderedCandidates == null ? 1 : positiveInteger(options.renderedCandidates, "renderedCandidates");
+  const candidateTriggers = renderedCandidates > 1
+    ? new Map(selectCinematicCandidateShots(plan, story, { maxShots: options.candidateTournamentShots ?? 2 }).map((entry) => [entry.shot_id, entry]))
+    : new Map();
   const sequenceReceipts = new Array(authoringSequences.length).fill(null);
   const tasks = authoringSequences.map((sequence, sequenceIndex) => async () => {
     assertFrameBudget(costState, maxFrameCostUsd);
@@ -140,9 +147,11 @@ export async function directFrames(workspacePath, options = {}, adapters = {}) {
       assertFrameBudget(costState, maxFrameCostUsd);
       const index = indexByShot.get(shot.id);
       const existing = store.get(`frame:${shot.id}`);
-      const shotOptions = options.pendingReasoning && existing?.status !== "succeeded"
+      const baseShotOptions = options.pendingReasoning && existing?.status !== "succeeded"
         ? { ...options, reasoning: options.pendingReasoning }
         : options;
+      const candidateTrigger = candidateTriggers.get(shot.id) ?? null;
+      const shotOptions = candidateTrigger ? { ...baseShotOptions, candidateTarget: renderedCandidates, candidateTrigger } : baseShotOptions;
       const shotRoutes = frameModelRoutes(shotOptions, intake);
       const frame = await directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, sequence, sequenceContract: sequenceContract?.value ?? null, sequenceJobId: sequenceContract?.job_id ?? null, previousSceneBlueprint, store, routes: shotRoutes, adapters, options: shotOptions });
       recordFrameCost(costState, frame, shotRoutes[0].model, Number(options.maxOutputTokens ?? 36_000));
@@ -169,6 +178,13 @@ export async function directFrames(workspacePath, options = {}, adapters = {}) {
     fallbacks: frames.filter((entry) => entry.fallback).length,
     sanitized: frames.filter((entry) => entry.sanitized).length,
     frame_cost: frameCostSummary(costState, maxFrameCostUsd),
+    ...(candidateTriggers.size ? {
+      candidate_tournaments: {
+        requested_shots: candidateTriggers.size,
+        completed_shots: frames.filter((entry) => entry.candidate_selection).length,
+        receipts: frames.map((entry) => entry.candidate_selection?.receipt).filter(Boolean)
+      }
+    } : {}),
     ...(options.sequenceBlueprint ? {
       sequences: {
         groups: authoringSequences.length,
@@ -343,6 +359,8 @@ export function buildFrameInput({ intake, evidence, plan, shot, index, narration
 
 async function directOneFrame({ workspace, intake, evidence, plan, shot, index, narrationTiming, sequence = null, sequenceContract = null, sequenceJobId = null, previousSceneBlueprint = null, store, routes, adapters, options }) {
   const jobId = `frame:${shot.id}`;
+  const candidateTarget = options.candidateTarget == null ? 1 : positiveInteger(options.candidateTarget, "candidateTarget");
+  const tournament = candidateTarget > 1;
   const baseInput = options.sceneBlueprint
     ? buildFrameBlueprintInput({ intake, evidence, plan, shot, index, narrationTiming, sequence, sequenceContract, previousSceneBlueprint })
     : buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming, sequence, sequenceContract, previousSceneBlueprint });
@@ -350,17 +368,28 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   const blueprintInputHash = options.sceneBlueprint
     ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BLUEPRINT_SCHEMA, worker: sequenceContract ? "frame-blueprint.v6" : "frame-blueprint.v5" })
     : null;
-  const inputHash = customRouting
-    ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, sequence: sequenceContract ? FRAME_SEQUENCE_VERSION : null, worker: sequenceContract ? "frame-director.v12" : options.sceneBlueprint ? "frame-director.v11" : "frame-director.v5" })
-    : semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v4" });
+  const inputHash = tournament
+    ? customRouting
+      ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, sequence: sequenceContract ? FRAME_SEQUENCE_VERSION : null, candidate_selection: { version: FRAME_CANDIDATE_SELECTION_VERSION, target: candidateTarget, trigger: options.candidateTrigger, judge_route: options.candidateJudgeRoute ?? null }, worker: "frame-director.v13" })
+      : semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, candidate_selection: { version: FRAME_CANDIDATE_SELECTION_VERSION, target: candidateTarget, trigger: options.candidateTrigger, judge_route: options.candidateJudgeRoute ?? null }, worker: "frame-director.v13" })
+    : customRouting
+      ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, sequence: sequenceContract ? FRAME_SEQUENCE_VERSION : null, worker: sequenceContract ? "frame-director.v12" : options.sceneBlueprint ? "frame-director.v11" : "frame-director.v5" })
+      : semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v4" });
   const existing = store.get(jobId);
-  const resanitized = await resanitizeStoredFrame({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
+  const resanitized = tournament ? null : await resanitizeStoredFrame({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash });
   if (resanitized) return resanitized;
-  const recovered = await recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash, stableRouteCache: options.stableRouteCache });
+  const recovered = tournament ? null : await recoverStoredFrameAttempt({ workspace, intake, evidence, plan, shot, store, jobId, existing, inputHash, stableRouteCache: options.stableRouteCache });
   if (recovered) return recovered;
   if (existing?.status === "succeeded" && existing.input_hash === inputHash) {
     const verification = await store.verifyOutputs(jobId);
-    if (verification.ok) return { shot_id: shot.id, cached: true, fallback: hasFallbackFrameOutputs(existing), outputs: verification.outputs, response_id: existing.remote?.response_id ?? null };
+    if (verification.ok) return {
+      shot_id: shot.id,
+      cached: true,
+      fallback: hasFallbackFrameOutputs(existing),
+      outputs: verification.outputs,
+      response_id: existing.remote?.response_id ?? null,
+      ...(tournament ? { candidate_selection: await readCachedCandidateSelection(workspace, shot.id) } : {})
+    };
     await store.markStaleFrom([jobId]);
   } else if (existing && existing.input_hash !== inputHash) {
     await store.markStaleFrom([jobId]);
@@ -369,7 +398,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   let resumeResponseId = null;
   const dependencies = [sequenceJobId ?? "creative-plan"];
   if (!current) await store.add({ id: jobId, kind: "frame", depends_on: dependencies, input_hash: inputHash, max_attempts: Number(options.maxAttempts ?? 3) });
-  else if (current.status === "failed" && existing?.input_hash === inputHash && isSemanticValidationFailure(current.error)) {
+  else if (!tournament && current.status === "failed" && existing?.input_hash === inputHash && isSemanticValidationFailure(current.error)) {
     if (options.fallbackMode === "error") throw frameRoutesExhaustedError(shot.id, [current.error]);
     await store.reconfigure(jobId, { input_hash: inputHash });
     await store.markRunning(jobId, { provider: "local", response_id: existing.remote?.response_id ?? null, status: "fallback" });
@@ -381,15 +410,16 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
     else await store.retry(jobId, { inputHash });
   }
   else if (current.status === "running" || current.status === "submitted") {
-    if (!current.remote?.response_id) {
+    if (tournament) {
+      await store.markFailed(jobId, new Error(`Restarting interrupted rendered-candidate tournament: ${jobId}`));
+      await store.retry(jobId, { inputHash });
+    } else if (!current.remote?.response_id) {
       await store.markFailed(jobId, new Error(`Recovered interrupted frame job without a resumable response id: ${jobId}`));
       await store.retry(jobId, { inputHash });
     } else resumeResponseId = current.remote.response_id;
   } else if (current.status !== "pending") throw new Error(`Frame job is already ${current.status}: ${jobId}`);
 
   if (!resumeResponseId) await store.markRunning(jobId, { provider: routes[0].provider, response_id: null, status: "running" });
-  let prior = null;
-  let errors = [];
   try {
     const blueprint = options.sceneBlueprint
       ? await resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, index, narrationTiming, sequence, sequenceContract, previousSceneBlueprint, store, routes, adapters, options, inputHash: blueprintInputHash, jobId })
@@ -399,115 +429,199 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
       : routes;
     let totalAttempt = 0;
     let lastResult = null;
-    for (const [routeIndex, route] of authorRoutes.entries()) {
-      const client = adapters.client ?? (adapters.createClient ?? createStructuredClient)(route);
-      const attemptsForRoute = routeIndex === 0 ? Number(options.semanticAttempts ?? 2) : 1;
-      for (let routeAttempt = 1; routeAttempt <= attemptsForRoute; routeAttempt += 1) {
-        totalAttempt += 1;
-        const request = {
-          model: route.model,
-          reasoningEffort: route.reasoning,
-          reasoningContext: "current_turn",
-          pro: Boolean(options.pro ?? intake.model?.reasoning_mode === "pro"),
-          instructions: options.leanPrompt ? LEAN_FRAME_INSTRUCTIONS : FRAME_INSTRUCTIONS,
-          input: blueprint
+    let calls = blueprint?.generated ? Number(blueprint.calls ?? 1) : 0;
+    let usage = mergeUsage(blueprint?.generated ? blueprint.usage : null);
+    const costEvents = blueprint?.generated ? [...(blueprint.cost_events ?? [providerCostEvent(blueprint, options.blueprintMaxOutputTokens ?? 3_000, "blueprint")])] : [];
+    const admissible = [];
+    const allErrors = [];
+    const variants = tournament ? candidateTarget : 1;
+
+    for (let variantIndex = 0; variantIndex < variants; variantIndex += 1) {
+      const variant = tournament ? candidateVariantBrief(shot.id, variantIndex, variants) : null;
+      let prior = null;
+      let errors = [];
+      let accepted = false;
+      for (const [routeIndex, route] of authorRoutes.entries()) {
+        const client = adapters.client ?? (adapters.createClient ?? createStructuredClient)(route);
+        const attemptsForRoute = routeIndex === 0 ? Number(options.semanticAttempts ?? 2) : 1;
+        for (let routeAttempt = 1; routeAttempt <= attemptsForRoute; routeAttempt += 1) {
+          totalAttempt += 1;
+          const frameInput = blueprint
             ? buildBlueprintFrameInput({ intake, evidence, plan, shot, index, narrationTiming, sequence, sequenceContract, previousSceneBlueprint, blueprint: blueprint.value, prior, errors })
-            : buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming, sequence, sequenceContract, previousSceneBlueprint, prior, errors, lean: options.leanPrompt }),
-          schema: FRAME_BUNDLE_SCHEMA,
-          schemaName: "launchclip_frame_bundle",
-          background: options.background !== false,
-          maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
-          ...(blueprint ? { temperature: Number(routeAttempt === 1 ? options.frameTemperature ?? .4 : options.frameRepairTemperature ?? .1) } : {}),
-          promptCacheKey: sequenceContract ? "launchclip:frame-director:v10" : options.leanPrompt ? "launchclip:frame-director:v9" : "launchclip:frame-director:v4",
-          metadata: { job_id: jobId, shot_id: shot.id, attempt: totalAttempt, route: routeIndex + 1 },
-          onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
-        };
-        let result;
-        try {
-          if (resumeResponseId && routeIndex === 0 && client.supportsResume !== false) {
-            try {
-              result = await client.resumeStructured(resumeResponseId, request);
-            } catch (error) {
-              if (!isCancelledResponseFailure(error)) throw error;
-              await store.markFailed(jobId, error);
-              await store.retry(jobId, { inputHash });
-              await store.markRunning(jobId, { provider: route.provider, response_id: null, status: "running" });
-              result = await client.runStructured(request);
-            }
-          } else result = await client.runStructured(request);
-        } catch (error) {
+            : buildFrameInput({ intake, evidence, plan, shot, index, narrationTiming, sequence, sequenceContract, previousSceneBlueprint, prior, errors, lean: options.leanPrompt });
+          const request = {
+            model: route.model,
+            reasoningEffort: route.reasoning,
+            reasoningContext: "current_turn",
+            pro: Boolean(options.pro ?? intake.model?.reasoning_mode === "pro"),
+            instructions: options.leanPrompt ? LEAN_FRAME_INSTRUCTIONS : FRAME_INSTRUCTIONS,
+            input: variant ? appendCandidateVariant(frameInput, variant) : frameInput,
+            schema: FRAME_BUNDLE_SCHEMA,
+            schemaName: "launchclip_frame_bundle",
+            background: options.background !== false,
+            maxOutputTokens: Number(options.maxOutputTokens ?? 36_000),
+            ...(blueprint ? { temperature: Number(routeAttempt === 1 ? options.frameTemperature ?? .4 : options.frameRepairTemperature ?? .1) } : {}),
+            promptCacheKey: tournament ? "launchclip:frame-director:v11" : sequenceContract ? "launchclip:frame-director:v10" : options.leanPrompt ? "launchclip:frame-director:v9" : "launchclip:frame-director:v4",
+            metadata: { job_id: jobId, shot_id: shot.id, attempt: totalAttempt, route: routeIndex + 1, ...(variant ? { candidate_id: variant.id, candidate_index: variantIndex + 1 } : {}) },
+            onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
+          };
+          let result;
+          calls += 1;
+          try {
+            if (resumeResponseId && routeIndex === 0 && client.supportsResume !== false) {
+              try {
+                result = await client.resumeStructured(resumeResponseId, request);
+              } catch (error) {
+                if (!isCancelledResponseFailure(error)) throw error;
+                await store.markFailed(jobId, error);
+                await store.retry(jobId, { inputHash });
+                await store.markRunning(jobId, { provider: route.provider, response_id: null, status: "running" });
+                calls += 1;
+                result = await client.runStructured(request);
+              }
+            } else result = await client.runStructured(request);
+          } catch (error) {
+            resumeResponseId = null;
+            const message = `Generation attempt ${totalAttempt} via ${route.provider}:${route.model} failed: ${error.message}`;
+            errors.push(message);
+            allErrors.push(message);
+            if (routeAttempt < attemptsForRoute) continue;
+            break;
+          }
           resumeResponseId = null;
-          errors.push(`Generation attempt ${totalAttempt} via ${route.provider}:${route.model} failed: ${error.message}`);
-          if (routeAttempt < attemptsForRoute) continue;
+          lastResult = result;
+          usage = mergeUsage(usage, result.usage);
+          costEvents.push(providerCostEvent({ ...result, provider: route.provider, route_model: route.model }, options.maxOutputTokens ?? 36_000, "author"));
+          await store.markRunning(jobId, { provider: route.provider, response_id: result.response_id, status: result.status });
+          const normalized = { ...result.value, html: ensureTimelineRegistration(result.value.html, shot.id) };
+          const sanitized = sanitizeFrameBundle(normalized, {
+            shot,
+            format: plan.format,
+            resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
+          });
+          const selectorAlignment = blueprint ? alignFrameSelectorsToBlueprint(sanitized.bundle, blueprint.value) : { bundle: sanitized.bundle, mappings: [] };
+          const eventTimingAlignment = alignFrameEventTiming(selectorAlignment.bundle, shot);
+          const lockedMotionRepair = blueprint
+            ? repairLockedSupportingMotionLiterals(eventTimingAlignment.bundle.html, blueprint.value.supporting_motion_beats)
+            : { html: eventTimingAlignment.bundle.html, opening_position_added: false, immediate_render_added: 0, unplanned_properties_removed: 0 };
+          const candidate = { ...eventTimingAlignment.bundle, html: lockedMotionRepair.html };
+          const repairs = [
+            ...sanitized.repairs,
+            ...(selectorAlignment.mappings.length ? [{ kind: "align-frame-selectors-to-blueprint", mappings: selectorAlignment.mappings }] : []),
+            ...(lockedMotionRepair.opening_position_added ? [{ kind: "add-explicit-opening-motion-position", at_seconds: 0 }] : []),
+            ...(lockedMotionRepair.immediate_render_added ? [{ kind: "add-locked-immediate-render-flags", count: lockedMotionRepair.immediate_render_added }] : []),
+            ...(lockedMotionRepair.unplanned_properties_removed ? [{ kind: "remove-unplanned-locked-motion-properties", count: lockedMotionRepair.unplanned_properties_removed }] : []),
+            ...(eventTimingAlignment.aligned.length ? [{ kind: "align-frame-event-timing", events: eventTimingAlignment.aligned }] : [])
+          ];
+          const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
+          errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format), ...(blueprint ? validateLockedSupportingMotion(candidate.html, blueprint.value.supporting_motion_beats) : [])];
+          let verification = null;
+          if (!errors.length && tournament) {
+            const verify = adapters.verifyFrameCandidate ?? verifyFrameCandidate;
+            verification = await verify(workspace, candidate, {
+              shot,
+              format: plan.format,
+              intake,
+              plan,
+              attempt: `${variant.id}-attempt-${totalAttempt}`
+            }, adapters.candidateVerification ?? {});
+            if (!verification.ok) {
+              if (verification.failure_kind === "infrastructure") throw new Error(`Rendered candidate verification infrastructure failed for ${variant.id}: ${verification.error}`);
+              errors = [`Rendered candidate ${variant.id} failed pixel verification: ${verification.error}`];
+            }
+          }
+          await writeFrameAttempt(workspace, shot.id, totalAttempt, {
+            input_hash: inputHash,
+            response_id: result.response_id,
+            provider: route.provider,
+            model: result.model,
+            usage: result.usage,
+            candidate_variant: variant,
+            repairs,
+            errors,
+            verification: verification ? { ok: verification.ok, failure_kind: verification.failure_kind, error: verification.error, report: verification.report, frames: verification.frames } : null,
+            candidate
+          });
+          if (errors.length) {
+            allErrors.push(...errors);
+            prior = candidate;
+            continue;
+          }
+          admissible.push({
+            id: variant?.id ?? `${shot.id}-candidate-01`,
+            bundle: candidate,
+            verification,
+            repairs,
+            response_id: result.response_id,
+            provider: route.provider,
+            model: result.model,
+            usage: result.usage
+          });
+          accepted = true;
           break;
         }
-        resumeResponseId = null;
-        lastResult = result;
-        await store.markRunning(jobId, { provider: route.provider, response_id: result.response_id, status: result.status });
-        const normalized = { ...result.value, html: ensureTimelineRegistration(result.value.html, shot.id) };
-        const sanitized = sanitizeFrameBundle(normalized, {
-          shot,
-          format: plan.format,
-          resourceRoles: Object.fromEntries(intake.resources.map((entry) => [entry.id, entry.role]))
-        });
-        const selectorAlignment = blueprint ? alignFrameSelectorsToBlueprint(sanitized.bundle, blueprint.value) : { bundle: sanitized.bundle, mappings: [] };
-        const eventTimingAlignment = alignFrameEventTiming(selectorAlignment.bundle, shot);
-        const lockedMotionRepair = blueprint
-          ? repairLockedSupportingMotionLiterals(eventTimingAlignment.bundle.html, blueprint.value.supporting_motion_beats)
-          : { html: eventTimingAlignment.bundle.html, opening_position_added: false, immediate_render_added: 0, unplanned_properties_removed: 0 };
-        const candidate = { ...eventTimingAlignment.bundle, html: lockedMotionRepair.html };
-        const repairs = [
-          ...sanitized.repairs,
-          ...(selectorAlignment.mappings.length ? [{ kind: "align-frame-selectors-to-blueprint", mappings: selectorAlignment.mappings }] : []),
-          ...(lockedMotionRepair.opening_position_added ? [{ kind: "add-explicit-opening-motion-position", at_seconds: 0 }] : []),
-          ...(lockedMotionRepair.immediate_render_added ? [{ kind: "add-locked-immediate-render-flags", count: lockedMotionRepair.immediate_render_added }] : []),
-          ...(lockedMotionRepair.unplanned_properties_removed ? [{ kind: "remove-unplanned-locked-motion-properties", count: lockedMotionRepair.unplanned_properties_removed }] : []),
-          ...(eventTimingAlignment.aligned.length ? [{ kind: "align-frame-event-timing", events: eventTimingAlignment.aligned }] : [])
-        ];
-        const validation = validateFrameBundle(candidate, frameValidationContext({ intake, evidence, plan, shot }));
-        errors = [...validation.errors, ...validateHyperFramesRoot(candidate.html, shot, plan.format), ...(blueprint ? validateLockedSupportingMotion(candidate.html, blueprint.value.supporting_motion_beats) : [])];
-        await writeFrameAttempt(workspace, shot.id, totalAttempt, {
-          input_hash: inputHash,
-          response_id: result.response_id,
-          provider: route.provider,
-          model: result.model,
-          usage: result.usage,
-          repairs,
-          errors,
-          candidate
-        });
-        if (errors.length) {
-          prior = candidate;
-          continue;
-        }
-        const paths = await writeFrameArtifacts(workspace, candidate);
-        const outputs = await Promise.all(paths.map((filePath) => describeJobOutput(workspace, filePath)));
-        const usage = mergeUsage(blueprint?.generated ? blueprint.usage : null, result.usage);
-        await store.markSucceeded(jobId, outputs, usage);
-        return {
-          shot_id: shot.id,
-          cached: false,
-          sanitized: repairs.length > 0,
-          repairs,
-          bundle: paths[0],
-          html: paths[1],
-          motion: paths[2],
-          response_id: result.response_id,
-          provider: route.provider,
-          model: result.model,
-          usage,
-          ...(blueprint ? { blueprint: { path: blueprint.path, response_id: blueprint.response_id, provider: blueprint.provider, model: blueprint.model, cached: !blueprint.generated } } : {})
-        };
+        if (accepted) break;
       }
+      if (!accepted && !tournament) break;
     }
-    const reason = `Frame ${shot.id} exhausted model routes: ${errors.join("; ")}`;
-    if (!lastResult || options.fallbackMode === "error") throw frameRoutesExhaustedError(shot.id, errors);
-    return persistFallbackFrame({
-      workspace, intake, evidence, plan, shot, store, jobId,
-      reason,
-      responseId: lastResult?.response_id ?? null,
-      usage: lastResult?.usage ?? {}
-    });
+
+    if (!admissible.length) {
+      const reason = `Frame ${shot.id} exhausted model routes: ${allErrors.join("; ")}`;
+      if (!lastResult || options.fallbackMode === "error") throw frameRoutesExhaustedError(shot.id, allErrors);
+      return persistFallbackFrame({
+        workspace, intake, evidence, plan, shot, store, jobId,
+        reason,
+        responseId: lastResult?.response_id ?? null,
+        usage,
+        calls,
+        costEvents
+      });
+    }
+
+    let selected = admissible[0];
+    let selection = null;
+    if (tournament) {
+      if (admissible.length < candidateTarget && options.allowSoleCandidate !== true) {
+        throw frameRoutesExhaustedError(shot.id, [...allErrors, `Rendered tournament admitted ${admissible.length} of ${candidateTarget} required independent candidates`]);
+      }
+      const judge = adapters.judgeRenderedFrameCandidates ?? judgeRenderedFrameCandidates;
+      selection = await judge(workspace, {
+        shot,
+        candidates: admissible,
+        trigger: options.candidateTrigger
+      }, {
+        route: options.candidateJudgeRoute,
+        reasoning: options.candidateJudgeReasoning ?? "high",
+        maxOutputTokens: options.candidateJudgeMaxOutputTokens ?? 5_000,
+        background: options.background
+      }, adapters.candidateJudge ?? {});
+      selected = selection.winner;
+      usage = mergeUsage(usage, selection.usage);
+      calls += Number(selection.calls ?? 0);
+      if (selection.calls) costEvents.push(providerCostEvent(selection, options.candidateJudgeMaxOutputTokens ?? 5_000, "judge"));
+    }
+
+    const paths = await writeFrameArtifacts(workspace, selected.bundle);
+    const provenance = tournament ? [selection.receipt, ...admissible.map((entry) => entry.verification?.report).filter(Boolean)] : [];
+    const outputs = await Promise.all([...paths, ...provenance].map((filePath) => describeJobOutput(workspace, filePath)));
+    await store.markSucceeded(jobId, outputs, usage);
+    return {
+      shot_id: shot.id,
+      cached: false,
+      sanitized: selected.repairs.length > 0,
+      repairs: selected.repairs,
+      bundle: paths[0],
+      html: paths[1],
+      motion: paths[2],
+      response_id: selected.response_id,
+      provider: selected.provider,
+      model: selected.model,
+      usage,
+      calls,
+      cost_events: costEvents,
+      ...(selection ? { candidate_selection: { receipt: selection.receipt, method: selection.method, candidate_count: admissible.length, selected_candidate_id: selected.id } } : {}),
+      ...(blueprint ? { blueprint: { path: blueprint.path, response_id: blueprint.response_id, provider: blueprint.provider, model: blueprint.model, cached: !blueprint.generated } } : {})
+    };
   } catch (error) {
     await store.markFailed(jobId, error);
     throw error;
@@ -557,6 +671,9 @@ async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, 
 
   const semanticAttempts = positiveInteger(options.blueprintSemanticAttempts ?? 2, "blueprintSemanticAttempts");
   const generationErrors = [];
+  let calls = 0;
+  let usage = mergeUsage();
+  const costEvents = [];
   let prior = null;
   let validationErrors = [];
   for (const [routeIndex, route] of routes.entries()) {
@@ -580,6 +697,7 @@ async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, 
         onSubmitted: async (response) => store.markRunning(jobId, { provider: route.provider, response_id: response.id, status: response.status })
       };
       let result;
+      calls += 1;
       try {
         result = await client.runStructured(request);
       } catch (error) {
@@ -587,6 +705,8 @@ async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, 
         if (routeAttempt < attemptsForRoute) continue;
         break;
       }
+      usage = mergeUsage(usage, result.usage);
+      costEvents.push(providerCostEvent({ ...result, provider: route.provider, route_model: route.model }, options.blueprintMaxOutputTokens ?? 3_000, "blueprint"));
       await store.markRunning(jobId, { provider: route.provider, response_id: result.response_id, status: result.status });
       const candidate = normalizeFrameBlueprint(result.value, shot);
       const validation = validateFrameBlueprint(candidate, shot);
@@ -601,7 +721,9 @@ async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, 
         response_id: result.response_id,
         provider: route.provider,
         model: result.model,
-        usage: result.usage,
+        usage,
+        calls,
+        cost_events: costEvents,
         blueprint: candidate
       };
       await writeAtomic(blueprintPath, `${JSON.stringify(record, null, 2)}\n`);
@@ -633,6 +755,38 @@ function matchingRouteIndex(routes, record) {
 function mergeUsage(...items) {
   const keys = ["input_tokens", "output_tokens", "total_tokens", "cached_tokens", "cache_write_tokens", "reasoning_tokens"];
   return Object.fromEntries(keys.map((key) => [key, items.reduce((sum, item) => sum + Number(item?.[key] ?? 0), 0)]));
+}
+
+function candidateVariantBrief(shotId, index, total) {
+  const lenses = [
+    "Iconic focal composition: maximize immediate scroll-stop hierarchy, cinematic depth, and one unforgettable visual noun.",
+    "Dynamic spatial composition: use an alternate camera, staging, and motion path while preserving the same factual and frozen-world contracts.",
+    "Editorial proof composition: make the evidence legible at phone size through physical visual causality instead of explanatory text."
+  ];
+  return {
+    id: `${shotId}-candidate-${String(index + 1).padStart(2, "0")}`,
+    index: index + 1,
+    total,
+    creative_lens: lenses[index % lenses.length],
+    independence_rule: "Author this as an independent first-principles solution. Do not imitate, repair, or average another candidate. Preserve only the supplied shot, blueprint, sequence, evidence, and brand truth."
+  };
+}
+
+function appendCandidateVariant(input, variant) {
+  const parsed = JSON.parse(input);
+  return JSON.stringify({ ...parsed, candidate_variant: variant });
+}
+
+function providerCostEvent(value, maxOutputTokens, stage) {
+  return {
+    stage,
+    provider: value?.provider ?? null,
+    model: value?.model ?? null,
+    route_model: value?.route_model ?? value?.model ?? null,
+    response_id: value?.response_id ?? null,
+    usage: value?.usage ?? {},
+    max_output_tokens: Number(maxOutputTokens)
+  };
 }
 
 export function sanitizeFrameBundle(bundle, context = {}) {
@@ -980,6 +1134,20 @@ async function readStoredBlueprintForRecovery(workspace, shotId) {
   }
 }
 
+async function readCachedCandidateSelection(workspace, shotId) {
+  const receipt = path.join(workspace, PRODUCTION_PATHS.qa, "candidate-selection", shotId, "selection.json");
+  const value = await readJson(receipt);
+  if (value?.schema_version !== FRAME_CANDIDATE_SELECTION_VERSION || value?.shot_id !== shotId || !value?.selected_candidate_id) {
+    throw new Error(`Cached rendered-candidate receipt is invalid for ${shotId}`);
+  }
+  return {
+    receipt,
+    method: value.method,
+    candidate_count: value.candidate_order?.length ?? 0,
+    selected_candidate_id: value.selected_candidate_id
+  };
+}
+
 function frameValidationContext({ intake, evidence, plan, shot }) {
   return {
     shotId: shot.id,
@@ -1002,33 +1170,66 @@ function isCancelledResponseFailure(error) {
 
 function recordFrameCost(state, frame, fallbackModel, maxOutputTokens) {
   if (frame.cached || frame.recovered || !frame.usage) return;
+  if (Array.isArray(frame.cost_events) && frame.cost_events.length) {
+    state.calls += Math.max(frame.cost_events.length, Number(frame.calls ?? frame.cost_events.length));
+    for (const event of frame.cost_events) recordProviderCostEvent(state, event, fallbackModel, maxOutputTokens, frame.shot_id);
+    return;
+  }
+  const calls = Math.max(1, Number(frame.calls ?? 1));
   if (frame.provider === "ollama") {
-    state.calls += 1;
+    state.calls += calls;
     return;
   }
   if (frame.provider === "openrouter" && String(fallbackModel ?? "").endsWith(":free")) {
-    state.calls += 1;
+    state.calls += calls;
     return;
   }
   if (frame.provider && frame.provider !== "openai") {
-    state.calls += 1;
+    state.calls += calls;
     state.complete = false;
     state.warnings.push(`Frame cost is not priced locally for provider ${frame.provider}`);
     return;
   }
   const model = frame.model && !String(frame.model).startsWith("local-") ? frame.model : fallbackModel;
   const estimate = estimateOpenAiUsageCost(model, frame.usage);
-  state.calls += 1;
+  state.calls += calls;
   if (estimate.estimated_usd == null) {
     state.complete = false;
     state.warnings.push(estimate.warning ?? `Unable to price frame response ${frame.response_id ?? "(unknown)"}`);
   } else state.estimatedUsd += estimate.estimated_usd;
-  if (Number(frame.usage.output_tokens ?? 0) > maxOutputTokens) {
+  if (Number(frame.usage.output_tokens ?? 0) > maxOutputTokens * calls) {
     state.outputTokenLimitBreaches.push({
       shot_id: frame.shot_id,
       response_id: frame.response_id ?? null,
       requested_max_output_tokens: maxOutputTokens,
       reported_output_tokens: Number(frame.usage.output_tokens)
+    });
+  }
+}
+
+function recordProviderCostEvent(state, event, fallbackModel, fallbackMaxOutputTokens, shotId) {
+  const provider = event.provider;
+  const routeModel = String(event.route_model ?? event.model ?? fallbackModel ?? "");
+  if (provider === "ollama" || provider === "openrouter" && routeModel.endsWith(":free")) return;
+  if (provider && provider !== "openai") {
+    state.complete = false;
+    state.warnings.push(`Frame ${event.stage ?? "provider"} cost is not priced locally for provider ${provider}`);
+    return;
+  }
+  const model = event.model && !String(event.model).startsWith("local-") ? event.model : fallbackModel;
+  const estimate = estimateOpenAiUsageCost(model, event.usage ?? {});
+  if (estimate.estimated_usd == null) {
+    state.complete = false;
+    state.warnings.push(estimate.warning ?? `Unable to price ${event.stage ?? "frame"} response ${event.response_id ?? "(unknown)"}`);
+  } else state.estimatedUsd += estimate.estimated_usd;
+  const limit = Number(event.max_output_tokens ?? fallbackMaxOutputTokens);
+  if (Number(event.usage?.output_tokens ?? 0) > limit) {
+    state.outputTokenLimitBreaches.push({
+      shot_id: shotId,
+      stage: event.stage ?? "frame",
+      response_id: event.response_id ?? null,
+      requested_max_output_tokens: limit,
+      reported_output_tokens: Number(event.usage.output_tokens)
     });
   }
 }
@@ -1312,7 +1513,7 @@ export async function fallbackFramesForVerification(workspacePath, verification)
   return { status: repaired.length ? "repaired" : "not-applicable", repaired };
 }
 
-async function persistFallbackFrame({ workspace, intake, evidence, plan, shot, store, jobId, reason, responseId = null, usage = {}, source = "semantic-validation", updateJob = true }) {
+async function persistFallbackFrame({ workspace, intake, evidence, plan, shot, store, jobId, reason, responseId = null, usage = {}, calls = 0, costEvents = [], source = "semantic-validation", updateJob = true }) {
   const fallback = buildFallbackFrame({ intake, plan, shot });
   const validation = validateFrameBundle(fallback, {
     shotId: shot.id,
@@ -1336,7 +1537,9 @@ async function persistFallbackFrame({ workspace, intake, evidence, plan, shot, s
     bundle: paths[0], html: paths[1], motion: paths[2],
     response_id: responseId,
     model: "local-deterministic-fallback",
-    usage
+    usage,
+    calls,
+    cost_events: costEvents
   };
 }
 
@@ -1465,6 +1668,15 @@ async function runPool(tasks, concurrency, options = {}) {
 
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
+}
+
+async function readOptionalJson(filePath) {
+  try {
+    return await readJson(filePath);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
 }
 
 async function readNarrationTiming(workspace) {

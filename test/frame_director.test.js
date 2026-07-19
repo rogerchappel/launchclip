@@ -589,7 +589,9 @@ test("authors parallel scenes from compact LLM blueprints and preserves their re
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /Do not use negative top offsets/.test(entry.instructions)));
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => /must never cross or cover a label/.test(entry.instructions)));
   assert.ok(calls.filter((entry) => entry.schema === "launchclip_frame_bundle").every((entry) => entry.prompt_cache_key === "launchclip:frame-director:v9"));
-  assert.deepEqual(result.frames.map((entry) => entry.usage.total_tokens), [450, 450]);
+  assert.deepEqual(result.frames.map((entry) => entry.usage.total_tokens), [600, 450]);
+  assert.deepEqual(result.frames.map((entry) => entry.calls), [3, 2]);
+  assert.equal(result.frame_cost.provider_calls_observed, 5);
   assert.ok(result.frames.every((entry) => entry.blueprint.cached === false));
   assert.ok(result.frames.every((entry) => entry.repairs.some((repair) => repair.kind === "align-frame-event-timing")));
   assert.ok(result.frames.every((entry) => entry.repairs.some((repair) => repair.kind === "remove-unplanned-locked-motion-properties")));
@@ -676,6 +678,104 @@ test("authors a cinematic continuity run in order against one cached shared-worl
   assert.equal(calls.length, callCount);
   assert.equal(cached.cached, 2);
   assert.equal(cached.sequences.cached, 1);
+});
+
+test("renders independent high-value candidates, judges pixels, and caches the winning receipt", async () => {
+  const context = fixture();
+  const workspace = await workspaceFixture(context);
+  const authorCalls = [];
+  const verificationCalls = new Map();
+  let judgeCalls = 0;
+  const client = { runStructured: async (options) => {
+    const input = JSON.parse(options.input);
+    const variant = input.candidate_variant;
+    authorCalls.push({
+      shot_id: input.shot.id,
+      candidate_id: variant?.id ?? null,
+      prior: input.prior_attempt,
+      errors: input.validation_errors_to_repair
+    });
+    const attempt = authorCalls.filter((entry) => entry.candidate_id === variant?.id).length;
+    const value = frameBundle(input.shot.id, input.shot.duration_seconds);
+    if (variant) value.html = value.html.replace('id="root"', `id="root" data-variant="${variant.index}-${attempt}"`);
+    return {
+      response_id: `author-${input.shot.id}-${variant?.index ?? 0}-${attempt}`,
+      model: "gpt-5.6-sol",
+      status: "completed",
+      value,
+      usage: { input_tokens: 6, output_tokens: 4, total_tokens: 10 }
+    };
+  } };
+  const verify = async (_workspace, bundle, options) => {
+    const variant = bundle.html.match(/data-variant="([^"]+)"/)?.[1];
+    const count = (verificationCalls.get(variant?.slice(0, 1)) ?? 0) + 1;
+    verificationCalls.set(variant?.slice(0, 1), count);
+    const report = path.join(workspace, "production", "qa", "candidate-verify", options.shot.id, options.attempt, "report.json");
+    await mkdir(path.dirname(report), { recursive: true });
+    const failed = variant?.startsWith("1-") && count === 1;
+    await writeFile(report, `${JSON.stringify({ status: failed ? "failed" : "passed" })}\n`);
+    return {
+      ok: !failed,
+      failure_kind: failed ? "content" : null,
+      error: failed ? "opening hierarchy is too flat" : null,
+      report,
+      snapshots: path.dirname(report),
+      frames: [{ file: path.relative(workspace, report), foreground_ratio: .4 }]
+    };
+  };
+  const judge = async (_workspace, { candidates, trigger }) => {
+    judgeCalls += 1;
+    assert.deepEqual(candidates.map((entry) => entry.id), ["shot-1-candidate-01", "shot-1-candidate-02"]);
+    assert.equal(trigger.kind, "hook");
+    assert.match(candidates[0].bundle.html, /data-variant="1-2"/);
+    assert.match(candidates[1].bundle.html, /data-variant="2-1"/);
+    const receipt = path.join(workspace, "production", "qa", "candidate-selection", "shot-1", "selection.json");
+    await mkdir(path.dirname(receipt), { recursive: true });
+    await writeFile(receipt, `${JSON.stringify({
+      schema_version: "launchclip.frame-candidate-selection.v1",
+      shot_id: "shot-1",
+      method: "fresh-vision-scorecard",
+      candidate_order: candidates.map((entry) => entry.id),
+      selected_candidate_id: candidates[1].id
+    })}\n`);
+    return {
+      winner: candidates[1],
+      receipt,
+      method: "fresh-vision-scorecard",
+      provider: "openai",
+      model: "gpt-5.6",
+      response_id: "judge-1",
+      usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+      calls: 1
+    };
+  };
+
+  const options = { renderedCandidates: 2, candidateTournamentShots: 1, semanticAttempts: 2, concurrency: 1, background: false };
+  const result = await directFrames(workspace, options, { client, verifyFrameCandidate: verify, judgeRenderedFrameCandidates: judge });
+
+  assert.equal(judgeCalls, 1);
+  assert.deepEqual(authorCalls.slice(0, 3).map((entry) => entry.candidate_id), ["shot-1-candidate-01", "shot-1-candidate-01", "shot-1-candidate-02"]);
+  assert.equal(authorCalls[1].prior.shot_id, "shot-1");
+  assert.match(authorCalls[1].errors.join(" "), /opening hierarchy is too flat/);
+  assert.equal(authorCalls[2].prior, null);
+  assert.deepEqual(authorCalls[2].errors, []);
+  assert.match(await readFile(result.frames[0].html, "utf8"), /data-variant="2-1"/);
+  assert.equal(result.frames[0].usage.total_tokens, 35);
+  assert.equal(result.frames[0].calls, 4);
+  assert.equal(result.frame_cost.provider_calls_observed, 5);
+  assert.deepEqual(result.candidate_tournaments, {
+    requested_shots: 1,
+    completed_shots: 1,
+    receipts: [path.join(workspace, "production", "qa", "candidate-selection", "shot-1", "selection.json")]
+  });
+
+  const callCount = authorCalls.length;
+  const cached = await directFrames(workspace, options, { client, verifyFrameCandidate: verify, judgeRenderedFrameCandidates: judge });
+  assert.equal(authorCalls.length, callCount);
+  assert.equal(judgeCalls, 1);
+  assert.equal(cached.frames[0].cached, true);
+  assert.equal(cached.frames[0].candidate_selection.selected_candidate_id, "shot-1-candidate-02");
+  assert.equal(cached.candidate_tournaments.completed_shots, 1);
 });
 
 test("can exhaust LLM routes without writing a deterministic visual fallback", async () => {
