@@ -319,12 +319,49 @@ samples. Clamp every timestamp to the composition duration and deduplicate it:
 - each sequence: entry, settled state, shot midpoint, planned visible event,
   and final hold
 
-Capture both HyperFrames snapshots and frames extracted from the encoded draft;
-the latter proves the delivered artifact rather than only the browser preview.
-Give every manifest entry a stable evidence ID, role, timestamp, sequence or
-boundary ID, filename, and file hash. Fail the review when an expected file is
-missing, empty, stale relative to the draft, out of range, or not cited by the
-fresh-context critic.
+Capture both a HyperFrames snapshot and a frame extracted from the encoded
+draft for every required sample; the latter proves the delivered artifact
+rather than only the browser preview. Use this manifest shape:
+
+```json
+{
+  "schema_version": "launchclip.subscription-temporal-evidence.v1",
+  "video_sha256": "<sha256-of-renders/draft.mp4>",
+  "entries": [
+    {
+      "sample_id": "hook-001",
+      "evidence_id": "hook-001-hyperframes",
+      "source": "hyperframes",
+      "role": "hook",
+      "at_seconds": 0,
+      "sequence_id": null,
+      "boundary_id": null,
+      "file": "qa/temporal-evidence/hook-001-hyperframes.png",
+      "sha256": "<sha256-of-this-image>"
+    },
+    {
+      "sample_id": "hook-001",
+      "evidence_id": "hook-001-encoded-draft",
+      "source": "encoded-draft",
+      "role": "hook",
+      "at_seconds": 0,
+      "sequence_id": null,
+      "boundary_id": null,
+      "file": "qa/temporal-evidence/hook-001-encoded-draft.png",
+      "sha256": "<sha256-of-this-image>"
+    }
+  ]
+}
+```
+
+Give each scheduled sample a stable `sample_id` and exactly two uniquely named
+evidence entries, one for each source. Copy the schedule's role, timestamp,
+sequence ID, and boundary ID exactly; use `null` when an ID does not apply.
+Additional sequence/event samples are allowed, but they also need unique
+evidence IDs, valid files and hashes, and critic review. Fail the review when an
+expected source is missing, a file is empty, the current draft hash changed, an
+artifact hash is stale, a timestamp is out of range, or the fresh-context
+critic did not list every evidence ID it reviewed.
 
 ## Preview and approval
 
