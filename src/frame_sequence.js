@@ -162,7 +162,11 @@ export function buildAuthoringSequences(plan, options = {}) {
 
 export function validateAuthoringSequenceDurations(sequences, productionDuration) {
   const errors = [];
-  for (const sequence of sequences ?? []) {
+  const groups = sequences ?? [];
+  if (groups.length > 1 && !groups.some((sequence) => (sequence.shots ?? []).length >= 2)) {
+    errors.push("cinematic planning requires at least one multi-shot shared-world sequence; independent shot resets cannot satisfy continuity");
+  }
+  for (const sequence of groups) {
     if ((sequence.shots ?? []).length < 2) continue;
     const duration = Number(sequence.duration_seconds);
     const minimum = Number(productionDuration) < 8 ? Number(productionDuration) : 8;

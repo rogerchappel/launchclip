@@ -34,6 +34,17 @@ test("fails closed when a multi-shot cinematic world falls outside eight to twen
   assert.throws(() => buildAuthoringSequences(planFixture(short[0].shots, 30), { enforceDuration: true }), /Cinematic sequence planning failed/);
 });
 
+test("fails closed when a cinematic plan evades continuity with independent shot resets", () => {
+  const plan = planFixture([
+    shot("one", 0, 5, "world-a", "cut"),
+    shot("two", 5, 10, "world-b", "cut"),
+    shot("three", 10, 15, "world-c", "resolve")
+  ]);
+  const groups = buildAuthoringSequences(plan);
+  assert.match(validateAuthoringSequenceDurations(groups, 15)[0], /at least one multi-shot shared-world sequence/);
+  assert.throws(() => buildAuthoringSequences(plan, { enforceDuration: true }), /independent shot resets cannot satisfy continuity/);
+});
+
 test("builds a compact sequence packet with exact boundary physics and narration timing", () => {
   const plan = planFixture([shot("one", 0, 4, "world", "continue"), shot("two", 4, 9, "world", "resolve")]);
   const sequence = buildAuthoringSequences(plan, { enforceDuration: true })[0];
