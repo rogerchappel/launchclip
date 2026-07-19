@@ -727,8 +727,8 @@ test("renders independent high-value candidates, judges pixels, and caches the w
     judgeCalls += 1;
     assert.deepEqual(candidates.map((entry) => entry.id), ["shot-1-candidate-01", "shot-1-candidate-02"]);
     assert.equal(trigger.kind, "hook");
-    assert.match(candidates[0].bundle.html, /data-variant="1-2"/);
-    assert.match(candidates[1].bundle.html, /data-variant="2-1"/);
+    assert.match(candidates[0].bundle.html, judgeCalls === 1 ? /data-variant="1-2"/ : /data-variant="1-\d+"/);
+    assert.match(candidates[1].bundle.html, judgeCalls === 1 ? /data-variant="2-1"/ : /data-variant="2-\d+"/);
     const receipt = path.join(workspace, "production", "qa", "candidate-selection", "shot-1", "selection.json");
     await mkdir(path.dirname(receipt), { recursive: true });
     await writeFile(receipt, `${JSON.stringify({
@@ -776,6 +776,13 @@ test("renders independent high-value candidates, judges pixels, and caches the w
   assert.equal(cached.frames[0].cached, true);
   assert.equal(cached.frames[0].candidate_selection.selected_candidate_id, "shot-1-candidate-02");
   assert.equal(cached.candidate_tournaments.completed_shots, 1);
+
+  const retuned = await directFrames(workspace, { ...options, candidateJudgeReasoning: "xhigh" }, { client, verifyFrameCandidate: verify, judgeRenderedFrameCandidates: judge });
+  assert.equal(retuned.frames[0].cached, false);
+  assert.equal(judgeCalls, 2);
+  const rebudgeted = await directFrames(workspace, { ...options, candidateJudgeReasoning: "xhigh", candidateJudgeMaxOutputTokens: 6_000 }, { client, verifyFrameCandidate: verify, judgeRenderedFrameCandidates: judge });
+  assert.equal(rebudgeted.frames[0].cached, false);
+  assert.equal(judgeCalls, 3);
 });
 
 test("can exhaust LLM routes without writing a deterministic visual fallback", async () => {

@@ -11,6 +11,7 @@ import { runHyperframes } from "./toolchain.js";
 import { analyzePng } from "./visual_snapshot.js";
 
 const execFileAsync = promisify(execFile);
+export const FRAME_CANDIDATE_VERIFICATION_VERSION = "launchclip.frame-candidate-verification.v5";
 
 export async function verifyFrameCandidate(workspacePath, bundle, options = {}, adapters = {}) {
   const workspace = path.resolve(workspacePath);
@@ -31,7 +32,7 @@ export async function verifyFrameCandidate(workspacePath, bundle, options = {}, 
   }, adapters);
   const comparison = compareEvidence(candidate, baseline, options);
   const report = {
-    schema_version: "launchclip.frame-candidate-verification.v5",
+    schema_version: FRAME_CANDIDATE_VERIFICATION_VERSION,
     shot_id: shot.id,
     attempt,
     status: comparison.ok ? "passed" : "failed",

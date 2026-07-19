@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildBlueprintFrameInput, buildFrameBlueprintInput, FRAME_BLUEPRINT_INSTRUCTIONS, FRAME_BLUEPRINT_SCHEMA, FRAME_BLUEPRINT_VERSION, normalizeFrameBlueprint, repairLockedSupportingMotionLiterals, validateFrameBlueprint, validateLockedSupportingMotion } from "./frame_blueprint.js";
-import { FRAME_CANDIDATE_SELECTION_VERSION, judgeRenderedFrameCandidates, selectCinematicCandidateShots } from "./frame_candidate_select.js";
-import { verifyFrameCandidate } from "./frame_candidate_verify.js";
+import { FRAME_CANDIDATE_JUDGMENT_VERSION, FRAME_CANDIDATE_SELECTION_VERSION, judgeRenderedFrameCandidates, selectCinematicCandidateShots } from "./frame_candidate_select.js";
+import { FRAME_CANDIDATE_VERIFICATION_VERSION, verifyFrameCandidate } from "./frame_candidate_verify.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { ensureTimelineRegistration, hasTimelineRegistration } from "./hyperframes_timeline.js";
 import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model_provider.js";
@@ -368,10 +368,20 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
   const blueprintInputHash = options.sceneBlueprint
     ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BLUEPRINT_SCHEMA, worker: sequenceContract ? "frame-blueprint.v6" : "frame-blueprint.v5" })
     : null;
+  const candidateSelectionHash = {
+    version: FRAME_CANDIDATE_SELECTION_VERSION,
+    judgment_version: FRAME_CANDIDATE_JUDGMENT_VERSION,
+    verification_version: FRAME_CANDIDATE_VERIFICATION_VERSION,
+    target: candidateTarget,
+    trigger: options.candidateTrigger,
+    judge_route: options.candidateJudgeRoute ?? null,
+    judge_reasoning: options.candidateJudgeReasoning ?? "high",
+    judge_max_output_tokens: Number(options.candidateJudgeMaxOutputTokens ?? 5_000)
+  };
   const inputHash = tournament
     ? customRouting
-      ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, sequence: sequenceContract ? FRAME_SEQUENCE_VERSION : null, candidate_selection: { version: FRAME_CANDIDATE_SELECTION_VERSION, target: candidateTarget, trigger: options.candidateTrigger, judge_route: options.candidateJudgeRoute ?? null }, worker: "frame-director.v13" })
-      : semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, candidate_selection: { version: FRAME_CANDIDATE_SELECTION_VERSION, target: candidateTarget, trigger: options.candidateTrigger, judge_route: options.candidateJudgeRoute ?? null }, worker: "frame-director.v13" })
+      ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, sequence: sequenceContract ? FRAME_SEQUENCE_VERSION : null, candidate_selection: candidateSelectionHash, worker: "frame-director.v13" })
+      : semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, sequence: sequenceContract ? FRAME_SEQUENCE_VERSION : null, candidate_selection: candidateSelectionHash, worker: "frame-director.v13" })
     : customRouting
       ? semanticHash({ input: baseInput, routes: routes.map(modelRouteKey), schema: FRAME_BUNDLE_SCHEMA, blueprint: options.sceneBlueprint ? FRAME_BLUEPRINT_VERSION : null, sequence: sequenceContract ? FRAME_SEQUENCE_VERSION : null, worker: sequenceContract ? "frame-director.v12" : options.sceneBlueprint ? "frame-director.v11" : "frame-director.v5" })
       : semanticHash({ input: baseInput, model: intake.model, reasoning: options.reasoning ?? "high", schema: FRAME_BUNDLE_SCHEMA, worker: "frame-director.v4" });
