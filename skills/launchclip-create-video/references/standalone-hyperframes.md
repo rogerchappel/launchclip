@@ -157,9 +157,12 @@ Author the top-level `index.html` as a standalone composition:
   composition root.
 - Give every assembled DOM id a unique, composition-prefixed value.
 - Mark each shared-world plane with `data-launchclip-sequence-id`. Mark every
-  declared boundary with `data-launchclip-transition-start` and
-  `data-launchclip-transition-duration`; include stable from/to IDs when the
-  transition hands an object or plane across the boundary.
+  declared boundary with `data-launchclip-boundary-id`,
+  `data-launchclip-transition-kind="ordinary|shared-world"`,
+  `data-launchclip-transition-start`, and
+  `data-launchclip-transition-duration`. When an object or plane is handed
+  across the boundary, put its stable IDs in `data-launchclip-transition-from`
+  and `data-launchclip-transition-to`.
 
 Keep rendering deterministic and seek-safe:
 
@@ -204,7 +207,7 @@ composition id, the inner root id, and its timeline key must match exactly.
 
 ## Design and motion quality contract
 
-Treat `DESIGN.md`, `HOOKS.md`, and `QUALITY.md` as executable creative
+Treat `DESIGN.md`, `STORYBOARD.md`, and `QUALITY.md` as executable creative
 constraints:
 
 - Package exact font files under `assets/fonts/` and declare them with
@@ -314,14 +317,27 @@ For a phase-2 project, build `qa/temporal-evidence/manifest.json` from exact
 samples. Clamp every timestamp to the composition duration and deduplicate it:
 
 - hook: `0,0.25,0.5,0.75,1,1.5,2,3,4`
-- ordinary boundary: immediately before, midpoint, and immediately after
-- shared-world move: before, departure, 20%, 50%, 80%, settle, and after
+- ordinary boundary: 0.05 seconds before, midpoint, and 0.05 seconds after
+- shared-world move: 0.05 seconds before, departure, 20%, 50%, 80%, settle,
+  and 0.05 seconds after
 - each sequence: entry, settled state, shot midpoint, planned visible event,
   and final hold
 
 Capture both a HyperFrames snapshot and a frame extracted from the encoded
 draft for every required sample; the latter proves the delivered artifact
 rather than only the browser preview. Use this manifest shape:
+
+```bash
+npx --yes hyperframes@0.7.58 snapshot <project> --at <comma-separated-schedule>
+ffmpeg -hide_banner -loglevel error -i <project>/renders/draft.mp4 \
+  -ss <at-seconds> -frames:v 1 -y \
+  <project>/qa/temporal-evidence/<sample-id>-encoded-draft.png
+```
+
+Copy or rename each HyperFrames result to
+`qa/temporal-evidence/<sample-id>-hyperframes.png`, then hash the current draft
+and every evidence file. Do not reuse the browser snapshot as encoded-draft
+evidence.
 
 ```json
 {

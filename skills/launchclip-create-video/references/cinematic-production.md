@@ -168,6 +168,22 @@ comparisons. The receipt can audit separate renders, but it cannot prove
 creative independence by itself; Candidate B must still be authored from the
 frozen brief without Candidate A in context.
 
+Render each isolated candidate with the same delivery geometry and sampling
+times. Preserve either the encoded candidate clip or at least its entry, peak
+motion, and settled frames:
+
+```bash
+npx --yes hyperframes@0.7.58 snapshot <candidate-project> \
+  --at <entry-seconds>,<peak-seconds>,<settle-seconds>
+npx --yes hyperframes@0.7.58 render <candidate-project> \
+  --quality draft --strict \
+  --output <project>/qa/rendered-candidates/<candidate-id>/candidate.mp4
+```
+
+Use separate candidate project state or restore the frozen pre-candidate state
+before authoring Candidate B. Do not let Candidate A's HTML, images, critic
+notes, or validation errors enter Candidate B's context.
+
 ## Direct sound and music
 
 Preserve narration as the primary information layer. If music is approved,
@@ -228,6 +244,12 @@ List every evidence ID in the temporal manifest under
 non-empty finding must also contain `evidence_ids` naming the exact artifacts
 that support it. A clean `ship` verdict without complete evidence coverage
 fails the phase-2 gate.
+
+Use `verdict: "repair"` or `"replan"` for a failed review. Every finding must
+contain a stable `id`, `severity: "blocking|major|minor"`, a concise `category`,
+an actionable `message`, and a non-empty `evidence_ids` array. Add timing or
+sequence identifiers when known; do not invent them when the evidence cannot
+localize the defect.
 
 Use `repair` or `replan` and actionable findings when it is not ready. Then run
 the model-free local gate from a LaunchClip checkout or installed CLI:
