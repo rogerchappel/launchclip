@@ -564,6 +564,20 @@ test("routes local-first generation and bounded local patch repair explicitly", 
   assert.equal(received.repair.maxIssuesPerShot, 4);
 });
 
+test("resumes cinematic frame stages from the persisted workspace profile", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-cinematic-resume-"));
+  await mkdir(path.join(workspace, "production"), { recursive: true });
+  await writeFile(path.join(workspace, "production", "intake.json"), JSON.stringify({ profile: { id: "cinematic" } }));
+  let received;
+  await runProductionStage("direct-frames", workspace, { "allow-frame-fallback": true }, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    directFrames: async (_workspace, options) => { received = options; return { status: "ready" }; }
+  });
+  assert.equal(received.sceneBlueprint, true);
+  assert.equal(received.allowFallback, false);
+  assert.deepEqual(received.routes, ["openai:gpt-5.6@high"]);
+});
+
 test("discovers ranked free frame models, clamps output, and records the accepted author", async () => {
   let frameOptions;
   let probeOptions;

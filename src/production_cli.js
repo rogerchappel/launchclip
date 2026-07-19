@@ -22,7 +22,7 @@ import { probeOpenRouterFreeModels, recordOpenRouterFreeModelOutcome, selectOpen
 
 export async function runProductionStage(command, target, flags = {}, adapters = {}) {
   if (command === "produce") return runProduction(target, flags, adapters);
-  flags = productionFlags(flags);
+  flags = productionFlags(await persistedProductionFlags(target, flags));
   if (command === "production-review") return runInteractiveProductionReview(target, flags, adapters);
   const lease = adapters.withProductionLease ?? withProductionLease;
   return lease(target, async () => {
@@ -45,6 +45,12 @@ export async function runProductionStage(command, target, flags = {}, adapters =
     if (command === "resolve-entities") return (adapters.resolveProductionEntities ?? resolveProductionEntities)(target, entityOptions(flags));
     throw new Error(`Unknown production stage: ${command}`);
   });
+}
+
+async function persistedProductionFlags(workspacePath, flags) {
+  if (flags.profile != null) return flags;
+  const intake = await readOptionalJson(path.join(path.resolve(workspacePath), "production", "intake.json"));
+  return intake?.profile?.id ? { ...flags, profile: intake.profile.id } : flags;
 }
 
 async function standaloneRepairOptions(workspacePath, flags, adapters) {
