@@ -6,17 +6,37 @@ import test from "node:test";
 import { ProductionVerificationError, assertVerificationFresh, classifyCommandFailure, plannedTypographyErrors, renderDraftProduction, renderProduction, verifyProduction, verifySemanticArtifacts, verifyShotCompositions } from "../src/production_render.js";
 import { FREE_VISION_UNAVAILABLE_CODE } from "../src/production_critic.js";
 
-test("runs lint, the current transition-aware browser check, and assembled snapshots", async () => {
+test("runs lint, transition-aware browser checks, and exact temporal snapshots", async () => {
   const workspace = await fixture();
+  await writeFile(path.join(workspace, "production", "hyperframes", "assembly.json"), `${JSON.stringify({
+    transitions: [{ from_shot_id: "shot-1", to_shot_id: "shot-2", at_seconds: 5, duration_seconds: .4, kind: "whip" }]
+  })}\n`);
   const commands = [];
-  const run = async (command, args) => { commands.push([command, args]); return { stdout: args.includes("--json") ? '{"findings":[]}' : "snapshots written", stderr: "" }; };
+  const run = async (command, args) => {
+    commands.push([command, args]);
+    await writeRequestedSnapshots(args);
+    return { stdout: args.includes("--json") ? '{"findings":[]}' : "snapshots written", stderr: "" };
+  };
   const result = await verifyProduction(workspace, { inspectSamples: 17, snapshotFrames: 9 }, { run });
   assert.equal(result.status, "ready");
   assert.ok(commands.every(([command, args]) => command === process.execPath && args[0].endsWith("hyperframes/dist/cli.js")));
   assert.deepEqual(commands.map((entry) => entry[1][1]), ["lint", "check", "snapshot"]);
   assert.ok(commands[1][1].includes("--at-transitions"));
   assert.ok(commands[1][1].includes("--timeout"));
-  assert.ok(commands[2][1].includes("9"));
+  assert.ok(commands[2][1].includes("--at"));
+  assert.ok(commands[2][1].includes("--no-end"));
+  assert.equal(commands[2][1].includes("--frames"), false);
+  const timestamps = commands[2][1][commands[2][1].indexOf("--at") + 1].split(",").map(Number);
+  assert.ok(timestamps.includes(4.92));
+  assert.ok(timestamps.includes(5.2));
+  assert.ok(timestamps.includes(5.48));
+  const temporal = JSON.parse(await readFile(result.temporal_evidence, "utf8"));
+  assert.equal(temporal.status, "passed");
+  assert.ok(temporal.evidence.every((entry) => entry.file.startsWith("snapshots/")));
+  assert.deepEqual(temporal.evidence.find((entry) => entry.timestamp_seconds === 5.2).roles[0], {
+    type: "transition", phase: "mid", from_shot_id: "shot-1", to_shot_id: "shot-2",
+    at_seconds: 5, duration_seconds: .4, kind: "whip"
+  });
   assert.deepEqual((JSON.parse(await readFile(path.join(result.qa, "verification.json"), "utf8"))).failed, []);
 });
 
@@ -27,6 +47,7 @@ test("runs each model-authored shot motion sidecar through an isolated native ch
   const result = await verifyProduction(workspace, { inspectSamples: 11 }, {
     run: async (command, args, options) => {
       commands.push({ command, args, options });
+      await writeRequestedSnapshots(args);
       return { stdout: args.includes("--json") ? JSON.stringify({ ok: true, motionSpec: args.at(-1).includes("shot-inspect") ? "index.motion.json" : null, issues: [] }) : "ok", stderr: "" };
     }
   });
@@ -41,6 +62,20 @@ test("runs each model-authored shot motion sidecar through an isolated native ch
   assert.match(await readFile(path.join(directory, "index.html"), "utf8"), /connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'/);
   assert.equal(await readFile(path.join(directory, "assets", "proof.png"), "utf8"), "proof-image");
   assert.equal(JSON.parse(await readFile(path.join(directory, "index.motion.json"), "utf8")).assertions[0].selector, "#proof");
+});
+
+test("fails closed when a successful snapshot command produces no temporal pixels", async () => {
+  const workspace = await fixture();
+  await assert.rejects(() => verifyProduction(workspace, {}, {
+    run: async (_command, args) => ({ stdout: args.includes("--json") ? "{}" : "ok", stderr: "" })
+  }), (error) => {
+    assert.ok(error instanceof ProductionVerificationError);
+    assert.deepEqual(error.verification.failed, ["snapshot"]);
+    return true;
+  });
+  const manifest = JSON.parse(await readFile(path.join(workspace, "production", "qa", "temporal-evidence.json"), "utf8"));
+  assert.equal(manifest.status, "failed");
+  assert.ok(manifest.evidence.every((entry) => entry.file === null));
 });
 
 test("waits for active shot inspectors before reporting a sibling setup failure", async () => {
@@ -76,7 +111,7 @@ test("reuses a content-addressed verification receipt with intact reports and sn
   const commands = [];
   const run = async (_command, args) => {
     commands.push(args[1]);
-    if (args[1] === "snapshot") await writeFile(path.join(args[args.indexOf("--output") + 1], "frame-00.png"), "snapshot");
+    await writeRequestedSnapshots(args);
     return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
   };
   const adapters = { run, verifierFingerprint: { hyperframes_cli: "test", browser: "test", node: "test", platform: "test", arch: "test" } };
@@ -89,7 +124,7 @@ test("reuses a content-addressed verification receipt with intact reports and sn
   assert.equal(receipt.schema_version, "launchclip.production-verification.v6");
   assert.equal(receipt.status, "passed");
   assert.equal(receipt.cacheable, true);
-  assert.equal(receipt.snapshot_artifacts.files.length, 1);
+  assert.equal(receipt.snapshot_artifacts.files.length, JSON.parse(await readFile(receipt.temporal_evidence, "utf8")).evidence.length);
 });
 
 test("reuses unchanged content-failure evidence for the next repair pass", async () => {
@@ -98,7 +133,7 @@ test("reuses unchanged content-failure evidence for the next repair pass", async
   const commands = [];
   const run = async (_command, args) => {
     commands.push(args[1]);
-    if (args[1] === "snapshot") await writeFile(path.join(args[args.indexOf("--output") + 1], "frame-00.png"), "snapshot");
+    await writeRequestedSnapshots(args);
     if (args[1] === "check" && args.at(-1).includes("shot-inspect")) {
       const error = new Error("missing selector");
       error.code = 1;
@@ -119,7 +154,7 @@ test("invalidates verification reuse when project content or a receipt artifact 
   let commands = 0;
   const run = async (_command, args) => {
     commands += 1;
-    if (args[1] === "snapshot") await writeFile(path.join(args[args.indexOf("--output") + 1], "frame-00.png"), `snapshot-${commands}`);
+    await writeRequestedSnapshots(args, `snapshot-${commands}`);
     return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
   };
   const adapters = { run, verifierFingerprint: { hyperframes_cli: "test", browser: "test", node: "test", platform: "test", arch: "test" } };
@@ -144,7 +179,7 @@ test("ignores HyperFrames runtime caches when content-addressing verification", 
       await mkdir(path.join(project, ".waveform-cache"), { recursive: true });
       await writeFile(path.join(project, ".waveform-cache", "voice.json"), `generated-${Date.now()}`);
     }
-    if (args[1] === "snapshot") await writeFile(path.join(args[args.indexOf("--output") + 1], "frame-00.png"), "snapshot");
+    await writeRequestedSnapshots(args);
     return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
   };
   const result = await verifyProduction(workspace, {}, {
@@ -158,7 +193,7 @@ test("ignores HyperFrames runtime caches when content-addressing verification", 
 test("rejects a verification receipt when the assembled project changes before render", async () => {
   const workspace = await fixture();
   const run = async (_command, args) => {
-    if (args[1] === "snapshot") await writeFile(path.join(args[args.indexOf("--output") + 1], "frame-00.png"), "snapshot");
+    await writeRequestedSnapshots(args);
     return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
   };
   const verification = await verifyProduction(workspace, {}, { run, verifierFingerprint: { hyperframes_cli: "test", browser: "test" } });
@@ -176,6 +211,7 @@ test("blocks production when a shot-local motion assertion fails", async () => {
       error.stdout = JSON.stringify({ ok: false, issues: [{ code: "motion_selector_missing", severity: "error", selector: "#proof" }] });
       throw error;
     }
+    await writeRequestedSnapshots(args);
     return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
   };
   await assert.rejects(() => verifyProduction(workspace, {}, { run }), (error) => {
@@ -192,12 +228,15 @@ test("blocks production when a shot-local motion assertion fails", async () => {
 
 test("fails closed when inspection returns structured errors with exit code zero", async () => {
   const workspace = await fixture();
-  const run = async (_command, args) => ({
-    stdout: args[1] === "check"
-      ? JSON.stringify({ ok: false, issues: [{ code: "layout_overlap", severity: "error", message: "metric overlaps label" }] })
-      : args.includes("--json") ? "{}" : "ok",
-    stderr: ""
-  });
+  const run = async (_command, args) => {
+    await writeRequestedSnapshots(args);
+    return {
+      stdout: args[1] === "check"
+        ? JSON.stringify({ ok: false, issues: [{ code: "layout_overlap", severity: "error", message: "metric overlaps label" }] })
+        : args.includes("--json") ? "{}" : "ok",
+      stderr: ""
+    };
+  };
   await assert.rejects(() => verifyProduction(workspace, {}, { run }), (error) => {
     assert.ok(error instanceof ProductionVerificationError);
     assert.deepEqual(error.verification.failed, ["inspect"]);
@@ -218,6 +257,7 @@ test("classifies unsupported verifier contracts as infrastructure failures", asy
       error.stderr = "spec version 2 is not supported — upgrade the HyperFrames CLI";
       throw error;
     }
+    await writeRequestedSnapshots(args);
     return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
   };
   await assert.rejects(() => verifyProduction(workspace, {}, { run }), (error) => {
@@ -285,6 +325,7 @@ test("blocks final rendering without approval and records failed HyperFrames che
   await assert.rejects(() => renderProduction(workspace), /requires explicit --approve/);
   const run = async (_command, args) => {
     if (args[1] === "check") { const error = new Error("overflow"); error.code = 1; error.stdout = '{"findings":[{"severity":"error"}]}'; throw error; }
+    await writeRequestedSnapshots(args);
     return { stdout: "{}", stderr: "" };
   };
   await assert.rejects(() => verifyProduction(workspace, {}, { run }), /inspect/);
@@ -308,10 +349,13 @@ test("blocks a fully deterministic fallback assembly from final rendering", asyn
 
 test("fails verification on lint warnings because final rendering uses strict-all", async () => {
   const workspace = await fixture();
-  const run = async (_command, args) => ({
-    stdout: args[1] === "lint" ? JSON.stringify({ warningCount: 1, findings: [{ severity: "warning", code: "missing_editable_id" }] }) : args.includes("--json") ? "{}" : "ok",
-    stderr: ""
-  });
+  const run = async (_command, args) => {
+    await writeRequestedSnapshots(args);
+    return {
+      stdout: args[1] === "lint" ? JSON.stringify({ warningCount: 1, findings: [{ severity: "warning", code: "missing_editable_id" }] }) : args.includes("--json") ? "{}" : "ok",
+      stderr: ""
+    };
+  };
   await assert.rejects(() => verifyProduction(workspace, {}, { run }), /lint/);
   const verification = JSON.parse(await readFile(path.join(workspace, "production", "qa", "verification.json"), "utf8"));
   assert.equal(verification.checks.lint.strict_warning_count, 1);
@@ -323,7 +367,7 @@ test("renders only after verification then runs frame-by-frame motion gates", as
   await mkdir(sourceMedia, { recursive: true });
   await writeFile(path.join(sourceMedia, "analysis.json"), `${JSON.stringify({ staged_references: [{ local_path: "/tmp/staged-reference.mp4" }] })}\n`);
   const commands = [];
-  const run = async (_command, args) => { commands.push(args[1]); return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" }; };
+  const run = async (_command, args) => { commands.push(args[1]); await writeRequestedSnapshots(args); return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" }; };
   let motionInput;
   let criticInput;
   const result = await renderProduction(workspace, { approve: true, references: ["/tmp/reference.mp4"], criticRoute: "openrouter:openrouter/free@none" }, {
@@ -355,7 +399,7 @@ test("renders a temporally analyzed draft before approval", async () => {
   const workspace = await fixture();
   const commands = [];
   const result = await renderDraftProduction(workspace, {}, {
-    run: async (_command, args) => { commands.push(args); return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" }; },
+    run: async (_command, args) => { commands.push(args); await writeRequestedSnapshots(args); return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" }; },
     writeMotionReport: async (_video, output) => { await writeFile(output, "{}\n"); return { quality: { ok: true }, family: "developing-card" }; },
     critiqueProduction: async () => ({ verdict: "ship", status: "approved" })
   });
@@ -375,7 +419,7 @@ test("writes cinematic readiness and rejects critic-approved low-motion drafts",
   await writeFile(path.join(workspace, "production", "hyperframes", "assembly.json"), `${JSON.stringify({ fallback_count: 0, fallbacks: [] })}\n`);
   let motionOptions;
   const result = await renderDraftProduction(workspace, {}, {
-    run: async (_command, args) => ({ stdout: args.includes("--json") ? "{}" : "ok", stderr: "" }),
+    run: passingRun,
     writeMotionReport: async (_video, output, options) => {
       motionOptions = options;
       const report = { quality: { ok: false, findings: [{ category: "hook", severity: "major", message: "Only one opening event landed." }] }, family: "developing-card" };
@@ -407,6 +451,7 @@ test("cinematic readiness cannot approve a vision-supervised native verification
   const result = await renderDraftProduction(workspace, { allowContentVerificationFailures: true }, {
     run: async (_command, args) => {
       if (args[1] === "check") return { stdout: JSON.stringify({ ok: false, findings: [{ severity: "error", code: "panel_out_of_canvas" }] }), stderr: "" };
+      await writeRequestedSnapshots(args);
       return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
     },
     writeMotionReport: async (_video, output) => { const report = { quality: { ok: true, findings: [] }, family: "developing-card" }; await writeFile(output, `${JSON.stringify(report)}\n`); return report; },
@@ -426,6 +471,7 @@ test("renders a vision-supervised draft after bounded browser-content findings",
       commands.push(args);
       if (args[1] === "lint") return { stdout: JSON.stringify({ warningCount: 1, findings: [{ severity: "warning", code: "overlapping_gsap_tweens", message: "two tweens meet at the same boundary" }] }), stderr: "" };
       if (args[1] === "check") return { stdout: JSON.stringify({ ok: false, layout: { findings: [{ severity: "error", code: "panel_out_of_canvas", message: "panel clips by two pixels" }] } }), stderr: "" };
+      await writeRequestedSnapshots(args);
       return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
     },
     writeMotionReport: async (_video, output) => { await writeFile(output, "{}\n"); return { quality: { ok: true }, family: "developing-card" }; },
@@ -448,7 +494,7 @@ test("keeps an encoded draft when every free vision route is unavailable", async
     allowFreeVisionUnavailable: true,
     visionUnavailableError: error
   }, {
-    run: async (_command, args) => ({ stdout: args.includes("--json") ? "{}" : "ok", stderr: "" }),
+    run: passingRun,
     writeMotionReport: async (_video, output) => { await writeFile(output, "{}\n"); return { quality: { ok: true }, family: "developing-card" }; },
     critiqueProduction: async () => { criticCalls += 1; return { verdict: "ship" }; }
   });
@@ -467,7 +513,7 @@ test("reuses unchanged native QA while still encoding and analyzing each draft",
     verifierFingerprint: { hyperframes_cli: "test", browser: "test", node: "test", platform: "test", arch: "test" },
     run: async (_command, args) => {
       commands.push(args[1]);
-      if (args[1] === "snapshot") await writeFile(path.join(args[args.indexOf("--output") + 1], "frame-00.png"), "snapshot");
+      await writeRequestedSnapshots(args);
       return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
     },
     writeMotionReport: async (_video, output) => { await writeFile(output, "{}\n"); return { quality: { ok: true }, family: "developing-card" }; },
@@ -487,7 +533,7 @@ test("blocks final approval when rendered audio fails deterministic gates", asyn
   await mkdir(media, { recursive: true });
   await writeFile(path.join(media, "manifest.json"), `${JSON.stringify({ voiceover: { path: "/tmp/voice.mp3" }, music: null, sfx_manifest: null })}\n`);
   await assert.rejects(() => renderProduction(workspace, { approve: true }, {
-    run: async (_command, args) => ({ stdout: args.includes("--json") ? "{}" : "ok", stderr: "" }),
+    run: passingRun,
     writeMotionReport: async (_video, output) => { await writeFile(output, "{}\n"); return { quality: { ok: true }, family: "developing-card" }; },
     writeAudioReport: async (_video, _manifest, output) => { const report = { quality: { ok: false, findings: [{ severity: "major", category: "masking" }] } }; await writeFile(output, `${JSON.stringify(report)}\n`); return report; }
   }), /audio quality gates/);
@@ -496,13 +542,29 @@ test("blocks final approval when rendered audio fails deterministic gates", asyn
 test("returns a targeted repair state when the independent critic does not approve", async () => {
   const workspace = await fixture();
   const result = await renderProduction(workspace, { approve: true }, {
-    run: async (_command, args) => ({ stdout: args.includes("--json") ? "{}" : "ok", stderr: "" }),
+    run: passingRun,
     writeMotionReport: async (_video, output) => { await writeFile(output, "{}\n"); return { quality: { ok: true }, family: "developing-card" }; },
     critiqueProduction: async () => ({ verdict: "repair", status: "needs-repair", findings: 2 })
   });
   assert.equal(result.status, "needs-repair");
   assert.equal(result.critique.findings, 2);
 });
+
+async function passingRun(_command, args) {
+  await writeRequestedSnapshots(args);
+  return { stdout: args.includes("--json") ? "{}" : "ok", stderr: "" };
+}
+
+async function writeRequestedSnapshots(args, content = "snapshot") {
+  if (args[1] !== "snapshot") return;
+  const output = args[args.indexOf("--output") + 1];
+  const timestamps = String(args[args.indexOf("--at") + 1]).split(",");
+  await mkdir(output, { recursive: true });
+  await Promise.all(timestamps.map((timestamp, index) => writeFile(
+    path.join(output, `frame-${String(index).padStart(3, "0")}-at-${timestamp}s.png`),
+    `${content}-${timestamp}`
+  )));
+}
 
 async function fixture() {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-render-"));

@@ -11,11 +11,12 @@ import { writeMotionReport } from "./render_motion_analysis.js";
 import { critiqueProduction, FREE_VISION_UNAVAILABLE_CODE } from "./production_critic.js";
 import { assessCinematicReadiness } from "./production_readiness.js";
 import { semanticVisualReport, validateSemanticVisualPlan } from "./semantic_visuals.js";
+import { captureTemporalEvidence, TEMPORAL_EVIDENCE_VERSION } from "./temporal_evidence.js";
 import { runHyperframes } from "./toolchain.js";
 
 const execFileAsync = promisify(execFile);
 const VERIFICATION_SCHEMA = "launchclip.production-verification.v6";
-const VERIFICATION_SUITE = "production-verify.v6";
+const VERIFICATION_SUITE = "production-verify.v7";
 const HYPERFRAMES_RUNTIME_DIRECTORIES = new Set([".thumbnails", ".waveform-cache"]);
 
 export class ProductionVerificationError extends Error {
@@ -34,7 +35,10 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
   const project = path.join(workspace, PRODUCTION_PATHS.hyperframes);
   const qaDir = path.join(workspace, PRODUCTION_PATHS.qa);
   const snapshots = path.join(qaDir, "snapshots");
-  const plan = JSON.parse(await readFile(path.join(workspace, PRODUCTION_PATHS.plan), "utf8"));
+  const [plan, assembly] = await Promise.all([
+    readFile(path.join(workspace, PRODUCTION_PATHS.plan), "utf8").then(JSON.parse),
+    readOptionalJson(path.join(project, "assembly.json"))
+  ]);
   const run = adapters.run ?? runCommand;
   await Promise.all([mkdir(qaDir, { recursive: true }), mkdir(snapshots, { recursive: true })]);
   const toolchain = await resolveVerifierFingerprint(project, adapters);
@@ -111,7 +115,20 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
     inspectSamples: options.inspectSamples,
     concurrency: options.shotInspectConcurrency
   }));
-  checks.snapshot = await captureHyperframes(run, ["snapshot", "--frames", String(options.snapshotFrames ?? 12), "--output", snapshots, project], { cwd: project });
+  const temporalEvidence = await captureTemporalEvidence({
+    project,
+    qaDir,
+    plan,
+    assembly,
+    snapshot: (args) => captureHyperframes(run, args, { cwd: project }),
+    options: {
+      output: snapshots,
+      maxFrames: Number(options.temporalMaxFrames ?? options.snapshotFrames ?? 64),
+      hookWindowSeconds: Number(options.temporalHookWindowSeconds ?? 4),
+      transitionPaddingSeconds: Number(options.temporalTransitionPaddingSeconds ?? .08)
+    }
+  });
+  checks.snapshot = temporalEvidence.check;
   await writeFile(path.join(qaDir, "snapshot.json"), `${JSON.stringify(checks.snapshot, null, 2)}\n`);
   const failed = Object.entries(checks).filter(([, result]) => !result.ok).map(([name]) => name);
   const infrastructureFailed = Object.entries(checks)
@@ -139,6 +156,7 @@ export async function verifyProduction(workspacePath, options = {}, adapters = {
     failed,
     infrastructure_failed: infrastructureFailed,
     snapshots,
+    temporal_evidence: temporalEvidence.manifest,
     cacheable: Boolean(toolchain && snapshotArtifacts.files.length),
     artifacts,
     snapshot_artifacts: snapshotArtifacts
@@ -436,6 +454,7 @@ function verificationResult({ workspace, project, qaDir, snapshots, receipt, cac
     project,
     qa: qaDir,
     snapshots,
+    temporal_evidence: receipt.temporal_evidence ?? path.join(qaDir, "temporal-evidence.json"),
     checks: receipt.checks,
     failed: receipt.failed,
     infrastructure_failed: receipt.infrastructure_failed ?? [],
@@ -454,7 +473,10 @@ async function buildVerificationInputs(workspace, project, options, toolchain) {
       strict_all: options.strictAll !== false,
       validate_timeout_ms: Number(options.timeoutMs ?? 8000),
       inspect_samples: Number(options.inspectSamples ?? 15),
-      snapshot_frames: Number(options.snapshotFrames ?? 12),
+      snapshot_frames: Number(options.temporalMaxFrames ?? options.snapshotFrames ?? 64),
+      temporal_evidence_algorithm: TEMPORAL_EVIDENCE_VERSION,
+      temporal_hook_window_seconds: Number(options.temporalHookWindowSeconds ?? 4),
+      temporal_transition_padding_seconds: Number(options.temporalTransitionPaddingSeconds ?? .08),
       at_transitions: true
     },
     toolchain
@@ -516,7 +538,7 @@ async function readReusableVerification(workspace, receiptPath, inputs) {
 }
 
 async function collectVerificationArtifacts(workspace, qaDir, plan) {
-  const files = ["semantic.json", "lint.json", "inspect.json", "snapshot.json"].map((name) => path.join(qaDir, name));
+  const files = ["semantic.json", "lint.json", "inspect.json", "snapshot.json", "temporal-evidence.json"].map((name) => path.join(qaDir, name));
   for (const shot of plan.shots ?? []) files.push(path.join(qaDir, "shot-inspect", shot.id, "inspect.json"));
   return Promise.all(files.map((filePath) => describeReceiptFile(workspace, filePath)));
 }
