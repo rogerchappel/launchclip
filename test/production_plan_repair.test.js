@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { buildAuthoringSequences, validateAuthoringSequenceDurations } from "../src/frame_sequence.js";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "../src/job_store.js";
 import { repairProductionPlan } from "../src/production_plan_repair.js";
 import { EVIDENCE_VERSION, PRODUCTION_PLAN_VERSION } from "../src/production_contracts.js";
@@ -92,6 +93,28 @@ test("rejects a cinematic replan that rewrites approved generated narration", as
   assert.equal(input.hard_constraints.selected_concept_id, "concept-1");
   assert.equal(input.hard_constraints.approved_narration, plan().narration.full_text);
   assert.equal(input.hard_constraints.measured_narration_duration_seconds, 10);
+});
+
+test("repairs a cinematic plan that breaks the shared-world duration window", async () => {
+  const workspace = await fixture({ cinematic: true });
+  let calls = 0;
+  const result = await repairProductionPlan(workspace, findings(), { semanticAttempts: 2 }, {
+    client: { runStructured: async (request) => {
+      calls += 1;
+      if (calls === 1) {
+        const candidate = shortCinematicRun();
+        assert.match(validateAuthoringSequenceDurations(buildAuthoringSequences(candidate), 10).join(" "), /actual 7/);
+        return { response_id: "short-run", model: "gpt-5.6", status: "completed", usage: {}, value: candidate };
+      }
+      const input = JSON.parse(request.input);
+      assert.match(request.instructions, /shared-world run between 8 and 20 seconds/);
+      assert.match(input.validation_errors_to_repair.join(" "), /must span 8-20 seconds; actual 7/);
+      assert.equal(request.promptCacheKey, "launchclip:production-plan-repair:v2");
+      return { response_id: "valid-run", model: "gpt-5.6", status: "completed", usage: {}, value: plan() };
+    } }
+  });
+  assert.equal(calls, 2);
+  assert.equal(result.status, "ready");
 });
 
 test("caps aggregate evidence in plan-repair requests", async () => {
@@ -221,4 +244,32 @@ function plan() {
     shots: [shot("shot-1", 0, 5, "Proof becomes the story."), shot("shot-2", 5, 10, "Then the result lands.")],
     rubric: [{ id: "rubric-1", criterion: "Every hold develops", measurement: "No long dead holds", severity: "major" }]
   };
+}
+
+function shortCinematicRun() {
+  const candidate = structuredClone(plan());
+  const first = candidate.shots[0];
+  const second = candidate.shots[1];
+  first.end_seconds = 4;
+  second.start_seconds = 4;
+  second.end_seconds = 7;
+  second.visual.continuity.handoff = "resolve";
+  const third = structuredClone(second);
+  third.id = "shot-3";
+  third.start_seconds = 7;
+  third.end_seconds = 10;
+  third.voiceover = "";
+  third.visual.continuity = {
+    ...third.visual.continuity,
+    sequence_id: "closing-cutaway",
+    handoff: "resolve",
+    inherits_object_ids: [],
+    hands_off_object_ids: [],
+    entry_velocity: 0,
+    exit_velocity: 0
+  };
+  third.visual.events = third.visual.events.map((event) => ({ ...event, id: "shot-3-connect" }));
+  third.sfx = third.sfx.map((cue) => ({ ...cue, event_id: "shot-3-connect" }));
+  candidate.shots.push(third);
+  return candidate;
 }
