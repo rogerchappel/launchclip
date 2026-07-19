@@ -54,12 +54,28 @@ test("passes a marked project only with candidate pixels and hashed temporal evi
   const result = await checkCinematicProject(project, { expectAudio: true }, passingAdapters());
   assert.equal(result.status, "ready");
   assert.equal(result.cinematic_contract.status, "passed");
-  assert.equal(result.cinematic_contract.candidate_count, 2);
-  assert.equal(result.cinematic_contract.temporal_entry_count, buildTemporalEvidenceSchedule(45).entries.length);
+  assert.equal(result.cinematic_contract.shared_world_boundary_count, 1);
+  assert.equal(result.cinematic_contract.candidate_comparison_count, 2);
+  assert.equal(result.cinematic_contract.candidate_count, 4);
+  assert.equal(result.cinematic_contract.temporal_entry_count, phase2Schedule().entries.length * 2);
   const verification = JSON.parse(await readFile(path.join(result.qa, "verification.json"), "utf8"));
   assert.equal(verification.checks.rendered_candidates.ok, true);
   assert.equal(verification.checks.temporal_evidence.ok, true);
   assert.equal(verification.checks.critic_citations.ok, true);
+});
+
+test("rejects a phase-2 critic that did not review every temporal artifact", async () => {
+  const project = await fixture({ complete: true, phase2: true });
+  await writePhase2Evidence(project);
+  const criticPath = path.join(project, "qa", "critic.json");
+  const critic = JSON.parse(await readFile(criticPath, "utf8"));
+  critic.evidence_ids_reviewed = critic.evidence_ids_reviewed.slice(1);
+  await writeFile(criticPath, JSON.stringify(critic));
+  const result = await checkCinematicProject(project, { expectAudio: true }, passingAdapters());
+  assert.equal(result.status, "needs-repair");
+  const verification = JSON.parse(await readFile(path.join(result.qa, "verification.json"), "utf8"));
+  assert.equal(verification.checks.critic_citations.ok, false);
+  assert.match(verification.checks.critic_citations.errors.join(" "), /did not review every temporal artifact/);
 });
 
 test("rejects phase-2 evidence after the encoded draft changes", async () => {
@@ -91,7 +107,8 @@ function passingAdapters() {
 async function fixture({ complete, phase2 = false }) {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-cinematic-check-"));
   await mkdir(path.join(project, "renders"), { recursive: true });
-  await writeFile(path.join(project, "index.html"), `<div data-composition-id="main" data-duration="45" data-width="1080" data-height="1920"${phase2 ? ' data-launchclip-cinematic-contract="phase-2"' : ""}></div>`);
+  const boundary = phase2 ? `<div data-launchclip-sequence-id="world-1" data-launchclip-boundary-id="handoff-1" data-launchclip-transition-kind="shared-world" data-launchclip-transition-start="10" data-launchclip-transition-duration="1"></div>` : "";
+  await writeFile(path.join(project, "index.html"), `<div data-composition-id="main" data-duration="45" data-width="1080" data-height="1920"${phase2 ? ' data-launchclip-cinematic-contract="phase-2"' : ""}>${boundary}</div>`);
   await writeFile(path.join(project, "renders", "draft.mp4"), "video");
   if (complete) {
     await mkdir(path.join(project, "qa"), { recursive: true });
@@ -110,36 +127,98 @@ async function writePhase2Evidence(project) {
   const candidateDir = path.join(project, "qa", "rendered-candidates");
   const temporalDir = path.join(project, "qa", "temporal-evidence");
   await Promise.all([mkdir(candidateDir, { recursive: true }), mkdir(temporalDir, { recursive: true })]);
-  await Promise.all([
-    writeFile(path.join(candidateDir, "candidate-a.png"), "candidate-a"),
-    writeFile(path.join(candidateDir, "candidate-b.png"), "candidate-b")
-  ]);
+  const artifactHashes = new Map();
+  await Promise.all(["opening-a", "opening-b", "transition-a", "transition-b"].map(async (id) => {
+    const bytes = renderedPng(id);
+    artifactHashes.set(id, hash(bytes));
+    await writeFile(path.join(candidateDir, `${id}.png`), bytes);
+  }));
   await writeFile(path.join(project, "qa", "rendered-candidates.json"), JSON.stringify({
     schema_version: SUBSCRIPTION_CANDIDATE_RECEIPT_VERSION,
-    selected_candidate_id: "candidate-b",
-    candidates: [
-      { id: "candidate-a", artifacts: ["qa/rendered-candidates/candidate-a.png"] },
-      { id: "candidate-b", artifacts: ["qa/rendered-candidates/candidate-b.png"] }
+    comparisons: [
+      candidateComparison("opening", "opening", ["opening-a", "opening-b"], "opening-b", artifactHashes),
+      candidateComparison("handoff-1", "transition", ["transition-a", "transition-b"], "transition-a", artifactHashes, "handoff-1")
     ]
   }));
-  const schedule = buildTemporalEvidenceSchedule(45);
+  const schedule = phase2Schedule();
   const entries = [];
-  for (const [index, expected] of schedule.entries.entries()) {
-    const content = `temporal-${index}`;
-    const file = path.join(temporalDir, `${expected.evidence_id}.png`);
-    await writeFile(file, content);
-    entries.push({
-      ...expected,
-      source: index % 2 ? "encoded-draft" : "hyperframes",
-      file: path.relative(project, file),
-      sha256: hash(content)
-    });
+  for (const expected of schedule.entries) {
+    for (const source of ["hyperframes", "encoded-draft"]) {
+      const evidenceId = `${expected.evidence_id}-${source}`;
+      const content = `temporal-${evidenceId}`;
+      const file = path.join(temporalDir, `${evidenceId}.png`);
+      await writeFile(file, content);
+      entries.push({
+        ...expected,
+        sample_id: expected.evidence_id,
+        evidence_id: evidenceId,
+        source,
+        file: path.relative(project, file),
+        sha256: hash(content)
+      });
+    }
   }
   await writeFile(path.join(temporalDir, "manifest.json"), JSON.stringify({
     schema_version: SUBSCRIPTION_TEMPORAL_EVIDENCE_VERSION,
     video_sha256: hash("video"),
     entries
   }));
+  await writeFile(path.join(project, "qa", "critic.json"), JSON.stringify({
+    verdict: "ship",
+    findings: [],
+    summary: "Fresh-context review of every required temporal artifact.",
+    evidence_ids_reviewed: entries.map((entry) => entry.evidence_id)
+  }));
+}
+
+function phase2Schedule() {
+  return buildTemporalEvidenceSchedule(45, [{
+    boundary_id: "handoff-1",
+    sequence_id: "world-1",
+    kind: "shared-world",
+    start_seconds: 10,
+    duration_seconds: 1
+  }]);
+}
+
+function candidateComparison(id, kind, candidateIds, selectedId, artifactHashes, boundaryId) {
+  return {
+    id,
+    kind,
+    ...(boundaryId ? { boundary_id: boundaryId } : {}),
+    judging_basis: "rendered-pixels-and-motion",
+    candidate_order: [...candidateIds],
+    selected_candidate_id: selectedId,
+    selection_rationale: `${selectedId} wins the deterministic rendered scorecard.`,
+    candidates: candidateIds.map((candidateId) => ({
+      id: candidateId,
+      render_id: `render-${candidateId}`,
+      admissible: true,
+      artifacts: [{ file: `qa/rendered-candidates/${candidateId}.png`, sha256: artifactHashes.get(candidateId) }],
+      scores: candidateScores(candidateId === selectedId ? 9 : 8),
+      ...(candidateId === selectedId ? {} : { rejection_reasons: ["Weaker delivery-size hierarchy."] })
+    }))
+  };
+}
+
+function candidateScores(value) {
+  return Object.fromEntries([
+    "scroll_stop",
+    "promise_or_proof_clarity",
+    "mobile_hierarchy",
+    "art_direction_specificity",
+    "depth_materiality",
+    "temporal_development",
+    "continuity",
+    "velocity_blur_shape",
+    "crisp_settle",
+    "implementation_feasibility"
+  ].map((field) => [field, value]));
+}
+
+function renderedPng(seed) {
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
+  return Buffer.concat([png, Buffer.from(seed)]);
 }
 
 function hash(value) {
