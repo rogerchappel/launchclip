@@ -119,6 +119,7 @@ export async function validateRenderedCandidateReceipt(projectPath, receipt, opt
   const declaredBoundaryIds = Array.isArray(options.boundaryIds) ? new Set(options.boundaryIds) : null;
   const artifacts = [];
   const renderIds = new Set();
+  const artifactHashOwners = new Map();
   let candidateCount = 0;
   for (const comparison of comparisons) {
     const comparisonId = comparison?.id ?? "(unknown)";
@@ -139,7 +140,6 @@ export async function validateRenderedCandidateReceipt(projectPath, receipt, opt
     if (!validOrder) errors.push(`candidate order in ${comparisonId} must list every supplied candidate exactly once`);
     const selectedId = comparison?.selected_candidate_id ?? comparison?.selected_id;
     if (!selectedId || !ids.includes(selectedId)) errors.push(`selected candidate ID in ${comparisonId} must reference a supplied candidate`);
-    const artifactFingerprints = [];
     let validScores = true;
     for (const candidate of candidates) {
       const candidateId = candidate?.id ?? "(unknown)";
@@ -150,7 +150,6 @@ export async function validateRenderedCandidateReceipt(projectPath, receipt, opt
       else renderIds.add(candidate.render_id);
       if (candidateId !== selectedId && !candidateRejectionReasons(candidate).length) errors.push(`rejected candidate ${candidateId} in ${comparisonId} requires a rejection reason`);
       const candidateArtifacts = candidateArtifactEntries(candidate);
-      const candidateHashes = [];
       let imageArtifacts = 0;
       let videoArtifacts = 0;
       if (!candidateArtifacts.length) errors.push(`candidate ${candidateId} in ${comparisonId} has no rendered pixel artifacts`);
@@ -169,7 +168,9 @@ export async function validateRenderedCandidateReceipt(projectPath, receipt, opt
             if (!mediaKind) errors.push(`candidate artifact is not a recognized rendered image or video: ${file}`);
             if (mediaKind === "image") imageArtifacts += 1;
             if (mediaKind === "video") videoArtifacts += 1;
-            candidateHashes.push(hash);
+            const priorOwner = artifactHashOwners.get(hash);
+            if (priorOwner) errors.push(`candidate ${candidateId} in ${comparisonId} reuses rendered pixels from ${priorOwner}`);
+            else artifactHashOwners.set(hash, `${candidateId} in ${comparisonId}`);
             artifacts.push(path.relative(project, resolved).split(path.sep).join("/"));
           }
         } catch (error) {
@@ -177,10 +178,7 @@ export async function validateRenderedCandidateReceipt(projectPath, receipt, opt
         }
       }
       if (!videoArtifacts && imageArtifacts < 3) errors.push(`candidate ${candidateId} in ${comparisonId} requires an encoded clip or at least three rendered lifecycle frames`);
-      artifactFingerprints.push(candidateHashes.sort().join(":"));
     }
-    const nonemptyFingerprints = artifactFingerprints.filter(Boolean);
-    if (nonemptyFingerprints.length !== new Set(nonemptyFingerprints).size) errors.push(`candidate comparison ${comparisonId} reuses the same rendered artifacts`);
     if (validOrder && validScores && selectedId && ids.includes(selectedId)) {
       const deterministicWinner = [...candidates].sort((left, right) =>
         candidateMeanScore(right) - candidateMeanScore(left) || candidateOrder.indexOf(left.id) - candidateOrder.indexOf(right.id)

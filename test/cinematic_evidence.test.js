@@ -90,6 +90,9 @@ test("requires independent opening and transition rendered-candidate comparisons
   const nonnumericScore = structuredClone(receipt);
   nonnumericScore.comparisons[0].candidates[0].scores.scroll_stop = null;
   assert.match((await validateRenderedCandidateReceipt(project, nonnumericScore, { boundaryIds: ["boundary-1"] })).errors.join(" "), /invalid scroll_stop score/);
+  const reusedPixels = structuredClone(receipt);
+  reusedPixels.comparisons[1].candidates[0].artifacts = structuredClone(reusedPixels.comparisons[0].candidates[0].artifacts);
+  assert.match((await validateRenderedCandidateReceipt(project, reusedPixels, { boundaryIds: ["boundary-1"] })).errors.join(" "), /reuses rendered pixels from opening-a in opening/);
   const textArtifact = structuredClone(receipt);
   const text = "not rendered pixels";
   await writeFile(path.join(project, textArtifact.comparisons[0].candidates[0].artifacts[0].file), text);
