@@ -65,6 +65,37 @@ test("runs the delegated production DAG in dependency order and stops for approv
   assert.match(result.next, /production-render/);
 });
 
+test("runs the cinematic creative funnel and premium frame contract in one command", async () => {
+  const calls = [];
+  const profile = { id: "cinematic", readiness: { maximum_repair_passes: 3 } };
+  const adapters = {
+    withProductionLease: async (_workspace, operation) => operation(),
+    buildIntake: async () => ({ workspace: "/tmp/cinematic-workspace", profile }),
+    writeIntake: async () => ({ workspace: "/tmp/cinematic-workspace" }),
+    prepareSourceMedia: async () => { calls.push("source-preprocess"); return {}; },
+    collectEvidence: async () => { calls.push("evidence"); return {}; },
+    analyzeSourceMedia: async () => { calls.push("source-media"); return {}; },
+    resolveProductionEntities: async () => { calls.push("entities"); return {}; },
+    planConceptTournament: async (_workspace, options) => { calls.push(["concepts", options]); return { selected_id: "concept-1" }; },
+    writeRetentionStory: async (_workspace, options) => { calls.push(["story", options]); return { concept_id: "concept-1" }; },
+    produceCinematicNarration: async (_workspace, options) => { calls.push(["narration", options]); return { duration_seconds: 44.2 }; },
+    planProduction: async () => { calls.push("plan"); return { shots: 4 }; },
+    produceAudio: async (_workspace, options) => { calls.push(["audio", options]); return { status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }; },
+    directFrames: async (_workspace, options) => { calls.push(["frames", options]); return { generated: 4, cached: 0 }; },
+    assembleHyperFrames: async () => { calls.push("assemble"); return {}; },
+    renderDraftProduction: async () => { calls.push("draft"); return { status: "ready", video: "/tmp/draft.mp4", verification: { status: "passed", snapshots: "/tmp/snapshots" }, critique: { verdict: "ship" } }; }
+  };
+  const result = await runProduction("A cinematic idea", { profile: "cinematic", "no-audio": true }, adapters);
+  assert.equal(result.status, "awaiting-approval");
+  assert.deepEqual(calls.map((entry) => Array.isArray(entry) ? entry[0] : entry), ["source-preprocess", "evidence", "source-media", "entities", "concepts", "story", "narration", "plan", "audio", "frames", "assemble", "draft"]);
+  assert.equal(calls[6][1].noVoice, true);
+  assert.equal(calls[8][1].noVoice, true);
+  assert.equal(calls[9][1].sceneBlueprint, true);
+  assert.equal(calls[9][1].allowFallback, false);
+  assert.equal(calls[9][1].routes[0], "openai:gpt-5.6@high");
+  assert.equal(result.creative_funnel.concepts.selected_id, "concept-1");
+});
+
 test("continues produce into review only when explicitly requested", async () => {
   const calls = [];
   const adapters = {

@@ -10,7 +10,7 @@ import { createCostTracker } from "./cost_tracker.js";
 import { diagnoseInstallation, VERSION } from "./doctor.js";
 import { createStylePack, listStylePacks, projectStyleRoot, resolveStylePack } from "./style_store.js";
 
-const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
+const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
 const COMMANDS = new Set(["doctor", "style", "intake", ...PRODUCTION_COMMANDS, "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
@@ -172,12 +172,15 @@ Usage:
   launchclip style save <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]
   launchclip style list [--root .launchclip/styles]
   launchclip style show <name|path> [--root .launchclip/styles]
-  launchclip intake <source> [--kind repository|product|topic|voiceover] [--resource path] [--assets path] [--style auto|family|name|path] [--style-root .launchclip/styles] [--style-file frame.md] [--style-reference path|url] [--reference url] [--voiceover audio|video] [--transcript text] [--presenter video] [--heygen-avatar video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
-  launchclip produce <source> [intake flags] [--heygen-avatar generated.mp4] [--review] [--model-policy cost-aware|local-first|quality|free] [--free-model-candidates 5] [--free-model-state path] [--free-vision-model-candidates 3] [--free-vision-model-state path] [--refresh-free-models] [--free-scene-concurrency 3] [--local-model qwen2.5-coder:latest] [--frame-route provider:model@reasoning] [--critic-route provider:model@reasoning] [--repair-route provider:model@reasoning] [--brand-assets-dir path] [--no-trim-silence] [--planning-mode auto|single|hierarchical] [--voice-id id] [--sfx-dir path] [--concurrency 4] [--max-frame-cost-usd 5] [--allow-frame-fallback] [--no-audio] [--fast-eval] [--allow-timing-drift]
+  launchclip intake <source> [--profile standard|cinematic] [--kind repository|product|topic|voiceover] [--resource path] [--assets path] [--style auto|family|name|path] [--style-root .launchclip/styles] [--style-file frame.md] [--style-reference path|url] [--reference url] [--voiceover audio|video] [--transcript text] [--presenter video] [--heygen-avatar video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
+  launchclip produce <source> [--profile standard|cinematic] [intake flags] [--heygen-avatar generated.mp4] [--review] [--model-policy cost-aware|local-first|quality|free] [--free-model-candidates 5] [--free-model-state path] [--free-vision-model-candidates 3] [--free-vision-model-state path] [--refresh-free-models] [--free-scene-concurrency 3] [--local-model qwen2.5-coder:latest] [--frame-route provider:model@reasoning] [--critic-route provider:model@reasoning] [--repair-route provider:model@reasoning] [--brand-assets-dir path] [--no-trim-silence] [--planning-mode auto|single|hierarchical] [--voice-id id] [--sfx-dir path] [--concurrency 4] [--max-frame-cost-usd 5] [--no-audio] [--fast-eval]
   launchclip evidence <workspace>
   launchclip source-preprocess <workspace> [--no-trim-silence] [--silence-duration 0.45] [--silence-padding 0.12]
   launchclip source-media <workspace> [--media-samples 12] [--media-reasoning high] [--transcribe-all]
   launchclip resolve-entities <workspace> [--brand-assets-dir ~/.launchclip/brand-assets]
+  launchclip concept-tournament <workspace> [--concept-route provider:model@reasoning] [--concept-judge-route provider:model@reasoning]
+  launchclip retention-story <workspace> [--story-writer-route provider:model@reasoning] [--story-editor-route provider:model@reasoning]
+  launchclip cinematic-narration <workspace> [--voice-id id] [--voice-model id] [--no-voice]
   launchclip creative-plan <workspace> [--planning-mode auto|single|hierarchical] [--hierarchical-threshold 180] [--chapter-concurrency 3] [--plan-semantic-attempts 2] [--visual-history-dir path] [--visual-history-limit 8] [--visual-similarity-limit 0.58] [--max-output-tokens 48000] [--foreground]
   launchclip production-audio <workspace> [--voice-id id] [--music-model music_v2] [--sfx-dir path] [--no-voice] [--no-music] [--no-sfx]
   launchclip direct-frames <workspace> [--model-policy cost-aware|local-first|quality|free] [--free-model-candidates 5] [--free-model-state path] [--refresh-free-models] [--free-scene-concurrency 3] [--blueprint-semantic-attempts 2] [--frame-route provider:model@reasoning] [--concurrency 4] [--semantic-attempts 2] [--pending-frame-reasoning medium] [--max-frame-cost-usd amount] [--allow-frame-fallback]
