@@ -3,7 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 export const SUBSCRIPTION_CINEMATIC_CONTRACT = "phase-2";
-export const SUBSCRIPTION_CANDIDATE_RECEIPT_VERSION = "launchclip.subscription-rendered-candidates.v1";
+export const SUBSCRIPTION_CANDIDATE_RECEIPT_VERSION = "launchclip.subscription-rendered-candidates.v2";
 export const SUBSCRIPTION_TEMPORAL_EVIDENCE_VERSION = "launchclip.subscription-temporal-evidence.v1";
 
 const SHARED_WORLD_ROLES = ["before", "departure", "early-acceleration", "peak-speed", "late-deceleration", "settle", "after"];
@@ -117,6 +117,7 @@ export async function validateRenderedCandidateReceipt(projectPath, receipt, opt
   if (!kinds.has("transition")) errors.push("candidate receipt requires a transition comparison");
   const declaredBoundaryIds = Array.isArray(options.boundaryIds) ? new Set(options.boundaryIds) : null;
   const artifacts = [];
+  const renderIds = new Set();
   let candidateCount = 0;
   for (const comparison of comparisons) {
     const comparisonId = comparison?.id ?? "(unknown)";
@@ -132,24 +133,52 @@ export async function validateRenderedCandidateReceipt(projectPath, receipt, opt
     if (candidates.length < 2) errors.push(`candidate comparison ${comparisonId} requires at least two candidates`);
     const ids = candidates.map((entry) => entry?.id).filter(Boolean);
     if (ids.length !== candidates.length || new Set(ids).size !== ids.length) errors.push(`candidate IDs in ${comparisonId} must be present and unique`);
+    const candidateOrder = Array.isArray(comparison?.candidate_order) ? comparison.candidate_order : [];
+    const validOrder = candidateOrder.length === ids.length && new Set(candidateOrder).size === candidateOrder.length && candidateOrder.every((id) => ids.includes(id));
+    if (!validOrder) errors.push(`candidate order in ${comparisonId} must list every supplied candidate exactly once`);
     const selectedId = comparison?.selected_candidate_id ?? comparison?.selected_id;
     if (!selectedId || !ids.includes(selectedId)) errors.push(`selected candidate ID in ${comparisonId} must reference a supplied candidate`);
+    const artifactFingerprints = [];
+    let validScores = true;
     for (const candidate of candidates) {
       const candidateId = candidate?.id ?? "(unknown)";
-      validateCandidateScores(candidate, comparisonId, errors);
+      validScores = validateCandidateScores(candidate, comparisonId, errors) && validScores;
+      if (candidate?.admissible !== true) errors.push(`candidate ${candidateId} in ${comparisonId} must be admissible before comparison`);
+      if (typeof candidate?.render_id !== "string" || !candidate.render_id.trim()) errors.push(`candidate ${candidateId} in ${comparisonId} requires a render ID`);
+      else if (renderIds.has(candidate.render_id)) errors.push(`candidate render ID must be unique: ${candidate.render_id}`);
+      else renderIds.add(candidate.render_id);
       if (candidateId !== selectedId && !candidateRejectionReasons(candidate).length) errors.push(`rejected candidate ${candidateId} in ${comparisonId} requires a rejection reason`);
-      const files = candidateArtifactFiles(candidate);
-      if (!files.length) errors.push(`candidate ${candidateId} in ${comparisonId} has no rendered pixel artifacts`);
-      for (const file of files) {
+      const candidateArtifacts = candidateArtifactEntries(candidate);
+      const candidateHashes = [];
+      if (!candidateArtifacts.length) errors.push(`candidate ${candidateId} in ${comparisonId} has no rendered pixel artifacts`);
+      for (const artifact of candidateArtifacts) {
+        const file = artifact.file;
+        if (!artifact.sha256) errors.push(`candidate artifact has no SHA-256: ${file}`);
         try {
           const resolved = containedProjectFile(project, file);
           const info = await stat(resolved);
           if (!info.isFile() || info.size <= 0) errors.push(`candidate artifact is empty: ${file}`);
-          else artifacts.push(path.relative(project, resolved).split(path.sep).join("/"));
+          else {
+            const bytes = await readFile(resolved);
+            const hash = createHash("sha256").update(bytes).digest("hex");
+            if (artifact.sha256 !== hash) errors.push(`candidate artifact has a stale or invalid file hash: ${file}`);
+            if (!isRenderedMedia(bytes)) errors.push(`candidate artifact is not a recognized rendered image or video: ${file}`);
+            candidateHashes.push(hash);
+            artifacts.push(path.relative(project, resolved).split(path.sep).join("/"));
+          }
         } catch (error) {
           errors.push(`candidate artifact is unavailable: ${file} (${error.message})`);
         }
       }
+      artifactFingerprints.push(candidateHashes.sort().join(":"));
+    }
+    const nonemptyFingerprints = artifactFingerprints.filter(Boolean);
+    if (nonemptyFingerprints.length !== new Set(nonemptyFingerprints).size) errors.push(`candidate comparison ${comparisonId} reuses the same rendered artifacts`);
+    if (validOrder && validScores && selectedId && ids.includes(selectedId)) {
+      const deterministicWinner = [...candidates].sort((left, right) =>
+        candidateMeanScore(right) - candidateMeanScore(left) || candidateOrder.indexOf(left.id) - candidateOrder.indexOf(right.id)
+      )[0]?.id;
+      if (selectedId !== deterministicWinner) errors.push(`selected candidate in ${comparisonId} does not match the deterministic score winner`);
     }
   }
   return { ok: errors.length === 0, errors, comparison_count: comparisons.length, candidate_count: candidateCount, artifacts };
@@ -214,10 +243,15 @@ export async function validateTemporalEvidenceManifest(projectPath, manifest, vi
 
 function validateCandidateScores(candidate, comparisonId, errors) {
   const scores = candidate?.scores;
+  let valid = true;
   for (const field of CANDIDATE_SCORE_FIELDS) {
     const value = Number(scores?.[field]);
-    if (!Number.isFinite(value) || value < 0 || value > 10) errors.push(`candidate ${candidate?.id ?? "(unknown)"} in ${comparisonId} has an invalid ${field} score`);
+    if (!Number.isFinite(value) || value < 0 || value > 10) {
+      valid = false;
+      errors.push(`candidate ${candidate?.id ?? "(unknown)"} in ${comparisonId} has an invalid ${field} score`);
+    }
   }
+  return valid;
 }
 
 function candidateRejectionReasons(candidate) {
@@ -226,14 +260,31 @@ function candidateRejectionReasons(candidate) {
   return [];
 }
 
-function candidateArtifactFiles(candidate) {
+function candidateMeanScore(candidate) {
+  return CANDIDATE_SCORE_FIELDS.reduce((total, field) => total + Number(candidate?.scores?.[field]), 0) / CANDIDATE_SCORE_FIELDS.length;
+}
+
+function candidateArtifactEntries(candidate) {
   const values = [
     ...(Array.isArray(candidate?.artifacts) ? candidate.artifacts : []),
     ...(Array.isArray(candidate?.artifact_paths) ? candidate.artifact_paths : []),
     ...(Array.isArray(candidate?.snapshots) ? candidate.snapshots : []),
     ...(Array.isArray(candidate?.verification?.frames) ? candidate.verification.frames : [])
   ];
-  return [...new Set(values.map((entry) => typeof entry === "string" ? entry : entry?.file ?? entry?.path).filter(Boolean))];
+  const entries = values.map((entry) => typeof entry === "string"
+    ? { file: entry, sha256: null }
+    : { file: entry?.file ?? entry?.path, sha256: entry?.sha256 ?? null }
+  ).filter((entry) => entry.file);
+  return [...new Map(entries.map((entry) => [entry.file, entry])).values()];
+}
+
+function isRenderedMedia(bytes) {
+  if (!Buffer.isBuffer(bytes) || bytes.length < 12) return false;
+  if (bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return true;
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return true;
+  if (bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP") return true;
+  if (["GIF87a", "GIF89a"].includes(bytes.subarray(0, 6).toString("ascii"))) return true;
+  return bytes.subarray(4, 8).toString("ascii") === "ftyp";
 }
 
 function containedProjectFile(project, value) {

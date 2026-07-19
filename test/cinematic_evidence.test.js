@@ -52,14 +52,17 @@ test("rejects invalid and out-of-range declared boundaries", () => {
 test("requires independent opening and transition rendered-candidate comparisons", async () => {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-candidate-evidence-"));
   await mkdir(path.join(project, "qa", "rendered-candidates"), { recursive: true });
-  await Promise.all(["opening-a", "opening-b", "transition-a", "transition-b"].map((id) =>
-    writeFile(path.join(project, "qa", "rendered-candidates", `${id}.png`), id)
-  ));
+  const artifactHashes = new Map();
+  await Promise.all(["opening-a", "opening-b", "transition-a", "transition-b"].map(async (id) => {
+    const bytes = renderedPng(id);
+    artifactHashes.set(id, hash(bytes));
+    await writeFile(path.join(project, "qa", "rendered-candidates", `${id}.png`), bytes);
+  }));
   const receipt = {
     schema_version: SUBSCRIPTION_CANDIDATE_RECEIPT_VERSION,
     comparisons: [
-      comparison("opening", "opening", ["opening-a", "opening-b"], "opening-b"),
-      comparison("handoff-1", "transition", ["transition-a", "transition-b"], "transition-a", "boundary-1")
+      comparison("opening", "opening", ["opening-a", "opening-b"], "opening-b", artifactHashes),
+      comparison("handoff-1", "transition", ["transition-a", "transition-b"], "transition-a", artifactHashes, "boundary-1")
     ]
   };
   const valid = await validateRenderedCandidateReceipt(project, receipt, { boundaryIds: ["boundary-1"] });
@@ -72,6 +75,18 @@ test("requires independent opening and transition rendered-candidate comparisons
     candidates: receipt.comparisons[0].candidates
   })).ok, false);
   assert.equal((await validateRenderedCandidateReceipt(project, receipt, { boundaryIds: ["other-boundary"] })).ok, false);
+  const wrongWinner = structuredClone(receipt);
+  wrongWinner.comparisons[0].selected_candidate_id = "opening-a";
+  wrongWinner.comparisons[0].candidates[1].rejection_reasons = ["Incorrectly rejected."];
+  assert.match((await validateRenderedCandidateReceipt(project, wrongWinner, { boundaryIds: ["boundary-1"] })).errors.join(" "), /deterministic score winner/);
+  const staleHash = structuredClone(receipt);
+  staleHash.comparisons[0].candidates[0].artifacts[0].sha256 = "stale";
+  assert.match((await validateRenderedCandidateReceipt(project, staleHash, { boundaryIds: ["boundary-1"] })).errors.join(" "), /stale or invalid file hash/);
+  const textArtifact = structuredClone(receipt);
+  const text = "not rendered pixels";
+  await writeFile(path.join(project, textArtifact.comparisons[0].candidates[0].artifacts[0].file), text);
+  textArtifact.comparisons[0].candidates[0].artifacts[0].sha256 = hash(text);
+  assert.match((await validateRenderedCandidateReceipt(project, textArtifact, { boundaryIds: ["boundary-1"] })).errors.join(" "), /not a recognized rendered image or video/);
 });
 
 test("requires hashed browser and encoded-draft evidence for every temporal sample", async () => {
@@ -102,18 +117,21 @@ test("requires hashed browser and encoded-draft evidence for every temporal samp
   assert.equal((await validateTemporalEvidenceManifest(project, { ...manifest, video_sha256: "stale" }, video, schedule)).ok, false);
 });
 
-function comparison(id, kind, candidateIds, selectedId, boundaryId) {
+function comparison(id, kind, candidateIds, selectedId, artifactHashes, boundaryId) {
   return {
     id,
     kind,
     ...(boundaryId ? { boundary_id: boundaryId } : {}),
     judging_basis: "rendered-pixels-and-motion",
+    candidate_order: [...candidateIds],
     selected_candidate_id: selectedId,
     selection_rationale: `${selectedId} has the strongest rendered lifecycle.`,
-    candidates: candidateIds.map((candidateId) => ({
+    candidates: candidateIds.map((candidateId, index) => ({
       id: candidateId,
-      artifacts: [`qa/rendered-candidates/${candidateId}.png`],
-      scores: candidateScores(8),
+      render_id: `render-${candidateId}`,
+      admissible: true,
+      artifacts: [{ file: `qa/rendered-candidates/${candidateId}.png`, sha256: artifactHashes.get(candidateId) }],
+      scores: candidateScores(candidateId === selectedId ? 9 : 8 - index * .1),
       ...(candidateId === selectedId ? {} : { rejection_reasons: ["Weaker hierarchy at delivery size."] })
     }))
   };
@@ -132,6 +150,11 @@ function candidateScores(value) {
     crisp_settle: value,
     implementation_feasibility: value
   };
+}
+
+function renderedPng(seed) {
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
+  return Buffer.concat([png, Buffer.from(seed)]);
 }
 
 function hash(value) {
