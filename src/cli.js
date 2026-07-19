@@ -10,12 +10,13 @@ import { createCostTracker } from "./cost_tracker.js";
 import { diagnoseInstallation, VERSION } from "./doctor.js";
 import { createStylePack, listStylePacks, projectStyleRoot, resolveStylePack } from "./style_store.js";
 import { checkCinematicProject } from "./cinematic_check.js";
+import { bundledSkillPath, installBundledSkills, listBundledSkills } from "./skill_install.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "style", "intake", ...PRODUCTION_COMMANDS, "cinematic-check", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "cinematic-check", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
-  const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {} } = io;
+  const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
   const [command, firstArg, ...rest] = argv;
   if (!command || command === "--help" || command === "-h") {
     stdout.write(help());
@@ -30,7 +31,8 @@ export async function runCli(argv, io = {}) {
   }
 
   const styleInvocation = command === "style" ? parseStyleInvocation(firstArg, rest) : null;
-  const flags = parseFlags(styleInvocation?.flagArgs ?? rest);
+  const skillsInvocation = command === "skills" ? parseSkillsInvocation(firstArg, rest) : null;
+  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
@@ -38,6 +40,8 @@ export async function runCli(argv, io = {}) {
     let result;
     if (command === "doctor") {
       result = await doctor();
+    } else if (command === "skills") {
+      result = await runSkillsCommand(skillsInvocation.action, skillsInvocation.name, flags, skillOptions);
     } else if (command === "style") {
       result = await runStyleCommand(styleInvocation.action, styleInvocation.name, flags);
     } else if (command === "intake") {
@@ -105,6 +109,27 @@ export async function runCli(argv, io = {}) {
   } finally {
     if (globalThis.fetch === tracker.fetch) globalThis.fetch = previousFetch;
   }
+}
+
+async function runSkillsCommand(action, name, flags, options) {
+  if (action === "list") return listBundledSkills(options);
+  if (action === "path") {
+    return {
+      stage: "skills",
+      action,
+      status: "ready",
+      name: name ?? null,
+      path: bundledSkillPath(name, options)
+    };
+  }
+  return installBundledSkills({ ...options, agent: flags.agent, skill: flags.skill, force: Boolean(flags.force) });
+}
+
+function parseSkillsInvocation(action, rest) {
+  if (!action) throw new Error("Missing skills action; use list, path, or install");
+  if (!new Set(["list", "path", "install"]).has(action)) throw new Error(`Unknown skills action: ${action}`);
+  const hasName = action === "path" && rest[0] && !rest[0].startsWith("--");
+  return { action, name: hasName ? rest[0] : null, flagArgs: hasName ? rest.slice(1) : rest };
 }
 
 async function runStyleCommand(action, name, flags) {
@@ -176,6 +201,9 @@ function help() {
 Usage:
   launchclip --version
   launchclip doctor
+  launchclip skills list
+  launchclip skills path [launchclip-create-video|launchclip-cli]
+  launchclip skills install --agent codex|claude [--skill launchclip-create-video|launchclip-cli|all] [--force]
   launchclip style create <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]
   launchclip style save <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]
   launchclip style list [--root .launchclip/styles]
