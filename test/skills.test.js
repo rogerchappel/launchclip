@@ -35,10 +35,16 @@ test("subscription skill requires the cinematic funnel and local output gate", a
   assert.match(reference, /Candidate B must not repair, imitate, or average candidate A/);
   assert.match(skill, /qa\/rendered-candidates\.json/);
   assert.match(skill, /qa\/temporal-evidence\/manifest\.json/);
+  assert.match(reference, /launchclip\.subscription-rendered-candidates\.v2/);
+  assert.match(reference, /requires four admissible candidates across the opening and transition\s+comparisons/);
+  assert.match(reference, /one encoded candidate clip or at least three lifecycle images per candidate/);
+  assert.match(reference, /velocity_blur_shape/);
   assert.match(runtime, /hook: `0,0\.25,0\.5,0\.75,1,1\.5,2,3,4`/);
   assert.match(runtime, /shared-world move: before, departure, 20%, 50%, 80%, settle, and after/);
-  assert.match(runtime, /Capture both HyperFrames snapshots and frames extracted from the encoded draft/);
-  assert.match(runtime, /stable\s+evidence ID, role, timestamp, sequence or\s+boundary ID, filename, and file hash/);
+  assert.match(runtime, /Capture both a HyperFrames snapshot and a frame extracted from the encoded\s+draft for every required sample/);
+  assert.match(runtime, /launchclip\.subscription-temporal-evidence\.v1/);
+  assert.match(runtime, /exactly two uniquely named\s+evidence entries, one for each source/);
+  assert.match(reference, /A clean `ship` verdict without complete evidence coverage\s+fails the phase-2 gate/);
   assert.match(reference, /Use at most three bounded passes/);
   assert.match(metadata, /cinematic, locally verified HyperFrames video/);
 });
