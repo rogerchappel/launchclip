@@ -1,6 +1,6 @@
 ---
 name: launchclip-create-video
-description: Create an end-to-end HyperFrames video with the current subscription agent as the creative and orchestration layer. Use when a user wants a video, promo, explainer, product story, repository walkthrough, or social clip from a URL, repository, topic, brief, script, supplied media, a user-owned project style pack, or a downloaded HeyGen avatar while avoiding LaunchClip's metered model pipeline and not depending on HyperFrames plugin skills. Ask a compact intake, author the editable composition, verify it locally, obtain preview approval, and render the final file.
+description: Create an end-to-end cinematic HyperFrames video with the current subscription agent as the creative, editorial, and orchestration layer. Use when a user wants a high-quality portrait or landscape video, promo, explainer, product story, repository walkthrough, YouTube video, Short, Reel, or social clip from an idea, URL, repository, topic, brief, script, supplied media, a user-owned project style pack, or a downloaded HeyGen avatar while avoiding LaunchClip's metered model pipeline and not depending on HyperFrames plugin skills. Run a five-concept tournament, retention edit, narration-first timing, local cinematic readiness gate, preview approval, and final render.
 ---
 
 # LaunchClip Create Video
@@ -9,8 +9,12 @@ Create a reviewable video with the current agent's included reasoning and local
 HyperFrames tooling. Treat this skill as the agent-native counterpart to
 `launchclip produce`, not as a wrapper around it.
 
-Before authoring, read [references/standalone-hyperframes.md](references/standalone-hyperframes.md)
-completely. It is the self-contained runtime contract for this workflow.
+Before authoring, read both references completely:
+
+- [references/cinematic-production.md](references/cinematic-production.md) is
+  the creative funnel, timing, verification, and repair contract.
+- [references/standalone-hyperframes.md](references/standalone-hyperframes.md)
+  is the self-contained runtime contract.
 
 ## Preserve the cost boundary
 
@@ -23,6 +27,8 @@ completely. It is the self-contained runtime contract for this workflow.
 - Do not run `launchclip produce`, `creative-plan`, `direct-frames`,
   `production-critique`, or `production-repair`; those stages call metered
   model APIs.
+- Use `launchclip cinematic-check` after a local draft render. It performs
+  deterministic local QA and does not call a model API.
 - Do not require, install, or invoke the HyperFrames plugin or its skills. Use
   this skill's bundled reference and `npx --yes hyperframes@0.7.58` directly.
 - Do not call paid model, image, voice, music, stock-media, or generation APIs
@@ -154,8 +160,14 @@ composition:
   constraints
 - `EVIDENCE.md`: factual claims and their source locations; label inference,
   opinion, and unverified claims explicitly
-- `SCRIPT.md`: narration verbatim when audio is supplied, or the planned spoken
-  script when narration is approved; omit for an intentionally unnarrated piece
+- `CONCEPTS.json`: five distinct treatments, complete fresh-context scorecard,
+  deterministic winner, and required improvements
+- `STORY.json`: the independently edited canonical retention story and its
+  score-floor receipt
+- `SCRIPT.md`: the exact approved narration; omit only for an intentionally
+  unnarrated piece
+- `NARRATION.json`: measured word/beat timings from the real take, or an
+  explicit editorial grid for an intentionally unnarrated piece
 - `STORYBOARD.md`: time-coded scenes, spoken beat, visible idea, on-screen copy,
   assets, motion development, transition, and audio intent
 - `DESIGN.md`: project-specific palette roles, typography, composition logic,
@@ -163,12 +175,13 @@ composition:
 - `SOURCE.md`: media probes, silence-trim receipt, transcript location, overview
   contact sheet, dense opening strip, detected cut points, and any reference
   cadence observations
-- `HOOKS.md`: three truthful opening treatments, the selected treatment, the
-  immediate promise, and the material changes planned inside the first four
-  seconds
+- `AUDIO-MANIFEST.json`: absolute local voice/music paths and SFX manifest when
+  audio is expected
 - `QUALITY.md`: project-specific pass/fail targets for typography, hierarchy,
   hook timing, change cadence, transition variety, motion physics, safe areas,
   source fidelity, and final artifact probing
+- `CINEMATIC-READINESS.json`: generated only by the local cinematic check after
+  the draft, critic receipt, and all required evidence exist
 
 Use supplied narration as authoritative. Do not silently rewrite it. Avoid
 inventing product capabilities, performance numbers, testimonials, research
@@ -234,12 +247,18 @@ Meet this default retention and craft floor unless the brief deliberately calls
 for a quieter treatment:
 
 - Make frame zero intentional and establish the promise within one second.
-- Land at least two distinct material changes in the first four seconds. A
-  color flicker or a caption word changing does not count as a material change.
+- Land at least three distinct material changes in the first four seconds for a
+  portrait short, or two for landscape. A color flicker or caption word change
+  does not count.
+- State the promise within one second for portrait short-form or two seconds for
+  landscape, then show grounded proof by three seconds or six seconds
+  respectively.
 - Change visual register, composition, evidence state, camera framing, or
   information density every two to four seconds; do not merely swap card copy.
-- Use at least three visual registers across the piece and avoid repeating the
-  same register more than twice consecutively.
+- Use at least five visual registers for a portrait short or four for landscape,
+  and avoid repeating the same register more than twice consecutively.
+- Keep text-only frames below 10% of the duration. Typography can lead a beat,
+  but it cannot replace the visual argument.
 - Define exact display, body, and metadata type families. Use genuine weight,
   scale, tracking, width, and case contrast; fail the review if a generic font
   silently replaces the planned family.
@@ -275,19 +294,24 @@ reference. Work in this order:
 2. Probe, trim, transcribe, and temporally inspect supplied media locally.
 3. Scaffold a blank project without installing any skill pack.
 4. Copy or link only approved assets into the project using stable local paths.
-5. Freeze the brief, source analysis, hook choice, storyboard, design system,
-   and quality targets.
-6. Author the composition and a motion sidecar from those frozen artifacts.
-7. Run static lint early.
-8. Run strict browser checks with transition and dense-hook snapshots. Sample
+5. Run the five-concept tournament and fresh-context selection.
+6. Write and independently edit the canonical retention story.
+7. Produce or prepare narration, measure the real take, then freeze the
+   storyboard, design system, music/edit grid, and quality targets.
+8. Author the composition and a motion sidecar from those frozen artifacts.
+9. Run static lint early.
+10. Run strict browser checks with transition and dense-hook snapshots. Sample
    shared-world moves at departure, early acceleration, peak speed, late
    deceleration, and settle rather than checking only their endpoints.
-9. Inspect every generated overview image, not only the command exit code.
-10. Review the opening, every transition boundary, every major type state, and
+11. Inspect every generated overview image, not only the command exit code.
+12. Review the opening, every transition boundary, every major type state, and
     the final frame at delivery scale. Scrub adjacent frames when a snapshot
     suggests clipping, popping, or a discontinuity.
-11. Repair the smallest responsible scene, then rerun the failed gate.
-12. Repeat until checks pass and the visible result satisfies `QUALITY.md`.
+13. Render a local draft, obtain a fresh-context critic receipt, and run
+    `launchclip cinematic-check`.
+14. Repair the smallest responsible sequence, mix, or plan, then rerun the
+    failed gate. Stop after three bounded passes and report `needs-repair`
+    instead of weakening the contract.
 
 Do not weaken checks, mark accidental overlaps as intentional, or use draft
 rendering to conceal a composition defect. Keep all motion deterministic and
@@ -295,9 +319,10 @@ seek-safe.
 
 ## Obtain review and render
 
-Open HyperFrames Studio only after the automated gates and visual snapshot
-review pass. Tell the user where the editable project and preview are located,
-summarize any deliberate limitations, and ask for explicit render approval.
+Open HyperFrames Studio only after the automated gates, visual snapshot review,
+and `CINEMATIC-READINESS.json` all pass. Tell the user where the editable
+project and preview are located, summarize any deliberate limitations, and ask
+for explicit render approval.
 Studio's Export action is useful for an ad hoc draft, but it is not the
 workflow's approval signal or final artifact.
 
