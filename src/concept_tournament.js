@@ -45,12 +45,12 @@ export async function planConceptTournament(workspacePath, options = {}, adapter
   const store = adapters.store ?? await ProductionJobStore.open(workspace);
   const candidateCount = Number(intake.profile?.planning?.concept_candidates ?? 5);
   const creativeInput = buildCreativeInput(intake, evidence, entities, candidateCount);
-  const candidateRuntime = stageRuntime(intake, options.candidateRoute, adapters.candidateClient ?? adapters.client, adapters.createClient);
+  const candidateRuntime = createCinematicStageRuntime(intake, options.candidateRoute, adapters.candidateClient ?? adapters.client, adapters.createClient);
   const candidateInputHash = semanticHash({ input: creativeInput, route: candidateRuntime.route, schema: CINEMATIC_CONCEPT_SET_SCHEMA, worker: CANDIDATE_WORKER_VERSION });
   const sourceDependency = store.get("source-media-analysis") ? ["source-media-analysis"] : [];
   const candidatePath = path.join(workspace, PRODUCTION_PATHS.conceptCandidates);
 
-  const candidateStage = await runStructuredStage({
+  const candidateStage = await runCinematicStructuredStage({
     workspace,
     store,
     jobId: CANDIDATE_JOB_ID,
@@ -71,7 +71,7 @@ export async function planConceptTournament(workspacePath, options = {}, adapter
     }),
     cachePath: candidatePath,
     materialize: async (value) => {
-      await writeAtomic(candidatePath, `${JSON.stringify(value, null, 2)}\n`);
+      await writeCinematicArtifact(candidatePath, `${JSON.stringify(value, null, 2)}\n`);
       return { value, paths: [candidatePath] };
     },
     background: options.background !== false
@@ -85,11 +85,11 @@ export async function planConceptTournament(workspacePath, options = {}, adapter
     factual_evidence: creativeInput.factual_evidence,
     candidates: candidateStage.value.candidates
   };
-  const judgeRuntime = stageRuntime(intake, options.judgeRoute, adapters.judgeClient ?? adapters.client, adapters.createClient);
+  const judgeRuntime = createCinematicStageRuntime(intake, options.judgeRoute, adapters.judgeClient ?? adapters.client, adapters.createClient);
   const tournamentInputHash = semanticHash({ input: judgmentInput, route: judgeRuntime.route, schema: CINEMATIC_CONCEPT_JUDGMENT_SCHEMA, worker: JUDGE_WORKER_VERSION });
   const conceptsPath = path.join(workspace, PRODUCTION_PATHS.concepts);
   const judgmentPath = path.join(workspace, "production", "plans", "concept-judgment.json");
-  const tournamentStage = await runStructuredStage({
+  const tournamentStage = await runCinematicStructuredStage({
     workspace,
     store,
     jobId: TOURNAMENT_JOB_ID,
@@ -107,8 +107,8 @@ export async function planConceptTournament(workspacePath, options = {}, adapter
     cachePath: conceptsPath,
     materialize: async (value) => {
       const tournament = createCinematicTournament(candidateStage.value, value);
-      await writeAtomic(judgmentPath, `${JSON.stringify(value, null, 2)}\n`);
-      await writeAtomic(conceptsPath, `${JSON.stringify(tournament, null, 2)}\n`);
+      await writeCinematicArtifact(judgmentPath, `${JSON.stringify(value, null, 2)}\n`);
+      await writeCinematicArtifact(conceptsPath, `${JSON.stringify(tournament, null, 2)}\n`);
       return { value: tournament, paths: [judgmentPath, conceptsPath] };
     },
     background: options.background !== false
@@ -140,14 +140,14 @@ function buildCreativeInput(intake, evidence, entities, candidateCount) {
     },
     candidate_count: candidateCount,
     craft_profile: intake.profile.craft,
-    factual_evidence: compactEvidence(evidence.items.filter((entry) => entry.claims_allowed && entry.role !== "reference")),
-    contextual_evidence: compactEvidence(evidence.items.filter((entry) => !entry.claims_allowed || entry.role === "reference"), 50_000),
+    factual_evidence: compactCinematicEvidence(evidence.items.filter((entry) => entry.claims_allowed && entry.role !== "reference")),
+    contextual_evidence: compactCinematicEvidence(evidence.items.filter((entry) => !entry.claims_allowed || entry.role === "reference"), 50_000),
     resources: intake.resources.map((entry) => ({ id: entry.id, role: entry.role, type: entry.type, location: entry.location, catalog: entry.catalog })),
     canonical_entities: entities?.matches ?? []
   };
 }
 
-async function runStructuredStage(configuration) {
+export async function runCinematicStructuredStage(configuration) {
   const {
     workspace, store, jobId, kind, dependsOn, inputHash, runtime, instructions, input, schema, schemaName,
     maxOutputTokens, semanticAttempts, validate, cachePath, materialize, background
@@ -228,7 +228,7 @@ async function prepareJob(store, { jobId, kind, dependsOn, inputHash }) {
   return { cached: false, job: existing, resumeResponseId: null };
 }
 
-function stageRuntime(intake, routeOption, providedClient, createClient = createStructuredClient) {
+export function createCinematicStageRuntime(intake, routeOption, providedClient, createClient = createStructuredClient) {
   const route = parseModelRoute(routeOption, {
     provider: intake.model?.provider ?? "openai",
     model: intake.model?.id ?? "gpt-5.6",
@@ -238,7 +238,7 @@ function stageRuntime(intake, routeOption, providedClient, createClient = create
   return { route, client: providedClient ?? createClient(route), pro: intake.model?.reasoning_mode === "pro" };
 }
 
-function compactEvidence(items, budget = 120_000) {
+export function compactCinematicEvidence(items, budget = 120_000) {
   const compact = [];
   let remaining = budget;
   for (const item of items ?? []) {
@@ -252,11 +252,11 @@ function compactEvidence(items, budget = 120_000) {
 
 async function writeAttempt(workspace, jobId, attempt, record) {
   const attemptPath = path.join(workspace, "production", "plans", ".attempts", `${jobId}-attempt-${attempt}.json`);
-  await writeAtomic(attemptPath, `${JSON.stringify(record, null, 2)}\n`);
+  await writeCinematicArtifact(attemptPath, `${JSON.stringify(record, null, 2)}\n`);
   return attemptPath;
 }
 
-async function writeAtomic(filePath, content) {
+export async function writeCinematicArtifact(filePath, content) {
   await mkdir(path.dirname(filePath), { recursive: true });
   const temporary = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(temporary, content);
