@@ -83,7 +83,7 @@ test("runs the cinematic creative funnel and premium frame contract in one comma
     produceAudio: async (_workspace, options) => { calls.push(["audio", options]); return { status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }; },
     directFrames: async (_workspace, options) => { calls.push(["frames", options]); return { generated: 4, cached: 0 }; },
     assembleHyperFrames: async () => { calls.push("assemble"); return {}; },
-    renderDraftProduction: async () => { calls.push("draft"); return { status: "ready", video: "/tmp/draft.mp4", verification: { status: "passed", snapshots: "/tmp/snapshots" }, critique: { verdict: "ship" } }; }
+    renderDraftProduction: async () => { calls.push("draft"); return { status: "ready", video: "/tmp/draft.mp4", verification: { status: "passed", snapshots: "/tmp/snapshots" }, readiness: { ok: true, status: "ready", repair_findings: [] }, critique: { verdict: "ship" } }; }
   };
   const result = await runProduction("A cinematic idea", { profile: "cinematic", "no-audio": true }, adapters);
   assert.equal(result.status, "awaiting-approval");
@@ -94,6 +94,52 @@ test("runs the cinematic creative funnel and premium frame contract in one comma
   assert.equal(calls[9][1].allowFallback, false);
   assert.equal(calls[9][1].routes[0], "openai:gpt-5.6@high");
   assert.equal(result.creative_funnel.concepts.selected_id, "concept-1");
+});
+
+test("repairs critic-approved cinematic motion failure before approval", async () => {
+  let drafts = 0;
+  let receivedRepair;
+  const readinessFinding = {
+    id: "readiness-motion-1", severity: "major", category: "motion", shot_ids: [], start_seconds: null, end_seconds: null,
+    evidence: "Opening motion is too sparse.", repair_scope: "plan", instruction: "Replan the opening cadence.", preserve: ["approved narration"]
+  };
+  const adapters = {
+    withProductionLease: async (_workspace, operation) => operation(),
+    buildIntake: async () => ({ workspace: "/tmp/cinematic-repair", profile: { id: "cinematic" } }),
+    writeIntake: async () => ({ workspace: "/tmp/cinematic-repair" }),
+    prepareSourceMedia: async () => ({}), collectEvidence: async () => ({}), analyzeSourceMedia: async () => ({}), resolveProductionEntities: async () => ({}),
+    planConceptTournament: async () => ({}), writeRetentionStory: async () => ({}), produceCinematicNarration: async () => ({}), planProduction: async () => ({}),
+    produceAudio: async () => ({ status: "ready", voiceover: null, music: null, sfx: null, warnings: [] }),
+    directFrames: async () => ({ generated: 2, cached: 0 }), assembleHyperFrames: async () => ({}),
+    renderDraftProduction: async () => {
+      drafts += 1;
+      return drafts === 1
+        ? { status: "needs-repair", verification: { status: "passed" }, critique: { verdict: "ship" }, readiness: { ok: false, status: "needs-repair", repair_findings: [readinessFinding], receipt: "/tmp/readiness.json" } }
+        : { status: "ready", verification: { status: "passed" }, critique: { verdict: "ship" }, readiness: { ok: true, status: "ready", repair_findings: [] } };
+    },
+    repairProduction: async (_workspace, options) => { receivedRepair = options; return { status: "replanned", repaired: [], actions: { plan_revised: true } }; }
+  };
+  const result = await runProduction("Cinematic idea", { profile: "cinematic", "no-audio": true }, adapters);
+  assert.equal(result.status, "awaiting-approval");
+  assert.equal(result.repairs[0].trigger, "readiness");
+  assert.deepEqual(receivedRepair.renderQualityFindings, [readinessFinding]);
+  assert.equal(drafts, 2);
+});
+
+test("review status cannot approve a cinematic task with failed readiness", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-cinematic-review-status-"));
+  const qa = path.join(workspace, "production", "qa");
+  await mkdir(qa, { recursive: true });
+  await writeFile(path.join(workspace, "production", "intake.json"), JSON.stringify({ profile: { id: "cinematic" } }));
+  await writeFile(path.join(qa, "verification.json"), JSON.stringify({ status: "passed", failed: [] }));
+  await writeFile(path.join(qa, "critique.json"), JSON.stringify({ verdict: "ship", findings: [] }));
+  await writeFile(path.join(qa, "cinematic-readiness.json"), JSON.stringify({ status: "needs-repair", ok: false, blockers: [{ id: "motion" }] }));
+  const result = await runProductionStage("production-review", workspace, {}, {
+    withProductionLease: async (_workspace, operation) => operation(),
+    runProductionReview: async (target, _options, controls) => controls.getStatus(target)
+  });
+  assert.equal(result.status, "needs-repair");
+  assert.equal(result.readiness.ok, false);
 });
 
 test("continues produce into review only when explicitly requested", async () => {

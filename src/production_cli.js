@@ -182,17 +182,21 @@ async function reviseProduction(workspace, flags, request, adapters) {
 
 async function readProductionReviewStatus(workspacePath) {
   const workspace = path.resolve(workspacePath);
-  const [verification, critique] = await Promise.all([
+  const [intake, verification, critique, readiness] = await Promise.all([
+    readOptionalJson(path.join(workspace, "production", "intake.json")),
     readOptionalJson(path.join(workspace, "production", "qa", "verification.json")),
-    readOptionalJson(path.join(workspace, "production", "qa", "critique.json"))
+    readOptionalJson(path.join(workspace, "production", "qa", "critique.json")),
+    readOptionalJson(path.join(workspace, "production", "qa", "cinematic-readiness.json"))
   ]);
-  const ready = verification?.status === "passed" && critique?.verdict === "ship";
+  const cinematic = intake?.profile?.id === "cinematic";
+  const ready = verification?.status === "passed" && critique?.verdict === "ship" && (!cinematic || readiness?.ok === true);
   return {
     stage: "production-review-status",
     status: ready ? "awaiting-approval" : "needs-repair",
     workspace,
     verification: verification ? { status: verification.status, failed: verification.failed ?? [] } : null,
-    critique: critique ? { verdict: critique.verdict, findings: critique.findings?.length ?? 0, summary: critique.summary ?? null } : null
+    critique: critique ? { verdict: critique.verdict, findings: critique.findings?.length ?? 0, summary: critique.summary ?? null } : null,
+    readiness: cinematic ? readiness ? { status: readiness.status, ok: readiness.ok, blockers: readiness.blockers?.length ?? 0 } : null : undefined
   };
 }
 
@@ -242,12 +246,15 @@ async function runProductionInWorkspace(workspace, flags, adapters, normalizedIn
   let visionReviewRequested = false;
   while (true) {
     let trigger;
+    let renderQualityFindings = [];
     try {
       draft = await (adapters.renderDraftProduction ?? renderDraftProduction)(workspace, renderOptions(flags), adapters.render);
       verification = draft.verification;
       critique = draft.critique;
-      if (!["repair", "replan"].includes(critique.verdict)) break;
-      trigger = "critique";
+      renderQualityFindings = cinematic ? draft.readiness?.repair_findings ?? [] : [];
+      if (["repair", "replan"].includes(critique.verdict)) trigger = "critique";
+      else if (cinematic && draft.readiness?.ok === false && renderQualityFindings.length) trigger = "readiness";
+      else break;
     } catch (error) {
       if (error?.code !== "LAUNCHCLIP_PRODUCTION_VERIFICATION_FAILED") throw error;
       draft = null;
@@ -283,7 +290,8 @@ async function runProductionInWorkspace(workspace, flags, adapters, normalizedIn
     const repair = await runProductionRepair(workspace, flags, {
       ...repairOptions(flags),
       trigger,
-      verification
+      verification,
+      renderQualityFindings
     }, adapters);
     repairs.push({ pass: repairs.length + 1, trigger, ...repair });
     if (!repair.repaired?.length && !repair.actions?.plan_revised) break;
@@ -303,7 +311,7 @@ async function runProductionInWorkspace(workspace, flags, adapters, normalizedIn
     }
     assembly = await (adapters.assembleHyperFrames ?? assembleHyperFrames)(workspace, assemblyOptions);
   }
-  const readyForApproval = draft?.status === "ready" && critique?.verdict === "ship";
+  const readyForApproval = draft?.status === "ready" && critique?.verdict === "ship" && (!cinematic || draft?.readiness?.ok === true);
   if (!readyForApproval && ["repair", "replan"].includes(critique?.verdict)) {
     frames = await rotateCritiqueRejectedFreeModel(frames, adapters);
   }
@@ -329,6 +337,8 @@ async function runProductionInWorkspace(workspace, flags, adapters, normalizedIn
       ? `Review ${draft.video} and ${verification.snapshots}, then run launchclip production-render ${workspace} --approve.`
       : verification?.status === "failed"
         ? `Review ${verification.qa}; run production-repair after resolving any unscoped verification findings.`
+        : cinematic && draft?.readiness?.ok === false
+          ? `Review ${draft.readiness.receipt ?? "production/qa/cinematic-readiness.json"}; resolve every deterministic craft gate before final approval.`
         : `Review ${critique?.critique ?? "production/qa/critique.json"}; resolve remaining findings before final approval.`
   };
 }
