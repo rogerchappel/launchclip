@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShipMode — idea to clip</title>
+  <script src="assets/gsap.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, sans-serif; }
+    #main { position: relative; width: 1280px; height: 720px; overflow: hidden; }
+    .canvas { position: absolute; inset: 0; background: #f5f2e9; }
+    .eyebrow { position: absolute; left: 80px; top: 64px; margin: 0; color: #40564b; font-size: 22px; font-weight: 700; letter-spacing: 3px; }
+    h1 { position: absolute; left: 80px; top: 112px; width: 1120px; margin: 0; font-size: 76px; line-height: 1.1; color: #173b30; }
+    .intro { position: absolute; left: 80px; top: 220px; margin: 0; font-size: 28px; color: #40564b; }
+    .card { position: absolute; top: 316px; width: 328px; height: 224px; padding: 30px; border: 3px solid #173b30; border-radius: 22px; background: #ffffff; }
+    #idea { left: 80px; } #plan { left: 476px; } #clip { left: 872px; background: #173b30; }
+    .number { margin: 0 0 14px; color: #40564b; font-size: 20px; font-weight: 700; }
+    h2 { margin: 0 0 16px; color: #173b30; font-size: 46px; line-height: 1.1; }
+    .detail { margin: 0; color: #40564b; font-size: 23px; line-height: 1.3; }
+    #clip h2, #clip .number, #clip .detail { color: #ffffff; }
+    .arrow { position: absolute; top: 410px; width: 42px; height: 28px; color: #173b30; font-size: 34px; line-height: 28px; text-align: center; }
+    #arrow-one { left: 421px; } #arrow-two { left: 817px; }
+    .rail { position: absolute; left: 80px; top: 585px; width: 1120px; height: 8px; border-radius: 4px; background: #c6d2c7; }
+    #progress { width: 100%; height: 100%; background: #173b30; transform-origin: left center; border-radius: 4px; }
+    .footer { position: absolute; left: 80px; top: 622px; margin: 0; font-size: 22px; color: #40564b; }
+  </style>
+</head>
+<body>
+  <div id="main" data-composition-id="main" data-start="0" data-duration="8" data-width="1280" data-height="720">
+    <div class="canvas"></div>
+    <p class="eyebrow">SHIPMODE / LAB 01</p>
+    <h1>Turn one idea into motion.</h1>
+    <p class="intro">Design the frame. Reveal the story. Inspect the result.</p>
+    <section id="idea" class="card"><p class="number">01 / MESSAGE</p><h2>Idea</h2><p class="detail">One clear promise.</p></section>
+    <div id="arrow-one" class="arrow" aria-hidden="true">→</div>
+    <section id="plan" class="card"><p class="number">02 / STRUCTURE</p><h2>Plan</h2><p class="detail">Three readable beats.</p></section>
+    <div id="arrow-two" class="arrow" aria-hidden="true">→</div>
+    <section id="clip" class="card"><p class="number">03 / PROOF</p><h2>Clip</h2><p class="detail">A local eight-second edit.</p></section>
+    <div class="rail"><div id="progress"></div></div>
+    <p class="footer">Original artwork · local tools · no API key</p>
+  </div>
+  <script>
+    window.__timelines = window.__timelines || {};
+    const timeline = gsap.timeline({ paused: true });
+    // The renderer seeks this timeline; never call play() or use wall-clock timers.
+    // Exercise: replace opacity-only reveals with a small vertical entrance.
+    timeline.fromTo("#idea", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" }, 0.3);
+    timeline.fromTo("#plan, #arrow-one", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" }, 2.3);
+    timeline.fromTo("#clip, #arrow-two", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" }, 4.3);
+    // The rail communicates elapsed time and remains active during reading holds.
+    timeline.fromTo("#progress", { scaleX: 0 }, { scaleX: 1, duration: 8, ease: "none" }, 0);
+    window.__timelines.main = timeline;
+  </script>
+</body>
+</html>

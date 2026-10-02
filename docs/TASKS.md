@@ -1,5 +1,9 @@
 # Tasks
 
+This list started with the June 2026 promotion-packet V1. For the current
+HyperFrames lane see [MODEL_DIRECTED_VIDEO.md](MODEL_DIRECTED_VIDEO.md); for
+beginners see the [ShipMode module](../courses/shipmode/README.md).
+
 ## V1 Complete
 
 - [x] Scaffold dependency-free Node CLI.
@@ -22,7 +26,7 @@
 
 - [ ] Add product-videogen `POST /api/v1/review-items` endpoint or compatible ingestion path.
 - [ ] Add optional `cutpilot` adapter when local footage exists.
-- [ ] Add Hyperframes adapter contract.
+- [x] Implement the HyperFrames production contract, HTML assembly, Studio preview, verification, and local MP4 rendering (`src/hyperframes_assembler.js`, `src/production_render.js`).
 - [ ] Add real presenter/B-roll rendering for `ugc-split` using product-videogen, HeyGen, or another approved generation backend.
 - [ ] Add live HeyGen API integration once credentials, avatar defaults, and approval flow are configured.
 - [ ] Add richer repo discovery for non-Node projects.

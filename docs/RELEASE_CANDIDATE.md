@@ -1,5 +1,10 @@
 # Release Candidate
 
+Historical V1 release-candidate checklist (June 2026). The recorded classification
+below is not a fresh verification of later production features. Current setup:
+[ShipMode module](../courses/shipmode/README.md) and
+[model-directed production](MODEL_DIRECTED_VIDEO.md).
+
 Classification: ship
 
 ## Verification
@@ -15,7 +20,7 @@ npm run check
 ## Current Limitations
 
 - Live product-videogen submission is disabled.
-- Renderer adapters are contract placeholders.
+- Product-videogen handoffs remain dry-run contracts. HyperFrames, local FFmpeg, and Remotion rendering are implemented; their runtime/toolchain requirements differ.
 - Repo discovery is intentionally conservative.
 - Secret redaction covers common token/key/password patterns, but reviewers should still inspect generated artifacts before sharing.
 

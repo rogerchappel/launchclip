@@ -19,6 +19,16 @@ try {
     ".codex-plugin/plugin.json",
     "bin/launchclip.js",
     "examples/motion/golden-timeline.json",
+    "courses/shipmode/README.md",
+    "courses/shipmode/VALIDATION.md",
+    "courses/shipmode/ASSETS.md",
+    "courses/shipmode/package.json",
+    "courses/shipmode/starter/index.motion.json",
+    "courses/shipmode/package-lock.json",
+    "courses/shipmode/scripts/setup.mjs",
+    "courses/shipmode/starter/index.html",
+    "courses/shipmode/finished/index.html",
+    "courses/shipmode/finished/index.motion.json",
     "motion-engine/schema.js",
     "public/icons/check.svg",
     "remotion/index.jsx",
@@ -31,6 +41,10 @@ try {
     "skills/launchclip-create-video/references/standalone-hyperframes.md"
   ];
   const packedFiles = new Set(artifact.files.map((entry) => entry.path));
+  const generatedCourseFiles = [...packedFiles].filter((file) =>
+    /^courses\/shipmode\/(?:.*\/)?(?:node_modules|assets|renders|snapshots|\.hyperframes)\//.test(file)
+  );
+  if (generatedCourseFiles.length) throw new Error(`Packed generated course files: ${generatedCourseFiles.join(", ")}`);
   const missing = expectedFiles.filter((file) => !packedFiles.has(file));
   if (missing.length) throw new Error(`Packed artifact is missing: ${missing.join(", ")}`);
 
@@ -51,6 +65,16 @@ try {
 
   const tarball = path.join(temp, artifact.filename);
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarball], consumer);
+
+  // Exercise the standalone student install from the packed artifact, not the checkout.
+  const course = path.join(consumer, "node_modules", "launchclip", "courses", "shipmode");
+  await run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"], course);
+  await run("npm", ["run", "setup"], course);
+  const installedGsap = await readFile(path.join(course, "node_modules", "gsap", "dist", "gsap.min.js"));
+  for (const project of ["starter", "finished"]) {
+    const localGsap = await readFile(path.join(course, project, "assets", "gsap.min.js"));
+    if (!localGsap.equals(installedGsap)) throw new Error(`Course setup copied incorrect GSAP for ${project}.`);
+  }
 
   const bin = path.join(consumer, "node_modules", ".bin", "launchclip");
   await access(bin, constants.X_OK);

@@ -1,5 +1,11 @@
 # Model-Directed Video Pipeline
 
+This is the optional API-backed production lane. Begin with the
+[ShipMode local motion lab](../courses/shipmode/README.md) and the bundled
+subscription-agent skill when learning without metered model stages.
+HyperFrames assembly, Studio preview, verification, and local render are
+implemented; aspirational quality language below is not a guarantee of output.
+
 ## Objective
 
 Launchclip should turn a small amount of source material into an editable,

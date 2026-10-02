@@ -44,7 +44,24 @@ the Remotion License, whose terms depend on the user or organisation. Review
 terms before organisational or commercial use; LaunchClip does not relicense
 third-party packages.
 
-## Quickstart
+## Start here: ShipMode motion lab
+
+The beginner default is the [ShipMode LaunchClip module](courses/shipmode/README.md):
+a small original, provider-free HyperFrames project with starter and finished
+versions. Build an eight-second clip, inspect it, and render locally. No API key,
+voice generation, downloaded footage, or provider billing is needed. Network
+access is needed for the initial locked dependency install and browser setup.
+
+For agent-assisted original videos, use the bundled
+[`launchclip-create-video`](skills/launchclip-create-video/SKILL.md) subscription
+workflow. It uses the current agent session rather than LaunchClip's metered
+model stages. The first motion lab is a deliberately smaller exercise; it does
+not claim the full skill's cinematic readiness contract.
+
+`produce` is an **optional API-backed route** for later lessons. A subscription
+login is not an API credential, and `--no-audio` does not disable its model calls.
+
+## Legacy promotion-packet quickstart
 
 ```bash
 launchclip run ./my-oss-tool \
@@ -106,7 +123,7 @@ the relevant `SKILL.md` if it uses a different skill-discovery convention. The
 root [`SKILL.md`](SKILL.md) remains the compatibility workflow for the original
 OSS promotion packet.
 
-## Model-Directed HyperFrames Production
+## Optional API-backed HyperFrames Production
 
 The newer production lane accepts a GitHub/local repository, product URL,
 topic, research resources, screenshots, screen recordings, supplied narration,
