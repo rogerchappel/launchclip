@@ -19,6 +19,12 @@ try {
     ".codex-plugin/plugin.json",
     "bin/launchclip.js",
     "examples/motion/golden-timeline.json",
+    "examples/hyperframes-local/README.md",
+    "examples/hyperframes-local/package.json",
+    "examples/hyperframes-local/package-lock.json",
+    "examples/hyperframes-local/setup.mjs",
+    "examples/hyperframes-local/index.html",
+    "examples/hyperframes-local/index.motion.json",
     "motion-engine/schema.js",
     "public/icons/check.svg",
     "remotion/index.jsx",
@@ -31,6 +37,10 @@ try {
     "skills/launchclip-create-video/references/standalone-hyperframes.md"
   ];
   const packedFiles = new Set(artifact.files.map((entry) => entry.path));
+  const generatedExampleFiles = [...packedFiles].filter((file) =>
+    /^examples\/hyperframes-local\/(?:.*\/)?(?:node_modules|assets|renders|snapshots|\.hyperframes)\//.test(file)
+  );
+  if (generatedExampleFiles.length) throw new Error(`Packed generated example files: ${generatedExampleFiles.join(", ")}`);
   const missing = expectedFiles.filter((file) => !packedFiles.has(file));
   if (missing.length) throw new Error(`Packed artifact is missing: ${missing.join(", ")}`);
 
@@ -51,6 +61,14 @@ try {
 
   const tarball = path.join(temp, artifact.filename);
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", tarball], consumer);
+
+  // Verify the example can be installed and prepared from the published artifact.
+  const example = path.join(consumer, "node_modules", "launchclip", "examples", "hyperframes-local");
+  await run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"], example);
+  await run("npm", ["run", "setup"], example);
+  const installedGsap = await readFile(path.join(example, "node_modules", "gsap", "dist", "gsap.min.js"));
+  const localGsap = await readFile(path.join(example, "assets", "gsap.min.js"));
+  if (!localGsap.equals(installedGsap)) throw new Error("Example setup copied incorrect GSAP.");
 
   const bin = path.join(consumer, "node_modules", ".bin", "launchclip");
   await access(bin, constants.X_OK);

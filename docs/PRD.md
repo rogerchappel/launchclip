@@ -1,5 +1,9 @@
 # PRD: launchclip
 
+Historical June 2026 V1 proposal. Future-tense renderer statements describe the
+original scope, not the current implementation: HyperFrames production is now
+implemented. See [MODEL_DIRECTED_VIDEO.md](MODEL_DIRECTED_VIDEO.md) for the current pipeline.
+
 Status: ready
 Decision: ready for next OSS factory development round
 

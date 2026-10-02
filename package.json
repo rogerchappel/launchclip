@@ -37,6 +37,7 @@
     ".codex-plugin",
     "bin",
     "examples/motion/golden-timeline.json",
+    "examples/hyperframes-local",
     "motion-engine",
     "public/base/README.md",
     "public/icons",

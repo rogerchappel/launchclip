@@ -1,0 +1,24 @@
+{
+  "name": "launchclip-hyperframes-local",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "setup": "node setup.mjs",
+    "dev": "hyperframes preview .",
+    "check": "hyperframes check . --strict --samples 17 --at-transitions",
+    "snapshot": "hyperframes snapshot . --at 0,1,3,5,7.9",
+    "render": "hyperframes render . --quality draft --fps 30 --workers 1 --strict-all --output renders/example.mp4"
+  },
+  "dependencies": {
+    "gsap": "3.14.2",
+    "hyperframes": "0.7.58"
+  },
+  "overrides": {
+    "adm-zip": "0.6.1",
+    "sharp": "0.35.4"
+  }
+}
