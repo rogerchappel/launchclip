@@ -2,8 +2,7 @@
 
 Historical June 2026 V1 proposal. Future-tense renderer statements describe the
 original scope, not the current implementation: HyperFrames production is now
-implemented. Use [MODEL_DIRECTED_VIDEO.md](MODEL_DIRECTED_VIDEO.md) and the
-[ShipMode beginner module](../courses/shipmode/README.md) for current workflows.
+implemented. See [MODEL_DIRECTED_VIDEO.md](MODEL_DIRECTED_VIDEO.md) for the current pipeline.
 
 Status: ready
 Decision: ready for next OSS factory development round

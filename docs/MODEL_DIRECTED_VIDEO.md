@@ -1,8 +1,8 @@
 # Model-Directed Video Pipeline
 
-This is the optional API-backed production lane. Begin with the
-[ShipMode local motion lab](../courses/shipmode/README.md) and the bundled
-subscription-agent skill when learning without metered model stages.
+This is the optional API-backed production lane. For agent-led authoring without
+LaunchClip's metered model stages, see the bundled
+[subscription-agent skill](../skills/launchclip-create-video/SKILL.md).
 HyperFrames assembly, Studio preview, verification, and local render are
 implemented; aspirational quality language below is not a guarantee of output.
 

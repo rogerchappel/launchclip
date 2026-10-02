@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ShipMode — idea to clip</title>
+  <title>Local timeline example</title>
   <script src="assets/gsap.min.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -29,7 +29,7 @@
 <body>
   <div id="main" data-composition-id="main" data-start="0" data-duration="8" data-width="1280" data-height="720">
     <div class="canvas"></div>
-    <p class="eyebrow">SHIPMODE / LAB 01</p>
+    <p class="eyebrow">LOCAL TIMELINE / 8 SECONDS</p>
     <h1>Turn one idea into motion.</h1>
     <p class="intro">Design the frame. Reveal the story. Inspect the result.</p>
     <section id="idea" class="card"><p class="number">01 / MESSAGE</p><h2>Idea</h2><p class="detail">One clear promise.</p></section>
@@ -44,10 +44,11 @@
     window.__timelines = window.__timelines || {};
     const timeline = gsap.timeline({ paused: true });
     // The renderer seeks this timeline; never call play() or use wall-clock timers.
-    // Exercise: replace opacity-only reveals with a small vertical entrance.
-    timeline.fromTo("#idea", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" }, 0.3);
-    timeline.fromTo("#plan, #arrow-one", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" }, 2.3);
-    timeline.fromTo("#clip, #arrow-two", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" }, 4.3);
+    timeline.fromTo("#idea", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 0.3);
+    timeline.fromTo("#plan", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 2.3);
+    timeline.fromTo("#arrow-one", { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.4, ease: "power2.out" }, 2.5);
+    timeline.fromTo("#clip", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 4.3);
+    timeline.fromTo("#arrow-two", { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.4, ease: "power2.out" }, 4.5);
     // The rail communicates elapsed time and remains active during reading holds.
     timeline.fromTo("#progress", { scaleX: 0 }, { scaleX: 1, duration: 8, ease: "none" }, 0);
     window.__timelines.main = timeline;

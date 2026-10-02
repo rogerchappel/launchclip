@@ -1,8 +1,7 @@
 # Tasks
 
 This list started with the June 2026 promotion-packet V1. For the current
-HyperFrames lane see [MODEL_DIRECTED_VIDEO.md](MODEL_DIRECTED_VIDEO.md); for
-beginners see the [ShipMode module](../courses/shipmode/README.md).
+HyperFrames lane see [MODEL_DIRECTED_VIDEO.md](MODEL_DIRECTED_VIDEO.md).
 
 ## V1 Complete
 

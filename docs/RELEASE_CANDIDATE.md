@@ -1,9 +1,8 @@
 # Release Candidate
 
 Historical V1 release-candidate checklist (June 2026). The recorded classification
-below is not a fresh verification of later production features. Current setup:
-[ShipMode module](../courses/shipmode/README.md) and
-[model-directed production](MODEL_DIRECTED_VIDEO.md).
+below is not a fresh verification of later production features. See
+[model-directed production](MODEL_DIRECTED_VIDEO.md) for the current pipeline.
 
 Classification: ship
 
