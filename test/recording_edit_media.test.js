@@ -39,7 +39,12 @@ test("renderer cleans unique scratch files after FFmpeg failure", async () => {
     assert.deepEqual(await readdir(directory), ["source.mp4"]);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
-test("local FFmpeg concatenates synchronized video and audio at original dimensions and frame rate", async () => {
+test("local FFmpeg concatenates synchronized video and audio at original dimensions and frame rate", async (context) => {
+  try { await run("ffmpeg", ["-version"]); await run("ffprobe", ["-version"]); } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    context.skip("Local FFmpeg and ffprobe are required for the rendering smoke test");
+    return;
+  }
   const directory = await mkdtemp(path.join(os.tmpdir(), "launchclip-edit-smoke-"));
   try {
     const input = path.join(directory, "source.mp4");
