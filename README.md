@@ -110,6 +110,69 @@ For a small provider-free example of seekable HTML/GSAP timing and local export,
 see [the local HyperFrames example](examples/hyperframes-local/README.md).
 It uses original HTML/CSS artwork and requires no model or media API key.
 
+## Recorded-video edits and B-roll
+
+Clean a presenter recording locally with **last take wins** and silence removal:
+
+```bash
+launchclip edit-recording take.mov --out .launchclip/base-edit --aspect 16:9
+# Reuse existing word timings instead of running local Whisper:
+launchclip edit-recording take.mov --recording-transcript take.words.json \
+  --out .launchclip/base-edit-with-transcript --aspect 16:9
+```
+
+Earlier nearby repeated passages and matching false starts are removed without
+performance ranking or a take-selection approval step. Lexical matching
+tolerates modest wording changes; very short or substantially rephrased
+restarts can remain. Defaults: 0.8s silence threshold, 0.15s speech handles,
+90s retake window. Configure `--silence-duration`, `--silence-padding`,
+`--retake-window` and `--min-repeat-words`; `--no-trim-silence` retains pauses
+while still removing retakes. Dimensions and playback speed are preserved.
+
+The command uses installed local Whisper (`base.en`, configurable with
+`--recording-model`); the first run may download model weights. Supplied JSON
+accepts flat words, `{words}`, or Whisper segments containing word arrays.
+Plain text and segment-only times cannot drive cuts. No paid provider is called.
+Outputs include `base-edit.mp4`, source/edited transcripts, remapped words,
+an original-to-edited segment map and a checksum/cache receipt. Identical reruns
+reuse verified artifacts; changed input/settings/engine or incomplete outputs
+require a fresh directory. Original media is never overwritten. Sequential
+rendering bounds memory, using temporary intermediates that are cleaned up.
+
+The edit also writes a B-roll capture tracker (`broll-plan.json`, `BROLL.md`).
+For an already clean transcript:
+
+```bash
+launchclip broll-plan .launchclip/base-edit/transcript.json \
+  --out .launchclip/captures --aspect 16:9
+```
+
+The offline keyword planner suggests shots, spoken anchors, edited timing,
+capture instructions, filenames and priorities. Track status and local footage
+paths in its JSON; reruns preserve capture progress and checklist notes.
+A changed transcript/timeline requires a new tracker directory. It does not
+record screens, generate stock video, or automatically insert captured clips.
+
+**Supplied B-roll is already supported.** Pass real clips through `--resource`
+or `--assets`; the production assembler supports source windows, placement and
+muted supporting video while presenter audio continues:
+
+```bash
+launchclip intake .launchclip/base-edit/base-edit.mp4 \
+  --transcript .launchclip/base-edit/transcript.json --aspect 16:9 \
+  --assets ./captured-broll --out .launchclip/edited-production
+```
+
+An existing intake can run `source-preprocess <workspace> --edit-recording`.
+`produce` accepts the same flag, but downstream model stages remain metered.
+Recording mode and remapped speech timings persist together; create a fresh
+intake to return to raw footage.
+
+The subscription skill's
+[recorded-video route](skills/launchclip-create-video/references/recorded-video.md)
+guides B-roll placement and restrained editorial glass overlays with smooth
+motion, using the edited word clock and preserving the existing story.
+
 ## Optional API-backed HyperFrames Production
 
 `produce` calls model APIs even with `--no-audio`; a subscription login is not
