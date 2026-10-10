@@ -12,7 +12,8 @@ export function normalizeRecordingTranscript(transcript) {
     if (!word) continue;
     const start = entry.start;
     const end = entry.end;
-    if (typeof start !== "number" || typeof end !== "number" || !Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) throw new Error("Every spoken word requires valid start and end timestamps");
+    if (typeof start !== "number" || typeof end !== "number" || !Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start) throw new Error("Every spoken word requires valid start and end timestamps");
+    if (end === start && Number.isFinite(start) && start >= 0) continue;
     if (words.length && start < words.at(-1).end - 0.001) throw new Error("Word timestamps must be ordered and non-overlapping");
     words.push({ word, start, end });
   }
@@ -50,8 +51,14 @@ export function planRecordingEdit(transcript, options = {}) {
       for (let later = earlier + 1; later < phrases.length; later++) {
         const right = phrases[later];
         if (words[right.first].start - words[left.last].end > window) break;
-        if (right.tokens.length < left.tokens.length * 0.75 || right.tokens.length < minimum) continue;
-        if (!isRetake(left.tokens, right.tokens, minimum)) continue;
+        let match = false;
+        for (let span = 1; span <= 3 && later + span <= phrases.length; span++) {
+          const targetPhrases = phrases.slice(later, later + span);
+          if (targetPhrases.some((phrase) => words[phrase.first].start - words[left.last].end > window)) break;
+          const target = targetPhrases.flatMap((phrase) => phrase.tokens);
+          if (target.length >= left.tokens.length * 0.75 && isRetake(left.tokens, target, minimum)) { match = true; break; }
+        }
+        if (!match) continue;
         for (let index = left.first; index <= left.last; index++) rejected.add(index);
         retakes.push({ start: words[left.first].start, end: words[left.last].end });
         break;
@@ -120,7 +127,9 @@ function isRetake(left, right, minimum) {
   while (prefix < Math.min(left.length, right.length) && left[prefix] === right[prefix]) prefix++;
   const compared = right.slice(0, left.length);
   const similarity = 1 - distance(left, compared) / Math.max(left.length, compared.length);
-  return (left.length < right.length && prefix >= Math.min(4, minimum) && prefix >= left.length * 0.8) || (prefix >= minimum && prefix >= left.length * 0.8) || (prefix >= 3 && similarity >= 0.8 && Math.min(left.length, right.length) / Math.max(left.length, right.length) >= 0.75);
+  const exact = left.length === right.length && prefix === left.length && left.length >= Math.min(4, minimum) && new Set(left).size >= 4;
+  const substantial = left.length >= Math.max(8, minimum) && right.length >= minimum && similarity >= 0.7 && Math.min(left.length, right.length) / Math.max(left.length, right.length) >= 0.75;
+  return exact || substantial || (left.length < right.length && prefix >= Math.min(4, minimum) && prefix >= left.length * 0.8) || (prefix >= minimum && prefix >= left.length * 0.8) || (prefix >= 3 && similarity >= 0.8 && Math.min(left.length, right.length) / Math.max(left.length, right.length) >= 0.75);
 }
 function distance(left, right) {
   let prior = Array.from({ length: right.length + 1 }, (_, index) => index);
