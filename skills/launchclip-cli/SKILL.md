@@ -13,6 +13,11 @@ constructing commands or diagnosing a run.
 
 Choose one lane:
 
+- **Local recorded-video cleanup and capture planning:** use `edit-recording`
+  and `broll-plan`; these call no paid models. Keep the last matching take,
+  trim silence, preserve original media, and carry the edited word timings into
+  the existing production/graphics workflow. See the recorded-video commands
+  below. This is separate from the older `align` motion workflow.
 - **Subscription/OAuth agent, no model API spend:** use the separate
   `launchclip-create-video` skill. Do not call `launchclip produce`.
 - **Model-directed production:** use `produce` or its resumable production
@@ -56,6 +61,41 @@ you will actually use because flags may differ across versions.
 
 Use the same executable consistently throughout a workspace. In examples,
 replace `launchclip` with `node ./bin/launchclip.js` when working from source.
+
+## Recorded-video commands
+
+```bash
+launchclip edit-recording take.mov --out .launchclip/base-edit --aspect 16:9
+launchclip broll-plan .launchclip/base-edit/transcript.json --out .launchclip/captures
+launchclip intake .launchclip/base-edit/base-edit.mp4 \
+  --transcript .launchclip/base-edit/transcript.json --aspect 16:9 \
+  --assets ./captured-broll --out .launchclip/production
+```
+
+Cleanup uses installed local Whisper, or accepts a flat/Scribe/Whisper
+word-timed JSON via `--recording-transcript`. It removes earlier matching
+retakes automatically, with no take-ranking or take-selection approval.
+It defaults to a 0.8s silence threshold, 0.15s speech handles and a 90s nearby
+retake window. Configure `--silence-duration`, `--silence-padding`,
+`--retake-window`, `--min-repeat-words`, and `--recording-model` if needed.
+`--no-trim-silence` leaves pauses while still removing repeated takes.
+
+For an existing production intake, use `source-preprocess <workspace>
+--edit-recording [--recording-transcript word-timed.json]`. `produce` accepts
+the same flags but its downstream model stages remain metered. Recording-edit
+mode persists with the source so a later run cannot restore raw video with
+edited transcript timings. To return to raw footage, create a fresh intake.
+
+`recording.json` verifies cached edit artifacts. A changed source, settings,
+engine, corrupted cache, or incomplete prior output needs a new output directory.
+The editable B-roll tracker/checklist is preserved on reruns. The planner only
+suggests capture cards; it does not record or automatically insert footage.
+Actual supplied clips are already supported through resources and root media
+requests in the production assembler.
+
+For basic glass editorial overlays with supplied speech, use the recorded-video
+reference in `launchclip-create-video`; do not force new narration or the full
+cinematic concept funnel onto an existing story.
 
 ## Confirm inputs and side effects
 

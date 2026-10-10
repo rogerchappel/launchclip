@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { ElevenLabsMediaProvider, LocalSfxLibrary } from "./production_media.js";
 import { PRODUCTION_PATHS } from "./production_contracts.js";
+import { normalizeRecordingTranscript } from "./recording_edit.js";
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const execFileAsync = promisify(execFile);
@@ -210,8 +211,8 @@ async function prepareVoiceover({ mediaDir, intake, evidence, plan, options, pro
     const wordsPath = sourceWords ? path.join(mediaDir, "voiceover.words.json") : null;
     let words = [];
     if (wordsPath) {
-      await copyFile(path.resolve(sourceWords), wordsPath);
-      words = JSON.parse(await readFile(wordsPath, "utf8"));
+      words = normalizeRecordingTranscript(JSON.parse(await readFile(path.resolve(sourceWords), "utf8")));
+      await writeAtomic(wordsPath, `${JSON.stringify(words, null, 2)}\n`);
     }
     const wordsDuration = Number(words.at(-1)?.end);
     let mediaDuration = null;

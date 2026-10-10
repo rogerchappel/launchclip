@@ -3,6 +3,7 @@ import { createReadStream } from "node:fs";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { trimMediaSilence } from "./media_trim.js";
+import { prepareRecording } from "./recording_workflow.js";
 
 export const SOURCE_PREPROCESS_VERSION = "launchclip.source-preprocess.v1";
 
@@ -12,6 +13,41 @@ export async function prepareSourceMedia(workspacePath, options = {}, adapters =
   const reportPath = path.join(workspace, "production", "source-media", "preprocess.json");
   const intake = JSON.parse(await readFile(intakePath, "utf8"));
   const source = (intake.resources ?? []).find((entry) => entry.role === "voiceover" && !entry.is_remote && ["video", "audio"].includes(entry.type));
+  if (source && (options.editRecording || source.recording_edit)) {
+    const input = path.resolve(source.derived_from ?? source.location);
+    const recordingOptions = options.editRecording ? { ...options.recording, trimSilence: options.trimSilence } : source.recording_edit.options;
+    const recording = await (adapters.prepareRecording ?? prepareRecording)(input, {
+      ...recordingOptions,
+      out: path.join(workspace, "production", "source-media", "recording-edit")
+    }, adapters.recording);
+    await applyPreparedResource(intake, intakePath, source.location, recording.output, recording.rendered_duration_seconds, recording.output_sha256);
+    for (const resource of intake.resources) {
+      if (["voiceover", "presenter"].includes(resource.role) && resource.location === recording.output) {
+        resource.recording_edit = { manifest: recording.manifest, options: recordingOptions };
+      }
+    }
+    // Replace raw transcript resources so planning never consumes rejected takes.
+    const transcripts = intake.resources.filter((entry) => entry.role === "voiceover-transcript");
+    if (!transcripts.length) {
+      const id = `recording-edited-transcript-${source.id}`;
+      transcripts.push({ id, role: "voiceover-transcript", type: "text", is_remote: false });
+      intake.resources.push(transcripts[0]);
+    }
+    for (const resource of transcripts) {
+      resource.derived_from = resource.derived_from ?? resource.location ?? input;
+      resource.location = recording.files.transcript;
+      resource.source = recording.files.transcript;
+      resource.media_location = recording.output;
+      resource.type = "text";
+      resource.is_remote = false;
+      resource.sha256 = await sha256File(recording.files.transcript);
+      resource.size_bytes = (await stat(recording.files.transcript)).size;
+    }
+    await writeAtomic(intakePath, `${JSON.stringify(intake, null, 2)}\n`);
+    const report = { ...recording, schema_version: SOURCE_PREPROCESS_VERSION, stage: "source-preprocess", changed: recording.output !== input, recording_edit: recording.manifest };
+    await writeAtomic(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+    return { ...report, report: reportPath };
+  }
   if (!source || options.trimSilence === false) {
     const report = {
       schema_version: SOURCE_PREPROCESS_VERSION,

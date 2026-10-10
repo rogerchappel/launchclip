@@ -5,6 +5,7 @@ import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promi
 import path from "node:path";
 import { promisify } from "node:util";
 import { EVIDENCE_SCHEMA, EVIDENCE_VERSION, PRODUCTION_PATHS } from "./production_contracts.js";
+import { normalizeRecordingTranscript } from "./recording_edit.js";
 
 const execFileAsync = promisify(execFile);
 const TEXT_EXTENSIONS = new Set([".md", ".txt", ".json", ".csv", ".tsv", ".yaml", ".yml", ".toml"]);
@@ -37,8 +38,9 @@ export async function buildEvidence(intake, options = {}, adapters = {}) {
   const maxItemChars = Number(options.maxItemChars ?? 60_000);
   const sourceResult = await collectSource(intake.source, { runner, fetcher, maxItemChars, warnings });
   const items = [...sourceResult.items];
+  const voiceoverLocation = intake.resources?.find((entry) => entry.role === "voiceover" && !entry.is_remote)?.location;
   for (const resource of intake.resources ?? []) {
-    items.push(...await collectResource(resource, { runner, fetcher, probe, maxItemChars, warnings }));
+    items.push(...await collectResource(resource, { runner, fetcher, probe, maxItemChars, warnings, voiceoverLocation }));
   }
   if (!items.length) throw new Error("Evidence collection produced no items");
   const evidence = {
@@ -187,6 +189,11 @@ async function collectResource(resource, context) {
     const raw = await readFile(resource.location, "utf8");
     const clipped = truncateText(raw, context.maxItemChars);
     if (resource.role === "voiceover-transcript") {
+      if (path.extname(resource.location).toLowerCase() === ".json") {
+        const words = normalizeRecordingTranscript(JSON.parse(raw));
+        const text = truncateText(words.map((entry) => entry.word).join(" "), context.maxItemChars);
+        return [item({ ...base, provenance: resource.media_location ?? context.voiceoverLocation ?? base.provenance, role: "voiceover", kind: "voiceover-transcript", title: "Authoritative supplied narration transcript", content: text.content, claimsAllowed: false, truncated: text.truncated, metadata: [["words_path", resource.location], ["provider", "supplied"], ["word_count", words.length]] })];
+      }
       return [item({ ...base, role: "voiceover", kind: "voiceover-transcript", title: "Authoritative supplied narration transcript", content: clipped.content, claimsAllowed: false, truncated: clipped.truncated })];
     }
     return [item({ ...base, kind: "text-resource", content: clipped.content, claimsAllowed: resource.role !== "reference", truncated: clipped.truncated })];
