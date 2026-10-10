@@ -10,7 +10,7 @@ export async function analyzeRecordingAudio(input, options = {}, adapters = {}) 
   const duration = positive(options.durationSeconds ?? Number((await (adapters.probeMedia ?? probeMedia)(input)).format?.duration), "durationSeconds");
   const silenceDuration = positive(options.silenceDuration ?? 0.4, "silenceDuration");
   const padding = nonnegative(options.silencePadding ?? 0.08, "silencePadding");
-  const joinTolerance = nonnegative(options.silenceJoinToleranceSeconds ?? 0.005, "silenceJoinToleranceSeconds");
+  const joinTolerance = nonnegative(options.silenceJoinToleranceSeconds ?? 0.01, "silenceJoinToleranceSeconds");
   if (joinTolerance > 0.01) throw new Error("Silence debounce cannot exceed 10ms");
   const maximum = options.maxEnvelopePoints ?? 6000;
   if (!Number.isInteger(maximum) || maximum < 2 || maximum > 6000) throw new Error("maxEnvelopePoints must be an integer between 2 and 6000");
@@ -28,8 +28,11 @@ export async function analyzeRecordingAudio(input, options = {}, adapters = {}) 
     ? Math.max(-60, Math.min(-30, Math.max(noiseFloor + 10, speechReference - 18)))
     : options.thresholdDb;
   if (typeof threshold !== "number" || !Number.isFinite(threshold) || threshold < -80 || threshold > -10) throw new Error("thresholdDb must be finite between -80 and -10 dB");
-  const quiet = await run("ffmpeg", [...common, "-af", `aresample=16000,aformat=channel_layouts=mono,silencedetect=noise=${threshold}dB:d=${silenceDuration}`, "-f", "null", "-"], { maxBuffer: 8 * 1024 * 1024 });
-  const silence = parseAudioSilence(quiet.stderr, duration, { joinToleranceSeconds: joinTolerance });
+  // Detect short quiet pieces before debouncing; otherwise a brief noise click
+  // can discard the preceding quiet piece before the requested duration gate.
+  const detectorDuration = Math.min(silenceDuration, 0.01);
+  const quiet = await run("ffmpeg", [...common, "-af", `aresample=16000,aformat=channel_layouts=mono,silencedetect=noise=${threshold}dB:d=${detectorDuration}`, "-f", "null", "-"], { maxBuffer: 8 * 1024 * 1024 });
+  const silence = parseAudioSilence(quiet.stderr, duration, { joinToleranceSeconds: joinTolerance }).filter((interval) => interval.end_seconds - interval.start_seconds >= silenceDuration - 1e-6);
   if (silence.length === 1 && silence[0].start_seconds === 0 && silence[0].end_seconds >= duration - 0.001) throw new Error("Recording audio is entirely below the silence threshold");
   return { schema_version: RECORDING_AUDIO_VERSION, source_duration_seconds: duration, threshold_db: threshold, threshold_receipt: { noise_floor_db: noiseFloor, speech_reference_db: speechReference, speech_percentile: 75, rule: options.thresholdDb === undefined ? "max(noise-floor+10dB,speech-p75-18dB),clamped[-60,-30]" : "explicit-override" }, silence_duration_seconds: silenceDuration, silence_padding_seconds: padding, silence_join_tolerance_seconds: joinTolerance, envelope_step_seconds: step, silence_intervals: silence, waveform };
 }
