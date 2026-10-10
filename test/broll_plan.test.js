@@ -59,3 +59,27 @@ test("unrelated speech stays empty and malformed timings fail instead of guessin
   assert.throws(() => createBrollPlan([{ text: "code", start: 0, end: 1 }], { durationSeconds: -1 }), /positive/);
   assert.throws(() => createBrollPlan([{ text: "code", start: 0, end: 1 }], { shots: [{ start_seconds: 2, end_seconds: 3, shot_description: "Beyond edit" }] }), /valid timeline/);
 });
+
+test("concrete Shipmode promises outrank biographies and rhetorical mentions across the transcript", () => {
+  const segments = [
+    "Software as a service might die.",
+    "I built apps and automations.",
+    "I created this community.",
+    "No shiny new tools, no side quests.",
+    "These services bring income.",
+    "Here are some useful tools.",
+    "Your own hands-free AI agent working for you.",
+    "You get actual code templates and live builds.",
+    "Shipmates share their progress and help each other.",
+    "Help each other get it out the door, including getting it seen."
+  ].map((text, index) => ({ text, start: index * 5, end: index * 5 + 4 }));
+  const plan = createBrollPlan({ segments });
+  const byTopic = (topic) => plan.cards.find((card) => card.suggested_filename.endsWith(`-${topic}.mp4`));
+  assert.equal(byTopic("agent").start_seconds, 30);
+  assert.equal(byTopic("templates").start_seconds, 35);
+  assert.equal(byTopic("community").start_seconds, 40);
+  assert.equal(byTopic("launch").start_seconds, 45);
+  assert.equal(plan.cards.filter((card) => /-(agent|templates|community|launch)\.mp4$/.test(card.suggested_filename)).length, 4);
+  assert.ok(plan.cards.every((card) => !/might die|No shiny/.test(card.spoken_line)));
+  assert.equal(createBrollPlan({ segments: segments.filter((entry) => /might die|No shiny/.test(entry.text)) }).cards.length, 0);
+});
