@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -47,21 +47,27 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
   };
   const inputHash = await checksum(input);
   const transcriptHash = options.transcript ? await checksum(path.resolve(options.transcript)) : null;
-  const requestHash = digest({ version: "recording-workflow.v1", inputHash, transcriptHash, policy, aspect: options.aspect ?? "16:9", model: options.model ?? "base.en", language: options.language ?? "en", crf: options.crf ?? 18 });
+  const engineHash = digest(await Promise.all(["recording_edit.js", "recording_edit_media.js"].map(async (name) => readFile(new URL(name, import.meta.url), "utf8"))));
+  const requestHash = digest({ version: "recording-workflow.v1", engineHash, inputHash, transcriptHash, policy, aspect: options.aspect ?? "16:9", model: options.model ?? "base.en", language: options.language ?? "en", crf: options.crf ?? 18 });
   const cached = await readCached(manifestPath, requestHash, files);
   if (cached) {
     const transcript = JSON.parse(await readFile(files.transcript, "utf8"));
     await ensureCaptureTracker(files, transcript, { durationSeconds: cached.duration_seconds, aspect: options.aspect ?? "16:9" });
     return { ...cached, manifest: manifestPath, cached: true };
   }
+  try {
+    await stat(output);
+    throw new Error("Recording output exists without a matching complete cache. Use a new output directory to preserve existing media and capture progress.");
+  } catch (error) { if (error.code !== "ENOENT") throw error; }
 
   const transcript = options.transcript
     ? JSON.parse(await readFile(path.resolve(options.transcript), "utf8"))
     : await (adapters.transcribe ?? transcribeRecording)(input, options);
   const plan = planRecordingEdit(transcript, { ...policy, durationSeconds });
+  const editedTranscript = { text: plan.text, words: plan.words, duration_seconds: plan.duration_seconds };
+  await readCaptureTracker(files, editedTranscript, { durationSeconds: plan.duration_seconds, aspect: options.aspect ?? "16:9" });
   await mkdir(directory, { recursive: true });
   const rendered = await (adapters.editRecording ?? editRecording)(input, output, plan, { crf: options.crf ?? 18 });
-  const editedTranscript = { text: plan.text, words: plan.words, duration_seconds: plan.duration_seconds };
   await writeJson(files.source_transcript, transcript);
   await writeJson(files.edit_plan, plan);
   await writeJson(files.transcript, editedTranscript);
@@ -139,6 +145,18 @@ async function readCached(manifestPath, requestHash, files) {
 }
 
 async function ensureCaptureTracker(files, transcript, options) {
+  const { existing, timelineHash } = await readCaptureTracker(files, transcript, options);
+  const plan = existing ?? { ...createBrollPlan(transcript, options), source_timeline_hash: timelineHash };
+  if (!existing) await writeJson(files.broll_plan, plan);
+  try { await readFile(files.broll_checklist); }
+  catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    await writeAtomic(files.broll_checklist, renderBrollChecklist(plan));
+  }
+  return plan;
+}
+
+async function readCaptureTracker(files, transcript, options) {
   const timelineHash = digest({ transcript, ...options });
   let existing;
   try { existing = JSON.parse(await readFile(files.broll_plan, "utf8")); }
@@ -146,20 +164,13 @@ async function ensureCaptureTracker(files, transcript, options) {
   if (existing && existing.source_timeline_hash !== timelineHash) {
     throw new Error("B-roll tracker belongs to a different transcript or timeline. Use a new output directory to preserve recorded capture progress.");
   }
-  const plan = existing ?? { ...createBrollPlan(transcript, options), source_timeline_hash: timelineHash };
   if (!existing) {
     try {
       await readFile(files.broll_checklist);
       throw new Error("B-roll checklist already exists without its plan. Use a new output directory.");
     } catch (error) { if (error.code !== "ENOENT") throw error; }
-    await writeJson(files.broll_plan, plan);
   }
-  try { await readFile(files.broll_checklist); }
-  catch (error) {
-    if (error.code !== "ENOENT") throw error;
-    await writeAtomic(files.broll_checklist, renderBrollChecklist(plan));
-  }
-  return plan;
+  return { existing, timelineHash };
 }
 
 async function checksum(file) {
