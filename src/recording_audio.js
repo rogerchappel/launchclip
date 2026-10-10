@@ -76,11 +76,12 @@ export function parseAudioSilence(output, durationSeconds) {
   return union(intervals).map(({ start, end }) => ({ start_seconds: start, end_seconds: end }));
 }
 
-/** Trim only measured quiet portions outside accepted word intervals. */
+/** Align silent ASR boundaries, then trim measured quiet outside voiced words. */
 export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08 } = {}) {
   const padding = nonnegative(silencePadding, "silencePadding");
   const duration = positive(plan?.source_duration_seconds, "source duration");
   if (Math.abs(analysis?.source_duration_seconds - duration) > 0.001 || !Number.isFinite(analysis?.source_duration_seconds) || !Array.isArray(analysis.silence_intervals)) throw new Error("Audio analysis must match the source recording");
+  if (!Number.isFinite(analysis.threshold_db) || analysis.threshold_db < -80 || analysis.threshold_db > -10) throw new Error("Audio analysis requires a valid silence threshold");
   if (!Array.isArray(plan.kept_segments) || !plan.kept_segments.length || !Array.isArray(plan.words) || !plan.words.length || !Array.isArray(plan.removed_segments)) throw new Error("Recording plan requires kept ranges and accepted spoken words");
   let clock = 0;
   let previous = 0;
@@ -92,19 +93,36 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08 
     return range;
   });
   if (!Number.isFinite(plan.duration_seconds) || Math.abs(plan.duration_seconds - clock) > 0.001) throw new Error("Recording plan duration does not match its mapping");
-  const sourceWords = plan.words.map((word) => {
+  const originalSourceWords = plan.words.map((word) => {
     checkedRange(word.start, word.end, plan.duration_seconds);
     const segment = plan.kept_segments.find((entry) => word.start >= entry.start_seconds - 1e-6 && word.end <= entry.end_seconds + 1e-6);
     if (!segment || !String(word.word ?? word.text ?? "").trim()) throw new Error("Accepted word crosses an edit boundary or has no text");
     const offset = segment.source_start_seconds - segment.start_seconds;
     return { ...word, start: word.start + offset, end: word.end + offset };
   });
-  for (let index = 1; index < sourceWords.length; index++) if (sourceWords[index].start < sourceWords[index - 1].end - 1e-6) throw new Error("Accepted words must be ordered and non-overlapping");
+  for (let index = 1; index < originalSourceWords.length; index++) if (originalSourceWords[index].start < originalSourceWords[index - 1].end - 1e-6) throw new Error("Accepted words must be ordered and non-overlapping");
+  const measuredQuiet = union(analysis.silence_intervals.map((interval) => checkedRange(interval.start_seconds, interval.end_seconds, duration)));
+  const alignedWords = [];
+  const droppedWords = [];
+  const sourceWords = originalSourceWords.flatMap((word) => {
+    // Only quiet touching a boundary can move it. An interior quiet span may be
+    // a natural intra-word pause and cannot split an accepted ASR token.
+    let start = word.start;
+    let end = word.end;
+    for (const quiet of measuredQuiet) {
+      if (quiet.start <= start && quiet.end > start) start = Math.min(end, quiet.end);
+      if (quiet.start < end && quiet.end >= end) end = Math.max(start, quiet.start);
+    }
+    const record = { word: word.word ?? word.text, source_start_seconds: word.start, source_end_seconds: word.end };
+    if (end - start <= 1e-6) { droppedWords.push({ ...record, reason: "unvoiced-transcript-artifact" }); return []; }
+    if (start !== word.start || end !== word.end) alignedWords.push({ ...record, aligned_start_seconds: start, aligned_end_seconds: end });
+    return [{ ...word, start, end }];
+  });
+  if (!sourceWords.length) throw new Error("Audio alignment found no voiced transcript words");
   const protectedRanges = union(sourceWords.map((word) => ({ start: Math.max(0, word.start - padding), end: Math.min(duration, word.end + padding) })));
-  const quiet = union(analysis.silence_intervals.map((interval) => {
-    const range = checkedRange(interval.start_seconds, interval.end_seconds, duration);
+  const quiet = measuredQuiet.map((range) => {
     return { start: range.start + padding, end: range.end - padding };
-  }).filter((range) => range.end > range.start));
+  }).filter((range) => range.end > range.start);
   const removals = union(quiet.flatMap((range) => subtract(range, protectedRanges)).flatMap((range) => keeps.flatMap((keep) => {
     const start = Math.max(range.start, keep.start);
     const end = Math.min(range.end, keep.end);
@@ -128,7 +146,7 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08 
     checkedRange(segment.source_start_seconds, segment.source_end_seconds, duration);
     return { ...segment };
   }), ...removals.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "waveform-silence" }))].sort((a, b) => a.source_start_seconds - b.source_start_seconds);
-  return { ...plan, duration_seconds: clock, kept_segments, removed_segments, words, audio_analysis: { schema_version: RECORDING_AUDIO_VERSION, threshold_db: analysis.threshold_db, silence_padding_seconds: padding, removed_seconds: plan.duration_seconds - clock } };
+  return { ...plan, duration_seconds: clock, kept_segments, removed_segments, words, text: words.map((word) => word.word ?? word.text).join(" "), audio_analysis: { schema_version: RECORDING_AUDIO_VERSION, threshold_db: analysis.threshold_db, silence_padding_seconds: padding, removed_seconds: plan.duration_seconds - clock, aligned_words: alignedWords, dropped_words: droppedWords } };
 }
 
 function percentile(values, fraction) { return values[Math.min(values.length - 1, Math.floor(values.length * fraction))]; }
