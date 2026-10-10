@@ -49,7 +49,11 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
   const transcriptHash = options.transcript ? await checksum(path.resolve(options.transcript)) : null;
   const requestHash = digest({ version: "recording-workflow.v1", inputHash, transcriptHash, policy, aspect: options.aspect ?? "16:9", model: options.model ?? "base.en", language: options.language ?? "en", crf: options.crf ?? 18 });
   const cached = await readCached(manifestPath, requestHash, files);
-  if (cached) return { ...cached, manifest: manifestPath, cached: true };
+  if (cached) {
+    const transcript = JSON.parse(await readFile(files.transcript, "utf8"));
+    await ensureCaptureTracker(files, transcript, { durationSeconds: cached.duration_seconds, aspect: options.aspect ?? "16:9" });
+    return { ...cached, manifest: manifestPath, cached: true };
+  }
 
   const transcript = options.transcript
     ? JSON.parse(await readFile(path.resolve(options.transcript), "utf8"))
@@ -58,14 +62,12 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
   await mkdir(directory, { recursive: true });
   const rendered = await (adapters.editRecording ?? editRecording)(input, output, plan, { crf: options.crf ?? 18 });
   const editedTranscript = { text: plan.text, words: plan.words, duration_seconds: plan.duration_seconds };
-  const broll = createBrollPlan(editedTranscript, { durationSeconds: plan.duration_seconds, aspect: options.aspect ?? "16:9" });
   await writeJson(files.source_transcript, transcript);
   await writeJson(files.edit_plan, plan);
   await writeJson(files.transcript, editedTranscript);
   await writeJson(files.words, plan.words);
-  await writeJson(files.broll_plan, broll);
-  await writeAtomic(files.broll_checklist, renderBrollChecklist(broll));
-  const checksums = Object.fromEntries(await Promise.all(Object.entries(files).map(async ([key, file]) => [key, await checksum(file)])));
+  await ensureCaptureTracker(files, editedTranscript, { durationSeconds: plan.duration_seconds, aspect: options.aspect ?? "16:9" });
+  const checksums = Object.fromEntries(await Promise.all(Object.entries(files).filter(([key]) => !key.startsWith("broll_")).map(async ([key, file]) => [key, await checksum(file)])));
   const result = {
     schema_version: "launchclip.recording-workflow.v1", stage: "edit-recording", status: "ready",
     input, output, input_hash: requestHash, input_sha256: inputHash,
@@ -86,12 +88,10 @@ export async function writeBrollPlan(transcriptPath, options = {}) {
   const checklist = path.join(directory, "BROLL.md");
   if (input === planPath || input === checklist) throw new Error("B-roll output must not overwrite its transcript");
   const transcript = JSON.parse(await readFile(input, "utf8"));
-  const plan = createBrollPlan(transcript, {
+  const plan = await ensureCaptureTracker({ broll_plan: planPath, broll_checklist: checklist }, transcript, {
     durationSeconds: options.durationSeconds ?? transcript.duration_seconds,
     aspect: options.aspect ?? "16:9"
   });
-  await writeJson(planPath, plan);
-  await writeAtomic(checklist, renderBrollChecklist(plan));
   return { stage: "broll-plan", status: "ready", plan: planPath, checklist, cards: plan.cards.length };
 }
 
@@ -128,6 +128,7 @@ async function readCached(manifestPath, requestHash, files) {
     const cached = JSON.parse(await readFile(manifestPath, "utf8"));
     if (cached.input_hash !== requestHash || cached.schema_version !== "launchclip.recording-workflow.v1") return null;
     for (const [key, file] of Object.entries(files)) {
+      if (key.startsWith("broll_")) continue;
       if (cached.files?.[key] !== file || cached.checksums?.[key] !== await checksum(file)) return null;
     }
     return cached;
@@ -135,6 +136,30 @@ async function readCached(manifestPath, requestHash, files) {
     if (error.code === "ENOENT" || error instanceof SyntaxError) return null;
     throw error;
   }
+}
+
+async function ensureCaptureTracker(files, transcript, options) {
+  const timelineHash = digest({ transcript, ...options });
+  let existing;
+  try { existing = JSON.parse(await readFile(files.broll_plan, "utf8")); }
+  catch (error) { if (error.code !== "ENOENT") throw error; }
+  if (existing && existing.source_timeline_hash !== timelineHash) {
+    throw new Error("B-roll tracker belongs to a different transcript or timeline. Use a new output directory to preserve recorded capture progress.");
+  }
+  const plan = existing ?? { ...createBrollPlan(transcript, options), source_timeline_hash: timelineHash };
+  if (!existing) {
+    try {
+      await readFile(files.broll_checklist);
+      throw new Error("B-roll checklist already exists without its plan. Use a new output directory.");
+    } catch (error) { if (error.code !== "ENOENT") throw error; }
+    await writeJson(files.broll_plan, plan);
+  }
+  try { await readFile(files.broll_checklist); }
+  catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    await writeAtomic(files.broll_checklist, renderBrollChecklist(plan));
+  }
+  return plan;
 }
 
 async function checksum(file) {
