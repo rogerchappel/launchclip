@@ -80,3 +80,41 @@ test("blank audio fails and adaptive analysis output remains bounded", async () 
   await assert.rejects(analyzeRecordingAudio("unused.wav", { durationSeconds: 1 }, { run: blank }), /no audible signal/);
   await assert.rejects(analyzeRecordingAudio("unused.wav", { durationSeconds: 1, thresholdDb: NaN }, { run: async () => ({ stdout: "pts_time:0\nlavfi.astats.Overall.RMS_level=-20" }) }), /thresholdDb/);
 });
+
+test("dialogue threshold receipt uses speech and noise references and keeps explicit overrides", async () => {
+  const output = ["pts_time:0", "lavfi.astats.Overall.RMS_level=-70", "pts_time:0.1", "lavfi.astats.Overall.RMS_level=-30", "pts_time:0.2", "lavfi.astats.Overall.RMS_level=-20"].join("\n");
+  const run = async () => ({ stdout: output, stderr: "" });
+  const analysis = await analyzeRecordingAudio("unused.wav", { durationSeconds: 0.3 }, { run });
+  assert.equal(analysis.threshold_db, -38);
+  assert.equal(analysis.threshold_receipt.noise_floor_db, -70);
+  assert.equal(analysis.threshold_receipt.speech_reference_db, -20);
+  assert.equal(analysis.threshold_receipt.speech_percentile, 75);
+  assert.match(analysis.threshold_receipt.rule, /clamped/);
+  const explicit = await analyzeRecordingAudio("unused.wav", { durationSeconds: 0.3, thresholdDb: -44 }, { run });
+  assert.equal(explicit.threshold_db, -44);
+  assert.equal(explicit.threshold_receipt.rule, "explicit-override");
+});
+
+test("5ms noise debounce joins tiny interruptions while preserving a 20ms voiced plosive", () => {
+  const joined = parseAudioSilence("silence_start:0\nsilence_end:0.7\nsilence_start:0.702\nsilence_end:1.5", 2);
+  assert.deepEqual(joined, [{ start_seconds: 0, end_seconds: 1.5 }]);
+  const separate = parseAudioSilence("silence_start:0\nsilence_end:0.7\nsilence_start:0.72\nsilence_end:1.5", 2);
+  assert.equal(separate.length, 2);
+  assert.throws(() => parseAudioSilence("", 2, { joinToleranceSeconds: 0.02 }), /10ms/);
+  const source = { schema_version: plan.schema_version, source_duration_seconds: 2, duration_seconds: 2,
+    kept_segments: [{ source_start_seconds: 0, source_end_seconds: 2, start_seconds: 0, end_seconds: 2 }], removed_segments: [],
+    words: [{ word: "Tap", start: 0.7, end: 0.72 }, { word: "again.", start: 1.6, end: 1.9 }], text: "Tap again." };
+  const refined = refineRecordingEditPlan(source, { source_duration_seconds: 2, threshold_db: -40, silence_intervals: separate });
+  assert.equal(refined.words[0].word, "Tap");
+  assert.ok(Math.abs(refined.words[0].end - refined.words[0].start - 0.02) < 1e-9);
+});
+
+test("measured quiet speech above noise floor survives a dialogue-relative silent interval", () => {
+  const source = { schema_version: plan.schema_version, source_duration_seconds: 3, duration_seconds: 3,
+    kept_segments: [{ source_start_seconds: 0, source_end_seconds: 3, start_seconds: 0, end_seconds: 3 }], removed_segments: [],
+    words: [{ word: "Whisper", start: 0.1, end: 0.5 }, { word: "Uh", start: 0.8, end: 1 }, { word: "louder.", start: 1.6, end: 2 }], text: "Whisper Uh louder." };
+  const refined = refineRecordingEditPlan(source, { source_duration_seconds: 3, threshold_db: -40, threshold_receipt: { noise_floor_db: -70 }, silence_intervals: [{ start_seconds: 0, end_seconds: 1.5 }], waveform: [{ start_seconds: 0.1, end_seconds: 0.5, rms_db: -50 }, { start_seconds: 0.8, end_seconds: 1, rms_db: -75 }] });
+  assert.deepEqual(refined.words.map((word) => word.word), ["Whisper", "louder."]);
+  assert.equal(refined.audio_analysis.dropped_words[0].word, "Uh");
+  assert.throws(() => refineRecordingEditPlan(source, { source_duration_seconds: 3, threshold_db: -40, silence_intervals: [], waveform: [{ start_seconds: 0, end_seconds: 1, rms_db: NaN }] }), /waveform level/);
+});
