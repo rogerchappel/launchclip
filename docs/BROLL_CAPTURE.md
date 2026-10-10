@@ -29,7 +29,12 @@ instructions, priority, `status: "planned"`, `media_path: null`, a stable filena
 and a suggested 12-second capture duration. The edit placement and recording
 duration are separate: record 10–15 seconds with steady handles so the editor
 can select a useful portion. One suggestion per keyword topic prevents repeated
-capture requests. `maxCards` caps chronological output.
+capture requests. The planner chooses the most concrete match across the whole
+transcript: templates/live builds over generic tools, hands-free agents over
+automation biographies, shipmates over generic community mentions, and launch
+or getting-seen lines over generic services. It skips rhetorical “might die” and
+negated “no shiny new tools” lines. Equal-strength matches use the earlier line.
+`maxCards` caps chronological output.
 
 For a subject the keywords do not cover, pass explicit `shots`:
 
@@ -51,7 +56,9 @@ cap. Optional `spoken_line` overrides the overlapping transcript text. Use your
 own material or demo accounts; hide credentials, private messages and production
 data. Capture actual states rather than simulated customers, revenue or results.
 
-After recording, update a saved card's `status` to `captured` and `media_path` to
-the local clip, then regenerate the Markdown checklist. These pure functions
+After recording, update a saved card's `status` to `recorded` and `media_path` to
+the local clip, then regenerate the Markdown checklist. `recorded`, `approved`
+and `placed` statuses display checked boxes; legacy `captured` does too.
+These pure functions
 perform no recording, file writes, uploads, paid calls or media validation; the
 calling CLI owns persistence and checking that a supplied capture exists.
