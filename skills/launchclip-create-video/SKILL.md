@@ -346,6 +346,10 @@ seek-safe.
 
 ## Obtain review and render
 
+For basic recorded-video editorial work, use the verification and delivery
+checks in `references/recorded-video.md`; no cinematic readiness receipt is
+required. The cinematic creation requirements below apply to that lane only.
+
 Open HyperFrames Studio only after the automated gates, visual snapshot review,
 and `CINEMATIC-READINESS.json` all pass. Tell the user where the editable
 project and preview are located, summarize any deliberate limitations, and ask
