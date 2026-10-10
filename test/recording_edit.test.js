@@ -75,3 +75,19 @@ test("pause preservation still excises retakes and maps all retained words", () 
   assert.equal(plan.kept_segments[0].source_start_seconds, 0);
   assert.equal(plan.kept_segments.at(-1).source_end_seconds, 12);
 });
+test("zero-duration transcription artifacts are discarded without invented timing", () => {
+  const words = [{ word: "hallucination", start: 1, end: 1 }, { word: "Actual", start: 1, end: 1.2 }, { word: "speech.", start: 1.3, end: 1.5 }];
+  assert.equal(planRecordingEdit(words, { durationSeconds: 3 }).text, "Actual speech.");
+});
+test("retakes remain detectable across changed sentence boundaries", () => {
+  const earlier = "Your own hands free AI agent working for you content and video to scale so people actually see what you built and how you turn it into products and income.";
+  const later = "Your own hands free AI agent working for you content and video at scale so people actually see what you built. And how to turn all of that into products and income.";
+  const plan = planRecordingEdit([...phrase(earlier, 1), ...phrase(later, 15)], { durationSeconds: 30 });
+  assert.equal(plan.text, later);
+});
+test("substantial repeated passages tolerate a changed opening and exact five-word lines", () => {
+  const earlier = "Engineering principles so that what you build doesn't fall over.";
+  const later = "Engineering principles so that what you build won't fail over.";
+  const plan = planRecordingEdit([...phrase(earlier, 1), ...phrase(later, 6), ...phrase("We call our members shipmates.", 12), ...phrase("We call our members shipmates.", 16)], { durationSeconds: 20 });
+  assert.equal(plan.text, `${later} We call our members shipmates.`);
+});
