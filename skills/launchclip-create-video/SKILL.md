@@ -9,7 +9,14 @@ Create a reviewable video with the current agent's included reasoning and local
 HyperFrames tooling. Treat this skill as the agent-native counterpart to
 `launchclip produce`, not as a wrapper around it.
 
-Before authoring, read both references completely:
+For an existing presenter recording when the user requests silence/retake
+cleanup, a B-roll capture plan, or restrained editorial overlays, read
+[references/recorded-video.md](references/recorded-video.md). That route preserves
+the recorded story and uses local recording-edit commands; it does not require
+a new concept tournament or rewrite the speech. Apply the premium cinematic
+funnel below to new stories and requested cinematic treatments.
+
+Before authoring a cinematic creation, read both references completely:
 
 - [references/cinematic-production.md](references/cinematic-production.md) is
   the creative funnel, timing, verification, and repair contract.
@@ -298,7 +305,9 @@ Do not imitate a named living artist or clone a person's voice or likeness.
 
 ## Author and repair
 
-Follow the scaffold, composition contract, and commands in the bundled
+For recorded-video editorial work, follow `references/recorded-video.md`
+instead of this cinematic sequence. For cinematic creation, follow the
+scaffold, composition contract, and commands in the bundled
 reference. Work in this order:
 
 1. Verify Node.js, FFmpeg, and HyperFrames availability.
