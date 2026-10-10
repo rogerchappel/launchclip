@@ -23,23 +23,28 @@ export async function editRecording(inputPath, outputPath, plan, options = {}, a
   await mkdir(path.dirname(output), { recursive: true });
   const temporary = await mkdtemp(path.join(path.dirname(output), ".launchclip-edit-"));
   try {
-    const filters = [];
-    const inputs = [];
-    for (const [index, segment] of plan.kept_segments.entries()) {
-      const start = segment.source_start_seconds;
-      const end = segment.source_end_seconds;
-      filters.push(`[0:v:0]trim=start=${start}:end=${end},setpts=PTS-STARTPTS[v${index}]`);
-      filters.push(`[0:a:0]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[a${index}]`);
-      inputs.push(`[v${index}][a${index}]`);
-    }
-    filters.push(`${inputs.join("")}concat=n=${inputs.length}:v=1:a=1[v][a]`);
-    const filterPath = path.join(temporary, "filters.txt");
-    await writeFile(filterPath, filters.join(";\n"));
-    const rendered = path.join(temporary, "edited.mp4");
+    const run = adapters.run ?? execute;
     const crf = options.crf ?? 18;
     if (!Number.isInteger(crf) || crf < 0 || crf > 51) throw new Error("crf must be an integer between 0 and 51");
-    const args = ["-hide_banner", "-nostdin", "-i", input, "-filter_complex_script", filterPath, "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", String(crf), "-preset", "medium", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", rendered];
-    await (adapters.run ?? execute)("ffmpeg", args, { maxBuffer: 16 * 1024 * 1024 });
+    const entries = [];
+    // Decode one range at a time. A fan-out trim graph can retain future ranges
+    // in memory while concat consumes the first, especially for UHD recordings.
+    for (const [index, segment] of plan.kept_segments.entries()) {
+      const name = `segment-${index}.mkv`;
+      const file = path.join(temporary, name);
+      await run("ffmpeg", ["-hide_banner", "-nostdin", "-ss", String(segment.source_start_seconds), "-i", input,
+        "-t", String(segment.source_end_seconds - segment.source_start_seconds), "-map", "0:v:0", "-map", "0:a:0",
+        "-c:v", "libx264", "-crf", String(crf), "-preset", "medium", "-threads", "2", "-pix_fmt", "yuv420p",
+        "-c:a", "pcm_s16le", file], { maxBuffer: 16 * 1024 * 1024 });
+      entries.push(`file '${name}'`);
+    }
+    const list = path.join(temporary, "segments.txt");
+    await writeFile(list, `${entries.join("\n")}\n`);
+    const rendered = path.join(temporary, "edited.mp4");
+    // PCM intermediates avoid separate AAC encoder priming at every join.
+    await run("ffmpeg", ["-hide_banner", "-nostdin", "-f", "concat", "-safe", "1", "-i", list,
+      "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+      "-movflags", "+faststart", rendered], { maxBuffer: 16 * 1024 * 1024 });
     await stat(rendered);
     const renderedProbe = await (adapters.probeMedia ?? probeMedia)(rendered);
     const renderedDuration = Number(renderedProbe.format?.duration);
