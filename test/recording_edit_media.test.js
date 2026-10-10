@@ -17,7 +17,7 @@ test("renderer rejects collisions and malformed plans without touching input", a
     const input = path.join(directory, "source.mp4");
     const output = path.join(directory, "edited.mp4");
     await writeFile(input, "original");
-    const probe = { format: { duration: "4" }, streams: [{ codec_type: "video" }, { codec_type: "audio" }] };
+    const probe = { format: { duration: "4" }, streams: [{ codec_type: "video", r_frame_rate: "30/1" }, { codec_type: "audio" }] };
     const adapters = { probeMedia: async () => probe };
     await assert.rejects(editRecording(input, input, plan(), {}, adapters), /differ/);
     await writeFile(output, "existing");
@@ -34,7 +34,7 @@ test("renderer cleans unique scratch files after FFmpeg failure", async () => {
     await writeFile(input, "original");
     let calls = 0;
     await assert.rejects(editRecording(input, path.join(directory, "edited.mp4"), plan(), {}, {
-      probeMedia: async () => ({ format: { duration: "4" }, streams: [{ codec_type: "video" }, { codec_type: "audio" }] }),
+      probeMedia: async () => ({ format: { duration: "4" }, streams: [{ codec_type: "video", r_frame_rate: "30/1" }, { codec_type: "audio" }] }),
       run: async (_command, args) => {
         calls++;
         assert.equal(args.includes("-filter_complex_script"), false);
