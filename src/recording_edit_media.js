@@ -26,6 +26,8 @@ export async function editRecording(inputPath, outputPath, plan, options = {}, a
     const run = adapters.run ?? execute;
     const crf = options.crf ?? 18;
     if (!Number.isInteger(crf) || crf < 0 || crf > 51) throw new Error("crf must be an integer between 0 and 51");
+    const frameRate = video.r_frame_rate && video.r_frame_rate !== "0/0" ? video.r_frame_rate : video.avg_frame_rate;
+    if (typeof frameRate !== "string" || !/^\d+(?:\/\d+)?$/.test(frameRate) || frameRate.startsWith("0")) throw new Error("Recording video requires a known frame rate");
     const entries = [];
     // Decode one range at a time. A fan-out trim graph can retain future ranges
     // in memory while concat consumes the first, especially for UHD recordings.
@@ -36,14 +38,20 @@ export async function editRecording(inputPath, outputPath, plan, options = {}, a
         "-t", String(segment.source_end_seconds - segment.source_start_seconds), "-map", "0:v:0", "-map", "0:a:0",
         "-c:v", "libx264", "-crf", String(crf), "-preset", "medium", "-threads", "2", "-pix_fmt", "yuv420p",
         "-c:a", "pcm_s16le", file], { maxBuffer: 16 * 1024 * 1024 });
-      entries.push(`file '${name}'`);
+      // Matroska's duration includes the rounded final video frame. Use the
+      // planned speech interval for the next segment's origin rather than
+      // accumulating that frame rounding at every cut.
+      entries.push(`file '${name}'`, `duration ${segment.source_end_seconds - segment.source_start_seconds}`);
     }
     const list = path.join(temporary, "segments.txt");
     await writeFile(list, `${entries.join("\n")}\n`);
     const rendered = path.join(temporary, "edited.mp4");
     // PCM intermediates avoid separate AAC encoder priming at every join.
+    // Resolve sub-frame video joins onto one continuous source-rate frame grid;
+    // packet copying would preserve overlapping frames as a faster VFR stream.
     await run("ffmpeg", ["-hide_banner", "-nostdin", "-f", "concat", "-safe", "1", "-i", list,
-      "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+      "-map", "0:v:0", "-map", "0:a:0", "-c:v", "libx264", "-crf", String(crf), "-preset", "medium", "-threads", "2",
+      "-r", frameRate, "-fps_mode", "cfr", "-t", String(plan.duration_seconds), "-c:a", "aac", "-b:a", "192k",
       "-movflags", "+faststart", rendered], { maxBuffer: 16 * 1024 * 1024 });
     await stat(rendered);
     const renderedProbe = await (adapters.probeMedia ?? probeMedia)(rendered);
