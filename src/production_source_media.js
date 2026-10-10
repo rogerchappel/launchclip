@@ -13,13 +13,19 @@ export async function prepareSourceMedia(workspacePath, options = {}, adapters =
   const reportPath = path.join(workspace, "production", "source-media", "preprocess.json");
   const intake = JSON.parse(await readFile(intakePath, "utf8"));
   const source = (intake.resources ?? []).find((entry) => entry.role === "voiceover" && !entry.is_remote && ["video", "audio"].includes(entry.type));
-  if (source && options.editRecording) {
+  if (source && (options.editRecording || source.recording_edit)) {
     const input = path.resolve(source.derived_from ?? source.location);
+    const recordingOptions = options.editRecording ? { ...options.recording, trimSilence: options.trimSilence } : source.recording_edit.options;
     const recording = await (adapters.prepareRecording ?? prepareRecording)(input, {
-      ...options.recording, trimSilence: options.trimSilence,
+      ...recordingOptions,
       out: path.join(workspace, "production", "source-media", "recording-edit")
     }, adapters.recording);
     await applyPreparedResource(intake, intakePath, source.location, recording.output, recording.rendered_duration_seconds, recording.output_sha256);
+    for (const resource of intake.resources) {
+      if (["voiceover", "presenter"].includes(resource.role) && resource.location === recording.output) {
+        resource.recording_edit = { manifest: recording.manifest, options: recordingOptions };
+      }
+    }
     // Replace raw transcript resources so planning never consumes rejected takes.
     const transcripts = intake.resources.filter((entry) => entry.role === "voiceover-transcript");
     if (!transcripts.length) {
