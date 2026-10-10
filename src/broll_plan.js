@@ -11,6 +11,23 @@ const RULES = [
   { key: "templates", match: /\b(templates?|tools|live builds)\b/i, priority: "medium", description: "Show the actual reusable template or tool", action: "Open a real template or tool you can share and demonstrate one useful step with sample inputs. Keep unshipped or unavailable features clearly labeled." }
 ];
 
+// Highest-specificity phrase wins across the whole transcript; ties keep the
+// earliest line. Generic biography/tool mentions remain fallback opportunities.
+const TOPIC_PREFERENCES = {
+  community: [/\bshipmates\b/i, /\b(share (?:their |your )?progress|help each other)\b/i, /\b(members|community)\b/i],
+  agent: [/\bhands.free\b/i, /\bagents?\b/i],
+  templates: [/\b(templates?|live builds)\b/i],
+  launch: [/\b(launch|getting (?:it )?seen|get it out|shipped)\b/i, /\bshipping\b/i, /\bproducts?\b/i]
+};
+
+function topicScore(rule, text) {
+  if (!rule.match.test(text)) return 0;
+  if (/\b(?:might|may|could)\s+(?:all\s+)?die\b|\bno\s+(?:shiny\s+)?(?:new\s+)?tools\b/i.test(text)) return 0;
+  const preferences = TOPIC_PREFERENCES[rule.key] ?? [];
+  const preference = preferences.findIndex((pattern) => pattern.test(text));
+  return preference < 0 ? 1 : preferences.length - preference + 1;
+}
+
 export function createBrollPlan(transcript, { durationSeconds, aspect = "16:9", maxCards = 12, shots = [] } = {}) {
   const lines = transcriptLines(transcript);
   const inferredDuration = Math.max(0, ...lines.map((line) => line.end));
@@ -21,14 +38,16 @@ export function createBrollPlan(transcript, { durationSeconds, aspect = "16:9", 
   if (!Array.isArray(shots)) throw new Error("shots must be an array");
 
   const candidates = [];
-  const seen = new Set();
-  for (const line of lines) {
-    const rule = RULES.find((entry) => entry.match.test(line.text) && !seen.has(entry.key));
-    if (!rule) continue;
-    const span = boundedSpan(line.start, line.end, duration);
-    if (!span) continue;
-    seen.add(rule.key);
-    candidates.push({ ...span, spoken_line: line.text, shot_description: rule.description, capture_instructions: instructions(rule.action, aspect), priority: rule.priority, key: rule.key });
+  for (const rule of RULES) {
+    let best = null;
+    let bestScore = 0;
+    for (const line of lines) {
+      const span = boundedSpan(line.start, line.end, duration);
+      const score = span ? topicScore(rule, line.text) : 0;
+      if (score > bestScore) { best = { line, span }; bestScore = score; }
+    }
+    if (!best) continue;
+    candidates.push({ ...best.span, spoken_line: best.line.text, shot_description: rule.description, capture_instructions: instructions(rule.action, aspect), priority: rule.priority, key: rule.key });
   }
 
   for (const shot of shots) {
@@ -50,7 +69,8 @@ export function createBrollPlan(transcript, { durationSeconds, aspect = "16:9", 
 export function renderBrollChecklist(plan) {
   const output = ["# B-roll capture checklist", "", plan.notes, "", `Capture aspect: ${plan.aspect}. Record 10–15 seconds per shot, including a still hold before and after the action.`, "", "Use demo data. Hide credentials, private messages and production data. Review every recording before sharing.", ""];
   for (const card of plan.cards) {
-    output.push(`## ${card.id}: ${card.shot_description}`, "", `- [${card.status === "captured" ? "x" : " "}] ${card.priority} priority — ${card.status}`, `- Edit placement: ${card.start_seconds.toFixed(2)}–${card.end_seconds.toFixed(2)}s`, `- Spoken line: ${card.spoken_line.replace(/\s+/g, " ")}`, `- Capture: ${card.capture_instructions}`, `- Save as: ${card.suggested_filename}`, `- Media: ${card.media_path ?? "not captured"}`, "");
+    const complete = ["captured", "recorded", "approved", "placed"].includes(card.status);
+    output.push(`## ${card.id}: ${card.shot_description}`, "", `- [${complete ? "x" : " "}] ${card.priority} priority — ${card.status}`, `- Edit placement: ${card.start_seconds.toFixed(2)}–${card.end_seconds.toFixed(2)}s`, `- Spoken line: ${card.spoken_line.replace(/\s+/g, " ")}`, `- Capture: ${card.capture_instructions}`, `- Save as: ${card.suggested_filename}`, `- Media: ${card.media_path ?? "not captured"}`, "");
   }
   if (!plan.cards.length) output.push("No keyword-based shots suggested. Add explicit shots for this subject.", "");
   return output.join("\n");
