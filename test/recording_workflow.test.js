@@ -93,3 +93,18 @@ test("recording options keep local transcription model separate from provider tr
   assert.equal(options.trimSilence, false);
   assert.equal(options.takePolicy, "last");
 });
+
+test("capture conflicts and incomplete prior exports fail before rendering or changing artifacts", async () => {
+  const f = await fixture();
+  const out = path.join(f.directory, "existing");
+  const { mkdir } = await import("node:fs/promises");
+  await mkdir(out);
+  await writeFile(path.join(out, "BROLL.md"), "Keep my capture notes");
+  await assert.rejects(() => prepareRecording(f.input, { out }, f.adapters), /checklist already exists/);
+  assert.equal(f.renders(), 0);
+  assert.equal(await readFile(path.join(out, "BROLL.md"), "utf8"), "Keep my capture notes");
+  await writeFile(path.join(out, "base-edit.mp4"), "Previous export");
+  await assert.rejects(() => prepareRecording(f.input, { out }, f.adapters), /matching complete cache/);
+  assert.equal(await readFile(path.join(out, "base-edit.mp4"), "utf8"), "Previous export");
+  assert.equal(f.renders(), 0);
+});
