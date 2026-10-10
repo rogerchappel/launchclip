@@ -10,6 +10,8 @@ export async function analyzeRecordingAudio(input, options = {}, adapters = {}) 
   const duration = positive(options.durationSeconds ?? Number((await (adapters.probeMedia ?? probeMedia)(input)).format?.duration), "durationSeconds");
   const silenceDuration = positive(options.silenceDuration ?? 0.4, "silenceDuration");
   const padding = nonnegative(options.silencePadding ?? 0.08, "silencePadding");
+  const joinTolerance = nonnegative(options.silenceJoinToleranceSeconds ?? 0.005, "silenceJoinToleranceSeconds");
+  if (joinTolerance > 0.01) throw new Error("Silence debounce cannot exceed 10ms");
   const maximum = options.maxEnvelopePoints ?? 6000;
   if (!Number.isInteger(maximum) || maximum < 2 || maximum > 6000) throw new Error("maxEnvelopePoints must be an integer between 2 and 6000");
   const samples = Math.max(1600, Math.ceil(duration * 16000 / maximum));
@@ -20,14 +22,16 @@ export async function analyzeRecordingAudio(input, options = {}, adapters = {}) 
   const waveform = parseRmsEnvelope(envelope.stdout, { durationSeconds: duration, stepSeconds: step, maxPoints: maximum });
   const levels = waveform.map((point) => point.rms_db).sort((a, b) => a - b);
   if (!levels.length || levels.at(-1) <= -75) throw new Error("Recording audio contains no audible signal; cannot create a speech edit");
+  const noiseFloor = percentile(levels, 0.2);
+  const speechReference = percentile(levels, 0.75);
   const threshold = options.thresholdDb === undefined
-    ? Math.max(-60, Math.min(-30, percentile(levels, 0.9) - 24, percentile(levels, 0.2) + 8))
+    ? Math.max(-60, Math.min(-30, Math.max(noiseFloor + 10, speechReference - 18)))
     : options.thresholdDb;
   if (typeof threshold !== "number" || !Number.isFinite(threshold) || threshold < -80 || threshold > -10) throw new Error("thresholdDb must be finite between -80 and -10 dB");
   const quiet = await run("ffmpeg", [...common, "-af", `aresample=16000,aformat=channel_layouts=mono,silencedetect=noise=${threshold}dB:d=${silenceDuration}`, "-f", "null", "-"], { maxBuffer: 8 * 1024 * 1024 });
-  const silence = parseAudioSilence(quiet.stderr, duration);
+  const silence = parseAudioSilence(quiet.stderr, duration, { joinToleranceSeconds: joinTolerance });
   if (silence.length === 1 && silence[0].start_seconds === 0 && silence[0].end_seconds >= duration - 0.001) throw new Error("Recording audio is entirely below the silence threshold");
-  return { schema_version: RECORDING_AUDIO_VERSION, source_duration_seconds: duration, threshold_db: threshold, silence_duration_seconds: silenceDuration, silence_padding_seconds: padding, envelope_step_seconds: step, silence_intervals: silence, waveform };
+  return { schema_version: RECORDING_AUDIO_VERSION, source_duration_seconds: duration, threshold_db: threshold, threshold_receipt: { noise_floor_db: noiseFloor, speech_reference_db: speechReference, speech_percentile: 75, rule: options.thresholdDb === undefined ? "max(noise-floor+10dB,speech-p75-18dB),clamped[-60,-30]" : "explicit-override" }, silence_duration_seconds: silenceDuration, silence_padding_seconds: padding, silence_join_tolerance_seconds: joinTolerance, envelope_step_seconds: step, silence_intervals: silence, waveform };
 }
 
 export function parseRmsEnvelope(output, { durationSeconds, stepSeconds, maxPoints = 6000 }) {
@@ -54,8 +58,10 @@ export function parseRmsEnvelope(output, { durationSeconds, stepSeconds, maxPoin
   return points;
 }
 
-export function parseAudioSilence(output, durationSeconds) {
+export function parseAudioSilence(output, durationSeconds, { joinToleranceSeconds = 0.005 } = {}) {
   const duration = positive(durationSeconds, "durationSeconds");
+  nonnegative(joinToleranceSeconds, "joinToleranceSeconds");
+  if (joinToleranceSeconds > 0.01) throw new Error("Silence debounce cannot exceed 10ms");
   const intervals = [];
   let start = null;
   for (const line of String(output).split(/\r?\n/)) {
@@ -73,7 +79,7 @@ export function parseAudioSilence(output, durationSeconds) {
     }
   }
   if (start !== null && start < duration) intervals.push({ start_seconds: start, end_seconds: duration });
-  return union(intervals).map(({ start, end }) => ({ start_seconds: start, end_seconds: end }));
+  return union(intervals, joinToleranceSeconds).map(({ start, end }) => ({ start_seconds: start, end_seconds: end }));
 }
 
 /** Align silent ASR boundaries, then trim measured quiet outside voiced words. */
@@ -102,6 +108,14 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08 
   });
   for (let index = 1; index < originalSourceWords.length; index++) if (originalSourceWords[index].start < originalSourceWords[index - 1].end - 1e-6) throw new Error("Accepted words must be ordered and non-overlapping");
   const measuredQuiet = union(analysis.silence_intervals.map((interval) => checkedRange(interval.start_seconds, interval.end_seconds, duration)));
+  if (analysis.waveform !== undefined && !Array.isArray(analysis.waveform)) throw new Error("Invalid acoustic waveform");
+  const waveform = (analysis.waveform ?? []).map((point) => {
+    checkedRange(point.start_seconds, point.end_seconds, duration);
+    if (!Number.isFinite(point.rms_db)) throw new Error("Invalid acoustic waveform level");
+    return point;
+  });
+  const floor = analysis.threshold_receipt?.noise_floor_db;
+  if (floor !== undefined && !Number.isFinite(floor)) throw new Error("Invalid acoustic noise floor");
   const alignedWords = [];
   const droppedWords = [];
   const sourceWords = originalSourceWords.flatMap((word) => {
@@ -109,6 +123,12 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08 
     // a natural intra-word pause and cannot split an accepted ASR token.
     let start = word.start;
     let end = word.end;
+    // A dialogue-relative cutoff can classify a whispered token as quiet. When
+    // its local RMS rises above the measured noise floor, retain it rather than
+    // treating it as an ASR phantom. Boundary alignment stays signal-driven.
+    const whollyQuiet = measuredQuiet.some((quiet) => quiet.start <= word.start && quiet.end >= word.end);
+    const quietSignal = Number.isFinite(floor) && waveform.some((point) => point.start_seconds < word.end && point.end_seconds > word.start && point.rms_db > floor + 6);
+    if (whollyQuiet && quietSignal) return [{ ...word }];
     for (const quiet of measuredQuiet) {
       if (quiet.start <= start && quiet.end > start) start = Math.min(end, quiet.end);
       if (quiet.start < end && quiet.end >= end) end = Math.max(start, quiet.start);
@@ -146,18 +166,18 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08 
     checkedRange(segment.source_start_seconds, segment.source_end_seconds, duration);
     return { ...segment };
   }), ...removals.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "waveform-silence" }))].sort((a, b) => a.source_start_seconds - b.source_start_seconds);
-  return { ...plan, duration_seconds: clock, kept_segments, removed_segments, words, text: words.map((word) => word.word ?? word.text).join(" "), audio_analysis: { schema_version: RECORDING_AUDIO_VERSION, threshold_db: analysis.threshold_db, silence_padding_seconds: padding, removed_seconds: plan.duration_seconds - clock, aligned_words: alignedWords, dropped_words: droppedWords } };
+  return { ...plan, duration_seconds: clock, kept_segments, removed_segments, words, text: words.map((word) => word.word ?? word.text).join(" "), audio_analysis: { schema_version: RECORDING_AUDIO_VERSION, threshold_db: analysis.threshold_db, threshold_receipt: analysis.threshold_receipt, silence_padding_seconds: padding, removed_seconds: plan.duration_seconds - clock, aligned_words: alignedWords, dropped_words: droppedWords } };
 }
 
 function percentile(values, fraction) { return values[Math.min(values.length - 1, Math.floor(values.length * fraction))]; }
 function positive(value, label) { if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) throw new Error(`${label} must be a positive finite number`); return value; }
 function nonnegative(value, label) { if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw new Error(`${label} must be a nonnegative finite number`); return value; }
 function checkedRange(start, end, duration) { if (![start, end].every(Number.isFinite) || start < 0 || end <= start || end > duration + 1e-6) throw new Error("Invalid audio/edit range"); return { start, end }; }
-function union(ranges) {
+function union(ranges, tolerance = 0) {
   const result = [];
   for (const entry of ranges.map((range) => ({ start: range.start ?? range.start_seconds, end: range.end ?? range.end_seconds })).sort((a, b) => a.start - b.start)) {
     const last = result.at(-1);
-    if (last && entry.start <= last.end) last.end = Math.max(last.end, entry.end);
+    if (last && entry.start <= last.end + tolerance) last.end = Math.max(last.end, entry.end);
     else result.push({ ...entry });
   }
   return result;
