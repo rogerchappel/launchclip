@@ -32,10 +32,18 @@ test("renderer cleans unique scratch files after FFmpeg failure", async () => {
   try {
     const input = path.join(directory, "source.mp4");
     await writeFile(input, "original");
+    let calls = 0;
     await assert.rejects(editRecording(input, path.join(directory, "edited.mp4"), plan(), {}, {
       probeMedia: async () => ({ format: { duration: "4" }, streams: [{ codec_type: "video" }, { codec_type: "audio" }] }),
-      run: async () => { throw new Error("render failure"); }
+      run: async (_command, args) => {
+        calls++;
+        assert.equal(args.includes("-filter_complex_script"), false);
+        assert.equal(args[args.indexOf("-threads") + 1], "2");
+        if (calls === 1) await writeFile(args.at(-1), "finished intermediate");
+        else throw new Error("render failure");
+      }
     }), /render failure/);
+    assert.equal(calls, 2);
     assert.deepEqual(await readdir(directory), ["source.mp4"]);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
