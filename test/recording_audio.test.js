@@ -118,3 +118,17 @@ test("measured quiet speech above noise floor survives a dialogue-relative silen
   assert.equal(refined.audio_analysis.dropped_words[0].word, "Uh");
   assert.throws(() => refineRecordingEditPlan(source, { source_duration_seconds: 3, threshold_db: -40, silence_intervals: [], waveform: [{ start_seconds: 0, end_seconds: 1, rms_db: NaN }] }), /waveform level/);
 });
+
+test("a short quiet prefix joins across noise before the requested pause duration gate", async () => {
+  const calls = [];
+  const run = async (command, args) => {
+    calls.push(args);
+    return calls.length === 1
+      ? { stdout: "pts_time:0\nlavfi.astats.Overall.RMS_level=-20", stderr: "" }
+      : { stdout: "", stderr: "silence_start:0.6\nsilence_end:0.98\nsilence_start:0.986\nsilence_end:1.7\nsilence_start:2\nsilence_end:2.1" };
+  };
+  const analysis = await analyzeRecordingAudio("unused.wav", { durationSeconds: 3, silenceDuration: 0.4 }, { run });
+  assert.deepEqual(analysis.silence_intervals, [{ start_seconds: 0.6, end_seconds: 1.7 }]);
+  assert.equal(analysis.silence_join_tolerance_seconds, 0.01);
+  assert.ok(calls[1].some((arg) => arg.includes("silencedetect=noise=-30dB:d=0.01")));
+});
