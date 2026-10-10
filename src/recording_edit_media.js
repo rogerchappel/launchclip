@@ -41,10 +41,13 @@ export async function editRecording(inputPath, outputPath, plan, options = {}, a
     const args = ["-hide_banner", "-nostdin", "-i", input, "-filter_complex_script", filterPath, "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", String(crf), "-preset", "medium", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", rendered];
     await (adapters.run ?? execute)("ffmpeg", args, { maxBuffer: 16 * 1024 * 1024 });
     await stat(rendered);
+    const renderedProbe = await (adapters.probeMedia ?? probeMedia)(rendered);
+    const renderedDuration = Number(renderedProbe.format?.duration);
+    if (!Number.isFinite(renderedDuration) || Math.abs(renderedDuration - plan.duration_seconds) > 0.15) throw new Error("Rendered recording edit duration differs from plan");
     // A final existence check protects files created while rendering.
     try { await stat(output); throw new Error("Recording edit output was created while rendering"); } catch (error) { if (error.code !== "ENOENT") throw error; }
     await link(rendered, output);
-    return { input, output, source_duration_seconds: duration, duration_seconds: plan.duration_seconds, kept_segments: plan.kept_segments.length, changed: plan.removed_segments.length > 0 };
+    return { input, output, source_duration_seconds: duration, duration_seconds: plan.duration_seconds, rendered_duration_seconds: renderedDuration, kept_segments: plan.kept_segments.length, changed: plan.removed_segments.length > 0 };
   } finally { await rm(temporary, { recursive: true, force: true }); }
 }
 

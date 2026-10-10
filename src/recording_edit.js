@@ -24,7 +24,8 @@ export function normalizeRecordingTranscript(transcript) {
 export function planRecordingEdit(transcript, options = {}) {
   const words = normalizeRecordingTranscript(transcript);
   const duration = positive(options.durationSeconds, "durationSeconds");
-  const silenceDuration = positive(options.silenceDuration ?? 0.8, "silenceDuration");
+  const trimSilence = options.silenceDuration !== null;
+  const silenceDuration = trimSilence ? positive(options.silenceDuration ?? 0.8, "silenceDuration") : Infinity;
   const padding = nonnegative(options.silencePadding ?? 0.15, "silencePadding");
   const window = positive(options.retakeWindow ?? 45, "retakeWindow");
   const minimum = positive(options.minRepeatWords ?? 6, "minRepeatWords");
@@ -45,7 +46,7 @@ export function planRecordingEdit(transcript, options = {}) {
   if (takePolicy === "last") {
     for (let earlier = 0; earlier < phrases.length; earlier++) {
       const left = phrases[earlier];
-      if (left.tokens.length < minimum) continue;
+      if (left.tokens.length < Math.min(4, minimum)) continue;
       for (let later = earlier + 1; later < phrases.length; later++) {
         const right = phrases[later];
         if (words[right.first].start - words[left.last].end > window) break;
@@ -66,6 +67,15 @@ export function planRecordingEdit(transcript, options = {}) {
     else groups.push({ start: word.start, end: word.end });
   }
   const ranges = groups.map((group) => ({ start: Math.max(0, group.start - padding), end: Math.min(duration, group.end + padding) }));
+  if (!trimSilence) {
+    for (let index = 0; index < ranges.length; index++) {
+      ranges[index].start = index === 0 ? 0 : ranges[index - 1].end;
+      const nextRetake = retakes.find((retake) => retake.start > groups[index].end);
+      ranges[index].end = nextRetake?.start ?? duration;
+      const precedingRetake = retakes.filter((retake) => retake.end <= groups[index].start).at(-1);
+      if (precedingRetake) ranges[index].start = Math.max(ranges[index].start, precedingRetake.end);
+    }
+  }
   // Never expand speech handles into a rejected spoken take.
   for (const range of ranges) {
     for (const retake of retakes) {
@@ -110,7 +120,7 @@ function isRetake(left, right, minimum) {
   while (prefix < Math.min(left.length, right.length) && left[prefix] === right[prefix]) prefix++;
   const compared = right.slice(0, left.length);
   const similarity = 1 - distance(left, compared) / Math.max(left.length, compared.length);
-  return (prefix >= minimum && prefix >= left.length * 0.8) || (prefix >= 3 && similarity >= 0.8 && Math.min(left.length, right.length) / Math.max(left.length, right.length) >= 0.75);
+  return (left.length < right.length && prefix >= Math.min(4, minimum) && prefix >= left.length * 0.8) || (prefix >= minimum && prefix >= left.length * 0.8) || (prefix >= 3 && similarity >= 0.8 && Math.min(left.length, right.length) / Math.max(left.length, right.length) >= 0.75);
 }
 function distance(left, right) {
   let prior = Array.from({ length: right.length + 1 }, (_, index) => index);
