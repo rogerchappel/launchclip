@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { normalizeRecordingTranscript } from "./recording_edit.js";
 
 const RESPONSE_SCHEMA = {
@@ -36,14 +37,15 @@ export async function identifySemanticRetakes(transcript, options = {}, adapters
   if (typeof decisions === "string") {
     try { decisions = JSON.parse(decisions); } catch { throw new Error("Semantic retake model returned invalid JSON; no cuts applied"); }
   }
-  return validateSemanticRetakes(decisions, words, { retakeWindow });
+  return validateSemanticRetakes({ ...decisions, transcript_hash: semanticTranscriptHash(words) }, words, { retakeWindow });
 }
 
 /** Fail closed on invalid model decisions; output contains only original-time removals. */
 export function validateSemanticRetakes(decisions, transcript, options = {}) {
   const words = normalizeRecordingTranscript(transcript);
   const retakeWindow = windowSeconds(options.retakeWindow ?? 90);
-  const entries = Array.isArray(decisions) ? decisions : decisions?.retakes;
+  if (decisions?.transcript_hash !== semanticTranscriptHash(words)) throw new Error("Semantic retake transcript_hash does not match original words; no cuts applied");
+  const entries = decisions?.retakes;
   if (!Array.isArray(entries)) throw new Error("Semantic retake decisions require a retakes array; no cuts applied");
   const passages = indexedPassages(words);
   const starts = new Set(passages.map((passage) => passage.first_word));
@@ -77,7 +79,11 @@ export function validateSemanticRetakes(decisions, transcript, options = {}) {
       if (overlaps && (entry.later.first_word !== other.earlier.first_word || entry.later.last_word !== other.earlier.last_word)) throw new Error("Semantic retake replacement is partially removed by another decision; no cuts applied");
     }
   }
-  return { retakes, removals: retakes.map(({ earlier, explanation }) => ({ ...earlier, start: words[earlier.first_word].start, end: words[earlier.last_word].end, reason: "semantic-retake", explanation })) };
+  return { transcript_hash: semanticTranscriptHash(words), retakes, removals: retakes.map(({ earlier, explanation }) => ({ ...earlier, start: words[earlier.first_word].start, end: words[earlier.last_word].end, reason: "semantic-retake", explanation })) };
+}
+
+export function semanticTranscriptHash(transcript) {
+  return createHash("sha256").update(JSON.stringify(normalizeRecordingTranscript(transcript))).digest("hex");
 }
 
 export function indexedPassages(words) {
