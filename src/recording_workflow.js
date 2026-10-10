@@ -79,7 +79,7 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
     : options.retakeModel
       ? await (adapters.identifySemanticRetakes ?? identifySemanticRetakes)(transcript, { durationSeconds, retakeWindow: policy.retakeWindow, model: options.retakeModel, baseUrl: options.retakeBaseUrl }, adapters.semantic)
       : { status: "not-requested", retakes: [], removals: [] };
-  const basePlan = planRecordingEdit(transcript, { ...policy, durationSeconds, semanticRetakes: semantic.retakes });
+  const basePlan = planRecordingEdit(transcript, { ...policy, silenceDuration: policy.audioSilence ? null : policy.silenceDuration, durationSeconds, semanticRetakes: semantic.retakes });
   const audio = policy.audioSilence
     ? await (adapters.analyzeRecordingAudio ?? analyzeRecordingAudio)(input, {
         durationSeconds, silenceDuration: policy.audioSilenceDuration,
