@@ -22,14 +22,37 @@ word arrays. Plain text or segment-only timestamps are insufficient for cuts.
 
 The deterministic policy is **last take wins**: remove earlier nearby repeated
 lines/passages and matching unfinished prefixes, retaining the final occurrence.
-Do not rank performances or ask the user to select takes. This is lexical retake
-detection, not unrestricted semantic paraphrase matching; very short or heavily
-reworded restarts can remain. It preserves unique speech in source order.
+Do not rank performances or ask the user to select takes. Preserve unique speech
+in source order. For reworded restarts, first use the active agent to compare
+nearby complete passages in the original normalized transcript. Follow the
+generic receipt contract in `docs/semantic-retakes.md`: compute its transcript
+hash, use original inclusive word indices, keep the later complete restatement,
+and leave uncertain or intentionally contrasting statements alone. Save decisions
+outside the repository and pass `--retake-decisions retakes.json` with the same
+`--recording-transcript` file. Decisions are automated; no take-selection gate.
+Standalone CLI users can instead explicitly select an installed local Ollama
+model with `--retake-model MODEL`. No paid fallback occurs. Without either option,
+the CLI applies lexical matching only; it cannot detect arbitrary paraphrases.
 
-Default silence threshold is 0.8s with 0.15s speech handles. Use
+The transcript-gap fallback uses 0.8s gaps with 0.15s speech handles. Use
 `--silence-duration`, `--silence-padding`, `--retake-window` (90s), and
 `--min-repeat-words` (6) when the recording needs different thresholds.
 `--no-trim-silence` preserves pauses while still applying last-take cleanup.
+Recognized hesitation tokens and abandoned connective starts are removed by
+default; grammatical uses of “but” and “like” remain. `--keep-fillers` disables
+this. Whisper may omit audible hesitations even with a verbatim prompt; the tool
+cannot cut a filler whose word timing is absent. Check the source audio.
+
+Local FFmpeg also measures a bounded RMS waveform and adaptive quiet threshold.
+It controls pause removal instead of pre-cutting transcript gaps, so inaccurate
+ASR timing cannot discard voiced gaps. It trims measured quiet outside spoken
+words, retaining 0.08s handles and
+protecting quiet speech. Defaults use a 0.4s acoustic pause minimum; configure
+`--audio-silence-duration`, `--audio-silence-padding`, or an explicitly inspected
+`--audio-threshold-db`. `--no-audio-silence` disables acoustic trimming.
+`audio-analysis.json` explains the measured threshold and stores the waveform;
+`semantic-retakes.json` records the applied decisions.
+
 Preserve source dimensions and playback speed; do not apply the older portrait
 presenter crop/speed defaults.
 
@@ -78,8 +101,8 @@ windows through `root_media_requests`.
 When this style is requested, define it in the project's `DESIGN.md` and honor
 an existing project style pack first. Use a restrained system:
 
-- Short editorial phrases, a presenter lower-third, occasional learning-pillar
-  cards, a challenge callout and a closing invitation grounded in speech.
+- Short editorial phrases, a presenter lower-third, occasional key-point
+  cards, a relevant callout and a closing invitation grounded in speech.
 - Dark translucent panels, subtle light borders, restrained shadow, one accent
   colour, and clear type hierarchy. Keep panels outside the face/gesture area.
 - Small translation plus opacity, about 0.4–0.5s on entry and 0.25–0.35s on exit,
