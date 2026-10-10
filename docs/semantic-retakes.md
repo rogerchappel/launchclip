@@ -2,7 +2,7 @@
 
 Launch Clip's optional semantic stage detects nearby passages that repeat the same information with different wording. The last take always wins. It does not rank delivery or require a take-selection interface. Literal matching remains available without a model.
 
-`identifySemanticRetakes(transcript, options, adapters)` returns `{retakes, removals}` using **original normalized word indices and source timestamps**. Run it before fillers or silence change word timing. Pass its `retakes` to the recording edit engine as `semanticRetakes`, with the same `retakeWindow` (90 seconds is the semantic default).
+`identifySemanticRetakes(transcript, options, adapters)` returns `{transcript_hash, retakes, removals}` using **original normalized word indices and source timestamps**. Run it before fillers or silence change word timing. Pass its `retakes` to the recording edit engine as `semanticRetakes`, with the same `retakeWindow` (90 seconds is the semantic default).
 
 There are two inference paths:
 
@@ -13,6 +13,7 @@ There are two inference paths:
 
 ```json
 {
+  "transcript_hash": "SHA256 of normalized original transcript words",
   "retakes": [
     {
       "earlier": { "first_word": 0, "last_word": 4 },
@@ -23,6 +24,8 @@ There are two inference paths:
   ]
 }
 ```
+
+Supplied decisions must include `transcript_hash: semanticTranscriptHash(originalTranscript)`. The hash includes wording and word timing; receipts from another transcript fail closed. Local model responses need only the retakes array; the inference adapter attaches the original transcript hash itself.
 
 Indices are inclusive and refer to `normalizeRecordingTranscript(originalTranscript)`. Use `indexedPassages(words)` to obtain allowed passage boundaries. A range may span several consecutive clauses or sentences. Mark only earlier repeated words; unique intervening passages stay in place. Return an empty `retakes` array when uncertain.
 
