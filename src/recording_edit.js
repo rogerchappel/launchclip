@@ -61,6 +61,31 @@ export function planRecordingEdit(transcript, options = {}) {
     }
   }
 
+  // Semantic decisions use the canonical normalized word indexes, before
+  // fillers or lexical retakes alter the transcript. They require no provider.
+  const semanticRetakes = options.semanticRetakes ?? [];
+  if (!Array.isArray(semanticRetakes)) throw new Error("semanticRetakes must be an array");
+  const protectedLater = new Set();
+  for (const decision of semanticRetakes) {
+    for (const range of [decision?.earlier, decision?.later]) {
+      if (!Number.isInteger(range?.first_word) || !Number.isInteger(range?.last_word) || range.first_word < 0 || range.last_word < range.first_word || range.last_word >= words.length) throw new Error("Semantic retake requires valid inclusive word-index ranges");
+    }
+    if (decision.earlier.last_word >= decision.later.first_word || decision.later_complete !== true || typeof decision.explanation !== "string" || !decision.explanation.trim()) throw new Error("Semantic retake requires an earlier range and a complete explained later take");
+    if (words[decision.later.first_word].start - words[decision.earlier.last_word].end > window) throw new Error("Semantic retake exceeds retakeWindow");
+  }
+  for (const decision of semanticRetakes) {
+    const chained = semanticRetakes.some((next) => next.earlier.first_word === decision.later.first_word && next.earlier.last_word === decision.later.last_word);
+    if (!chained) for (let index = decision.later.first_word; index <= decision.later.last_word; index++) protectedLater.add(index);
+  }
+  for (const decision of semanticRetakes) {
+    const { first_word: first, last_word: last } = decision.earlier;
+    for (let index = first; index <= last; index++) {
+      if (protectedLater.has(index)) throw new Error("Semantic retake decisions conflict with a retained later take");
+      rejected.add(index);
+    }
+    explicitCuts.push({ start: words[first].start, end: words[last].end, reason: "semantic-retake" });
+  }
+
   const phrases = [];
   let begin = 0;
   for (let index = 0; index < words.length; index++) {
@@ -73,7 +98,7 @@ export function planRecordingEdit(transcript, options = {}) {
   if (takePolicy === "last") {
     for (let earlier = 0; earlier < phrases.length; earlier++) {
       const left = phrases[earlier];
-      if (left.tokens.length < Math.min(4, minimum)) continue;
+      if (left.tokens.length < Math.min(4, minimum) || Array.from({ length: left.last - left.first + 1 }, (_, offset) => left.first + offset).some((index) => protectedLater.has(index))) continue;
       for (let later = earlier + 1; later < phrases.length; later++) {
         const right = phrases[later];
         if (words[right.first].start - words[left.last].end > window) break;
@@ -98,7 +123,7 @@ export function planRecordingEdit(transcript, options = {}) {
     const prior = cuts.at(-1);
     if (prior && cut.start <= prior.end) {
       prior.end = Math.max(prior.end, cut.end);
-      if (cut.reason === "repeated-take" || (cut.reason === "false-start" && prior.reason === "filler")) prior.reason = cut.reason;
+      if (cutPriority(cut.reason) > cutPriority(prior.reason)) prior.reason = cut.reason;
     } else cuts.push({ ...cut });
   }
   const groups = [];
@@ -142,7 +167,7 @@ export function planRecordingEdit(transcript, options = {}) {
   for (const segment of [...kept_segments, { source_start_seconds: duration, source_end_seconds: duration }]) {
     if (segment.source_start_seconds > cursor + 0.000001) {
       const causes = cuts.filter((cut) => cut.start < segment.source_start_seconds && cut.end > cursor);
-      const reason = causes.find((cut) => cut.reason === "repeated-take")?.reason ?? causes.find((cut) => cut.reason === "false-start")?.reason ?? causes[0]?.reason ?? "silence";
+      const reason = causes.sort((left, right) => cutPriority(right.reason) - cutPriority(left.reason))[0]?.reason ?? "silence";
       removed_segments.push({ source_start_seconds: cursor, source_end_seconds: segment.source_start_seconds, reason });
     }
     cursor = segment.source_end_seconds;
@@ -156,6 +181,7 @@ export function planRecordingEdit(transcript, options = {}) {
   return { schema_version: RECORDING_EDIT_VERSION, source_duration_seconds: duration, duration_seconds: clock, kept_segments, removed_segments, words: remapped, text: remapped.map((word) => word.word).join(" ") };
 }
 
+function cutPriority(reason) { return { "semantic-retake": 4, "repeated-take": 3, "false-start": 2, filler: 1 }[reason] ?? 0; }
 function token(word) { return word.toLowerCase().replace(/[^\p{L}\p{N}]/gu, ""); }
 function isRetake(left, right, minimum) {
   // Require an anchored passage, not a few common words scattered in two lines.
