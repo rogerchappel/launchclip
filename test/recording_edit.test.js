@@ -56,3 +56,22 @@ test("three successive retakes leave only the last and no clipped word", () => {
   assert.equal(plan.words.length, 8);
   assert.ok(plan.words.every((word) => word.start >= 0 && word.end <= plan.duration_seconds));
 });
+test("pause preservation keeps the full source when silence removal is disabled", () => {
+  const plan = planRecordingEdit([...phrase("Hello world.", 2), ...phrase("Let's ship.", 6)], { durationSeconds: 9, silenceDuration: null });
+  assert.equal(plan.duration_seconds, 9);
+  assert.equal(plan.kept_segments.length, 1);
+  assert.equal(plan.removed_segments.length, 0);
+  assert.equal(plan.words[0].start, 2);
+});
+test("short false starts are removed only when the longer restart completes them", () => {
+  const words = [...phrase("You get actual code templates", 1), ...phrase("You get actual code templates and support.", 5)];
+  const plan = planRecordingEdit(words, { durationSeconds: 10 });
+  assert.equal(plan.text, "You get actual code templates and support.");
+});
+test("pause preservation still excises retakes and maps all retained words", () => {
+  const words = [...phrase("Welcome aboard.", 1), ...phrase(passage, 3), ...phrase(passage, 7)];
+  const plan = planRecordingEdit(words, { durationSeconds: 12, silenceDuration: null });
+  assert.equal(plan.text, `Welcome aboard. ${passage}`);
+  assert.equal(plan.kept_segments[0].source_start_seconds, 0);
+  assert.equal(plan.kept_segments.at(-1).source_end_seconds, 12);
+});
