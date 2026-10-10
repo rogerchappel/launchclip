@@ -19,7 +19,7 @@ async function fixture() {
   const adapters = {
     probe: async () => ({ format: { duration: 10 }, streams: [{ codec_type: "video" }, { codec_type: "audio" }] }),
     transcribe: async () => { transcripts++; return { words }; },
-    analyzeRecordingAudio: async () => ({ schema_version: "launchclip.recording-audio.v1", source_duration_seconds: 10, threshold_db: -40, silence_intervals: [], waveform: [] }),
+    analyzeRecordingAudio: async () => ({ schema_version: "launchclip.recording-audio.v1", source_duration_seconds: 10, threshold_db: -40, silence_intervals: [{ start_seconds: 0, end_seconds: 1 }, { start_seconds: 3, end_seconds: 6 }, { start_seconds: 8, end_seconds: 10 }], waveform: [] }),
     editRecording: async (_input, output, plan) => { renders++; await writeFile(output, "edited recording"); return { rendered_duration_seconds: plan.duration_seconds }; }
   };
   return { directory, input, words, adapters, renders: () => renders, transcripts: () => transcripts };
