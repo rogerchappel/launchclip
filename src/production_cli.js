@@ -13,6 +13,7 @@ import { critiqueProduction, FREE_VISION_UNAVAILABLE_CODE } from "./production_c
 import { repairProduction } from "./production_repair.js";
 import { analyzeSourceMedia } from "./source_media_analysis.js";
 import { prepareSourceMedia } from "./production_source_media.js";
+import { recordingOptions } from "./recording_workflow.js";
 import { withProductionLease } from "./job_store.js";
 import { resolveProductionEntities } from "./entity_resolution.js";
 import { openProductionPreview } from "./production_preview.js";
@@ -364,6 +365,8 @@ function entityOptions(flags) {
 
 function sourcePreprocessOptions(flags) {
   return {
+    editRecording: Boolean(flags["edit-recording"]),
+    recording: recordingOptions(flags),
     trimSilence: !flags["no-trim-silence"],
     silenceDuration: numberOr(flags["silence-duration"], 0.45),
     silencePadding: numberOr(flags["silence-padding"], 0.12),
