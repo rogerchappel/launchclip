@@ -83,3 +83,15 @@ test("concrete Shipmode promises outrank biographies and rhetorical mentions acr
   assert.ok(plan.cards.every((card) => !/might die|No shiny/.test(card.spoken_line)));
   assert.equal(createBrollPlan({ segments: segments.filter((entry) => /might die|No shiny/.test(entry.text)) }).cards.length, 0);
 });
+
+test("recorded, approved and placed capture states render completed checklist boxes", () => {
+  const plan = createBrollPlan([{ word: "agent", start: 0, end: 1 }]);
+  for (const status of ["recorded", "approved", "placed", "captured"]) {
+    plan.cards[0].status = status;
+    assert.match(renderBrollChecklist(plan), new RegExp(`\\[x\\] high priority — ${status}`));
+  }
+  for (const status of ["planned", "rejected"]) {
+    plan.cards[0].status = status;
+    assert.match(renderBrollChecklist(plan), new RegExp(`\\[ \\] high priority — ${status}`));
+  }
+});
