@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-const KINDS = ['media-window', 'checklist', 'step-rail', 'callout', 'audience-grid', 'trend-chart'];
+const KINDS = ['media-window', 'checklist', 'step-rail', 'callout', 'audience-grid', 'trend-chart', 'metric', 'progress'];
 const escape = value => String(value).replace(/[&<>"']/g, char => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char]));
 const js = value => JSON.stringify(value).replace(/</g, '\\u003c');
 function object(value, label, keys) {
@@ -27,10 +27,35 @@ function localMedia(media) {
   if (media.kind === 'image' && media.sourceStart !== undefined) throw new Error('sourceStart is only for video');
 }
 
+function series(config, label, duration) {
+  if (!['illustration', 'data'].includes(config.mode)) throw new Error(`${label}.mode must be illustration or data`);
+  if (config.mode === 'data') text(config.source, `${label}.source for real data`, 80);
+  else if (config.source !== undefined) throw new Error('illustration cannot claim a real data source');
+  if (!Array.isArray(config.values) || config.values.length < 1 || config.values.length > 8) throw new Error(`${label}.values must contain 1–8 entries`);
+  let previous = -1;
+  config.values.forEach((entry, i) => {
+    object(entry, `${label}.values[${i}]`, ['value', 'at']);
+    number(entry.value, 'value', -1_000_000_000, 1_000_000_000);
+    number(entry.at, 'at', .28, duration - .8);
+    if (entry.at <= previous || (previous >= 0 && entry.at - previous + 1e-9 < .65)) throw new Error('value times must increase with at least 0.65s between events');
+    previous = entry.at;
+  });
+  return config.mode === 'illustration' ? 'Illustration · example values' : `Source: ${config.source}`;
+}
+
+// Text changes are finite timeline states, not callbacks or wall-clock work.
+// They restore even when a renderer seeks backwards with events suppressed.
+function textFrames(motion, selector, from, to, format, time) {
+  for (let frame = 0; frame <= 18; frame++) {
+    const progress = frame / 18, eased = 1 - (1 - progress) ** 3;
+    motion.push(`tl.set(${js(selector)}, {textContent:${js(format(from + (to - from) * eased))}}, ${time + frame / 30});`);
+  }
+}
+
 // Skill-local authoring helper, not a production API. The host owns its paused
 // GSAP timeline and places these fragments directly inside its composition root.
 export function buildEditorialModule(input) {
-  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart']);
+  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress']);
   if (!/^[a-z][a-z0-9-]{0,59}$/.test(input.id ?? '')) throw new Error('id must be a unique lowercase DOM-safe identifier');
   if (!KINDS.includes(input.kind)) throw new Error(`kind must be ${KINDS.join(', ')}`);
   if (!['16:9', '9:16'].includes(input.aspect)) throw new Error('aspect must be 16:9 or 9:16');
@@ -46,8 +71,8 @@ export function buildEditorialModule(input) {
   text(input.title, 'title', 54);
   const accent = input.accent ?? '#FF6A00';
   if (!/^#[0-9a-fA-F]{6}$/.test(accent)) throw new Error('accent must be a six-digit hex color');
-  const allowed = {'media-window': ['media'], checklist: ['rows'], 'step-rail': ['steps'], callout: ['body'], 'audience-grid': ['audience'], 'trend-chart': ['chart']}[input.kind];
-  for (const key of ['media', 'rows', 'steps', 'body', 'audience', 'chart']) if (input[key] !== undefined && !allowed.includes(key)) throw new Error(`${input.kind} does not accept ${key}`);
+  const allowed = {'media-window': ['media'], checklist: ['rows'], 'step-rail': ['steps'], callout: ['body'], 'audience-grid': ['audience'], 'trend-chart': ['chart'], metric: ['metric'], progress: ['progress']}[input.kind];
+  for (const key of ['media', 'rows', 'steps', 'body', 'audience', 'chart', 'metric', 'progress']) if (input[key] !== undefined && !allowed.includes(key)) throw new Error(`${input.kind} does not accept ${key}`);
   const statusLabels = {pending: 'Pending', active: 'Active', done: 'Done', ...(input.statusLabels ?? {})};
   if (input.statusLabels !== undefined) {
     if (input.kind !== 'checklist') throw new Error('statusLabels is only for checklist');
@@ -97,8 +122,9 @@ export function buildEditorialModule(input) {
       if (!Number.isInteger(columns) || columns > tiles.length) throw new Error('columns must be an integer no larger than the tile count');
       const cellWidth = (rect.width - 48 - 16 * (columns - 1)) / columns;
       const cellHeight = font >= 32 ? 180 : 160, labelFont = Math.max(22, font - 6);
-      if (cellWidth < 130 || rect.height < header + 55 + 48 + Math.ceil(tiles.length / columns) * (cellHeight + 16)) throw new Error('audience grid does not fit rect; use fewer tiles/columns or a larger rect');
-      css += `#${id} .ui-note{margin:0;padding:0 24px 20px;color:#d3d6dd;font-size:22px;line-height:1.3}#${id} .ui-audience{display:grid;grid-template-columns:repeat(${columns},minmax(0,1fr));gap:16px;padding:0 24px 24px}#${id} .ui-viewer{height:${cellHeight}px;padding:16px;border:2px solid #535761;border-radius:14px;background:#24272e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;opacity:.65}#${id} .ui-avatar{font-size:52px;line-height:1.1}#${id} .ui-viewer-label{font-size:${labelFont}px;text-align:center;overflow-wrap:break-word}`;
+      const rowCount = Math.ceil(tiles.length / columns);
+      if (cellWidth < 130 || rect.height < header + 55 + 24 + rowCount * cellHeight + (rowCount - 1) * 16) throw new Error('audience grid does not fit rect; use fewer tiles/columns or a larger rect');
+      css += `#${id} .ui-note{margin:0;padding:0 24px 20px;color:#d3d6dd;font-size:22px;line-height:1.3}#${id} .ui-audience{display:grid;grid-template-columns:repeat(${columns},minmax(0,1fr));gap:16px;padding:0 24px 24px}#${id} .ui-viewer{height:${cellHeight}px;padding:16px;border:2px solid #535761;border-radius:14px;background:#24272e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;opacity:0}#${id} .ui-avatar{font-size:52px;line-height:1.1}#${id} .ui-viewer-label{font-size:${labelFont}px;text-align:center;overflow-wrap:break-word}`;
       body += '<p class="ui-note">Illustration · audience tiles</p><div class="ui-audience">';
       tiles.forEach((tile, i) => {
         object(tile, `audience.tiles[${i}]`, ['label', 'emoji', 'at']);
@@ -109,7 +135,7 @@ export function buildEditorialModule(input) {
         if (Array.from(emoji).length > 8 || /[\r\n]/.test(emoji)) throw new Error('tile.emoji must be a compact icon accent');
         const time = start + at(tile.at, 'tile.at');
         body += `<div id="${id}-viewer-${i}" class="ui-viewer"><span class="ui-avatar" aria-hidden="true">${escape(emoji)}</span><span class="ui-viewer-label">${escape(tile.label)}</span></div>`;
-        motion.push(`tl.fromTo(${js(`#${id}-viewer-${i}`)}, {opacity:0.65,y:8}, {opacity:1,y:0,borderColor:${js(accent)},duration:0.24,ease:'power3.out'}, ${time});`);
+        motion.push(`tl.fromTo(${js(`#${id}-viewer-${i}`)}, {opacity:0,y:8}, {opacity:1,y:0,borderColor:${js(accent)},duration:0.24,ease:'power3.out'}, ${time});`);
         events.push({id: `${id}-viewer-${i}-settle`, time: time + .24});
       });
       body += '</div>';
@@ -151,6 +177,49 @@ export function buildEditorialModule(input) {
         events.push({id: `${id}-point-${i}-settle`, time: time + .38});
       });
       body += '</div>';
+    } else if (input.kind === 'metric' || input.kind === 'progress') {
+      const config = input[input.kind], isMetric = input.kind === 'metric';
+      object(config, input.kind, isMetric ? ['mode', 'unit', 'format', 'currency', 'decimals', 'values', 'source'] : ['mode', 'values', 'max', 'label', 'source']);
+      const attribution = series(config, input.kind, duration);
+      let format;
+      if (isMetric) {
+        text(config.unit, 'metric.unit', 18);
+        if (!['number', 'percent', 'currency'].includes(config.format)) throw new Error('metric.format must be number, percent or currency');
+        const decimals = config.decimals ?? (config.format === 'currency' ? 2 : 0);
+        number(decimals, 'metric.decimals', 0, 2);
+        if (!Number.isInteger(decimals)) throw new Error('metric.decimals must be an integer');
+        if (config.format === 'currency') {
+          if (!/^[A-Z]{3}$/.test(config.currency ?? '')) throw new Error('metric.currency requires an explicit three-letter code');
+          const formatter = new Intl.NumberFormat('en-US', {style: 'currency', currency: config.currency, currencyDisplay: 'code', minimumFractionDigits: decimals, maximumFractionDigits: decimals});
+          format = value => formatter.format(value);
+        } else {
+          if (config.currency !== undefined) throw new Error('currency is only for currency format');
+          format = value => value.toLocaleString('en-US', {minimumFractionDigits: decimals, maximumFractionDigits: decimals}) + (config.format === 'percent' ? '%' : '');
+        }
+        if (config.format === 'percent' && config.values.some(entry => entry.value < 0 || entry.value > 100)) throw new Error('percent values must be between 0 and 100');
+      } else {
+        const max = config.max ?? 100;
+        number(max, 'progress.max', 1, 1_000_000_000);
+        if (config.label !== undefined) text(config.label, 'progress.label', 32);
+        if (config.values.some(entry => entry.value < 0 || entry.value > max)) throw new Error('progress values must be between 0 and max');
+        format = value => `${Math.round(value / max * 100)}%`;
+      }
+      const noteLines = Math.ceil(attribution.length / Math.floor((rect.width - 48) / (22 * .65)));
+      if (rect.height < header + noteLines * 29 + 24 + (isMetric ? 110 : 160)) throw new Error(`${input.kind} rect too short`);
+      const numberFont = Math.max(36, Math.min(64, Math.floor((rect.width - 48) / (Math.max(...config.values.map(entry => format(entry.value).length)) * .68))));
+      if (Math.max(...config.values.map(entry => format(entry.value).length)) * numberFont * .68 > rect.width - 48) throw new Error('formatted metric too wide for rect');
+      css += `#${id} .ui-note{margin:0;padding:0 24px 20px;color:#d3d6dd;font-size:22px;line-height:1.3;overflow-wrap:break-word}#${id} .ui-number{margin:0;padding:0 24px 12px;font-size:${numberFont}px;font-weight:750;line-height:1.1;font-variant-numeric:tabular-nums;white-space:nowrap}#${id} .ui-number-unit{padding:0 24px 20px;font-size:22px;color:#d3d6dd}#${id} .ui-progress-track{height:16px;margin:0 24px 24px;background:#474c56;border-radius:8px;overflow:hidden}#${id} .ui-progress-fill{height:100%;background:${accent};transform-origin:left}`;
+      body += `<p class="ui-note">${escape(attribution)}</p><div id="${id}-number" class="ui-number">${escape(format(config.values[0].value))}</div><div class="ui-number-unit">${escape(isMetric ? config.unit : (config.label ?? 'Progress'))}</div>`;
+      if (!isMetric) body += '<div class="ui-progress-track"><div class="ui-progress-fill"></div></div>';
+      motion.push(`tl.set(${js(`#${id}-number`)}, {textContent:${js(format(config.values[0].value))}}, ${start});`);
+      if (!isMetric) motion.push(`tl.set(${js(`${selector} .ui-progress-fill`)}, {scaleX:${config.values[0].value / (config.max ?? 100)}}, ${start});`);
+      config.values.forEach((entry, i) => {
+        const time = start + entry.at;
+        if (i === 0) motion.push(`tl.fromTo(${js(`#${id}-number`)}, {opacity:0.7}, {opacity:1,duration:0.2}, ${time});`);
+        else textFrames(motion, `#${id}-number`, config.values[i - 1].value, entry.value, format, time);
+        if (!isMetric && i > 0) motion.push(`tl.to(${js(`${selector} .ui-progress-fill`)}, {scaleX:${entry.value / (config.max ?? 100)},duration:0.6,ease:'power2.inOut'}, ${time});`);
+        events.push({id: `${id}-value-${i}-settle`, time: time + (i ? .6 : .2)});
+      });
     } else if (input.kind === 'checklist') {
       if (!Array.isArray(input.rows) || input.rows.length < 1 || input.rows.length > 6) throw new Error('rows must contain 1–6 entries; split longer lists');
       const rowHeight = font * 2.5 + 28;
