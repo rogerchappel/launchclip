@@ -90,8 +90,13 @@ this is an automated stage, not a request for human take selection.
 Outer frames are trimmed to the chosen voiced word boundaries. Wordless islands
 are removed throughout the edit, including tiny remnants between rejected takes.
 Genuine short words are preserved; there is no blanket minimum clip duration.
-Handles directly facing rejected takes or fillers are trimmed to retained word
-bounds, removing residual audio even when ASR does not recognize a word. These
+Handles directly facing rejected takes or fillers prefer the nearest verified
+quiet separator fully outside accepted words, within the original retained range
+and at most 200ms from the aligned word boundary. Cuts land inside that gap with
+padding clamped to half its duration; without a qualifying separator they fall
+back to aligned word bounds. Precise boundary quiet uses nondebounced 10ms
+detection; the normal 0.4s acoustic pause minimum remains unchanged. This removes
+residual audio even when ASR does not recognize a word. These
 removed handles are protected from later QA restoration. PCM join checks detect
 isolated click candidates; they do not establish that every sustained phoneme or
 breath is correct. Inspect source/output audio context for suspicious residue and
