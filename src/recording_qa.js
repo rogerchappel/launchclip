@@ -30,7 +30,13 @@ export function assessRecordingQa(plan, renderedTranscript, options = {}) {
       const segment = plan.kept_segments[finding.segment_index];
       const time = finding.edge === "start" ? segment.start_seconds : segment.end_seconds;
       issues.push({ kind: "clipped-boundary", segment_index: finding.segment_index, edge: finding.edge, start_seconds: time, end_seconds: time, explanation: finding.explanation, repairable: true });
-      repair_requests.push({ kind: "expand-boundary", segment_index: finding.segment_index, edge: finding.edge, seconds: finding.seconds, explanation: finding.explanation });
+      let evidence;
+      if (finding.evidence !== undefined) {
+        const proof = finding.evidence;
+        if (proof?.acoustic_proven !== true || proof?.retranscription_proven !== true || !explanation(proof.source_word?.word) || !Number.isFinite(proof.source_word?.start) || !Number.isFinite(proof.source_word?.end) || proof.source_word.start < 0 || proof.source_word.end <= proof.source_word.start) throw new Error("Invalid independently proven acoustic source-word evidence");
+        evidence = { acoustic_proven: true, retranscription_proven: true, source_word: { word: proof.source_word.word, start: proof.source_word.start, end: proof.source_word.end } };
+      }
+      repair_requests.push({ kind: "expand-boundary", segment_index: finding.segment_index, edge: finding.edge, seconds: finding.seconds, explanation: finding.explanation, ...(evidence ? { evidence } : {}) });
     }
   }
   let coherence = "pending";
