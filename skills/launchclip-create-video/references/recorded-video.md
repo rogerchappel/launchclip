@@ -238,6 +238,8 @@ redrawing controls, connectors or mechanical metaphors for each beat. Prefer:
 - **Takeaway card:** emphasize one short conclusion, then return to the speaker.
   It is an accent, not a replacement for all visual explanation.
 
+For the bundled module catalog and integration contract, read
+[editorial-ui-modules.md](editorial-ui-modules.md) when authoring these modules.
 Prefer bundled LaunchClip modules and existing media-window framing. An already
 available, appropriate component library may supply a module, but do not imply
 that a library is installed, integrate unreviewed remote code, or add dependencies
