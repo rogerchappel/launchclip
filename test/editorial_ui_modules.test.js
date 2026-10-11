@@ -286,3 +286,29 @@ test('code snippets use bounded typed tokens preserving spacing and rejecting ex
   for(const tokens of [[{text:'bad',type:'html'}],[{text:'a\nb',type:'plain'}],[{text:'x'.repeat(80),type:'plain'}]]) assert.throws(()=>buildEditorialModule({...expressive,kind:'code-snippet',code:{lines:[{at:1,tokens}]}}));
   assert.throws(()=>buildEditorialModule({...expressive,kind:'code-snippet',code:{lines:Array(4).fill(code.lines[0])}}),/1–3/);
 });
+
+test('excerpt windows keep fixed chrome and safely focus bounded highlighted text', () => {
+  const excerpt={mode:'illustration',lines:[{segments:[{text:'Build a useful thing.'}]},{segments:[{text:'Then '},{text:'make it clear.',highlight:true}]}],focus:{line:1,scale:1.2,at:2}};
+  const result=buildEditorialModule({...expressive,kind:'excerpt-window',excerpt});
+  assert.match(result.html,/Illustration · text excerpt/);assert.match(result.html,/ui-excerpt-highlight">make it clear/);
+  const focus=commands(result).find(call=>call[0]==='to'&&call[1]==='#reach-excerpt');
+  assert.equal(focus[2].scale,1.2);assert.equal(focus.at(-1),72);assert.equal(result.events.at(-1).time,72.5);
+  assert.ok(focus[2].x>=0&&focus[2].y>=0);
+  assert.doesNotMatch(result.motion,/\.ui-bar|fetch|onUpdate|Date\./);
+  for(const bad of [{mode:'data'},{focus:{...excerpt.focus,scale:1.4}},{focus:{...excerpt.focus,line:2}},{lines:[{segments:[{text:'x'.repeat(120)}]}]}]) assert.throws(()=>buildEditorialModule({...expressive,kind:'excerpt-window',excerpt:{...excerpt,...bad}}));
+  const escaped=buildEditorialModule({...expressive,kind:'excerpt-window',excerpt:{...excerpt,lines:[{segments:[{text:'<script>bad()</script>'}]}],focus:{...excerpt.focus,line:0}}});
+  assert.doesNotMatch(escaped.html,/<script>/);assert.doesNotMatch(escaped.motion,/bad\(/);
+});
+
+test('callout headings and timed underline emphasis have separate seekable acquisition', () => {
+  const input={...expressive,kind:'callout',treatment:{icon:'warning',at:.6,segments:[{text:'Check '},{text:'before release',highlight:true,underlineAt:2}]}};
+  const result=buildEditorialModule(input),calls=commands(result);
+  assert.match(result.html,/ui-underlined/);
+  assert.ok(calls.some(call=>call[1]==='#reach-heading'&&call[0]==='fromTo'&&call[2].y===6));
+  assert.ok(calls.some(call=>call[1]==='#reach-underline-1'&&call[0]==='set'&&call[2].scaleX===0&&call.at(-1)===70));
+  assert.ok(calls.some(call=>call[1]==='#reach-underline-1'&&call[0]==='to'&&call[2].scaleX===1&&call.at(-1)===72));
+  assert.equal(result.events.find(event=>event.id==='reach-underline-1-settle').time,72.28);
+  for(const icon of ['check','warning']) assert.match(buildEditorialModule({...input,treatment:{...input.treatment,icon}}).html,/<svg/);
+  assert.throws(()=>buildEditorialModule({...input,treatment:{...input.treatment,segments:[{text:'early',underlineAt:.7}]}}),/follow treatment/);
+  assert.throws(()=>buildEditorialModule({...input,rect:{x:80,y:80,width:420,height:500},treatment:{segments:[{text:'very long unbroken emphasized phrase needing two full lines',underlineAt:2}]}}),/fit one line/);
+});
