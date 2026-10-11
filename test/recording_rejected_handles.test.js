@@ -140,3 +140,15 @@ test("boundary plan limits PCM extraction to source-mapped rejected-facing handl
   assert.ok(calls.filter((call) => call.args.includes("f32le")).every((call) => call.options.maxBuffer === 32000));
   assert.equal(refineRecordingEditPlan(source, analysis, { trimEdges: false }).audio_analysis.unconfirmed_boundaries.length, 0);
 });
+
+test("fine windows follow acoustically aligned onset instead of stale broad ASR bounds", async () => {
+  const source = fixture("filler");
+  const analysis = await analyzeRecordingAudio("fixture.wav", { durationSeconds: 10, thresholdDb: -40, boundaryPlan: source }, { run: async (_, args) => {
+    if (args.includes("f32le")) return { stdout: Buffer.alloc(Math.round(Number(args[args.indexOf("-t") + 1]) * 16000) * 4), stderr: "" };
+    return args[args.indexOf("-af") + 1].includes("astats") ? { stdout: "pts_time:0\nlavfi.astats.Overall.RMS_level=-60\npts_time:0.1\nlavfi.astats.Overall.RMS_level=-20", stderr: "" } : { stdout: "", stderr: "silence_start: 3.4\nsilence_end: 3.83" };
+  } });
+  assert.equal(analysis.boundary_silence_receipt.windows[1].end, 3.83);
+  const refined = refineRecordingEditPlan(source, analysis, { trimEdges: false });
+  assert.equal(refined.audio_analysis.unconfirmed_boundaries.length, 0);
+  assert.equal(refined.audio_analysis.aligned_words[0].aligned_start_seconds, 3.83);
+});
