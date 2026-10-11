@@ -203,7 +203,6 @@ export function buildEditorialModule(input) {
           if (config.currency !== undefined) throw new Error('currency is only for currency format');
           format = value => value.toLocaleString('en-US', {minimumFractionDigits: decimals, maximumFractionDigits: decimals}) + (config.format === 'percent' ? '%' : '');
         }
-        if (config.format === 'percent' && config.values.some(entry => entry.value < 0 || entry.value > 100)) throw new Error('percent values must be between 0 and 100');
       } else {
         const max = config.max ?? 100;
         number(max, 'progress.max', 1, 1_000_000_000);
