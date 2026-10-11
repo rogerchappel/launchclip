@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { prepareRecording, recordingOptions, writeBrollPlan } from "../src/recording_workflow.js";
 import { runCli } from "../src/cli.js";
+import { recordingQaEvidenceHash } from "../src/recording_qa.js";
 
 function phrase(text, start) {
   return text.split(" ").map((word, index) => ({ word, start: start + index * 0.3, end: start + index * 0.3 + 0.2 }));
@@ -15,12 +16,16 @@ async function fixture() {
   await writeFile(input, "original recording");
   const words = [...phrase("Engineering principles help us build reliable products.", 1), ...phrase("Engineering principles help us build reliable products.", 6)];
   let renders = 0;
+  let renderedPlan;
   let transcripts = 0;
   const adapters = {
     probe: async () => ({ format: { duration: 10 }, streams: [{ codec_type: "video" }, { codec_type: "audio" }] }),
     transcribe: async () => { transcripts++; return { words }; },
     analyzeRecordingAudio: async () => ({ schema_version: "launchclip.recording-audio.v1", source_duration_seconds: 10, threshold_db: -40, silence_intervals: [{ start_seconds: 0, end_seconds: 1 }, { start_seconds: 3, end_seconds: 6 }, { start_seconds: 8, end_seconds: 10 }], waveform: [] }),
-    editRecording: async (_input, output, plan) => { renders++; await writeFile(output, "edited recording"); return { rendered_duration_seconds: plan.duration_seconds }; }
+    transcribeRendered: async () => ({ words: renderedPlan.words }),
+    analyzeRecordingJoins: async () => ({ checked: true, issues: [] }),
+    identifyRecordingCoherence: async (plan, actual, options) => ({ evidence_hash: recordingQaEvidenceHash(plan, actual, options.mediaSha256, options.sourceTranscript, options.acoustic), coverage_complete: true, findings: [], transcript_resolutions: [], acoustic_resolutions: [] }),
+    editRecording: async (_input, output, plan) => { renderedPlan = plan; renders++; await writeFile(output, "edited recording"); return { rendered_duration_seconds: plan.duration_seconds }; }
   };
   return { directory, input, words, adapters, renders: () => renders, transcripts: () => transcripts };
 }
@@ -108,4 +113,24 @@ test("capture conflicts and incomplete prior exports fail before rendering or ch
   await assert.rejects(() => prepareRecording(f.input, { out }, f.adapters), /matching complete cache/);
   assert.equal(await readFile(path.join(out, "base-edit.mp4"), "utf8"), "Previous export");
   assert.equal(f.renders(), 0);
+});
+
+test("pending QA withholds base edit and resumes automatically from bound agent evidence", async () => {
+  const f = await fixture();
+  delete f.adapters.identifyRecordingCoherence;
+  const options = { out: path.join(f.directory, "qa-edit") };
+  const pending = await prepareRecording(f.input, options, f.adapters);
+  assert.equal(pending.status, "needs-semantic-review");
+  assert.equal(pending.output, undefined);
+  await assert.rejects(() => readFile(path.join(options.out, "base-edit.mp4")), { code: "ENOENT" });
+  assert.equal(await readFile(pending.candidate, "utf8"), "edited recording");
+  const reviews = path.join(f.directory, "qa-reviews.json");
+  await writeFile(reviews, JSON.stringify({ reviews: [{ evidence_hash: pending.qa.evidence_hash, coverage_complete: true, findings: [], transcript_resolutions: [], acoustic_resolutions: [] }] }));
+  const accepted = await prepareRecording(f.input, { ...options, qaDecisions: reviews }, f.adapters);
+  assert.equal(accepted.status, "ready");
+  assert.equal(accepted.qa_status, "passed");
+  assert.equal(f.renders(), 1);
+  assert.equal(f.transcripts(), 1);
+  assert.ok(accepted.files.rendered_transcript.endsWith("rendered-transcript.json"));
+  assert.equal((await prepareRecording(f.input, { ...options, qaDecisions: reviews }, f.adapters)).cached, true);
 });
