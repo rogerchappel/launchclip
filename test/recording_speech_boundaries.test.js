@@ -35,7 +35,8 @@ test("chosen speech removes initial and tail frame islands, rejected intro resid
   assert.deepEqual(refined.removed_segments.find((range) => range.reason === "repeated-take"), source.removed_segments[0]);
   assert.equal(refined.removed_segments.filter((range) => range.reason === "wordless-range").length, 3);
   assert.ok(Math.abs(refined.audio_analysis.wordless_removed_seconds - 1.68) < 1e-9);
-  assert.ok(Math.abs(refined.audio_analysis.speech_boundary_removed_seconds - 1.2) < 1e-9);
+  assert.ok(Math.abs(refined.audio_analysis.speech_boundary_removed_seconds - 1) < 1e-9);
+  assert.ok(Math.abs(refined.audio_analysis.rejected_splice_removed_seconds - 0.2) < 1e-9);
   assert.deepEqual(source, before);
 });
 
