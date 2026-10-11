@@ -194,3 +194,42 @@ test('numbered steps remain optional, bounded and distinct from checklist state'
   assert.match(media.html, /^<video[^>]*><\/video><section/);
   assert.match(media.css, /\.ui-bar\{background:rgba/);
 });
+
+test('directional motion preserves a readable rest pose and exposes absolute travel windows', () => {
+  const input = {...base, kind: 'callout', body: 'Carry this idea into the next beat.', motion: {enter: 'right', exit: 'left', distance: 64, enterDuration: .4, exitDuration: .26, scale: .98}};
+  const result = buildEditorialModule(input), calls = commands(result);
+  assert.deepEqual(result, buildEditorialModule(input));
+  const entry = calls.find(call => call[0] === 'fromTo' && call[1] === '#learn');
+  assert.equal(entry[2].x, 64);
+  assert.equal(entry[2].scale, .98);
+  assert.equal(entry[3].x, 0);
+  assert.equal(entry[3].y, 0);
+  assert.equal(entry[3].scale, 1);
+  const exit = calls.find(call => call[0] === 'to' && call[1] === '#learn');
+  assert.equal(exit[2].x, -64);
+  assert.equal(exit.at(-1), 97.74);
+  assert.deepEqual(result.layout.motion, {enterEnd: 70.4, exitStart: 97.74, end: 98});
+  assert.equal(result.events[0].time, 70.4);
+  assert.ok(calls.some(call => call[0] === 'set' && call[1] === '#learn' && call.at(-1) === 98 && call[2].opacity === 0));
+  assert.doesNotMatch(result.motion, /filter|onUpdate|setTimeout|Math.random/);
+});
+
+test('directional media and chrome share the same screen pivot and timing', () => {
+  const result = buildEditorialModule({...base, kind: 'media-window', media: {kind: 'image', src: 'assets/demo.png'}, motion: {enter: 'down', exit: 'up', scale: .95}});
+  assert.match(result.html, /^<img[^>]*><section/);
+  const entries = commands(result).filter(call => call[0] === 'fromTo');
+  assert.equal(entries.length, 2);
+  assert.equal(entries[0][2].transformOrigin, '0px 0px');
+  assert.equal(entries[1][2].transformOrigin, '0px -48px');
+  assert.equal(entries[0][2].y, entries[1][2].y);
+  assert.deepEqual(entries[0][3], entries[1][3]);
+  assert.equal(entries[0].at(-1), entries[1].at(-1));
+});
+
+test('motion rejects unsafe travel, unsupported effects and unreadable timing', () => {
+  const input = {...base, kind: 'callout', body: 'Clear next step.'};
+  for (const motion of [{enter: 'diagonal'}, {exit: '<script>'}, {distance: 97}, {distance: -1}, {scale: 1.1}, {enterDuration: .7}, {exitDuration: .1}, {filter: 'blur(4px)'}]) assert.throws(() => buildEditorialModule({...input, motion}), /motion/);
+  assert.throws(() => buildEditorialModule({...input, duration: 1, motion: {enterDuration: .6, exitDuration: .5}}), /readable hold/);
+  assert.throws(() => buildEditorialModule({...base, motion: {enterDuration: .6}, rows: [{label: 'Too early', status: 'active', at: .4}]}), /row.at/);
+  assert.throws(() => buildEditorialModule({...expressive, duration: 4, kind: 'metric', motion: {exitDuration: .5}, metric: {mode: 'illustration', unit: 'views', format: 'number', values: [{value: 12, at: .6}, {value: 36, at: 3}]}}), /at/);
+});
