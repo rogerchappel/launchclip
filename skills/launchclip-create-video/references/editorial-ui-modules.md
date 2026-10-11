@@ -207,3 +207,82 @@ Verify label wrapping, tick alignment, progress endpoints, intentional track ove
 presenter/gesture/caption clearance and crop at the actual delivery size. Review
 normal-speed motion and encoded sound separately from numerical bounds checks.
 A module template or passing checker cannot establish that the edit is usable.
+
+## Choreograph connected sequences
+
+Plan a short sequence before choosing each module's entrance. Name the visible
+subject, its initial state, what changes, what carries into the next beat, and
+where the audience gets time to read the result. Keep a meaningful shared object
+or frame alive across related beats using one stable DOM identity and the host's
+paused timeline. For example, a captured media window can remain while a selected
+item gains a callout and then becomes the next focus. Replacing every panel with
+another directional panel still produces a stack of cards; it does not prove an
+object handoff. These fragments supply bounded travel, not automatic shared-object
+morphing or a camera engine.
+
+Choose placement from the actual footage's face, gaze, negative space, and caption
+area. Maintain the same stage and presenter crop across related beats. A change
+of emphasis may merit one restrained presenter punch-in; a quiet spoken passage
+may return to a clean presenter frame. Do not switch left and right on every beat
+or pulse the presenter merely to add activity. A reset should follow a narrative
+boundary, a useful scale change, or a deliberately quiet moment.
+
+An optional common `motion` field varies arrival and departure without moving the
+reading pose:
+
+```json
+"motion": {
+  "enter": "right",
+  "exit": "left",
+  "distance": 64,
+  "enterDuration": 0.4,
+  "exitDuration": 0.26,
+  "scale": 0.98
+}
+```
+
+Directions name the starting or ending offset relative to `rect`, not the side
+where the module must be placed. `left`, `right`, `up`, `down`, and `none` are
+supported. Travel distance is 0–96 pixels; arrival duration is 0.2–0.6 seconds;
+departure duration is 0.16–0.5 seconds; the travel scale is 0.92–1. The module
+rests at its supplied rectangle with scale 1. Supplying `motion` defaults to
+up/up, 48 pixels, 0.36/0.28 seconds, and scale 1. Omitting it preserves the
+original 18-pixel upward settle and short upward exit. Entrance decelerates;
+departure accelerates. The helper rejects motion that leaves less than 0.5 seconds
+of stationary hold; give longer copy substantially more reading time. Content
+cue offsets must follow arrival and settle before departure.
+
+Returned `layout.motion` contains absolute `enterEnd`, `exitStart`, and `end`
+times when this field is supplied. The host owns clip starts, durations, tracks,
+and sequence scheduling. For a short panel exchange, an outgoing module could
+start at 12 with duration 4 and departure duration 0.26; its departure begins at
+15.74. An incoming module can start at 15.74 on a different track and acquire its
+pose over 0.4 seconds. Only the travel intervals overlap; the two panels never
+hold over each other. Pair travel directions and object trajectories to express
+the relationship, keep face/captions clear throughout the overlap, and check
+painted frames rather than assuming a timing receipt guarantees readability.
+Prefer one persistent object to such a replacement when the narration describes
+the same subject continuing to change.
+
+Root media remains a direct child of the composition. Its motion shares the
+chrome's screen pivot, timing, opacity, and scale; do not nest the video inside a
+moving wrapper or animate its clock. Optional travel uses only deterministic
+translation, scale, and opacity. Animated CSS filter blur is not offered by this
+helper because it is outside the bundled visual-property contract. Static glass
+backdrop blur is a separate supported treatment. A brief host-authored streak
+may use finite, aria-hidden icon echoes that collapse into the same subject;
+keep any such treatment confined to travel and prove seek-safe cleanup. Never
+blur held text or the presenter's face.
+
+Choose a small sound vocabulary for the whole sequence: a soft travel cue for an
+exchange, a precise tick for a selection or completion, and a restrained accent
+for an important focus change. Trigger cues at the actual visible contact or
+settle from the emitted events, using authorized local audio. Leave most quiet
+holds and spoken pauses unscored. Normal-speed audiovisual playback is required
+to judge fluidity and sound; snapshots and signal checks cannot certify it.
+
+Verify a representative exchange at arrival, stationary hold, departing midpoint,
+overlap, and exact end, then seek last → first → midpoint → last. Check that media
+and chrome stay attached, only travel intervals overlap, content is sharp in its
+hold, and every departed module clears completely. Review a landscape and a
+portrait layout at the intended delivery size before expanding the edit.
