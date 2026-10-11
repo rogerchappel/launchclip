@@ -27,7 +27,7 @@ function localMedia(media) {
   if (media.kind === 'image' && media.sourceStart !== undefined) throw new Error('sourceStart is only for video');
 }
 
-function series(config, label, duration) {
+function series(config, label, duration, enterDuration = .28, exitDuration = null) {
   if (!['illustration', 'data'].includes(config.mode)) throw new Error(`${label}.mode must be illustration or data`);
   if (config.mode === 'data') text(config.source, `${label}.source for real data`, 80);
   else if (config.source !== undefined) throw new Error('illustration cannot claim a real data source');
@@ -36,7 +36,7 @@ function series(config, label, duration) {
   config.values.forEach((entry, i) => {
     object(entry, `${label}.values[${i}]`, ['value', 'at']);
     number(entry.value, 'value', -1_000_000_000, 1_000_000_000);
-    number(entry.at, 'at', .28, duration - .8);
+    number(entry.at, 'at', enterDuration, duration - Math.max(.8, (exitDuration ?? 0) + .6));
     if (entry.at <= previous || (previous >= 0 && entry.at - previous + 1e-9 < .65)) throw new Error('value times must increase with at least 0.65s between events');
     previous = entry.at;
   });
@@ -52,10 +52,37 @@ function textFrames(motion, selector, from, to, format, time) {
   }
 }
 
+const DIRECTIONS = ['left', 'right', 'up', 'down', 'none'];
+function motionSpec(value, duration) {
+  if (value === undefined) return null;
+  object(value, 'motion', ['enter', 'exit', 'distance', 'enterDuration', 'exitDuration', 'scale']);
+  const config = {enter: 'up', exit: 'up', distance: 48, enterDuration: .36, exitDuration: .28, scale: 1, ...value};
+  for (const key of ['enter', 'exit']) if (!DIRECTIONS.includes(config[key])) throw new Error(`motion.${key} must be ${DIRECTIONS.join(', ')}`);
+  number(config.distance, 'motion.distance', 0, 96);
+  number(config.enterDuration, 'motion.enterDuration', .2, .6);
+  number(config.exitDuration, 'motion.exitDuration', .16, .5);
+  number(config.scale, 'motion.scale', .92, 1);
+  if (duration < config.enterDuration + config.exitDuration + .5) throw new Error('motion must leave at least 0.5s of readable hold');
+  return config;
+}
+function offset(direction, distance) {
+  return {x: direction === 'left' ? -distance : direction === 'right' ? distance : 0,
+    y: direction === 'up' ? -distance : direction === 'down' ? distance : 0};
+}
+function moduleMotion(target, start, duration, config, media = false) {
+  const selector = js(target);
+  if (!config) return [`tl.fromTo(${selector}, {opacity:0,y:18}, {opacity:1,y:0,duration:0.28,ease:'power3.out'}, ${start});`, `tl.to(${selector}, {opacity:0,y:-8,duration:0.22,ease:'power2.in'}, ${start + duration - .22});`];
+  // Root media and chrome share the chrome's top-left pivot, despite their
+  // distinct root DOM boxes. The media box begins 48px below that pivot.
+  const origin = media ? '0px -48px' : '0px 0px';
+  return [`tl.set(${selector}, ${js({opacity: 0, ...offset(config.enter, config.distance), scale: config.scale, transformOrigin: origin})}, ${start});`, `tl.fromTo(${selector}, ${js({opacity: 0, ...offset(config.enter, config.distance), scale: config.scale, transformOrigin: origin})}, ${js({opacity: 1, x: 0, y: 0, scale: 1, duration: config.enterDuration, ease: 'power3.out', immediateRender: false})}, ${start});`,
+    `tl.to(${selector}, ${js({opacity: 0, ...offset(config.exit, config.distance), scale: config.scale, duration: config.exitDuration, ease: 'power2.in'})}, ${start + duration - config.exitDuration});`];
+}
+
 // Skill-local authoring helper, not a production API. The host owns its paused
 // GSAP timeline and places these fragments directly inside its composition root.
 export function buildEditorialModule(input) {
-  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered']);
+  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion']);
   if (!/^[a-z][a-z0-9-]{0,59}$/.test(input.id ?? '')) throw new Error('id must be a unique lowercase DOM-safe identifier');
   if (!KINDS.includes(input.kind)) throw new Error(`kind must be ${KINDS.join(', ')}`);
   if (input.presentation !== undefined && !['solid', 'glass'].includes(input.presentation)) throw new Error('presentation must be solid or glass');
@@ -64,6 +91,8 @@ export function buildEditorialModule(input) {
   const canvas = input.aspect === '16:9' ? {width: 1920, height: 1080} : {width: 1080, height: 1920};
   const start = number(input.start, 'start', 0, 86400);
   const duration = number(input.duration, 'duration', 1, 3600);
+  const movement = motionSpec(input.motion, duration);
+  const enterDuration = movement?.enterDuration ?? .28, exitDuration = movement?.exitDuration ?? .22;
   const rect = input.rect ?? (input.aspect === '16:9' ? {x: 80, y: 480, width: 680, height: 500} : {x: 90, y: 960, width: 900, height: 740});
   object(rect, 'rect', ['x', 'y', 'width', 'height']);
   number(rect.width, 'rect.width', 420, canvas.width);
@@ -84,17 +113,17 @@ export function buildEditorialModule(input) {
   const id = input.id, selector = `#${id}`, font = Math.max(24, Math.min(36, Math.round(rect.width / 22)));
   const statusWidth = Math.max(100, Math.ceil(Math.max(...Object.values(statusLabels).map(label => label.length)) * (font - 6) * .65));
   const pad = 24, titleLines = Math.ceil(input.title.length / Math.max(1, Math.floor((rect.width - 48) / ((font + 4) * .65))));
-  const header = pad * 2 + titleLines * (font + 4) * 1.15, exit = start + duration - .22;
+  const header = pad * 2 + titleLines * (font + 4) * 1.15;
   const track = input.track ?? 2;
   number(track, 'track', 1, 98);
   if (!Number.isInteger(track)) throw new Error('track must be an integer');
   const timed = `class="clip" data-start="${start}" data-duration="${duration}" data-track-index="${track}"`;
   const chromeTimed = timed.replace(`data-track-index="${track}"`, `data-track-index="${track + 1}" data-layout-allow-occlusion="true"`);
   const placement = `left:${rect.x}px;top:${rect.y}px;width:${rect.width}px;height:${rect.height}px`;
-  const events = [{id: `${id}-enter`, time: start + .28}];
-  const motion = [`tl.fromTo(${js(selector)}, {opacity:0,y:18}, {opacity:1,y:0,duration:0.28,ease:'power3.out'}, ${start});`, `tl.to(${js(selector)}, {opacity:0,y:-8,duration:0.22,ease:'power2.in'}, ${exit});`];
+  const events = [{id: `${id}-enter`, time: start + enterDuration}];
+  const motion = moduleMotion(selector, start, duration, movement);
   motion.push(`tl.set(${js(selector)}, {opacity:0}, ${start + duration});`);
-  const at = (value, label) => number(value, label, .28, duration - .45);
+  const at = (value, label) => number(value, label, enterDuration, duration - (movement ? Math.max(.45, exitDuration + .3) : .45));
   let css = `#${id}{position:absolute;${placement};box-sizing:border-box;overflow:hidden;background:#17191d;color:#f7f7f8;border:1px solid #535761;border-radius:18px;box-shadow:0 16px 48px #0005;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:${font}px;line-height:1.25}#${id} *{box-sizing:border-box}#${id} .ui-title{margin:0;padding:${pad}px;font-size:${font + 4}px;font-weight:700;line-height:1.15}#${id} .ui-row{display:flex;align-items:center;gap:18px;padding:14px ${pad}px;border-top:1px solid #383c45}#${id} .ui-label{flex:1;min-width:0;overflow-wrap:break-word}#${id} .ui-check{width:36px;height:36px;flex:none;border:2px solid #828791;border-radius:7px;display:grid;place-items:center}#${id} .ui-check svg{width:32px;height:32px;opacity:0}#${id} .ui-status{font-size:${font - 6}px;color:#b8bbc3;width:${statusWidth}px;flex:none;text-align:right;position:relative}#${id} .ui-bar{position:absolute;top:0;left:0;right:0;height:48px;display:flex;align-items:center;gap:10px;padding:0 16px;background:#24272e;border-bottom:1px solid #535761}#${id} .ui-dot{width:12px;height:12px;border-radius:50%}#${id} .ui-bar-label{margin-left:12px;font-size:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#${id} .ui-content{padding:${pad}px}#${id} .ui-rail{position:relative;margin:20px ${pad}px 0;height:8px;background:#474c56;border-radius:4px}#${id} .ui-fill{height:100%;background:${accent};transform-origin:left;border-radius:4px}#${id} .ui-steps{display:flex;justify-content:space-between;padding:22px ${pad}px;gap:12px}#${id} .ui-step{flex:1;min-width:0;font-size:${Math.max(22, font - 4)}px;overflow-wrap:break-word;opacity:.65}#${id} .ui-body{padding:0 ${pad}px ${pad}px;margin:0;color:#d3d6dd;overflow-wrap:break-word}`;
   let body = '', media = '';
   if (input.presentation === 'glass') {
@@ -112,7 +141,7 @@ export function buildEditorialModule(input) {
     // root-media-window-bar/dot markup, not an external React UI library.
     media = source.kind === 'video' ? `<video id="${id}-media" ${timed} data-media-start="${source.sourceStart ?? 0}" src="${escape(source.src)}" muted playsinline style="${content}"></video>` : `<img id="${id}-media" ${timed} src="${escape(source.src)}" alt="${escape(input.title)}" style="${content}" />`;
     body = `<div class="ui-bar"><span class="ui-dot" style="background:#ff6258"></span><span class="ui-dot" style="background:#ffc04a"></span><span class="ui-dot" style="background:#40c957"></span><span class="ui-bar-label">${escape(input.title)}</span></div>`;
-    motion.push(`tl.fromTo(${js(`#${id}-media`)}, {opacity:0,y:18}, {opacity:1,y:0,duration:0.28,ease:'power3.out'}, ${start});`, `tl.to(${js(`#${id}-media`)}, {opacity:0,y:-8,duration:0.22,ease:'power2.in'}, ${exit});`);
+    motion.push(...moduleMotion(`#${id}-media`, start, duration, movement, true));
   } else {
     body = `<h2 class="ui-title">${escape(input.title)}</h2>`;
     if (input.kind === 'callout') {
@@ -187,7 +216,7 @@ export function buildEditorialModule(input) {
     } else if (input.kind === 'metric' || input.kind === 'progress') {
       const config = input[input.kind], isMetric = input.kind === 'metric';
       object(config, input.kind, isMetric ? ['mode', 'unit', 'format', 'currency', 'decimals', 'values', 'source'] : ['mode', 'values', 'max', 'label', 'source']);
-      const attribution = series(config, input.kind, duration);
+      const attribution = series(config, input.kind, duration, enterDuration, movement ? exitDuration : null);
       let format;
       if (isMetric) {
         text(config.unit, 'metric.unit', 18);
@@ -278,8 +307,9 @@ export function buildEditorialModule(input) {
       body += '</div>';
     }
   }
+  if (movement && events.some(event => event.time > start + duration - exitDuration + 1e-9)) throw new Error('content must settle before motion exit begins');
   const background = input.kind === 'media-window' ? 'background:transparent;' : '';
-  return {html: `${media}<section id="${id}" ${input.kind === 'media-window' ? chromeTimed : timed} style="${background}">${body}</section>`, css, motion: motion.join('\n'), events, layout: {canvas, rect: {...rect}}};
+  return {html: `${media}<section id="${id}" ${input.kind === 'media-window' ? chromeTimed : timed} style="${background}">${body}</section>`, css, motion: motion.join('\n'), events, layout: {canvas, rect: {...rect}, ...(movement ? {motion: {enterEnd: start + enterDuration, exitStart: start + duration - exitDuration, end: start + duration}} : {})}};
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
