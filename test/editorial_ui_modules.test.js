@@ -394,3 +394,16 @@ test('visible code typing preserves token spacing, finite spans and legacy defau
   for(const code of [{typing:'yes',lines},{typing:false,lines},{typing:true,lines:[{...lines[0],typeDuration:.01}]},{typing:true,lines:[lines[0],{...lines[1],at:1}]}]) assert.throws(()=>buildEditorialModule({...base,code}));
   assert.throws(()=>buildEditorialModule({...base,duration:2,code:{typing:true,lines:[{...lines[0],at:1,typeDuration:1}]}}),/settle/);
 });
+
+test('excerpt highlight sweep separates its background from stationary escaped text', () => {
+  const base={id:'sweep',kind:'excerpt-window',aspect:'16:9',start:2,duration:4,title:'A useful excerpt',rect:{x:90,y:200,width:900,height:400},excerpt:{mode:'illustration',highlightMotion:true,lines:[{segments:[{text:'Keep '},{text:'<the subject>',highlight:true}]}],focus:{line:0,scale:1.1,at:1.1}}};
+  const result=buildEditorialModule(base);
+  assert.match(result.html,/ui-highlight-fill" aria-hidden="true/);assert.match(result.html,/ui-highlight-text">&lt;the subject&gt;/);
+  assert.match(result.css,/transform-origin:left center/);assert.match(result.motion,/scaleX:1,duration:0.35/);
+  assert.equal(result.events.find(e=>e.id==='sweep-highlight-sweep-settle').time,3.45);
+  assert.doesNotMatch(result.motion,/backgroundColor|onUpdate/);
+  assert.throws(()=>buildEditorialModule({...base,excerpt:{...base.excerpt,highlightMotion:'yes'}}),/boolean/);
+  assert.throws(()=>buildEditorialModule({...base,duration:1.6}),/settle/);
+  const old=buildEditorialModule({...base,excerpt:{...base.excerpt,highlightMotion:false}});
+  assert.doesNotMatch(old.html,/ui-highlight-fill/);assert.match(old.motion,/backgroundColor/);
+});
