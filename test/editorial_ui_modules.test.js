@@ -97,3 +97,100 @@ test('local CLI emits the same module and fails clearly for invalid input', asyn
   assert.equal(failure.stdout, '');
   assert.match(failure.stderr, /id/);
 });
+
+const expressive = {...base, id: 'reach', title: 'Getting seen', rect: {x: 80, y: 130, width: 850, height: 650}};
+const points = [{label: 'Start', value: 12, at: 1}, {label: 'Later', value: 36, at: 3}, {label: 'Now', value: 180, at: 5}];
+
+test('illustrative audience activates bounded emoji tiles on explicit events without geometry or counts', () => {
+  const input = {...expressive, kind: 'audience-grid', audience: {columns: 3, tiles: Array.from({length: 6}, (_, i) => ({label: 'Viewer', emoji: '👤', at: 1 + i * .5}))}};
+  const result = buildEditorialModule(input);
+  assert.deepEqual(result, buildEditorialModule(input));
+  assert.match(result.html, /Illustration · audience tiles/);
+  assert.doesNotMatch(result.html, /<svg|<path|<line|viewers reached/);
+  assert.equal(result.events.at(-1).time, 73.74);
+  assert.ok(commands(result).some(call => call[1] === '#reach-viewer-2' && call.at(-1) === 72));
+  const portrait = buildEditorialModule({...input, aspect: '9:16', rect: {x: 90, y: 400, width: 900, height: 700}});
+  assert.equal(portrait.layout.canvas.height, 1920);
+});
+
+test('illustrative numbers retain attribution and chart/count are directly seekable GSAP properties', () => {
+  const result = buildEditorialModule({...expressive, kind: 'trend-chart', chart: {mode: 'illustration', unit: 'views', points}});
+  assert.match(result.html, /Illustration · example values/);
+  assert.match(result.html, /height:12px/);
+  assert.match(result.html, /height:180px/);
+  const calls = commands(result);
+  assert.ok(calls.some(call => call[0] === 'set' && call[1] === '#reach-count' && call[2].textContent === 0 && call.at(-1) === 70));
+  assert.ok(calls.some(call => call[0] === 'fromTo' && call[1] === '#reach-count' && call[2].textContent === 36 && call[3].textContent === 180 && call[3].snap.textContent === 1));
+  assert.doesNotMatch(result.motion, /onUpdate|setTimeout|Date\.|Math.random/);
+  assert.equal(result.events.at(-1).time, 75.38);
+});
+
+test('real data requires attribution and supports decreases and zero without NaN geometry', () => {
+  assert.throws(() => buildEditorialModule({...expressive, kind: 'trend-chart', chart: {mode: 'data', unit: 'views', points}}), /source for real data/);
+  const real = buildEditorialModule({...expressive, kind: 'trend-chart', chart: {mode: 'data', unit: 'views', source: 'Supplied analytics export', points: [...points.slice(0, 2), {label: 'Now', value: 0, at: 5}]}});
+  assert.match(real.html, /Source: Supplied analytics export/);
+  assert.match(real.motion, /textContent:0,snap/);
+  const zero = buildEditorialModule({...expressive, kind: 'trend-chart', chart: {mode: 'illustration', unit: 'views', points: points.map(point => ({...point, value: 0}))}});
+  assert.doesNotMatch(zero.html, /NaN|Infinity/);
+  assert.match(zero.html, /height:0px/);
+  assert.throws(() => buildEditorialModule({...expressive, kind: 'trend-chart', chart: {mode: 'illustration', unit: 'views', source: 'Misleading source', points}}), /cannot claim/);
+});
+
+test('expressive inputs reject unsafe modes, invalid timing, oversized copy and overfull layouts', () => {
+  const chart = {mode: 'illustration', unit: 'views', points};
+  for (const bad of [{mode: 'real'}, {points: [{...points[0], value: Infinity}, points[1]]}, {points: [{...points[0], value: .5}, points[1]]}, {points: [points[0], {...points[1], at: 1.2}]}, {points: [{...points[0], percentage: 99}, points[1]]}]) assert.throws(() => buildEditorialModule({...expressive, kind: 'trend-chart', chart: {...chart, ...bad}}));
+  const audience = {tiles: [{label: 'Viewer', emoji: '👤', at: 1}, {label: 'Viewer', emoji: '👤', at: 2}]};
+  for (const bad of [{columns: 2.5}, {columns: 4}, {tiles: [{...audience.tiles[0], emoji: 'much too long accent'}, audience.tiles[1]]}]) assert.throws(() => buildEditorialModule({...expressive, kind: 'audience-grid', audience: {...audience, ...bad}}));
+  assert.throws(() => buildEditorialModule({...expressive, kind: 'audience-grid', rect: {...expressive.rect, height: 160}, audience}), /does not fit/);
+  assert.throws(() => buildEditorialModule({...expressive, kind: 'trend-chart', rect: {...expressive.rect, height: 160}, chart}), /does not fit/);
+  const escaped = buildEditorialModule({...expressive, kind: 'audience-grid', audience: {tiles: [{label: '<b>A</b>', emoji: '<x>', at: 1}, audience.tiles[1]]}});
+  assert.doesNotMatch(escaped.html, /<b>|<x>/);
+  assert.match(escaped.html, /&lt;b&gt;/);
+  const source = buildEditorialModule({...expressive, kind: 'trend-chart', chart: {mode: 'data', unit: 'views', source: '<script>bad()</script>', points}});
+  assert.doesNotMatch(source.html, /<script>/);
+  assert.doesNotMatch(source.motion, /bad\(/);
+});
+
+test('standalone metrics preserve their initial value and format increases, decreases, percent and money', () => {
+  const metric = {mode: 'illustration', unit: 'viewers', format: 'number', values: [{value: 12, at: .6}, {value: 180, at: 2}, {value: 36, at: 4}]};
+  const result = buildEditorialModule({...expressive, kind: 'metric', metric});
+  assert.match(result.html, /class="ui-number">12</);
+  assert.match(result.html, /Illustration · example values/);
+  const frames = commands(result).filter(call => call[0] === 'set' && call[1] === '#reach-number');
+  assert.ok(frames.some(call => call[2].textContent === '180' && call.at(-1) === 72.6));
+  assert.ok(frames.some(call => call[2].textContent === '36' && call.at(-1) === 74.6));
+  assert.doesNotMatch(result.motion, /onUpdate|setTimeout|Date\.|Math.random/);
+  const percent = buildEditorialModule({...expressive, kind: 'metric', metric: {...metric, unit: 'completion', format: 'percent', decimals: 1, values: [{value: 72.5, at: .6}, {value: 48, at: 2.2}]}});
+  assert.match(percent.html, /72.5%/);
+  const change = buildEditorialModule({...expressive, kind: 'metric', metric: {...metric, unit: 'growth', format: 'percent', values: [{value: 150, at: .6}, {value: -12, at: 2.2}]}});
+  assert.match(change.html, /150%/);
+  assert.ok(commands(change).some(call => call[2]?.textContent === '-12%'));
+  assert.ok(commands(percent).some(call => call[2]?.textContent === '48.0%'));
+  const money = buildEditorialModule({...expressive, kind: 'metric', metric: {...metric, unit: 'balance', format: 'currency', currency: 'USD', decimals: 2, values: [{value: 1250.25, at: .6}, {value: -50, at: 2.2}]}});
+  assert.match(money.html, /USD\s1,250.25/);
+  assert.ok(commands(money).some(call => call[2]?.textContent === '-USD\u00a050.00'));
+});
+
+test('standalone progress supports reversed values and rejects invented or out-of-range data', () => {
+  const progress = {mode: 'illustration', max: 4, label: 'Example stages', values: [{value: 1, at: .6}, {value: 4, at: 2}, {value: 2, at: 4}]};
+  const result = buildEditorialModule({...expressive, kind: 'progress', progress});
+  assert.match(result.html, /class="ui-number">25%</);
+  assert.ok(commands(result).some(call => call[1] === '#reach .ui-progress-fill' && call[2]?.scaleX === .5));
+  assert.equal(result.events.at(-1).time, 74.6);
+  for (const bad of [{mode: 'data'}, {max: 0}, {values: [{value: 5, at: .6}]}, {values: [{value: -1, at: .6}]}, {values: [{value: 1, at: 2}, {value: 2, at: 2.5}]}]) assert.throws(() => buildEditorialModule({...expressive, kind: 'progress', progress: {...progress, ...bad}}));
+  const metric = {mode: 'illustration', format: 'percent', unit: 'completion', values: [{value: 50, at: .6}]};
+  for (const bad of [{values: [{value: Infinity, at: .6}]}, {format: 'currency'}, {currency: 'USD'}, {decimals: 3}, {decimals: .5}]) assert.throws(() => buildEditorialModule({...expressive, kind: 'metric', metric: {...metric, ...bad}}));
+});
+
+test('numbered steps remain optional, bounded and distinct from checklist state', () => {
+  const result = buildEditorialModule({...base, kind: 'step-rail', numbered: true, steps: [{label: 'Plan', at: 1}, {label: 'Build', at: 3}, {label: 'Share', at: 5}]});
+  assert.equal((result.html.match(/class="ui-step-number"/g) ?? []).length, 3);
+  assert.match(result.html, />1<\/span>Plan/);
+  assert.match(result.html, />3<\/span>Share/);
+  assert.match(result.css, /ui-step-number/);
+  assert.throws(() => buildEditorialModule({...base, rows: [row], numbered: true}), /step-rail only/);
+  assert.throws(() => buildEditorialModule({...base, kind: 'callout', body: 'Readable text', presentation: 'arbitrary-css'}), /solid or glass/);
+  const media = buildEditorialModule({...base, kind: 'media-window', presentation: 'glass', media: {kind: 'video', src: 'assets/demo.mp4'}});
+  assert.match(media.html, /^<video[^>]*><\/video><section/);
+  assert.match(media.css, /\.ui-bar\{background:rgba/);
+});

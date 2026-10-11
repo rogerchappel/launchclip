@@ -137,8 +137,9 @@ A `metric` uses `mode: "illustration"` or `"data"`, a short `unit`, and
 `format: "number"`, `"percent"` or `"currency"`. Set `decimals` explicitly when
 precision matters (0–2). Currency uses an explicit three-letter `currency` code;
 preserve that code rather than substituting an ambiguous currency symbol.
-Percentage values use percentage points from 0 to 100, not fractions: 25 means
-25%. Number and currency values may be negative. Choose the real start and end
+Percentage metrics use signed percentage points, not fractions: 25 means 25%,
+150 means 150%, and -12 means -12%. Progress remains bounded to 0–max.
+Number and currency values may also be negative. Choose the real start and end
 values for an increase or decrease; direction follows those values rather than
 a decorative arrow. Verify the resulting sign, scale and units in encoded frames.
 
