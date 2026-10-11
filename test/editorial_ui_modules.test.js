@@ -178,3 +178,16 @@ test('standalone progress supports reversed values and rejects invented or out-o
   const metric = {mode: 'illustration', format: 'percent', unit: 'completion', values: [{value: 50, at: .6}]};
   for (const bad of [{values: [{value: 101, at: .6}]}, {values: [{value: -1, at: .6}]}, {format: 'currency'}, {currency: 'USD'}, {decimals: 3}, {decimals: .5}]) assert.throws(() => buildEditorialModule({...expressive, kind: 'metric', metric: {...metric, ...bad}}));
 });
+
+test('numbered steps remain optional, bounded and distinct from checklist state', () => {
+  const result = buildEditorialModule({...base, kind: 'step-rail', numbered: true, steps: [{label: 'Plan', at: 1}, {label: 'Build', at: 3}, {label: 'Share', at: 5}]});
+  assert.equal((result.html.match(/class="ui-step-number"/g) ?? []).length, 3);
+  assert.match(result.html, />1<\/span>Plan/);
+  assert.match(result.html, />3<\/span>Share/);
+  assert.match(result.css, /ui-step-number/);
+  assert.throws(() => buildEditorialModule({...base, rows: [row], numbered: true}), /step-rail only/);
+  assert.throws(() => buildEditorialModule({...base, kind: 'callout', body: 'Readable text', presentation: 'arbitrary-css'}), /solid or glass/);
+  const media = buildEditorialModule({...base, kind: 'media-window', presentation: 'glass', media: {kind: 'video', src: 'assets/demo.mp4'}});
+  assert.match(media.html, /^<video[^>]*><\/video><section/);
+  assert.match(media.css, /\.ui-bar\{background:rgba/);
+});
