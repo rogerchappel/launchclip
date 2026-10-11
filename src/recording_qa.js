@@ -139,8 +139,13 @@ function align(expected, actual) {
   return result.reverse();
 }
 function nearestJoin(plan, start, end) {
-  const candidates = (plan.kept_segments ?? []).flatMap((segment, segment_index) => [{ segment_index, edge: "start", time: segment.start_seconds }, { segment_index, edge: "end", time: segment.end_seconds }]).filter((candidate) => Math.min(Math.abs(start - candidate.time), Math.abs(end - candidate.time)) <= 0.25).sort((a, b) => Math.min(Math.abs(start - a.time), Math.abs(end - a.time)) - Math.min(Math.abs(start - b.time), Math.abs(end - b.time)));
-  return candidates[0];
+  const segments = (plan.kept_segments ?? []).map((segment, segment_index) => ({ ...segment, segment_index }));
+  // Adjacent edited segments share a join timestamp but refer to different source
+  // intervals. Associate an omitted word with its containing interval first.
+  const containing = segments.filter((segment) => start >= segment.start_seconds - 1e-6 && end <= segment.end_seconds + 1e-6);
+  const candidates = (containing.length ? containing : segments).flatMap((segment) => [{ segment_index: segment.segment_index, edge: "start", time: segment.start_seconds }, { segment_index: segment.segment_index, edge: "end", time: segment.end_seconds }]);
+  const distance = (candidate) => Math.min(Math.abs(start - candidate.time), Math.abs(end - candidate.time));
+  return candidates.filter((candidate) => distance(candidate) <= 0.25).sort((a, b) => distance(a) - distance(b))[0];
 }
 function validSegment(plan, index) { return Number.isInteger(index) && index >= 0 && index < (plan.kept_segments?.length ?? 0); }
 function explanation(value) { return typeof value === "string" && value.trim().length > 0; }
