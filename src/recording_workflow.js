@@ -6,9 +6,11 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { probeMedia } from "./media_trim.js";
-import { planRecordingEdit } from "./recording_edit.js";
+import { normalizeRecordingTranscript, planRecordingEdit } from "./recording_edit.js";
 import { editRecording } from "./recording_edit_media.js";
 import { createBrollPlan, renderBrollChecklist } from "./broll_plan.js";
+import { analyzeRecordingAudio, refineRecordingEditPlan } from "./recording_audio.js";
+import { identifySemanticRetakes, validateSemanticRetakes } from "./semantic_retakes.js";
 
 const run = promisify(execFile);
 
@@ -30,11 +32,13 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
     edit_plan: path.join(directory, "edit-plan.json"),
     transcript: path.join(directory, "transcript.json"),
     words: path.join(directory, "words.json"),
+    audio_analysis: path.join(directory, "audio-analysis.json"),
+    semantic_retakes: path.join(directory, "semantic-retakes.json"),
     broll_plan: path.join(directory, "broll-plan.json"),
     broll_checklist: path.join(directory, "BROLL.md")
   };
   const manifestPath = path.join(directory, "recording.json");
-  const protectedInputs = [input, options.transcript ? path.resolve(options.transcript) : null].filter(Boolean);
+  const protectedInputs = [input, options.transcript ? path.resolve(options.transcript) : null, options.retakeDecisions ? path.resolve(options.retakeDecisions) : null].filter(Boolean);
   if ([...Object.values(files), manifestPath].some((file) => protectedInputs.includes(file))) {
     throw new Error("Recording output must not overwrite source media or supplied transcript");
   }
@@ -43,12 +47,19 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
     silenceDuration: options.trimSilence === false ? null : options.silenceDuration ?? 0.8,
     silencePadding: options.silencePadding ?? 0.15,
     retakeWindow: options.retakeWindow ?? 90,
-    minRepeatWords: options.minRepeatWords ?? 6
+    minRepeatWords: options.minRepeatWords ?? 6,
+    removeFillers: options.removeFillers !== false,
+    audioSilence: options.audioSilence !== false && options.trimSilence !== false,
+    audioSilenceDuration: options.audioSilenceDuration ?? 0.4,
+    audioSilencePadding: options.audioSilencePadding ?? 0.08,
+    audioThresholdDb: options.audioThresholdDb ?? null
   };
   const inputHash = await checksum(input);
   const transcriptHash = options.transcript ? await checksum(path.resolve(options.transcript)) : null;
-  const engineHash = digest(await Promise.all(["recording_edit.js", "recording_edit_media.js"].map(async (name) => readFile(new URL(name, import.meta.url), "utf8"))));
-  const requestHash = digest({ version: "recording-workflow.v1", engineHash, inputHash, transcriptHash, policy, aspect: options.aspect ?? "16:9", model: options.model ?? "base.en", language: options.language ?? "en", crf: options.crf ?? 18 });
+  if (options.retakeDecisions && options.retakeModel) throw new Error("Choose supplied retake decisions or a local retake model, not both");
+  const retakeDecisionsHash = options.retakeDecisions ? await checksum(path.resolve(options.retakeDecisions)) : null;
+  const engineHash = digest(await Promise.all(["recording_edit.js", "recording_edit_media.js", "recording_audio.js", "semantic_retakes.js"].map(async (name) => readFile(new URL(name, import.meta.url), "utf8"))));
+  const requestHash = digest({ version: "recording-workflow.v2", engineHash, inputHash, transcriptHash, retakeDecisionsHash, retakeModel: options.retakeModel ?? null, retakeBaseUrl: options.retakeBaseUrl ?? null, policy, aspect: options.aspect ?? "16:9", model: options.model ?? "base.en", language: options.language ?? "en", crf: options.crf ?? 18 });
   const cached = await readCached(manifestPath, requestHash, files);
   if (cached) {
     const transcript = JSON.parse(await readFile(files.transcript, "utf8"));
@@ -63,7 +74,20 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
   const transcript = options.transcript
     ? JSON.parse(await readFile(path.resolve(options.transcript), "utf8"))
     : await (adapters.transcribe ?? transcribeRecording)(input, options);
-  const plan = planRecordingEdit(transcript, { ...policy, durationSeconds });
+  const semantic = options.retakeDecisions
+    ? validateSemanticRetakes(JSON.parse(await readFile(path.resolve(options.retakeDecisions), "utf8")), normalizeRecordingTranscript(transcript), { retakeWindow: policy.retakeWindow })
+    : options.retakeModel
+      ? await (adapters.identifySemanticRetakes ?? identifySemanticRetakes)(transcript, { durationSeconds, retakeWindow: policy.retakeWindow, model: options.retakeModel, baseUrl: options.retakeBaseUrl }, adapters.semantic)
+      : { status: "not-requested", retakes: [], removals: [] };
+  const basePlan = planRecordingEdit(transcript, { ...policy, silenceDuration: policy.audioSilence ? null : policy.silenceDuration, durationSeconds, semanticRetakes: semantic.retakes });
+  const audio = policy.audioSilence
+    ? await (adapters.analyzeRecordingAudio ?? analyzeRecordingAudio)(input, {
+        durationSeconds, silenceDuration: policy.audioSilenceDuration,
+        silencePadding: policy.audioSilencePadding,
+        ...(policy.audioThresholdDb == null ? {} : { thresholdDb: policy.audioThresholdDb })
+      })
+    : { status: "disabled", source_duration_seconds: durationSeconds };
+  const plan = policy.audioSilence ? refineRecordingEditPlan(basePlan, audio, { silencePadding: policy.audioSilencePadding }) : basePlan;
   const editedTranscript = { text: plan.text, words: plan.words, duration_seconds: plan.duration_seconds };
   await readCaptureTracker(files, editedTranscript, { durationSeconds: plan.duration_seconds, aspect: options.aspect ?? "16:9" });
   await mkdir(directory, { recursive: true });
@@ -72,6 +96,8 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
   await writeJson(files.edit_plan, plan);
   await writeJson(files.transcript, editedTranscript);
   await writeJson(files.words, plan.words);
+  await writeJson(files.audio_analysis, audio);
+  await writeJson(files.semantic_retakes, semantic);
   await ensureCaptureTracker(files, editedTranscript, { durationSeconds: plan.duration_seconds, aspect: options.aspect ?? "16:9" });
   const checksums = Object.fromEntries(await Promise.all(Object.entries(files).filter(([key]) => !key.startsWith("broll_")).map(async ([key, file]) => [key, await checksum(file)])));
   const result = {
@@ -80,7 +106,9 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
     output_sha256: checksums.media, source_duration_seconds: durationSeconds,
     duration_seconds: plan.duration_seconds,
     rendered_duration_seconds: rendered.rendered_duration_seconds ?? rendered.duration_seconds ?? plan.duration_seconds,
-    take_policy: policy.takePolicy, files, checksums, cached: false
+    take_policy: policy.takePolicy, filler_cleanup: policy.removeFillers,
+    audio_silence: policy.audioSilence, semantic_retakes: semantic.retakes.length,
+    files, checksums, cached: false
   };
   await writeJson(manifestPath, result);
   return { ...result, manifest: manifestPath };
@@ -105,6 +133,11 @@ export function recordingOptions(flags = {}) {
   return {
     out: flags.out, transcript: flags["recording-transcript"] ?? flags.transcript,
     trimSilence: !flags["no-trim-silence"], takePolicy: "last",
+    removeFillers: !flags["keep-fillers"], audioSilence: !flags["no-audio-silence"],
+    retakeDecisions: flags["retake-decisions"], retakeModel: flags["retake-model"], retakeBaseUrl: flags["retake-base-url"],
+    audioSilenceDuration: flags["audio-silence-duration"] == null ? 0.4 : Number(flags["audio-silence-duration"]),
+    audioSilencePadding: flags["audio-silence-padding"] == null ? 0.08 : Number(flags["audio-silence-padding"]),
+    audioThresholdDb: flags["audio-threshold-db"] == null ? undefined : Number(flags["audio-threshold-db"]),
     silenceDuration: flags["silence-duration"] == null ? 0.8 : Number(flags["silence-duration"]),
     silencePadding: flags["silence-padding"] == null ? 0.15 : Number(flags["silence-padding"]),
     retakeWindow: flags["retake-window"] == null ? 90 : Number(flags["retake-window"]),
@@ -118,7 +151,7 @@ async function transcribeRecording(input, options) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "launchclip-recording-transcript-"));
   try {
     try {
-      await run("whisper", [input, "--model", options.model ?? "base.en", "--language", options.language ?? "en", "--word_timestamps", "True", "--fp16", "False", "--verbose", "False", "--output_format", "json", "--output_dir", directory], { maxBuffer: 16 * 1024 * 1024 });
+      await run("whisper", [input, "--model", options.model ?? "base.en", "--language", options.language ?? "en", "--word_timestamps", "True", "--condition_on_previous_text", "False", "--initial_prompt", "Transcribe speech verbatim, including audible hesitation words um, uh, erm, er and false starts.", "--fp16", "False", "--verbose", "False", "--output_format", "json", "--output_dir", directory], { maxBuffer: 16 * 1024 * 1024 });
     } catch (error) {
       if (error.code === "ENOENT") throw new Error("Local Whisper is not installed. Install openai-whisper or supply --recording-transcript <word-timed.json>; no paid transcription is called.");
       throw error;

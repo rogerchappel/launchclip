@@ -139,6 +139,24 @@ reuse verified artifacts; changed input/settings/engine or incomplete outputs
 require a fresh directory. Original media is never overwritten. Sequential
 rendering bounds memory, using temporary intermediates that are cleaned up.
 
+Cleanup also removes recognized hesitation words and abandoned starts, preserving
+grammatical connectives. `--keep-fillers` opts out. Local FFmpeg measures the audio
+waveform to control pause removal independently of transcript gaps;
+`audio-analysis.json` records
+its adaptive threshold. Use `--no-audio-silence` to disable that stage, or configure
+`--audio-silence-duration` (0.4s), `--audio-silence-padding` (0.08s), and
+`--audio-threshold-db` after inspecting the recording. Untranscribed fillers cannot
+be removed reliably from word timing alone.
+
+For rephrased retakes, provide agent-generated `--retake-decisions retakes.json`
+with the original word transcript, or explicitly choose an installed local
+Ollama model with `--retake-model MODEL`. Both use last take wins and preserve
+unique speech. The [semantic receipt contract](docs/semantic-retakes.md) binds
+original word indices to a transcript hash. No paid model is selected implicitly;
+without either option, only lexical retakes are detected. The recorded-video
+skill performs this semantic pass using the active agent. Decisions and media
+stay in the recording's output directory, never in the tool's source code.
+
 The edit also writes a B-roll capture tracker (`broll-plan.json`, `BROLL.md`).
 For an already clean transcript:
 
