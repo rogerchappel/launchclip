@@ -220,6 +220,16 @@ another directional panel still produces a stack of cards; it does not prove an
 object handoff. These fragments supply bounded travel, not automatic shared-object
 morphing or a camera engine.
 
+A useful sequence grammar is a persistent header or media frame with a small
+thumbnail cluster that resolves into one selected window, followed by a highlighted
+excerpt and a contextual badge or task-state change inside that same stage. Use
+supplied screenshots when they exist; otherwise make the content visibly conceptual.
+This is one narrative pattern, not required branding, layout, or a fixed beat count.
+Secondary objects may move while the primary subject holds. Let outgoing labels
+lose visibility before incoming labels occupy the same reading zone, and inspect
+actual transition frames to choose the overlap; no universal millisecond quota
+substitutes for those frames.
+
 Choose placement from the actual footage's face, gaze, negative space, and caption
 area. Maintain the same stage and presenter crop across related beats. A change
 of emphasis may merit one restrained presenter punch-in; a quiet spoken passage
@@ -256,11 +266,14 @@ Returned `layout.motion` contains absolute `enterEnd`, `exitStart`, and `end`
 times when this field is supplied. The host owns clip starts, durations, tracks,
 and sequence scheduling. For a short panel exchange, an outgoing module could
 start at 12 with duration 4 and departure duration 0.26; its departure begins at
-15.74. An incoming module can start at 15.74 on a different track and acquire its
-pose over 0.4 seconds. Only the travel intervals overlap; the two panels never
-hold over each other. Pair travel directions and object trajectories to express
-the relationship, keep face/captions clear throughout the overlap, and check
-painted frames rather than assuming a timing receipt guarantees readability.
+15.74. An incoming module can acquire its pose over 0.4 seconds. When both contain
+text in the same zone, start the incoming module at 16 after the outgoing copy
+clears; overlapping their whole fades produces doubled, unreadable text. Overlap
+movement of a shared subject or panels in distinct non-conflicting zones instead,
+using different tracks and only their travel windows. Two panels must never hold
+over each other. Pair travel directions and object trajectories to express the
+relationship, keep face/captions clear throughout travel, and check painted
+frames rather than assuming a timing receipt guarantees readability.
 Prefer one persistent object to such a replacement when the narration describes
 the same subject continuing to change.
 
