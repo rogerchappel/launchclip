@@ -179,8 +179,12 @@ windows through `root_media_requests`.
 
 ## Full recorded treatment: direct before decorating
 
-Base-edit QA is the prerequisite, not the finished production. Use its accepted
-edited transcript and source-to-output map as the timing authority. Preserve
+Accepted timing and recording QA are prerequisites, not the finished production.
+For an already-clean recording, verify its transcript, voiced boundaries, audio
+continuity and existing QA evidence without rerunning unnecessary cleanup. Use
+its verified timeline (an identity source map when no cuts were made), or the
+accepted base edit's edited transcript and source-to-output map, as the timing
+authority. Preserve
 unique speech and its order. Do not rewrite a recorded story, fabricate a
 five-concept tournament, or force short-form cadence onto a longer explanation.
 
@@ -251,7 +255,11 @@ local cues are absent, use permitted local synthesis or user-supplied sounds;
 report a missing sound rather than silently calling a paid provider.
 
 Music choices are explicit: none, supplied track, or approved provider. A full
-production may deliberately be music-free. When music is wanted, design an arc
+production may deliberately be music-free. If requested music or SFX are missing,
+record `audio-pending` in the brief and ask once for the missing asset or provider
+decision while continuing independent visual work. Retain the requested audio
+intent; do not switch to `none` merely to pass the readiness gate. A silent
+intermediate proof must be labeled incomplete until that decision is resolved. When music is wanted, design an arc
 with density changes, pauses, transitions and an ending suited to the story.
 Request an instrumental bed that leaves room for speech if generation is
 approved; no genre is universal and no provider credits are implied.
@@ -279,7 +287,10 @@ Review moving output at delivery size and listen to the actual encoded mix.
 Compare it with the declared treatment and reference observations. Confirm the
 idea develops, motion settles cleanly, transitions preserve continuity, the
 presenter remains readable, and sound supports the action. Keep evidence paths
-and specific findings, then repair the responsible sequence before expanding.
+and specific findings, bind review to both the actual prototype and current
+direction plan, then repair the responsible sequence before expanding. A changed
+plan, selected asset or render invalidates the old review; regenerate the
+contract's evidence hashes and inspect the changed treatment.
 CLI success and attractive screenshots cannot substitute for this review.
 Existing user authorization to render drafts is sufficient; do not add an
 approval round solely because a prototype exists.

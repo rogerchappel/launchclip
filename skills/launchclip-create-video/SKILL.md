@@ -36,8 +36,9 @@ Before authoring a cinematic creation, read both references completely:
 - Do not run `launchclip produce`, `creative-plan`, `direct-frames`,
   `production-critique`, or `production-repair`; those stages call metered
   model APIs.
-- Use `launchclip cinematic-check` after a local draft render. It performs
-  deterministic local QA and does not call a model API.
+- For new-story cinematic creation, use `launchclip cinematic-check` after a
+  local draft render. Recorded treatments use their own local direction gate.
+  Both checks are deterministic and do not call a model API.
 - Do not require, install, or invoke the HyperFrames plugin or its skills. Use
   this skill's bundled reference and `npx --yes hyperframes@0.7.58` directly.
 - Do not call paid model, image, voice, music, stock-media, or generation APIs
@@ -165,8 +166,10 @@ audio.
 
 ## Freeze the brief and evidence
 
-Create these planning artifacts inside the output project before authoring the
-composition:
+For new-story cinematic creation, create these planning artifacts inside the
+output project before authoring the composition. Recorded treatments use the
+artifacts specified in `references/recorded-video.md`, without concept/story
+tournament receipts:
 
 - `BRIEF.md`: source, audience, promise, CTA, destination, aspect, duration,
   language, interaction mode, cost mode, supplied assets, permissions, and
