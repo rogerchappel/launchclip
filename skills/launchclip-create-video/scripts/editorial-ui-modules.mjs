@@ -55,9 +55,11 @@ function textFrames(motion, selector, from, to, format, time) {
 // Skill-local authoring helper, not a production API. The host owns its paused
 // GSAP timeline and places these fragments directly inside its composition root.
 export function buildEditorialModule(input) {
-  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress']);
+  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered']);
   if (!/^[a-z][a-z0-9-]{0,59}$/.test(input.id ?? '')) throw new Error('id must be a unique lowercase DOM-safe identifier');
   if (!KINDS.includes(input.kind)) throw new Error(`kind must be ${KINDS.join(', ')}`);
+  if (input.presentation !== undefined && !['solid', 'glass'].includes(input.presentation)) throw new Error('presentation must be solid or glass');
+  if (input.numbered !== undefined && (input.kind !== 'step-rail' || typeof input.numbered !== 'boolean')) throw new Error('numbered is a boolean for step-rail only');
   if (!['16:9', '9:16'].includes(input.aspect)) throw new Error('aspect must be 16:9 or 9:16');
   const canvas = input.aspect === '16:9' ? {width: 1920, height: 1080} : {width: 1080, height: 1920};
   const start = number(input.start, 'start', 0, 86400);
@@ -95,6 +97,11 @@ export function buildEditorialModule(input) {
   const at = (value, label) => number(value, label, .28, duration - .45);
   let css = `#${id}{position:absolute;${placement};box-sizing:border-box;overflow:hidden;background:#17191d;color:#f7f7f8;border:1px solid #535761;border-radius:18px;box-shadow:0 16px 48px #0005;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:${font}px;line-height:1.25}#${id} *{box-sizing:border-box}#${id} .ui-title{margin:0;padding:${pad}px;font-size:${font + 4}px;font-weight:700;line-height:1.15}#${id} .ui-row{display:flex;align-items:center;gap:18px;padding:14px ${pad}px;border-top:1px solid #383c45}#${id} .ui-label{flex:1;min-width:0;overflow-wrap:break-word}#${id} .ui-check{width:36px;height:36px;flex:none;border:2px solid #828791;border-radius:7px;display:grid;place-items:center}#${id} .ui-check svg{width:32px;height:32px;opacity:0}#${id} .ui-status{font-size:${font - 6}px;color:#b8bbc3;width:${statusWidth}px;flex:none;text-align:right;position:relative}#${id} .ui-bar{position:absolute;top:0;left:0;right:0;height:48px;display:flex;align-items:center;gap:10px;padding:0 16px;background:#24272e;border-bottom:1px solid #535761}#${id} .ui-dot{width:12px;height:12px;border-radius:50%}#${id} .ui-bar-label{margin-left:12px;font-size:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#${id} .ui-content{padding:${pad}px}#${id} .ui-rail{position:relative;margin:20px ${pad}px 0;height:8px;background:#474c56;border-radius:4px}#${id} .ui-fill{height:100%;background:${accent};transform-origin:left;border-radius:4px}#${id} .ui-steps{display:flex;justify-content:space-between;padding:22px ${pad}px;gap:12px}#${id} .ui-step{flex:1;min-width:0;font-size:${Math.max(22, font - 4)}px;overflow-wrap:break-word;opacity:.65}#${id} .ui-body{padding:0 ${pad}px ${pad}px;margin:0;color:#d3d6dd;overflow-wrap:break-word}`;
   let body = '', media = '';
+  if (input.presentation === 'glass') {
+    // Opaque tint is the readability fallback when native video compositing
+    // does not reproduce backdrop blur. Keep framed media itself sharp.
+    css += input.kind === 'media-window' ? `#${id} .ui-bar{background:rgba(28,31,39,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}` : `#${id}{background:rgba(23,25,29,.86);border-color:#ffffff50;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}`;
+  }
   if (input.kind === 'media-window') {
     localMedia(input.media);
     const source = input.media;
@@ -250,6 +257,7 @@ export function buildEditorialModule(input) {
       if (!Array.isArray(input.steps) || input.steps.length < 2 || input.steps.length > 6) throw new Error('steps must contain 2–6 entries; split longer rails');
       if (rect.height < header + 160) throw new Error('step-rail rect must leave room for labels');
       motion.unshift(`tl.set(${js(`${selector} .ui-fill`)}, {scaleX:0,transformOrigin:'left center'}, ${start});`);
+if (input.numbered) css += `#${id} .ui-step-number{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:${accent};color:#17191d;font-size:24px;font-weight:750;margin-bottom:12px}`;
       let previous = -1;
       body += `<div class="ui-rail"><div class="ui-fill"></div></div><div class="ui-steps">`;
       input.steps.forEach((step, i) => {
@@ -260,7 +268,7 @@ export function buildEditorialModule(input) {
         const offset = at(step.at, 'step.at');
         if (offset <= previous || (previous >= 0 && offset - previous + 1e-9 < .3)) throw new Error('step times must strictly increase with at least 0.3s between events');
         previous = offset;
-        body += `<div id="${id}-step-${i}" class="ui-step">${escape(step.label)}</div>`;
+        body += `<div id="${id}-step-${i}" class="ui-step">${input.numbered ? `<span class="ui-step-number">${i + 1}</span>` : ''}${escape(step.label)}</div>`;
         const time = start + offset;
         motion.push(`tl.to(${js(`#${id}-step-${i}`)}, {opacity:1,duration:0.18}, ${time});`, `tl.to(${js(`#${id}-step-${i}`)}, {color:${js(accent)},duration:0.18}, ${time});`, `tl.to(${js(`${selector} .ui-fill`)}, {scaleX:${i / (input.steps.length - 1)},duration:0.3,ease:'power2.inOut'}, ${time});`);
         events.push({id: `${id}-step-${i}-settle`, time: time + .3});
