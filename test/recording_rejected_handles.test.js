@@ -85,6 +85,8 @@ test("noise-relative confirmation preserves soft tails and rejects brief dips be
   assert.equal(refined.kept_segments[0].source_end_seconds, 1.825, "keeps soft accepted tail below dialogue cutoff until sustained noise-relative quiet");
   assert.ok(refined.kept_segments[1].source_start_seconds > 3.6 && refined.kept_segments[1].source_start_seconds < 3.8);
   assert.deepEqual(refined.audio_analysis.unconfirmed_boundaries, []);
+  const withDialogueQuiet = refineRecordingEditPlan(fixture("filler"), { ...analysis, silence_intervals: [{ start_seconds: 1.51, end_seconds: 1.9 }] }, { trimEdges: false });
+  assert.equal(withDialogueQuiet.kept_segments[0].source_end_seconds, 1.825, "normal pause cutoff cannot undo stricter acoustic tail protection");
 });
 
 test("no confirmed separator preserves original handles with unresolved receipt instead of clipping", () => {
