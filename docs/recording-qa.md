@@ -14,14 +14,15 @@ A receipt has this contract:
 
 ```js
 {
-  evidence_hash: recordingQaEvidenceHash(plan, renderedTranscript, mediaSha256),
+  evidence_hash: recordingQaEvidenceHash(plan, renderedTranscript, mediaSha256, sourceTranscript, acoustic),
   coverage_complete: true,
   findings: [],
-  transcript_resolutions: []
+  transcript_resolutions: [],
+  acoustic_resolutions: []
 }
 ```
 
-Hash the actual rendered media bytes with SHA256. Binding includes the entire plan and normalized output words. If original source context is supplied, pass it as `sourceTranscript` to identification/assessment, and as the fourth argument to `recordingQaEvidenceHash`; the source is then also bound. Stale receipts fail closed. The model response receives its evidence hash locally rather than calculating it.
+Hash the actual rendered media bytes with SHA256. Binding includes the entire plan and normalized output words. If original source context is supplied, pass it as `sourceTranscript` to identification/assessment, and as the fourth argument to `recordingQaEvidenceHash`; the source is then also bound. Pass the measured acoustic snapshot as the fifth hash argument; identification and assessment bind `options.acoustic` automatically. Stale receipts fail closed. The model response receives its evidence hash locally rather than calculating it.
 
 Findings include `kind`, `start_seconds`, `end_seconds`, and `explanation`, with optional `segment_index` and `edge`. Blocking kinds are `broken-sentence`, `missing-context`, `orphan-fragment`, `unintended-repetition`, and `unclear-audio`. `source-delivery` and `transcription-variation` are nonblocking observations. Original informal grammar is not automatically an editing defect. Semantic findings cannot declare themselves repairable or execute edits.
 
@@ -37,6 +38,8 @@ Assessment options:
   sourceTranscript // optional original word-timed transcript
 }
 ```
+
+An unproven `join-click-candidate` stays ambiguous. A bound semantic receipt may resolve it with `acoustic_resolutions:[{issue_index,verdict:"natural-transition",explanation}]` after audition; unresolved candidates prevent passing. A matching original word whose original timestamp crosses a cut, together with an independent output-ASR disagreement at that boundary, permits a small source-word restoration request; the repair engine still checks protected removed ranges.
 
 A proven acoustic issue uses `{kind:'clipped-boundary', segment_index, edge:'start'|'end', seconds, proven:true, explanation}`. Without complete acoustic and semantic coverage the edit cannot pass. CLI runs without an installed local model stage an agent review and remain pending; the active subscription agent must complete and supply the bound receipt. Do not replace missing coverage with an empty fabricated pass.
 
