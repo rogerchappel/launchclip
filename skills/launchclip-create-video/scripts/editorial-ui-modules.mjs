@@ -212,9 +212,12 @@ export function buildEditorialModule(input) {
         format = value => `${Math.round(value / max * 100)}%`;
       }
       const noteLines = Math.ceil(attribution.length / Math.floor((rect.width - 48) / (22 * .65)));
-      if (rect.height < header + noteLines * 29 + 24 + (isMetric ? 110 : 160)) throw new Error(`${input.kind} rect too short`);
       const numberFont = Math.max(36, Math.min(64, Math.floor((rect.width - 48) / (Math.max(...config.values.map(entry => format(entry.value).length)) * .68))));
       if (Math.max(...config.values.map(entry => format(entry.value).length)) * numberFont * .68 > rect.width - 48) throw new Error('formatted metric too wide for rect');
+      const unitText = isMetric ? config.unit : (config.label ?? 'Progress');
+      const unitLines = Math.ceil(unitText.length / Math.floor((rect.width - 48) / (22 * .65)));
+      const requiredHeight = 2 + header + noteLines * 22 * 1.3 + 20 + numberFont * 1.1 + 12 + unitLines * 22 * 1.25 + 20 + (isMetric ? 0 : 40);
+      if (rect.height < requiredHeight) throw new Error(`${input.kind} rect too short; requires at least ${Math.ceil(requiredHeight)}px`);
       css += `#${id} .ui-note{margin:0;padding:0 24px 20px;color:#d3d6dd;font-size:22px;line-height:1.3;overflow-wrap:break-word}#${id} .ui-number{margin:0;padding:0 24px 12px;font-size:${numberFont}px;font-weight:750;line-height:1.1;font-variant-numeric:tabular-nums;white-space:nowrap}#${id} .ui-number-unit{padding:0 24px 20px;font-size:22px;color:#d3d6dd}#${id} .ui-progress-track{height:16px;margin:0 24px 24px;background:#474c56;border-radius:8px;overflow:hidden}#${id} .ui-progress-fill{height:100%;background:${accent};transform-origin:left}`;
       body += `<p class="ui-note">${escape(attribution)}</p><div id="${id}-number" class="ui-number">${escape(format(config.values[0].value))}</div><div class="ui-number-unit">${escape(isMetric ? config.unit : (config.label ?? 'Progress'))}</div>`;
       if (!isMetric) body += '<div class="ui-progress-track"><div class="ui-progress-fill"></div></div>';
@@ -257,7 +260,7 @@ export function buildEditorialModule(input) {
       if (!Array.isArray(input.steps) || input.steps.length < 2 || input.steps.length > 6) throw new Error('steps must contain 2–6 entries; split longer rails');
       if (rect.height < header + 160) throw new Error('step-rail rect must leave room for labels');
       motion.unshift(`tl.set(${js(`${selector} .ui-fill`)}, {scaleX:0,transformOrigin:'left center'}, ${start});`);
-if (input.numbered) css += `#${id} .ui-step-number{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:${accent};color:#17191d;font-size:24px;font-weight:750;margin-bottom:12px}`;
+      if (input.numbered) css += `#${id} .ui-step-number{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:${accent};color:#17191d;font-size:24px;font-weight:750;margin-bottom:12px}`;
       let previous = -1;
       body += `<div class="ui-rail"><div class="ui-fill"></div></div><div class="ui-steps">`;
       input.steps.forEach((step, i) => {
