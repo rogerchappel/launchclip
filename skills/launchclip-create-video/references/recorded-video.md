@@ -92,10 +92,15 @@ are removed throughout the edit, including tiny remnants between rejected takes.
 Genuine short words are preserved; there is no blanket minimum clip duration.
 Handles directly facing rejected takes or fillers prefer the nearest verified
 quiet separator fully outside accepted words, within the original retained range
-and at most 200ms from the aligned word boundary. Cuts land inside that gap with
+and at most 500ms from the aligned word boundary. Cuts land inside that gap with
 padding clamped to half its duration; without a qualifying separator they fall
-back to aligned word bounds. Precise boundary quiet uses nondebounced 10ms
-detection; the normal 0.4s acoustic pause minimum remains unchanged. This removes
+back to aligned word bounds for legacy analysis. New analysis uses a separate
+noise-relative cutoff (noise floor + 6dB, never above the dialogue cutoff and
+bounded below at -80dB), requiring 40ms sustained quiet without debounce. If no
+separator qualifies, it preserves the original handle and records an unconfirmed
+boundary for source/output QA instead of claiming clean audio. The initial cut
+search is distinct from QA restoration budgets: repairs remain capped at 200ms
+each and 600ms total. The normal 0.4s acoustic pause minimum remains unchanged. This removes
 residual audio even when ASR does not recognize a word. These
 removed handles are protected from later QA restoration. PCM join checks detect
 isolated click candidates; they do not establish that every sustained phoneme or
