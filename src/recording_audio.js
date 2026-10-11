@@ -32,11 +32,14 @@ export async function analyzeRecordingAudio(input, options = {}, adapters = {}) 
   // can discard the preceding quiet piece before the requested duration gate.
   const detectorDuration = Math.min(silenceDuration, 0.01);
   const quiet = await run("ffmpeg", [...common, "-af", `aresample=16000,aformat=channel_layouts=mono,silencedetect=noise=${threshold}dB:d=${detectorDuration}`, "-f", "null", "-"], { maxBuffer: 8 * 1024 * 1024 });
-  // Splice separators must be proven quiet, without joining across noise blips.
-  const boundarySilence = parseAudioSilence(quiet.stderr, duration, { joinToleranceSeconds: 0 });
+  // Dialogue-relative quiet can contain soft consonants. Confirm separators
+  // against the noise floor for 40ms, without joining across voiced blips.
+  const boundaryThreshold = Math.max(-80, Math.min(threshold, noiseFloor + 6));
+  const boundaryDetection = await run("ffmpeg", [...common, "-af", `aresample=16000,aformat=channel_layouts=mono,silencedetect=noise=${boundaryThreshold}dB:d=0.04`, "-f", "null", "-"], { maxBuffer: 8 * 1024 * 1024 });
+  const boundarySilence = parseAudioSilence(boundaryDetection.stderr, duration, { joinToleranceSeconds: 0 }).filter((interval) => interval.end_seconds - interval.start_seconds >= 0.04 - 1e-6);
   const silence = parseAudioSilence(quiet.stderr, duration, { joinToleranceSeconds: joinTolerance }).filter((interval) => interval.end_seconds - interval.start_seconds >= silenceDuration - 1e-6);
   if (silence.length === 1 && silence[0].start_seconds === 0 && silence[0].end_seconds >= duration - 0.001) throw new Error("Recording audio is entirely below the silence threshold");
-  return { schema_version: RECORDING_AUDIO_VERSION, source_duration_seconds: duration, threshold_db: threshold, threshold_receipt: { noise_floor_db: noiseFloor, speech_reference_db: speechReference, speech_percentile: 75, rule: options.thresholdDb === undefined ? "max(noise-floor+10dB,speech-p75-18dB),clamped[-60,-30]" : "explicit-override" }, silence_duration_seconds: silenceDuration, silence_padding_seconds: padding, silence_join_tolerance_seconds: joinTolerance, envelope_step_seconds: step, silence_intervals: silence, boundary_silence_intervals: boundarySilence, waveform };
+  return { schema_version: RECORDING_AUDIO_VERSION, source_duration_seconds: duration, threshold_db: threshold, threshold_receipt: { noise_floor_db: noiseFloor, speech_reference_db: speechReference, speech_percentile: 75, rule: options.thresholdDb === undefined ? "max(noise-floor+10dB,speech-p75-18dB),clamped[-60,-30]" : "explicit-override" }, silence_duration_seconds: silenceDuration, silence_padding_seconds: padding, silence_join_tolerance_seconds: joinTolerance, envelope_step_seconds: step, silence_intervals: silence, boundary_silence_intervals: boundarySilence, boundary_silence_receipt: { threshold_db: boundaryThreshold, noise_floor_db: noiseFloor, rule: "max(-80,min(dialogue-threshold,noise-floor+6dB))", minimum_duration_seconds: 0.04, join_tolerance_seconds: 0 }, waveform };
 }
 
 export function parseRmsEnvelope(output, { durationSeconds, stepSeconds, maxPoints = 6000 }) {
@@ -150,6 +153,7 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
   const rejectedReasons = new Set(["semantic-retake", "repeated-take", "filler", "false-start"]);
   const rejectedCuts = plan.removed_segments.filter((segment) => rejectedReasons.has(segment.reason));
   const spliceRanges = [];
+  const unconfirmedBoundaries = [];
   for (const keep of keeps) {
     const spoken = sourceWords.filter((word) => word.start >= keep.start - 1e-6 && word.end <= keep.end + 1e-6);
     if (!spoken.length) continue; // Wordless ranges are removed separately below.
@@ -159,17 +163,23 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
     const touchesLaterCut = rejectedCuts.some((cut) => Math.abs(cut.source_start_seconds - keep.end) <= 1e-6);
     if (touchesEarlierCut && spoken[0].start > keep.start) {
       const wordStart = spoken[0].start;
-      const separator = boundaryQuiet.filter((quiet) => quiet.end <= wordStart && quiet.end > Math.max(keep.start, wordStart - 0.2) && quiet.start >= keep.start).at(-1);
-      const boundary = separator ? Math.max(wordStart - 0.2, separator.end - Math.min(padding, (separator.end - separator.start) / 2)) : wordStart;
+      const separator = boundaryQuiet.map((quiet) => ({ start: Math.max(quiet.start, keep.start), end: Math.min(quiet.end, wordStart) })).filter((quiet) => quiet.end - quiet.start >= 0.04 - 1e-6 && quiet.end > wordStart - 0.5).at(-1);
+      if (!separator && analysis.boundary_silence_receipt) { unconfirmedBoundaries.push({ side: "start", source_word_boundary_seconds: wordStart, source_keep_boundary_seconds: keep.start, reason: "no-confirmed-quiet-separator" }); }
+      const boundary = separator ? Math.max(wordStart - 0.5, separator.end - Math.min(padding, (separator.end - separator.start) / 2)) : analysis.boundary_silence_receipt ? keep.start : wordStart;
+      if (boundary > keep.start) {
       spliceRanges.push({ start: keep.start, end: boundary });
       keep.start = boundary;
+      }
     }
     if (touchesLaterCut && spoken.at(-1).end < keep.end) {
       const wordEnd = spoken.at(-1).end;
-      const separator = boundaryQuiet.find((quiet) => quiet.start >= wordEnd && quiet.start < Math.min(keep.end, wordEnd + 0.2) && quiet.end <= keep.end);
-      const boundary = separator ? Math.min(wordEnd + 0.2, separator.start + Math.min(padding, (separator.end - separator.start) / 2)) : wordEnd;
+      const separator = boundaryQuiet.map((quiet) => ({ start: Math.max(quiet.start, wordEnd), end: Math.min(quiet.end, keep.end) })).find((quiet) => quiet.end - quiet.start >= 0.04 - 1e-6 && quiet.start < wordEnd + 0.5);
+      if (!separator && analysis.boundary_silence_receipt) { unconfirmedBoundaries.push({ side: "end", source_word_boundary_seconds: wordEnd, source_keep_boundary_seconds: keep.end, reason: "no-confirmed-quiet-separator" }); }
+      const boundary = separator ? Math.min(wordEnd + 0.5, separator.start + Math.min(padding, (separator.end - separator.start) / 2)) : analysis.boundary_silence_receipt ? keep.end : wordEnd;
+      if (boundary < keep.end) {
       spliceRanges.push({ start: boundary, end: keep.end });
       keep.end = boundary;
+      }
     }
   }
   const protectedRanges = union(sourceWords.map((word) => ({ start: Math.max(0, word.start - padding), end: Math.min(duration, word.end + padding) })));
@@ -215,7 +225,7 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
     checkedRange(segment.source_start_seconds, segment.source_end_seconds, duration);
     return { ...segment };
   }), ...removals.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "waveform-silence" })), ...wordlessRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "wordless-range" })), ...boundaryRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "speech-boundary" })), ...spliceRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "rejected-splice-handle" }))].sort((a, b) => a.source_start_seconds - b.source_start_seconds);
-  return { ...plan, duration_seconds: clock, kept_segments, removed_segments, words, text: words.map((word) => word.word ?? word.text).join(" "), audio_analysis: { schema_version: RECORDING_AUDIO_VERSION, threshold_db: analysis.threshold_db, threshold_receipt: analysis.threshold_receipt, silence_padding_seconds: padding, trim_edges: trimEdges, speech_boundary_removed_seconds: boundaryRanges.reduce((sum, range) => sum + range.end - range.start, 0), rejected_splice_removed_seconds: spliceRanges.reduce((sum, range) => sum + range.end - range.start, 0), wordless_removed_seconds: wordlessRanges.reduce((sum, range) => sum + range.end - range.start, 0), removed_seconds: plan.duration_seconds - clock, aligned_words: alignedWords, dropped_words: droppedWords } };
+  return { ...plan, duration_seconds: clock, kept_segments, removed_segments, words, text: words.map((word) => word.word ?? word.text).join(" "), audio_analysis: { schema_version: RECORDING_AUDIO_VERSION, threshold_db: analysis.threshold_db, threshold_receipt: analysis.threshold_receipt, silence_padding_seconds: padding, trim_edges: trimEdges, boundary_silence_receipt: analysis.boundary_silence_receipt, boundary_search_seconds: 0.5, unconfirmed_boundaries: unconfirmedBoundaries, speech_boundary_removed_seconds: boundaryRanges.reduce((sum, range) => sum + range.end - range.start, 0), rejected_splice_removed_seconds: spliceRanges.reduce((sum, range) => sum + range.end - range.start, 0), wordless_removed_seconds: wordlessRanges.reduce((sum, range) => sum + range.end - range.start, 0), removed_seconds: plan.duration_seconds - clock, aligned_words: alignedWords, dropped_words: droppedWords } };
 }
 
 function percentile(values, fraction) { return values[Math.min(values.length - 1, Math.floor(values.length * fraction))]; }
