@@ -11,7 +11,7 @@ const base = {id: 'learn', kind: 'checklist', aspect: '16:9', start: 70, duratio
 const row = {label: 'Engineering principles', status: 'active', at: 2.79, doneAt: 6.72};
 function commands(result) {
   const calls = [];
-  runInNewContext(result.motion, {tl: {fromTo: (...args) => calls.push(['fromTo', ...args]), to: (...args) => calls.push(['to', ...args])}});
+  runInNewContext(result.motion, {tl: {fromTo: (...args) => calls.push(['fromTo', ...args]), to: (...args) => calls.push(['to', ...args]), set: (...args) => calls.push(['set', ...args])}});
   return calls;
 }
 
@@ -52,6 +52,14 @@ test('bar stages are explicit chronological events without fabricated percentage
   assert.match(result.motion, /scaleX:1/);
   assert.equal(result.events.at(-1).time, 75.3);
   assert.throws(() => buildEditorialModule({...base, kind: 'step-rail', steps: [{label: 'Plan', at: 2}, {label: 'Build', at: 1}]}), /strictly increase/);
+});
+
+test('module exits hard-clear at their boundary and rail transforms initialize in GSAP', () => {
+  const media = buildEditorialModule({...base, kind: 'media-window', media: {kind: 'video', src: 'assets/demo.mp4'}});
+  for (const target of ['#learn', '#learn-media']) assert.ok(commands(media).some(call => call[0] === 'set' && call[1] === target && call[2].opacity === 0 && call.at(-1) === 98));
+  const rail = buildEditorialModule({...base, kind: 'step-rail', steps: [{label: 'Plan', at: 1}, {label: 'Build', at: 3}]});
+  assert.doesNotMatch(rail.css, /transform:scaleX/);
+  assert.ok(commands(rail).some(call => call[0] === 'set' && call[1] === '#learn .ui-fill' && call[2].scaleX === 0 && call.at(-1) === 0));
 });
 
 test('untrusted copy is escaped and generated animation never executes it', () => {
