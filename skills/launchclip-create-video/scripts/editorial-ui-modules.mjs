@@ -93,7 +93,7 @@ function moduleMotion(target, start, duration, config, media = false) {
 // Skill-local authoring helper, not a production API. The host owns its paused
 // GSAP timeline and places these fragments directly inside its composition root.
 export function buildEditorialModule(input) {
-  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt']);
+  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt', 'theme']);
   if (!/^[a-z][a-z0-9-]{0,59}$/.test(input.id ?? '')) throw new Error('id must be a unique lowercase DOM-safe identifier');
   if (!KINDS.includes(input.kind)) throw new Error(`kind must be ${KINDS.join(', ')}`);
   if (input.presentation !== undefined && !['solid', 'glass'].includes(input.presentation)) throw new Error('presentation must be solid or glass');
@@ -113,6 +113,13 @@ export function buildEditorialModule(input) {
   text(input.title, 'title', 54);
   const accent = input.accent ?? '#FF6A00';
   if (!/^#[0-9a-fA-F]{6}$/.test(accent)) throw new Error('accent must be a six-digit hex color');
+  let theme = null;
+  if (input.theme !== undefined) {
+    object(input.theme, 'theme', ['surface', 'foreground', 'muted', 'border', 'accentText']);
+    for (const key of ['surface', 'foreground', 'muted', 'border']) if (typeof input.theme[key] !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(input.theme[key])) throw new Error(`theme.${key} must be a six-digit hex color`);
+    if (input.theme.accentText !== undefined && (typeof input.theme.accentText !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(input.theme.accentText))) throw new Error('theme.accentText must be a six-digit hex color');
+    theme = {...input.theme, accentText: input.theme.accentText ?? input.theme.foreground};
+  }
   const allowed = {'media-window': ['media'], checklist: ['rows'], 'step-rail': ['steps'], callout: ['body', 'treatment'], 'audience-grid': ['audience'], 'trend-chart': ['chart'], metric: ['metric'], progress: ['progress'], 'date-card': ['date'], 'status-rack': ['rack'], 'code-snippet': ['code'], 'excerpt-window': ['excerpt']}[input.kind];
   for (const key of ['media', 'rows', 'steps', 'body', 'audience', 'chart', 'metric', 'progress', 'treatment', 'date', 'rack', 'code', 'excerpt']) if (input[key] !== undefined && !allowed.includes(key)) throw new Error(`${input.kind} does not accept ${key}`);
   const statusLabels = {pending: 'Pending', active: 'Active', done: 'Done', ...(input.statusLabels ?? {})};
@@ -302,7 +309,7 @@ export function buildEditorialModule(input) {
           if (!Array.isArray(state.lights) || state.lights.length !== 3 || state.lights.some(light => typeof light !== 'boolean')) throw new Error('rack lights must be exactly three booleans');
           const time = start + offset; let changed = n === 0;
           if (n === 0) motion.push(`tl.fromTo(${js(`#${id}-rack-${i}`)}, {opacity:0,x:-10}, {opacity:1,x:0,duration:0.22,ease:'power3.out'}, ${time});`);
-          state.lights.forEach((light, j) => {if (light !== previousLights[j]) {changed = true; motion.push(`tl.to(${js(`#${id}-light-${i}-${j}`)}, {backgroundColor:${js(light ? accent : '#536071')},duration:0.18,ease:'power2.out'}, ${time});`);}});
+          state.lights.forEach((light, j) => {if (light !== previousLights[j]) {changed = true; motion.push(`tl.to(${js(`#${id}-light-${i}-${j}`)}, {backgroundColor:${js(light ? accent : (theme?.border ?? '#536071'))},duration:0.18,ease:'power2.out'}, ${time});`);}});
           previousLights = [...state.lights];
           if (changed) events.push({id: `${id}-rack-${i}-state-${n}`, time: time + (n === 0 ? .22 : .18)});
         });
@@ -461,7 +468,7 @@ export function buildEditorialModule(input) {
         if (row.status === 'active') motion.push(`tl.to(${js(`#${id}-row-${i} .ui-check`)}, {borderColor:${js(accent)},duration:0.16}, ${eventTime});`, `tl.to(${js(`#${id}-row-${i}`)}, {backgroundColor:${js(accent + '22')},duration:0.16}, ${eventTime});`);
         if (row.status !== 'pending') events.push({id: `${id}-row-${i}-state`, time: eventTime + .16});
         if (doneTime !== null) {
-          motion.push(`tl.to(${js(`#${id}-row-${i}`)}, {backgroundColor:"#17191d",duration:0.16}, ${doneTime});`, `tl.to(${js(`#${id}-status-${i}-active`)}, {opacity:0,duration:0.01}, ${doneTime});`, `tl.to(${js(`#${id}-status-${i}-done`)}, {opacity:1,duration:0.16}, ${doneTime});`, `tl.to(${js(`#${id}-row-${i} svg`)}, {opacity:1,duration:0.16,ease:'power2.out'}, ${doneTime});`);
+          motion.push(`tl.to(${js(`#${id}-row-${i}`)}, {backgroundColor:${js(theme?.surface ?? "#17191d")},duration:0.16}, ${doneTime});`, `tl.to(${js(`#${id}-status-${i}-active`)}, {opacity:0,duration:0.01}, ${doneTime});`, `tl.to(${js(`#${id}-status-${i}-done`)}, {opacity:1,duration:0.16}, ${doneTime});`, `tl.to(${js(`#${id}-row-${i} svg`)}, {opacity:1,duration:0.16,ease:'power2.out'}, ${doneTime});`);
           events.push({id: `${id}-row-${i}-covered`, time: doneTime + .16});
         }
       });
@@ -482,13 +489,30 @@ export function buildEditorialModule(input) {
         previous = offset;
         body += `<div id="${id}-step-${i}" class="ui-step">${input.numbered ? `<span class="ui-step-number">${i + 1}</span>` : ''}${escape(step.label)}</div>`;
         const time = start + offset;
-        motion.push(`tl.to(${js(`#${id}-step-${i}`)}, {opacity:1,duration:0.18}, ${time});`, `tl.to(${js(`#${id}-step-${i}`)}, {color:${js(accent)},duration:0.18}, ${time});`, `tl.to(${js(`${selector} .ui-fill`)}, {scaleX:${i / (input.steps.length - 1)},duration:0.3,ease:'power2.inOut'}, ${time});`);
+        motion.push(`tl.to(${js(`#${id}-step-${i}`)}, {opacity:1,duration:0.18}, ${time});`, `tl.to(${js(`#${id}-step-${i}`)}, {color:${js(theme?.accentText ?? accent)},duration:0.18}, ${time});`, `tl.to(${js(`${selector} .ui-fill`)}, {scaleX:${i / (input.steps.length - 1)},duration:0.3,ease:'power2.inOut'}, ${time});`);
         events.push({id: `${id}-step-${i}-settle`, time: time + .3});
       });
       body += '</div>';
     }
   }
   if ((movement || input.treatment || ['date-card', 'status-rack', 'code-snippet', 'excerpt-window'].includes(input.kind)) && events.some(event => event.time > start + duration - exitDuration + 1e-9)) throw new Error('content must settle before motion exit begins');
+  if (theme) {
+    const scoped = (selectors, declarations) => selectors.map(name => `${selector}${name ? ` ${name}` : ''}`).join(',') + `{${declarations}}`;
+    const fill = input.presentation === 'glass' ? theme.surface + 'DB' : theme.surface;
+    css += scoped([''], `background:${fill};color:${theme.foreground};border-color:${theme.border}`);
+    css += scoped(['.ui-row', '.ui-rack-row', '.ui-viewer'], `background:${theme.surface};border-color:${theme.border};color:${theme.foreground}`);
+    css += scoped(['.ui-bar'], `background:${input.presentation === 'glass' ? theme.surface + 'E0' : theme.surface};border-color:${theme.border};color:${theme.foreground}`);
+    css += scoped(['.ui-body', '.ui-symbol', '.ui-rack-label', '.ui-bar-label', '.ui-title'], `color:${theme.foreground}`);
+    css += scoped(['.ui-status', '.ui-note', '.ui-unit', '.ui-number-unit', '.ui-date-note', '.ui-rack-note', '.ui-code-language', '.ui-excerpt-note', '.ui-token-comment', '.ui-token-string'], `color:${theme.muted}`);
+    css += scoped(['.ui-emphasis', '.ui-token-keyword', '.ui-token-number'], `color:${theme.accentText}`);
+    css += scoped(['.ui-token-operator', '.ui-step'], `color:${theme.foreground}`);
+    css += scoped(['.ui-check', '.ui-bar-track'], `border-color:${theme.border}`);
+    css += scoped(['.ui-rail', '.ui-progress-track', '.ui-rack-marker', '.ui-light'], `background:${theme.border}`);
+    // Orange stays an accent fill; dark ink remains legible on its bright band.
+    css += scoped(['.ui-month', '.ui-step-number'], 'color:#171612');
+    if (input.kind === 'media-window') css += `#${id}-media{background:${theme.surface}!important}`;
+    if (input.presentation === 'glass') css += `@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){${scoped([''], `background:${theme.surface}BD`)}}`;
+  }
   const background = input.kind === 'media-window' ? 'background:transparent;' : '';
   return {html: `${media}<section id="${id}" ${input.kind === 'media-window' ? chromeTimed : timed} style="${background}">${body}</section>`, css, motion: motion.join('\n'), events, layout: {canvas, rect: {...rect}, ...(movement ? {motion: {enterEnd: start + enterDuration, exitStart: start + duration - exitDuration, end: start + duration}} : {})}};
 }
