@@ -205,13 +205,59 @@ State why unused resources do not help (unreadable, redundant, unrelated, wrong
 aspect or unsupported claim). A filename is a discovery hint, not evidence.
 Keep originals unchanged; freeze selected copies in the composition project.
 
-Do not wait for optional captures. For each important beat, design a useful
-conceptual treatment that works without them: spatial comparison, process,
-transformation, branching route, cause/effect, timeline or object handoff.
-Replace it with a real useful capture when one exists. Label conceptual UI or
-process diagrams as illustrations; never invent product screens, progress,
-member activity, results, testimonials or numbers as proof. Avoid a generic
-three-card layout or floating keywords when an idea can be shown in motion.
+Do not wait for optional captures. Design useful module states that work from
+the spoken content alone: a checklist changing state, a process advancing along
+a step rail, a highlighted comparison, or a short takeaway. Use a real capture
+when it clarifies or substantiates the idea. Distinguish conceptual states from
+actual evidence in the plan and visible treatment; label illustrative UI when
+it could be mistaken for a real product screen or measured result. Never invent
+product screens, progress, member activity, results, testimonials or numbers as
+proof. A progress bar can express an explicitly illustrative process, but cannot
+imply a measured completion percentage without supporting evidence.
+
+### Select established modules before custom geometry
+
+Use a small project-consistent vocabulary of curated, verified UI components.
+The art director chooses the module, content, placement, emphasis, state changes
+and timing; it should reuse the module's geometry and animation instead of
+redrawing controls, connectors or mechanical metaphors for each beat. Prefer:
+
+- **Browser or desktop media window:** supplied screenshot, app demo, screen
+  recording or over-the-shoulder footage inside restrained window chrome. Keep
+  media aspect ratio and readable focal detail; animate crop/focus rather than
+  stretching the image. An empty window is not evidence or useful B-roll.
+- **Checklist or step rail:** a concrete process stated in the speech, with a
+  row highlight, checkbox/tick state or next-step emphasis. Align every row and
+  indicator with layout primitives; preserve completed states between beats.
+- **Progress or status:** advance along known stages or show a grounded status.
+  Without real measurements, use named stages and explicit illustrative
+  treatment rather than fabricated percentages, elapsed time or success data.
+- **Highlight or callout:** focus a relevant region of an actual capture, attach
+  a short explanation, or pair a real image/video with a concise takeaway.
+  Keep arrows local to their target and omit them when proximity is clearer.
+- **Takeaway card:** emphasize one short conclusion, then return to the speaker.
+  It is an accent, not a replacement for all visual explanation.
+
+Prefer bundled LaunchClip modules and existing media-window framing. An already
+available, appropriate component library may supply a module, but do not imply
+that a library is installed, integrate unreviewed remote code, or add dependencies
+merely to obtain a familiar appearance. The HyperFrames composition must still
+use the bundled runtime contract: deterministic local assets and seek-safe
+paused timelines, with framework-owned media playback. A live web component's
+interactive animation is not automatically a render-safe video component.
+
+Keep a consistent window radius, title bar, spacing, text hierarchy, icon size
+and animation grammar in `DESIGN.md`. Module entries normally decelerate into a
+crisp readable settle; exits accelerate away. Reuse established state-change
+animations and a small set of curves. Animate one useful change at a time and
+hold the resulting state long enough to read. Avoid elaborate factory/cube or
+mechanical constructions when a simple UI state communicates the same idea.
+
+Custom diagrams remain an exception when the available modules cannot express
+the concept. Record why the module is inadequate and prove the custom geometry
+in the short prototype, including connector endpoints and motion overlaps,
+before full authoring. This is not a fixed module quota: quiet presenter beats,
+real proof and meaningful variation remain driven by the recording.
 
 ### Build a whole-transcript direction map
 
@@ -220,7 +266,9 @@ in the verification section), plus a human-readable `STORYBOARD.md`. Cover the
 whole accepted timeline, including deliberate quiet presenter beats. For each
 sequence record the spoken anchor/time range, purpose (explain, demonstrate,
 contrast, anticipate, emphasize or rest), visual action and development, chosen
-resource or asset-free fallback, layout, continuity, motion and audio events.
+resource or asset-free fallback, selected module and changing states, layout,
+continuity, motion and audio events. Record the module source/version so a later
+repair can update content or timing without reinventing its geometry.
 
 Choose the number and length of sequences from context, not a template quota.
 Preserve the presenter for personal/emotional statements; use overlays when an
@@ -234,7 +282,11 @@ For each aspect ratio define a separate readable layout. In 16:9 protect the
 face, gestures and useful negative space; in 9:16 inspect the actual crop and
 reserve caption/platform UI areas. Do not shrink a landscape scene into
 portrait or place a panel over the presenter to preserve a planned layout.
-Inspect layouts at delivery size, including the actual target crop.
+Inspect layouts at delivery size, including the actual target crop. Place
+overlays in genuinely usable negative space with a sufficiently opaque surface
+for busy footage; use a split or full-frame module when safe readable space is
+unavailable. Preserve the face and quiet personal beats rather than continuously
+covering the presenter with UI.
 
 ### Choreograph visual and audio events together
 
@@ -291,7 +343,11 @@ and specific findings, bind review to both the actual prototype and current
 direction plan, then repair the responsible sequence before expanding. A changed
 plan, selected asset or render invalidates the old review; regenerate the
 contract's evidence hashes and inspect the changed treatment.
-CLI success and attractive screenshots cannot substitute for this review.
+CLI success, bounds checks and attractive screenshots cannot substitute for
+normal-speed audiovisual review. If playback or listening is unavailable, record
+which checks were performed, leave motion/audio approval pending and deliver a
+clearly labeled review draft; never set review approval flags from frame or
+waveform checks alone.
 Existing user authorization to render drafts is sufficient; do not add an
 approval round solely because a prototype exists.
 
