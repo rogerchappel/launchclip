@@ -187,6 +187,8 @@ export function buildEditorialModule(input) {
           body += `<div id="${id}-edge" class="ui-accent-edge" aria-hidden="true"></div>`;
           motion.push(`tl.fromTo(${js(`#${id}-edge`)}, {opacity:0}, {opacity:0.6,duration:0.4,ease:'power2.out'}, ${time});`);
         }
+        if (treatment.corners && (rect.x < 12 || rect.y < 12 || rect.x + rect.width > canvas.width - 12 || rect.y + rect.height > canvas.height - 12)) throw new Error('corners require 12px canvas clearance');
+        if (treatment.corners) css += `#${id}{overflow:visible}#${id} .ui-corner-tl{left:-8px;top:-8px}#${id} .ui-corner-tr{right:-8px;top:-8px}#${id} .ui-corner-bl{left:-8px;bottom:-8px}#${id} .ui-corner-br{right:-8px;bottom:-8px}`;
         if (treatment.corners) ['tl','tr','bl','br'].forEach((corner, i) => {
           body += `<span id="${id}-corner-${corner}" class="ui-corner ui-corner-${corner}" aria-hidden="true"></span>`;
           motion.push(`tl.fromTo(${js(`#${id}-corner-${corner}`)}, {opacity:0,x:${corner.endsWith('l') ? 6 : -6},y:${corner.startsWith('t') ? 6 : -6}}, {opacity:1,x:0,y:0,duration:0.28,ease:'power3.out'}, ${time + i * .04});`);
@@ -419,7 +421,7 @@ export function buildEditorialModule(input) {
       body += '</div>';
     }
   }
-  if (movement && events.some(event => event.time > start + duration - exitDuration + 1e-9)) throw new Error('content must settle before motion exit begins');
+  if ((movement || input.treatment || ['date-card', 'status-rack', 'code-snippet'].includes(input.kind)) && events.some(event => event.time > start + duration - exitDuration + 1e-9)) throw new Error('content must settle before motion exit begins');
   const background = input.kind === 'media-window' ? 'background:transparent;' : '';
   return {html: `${media}<section id="${id}" ${input.kind === 'media-window' ? chromeTimed : timed} style="${background}">${body}</section>`, css, motion: motion.join('\n'), events, layout: {canvas, rect: {...rect}, ...(movement ? {motion: {enterEnd: start + enterDuration, exitStart: start + duration - exitDuration, end: start + duration}} : {})}};
 }
