@@ -226,7 +226,7 @@ export function buildEditorialModule(input) {
         const time = start + entry.at;
         if (i === 0) motion.push(`tl.fromTo(${js(`#${id}-number`)}, {opacity:0.7}, {opacity:1,duration:0.2}, ${time});`);
         else textFrames(motion, `#${id}-number`, config.values[i - 1].value, entry.value, format, time);
-        if (!isMetric && i > 0) motion.push(`tl.to(${js(`${selector} .ui-progress-fill`)}, {scaleX:${entry.value / (config.max ?? 100)},duration:0.6,ease:'power2.inOut'}, ${time});`);
+        if (!isMetric && i > 0) motion.push(`tl.to(${js(`${selector} .ui-progress-fill`)}, {scaleX:${entry.value / (config.max ?? 100)},duration:0.6,ease:'power2.out'}, ${time});`);
         events.push({id: `${id}-value-${i}-settle`, time: time + (i ? .6 : .2)});
       });
     } else if (input.kind === 'checklist') {
