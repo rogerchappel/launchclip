@@ -33,8 +33,24 @@ export async function analyzeRecordingAudio(input, options = {}, adapters = {}) 
   const detectorDuration = Math.min(silenceDuration, 0.01);
   const quiet = await run("ffmpeg", [...common, "-af", `aresample=16000,aformat=channel_layouts=mono,silencedetect=noise=${threshold}dB:d=${detectorDuration}`, "-f", "null", "-"], { maxBuffer: 8 * 1024 * 1024 });
   const silence = parseAudioSilence(quiet.stderr, duration, { joinToleranceSeconds: joinTolerance }).filter((interval) => interval.end_seconds - interval.start_seconds >= silenceDuration - 1e-6);
+  // Dialogue-relative quiet can contain soft consonants. Confirm separators
+  // against the noise floor for 40ms, without joining across voiced blips.
+  const boundaryThreshold = Math.max(-80, Math.min(threshold, noiseFloor + 6));
+  const boundaryWindows = options.boundaryPlan ? recordingBoundaryWindows(options.boundaryPlan, duration, silence, waveform, noiseFloor) : null;
+  const boundaryMinimum = boundaryWindows ? 0.02 : 0.04;
+  let boundarySilence;
+  if (boundaryWindows) {
+    boundarySilence = [];
+    for (const window of boundaryWindows) {
+      const pcm = await run("ffmpeg", ["-hide_banner", "-nostdin", "-loglevel", "error", "-ss", String(window.start), "-i", input, "-t", String(window.end - window.start), "-map", "0:a:0", "-vn", "-af", "aresample=16000,aformat=sample_fmts=s16:channel_layouts=mono", "-f", "f32le", "-"], { encoding: "buffer", maxBuffer: 32000 });
+      boundarySilence.push(...parseBoundaryPcm(pcm.stdout, window, boundaryThreshold));
+    }
+  } else {
+    const boundaryDetection = await run("ffmpeg", [...common, "-af", `aresample=16000,aformat=channel_layouts=mono,silencedetect=noise=${boundaryThreshold}dB:d=0.04`, "-f", "null", "-"], { maxBuffer: 8 * 1024 * 1024 });
+    boundarySilence = parseAudioSilence(boundaryDetection.stderr, duration, { joinToleranceSeconds: 0 }).filter((interval) => interval.end_seconds - interval.start_seconds >= boundaryMinimum - 1e-6);
+  }
   if (silence.length === 1 && silence[0].start_seconds === 0 && silence[0].end_seconds >= duration - 0.001) throw new Error("Recording audio is entirely below the silence threshold");
-  return { schema_version: RECORDING_AUDIO_VERSION, source_duration_seconds: duration, threshold_db: threshold, threshold_receipt: { noise_floor_db: noiseFloor, speech_reference_db: speechReference, speech_percentile: 75, rule: options.thresholdDb === undefined ? "max(noise-floor+10dB,speech-p75-18dB),clamped[-60,-30]" : "explicit-override" }, silence_duration_seconds: silenceDuration, silence_padding_seconds: padding, silence_join_tolerance_seconds: joinTolerance, envelope_step_seconds: step, silence_intervals: silence, waveform };
+  return { schema_version: RECORDING_AUDIO_VERSION, source_duration_seconds: duration, threshold_db: threshold, threshold_receipt: { noise_floor_db: noiseFloor, speech_reference_db: speechReference, speech_percentile: 75, rule: options.thresholdDb === undefined ? "max(noise-floor+10dB,speech-p75-18dB),clamped[-60,-30]" : "explicit-override" }, silence_duration_seconds: silenceDuration, silence_padding_seconds: padding, silence_join_tolerance_seconds: joinTolerance, envelope_step_seconds: step, silence_intervals: silence, boundary_silence_intervals: boundarySilence, boundary_silence_receipt: { threshold_db: boundaryThreshold, noise_floor_db: noiseFloor, rule: "max(-80,min(dialogue-threshold,noise-floor+6dB))", minimum_duration_seconds: boundaryMinimum, join_tolerance_seconds: 0, measurement: boundaryWindows ? "mono16k-float-rms-10ms" : "silencedetect-peak", windows: boundaryWindows }, waveform };
 }
 
 export function parseRmsEnvelope(output, { durationSeconds, stepSeconds, maxPoints = 6000 }) {
@@ -112,6 +128,10 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
   });
   for (let index = 1; index < originalSourceWords.length; index++) if (originalSourceWords[index].start < originalSourceWords[index - 1].end - 1e-6) throw new Error("Accepted words must be ordered and non-overlapping");
   const measuredQuiet = union(analysis.silence_intervals.map((interval) => checkedRange(interval.start_seconds, interval.end_seconds, duration)));
+  if (analysis.boundary_silence_intervals !== undefined && !Array.isArray(analysis.boundary_silence_intervals)) throw new Error("Invalid boundary silence intervals");
+  const boundaryQuiet = union((analysis.boundary_silence_intervals ?? analysis.silence_intervals).map((interval) => checkedRange(interval.start_seconds, interval.end_seconds, duration)));
+  const boundaryMinimum = analysis.boundary_silence_receipt?.minimum_duration_seconds ?? 0.04;
+  if (!Number.isFinite(boundaryMinimum) || boundaryMinimum < 0.02 || boundaryMinimum > 0.04) throw new Error("Invalid boundary silence minimum duration");
   if (analysis.waveform !== undefined && !Array.isArray(analysis.waveform)) throw new Error("Invalid acoustic waveform");
   const waveform = (analysis.waveform ?? []).map((point) => {
     checkedRange(point.start_seconds, point.end_seconds, duration);
@@ -146,6 +166,8 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
   const rejectedReasons = new Set(["semantic-retake", "repeated-take", "filler", "false-start"]);
   const rejectedCuts = plan.removed_segments.filter((segment) => rejectedReasons.has(segment.reason));
   const spliceRanges = [];
+  const spliceProtection = [];
+  const unconfirmedBoundaries = [];
   for (const keep of keeps) {
     const spoken = sourceWords.filter((word) => word.start >= keep.start - 1e-6 && word.end <= keep.end + 1e-6);
     if (!spoken.length) continue; // Wordless ranges are removed separately below.
@@ -154,15 +176,30 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
     const touchesEarlierCut = rejectedCuts.some((cut) => Math.abs(cut.source_end_seconds - keep.start) <= 1e-6);
     const touchesLaterCut = rejectedCuts.some((cut) => Math.abs(cut.source_start_seconds - keep.end) <= 1e-6);
     if (touchesEarlierCut && spoken[0].start > keep.start) {
-      spliceRanges.push({ start: keep.start, end: spoken[0].start });
-      keep.start = spoken[0].start;
+      const wordStart = spoken[0].start;
+      const separator = boundaryQuiet.map((quiet) => ({ start: Math.max(quiet.start, keep.start), end: Math.min(quiet.end, wordStart) })).filter((quiet) => quiet.end - quiet.start >= boundaryMinimum - 1e-6 && quiet.end > wordStart - 0.5).at(-1);
+      if (!separator && analysis.boundary_silence_receipt) { unconfirmedBoundaries.push({ side: "start", source_word_boundary_seconds: wordStart, source_keep_boundary_seconds: keep.start, reason: "no-confirmed-quiet-separator" }); }
+      const boundary = separator ? Math.max(wordStart - 0.5, separator.end - Math.min(padding, (separator.end - separator.start) / 2)) : analysis.boundary_silence_receipt ? keep.start : wordStart;
+      if (boundary > keep.start) {
+      spliceRanges.push({ start: keep.start, end: boundary });
+      keep.start = boundary;
+      }
+      if (keep.start < wordStart) spliceProtection.push({ start: keep.start, end: wordStart });
     }
     if (touchesLaterCut && spoken.at(-1).end < keep.end) {
-      spliceRanges.push({ start: spoken.at(-1).end, end: keep.end });
-      keep.end = spoken.at(-1).end;
+      const wordEnd = spoken.at(-1).end;
+      const separator = boundaryQuiet.map((quiet) => ({ start: Math.max(quiet.start, wordEnd), end: Math.min(quiet.end, keep.end) })).find((quiet) => quiet.end - quiet.start >= boundaryMinimum - 1e-6 && quiet.start < wordEnd + 0.5);
+      if (!separator && analysis.boundary_silence_receipt) { unconfirmedBoundaries.push({ side: "end", source_word_boundary_seconds: wordEnd, source_keep_boundary_seconds: keep.end, reason: "no-confirmed-quiet-separator" }); }
+      const boundary = separator ? Math.min(wordEnd + 0.5, separator.start + Math.min(padding, (separator.end - separator.start) / 2)) : analysis.boundary_silence_receipt ? keep.end : wordEnd;
+      if (boundary < keep.end) {
+      spliceRanges.push({ start: boundary, end: keep.end });
+      keep.end = boundary;
+      }
+      if (keep.end > wordEnd) spliceProtection.push({ start: wordEnd, end: keep.end });
     }
   }
-  const protectedRanges = union(sourceWords.map((word) => ({ start: Math.max(0, word.start - padding), end: Math.min(duration, word.end + padding) })));
+  // The looser dialogue pause cutoff must not undo conservative splice proof.
+  const protectedRanges = union([...sourceWords.map((word) => ({ start: Math.max(0, word.start - padding), end: Math.min(duration, word.end + padding) })), ...spliceProtection]);
   const quiet = measuredQuiet.map((range) => {
     return { start: range.start + padding, end: range.end - padding };
   }).filter((range) => range.end > range.start);
@@ -205,7 +242,56 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
     checkedRange(segment.source_start_seconds, segment.source_end_seconds, duration);
     return { ...segment };
   }), ...removals.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "waveform-silence" })), ...wordlessRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "wordless-range" })), ...boundaryRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "speech-boundary" })), ...spliceRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "rejected-splice-handle" }))].sort((a, b) => a.source_start_seconds - b.source_start_seconds);
-  return { ...plan, duration_seconds: clock, kept_segments, removed_segments, words, text: words.map((word) => word.word ?? word.text).join(" "), audio_analysis: { schema_version: RECORDING_AUDIO_VERSION, threshold_db: analysis.threshold_db, threshold_receipt: analysis.threshold_receipt, silence_padding_seconds: padding, trim_edges: trimEdges, speech_boundary_removed_seconds: boundaryRanges.reduce((sum, range) => sum + range.end - range.start, 0), rejected_splice_removed_seconds: spliceRanges.reduce((sum, range) => sum + range.end - range.start, 0), wordless_removed_seconds: wordlessRanges.reduce((sum, range) => sum + range.end - range.start, 0), removed_seconds: plan.duration_seconds - clock, aligned_words: alignedWords, dropped_words: droppedWords } };
+  return { ...plan, duration_seconds: clock, kept_segments, removed_segments, words, text: words.map((word) => word.word ?? word.text).join(" "), audio_analysis: { schema_version: RECORDING_AUDIO_VERSION, threshold_db: analysis.threshold_db, threshold_receipt: analysis.threshold_receipt, silence_padding_seconds: padding, trim_edges: trimEdges, boundary_silence_receipt: analysis.boundary_silence_receipt, boundary_search_seconds: 0.5, unconfirmed_boundaries: unconfirmedBoundaries, speech_boundary_removed_seconds: boundaryRanges.reduce((sum, range) => sum + range.end - range.start, 0), rejected_splice_removed_seconds: spliceRanges.reduce((sum, range) => sum + range.end - range.start, 0), wordless_removed_seconds: wordlessRanges.reduce((sum, range) => sum + range.end - range.start, 0), removed_seconds: plan.duration_seconds - clock, aligned_words: alignedWords, dropped_words: droppedWords } };
+}
+
+function recordingBoundaryWindows(plan, duration, silence, waveform, floor) {
+  if (Math.abs(plan?.source_duration_seconds - duration) > 0.001 || !Array.isArray(plan?.words) || !Array.isArray(plan?.kept_segments) || !Array.isArray(plan?.removed_segments)) throw new Error("Invalid acoustic boundary plan");
+  const rejected = plan.removed_segments.filter((cut) => ["semantic-retake", "repeated-take", "filler", "false-start"].includes(cut.reason));
+  const windows = [];
+  for (const keep of plan.kept_segments) {
+    checkedRange(keep.source_start_seconds, keep.source_end_seconds, duration);
+    const words = plan.words.filter((word) => word.start >= keep.start_seconds - 1e-6 && word.end <= keep.end_seconds + 1e-6).flatMap((word) => {
+      const offset = keep.source_start_seconds - keep.start_seconds;
+      const range = checkedRange(word.start + offset, word.end + offset, duration);
+      const whollyQuiet = silence.some((quiet) => quiet.start_seconds <= range.start && quiet.end_seconds >= range.end);
+      const quietSignal = waveform.some((point) => point.start_seconds < range.end && point.end_seconds > range.start && point.rms_db > floor + 6);
+      if (whollyQuiet && quietSignal) return [range];
+      for (const quiet of silence) {
+        if (quiet.start_seconds <= range.start && quiet.end_seconds > range.start) range.start = Math.min(range.end, quiet.end_seconds);
+        if (quiet.start_seconds < range.end && quiet.end_seconds >= range.end) range.end = Math.max(range.start, quiet.start_seconds);
+      }
+      return range.end - range.start > 1e-6 ? [range] : [];
+    });
+    if (!words.length) continue;
+    if (rejected.some((cut) => Math.abs(cut.source_end_seconds - keep.source_start_seconds) <= 1e-6)) windows.push({ start: Math.max(keep.source_start_seconds, words[0].start - 0.5), end: words[0].start });
+    if (rejected.some((cut) => Math.abs(cut.source_start_seconds - keep.source_end_seconds) <= 1e-6)) windows.push({ start: words.at(-1).end, end: Math.min(keep.source_end_seconds, words.at(-1).end + 0.5) });
+  }
+  if (windows.length > 512) throw new Error("Acoustic boundary windows exceed 512-window budget");
+  return windows.filter((window) => window.end - window.start >= 0.02 - 1e-6);
+}
+
+/** Local PCM only: two consecutive quiet 10ms RMS frames, never joined over signal. */
+export function parseBoundaryPcm(pcm, window, thresholdDb) {
+  if (!Buffer.isBuffer(pcm) || pcm.length > 32000 || pcm.length % 4 || !Number.isFinite(thresholdDb) || thresholdDb < -80 || thresholdDb > -10 || !Number.isFinite(window?.start) || !Number.isFinite(window?.end) || window.start < 0 || window.end <= window.start || window.end - window.start > 0.5 + 1e-6) throw new Error("Invalid bounded boundary PCM");
+  const frames = Math.min(Math.floor(pcm.length / 640), Math.floor((window.end - window.start + 1e-6) / 0.01));
+  const result = [];
+  let first = null;
+  for (let frame = 0; frame <= frames; frame++) {
+    let energy = 0;
+    if (frame < frames) for (let sample = 0; sample < 160; sample++) {
+      const value = pcm.readFloatLE((frame * 160 + sample) * 4);
+      if (!Number.isFinite(value)) throw new Error("Invalid boundary PCM sample");
+      energy += value * value;
+    }
+    const quiet = frame < frames && 10 * Math.log10(energy / 160) <= thresholdDb;
+    if (quiet && first === null) first = frame;
+    if (!quiet && first !== null) {
+      if (frame - first >= 2) result.push({ start_seconds: window.start + first * 0.01, end_seconds: Math.min(window.end, window.start + frame * 0.01) });
+      first = null;
+    }
+  }
+  return result;
 }
 
 function percentile(values, fraction) { return values[Math.min(values.length - 1, Math.floor(values.length * fraction))]; }

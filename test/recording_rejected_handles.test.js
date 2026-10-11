@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { refineRecordingEditPlan } from "../src/recording_audio.js";
+import { analyzeRecordingAudio, parseBoundaryPcm, refineRecordingEditPlan } from "../src/recording_audio.js";
 
 function fixture(reason) {
   return {
@@ -44,4 +44,111 @@ test("quiet-only cuts preserve natural interior handles and do not trigger rejec
     assert.ok(Math.abs(word.end - source.words[index].end) < 1e-9);
   });
   assert.equal(refined.audio_analysis.rejected_splice_removed_seconds, 0);
+});
+
+test("verified separators preserve accepted consonant tails and exclude untranscribed rejected residue", () => {
+  const source = fixture("repeated-take");
+  const analysis = { source_duration_seconds: 10, threshold_db: -40, silence_intervals: [],
+    boundary_silence_intervals: [{ start_seconds: 1.64, end_seconds: 1.69 }, { start_seconds: 3.65, end_seconds: 3.75 }] };
+  const refined = refineRecordingEditPlan(source, analysis, { trimEdges: false });
+  assert.ok(Math.abs(refined.kept_segments[0].source_end_seconds - 1.665) < 1e-9, "cut inside quiet after the untranscribed chosen tail");
+  assert.ok(Math.abs(refined.kept_segments[1].source_start_seconds - 3.7) < 1e-9, "cut after rejected voiced residue, inside quiet before chosen onset");
+  assert.deepEqual(refined.words.map((word) => word.source_index), source.words.map((word) => word.source_index));
+  assert.ok(Math.abs(refined.words[1].end - refined.words[1].start - 0.05) < 1e-9);
+  assert.equal(refined.removed_segments.find((range) => range.reason === "rejected-splice-handle").source_start_seconds, 1.665);
+});
+
+test("separator search is bounded and never crosses accepted words or original rejected ranges", () => {
+  const source = fixture("filler");
+  const analysis = { source_duration_seconds: 10, threshold_db: -40, silence_intervals: [],
+    boundary_silence_intervals: [{ start_seconds: 1.995, end_seconds: 2.2 }, { start_seconds: 3.79, end_seconds: 3.85 }] };
+  const refined = refineRecordingEditPlan(source, analysis, { trimEdges: false });
+  assert.equal(refined.kept_segments[0].source_end_seconds, 1.5, "separator has too little quiet inside original keep");
+  assert.equal(refined.kept_segments[1].source_start_seconds, 3.8, "overlapping chosen word leaves too little confirmed quiet");
+  assert.throws(() => refineRecordingEditPlan(source, { ...analysis, boundary_silence_intervals: [{ start_seconds: NaN, end_seconds: 4 }] }), /range/);
+  assert.throws(() => refineRecordingEditPlan(source, { ...analysis, boundary_silence_intervals: {} }), /boundary silence/);
+});
+
+test("noise-relative confirmation preserves soft tails and rejects brief dips before resumed energy", async () => {
+  const calls = [];
+  const analysis = await analyzeRecordingAudio("fixture.wav", { durationSeconds: 10, thresholdDb: -40 }, { run: async (_, args) => {
+    const filter = args[args.indexOf("-af") + 1]; calls.push(filter);
+    if (filter.includes("astats")) return { stdout: "pts_time:0\nlavfi.astats.Overall.RMS_level=-60\npts_time:0.1\nlavfi.astats.Overall.RMS_level=-20", stderr: "" };
+    if (filter.includes("noise=-54dB")) return { stdout: "", stderr: "silence_start: 1.53\nsilence_end: 1.55\nsilence_start: 1.75\nsilence_end: 1.9\nsilence_start: 3.6\nsilence_end: 3.85" };
+    return { stdout: "", stderr: "silence_start: 1.51\nsilence_end: 1.9" };
+  } });
+  assert.ok(calls.some((filter) => filter.includes("silencedetect=noise=-54dB:d=0.04")));
+  assert.equal(analysis.boundary_silence_receipt.threshold_db, -54);
+  assert.equal(analysis.boundary_silence_receipt.join_tolerance_seconds, 0);
+  assert.equal(analysis.boundary_silence_intervals.length, 2, "20ms dip is not a separator");
+  const refined = refineRecordingEditPlan(fixture("filler"), analysis, { trimEdges: false });
+  assert.equal(refined.kept_segments[0].source_end_seconds, 1.825, "keeps soft accepted tail below dialogue cutoff until sustained noise-relative quiet");
+  assert.ok(refined.kept_segments[1].source_start_seconds > 3.6 && refined.kept_segments[1].source_start_seconds < 3.8);
+  assert.deepEqual(refined.audio_analysis.unconfirmed_boundaries, []);
+  const withDialogueQuiet = refineRecordingEditPlan(fixture("filler"), { ...analysis, silence_intervals: [{ start_seconds: 1.51, end_seconds: 1.9 }] }, { trimEdges: false });
+  assert.equal(withDialogueQuiet.kept_segments[0].source_end_seconds, 1.825, "normal pause cutoff cannot undo stricter acoustic tail protection");
+});
+
+test("no confirmed separator preserves original handles with unresolved receipt instead of clipping", () => {
+  const source = fixture("semantic-retake");
+  const refined = refineRecordingEditPlan(source, { source_duration_seconds: 10, threshold_db: -40, silence_intervals: [], boundary_silence_intervals: [], boundary_silence_receipt: { threshold_db: -54 } }, { trimEdges: false });
+  assert.deepEqual(refined.kept_segments, source.kept_segments);
+  assert.deepEqual(refined.audio_analysis.unconfirmed_boundaries.map((boundary) => boundary.side), ["end", "start"]);
+  assert.equal(refined.audio_analysis.rejected_splice_removed_seconds, 0);
+});
+
+test("boundary cutoff stays below dialogue cutoff in noisy backgrounds and is bounded for low floors", async () => {
+  for (const [floor, expected] of [[-25, -40], [-110, -80]]) {
+    const analysis = await analyzeRecordingAudio("fixture.wav", { durationSeconds: 2, thresholdDb: -40 }, { run: async (_, args) => args[args.indexOf("-af") + 1].includes("astats") ? { stdout: `pts_time:0\nlavfi.astats.Overall.RMS_level=${floor}\npts_time:0.1\nlavfi.astats.Overall.RMS_level=-20`, stderr: "" } : { stdout: "", stderr: "" } });
+    assert.equal(analysis.boundary_silence_receipt.threshold_db, expected);
+  }
+});
+
+test("analysis retains short precise separators without debounce while long-gap trimming remains separate", async () => {
+  const analysis = await analyzeRecordingAudio("fixture.wav", { durationSeconds: 2, thresholdDb: -40 }, { run: async (_, args) => args.includes("-af") && args[args.indexOf("-af") + 1].includes("astats")
+    ? { stdout: "pts_time:0\nlavfi.astats.Overall.RMS_level=-20", stderr: "" }
+    : { stdout: "", stderr: "silence_start: 0.4\nsilence_end: 0.45\nsilence_start: 0.455\nsilence_end: 0.5\nsilence_start: 1\nsilence_end: 1.5" } });
+  assert.deepEqual(analysis.boundary_silence_intervals, [{ start_seconds: 0.4, end_seconds: 0.45 }, { start_seconds: 0.455, end_seconds: 0.5 }, { start_seconds: 1, end_seconds: 1.5 }]);
+  assert.deepEqual(analysis.silence_intervals, [{ start_seconds: 1, end_seconds: 1.5 }]);
+});
+
+test("fine boundary RMS tolerates room-noise peaks but preserves soft vocal tails and single-frame dips", () => {
+  const pcm = Buffer.alloc(8 * 640);
+  for (let frame = 0; frame < 8; frame++) {
+    const level = [0, 1, 3, 4].includes(frame) ? 0.003 : 0.0005;
+    for (let sample = 0; sample < 160; sample++) pcm.writeFloatLE(level, (frame * 160 + sample) * 4);
+    if (frame >= 5) pcm.writeFloatLE(0.008, frame * 640); // Peak exceeds cutoff, quiet RMS does not.
+  }
+  assert.deepEqual(parseBoundaryPcm(pcm, { start: 5, end: 5.08 }, -54), [{ start_seconds: 5.05, end_seconds: 5.08 }]);
+  assert.throws(() => parseBoundaryPcm(Buffer.alloc(32004), { start: 0, end: 0.5 }, -54), /bounded/);
+  pcm.writeFloatLE(NaN, 0);
+  assert.throws(() => parseBoundaryPcm(pcm, { start: 5, end: 5.08 }, -54), /sample/);
+});
+
+test("boundary plan limits PCM extraction to source-mapped rejected-facing handles", async () => {
+  const source = fixture("filler");
+  const calls = [];
+  const analysis = await analyzeRecordingAudio("fixture.wav", { durationSeconds: 10, thresholdDb: -40, boundaryPlan: source }, { run: async (_, args, options) => {
+    calls.push({ args, options });
+    if (args.includes("f32le")) return { stdout: Buffer.alloc(Math.round(Number(args[args.indexOf("-t") + 1]) * 16000) * 4), stderr: "" };
+    return args[args.indexOf("-af") + 1].includes("astats") ? { stdout: "pts_time:0\nlavfi.astats.Overall.RMS_level=-60\npts_time:0.1\nlavfi.astats.Overall.RMS_level=-20", stderr: "" } : { stdout: "", stderr: "" };
+  } });
+  assert.deepEqual(analysis.boundary_silence_receipt.windows, [{ start: 1.5, end: 2 }, { start: 3.3, end: 3.8 }]);
+  assert.equal(analysis.boundary_silence_receipt.measurement, "mono16k-float-rms-10ms");
+  assert.equal(analysis.boundary_silence_receipt.minimum_duration_seconds, 0.02);
+  assert.equal(calls.filter((call) => call.args.includes("f32le")).length, 2);
+  assert.ok(calls.filter((call) => call.args.includes("f32le")).every((call) => call.options.maxBuffer === 32000));
+  assert.equal(refineRecordingEditPlan(source, analysis, { trimEdges: false }).audio_analysis.unconfirmed_boundaries.length, 0);
+});
+
+test("fine windows follow acoustically aligned onset instead of stale broad ASR bounds", async () => {
+  const source = fixture("filler");
+  const analysis = await analyzeRecordingAudio("fixture.wav", { durationSeconds: 10, thresholdDb: -40, boundaryPlan: source }, { run: async (_, args) => {
+    if (args.includes("f32le")) return { stdout: Buffer.alloc(Math.round(Number(args[args.indexOf("-t") + 1]) * 16000) * 4), stderr: "" };
+    return args[args.indexOf("-af") + 1].includes("astats") ? { stdout: "pts_time:0\nlavfi.astats.Overall.RMS_level=-60\npts_time:0.1\nlavfi.astats.Overall.RMS_level=-20", stderr: "" } : { stdout: "", stderr: "silence_start: 3.4\nsilence_end: 3.83" };
+  } });
+  assert.equal(analysis.boundary_silence_receipt.windows[1].end, 3.83);
+  const refined = refineRecordingEditPlan(source, analysis, { trimEdges: false });
+  assert.equal(refined.audio_analysis.unconfirmed_boundaries.length, 0);
+  assert.equal(refined.audio_analysis.aligned_words[0].aligned_start_seconds, 3.83);
 });

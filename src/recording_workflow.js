@@ -87,7 +87,7 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
   const basePlan = planRecordingEdit(transcript, { ...policy, silenceDuration: policy.audioSilence ? null : policy.silenceDuration, durationSeconds, semanticRetakes: semantic.retakes });
   const audio = policy.audioSilence
     ? await (adapters.analyzeRecordingAudio ?? analyzeRecordingAudio)(input, {
-        durationSeconds, silenceDuration: policy.audioSilenceDuration,
+        durationSeconds, boundaryPlan: basePlan, silenceDuration: policy.audioSilenceDuration,
         silencePadding: policy.audioSilencePadding,
         ...(policy.audioThresholdDb == null ? {} : { thresholdDb: policy.audioThresholdDb })
       })

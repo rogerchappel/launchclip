@@ -90,8 +90,22 @@ this is an automated stage, not a request for human take selection.
 Outer frames are trimmed to the chosen voiced word boundaries. Wordless islands
 are removed throughout the edit, including tiny remnants between rejected takes.
 Genuine short words are preserved; there is no blanket minimum clip duration.
-Handles directly facing rejected takes or fillers are trimmed to retained word
-bounds, removing residual audio even when ASR does not recognize a word. These
+Handles directly facing rejected takes or fillers prefer the nearest verified
+quiet separator fully outside accepted words, within the original retained range
+and at most 500ms from the aligned word boundary. Cuts land inside that gap with
+padding clamped to half its duration; without a qualifying separator they fall
+back to aligned word bounds for legacy analysis. New analysis uses a separate
+noise-relative cutoff (noise floor + 6dB, never above the dialogue cutoff and
+bounded below at -80dB). Recording workflows measure 10ms RMS frames in bounded
+source windows around rejected-facing aligned word edges, requiring at least
+20ms consecutive quiet without debounce. This preserves quieter word tails and
+allows a narrow confirmed separator before a rejected onset. Standalone analysis
+without a boundary plan retains the 40ms peak-detector fallback. If no
+separator qualifies, it preserves the original handle and records an unconfirmed
+boundary for source/output QA instead of claiming clean audio. The initial cut
+search is distinct from QA restoration budgets: repairs remain capped at 200ms
+each and 600ms total. The normal 0.4s acoustic pause minimum remains unchanged. This removes
+residual audio even when ASR does not recognize a word. These
 removed handles are protected from later QA restoration. PCM join checks detect
 isolated click candidates; they do not establish that every sustained phoneme or
 breath is correct. Inspect source/output audio context for suspicious residue and
