@@ -153,6 +153,7 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
   const rejectedReasons = new Set(["semantic-retake", "repeated-take", "filler", "false-start"]);
   const rejectedCuts = plan.removed_segments.filter((segment) => rejectedReasons.has(segment.reason));
   const spliceRanges = [];
+  const spliceProtection = [];
   const unconfirmedBoundaries = [];
   for (const keep of keeps) {
     const spoken = sourceWords.filter((word) => word.start >= keep.start - 1e-6 && word.end <= keep.end + 1e-6);
@@ -170,6 +171,7 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
       spliceRanges.push({ start: keep.start, end: boundary });
       keep.start = boundary;
       }
+      if (keep.start < wordStart) spliceProtection.push({ start: keep.start, end: wordStart });
     }
     if (touchesLaterCut && spoken.at(-1).end < keep.end) {
       const wordEnd = spoken.at(-1).end;
@@ -180,9 +182,11 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
       spliceRanges.push({ start: boundary, end: keep.end });
       keep.end = boundary;
       }
+      if (keep.end > wordEnd) spliceProtection.push({ start: wordEnd, end: keep.end });
     }
   }
-  const protectedRanges = union(sourceWords.map((word) => ({ start: Math.max(0, word.start - padding), end: Math.min(duration, word.end + padding) })));
+  // The looser dialogue pause cutoff must not undo conservative splice proof.
+  const protectedRanges = union([...sourceWords.map((word) => ({ start: Math.max(0, word.start - padding), end: Math.min(duration, word.end + padding) })), ...spliceProtection]);
   const quiet = measuredQuiet.map((range) => {
     return { start: range.start + padding, end: range.end - padding };
   }).filter((range) => range.end > range.start);
