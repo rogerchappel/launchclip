@@ -162,6 +162,9 @@ test('standalone metrics preserve their initial value and format increases, decr
   assert.doesNotMatch(result.motion, /onUpdate|setTimeout|Date\.|Math.random/);
   const percent = buildEditorialModule({...expressive, kind: 'metric', metric: {...metric, unit: 'completion', format: 'percent', decimals: 1, values: [{value: 72.5, at: .6}, {value: 48, at: 2.2}]}});
   assert.match(percent.html, /72.5%/);
+  const change = buildEditorialModule({...expressive, kind: 'metric', metric: {...metric, unit: 'growth', format: 'percent', values: [{value: 150, at: .6}, {value: -12, at: 2.2}]}});
+  assert.match(change.html, /150%/);
+  assert.ok(commands(change).some(call => call[2]?.textContent === '-12%'));
   assert.ok(commands(percent).some(call => call[2]?.textContent === '48.0%'));
   const money = buildEditorialModule({...expressive, kind: 'metric', metric: {...metric, unit: 'balance', format: 'currency', currency: 'USD', decimals: 2, values: [{value: 1250.25, at: .6}, {value: -50, at: 2.2}]}});
   assert.match(money.html, /USD\s1,250.25/);
@@ -176,7 +179,7 @@ test('standalone progress supports reversed values and rejects invented or out-o
   assert.equal(result.events.at(-1).time, 74.6);
   for (const bad of [{mode: 'data'}, {max: 0}, {values: [{value: 5, at: .6}]}, {values: [{value: -1, at: .6}]}, {values: [{value: 1, at: 2}, {value: 2, at: 2.5}]}]) assert.throws(() => buildEditorialModule({...expressive, kind: 'progress', progress: {...progress, ...bad}}));
   const metric = {mode: 'illustration', format: 'percent', unit: 'completion', values: [{value: 50, at: .6}]};
-  for (const bad of [{values: [{value: 101, at: .6}]}, {values: [{value: -1, at: .6}]}, {format: 'currency'}, {currency: 'USD'}, {decimals: 3}, {decimals: .5}]) assert.throws(() => buildEditorialModule({...expressive, kind: 'metric', metric: {...metric, ...bad}}));
+  for (const bad of [{values: [{value: Infinity, at: .6}]}, {format: 'currency'}, {currency: 'USD'}, {decimals: 3}, {decimals: .5}]) assert.throws(() => buildEditorialModule({...expressive, kind: 'metric', metric: {...metric, ...bad}}));
 });
 
 test('numbered steps remain optional, bounded and distinct from checklist state', () => {
