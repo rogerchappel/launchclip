@@ -11,7 +11,7 @@ Exit 0 means `evidence-ready`; exit 1 means `needs-attention`; exit 2 means
 incorrect command usage. Inspect `issues` and `warnings` in the JSON output.
 This is an evidence consistency check, **not artistic approval or a final-video
 validator**. The reviewer still has to watch moving footage and listen to the
-mix. Hashes bind their declared review to local bytes; attestations are not proof
+mix. Hashes bind their declared review to local bytes and direction choices; attestations are not proof
 that a person or agent actually performed a good review.
 
 ## Direction receipt version 1
@@ -35,8 +35,8 @@ than screenshots. The helper checks nonempty files but does not decode them.
   "resources": [],
   "beats": [{
     "id": "invitation",
-    "start": 12,
-    "end": 19,
+    "start": 0,
+    "end": 90,
     "layer": "presenter",
     "purpose": "Give the personal invitation room to land",
     "visualDevelopment": "Stay with the presenter after the explanatory sequence",
@@ -52,6 +52,7 @@ than screenshots. The helper checks nonempty files but does not decode them.
   },
   "critique": {
     "prototypeSha256": "REPLACE_WITH_THE_SAME_ACTUAL_SHA256",
+    "directionSha256": "REPLACE_WITH_CANONICAL_DIRECTION_SHA256",
     "outcome": "pass",
     "notes": "Replace with specific observations after watching and listening",
     "reviewedAt": "2026-10-11T00:00:00Z",
@@ -64,6 +65,18 @@ than screenshots. The helper checks nonempty files but does not decode them.
 The example deliberately needs real hashes, files and review notes. Do not copy
 its passing outcome before reviewing. Set `outcome: "revise"` while revisions
 remain. After rerendering, recompute the prototype hash and review the new render.
+Compute the direction binding after finalizing the plan and prototype hash:
+
+```bash
+node <installed-skill>/scripts/check-recorded-treatment.mjs --hash <project>/EDIT-DIRECTION.json
+```
+
+Copy the returned digest into `critique.directionSha256` after reviewing that
+exact direction. Hashing sorts object keys recursively, preserves array order
+and excludes only the top-level `critique` object. Changes to timing, events,
+audio, selected resources, prototype or other direction fields invalidate the
+previous review even when the render path and bytes stay unchanged. Recompute
+and review again rather than silently refreshing a passing receipt.
 
 - `target`: positive duration and integer dimensions; aspect is `16:9`, `9:16`
   or `1:1`. Dimensions must match. `delivery` is `preview` or `publishable`.
@@ -91,7 +104,8 @@ remain. After rerendering, recompute the prototype hash and review the new rende
   All chosen music/SFX must reference assets marked used. Intentionally absent
   music and effects are valid; the creative reviewer judges whether they help.
 - `prototype`: local rendered file, actual SHA-256, valid representative range.
-- `critique`: `prototypeSha256` matching the current render, `outcome: "pass"`
+- `critique`: `prototypeSha256` matching the current render and `directionSha256`
+  matching the canonical direction, `outcome: "pass"`
   or `"revise"`, specific notes, ISO date, `reviewedMotion: true` and
   `reviewedAudio: true`. `reviewedAudio: "none"` is allowed only when narration,
   music and SFX are all absent. Review pacing, meaningful visual development,
