@@ -65,3 +65,27 @@ test("PCM seam impulse is a candidate while a sustained vowel is not", async () 
   const natural = await analyzeRecordingJoins("local.wav", plan(), {}, { run: async () => ({ stdout: voiced }) });
   assert.equal(natural.issues.length, 0);
 });
+test("join batches preserve original indexes and never claim partial coverage passes", async () => {
+  const segments = Array.from({ length: 301 }, (_, index) => ({ source_start_seconds: index * 0.3, source_end_seconds: index * 0.3 + 0.2, start_seconds: index * 0.2, end_seconds: index * 0.2 + 0.2 }));
+  const many = { source_duration_seconds: 91, duration_seconds: segments.at(-1).end_seconds, kept_segments: segments, words: segments.map((segment, index) => ({ word: `word${index}`, start: segment.start_seconds + 0.02, end: segment.end_seconds - 0.02 })), removed_segments: [] };
+  const adapters = { run: async () => ({ stdout: Buffer.alloc(3840 * 4) }) };
+  const reports = [];
+  let offset = 0;
+  do {
+    const report = await analyzeRecordingJoins("local.wav", many, { joinOffset: offset }, adapters);
+    reports.push(report);
+    assert.equal(report.checked, false);
+    assert.equal(report.total_joins, 300);
+    assert.equal(report.unresolved_joins.length, 300 - report.sampled_joins);
+    offset = report.next_join_offset;
+  } while (offset !== null);
+  assert.deepEqual(reports.map((report) => report.sampled_joins), [128, 128, 44]);
+  assert.deepEqual(reports.map((report) => report.join_offset), [0, 128, 256]);
+  assert.deepEqual(reports.flatMap((report) => report.measurements.map((measurement) => measurement.segment_index)), Array.from({ length: 300 }, (_, index) => index + 1));
+  for (const invalid of [-1, 0.5, 301]) await assert.rejects(analyzeRecordingJoins("local.wav", many, { joinOffset: invalid }, adapters), /joinOffset/);
+  const end = await analyzeRecordingJoins("local.wav", many, { joinOffset: 300 }, adapters);
+  assert.equal(end.sampled_joins, 0);
+  assert.equal(end.checked, false);
+  assert.equal(end.next_join_offset, null);
+  assert.equal(end.unresolved_joins.length, 300);
+});
