@@ -347,3 +347,35 @@ test('palette input rejects unsafe or incomplete colors and defaults optional ac
   assert.match(result.css,/ui-emphasis[^}]*color:#171612/);
   assert.doesNotMatch(result.motion,/bad\(|fetch|onUpdate/);
 });
+
+test('focus convergence preserves the chosen subject and starts progress only after it settles', () => {
+  const input={...paletteBase,kind:'focus-flow',duration:8.95,rect:{x:80,y:695,width:1120,height:340},theme:warmPalette,focus:{options:['Compare','New tools','Side quests','The next build'],selected:3,arriveAt:.28,chooseAt:1,progressAt:5.5,icon:'terminal'}};
+  const result=buildEditorialModule(input),calls=commands(result);
+  assert.deepEqual(result,buildEditorialModule(input));assert.match(result.html,/Illustration · focus sequence/);
+  assert.equal((result.html.match(/class="ui-focus-option"/g)??[]).length,4);
+  const chosen=calls.find(call=>call[0]==='to'&&call[1]==='#palette-option-3'&&call[2].borderColor);
+  assert.equal(chosen[2].x,407.25);assert.equal(chosen[2].scale,1.4);assert.equal(chosen.at(-1),1.18);
+  assert.ok(calls.some(call=>call[1]==='#palette-option-0'&&call[2].opacity===0&&call.at(-1)===1));
+  assert.ok(calls.some(call=>call[1]==='#palette-focus-fill'&&call[2].scaleX===1&&call.at(-1)===5.5));
+  assert.equal(result.events.find(e=>e.id==='palette-chosen-task').time,1.6);
+  assert.doesNotMatch(result.motion,/onUpdate|setTimeout|Date\.|Math.random/);
+  assert.throws(()=>buildEditorialModule({...input,focus:{...input.focus,options:['Same','same']}}),/distinct/);
+  assert.throws(()=>buildEditorialModule({...input,focus:{...input.focus,progressAt:1.5}}),/settle/);
+  assert.throws(()=>buildEditorialModule({...input,focus:{...input.focus,selected:4}}),/selected/);
+  assert.throws(()=>buildEditorialModule({...input,focus:{...input.focus,chooseAt:.5}}),/hold options/);
+});
+
+test('growth distinguishes relative illustrations from supplied real counts with bounded staged bars', () => {
+  const result=buildEditorialModule({...paletteBase,kind:'growth-chart',growth:{mode:'illustration'}});
+  assert.match(result.html,/Illustration · relative growth/);assert.match(result.css,/ui-metric\{display:none\}/);
+  assert.equal(result.events.filter(e=>e.id.includes('-point-')).length,4);
+  assert.ok(commands(result).some(call=>call[0]==='fromTo'&&call[1]==='#palette-column-2'&&call[2].opacity===0));
+  assert.throws(()=>buildEditorialModule({...paletteBase,kind:'growth-chart',growth:{mode:'data',source:'Analytics'}}),/supplied points/);
+  const points=[{label:'Start',value:0,at:.6},{label:'Later',value:20,at:2},{label:'Now',value:90,at:4}];
+  const real=buildEditorialModule({...paletteBase,kind:'growth-chart',growth:{mode:'data',unit:'views',source:'Supplied export',points}});
+  assert.match(real.html,/Source: Supplied export/);assert.doesNotMatch(real.css,/ui-metric\{display:none\}/);
+  assert.throws(()=>buildEditorialModule({...paletteBase,kind:'growth-chart',growth:{mode:'illustration',points:[points[1],{...points[2],value:10}]}}),/must not decrease/);
+  assert.throws(()=>buildEditorialModule({...paletteBase,kind:'growth-chart',growth:{mode:'illustration',showValues:'no'}}),/boolean/);
+  const escaped=buildEditorialModule({...paletteBase,kind:'focus-flow',focus:{options:['<b>A</b>','B'],selected:0,arriveAt:.6,chooseAt:1.5,progressAt:3}});
+  assert.doesNotMatch(escaped.html,/<b>/);assert.match(escaped.html,/&lt;b&gt;/);
+});
