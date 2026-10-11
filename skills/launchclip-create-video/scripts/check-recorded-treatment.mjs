@@ -1,8 +1,27 @@
 #!/usr/bin/env node
 import {readFile, stat} from 'node:fs/promises';
+import {createReadStream} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {resolve, dirname} from 'node:path';
 import {pathToFileURL} from 'node:url';
+
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]));
+  return value;
+}
+
+// Exclude only the top-level review, preserving every declared production choice.
+export function directionSha256(plan) {
+  const {critique, ...direction} = plan;
+  return createHash('sha256').update(JSON.stringify(canonical(direction))).digest('hex');
+}
+
+async function fileSha256(path) {
+  const digest = createHash('sha256');
+  for await (const chunk of createReadStream(path)) digest.update(chunk);
+  return digest.digest('hex');
+}
 
 // Evidence consistency is deterministic; creative quality remains a critic's judgment.
 export async function checkRecordedTreatment(planPath) {
@@ -26,7 +45,7 @@ export async function checkRecordedTreatment(planPath) {
       const info = await stat(path);
       if (!info.isFile() || info.size === 0) { fail(`${label}: nonempty local file required`); return; }
       if (hash(entry.sha256)) {
-        const actual = createHash('sha256').update(await readFile(path)).digest('hex');
+        const actual = await fileSha256(path);
         if (actual !== entry.sha256) fail(`${label}: file changed since review`);
       }
     } catch (error) { fail(`${label}: file unavailable (${error.code || error.message})`); }
@@ -89,6 +108,14 @@ export async function checkRecordedTreatment(planPath) {
   for (let i = 0; i < ranges.length; i++) for (let j = i + 1; j < ranges.length && ranges[j].start < ranges[i].end; j++) {
     if (ranges[i].layer === ranges[j].layer) fail(`Beats ${ranges[i].id} and ${ranges[j].id} overlap on layer ${ranges[i].layer}`);
   }
+  if (finite(duration) && duration > 0) {
+    let coveredUntil = 0;
+    for (const beat of ranges) {
+      if (beat.start - coveredUntil > 0.05 + 1e-9) fail(`Uncovered output timeline: ${coveredUntil}s to ${beat.start}s`);
+      coveredUntil = Math.max(coveredUntil, beat.end);
+    }
+    if (duration - coveredUntil > 0.05 + 1e-9) fail(`Uncovered output timeline: ${coveredUntil}s to ${duration}s`);
+  }
   const audio = object(plan.audio) ? plan.audio : {};
   const music = object(audio.music) ? audio.music : {};
   if (!['none', 'local'].includes(music.choice)) fail('audio.music.choice must explicitly be none or local');
@@ -108,6 +135,7 @@ export async function checkRecordedTreatment(planPath) {
   await file(prototype, 'prototype', true);
   if (!finite(prototype.start) || !finite(prototype.end) || prototype.start < 0 || prototype.end <= prototype.start || prototype.end > duration) fail('prototype: invalid representative output range');
   const critique = object(plan.critique) ? plan.critique : {};
+  if (!hash(critique.directionSha256) || critique.directionSha256 !== directionSha256(plan)) fail('critique: direction changed since review or direction hash absent');
   if (critique.outcome !== 'pass') fail('critique: revision required or passing review absent');
   if (!hash(critique.prototypeSha256) || critique.prototypeSha256 !== prototype.sha256) fail('critique: review does not bind to current prototype');
   if (critique.reviewedMotion !== true) fail('critique: motion review must be attested');
@@ -121,8 +149,14 @@ export async function checkRecordedTreatment(planPath) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  if (process.argv.length !== 3) {
-    console.error('Usage: node check-recorded-treatment.mjs path/to/EDIT-DIRECTION.json');
+  if (process.argv.length === 4 && process.argv[2] === '--hash') {
+    try {
+      const plan = JSON.parse(await readFile(process.argv[3], 'utf8'));
+      if (!plan || typeof plan !== 'object' || Array.isArray(plan)) throw new Error('Direction plan must be an object');
+      console.log(directionSha256(plan));
+    } catch (error) { console.error(error.message); process.exitCode = 1; }
+  } else if (process.argv.length !== 3) {
+    console.error('Usage: node check-recorded-treatment.mjs [--hash] path/to/EDIT-DIRECTION.json');
     process.exitCode = 2;
   } else {
     const result = await checkRecordedTreatment(process.argv[2]);
