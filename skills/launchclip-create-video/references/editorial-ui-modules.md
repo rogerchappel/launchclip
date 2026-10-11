@@ -2,7 +2,7 @@
 
 Use the skill-local `scripts/editorial-ui-modules.mjs` helper for a consistent
 browser/desktop media window, checklist, step rail, callout, audience grid or
-trend chart. These are bundled
+trend chart, formatted metric or progress bar. These are bundled
 HTML/CSS/GSAP templates, not installed Radix or Magic UI components. Window
 chrome follows LaunchClip's existing `src/hyperframes_assembler.js` treatment;
 checkmark geometry comes from its shipped `public/icons/check.svg`.
@@ -55,10 +55,12 @@ geometry and unsupported inputs rather than silently discarding them.
 | --- | --- |
 | `media-window` | `media: {kind: "image" or "video", src: "assets/local-file.ext", sourceStart?: seconds}`; sourceStart is video-only |
 | `checklist` | `rows: [{label, status: "pending" or "active" or "done", at, doneAt?}]`; optional `statusLabels: {pending, active, done}` |
-| `step-rail` | `steps: [{label, at}]`, with strictly increasing times |
+| `step-rail` | `steps: [{label, at}]`, with strictly increasing times; optional `numbered: true` |
 | `callout` | `body`, a short explanation beneath `title` |
 | `audience-grid` | `audience: {tiles: [{label, emoji?, at}], columns?}`; audience tiles are illustrative |
 | `trend-chart` | `chart: {mode: "illustration" or "data", points: [{label, value, at}], unit, source?}`; source is required for real data |
+| `metric` | `metric: {mode, unit, format, currency?, decimals?, values: [{value, at}], source?}` |
+| `progress` | `progress: {mode, values: [{value, at}], max?, label?, source?}` |
 
 Checklist rows begin pending. `status` is the target state at `at`; an active
 row may also supply a later `doneAt` to reveal its tick and done state.
@@ -69,7 +71,8 @@ Event timestamps represent the visible settle, not necessarily the tween start.
 Use the returned events rather than recomputing a contact from a guessed delay.
 
 All kinds accept `id`, `kind`, `aspect`, `start`, `duration`, `title`, optional
-`rect` and optional six-digit hex `accent`, and optional integer `track` (1–98, default
+`rect`, six-digit hex `accent`, `presentation: "solid"` (default) or `"glass"`,
+and optional integer `track` (1–98, default
 2). Media-window chrome uses the following track; reserve distinct track pairs
 for intentional simultaneous media windows. Use `16:9` (1920×1080) or `9:16`
 (1080×1920). Default rectangles are starting points, not presenter-safe placement.
@@ -121,6 +124,59 @@ promised outcomes. Neither reach module is mandatory: a capture, icon accent or
 quiet presenter beat may communicate the passage better. Keep the presenter in
 the same established run while swapping related modules; module entry/exit does
 not own or recenter the presenter.
+
+## Metrics, progress and numbered steps
+
+These options require the expanded helper catalog in the installed skill. The
+familiar patterns are informed by [Magic UI Number Ticker](https://magicui.design/docs/components/number-ticker)
+(up/down counts and decimal precision) and [shadcn Progress](https://ui.shadcn.com/docs/components/base/progress).
+They are pattern references, not a claim that those React libraries are installed
+or that their code drives this HyperFrames composition.
+
+A `metric` uses `mode: "illustration"` or `"data"`, a short `unit`, and
+`format: "number"`, `"percent"` or `"currency"`. Set `decimals` explicitly when
+precision matters (0–2). Currency uses an explicit three-letter `currency` code;
+preserve that code rather than substituting an ambiguous currency symbol.
+Percentage values use percentage points from 0 to 100, not fractions: 25 means
+25%. Number and currency values may be negative. Choose the real start and end
+values for an increase or decrease; direction follows those values rather than
+a decorative arrow. Verify the resulting sign, scale and units in encoded frames.
+
+A `progress` uses `values`, optional `max` (default 100) and optional `label`.
+Each value must be within 0–max; displayed percentage is relative to that max.
+A 3-of-4 stage example means 75%, not 3%. Illustration mode needs its persistent
+label; data mode needs `source` and independent verification of the measure.
+For both metric and progress, `values` contains relative `{value, at}` entries,
+with at least 0.65 seconds between events to accommodate the finite transition.
+Use actual emitted settle events for SFX; the first visible value must agree
+with the intended starting state rather than implying zero when zero is untrue.
+
+For an illustrative percentage decrease, a metric object can be:
+
+```json
+{
+  "mode": "illustration",
+  "unit": "example rate",
+  "format": "percent",
+  "decimals": 1,
+  "values": [
+    {"value": 72.5, "at": 0.6},
+    {"value": 48.0, "at": 2.2}
+  ]
+}
+```
+
+Supply it in `metric` of a `kind: "metric"` specification with enough room and
+dwell. Source-backed rate changes need a clear denominator/time context; neither
+example percentages nor money amounts become real achievements through animation.
+
+Set `numbered: true` on a `step-rail` to use ordered stage markers when the speech
+expresses sequence. Numbering does not mean those stages have been completed.
+Select `presentation: "glass"` for a footage overlay when the design calls for
+it. Check text contrast over the busiest actual source frame and verify blur in
+the encoded render; keep a sufficiently opaque tinted fallback when blur fails.
+Use solid panels where they communicate better. These catalog options are
+available to the director, not a list of effects every video must contain.
 
 ## Assemble the fragments
 

@@ -232,6 +232,13 @@ redrawing controls, connectors or mechanical metaphors for each beat. Prefer:
 - **Progress or status:** advance along known stages or show a grounded status.
   Without real measurements, use named stages and explicit illustrative
   treatment rather than fabricated percentages, elapsed time or success data.
+- **Metric:** a meaningful value changing up or down, with explicit number,
+  percentage or money formatting and units. Verify start/end values and their
+  direction; a decrease is not automatically a failure or an increase a success.
+  Use sourced values or persistently labeled illustrative examples, keeping
+  signs, decimals, currency and percentage meaning intact.
+- **Numbered steps:** a short ordered 1/2/3 process when sequence matters, rather
+  than presenting every idea as a completed checklist.
 - **Highlight or callout:** focus a relevant region of an actual capture, attach
   a short explanation, or pair a real image/video with a concise takeaway.
   Keep arrows local to their target and omit them when proximity is clearer.
@@ -253,7 +260,12 @@ Keep a consistent window radius, title bar, spacing, text hierarchy, icon size
 and animation grammar in `DESIGN.md`. Module entries normally decelerate into a
 crisp readable settle; exits accelerate away. Reuse established state-change
 animations and a small set of curves. Animate one useful change at a time and
-hold the resulting state long enough to read. Avoid elaborate factory/cube or
+hold the resulting state long enough to read. A translucent glass overlay can
+fit footage when requested or suited to the brand; protect contrast with tint,
+border and readable spacing, and verify the encoded result. Use a sufficiently
+opaque tinted fallback when backdrop blur is unavailable or busy footage makes
+text unreadable. Glass is a surface variant, not a reason to cover the face or
+force every module into the video. Avoid elaborate factory/cube or
 mechanical constructions when a simple UI state communicates the same idea.
 
 Custom diagrams remain an exception when the available modules cannot express
