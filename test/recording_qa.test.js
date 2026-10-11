@@ -113,3 +113,31 @@ test("matching original word crossing a cut plus independent ASR discrepancy per
   const unique = [{ ...sourceTranscript[0], word: "Other" }, ...sourceTranscript.slice(1)];
   assert.equal(assessRecordingQa(plan, plan.words.slice(1), { acoustic, sourceTranscript: unique }).repair_requests.length, 0);
 });
+
+test("omitted first word belongs to the following source interval at an adjacent edited join", () => {
+  const joined = {
+    source_duration_seconds: 12, duration_seconds: 1.08,
+    kept_segments: [
+      { source_start_seconds: 1, source_end_seconds: 1.5, start_seconds: 0, end_seconds: 0.5 },
+      { source_start_seconds: 10.02, source_end_seconds: 10.6, start_seconds: 0.5, end_seconds: 1.08 },
+    ],
+    words: [
+      { word: "Ready.", start: 0.1, end: 0.4 },
+      { word: "Birds", start: 0.5, end: 0.56 },
+      { word: "sing.", start: 0.68, end: 1.0 },
+    ],
+  };
+  const original = [
+    { word: "Ready.", start: 1.1, end: 1.4 },
+    { word: "Birds", start: 10, end: 10.08 },
+    { word: "sing.", start: 10.2, end: 10.52 },
+  ];
+  const qa = assessRecordingQa(joined, [joined.words[0], joined.words[2]], { sourceTranscript: original });
+  assert.equal(qa.issues[0].word_index, 1);
+  assert.equal(qa.issues[0].segment_index, 1);
+  assert.equal(qa.issues[0].edge, "start");
+  assert.equal(qa.repair_requests.length, 1);
+  assert.equal(qa.repair_requests[0].segment_index, 1);
+  assert.equal(qa.repair_requests[0].edge, "start");
+  assert.ok(Math.abs(qa.repair_requests[0].seconds - 0.02) < 1e-9);
+});
