@@ -379,3 +379,18 @@ test('growth distinguishes relative illustrations from supplied real counts with
   const escaped=buildEditorialModule({...paletteBase,kind:'focus-flow',focus:{options:['<b>A</b>','B'],selected:0,arriveAt:.6,chooseAt:1.5,progressAt:3}});
   assert.doesNotMatch(escaped.html,/<b>/);assert.match(escaped.html,/&lt;b&gt;/);
 });
+
+test('visible code typing preserves token spacing, finite spans and legacy default output', () => {
+  const base={id:'typed',kind:'code-snippet',aspect:'16:9',start:4,duration:4,title:'A useful example',rect:{x:80,y:80,width:900,height:320}};
+  const lines=[{at:.5,typeDuration:.8,tokens:[{text:'const ',type:'keyword'},{text:'x = 7;',type:'plain'}]},{at:1.3,typeDuration:.25,tokens:[{text:'<x>',type:'string'}]}];
+  const result=buildEditorialModule({...base,code:{typing:true,lines}});
+  assert.equal((result.html.match(/class="ui-code-character"/g)||[]).length,15);
+  assert.match(result.html,/&lt;/); assert.match(result.html,/&gt;/);
+  assert.deepEqual(result.events.filter(e=>e.role==='typing'),[{id:'typed-code-0-typing-start',time:4.5,endTime:5.3,duration:.8,role:'typing'},{id:'typed-code-1-typing-start',time:5.3,endTime:5.55,duration:.25,role:'typing'}]);
+  assert.match(result.motion,/#typed-char-0-11/); assert.doesNotMatch(result.motion,/onUpdate|setTimeout/);
+  assert.equal(result.events.find(e=>e.id==='typed-code-0-settle').time,5.3);
+  const legacy=buildEditorialModule({...base,code:{lines:[{at:.5,tokens:lines[0].tokens}]}});
+  assert.doesNotMatch(legacy.html,/ui-code-character/); assert.equal(legacy.events.find(e=>e.id==='typed-code-0-settle').time,4.74);
+  for(const code of [{typing:'yes',lines},{typing:false,lines},{typing:true,lines:[{...lines[0],typeDuration:.01}]},{typing:true,lines:[lines[0],{...lines[1],at:1}]}]) assert.throws(()=>buildEditorialModule({...base,code}));
+  assert.throws(()=>buildEditorialModule({...base,duration:2,code:{typing:true,lines:[{...lines[0],at:1,typeDuration:1}]}}),/settle/);
+});
