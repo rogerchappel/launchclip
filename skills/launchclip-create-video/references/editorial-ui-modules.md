@@ -661,3 +661,11 @@ a `-highlight-sweep-settle` event; it does not automatically add sound. Omit the
 option to retain the previous background-color acquisition and original output.
 Inspect the encoded phrase at onset, midway and completion for alignment,
 readability and correct timing with speech.
+
+Match the mechanism to the subject: use a background sweep for an excerpt,
+a drawn underline for a critical phrase, or a brief color transition at a
+caption/callout emphasis. Keep glyph size steady during a color change. These
+are distinct actions; a color transition is not a marker wipe. Caption emphasis
+can acquire color at the actual word onset, while a callout can acquire its
+accent after text settles. Check measured speech rather than assigning every
+emphasis the same arbitrary delay.
