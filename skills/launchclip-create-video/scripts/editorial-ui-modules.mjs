@@ -54,6 +54,8 @@ function textFrames(motion, selector, from, to, format, time) {
 
 // Small symbolic glyphs authored locally; no brand marks or arbitrary SVG input.
 const SYMBOLS = {
+  check: '<circle cx="12" cy="12" r="9"/><path d="m7 12 3 3 7-7"/>',
+  warning: '<path d="m12 3 10 18H2ZM12 9v5m0 3h.01"/>',
   terminal: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 9 3 3-3 3m6 0h4"/>',
   branch: '<circle cx="6" cy="5" r="2"/><circle cx="18" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10m12-10v3c0 4-12 0-12 5"/>',
   users: '<circle cx="9" cy="8" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3m1-15a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 5"/>',
@@ -164,23 +166,42 @@ export function buildEditorialModule(input) {
         const treatment = input.treatment;
         object(treatment, 'treatment', ['icon', 'monospace', 'glow', 'corners', 'segments', 'at']);
         for (const key of ['monospace', 'glow', 'corners']) if (treatment[key] !== undefined && typeof treatment[key] !== 'boolean') throw new Error(`treatment.${key} must be a boolean`);
-        if (treatment.icon !== undefined && !Object.hasOwn(SYMBOLS, treatment.icon)) throw new Error('icon must be terminal, branch, users or rocket');
-        let copy, markup;
+        if (treatment.icon !== undefined && !Object.hasOwn(SYMBOLS, treatment.icon)) throw new Error('icon must be terminal, branch, users, rocket, check or warning');
+        let copy, markup; const underlines = []; const chunks = [];
         if (treatment.segments !== undefined) {
           if (input.body !== undefined) throw new Error('segments replace body; do not supply both');
           if (!Array.isArray(treatment.segments) || treatment.segments.length < 1 || treatment.segments.length > 12) throw new Error('segments must contain 1–12 entries');
-          copy = ''; markup = treatment.segments.map(segment => {object(segment, 'segment', ['text', 'highlight']); if (typeof segment.text !== 'string' || !segment.text.length || segment.text.length > 160) throw new Error('segment.text must contain 1–160 characters'); if (segment.highlight !== undefined && typeof segment.highlight !== 'boolean') throw new Error('segment.highlight must be a boolean'); copy += segment.text; return `<span${segment.highlight ? ' class="ui-emphasis"' : ''}>${escape(segment.text)}</span>`;}).join('');
+          copy = ''; markup = treatment.segments.map((segment, i) => {
+            object(segment, 'segment', ['text', 'highlight', 'underlineAt']);
+            if (typeof segment.text !== 'string' || !segment.text.length || segment.text.length > 160) throw new Error('segment.text must contain 1–160 characters');
+            if (segment.highlight !== undefined && typeof segment.highlight !== 'boolean') throw new Error('segment.highlight must be a boolean');
+            copy += segment.text;
+            if (segment.underlineAt !== undefined) {
+              if (/[\r\n\t]/.test(segment.text) || segment.text.length * font * .68 > rect.width - 36) throw new Error('underlined phrase must fit one line');
+              const time = start + at(segment.underlineAt, 'segment.underlineAt');
+              underlines.push({i, time}); chunks.push(segment.text.length);
+            } else chunks.push(...(segment.text.match(/\S+\s*|\s+/g) ?? []).map(part => part.length));
+            return `<span class="${[segment.highlight ? 'ui-emphasis' : '', segment.underlineAt !== undefined ? 'ui-underlined' : ''].filter(Boolean).join(' ')}">${escape(segment.text)}${segment.underlineAt === undefined ? '' : `<span id="${id}-underline-${i}" class="ui-underline" aria-hidden="true"></span>`}</span>`;
+          }).join('');
           text(copy, 'combined segments', 160);
         } else {copy = text(input.body, 'body', 160); markup = escape(copy);}
         const inset = 18, iconWidth = treatment.icon ? 60 : 0;
         const headingLines = Math.ceil(input.title.length / Math.max(1, Math.floor((rect.width - inset * 2 - iconWidth) / ((font + 2) * .68))));
         const headingHeight = Math.max(treatment.icon ? 48 : 0, headingLines * (font + 2) * 1.2);
-        const lines = Math.ceil(copy.length / Math.max(1, Math.floor((rect.width - inset * 2) / (font * .68))));
+        const columns = Math.max(1, Math.floor((rect.width - inset * 2) / (font * .68)));
+        let lines = Math.ceil(copy.length / columns);
+        if (underlines.length) {let count = 1, used = 0; for (const chunk of chunks) {if (used && used + chunk > columns) {count++; used = 0;} count += Math.max(0, Math.ceil(chunk / columns) - 1); used = chunk > columns ? chunk % columns : used + chunk;} lines = Math.max(lines, count);}
         if (rect.height < inset * 3 + headingHeight + lines * font * 1.3) throw new Error('treated callout rect too short for copy');
         const family = treatment.monospace ? 'ui-monospace,SFMono-Regular,Consolas,monospace' : 'inherit';
-        css += `#${id}{background:#101923;border-color:#465568;border-radius:14px}#${id} .ui-callout-heading{display:flex;align-items:center;gap:12px;padding:18px}#${id} .ui-title{padding:0;font-size:${font + 2}px;line-height:1.2;min-width:0;overflow-wrap:break-word;font-family:${family}}#${id} .ui-body{padding:0 18px 18px;font-family:${family};line-height:1.3;color:#e0e7ef}#${id} .ui-emphasis{color:${accent};font-weight:700}#${id} .ui-symbol{width:48px;height:48px;flex:none;color:#f7f7f8}#${id} .ui-symbol svg{width:48px;height:48px;display:block}#${id} .ui-corner{position:absolute;width:18px;height:18px;pointer-events:none;border-color:${accent};border-style:solid;border-width:0;opacity:0}#${id} .ui-corner-tl{left:7px;top:7px;border-left-width:2px;border-top-width:2px}#${id} .ui-corner-tr{right:7px;top:7px;border-right-width:2px;border-top-width:2px}#${id} .ui-corner-bl{left:7px;bottom:7px;border-left-width:2px;border-bottom-width:2px}#${id} .ui-corner-br{right:7px;bottom:7px;border-right-width:2px;border-bottom-width:2px}`;
-        body = `<div class="ui-callout-heading">${treatment.icon ? `<span id="${id}-symbol" class="ui-symbol" aria-hidden="true">${symbol(treatment.icon)}</span>` : ''}<h2 class="ui-title">${escape(input.title)}</h2></div><p id="${id}-copy" class="ui-body">${markup}</p>`;
+        css += `#${id}{background:#101923;border-color:#465568;border-radius:14px}#${id} .ui-callout-heading{display:flex;align-items:center;gap:12px;padding:18px}#${id} .ui-title{padding:0;font-size:${font + 2}px;line-height:1.2;min-width:0;overflow-wrap:break-word;font-family:${family}}#${id} .ui-body{padding:0 18px 18px;font-family:${family};line-height:1.3;color:#e0e7ef}#${id} .ui-emphasis{color:${accent};font-weight:700}#${id} .ui-underlined{position:relative;display:inline-block;white-space:nowrap}#${id} .ui-underline{position:absolute;left:0;right:0;bottom:-2px;height:2px;background:${accent};transform-origin:left center;display:block}#${id} .ui-symbol{width:48px;height:48px;flex:none;color:#f7f7f8}#${id} .ui-symbol svg{width:48px;height:48px;display:block}#${id} .ui-corner{position:absolute;width:18px;height:18px;pointer-events:none;border-color:${accent};border-style:solid;border-width:0;opacity:0}#${id} .ui-corner-tl{left:7px;top:7px;border-left-width:2px;border-top-width:2px}#${id} .ui-corner-tr{right:7px;top:7px;border-right-width:2px;border-top-width:2px}#${id} .ui-corner-bl{left:7px;bottom:7px;border-left-width:2px;border-bottom-width:2px}#${id} .ui-corner-br{right:7px;bottom:7px;border-right-width:2px;border-bottom-width:2px}`;
+        body = `<div class="ui-callout-heading">${treatment.icon ? `<span id="${id}-symbol" class="ui-symbol" aria-hidden="true">${symbol(treatment.icon)}</span>` : ''}<h2 id="${id}-heading" class="ui-title">${escape(input.title)}</h2></div><p id="${id}-copy" class="ui-body">${markup}</p>`;
         const time = start + at(treatment.at ?? enterDuration, 'treatment.at');
+        motion.push(`tl.fromTo(${js(`#${id}-heading`)}, {opacity:0,y:6}, {opacity:1,y:0,duration:0.28,ease:'power3.out'}, ${time});`);
+        underlines.forEach(({i, time: underlineTime}) => {
+          if (underlineTime < time + .4) throw new Error('underline must follow treatment settle');
+          motion.push(`tl.set(${js(`#${id}-underline-${i}`)}, {scaleX:0}, ${start});`, `tl.to(${js(`#${id}-underline-${i}`)}, {scaleX:1,duration:0.28,ease:'power3.out'}, ${underlineTime});`);
+          events.push({id: `${id}-underline-${i}-settle`, time: underlineTime + .28});
+        });
         motion.push(`tl.fromTo(${js(`#${id}-copy`)}, {opacity:0,y:8}, {opacity:1,y:0,duration:0.3,ease:'power3.out'}, ${time + .08});`);
         if (treatment.icon) motion.push(`tl.fromTo(${js(`#${id}-symbol`)}, {opacity:0,scale:0.86,rotation:-6}, {opacity:1,scale:1,rotation:0,duration:0.34,ease:'power3.out'}, ${time});`);
         if (treatment.glow) {
