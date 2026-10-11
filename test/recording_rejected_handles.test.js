@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { analyzeRecordingAudio, refineRecordingEditPlan } from "../src/recording_audio.js";
+import { analyzeRecordingAudio, parseBoundaryPcm, refineRecordingEditPlan } from "../src/recording_audio.js";
 
 function fixture(reason) {
   return {
@@ -110,4 +110,33 @@ test("analysis retains short precise separators without debounce while long-gap 
     : { stdout: "", stderr: "silence_start: 0.4\nsilence_end: 0.45\nsilence_start: 0.455\nsilence_end: 0.5\nsilence_start: 1\nsilence_end: 1.5" } });
   assert.deepEqual(analysis.boundary_silence_intervals, [{ start_seconds: 0.4, end_seconds: 0.45 }, { start_seconds: 0.455, end_seconds: 0.5 }, { start_seconds: 1, end_seconds: 1.5 }]);
   assert.deepEqual(analysis.silence_intervals, [{ start_seconds: 1, end_seconds: 1.5 }]);
+});
+
+test("fine boundary RMS tolerates room-noise peaks but preserves soft vocal tails and single-frame dips", () => {
+  const pcm = Buffer.alloc(8 * 640);
+  for (let frame = 0; frame < 8; frame++) {
+    const level = [0, 1, 3, 4].includes(frame) ? 0.003 : 0.0005;
+    for (let sample = 0; sample < 160; sample++) pcm.writeFloatLE(level, (frame * 160 + sample) * 4);
+    if (frame >= 5) pcm.writeFloatLE(0.008, frame * 640); // Peak exceeds cutoff, quiet RMS does not.
+  }
+  assert.deepEqual(parseBoundaryPcm(pcm, { start: 5, end: 5.08 }, -54), [{ start_seconds: 5.05, end_seconds: 5.08 }]);
+  assert.throws(() => parseBoundaryPcm(Buffer.alloc(32004), { start: 0, end: 0.5 }, -54), /bounded/);
+  pcm.writeFloatLE(NaN, 0);
+  assert.throws(() => parseBoundaryPcm(pcm, { start: 5, end: 5.08 }, -54), /sample/);
+});
+
+test("boundary plan limits PCM extraction to source-mapped rejected-facing handles", async () => {
+  const source = fixture("filler");
+  const calls = [];
+  const analysis = await analyzeRecordingAudio("fixture.wav", { durationSeconds: 10, thresholdDb: -40, boundaryPlan: source }, { run: async (_, args, options) => {
+    calls.push({ args, options });
+    if (args.includes("f32le")) return { stdout: Buffer.alloc(Math.round(Number(args[args.indexOf("-t") + 1]) * 16000) * 4), stderr: "" };
+    return args[args.indexOf("-af") + 1].includes("astats") ? { stdout: "pts_time:0\nlavfi.astats.Overall.RMS_level=-60\npts_time:0.1\nlavfi.astats.Overall.RMS_level=-20", stderr: "" } : { stdout: "", stderr: "" };
+  } });
+  assert.deepEqual(analysis.boundary_silence_receipt.windows, [{ start: 1.5, end: 2 }, { start: 3.3, end: 3.8 }]);
+  assert.equal(analysis.boundary_silence_receipt.measurement, "mono16k-float-rms-10ms");
+  assert.equal(analysis.boundary_silence_receipt.minimum_duration_seconds, 0.02);
+  assert.equal(calls.filter((call) => call.args.includes("f32le")).length, 2);
+  assert.ok(calls.filter((call) => call.args.includes("f32le")).every((call) => call.options.maxBuffer === 32000));
+  assert.equal(refineRecordingEditPlan(source, analysis, { trimEdges: false }).audio_analysis.unconfirmed_boundaries.length, 0);
 });
