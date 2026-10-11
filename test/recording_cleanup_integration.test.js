@@ -56,6 +56,9 @@ test('explicit local model uses injected inference without a default provider ca
 test('acoustic cleanup retains a transcript gap when the audio contains no measured quiet',async()=>{
  const f=await fixture();f.adapters.analyzeRecordingAudio=async()=>({source_duration_seconds:7,threshold_db:-40,silence_intervals:[],waveform:[]});
  const result=await prepareRecording(f.input,{out:path.join(f.directory,'edit'),transcript:f.transcript,removeFillers:false},f.adapters);
- assert.equal(result.duration_seconds,7);
- const plan=JSON.parse(await readFile(result.files.edit_plan,'utf8'));assert.deepEqual(plan.removed_segments,[]);
+ assert.equal(result.duration_seconds,4.1);
+ const plan=JSON.parse(await readFile(result.files.edit_plan,'utf8'));
+ assert.deepEqual(plan.kept_segments.map(s=>[s.source_start_seconds,s.source_end_seconds]),[[1,5.1]]);
+ assert.deepEqual(plan.removed_segments.map(s=>s.reason),['speech-boundary','speech-boundary']);
+ assert.ok(Math.abs(plan.words[5].start-plan.words[4].end-1.5)<1e-9);
 });
