@@ -90,6 +90,13 @@ this is an automated stage, not a request for human take selection.
 Outer frames are trimmed to the chosen voiced word boundaries. Wordless islands
 are removed throughout the edit, including tiny remnants between rejected takes.
 Genuine short words are preserved; there is no blanket minimum clip duration.
+Handles directly facing rejected takes or fillers are trimmed to retained word
+bounds, removing residual audio even when ASR does not recognize a word. These
+removed handles are protected from later QA restoration. PCM join checks detect
+isolated click candidates; they do not establish that every sustained phoneme or
+breath is correct. Inspect source/output audio context for suspicious residue and
+leave ambiguous sound findings unresolved rather than claiming clean audio from
+transcript agreement alone.
 
 With the active-agent route, an initial `needs-semantic-review` result is a
 checkpoint for the agent to continue automatically. Read its saved candidate,
