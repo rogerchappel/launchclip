@@ -36,7 +36,7 @@ Before authoring a cinematic creation, read both references completely:
 - Do not run `launchclip produce`, `creative-plan`, `direct-frames`,
   `production-critique`, or `production-repair`; those stages call metered
   model APIs.
-- For new-story cinematic creation, use `launchclip cinematic-check` after a
+- Use `launchclip cinematic-check` for new-story cinematic creation after a
   local draft render. Recorded treatments use their own local direction gate.
   Both checks are deterministic and do not call a model API.
 - Do not require, install, or invoke the HyperFrames plugin or its skills. Use
