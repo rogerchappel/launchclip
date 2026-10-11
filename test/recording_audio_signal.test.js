@@ -26,7 +26,7 @@ test("local FFmpeg measures a quiet gap between speech-like tones and shortens t
     assert.equal(analysis.waveform[10].rms, 0);
     assert.ok(analysis.threshold_db >= -60 && analysis.threshold_db <= -30);
     const base = planRecordingEdit([{ word: "First.", start: 0.05, end: 0.7 }, { word: "Second.", start: 1.4, end: 2.05 }], { durationSeconds: 2.1, silenceDuration: 0.8, silencePadding: 0.15, takePolicy: "none" });
-    const refined = refineRecordingEditPlan(base, analysis);
+    const refined = refineRecordingEditPlan(base, analysis, { trimEdges: false });
     assert.ok(Math.abs(base.duration_seconds - 2.1) < 0.001);
     assert.ok(Math.abs(refined.duration_seconds - 1.76) < 0.01);
     assert.ok(Math.abs(refined.words[1].start - 1.06) < 0.01);
