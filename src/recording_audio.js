@@ -32,10 +32,11 @@ export async function analyzeRecordingAudio(input, options = {}, adapters = {}) 
   // can discard the preceding quiet piece before the requested duration gate.
   const detectorDuration = Math.min(silenceDuration, 0.01);
   const quiet = await run("ffmpeg", [...common, "-af", `aresample=16000,aformat=channel_layouts=mono,silencedetect=noise=${threshold}dB:d=${detectorDuration}`, "-f", "null", "-"], { maxBuffer: 8 * 1024 * 1024 });
+  const silence = parseAudioSilence(quiet.stderr, duration, { joinToleranceSeconds: joinTolerance }).filter((interval) => interval.end_seconds - interval.start_seconds >= silenceDuration - 1e-6);
   // Dialogue-relative quiet can contain soft consonants. Confirm separators
   // against the noise floor for 40ms, without joining across voiced blips.
   const boundaryThreshold = Math.max(-80, Math.min(threshold, noiseFloor + 6));
-  const boundaryWindows = options.boundaryPlan ? recordingBoundaryWindows(options.boundaryPlan, duration) : null;
+  const boundaryWindows = options.boundaryPlan ? recordingBoundaryWindows(options.boundaryPlan, duration, silence, waveform, noiseFloor) : null;
   const boundaryMinimum = boundaryWindows ? 0.02 : 0.04;
   let boundarySilence;
   if (boundaryWindows) {
@@ -48,7 +49,6 @@ export async function analyzeRecordingAudio(input, options = {}, adapters = {}) 
     const boundaryDetection = await run("ffmpeg", [...common, "-af", `aresample=16000,aformat=channel_layouts=mono,silencedetect=noise=${boundaryThreshold}dB:d=0.04`, "-f", "null", "-"], { maxBuffer: 8 * 1024 * 1024 });
     boundarySilence = parseAudioSilence(boundaryDetection.stderr, duration, { joinToleranceSeconds: 0 }).filter((interval) => interval.end_seconds - interval.start_seconds >= boundaryMinimum - 1e-6);
   }
-  const silence = parseAudioSilence(quiet.stderr, duration, { joinToleranceSeconds: joinTolerance }).filter((interval) => interval.end_seconds - interval.start_seconds >= silenceDuration - 1e-6);
   if (silence.length === 1 && silence[0].start_seconds === 0 && silence[0].end_seconds >= duration - 0.001) throw new Error("Recording audio is entirely below the silence threshold");
   return { schema_version: RECORDING_AUDIO_VERSION, source_duration_seconds: duration, threshold_db: threshold, threshold_receipt: { noise_floor_db: noiseFloor, speech_reference_db: speechReference, speech_percentile: 75, rule: options.thresholdDb === undefined ? "max(noise-floor+10dB,speech-p75-18dB),clamped[-60,-30]" : "explicit-override" }, silence_duration_seconds: silenceDuration, silence_padding_seconds: padding, silence_join_tolerance_seconds: joinTolerance, envelope_step_seconds: step, silence_intervals: silence, boundary_silence_intervals: boundarySilence, boundary_silence_receipt: { threshold_db: boundaryThreshold, noise_floor_db: noiseFloor, rule: "max(-80,min(dialogue-threshold,noise-floor+6dB))", minimum_duration_seconds: boundaryMinimum, join_tolerance_seconds: 0, measurement: boundaryWindows ? "mono16k-float-rms-10ms" : "silencedetect-peak", windows: boundaryWindows }, waveform };
 }
@@ -245,15 +245,23 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
   return { ...plan, duration_seconds: clock, kept_segments, removed_segments, words, text: words.map((word) => word.word ?? word.text).join(" "), audio_analysis: { schema_version: RECORDING_AUDIO_VERSION, threshold_db: analysis.threshold_db, threshold_receipt: analysis.threshold_receipt, silence_padding_seconds: padding, trim_edges: trimEdges, boundary_silence_receipt: analysis.boundary_silence_receipt, boundary_search_seconds: 0.5, unconfirmed_boundaries: unconfirmedBoundaries, speech_boundary_removed_seconds: boundaryRanges.reduce((sum, range) => sum + range.end - range.start, 0), rejected_splice_removed_seconds: spliceRanges.reduce((sum, range) => sum + range.end - range.start, 0), wordless_removed_seconds: wordlessRanges.reduce((sum, range) => sum + range.end - range.start, 0), removed_seconds: plan.duration_seconds - clock, aligned_words: alignedWords, dropped_words: droppedWords } };
 }
 
-function recordingBoundaryWindows(plan, duration) {
+function recordingBoundaryWindows(plan, duration, silence, waveform, floor) {
   if (Math.abs(plan?.source_duration_seconds - duration) > 0.001 || !Array.isArray(plan?.words) || !Array.isArray(plan?.kept_segments) || !Array.isArray(plan?.removed_segments)) throw new Error("Invalid acoustic boundary plan");
   const rejected = plan.removed_segments.filter((cut) => ["semantic-retake", "repeated-take", "filler", "false-start"].includes(cut.reason));
   const windows = [];
   for (const keep of plan.kept_segments) {
     checkedRange(keep.source_start_seconds, keep.source_end_seconds, duration);
-    const words = plan.words.filter((word) => word.start >= keep.start_seconds - 1e-6 && word.end <= keep.end_seconds + 1e-6).map((word) => {
+    const words = plan.words.filter((word) => word.start >= keep.start_seconds - 1e-6 && word.end <= keep.end_seconds + 1e-6).flatMap((word) => {
       const offset = keep.source_start_seconds - keep.start_seconds;
-      return checkedRange(word.start + offset, word.end + offset, duration);
+      const range = checkedRange(word.start + offset, word.end + offset, duration);
+      const whollyQuiet = silence.some((quiet) => quiet.start_seconds <= range.start && quiet.end_seconds >= range.end);
+      const quietSignal = waveform.some((point) => point.start_seconds < range.end && point.end_seconds > range.start && point.rms_db > floor + 6);
+      if (whollyQuiet && quietSignal) return [range];
+      for (const quiet of silence) {
+        if (quiet.start_seconds <= range.start && quiet.end_seconds > range.start) range.start = Math.min(range.end, quiet.end_seconds);
+        if (quiet.start_seconds < range.end && quiet.end_seconds >= range.end) range.end = Math.max(range.start, quiet.start_seconds);
+      }
+      return range.end - range.start > 1e-6 ? [range] : [];
     });
     if (!words.length) continue;
     if (rejected.some((cut) => Math.abs(cut.source_end_seconds - keep.source_start_seconds) <= 1e-6)) windows.push({ start: Math.max(keep.source_start_seconds, words[0].start - 0.5), end: words[0].start });
