@@ -32,9 +32,11 @@ export async function analyzeRecordingAudio(input, options = {}, adapters = {}) 
   // can discard the preceding quiet piece before the requested duration gate.
   const detectorDuration = Math.min(silenceDuration, 0.01);
   const quiet = await run("ffmpeg", [...common, "-af", `aresample=16000,aformat=channel_layouts=mono,silencedetect=noise=${threshold}dB:d=${detectorDuration}`, "-f", "null", "-"], { maxBuffer: 8 * 1024 * 1024 });
+  // Splice separators must be proven quiet, without joining across noise blips.
+  const boundarySilence = parseAudioSilence(quiet.stderr, duration, { joinToleranceSeconds: 0 });
   const silence = parseAudioSilence(quiet.stderr, duration, { joinToleranceSeconds: joinTolerance }).filter((interval) => interval.end_seconds - interval.start_seconds >= silenceDuration - 1e-6);
   if (silence.length === 1 && silence[0].start_seconds === 0 && silence[0].end_seconds >= duration - 0.001) throw new Error("Recording audio is entirely below the silence threshold");
-  return { schema_version: RECORDING_AUDIO_VERSION, source_duration_seconds: duration, threshold_db: threshold, threshold_receipt: { noise_floor_db: noiseFloor, speech_reference_db: speechReference, speech_percentile: 75, rule: options.thresholdDb === undefined ? "max(noise-floor+10dB,speech-p75-18dB),clamped[-60,-30]" : "explicit-override" }, silence_duration_seconds: silenceDuration, silence_padding_seconds: padding, silence_join_tolerance_seconds: joinTolerance, envelope_step_seconds: step, silence_intervals: silence, waveform };
+  return { schema_version: RECORDING_AUDIO_VERSION, source_duration_seconds: duration, threshold_db: threshold, threshold_receipt: { noise_floor_db: noiseFloor, speech_reference_db: speechReference, speech_percentile: 75, rule: options.thresholdDb === undefined ? "max(noise-floor+10dB,speech-p75-18dB),clamped[-60,-30]" : "explicit-override" }, silence_duration_seconds: silenceDuration, silence_padding_seconds: padding, silence_join_tolerance_seconds: joinTolerance, envelope_step_seconds: step, silence_intervals: silence, boundary_silence_intervals: boundarySilence, waveform };
 }
 
 export function parseRmsEnvelope(output, { durationSeconds, stepSeconds, maxPoints = 6000 }) {
@@ -112,6 +114,8 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
   });
   for (let index = 1; index < originalSourceWords.length; index++) if (originalSourceWords[index].start < originalSourceWords[index - 1].end - 1e-6) throw new Error("Accepted words must be ordered and non-overlapping");
   const measuredQuiet = union(analysis.silence_intervals.map((interval) => checkedRange(interval.start_seconds, interval.end_seconds, duration)));
+  if (analysis.boundary_silence_intervals !== undefined && !Array.isArray(analysis.boundary_silence_intervals)) throw new Error("Invalid boundary silence intervals");
+  const boundaryQuiet = union((analysis.boundary_silence_intervals ?? analysis.silence_intervals).map((interval) => checkedRange(interval.start_seconds, interval.end_seconds, duration)));
   if (analysis.waveform !== undefined && !Array.isArray(analysis.waveform)) throw new Error("Invalid acoustic waveform");
   const waveform = (analysis.waveform ?? []).map((point) => {
     checkedRange(point.start_seconds, point.end_seconds, duration);
@@ -154,12 +158,18 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
     const touchesEarlierCut = rejectedCuts.some((cut) => Math.abs(cut.source_end_seconds - keep.start) <= 1e-6);
     const touchesLaterCut = rejectedCuts.some((cut) => Math.abs(cut.source_start_seconds - keep.end) <= 1e-6);
     if (touchesEarlierCut && spoken[0].start > keep.start) {
-      spliceRanges.push({ start: keep.start, end: spoken[0].start });
-      keep.start = spoken[0].start;
+      const wordStart = spoken[0].start;
+      const separator = boundaryQuiet.filter((quiet) => quiet.end <= wordStart && quiet.end > Math.max(keep.start, wordStart - 0.2) && quiet.start >= keep.start).at(-1);
+      const boundary = separator ? Math.max(wordStart - 0.2, separator.end - Math.min(padding, (separator.end - separator.start) / 2)) : wordStart;
+      spliceRanges.push({ start: keep.start, end: boundary });
+      keep.start = boundary;
     }
     if (touchesLaterCut && spoken.at(-1).end < keep.end) {
-      spliceRanges.push({ start: spoken.at(-1).end, end: keep.end });
-      keep.end = spoken.at(-1).end;
+      const wordEnd = spoken.at(-1).end;
+      const separator = boundaryQuiet.find((quiet) => quiet.start >= wordEnd && quiet.start < Math.min(keep.end, wordEnd + 0.2) && quiet.end <= keep.end);
+      const boundary = separator ? Math.min(wordEnd + 0.2, separator.start + Math.min(padding, (separator.end - separator.start) / 2)) : wordEnd;
+      spliceRanges.push({ start: boundary, end: keep.end });
+      keep.end = boundary;
     }
   }
   const protectedRanges = union(sourceWords.map((word) => ({ start: Math.max(0, word.start - padding), end: Math.min(duration, word.end + padding) })));
