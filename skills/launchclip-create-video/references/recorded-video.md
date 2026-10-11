@@ -232,11 +232,19 @@ redrawing controls, connectors or mechanical metaphors for each beat. Prefer:
 - **Progress or status:** advance along known stages or show a grounded status.
   Without real measurements, use named stages and explicit illustrative
   treatment rather than fabricated percentages, elapsed time or success data.
+- **Metric:** a meaningful value changing up or down, with explicit number,
+  percentage or money formatting and units. Verify start/end values and their
+  direction; a decrease is not automatically a failure or an increase a success.
+  Use sourced values or persistently labeled illustrative examples, keeping
+  signs, decimals, currency and percentage meaning intact.
+- **Numbered steps:** a short ordered 1/2/3 process when sequence matters, rather
+  than presenting every idea as a completed checklist.
 - **Highlight or callout:** focus a relevant region of an actual capture, attach
   a short explanation, or pair a real image/video with a concise takeaway.
   Keep arrows local to their target and omit them when proximity is clearer.
-- **Takeaway card:** emphasize one short conclusion, then return to the speaker.
-  It is an accent, not a replacement for all visual explanation.
+- **Takeaway card:** emphasize one short conclusion within the current layout.
+  It is an accent, not a replacement for all visual explanation; its exit does
+  not by itself require a return to a full-frame presenter.
 
 For the bundled module catalog and integration contract, read
 [editorial-ui-modules.md](editorial-ui-modules.md) when authoring these modules.
@@ -252,7 +260,12 @@ Keep a consistent window radius, title bar, spacing, text hierarchy, icon size
 and animation grammar in `DESIGN.md`. Module entries normally decelerate into a
 crisp readable settle; exits accelerate away. Reuse established state-change
 animations and a small set of curves. Animate one useful change at a time and
-hold the resulting state long enough to read. Avoid elaborate factory/cube or
+hold the resulting state long enough to read. A translucent glass overlay can
+fit footage when requested or suited to the brand; protect contrast with tint,
+border and readable spacing, and verify the encoded result. Use a sufficiently
+opaque tinted fallback when backdrop blur is unavailable or busy footage makes
+text unreadable. Glass is a surface variant, not a reason to cover the face or
+force every module into the video. Avoid elaborate factory/cube or
 mechanical constructions when a simple UI state communicates the same idea.
 
 Custom diagrams remain an exception when the available modules cannot express
@@ -260,6 +273,39 @@ the concept. Record why the module is inadequate and prove the custom geometry
 in the short prototype, including connector endpoints and motion overlaps,
 before full authoring. This is not a fixed module quota: quiet presenter beats,
 real proof and meaningful variation remain driven by the recording.
+
+### Give familiar modules semantic personality
+
+A familiar UI foundation is not a mandate to make every explanation a checklist
+or a slide. Choose the visible idea from the speech: an icon cluster for related
+concepts, an audience grid for reach, an illustrative trend for momentum, a
+focused screenshot for evidence, or a short counter for an actual stated number.
+Use a bounded vocabulary of meaningful icons, emoji or simple illustrations to
+add recognition and personality when useful, with coherent scale, color and
+rendering style derived from the brand, speaker and topic. No symbol or module
+is mandatory for every beat.
+Keep the main idea readable; decorative badges and unrelated symbols do not
+constitute visual development. Freeze any chosen assets locally and preserve
+existing resource permissions and provenance.
+
+Let a state develop across related beats: reveal a named group, highlight the
+relevant member, then expand the group or shift emphasis when the narration
+changes. Prefer this to replacing one text panel with another. Connect motion
+and a restrained sound cue to that meaningful state change; do not add constant
+pulsing, counters or sound merely to increase energy. Useful captures enrich the
+sequence, but their absence should not reduce it to title cards.
+
+Keep numbers grounded. A spoken or verified number can be counted up with its
+meaning and units intact. An audience grid or rising trend can illustrate reach
+without claiming a specific audience size or measured outcome. Example viewer
+counts and chart values are permissible in an explicitly hypothetical sequence
+with a persistent readable Illustration label; record the example values as
+illustrative in the plan and do not style them as real analytics or results.
+Measured metrics need supporting data. Do not turn a reference video's
+performance into a promise for this video.
+Never present illustrative achievements, growth, members, revenue or completed
+work as real results.
+A decorative count of illustrative shapes is not an actual viewer count.
 
 ### Build a whole-transcript direction map
 
@@ -279,6 +325,22 @@ needs the space. Real captures should show evidence, not fill time. Group relate
 beats into a developing sequence with persistent objects and anchors rather
 than resetting the same title plate at each sentence. Simple typography remains
 useful as an accent or intentional pause, not the entire visual argument.
+
+Plan presenter placement as runs of related beats, not as an automatic
+per-module transition. Record each run's time range, presenter crop/position,
+graphic zone and narrative reason for its entry/exit in `STORYBOARD.md`. Once a
+side presenter or split is established for an explanation, keep that placement
+stable while graphics change beside it. Do not repeatedly move full-frame →
+side → full-frame merely because a card enters or exits. A brief empty graphic
+zone can hold the same crop until the next related idea arrives; tiny gaps
+between modules are not narrative reasons to recenter the face.
+
+Return to a full-frame presenter for a deliberate narrative or emotional
+boundary, personal statement, sustained quiet beat or invitation. A full-screen
+visual can interrupt a run when it needs the space; return to the established
+presenter placement afterward when the explanation continues. Choose run length
+from the content rather than a fixed duration or transition quota. Review the
+full sequence for distracting crop oscillation as well as individual cards.
 
 For each aspect ratio define a separate readable layout. In 16:9 protect the
 face, gestures and useful negative space; in 9:16 inspect the actual crop and
@@ -340,7 +402,10 @@ SFX are part of the treatment.
 Review moving output at delivery size and listen to the actual encoded mix.
 Compare it with the declared treatment and reference observations. Confirm the
 idea develops, motion settles cleanly, transitions preserve continuity, the
-presenter remains readable, and sound supports the action. Keep evidence paths
+presenter remains readable, and sound supports the action. Review adjacent
+modules together: presenter placement should persist through a related run,
+and visual personality should clarify the spoken idea rather than resemble a
+repeated slideshow. Keep evidence paths
 and specific findings, bind review to both the actual prototype and current
 direction plan, then repair the responsible sequence before expanding. A changed
 plan, selected asset or render invalidates the old review; regenerate the
