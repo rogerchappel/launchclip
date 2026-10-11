@@ -209,6 +209,9 @@ async function readProductionReviewStatus(workspacePath) {
 
 async function runProductionInWorkspace(workspace, flags, adapters, normalizedIntake = {}) {
   const sourcePreprocess = await (adapters.prepareSourceMedia ?? prepareSourceMedia)(workspace, sourcePreprocessOptions(flags), adapters.sourcePreprocess);
+  if (["needs-semantic-review", "needs-attention", "repair-needed"].includes(sourcePreprocess.status)) {
+    return { stage: "produce", status: sourcePreprocess.status, workspace, source_preprocess: sourcePreprocess, next_action: sourcePreprocess.next_action };
+  }
   const evidence = await (adapters.collectEvidence ?? collectEvidence)(workspace, evidenceOptions(flags), adapters.evidence);
   const sourceMedia = await (adapters.analyzeSourceMedia ?? analyzeSourceMedia)(workspace, mediaAnalysisOptions(flags), adapters.mediaAnalysis);
   const entityResolution = await (adapters.resolveProductionEntities ?? resolveProductionEntities)(workspace, entityOptions(flags));
