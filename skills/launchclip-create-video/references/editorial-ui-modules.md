@@ -12,6 +12,67 @@ not choose moments, validate facts, measure a real product's progress or approve
 creative quality. Choose modules through `recorded-video.md` and keep the same
 source and audio contracts.
 
+## Decide each beat before authoring
+
+Before generating modules for a directed recording, complete this decision table
+in `STORYBOARD.md`. Choose the visual's function from the actual transcript and
+intended viewer response, then choose the capability that serves it. Catalog
+availability is not a reason to add a graphic.
+
+| Accepted time / spoken anchor | Intended viewer emotion or understanding | Visual function / changing subject | Chosen capability | Sound function | Caption zone |
+| --- | --- | --- | --- | --- | --- |
+| Exact earliest claim word and its measured time | What should become clearer or felt here? | What visible action makes that happen? | Why does this particular module or shared object fit? | What should the sound communicate, or why silence? | Which tested region stays clear of face and graphic? |
+
+Arguments, credibility statements, and community offers do not default to
+checklists. An argument may need one phrase emphasized or a meaningful comparison;
+credibility may need a real excerpt or relevant supplied evidence; a community
+invitation may need warmth, an audience relationship, or a clean presenter hold.
+Use a checklist for an actual sequence of tasks or conditions, and a rack for
+meaningful supplied state signals. Neither implies that the presenter completed
+an imaginary task. A strong emotional passage can benefit from less UI, a
+restrained presenter focus, and a deliberately quiet sound bed.
+
+Review the whole table before authoring. Identify repeated module and sound
+families, and record why each repeat carries meaning or continues the same subject.
+Change a repeated treatment when it merely restates narration. Keep repetitions
+that develop a continuing object or make a comparison clearer. Do not impose a
+fixed graphic count, forced treatment rotation, or mandatory side switch.
+
+Mark acquisition and settle times against measured speech. Start from the
+**earliest spoken word that establishes the claim**, rather than waiting for the
+sentence to finish or using the next chapter boundary. Let the subject develop
+with the claim and land the key emphasis on the relevant word. Compare the actual
+first cue time with the visual start in the rendered timeline; repair arbitrary
+lags and premature reveals. Do not change the spoken content to accommodate a
+chosen widget.
+
+For requested captions, favor two- or three-word chunks derived from accepted
+speech timing, with shorter chunks for natural emphasis and longer holds when
+reading needs them. Check coverage across all captioned speech, including quiet
+presenter passages and returns between graphics; inspect gaps, dropped words, and
+timing after cuts. Place captions in an adaptive face-safe zone opposite the
+active graphic where possible, stable across a shared layout run. Inspect the
+face, hands, platform UI, and graphic bounds at transition frames as well as
+holds. Switch zones only when the actual layout requires it, not every beat.
+
+If an elapsed-progress line is part of the treatment, give it one clock for the
+**whole accepted video**, from zero to its true end. The host keeps it alive across
+overlays; overlay replacement must not reset it. An explicit chapter marker can
+sit on that same clock without inventing section counts or progress data. Label
+actual process or product progress differently and require supplied evidence.
+The elapsed clock belongs to the host: use one linear (`ease: none`) fill tween
+from zero to the accepted duration. The helper's `progress` states express explicit
+values, not an automatic elapsed-time clock; do not combine their discrete fill
+animations with a second host tween on the same property.
+
+Build a small sound vocabulary around meaning: travel for a handoff, a restrained
+accent for a genuine emphasis, a confirmation sound for a real completion, or no
+cue during an intimate or dense passage. Module events provide synchronization
+points, not instructions to play a tick at every event. Audit repeated tick
+density, cue coverage, quiet space, and competing speech in normal-speed playback.
+Review caption gaps and repeated visual/sound families alongside the decision
+table; repair the specific failure instead of targeting a universal quota.
+
 ## Generate a module
 
 Save a module specification in the composition project, then run:
@@ -421,10 +482,46 @@ Whole-stage polish belongs to the host composition. A restrained brand palette
 may use a warm background, cream type, and darker surfaces while retaining one
 primary accent. Low-contrast, large topic symbols can persist behind the stage
 and move between meaningful states with finite translation, rotation, and opacity;
-keep them away from the face, captions, and held copy. A bottom section-progress
-line can use the existing `progress` module with values derived from the actual
-section's elapsed time. Label it as section progress, not fictional product
-completion. Neither background glyphs nor progress should force constant motion.
+keep them away from the face, captions, and held copy. A bottom elapsed-progress
+line can reuse the progress-bar treatment with a host-owned linear tween derived
+from the whole accepted video's elapsed time. Keep one persistent clock across overlays, and
+label it as video progress rather than fictional product completion. Neither background glyphs nor progress should force constant motion.
 Use real chapter/section timing; do not invent recording indicators, chapter
 counts, brand claims, or facts from a style reference. Inspect the complete frame
 and its transitions, not just isolated widget screenshots.
+
+
+## Optional palette tokens
+
+Supply a common `theme` to use the same geometry with a different palette. The
+four required tokens are `surface`, `foreground`, `muted`, and `border`, each a
+six-digit hex color. Optional `accentText` defaults to `foreground`; the separate
+existing `accent` remains the primary graphic fill, line, and glow color. Palette
+colors affect scoped module surfaces, rows, chrome, text, code tokens, and inactive
+signals. Completed checklist rows and switched-off rack lights return to the
+chosen palette when seeking, rather than restoring the original navy colors.
+Omitting `theme` preserves existing HTML, CSS, motion, events, and layout output.
+No arbitrary CSS, network font, or new rendering engine is accepted.
+
+A warm light-surface recipe, independent of any particular brand:
+
+```json
+"accent": "#FF6A00",
+"theme": {
+  "surface": "#FFF1CE",
+  "foreground": "#171612",
+  "muted": "#5D5548",
+  "border": "#9B8769",
+  "accentText": "#A43C0A"
+}
+```
+
+Use the bright orange for graphic energy and the darker orange for readable
+emphasis on cream. For a charcoal surface, a companion recipe is surface
+`#171612`, foreground `#FFF1CE`, muted `#D0C4A8`, border `#736A57`, and accentText
+`#FF9D4C`. Choose surfaces from the emotional function and footage context, not a
+forced alternating pattern. Glass keeps a translucent tint based on the supplied
+surface; media itself stays sharp. Accent-filled date/step badges retain dark ink.
+Palette validation checks syntax, not aesthetic quality or universal contrast:
+verify actual held text, syntax colors, glass over footage, and transition frames
+at delivery size using both browser and native render checks.
