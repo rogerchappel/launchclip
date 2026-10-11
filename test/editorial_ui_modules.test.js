@@ -150,3 +150,31 @@ test('expressive inputs reject unsafe modes, invalid timing, oversized copy and 
   assert.doesNotMatch(source.html, /<script>/);
   assert.doesNotMatch(source.motion, /bad\(/);
 });
+
+test('standalone metrics preserve their initial value and format increases, decreases, percent and money', () => {
+  const metric = {mode: 'illustration', unit: 'viewers', format: 'number', values: [{value: 12, at: .6}, {value: 180, at: 2}, {value: 36, at: 4}]};
+  const result = buildEditorialModule({...expressive, kind: 'metric', metric});
+  assert.match(result.html, /class="ui-number">12</);
+  assert.match(result.html, /Illustration · example values/);
+  const frames = commands(result).filter(call => call[0] === 'set' && call[1] === '#reach-number');
+  assert.ok(frames.some(call => call[2].textContent === '180' && call.at(-1) === 72.6));
+  assert.ok(frames.some(call => call[2].textContent === '36' && call.at(-1) === 74.6));
+  assert.doesNotMatch(result.motion, /onUpdate|setTimeout|Date\.|Math.random/);
+  const percent = buildEditorialModule({...expressive, kind: 'metric', metric: {...metric, unit: 'completion', format: 'percent', decimals: 1, values: [{value: 72.5, at: .6}, {value: 48, at: 2.2}]}});
+  assert.match(percent.html, /72.5%/);
+  assert.ok(commands(percent).some(call => call[2]?.textContent === '48.0%'));
+  const money = buildEditorialModule({...expressive, kind: 'metric', metric: {...metric, unit: 'balance', format: 'currency', currency: 'USD', decimals: 2, values: [{value: 1250.25, at: .6}, {value: -50, at: 2.2}]}});
+  assert.match(money.html, /USD\s1,250.25/);
+  assert.ok(commands(money).some(call => call[2]?.textContent === '-USD\u00a050.00'));
+});
+
+test('standalone progress supports reversed values and rejects invented or out-of-range data', () => {
+  const progress = {mode: 'illustration', max: 4, label: 'Example stages', values: [{value: 1, at: .6}, {value: 4, at: 2}, {value: 2, at: 4}]};
+  const result = buildEditorialModule({...expressive, kind: 'progress', progress});
+  assert.match(result.html, /class="ui-number">25%</);
+  assert.ok(commands(result).some(call => call[1] === '#reach .ui-progress-fill' && call[2]?.scaleX === .5));
+  assert.equal(result.events.at(-1).time, 74.6);
+  for (const bad of [{mode: 'data'}, {max: 0}, {values: [{value: 5, at: .6}]}, {values: [{value: -1, at: .6}]}, {values: [{value: 1, at: 2}, {value: 2, at: 2.5}]}]) assert.throws(() => buildEditorialModule({...expressive, kind: 'progress', progress: {...progress, ...bad}}));
+  const metric = {mode: 'illustration', format: 'percent', unit: 'completion', values: [{value: 50, at: .6}]};
+  for (const bad of [{values: [{value: 101, at: .6}]}, {values: [{value: -1, at: .6}]}, {format: 'currency'}, {currency: 'USD'}, {decimals: 3}, {decimals: .5}]) assert.throws(() => buildEditorialModule({...expressive, kind: 'metric', metric: {...metric, ...bad}}));
+});
