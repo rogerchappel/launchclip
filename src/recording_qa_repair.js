@@ -87,10 +87,13 @@ export async function analyzeRecordingJoins(media, plan, options = {}, adapters 
   const maximum = options.maxJoins ?? 128;
   if (!Number.isInteger(maximum) || maximum < 1 || maximum > 256) throw new Error("maxJoins must be between 1 and 256");
   const joins = plan.kept_segments.slice(1).map((segment, index) => ({ at: segment.start_seconds, segment: index + 1 }));
+  const offset = options.joinOffset ?? 0;
+  if (!Number.isInteger(offset) || offset < 0 || offset > joins.length) throw new Error("joinOffset must be an integer within join coverage");
+  const stop = Math.min(joins.length, offset + maximum);
   const issues = [];
   const measurements = [];
   const run = adapters.run ?? execute;
-  for (const join of joins.slice(0, maximum)) {
+  for (const join of joins.slice(offset, stop)) {
     const start = Math.max(0, join.at - halfWindow);
     const end = Math.min(plan.duration_seconds, join.at + halfWindow);
     const output = await run("ffmpeg", ["-hide_banner", "-nostdin", "-ss", String(start), "-i", media, "-t", String(end - start), "-map", "0:a:0", "-vn", "-ar", String(sampleRate), "-ac", "1", "-f", "f32le", "-"], { encoding: null, maxBuffer: 128 * 1024 });
@@ -111,7 +114,7 @@ export async function analyzeRecordingJoins(media, plan, options = {}, adapters 
     measurements.push(record);
     if (candidate) issues.push({ ...record, kind: "join-click-candidate", edge: "start", proven: false, explanation: "An isolated fast impulse occurs at the join in otherwise quiet audio; inspect source before repairing." });
   }
-  return { schema_version: "launchclip.recording-joins.v1", checked: joins.length <= maximum, sampled_joins: measurements.length, total_joins: joins.length, issues, measurements, unresolved_joins: joins.slice(maximum).map((join) => join.segment) };
+  return { schema_version: "launchclip.recording-joins.v1", checked: offset === 0 && stop === joins.length, sampled_joins: measurements.length, total_joins: joins.length, join_offset: offset, next_join_offset: stop < joins.length ? stop : null, issues, measurements, unresolved_joins: [...joins.slice(0, offset), ...joins.slice(stop)].map((join) => join.segment) };
 }
 
 function unpackPlan(plan) {
