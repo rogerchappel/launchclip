@@ -645,3 +645,19 @@ Verify onset, completion, gaps between spans, audibility beneath narration and
 whether repeated typing becomes distracting. Signal presence alone is not
 listening approval. Omitting `code.typing` preserves the existing markup, motion
 and events, so earlier compositions remain unchanged.
+
+## Animate excerpt emphasis
+
+Set `excerpt.highlightMotion: true` to sweep the background of highlighted
+segments from left to right over 0.35 seconds at `excerpt.focus.at`. A separate
+background layer scales; the text keeps its normal shape. Existing whole-excerpt
+focus travel remains independent. Highlight the relevant phrase on its measured
+spoken emphasis, rather than leaving every excerpt permanently accented or
+acquiring an unrelated highlight at a chapter boundary.
+
+The sweep is finite and restores partial states on backward seeks. It must
+settle before departure, alongside the existing focus movement. The helper adds
+a `-highlight-sweep-settle` event; it does not automatically add sound. Omit the
+option to retain the previous background-color acquisition and original output.
+Inspect the encoded phrase at onset, midway and completion for alignment,
+readability and correct timing with speech.
