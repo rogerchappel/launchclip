@@ -61,12 +61,45 @@ test("verified separators preserve accepted consonant tails and exclude untransc
 test("separator search is bounded and never crosses accepted words or original rejected ranges", () => {
   const source = fixture("filler");
   const analysis = { source_duration_seconds: 10, threshold_db: -40, silence_intervals: [],
-    boundary_silence_intervals: [{ start_seconds: 1.695, end_seconds: 1.9 }, { start_seconds: 3.7, end_seconds: 3.85 }] };
+    boundary_silence_intervals: [{ start_seconds: 1.995, end_seconds: 2.2 }, { start_seconds: 3.79, end_seconds: 3.85 }] };
   const refined = refineRecordingEditPlan(source, analysis, { trimEdges: false });
-  assert.equal(refined.kept_segments[0].source_end_seconds, 1.7, "padding is clamped to 200ms total movement");
-  assert.equal(refined.kept_segments[1].source_start_seconds, 3.8, "overlapping chosen word falls back to its envelope");
+  assert.equal(refined.kept_segments[0].source_end_seconds, 1.5, "separator has too little quiet inside original keep");
+  assert.equal(refined.kept_segments[1].source_start_seconds, 3.8, "overlapping chosen word leaves too little confirmed quiet");
   assert.throws(() => refineRecordingEditPlan(source, { ...analysis, boundary_silence_intervals: [{ start_seconds: NaN, end_seconds: 4 }] }), /range/);
   assert.throws(() => refineRecordingEditPlan(source, { ...analysis, boundary_silence_intervals: {} }), /boundary silence/);
+});
+
+test("noise-relative confirmation preserves soft tails and rejects brief dips before resumed energy", async () => {
+  const calls = [];
+  const analysis = await analyzeRecordingAudio("fixture.wav", { durationSeconds: 10, thresholdDb: -40 }, { run: async (_, args) => {
+    const filter = args[args.indexOf("-af") + 1]; calls.push(filter);
+    if (filter.includes("astats")) return { stdout: "pts_time:0\nlavfi.astats.Overall.RMS_level=-60\npts_time:0.1\nlavfi.astats.Overall.RMS_level=-20", stderr: "" };
+    if (filter.includes("noise=-54dB")) return { stdout: "", stderr: "silence_start: 1.53\nsilence_end: 1.55\nsilence_start: 1.75\nsilence_end: 1.9\nsilence_start: 3.6\nsilence_end: 3.85" };
+    return { stdout: "", stderr: "silence_start: 1.51\nsilence_end: 1.9" };
+  } });
+  assert.ok(calls.some((filter) => filter.includes("silencedetect=noise=-54dB:d=0.04")));
+  assert.equal(analysis.boundary_silence_receipt.threshold_db, -54);
+  assert.equal(analysis.boundary_silence_receipt.join_tolerance_seconds, 0);
+  assert.equal(analysis.boundary_silence_intervals.length, 2, "20ms dip is not a separator");
+  const refined = refineRecordingEditPlan(fixture("filler"), analysis, { trimEdges: false });
+  assert.equal(refined.kept_segments[0].source_end_seconds, 1.825, "keeps soft accepted tail below dialogue cutoff until sustained noise-relative quiet");
+  assert.ok(refined.kept_segments[1].source_start_seconds > 3.6 && refined.kept_segments[1].source_start_seconds < 3.8);
+  assert.deepEqual(refined.audio_analysis.unconfirmed_boundaries, []);
+});
+
+test("no confirmed separator preserves original handles with unresolved receipt instead of clipping", () => {
+  const source = fixture("semantic-retake");
+  const refined = refineRecordingEditPlan(source, { source_duration_seconds: 10, threshold_db: -40, silence_intervals: [], boundary_silence_intervals: [], boundary_silence_receipt: { threshold_db: -54 } }, { trimEdges: false });
+  assert.deepEqual(refined.kept_segments, source.kept_segments);
+  assert.deepEqual(refined.audio_analysis.unconfirmed_boundaries.map((boundary) => boundary.side), ["end", "start"]);
+  assert.equal(refined.audio_analysis.rejected_splice_removed_seconds, 0);
+});
+
+test("boundary cutoff stays below dialogue cutoff in noisy backgrounds and is bounded for low floors", async () => {
+  for (const [floor, expected] of [[-25, -40], [-110, -80]]) {
+    const analysis = await analyzeRecordingAudio("fixture.wav", { durationSeconds: 2, thresholdDb: -40 }, { run: async (_, args) => args[args.indexOf("-af") + 1].includes("astats") ? { stdout: `pts_time:0\nlavfi.astats.Overall.RMS_level=${floor}\npts_time:0.1\nlavfi.astats.Overall.RMS_level=-20`, stderr: "" } : { stdout: "", stderr: "" } });
+    assert.equal(analysis.boundary_silence_receipt.threshold_db, expected);
+  }
 });
 
 test("analysis retains short precise separators without debounce while long-gap trimming remains separate", async () => {
