@@ -20,6 +20,11 @@ export async function prepareSourceMedia(workspacePath, options = {}, adapters =
       ...recordingOptions,
       out: path.join(workspace, "production", "source-media", "recording-edit")
     }, adapters.recording);
+    if (recording.status !== "ready") {
+      const report = { ...recording, schema_version: SOURCE_PREPROCESS_VERSION, stage: "source-preprocess", changed: false };
+      await writeAtomic(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+      return { ...report, report: reportPath };
+    }
     await applyPreparedResource(intake, intakePath, source.location, recording.output, recording.rendered_duration_seconds, recording.output_sha256);
     for (const resource of intake.resources) {
       if (["voiceover", "presenter"].includes(resource.role) && resource.location === recording.output) {
