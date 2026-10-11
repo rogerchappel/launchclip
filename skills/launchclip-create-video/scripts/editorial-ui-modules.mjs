@@ -228,8 +228,9 @@ export function buildEditorialModule(input) {
         events.push({id: `${id}-treatment-settle`, time: time + .4});
       }
     } else if (input.kind === 'excerpt-window') {
-      object(input.excerpt, 'excerpt', ['mode', 'source', 'lines', 'focus']);
+      object(input.excerpt, 'excerpt', ['mode', 'source', 'lines', 'focus', 'highlightMotion']);
       const excerpt = input.excerpt;
+      if (excerpt.highlightMotion !== undefined && typeof excerpt.highlightMotion !== 'boolean') throw new Error('excerpt.highlightMotion must be a boolean');
       if (!['illustration', 'data'].includes(excerpt.mode)) throw new Error('excerpt.mode must be illustration or data');
       if (excerpt.mode === 'data') text(excerpt.source, 'excerpt.source', 80);
       else if (excerpt.source !== undefined) throw new Error('illustration cannot claim a real data source');
@@ -254,6 +255,7 @@ export function buildEditorialModule(input) {
           if (typeof segment.text !== 'string' || segment.text.length < 1 || segment.text.length > 120 || /[\r\n\t]/.test(segment.text)) throw new Error('excerpt segment must be short single-line text');
           if (segment.highlight !== undefined && typeof segment.highlight !== 'boolean') throw new Error('highlight must be a boolean');
           length += segment.text.length;
+          if (segment.highlight && excerpt.highlightMotion) return `<span class="ui-excerpt-highlight ui-excerpt-sweep"><span class="ui-highlight-fill" aria-hidden="true"></span><span class="ui-highlight-text">${escape(segment.text)}</span></span>`;
           return `<span${segment.highlight ? ' class="ui-excerpt-highlight"' : ''}>${escape(segment.text)}</span>`;
         }).join('');
         const width = length * textFont * .68;
@@ -267,7 +269,13 @@ export function buildEditorialModule(input) {
       const y = Math.max(0, Math.min(viewHeight - textHeight * zoom, viewHeight / 2 - (excerpt.focus.line + .5) * lineHeight * zoom));
       css += `#${id} .ui-excerpt-note{position:absolute;top:48px;left:0;right:0;padding:16px 24px 0;font-size:22px;line-height:1.3;color:#d3d6dd}#${id} .ui-excerpt-viewport{position:absolute;left:24px;right:24px;top:${48 + noteHeight + 24}px;bottom:24px;overflow:hidden}#${id} .ui-excerpt-content{width:${longest}px;height:${textHeight}px;font:${textFont}px/1.5 ui-monospace,monospace;transform-origin:top left}#${id} .ui-excerpt-line{height:${lineHeight}px;white-space:pre}#${id} .ui-excerpt-highlight{background:transparent;border-radius:3px}`;
       body = `<div class="ui-bar"><span class="ui-dot" style="background:#ff6258"></span><span class="ui-dot" style="background:#ffc04a"></span><span class="ui-dot" style="background:#40c957"></span><span class="ui-bar-label">${escape(input.title)}</span></div><div class="ui-excerpt-note">${escape(note)}</div><div class="ui-excerpt-viewport"><div id="${id}-excerpt" class="ui-excerpt-content">${lines}</div></div>`;
-      motion.push(`tl.set(${js(`#${id}-excerpt`)}, {x:0,y:0,scale:1}, ${start});`, `tl.to(${js(`#${id}-excerpt`)}, {x:${x},y:${y},scale:${zoom},duration:0.5,ease:'power3.inOut'}, ${time});`, `tl.to(${js(`#${id} .ui-excerpt-highlight`)}, {backgroundColor:${js(accent + '55')},duration:0.24,ease:'power2.out'}, ${time + .16});`);
+      if (excerpt.highlightMotion) {
+        css += `#${id} .ui-excerpt-sweep{position:relative;display:inline-block}#${id} .ui-highlight-fill{position:absolute;inset:0;background:${accent}55;border-radius:3px;transform-origin:left center}#${id} .ui-highlight-text{position:relative}`;
+        motion.push(`tl.set(${js(`#${id} .ui-highlight-fill`)}, {scaleX:0}, ${start});`, `tl.to(${js(`#${id} .ui-highlight-fill`)}, {scaleX:1,duration:0.35,ease:'power2.inOut'}, ${time});`);
+        events.push({id: `${id}-highlight-sweep-settle`, time: time + .35});
+      }
+      motion.push(`tl.set(${js(`#${id}-excerpt`)}, {x:0,y:0,scale:1}, ${start});`, `tl.to(${js(`#${id}-excerpt`)}, {x:${x},y:${y},scale:${zoom},duration:0.5,ease:'power3.inOut'}, ${time});`);
+      if (!excerpt.highlightMotion) motion.push(`tl.to(${js(`#${id} .ui-excerpt-highlight`)}, {backgroundColor:${js(accent + '55')},duration:0.24,ease:'power2.out'}, ${time + .16});`);
       events.push({id: `${id}-excerpt-focus`, time: time + .5});
     } else if (input.kind === 'date-card') {
       object(input.date, 'date', ['month', 'day', 'year', 'caption', 'at']);
