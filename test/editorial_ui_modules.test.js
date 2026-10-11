@@ -403,7 +403,7 @@ test('excerpt highlight sweep separates its background from stationary escaped t
   assert.equal(result.events.find(e=>e.id==='sweep-highlight-sweep-settle').time,3.45);
   assert.doesNotMatch(result.motion,/backgroundColor|onUpdate/);
   assert.throws(()=>buildEditorialModule({...base,excerpt:{...base.excerpt,highlightMotion:'yes'}}),/boolean/);
-  assert.throws(()=>buildEditorialModule({...base,duration:1.5}),/settle/);
+  assert.throws(()=>buildEditorialModule({...base,duration:1.6}),/settle/);
   const old=buildEditorialModule({...base,excerpt:{...base.excerpt,highlightMotion:false}});
   assert.doesNotMatch(old.html,/ui-highlight-fill/);assert.match(old.motion,/backgroundColor/);
 });
