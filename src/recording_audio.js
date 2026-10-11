@@ -42,7 +42,7 @@ export async function analyzeRecordingAudio(input, options = {}, adapters = {}) 
   if (boundaryWindows) {
     boundarySilence = [];
     for (const window of boundaryWindows) {
-      const pcm = await run("ffmpeg", ["-hide_banner", "-nostdin", "-loglevel", "error", "-ss", String(window.start), "-i", input, "-t", String(window.end - window.start), "-map", "0:a:0", "-vn", "-af", "aresample=16000,aformat=channel_layouts=mono", "-f", "f32le", "-"], { encoding: "buffer", maxBuffer: 32000 });
+      const pcm = await run("ffmpeg", ["-hide_banner", "-nostdin", "-loglevel", "error", "-ss", String(window.start), "-i", input, "-t", String(window.end - window.start), "-map", "0:a:0", "-vn", "-af", "aresample=16000,aformat=sample_fmts=s16:channel_layouts=mono", "-f", "f32le", "-"], { encoding: "buffer", maxBuffer: 32000 });
       boundarySilence.push(...parseBoundaryPcm(pcm.stdout, window, boundaryThreshold));
     }
   } else {
