@@ -5,14 +5,15 @@ import path from 'node:path';
 import test from 'node:test';
 import {prepareRecording,recordingOptions} from '../src/recording_workflow.js';
 import {semanticTranscriptHash} from '../src/semantic_retakes.js';
+import {recordingQaEvidenceHash} from '../src/recording_qa.js';
 
 const words=[{word:'Um,',start:1,end:1.2},{word:'We',start:1.4,end:1.6},{word:'discover',start:1.6,end:1.9},{word:'useful',start:1.9,end:2.2},{word:'patterns.',start:2.2,end:2.5},{word:'We',start:4,end:4.2},{word:'identify',start:4.2,end:4.5},{word:'helpful',start:4.5,end:4.8},{word:'patterns.',start:4.8,end:5.1}];
 async function fixture(){
  const directory=await mkdtemp(path.join(os.tmpdir(),'launchclip-cleanup-'));
  const input=path.join(directory,'recording.mov');await writeFile(input,'original');
  const transcript=path.join(directory,'words.json');await writeFile(transcript,JSON.stringify({words}));
- let analyses=0,renders=0;
- const adapters={probe:async()=>({format:{duration:7},streams:[{codec_type:'video'},{codec_type:'audio'}]}),analyzeRecordingAudio:async()=>{analyses++;return{source_duration_seconds:7,threshold_db:-40,silence_intervals:[{start_seconds:2.5,end_seconds:4}],waveform:[]};},editRecording:async(_input,output,plan)=>{renders++;await writeFile(output,'edited');return{duration_seconds:plan.duration_seconds};}};
+ let analyses=0,renders=0,renderedPlan;
+ const adapters={probe:async()=>({format:{duration:7},streams:[{codec_type:'video'},{codec_type:'audio'}]}),analyzeRecordingAudio:async()=>{analyses++;return{source_duration_seconds:7,threshold_db:-40,silence_intervals:[{start_seconds:2.5,end_seconds:4}],waveform:[]};},transcribeRendered:async()=>({words:renderedPlan.words}),analyzeRecordingJoins:async()=>({checked:true,issues:[]}),identifyRecordingCoherence:async(plan,actual,options)=>({evidence_hash:recordingQaEvidenceHash(plan,actual,options.mediaSha256,options.sourceTranscript,options.acoustic),coverage_complete:true,findings:[],transcript_resolutions:[],acoustic_resolutions:[]}),editRecording:async(_input,output,plan)=>{renderedPlan=plan;renders++;await writeFile(output,'edited');return{duration_seconds:plan.duration_seconds};}};
  return{input,transcript,directory,adapters,analyses:()=>analyses,renders:()=>renders};
 }
 test('cleanup defaults combine filler removal and measured quiet with verified cache',async()=>{
