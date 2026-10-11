@@ -316,7 +316,8 @@ export function buildEditorialModule(input) {
       });
       body += '</div>';
     } else if (input.kind === 'code-snippet') {
-      object(input.code, 'code', ['language', 'lines']); const code = input.code;
+      object(input.code, 'code', ['language', 'lines', 'typing']); const code = input.code;
+      if (code.typing !== undefined && typeof code.typing !== 'boolean') throw new Error('code.typing must be a boolean');
       const language = code.language === undefined ? 'Example code' : text(code.language, 'code.language', 24);
       if (!Array.isArray(code.lines) || code.lines.length < 1 || code.lines.length > 3) throw new Error('code.lines must contain 1–3 lines');
       const codeFont = Math.max(22, Math.min(28, Math.floor(rect.width / 28))), lineHeight = Math.ceil(codeFont * 1.5);
@@ -324,17 +325,25 @@ export function buildEditorialModule(input) {
       const tokenTypes = ['plain', 'keyword', 'string', 'number', 'comment', 'operator'];
       css += `#${id} .ui-code-language{font:22px/1.3 ui-monospace,monospace;margin:0;padding:0 24px 16px;color:#b8c4d3}#${id} .ui-code{margin:0;padding:0 24px 24px;font:${codeFont}px/1.5 ui-monospace,monospace}#${id} .ui-code-line{display:block;height:${lineHeight}px;white-space:pre;opacity:0}#${id} .ui-token-keyword{color:#ffa9a0}#${id} .ui-token-string{color:#add8ff}#${id} .ui-token-number{color:${accent}}#${id} .ui-token-comment{color:#a5b1c2}#${id} .ui-token-operator{color:#e1bcff}`;
       body += `<p class="ui-code-language">${escape(language)} · Example</p><pre class="ui-code">`;
-      let previous = -1;
+      let previous = -1, typingEnd = -1;
       code.lines.forEach((line, i) => {
-        object(line, 'code line', ['tokens', 'at']); const offset = at(line.at, 'code line.at');
+        object(line, 'code line', ['tokens', 'at', 'typeDuration']); const offset = at(line.at, 'code line.at');
+        if (!code.typing && line.typeDuration !== undefined) throw new Error('line.typeDuration requires code.typing');
+        const typeDuration = code.typing ? number(line.typeDuration ?? .6, 'line.typeDuration', .12, 2) : .24;
+        if (code.typing && offset < typingEnd - 1e-9) throw new Error('typing lines must not overlap');
+        typingEnd = offset + typeDuration;
         if (offset <= previous || previous >= 0 && offset - previous < .3 - 1e-9) throw new Error('code line times must increase by at least 0.3s'); previous = offset;
         if (!Array.isArray(line.tokens) || line.tokens.length < 1 || line.tokens.length > 24) throw new Error('code line requires 1–24 tokens');
-        let length = 0;
-        const tokens = line.tokens.map(token => {object(token, 'code token', ['text', 'type']); if (typeof token.text !== 'string' || token.text.length < 1 || token.text.length > 80) throw new Error('token.text must contain 1–80 characters'); if (/[\r\n\t]/.test(token.text)) throw new Error('code token must be one line without tabs'); if (!tokenTypes.includes(token.type)) throw new Error('unsupported token type'); length += token.text.length; return `<span class="ui-token-${token.type}">${escape(token.text)}</span>`;}).join('');
+        let length = 0, character = 0;
+        const tokens = line.tokens.map(token => {object(token, 'code token', ['text', 'type']); if (typeof token.text !== 'string' || token.text.length < 1 || token.text.length > 80) throw new Error('token.text must contain 1–80 characters'); if (/[\r\n\t]/.test(token.text)) throw new Error('code token must be one line without tabs'); if (!tokenTypes.includes(token.type)) throw new Error('unsupported token type'); length += token.text.length; return `<span class="ui-token-${token.type}">${code.typing ? Array.from(token.text).map(char => `<span id="${id}-char-${i}-${character++}" class="ui-code-character" style="opacity:0">${escape(char)}</span>`).join('') : escape(token.text)}</span>`;}).join('');
         if (length > Math.floor((rect.width - 48) / (codeFont * .65))) throw new Error('code line too long for rect; shorten the example or widen the module');
         body += `<span id="${id}-code-${i}" class="ui-code-line">${tokens}</span>`;
         motion.push(`tl.fromTo(${js(`#${id}-code-${i}`)}, {opacity:0,x:12}, {opacity:1,x:0,duration:0.24,ease:'power3.out'}, ${start + offset});`);
-        events.push({id: `${id}-code-${i}-settle`, time: start + offset + .24});
+        if (code.typing) {
+          for (let j = 0; j < character; j++) motion.push(`tl.to(${js(`#${id}-char-${i}-${j}`)}, {opacity:1,duration:0.001,ease:'none'}, ${start + offset + (j + 1) * typeDuration / character - .001});`);
+          events.push({id: `${id}-code-${i}-typing-start`, time: start + offset, endTime: start + offset + typeDuration, duration: typeDuration, role: 'typing'}, {id: `${id}-code-${i}-typing-end`, time: start + offset + typeDuration});
+        }
+        events.push({id: `${id}-code-${i}-settle`, time: start + offset + typeDuration});
       });
       body += '</pre>';
     } else if (input.kind === 'audience-grid') {
