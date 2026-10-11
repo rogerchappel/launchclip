@@ -26,7 +26,7 @@ test("recording mode survives omitted flags and keeps presenter, narration and w
   const adapters = {
     prepareRecording: async (source, options) => {
       calls.push({ source, options });
-      return { output, output_sha256: "edited-sha", rendered_duration_seconds: 0.65, manifest: "recording.json", files: { transcript } };
+      return { status: "ready", output, output_sha256: "edited-sha", rendered_duration_seconds: 0.65, manifest: "recording.json", files: { transcript } };
     },
     trimMediaSilence: async () => { throw new Error("must not restore raw recording"); }
   };
