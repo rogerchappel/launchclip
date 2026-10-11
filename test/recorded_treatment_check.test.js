@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
-import {checkRecordedTreatment} from '../skills/launchclip-create-video/scripts/check-recorded-treatment.mjs';
+import {checkRecordedTreatment, directionSha256} from '../skills/launchclip-create-video/scripts/check-recorded-treatment.mjs';
 
 const sha = content => createHash('sha256').update(content).digest('hex');
 async function fixture(t) {
@@ -17,13 +17,13 @@ async function fixture(t) {
   const plan = {
     version: 1, target: {durationSeconds: 40, aspectRatio: '16:9', width: 1920, height: 1080, delivery: 'publishable'},
     source: {path: 'source.mp4', width: 3840, height: 2160}, resources: [],
-    beats: [{id: 'hold', start: 0, end: 10, layer: 'presenter', purpose: 'Let the invitation land', visualDevelopment: 'Presenter holds attention', motionIntent: 'Deliberate stillness', events: []}],
+    beats: [{id: 'hold', start: 0, end: 40, layer: 'presenter', purpose: 'Let the invitation land', visualDevelopment: 'Presenter holds attention', motionIntent: 'Deliberate stillness', events: []}],
     audio: {narration: 'source', music: {choice: 'none'}, sfx: []},
     prototype: {path: 'prototype.mp4', sha256: sha('render placeholder'), start: 0, end: 10},
     critique: {prototypeSha256: sha('render placeholder'), outcome: 'pass', notes: 'Watched motion and listened for intelligibility; hold serves the invitation.', reviewedAt: '2026-10-11T00:00:00Z', reviewedMotion: true, reviewedAudio: true}
   };
   const path = join(dir, 'EDIT-DIRECTION.json');
-  async function check() { await writeFile(path, JSON.stringify(plan)); return checkRecordedTreatment(path); }
+  async function check(refresh = true) { if (refresh) plan.critique.directionSha256 = directionSha256(plan); await writeFile(path, JSON.stringify(plan)); return checkRecordedTreatment(path); }
   return {dir, path, plan, check};
 }
 
@@ -106,8 +106,44 @@ test('malformed input returns diagnostics and CLI exposes exit contract', async 
   await check();
   const script = new URL('../skills/launchclip-create-video/scripts/check-recorded-treatment.mjs', import.meta.url);
   assert.equal(spawnSync(process.execPath, [script.pathname, path]).status, 0);
+  const hashResult = spawnSync(process.execPath, [script.pathname, '--hash', path], {encoding: 'utf8'});
+  assert.equal(hashResult.status, 0);
+  assert.match(hashResult.stdout.trim(), /^[a-f0-9]{64}$/);
   await writeFile(path, '{broken');
   assert.equal((await checkRecordedTreatment(path)).status, 'needs-attention');
   assert.equal(spawnSync(process.execPath, [script.pathname, path]).status, 1);
   assert.equal(spawnSync(process.execPath, [script.pathname]).status, 2);
+});
+
+
+test('whole timeline coverage includes quiet beats and permits only 50ms rounding gaps', async t => {
+  const {plan, check} = await fixture(t);
+  plan.beats[0].start = 0.05;
+  plan.beats[0].end = 39.95;
+  assert.equal((await check()).status, 'evidence-ready');
+  plan.beats[0].start = 0.051;
+  assert.match((await check()).issues.join('\n'), /Uncovered output timeline/);
+  plan.beats[0].start = 0;
+  plan.beats[0].end = 19;
+  plan.beats.push({...plan.beats[0], id: 'second', start: 20, end: 40});
+  assert.match((await check()).issues.join('\n'), /19s to 20s/);
+});
+
+test('direction and audio changes invalidate passing review; key order and review edits do not', async t => {
+  const {plan, check} = await fixture(t);
+  assert.equal((await check()).status, 'evidence-ready');
+  const initial = directionSha256(plan);
+  const reversed = Object.fromEntries(Object.entries(plan).reverse());
+  assert.equal(directionSha256(reversed), initial);
+  plan.critique.notes = 'Additional review details';
+  assert.equal((await check(false)).status, 'evidence-ready');
+  plan.beats[0].motionIntent = 'New motion treatment';
+  assert.match((await check(false)).issues.join('\n'), /direction changed/);
+  await check();
+  plan.audio.narration = 'none';
+  assert.match((await check(false)).issues.join('\n'), /direction changed/);
+  plan.audio.narration = 'source';
+  await check();
+  plan.beats[0].events.push({id: 'new-event', time: 5});
+  assert.match((await check(false)).issues.join('\n'), /direction changed/);
 });
