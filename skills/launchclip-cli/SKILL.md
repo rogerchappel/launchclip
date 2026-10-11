@@ -94,6 +94,28 @@ Alternatively explicitly select an installed local Ollama model with
 or take-selection approval occurs; the default CLI alone matches lexical retakes.
 Do not put recording-specific decisions, wording, or assets in Launch Clip code.
 
+Post-render QA is part of cleanup: render → independently transcribe actual
+video → compare words/inspect every join → semantic coherence check → safe
+bounded repair/recheck. Selected speech defines the outer edges; wordless islands
+are removed at every splice without filtering out short complete words.
+
+Use `--qa-model MODEL` only for an explicitly selected installed local Ollama
+model. In the subscription-agent route, the active agent automatically reads the
+saved candidate, source context, rendered transcript, join evidence and issues,
+then writes evidence-bound receipts according to `docs/recording-qa.md` and
+resumes the same command with `--qa-decisions reviews.json`. The JSON can contain
+`{reviews:[receipt]}` for successive attempts. This is automatic model work, not
+human take-selection approval. Without either route semantic QA remains pending.
+Do not claim a timing/ASR-only run checked coherence.
+
+`--qa-attempts` defaults to three (maximum five). Safe boundary recoveries are
+limited to 0.2s each/0.6s total and cannot resurrect rejected speech. Unsupported
+or unproven issues remain `needs-attention`. Only passed candidates are published
+as `base-edit.mp4`; pending QA stops production before downstream stages. Keep
+all per-attempt evidence under `qa/`, including each actual transcript, plus the
+final `rendered-transcript.json` and `recording-qa.json`. `--qa-recording-model`
+configures local verification Whisper separately. No paid model is chosen.
+
 For an existing production intake, use `source-preprocess <workspace>
 --edit-recording [--recording-transcript word-timed.json]`. `produce` accepts
 the same flags but its downstream model stages remain metered. Recording-edit

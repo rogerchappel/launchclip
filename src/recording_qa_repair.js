@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { normalizeRecordingTranscript } from "./recording_edit.js";
 const execute = promisify(execFile);
 const EPSILON = 1e-6;
-const PROTECTED_REASONS = new Set(["filler", "false-start", "repeated-take", "semantic-retake"]);
+const PROTECTED_REASONS = new Set(["filler", "false-start", "repeated-take", "semantic-retake", "rejected-splice-handle"]);
 
 /** Recover only the boundary of a retained word; unsupported edits fail closed. */
 export function repairRecordingPlan(plan, requests = [], options = {}) {

@@ -68,6 +68,64 @@ Changed input/settings/engine or an incomplete prior export requires a fresh
 output directory; do not overwrite an existing base edit. Temporary rendering
 segments need disk space and are cleaned after success or failure.
 
+## Automatic QA and bounded repairs
+
+Base editing includes post-render QA. The active agent owns the semantic check;
+this is an automated stage, not a request for human take selection.
+
+1. Render a candidate, then independently transcribe its actual audio with local
+   Whisper. Source word remapping alone is not final-video evidence.
+2. Inspect every audio join in bounded PCM batches. Compare the intended words
+   with the fresh transcript; ASR differences alone do not prove a bad cut.
+3. Assess continuity, unique context, orphan fragments and repetition against
+   the rendered transcript, source words and join evidence. Distinguish source
+   delivery and recognition errors from problems introduced by editing.
+4. Restore proven clipped retained-word boundaries within the repair budget,
+   then render and recheck. Never restore a rejected take or filler, invent
+   speech, or delete a complete unique word to make the transcript look cleaner.
+5. Publish `base-edit.mp4` and B-roll timings only after QA passes. Default maximum
+   is three rendered attempts (`--qa-attempts`, capped at five). Total boundary
+   recovery is capped at 0.6s across retries, and 0.2s per repair.
+
+Outer frames are trimmed to the chosen voiced word boundaries. Wordless islands
+are removed throughout the edit, including tiny remnants between rejected takes.
+Genuine short words are preserved; there is no blanket minimum clip duration.
+Handles directly facing rejected takes or fillers are trimmed to retained word
+bounds, removing residual audio even when ASR does not recognize a word. These
+removed handles are protected from later QA restoration. PCM join checks detect
+isolated click candidates; they do not establish that every sustained phoneme or
+breath is correct. Inspect source/output audio context for suspicious residue and
+leave ambiguous sound findings unresolved rather than claiming clean audio from
+transcript agreement alone.
+
+With the active-agent route, an initial `needs-semantic-review` result is a
+checkpoint for the agent to continue automatically. Read its saved candidate,
+actual `rendered-transcript.json`, `plan.json`, `joins.json`, QA issues and source
+context. Use the CLI package's `recordingQaEvidenceHash(plan, actual, mediaSha256,
+sourceTranscript, acoustic)` helper and the receipt contract in
+`docs/recording-qa.md`. Save each complete review in a local
+`{ "reviews": [receipt] }` JSON file, then rerun the same command with
+`--qa-decisions reviews.json`. Candidates are checksum-verified and reused;
+new attempts need new evidence-bound reviews. Preserve earlier review receipts.
+
+Assess every disagreement individually. Never blanket-resolve an omitted word,
+mark semantic coverage complete from timing tests, or turn an unresolved
+sound/coherence problem into a nonblocking source-delivery note. Compare short
+source/output windows when the word boundaries are uncertain. If evidence cannot
+support a safe correction, retain the timed `needs-attention` report.
+
+Standalone CLI users can explicitly select an installed local Ollama model with
+`--qa-model MODEL` for the semantic pass; `--qa-recording-model` configures local
+final-video Whisper separately. There is no implicit paid provider, model install,
+or metered fallback. Without a model or bound agent receipt, semantic QA stays
+pending and `base-edit.mp4` is withheld. This is model work pending, not human
+approval pending. Production stops before downstream stages until it is resolved.
+
+Every candidate, independent transcript, measured join, review and repair remains
+in `qa/attempt-N/` with `qa/session.json`. Ready outputs include
+`rendered-transcript.json` and `recording-qa.json` beside the intended transcript
+and edit map. Existing exports require a new directory after this engine update.
+
 ## B-roll capture and placement
 
 Editing also writes `broll-plan.json` and `BROLL.md`. For an already clean video:
