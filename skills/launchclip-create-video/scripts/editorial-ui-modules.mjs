@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-const KINDS = ['media-window', 'checklist', 'step-rail', 'callout', 'audience-grid', 'trend-chart', 'metric', 'progress'];
+const KINDS = ['media-window', 'checklist', 'step-rail', 'callout', 'audience-grid', 'trend-chart', 'metric', 'progress', 'date-card', 'status-rack', 'code-snippet'];
 const escape = value => String(value).replace(/[&<>"']/g, char => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char]));
 const js = value => JSON.stringify(value).replace(/</g, '\\u003c');
 function object(value, label, keys) {
@@ -82,7 +82,7 @@ function moduleMotion(target, start, duration, config, media = false) {
 // Skill-local authoring helper, not a production API. The host owns its paused
 // GSAP timeline and places these fragments directly inside its composition root.
 export function buildEditorialModule(input) {
-  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion']);
+  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code']);
   if (!/^[a-z][a-z0-9-]{0,59}$/.test(input.id ?? '')) throw new Error('id must be a unique lowercase DOM-safe identifier');
   if (!KINDS.includes(input.kind)) throw new Error(`kind must be ${KINDS.join(', ')}`);
   if (input.presentation !== undefined && !['solid', 'glass'].includes(input.presentation)) throw new Error('presentation must be solid or glass');
@@ -102,8 +102,8 @@ export function buildEditorialModule(input) {
   text(input.title, 'title', 54);
   const accent = input.accent ?? '#FF6A00';
   if (!/^#[0-9a-fA-F]{6}$/.test(accent)) throw new Error('accent must be a six-digit hex color');
-  const allowed = {'media-window': ['media'], checklist: ['rows'], 'step-rail': ['steps'], callout: ['body'], 'audience-grid': ['audience'], 'trend-chart': ['chart'], metric: ['metric'], progress: ['progress']}[input.kind];
-  for (const key of ['media', 'rows', 'steps', 'body', 'audience', 'chart', 'metric', 'progress']) if (input[key] !== undefined && !allowed.includes(key)) throw new Error(`${input.kind} does not accept ${key}`);
+  const allowed = {'media-window': ['media'], checklist: ['rows'], 'step-rail': ['steps'], callout: ['body', 'treatment'], 'audience-grid': ['audience'], 'trend-chart': ['chart'], metric: ['metric'], progress: ['progress'], 'date-card': ['date'], 'status-rack': ['rack'], 'code-snippet': ['code']}[input.kind];
+  for (const key of ['media', 'rows', 'steps', 'body', 'audience', 'chart', 'metric', 'progress', 'treatment', 'date', 'rack', 'code']) if (input[key] !== undefined && !allowed.includes(key)) throw new Error(`${input.kind} does not accept ${key}`);
   const statusLabels = {pending: 'Pending', active: 'Active', done: 'Done', ...(input.statusLabels ?? {})};
   if (input.statusLabels !== undefined) {
     if (input.kind !== 'checklist') throw new Error('statusLabels is only for checklist');
@@ -149,6 +149,74 @@ export function buildEditorialModule(input) {
       const lines = Math.ceil(input.body.length / Math.max(18, Math.floor((rect.width - pad * 2) / (font * .58))));
       if (rect.height < header + lines * font * 1.25 + pad) throw new Error('callout rect too short for body');
       body += `<p class="ui-body">${escape(input.body)}</p>`;
+    } else if (input.kind === 'date-card') {
+      object(input.date, 'date', ['month', 'day', 'year', 'caption', 'at']);
+      const date = input.date;
+      number(date.month, 'date.month', 1, 12); number(date.day, 'date.day', 1, 31);
+      if (!Number.isInteger(date.month) || !Number.isInteger(date.day)) throw new Error('date month/day must be integers');
+      if (date.year !== undefined) {number(date.year, 'date.year', 1, 9999); if (!Number.isInteger(date.year)) throw new Error('date.year must be an integer');}
+      const leap = date.year === undefined || date.year % 4 === 0 && (date.year % 100 !== 0 || date.year % 400 === 0);
+      if (date.day > [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][date.month - 1]) throw new Error('day does not exist in supplied month/year');
+      const caption = date.caption === undefined ? '' : text(date.caption, 'date.caption', 42);
+      const captionLines = caption ? Math.ceil(caption.length / Math.floor((rect.width - 40) / (22 * .65))) : 0;
+      if (rect.height < 48 + 132 + titleLines * (font + 4) * 1.15 + 36 + captionLines * 29) throw new Error('date-card rect too short');
+      const time = start + at(date.at, 'date.at'), month = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'][date.month - 1];
+      css += `#${id} .ui-month{height:48px;background:${accent};color:#101923;display:grid;place-items:center;font:700 22px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:2px}#${id} .ui-day{font:800 112px/1.1 system-ui,sans-serif;text-align:center;height:132px;padding-top:8px}#${id} .ui-title{text-align:center;padding:12px 20px}#${id} .ui-date-note{text-align:center;font:22px/1.3 ui-monospace,SFMono-Regular,Consolas,monospace;margin:0;padding:0 20px 12px;color:#d3d6dd}`;
+      body = `<div class="ui-month">${month}${date.year === undefined ? '' : ` · ${date.year}`}</div><div id="${id}-day" class="ui-day">${date.day}</div><h2 class="ui-title">${escape(input.title)}</h2>${caption ? `<p class="ui-date-note">${escape(caption)}</p>` : ''}`;
+      motion.push(`tl.fromTo(${js(`#${id}-day`)}, {opacity:0,y:14,scale:0.94}, {opacity:1,y:0,scale:1,duration:0.32,ease:'power3.out'}, ${time});`);
+      events.push({id: `${id}-date-settle`, time: time + .32});
+    } else if (input.kind === 'status-rack') {
+      object(input.rack, 'rack', ['mode', 'source', 'rows']);
+      const rack = input.rack;
+      if (!['illustration', 'data'].includes(rack.mode)) throw new Error('rack.mode must be illustration or data');
+      if (rack.mode === 'data') text(rack.source, 'rack.source', 80);
+      else if (rack.source !== undefined) throw new Error('illustration cannot claim a real data source');
+      if (!Array.isArray(rack.rows) || rack.rows.length < 1 || rack.rows.length > 8) throw new Error('rack.rows must contain 1–8 rows');
+      const note = rack.mode === 'illustration' ? 'Illustration · status states' : `Source: ${rack.source}`;
+      const noteLines = Math.ceil(note.length / Math.floor((rect.width - 48) / (22 * .65)));
+      if (rect.height < header + noteLines * 29 + 20 + rack.rows.length * 52 + 24) throw new Error('status-rack rect too short');
+      css += `#${id} .ui-rack-note{font-size:22px;line-height:1.3;color:#d3d6dd;margin:0;padding:0 24px 20px}#${id} .ui-rack{display:grid;gap:8px;padding:0 24px 24px}#${id} .ui-rack-row{height:44px;border:1px solid #465061;border-radius:8px;background:#101923;display:flex;align-items:center;gap:12px;padding:0 12px;font:22px/1.25 ui-monospace,SFMono-Regular,Consolas,monospace;opacity:0}#${id} .ui-rack-marker{width:22px;height:5px;background:#7e8795;flex:none;border-radius:2px}#${id} .ui-rack-label{flex:1;min-width:0}#${id} .ui-lights{display:flex;gap:8px}#${id} .ui-light{width:10px;height:10px;background:#536071;border-radius:50%;flex:none}`;
+      body += `<p class="ui-rack-note">${escape(note)}</p><div class="ui-rack">`;
+      rack.rows.forEach((row, i) => {
+        object(row, 'rack row', ['label', 'states']); text(row.label, 'rack.label', 24);
+        if (row.label.length > Math.floor((rect.width - 48 - 24 - 22 - 24 - 46) / (22 * .65))) throw new Error('rack label too long for rect');
+        if (!Array.isArray(row.states) || row.states.length < 1 || row.states.length > 8) throw new Error('row.states must contain 1–8 states');
+        body += `<div id="${id}-rack-${i}" class="ui-rack-row"><span class="ui-rack-marker" aria-hidden="true"></span><span class="ui-rack-label">${escape(row.label)}</span><span class="ui-lights" aria-label="supplied status indicators">${[0,1,2].map(j => `<span id="${id}-light-${i}-${j}" class="ui-light"></span>`).join('')}</span></div>`;
+        let previous = -1, previousLights = [false, false, false];
+        row.states.forEach((state, n) => {
+          object(state, 'rack state', ['at', 'lights']); const offset = at(state.at, 'rack state.at');
+          if (offset <= previous || previous >= 0 && offset - previous < .3 - 1e-9) throw new Error('rack state times must increase by at least 0.3s'); previous = offset;
+          if (!Array.isArray(state.lights) || state.lights.length !== 3 || state.lights.some(light => typeof light !== 'boolean')) throw new Error('rack lights must be exactly three booleans');
+          const time = start + offset; let changed = n === 0;
+          if (n === 0) motion.push(`tl.fromTo(${js(`#${id}-rack-${i}`)}, {opacity:0,x:-10}, {opacity:1,x:0,duration:0.22,ease:'power3.out'}, ${time});`);
+          state.lights.forEach((light, j) => {if (light !== previousLights[j]) {changed = true; motion.push(`tl.to(${js(`#${id}-light-${i}-${j}`)}, {backgroundColor:${js(light ? accent : '#536071')},duration:0.18,ease:'power2.out'}, ${time});`);}});
+          previousLights = [...state.lights];
+          if (changed) events.push({id: `${id}-rack-${i}-state-${n}`, time: time + (n === 0 ? .22 : .18)});
+        });
+      });
+      body += '</div>';
+    } else if (input.kind === 'code-snippet') {
+      object(input.code, 'code', ['language', 'lines']); const code = input.code;
+      const language = code.language === undefined ? 'Example code' : text(code.language, 'code.language', 24);
+      if (!Array.isArray(code.lines) || code.lines.length < 1 || code.lines.length > 3) throw new Error('code.lines must contain 1–3 lines');
+      const codeFont = Math.max(22, Math.min(28, Math.floor(rect.width / 28))), lineHeight = Math.ceil(codeFont * 1.5);
+      if (rect.height < header + 44 + code.lines.length * lineHeight + 24) throw new Error('code-snippet rect too short');
+      const tokenTypes = ['plain', 'keyword', 'string', 'number', 'comment', 'operator'];
+      css += `#${id} .ui-code-language{font:22px/1.3 ui-monospace,SFMono-Regular,Consolas,monospace;margin:0;padding:0 24px 16px;color:#b8c4d3}#${id} .ui-code{margin:0;padding:0 24px 24px;font:${codeFont}px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}#${id} .ui-code-line{display:block;height:${lineHeight}px;white-space:pre;opacity:0}#${id} .ui-token-keyword{color:#ffa9a0}#${id} .ui-token-string{color:#add8ff}#${id} .ui-token-number{color:${accent}}#${id} .ui-token-comment{color:#a5b1c2}#${id} .ui-token-operator{color:#e1bcff}`;
+      body += `<p class="ui-code-language">${escape(language)} · Example</p><pre class="ui-code">`;
+      let previous = -1;
+      code.lines.forEach((line, i) => {
+        object(line, 'code line', ['tokens', 'at']); const offset = at(line.at, 'code line.at');
+        if (offset <= previous || previous >= 0 && offset - previous < .3 - 1e-9) throw new Error('code line times must increase by at least 0.3s'); previous = offset;
+        if (!Array.isArray(line.tokens) || line.tokens.length < 1 || line.tokens.length > 24) throw new Error('code line requires 1–24 tokens');
+        let length = 0;
+        const tokens = line.tokens.map(token => {object(token, 'code token', ['text', 'type']); if (typeof token.text !== 'string' || token.text.length < 1 || token.text.length > 80) throw new Error('token.text must contain 1–80 characters'); if (/[\r\n\t]/.test(token.text)) throw new Error('code token must be one line without tabs'); if (!tokenTypes.includes(token.type)) throw new Error('unsupported token type'); length += token.text.length; return `<span class="ui-token-${token.type}">${escape(token.text)}</span>`;}).join('');
+        if (length > Math.floor((rect.width - 48) / (codeFont * .65))) throw new Error('code line too long for rect; shorten the example or widen the module');
+        body += `<span id="${id}-code-${i}" class="ui-code-line">${tokens}</span>`;
+        motion.push(`tl.fromTo(${js(`#${id}-code-${i}`)}, {opacity:0,x:12}, {opacity:1,x:0,duration:0.24,ease:'power3.out'}, ${start + offset});`);
+        events.push({id: `${id}-code-${i}-settle`, time: start + offset + .24});
+      });
+      body += '</pre>';
     } else if (input.kind === 'audience-grid') {
       object(input.audience, 'audience', ['tiles', 'columns']);
       const {tiles} = input.audience;
