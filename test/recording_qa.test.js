@@ -141,3 +141,36 @@ test("omitted first word belongs to the following source interval at an adjacent
   assert.equal(qa.repair_requests[0].edge, "start");
   assert.ok(Math.abs(qa.repair_requests[0].seconds - 0.02) < 1e-9);
 });
+
+test("resolved recognition variation suppresses its source-grounded expansion request", () => {
+  const sourceTranscript = [{ word: "The", start: 3.92, end: 4.4 }, ...phrase("garden grows well.", 4.5)];
+  const actual = plan.words.slice(1);
+  const semantic = { evidence_hash: recordingQaEvidenceHash(plan, actual, sha, sourceTranscript, acoustic), coverage_complete: true, findings: [], transcript_resolutions: [{ issue_index: 0, verdict: "asr-variation", explanation: "Audition confirms the complete first word; recognition omitted it." }] };
+  const qa = assessRecordingQa(plan, actual, { acoustic, sourceTranscript, semantic, mediaSha256: sha });
+  assert.equal(qa.status, "passed");
+  assert.equal(qa.issues[0].resolved, true);
+  assert.equal(qa.repair_requests.length, 0);
+  assert.equal(qa.checks.acoustic, "passed");
+});
+test("resolved ASR variation does not suppress independent proven acoustic clipping", () => {
+  const sourceTranscript = [{ word: "The", start: 3.92, end: 4.4 }, ...phrase("garden grows well.", 4.5)];
+  const actual = plan.words.slice(1);
+  const measured = { checked: true, issues: [{ kind: "clipped-boundary", segment_index: 0, edge: "start", seconds: 0.05, proven: true, explanation: "Independent acoustic evidence proves the source onset was clipped." }] };
+  const semantic = { evidence_hash: recordingQaEvidenceHash(plan, actual, sha, sourceTranscript, measured), coverage_complete: true, findings: [], transcript_resolutions: [{ issue_index: 0, verdict: "asr-variation", explanation: "Recognition difference resolved independently of the measured clipping." }] };
+  const qa = assessRecordingQa(plan, actual, { acoustic: measured, sourceTranscript, semantic, mediaSha256: sha });
+  assert.equal(qa.status, "repair-needed");
+  assert.equal(qa.issues[0].resolved, true);
+  assert.equal(qa.repair_requests.length, 1);
+  assert.equal(qa.repair_requests[0].seconds, 0.05);
+  assert.match(qa.repair_requests[0].explanation, /Independent acoustic/);
+});
+test("unresolved source-grounded ASR boundary disagreement still requests a retry", () => {
+  const sourceTranscript = [{ word: "The", start: 3.92, end: 4.4 }, ...phrase("garden grows well.", 4.5)];
+  const actual = plan.words.slice(1);
+  const semantic = { evidence_hash: recordingQaEvidenceHash(plan, actual, sha, sourceTranscript, acoustic), coverage_complete: true, findings: [], transcript_resolutions: [] };
+  const qa = assessRecordingQa(plan, actual, { acoustic, sourceTranscript, semantic, mediaSha256: sha });
+  assert.equal(qa.status, "repair-needed");
+  assert.equal(qa.repair_requests.length, 1);
+  assert.ok(Math.abs(qa.repair_requests[0].seconds - 0.08) < 1e-9);
+  assert.equal(qa.issues[0].resolved, undefined);
+});

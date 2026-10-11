@@ -49,3 +49,12 @@ test("coherence blockers preserve candidate with timed findings and no speculati
  const result=await runRecordingQa("source.mov",plan(1),f.options,f.adapters);
  assert.equal(result.status,"needs-attention");assert.equal(f.renders(),1);assert.equal(result.report.issues[0].kind,"missing-context");
 });
+
+test("resolved boundary recognition variation passes the same candidate without an unnecessary second render",async()=>{
+ const f=await fixture();f.adapters.transcribeRendered=async()=>({words:plan().words.slice(1)});
+ f.adapters.identifyRecordingCoherence=async(p,actual,options)=>({...review(p,actual,options),transcript_resolutions:[{issue_index:0,verdict:"asr-variation",explanation:"Audition confirms the first word is intact; recognition omitted it."}]});
+ const result=await runRecordingQa("source.mov",plan(),f.options,f.adapters);
+ assert.equal(result.status,"passed");assert.equal(result.attempts,1);assert.equal(f.renders(),1);
+ assert.equal(result.plan.kept_segments[0].source_start_seconds,1.1);
+ assert.equal(result.report.repair_requests.length,0);
+});

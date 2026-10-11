@@ -46,18 +46,6 @@ export function assessRecordingQa(plan, renderedTranscript, options = {}) {
       repair_requests.push({ kind: "expand-boundary", segment_index: finding.segment_index, edge: finding.edge, seconds: finding.seconds, explanation: finding.explanation, ...(evidence ? { evidence } : {}) });
     }
   }
-  if (options.sourceTranscript) {
-    const sourceWords = normalizeRecordingTranscript(options.sourceTranscript);
-    for (const issue of issues.slice(0, transcriptIssueCount)) {
-      if (issue.segment_index === undefined || issue.word_index === undefined || !issue.edge) continue;
-      const segment = plan.kept_segments[issue.segment_index];
-      const boundary = issue.edge === "start" ? segment.source_start_seconds : segment.source_end_seconds;
-      const intended = expected[issue.word_index];
-      const word = sourceWords.find((candidate) => token(candidate.word) === token(intended.word) && candidate.start < boundary && candidate.end > boundary);
-      const extension = word ? issue.edge === "start" ? boundary - word.start : word.end - boundary : 0;
-      if (extension > 0 && extension <= 0.2 && !repair_requests.some((request) => request.segment_index === issue.segment_index && request.edge === issue.edge)) repair_requests.push({ kind: "expand-boundary", segment_index: issue.segment_index, edge: issue.edge, seconds: extension, explanation: "Independent rendered transcription disagrees at a boundary that cuts through the matching original timed source word." });
-    }
-  }
   let coherence = "pending";
   const resolved = new Set();
   if (options.semantic !== undefined) {
@@ -66,6 +54,19 @@ export function assessRecordingQa(plan, renderedTranscript, options = {}) {
     for (const resolution of semantic.transcript_resolutions) resolved.add(resolution.issue_index);
     for (const resolution of semantic.acoustic_resolutions) { const mapped = acousticIssueIndices.find((entry) => entry.acousticIndex === resolution.issue_index); if (mapped) resolved.add(mapped.issueIndex); }
     for (const finding of semantic.findings) issues.push({ ...finding, repairable: false });
+  }
+  if (options.sourceTranscript) {
+    const sourceWords = normalizeRecordingTranscript(options.sourceTranscript);
+    for (const [issueIndex, issue] of issues.slice(0, transcriptIssueCount).entries()) {
+      if (resolved.has(issueIndex)) continue;
+      if (issue.segment_index === undefined || issue.word_index === undefined || !issue.edge) continue;
+      const segment = plan.kept_segments[issue.segment_index];
+      const boundary = issue.edge === "start" ? segment.source_start_seconds : segment.source_end_seconds;
+      const intended = expected[issue.word_index];
+      const word = sourceWords.find((candidate) => token(candidate.word) === token(intended.word) && candidate.start < boundary && candidate.end > boundary);
+      const extension = word ? issue.edge === "start" ? boundary - word.start : word.end - boundary : 0;
+      if (extension > 0 && extension <= 0.2 && !repair_requests.some((request) => request.segment_index === issue.segment_index && request.edge === issue.edge)) repair_requests.push({ kind: "expand-boundary", segment_index: issue.segment_index, edge: issue.edge, seconds: extension, explanation: "Independent rendered transcription disagrees at a boundary that cuts through the matching original timed source word." });
+    }
   }
   const unresolved = issues.filter((issue, index) => !resolved.has(index) && issue.blocking !== false);
   const transcript = [...Array(transcriptIssueCount).keys()].some((index) => !resolved.has(index)) ? "ambiguous" : "passed";
