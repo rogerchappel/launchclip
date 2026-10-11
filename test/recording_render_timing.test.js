@@ -48,3 +48,36 @@ test("many subframe cuts retain planned audio timestamps and one continuous orig
     assert.ok(Math.abs(last / 48000 - expectedEnd) < 0.02);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test("varied short and long acoustic cuts retain planned duration with a shorter source audio tail", async (context) => {
+  try { await run("ffmpeg", ["-version"]); await run("ffprobe", ["-version"]); }
+  catch (error) { if (error.code !== "ENOENT") throw error; context.skip("Local FFmpeg and ffprobe required"); return; }
+  const directory = await mkdtemp(path.join(os.tmpdir(), "launchclip-varied-timing-"));
+  try {
+    const input = path.join(directory, "source.mp4");
+    const output = path.join(directory, "edited.mp4");
+    await run("ffmpeg", ["-hide_banner", "-nostdin", "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=60:duration=8",
+      "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=7.933", "-c:v", "libx264", "-c:a", "aac", input]);
+    let clock = 0;
+    let source = 0;
+    const lengths = [0.08, 0.182937, 0.42875, 0.314063, 0.406687, 0.714687, 0.378563, 1.392624, 0.67625, 0.434563, 0.392688];
+    const kept_segments = lengths.map((length) => {
+      const segment = { source_start_seconds: source, source_end_seconds: source + length, start_seconds: clock, end_seconds: clock + length };
+      source += length + 0.04;
+      clock = segment.end_seconds;
+      return segment;
+    });
+    kept_segments.push({ source_start_seconds: 7.85198, source_end_seconds: 8, start_seconds: clock, end_seconds: clock + 0.14802 });
+    clock += 0.14802;
+    const plan = { schema_version: "launchclip.recording-edit.v1", source_duration_seconds: 8, duration_seconds: clock, kept_segments, removed_segments: [] };
+    await editRecording(input, output, plan);
+    const probe = await probeMedia(output);
+    const video = probe.streams.find((stream) => stream.codec_type === "video");
+    const audio = probe.streams.find((stream) => stream.codec_type === "audio");
+    assert.ok(Math.abs(Number(probe.format.duration) - clock) <= 1 / 60 + 0.001);
+    assert.equal(video.r_frame_rate, "60/1");
+    assert.ok(Math.abs(Number(video.start_time)) < 0.001);
+    assert.ok(Math.abs(Number(audio.start_time)) < 0.001);
+    assert.ok(clock - Number(audio.duration) < 0.08, "Only the source's missing audio tail may remain short");
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
