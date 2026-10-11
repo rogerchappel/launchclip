@@ -86,3 +86,11 @@ test("inference opt-in uses generic evidence and binds response locally", async 
   await assert.rejects(identifyRecordingCoherence(plan, plan.words, { mediaSha256: sha }, { infer: async () => "bad JSON" }), /invalid JSON/);
   await assert.rejects(identifyRecordingCoherence(plan, plan.words, { mediaSha256: sha, model: "local", baseUrl: "https://example.com" }), /local Ollama/);
 });
+
+test("independent acoustic and fresh transcription onset evidence is preserved for guarded repair", () => {
+  const proof = { acoustic_proven: true, retranscription_proven: true, source_word: { word: "The", start: 3.92, end: 4.2 } };
+  const finding = { kind: "clipped-boundary", segment_index: 0, edge: "start", seconds: 0.08, proven: true, explanation: "Source onset independently confirmed before the accepted cut.", evidence: proof };
+  const qa = assessRecordingQa(plan, plan.words, { acoustic: { checked: true, issues: [finding] } });
+  assert.deepEqual(qa.repair_requests[0].evidence, proof);
+  assert.throws(() => assessRecordingQa(plan, plan.words, { acoustic: { checked: true, issues: [{ ...finding, evidence: { ...proof, retranscription_proven: false } }] } }), /independently proven/);
+});
