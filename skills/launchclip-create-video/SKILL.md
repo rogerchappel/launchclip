@@ -1,6 +1,6 @@
 ---
 name: launchclip-create-video
-description: Create an end-to-end cinematic HyperFrames video with the current subscription agent as the creative, editorial, and orchestration layer. Use when a user wants a high-quality portrait or landscape video, promo, explainer, product story, repository walkthrough, YouTube video, Short, Reel, or social clip from an idea, URL, repository, topic, brief, script, supplied media, a user-owned project style pack, or a downloaded HeyGen avatar while avoiding LaunchClip's metered model pipeline and not depending on HyperFrames plugin skills. Run a five-concept tournament, retention edit, narration-first timing, local cinematic readiness gate, preview approval, and final render.
+description: Create an end-to-end cinematic HyperFrames video with the current subscription agent as the creative, editorial, and orchestration layer. Use when a user wants a high-quality portrait or landscape video, promo, explainer, product story, repository walkthrough, YouTube video, Short, Reel, or social clip from an idea, URL, repository, topic, brief, script, supplied media, a user-owned project style pack, or a downloaded HeyGen avatar while avoiding LaunchClip's metered model pipeline and not depending on HyperFrames plugin skills. Use the recorded-video direction workflow for existing footage; use a five-concept tournament and cinematic readiness gate for new stories. Preserve narration, develop motion and sound together, and verify the rendered result.
 ---
 
 # LaunchClip Create Video
@@ -9,12 +9,14 @@ Create a reviewable video with the current agent's included reasoning and local
 HyperFrames tooling. Treat this skill as the agent-native counterpart to
 `launchclip produce`, not as a wrapper around it.
 
-For an existing presenter recording when the user requests silence/retake
-cleanup, a B-roll capture plan, or restrained editorial overlays, read
-[references/recorded-video.md](references/recorded-video.md). That route preserves
-the recorded story and uses local recording-edit commands; it does not require
-a new concept tournament or rewrite the speech. Apply the premium cinematic
-funnel below to new stories and requested cinematic treatments.
+For an existing recording—community launch, product/app demonstration, topic
+video, interview or presenter clip—read
+[references/recorded-video.md](references/recorded-video.md). That route offers
+fast base-edit-only cleanup and a full directed treatment with purposeful
+graphics, optional useful resources, motion choreography and sound design.
+Preserve the recorded story; do not require a new concept tournament or rewrite
+the speech. The full treatment must prove a short integrated audiovisual
+prototype before expanding it. Apply the cinematic funnel below to new stories.
 
 Before authoring a cinematic creation, read both references completely:
 
@@ -59,8 +61,10 @@ missing decisions, using no more than three grouped questions:
 3. **Materials and audio:** Which logos, screenshots, recordings,
    script/voiceover, presenter footage, references, or style rules may be used?
    Ask once whether the edit should include music and sound effects. When sound
-   effects are wanted, ask for the local SFX folder. Confirm permission for any
-   likeness, voice, private material, reference analysis, or paid music call.
+   effects are wanted, discover supplied/project/style/package audio first; ask
+   for a folder only if no useful authorized local library is available. Honor
+   permissions already supplied; confirm missing permission for likeness, voice,
+   private material, reference analysis or paid music calls.
 
 Do not ask for fields that can be sensibly defaulted. Use these defaults and
 state them:
@@ -141,9 +145,11 @@ audio.
   subprocess. Generate one instrumental bed sized to the edit, leaving
   midrange space for narration and requesting a clean ending. Do not use an
   OpenAI key for subscription-mode orchestration or music.
-- **Sound effects:** support none or a user-approved local folder. Recursively
-  inventory `.wav`, `.mp3`, `.m4a`, `.aac`, `.ogg`, and `.flac` files, then copy
-  only selected cues into the project. Match cues by semantic filename and
+- **Sound effects:** support none or authorized local files. Inspect supplied
+  resources, project/style-pack audio, and the active LaunchClip checkout or
+  installed package's `public/sfx` if it exists; do not assume every distribution
+  includes a library. Recursively inventory `.wav`, `.mp3`, `.m4a`, `.aac`,
+  `.ogg`, and `.flac` files, then copy only selected cues into the project. Match cues by semantic filename and
   audition them locally. Do not assume a private machine path in the reusable
   skill. Do not call ElevenLabs Sound Effects merely because the music provider
   was approved; that requires a separate explicit request.
@@ -346,9 +352,11 @@ seek-safe.
 
 ## Obtain review and render
 
-For basic recorded-video editorial work, use the verification and delivery
-checks in `references/recorded-video.md`; no cinematic readiness receipt is
-required. The cinematic creation requirements below apply to that lane only.
+For recorded-video work, use the verification and delivery checks in
+`references/recorded-video.md`. Full treatments require the recorded direction
+readiness gate, while base-edit-only exports use recording QA. Neither route
+needs fabricated cinematic tournament receipts. The cinematic creation
+requirements below apply to new-story creation only.
 
 Open HyperFrames Studio only after the automated gates, visual snapshot review,
 and `CINEMATIC-READINESS.json` all pass. Tell the user where the editable
