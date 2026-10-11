@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-const KINDS = ['media-window', 'checklist', 'step-rail', 'callout'];
+const KINDS = ['media-window', 'checklist', 'step-rail', 'callout', 'audience-grid', 'trend-chart'];
 const escape = value => String(value).replace(/[&<>"']/g, char => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char]));
 const js = value => JSON.stringify(value).replace(/</g, '\\u003c');
 function object(value, label, keys) {
@@ -30,7 +30,7 @@ function localMedia(media) {
 // Skill-local authoring helper, not a production API. The host owns its paused
 // GSAP timeline and places these fragments directly inside its composition root.
 export function buildEditorialModule(input) {
-  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels']);
+  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart']);
   if (!/^[a-z][a-z0-9-]{0,59}$/.test(input.id ?? '')) throw new Error('id must be a unique lowercase DOM-safe identifier');
   if (!KINDS.includes(input.kind)) throw new Error(`kind must be ${KINDS.join(', ')}`);
   if (!['16:9', '9:16'].includes(input.aspect)) throw new Error('aspect must be 16:9 or 9:16');
@@ -46,8 +46,8 @@ export function buildEditorialModule(input) {
   text(input.title, 'title', 54);
   const accent = input.accent ?? '#FF6A00';
   if (!/^#[0-9a-fA-F]{6}$/.test(accent)) throw new Error('accent must be a six-digit hex color');
-  const allowed = {'media-window': ['media'], checklist: ['rows'], 'step-rail': ['steps'], callout: ['body']}[input.kind];
-  for (const key of ['media', 'rows', 'steps', 'body']) if (input[key] !== undefined && !allowed.includes(key)) throw new Error(`${input.kind} does not accept ${key}`);
+  const allowed = {'media-window': ['media'], checklist: ['rows'], 'step-rail': ['steps'], callout: ['body'], 'audience-grid': ['audience'], 'trend-chart': ['chart']}[input.kind];
+  for (const key of ['media', 'rows', 'steps', 'body', 'audience', 'chart']) if (input[key] !== undefined && !allowed.includes(key)) throw new Error(`${input.kind} does not accept ${key}`);
   const statusLabels = {pending: 'Pending', active: 'Active', done: 'Done', ...(input.statusLabels ?? {})};
   if (input.statusLabels !== undefined) {
     if (input.kind !== 'checklist') throw new Error('statusLabels is only for checklist');
@@ -68,7 +68,7 @@ export function buildEditorialModule(input) {
   const motion = [`tl.fromTo(${js(selector)}, {opacity:0,y:18}, {opacity:1,y:0,duration:0.28,ease:'power3.out'}, ${start});`, `tl.to(${js(selector)}, {opacity:0,y:-8,duration:0.22,ease:'power2.in'}, ${exit});`];
   motion.push(`tl.set(${js(selector)}, {opacity:0}, ${start + duration});`);
   const at = (value, label) => number(value, label, .28, duration - .45);
-  const css = `#${id}{position:absolute;${placement};box-sizing:border-box;overflow:hidden;background:#17191d;color:#f7f7f8;border:1px solid #535761;border-radius:18px;box-shadow:0 16px 48px #0005;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:${font}px;line-height:1.25}#${id} *{box-sizing:border-box}#${id} .ui-title{margin:0;padding:${pad}px;font-size:${font + 4}px;font-weight:700;line-height:1.15}#${id} .ui-row{display:flex;align-items:center;gap:18px;padding:14px ${pad}px;border-top:1px solid #383c45}#${id} .ui-label{flex:1;min-width:0;overflow-wrap:break-word}#${id} .ui-check{width:36px;height:36px;flex:none;border:2px solid #828791;border-radius:7px;display:grid;place-items:center}#${id} .ui-check svg{width:32px;height:32px;opacity:0}#${id} .ui-status{font-size:${font - 6}px;color:#b8bbc3;width:${statusWidth}px;flex:none;text-align:right;position:relative}#${id} .ui-bar{position:absolute;top:0;left:0;right:0;height:48px;display:flex;align-items:center;gap:10px;padding:0 16px;background:#24272e;border-bottom:1px solid #535761}#${id} .ui-dot{width:12px;height:12px;border-radius:50%}#${id} .ui-bar-label{margin-left:12px;font-size:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#${id} .ui-content{padding:${pad}px}#${id} .ui-rail{position:relative;margin:20px ${pad}px 0;height:8px;background:#474c56;border-radius:4px}#${id} .ui-fill{height:100%;background:${accent};transform-origin:left;border-radius:4px}#${id} .ui-steps{display:flex;justify-content:space-between;padding:22px ${pad}px;gap:12px}#${id} .ui-step{flex:1;min-width:0;font-size:${Math.max(22, font - 4)}px;overflow-wrap:break-word;opacity:.65}#${id} .ui-body{padding:0 ${pad}px ${pad}px;margin:0;color:#d3d6dd;overflow-wrap:break-word}`;
+  let css = `#${id}{position:absolute;${placement};box-sizing:border-box;overflow:hidden;background:#17191d;color:#f7f7f8;border:1px solid #535761;border-radius:18px;box-shadow:0 16px 48px #0005;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:${font}px;line-height:1.25}#${id} *{box-sizing:border-box}#${id} .ui-title{margin:0;padding:${pad}px;font-size:${font + 4}px;font-weight:700;line-height:1.15}#${id} .ui-row{display:flex;align-items:center;gap:18px;padding:14px ${pad}px;border-top:1px solid #383c45}#${id} .ui-label{flex:1;min-width:0;overflow-wrap:break-word}#${id} .ui-check{width:36px;height:36px;flex:none;border:2px solid #828791;border-radius:7px;display:grid;place-items:center}#${id} .ui-check svg{width:32px;height:32px;opacity:0}#${id} .ui-status{font-size:${font - 6}px;color:#b8bbc3;width:${statusWidth}px;flex:none;text-align:right;position:relative}#${id} .ui-bar{position:absolute;top:0;left:0;right:0;height:48px;display:flex;align-items:center;gap:10px;padding:0 16px;background:#24272e;border-bottom:1px solid #535761}#${id} .ui-dot{width:12px;height:12px;border-radius:50%}#${id} .ui-bar-label{margin-left:12px;font-size:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#${id} .ui-content{padding:${pad}px}#${id} .ui-rail{position:relative;margin:20px ${pad}px 0;height:8px;background:#474c56;border-radius:4px}#${id} .ui-fill{height:100%;background:${accent};transform-origin:left;border-radius:4px}#${id} .ui-steps{display:flex;justify-content:space-between;padding:22px ${pad}px;gap:12px}#${id} .ui-step{flex:1;min-width:0;font-size:${Math.max(22, font - 4)}px;overflow-wrap:break-word;opacity:.65}#${id} .ui-body{padding:0 ${pad}px ${pad}px;margin:0;color:#d3d6dd;overflow-wrap:break-word}`;
   let body = '', media = '';
   if (input.kind === 'media-window') {
     localMedia(input.media);
@@ -88,6 +88,69 @@ export function buildEditorialModule(input) {
       const lines = Math.ceil(input.body.length / Math.max(18, Math.floor((rect.width - pad * 2) / (font * .58))));
       if (rect.height < header + lines * font * 1.25 + pad) throw new Error('callout rect too short for body');
       body += `<p class="ui-body">${escape(input.body)}</p>`;
+    } else if (input.kind === 'audience-grid') {
+      object(input.audience, 'audience', ['tiles', 'columns']);
+      const {tiles} = input.audience;
+      if (!Array.isArray(tiles) || tiles.length < 2 || tiles.length > 12) throw new Error('audience.tiles must contain 2–12 entries; split larger grids');
+      const columns = input.audience.columns ?? Math.min(tiles.length, rect.width < 600 ? 2 : 3);
+      number(columns, 'audience.columns', 2, 4);
+      if (!Number.isInteger(columns) || columns > tiles.length) throw new Error('columns must be an integer no larger than the tile count');
+      const cellWidth = (rect.width - 48 - 16 * (columns - 1)) / columns;
+      const cellHeight = font >= 32 ? 180 : 160, labelFont = Math.max(22, font - 6);
+      if (cellWidth < 130 || rect.height < header + 55 + 48 + Math.ceil(tiles.length / columns) * (cellHeight + 16)) throw new Error('audience grid does not fit rect; use fewer tiles/columns or a larger rect');
+      css += `#${id} .ui-note{margin:0;padding:0 24px 20px;color:#d3d6dd;font-size:22px;line-height:1.3}#${id} .ui-audience{display:grid;grid-template-columns:repeat(${columns},minmax(0,1fr));gap:16px;padding:0 24px 24px}#${id} .ui-viewer{height:${cellHeight}px;padding:16px;border:2px solid #535761;border-radius:14px;background:#24272e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;opacity:.65}#${id} .ui-avatar{font-size:52px;line-height:1.1}#${id} .ui-viewer-label{font-size:${labelFont}px;text-align:center;overflow-wrap:break-word}`;
+      body += '<p class="ui-note">Illustration · audience tiles</p><div class="ui-audience">';
+      tiles.forEach((tile, i) => {
+        object(tile, `audience.tiles[${i}]`, ['label', 'emoji', 'at']);
+        text(tile.label, 'tile.label', 24);
+        if (tile.label.length > Math.floor((cellWidth - 32) / (labelFont * .65)) * 2) throw new Error('tile label too long for rect');
+        const emoji = tile.emoji ?? '👤';
+        text(emoji, 'tile.emoji', 16);
+        if (Array.from(emoji).length > 8 || /[\r\n]/.test(emoji)) throw new Error('tile.emoji must be a compact icon accent');
+        const time = start + at(tile.at, 'tile.at');
+        body += `<div id="${id}-viewer-${i}" class="ui-viewer"><span class="ui-avatar" aria-hidden="true">${escape(emoji)}</span><span class="ui-viewer-label">${escape(tile.label)}</span></div>`;
+        motion.push(`tl.fromTo(${js(`#${id}-viewer-${i}`)}, {opacity:0.65,y:8}, {opacity:1,y:0,borderColor:${js(accent)},duration:0.24,ease:'power3.out'}, ${time});`);
+        events.push({id: `${id}-viewer-${i}-settle`, time: time + .24});
+      });
+      body += '</div>';
+    } else if (input.kind === 'trend-chart') {
+      object(input.chart, 'chart', ['mode', 'points', 'unit', 'source']);
+      const {mode, points} = input.chart;
+      if (!['illustration', 'data'].includes(mode)) throw new Error('chart.mode must be illustration or data');
+      if (!Array.isArray(points) || points.length < 2 || points.length > 8) throw new Error('chart.points must contain 2–8 entries');
+      const unit = text(input.chart.unit, 'chart.unit', 18);
+      if (mode === 'data') text(input.chart.source, 'chart.source for real data', 80);
+      else if (input.chart.source !== undefined) throw new Error('illustration cannot claim a real data source');
+      const attribution = mode === 'illustration' ? 'Illustration · example values' : `Source: ${input.chart.source}`;
+      const columnWidth = (rect.width - 48 - 16 * (points.length - 1)) / points.length;
+      const chartHeight = 180, labelFont = 22;
+      const attributionLines = Math.ceil(attribution.length / Math.floor((rect.width - 48) / (22 * .65)));
+      if (columnWidth < 40 || rect.height < header + attributionLines * 29 + 24 + 80 + chartHeight + 80) throw new Error('trend chart does not fit rect; use fewer points or a larger rect');
+      let previous = -1;
+      points.forEach((point, i) => {
+        object(point, `chart.points[${i}]`, ['label', 'value', 'at']);
+        text(point.label, 'point.label', 16);
+        number(point.value, 'point.value', 0, 1_000_000_000);
+        if (!Number.isInteger(point.value)) throw new Error('point.value must be a whole count');
+        if (point.label.length > Math.floor(columnWidth / (labelFont * .65)) * 2) throw new Error('point label too long for rect');
+        const offset = at(point.at, 'point.at');
+        if (offset <= previous || (previous >= 0 && offset - previous + 1e-9 < .5)) throw new Error('point times must increase with at least 0.5s between events');
+        previous = offset;
+      });
+      const maximum = Math.max(1, ...points.map(point => point.value));
+      css += `#${id} .ui-note{margin:0;padding:0 24px 20px;color:#d3d6dd;font-size:22px;line-height:1.3;overflow-wrap:break-word}#${id} .ui-metric{padding:0 24px 20px;height:80px;display:flex;align-items:baseline;gap:16px;white-space:nowrap}#${id} .ui-count{font-size:48px;font-weight:750;font-variant-numeric:tabular-nums}#${id} .ui-unit{font-size:22px;color:#d3d6dd}#${id} .ui-chart{display:grid;grid-template-columns:repeat(${points.length},minmax(0,1fr));gap:16px;padding:0 24px 24px}#${id} .ui-column{min-width:0;text-align:center}#${id} .ui-bar-track{height:${chartHeight}px;display:flex;align-items:flex-end;border-bottom:1px solid #828791}#${id} .ui-trend-bar{width:100%;background:${accent};border-radius:7px 7px 0 0;transform-origin:bottom}#${id} .ui-point-label{display:block;font-size:${labelFont}px;line-height:1.25;margin-top:12px;overflow-wrap:break-word}`;
+      const formatted = Math.round(maximum).toLocaleString('en-US');
+      if (formatted.length * 48 * .65 + unit.length * 22 * .65 + 16 > rect.width - 48) throw new Error('metric and unit too wide for rect');
+      body += `<p class="ui-note">${escape(attribution)}</p><div class="ui-metric"><span id="${id}-count" class="ui-count">0</span><span class="ui-unit">${escape(unit)}</span></div><div class="ui-chart">`;
+      motion.unshift(`tl.set(${js(`#${id}-count`)}, {textContent:0}, ${start});`);
+      points.forEach((point, i) => {
+        body += `<div class="ui-column"><div class="ui-bar-track"><div id="${id}-bar-${i}" class="ui-trend-bar" style="height:${point.value / maximum * chartHeight}px"></div></div><span class="ui-point-label">${escape(point.label)}</span></div>`;
+        const time = start + point.at;
+        motion.push(`tl.set(${js(`#${id}-bar-${i}`)}, {scaleY:0}, ${start});`, `tl.to(${js(`#${id}-bar-${i}`)}, {scaleY:1,duration:0.38,ease:'power3.out'}, ${time});`);
+        motion.push(`tl.fromTo(${js(`#${id}-count`)}, {textContent:${i ? points[i - 1].value : 0}}, {textContent:${point.value},snap:{textContent:1},duration:0.38,ease:'power2.out',immediateRender:false}, ${time});`);
+        events.push({id: `${id}-point-${i}-settle`, time: time + .38});
+      });
+      body += '</div>';
     } else if (input.kind === 'checklist') {
       if (!Array.isArray(input.rows) || input.rows.length < 1 || input.rows.length > 6) throw new Error('rows must contain 1–6 entries; split longer lists');
       const rowHeight = font * 2.5 + 28;
