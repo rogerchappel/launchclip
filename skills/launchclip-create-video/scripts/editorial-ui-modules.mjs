@@ -117,7 +117,7 @@ export function buildEditorialModule(input) {
     } else {
       if (!Array.isArray(input.steps) || input.steps.length < 2 || input.steps.length > 6) throw new Error('steps must contain 2–6 entries; split longer rails');
       if (rect.height < header + 160) throw new Error('step-rail rect must leave room for labels');
-      motion.unshift(`tl.set(${js(`${selector} .ui-fill`)}, {scaleX:0,transformOrigin:'left center'}, 0);`);
+      motion.unshift(`tl.set(${js(`${selector} .ui-fill`)}, {scaleX:0,transformOrigin:'left center'}, ${start});`);
       let previous = -1;
       body += `<div class="ui-rail"><div class="ui-fill"></div></div><div class="ui-steps">`;
       input.steps.forEach((step, i) => {
