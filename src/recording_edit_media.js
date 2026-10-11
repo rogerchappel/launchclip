@@ -56,7 +56,7 @@ export async function editRecording(inputPath, outputPath, plan, options = {}, a
     await stat(rendered);
     const renderedProbe = await (adapters.probeMedia ?? probeMedia)(rendered);
     const renderedDuration = Number(renderedProbe.format?.duration);
-    if (!Number.isFinite(renderedDuration) || Math.abs(renderedDuration - plan.duration_seconds) > 0.15) throw new Error("Rendered recording edit duration differs from plan");
+    if (!Number.isFinite(renderedDuration) || Math.abs(renderedDuration - plan.duration_seconds) > 0.15) throw new Error(`Rendered recording edit duration differs from plan: planned ${plan.duration_seconds.toFixed(6)}s, rendered ${renderedDuration.toFixed(6)}s`);
     // A final existence check protects files created while rendering.
     try { await stat(output); throw new Error("Recording edit output was created while rendering"); } catch (error) { if (error.code !== "ENOENT") throw error; }
     await link(rendered, output);
