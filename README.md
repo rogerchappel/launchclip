@@ -157,6 +157,24 @@ without either option, only lexical retakes are detected. The recorded-video
 skill performs this semantic pass using the active agent. Decisions and media
 stay in the recording's output directory, never in the tool's source code.
 
+Post-render QA independently transcribes the candidate video, checks every audio
+join, compares retained speech, and assesses coherence. Proven clipped-word
+boundaries can be recovered and rechecked automatically, within three attempts
+and a shared 0.6s repair budget. Rejected takes and fillers remain protected.
+Outer edges start/end at selected speech, and wordless fragments are removed
+throughout the edit; genuine short words remain.
+
+The recorded-video skill uses the active agent for evidence-bound semantic QA.
+Standalone CLI users can explicitly choose local Ollama with `--qa-model MODEL`,
+or supply `--qa-decisions reviews.json` following the
+[QA receipt contract](docs/recording-qa.md). Without semantic coverage the result
+is `needs-semantic-review`, with a reusable candidate and actual transcript;
+`base-edit.mp4` is published only after QA passes. Unresolved issues return timed
+`needs-attention` findings rather than speculative speech edits. No paid fallback
+is selected. `--qa-recording-model` configures final-video local Whisper, and
+`--qa-attempts` sets the bounded retry count. See `qa/session.json`, per-attempt
+artifacts, `rendered-transcript.json`, and `recording-qa.json` for the audit trail.
+
 The edit also writes a B-roll capture tracker (`broll-plan.json`, `BROLL.md`).
 For an already clean transcript:
 
