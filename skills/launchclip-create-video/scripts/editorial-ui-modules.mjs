@@ -100,7 +100,7 @@ export function buildEditorialModule(input) {
   if (input.presentation === 'glass') {
     // Opaque tint is the readability fallback when native video compositing
     // does not reproduce backdrop blur. Keep framed media itself sharp.
-    css += input.kind === 'media-window' ? `#${id} .ui-bar{background:rgba(28,31,39,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}` : `#${id}{background:rgba(23,25,29,.86);border-color:#ffffff50;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}`;
+    css += input.kind === 'media-window' ? `#${id} .ui-bar{background:rgba(28,31,39,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}` : `#${id}{background:rgba(23,25,29,.86);border-color:#ffffff50;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){#${id}{background:rgba(23,25,29,.74)}}`;
   }
   if (input.kind === 'media-window') {
     localMedia(input.media);
