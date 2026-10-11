@@ -24,11 +24,12 @@ const plan = {
 test("waveform quiet below transcript gap threshold shortens edit and remaps through rejected takes", () => {
   const analysis = { source_duration_seconds: 6, threshold_db: -40, silence_intervals: [{ start_seconds: 0.65, end_seconds: 1.1 }] };
   const refined = refineRecordingEditPlan(plan, analysis, { trimEdges: false });
-  assert.ok(Math.abs(refined.duration_seconds - 3.71) < 1e-9);
+  assert.ok(Math.abs(refined.duration_seconds - 3.21) < 1e-9);
   assert.ok(Math.abs(refined.words[1].start - 0.86) < 1e-9);
-  assert.ok(Math.abs(refined.words[2].start - 1.81) < 1e-9);
+  assert.ok(Math.abs(refined.words[2].start - 1.31) < 1e-9);
   assert.equal(refined.text, plan.text);
-  assert.deepEqual(refined.removed_segments.filter((segment) => segment.reason !== "waveform-silence"), plan.removed_segments);
+  assert.deepEqual(refined.removed_segments.filter((segment) => ["repeated-take", "filler"].includes(segment.reason)), plan.removed_segments);
+  assert.ok(Math.abs(refined.audio_analysis.rejected_splice_removed_seconds - 0.5) < 1e-9);
   assert.equal(refined.removed_segments[0].reason, "waveform-silence");
   assert.ok(Math.abs(refined.removed_segments[0].source_start_seconds - 0.73) < 1e-9);
   assert.ok(Math.abs(refined.removed_segments[0].source_end_seconds - 1.02) < 1e-9);
