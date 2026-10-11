@@ -291,7 +291,8 @@ with a persistent readable Illustration label; record the example values as
 illustrative in the plan and do not style them as real analytics or results.
 Measured metrics need supporting data. Do not turn a reference video's
 performance into a promise for this video.
-Never invent achievements, growth, members, revenue or completed product work.
+Never present illustrative achievements, growth, members, revenue or completed
+work as real results.
 A decorative count of illustrative shapes is not an actual viewer count.
 
 ### Build a whole-transcript direction map
