@@ -1,16 +1,16 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { probeMedia } from "./media_trim.js";
 import { normalizeRecordingTranscript, planRecordingEdit } from "./recording_edit.js";
-import { editRecording } from "./recording_edit_media.js";
 import { createBrollPlan, renderBrollChecklist } from "./broll_plan.js";
 import { analyzeRecordingAudio, refineRecordingEditPlan } from "./recording_audio.js";
 import { identifySemanticRetakes, validateSemanticRetakes } from "./semantic_retakes.js";
+import { runRecordingQa } from "./recording_qa_workflow.js";
 
 const run = promisify(execFile);
 
@@ -34,11 +34,13 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
     words: path.join(directory, "words.json"),
     audio_analysis: path.join(directory, "audio-analysis.json"),
     semantic_retakes: path.join(directory, "semantic-retakes.json"),
+    rendered_transcript: path.join(directory, "rendered-transcript.json"),
+    qa_report: path.join(directory, "recording-qa.json"),
     broll_plan: path.join(directory, "broll-plan.json"),
     broll_checklist: path.join(directory, "BROLL.md")
   };
   const manifestPath = path.join(directory, "recording.json");
-  const protectedInputs = [input, options.transcript ? path.resolve(options.transcript) : null, options.retakeDecisions ? path.resolve(options.retakeDecisions) : null].filter(Boolean);
+  const protectedInputs = [input, options.transcript ? path.resolve(options.transcript) : null, options.retakeDecisions ? path.resolve(options.retakeDecisions) : null, options.qaDecisions ? path.resolve(options.qaDecisions) : null].filter(Boolean);
   if ([...Object.values(files), manifestPath].some((file) => protectedInputs.includes(file))) {
     throw new Error("Recording output must not overwrite source media or supplied transcript");
   }
@@ -58,8 +60,10 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
   const transcriptHash = options.transcript ? await checksum(path.resolve(options.transcript)) : null;
   if (options.retakeDecisions && options.retakeModel) throw new Error("Choose supplied retake decisions or a local retake model, not both");
   const retakeDecisionsHash = options.retakeDecisions ? await checksum(path.resolve(options.retakeDecisions)) : null;
-  const engineHash = digest(await Promise.all(["recording_edit.js", "recording_edit_media.js", "recording_audio.js", "semantic_retakes.js"].map(async (name) => readFile(new URL(name, import.meta.url), "utf8"))));
-  const requestHash = digest({ version: "recording-workflow.v2", engineHash, inputHash, transcriptHash, retakeDecisionsHash, retakeModel: options.retakeModel ?? null, retakeBaseUrl: options.retakeBaseUrl ?? null, policy, aspect: options.aspect ?? "16:9", model: options.model ?? "base.en", language: options.language ?? "en", crf: options.crf ?? 18 });
+  const qaDecisionsHash = options.qaDecisions ? await checksum(path.resolve(options.qaDecisions)) : null;
+  const engineHash = digest(await Promise.all(["recording_workflow.js", "recording_edit.js", "recording_edit_media.js", "recording_audio.js", "semantic_retakes.js", "recording_qa_workflow.js", "recording_qa.js", "recording_qa_repair.js"].map(async (name) => readFile(new URL(name, import.meta.url), "utf8"))));
+  const candidateHash = digest({ version: "recording-workflow.v3", qaModel: options.qaModel ?? null, qaBaseUrl: options.qaBaseUrl ?? null, qaAttempts: options.qaAttempts ?? 3, qaTranscriptionModel: options.qaTranscriptionModel ?? "base.en", engineHash, inputHash, transcriptHash, retakeDecisionsHash, retakeModel: options.retakeModel ?? null, retakeBaseUrl: options.retakeBaseUrl ?? null, policy, aspect: options.aspect ?? "16:9", model: options.model ?? "base.en", language: options.language ?? "en", crf: options.crf ?? 18 });
+  const requestHash = digest({ candidateHash, qaDecisionsHash });
   const cached = await readCached(manifestPath, requestHash, files);
   if (cached) {
     const transcript = JSON.parse(await readFile(files.transcript, "utf8"));
@@ -71,9 +75,10 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
     throw new Error("Recording output exists without a matching complete cache. Use a new output directory to preserve existing media and capture progress.");
   } catch (error) { if (error.code !== "ENOENT") throw error; }
 
+  const session = await readQaSession(directory, candidateHash);
   const transcript = options.transcript
     ? JSON.parse(await readFile(path.resolve(options.transcript), "utf8"))
-    : await (adapters.transcribe ?? transcribeRecording)(input, options);
+    : session ? await readSessionTranscript(files.source_transcript, session) : await (adapters.transcribe ?? transcribeRecording)(input, options);
   const semantic = options.retakeDecisions
     ? validateSemanticRetakes(JSON.parse(await readFile(path.resolve(options.retakeDecisions), "utf8")), normalizeRecordingTranscript(transcript), { retakeWindow: policy.retakeWindow })
     : options.retakeModel
@@ -87,12 +92,30 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
         ...(policy.audioThresholdDb == null ? {} : { thresholdDb: policy.audioThresholdDb })
       })
     : { status: "disabled", source_duration_seconds: durationSeconds };
-  const plan = policy.audioSilence ? refineRecordingEditPlan(basePlan, audio, { silencePadding: policy.audioSilencePadding }) : basePlan;
+  let plan = policy.audioSilence ? refineRecordingEditPlan(basePlan, audio, { silencePadding: policy.audioSilencePadding }) : basePlan;
+  await readCaptureTracker(files, { text: plan.text, words: plan.words, duration_seconds: plan.duration_seconds }, { durationSeconds: plan.duration_seconds, aspect: options.aspect ?? "16:9" });
+  await mkdir(directory, { recursive: true });
+  await writeJson(files.source_transcript, transcript);
+  const qa = await runRecordingQa(input, plan, {
+    directory, requestHash: candidateHash, sourceTranscript: transcript,
+    maxAttempts: options.qaAttempts ?? 3, model: options.qaModel, baseUrl: options.qaBaseUrl,
+    transcriptionModel: options.qaTranscriptionModel ?? "base.en", language: options.language ?? "en", crf: options.crf ?? 18,
+    ...(options.qaDecisions ? { decisions: JSON.parse(await readFile(path.resolve(options.qaDecisions), "utf8")) } : {})
+  }, { ...adapters, transcribeRendered: adapters.transcribeRendered ?? transcribeRecording });
+  if (qa.status !== "passed") {
+    await writeJson(files.qa_report, qa.report);
+    return { schema_version: "launchclip.recording-workflow.v1", stage: "edit-recording", status: qa.status,
+      input, input_hash: requestHash, source_duration_seconds: durationSeconds, duration_seconds: qa.plan.duration_seconds,
+      candidate: qa.files.media, qa_attempts: qa.attempts, qa: qa.report, files: { ...qa.files, source_transcript: files.source_transcript },
+      next_action: qa.status === "needs-semantic-review" ? "The active agent should review the saved rendered transcript, joins and source context, write an evidence-bound QA receipt, then rerun with --qa-decisions. Standalone users can explicitly select --qa-model for local Ollama." : "Inspect the timed QA issues. No safe automatic repair remains; the candidate is preserved and has not been published as the base edit." };
+  }
+  plan = qa.plan;
   const editedTranscript = { text: plan.text, words: plan.words, duration_seconds: plan.duration_seconds };
   await readCaptureTracker(files, editedTranscript, { durationSeconds: plan.duration_seconds, aspect: options.aspect ?? "16:9" });
-  await mkdir(directory, { recursive: true });
-  const rendered = await (adapters.editRecording ?? editRecording)(input, output, plan, { crf: options.crf ?? 18 });
-  await writeJson(files.source_transcript, transcript);
+  await link(qa.files.media, output);
+  const rendered = { rendered_duration_seconds: qa.rendered_duration_seconds };
+  await writeJson(files.rendered_transcript, JSON.parse(await readFile(qa.files.rendered_transcript, "utf8")));
+  await writeJson(files.qa_report, qa.report);
   await writeJson(files.edit_plan, plan);
   await writeJson(files.transcript, editedTranscript);
   await writeJson(files.words, plan.words);
@@ -108,6 +131,7 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
     rendered_duration_seconds: rendered.rendered_duration_seconds ?? rendered.duration_seconds ?? plan.duration_seconds,
     take_policy: policy.takePolicy, filler_cleanup: policy.removeFillers,
     audio_silence: policy.audioSilence, semantic_retakes: semantic.retakes.length,
+    qa_status: "passed", qa_attempts: qa.attempts, qa_session: qa.files.qa_session,
     files, checksums, cached: false
   };
   await writeJson(manifestPath, result);
@@ -143,11 +167,14 @@ export function recordingOptions(flags = {}) {
     retakeWindow: flags["retake-window"] == null ? 90 : Number(flags["retake-window"]),
     minRepeatWords: flags["min-repeat-words"] == null ? 6 : Number(flags["min-repeat-words"]),
     model: flags["recording-model"] ?? "base.en", language: flags.language ?? "en",
+    qaModel: flags["qa-model"], qaBaseUrl: flags["qa-base-url"], qaDecisions: flags["qa-decisions"],
+    qaAttempts: flags["qa-attempts"] == null ? 3 : Number(flags["qa-attempts"]),
+    qaTranscriptionModel: flags["qa-recording-model"] ?? "base.en",
     aspect: flags.aspect ?? "16:9", crf: flags["source-crf"] == null ? 18 : Number(flags["source-crf"])
   };
 }
 
-async function transcribeRecording(input, options) {
+export async function transcribeRecording(input, options = {}) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "launchclip-recording-transcript-"));
   try {
     try {
@@ -160,6 +187,19 @@ async function transcribeRecording(input, options) {
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+}
+
+async function readQaSession(directory, requestHash) {
+  try {
+    const session = JSON.parse(await readFile(path.join(directory, "qa", "session.json"), "utf8"));
+    if (session.request_hash !== requestHash) throw new Error("Recording QA session belongs to different input, settings or engine. Use a fresh output directory.");
+    return session;
+  } catch (error) { if (error.code === "ENOENT") return null; throw error; }
+}
+async function readSessionTranscript(file, session) {
+  const transcript = JSON.parse(await readFile(file, "utf8"));
+  if (digest(transcript) !== session.source_transcript_hash) throw new Error("Saved source transcript changed; use a fresh output directory.");
+  return transcript;
 }
 
 async function readCached(manifestPath, requestHash, files) {
