@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-const KINDS = ['media-window', 'checklist', 'step-rail', 'callout', 'audience-grid', 'trend-chart', 'metric', 'progress', 'date-card', 'status-rack', 'code-snippet', 'excerpt-window'];
+const KINDS = ['media-window', 'checklist', 'step-rail', 'callout', 'audience-grid', 'trend-chart', 'metric', 'progress', 'date-card', 'status-rack', 'code-snippet', 'excerpt-window', 'focus-flow', 'growth-chart'];
 const escape = value => String(value).replace(/[&<>"']/g, char => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char]));
 const js = value => JSON.stringify(value).replace(/</g, '\\u003c');
 function object(value, label, keys) {
@@ -93,7 +93,7 @@ function moduleMotion(target, start, duration, config, media = false) {
 // Skill-local authoring helper, not a production API. The host owns its paused
 // GSAP timeline and places these fragments directly inside its composition root.
 export function buildEditorialModule(input) {
-  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt', 'theme']);
+  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt', 'theme', 'focus', 'growth']);
   if (!/^[a-z][a-z0-9-]{0,59}$/.test(input.id ?? '')) throw new Error('id must be a unique lowercase DOM-safe identifier');
   if (!KINDS.includes(input.kind)) throw new Error(`kind must be ${KINDS.join(', ')}`);
   if (input.presentation !== undefined && !['solid', 'glass'].includes(input.presentation)) throw new Error('presentation must be solid or glass');
@@ -120,8 +120,8 @@ export function buildEditorialModule(input) {
     if (input.theme.accentText !== undefined && (typeof input.theme.accentText !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(input.theme.accentText))) throw new Error('theme.accentText must be a six-digit hex color');
     theme = {...input.theme, accentText: input.theme.accentText ?? input.theme.foreground};
   }
-  const allowed = {'media-window': ['media'], checklist: ['rows'], 'step-rail': ['steps'], callout: ['body', 'treatment'], 'audience-grid': ['audience'], 'trend-chart': ['chart'], metric: ['metric'], progress: ['progress'], 'date-card': ['date'], 'status-rack': ['rack'], 'code-snippet': ['code'], 'excerpt-window': ['excerpt']}[input.kind];
-  for (const key of ['media', 'rows', 'steps', 'body', 'audience', 'chart', 'metric', 'progress', 'treatment', 'date', 'rack', 'code', 'excerpt']) if (input[key] !== undefined && !allowed.includes(key)) throw new Error(`${input.kind} does not accept ${key}`);
+  const allowed = {'media-window': ['media'], checklist: ['rows'], 'step-rail': ['steps'], callout: ['body', 'treatment'], 'audience-grid': ['audience'], 'trend-chart': ['chart'], metric: ['metric'], progress: ['progress'], 'date-card': ['date'], 'status-rack': ['rack'], 'code-snippet': ['code'], 'excerpt-window': ['excerpt'], 'focus-flow': ['focus'], 'growth-chart': ['growth']}[input.kind];
+  for (const key of ['media', 'rows', 'steps', 'body', 'audience', 'chart', 'metric', 'progress', 'treatment', 'date', 'rack', 'code', 'excerpt', 'focus', 'growth']) if (input[key] !== undefined && !allowed.includes(key)) throw new Error(`${input.kind} does not accept ${key}`);
   const statusLabels = {pending: 'Pending', active: 'Active', done: 'Done', ...(input.statusLabels ?? {})};
   if (input.statusLabels !== undefined) {
     if (input.kind !== 'checklist') throw new Error('statusLabels is only for checklist');
@@ -144,7 +144,7 @@ export function buildEditorialModule(input) {
   const at = (value, label) => number(value, label, enterDuration, duration - (movement ? Math.max(.45, exitDuration + .3) : .45));
   let css = `#${id}{position:absolute;${placement};box-sizing:border-box;overflow:hidden;background:#17191d;color:#f7f7f8;border:1px solid #535761;border-radius:18px;box-shadow:0 16px 48px #0005;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:${font}px;line-height:1.25}#${id} *{box-sizing:border-box}#${id} .ui-title{margin:0;padding:${pad}px;font-size:${font + 4}px;font-weight:700;line-height:1.15}#${id} .ui-row{display:flex;align-items:center;gap:18px;padding:14px ${pad}px;border-top:1px solid #383c45}#${id} .ui-label{flex:1;min-width:0;overflow-wrap:break-word}#${id} .ui-check{width:36px;height:36px;flex:none;border:2px solid #828791;border-radius:7px;display:grid;place-items:center}#${id} .ui-check svg{width:32px;height:32px;opacity:0}#${id} .ui-status{font-size:${font - 6}px;color:#b8bbc3;width:${statusWidth}px;flex:none;text-align:right;position:relative}#${id} .ui-bar{position:absolute;top:0;left:0;right:0;height:48px;display:flex;align-items:center;gap:10px;padding:0 16px;background:#24272e;border-bottom:1px solid #535761}#${id} .ui-dot{width:12px;height:12px;border-radius:50%}#${id} .ui-bar-label{margin-left:12px;font-size:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#${id} .ui-content{padding:${pad}px}#${id} .ui-rail{position:relative;margin:20px ${pad}px 0;height:8px;background:#474c56;border-radius:4px}#${id} .ui-fill{height:100%;background:${accent};transform-origin:left;border-radius:4px}#${id} .ui-steps{display:flex;justify-content:space-between;padding:22px ${pad}px;gap:12px}#${id} .ui-step{flex:1;min-width:0;font-size:${Math.max(22, font - 4)}px;overflow-wrap:break-word;opacity:.65}#${id} .ui-body{padding:0 ${pad}px ${pad}px;margin:0;color:#d3d6dd;overflow-wrap:break-word}`;
   let body = '', media = '';
-  if (['date-card', 'status-rack', 'code-snippet', 'excerpt-window'].includes(input.kind)) css += `#${id}{background:#101923;border-color:#465568;border-radius:14px;box-shadow:0 0 18px ${accent}16,0 14px 38px #0005}`;
+  if (['date-card', 'status-rack', 'code-snippet', 'excerpt-window', 'focus-flow', 'growth-chart'].includes(input.kind)) css += `#${id}{background:#101923;border-color:#465568;border-radius:14px;box-shadow:0 0 18px ${accent}16,0 14px 38px #0005}`;
   if (input.presentation === 'glass') {
     // Opaque tint is the readability fallback when native video compositing
     // does not reproduce backdrop blur. Keep framed media itself sharp.
@@ -363,25 +363,70 @@ export function buildEditorialModule(input) {
         events.push({id: `${id}-viewer-${i}-settle`, time: time + .24});
       });
       body += '</div>';
-    } else if (input.kind === 'trend-chart') {
-      object(input.chart, 'chart', ['mode', 'points', 'unit', 'source']);
-      const {mode, points} = input.chart;
+    } else if (input.kind === 'focus-flow') {
+      object(input.focus, 'focus', ['options', 'selected', 'arriveAt', 'chooseAt', 'progressAt', 'progressDuration', 'progressLabel', 'icon']);
+      const focus = input.focus, options = focus.options;
+      if (!Array.isArray(options) || options.length < 2 || options.length > 4) throw new Error('focus.options must contain 2–4 meaningful labels');
+      options.forEach(label => text(label, 'focus option', 24));
+      if (new Set(options.map(label => label.trim().toLowerCase())).size !== options.length) throw new Error('focus options must be distinct');
+      number(focus.selected, 'focus.selected', 0, options.length - 1);
+      if (!Number.isInteger(focus.selected)) throw new Error('focus.selected must be an integer');
+      if (focus.icon !== undefined && !Object.hasOwn(SYMBOLS, focus.icon)) throw new Error('focus.icon must be a built-in symbolic icon');
+      const arrive = at(focus.arriveAt, 'focus.arriveAt'), choose = at(focus.chooseAt, 'focus.chooseAt'), progress = at(focus.progressAt, 'focus.progressAt');
+      const progressDuration = number(focus.progressDuration ?? .8, 'focus.progressDuration', .3, 2);
+      if (choose < arrive + .24 + (options.length - 1) * .08 + .2 || progress < choose + .9) throw new Error('focus must hold options before choosing and settle the chosen task before progress');
+      if (progress + progressDuration + .35 > duration - exitDuration) throw new Error('focus progress must finish with a readable hold before exit');
+      const label = focus.progressLabel === undefined ? 'Illustrative progress' : text(focus.progressLabel, 'focus.progressLabel', 32);
+      const rowHeight = 64, gap = 14, horizontal = input.aspect === '16:9' && rect.width >= 900;
+      const stageHeight = horizontal ? 96 : options.length * (rowHeight + gap) - gap;
+      const optionWidth = horizontal ? (rect.width - 48 - gap * (options.length - 1)) / options.length : rect.width - 48;
+      const optionFont = horizontal ? 22 : Math.max(24, font - 2), available = optionWidth - 32 - (focus.icon ? 46 : 0);
+      if (options.some(option => option.length * optionFont * .65 > available * (horizontal ? 2 : 1))) throw new Error('focus option too long for rect');
+      if (label.length * 22 * .65 > rect.width - 48 || rect.height < header + 50 + stageHeight + 94) throw new Error('focus-flow does not fit rect');
+      const target = (stageHeight - rowHeight) / 2, targetX = (rect.width - 48 - optionWidth) / 2;
+      css += `#${id} .ui-focus-note{font-size:22px;line-height:1.3;margin:0;padding:0 24px 20px;color:#d3d6dd}#${id} .ui-focus-stage{position:relative;height:${stageHeight}px;margin:0 24px}#${id} .ui-focus-option{position:absolute;left:0;top:0;width:${optionWidth}px;height:${rowHeight}px;padding:0 16px;display:flex;align-items:center;justify-content:center;gap:12px;border:1px solid #535761;border-radius:12px;background:#24272e;font-size:${optionFont}px;line-height:1.25;text-align:center;opacity:0}#${id} .ui-focus-option>span:last-child{min-width:0;overflow-wrap:break-word}#${id} .ui-focus-icon{width:34px;height:34px;flex:none}#${id} .ui-focus-icon svg{width:34px;height:34px;display:block}#${id} .ui-focus-progress{margin:18px 24px 24px;opacity:0}#${id} .ui-focus-progress-label{font-size:22px;line-height:1.3;margin-bottom:12px}#${id} .ui-focus-track{height:12px;border-radius:6px;background:#474c56;overflow:hidden}#${id} .ui-focus-fill{height:100%;background:${accent};transform-origin:left center}`;
+      body += '<p class="ui-focus-note">Illustration · focus sequence</p><div class="ui-focus-stage">';
+      options.forEach((option, i) => {
+        const key = `${id}-option-${i}`, initial = horizontal ? 0 : i * (rowHeight + gap), initialX = horizontal ? i * (optionWidth + gap) : 0;
+        body += `<div id="${key}" class="ui-focus-option">${i === focus.selected && focus.icon ? `<span class="ui-focus-icon" aria-hidden="true">${symbol(focus.icon)}</span>` : ''}<span>${escape(option)}</span></div>`;
+        motion.push(`tl.fromTo(${js(`#${key}`)}, {opacity:0,x:${initialX},y:${initial + 8}}, {opacity:1,x:${initialX},y:${initial},duration:0.24,ease:'power3.out'}, ${start + arrive + i * .08});`);
+        if (i === focus.selected) motion.push(`tl.to(${js(`#${key}`)}, {x:${targetX},y:${target},scale:${horizontal ? 1.4 : 1},borderColor:${js(accent)},backgroundColor:${js(accent + '22')},duration:0.42,ease:'power3.inOut'}, ${start + choose + .18});`);
+        else motion.push(`tl.to(${js(`#${key}`)}, {opacity:0,duration:0.16,ease:'power2.out'}, ${start + choose});`, `tl.to(${js(`#${key}`)}, {x:${targetX},y:${target},scale:0.94,duration:0.38,ease:'power3.inOut'}, ${start + choose});`);
+      });
+      body += `</div><div id="${id}-focus-progress" class="ui-focus-progress"><div class="ui-focus-progress-label">${escape(label)}</div><div class="ui-focus-track"><div id="${id}-focus-fill" class="ui-focus-fill"></div></div></div>`;
+      motion.push(`tl.set(${js(`#${id}-focus-fill`)}, {scaleX:0}, ${start});`, `tl.to(${js(`#${id}-focus-progress`)}, {opacity:1,duration:0.2}, ${start + progress});`, `tl.to(${js(`#${id}-focus-fill`)}, {scaleX:1,duration:${progressDuration},ease:'power2.inOut'}, ${start + progress});`);
+      events.push({id: `${id}-options-settle`, time: start + arrive + (options.length - 1) * .08 + .24}, {id: `${id}-chosen-task`, time: start + choose + .6}, {id: `${id}-focus-progress-settle`, time: start + progress + progressDuration});
+    } else if (input.kind === 'trend-chart' || input.kind === 'growth-chart') {
+      const isGrowth = input.kind === 'growth-chart';
+      const supplied = isGrowth ? input.growth : input.chart;
+      object(supplied, isGrowth ? 'growth' : 'chart', isGrowth ? ['mode', 'points', 'unit', 'source', 'showValues'] : ['mode', 'points', 'unit', 'source']);
+      if (isGrowth && supplied.showValues !== undefined && typeof supplied.showValues !== 'boolean') throw new Error('growth.showValues must be a boolean');
+      const showValues = !isGrowth || (supplied.showValues ?? supplied.points !== undefined);
+      let chart = supplied;
+      if (isGrowth && supplied.points === undefined) {
+        if (supplied.mode !== 'illustration') throw new Error('real growth data requires supplied points');
+        if (duration < enterDuration + exitDuration + 2.4) throw new Error('default growth illustration needs a longer duration');
+        const interval = (duration - enterDuration - exitDuration - .9) / 3;
+        chart = {...supplied, points: [1,3,8,20].map((value, i) => ({label: ['Start','Next','Later','Reach'][i], value, at: enterDuration + i * interval}))};
+      }
+      const {mode, points} = chart;
       if (!['illustration', 'data'].includes(mode)) throw new Error('chart.mode must be illustration or data');
       if (!Array.isArray(points) || points.length < 2 || points.length > 8) throw new Error('chart.points must contain 2–8 entries');
-      const unit = text(input.chart.unit, 'chart.unit', 18);
-      if (mode === 'data') text(input.chart.source, 'chart.source for real data', 80);
-      else if (input.chart.source !== undefined) throw new Error('illustration cannot claim a real data source');
-      const attribution = mode === 'illustration' ? 'Illustration · example values' : `Source: ${input.chart.source}`;
+      const unit = text(isGrowth ? (chart.unit ?? 'reach') : chart.unit, 'chart.unit', 18);
+      if (mode === 'data') text(chart.source, 'chart.source for real data', 80);
+      else if (chart.source !== undefined) throw new Error('illustration cannot claim a real data source');
+      const attribution = mode === 'illustration' ? (isGrowth && !showValues ? 'Illustration · relative growth' : 'Illustration · example values') : `Source: ${chart.source}`;
       const columnWidth = (rect.width - 48 - 16 * (points.length - 1)) / points.length;
       const chartHeight = 180, labelFont = 22;
       const attributionLines = Math.ceil(attribution.length / Math.floor((rect.width - 48) / (22 * .65)));
-      if (columnWidth < 40 || rect.height < header + attributionLines * 29 + 24 + 80 + chartHeight + 80) throw new Error('trend chart does not fit rect; use fewer points or a larger rect');
+      if (columnWidth < 40 || rect.height < header + attributionLines * 29 + 24 + (isGrowth ? (showValues ? 88 : 0) : 80) + chartHeight + 80) throw new Error('trend chart does not fit rect; use fewer points or a larger rect');
       let previous = -1;
       points.forEach((point, i) => {
         object(point, `chart.points[${i}]`, ['label', 'value', 'at']);
         text(point.label, 'point.label', 16);
         number(point.value, 'point.value', 0, 1_000_000_000);
         if (!Number.isInteger(point.value)) throw new Error('point.value must be a whole count');
+        if (isGrowth && i > 0 && point.value < points[i - 1].value) throw new Error('growth values must not decrease; use trend-chart for declines');
         if (point.label.length > Math.floor(columnWidth / (labelFont * .65)) * 2) throw new Error('point label too long for rect');
         const offset = at(point.at, 'point.at');
         if (offset <= previous || (previous >= 0 && offset - previous + 1e-9 < .5)) throw new Error('point times must increase with at least 0.5s between events');
@@ -389,13 +434,16 @@ export function buildEditorialModule(input) {
       });
       const maximum = Math.max(1, ...points.map(point => point.value));
       css += `#${id} .ui-note{margin:0;padding:0 24px 20px;color:#d3d6dd;font-size:22px;line-height:1.3;overflow-wrap:break-word}#${id} .ui-metric{padding:0 24px 20px;height:80px;display:flex;align-items:baseline;gap:16px;white-space:nowrap}#${id} .ui-count{font-size:48px;font-weight:750;font-variant-numeric:tabular-nums}#${id} .ui-unit{font-size:22px;color:#d3d6dd}#${id} .ui-chart{display:grid;grid-template-columns:repeat(${points.length},minmax(0,1fr));gap:16px;padding:0 24px 24px}#${id} .ui-column{min-width:0;text-align:center}#${id} .ui-bar-track{height:${chartHeight}px;display:flex;align-items:flex-end;border-bottom:1px solid #828791}#${id} .ui-trend-bar{width:100%;background:${accent};border-radius:7px 7px 0 0;transform-origin:bottom}#${id} .ui-point-label{display:block;font-size:${labelFont}px;line-height:1.25;margin-top:12px;overflow-wrap:break-word}`;
+      if (isGrowth) css += `#${id} .ui-column{opacity:0}#${id} .ui-count{font-size:56px}#${id} .ui-metric{height:88px}#${id} .ui-trend-bar{border-radius:10px 10px 0 0}`;
+      if (isGrowth && !showValues) css += `#${id} .ui-metric{display:none}`;
       const formatted = Math.round(maximum).toLocaleString('en-US');
-      if (formatted.length * 48 * .65 + unit.length * 22 * .65 + 16 > rect.width - 48) throw new Error('metric and unit too wide for rect');
+      if (showValues && formatted.length * (isGrowth ? 56 : 48) * .65 + unit.length * 22 * .65 + 16 > rect.width - 48) throw new Error('metric and unit too wide for rect');
       body += `<p class="ui-note">${escape(attribution)}</p><div class="ui-metric"><span id="${id}-count" class="ui-count">0</span><span class="ui-unit">${escape(unit)}</span></div><div class="ui-chart">`;
       motion.unshift(`tl.set(${js(`#${id}-count`)}, {textContent:0}, ${start});`);
       points.forEach((point, i) => {
-        body += `<div class="ui-column"><div class="ui-bar-track"><div id="${id}-bar-${i}" class="ui-trend-bar" style="height:${point.value / maximum * chartHeight}px"></div></div><span class="ui-point-label">${escape(point.label)}</span></div>`;
+        body += `<div${isGrowth ? ` id="${id}-column-${i}"` : ''} class="ui-column"><div class="ui-bar-track"><div id="${id}-bar-${i}" class="ui-trend-bar" style="height:${point.value / maximum * chartHeight}px"></div></div><span class="ui-point-label">${escape(point.label)}</span></div>`;
         const time = start + point.at;
+        if (isGrowth) motion.push(`tl.fromTo(${js(`#${id}-column-${i}`)}, {opacity:0,y:10}, {opacity:1,y:0,duration:0.24,ease:'power3.out'}, ${time});`);
         motion.push(`tl.set(${js(`#${id}-bar-${i}`)}, {scaleY:0}, ${start});`, `tl.to(${js(`#${id}-bar-${i}`)}, {scaleY:1,duration:0.38,ease:'power3.out'}, ${time});`);
         motion.push(`tl.fromTo(${js(`#${id}-count`)}, {textContent:${i ? points[i - 1].value : 0}}, {textContent:${point.value},snap:{textContent:1},duration:0.38,ease:'power2.out',immediateRender:false}, ${time});`);
         events.push({id: `${id}-point-${i}-settle`, time: time + .38});
@@ -495,19 +543,19 @@ export function buildEditorialModule(input) {
       body += '</div>';
     }
   }
-  if ((movement || input.treatment || ['date-card', 'status-rack', 'code-snippet', 'excerpt-window'].includes(input.kind)) && events.some(event => event.time > start + duration - exitDuration + 1e-9)) throw new Error('content must settle before motion exit begins');
+  if ((movement || input.treatment || ['date-card', 'status-rack', 'code-snippet', 'excerpt-window', 'focus-flow', 'growth-chart'].includes(input.kind)) && events.some(event => event.time > start + duration - exitDuration + 1e-9)) throw new Error('content must settle before motion exit begins');
   if (theme) {
     const scoped = (selectors, declarations) => selectors.map(name => `${selector}${name ? ` ${name}` : ''}`).join(',') + `{${declarations}}`;
     const fill = input.presentation === 'glass' ? theme.surface + 'DB' : theme.surface;
     css += scoped([''], `background:${fill};color:${theme.foreground};border-color:${theme.border}`);
-    css += scoped(['.ui-row', '.ui-rack-row', '.ui-viewer'], `background:${theme.surface};border-color:${theme.border};color:${theme.foreground}`);
+    css += scoped(['.ui-row', '.ui-rack-row', '.ui-viewer', '.ui-focus-option'], `background:${theme.surface};border-color:${theme.border};color:${theme.foreground}`);
     css += scoped(['.ui-bar'], `background:${input.presentation === 'glass' ? theme.surface + 'E0' : theme.surface};border-color:${theme.border};color:${theme.foreground}`);
     css += scoped(['.ui-body', '.ui-symbol', '.ui-rack-label', '.ui-bar-label', '.ui-title'], `color:${theme.foreground}`);
-    css += scoped(['.ui-status', '.ui-note', '.ui-unit', '.ui-number-unit', '.ui-date-note', '.ui-rack-note', '.ui-code-language', '.ui-excerpt-note', '.ui-token-comment', '.ui-token-string'], `color:${theme.muted}`);
+    css += scoped(['.ui-status', '.ui-focus-note', '.ui-note', '.ui-unit', '.ui-number-unit', '.ui-date-note', '.ui-rack-note', '.ui-code-language', '.ui-excerpt-note', '.ui-token-comment', '.ui-token-string'], `color:${theme.muted}`);
     css += scoped(['.ui-emphasis', '.ui-token-keyword', '.ui-token-number'], `color:${theme.accentText}`);
     css += scoped(['.ui-token-operator', '.ui-step'], `color:${theme.foreground}`);
     css += scoped(['.ui-check', '.ui-bar-track'], `border-color:${theme.border}`);
-    css += scoped(['.ui-rail', '.ui-progress-track', '.ui-rack-marker', '.ui-light'], `background:${theme.border}`);
+    css += scoped(['.ui-rail', '.ui-progress-track', '.ui-rack-marker', '.ui-light', '.ui-focus-track'], `background:${theme.border}`);
     // Orange stays an accent fill; dark ink remains legible on its bright band.
     css += scoped(['.ui-month', '.ui-step-number'], 'color:#171612');
     if (input.kind === 'media-window') css += `#${id}-media{background:${theme.surface}!important}`;
