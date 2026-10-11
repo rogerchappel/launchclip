@@ -168,6 +168,7 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
   const spliceRanges = [];
   const spliceProtection = [];
   const unconfirmedBoundaries = [];
+  const ambiguousWordSpans = [];
   for (const keep of keeps) {
     const spoken = sourceWords.filter((word) => word.start >= keep.start - 1e-6 && word.end <= keep.end + 1e-6);
     if (!spoken.length) continue; // Wordless ranges are removed separately below.
@@ -175,6 +176,21 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
     // facing handle may therefore contain rejected speech even when not quiet.
     const touchesEarlierCut = rejectedCuts.some((cut) => Math.abs(cut.source_end_seconds - keep.start) <= 1e-6);
     const touchesLaterCut = rejectedCuts.some((cut) => Math.abs(cut.source_start_seconds - keep.end) <= 1e-6);
+    // A first-word timestamp can swallow the rejected take's short tail and a
+    // long pause before the chosen word. Neither RMS nor matching ASR proves
+    // which island belongs to that word, so retain speech and request review.
+    if (touchesEarlierCut) {
+      const first = spoken[0];
+      const separator = measuredQuiet.find((quiet) => first.end - first.start >= 0.8
+        && quiet.start > first.start && quiet.start - first.start <= 0.2 + 1e-6
+        && quiet.end < first.end && quiet.end - quiet.start >= 0.4 - 1e-6);
+      if (separator) ambiguousWordSpans.push({
+        source_word_start_seconds: first.start, source_word_end_seconds: first.end,
+        source_keep_boundary_seconds: keep.start,
+        quiet_start_seconds: separator.start, quiet_end_seconds: separator.end,
+        reason: "retake-word-timestamp-spans-quiet"
+      });
+    }
     if (touchesEarlierCut && spoken[0].start > keep.start) {
       const wordStart = spoken[0].start;
       const separator = boundaryQuiet.map((quiet) => ({ start: Math.max(quiet.start, keep.start), end: Math.min(quiet.end, wordStart) })).filter((quiet) => quiet.end - quiet.start >= boundaryMinimum - 1e-6 && quiet.end > wordStart - 0.5).at(-1);
@@ -242,7 +258,7 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
     checkedRange(segment.source_start_seconds, segment.source_end_seconds, duration);
     return { ...segment };
   }), ...removals.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "waveform-silence" })), ...wordlessRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "wordless-range" })), ...boundaryRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "speech-boundary" })), ...spliceRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "rejected-splice-handle" }))].sort((a, b) => a.source_start_seconds - b.source_start_seconds);
-  return { ...plan, duration_seconds: clock, kept_segments, removed_segments, words, text: words.map((word) => word.word ?? word.text).join(" "), audio_analysis: { schema_version: RECORDING_AUDIO_VERSION, threshold_db: analysis.threshold_db, threshold_receipt: analysis.threshold_receipt, silence_padding_seconds: padding, trim_edges: trimEdges, boundary_silence_receipt: analysis.boundary_silence_receipt, boundary_search_seconds: 0.5, unconfirmed_boundaries: unconfirmedBoundaries, speech_boundary_removed_seconds: boundaryRanges.reduce((sum, range) => sum + range.end - range.start, 0), rejected_splice_removed_seconds: spliceRanges.reduce((sum, range) => sum + range.end - range.start, 0), wordless_removed_seconds: wordlessRanges.reduce((sum, range) => sum + range.end - range.start, 0), removed_seconds: plan.duration_seconds - clock, aligned_words: alignedWords, dropped_words: droppedWords } };
+  return { ...plan, duration_seconds: clock, kept_segments, removed_segments, words, text: words.map((word) => word.word ?? word.text).join(" "), audio_analysis: { schema_version: RECORDING_AUDIO_VERSION, threshold_db: analysis.threshold_db, threshold_receipt: analysis.threshold_receipt, silence_padding_seconds: padding, trim_edges: trimEdges, boundary_silence_receipt: analysis.boundary_silence_receipt, boundary_search_seconds: 0.5, unconfirmed_boundaries: unconfirmedBoundaries, ambiguous_word_spans: ambiguousWordSpans, speech_boundary_removed_seconds: boundaryRanges.reduce((sum, range) => sum + range.end - range.start, 0), rejected_splice_removed_seconds: spliceRanges.reduce((sum, range) => sum + range.end - range.start, 0), wordless_removed_seconds: wordlessRanges.reduce((sum, range) => sum + range.end - range.start, 0), removed_seconds: plan.duration_seconds - clock, aligned_words: alignedWords, dropped_words: droppedWords } };
 }
 
 function recordingBoundaryWindows(plan, duration, silence, waveform, floor) {
