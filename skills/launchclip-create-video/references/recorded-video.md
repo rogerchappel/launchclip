@@ -96,7 +96,11 @@ and at most 500ms from the aligned word boundary. Cuts land inside that gap with
 padding clamped to half its duration; without a qualifying separator they fall
 back to aligned word bounds for legacy analysis. New analysis uses a separate
 noise-relative cutoff (noise floor + 6dB, never above the dialogue cutoff and
-bounded below at -80dB), requiring 40ms sustained quiet without debounce. If no
+bounded below at -80dB). Recording workflows measure 10ms RMS frames in bounded
+source windows around rejected-facing aligned word edges, requiring at least
+20ms consecutive quiet without debounce. This preserves quieter word tails and
+allows a narrow confirmed separator before a rejected onset. Standalone analysis
+without a boundary plan retains the 40ms peak-detector fallback. If no
 separator qualifies, it preserves the original handle and records an unconfirmed
 boundary for source/output QA instead of claiming clean audio. The initial cut
 search is distinct from QA restoration budgets: repairs remain capped at 200ms
