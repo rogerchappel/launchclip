@@ -147,7 +147,33 @@ export function recordingAcousticIssues(plan, acoustic) {
       source_word_boundary_seconds: word, source_keep_boundary_seconds: keep,
       proven: false, explanation: "No verified quiet separator was found beside rejected speech. Review the retained source handle and rendered boundary for rejected-speech residue or natural chosen breath." };
   }).sort((left, right) => left.segment_index - right.segment_index || left.edge.localeCompare(right.edge) || left.source_word_boundary_seconds - right.source_word_boundary_seconds || left.source_keep_boundary_seconds - right.source_keep_boundary_seconds);
-  return [...supplied, ...boundaries];
+  const spans = plan.audio_analysis?.ambiguous_word_spans ?? [];
+  if (!Array.isArray(spans)) throw new Error("Ambiguous recording word spans require an array");
+  const swallowed = spans.map((span) => {
+    const start = span?.source_word_start_seconds;
+    const end = span?.source_word_end_seconds;
+    const keep = span?.source_keep_boundary_seconds;
+    const quietStart = span?.quiet_start_seconds;
+    const quietEnd = span?.quiet_end_seconds;
+    if (![start, end, keep, quietStart, quietEnd].every(Number.isFinite)
+      || keep < 0 || start < keep || end - start < 0.8 - 1e-6
+      || quietStart <= start || quietStart - start > 0.2 + 1e-6
+      || quietEnd >= end || quietEnd - quietStart < 0.4 - 1e-6
+      || span.reason !== "retake-word-timestamp-spans-quiet"
+      || (Number.isFinite(plan.source_duration_seconds) && end > plan.source_duration_seconds + 1e-6)) throw new Error("Invalid ambiguous recording word span");
+    const index = plan.kept_segments.findIndex((segment) => start >= segment.source_start_seconds - 1e-6 && end <= segment.source_end_seconds + 1e-6);
+    if (index < 0) throw new Error("Ambiguous word span does not identify retained speech");
+    const segment = plan.kept_segments[index];
+    const offset = segment.start_seconds - segment.source_start_seconds;
+    const first = normalizeRecordingTranscript(plan.words).find((word) => word.start >= segment.start_seconds - 1e-6 && word.end <= segment.end_seconds + 1e-6);
+    if (!first || Math.abs(first.start - (start + offset)) > 1e-6 || Math.abs(first.end - (end + offset)) > 1e-6) throw new Error("Ambiguous word span does not match a retained timed word");
+    if (!(plan.removed_segments ?? []).some((cut) => ["semantic-retake", "repeated-take", "filler", "false-start"].includes(cut.reason) && Math.abs(cut.source_end_seconds - keep) <= 1e-6)) throw new Error("Ambiguous word span requires an adjacent rejected cut");
+    return { kind: "unconfirmed-boundary", segment_index: index, edge: "start",
+      at_seconds: start + offset, source_word_boundary_seconds: start,
+      source_keep_boundary_seconds: keep, proven: false,
+      explanation: "A retake-facing first-word timestamp spans a short leading signal island and a long interior quiet separator. The leading island may be rejected-speech residue or natural chosen delivery. Matching ASR cannot prove clean speech: inspect the original and rendered boundary and independently align the chosen word before resolving. No automatic speech removal is authorized." };
+  });
+  return [...supplied, ...boundaries, ...swallowed];
 }
 
 function align(expected, actual) {

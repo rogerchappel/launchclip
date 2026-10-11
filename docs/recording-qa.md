@@ -44,3 +44,24 @@ An unproven `join-click-candidate` stays ambiguous. A bound semantic receipt may
 A proven acoustic issue uses `{kind:'clipped-boundary', segment_index, edge:'start'|'end', seconds, proven:true, explanation}`. Without complete acoustic and semantic coverage the edit cannot pass. CLI runs without an installed local model stage an agent review and remain pending; the active subscription agent must complete and supply the bound receipt. Do not replace missing coverage with an empty fabricated pass.
 
 Every repaired render changes the evidence. Transcribe and inspect the new export again, then obtain a fresh semantic receipt. Preserve media and QA receipts for each iteration. This module does not publish, delete source footage, or silently rewrite speech.
+
+## Word timestamps that swallow a retake tail
+
+A recognizer can assign the first chosen word a timestamp that includes a short
+signal from the rejected take, followed by a long quiet pause. Matching output
+ASR does not prove that this retained head is clean.
+
+Waveform refinement records `audio_analysis.ambiguous_word_spans` when a
+retake-facing first word lasts at least 0.8 seconds and contains at least 0.4
+seconds of measured interior quiet beginning within 0.2 seconds of its start.
+It preserves the timed word and speech ranges. These conservative thresholds
+identify uncertainty; they are not a voice-activity classifier or a deletion
+rule. Ordinary interior pauses away from rejected cuts are unaffected.
+
+QA appends the span as an unconfirmed acoustic boundary after existing measured
+issues. A matching transcript or an otherwise empty semantic assessment cannot
+pass it. An active agent or explicitly selected local model must inspect the
+source and rendered boundary and independently align the chosen speech before
+providing an evidence-bound acoustic resolution. The review may identify natural
+delivery instead of a retake artifact. No automatic speech removal or boundary
+contraction is authorized by this flag.
