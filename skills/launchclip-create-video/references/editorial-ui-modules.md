@@ -525,3 +525,82 @@ surface; media itself stays sharp. Accent-filled date/step badges retain dark in
 Palette validation checks syntax, not aesthetic quality or universal contrast:
 verify actual held text, syntax colors, glass over footage, and transition frames
 at delivery size using both browser and native render checks.
+
+## Focus decisions and developing reach
+
+Choose `focus-flow` when the spoken idea resolves meaningful competing choices
+into one chosen task, then makes progress on that same task. Supply two to four
+short, distinct option labels and a zero-based `selected` index. The selected
+option keeps its identity as it moves to the center; distractors fade before
+converging, rather than becoming three anonymous boxes around an unrelated build.
+Do not use this scene for every argument or for an already simple task list.
+
+```json
+{
+  "id": "focus", "kind": "focus-flow", "aspect": "16:9",
+  "start": 0, "duration": 8.95, "title": "One chosen task",
+  "rect": {"x": 80, "y": 695, "width": 1120, "height": 340},
+  "focus": {
+    "options": ["Research", "New tools", "Side quests", "The next build"],
+    "selected": 3, "arriveAt": 0.28, "chooseAt": 1,
+    "progressAt": 5.5, "progressDuration": 0.8,
+    "progressLabel": "The next build"
+  }
+}
+```
+
+Offsets are relative to module start. Acquisition takes 0.24 seconds per option
+with 0.08 seconds between options; `chooseAt` must leave another 0.2 seconds to
+read them. `progressAt` must follow choice by at least 0.9 seconds. Progress lasts
+0.3–2 seconds (default 0.8), with a further 0.35-second hold before departure.
+The progress is visibly illustrative, not measured product completion. Optional
+`icon` uses the existing symbolic registry. Labels are at most 24 characters;
+progress copy is at most 32, subject to conservative fitting validation.
+Landscape panels at least 900 pixels wide arrange options horizontally; narrower
+panels and portrait use a stack. Four portrait options need a taller panel
+(for example 900 × 580), not a compressed landscape lower third.
+
+Choose `growth-chart` for increasing reach or distribution over time.
+`audience-grid` expresses people and relationships; repeating audience tiles
+for both belonging and scaling loses that distinction. Growth defaults to four
+staged relative bars with a persistent **Illustration · relative growth** label
+and no invented numerical reach claims:
+
+```json
+{
+  "id": "reach", "kind": "growth-chart", "aspect": "16:9",
+  "start": 0, "duration": 4.68, "title": "Reach develops",
+  "rect": {"x": 70, "y": 240, "width": 1050, "height": 640},
+  "growth": {"mode": "illustration", "unit": "reach"}
+}
+```
+
+Optional `points` contain two to eight `{label, value, at}` entries: short labels
+(up to 16 characters), whole nonnegative values up to one billion, and increasing
+relative times at least 0.5 seconds apart. Values must not decrease; use
+`trend-chart` for declines. Supplied illustrative values retain the persistent
+example-values label. `mode: "data"` requires supplied points and a short `source`;
+the helper checks shape, not the truth of that source. `showValues: false` hides
+the metric while preserving the relative bars and attribution. Without supplied
+points, default illustration needs room for acquisition, four events and a hold;
+shorten neither the source speech nor reading time to fit an arbitrary widget.
+
+Before choosing either module, inspect supplied screenshots, logos, icons and
+clips. Use a real asset when it communicates the actual subject better than a
+synthetic scene; place it through the existing media or excerpt contract. Assets
+are useful evidence, not a prerequisite for a complete editorial treatment.
+Explain repeated visual families in the beat table: repeat to continue an object
+or relationship, not merely to swap labels. A distinct meaning can justify a
+distinct capability without mandatory visual rotation.
+
+Use `presentation: "solid"` for a readable panel over busy footage. Choose glass
+only when translucency serves the scene and tested negative space supports it;
+inspect the actual background and delivery size rather than relying on an alpha
+value. Keep the source face and captions clear through transitions and holds.
+
+Plan sound by meaning: acquisition, removal, commitment, travel or growth may
+need different roles, or silence. Do not attach a tick to every returned event.
+Audition intended cues alone and in the actual dialogue/music mix at normal
+speed; check masking and whether the intended action is audible. A populated
+cue list, waveform or nonzero sample count does not demonstrate audible craft.
+Keep dialogue clear and record listening approval separately from visual checks.
