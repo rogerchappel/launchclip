@@ -604,3 +604,44 @@ Audition intended cues alone and in the actual dialogue/music mix at normal
 speed; check masking and whether the intended action is audible. A populated
 cue list, waveform or nonzero sample count does not demonstrate audible craft.
 Keep dialogue clear and record listening approval separately from visual checks.
+
+## Tie typing sound to visible typing
+
+A typing sound means text is visibly appearing character by character. A full
+line acquisition, a claim badge, a chart bar contact, or a progress change is not
+typing. Use an appropriate contact, acquisition, notification cue or silence for
+those actions; do not reuse a typing recording just because it sounds energetic.
+
+Code snippets can opt into deterministic character reveal without changing old
+full-line behavior:
+
+```json
+"code": {
+  "typing": true,
+  "lines": [{
+    "at": 0.5, "typeDuration": 0.8,
+    "tokens": [{"text": "const ", "type": "keyword"},
+               {"text": "value = 7;", "type": "plain"}]
+  }]
+}
+```
+
+Each line's `at` starts its visible typing span; `typeDuration` is 0.12–2 seconds
+(default 0.6). Characters keep their syntax color and whitespace and are keyed
+on the registered timeline, so backward seeking restores the partial text.
+Typing lines cannot overlap, must retain the existing minimum line spacing, and
+must finish before departure. Choose readable short examples; fast sound does
+not justify cramming long code into a short speech beat.
+
+The helper emits `-code-i-typing-start` with absolute `time`, `endTime`, `duration`
+and `role: "typing"`, plus a matching `-typing-end`. The existing `-settle` event
+marks the completed line. The host owns audio: gate a locally supplied typing
+recording to those spans, avoid its silent head/tail, and stop it at the visual
+completion. Events do not automatically add sound. Ordinary callout and excerpt
+acquisitions remain non-typing unless the host actually authors visible typing.
+
+Check the encoded visual and audition the actual mix together at normal speed.
+Verify onset, completion, gaps between spans, audibility beneath narration and
+whether repeated typing becomes distracting. Signal presence alone is not
+listening approval. Omitting `code.typing` preserves the existing markup, motion
+and events, so earlier compositions remain unchanged.
