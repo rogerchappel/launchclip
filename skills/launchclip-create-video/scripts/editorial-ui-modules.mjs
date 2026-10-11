@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-const KINDS = ['media-window', 'checklist', 'step-rail', 'callout', 'audience-grid', 'trend-chart', 'metric', 'progress'];
+const KINDS = ['media-window', 'checklist', 'step-rail', 'callout', 'audience-grid', 'trend-chart', 'metric', 'progress', 'date-card', 'status-rack', 'code-snippet', 'excerpt-window'];
 const escape = value => String(value).replace(/[&<>"']/g, char => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char]));
 const js = value => JSON.stringify(value).replace(/</g, '\\u003c');
 function object(value, label, keys) {
@@ -52,6 +52,17 @@ function textFrames(motion, selector, from, to, format, time) {
   }
 }
 
+// Small symbolic glyphs authored locally; no brand marks or arbitrary SVG input.
+const SYMBOLS = {
+  check: '<circle cx="12" cy="12" r="9"/><path d="m7 12 3 3 7-7"/>',
+  warning: '<path d="m12 3 10 18H2ZM12 9v5m0 3h.01"/>',
+  terminal: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 9 3 3-3 3m6 0h4"/>',
+  branch: '<circle cx="6" cy="5" r="2"/><circle cx="18" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10m12-10v3c0 4-12 0-12 5"/>',
+  users: '<circle cx="9" cy="8" r="3"/><path d="M3 20v-3a6 6 0 0 1 12 0v3m1-15a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 5"/>',
+  rocket: '<path d="M8 16c-2-5 2-11 11-12 1 9-5 13-10 11m4-6 2 2M8 12l-4 1-1 4 5-1m4 0 1 5 4-1 1-4m-10 3-4 3"/>'
+};
+const symbol = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${SYMBOLS[name]}</svg>`;
+
 const DIRECTIONS = ['left', 'right', 'up', 'down', 'none'];
 function motionSpec(value, duration) {
   if (value === undefined) return null;
@@ -82,7 +93,7 @@ function moduleMotion(target, start, duration, config, media = false) {
 // Skill-local authoring helper, not a production API. The host owns its paused
 // GSAP timeline and places these fragments directly inside its composition root.
 export function buildEditorialModule(input) {
-  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion']);
+  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt']);
   if (!/^[a-z][a-z0-9-]{0,59}$/.test(input.id ?? '')) throw new Error('id must be a unique lowercase DOM-safe identifier');
   if (!KINDS.includes(input.kind)) throw new Error(`kind must be ${KINDS.join(', ')}`);
   if (input.presentation !== undefined && !['solid', 'glass'].includes(input.presentation)) throw new Error('presentation must be solid or glass');
@@ -102,8 +113,8 @@ export function buildEditorialModule(input) {
   text(input.title, 'title', 54);
   const accent = input.accent ?? '#FF6A00';
   if (!/^#[0-9a-fA-F]{6}$/.test(accent)) throw new Error('accent must be a six-digit hex color');
-  const allowed = {'media-window': ['media'], checklist: ['rows'], 'step-rail': ['steps'], callout: ['body'], 'audience-grid': ['audience'], 'trend-chart': ['chart'], metric: ['metric'], progress: ['progress']}[input.kind];
-  for (const key of ['media', 'rows', 'steps', 'body', 'audience', 'chart', 'metric', 'progress']) if (input[key] !== undefined && !allowed.includes(key)) throw new Error(`${input.kind} does not accept ${key}`);
+  const allowed = {'media-window': ['media'], checklist: ['rows'], 'step-rail': ['steps'], callout: ['body', 'treatment'], 'audience-grid': ['audience'], 'trend-chart': ['chart'], metric: ['metric'], progress: ['progress'], 'date-card': ['date'], 'status-rack': ['rack'], 'code-snippet': ['code'], 'excerpt-window': ['excerpt']}[input.kind];
+  for (const key of ['media', 'rows', 'steps', 'body', 'audience', 'chart', 'metric', 'progress', 'treatment', 'date', 'rack', 'code', 'excerpt']) if (input[key] !== undefined && !allowed.includes(key)) throw new Error(`${input.kind} does not accept ${key}`);
   const statusLabels = {pending: 'Pending', active: 'Active', done: 'Done', ...(input.statusLabels ?? {})};
   if (input.statusLabels !== undefined) {
     if (input.kind !== 'checklist') throw new Error('statusLabels is only for checklist');
@@ -126,6 +137,7 @@ export function buildEditorialModule(input) {
   const at = (value, label) => number(value, label, enterDuration, duration - (movement ? Math.max(.45, exitDuration + .3) : .45));
   let css = `#${id}{position:absolute;${placement};box-sizing:border-box;overflow:hidden;background:#17191d;color:#f7f7f8;border:1px solid #535761;border-radius:18px;box-shadow:0 16px 48px #0005;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:${font}px;line-height:1.25}#${id} *{box-sizing:border-box}#${id} .ui-title{margin:0;padding:${pad}px;font-size:${font + 4}px;font-weight:700;line-height:1.15}#${id} .ui-row{display:flex;align-items:center;gap:18px;padding:14px ${pad}px;border-top:1px solid #383c45}#${id} .ui-label{flex:1;min-width:0;overflow-wrap:break-word}#${id} .ui-check{width:36px;height:36px;flex:none;border:2px solid #828791;border-radius:7px;display:grid;place-items:center}#${id} .ui-check svg{width:32px;height:32px;opacity:0}#${id} .ui-status{font-size:${font - 6}px;color:#b8bbc3;width:${statusWidth}px;flex:none;text-align:right;position:relative}#${id} .ui-bar{position:absolute;top:0;left:0;right:0;height:48px;display:flex;align-items:center;gap:10px;padding:0 16px;background:#24272e;border-bottom:1px solid #535761}#${id} .ui-dot{width:12px;height:12px;border-radius:50%}#${id} .ui-bar-label{margin-left:12px;font-size:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#${id} .ui-content{padding:${pad}px}#${id} .ui-rail{position:relative;margin:20px ${pad}px 0;height:8px;background:#474c56;border-radius:4px}#${id} .ui-fill{height:100%;background:${accent};transform-origin:left;border-radius:4px}#${id} .ui-steps{display:flex;justify-content:space-between;padding:22px ${pad}px;gap:12px}#${id} .ui-step{flex:1;min-width:0;font-size:${Math.max(22, font - 4)}px;overflow-wrap:break-word;opacity:.65}#${id} .ui-body{padding:0 ${pad}px ${pad}px;margin:0;color:#d3d6dd;overflow-wrap:break-word}`;
   let body = '', media = '';
+  if (['date-card', 'status-rack', 'code-snippet', 'excerpt-window'].includes(input.kind)) css += `#${id}{background:#101923;border-color:#465568;border-radius:14px;box-shadow:0 0 18px ${accent}16,0 14px 38px #0005}`;
   if (input.presentation === 'glass') {
     // Opaque tint is the readability fallback when native video compositing
     // does not reproduce backdrop blur. Keep framed media itself sharp.
@@ -145,10 +157,179 @@ export function buildEditorialModule(input) {
   } else {
     body = `<h2 class="ui-title">${escape(input.title)}</h2>`;
     if (input.kind === 'callout') {
-      text(input.body, 'body', 160);
-      const lines = Math.ceil(input.body.length / Math.max(18, Math.floor((rect.width - pad * 2) / (font * .58))));
-      if (rect.height < header + lines * font * 1.25 + pad) throw new Error('callout rect too short for body');
-      body += `<p class="ui-body">${escape(input.body)}</p>`;
+      if (input.treatment === undefined) {
+        text(input.body, 'body', 160);
+        const lines = Math.ceil(input.body.length / Math.max(18, Math.floor((rect.width - pad * 2) / (font * .58))));
+        if (rect.height < header + lines * font * 1.25 + pad) throw new Error('callout rect too short for body');
+        body += `<p class="ui-body">${escape(input.body)}</p>`;
+      } else {
+        const treatment = input.treatment;
+        object(treatment, 'treatment', ['icon', 'monospace', 'glow', 'corners', 'segments', 'at']);
+        for (const key of ['monospace', 'glow', 'corners']) if (treatment[key] !== undefined && typeof treatment[key] !== 'boolean') throw new Error(`treatment.${key} must be a boolean`);
+        if (treatment.icon !== undefined && !Object.hasOwn(SYMBOLS, treatment.icon)) throw new Error('icon must be terminal, branch, users, rocket, check or warning');
+        let copy, markup; const underlines = []; const chunks = [];
+        if (treatment.segments !== undefined) {
+          if (input.body !== undefined) throw new Error('segments replace body; do not supply both');
+          if (!Array.isArray(treatment.segments) || treatment.segments.length < 1 || treatment.segments.length > 12) throw new Error('segments must contain 1–12 entries');
+          copy = ''; markup = treatment.segments.map((segment, i) => {
+            object(segment, 'segment', ['text', 'highlight', 'underlineAt']);
+            if (typeof segment.text !== 'string' || !segment.text.length || segment.text.length > 160) throw new Error('segment.text must contain 1–160 characters');
+            if (segment.highlight !== undefined && typeof segment.highlight !== 'boolean') throw new Error('segment.highlight must be a boolean');
+            copy += segment.text;
+            if (segment.underlineAt !== undefined) {
+              if (/[\r\n\t]/.test(segment.text) || segment.text.length * font * .68 > rect.width - 36) throw new Error('underlined phrase must fit one line');
+              const time = start + at(segment.underlineAt, 'segment.underlineAt');
+              underlines.push({i, time}); chunks.push(segment.text.length);
+            } else chunks.push(...(segment.text.match(/\S+\s*|\s+/g) ?? []).map(part => part.length));
+            return `<span class="${[segment.highlight ? 'ui-emphasis' : '', segment.underlineAt !== undefined ? 'ui-underlined' : ''].filter(Boolean).join(' ')}">${escape(segment.text)}${segment.underlineAt === undefined ? '' : `<span id="${id}-underline-${i}" class="ui-underline" aria-hidden="true"></span>`}</span>`;
+          }).join('');
+          text(copy, 'combined segments', 160);
+        } else {copy = text(input.body, 'body', 160); markup = escape(copy);}
+        const inset = 18, iconWidth = treatment.icon ? 60 : 0;
+        const headingLines = Math.ceil(input.title.length / Math.max(1, Math.floor((rect.width - inset * 2 - iconWidth) / ((font + 2) * .68))));
+        const headingHeight = Math.max(treatment.icon ? 48 : 0, headingLines * (font + 2) * 1.2);
+        const columns = Math.max(1, Math.floor((rect.width - inset * 2) / (font * .68)));
+        let lines = Math.ceil(copy.length / columns);
+        if (underlines.length) {let count = 1, used = 0; for (const chunk of chunks) {if (used && used + chunk > columns) {count++; used = 0;} count += Math.max(0, Math.ceil(chunk / columns) - 1); used = chunk > columns ? chunk % columns : used + chunk;} lines = Math.max(lines, count);}
+        if (rect.height < inset * 3 + headingHeight + lines * font * 1.3) throw new Error('treated callout rect too short for copy');
+        const family = treatment.monospace ? 'ui-monospace,monospace' : 'inherit';
+        css += `#${id}{background:#101923;border-color:#465568;border-radius:14px}#${id} .ui-callout-heading{display:flex;align-items:center;gap:12px;padding:18px}#${id} .ui-title{padding:0;font-size:${font + 2}px;line-height:1.2;min-width:0;overflow-wrap:break-word;font-family:${family}}#${id} .ui-body{padding:0 18px 18px;font-family:${family};line-height:1.3;color:#e0e7ef}#${id} .ui-emphasis{color:${accent};font-weight:700}#${id} .ui-underlined{position:relative;display:inline-block;white-space:nowrap}#${id} .ui-underline{position:absolute;left:0;right:0;bottom:-2px;height:2px;background:${accent};transform-origin:left center;display:block}#${id} .ui-symbol{width:48px;height:48px;flex:none;color:#f7f7f8}#${id} .ui-symbol svg{width:48px;height:48px;display:block}#${id} .ui-corner{position:absolute;width:18px;height:18px;pointer-events:none;border-color:${accent};border-style:solid;border-width:0;opacity:0}#${id} .ui-corner-tl{left:7px;top:7px;border-left-width:2px;border-top-width:2px}#${id} .ui-corner-tr{right:7px;top:7px;border-right-width:2px;border-top-width:2px}#${id} .ui-corner-bl{left:7px;bottom:7px;border-left-width:2px;border-bottom-width:2px}#${id} .ui-corner-br{right:7px;bottom:7px;border-right-width:2px;border-bottom-width:2px}`;
+        // Font shorthand keeps the local monospace treatment intact through
+        // the renderer's font-family normalization, as with code/date widgets.
+        if (treatment.monospace) css += `#${id} .ui-title{font:700 ${font + 2}px/1.2 ui-monospace,monospace}#${id} .ui-body{font:${font}px/1.3 ui-monospace,monospace}`;
+        body = `<div class="ui-callout-heading">${treatment.icon ? `<span id="${id}-symbol" class="ui-symbol" aria-hidden="true">${symbol(treatment.icon)}</span>` : ''}<h2 id="${id}-heading" class="ui-title">${escape(input.title)}</h2></div><p id="${id}-copy" class="ui-body">${markup}</p>`;
+        const time = start + at(treatment.at ?? enterDuration, 'treatment.at');
+        motion.push(`tl.fromTo(${js(`#${id}-heading`)}, {opacity:0,y:6}, {opacity:1,y:0,duration:0.28,ease:'power3.out'}, ${time});`);
+        underlines.forEach(({i, time: underlineTime}) => {
+          if (underlineTime < time + .4) throw new Error('underline must follow treatment settle');
+          motion.push(`tl.set(${js(`#${id}-underline-${i}`)}, {scaleX:0}, ${start});`, `tl.to(${js(`#${id}-underline-${i}`)}, {scaleX:1,duration:0.28,ease:'power3.out'}, ${underlineTime});`);
+          events.push({id: `${id}-underline-${i}-settle`, time: underlineTime + .28});
+        });
+        motion.push(`tl.fromTo(${js(`#${id}-copy`)}, {opacity:0,y:8}, {opacity:1,y:0,duration:0.3,ease:'power3.out'}, ${time + .08});`);
+        if (treatment.icon) motion.push(`tl.fromTo(${js(`#${id}-symbol`)}, {opacity:0,scale:0.86,rotation:-6}, {opacity:1,scale:1,rotation:0,duration:0.34,ease:'power3.out'}, ${time});`);
+        if (treatment.glow) {
+          css += `#${id}{box-shadow:0 0 24px ${accent}25,0 14px 38px #0005}#${id} .ui-accent-edge{position:absolute;inset:0;border:1px solid ${accent};border-radius:14px;opacity:0;pointer-events:none}`;
+          body += `<div id="${id}-edge" class="ui-accent-edge" aria-hidden="true"></div>`;
+          motion.push(`tl.fromTo(${js(`#${id}-edge`)}, {opacity:0}, {opacity:0.6,duration:0.4,ease:'power2.out'}, ${time});`);
+        }
+        if (treatment.corners && (rect.x < 12 || rect.y < 12 || rect.x + rect.width > canvas.width - 12 || rect.y + rect.height > canvas.height - 12)) throw new Error('corners require 12px canvas clearance');
+        if (treatment.corners) css += `#${id}{overflow:visible}#${id} .ui-corner-tl{left:-8px;top:-8px}#${id} .ui-corner-tr{right:-8px;top:-8px}#${id} .ui-corner-bl{left:-8px;bottom:-8px}#${id} .ui-corner-br{right:-8px;bottom:-8px}`;
+        if (treatment.corners) ['tl','tr','bl','br'].forEach((corner, i) => {
+          body += `<span id="${id}-corner-${corner}" class="ui-corner ui-corner-${corner}" aria-hidden="true"></span>`;
+          motion.push(`tl.fromTo(${js(`#${id}-corner-${corner}`)}, {opacity:0,x:${corner.endsWith('l') ? 6 : -6},y:${corner.startsWith('t') ? 6 : -6}}, {opacity:1,x:0,y:0,duration:0.28,ease:'power3.out'}, ${time + i * .04});`);
+        });
+        events.push({id: `${id}-treatment-settle`, time: time + .4});
+      }
+    } else if (input.kind === 'excerpt-window') {
+      object(input.excerpt, 'excerpt', ['mode', 'source', 'lines', 'focus']);
+      const excerpt = input.excerpt;
+      if (!['illustration', 'data'].includes(excerpt.mode)) throw new Error('excerpt.mode must be illustration or data');
+      if (excerpt.mode === 'data') text(excerpt.source, 'excerpt.source', 80);
+      else if (excerpt.source !== undefined) throw new Error('illustration cannot claim a real data source');
+      if (!Array.isArray(excerpt.lines) || excerpt.lines.length < 1 || excerpt.lines.length > 5) throw new Error('excerpt.lines must contain 1–5 lines');
+      object(excerpt.focus, 'excerpt.focus', ['line', 'scale', 'at']);
+      number(excerpt.focus.line, 'focus.line', 0, excerpt.lines.length - 1);
+      if (!Number.isInteger(excerpt.focus.line)) throw new Error('focus.line must be an integer');
+      const zoom = number(excerpt.focus.scale, 'focus.scale', 1, 1.3), time = start + at(excerpt.focus.at, 'focus.at');
+      const note = excerpt.mode === 'illustration' ? 'Illustration · text excerpt' : `Source: ${excerpt.source}`;
+      const textFont = Math.max(24, Math.min(32, Math.floor(rect.width / 24))), lineHeight = Math.ceil(textFont * 1.5);
+      const noteHeight = Math.ceil(note.length / Math.floor((rect.width - 48) / (22 * .65))) * 29 + 16;
+      const viewWidth = rect.width - 48, viewHeight = rect.height - 48 - noteHeight - 48;
+      const textHeight = lineHeight * excerpt.lines.length;
+      if (viewHeight < textHeight * zoom) throw new Error('excerpt-window rect too short for focused text');
+      let longest = 0;
+      const lines = excerpt.lines.map((line, i) => {
+        object(line, 'excerpt line', ['segments']);
+        if (!Array.isArray(line.segments) || line.segments.length < 1 || line.segments.length > 12) throw new Error('excerpt segments must contain 1–12 entries');
+        let length = 0;
+        const segments = line.segments.map(segment => {
+          object(segment, 'excerpt segment', ['text', 'highlight']);
+          if (typeof segment.text !== 'string' || segment.text.length < 1 || segment.text.length > 120 || /[\r\n\t]/.test(segment.text)) throw new Error('excerpt segment must be short single-line text');
+          if (segment.highlight !== undefined && typeof segment.highlight !== 'boolean') throw new Error('highlight must be a boolean');
+          length += segment.text.length;
+          return `<span${segment.highlight ? ' class="ui-excerpt-highlight"' : ''}>${escape(segment.text)}</span>`;
+        }).join('');
+        const width = length * textFont * .68;
+        if (width * zoom > viewWidth) throw new Error('excerpt line too long at focused zoom; shorten or widen it');
+        longest = Math.max(longest, width);
+        return `<div class="ui-excerpt-line">${segments}</div>`;
+      }).join('');
+      // Focus travel is compiled from the supplied line and fixed geometry;
+      // all text remains within the viewport at both endpoints and maximum zoom.
+      const x = (viewWidth - longest * zoom) / 2;
+      const y = Math.max(0, Math.min(viewHeight - textHeight * zoom, viewHeight / 2 - (excerpt.focus.line + .5) * lineHeight * zoom));
+      css += `#${id} .ui-excerpt-note{position:absolute;top:48px;left:0;right:0;padding:16px 24px 0;font-size:22px;line-height:1.3;color:#d3d6dd}#${id} .ui-excerpt-viewport{position:absolute;left:24px;right:24px;top:${48 + noteHeight + 24}px;bottom:24px;overflow:hidden}#${id} .ui-excerpt-content{width:${longest}px;height:${textHeight}px;font:${textFont}px/1.5 ui-monospace,monospace;transform-origin:top left}#${id} .ui-excerpt-line{height:${lineHeight}px;white-space:pre}#${id} .ui-excerpt-highlight{background:transparent;border-radius:3px}`;
+      body = `<div class="ui-bar"><span class="ui-dot" style="background:#ff6258"></span><span class="ui-dot" style="background:#ffc04a"></span><span class="ui-dot" style="background:#40c957"></span><span class="ui-bar-label">${escape(input.title)}</span></div><div class="ui-excerpt-note">${escape(note)}</div><div class="ui-excerpt-viewport"><div id="${id}-excerpt" class="ui-excerpt-content">${lines}</div></div>`;
+      motion.push(`tl.set(${js(`#${id}-excerpt`)}, {x:0,y:0,scale:1}, ${start});`, `tl.to(${js(`#${id}-excerpt`)}, {x:${x},y:${y},scale:${zoom},duration:0.5,ease:'power3.inOut'}, ${time});`, `tl.to(${js(`#${id} .ui-excerpt-highlight`)}, {backgroundColor:${js(accent + '55')},duration:0.24,ease:'power2.out'}, ${time + .16});`);
+      events.push({id: `${id}-excerpt-focus`, time: time + .5});
+    } else if (input.kind === 'date-card') {
+      object(input.date, 'date', ['month', 'day', 'year', 'caption', 'at']);
+      const date = input.date;
+      number(date.month, 'date.month', 1, 12); number(date.day, 'date.day', 1, 31);
+      if (!Number.isInteger(date.month) || !Number.isInteger(date.day)) throw new Error('date month/day must be integers');
+      if (date.year !== undefined) {number(date.year, 'date.year', 1, 9999); if (!Number.isInteger(date.year)) throw new Error('date.year must be an integer');}
+      const leap = date.year === undefined || date.year % 4 === 0 && (date.year % 100 !== 0 || date.year % 400 === 0);
+      if (date.day > [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][date.month - 1]) throw new Error('day does not exist in supplied month/year');
+      const caption = date.caption === undefined ? '' : text(date.caption, 'date.caption', 42);
+      const captionLines = caption ? Math.ceil(caption.length / Math.floor((rect.width - 40) / (22 * .65))) : 0;
+      if (rect.height < 48 + 132 + titleLines * (font + 4) * 1.15 + 36 + captionLines * 29) throw new Error('date-card rect too short');
+      const time = start + at(date.at, 'date.at'), month = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'][date.month - 1];
+      css += `#${id} .ui-month{height:48px;background:${accent};color:#101923;display:grid;place-items:center;font:700 22px/1.2 ui-monospace,monospace;letter-spacing:2px}#${id} .ui-day{font:800 112px/1.1 system-ui,sans-serif;text-align:center;height:132px;padding-top:8px}#${id} .ui-title{text-align:center;padding:12px 20px}#${id} .ui-date-note{text-align:center;font:22px/1.3 ui-monospace,monospace;margin:0;padding:0 20px 12px;color:#d3d6dd}`;
+      body = `<div class="ui-month">${month}${date.year === undefined ? '' : ` · ${date.year}`}</div><div id="${id}-day" class="ui-day">${date.day}</div><h2 class="ui-title">${escape(input.title)}</h2>${caption ? `<p class="ui-date-note">${escape(caption)}</p>` : ''}`;
+      motion.push(`tl.fromTo(${js(`#${id}-day`)}, {opacity:0,y:14,scale:0.94}, {opacity:1,y:0,scale:1,duration:0.32,ease:'power3.out'}, ${time});`);
+      events.push({id: `${id}-date-settle`, time: time + .32});
+    } else if (input.kind === 'status-rack') {
+      object(input.rack, 'rack', ['mode', 'source', 'rows']);
+      const rack = input.rack;
+      if (!['illustration', 'data'].includes(rack.mode)) throw new Error('rack.mode must be illustration or data');
+      if (rack.mode === 'data') text(rack.source, 'rack.source', 80);
+      else if (rack.source !== undefined) throw new Error('illustration cannot claim a real data source');
+      if (!Array.isArray(rack.rows) || rack.rows.length < 1 || rack.rows.length > 8) throw new Error('rack.rows must contain 1–8 rows');
+      const note = rack.mode === 'illustration' ? 'Illustration · status states' : `Source: ${rack.source}`;
+      const noteLines = Math.ceil(note.length / Math.floor((rect.width - 48) / (22 * .65)));
+      if (rect.height < header + noteLines * 29 + 20 + rack.rows.length * 52 + 24) throw new Error('status-rack rect too short');
+      css += `#${id} .ui-rack-note{font-size:22px;line-height:1.3;color:#d3d6dd;margin:0;padding:0 24px 20px}#${id} .ui-rack{display:grid;gap:8px;padding:0 24px 24px}#${id} .ui-rack-row{height:44px;border:1px solid #465061;border-radius:8px;background:#101923;display:flex;align-items:center;gap:12px;padding:0 12px;font:22px/1.25 ui-monospace,monospace;opacity:0}#${id} .ui-rack-marker{width:22px;height:5px;background:#7e8795;flex:none;border-radius:2px}#${id} .ui-rack-label{flex:1;min-width:0}#${id} .ui-lights{display:flex;gap:8px}#${id} .ui-light{width:18px;height:18px;background:#536071;border-radius:50%;flex:none}`;
+      body += `<p class="ui-rack-note">${escape(note)}</p><div class="ui-rack">`;
+      rack.rows.forEach((row, i) => {
+        object(row, 'rack row', ['label', 'states']); text(row.label, 'rack.label', 24);
+        if (row.label.length > Math.floor((rect.width - 48 - 24 - 22 - 24 - 70) / (22 * .65))) throw new Error('rack label too long for rect');
+        if (!Array.isArray(row.states) || row.states.length < 1 || row.states.length > 8) throw new Error('row.states must contain 1–8 states');
+        body += `<div id="${id}-rack-${i}" class="ui-rack-row"><span class="ui-rack-marker" aria-hidden="true"></span><span class="ui-rack-label">${escape(row.label)}</span><span class="ui-lights" aria-label="supplied status indicators">${[0,1,2].map(j => `<span id="${id}-light-${i}-${j}" class="ui-light"></span>`).join('')}</span></div>`;
+        let previous = -1, previousLights = [false, false, false];
+        row.states.forEach((state, n) => {
+          object(state, 'rack state', ['at', 'lights']); const offset = at(state.at, 'rack state.at');
+          if (offset <= previous || previous >= 0 && offset - previous < .3 - 1e-9) throw new Error('rack state times must increase by at least 0.3s'); previous = offset;
+          if (!Array.isArray(state.lights) || state.lights.length !== 3 || state.lights.some(light => typeof light !== 'boolean')) throw new Error('rack lights must be exactly three booleans');
+          const time = start + offset; let changed = n === 0;
+          if (n === 0) motion.push(`tl.fromTo(${js(`#${id}-rack-${i}`)}, {opacity:0,x:-10}, {opacity:1,x:0,duration:0.22,ease:'power3.out'}, ${time});`);
+          state.lights.forEach((light, j) => {if (light !== previousLights[j]) {changed = true; motion.push(`tl.to(${js(`#${id}-light-${i}-${j}`)}, {backgroundColor:${js(light ? accent : '#536071')},duration:0.18,ease:'power2.out'}, ${time});`);}});
+          previousLights = [...state.lights];
+          if (changed) events.push({id: `${id}-rack-${i}-state-${n}`, time: time + (n === 0 ? .22 : .18)});
+        });
+      });
+      body += '</div>';
+    } else if (input.kind === 'code-snippet') {
+      object(input.code, 'code', ['language', 'lines']); const code = input.code;
+      const language = code.language === undefined ? 'Example code' : text(code.language, 'code.language', 24);
+      if (!Array.isArray(code.lines) || code.lines.length < 1 || code.lines.length > 3) throw new Error('code.lines must contain 1–3 lines');
+      const codeFont = Math.max(22, Math.min(28, Math.floor(rect.width / 28))), lineHeight = Math.ceil(codeFont * 1.5);
+      if (rect.height < header + 44 + code.lines.length * lineHeight + 24) throw new Error('code-snippet rect too short');
+      const tokenTypes = ['plain', 'keyword', 'string', 'number', 'comment', 'operator'];
+      css += `#${id} .ui-code-language{font:22px/1.3 ui-monospace,monospace;margin:0;padding:0 24px 16px;color:#b8c4d3}#${id} .ui-code{margin:0;padding:0 24px 24px;font:${codeFont}px/1.5 ui-monospace,monospace}#${id} .ui-code-line{display:block;height:${lineHeight}px;white-space:pre;opacity:0}#${id} .ui-token-keyword{color:#ffa9a0}#${id} .ui-token-string{color:#add8ff}#${id} .ui-token-number{color:${accent}}#${id} .ui-token-comment{color:#a5b1c2}#${id} .ui-token-operator{color:#e1bcff}`;
+      body += `<p class="ui-code-language">${escape(language)} · Example</p><pre class="ui-code">`;
+      let previous = -1;
+      code.lines.forEach((line, i) => {
+        object(line, 'code line', ['tokens', 'at']); const offset = at(line.at, 'code line.at');
+        if (offset <= previous || previous >= 0 && offset - previous < .3 - 1e-9) throw new Error('code line times must increase by at least 0.3s'); previous = offset;
+        if (!Array.isArray(line.tokens) || line.tokens.length < 1 || line.tokens.length > 24) throw new Error('code line requires 1–24 tokens');
+        let length = 0;
+        const tokens = line.tokens.map(token => {object(token, 'code token', ['text', 'type']); if (typeof token.text !== 'string' || token.text.length < 1 || token.text.length > 80) throw new Error('token.text must contain 1–80 characters'); if (/[\r\n\t]/.test(token.text)) throw new Error('code token must be one line without tabs'); if (!tokenTypes.includes(token.type)) throw new Error('unsupported token type'); length += token.text.length; return `<span class="ui-token-${token.type}">${escape(token.text)}</span>`;}).join('');
+        if (length > Math.floor((rect.width - 48) / (codeFont * .65))) throw new Error('code line too long for rect; shorten the example or widen the module');
+        body += `<span id="${id}-code-${i}" class="ui-code-line">${tokens}</span>`;
+        motion.push(`tl.fromTo(${js(`#${id}-code-${i}`)}, {opacity:0,x:12}, {opacity:1,x:0,duration:0.24,ease:'power3.out'}, ${start + offset});`);
+        events.push({id: `${id}-code-${i}-settle`, time: start + offset + .24});
+      });
+      body += '</pre>';
     } else if (input.kind === 'audience-grid') {
       object(input.audience, 'audience', ['tiles', 'columns']);
       const {tiles} = input.audience;
@@ -307,7 +488,7 @@ export function buildEditorialModule(input) {
       body += '</div>';
     }
   }
-  if (movement && events.some(event => event.time > start + duration - exitDuration + 1e-9)) throw new Error('content must settle before motion exit begins');
+  if ((movement || input.treatment || ['date-card', 'status-rack', 'code-snippet', 'excerpt-window'].includes(input.kind)) && events.some(event => event.time > start + duration - exitDuration + 1e-9)) throw new Error('content must settle before motion exit begins');
   const background = input.kind === 'media-window' ? 'background:transparent;' : '';
   return {html: `${media}<section id="${id}" ${input.kind === 'media-window' ? chromeTimed : timed} style="${background}">${body}</section>`, css, motion: motion.join('\n'), events, layout: {canvas, rect: {...rect}, ...(movement ? {motion: {enterEnd: start + enterDuration, exitStart: start + duration - exitDuration, end: start + duration}} : {})}};
 }

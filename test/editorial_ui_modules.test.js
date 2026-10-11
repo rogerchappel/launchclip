@@ -233,3 +233,82 @@ test('motion rejects unsafe travel, unsupported effects and unreadable timing', 
   assert.throws(() => buildEditorialModule({...base, motion: {enterDuration: .6}, rows: [{label: 'Too early', status: 'active', at: .4}]}), /row.at/);
   assert.throws(() => buildEditorialModule({...expressive, duration: 4, kind: 'metric', motion: {exitDuration: .5}, metric: {mode: 'illustration', unit: 'views', format: 'number', values: [{value: 12, at: .6}, {value: 36, at: 3}]}}), /at/);
 });
+
+test('developer callouts use allowlisted symbols escaped segments and independent finite accents', () => {
+  const input = {...expressive, kind:'callout', treatment:{icon:'branch',monospace:true,glow:true,corners:true,at:.6,segments:[{text:'Review '},{text:'before shipping',highlight:true}]}};
+  const result = buildEditorialModule(input);
+  assert.deepEqual(result,buildEditorialModule(input));
+  assert.match(result.html,/ui-emphasis">before shipping/);
+  assert.match(result.css,/ui-monospace/);
+  assert.match(result.css,/left:-8px/);
+  assert.equal((result.html.match(/aria-hidden="true"/g)??[]).length,6);
+  const calls=commands(result);
+  assert.ok(calls.some(call=>call[1]==='#reach-symbol'&&call[2].scale===.86));
+  assert.ok(calls.some(call=>call[1]==='#reach-corner-br'&&call.at(-1)===70.72));
+  assert.equal(result.events.at(-1).time,71);
+  assert.doesNotMatch(result.motion,/boxShadow|filter|repeat|onUpdate/);
+  for(const icon of ['terminal','branch','users','rocket']) assert.match(buildEditorialModule({...input,treatment:{...input.treatment,icon}}).html,/<svg/);
+  for(const treatment of [{icon:'github'},{icon:'<svg>'},{glow:'true'},{segments:[{text:'ok',highlight:'yes'}]}]) assert.throws(()=>buildEditorialModule({...input,treatment}));
+  assert.throws(()=>buildEditorialModule({...input,body:'Conflicting copy'}),/replace body/);
+  assert.throws(()=>buildEditorialModule({...input,rect:{...input.rect,x:0}}),/clearance/);
+  const safe=buildEditorialModule({...input,treatment:{segments:[{text:'<script>bad()</script>',highlight:true}]}});
+  assert.doesNotMatch(safe.html,/<script>/);assert.doesNotMatch(safe.motion,/bad\(/);
+});
+
+test('date cards validate calendar values and animate the supplied date without render clocks', () => {
+  const input={...expressive,kind:'date-card',date:{month:2,day:29,year:2028,caption:'A planned milestone',at:1}};
+  const result=buildEditorialModule(input);
+  assert.match(result.html,/FEBRUARY · 2028/);assert.match(result.html,/>29<\/div>/);
+  assert.equal(result.events.at(-1).time,71.32);commands(result);
+  assert.doesNotMatch(result.motion,/Date|setTimeout/);
+  for(const date of [{...input.date,year:2027},{...input.date,month:4,day:31},{...input.date,month:2.5},{...input.date,day:0}]) assert.throws(()=>buildEditorialModule({...input,date}));
+  assert.throws(()=>buildEditorialModule({...input,rect:{...input.rect,height:160}}),/too short/);
+});
+
+test('status racks change lights in both directions and emit only actual state changes', () => {
+  const rack={mode:'illustration',rows:[{label:'Build',states:[{at:1,lights:[true,false,false]},{at:2,lights:[true,true,false]},{at:3,lights:[false,true,false]},{at:4,lights:[false,true,false]}]}]};
+  const result=buildEditorialModule({...expressive,kind:'status-rack',rack});
+  assert.match(result.html,/Illustration · status states/);
+  assert.equal(result.events.length,4);
+  assert.ok(commands(result).some(call=>call[1]==='#reach-light-0-0'&&call[2].backgroundColor==='#536071'&&call.at(-1)===73));
+  assert.throws(()=>buildEditorialModule({...expressive,kind:'status-rack',rack:{...rack,mode:'data'}}),/source/);
+  assert.throws(()=>buildEditorialModule({...expressive,kind:'status-rack',rack:{...rack,rows:[{label:'Bad',states:[{at:1,lights:[1,false,true]}]}]}}),/booleans/);
+  assert.throws(()=>buildEditorialModule({...expressive,kind:'status-rack',rack:{...rack,rows:Array(9).fill(rack.rows[0])}}),/1–8/);
+});
+
+test('code snippets use bounded typed tokens preserving spacing and rejecting executable markup', () => {
+  const code={language:'TypeScript',lines:[{at:.6,tokens:[{text:'const ',type:'keyword'},{text:'x = ',type:'plain'},{text:'7',type:'number'}]},{at:1,tokens:[{text:' ',type:'plain'},{text:'"hello"',type:'string'}]}]};
+  const result=buildEditorialModule({...expressive,kind:'code-snippet',code});
+  assert.match(result.html,/ui-token-number">7/);assert.match(result.html,/TypeScript · Example/);
+  assert.equal(result.events.at(-1).time,71.24);commands(result);
+  const safe=buildEditorialModule({...expressive,kind:'code-snippet',code:{lines:[{at:1,tokens:[{text:'<script>bad()</script>',type:'plain'}]}]}});
+  assert.doesNotMatch(safe.html,/<script>/);assert.match(safe.html,/&lt;script&gt;/);
+  for(const tokens of [[{text:'bad',type:'html'}],[{text:'a\nb',type:'plain'}],[{text:'x'.repeat(80),type:'plain'}]]) assert.throws(()=>buildEditorialModule({...expressive,kind:'code-snippet',code:{lines:[{at:1,tokens}]}}));
+  assert.throws(()=>buildEditorialModule({...expressive,kind:'code-snippet',code:{lines:Array(4).fill(code.lines[0])}}),/1–3/);
+});
+
+test('excerpt windows keep fixed chrome and safely focus bounded highlighted text', () => {
+  const excerpt={mode:'illustration',lines:[{segments:[{text:'Build a useful thing.'}]},{segments:[{text:'Then '},{text:'make it clear.',highlight:true}]}],focus:{line:1,scale:1.2,at:2}};
+  const result=buildEditorialModule({...expressive,kind:'excerpt-window',excerpt});
+  assert.match(result.html,/Illustration · text excerpt/);assert.match(result.html,/ui-excerpt-highlight">make it clear/);
+  const focus=commands(result).find(call=>call[0]==='to'&&call[1]==='#reach-excerpt');
+  assert.equal(focus[2].scale,1.2);assert.equal(focus.at(-1),72);assert.equal(result.events.at(-1).time,72.5);
+  assert.ok(focus[2].x>=0&&focus[2].y>=0);
+  assert.doesNotMatch(result.motion,/\.ui-bar|fetch|onUpdate|Date\./);
+  for(const bad of [{mode:'data'},{focus:{...excerpt.focus,scale:1.4}},{focus:{...excerpt.focus,line:2}},{lines:[{segments:[{text:'x'.repeat(120)}]}]}]) assert.throws(()=>buildEditorialModule({...expressive,kind:'excerpt-window',excerpt:{...excerpt,...bad}}));
+  const escaped=buildEditorialModule({...expressive,kind:'excerpt-window',excerpt:{...excerpt,lines:[{segments:[{text:'<script>bad()</script>'}]}],focus:{...excerpt.focus,line:0}}});
+  assert.doesNotMatch(escaped.html,/<script>/);assert.doesNotMatch(escaped.motion,/bad\(/);
+});
+
+test('callout headings and timed underline emphasis have separate seekable acquisition', () => {
+  const input={...expressive,kind:'callout',treatment:{icon:'warning',at:.6,segments:[{text:'Check '},{text:'before release',highlight:true,underlineAt:2}]}};
+  const result=buildEditorialModule(input),calls=commands(result);
+  assert.match(result.html,/ui-underlined/);
+  assert.ok(calls.some(call=>call[1]==='#reach-heading'&&call[0]==='fromTo'&&call[2].y===6));
+  assert.ok(calls.some(call=>call[1]==='#reach-underline-1'&&call[0]==='set'&&call[2].scaleX===0&&call.at(-1)===70));
+  assert.ok(calls.some(call=>call[1]==='#reach-underline-1'&&call[0]==='to'&&call[2].scaleX===1&&call.at(-1)===72));
+  assert.equal(result.events.find(event=>event.id==='reach-underline-1-settle').time,72.28);
+  for(const icon of ['check','warning']) assert.match(buildEditorialModule({...input,treatment:{...input.treatment,icon}}).html,/<svg/);
+  assert.throws(()=>buildEditorialModule({...input,treatment:{...input.treatment,segments:[{text:'early',underlineAt:.7}]}}),/follow treatment/);
+  assert.throws(()=>buildEditorialModule({...input,rect:{x:80,y:80,width:420,height:500},treatment:{segments:[{text:'very long unbroken emphasized phrase needing two full lines',underlineAt:2}]}}),/fit one line/);
+});

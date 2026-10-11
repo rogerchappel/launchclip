@@ -299,3 +299,132 @@ overlap, and exact end, then seek last → first → midpoint → last. Check th
 and chrome stay attached, only travel intervals overlap, content is sharp in its
 hold, and every departed module clears completely. Review a landscape and a
 portrait layout at the intended delivery size before expanding the edit.
+
+## Developer-style details and compact widgets
+
+Use the optional details selectively. A meaningful symbol, one highlighted phrase,
+and a quiet edge can establish a developer-oriented visual language without
+animating everything. Use supplied branding separately; the built-in symbols are
+locally authored terminal, branch, users, and rocket glyphs, not product logos.
+Colors follow the existing `accent` input. No external icon HTML, arbitrary SVG,
+network font, or dependency is accepted.
+
+A callout may include `treatment`:
+
+```json
+{
+  "icon": "terminal",
+  "monospace": true,
+  "glow": true,
+  "corners": true,
+  "at": 0.5,
+  "segments": [
+    {"text": "Keep "},
+    {"text": "the useful idea", "highlight": true},
+    {"text": " in focus."}
+  ]
+}
+```
+
+`segments` replaces `body`; do not supply both. Supply spaces explicitly between
+segments. The joined copy is limited to 160 characters, with at most 12 segments.
+`icon`, `monospace`, `glow`, `corners`, and `segments` are optional. With no segments,
+use the ordinary `body`. `at` defaults to the module's arrival end and is relative
+to `start`. Icon, copy, accent outline, and four corner brackets acquire separately
+and settle within 0.4 seconds. The glow is a static soft shadow plus a finite
+opacity reveal, never an animated CSS filter or shadow. External corners require
+12 pixels of canvas clearance; the helper checks copy fit and rejects undersized
+cards. Omit `treatment` to retain the original callout output exactly.
+
+| Kind | Required content |
+| --- | --- |
+| `date-card` | `date: {month: 1..12, day: 1..31, year?, caption?, at}`; calendar-valid integers, optional caption ≤42 characters |
+| `status-rack` | `rack: {mode: "illustration" or "data", source?, rows: [{label, states: [{at, lights: [boolean, boolean, boolean]}]}]}`; 1–8 rows, 1–8 states per row |
+| `code-snippet` | `code: {language?, lines: [{at, tokens: [{text, type}]}]}`; 1–3 lines, 1–24 tokens per line |
+
+The date card uses a colored month band, a large independently settling day, and
+short context. A supplied year validates leap days; without a year February 29
+is allowed. The helper never reads the current date. Choose meaningful actual
+milestones or visibly hypothetical dates rather than implying an unverified
+announcement.
+
+Status racks use compact monospaced rows and three 18-pixel indicators. Rows
+acquire on their first state; subsequent lights can turn on or off. State offsets
+must strictly increase by at least 0.3 seconds within each row. Repeating unchanged
+lights emits no extra sound event. Illustration mode retains a visible label;
+real data requires a source attribution. A light turning on represents the
+supplied state, not a software/security certification. Shorten labels to fit the
+chosen width; the helper rejects overfull racks.
+
+Code token types are `plain`, `keyword`, `string`, `number`, `comment`, and
+`operator`. Explicit typed tokens receive restrained syntax colors, and each
+line acquires independently. Preserve spaces in token strings; tabs/newlines are
+rejected. Line offsets must increase by at least 0.3 seconds. Lines must fit their
+width without scrolling or clipping, so show a short excerpt instead of an entire
+program. Token styling does not parse or execute code. The language label is
+optional; the module retains an `Example` marker rather than implying product
+proof. All copy is escaped.
+
+These widgets accept the existing aspect, rect, track, accent, and directional
+motion options. Supply explicit rectangles appropriate to the footage and inspect
+both aspect ratios at delivery size. Local monospace fallbacks are used; a project
+may separately freeze and declare an authorized font. Content settles before the
+exit begins, and emitted events identify the actual state/accent settle. Check
+forward and reverse seeks, and judge the integrated scene's normal-speed playback
+before expanding it.
+
+## Focused browser excerpts and text variants
+
+Use `excerpt-window` for a short, supplied or visibly illustrative document excerpt,
+not a reconstructed live browser or a claim that a real website was captured:
+
+```json
+"excerpt": {
+  "mode": "illustration",
+  "lines": [
+    {"segments": [{"text": "Build a useful thing."}]},
+    {"segments": [{"text": "Make the "}, {"text": "next step", "highlight": true}, {"text": " clear."}]}
+  ],
+  "focus": {"line": 1, "scale": 1.2, "at": 1.2}
+}
+```
+
+Browser chrome and the visible illustration/source note remain fixed while the
+inner text scales and pans to the chosen line, then the highlights acquire.
+`focus.line` is zero-based, `scale` is 1–1.3, and `at` is relative to module start.
+Use 1–5 short lines with 1–12 segments per line. Text must fit at focused scale;
+the helper validates the maximum zoom and computes a bounded pan from the fixed
+geometry. It never measures layout at render time, fetches a URL, accepts HTML,
+or clips required text to simulate a focus. `mode: "data"` requires `source`;
+illustration mode cannot claim an actual source. Preserve spaces explicitly.
+
+Two extra callout symbols, `check` and `warning`, support confirmation and caution
+without branded imagery. The title acquires independently of the subtitle/body.
+A segment can add `underlineAt`, a relative cue after the treatment has settled:
+
+```json
+"segments": [
+  {"text": "Review "},
+  {"text": "before release", "highlight": true, "underlineAt": 2.4}
+]
+```
+
+The underline grows separately beneath sharp, stationary text and emits its own
+settle event. Underlined phrases must fit on one line; long or early underlines
+are rejected. Use title, body/segments, rectangle, and existing treatment options
+to compose variants instead of adding many presets: a compact icon/title/subtitle
+card; a restrained monospace statement with one late underline; or a rounded
+badge-like callout with a short title and a highlighted action. Select variants
+from meaning and available footage space, not a repeated rotation schedule.
+
+Whole-stage polish belongs to the host composition. A restrained brand palette
+may use a warm background, cream type, and darker surfaces while retaining one
+primary accent. Low-contrast, large topic symbols can persist behind the stage
+and move between meaningful states with finite translation, rotation, and opacity;
+keep them away from the face, captions, and held copy. A bottom section-progress
+line can use the existing `progress` module with values derived from the actual
+section's elapsed time. Label it as section progress, not fictional product
+completion. Neither background glyphs nor progress should force constant motion.
+Use real chapter/section timing; do not invent recording indicators, chapter
+counts, brand claims, or facts from a style reference. Inspect the complete frame
+and its transitions, not just isolated widget screenshots.
