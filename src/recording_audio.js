@@ -143,6 +143,25 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
     return [{ ...word, start, end }];
   });
   if (!sourceWords.length) throw new Error("Audio alignment found no voiced transcript words");
+  const rejectedReasons = new Set(["semantic-retake", "repeated-take", "filler", "false-start"]);
+  const rejectedCuts = plan.removed_segments.filter((segment) => rejectedReasons.has(segment.reason));
+  const spliceRanges = [];
+  for (const keep of keeps) {
+    const spoken = sourceWords.filter((word) => word.start >= keep.start - 1e-6 && word.end <= keep.end + 1e-6);
+    if (!spoken.length) continue; // Wordless ranges are removed separately below.
+    // ASR bounds on a rejected word can underestimate its audible tail. A
+    // facing handle may therefore contain rejected speech even when not quiet.
+    const touchesEarlierCut = rejectedCuts.some((cut) => Math.abs(cut.source_end_seconds - keep.start) <= 1e-6);
+    const touchesLaterCut = rejectedCuts.some((cut) => Math.abs(cut.source_start_seconds - keep.end) <= 1e-6);
+    if (touchesEarlierCut && spoken[0].start > keep.start) {
+      spliceRanges.push({ start: keep.start, end: spoken[0].start });
+      keep.start = spoken[0].start;
+    }
+    if (touchesLaterCut && spoken.at(-1).end < keep.end) {
+      spliceRanges.push({ start: spoken.at(-1).end, end: keep.end });
+      keep.end = spoken.at(-1).end;
+    }
+  }
   const protectedRanges = union(sourceWords.map((word) => ({ start: Math.max(0, word.start - padding), end: Math.min(duration, word.end + padding) })));
   const quiet = measuredQuiet.map((range) => {
     return { start: range.start + padding, end: range.end - padding };
@@ -185,8 +204,8 @@ export function refineRecordingEditPlan(plan, analysis, { silencePadding = 0.08,
   const removed_segments = [...plan.removed_segments.map((segment) => {
     checkedRange(segment.source_start_seconds, segment.source_end_seconds, duration);
     return { ...segment };
-  }), ...removals.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "waveform-silence" })), ...wordlessRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "wordless-range" })), ...boundaryRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "speech-boundary" }))].sort((a, b) => a.source_start_seconds - b.source_start_seconds);
-  return { ...plan, duration_seconds: clock, kept_segments, removed_segments, words, text: words.map((word) => word.word ?? word.text).join(" "), audio_analysis: { schema_version: RECORDING_AUDIO_VERSION, threshold_db: analysis.threshold_db, threshold_receipt: analysis.threshold_receipt, silence_padding_seconds: padding, trim_edges: trimEdges, speech_boundary_removed_seconds: boundaryRanges.reduce((sum, range) => sum + range.end - range.start, 0), wordless_removed_seconds: wordlessRanges.reduce((sum, range) => sum + range.end - range.start, 0), removed_seconds: plan.duration_seconds - clock, aligned_words: alignedWords, dropped_words: droppedWords } };
+  }), ...removals.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "waveform-silence" })), ...wordlessRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "wordless-range" })), ...boundaryRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "speech-boundary" })), ...spliceRanges.map((range) => ({ source_start_seconds: range.start, source_end_seconds: range.end, reason: "rejected-splice-handle" }))].sort((a, b) => a.source_start_seconds - b.source_start_seconds);
+  return { ...plan, duration_seconds: clock, kept_segments, removed_segments, words, text: words.map((word) => word.word ?? word.text).join(" "), audio_analysis: { schema_version: RECORDING_AUDIO_VERSION, threshold_db: analysis.threshold_db, threshold_receipt: analysis.threshold_receipt, silence_padding_seconds: padding, trim_edges: trimEdges, speech_boundary_removed_seconds: boundaryRanges.reduce((sum, range) => sum + range.end - range.start, 0), rejected_splice_removed_seconds: spliceRanges.reduce((sum, range) => sum + range.end - range.start, 0), wordless_removed_seconds: wordlessRanges.reduce((sum, range) => sum + range.end - range.start, 0), removed_seconds: plan.duration_seconds - clock, aligned_words: alignedWords, dropped_words: droppedWords } };
 }
 
 function percentile(values, fraction) { return values[Math.min(values.length - 1, Math.floor(values.length * fraction))]; }
