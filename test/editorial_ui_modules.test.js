@@ -4,6 +4,7 @@ import {spawnSync} from 'node:child_process';
 import {mkdtemp, writeFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {createHash} from 'node:crypto';
 import {runInNewContext} from 'node:vm';
 import {buildEditorialModule} from '../skills/launchclip-create-video/scripts/editorial-ui-modules.mjs';
 
@@ -311,4 +312,38 @@ test('callout headings and timed underline emphasis have separate seekable acqui
   for(const icon of ['check','warning']) assert.match(buildEditorialModule({...input,treatment:{...input.treatment,icon}}).html,/<svg/);
   assert.throws(()=>buildEditorialModule({...input,treatment:{...input.treatment,segments:[{text:'early',underlineAt:.7}]}}),/follow treatment/);
   assert.throws(()=>buildEditorialModule({...input,rect:{x:80,y:80,width:420,height:500},treatment:{segments:[{text:'very long unbroken emphasized phrase needing two full lines',underlineAt:2}]}}),/fit one line/);
+});
+
+const paletteBase={id:'palette',aspect:'16:9',start:0,duration:8,title:'A useful idea',rect:{x:80,y:80,width:850,height:750}};
+const paletteSpecs=[{kind:'callout',body:'Keep the next step clear.'},{kind:'media-window',media:{kind:'image',src:'assets/demo.png'}},{kind:'checklist',rows:[{label:'One',status:'active',at:.6,doneAt:2}]},{kind:'step-rail',steps:[{label:'One',at:.6},{label:'Two',at:4}]},{kind:'audience-grid',audience:{tiles:[{label:'One',at:.6},{label:'Two',at:3}]}},{kind:'trend-chart',chart:{mode:'illustration',unit:'views',points:[{label:'One',value:0,at:.6},{label:'Two',value:20,at:3}]}},{kind:'metric',metric:{mode:'illustration',unit:'views',format:'number',values:[{value:0,at:.6},{value:20,at:6}]}},{kind:'progress',progress:{mode:'illustration',values:[{value:0,at:.6},{value:20,at:6}]}},{kind:'date-card',date:{month:2,day:2,at:.6}},{kind:'status-rack',rack:{mode:'illustration',rows:[{label:'Build',states:[{at:.6,lights:[true,false,false]},{at:3,lights:[false,true,false]}]}]}},{kind:'code-snippet',code:{lines:[{at:.6,tokens:[{text:'const ',type:'keyword'},{text:'value = 7;',type:'plain'}]}]}},{kind:'excerpt-window',excerpt:{mode:'illustration',lines:[{segments:[{text:'A useful idea.'}]}],focus:{line:0,scale:1.2,at:2}}}];
+
+const originalPaletteHashes={"callout":"65377e8879aaf9bfda689e707755e1d6025a3e1f3b346830b52daedcb3fe5e42","media-window":"ac4814e27676ea2fe468eca9474b5fbb0f0820338946b14d70a5218715e33e01","checklist":"37492c1d22854cc390cb494dd09f1bd83e7ab095018bc3ac1ce88323ce4a6023","step-rail":"0b4a8879c27044e871e4b969397b96a344e92b219751ea785d5f3791af55ccd0","audience-grid":"a1e2c85b1d431838dbf141459ba1c47747ee5453194ede1a8fc582808a4c2196","trend-chart":"0a0169797db1180dddfb30966dbcc596fd9f97c552c664377abf808d83a6ea7d","metric":"374cf3d6bdb2594b52919ea753e1ef5092ac8a197e8f2616c6cb2b87840f3d9a","progress":"9962b59abfb4533d63ea4bbfdb02fea6d404697772abd309e51cbe63f9e886fe","date-card":"8bac996206bdf5fc7e826a2c43357bdbfab78fcf2102bed16af42e9e3700d733","status-rack":"9b85e5a0f9ffec4d0eb9044def5751867178485b453f2368eba68cedcdf0ccb0","code-snippet":"a6a0f8e4760c7f106be96d2d1b5d8d33dbfa78ad83b1a2a67e92cccec30fd4de","excerpt-window":"dcf8327b57714e4a130f229e9db442f5dc3252c8d4677a6584eb97ad1b3237b7"};
+
+const warmPalette={surface:'#FFF1CE',foreground:'#171612',muted:'#5D5548',border:'#9B8769',accentText:'#A43C0A'};
+
+test('optional palettes preserve every original module output and theme only presentation', () => {
+  for (const spec of paletteSpecs) {
+    const original=buildEditorialModule({...paletteBase,...spec});
+    assert.equal(createHash('sha256').update(JSON.stringify(original)).digest('hex'),originalPaletteHashes[spec.kind],spec.kind);
+    const themed=buildEditorialModule({...paletteBase,...spec,theme:warmPalette});
+    assert.equal(themed.html,original.html);
+    assert.deepEqual(themed.events,original.events);
+    assert.deepEqual(themed.layout,original.layout);
+    assert.match(themed.css,/#palette\{background:#FFF1CE;color:#171612;border-color:#9B8769\}/);
+  }
+  const list=buildEditorialModule({...paletteBase,...paletteSpecs.find(spec=>spec.kind==='checklist'),theme:warmPalette});
+  assert.ok(commands(list).some(call=>call[1]==='#palette-row-0'&&call[2].backgroundColor==='#FFF1CE'&&call.at(-1)===2));
+  const rack=buildEditorialModule({...paletteBase,...paletteSpecs.find(spec=>spec.kind==='status-rack'),theme:warmPalette});
+  assert.ok(commands(rack).some(call=>call[1]==='#palette-light-0-0'&&call[2].backgroundColor==='#9B8769'&&call.at(-1)===3));
+  const glass=buildEditorialModule({...paletteBase,kind:'callout',body:'Clear copy.',theme:warmPalette,presentation:'glass'});
+  assert.match(glass.css,/#FFF1CEDB/);assert.match(glass.css,/#FFF1CEBD/);
+});
+
+test('palette input rejects unsafe or incomplete colors and defaults optional accent text to ink', () => {
+  const input={...paletteBase,kind:'callout',body:'Clear copy.'};
+  for (const theme of [null,[],{}, {...warmPalette,surface:'red'}, {...warmPalette,foreground:'#123'}, {...warmPalette,border:'var(--color)'}, {...warmPalette,muted:123456}, {...warmPalette,accentText:'#fff;bad()'}, {...warmPalette,font:'external'}]) assert.throws(()=>buildEditorialModule({...input,theme}),/theme/);
+  const {accentText,...theme}=warmPalette;
+  const result=buildEditorialModule({...input,theme});
+  assert.match(result.css,/ui-emphasis[^}]*color:#171612/);
+  assert.doesNotMatch(result.motion,/bad\(|fetch|onUpdate/);
 });
