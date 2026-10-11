@@ -27,6 +27,14 @@ test("complete unique speech deletion and ambiguous boundary requests fail close
   assert.equal(result.changed, false);
   assert.equal(result.rejected.length, 3);
 });
+test("QA restoration cannot bring rejected splice-handle sound back", () => {
+  const candidate = plan();
+  candidate.removed_segments.push({ source_start_seconds: 1, source_end_seconds: 1.1, reason: "rejected-splice-handle" });
+  const result = repairRecordingPlan(candidate, [expand(0, "start")], { sourceTranscript: source, trimEdges: false });
+  assert.equal(result.changed, false);
+  assert.equal(result.applied.length, 0);
+  assert.match(result.rejected[0].reason, /rejected/);
+});
 test("drop wordless splices and trim first/last to accepted speech without restoring the raw head", () => {
   const original = plan();
   original.kept_segments.unshift({ source_start_seconds: 0, source_end_seconds: 0.1, start_seconds: 0, end_seconds: 0.1 });
