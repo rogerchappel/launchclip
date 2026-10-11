@@ -372,3 +372,59 @@ may separately freeze and declare an authorized font. Content settles before the
 exit begins, and emitted events identify the actual state/accent settle. Check
 forward and reverse seeks, and judge the integrated scene's normal-speed playback
 before expanding it.
+
+## Focused browser excerpts and text variants
+
+Use `excerpt-window` for a short, supplied or visibly illustrative document excerpt,
+not a reconstructed live browser or a claim that a real website was captured:
+
+```json
+"excerpt": {
+  "mode": "illustration",
+  "lines": [
+    {"segments": [{"text": "Build a useful thing."}]},
+    {"segments": [{"text": "Make the "}, {"text": "next step", "highlight": true}, {"text": " clear."}]}
+  ],
+  "focus": {"line": 1, "scale": 1.2, "at": 1.2}
+}
+```
+
+Browser chrome and the visible illustration/source note remain fixed while the
+inner text scales and pans to the chosen line, then the highlights acquire.
+`focus.line` is zero-based, `scale` is 1–1.3, and `at` is relative to module start.
+Use 1–5 short lines with 1–12 segments per line. Text must fit at focused scale;
+the helper validates the maximum zoom and computes a bounded pan from the fixed
+geometry. It never measures layout at render time, fetches a URL, accepts HTML,
+or clips required text to simulate a focus. `mode: "data"` requires `source`;
+illustration mode cannot claim an actual source. Preserve spaces explicitly.
+
+Two extra callout symbols, `check` and `warning`, support confirmation and caution
+without branded imagery. The title acquires independently of the subtitle/body.
+A segment can add `underlineAt`, a relative cue after the treatment has settled:
+
+```json
+"segments": [
+  {"text": "Review "},
+  {"text": "before release", "highlight": true, "underlineAt": 2.4}
+]
+```
+
+The underline grows separately beneath sharp, stationary text and emits its own
+settle event. Underlined phrases must fit on one line; long or early underlines
+are rejected. Use title, body/segments, rectangle, and existing treatment options
+to compose variants instead of adding many presets: a compact icon/title/subtitle
+card; a restrained monospace statement with one late underline; or a rounded
+badge-like callout with a short title and a highlighted action. Select variants
+from meaning and available footage space, not a repeated rotation schedule.
+
+Whole-stage polish belongs to the host composition. A restrained brand palette
+may use a warm background, cream type, and darker surfaces while retaining one
+primary accent. Low-contrast, large topic symbols can persist behind the stage
+and move between meaningful states with finite translation, rotation, and opacity;
+keep them away from the face, captions, and held copy. A bottom section-progress
+line can use the existing `progress` module with values derived from the actual
+section's elapsed time. Label it as section progress, not fictional product
+completion. Neither background glyphs nor progress should force constant motion.
+Use real chapter/section timing; do not invent recording indicators, chapter
+counts, brand claims, or facts from a style reference. Inspect the complete frame
+and its transitions, not just isolated widget screenshots.
