@@ -1,7 +1,16 @@
 # Recorded presenter video
 
-Use this route for an existing recording with automatic base editing, B-roll
-planning or basic editorial graphics. Preserve the story and the original file.
+Use this route for existing presenter, community, product/app-demo, interview or
+topic recordings in landscape or portrait. Preserve the recorded story and the
+original file. Choose scope from the user's request:
+
+- **Base edit only:** run automatic cleanup and recording QA; deliver promptly.
+  Do not require a creative treatment, music or prototype for cleanup alone.
+- **Full directed treatment:** after accepted cleanup, follow the direction,
+  prototype, sound and delivery stages below. Optional assets enrich the result;
+  their absence must not reduce the edit to text cards.
+- **Restrained overlays:** when explicitly requested, use the glass treatment
+  below or the supplied style. Do not mistake it for the default quality ceiling.
 Read `standalone-hyperframes.md` before authoring the composition; no additional
 HyperFrames plugin skills are required.
 
@@ -168,6 +177,130 @@ mute B-roll unless its audio is deliberately needed. The CLI production lane
 accepts captures as `--resource` / `--assets` and can assemble per-shot source
 windows through `root_media_requests`.
 
+## Full recorded treatment: direct before decorating
+
+Base-edit QA is the prerequisite, not the finished production. Use its accepted
+edited transcript and source-to-output map as the timing authority. Preserve
+unique speech and its order. Do not rewrite a recorded story, fabricate a
+five-concept tournament, or force short-form cadence onto a longer explanation.
+
+### Inspect the material and define the treatment
+
+Read the entire accepted transcript before choosing moments. Write `BRIEF.md`
+and `DESIGN.md`: audience, destination/aspect, promise, emotional arc, brand,
+visual language, motion character and audio choices. A community launch, app
+demonstration and topic explanation need different visual arguments, even when
+they share a style pack. References can inform timing, hierarchy, contrast and
+sound texture; do not clone their footage, composition, branding or soundtrack.
+
+Inventory the resources supplied by the user, named project/style assets, and
+available local audio. Actually view images, sample video and audition relevant
+sounds. Record each candidate's local path, dimensions/duration, content,
+permission/provenance, useful source window and decision in `RESOURCES.md`.
+State why unused resources do not help (unreadable, redundant, unrelated, wrong
+aspect or unsupported claim). A filename is a discovery hint, not evidence.
+Keep originals unchanged; freeze selected copies in the composition project.
+
+Do not wait for optional captures. For each important beat, design a useful
+conceptual treatment that works without them: spatial comparison, process,
+transformation, branching route, cause/effect, timeline or object handoff.
+Replace it with a real useful capture when one exists. Label conceptual UI or
+process diagrams as illustrations; never invent product screens, progress,
+member activity, results, testimonials or numbers as proof. Avoid a generic
+three-card layout or floating keywords when an idea can be shown in motion.
+
+### Build a whole-transcript direction map
+
+Save `EDIT-DIRECTION.json` using the bundled readiness helper's contract (linked
+in the verification section), plus a human-readable `STORYBOARD.md`. Cover the
+whole accepted timeline, including deliberate quiet presenter beats. For each
+sequence record the spoken anchor/time range, purpose (explain, demonstrate,
+contrast, anticipate, emphasize or rest), visual action and development, chosen
+resource or asset-free fallback, layout, continuity, motion and audio events.
+
+Choose the number and length of sequences from context, not a template quota.
+Preserve the presenter for personal/emotional statements; use overlays when an
+idea benefits from accompaniment and full-screen graphics when the explanation
+needs the space. Real captures should show evidence, not fill time. Group related
+beats into a developing sequence with persistent objects and anchors rather
+than resetting the same title plate at each sentence. Simple typography remains
+useful as an accent or intentional pause, not the entire visual argument.
+
+For each aspect ratio define a separate readable layout. In 16:9 protect the
+face, gestures and useful negative space; in 9:16 inspect the actual crop and
+reserve caption/platform UI areas. Do not shrink a landscape scene into
+portrait or place a panel over the presenter to preserve a planned layout.
+Inspect layouts at delivery size, including the actual target crop.
+
+### Choreograph visual and audio events together
+
+Declare the action's intent, start, acceleration, travel, deceleration, settle
+and exit. Assign a curve appropriate to the distance and meaning: a fast entry
+can decelerate into a confident lock, while a travelling object may accelerate
+and decelerate through a shared path. Connect departing and arriving objects
+with continuous geometry/velocity; avoid pops at clip boundaries. Use overshoot
+only when the action calls for it. Smooth easing is not a substitute for an
+idea that develops. Keep readable states long enough and every settled object
+crisp; blur belongs to measured fast travel, not permanent decoration.
+
+Resolve music and SFX separately under the main skill's cost boundary. Search
+supplied/project/style resources and an existing LaunchClip `public/sfx` library
+before asking for or generating audio; library availability is not guaranteed.
+Audition candidate cues and choose by sound, not merely filename. If useful
+local cues are absent, use permitted local synthesis or user-supplied sounds;
+report a missing sound rather than silently calling a paid provider.
+
+Music choices are explicit: none, supplied track, or approved provider. A full
+production may deliberately be music-free. When music is wanted, design an arc
+with density changes, pauses, transitions and an ending suited to the story.
+Request an instrumental bed that leaves room for speech if generation is
+approved; no genre is universal and no provider credits are implied.
+
+Record exact local paths and source windows in `AUDIO-MANIFEST.json`. Bind each
+SFX to an identified visible event and timestamp: contact, latch, typing,
+assembly, transformation or departure. Shape travel sounds around movement and
+place impacts at contact/settle, rather than sprinkling whooshes at every cut.
+Use a coherent small vocabulary with room for silence. If music has a stable
+pulse, derive a local `BEATS.json`; align optional accents where speech permits,
+but never warp narration or clip a word to hit a beat. Audition voice, bed and
+SFX together, duck around dense speech, avoid masking consonants and check
+clipping. Do not approve a mix from waveform or volume percentages alone.
+
+### Prove one integrated sequence before full authoring
+
+Render a representative 20–30 second prototype, or a shorter meaningful
+sequence when the whole video is short. Include the riskiest visual grammar,
+a presenter/graphic transition, internal development and the intended sound
+mix. Pick a representative section, not only an easy logo sting. A muted
+prototype can prove layout, but cannot pass audiovisual review when music or
+SFX are part of the treatment.
+
+Review moving output at delivery size and listen to the actual encoded mix.
+Compare it with the declared treatment and reference observations. Confirm the
+idea develops, motion settles cleanly, transitions preserve continuity, the
+presenter remains readable, and sound supports the action. Keep evidence paths
+and specific findings, then repair the responsible sequence before expanding.
+CLI success and attractive screenshots cannot substitute for this review.
+Existing user authorization to render drafts is sufficient; do not add an
+approval round solely because a prototype exists.
+
+Use an independent reviewer with a fresh brief and the actual audiovisual
+artifacts when delegation is available and authorized. Otherwise document that
+the review was performed by the author. Never claim independence from a second
+self-written scorecard. Bound the review/repair loop to three passes; keep
+unresolved defects visible as `needs-repair` rather than relaxing the bar.
+
+### Preserve final source fidelity
+
+A low-resolution proxy is for fast exploration. Record its dimensions and label
+prototype output accordingly. For delivery, use the original or a verified
+high-quality accepted base edit and the accepted segment map to rebuild retained
+source windows. Do not enlarge a proxy and call it a high-quality final. Verify
+source dimensions, crop, frame rate and audio alignment after reconforming;
+re-run recording QA if speech boundaries change. Keep one authoritative
+continuous narration track at the root, with muted presenter/B-roll segments
+using the same accepted timeline.
+
 ## Editorial glass treatment
 
 When this style is requested, define it in the project's `DESIGN.md` and honor
@@ -195,9 +328,36 @@ implied by this route.
 
 ## Verification and delivery
 
+Base-edit-only output uses recording QA above. Full directed treatments also
+use [recorded-treatment-check.md](recorded-treatment-check.md) and its
+additive local gate:
+
+```bash
+node <installed-skill>/scripts/check-recorded-treatment.mjs <project>/EDIT-DIRECTION.json
+```
+
+Use the actual installed skill path; this helper makes no model calls. Record
+all times on the accepted output timeline, selected resource hashes, meaningful
+beat development/motion, named visual events with synchronized SFX, and a
+checksum-bound prototype review. The helper accepts an asset-free design and an
+explicit no-music choice. It checks declared planning/evidence consistency, not
+creative excellence or actual media dimensions. Its `evidence-ready` result is
+permission to continue authoring, not proof that the video is publishable.
+
 Run HyperFrames lint/check, inspect snapshots and encoded entry/settle/exit
-frames, and verify actual duration, dimensions, audio sync and readable safe
-areas. Confirm the original is unchanged. Preview the completed treatment for
-final export approval. Do not require a take-selection review or generate fake
-concept/story receipts merely to satisfy cinematic checks: `cinematic-check`
-belongs to the full cinematic workflow, not this basic editorial route.
+frames, and verify actual duration, dimensions, source fidelity, audio sync and
+readable safe areas. Then review the whole moving draft with its encoded audio,
+including quiet beats, joins, music changes, cue contacts and the ending. Use a
+fresh independent critic when available and authorized; give them the brief and
+artifacts rather than the author's desired conclusion. Keep concrete findings
+and fixes; repeat relevant checks after each repair, up to three passes. If the
+artifact remains incoherent, repetitive, poorly mixed or visually defective,
+return `needs-repair` with the remaining findings. Never hide failures behind a
+passing CLI result or call screenshots a motion/audio review.
+
+Confirm the original is unchanged. Preview the completed treatment for final
+export approval unless the user has already authorized that export. Deliver the
+encoded media, editable project, direction/resource/audio manifests and review
+findings; disclose missing captures, proxy-only output or author-only review.
+Do not require human take selection or generate fake concept/story receipts:
+`cinematic-check` belongs to the new-story cinematic workflow, not this route.
