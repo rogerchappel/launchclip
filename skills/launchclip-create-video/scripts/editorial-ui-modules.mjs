@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-const KINDS = ['media-window', 'checklist', 'step-rail', 'callout', 'audience-grid', 'trend-chart', 'metric', 'progress', 'date-card', 'status-rack', 'code-snippet'];
+const KINDS = ['media-window', 'checklist', 'step-rail', 'callout', 'audience-grid', 'trend-chart', 'metric', 'progress', 'date-card', 'status-rack', 'code-snippet', 'excerpt-window'];
 const escape = value => String(value).replace(/[&<>"']/g, char => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char]));
 const js = value => JSON.stringify(value).replace(/</g, '\\u003c');
 function object(value, label, keys) {
@@ -91,7 +91,7 @@ function moduleMotion(target, start, duration, config, media = false) {
 // Skill-local authoring helper, not a production API. The host owns its paused
 // GSAP timeline and places these fragments directly inside its composition root.
 export function buildEditorialModule(input) {
-  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code']);
+  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt']);
   if (!/^[a-z][a-z0-9-]{0,59}$/.test(input.id ?? '')) throw new Error('id must be a unique lowercase DOM-safe identifier');
   if (!KINDS.includes(input.kind)) throw new Error(`kind must be ${KINDS.join(', ')}`);
   if (input.presentation !== undefined && !['solid', 'glass'].includes(input.presentation)) throw new Error('presentation must be solid or glass');
@@ -111,8 +111,8 @@ export function buildEditorialModule(input) {
   text(input.title, 'title', 54);
   const accent = input.accent ?? '#FF6A00';
   if (!/^#[0-9a-fA-F]{6}$/.test(accent)) throw new Error('accent must be a six-digit hex color');
-  const allowed = {'media-window': ['media'], checklist: ['rows'], 'step-rail': ['steps'], callout: ['body', 'treatment'], 'audience-grid': ['audience'], 'trend-chart': ['chart'], metric: ['metric'], progress: ['progress'], 'date-card': ['date'], 'status-rack': ['rack'], 'code-snippet': ['code']}[input.kind];
-  for (const key of ['media', 'rows', 'steps', 'body', 'audience', 'chart', 'metric', 'progress', 'treatment', 'date', 'rack', 'code']) if (input[key] !== undefined && !allowed.includes(key)) throw new Error(`${input.kind} does not accept ${key}`);
+  const allowed = {'media-window': ['media'], checklist: ['rows'], 'step-rail': ['steps'], callout: ['body', 'treatment'], 'audience-grid': ['audience'], 'trend-chart': ['chart'], metric: ['metric'], progress: ['progress'], 'date-card': ['date'], 'status-rack': ['rack'], 'code-snippet': ['code'], 'excerpt-window': ['excerpt']}[input.kind];
+  for (const key of ['media', 'rows', 'steps', 'body', 'audience', 'chart', 'metric', 'progress', 'treatment', 'date', 'rack', 'code', 'excerpt']) if (input[key] !== undefined && !allowed.includes(key)) throw new Error(`${input.kind} does not accept ${key}`);
   const statusLabels = {pending: 'Pending', active: 'Active', done: 'Done', ...(input.statusLabels ?? {})};
   if (input.statusLabels !== undefined) {
     if (input.kind !== 'checklist') throw new Error('statusLabels is only for checklist');
@@ -135,7 +135,7 @@ export function buildEditorialModule(input) {
   const at = (value, label) => number(value, label, enterDuration, duration - (movement ? Math.max(.45, exitDuration + .3) : .45));
   let css = `#${id}{position:absolute;${placement};box-sizing:border-box;overflow:hidden;background:#17191d;color:#f7f7f8;border:1px solid #535761;border-radius:18px;box-shadow:0 16px 48px #0005;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:${font}px;line-height:1.25}#${id} *{box-sizing:border-box}#${id} .ui-title{margin:0;padding:${pad}px;font-size:${font + 4}px;font-weight:700;line-height:1.15}#${id} .ui-row{display:flex;align-items:center;gap:18px;padding:14px ${pad}px;border-top:1px solid #383c45}#${id} .ui-label{flex:1;min-width:0;overflow-wrap:break-word}#${id} .ui-check{width:36px;height:36px;flex:none;border:2px solid #828791;border-radius:7px;display:grid;place-items:center}#${id} .ui-check svg{width:32px;height:32px;opacity:0}#${id} .ui-status{font-size:${font - 6}px;color:#b8bbc3;width:${statusWidth}px;flex:none;text-align:right;position:relative}#${id} .ui-bar{position:absolute;top:0;left:0;right:0;height:48px;display:flex;align-items:center;gap:10px;padding:0 16px;background:#24272e;border-bottom:1px solid #535761}#${id} .ui-dot{width:12px;height:12px;border-radius:50%}#${id} .ui-bar-label{margin-left:12px;font-size:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#${id} .ui-content{padding:${pad}px}#${id} .ui-rail{position:relative;margin:20px ${pad}px 0;height:8px;background:#474c56;border-radius:4px}#${id} .ui-fill{height:100%;background:${accent};transform-origin:left;border-radius:4px}#${id} .ui-steps{display:flex;justify-content:space-between;padding:22px ${pad}px;gap:12px}#${id} .ui-step{flex:1;min-width:0;font-size:${Math.max(22, font - 4)}px;overflow-wrap:break-word;opacity:.65}#${id} .ui-body{padding:0 ${pad}px ${pad}px;margin:0;color:#d3d6dd;overflow-wrap:break-word}`;
   let body = '', media = '';
-  if (['date-card', 'status-rack', 'code-snippet'].includes(input.kind)) css += `#${id}{background:#101923;border-color:#465568;border-radius:14px;box-shadow:0 0 18px ${accent}16,0 14px 38px #0005}`;
+  if (['date-card', 'status-rack', 'code-snippet', 'excerpt-window'].includes(input.kind)) css += `#${id}{background:#101923;border-color:#465568;border-radius:14px;box-shadow:0 0 18px ${accent}16,0 14px 38px #0005}`;
   if (input.presentation === 'glass') {
     // Opaque tint is the readability fallback when native video compositing
     // does not reproduce backdrop blur. Keep framed media itself sharp.
@@ -196,6 +196,48 @@ export function buildEditorialModule(input) {
         });
         events.push({id: `${id}-treatment-settle`, time: time + .4});
       }
+    } else if (input.kind === 'excerpt-window') {
+      object(input.excerpt, 'excerpt', ['mode', 'source', 'lines', 'focus']);
+      const excerpt = input.excerpt;
+      if (!['illustration', 'data'].includes(excerpt.mode)) throw new Error('excerpt.mode must be illustration or data');
+      if (excerpt.mode === 'data') text(excerpt.source, 'excerpt.source', 80);
+      else if (excerpt.source !== undefined) throw new Error('illustration cannot claim a real data source');
+      if (!Array.isArray(excerpt.lines) || excerpt.lines.length < 1 || excerpt.lines.length > 5) throw new Error('excerpt.lines must contain 1–5 lines');
+      object(excerpt.focus, 'excerpt.focus', ['line', 'scale', 'at']);
+      number(excerpt.focus.line, 'focus.line', 0, excerpt.lines.length - 1);
+      if (!Number.isInteger(excerpt.focus.line)) throw new Error('focus.line must be an integer');
+      const zoom = number(excerpt.focus.scale, 'focus.scale', 1, 1.3), time = start + at(excerpt.focus.at, 'focus.at');
+      const note = excerpt.mode === 'illustration' ? 'Illustration · text excerpt' : `Source: ${excerpt.source}`;
+      const textFont = Math.max(24, Math.min(32, Math.floor(rect.width / 24))), lineHeight = Math.ceil(textFont * 1.5);
+      const noteHeight = Math.ceil(note.length / Math.floor((rect.width - 48) / (22 * .65))) * 29 + 16;
+      const viewWidth = rect.width - 48, viewHeight = rect.height - 48 - noteHeight - 48;
+      const textHeight = lineHeight * excerpt.lines.length;
+      if (viewHeight < textHeight * zoom) throw new Error('excerpt-window rect too short for focused text');
+      let longest = 0;
+      const lines = excerpt.lines.map((line, i) => {
+        object(line, 'excerpt line', ['segments']);
+        if (!Array.isArray(line.segments) || line.segments.length < 1 || line.segments.length > 12) throw new Error('excerpt segments must contain 1–12 entries');
+        let length = 0;
+        const segments = line.segments.map(segment => {
+          object(segment, 'excerpt segment', ['text', 'highlight']);
+          if (typeof segment.text !== 'string' || segment.text.length < 1 || segment.text.length > 120 || /[\r\n\t]/.test(segment.text)) throw new Error('excerpt segment must be short single-line text');
+          if (segment.highlight !== undefined && typeof segment.highlight !== 'boolean') throw new Error('highlight must be a boolean');
+          length += segment.text.length;
+          return `<span${segment.highlight ? ' class="ui-excerpt-highlight"' : ''}>${escape(segment.text)}</span>`;
+        }).join('');
+        const width = length * textFont * .68;
+        if (width * zoom > viewWidth) throw new Error('excerpt line too long at focused zoom; shorten or widen it');
+        longest = Math.max(longest, width);
+        return `<div class="ui-excerpt-line">${segments}</div>`;
+      }).join('');
+      // Focus travel is compiled from the supplied line and fixed geometry;
+      // all text remains within the viewport at both endpoints and maximum zoom.
+      const x = (viewWidth - longest * zoom) / 2;
+      const y = Math.max(0, Math.min(viewHeight - textHeight * zoom, viewHeight / 2 - (excerpt.focus.line + .5) * lineHeight * zoom));
+      css += `#${id} .ui-excerpt-note{position:absolute;top:48px;left:0;right:0;padding:16px 24px 0;font-size:22px;line-height:1.3;color:#d3d6dd}#${id} .ui-excerpt-viewport{position:absolute;left:24px;right:24px;top:${48 + noteHeight + 24}px;bottom:24px;overflow:hidden}#${id} .ui-excerpt-content{width:${longest}px;height:${textHeight}px;font:${textFont}px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;transform-origin:top left}#${id} .ui-excerpt-line{height:${lineHeight}px;white-space:pre}#${id} .ui-excerpt-highlight{background:transparent;border-radius:3px}`;
+      body = `<div class="ui-bar"><span class="ui-dot" style="background:#ff6258"></span><span class="ui-dot" style="background:#ffc04a"></span><span class="ui-dot" style="background:#40c957"></span><span class="ui-bar-label">${escape(input.title)}</span></div><div class="ui-excerpt-note">${escape(note)}</div><div class="ui-excerpt-viewport"><div id="${id}-excerpt" class="ui-excerpt-content">${lines}</div></div>`;
+      motion.push(`tl.set(${js(`#${id}-excerpt`)}, {x:0,y:0,scale:1}, ${start});`, `tl.to(${js(`#${id}-excerpt`)}, {x:${x},y:${y},scale:${zoom},duration:0.5,ease:'power3.inOut'}, ${time});`, `tl.to(${js(`#${id} .ui-excerpt-highlight`)}, {backgroundColor:${js(accent + '55')},duration:0.24,ease:'power2.out'}, ${time + .16});`);
+      events.push({id: `${id}-excerpt-focus`, time: time + .5});
     } else if (input.kind === 'date-card') {
       object(input.date, 'date', ['month', 'day', 'year', 'caption', 'at']);
       const date = input.date;
@@ -422,7 +464,7 @@ export function buildEditorialModule(input) {
       body += '</div>';
     }
   }
-  if ((movement || input.treatment || ['date-card', 'status-rack', 'code-snippet'].includes(input.kind)) && events.some(event => event.time > start + duration - exitDuration + 1e-9)) throw new Error('content must settle before motion exit begins');
+  if ((movement || input.treatment || ['date-card', 'status-rack', 'code-snippet', 'excerpt-window'].includes(input.kind)) && events.some(event => event.time > start + duration - exitDuration + 1e-9)) throw new Error('content must settle before motion exit begins');
   const background = input.kind === 'media-window' ? 'background:transparent;' : '';
   return {html: `${media}<section id="${id}" ${input.kind === 'media-window' ? chromeTimed : timed} style="${background}">${body}</section>`, css, motion: motion.join('\n'), events, layout: {canvas, rect: {...rect}, ...(movement ? {motion: {enterEnd: start + enterDuration, exitStart: start + duration - exitDuration, end: start + duration}} : {})}};
 }
