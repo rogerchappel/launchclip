@@ -1,7 +1,7 @@
 {
   "schema": "launchclip.story.v1",
   "title": "The rule of 72 (golden, 9:16 explainer)",
-  "notes": "Renderer-eval golden story: 9:16 explainer covering kinetic-words, function-chart, flow-compare, archive-card and equation-lockup. Values are illustrative.",
+  "notes": "Renderer-eval golden story: 9:16 explainer covering kinetic-words, function-chart, flow-compare, archive-card and equation-lockup, on cuts with one camera pan into s2. Values are illustrative.",
   "lane": "motion",
   "phase": 2,
   "format": { "width": 1080, "height": 1920, "fps": 30, "duration": 26, "platform": "youtube-shorts" },
@@ -40,7 +40,7 @@
       "start": 4.4,
       "end": 11.2,
       "energy": 1,
-      "in": { "type": "push", "dur": 0.45, "direction": "up" },
+      "in": { "type": "pan", "dur": 0.6, "direction": "down" },
       "params": {
         "fn": "100 * 1.07^t",
         "x": [0, 40, "years"],
