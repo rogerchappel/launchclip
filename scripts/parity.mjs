@@ -190,7 +190,7 @@ export async function defaultCompileHyperFrames(context, {compiler = 'auto'} = {
 export async function hyperframesStills(projectDir, samples, outDir) {
   const frames = await mkdtemp(path.join(os.tmpdir(), 'launchclip-parity-hf-'));
   try {
-    const at = samples.map(sample => String(sample.time)).join(',');
+    const at = samples.map(sample => String(Math.round((sample.time + 1e-4) * 1e6) / 1e6)).join(','); // snapshot floors seconds × fps
     await must('hyperframes snapshot', process.execPath, [HYPERFRAMES_CLI, 'snapshot', '--at', at, '--no-end', '--output', frames, '--describe', 'false', projectDir], {cwd: projectDir});
     const files = (await readdir(frames)).filter(name => /^frame-\d+.*\.(png|jpe?g|webp)$/i.test(name)).sort((a, b) => a.localeCompare(b, 'en', {numeric: true}));
     if (files.length !== samples.length) throw new Error(`hyperframes snapshot wrote ${files.length} frames for ${samples.length} times: ${files.join(', ')}`);

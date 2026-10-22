@@ -87,7 +87,8 @@ export async function projectEvidenceSchedule(projectPath, { storyModule } = {})
 function hyperframesStills(project, schedule, out) {
   const snapshots = path.join(project, 'snapshots');
   rmSync(snapshots, { recursive: true, force: true });
-  hyperframes(['snapshot', project, '--at', schedule.timestamps.join(',')]);
+  // snapshot floors seconds × fps; nudge each time well under a frame.
+  hyperframes(['snapshot', project, '--at', schedule.timestamps.map(t => Math.round((t + 1e-4) * 1e6) / 1e6).join(',')]);
   // Snapshot files are numbered in request order; HyperFrames may append extras after them.
   const frames = readdirSync(snapshots).filter((file) => /^frame-\d+/.test(file)).sort();
   if (frames.length < schedule.timestamps.length) throw new Error(`expected ${schedule.timestamps.length} snapshots, got ${frames.length}`);
