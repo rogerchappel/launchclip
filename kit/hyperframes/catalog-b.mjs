@@ -73,6 +73,7 @@ export function emitCatalogB(model) {
 }
 
 export const EMITTERS = {
+  'process-steps': emitCatalogB,
   'flow-compare': emitCatalogB,
   'gauge-compare': emitCatalogB,
   'function-chart': emitCatalogB,

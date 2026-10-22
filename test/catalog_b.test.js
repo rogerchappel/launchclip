@@ -430,3 +430,43 @@ test('flow-compare: emitter loops are seek-safe repeats that match the Remotion 
 test('flow-compare: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not installed'}, () => {
   assert.ok(remotionStill('flow-compare', 3) > 20000);
 });
+
+// ---------------------------------------------------------------------------
+// process-steps
+
+test('process-steps: fixture model meets the contract; steps light in order', () => {
+  const {model} = loadFixture('process-steps');
+  assertModelContract(model, 'process-steps');
+  const c = model.content;
+  assert.equal(c.layout, 'vertical');
+  assert.deepEqual(model.events.map(e => e.name), ['enter', 'step-0', 'step-1', 'step-2']);
+  assert.equal(c.connectors.length, 2);
+  c.connectors.forEach((k, i) => {
+    assert.ok(Math.abs(k.time + k.duration - c.steps[i + 1].time) < 1e-6, 'connector fills into the next step');
+    assert.equal(k.axis, 'y');
+  });
+  assert.equal(c.steps[0].doneTime, c.steps[1].time);
+  assert.equal(c.steps.at(-1).doneTime, null);
+  assert.ok(model.contrast['ink/step'] >= 3);
+});
+
+test('process-steps: horizontal in landscape; strict validation', () => {
+  const resolve = MODULES['process-steps'].resolve;
+  const wide = resolve({steps: ['Plan', 'Build', 'Ship']}, ctx({format: {width: 1920, height: 1080, fps: 30}, aspect: '16:9'}));
+  assertModelContract(wide, 'process-steps');
+  assert.equal(wide.content.layout, 'horizontal');
+  assert.equal(wide.content.connectors[0].axis, 'x');
+  assert.throws(() => resolve({steps: ['Only one']}, ctx()), /params\.steps must be an array of 2–5 entries/);
+  assert.throws(() => resolve({steps: ['A', 'B', 'C', 'D', 'E', 'F']}, ctx()), /params\.steps must be an array of 2–5/);
+  assert.throws(() => resolve({steps: [{label: 'A', at: 2}, {label: 'B', at: 2.1}]}, ctx()), /params\.steps\[1\]\.at must come at least 0\.35 s after/);
+  assert.throws(() => resolve({steps: [{label: 'A', note: 'x'}, 'B']}, ctx()), /params\.steps\[0\]\.note is not supported/);
+  assert.throws(() => resolve({steps: ['A', 'B'], color: 'accent'}, ctx({brand: {...brand, colors: {...brand.colors, ink: '#2fa8d0'}}})), /ink on the step colour/);
+});
+
+test('process-steps: emitter output is seek-safe and matches the Remotion evaluator', () => {
+  assertEmitter(loadFixture('process-steps').model);
+});
+
+test('process-steps: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not installed'}, () => {
+  assert.ok(remotionStill('process-steps', 3.3) > 20000);
+});
