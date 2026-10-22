@@ -151,11 +151,17 @@ export const EDITORIAL_SYMBOLS = Object.freeze({
 
 // Design tokens shared by both renderers. Hex alphas ("16", "22", …) are
 // appended to the accent or theme colors, as in CSS #RRGGBBAA.
+// Fonts read the story's brand stacks (--lc-font-body / --lc-font-meta, set on
+// the root by both compilers from the same Google Fonts files), so a module
+// renders the same face in both renderers. The system stacks are only the
+// fallback outside a story: system-ui is platform-specific, and HyperFrames
+// substitutes its own bundled faces for system families while Remotion's
+// Chrome uses the host's, which made module text 10% wider in one renderer.
 export const EDITORIAL_STYLE = Object.freeze({
   font: Object.freeze({
-    sans: "system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
-    mono: 'ui-monospace,monospace',
-    display: 'system-ui,sans-serif'
+    sans: "var(--lc-font-body, system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif)",
+    mono: 'var(--lc-font-meta, ui-monospace,monospace)',
+    display: 'var(--lc-font-body, system-ui,sans-serif)'
   }),
   size: Object.freeze({small: 22, lineHeight: 1.25, titleLineHeight: 1.15, day: 112, avatar: 52, count: 48, growthCount: 56, stepNumber: 24}),
   space: Object.freeze({pad: 24, bar: 48, inset: 18, gap: 16, rowGap: 18}),

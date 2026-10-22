@@ -71,3 +71,25 @@ export function brandFontStacks(brand) {
   };
   return { display: stack('display'), body: stack('body'), meta: stack('meta'), families };
 }
+
+// Faces a catalogue module draws besides the brand stacks (archive-card's
+// italic serif quote). Both compilers load them, from the same Google Fonts
+// files, only when a scene uses the module: a system serif stack resolved to
+// different faces in the two renderers (HyperFrames substitutes bundled
+// fonts for system families), so the quote wrapped on different words.
+export const MODULE_FONTS = Object.freeze({
+  'archive-card': Object.freeze([Object.freeze({ family: 'EB Garamond', styles: Object.freeze(['normal', 'italic']) })])
+});
+
+/** Module faces a story needs: [{family, styles}], one entry per family. */
+export function moduleFontFaces(story) {
+  const out = new Map();
+  for (const scene of Array.isArray(story?.scenes) ? story.scenes : []) {
+    for (const face of MODULE_FONTS[scene?.module] ?? []) {
+      const entry = out.get(face.family) ?? { family: face.family, styles: [] };
+      for (const style of face.styles) if (!entry.styles.includes(style)) entry.styles.push(style);
+      out.set(face.family, entry);
+    }
+  }
+  return [...out.values()];
+}

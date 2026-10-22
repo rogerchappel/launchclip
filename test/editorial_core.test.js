@@ -24,8 +24,10 @@ test('golden corpus covers every kind with outputs and errors', () => {
 // errors must stay byte-identical to the corpus captured before the density
 // change (sha256 of the subset as it stood at dacadc4). The 9:16 and
 // default-rect fixtures were regenerated for content-derived rects and the
-// portrait type scale.
-const EXPLICIT_16X9_SHA256 = '0767cad85d2becb1f24cdebe2ef51b7494267c56f99e639acfa7b12d7a8fff33';
+// portrait type scale. The hash was then re-taken once when editorial fonts
+// moved to the story's brand-font variables (var(--lc-font-*, <old stack>));
+// that capture differed from dacadc4 only in those font wrappers.
+const EXPLICIT_16X9_SHA256 = 'aa766b3d0c6957af342c3d2fd8027e6ec8291966794f72fb5f0459b65fd92641';
 const explicit16x9 = entry => entry.spec && typeof entry.spec === 'object' && !Array.isArray(entry.spec) && entry.spec.aspect === '16:9' && entry.spec.rect !== undefined;
 
 test('explicit-rect 16:9 golden outputs are unchanged by the density work', () => {

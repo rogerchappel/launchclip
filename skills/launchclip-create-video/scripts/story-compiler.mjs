@@ -20,9 +20,10 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { deriveBoundaries, validateStory } from './story.mjs';
 import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from './modules.mjs';
-import { gsapVars, sceneWindows } from './transitions.mjs';
-import { CAPTION_CSS, CAPTION_DEFAULT_COLORS, captionChunksFrom, captionRuntime, chunkWords, narrationWords } from './captions.mjs';
-import { brandFontStacks, fontSlug, googleFontModuleName } from './fonts.mjs';
+import { gsapVars, layerStateAt, sceneWindows } from './transitions.mjs';
+import { getEase } from './motion.mjs';
+import { captionCss, CAPTION_DEFAULT_COLORS, captionChunksFrom, captionRuntime, chunkWords, narrationWords } from './captions.mjs';
+import { brandFontStacks, fontSlug, googleFontModuleName, moduleFontFaces } from './fonts.mjs';
 import { EMITTERS as EDITORIAL_EMITTERS } from './editorial-ui-modules.mjs';
 import { EMITTERS as CATALOG_A_EMITTERS } from './hyperframes-catalog-a.mjs';
 import { EMITTERS as CATALOG_B_EMITTERS } from './hyperframes-catalog-b.mjs';
@@ -132,7 +133,12 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const outer = `lc-scene-${id}`, inner = `lc-layer-${id}`;
     const media = hoistMedia(out.html ?? '');
     for (const element of media.elements) hoisted.push(withZIndex(element, z + 5));
-    if (media.elements.length && entry.tweens.some((tw) => tw.prop !== 'opacity')) warnings.push(`${entry.scene.id}: root media does not follow ${entry.transitionIn?.type ?? 'transition'} transforms (HyperFrames keeps <video>/<audio> on the root)`);
+    const mediaMotion = [];
+    for (const element of media.elements) {
+      const follow = mediaLayerTweens(element, entry.tweens);
+      mediaMotion.push(...follow.lines);
+      if (follow.unsupported.length) warnings.push(`${entry.scene.id}: root media does not follow the ${follow.unsupported.join(', ')} of its ${entry.transitionIn?.type ?? 'transition'} (HyperFrames keeps <video>/<audio> on the root)`);
+    }
     const boundary = boundaryFor.get(entry.scene.id);
     markup.push(`<div id="${outer}" class="lc-scene${entry.plate ? ' lc-plate' : ''}" data-launchclip-scene="${id}" data-launchclip-module="${attr(entry.scene.module)}" data-launchclip-start="${num(entry.start)}" data-launchclip-render-end="${num(entry.renderEnd)}"${boundaryAttrs(boundary)} style="z-index:${z}"><div id="${inner}" class="lc-layer">${media.html}</div></div>`);
     css.push(out.css ?? '');
@@ -140,6 +146,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     motion.push(...toggle(`#${outer}`, entry.start, entry.renderEnd, D));
     motion.push(...entry.tweens.map((tw) => tweenCode(`#${inner}`, tw)));
     if (out.motion) motion.push(`{\n${out.motion}\n}`);
+    motion.push(...mediaMotion);
     z += 10;
   }
 
@@ -181,7 +188,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   }
 
   const fonts = brandFontStacks(story.brand);
-  const fontCss = await fontFaces(fonts.families, sourceDir, warnings);
+  const fontCss = await fontFaces([...fonts.families, ...moduleFontFaces(story).filter((face) => !fonts.families.includes(face.family))], sourceDir, warnings);
   const capIdle = colors.paper ?? CAPTION_DEFAULT_COLORS.idle;
   const capActive = colors.primary ?? CAPTION_DEFAULT_COLORS.active;
   const html = `<!doctype html>
@@ -203,7 +210,7 @@ ${fontCss.css}
     .lc-layer { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; }
     .lc-plate > .lc-layer { background: ${bg}; }
     ${placeholderCss()}
-    ${captions ? `${CAPTION_CSS.trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}
+    ${captions ? `${captionCss(format).trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}
     ${css.filter(Boolean).join('\n    ')}
   </style>
 </head>
@@ -281,6 +288,38 @@ function hoistMedia(html) {
   return { html: rest, elements };
 }
 
+// Root media sits outside its scene layer, so it would ignore the layer's
+// transition (a morph's crossfade, a push or whip) that Remotion applies to
+// everything in the scene. Replay the layer tweens on the media element with
+// properties the module's own motion never touches: x/y as xPercent/yPercent
+// of the element box (GSAP adds them to x/y as pure translations), opacity and
+// blur as one CSS filter, so they multiply with the module's opacity. Each
+// filter tween writes both components, holding the other at the layer's value.
+// Layer scale (zoom) and iris pivot on the canvas centre and are reported as
+// unsupported. → {lines: [GSAP calls], unsupported: [props]}
+export function mediaLayerTweens(element, tweens) {
+  const id = /\sid="([^"]+)"/.exec(element)?.[1];
+  const box = (name) => Number(new RegExp(`[;"\\s]${name}:\\s*(-?[\\d.]+)px`).exec(element)?.[1]);
+  const width = box('width'), height = box('height');
+  const lines = [];
+  const unsupported = new Set();
+  if (!id) return { lines, unsupported: [...new Set(tweens.map((tw) => tw.prop))] };
+  const selector = `#${id}`;
+  const filter = (state) => `opacity(${round(state.opacity, 4)}) blur(${round(state.blur, 3)}px)`;
+  for (const tw of tweens) {
+    const timing = { duration: round(tw.duration, 4), ease: tw.ease, immediateRender: false };
+    if ((tw.prop === 'x' && width > 0) || (tw.prop === 'y' && height > 0)) {
+      const key = tw.prop === 'x' ? 'xPercent' : 'yPercent', size = tw.prop === 'x' ? width : height;
+      lines.push(`tl.fromTo(${js(selector)}, ${js({ [key]: round(tw.from / size * 100, 4) })}, ${js({ [key]: round(tw.to / size * 100, 4), ...timing })}, ${num(tw.at)});`);
+    } else if (tw.prop === 'opacity' || tw.prop === 'blur') {
+      const before = { ...layerStateAt(tw.at, tweens, getEase), [tw.prop]: tw.from };
+      const after = { ...layerStateAt(tw.at + tw.duration, tweens, getEase), [tw.prop]: tw.to };
+      lines.push(`tl.fromTo(${js(selector)}, ${js({ filter: filter(before) })}, ${js({ filter: filter(after), ...timing })}, ${num(tw.at)});`);
+    } else unsupported.add(tw.prop);
+  }
+  return { lines, unsupported: [...unsupported] };
+}
+
 function withZIndex(element, z) {
   return /\sstyle="/.test(element) ? element.replace(/\sstyle="/, ` style="z-index:${z};`) : element.replace(/^<(\w+)/, `<$1 style="z-index:${z}"`);
 }
@@ -325,12 +364,15 @@ async function loadCaptionChunks(story, overlay, sourceDir, warnings) {
 // Brand fonts: frozen files under assets/fonts/ win (named <family-slug>*.woff2),
 // then the exact Google Fonts files @remotion/google-fonts would load (so both
 // renderers draw the same faces), then a Google Fonts stylesheet link.
+// families: names (normal style) or {family, styles} (module faces).
 async function fontFaces(families, sourceDir, warnings) {
   const rules = [];
   const links = [];
   let local = [];
   if (sourceDir && existsSync(path.join(sourceDir, 'assets/fonts'))) local = await readdir(path.join(sourceDir, 'assets/fonts'));
-  for (const family of families) {
+  for (const entry of families) {
+    const family = typeof entry === 'string' ? entry : entry.family;
+    const styles = typeof entry === 'string' ? ['normal'] : entry.styles;
     const slug = fontSlug(family);
     const files = local.filter((file) => /\.(woff2?|ttf|otf)$/i.test(file) && file.toLowerCase().replace(/[^a-z0-9]+/g, '-').startsWith(slug));
     if (files.length) {
@@ -344,11 +386,13 @@ async function fontFaces(families, sourceDir, warnings) {
     }
     const info = await googleFontInfo(family);
     if (info) {
-      for (const [weight, subsets] of Object.entries(info.fonts?.normal ?? {})) {
-        const subset = subsets.latin ? 'latin' : Object.keys(subsets)[0];
-        if (!subset) continue;
-        const range = info.unicodeRanges?.[subset];
-        rules.push(`    @font-face { font-family: '${family}'; src: url("${subsets[subset]}") format("woff2"); font-weight: ${weight}; font-style: normal; font-display: block;${range ? ` unicode-range: ${range};` : ''} }`);
+      for (const style of styles) {
+        for (const [weight, subsets] of Object.entries(info.fonts?.[style] ?? {})) {
+          const subset = subsets.latin ? 'latin' : Object.keys(subsets)[0];
+          if (!subset) continue;
+          const range = info.unicodeRanges?.[subset];
+          rules.push(`    @font-face { font-family: '${family}'; src: url("${subsets[subset]}") format("woff2"); font-weight: ${weight}; font-style: ${style}; font-display: block;${range ? ` unicode-range: ${range};` : ''} }`);
+        }
       }
       continue;
     }

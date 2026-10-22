@@ -686,7 +686,7 @@ async function runGates(ctx) {
       : { status: master.loudness?.compliant ? "passed" : "failed", target: master.loudness?.target, output: master.loudness?.output };
 
   try {
-    const motion = await ctx.adapters.motion(ctx.out, path.join(ctx.project, PATHS.motion), { expected: cinematicMotionExpectations({ duration, width: format.width, height: format.height }) });
+    const motion = await ctx.adapters.motion(ctx.out, path.join(ctx.project, PATHS.motion), { expected: cinematicMotionExpectations({ duration, width: format.width, height: format.height }).expected });
     gates.motion = { status: motion?.quality?.ok ? "passed" : "failed", report: PATHS.motion, findings: (motion?.quality?.findings ?? []).slice(0, 12) };
   } catch (error) {
     gates.motion = { status: "failed", error: error.message };

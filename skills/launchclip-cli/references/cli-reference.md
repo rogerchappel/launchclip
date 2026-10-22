@@ -527,7 +527,11 @@ in both renderers lives in `examples/story/minimal/`.
 `validate` also checks every `module` against the kit's module registry
 (`kit/core/modules.mjs`: the 14 editorial kinds plus the catalogue). An
 unknown module is reported as a warning, because both compilers render it as
-a visible labelled placeholder rather than failing.
+a visible labelled placeholder rather than failing. Once anchors resolve, each
+known module's `params` are resolved too (the step both compilers take); a
+scene whose params the module rejects (for example a hit earlier than the
+module's minimum lead-in) is an error, because it would render as a
+placeholder in both renderers.
 
 ### Compile a storyboard for a renderer
 
@@ -639,6 +643,28 @@ whole pipeline can be exercised offline. Never ship it. The `kokoro`,
 
 After finish, a fresh-context critic reviews `qa/critic-sheets/` and writes
 `qa/critic.json`; `launchclip cinematic-check` then closes the critic gate.
+
+### Renderer eval (npm script, repository checkout)
+
+```bash
+npm run eval:renderers [-- --stories a,b] [--quality draft] [--out qa/renderer-eval] [--thresholds eval/renderer-thresholds.json] [--worst 4]
+```
+
+Renders every golden storyboard in `examples/story/` (`cooling`, `minimal`,
+`promo-16x9`, `explainer-9x16`, `data-story-9x16`) with both renderers and
+measures whether they match and pass the same gates: render time per
+renderer, `story validate`, layout-check, the cinematic-check motion and audio
+analyses of each MP4, frame parity (ffmpeg SSIM at the temporal-evidence
+schedule of the story's boundaries, plus every frame), frame counts, loudness
+and the decoded audio. It writes `<out>/report.json` and `<out>/report.md`
+(one table per story, with a contact sheet of the worst frames:
+HyperFrames | Remotion | difference ×4) and exits 1 when a threshold in
+`eval/renderer-thresholds.json` fails (2 on a usage error). Gates there are
+`true` (must pass), `"report"` (shown, never fails) or `false` (skipped);
+`stories.<id>` overrides any limit for one story. Run it after any change
+under `kit/`; it needs both renderers' Chrome and takes a few minutes.
+Rebuild a golden story's audio with `node scripts/golden-story-audio.mjs
+examples/story/<id>` (macOS `say` and ffmpeg).
 
 ## Failure handling
 

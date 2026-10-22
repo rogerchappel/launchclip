@@ -1,0 +1,450 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "How our CI got faster (golden, 9:16 data story)",
+  "notes": "Renderer-eval golden story: 9:16 editorial data story covering trend-chart, growth-chart, checklist, step-rail, code-snippet (typing), excerpt-window and focus-flow. Figures are illustrative.",
+  "lane": "motion",
+  "phase": 2,
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 31,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0d1117",
+      "primary": "#58a6ff",
+      "accent": "#3fb950",
+      "ink": "#0d1117",
+      "paper": "#f0f6fc"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "audio": {
+    "words": "NARRATION.json",
+    "mix": "assets/audio/mix.m4a"
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "trend-chart",
+      "start": 0,
+      "end": 5.2,
+      "energy": 2,
+      "params": {
+        "title": "Build minutes per week",
+        "rect": {
+          "x": 90,
+          "y": 560,
+          "height": 560,
+          "width": 840
+        },
+        "chart": {
+          "mode": "illustration",
+          "unit": "minutes",
+          "points": [
+            {
+              "label": "W1",
+              "value": 420,
+              "at": 2.54
+            },
+            {
+              "label": "W2",
+              "value": 380,
+              "at": 3.04
+            },
+            {
+              "label": "W3",
+              "value": 190,
+              "at": 3.54
+            },
+            {
+              "label": "W4",
+              "value": 120,
+              "at": 4.04
+            }
+          ]
+        }
+      },
+      "hits": [
+        {
+          "at": "word:four",
+          "event": "point-0",
+          "cue": "tick"
+        },
+        {
+          "at": "word:one",
+          "event": "point-3",
+          "cue": "tick"
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "module": "growth-chart",
+      "start": 5.2,
+      "end": 9.6,
+      "energy": 1,
+      "in": {
+        "type": "push",
+        "dur": 0.45,
+        "direction": "left"
+      },
+      "params": {
+        "title": "Deploys per week",
+        "rect": {
+          "x": 90,
+          "y": 560,
+          "height": 560,
+          "width": 840
+        },
+        "growth": {
+          "mode": "illustration",
+          "unit": "deploys",
+          "points": [
+            {
+              "label": "Jan",
+              "value": 12,
+              "at": 0.7
+            },
+            {
+              "label": "Feb",
+              "value": 19,
+              "at": 1.2
+            },
+            {
+              "label": "Mar",
+              "value": 31,
+              "at": 1.7
+            },
+            {
+              "label": "Apr",
+              "value": 44,
+              "at": 2.2
+            }
+          ]
+        }
+      },
+      "hits": [
+        {
+          "at": "word:deploys",
+          "event": "growth-start",
+          "cue": "pop"
+        },
+        {
+          "at": "word:climbing",
+          "event": "growth-peak",
+          "cue": "tick"
+        }
+      ]
+    },
+    {
+      "id": "s3",
+      "module": "checklist",
+      "start": 9.6,
+      "end": 14.1,
+      "energy": "build",
+      "in": {
+        "type": "fade",
+        "dur": 0.4
+      },
+      "params": {
+        "title": "What changed",
+        "rect": {
+          "x": 90,
+          "y": 560,
+          "height": 560,
+          "width": 840
+        },
+        "statusLabels": {
+          "pending": "Next",
+          "active": "Now",
+          "done": "Done"
+        },
+        "rows": [
+          {
+            "label": "Cache dependencies",
+            "status": "done",
+            "at": 1.63
+          },
+          {
+            "label": "Split the test suite",
+            "status": "done",
+            "at": 2.04
+          },
+          {
+            "label": "Slim the images",
+            "status": "done",
+            "at": 2.45
+          }
+        ]
+      },
+      "hits": [
+        {
+          "at": "word:cache",
+          "event": "row-0",
+          "cue": "tick"
+        },
+        {
+          "at": "word:split",
+          "event": "row-1",
+          "cue": "tick"
+        },
+        {
+          "at": "word:slim",
+          "event": "row-2",
+          "cue": "tick"
+        }
+      ]
+    },
+    {
+      "id": "s4",
+      "module": "step-rail",
+      "start": 14.1,
+      "end": 18.6,
+      "energy": 2,
+      "in": {
+        "type": "morph",
+        "dur": 0.5,
+        "from_object": "s3.rows"
+      },
+      "params": {
+        "title": "Every pull request",
+        "rect": {
+          "x": 90,
+          "y": 680,
+          "height": 300,
+          "width": 840
+        },
+        "numbered": true,
+        "steps": [
+          {
+            "label": "Lint",
+            "at": 1.87
+          },
+          {
+            "label": "Test",
+            "at": 2.23
+          },
+          {
+            "label": "Build",
+            "at": 2.6
+          },
+          {
+            "label": "Ship",
+            "at": 3.01
+          }
+        ]
+      },
+      "hits": [
+        {
+          "at": "word:lint",
+          "event": "step-0",
+          "cue": "tick"
+        },
+        {
+          "at": "word:test",
+          "event": "step-1",
+          "cue": "tick"
+        },
+        {
+          "at": "word:build#2",
+          "event": "step-2",
+          "cue": "tick"
+        },
+        {
+          "at": "word:ship",
+          "event": "step-3",
+          "cue": "pop"
+        }
+      ]
+    },
+    {
+      "id": "s5",
+      "module": "code-snippet",
+      "start": 18.6,
+      "end": 23.1,
+      "energy": 1,
+      "in": {
+        "type": "whip",
+        "dur": 0.35,
+        "direction": "left"
+      },
+      "params": {
+        "title": "The cache fix",
+        "rect": {
+          "x": 90,
+          "y": 640,
+          "height": 360,
+          "width": 840
+        },
+        "code": {
+          "language": "YAML",
+          "typing": true,
+          "lines": [
+            {
+              "at": 0.5,
+              "typeDuration": 1,
+              "tokens": [
+                {
+                  "text": "cache: ",
+                  "type": "keyword"
+                },
+                {
+                  "text": "npm",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "at": 1.6,
+              "typeDuration": 1.1,
+              "tokens": [
+                {
+                  "text": "key: ",
+                  "type": "keyword"
+                },
+                {
+                  "text": "lockfile",
+                  "type": "string"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "hits": [
+        {
+          "at": "word:two",
+          "event": "line-0",
+          "cue": "tick"
+        },
+        {
+          "at": "word:config",
+          "event": "line-1",
+          "cue": "tick"
+        }
+      ]
+    },
+    {
+      "id": "s6",
+      "module": "excerpt-window",
+      "start": 23.1,
+      "end": 27.1,
+      "energy": 1,
+      "in": {
+        "type": "fade",
+        "dur": 0.4
+      },
+      "params": {
+        "title": "Postmortem",
+        "rect": {
+          "x": 90,
+          "y": 600,
+          "height": 440,
+          "width": 840
+        },
+        "excerpt": {
+          "mode": "illustration",
+          "lines": [
+            {
+              "segments": [
+                {
+                  "text": "We guessed for months."
+                }
+              ]
+            },
+            {
+              "segments": [
+                {
+                  "text": "Then we "
+                },
+                {
+                  "text": "measured first",
+                  "highlight": true
+                }
+              ]
+            }
+          ],
+          "focus": {
+            "line": 1,
+            "scale": 1.15,
+            "at": 2.13
+          }
+        }
+      },
+      "hits": [
+        {
+          "at": "word:postmortem",
+          "event": "excerpt-open"
+        },
+        {
+          "at": "word:measure",
+          "event": "focus",
+          "cue": "pop"
+        }
+      ]
+    },
+    {
+      "id": "s7",
+      "module": "focus-flow",
+      "start": 27.1,
+      "end": 31,
+      "energy": 2,
+      "in": {
+        "type": "push",
+        "dur": 0.4,
+        "direction": "up"
+      },
+      "params": {
+        "title": "Next up",
+        "rect": {
+          "x": 90,
+          "y": 560,
+          "height": 540,
+          "width": 840
+        },
+        "focus": {
+          "options": [
+            "Docs",
+            "Flaky tests",
+            "Refactor"
+          ],
+          "selected": 1,
+          "arriveAt": 0.3,
+          "chooseAt": 1.02,
+          "progressAt": 1.95,
+          "progressDuration": 0.8,
+          "progressLabel": "Fixing flaky tests",
+          "icon": "check"
+        }
+      },
+      "hits": [
+        {
+          "at": "word:pick",
+          "event": "focus-choose",
+          "cue": "pop"
+        },
+        {
+          "at": "word:flaky",
+          "event": "focus-progress",
+          "cue": "tick"
+        }
+      ]
+    }
+  ],
+  "overlays": [
+    {
+      "type": "captions",
+      "style": "word-highlight"
+    }
+  ],
+  "ending": {
+    "loop_to": "s1"
+  }
+}
