@@ -44,3 +44,6 @@ Thumbs.db
 
 # Renderer parity reports (scripts/parity.mjs)
 qa/parity/
+
+# Voice provider QA samples
+qa/voice/
