@@ -144,6 +144,21 @@ export const Symbol: React.FC<{name: string; style?: React.CSSProperties}> = ({n
 export const Title: React.FC<{model: Model}> = ({model}) => <h2 className="ui-title">{model.title}</h2>;
 
 /**
+ * Density wrapper (the emitter's `.ui-density`): when model.density.scale is
+ * not 1, children lay out in the layout box and scale into the rect from its
+ * top-left corner. At scale 1 the children render directly, as before.
+ */
+export const Density: React.FC<{model: Model; children?: React.ReactNode}> = ({model, children}) => {
+  const d = model.density;
+  if (!d || d.scale === 1 || model.kind === 'media-window') return <>{children}</>;
+  return (
+    <div className="ui-density" style={{position: 'absolute', left: 0, top: 0, width: d.layout.width, height: d.layout.height, transform: `scale(${d.scale})`, transformOrigin: '0 0'}}>
+      {children}
+    </div>
+  );
+};
+
+/**
  * Full-canvas layer holding the module section at absolute canvas coordinates.
  * `css` is the kind-specific stylesheet (appended between base and theme CSS).
  */
@@ -155,7 +170,7 @@ export const ModuleShell: React.FC<{model: Model; t: number; css?: string; child
   return (
     <AbsoluteFill style={{pointerEvents: 'none'}}>
       <style>{baseCss(model) + css + themeCss(model)}</style>
-      <section id={model.id} style={style}>{children}</section>
+      <section id={model.id} style={style}><Density model={model}>{children}</Density></section>
     </AbsoluteFill>
   );
 };

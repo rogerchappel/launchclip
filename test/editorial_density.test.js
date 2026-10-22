@@ -4,6 +4,7 @@
 // key text at least 44 px.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {DENSITY, resolveEditorialModule} from '../kit/core/editorial-core.mjs';
 import {buildEditorialModule} from '../kit/hyperframes/editorial-ui-modules.mjs';
 
@@ -27,15 +28,50 @@ const SPECS = {
 const spec = (name, extra = {}) => ({...base, kind: name, ...SPECS[name], ...extra});
 const centre = rect => rect.y + rect.height / 2;
 
-test('9:16 default rects take the safe-zone width and a content height, centred near the target', () => {
+test('9:16 default rects sit in the safe zone, above the caption band, at phone scale', () => {
   for (const name of Object.keys(SPECS)) {
-    const {rect, density} = resolveEditorialModule(spec(name, {aspect: '9:16'}));
+    const model = resolveEditorialModule(spec(name, {aspect: '9:16'}));
+    const {rect, density} = model;
     assert.equal(density.source, 'derived', name);
     assert.ok(rect.x >= 80 && rect.x + rect.width <= 940, `${name} x inside 80–940`);
     assert.ok(rect.y >= 280 && rect.y + rect.height <= DENSITY.portrait.captionTop, `${name} y inside 280–1190: ${JSON.stringify(rect)}`);
-    assert.ok(centre(rect) > 280 + 1170 / 2 && Math.abs(centre(rect) - 860) <= 288, `${name} centre ${centre(rect)}`);
-    assert.ok(rect.height < 740 && density.layout.height - Math.max(160, density.natural) < 1, `${name} hugs its content`);
+    // Centre of mass within the layout-check tolerance (860 ± 288).
+    assert.ok(Math.abs(centre(rect) - 860) <= 288, `${name} centre ${centre(rect)}`);
+    // Key text: title and base copy at least 44 px (body copy rounds from 43.2 at 1.8).
+    assert.ok(model.chrome.titleFont * density.scale >= 44, `${name} title ${model.chrome.titleFont * density.scale}px`);
+    assert.ok(model.chrome.font * density.scale >= 43, `${name} body ${model.chrome.font * density.scale}px`);
+    assert.ok(density.scale >= 1.8, `${name} scale ${density.scale}`);
+    // The card is as tall as its content, not a fixed 740 px box.
+    assert.ok(density.natural <= density.layout.height + .5, name);
+    assert.ok(density.layout.height - Math.max(160, density.natural) < 1, `${name} hugs its content`);
   }
+});
+
+test('compact 9:16 cards keep their centre below the lower-third line', () => {
+  const lowerThird = 280 + 1170 / 2;
+  for (const name of ['callout', 'callout-treated', 'checklist', 'step-rail', 'metric', 'date-card', 'status-rack', 'code-snippet', 'excerpt-window']) {
+    const {rect} = resolveEditorialModule(spec(name, {aspect: '9:16'}));
+    assert.ok(centre(rect) > lowerThird, `${name} centre ${centre(rect)} > ${lowerThird}`);
+  }
+});
+
+test('9:16 hero numbers are genuinely big and stay inside the card', () => {
+  const model = resolveEditorialModule(spec('metric', {aspect: '9:16'}));
+  const rendered = model.content.numberFont * model.density.scale;
+  assert.ok(rendered >= 200, `metric number ${rendered}px`);
+  const widest = Math.max(...model.content.values.map(value => value.text.length));
+  assert.ok(widest * model.content.numberFont * .68 <= model.density.layout.width - 48);
+  const long = resolveEditorialModule(spec('metric', {aspect: '9:16', metric: {...SPECS.metric.metric, values: [{value: 1234567, at: .6}]}}));
+  assert.ok('1,234,567'.length * long.content.numberFont * .68 <= long.density.layout.width - 48);
+});
+
+test('the emitter scales 9:16 content through one .ui-density wrapper', () => {
+  const built = buildEditorialModule(spec('checklist', {aspect: '9:16'}));
+  const model = resolveEditorialModule(spec('checklist', {aspect: '9:16'}));
+  assert.match(built.html, /^<section id="mod"[^>]*><div class="ui-density"><h2 class="ui-title">/);
+  assert.ok(built.css.includes(`#mod>.ui-density{position:absolute;left:0;top:0;width:${model.density.layout.width}px;height:${model.density.layout.height}px;transform:scale(${model.density.scale});transform-origin:0 0}`));
+  assert.ok(built.css.includes(`left:${model.rect.x}px;top:${model.rect.y}px;width:${model.rect.width}px;height:${model.rect.height}px`));
+  assert.deepEqual(built.layout.rect, model.rect);
 });
 
 test('16:9 stays at scale 1: explicit rects are untouched, defaults hug content on the old baseline', () => {
@@ -58,6 +94,22 @@ test('16:9 stays at scale 1: explicit rects are untouched, defaults hug content 
   assert.ok(grid.rect.height > 500);
 });
 
+test('explicit 9:16 rects keep their footprint and grow the type to fit it', () => {
+  const rect = {x: 90, y: 380, width: 900, height: 620};
+  const model = resolveEditorialModule(spec('metric', {aspect: '9:16', rect}));
+  assert.deepEqual(model.rect, rect);
+  assert.equal(model.density.source, 'explicit');
+  assert.ok(model.density.scale > 1.5);
+  assert.ok(model.density.natural <= model.density.layout.height + .5);
+  // A tight rect only grows as far as its content allows.
+  const tight = {x: 90, y: 600, width: 900, height: 230};
+  const callout = resolveEditorialModule(spec('callout', {aspect: '9:16', rect: tight}));
+  assert.ok(callout.density.scale >= 1 && callout.density.scale < 1.2, `scale ${callout.density.scale}`);
+  assert.ok(callout.density.natural <= callout.density.layout.height + .5);
+  // Errors for an explicit rect are the pre-density messages.
+  assert.throws(() => resolveEditorialModule(spec('callout', {aspect: '9:16', rect: {...tight, height: 160}, body: 'word '.repeat(30)})), /callout rect too short for body/);
+});
+
 test('9:16 media-window keeps scale 1 and a 16:9 media frame centred on the target', () => {
   const model = resolveEditorialModule({...base, kind: 'media-window', aspect: '9:16', title: 'Demo', media: {kind: 'image', src: 'assets/demo.png'}});
   assert.equal(model.density.scale, 1);
@@ -71,4 +123,12 @@ test('content that only fits the legacy footprint still resolves there', () => {
   const model = resolveEditorialModule({...base, kind: 'code-snippet', aspect: '9:16', title: 'Long line', code: {lines: [{at: .6, tokens: [{text: line, type: 'plain'}]}]}});
   assert.equal(model.density.source, 'legacy');
   assert.deepEqual(model.rect, {x: 90, y: 960, width: 900, height: 740});
+});
+
+test('both Remotion shells wrap module content in the same density wrapper', () => {
+  const shared = readFileSync(new URL('../kit/remotion/modules/shared.tsx', import.meta.url), 'utf8');
+  const shellB = readFileSync(new URL('../kit/remotion/modules/shell-b.tsx', import.meta.url), 'utf8');
+  assert.ok(shared.includes("className=\"ui-density\" style={{position: 'absolute', left: 0, top: 0, width: d.layout.width, height: d.layout.height, transform: `scale(${d.scale})`, transformOrigin: '0 0'}}"));
+  assert.ok(shared.includes('<section id={model.id} style={style}><Density model={model}>{children}</Density></section>'));
+  assert.ok(shellB.includes('<Density model={model}>{children}</Density>'));
 });

@@ -31,6 +31,11 @@ function moduleMotion(target, model, origin) {
     `tl.to(${selector}, ${js({...m.exitTo, duration: m.exitDuration, ease: m.exitEase})}, ${m.exitStart});`];
 }
 
+/** CSS declarations for the density wrapper (shared with the Remotion shells). */
+export function densityCss(density) {
+  return `position:absolute;left:0;top:0;width:${density.layout.width}px;height:${density.layout.height}px;transform:scale(${density.scale});transform-origin:0 0`;
+}
+
 // Skill-local authoring helper, not a production API. The host owns its paused
 // GSAP timeline and places these fragments directly inside its composition root.
 export function buildEditorialModule(input) {
@@ -224,6 +229,14 @@ export function emitEditorialModule(model) {
     css += scoped(['.ui-month', '.ui-step-number'], `color:${C.themedInk}`);
     if (kind === 'media-window') css += `#${id}-media{background:${theme.surface}!important}`;
     if (glass) css += `@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){${scoped([''], `background:${theme.surface}${G.themeSupportedAlpha}`)}}`;
+  }
+  const density = model.density;
+  if (density && density.scale !== 1 && kind !== 'media-window') {
+    // Density: the kind markup lays out in the layout box and is scaled into
+    // the rect from its top-left corner (the section keeps the canvas rect,
+    // border, radius, shadow and module motion).
+    css += `#${id}>.ui-density{${densityCss(density)}}`;
+    body = `<div class="ui-density">${body}</div>`;
   }
   const background = kind === 'media-window' ? 'background:transparent;' : '';
   return {html: `${media}<section id="${id}" ${kind === 'media-window' ? chromeTimed : timed} style="${background}">${body}</section>`, css, motion: motion.join('\n'), events: model.events, layout: model.layout};

@@ -10,6 +10,7 @@ import { useCurrentFrame, useVideoConfig } from "remotion";
 import { EDITORIAL_STYLE, EDITORIAL_SYMBOLS } from "../../core/editorial-core.mjs";
 // @ts-ignore plain ESM core, bundled by Remotion
 import { tween } from "../../core/motion.mjs";
+import { Density } from "./shared";
 
 export type Model = any;
 export const S = EDITORIAL_STYLE;
@@ -144,7 +145,7 @@ export function surfaceStyle(model: Model): React.CSSProperties {
 /** <section> at the module rect, carrying the module enter/exit. */
 export const Section: React.FC<{ model: Model; t: number; children?: React.ReactNode; style?: React.CSSProperties }> = ({ model, t, children, style }) => (
   <section id={model.id} style={{ ...surfaceStyle(model), ...moduleMotion(model, t), ...style }}>
-    {children}
+    <Density model={model}>{children}</Density>
   </section>
 );
 

@@ -250,21 +250,22 @@ const hex = value => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value
 // output for explicit rects. 9:16 picks the largest scale, from DENSITY.max
 // down to 1, at which the content validates and its natural height fits.
 export const DENSITY = Object.freeze({
-  max: 1, min: 1, step: .05,
+  max: 2, min: 1, step: .05,
   // RFC §5 Shorts geometry, reference 1080x1920: safe zone, the caption band
   // top (shorts-delivery.md) and the centre-of-mass target. The default card
   // centre sits just below the lower-third line (safe.y + safe.height / 2) so
   // the lower third is never empty.
   portrait: Object.freeze({x: 90, width: 840, top: 280, captionTop: 1190, bottom: 1450, centre: 880, mediaHeight: 521}),
   landscape: Object.freeze({x: 80, width: 680, top: 80, baseline: 980}),
-  heroNumber: 64, numberCap: 64
+  // Hero numbers (metric/progress) may grow to this layout size in 9:16.
+  heroNumber: 120, numberCap: 64
 });
 const LEGACY_RECT = {'16:9': {x: 80, y: 480, width: 680, height: 500}, '9:16': {x: 90, y: 960, width: 900, height: 740}};
 const BASE = Object.freeze({scale: 1, hero: false});
 
 function candidates() {
   const list = [];
-  for (let scale = DENSITY.max; scale >= DENSITY.min - 1e-9; scale -= DENSITY.step) list.push({scale: Math.round(scale * 100) / 100, hero: false});
+  for (let scale = DENSITY.max; scale >= DENSITY.min - 1e-9; scale -= DENSITY.step) list.push({scale: Math.round(scale * 100) / 100, hero: true});
   return list;
 }
 
@@ -274,7 +275,23 @@ export function resolveEditorialModule(input) {
   if (!plain || !['16:9', '9:16'].includes(input.aspect) || !EDITORIAL_KINDS.includes(input.kind)) return resolveAt(input, input?.rect, BASE, 'explicit');
   const explicit = input.rect !== undefined;
   const portrait = input.aspect === '9:16';
-  if (explicit) return resolveAt(input, input.rect, BASE, 'explicit');
+  if (explicit && !portrait) return resolveAt(input, input.rect, BASE, 'explicit');
+  if (explicit) {
+    // Explicit 9:16 rect: keep the rect, grow the type until the content
+    // would no longer fit. The final BASE attempt is the pre-density
+    // behaviour, so any spec that resolved before still resolves (or throws
+    // the same error).
+    const rect = input.rect;
+    if (rect && typeof rect === 'object' && input.kind !== 'media-window') {
+      for (const candidate of candidates()) {
+        try {
+          const model = resolveAt(input, rect, candidate, 'explicit');
+          if (model.density.natural <= model.density.layout.height + .5) return model;
+        } catch { /* try a smaller scale */ }
+      }
+    }
+    return resolveAt(input, rect, BASE, 'explicit');
+  }
   if (input.kind === 'media-window') {
     if (!portrait) return resolveAt(input, LEGACY_RECT['16:9'], BASE, 'legacy');
     const P = DENSITY.portrait, height = P.mediaHeight;
@@ -294,8 +311,11 @@ export function resolveEditorialModule(input) {
   // 9:16 default: safe-zone width, the largest scale whose natural height
   // fits above the caption band (else above the safe-zone bottom), centred
   // on the RFC centre-of-mass target.
-  const P = DENSITY.portrait;
-  const passes = [{limit: P.captionTop}, {limit: P.bottom}];
+  // First choice keeps the card centre below the lower-third line at near
+  // phone scale; then any scale above the caption band; then the whole safe
+  // zone.
+  const P = DENSITY.portrait, lowerThird = P.top + (P.bottom - P.top) / 2;
+  const passes = [{limit: P.captionTop, maxHeight: 2 * (P.captionTop - lowerThird - 1), minScale: 1.8}, {limit: P.captionTop}, {limit: P.bottom}];
   for (const {limit, maxHeight = Infinity, minScale = 0} of passes) {
     const band = limit - P.top;
     for (const candidate of candidates()) {
