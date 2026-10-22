@@ -24,6 +24,11 @@
 // Remotion renders missing segments by frame range (src/renderers/remotion_segments.js),
 // joins them with the FFmpeg concat demuxer (stream copy), encodes once with
 // the delivery settings and muxes the soundtrack once over the whole timeline.
+// No stage may lose a frame: a segment is cached only once it holds exactly
+// its frame range (a short one is re-rendered once, then the render fails),
+// the join stamps every frame from its index, the delivery encode passes
+// frames through, the mux is limited by frame count, and the joined, encoded
+// and final files must each hold the story's frame count.
 // HyperFrames' CLI has no frame range, so it renders whole videos, cached by
 // the hash of the whole timeline.
 import { execFile } from "node:child_process";
@@ -486,13 +491,70 @@ export function storySoundtrack(story) {
 // ---------------------------------------------------------------------------
 // FFmpeg tools (each replaceable in tests)
 
+/** Timescale of joined segments (exact for 24, 25, 30, 50 and 60 fps). */
+export const JOIN_TIMESCALE = 90000;
+
+/**
+ * The concat demuxer list for joining segments: one `file` line per segment
+ * and, when its frame count is known, a `duration` line (frames / fps), so the
+ * demuxer never probes a segment's length from its container metadata.
+ */
+export function concatList(files, { fps, frames } = {}) {
+  return files.map((file, index) => {
+    const line = `file '${path.resolve(file).replaceAll("'", "'\\''")}'`;
+    const count = Array.isArray(frames) ? Number(frames[index]) : NaN;
+    return Number.isFinite(count) && Number(fps) > 0 ? `${line}\nduration ${(count / Number(fps)).toFixed(9)}` : line;
+  }).join("\n") + "\n";
+}
+
+/**
+ * FFmpeg arguments of the join: a stream copy whose packets are re-stamped
+ * from their index (setts: pts = dts = N / fps, duration one frame) in a
+ * 90 kHz timebase. The concat demuxer places each file at the running sum of
+ * the previous files' durations in microseconds, which is not a whole number
+ * of ticks for every frame rate and drifts across many joins; stamping from
+ * the packet index makes every frame land exactly on its slot, whatever the
+ * segments' container metadata says. The lossless segments have no B-frames
+ * (x264 ultrafast), so packets are in presentation order and pts = dts holds.
+ */
+export function concatArgs(list, output, { fps } = {}) {
+  const rate = Number(fps);
+  // time_base + prescale: the expressions are evaluated in the 90 kHz output
+  // timebase, whatever timebase the first segment was written with.
+  const restamp = rate > 0 ? ["-bsf:v", `setts=time_base=1/${JOIN_TIMESCALE}:prescale=1:ts=N/(${rate}*TB_OUT):duration=1/(${rate}*TB_OUT)`] : [];
+  return ["-f", "concat", "-safe", "0", "-i", list, "-map", "0:v:0", "-c", "copy", ...restamp, "-video_track_timescale", String(JOIN_TIMESCALE), "-an", output];
+}
+
+/**
+ * FFmpeg arguments of the soundtrack mux (stream copy). Every video frame is
+ * kept: the video is limited by its frame count (`-frames:v`) and the output
+ * `-t` sits half a frame past the last frame's end. `-shortest` is not used:
+ * it ends the output with the shortest stream and drops every video frame
+ * that ends after the soundtrack does, so a soundtrack even a few samples
+ * short of frames / fps loses the last frame (with an exact-length soundtrack
+ * the last frame survives only because its end equals the audio's). The
+ * audio starts at the window's offset (`-ss`, previews) and is cut by the
+ * same `-t`, at AAC packet granularity. Without frames/fps (an unknown frame
+ * count) it falls back to the window's duration, else -shortest.
+ */
+export function muxArgs({ video, audio, output, offset = 0, duration, frames, fps }) {
+  const count = Number(frames);
+  const rate = Number(fps);
+  const exact = Number.isInteger(count) && count > 0 && rate > 0;
+  const input = [...(offset > 0 ? ["-ss", String(offset)] : []), "-i", audio];
+  const limit = exact ? ["-frames:v", String(count), "-t", String((count + 0.5) / rate)] : Number(duration) > 0 ? ["-t", String(duration)] : ["-shortest"];
+  return ["-i", video, ...input, "-map", "0:v:0", "-map", "1:a:0", "-c", "copy", ...limit, "-movflags", "+faststart", output];
+}
+
 export function defaultSegmentTools() {
   const ffmpeg = (args) => execFileAsync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", ...args], { maxBuffer: 1 << 26 });
   return {
-    async concat(files, output) {
+    // Join segments (stream copy) with exact per-frame timestamps; options:
+    // {fps, frames: [frame count of each file]}.
+    async concat(files, output, options = {}) {
       const list = `${output}.txt`;
-      await writeFile(list, files.map((file) => `file '${path.resolve(file).replaceAll("'", "'\\''")}'`).join("\n") + "\n");
-      try { await ffmpeg(["-f", "concat", "-safe", "0", "-i", list, "-map", "0:v:0", "-c", "copy", "-an", output]); }
+      await writeFile(list, concatList(files, options));
+      try { await ffmpeg(concatArgs(list, output, options)); }
       finally { await rm(list, { force: true }); }
     },
     // The soundtrack as AAC (48 kHz stereo, 320 kb/s, as Remotion encodes it),
@@ -500,11 +562,11 @@ export function defaultSegmentTools() {
     async encodeAudio({ audio, output, volume = 1, duration }) {
       await ffmpeg(["-i", audio, "-vn", "-af", `volume=${volume},apad`, "-t", String(duration), "-ar", "48000", "-ac", "2", "-c:a", "aac", "-b:a", "320k", output]);
     },
-    // Mux the soundtrack (stream copy): offset/duration cut a window of it (previews).
-    async mux({ video, audio, output, offset = 0, duration }) {
+    // Mux the soundtrack (stream copy) under every video frame: offset/duration
+    // cut a window of it (previews); frames/fps keep exactly that many frames.
+    async mux({ video, audio, output, offset = 0, duration, frames, fps }) {
       if (!audio) { await copyFile(video, output); return; }
-      const input = [...(offset > 0 ? ["-ss", String(offset)] : []), "-i", audio];
-      await ffmpeg(["-i", video, ...input, "-map", "0:v:0", "-map", "1:a:0", "-c", "copy", ...(duration ? ["-t", String(duration)] : ["-shortest"]), "-movflags", "+faststart", output]);
+      await ffmpeg(muxArgs({ video, audio, output, offset, duration, frames, fps }));
     },
     async countFrames(file) {
       const { stdout } = await execFileAsync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0", file]);
@@ -582,18 +644,28 @@ export async function renderWithSegments(options) {
     return { segment, file, status: force ? "forced" : existsSync(file) ? "reused" : "rendered" };
   });
 
-  // Render what is missing or forced, into a temporary name first.
+  // A cached segment that does not hold its frame count (cached by a render
+  // that failed its final check) is re-rendered rather than joined.
+  for (const entry of entries.filter((item) => item.status === "reused")) {
+    const count = await tools.countFrames(entry.file);
+    if (Number.isFinite(count) && count !== entry.segment.frames) {
+      await rm(entry.file, { force: true });
+      Object.assign(entry, { status: "rendered", repaired: `the cached segment had ${count} frames` });
+    }
+  }
+
+  // Render what is missing or forced, into a temporary name first; a segment
+  // joins the cache only once it holds exactly its frame range.
   const work = entries.filter((entry) => entry.status !== "reused");
   const renderStarted = now();
   const timings = new Map();
   if (work.length) {
-    const result = await adapter.renderSegments(project, work.map((entry) => ({ startFrame: entry.segment.startFrame, endFrame: entry.segment.endFrame, output: `${entry.file}.partial.mp4`, id: entry.segment.id })), { story, kitHash: inputs.kit, quality });
-    for (const [i, entry] of work.entries()) {
-      const temporary = `${entry.file}.partial.mp4`;
-      if (!existsSync(temporary)) throw new Error(`segment ${entry.segment.id} was not rendered (${rel(project, temporary)})`);
-      await rename(temporary, entry.file);
-      const took = Number(result?.segments?.[i]?.seconds);
+    const results = await renderVerifiedSegments({ project, adapter, tools, work, story, kitHash: inputs.kit, quality });
+    for (const entry of work) {
+      await rename(`${entry.file}.partial.mp4`, entry.file);
+      const { seconds: took, retried } = results.get(entry);
       timings.set(entry.segment.hash, Number.isFinite(took) ? took : null);
+      if (retried) entry.retried = retried;
     }
   }
   seconds.render = round3((now() - renderStarted) / 1000);
@@ -613,23 +685,35 @@ export async function renderWithSegments(options) {
   await mkdir(path.dirname(output), { recursive: true });
   const joined = `${output}.joined.mp4`;
   const encoded = `${output}.video.mp4`;
-  const joinStarted = now();
-  await tools.concat(entries.map((entry) => entry.file), joined);
-  seconds.join = round3((now() - joinStarted) / 1000);
-  const encodeStarted = now();
-  if (typeof adapter.encodeDelivery === "function") await adapter.encodeDelivery(joined, encoded, { quality });
-  else await rename(joined, encoded);
-  await rm(joined, { force: true });
-  seconds.encode = round3((now() - encodeStarted) / 1000);
   const first = scope[0].startFrame;
   const last = scope.at(-1).endFrame;
+  // Every stage keeps every frame; a stage that does not fails the render
+  // stage here, naming itself, instead of shipping a video a frame short.
+  const expectFrames = async (stage, file) => {
+    const count = await tools.countFrames(file);
+    if (Number.isFinite(count) && count !== last - first) {
+      await Promise.all([joined, encoded, output].map((temporary) => rm(temporary, { force: true })));
+      throw new Error(`render stage failed: the ${stage} has ${count} frames; the ${options.previewScene ? `preview of scene "${options.previewScene}"` : "story"} has ${last - first} (frames ${first}–${last} at ${plan.fps} fps)`);
+    }
+  };
+  const joinStarted = now();
+  await tools.concat(entries.map((entry) => entry.file), joined, { fps: plan.fps, frames: entries.map((entry) => entry.segment.frames) });
+  await expectFrames("joined segments", joined);
+  seconds.join = round3((now() - joinStarted) / 1000);
+  const encodeStarted = now();
+  if (typeof adapter.encodeDelivery === "function") {
+    await adapter.encodeDelivery(joined, encoded, { quality });
+    await expectFrames("delivery encode", encoded);
+  } else await rename(joined, encoded);
+  await rm(joined, { force: true });
+  seconds.encode = round3((now() - encodeStarted) / 1000);
   const muxStarted = now();
   const audio = await soundtrackFile({ project, story, adapter, dir, inputs, tools });
-  await tools.mux({ video: encoded, audio: audio?.file ?? null, output, offset: first / plan.fps, duration: options.previewScene ? (last - first) / plan.fps : undefined });
+  await tools.mux({ video: encoded, audio: audio?.file ?? null, output, offset: first / plan.fps, duration: options.previewScene ? (last - first) / plan.fps : undefined, frames: last - first, fps: plan.fps });
   await rm(encoded, { force: true });
   seconds.mux = round3((now() - muxStarted) / 1000);
-  const frames = await tools.countFrames(output);
-  if (Number.isFinite(frames) && frames !== last - first) throw new Error(`joined render has ${frames} frames; expected ${last - first}`);
+  // The final MP4 holds exactly the story's (or the preview's) frame count.
+  await expectFrames("final MP4", output);
 
   if (!options.previewScene) await pruneCache(dir, index, new Set([...hashed.map((segment) => segment.hash), ...(audio?.key ? [audio.key] : [])]));
   await writeIndex(dir, index);
@@ -647,8 +731,55 @@ export async function renderWithSegments(options) {
     seconds_saved: round3(saved),
     cache: rel(project, dir),
     audio: audio ? { source: audio.source, volume: audio.volume } : null,
-    plan: entries.map((entry) => ({ id: entry.segment.id, kind: entry.segment.kind, frames: [entry.segment.startFrame, entry.segment.endFrame], scenes: entry.segment.scenes, hash: short(entry.segment.hash), status: entry.status, seconds: timings.get(entry.segment.hash) == null ? null : round3(timings.get(entry.segment.hash)) }))
+    plan: entries.map((entry) => ({ id: entry.segment.id, kind: entry.segment.kind, frames: [entry.segment.startFrame, entry.segment.endFrame], scenes: entry.segment.scenes, hash: short(entry.segment.hash), status: entry.status, seconds: timings.get(entry.segment.hash) == null ? null : round3(timings.get(entry.segment.hash)), ...(entry.retried ? { retried: entry.retried } : {}), ...(entry.repaired ? { repaired: entry.repaired } : {}) }))
   };
+}
+
+/**
+ * Render segments through the adapter and check that each one holds exactly
+ * its frame range (a renderer can come back a frame short, or not write a
+ * file at all). A segment that does not is re-rendered once, alone; if it
+ * still does not, the render fails, naming the segment and both counts.
+ * work: [{segment, file}] (each renders to `${file}.partial.mp4`).
+ * → Map(entry → {seconds, retried: null | "had N frames"})
+ */
+export async function renderVerifiedSegments({ project, adapter, tools, work, story, kitHash, quality }) {
+  const results = new Map();
+  const render = async (list) => {
+    const result = await adapter.renderSegments(project, list.map((entry) => ({ startFrame: entry.segment.startFrame, endFrame: entry.segment.endFrame, output: `${entry.file}.partial.mp4`, id: entry.segment.id })), { story, kitHash, quality });
+    list.forEach((entry, i) => results.set(entry, { seconds: Number(result?.segments?.[i]?.seconds), retried: results.get(entry)?.retried ?? null }));
+  };
+  const problem = async (entry) => {
+    const temporary = `${entry.file}.partial.mp4`;
+    if (!existsSync(temporary)) return "was not written";
+    const count = await tools.countFrames(temporary);
+    return Number.isFinite(count) && count !== entry.segment.frames ? `had ${count} frames` : null;
+  };
+  const check = async (list) => {
+    const bad = [];
+    for (const entry of list) {
+      const found = await problem(entry);
+      if (found) bad.push({ entry, found });
+    }
+    return bad;
+  };
+  await render(work);
+  const first = await check(work);
+  if (!first.length) return results;
+  for (const { entry } of first) await rm(`${entry.file}.partial.mp4`, { force: true });
+  const retry = first.map(({ entry }) => entry);
+  await render(retry);
+  for (const { entry, found } of first) results.get(entry).retried = found;
+  const second = await check(retry);
+  if (second.length) {
+    for (const entry of work) await rm(`${entry.file}.partial.mp4`, { force: true });
+    const detail = second.map(({ entry, found }) => {
+      const before = first.find((item) => item.entry === entry).found;
+      return `segment ${entry.segment.id} (frames ${entry.segment.startFrame}–${entry.segment.endFrame}, ${entry.segment.frames} expected) ${before}, then ${found} when re-rendered`;
+    }).join("; ");
+    throw new Error(`render stage failed: ${detail} (${rel(project, path.dirname(work[0].file))})`);
+  }
+  return results;
 }
 
 // HyperFrames (no frame range): whole renders, cached by the whole timeline's hash.

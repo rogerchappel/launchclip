@@ -65,10 +65,16 @@ export function losslessArgs(args) {
   return out;
 }
 
-/** FFmpeg arguments of the delivery encode (video only). */
+/**
+ * FFmpeg arguments of the delivery encode (video only). `-fps_mode
+ * passthrough`: every decoded frame of the joined segments is encoded once,
+ * at its own timestamp (the join stamps them exactly), never dropped or
+ * duplicated by FFmpeg's constant-frame-rate sync. For exact timestamps the
+ * bitstream is the same as with the default sync.
+ */
 export function deliveryArgs(input, output, quality = "draft") {
   const { crf, x264Preset } = deliverySettings(quality);
-  return ["-y", "-hide_banner", "-loglevel", "error", "-i", path.resolve(input), "-c:v", "libx264", "-pix_fmt", "yuv420p", ...(x264Preset ? ["-preset", x264Preset] : []), "-video_track_timescale", "90000", "-crf", String(crf), "-an", "-map_metadata", "-1", path.resolve(output)];
+  return ["-y", "-hide_banner", "-loglevel", "error", "-i", path.resolve(input), "-fps_mode", "passthrough", "-c:v", "libx264", "-pix_fmt", "yuv420p", ...(x264Preset ? ["-preset", x264Preset] : []), "-video_track_timescale", "90000", "-crf", String(crf), "-an", "-map_metadata", "-1", path.resolve(output)];
 }
 
 // Bundles are cached outside the project (the project is the bundle's public
