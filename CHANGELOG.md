@@ -61,6 +61,16 @@
 - Portrait shorts in the metered director lane now burn in word-synced captions
   inside the safe zone instead of relying on typography alone.
 
+### Fixed
+
+- A partial render can no longer ship a video a frame short. Each Remotion
+  segment must hold exactly its frame range before it is cached (a short one
+  is re-rendered once, else the render fails naming it), a short segment left
+  in the cache is re-rendered, the join stamps every frame from its index, the
+  delivery encode passes frames through, the soundtrack mux is limited by
+  frame count instead of `-shortest`/`-t`, and the joined, encoded and final
+  files must each hold the story's frame count.
+
 ## 0.1.1 - 2026-07-18
 
 ### Added
