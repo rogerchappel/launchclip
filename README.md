@@ -460,7 +460,7 @@ diagram language, presenter treatment, motion physics, transitions, and
 forbidden motifs while leaving composition driven by each narrated concept.
 
 Reusable, user-owned styles live in `.launchclip/styles/<name>`. LaunchClip does
-not ship or invent channel presets: save the design system from a completed
+not invent channel presets for produced videos: save the design system from a completed
 video or another style directory, then track that small pack with the project:
 
 ```bash
@@ -476,6 +476,29 @@ matching pack remains a free-form creative family for backward compatibility.
 Use `--style-root` to read packs from a non-default directory. Generated
 `.launchclip` workspaces remain ignored by Git, while `.launchclip/styles/**` is
 intentionally trackable so a repository can keep its own visual identity.
+
+Storyboard videos use style pack v2 (`style.json` with
+`"schema": "launchclip.style.v2"`): palette, bundled fonts, motion grammar,
+camera, ambient level, caption preset, SFX density and music hints, module
+preferences and an optional intro/outro. A storyboard names it with
+`"style": "<name>"` and every command (validate, compile, layout-check,
+finish, both renderers) merges it the same way; explicit storyboard values
+win. Five starters ship for storyboards (`editorial-dark`, `bold-creator`,
+`minimal-tech`, `warm-documentary`, `neon-explainer`). To mimic earlier videos,
+draft a pack from them and measure later renders against it:
+
+```bash
+launchclip style create my-channel --from-reference ep1.mp4 ep2.mp4
+launchclip story plan --brief brief.md --style my-channel
+launchclip style check ./episode-3 --against my-channel
+launchclip style upgrade ai-news   # v1 pack → v2
+```
+
+Captions have 14 presets shared by both renderers (`word-highlight`,
+`karaoke-fill`, `pop-word`, `bounce`, `typewriter`, `box-highlight`,
+`underline-sweep`, `kinetic-stack`, `minimal-line`, `glow`, `outline-heavy`,
+`split-color`, `lower-band`, `bubble`), chosen with
+`{"type": "captions", "preset": "<name>"}` or by the style pack.
 
 Every planned shot carries semantic visual objects, continuity handoffs, and
 named visible events. SFX cues must bind to those events, and production
