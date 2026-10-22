@@ -26,6 +26,7 @@ import { brandFontStacks, fontSlug, googleFontModuleName } from '../core/fonts.m
 import { EMITTERS as EDITORIAL_EMITTERS } from './editorial-ui-modules.mjs';
 import { EMITTERS as CATALOG_A_EMITTERS } from './catalog-a.mjs';
 import { EMITTERS as CATALOG_B_EMITTERS } from './catalog-b.mjs';
+import { EMITTERS as CATALOG_C_EMITTERS, cameraGsap } from './catalog-c.mjs';
 
 export const COMPOSITION_ID = 'launchclip-story';
 export const GSAP_SRC = 'https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js';
@@ -35,7 +36,7 @@ const TOGGLE_LEAD = 0.0005;
 
 /** Every HyperFrames emitter, keyed by module id. */
 export function hyperframesEmitters() {
-  return { ...CATALOG_A_EMITTERS, ...CATALOG_B_EMITTERS, ...EDITORIAL_EMITTERS };
+  return { ...CATALOG_A_EMITTERS, ...CATALOG_B_EMITTERS, ...CATALOG_C_EMITTERS, ...EDITORIAL_EMITTERS };
 }
 
 /**
