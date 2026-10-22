@@ -80,8 +80,10 @@ function checkAnimations(model) {
     }
     if (key.endsWith(".blur")) assert.equal(list.at(-1).to.blur, 0, `${key} settles sharp`);
   }
-  for (const node of new Set(model.animations.map((a) => a.node))) {
-    for (const prop of ["opacity", "transform", "filter"]) assert.ok(!(prop in model.styles[node]), `${node} static ${prop}`);
+  for (const [key] of tracks) {
+    const [node, prop] = [key.slice(0, key.lastIndexOf(".")), key.slice(key.lastIndexOf(".") + 1)];
+    const css = prop === "blur" ? "filter" : prop === "opacity" || prop === "color" ? prop : "transform";
+    if (css !== "color") assert.ok(!(css in model.styles[node]), `${node} sets static ${css} while ${prop} is animated`);
   }
 }
 
@@ -267,4 +269,71 @@ test("each sample renders a real Remotion still through ModuleReview", { timeout
 test("the throwaway parity verifier and its Remotion entry exist", () => {
   assert.ok(existsSync(path.join(ROOT, "scripts", "parity-cat-a.mjs")));
   assert.ok(existsSync(ENTRY));
+});
+
+// Parity fixtures resolve and their scenes use catalogue A modules.
+async function checkFixture(name) {
+  const fixture = JSON.parse(await readFile(path.join(ROOT, "test", "fixtures", "parity", name), "utf8"));
+  const scene = fixture.story.scenes.find((item) => item.id === fixture.sceneId);
+  const format = fixture.story.format;
+  const model = MODULES[scene.module].resolve(scene.params, { id: scene.id, start: scene.start, duration: scene.end - scene.start, format, brand: fixture.story.brand, aspect: "9:16" });
+  checkContract(model, { captions: !model.hidesCaptions });
+  checkEmitter(model);
+  return model;
+}
+
+// ---------------------------------------------------------------------------
+// hook-title
+
+const HOOK = { eyebrow: "Physics in 30 seconds", headline: "Hot coffee cools fast, then crawls.", emphasis: [{ text: "fast", at: 1.2 }, { text: "crawls", at: 2.4, color: "accent" }], kicker: "Why?", kickerAt: 3 };
+registerSample("hook-title", HOOK);
+
+test("hook-title is readable on frame 0 and lights its emphasis words on time", () => {
+  const model = resolve("hook-title", HOOK);
+  assert.equal(model.hidesCaptions, true);
+  const t0 = model.start;
+  assert.equal(sampleNode(model, "root", t0).opacity ?? 1, 1);
+  for (const line of model.content.lines) for (const word of line.words) assert.equal(sampleNode(model, `word-${word.index}`, t0).opacity ?? 1, 1);
+  assert.equal(model.content.lines.flatMap((line) => line.words.map((word) => word.text)).join(" "), HOOK.headline);
+  const [fast, crawls] = model.content.emphasis;
+  assert.equal(fast.time, 3.2);
+  assert.equal(crawls.color, BRAND.colors.accent);
+  assert.equal(sampleNode(model, `word-${fast.word}-text`, fast.time - .01).color, BRAND.colors.paper);
+  assert.equal(sampleNode(model, `word-${fast.word}-text`, fast.time + .5).color, BRAND.colors.primary);
+  assert.equal(sampleNode(model, `word-${fast.word}-bar`, fast.time + 1).scaleX, 1);
+  assert.deepEqual(model.events.map((e) => e.id), ["m1-title", "m1-emphasis-0", "m1-emphasis-1", "m1-kicker"]);
+  assert.equal(model.events.find((e) => e.id === "m1-kicker").time, 5);
+  assert.equal(sampleNode(model, "kicker", 4.9).opacity, 0);
+  assert.equal(sampleNode(model, "kicker", 5.6).opacity, 1);
+  assert.ok(model.content.size >= 120, `headline set large (${model.content.size}px)`);
+  assert.ok(model.content.lines.length <= 4);
+});
+
+test("hook-title validates its params with path-prefixed messages", () => {
+  const bad = (params, pattern) => assert.throws(() => resolve("hook-title", params), pattern);
+  bad({}, /hook-title: params\.headline is required/);
+  bad({ headline: "Hi", subtitle: "x" }, /params\.subtitle is not a known parameter \(allowed: headline/);
+  bad({ headline: "" }, /params\.headline must be a string of 1–90 characters/);
+  bad({ headline: "Hello there", emphasis: [{ text: "nope" }] }, /params\.emphasis\[0\]\.text "nope" must match whole words/);
+  bad({ headline: "Hello there", emphasis: [{ text: "there", at: 9 }] }, /params\.emphasis\[0\]\.at must be seconds from the scene start between 0 and 3\.5/);
+  bad({ headline: "Hello there", emphasis: [{ text: "there", wobble: 1 }] }, /params\.emphasis\[0\]\.wobble is not a known parameter/);
+  bad({ headline: "Hello there", kickerAt: 1 }, /params\.kickerAt needs params\.kicker/);
+  bad({ headline: "Hello there", color: "pink" }, /params\.color must be one of "primary", "accent"/);
+  bad({ headline: "Hello there", align: "right" }, /params\.align must be one of "center", "left"/);
+  bad({ headline: "Supercalifragilisticexpialidociously" }, /params\.headline is too long/);
+  assert.throws(() => resolve("hook-title", { headline: "Hello" }, { duration: 1 }), /needs a scene of at least 1\.5 s/);
+});
+
+test("hook-title enforces kicker ink contrast on the emphasis fill", () => {
+  const brand = { colors: { ...BRAND.colors, ink: "#f2eee6" } };
+  assert.throws(() => resolve("hook-title", { headline: "Hello there", kicker: "Why?" }, { brand }), /brand contrast too low: ink on primary/);
+  assert.ok(resolve("hook-title", { headline: "Hello there" }, { brand }));
+});
+
+test("hook-title parity fixture and the golden story's s1 resolve", async () => {
+  await checkFixture("a-cat-hook-title.json");
+  const golden = JSON.parse(await readFile(path.join(ROOT, "examples", "story", "cooling.story.json"), "utf8"));
+  const s1 = golden.scenes.find((scene) => scene.id === "s1");
+  const model = MODULES["hook-title"].resolve(s1.params, { id: "s1", start: s1.start, duration: s1.end - s1.start, format: golden.format, brand: golden.brand });
+  checkContract(model, { captions: false });
 });

@@ -472,7 +472,7 @@ function resolveHookTitle(params, ctx) {
 
   const tokens = phraseTokens(headline, emphasis.map(entry => entry.text), 'params.emphasis');
   const lineHeight = .98;
-  const eyebrowSize = Math.round(44 * k), eyebrowGap = Math.round(30 * k), ruleGap = Math.round(44 * k);
+  const eyebrowSize = Math.ceil(44 * k), eyebrowGap = Math.round(30 * k), ruleGap = Math.ceil(44 * k);
   const kickerSize = Math.round(84 * k), kickerGap = Math.round(56 * k);
   const chrome = (eyebrow ? eyebrowSize * 1.2 + eyebrowGap + 6 * k + ruleGap : 0) + (kicker ? kickerGap + kickerSize * 1.36 : 0);
   const fit = fitLines(tokens.map(token => token.text.toUpperCase()), {kind: 'display', maxWidth: width, maxLines: 5, maxSize: (st.portrait ? 176 : 150) * k, minSize: 72 * k, lineHeight, maxHeight: (rect ?? st.zone).height - chrome});
@@ -703,7 +703,7 @@ function resolveCountUp(params, ctx) {
   let numberSize = Math.floor((st.portrait ? 420 : 320) * k);
   while (numberSize > 120 * k && widthAt(numberSize) > maxWidth) numberSize -= 2;
   if (widthAt(numberSize) > maxWidth) throw new Error('params.value with its prefix and suffix is too wide; use fewer digits or a shorter suffix');
-  const labelSize = Math.round(62 * k), noteSize = Math.round(44 * k);
+  const labelSize = Math.round(62 * k), noteSize = Math.ceil(44 * k);
   const labelFit = fitLines(splitWords(label).map(word => word.text), {kind: 'body', maxWidth: area.width * .86, maxLines: 2, maxSize: labelSize, minSize: labelSize, lineHeight: 1.2, maxHeight: labelSize * 2.5});
   if (!labelFit) throw new Error('params.label is too long for two lines; shorten it');
   if (note && textWidth(note.toUpperCase(), noteSize, 'meta', .08) > area.width) throw new Error('params.note is too wide for one line; shorten it');

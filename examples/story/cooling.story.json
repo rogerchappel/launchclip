@@ -22,10 +22,11 @@
       "end": 5.75,
       "energy": 1,
       "params": {
+        "eyebrow": "Physics in 30 seconds",
         "headline": "Hot coffee cools fast, then crawls.",
+        "emphasis": [{ "text": "fast", "at": 1.6 }, { "text": "crawls", "at": 3.92 }],
         "kicker": "Why?",
-        "subject": "mug",
-        "readout": { "unit": "°C", "values": [[0, 90], [1.7, 62], [4.0, 58.4]] }
+        "kickerAt": 4.78
       },
       "hits": [
         { "at": "word:fast", "event": "readout-plunge", "cue": "whoosh-down" },
