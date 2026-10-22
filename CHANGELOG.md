@@ -4,6 +4,15 @@
 
 ### Added
 
+- Add partial rendering to `launchclip finish`: the render stage caches the
+  timeline in segments (scene bodies and whole transition overlaps) hashed
+  from everything that can change their pixels, and re-renders only the
+  segments an edit touches. Remotion renders them by frame range as lossless
+  segments, joins them with a stream copy and encodes once, frame-identical
+  to a fresh full render; HyperFrames caches whole renders by hash. Add
+  `--scene s3[,s4]` (force those scenes, re-run master, evidence and gates,
+  before/after stills) and `--preview-scene s3` (just that scene to
+  `renders/scene-s3.mp4`).
 - Add the `launchclip-create-video-remotion` skill: the same subscription-agent
   cinematic workflow with Remotion 4.0.536 and React 19.3 as the renderer,
   `storyboard.json` as the primary artefact, and a new `standalone-remotion.md`

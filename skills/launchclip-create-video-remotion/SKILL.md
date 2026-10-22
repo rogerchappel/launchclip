@@ -395,7 +395,11 @@ reference. Work in this order:
     `--renderer remotion`, require the fresh-context critic to cite reviewed
     evidence IDs, and run `launchclip cinematic-check --renderer remotion`.
 15. Repair the smallest responsible scene, module parameter, mix, or plan, then
-    rerun the failed gate. Stop after three bounded passes and report
+    rerun the failed gate. For a second-pass scene fix, look first with
+    `launchclip finish <project> --preview-scene <id>`, then run
+    `launchclip finish <project> --scene <id>`: it re-renders only that scene's
+    segments, re-runs master, evidence and gates, and writes a before/after
+    still to inspect. Stop after three bounded passes and report
     `needs-repair` instead of weakening the contract.
 
 Do not weaken checks, mark accidental overlaps as intentional, or use draft

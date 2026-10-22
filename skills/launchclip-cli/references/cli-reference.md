@@ -19,6 +19,7 @@ the current workflow and the decisions an operating agent must not guess.
 - [Local-first OSS packet lane](#local-first-oss-packet-lane)
 - [Storyboard (storyboard.json)](#storyboard-storyboardjson)
 - [Finish: storyboard to mastered video in one command](#finish-storyboard-to-mastered-video-in-one-command)
+  - [The iteration loop: re-render one scene](#the-iteration-loop-re-render-one-scene)
 
 - [Voice providers](#voice-providers)
 - [Failure handling](#failure-handling)
@@ -608,7 +609,8 @@ candidate as `<out>.rejected.json`. Review the storyboard, then run
 
 ```bash
 launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] \
-  [--voice kokoro|elevenlabs|supplied|test] [--out renders/final.mp4] [--force] [--json]
+  [--voice kokoro|elevenlabs|supplied|test] [--out renders/final.mp4] \
+  [--scene s3[,s4] | --preview-scene s3] [--force] [--json]
 ```
 
 `finish` is the recommended way to turn a `storyboard.json` project into a
@@ -621,7 +623,7 @@ finished video. It runs these stages in order and stops at the first failure
 | `validate` | Validates the story, resolves its anchors against the synthesised words, and runs the geometric layout check. Errors fail the run; warnings are reported. | `.launchclip/finish/storyboard.json`, `.launchclip/finish/story.resolved.json` |
 | `captions` | Chunks the words into caption lines when a captions overlay has no `src`. | `assets/captions/captions.json` |
 | `sound` | Binds a procedural kit cue to every hit (`hit.cue`, else the named module event's cue, else a default from the event name) and to every module event that carries a `cue`, adds a whoosh under push, whip and zoom transitions, picks a music bed from scene `energy` (tempo, level and kick window), and mixes everything with the music ducked under the voice. Skipped when the storyboard sets `audio.mix`. `audio.sfx: "none"` and `audio.music: "none"` turn the parts off. | `assets/audio/mix.wav`, `assets/audio/kit/`, `AUDIO-MANIFEST.json`, `qa/sfx.json` |
-| `render` | Renders the filled copy through the renderer adapter. The default renderer is `remotion` when the project has no `index.html`, otherwise `hyperframes`; HyperFrames compiles to `.launchclip/finish/hyperframes/` first. | `.launchclip/finish/render-<quality>.mp4` |
+| `render` | Renders the filled copy through the renderer adapter and the segment cache (see the iteration loop below): unchanged segments are reused and the summary reports how many were reused, rendered and the time saved. The default renderer is `remotion` when the project has no `index.html`, otherwise `hyperframes`; HyperFrames compiles to `.launchclip/finish/hyperframes/` first. | `.launchclip/finish/render-<quality>.mp4`, `.launchclip/finish/segments/` |
 | `master` | Masters the render's audio to −14 LUFS and at most −1 dBTP, re-measured after encoding. | `renders/draft.mp4` (draft) or `renders/final.mp4` (high), or `--out` |
 | `evidence` | Builds the phase-2 temporal evidence (browser stills plus encoded frames) and critic contact sheets. | `qa/temporal-evidence/`, `qa/critic-sheets/` |
 | `gates` | Runs the renderer-neutral gates: layout, loudness, motion and audio analysis of the mastered MP4, and the temporal evidence manifest. The critic gate is reported as `pending`, with the next step. | `qa/finish/` |
@@ -645,6 +647,53 @@ whole pipeline can be exercised offline. Never ship it. The `kokoro`,
 
 After finish, a fresh-context critic reviews `qa/critic-sheets/` and writes
 `qa/critic.json`; `launchclip cinematic-check` then closes the critic gate.
+
+### The iteration loop: re-render one scene
+
+The render stage splits the timeline into segments where the set of layers on
+screen changes: each scene's body is one segment and each transition overlap
+(the incoming scene plus the outgoing scene held under it) is its own, so a
+join never falls mid-transition. Every segment is hashed from what can change
+its pixels: the scenes on screen in it (params, timing, transition tweens, a
+morph's source scene, referenced asset files), the caption chunks and timed
+overlays on screen in its window (a chunk that crosses a join counts for
+both), the global settings (brand, format, lane and any other top-level field
+such as a world camera or ambient drift: these touch every segment), the
+fonts, a content hash of the kit sources that render, and the renderer.
+Audio-only fields (`audio.mix`, `mix_volume`, `voice`, `music`, `sfx`) and the
+title do not touch the picture. Segments live in
+`.launchclip/finish/segments/<renderer>/<hash>.mp4`, so after an edit only
+the segments whose hash changed render again: editing one scene's copy
+re-renders its body and the two transitions that show it; editing a
+transition re-renders the segments of both scenes it joins.
+
+With Remotion, missing segments render by frame range through one bundle and
+one browser as lossless H.264, join with an FFmpeg concat stream copy, and are
+encoded once with the delivery settings `remotion render` uses; the soundtrack
+is muxed once over the whole timeline. A partial render is frame-identical to
+a fresh render of every segment. The HyperFrames CLI has no frame range, so
+HyperFrames renders whole videos, cached by the hash of the whole timeline:
+partial rendering is Remotion-only for now.
+
+```bash
+launchclip finish <project> --scene s3        # second pass on s3 (comma-separate several)
+launchclip finish <project> --preview-scene s3 # just s3, to renders/scene-s3.mp4
+```
+
+`--scene s3[,s4]` forces those scenes' segments to re-render even when their
+hash is unchanged, re-runs `master`, `evidence` (all samples: build-evidence
+has no partial mode) and `gates`, and writes before/after stills of each scene
+from the middle of its own segment to `qa/finish/scenes/` (`<id>-before.png`,
+`<id>-after.png` and `<id>-before-after.png` side by side), listed in the
+summary and in `finish.json` as `scene_stills`. Edits need no flag: an edited
+scene's segments re-render on the next plain `finish`; `--scene` is for a
+re-render the hashes cannot see and for the before/after check.
+
+`--preview-scene s3` renders only the segments that show `s3` (reusing cached
+ones and caching the new ones for the next full run) to
+`renders/scene-s3.mp4` with its slice of the soundtrack, then stops: master,
+evidence and gates are skipped, the final and the finish state are untouched,
+and the report's `status` is `preview`. Unknown scene ids are an error.
 
 ### Renderer eval (npm script, repository checkout)
 

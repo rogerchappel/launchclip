@@ -32,8 +32,12 @@ reference. Work in this order:
     the fresh-context critic to cite reviewed evidence IDs, and run
     `launchclip cinematic-check`.
 15. Repair the smallest responsible sequence, mix, or plan, then rerun the
-    failed gate. Stop after three bounded passes and report `needs-repair`
-    instead of weakening the contract.
+    failed gate. In a storyboard project, run second-pass scene fixes with
+    `launchclip finish <project> --scene <id>`: it re-runs master, evidence
+    and gates and writes a before/after still to inspect (HyperFrames
+    re-renders the whole video; partial rendering is Remotion-only). Stop
+    after three bounded passes and report `needs-repair` instead of weakening
+    the contract.
 
 Do not weaken checks, mark accidental overlaps as intentional, or use draft
 rendering to conceal a composition defect. Keep all motion deterministic and

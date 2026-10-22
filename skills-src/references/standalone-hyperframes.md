@@ -502,6 +502,11 @@ audio, loudness, layout and evidence gates. It never rewrites
 `finish.json`. The critic gate stays `pending` until the fresh-context critic
 has reviewed `qa/critic-sheets/`.
 
+`--scene s3` and `--preview-scene s3` work with HyperFrames too, but its CLI
+has no frame range: finish renders the whole video (cached by the hash of the
+whole timeline, so an unchanged story is never rendered twice), and a preview
+is cut from that render. Partial rendering is Remotion-only for now.
+
 Hand-authored `index.html` projects (no storyboard) use the manual render
 below.
 

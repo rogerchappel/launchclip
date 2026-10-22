@@ -675,6 +675,25 @@ skips stages whose inputs have not changed, and writes `finish.json`. The
 critic gate stays `pending`: run the fresh-context critic on
 `qa/critic-sheets/`, then `launchclip cinematic-check`.
 
+#### Second pass: re-render one scene
+
+The render stage caches the timeline in segments (each scene's body and each
+transition overlap), hashed from everything that can change their pixels, in
+`.launchclip/finish/segments/remotion/`. After an edit, a plain `launchclip
+finish` re-renders only the segments of the scenes you changed and reports how
+many it reused and the time saved. For a fix:
+
+```bash
+launchclip finish <project> --preview-scene s3   # fast look: renders/scene-s3.mp4 only
+launchclip finish <project> --scene s3           # re-render s3 into the final
+```
+
+`--preview-scene` renders just that scene with its slice of the soundtrack and
+touches neither the final nor the gates. `--scene s3[,s4]` forces those scenes'
+segments to re-render, re-runs master, evidence and gates, and writes
+before/after stills to `qa/finish/scenes/<id>-before-after.png`: inspect them.
+The joined result is frame-identical to a fresh full render.
+
 Use the manual commands below when the CLI is not available or a single step
 needs rerunning with different options.
 
