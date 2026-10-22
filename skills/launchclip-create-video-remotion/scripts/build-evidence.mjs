@@ -24,13 +24,19 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const sha = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
 const hasExactFile = (dir, name) => existsSync(dir) && readdirSync(dir).includes(name);
 
+// commands: optional {hyperframes, remotion} argv prefixes (e.g. [node, cli.js])
+// that replace the HYPERFRAMES_BIN / REMOTION_BIN / npx lookup.
+let COMMANDS = {};
+
 function hyperframes(args) {
+  if (COMMANDS.hyperframes) return execFileSync(COMMANDS.hyperframes[0], [...COMMANDS.hyperframes.slice(1), ...args], { stdio: 'ignore' });
   const bin = process.env.HYPERFRAMES_BIN;
   if (bin) return execFileSync(bin, args, { stdio: 'ignore' });
   return execFileSync('npx', ['--yes', `hyperframes@${HYPERFRAMES_VERSION}`, ...args], { stdio: 'ignore' });
 }
 
 function remotion(args) {
+  if (COMMANDS.remotion) return execFileSync(COMMANDS.remotion[0], [...COMMANDS.remotion.slice(1), ...args], { stdio: 'ignore' });
   const bin = process.env.REMOTION_BIN;
   if (bin) return execFileSync(bin, args, { stdio: 'ignore' });
   return execFileSync('npx', ['--yes', `@remotion/cli@${REMOTION_VERSION}`, ...args], { stdio: 'ignore' });
@@ -76,8 +82,14 @@ export async function resolveProjectStory(project, { storyModule } = {}) {
 }
 
 // storyboard.json wins over index.html, matching declaredBoundariesForProject() in src/cinematic_evidence.js.
-export async function projectEvidenceSchedule(projectPath, { storyModule } = {}) {
+// story: an already resolved story to use instead of the project's storyboard.json.
+export async function projectEvidenceSchedule(projectPath, { storyModule, story: injected } = {}) {
   const project = path.resolve(projectPath);
+  if (injected) {
+    const module = await loadStoryModule(storyModule);
+    const format = module.storyFormat(injected);
+    return { schedule: buildTemporalEvidenceSchedule(format.duration, module.deriveBoundaries(injected)), story: { module, story: injected, resolved: injected, format } };
+  }
   if (!hasExactFile(project, 'storyboard.json')) return { schedule: evidenceSchedule(readFileSync(path.join(project, 'index.html'), 'utf8')), story: null };
   const story = await resolveProjectStory(project, { storyModule });
   const boundaries = story.module.deriveBoundaries(story.resolved);
@@ -133,13 +145,17 @@ function remotionStills(project, schedule, out, story, entry) {
   }
 }
 
-export async function buildEvidence(projectPath, { video = 'renders/draft.mp4', sheets = true, renderer, entry, storyModule } = {}) {
+// Options for embedding (launchclip finish): story (a resolved story instead of
+// storyboard.json), stillsProject (the compiled HyperFrames project to snapshot,
+// default the project) and commands ({hyperframes, remotion} argv prefixes).
+export async function buildEvidence(projectPath, { video = 'renders/draft.mp4', sheets = true, renderer, entry, storyModule, story: injected, stillsProject, commands = {} } = {}) {
   const project = path.resolve(projectPath);
   const draft = path.resolve(project, video);
   if (!existsSync(draft)) throw new Error(`draft video not found: ${draft}`);
   const engine = renderer ?? detectRenderer(project);
   if (!['hyperframes', 'remotion'].includes(engine)) throw new Error(`unknown renderer: ${engine}`);
-  const { schedule, story } = await projectEvidenceSchedule(project, { storyModule });
+  COMMANDS = commands ?? {};
+  const { schedule, story } = await projectEvidenceSchedule(project, { storyModule, story: injected });
   const out = path.join(project, 'qa/temporal-evidence');
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
@@ -147,7 +163,7 @@ export async function buildEvidence(projectPath, { video = 'renders/draft.mp4', 
     if (!story) throw new Error('the remotion renderer needs storyboard.json');
     remotionStills(project, schedule, out, story, entry);
   } else {
-    hyperframesStills(project, schedule, out);
+    hyperframesStills(path.resolve(stillsProject ?? project), schedule, out);
   }
   const entries = [];
   for (const sample of schedule.entries) {

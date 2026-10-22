@@ -15,7 +15,7 @@ import { prepareRecording, recordingOptions, writeBrollPlan } from "./recording_
 import { runStoryCommand } from "./story_cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "story", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "story", "finish", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -77,6 +77,21 @@ export async function runCli(argv, io = {}) {
         return;
       }
       result = report;
+    } else if (command === "finish") {
+      const { runFinish, formatFinishSummary } = await import("./finish.js");
+      const report = await runFinish(required(firstArg, "story project path"), {
+        renderer: flags.renderer,
+        quality: flags.quality,
+        voice: flags.voice,
+        out: flags.out,
+        force: Boolean(flags.force)
+      }, productionAdapters.finish);
+      stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatFinishSummary(report));
+      if (report.status === "failed") {
+        const failedStage = report.stages.find((stage) => stage.status === "failed");
+        throw new Error(`launchclip finish failed at the ${failedStage?.name ?? "unknown"} stage: ${failedStage?.error ?? ""}`.trim());
+      }
+      return;
     } else if (command === "init") {
       result = await initWorkspace(required(firstArg, "repo path"), flags);
     } else if (command === "demo") {
@@ -261,6 +276,7 @@ Usage:
   launchclip story compile <project> --renderer hyperframes|remotion [--out dir]
   launchclip cinematic-check <project> [--renderer hyperframes|remotion] [--video renders/draft.mp4] [--audio-manifest AUDIO-MANIFEST.json] [--expect-audio] [--critique qa/critic.json]
   launchclip layout-check <project> [--profile shorts|landscape] [--json]
+  launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--voice kokoro|elevenlabs|supplied|test] [--out renders/final.mp4] [--force] [--json]
   launchclip init <repo> --out <workspace>
   launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]
   launchclip plan <workspace> --format short-15 --renderer none|hyperframes [--style proof-card|ugc-split|ugc-demo-punchy|premium-product-short|data-story-benchmark] [--assets-dir path/to/assets] [--talking-head heygen --avatar-id avatar_123]
