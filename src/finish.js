@@ -444,7 +444,8 @@ const STAGES = [
       // -22 LUFS), which leaves too little voice-to-music margin in the mix.
       // Bring them to the -17 LUFS supplied voiceovers already get.
       let loudness = null;
-      if (request.provider !== "supplied") {
+      // The offline "test" voice is a placeholder tone and needs no levelling.
+      if (request.provider !== "supplied" && request.provider !== "test") {
         const normalized = `${outFile}.norm.wav`;
         loudness = await ctx.adapters.normalizeVoice(outFile, normalized);
         await rename(normalized, outFile);

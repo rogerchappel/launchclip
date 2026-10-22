@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -275,6 +276,7 @@ async function chromeAvailable() {
 test("eval:renderers renders examples/story/minimal with both renderers and matches them", { timeout: 600_000 }, async (t) => {
   const missing = await chromeAvailable();
   if (missing) { t.skip(`Chrome Headless Shell is unavailable: ${missing}`); return; }
+  try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); } catch { t.skip("FFmpeg is unavailable"); return; }
   const out = await mkdtemp(path.join(os.tmpdir(), "launchclip-renderer-eval-e2e-"));
   try {
     const report = await runRendererEval({ stories: ["minimal"], out, quality: "draft" });
