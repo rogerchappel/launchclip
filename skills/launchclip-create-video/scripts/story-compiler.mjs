@@ -319,7 +319,7 @@ function cameraMarkup(plan, brand, plates) {
   const parts = [];
   if (plan.parallax) {
     const layer = backgroundLayer(plan, brand);
-    parts.push(`<div id="lc-world-bg" class="lc-world-bg" aria-hidden="true"><div class="lc-world-bg-fill" style="left:${layer.left}px;top:${layer.top}px;width:${layer.width}px;height:${layer.height}px;background:${layer.background}"></div></div>`);
+    parts.push(`<div id="lc-world-bg" class="lc-world-bg" aria-hidden="true">${layer.glows.map((glow) => `<div class="lc-world-glow" style="left:${glow.left}px;top:${glow.top}px;width:${glow.size}px;height:${glow.size}px;background:${glow.background}"></div>`).join('')}</div>`);
   }
   const defs = plan.blurSamples.length ? '<svg class="lc-cam-defs" width="0" height="0" aria-hidden="true"><defs><filter id="lc-cam-blur" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB"><feGaussianBlur id="lc-cam-blur-k" in="SourceGraphic" stdDeviation="0 0"></feGaussianBlur></filter></defs></svg>' : '';
   parts.push(`${defs}<div id="lc-camera" class="lc-camera" data-launchclip-camera="${plan.mode}"><div id="lc-cam-drift" class="lc-cam"><div id="lc-cam-zoom" class="lc-cam"><div id="lc-cam-pan" class="lc-cam">${plates.join('')}</div></div></div></div>`);
@@ -334,7 +334,7 @@ function cameraCss(plan, W, H) {
     `.lc-parallax { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; }`
   ];
   if (plan.mode === 'world') rules.push('.lc-world-plate > .lc-layer { background: transparent; }');
-  if (plan.parallax) rules.push(`.lc-world-bg { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; pointer-events: none; }`, '.lc-world-bg-fill { position: absolute; }');
+  if (plan.parallax) rules.push(`.lc-world-bg { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; pointer-events: none; }`, '.lc-world-glow { position: absolute; border-radius: 50%; }');
   return rules.join('\n    ');
 }
 

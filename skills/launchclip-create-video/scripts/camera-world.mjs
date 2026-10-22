@@ -299,9 +299,43 @@ export function cameraPlan(story, { windows, objects } = {}) {
     moves, drift,
     parallax: camera.parallax ? { background: PARALLAX.background, overlay: PARALLAX.overlay } : null
   };
+  plan.background = plan.parallax ? backgroundKeys(plan) : null;
   plan.blurSamples = blurSamples(plan);
   plan.ops = cameraOps(plan);
   return plan;
+}
+
+/**
+ * Background depth-layer states per move, in screen px: each move shifts the
+ * layer by PARALLAX.background × the plates' screen travel (world travel ×
+ * the zoom it lands at) and turns it by the same fraction of the roll. The
+ * layer is never scaled: a magnified gradient rasterises differently in the
+ * two renderers, and a dolly already reads through the plates.
+ * → {home: {x, y, scale, rotation}, keys: [{start, duration, ease, from, to}]}
+ */
+export function backgroundKeys(plan) {
+  const k = plan.parallax?.background ?? 0;
+  let at = { x: 0, y: 0, scale: 1, rotation: 0 };
+  const keys = [];
+  for (const move of plan.moves) {
+    const zoom = move.to.zoom;
+    const to = { x: round(at.x + k * (move.from.x - move.to.x) * zoom, 4), y: round(at.y + k * (move.from.y - move.to.y) * zoom, 4), scale: 1, rotation: round(k * move.to.rotation, 4) };
+    keys.push({ start: move.start, duration: move.duration, ease: move.ease, from: at, to });
+    at = to;
+  }
+  return { home: { x: 0, y: 0, scale: 1, rotation: 0 }, keys };
+}
+
+function backgroundAt(plan, t) {
+  if (!plan.background) return { x: 0, y: 0, scale: 1, rotation: 0 };
+  let state = plan.background.home;
+  for (const key of plan.background.keys) {
+    if (t < key.start - EPS) break;
+    const p = key.duration > 0 ? Math.min(1, Math.max(0, (t - key.start) / key.duration)) : 1;
+    const e = p >= 1 ? 1 : getEase(key.ease)(p);
+    state = { x: lerp(key.from.x, key.to.x, e), y: lerp(key.from.y, key.to.y, e), scale: 1, rotation: lerp(key.from.rotation, key.to.rotation, e) };
+  }
+  return state;
 }
 
 /** Camera state (moves only, no drift) at absolute t: the latest started move wins, as on a GSAP timeline. */
@@ -330,10 +364,7 @@ export function containerState(plan, t) {
   const W2 = plan.width / 2, H2 = plan.height / 2;
   const pan = { x: W2 - c.x, y: H2 - c.y };
   const zoom = { scale: c.zoom, rotation: c.rotation };
-  const k = plan.parallax?.background ?? 0;
-  const home = plan.home;
-  const background = { x: k * (home.x - c.x), y: k * (home.y - c.y), scale: 1 + k * (c.zoom - 1), rotation: k * c.rotation };
-  return { pan, zoom, drift: driftAt(plan, t), background };
+  return { pan, zoom, drift: driftAt(plan, t), background: backgroundAt(plan, t) };
 }
 
 /**
@@ -418,16 +449,16 @@ export function cameraOps(plan) {
   const W2 = plan.width / 2, H2 = plan.height / 2;
   const panOf = (s) => ({ x: round(W2 - s.x, 4), y: round(H2 - s.y, 4) });
   const zoomOf = (s) => ({ scale: round(s.zoom, 6), rotation: round(s.rotation, 4) });
-  const k = plan.parallax?.background ?? 0;
-  const bgOf = (s) => ({ x: round(k * (plan.home.x - s.x), 4), y: round(k * (plan.home.y - s.y), 4), scale: round(1 + k * (s.zoom - 1), 6), rotation: round(k * s.rotation, 4) });
   ops.push({ type: 'set', target: 'pan', time: 0, props: panOf(plan.home) });
   ops.push({ type: 'set', target: 'zoom', time: 0, props: zoomOf(plan.home) });
-  if (plan.parallax) ops.push({ type: 'set', target: 'background', time: 0, props: bgOf(plan.home) });
   for (const move of plan.moves) {
     const timing = { start: move.start, duration: move.duration, ease: move.ease };
     ops.push({ type: 'tween', target: 'pan', ...timing, from: panOf(move.from), to: panOf(move.to) });
     ops.push({ type: 'tween', target: 'zoom', ...timing, from: zoomOf(move.from), to: zoomOf(move.to) });
-    if (plan.parallax) ops.push({ type: 'tween', target: 'background', ...timing, from: bgOf(move.from), to: bgOf(move.to) });
+  }
+  if (plan.background) {
+    ops.push({ type: 'set', target: 'background', time: 0, props: { ...plan.background.home } });
+    for (const key of plan.background.keys) ops.push({ type: 'tween', target: 'background', start: key.start, duration: key.duration, ease: key.ease, from: { ...key.from }, to: { ...key.to } });
   }
   if (plan.drift) {
     ops.push({ type: 'set', target: 'drift', time: 0, props: { x: round(waveValue(plan.drift.x, 0), 6), y: round(waveValue(plan.drift.y, 0), 6), scale: round(waveValue(plan.drift.scale, 0), 6) } });
@@ -503,33 +534,40 @@ export function containerTransform(props) {
 }
 
 /**
- * The background depth layer when ambient motion's field is absent: a few
- * soft brand-colour glows (primary, accent) over brand.colors.bg, one pair
- * near every plate's rest framing, so parallax reads at 0.3×. → {left, top,
- * width, height, background} (px relative to the canvas, CSS background).
+ * The background depth layer when ambient motion's field is absent: soft
+ * brand-colour glows (primary, accent) over brand.colors.bg, one pair near
+ * every plate's rest framing, so parallax reads at 0.3×. Each glow is its own
+ * small element (one radial gradient with a many-stop falloff, like the
+ * ambient field's blobs) rather than one huge multi-gradient layer, which
+ * the two renderers rasterise with different gradient dithering.
+ * → {bg, glows: [{left, top, size, background}]} (px in the layer's frame,
+ * whose origin is the canvas origin at home).
  */
 export function backgroundLayer(plan, brand) {
   const colors = isObject(brand?.colors) ? brand.colors : {};
   const hex = (value, fallback) => (/^#[0-9a-fA-F]{6}$/.test(value ?? '') ? value : fallback);
   const bg = hex(colors.bg, '#000000');
-  const glow = [hex(colors.primary, '#ffffff'), hex(colors.accent, hex(colors.primary, '#ffffff'))];
-  const W = plan.width, H = plan.height, k = plan.parallax?.background ?? 0.3;
-  // Where each rest framing sits in the layer's own coordinates.
-  const rests = [plan.home, ...plan.moves.map((move) => move.to)];
-  const offsets = rests.map((s) => ({ x: -k * (plan.home.x - s.x), y: -k * (plan.home.y - s.y) }));
-  const minX = Math.min(0, ...offsets.map((o) => o.x)), maxX = Math.max(0, ...offsets.map((o) => o.x));
-  const minY = Math.min(0, ...offsets.map((o) => o.y)), maxY = Math.max(0, ...offsets.map((o) => o.y));
-  const margin = Math.max(W, H);
-  const left = Math.floor(minX - margin), top = Math.floor(minY - margin);
-  const width = Math.ceil(maxX - minX + W + 2 * margin), height = Math.ceil(maxY - minY + H + 2 * margin);
-  const alpha = (value, a) => `${value}${Math.round(a * 255).toString(16).padStart(2, '0')}`;
-  const layers = [];
-  offsets.forEach((o, i) => {
+  const palette = [hex(colors.primary, '#ffffff'), hex(colors.accent, hex(colors.primary, '#ffffff'))];
+  const W = plan.width, H = plan.height;
+  const rests = [plan.background?.home ?? { x: 0, y: 0 }, ...(plan.background?.keys ?? []).map((key) => key.to)];
+  const rgb = (value) => [1, 3, 5].map((i) => parseInt(value.slice(i, i + 2), 16));
+  const falloff = [[0, 1], [15, 0.94], [30, 0.78], [45, 0.56], [60, 0.34], [75, 0.16], [88, 0.05], [100, 0]];
+  const gradient = (color, alpha) => {
+    const [r, g, b] = rgb(color);
+    return `radial-gradient(closest-side, ${falloff.map(([stop, f]) => `rgba(${r}, ${g}, ${b}, ${round(alpha * f, 4)}) ${stop}%`).join(', ')})`;
+  };
+  const glows = [];
+  rests.forEach((rest, i) => {
+    const o = { x: -rest.x, y: -rest.y };
     const flip = i % 2 === 0;
-    const a = { x: o.x + W * (flip ? 0.22 : 0.78) - left, y: o.y + H * (flip ? 0.24 : 0.7) - top };
-    const b = { x: o.x + W * (flip ? 0.84 : 0.18) - left, y: o.y + H * (flip ? 0.78 : 0.3) - top };
-    layers.push(`radial-gradient(${Math.round(W * 0.62)}px ${Math.round(W * 0.62)}px at ${Math.round(a.x)}px ${Math.round(a.y)}px, ${alpha(glow[0], 0.16)}, ${alpha(glow[0], 0)})`);
-    layers.push(`radial-gradient(${Math.round(W * 0.5)}px ${Math.round(W * 0.5)}px at ${Math.round(b.x)}px ${Math.round(b.y)}px, ${alpha(glow[1], 0.12)}, ${alpha(glow[1], 0)})`);
+    const spots = [
+      { x: W * (flip ? 0.22 : 0.78), y: H * (flip ? 0.24 : 0.7), size: W * 1.3, color: palette[0], alpha: 0.2 },
+      { x: W * (flip ? 0.84 : 0.18), y: H * (flip ? 0.78 : 0.3), size: W * 1.05, color: palette[1], alpha: 0.14 }
+    ];
+    for (const spot of spots) {
+      const size = Math.round(spot.size);
+      glows.push({ left: Math.round(o.x + spot.x - size / 2), top: Math.round(o.y + spot.y - size / 2), size, background: gradient(spot.color, spot.alpha) });
+    }
   });
-  return { left, top, width, height, background: `${layers.join(', ')}, ${bg}` };
+  return { bg, glows };
 }

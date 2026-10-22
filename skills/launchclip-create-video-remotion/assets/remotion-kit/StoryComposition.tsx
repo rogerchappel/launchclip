@@ -126,7 +126,9 @@ export const CameraWorld: React.FC<{ plan: any; brand: any; children: React.Reac
     <>
       {layer ? (
         <div style={{ ...box, pointerEvents: "none", transform: containerTransform(opsStateAt(plan.ops, "background", t)) }} aria-hidden>
-          <div style={{ position: "absolute", left: layer.left, top: layer.top, width: layer.width, height: layer.height, background: layer.background }} />
+          {layer.glows.map((glow: any, index: number) => (
+            <div key={index} style={{ position: "absolute", left: glow.left, top: glow.top, width: glow.size, height: glow.size, borderRadius: "50%", background: glow.background }} />
+          ))}
         </div>
       ) : null}
       {plan.blurSamples.length ? (

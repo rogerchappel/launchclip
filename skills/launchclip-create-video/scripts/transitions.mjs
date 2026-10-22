@@ -59,7 +59,9 @@ export function transitionTweens(transition, { width, height, grammar = null, mo
     // The camera travels (camera-world.mjs). A dolly lands on a scene drawn
     // inside (push) or around (pull) the outgoing one, so the two plates
     // crossfade while the camera moves.
-    if (type === 'push') return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', 0, d * 0.55)], out: [t('opacity', 1, 0, 'power1.inOut', d * 0.45, d * 0.55)] };
+    // The outgoing plate is gone before the object it zooms into fills the
+    // frame, so its magnified content never sits on top of the new scene.
+    if (type === 'push') return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', d * 0.15, d * 0.45)], out: [t('opacity', 1, 0, 'power1.inOut', d * 0.3, d * 0.35)] };
     if (type === 'pull') return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', 0, d * 0.5)], out: [t('opacity', 1, 0, 'power1.inOut', d * 0.3, d * 0.7)] };
     return { type, duration: d, camera: true, in: [], out: [] };
   }
