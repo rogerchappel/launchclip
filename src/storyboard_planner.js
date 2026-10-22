@@ -52,7 +52,7 @@ export async function planStoryboard(options = {}) {
   const repairs = Math.max(0, Math.min(5, Number.isInteger(maxRepairs) ? maxRepairs : DEFAULT_MAX_REPAIRS));
   const wordList = Array.isArray(words) ? words : Array.isArray(words?.words) ? words.words : [];
   const fixed = fixedInputs({ lane, format, brand, audio, base });
-  const instructions = planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined });
+  const instructions = planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, artDirection: brief });
   const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane });
   const request = planRequest({ brief, fixed, hints });
   const started = now();

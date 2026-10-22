@@ -20,7 +20,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - format: {width, height, fps, duration, platform?} and brand: {colors, fonts} are given; copy them unchanged.
 - audio: {voice?, words?, music?, sfx?}; base: null, or the recording path for footage-led.
 - scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: cut | fade | push | whip | zoom | iris | morph | pan | pull | orbit | whip-pan, dur, direction?, from_object?}, params, hits?}].
-- in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus.
+- in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus; camera moves (pan, whip-pan, orbit, pull, world push) are under "Motion grammar and camera".
 - overlays: [captions]. ending: {loop_to: "<first scene id>"} for a seamless loop (Shorts).
 - Vary the modules: a 20–40 s piece uses at least four different modules and never the same module three times in a row.
 
@@ -29,6 +29,20 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - motion: no voice. Full-frame modules cover the whole duration back to back on track 0 (no gaps). Time scenes in seconds or beat anchors. audio.music may be "synth".
 - voiceover-motion: audio.voice and audio.words are fixed inputs; copy them unchanged. Full-frame modules cover the whole duration on track 0. Start scenes and place hits on word anchors from the narration so visuals land on the spoken word. Add a captions overlay.
 - footage-led: base (the edited recording under assets/) plays underneath and is a fixed input; copy it unchanged. Scenes are overlays and inserts on the strong lines only, covering 10–40% of the runtime (up to 50% with resource inserts); gaps show the recording. Prefer callout, kinetic-words, count-up and metric. Add a captions overlay.
+
+## Motion grammar and camera
+
+- motion? {grammar}: one feel for every entrance, exit, pop, stagger, transition and camera move. grammar is one of editorial, snappy, smooth, playful, documentary, or {base, ...overrides} (ease: {enter, exit, move, camera, emphasis}, duration: {enter, exit, transition, camera}, stagger multiplier). Omit it for editorial, the default.
+- editorial: Clean product-editorial motion: power3 entrances, quick power2 exits, no overshoot on entrances. The default. Camera ease power3.inOut, camera moves about 0.8 s, transitions about 0.45 s.
+- snappy: Fast and punchy: expo-out entrances, short durations, a slight overshoot on pops, whips and anticipating camera moves. Camera ease back.inOut(1.2), camera moves about 0.55 s, transitions about 0.32 s.
+- smooth: Calm and fluid: sine and power2 curves, long durations, no overshoot anywhere. Camera ease sine.inOut, camera moves about 1.1 s, transitions about 0.7 s.
+- playful: Springy and bouncy: back-out entrances, elastic pops, bigger staggers and a camera that winds up and overshoots. Camera ease back.inOut(1.6), camera moves about 0.75 s, transitions about 0.5 s.
+- documentary: Slow and restrained: power1 curves, long holds and gentle moves, nothing that calls attention to itself. Camera ease power1.inOut, camera moves about 1.3 s, transitions about 0.8 s.
+- camera? {mode: "cuts" | "world", layout?: row | column | grid | path | auto, spacing?: 0–1, parallax?: boolean, blur?: boolean}. "cuts" (default): scenes replace each other. "world": every track-0 scene sits in one world and the camera travels to it, with a slow drift (never fully still), a parallax background (0.3×) and overlays at 1.15×.
+- Camera transitions (scene.in or ending.in, track-0 scenes only): pan {direction: where the next scene sits, e.g. "right"}, whip-pan (fast, motion-blurred), orbit (pan with a slight turn), pull (dolly out to a wider scene) and, in world mode only, push (dolly into a named object: in.from_object "s3.gap-bracket", else the scene content). In cuts mode push keeps its slide meaning, and pan/whip-pan/orbit/pull still move a camera between the two scenes.
+- Choose by meaning and art direction: pan for continuation along a path, push to go deeper into a detail, pull to reveal the bigger picture, orbit for a change of angle on the same subject, whip-pan for energy or a time jump, cut/fade when the story jumps. Give camera moves 0.6–1.2 s (whip-pan 0.3–0.5 s) and keep scenes at least 2 s longer than their move.
+- In world mode, an ending {"loop_to": "s1", "in": {"type": "whip-pan", "dur": 0.4}} travels home for a seamless loop.
+- Lanes: footage-led keeps camera.mode "cuts" and uses punch-in for emphasis (no camera transitions). The motion and voiceover-motion lanes may use the world camera; use it when the direction asks for travel or the grammar is playful, snappy or smooth.
 
 ## Time anchors
 

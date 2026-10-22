@@ -11,7 +11,8 @@
 // Plain ESM; imports only sibling kit/core files. Canonical copy:
 // kit/core/planning-prompt.mjs.
 
-import { STORY_SCHEMA, STORY_LANES, STORY_TRANSITIONS, STORY_CAPTION_STYLES } from './story.mjs';
+import { STORY_SCHEMA, STORY_LANES, STORY_TRANSITIONS, STORY_CAPTION_STYLES, STORY_CAMERA_LAYOUTS } from './story.mjs';
+import { GRAMMARS, GRAMMAR_NAMES } from './grammar.mjs';
 import { knownModules, catalogModules, isEditorialKind } from './modules.mjs';
 import { SAFE_ZONE_PROFILES } from './layout-check.mjs';
 
@@ -107,6 +108,57 @@ export function suggestModules(text, { lane, limit = 3 } = {}) {
     if (matched.length) hints.push({ sentence, modules: matched });
   }
   return hints;
+}
+
+// ---------------------------------------------------------------------------
+// Motion grammar and camera from the art direction
+
+// Art-direction words → grammar. The first grammar with a match wins, in
+// this order; no match keeps editorial.
+export const ART_DIRECTION_GRAMMARS = Object.freeze([
+  { grammar: 'playful', patterns: ['\\bplayful\\b', '\\bfun\\b', '\\bbouncy\\b', '\\bquirky\\b', '\\bkids?\\b', '\\bcartoon', '\\bwhimsical\\b', '\\bcheeky\\b', '\\bfriendly\\b'] },
+  { grammar: 'snappy', patterns: ['\\bsnappy\\b', '\\bpunchy\\b', '\\benergetic\\b', '\\bhype\\b', '\\bbold\\b', '\\bfast[- ]paced\\b', '\\bkinetic\\b', '\\bhigh[- ]energy\\b', '\\bsporty\\b', '\\blaunch\\b'] },
+  { grammar: 'documentary', patterns: ['\\bdocumentary\\b', '\\bserious\\b', '\\bsober\\b', '\\brestrained\\b', '\\bhistorical\\b', '\\barchival\\b', '\\binvestigative\\b', '\\bjournalis', '\\bnews\\b', '\\bsolemn\\b'] },
+  { grammar: 'smooth', patterns: ['\\bsmooth\\b', '\\bcalm\\b', '\\belegant\\b', '\\bpremium\\b', '\\bluxur', '\\bsoft\\b', '\\bdreamy\\b', '\\bwellness\\b', '\\bflowing\\b', '\\bcinematic\\b', '\\bminimal'] }
+]);
+const WORLD_WORDS = ['\\bjourney\\b', '\\bexplore', '\\bmap\\b', '\\bworld\\b', '\\bcontinuous\\b', '\\bone[- ]take\\b', '\\bpans?\\b', '\\bcamera\\b', '\\bfly[- ]?through\\b', '\\btravel'];
+const CUT_WORDS = ['\\bhard cuts?\\b', '\\bjump cuts?\\b', '\\bno camera\\b', '\\bstatic\\b'];
+
+/**
+ * Motion grammar and camera mode for an art direction (free text: the brief
+ * or style notes) and lane. Footage-led stories always keep cuts and
+ * punch-ins; the motion and voiceover lanes get the world camera when the
+ * direction asks for travel, or when its grammar is playful, snappy or smooth
+ * (editorial and documentary keep cuts unless asked).
+ * → {grammar, camera: {mode, layout?}, reason}
+ */
+export function suggestMotion({ artDirection = '', lane } = {}) {
+  const text = String(artDirection ?? '');
+  const match = (list) => list.some((source) => new RegExp(source, 'i').test(text));
+  const row = ART_DIRECTION_GRAMMARS.find((entry) => match(entry.patterns));
+  const grammar = row?.grammar ?? 'editorial';
+  if (lane === 'footage-led') return { grammar, camera: { mode: 'cuts' }, reason: 'footage-led keeps cuts and punch-ins' };
+  if (match(CUT_WORDS)) return { grammar, camera: { mode: 'cuts' }, reason: 'the direction asks for cuts' };
+  if (match(WORLD_WORDS)) return { grammar, camera: { mode: 'world', layout: 'auto' }, reason: 'the direction asks for camera travel' };
+  if (['playful', 'snappy', 'smooth'].includes(grammar)) return { grammar, camera: { mode: 'world', layout: 'auto' }, reason: `${grammar} motion travels between scenes` };
+  return { grammar, camera: { mode: 'cuts' }, reason: `${grammar} motion cuts between scenes` };
+}
+
+function motionLines({ lane, artDirection } = {}) {
+  const lines = [
+    `motion? {grammar}: one feel for every entrance, exit, pop, stagger, transition and camera move. grammar is one of ${GRAMMAR_NAMES.join(', ')}, or {base, ...overrides} (ease: {enter, exit, move, camera, emphasis}, duration: {enter, exit, transition, camera}, stagger multiplier). Omit it for editorial, the default.`,
+    ...GRAMMAR_NAMES.map((name) => `${name}: ${GRAMMARS[name].describe} Camera ease ${GRAMMARS[name].ease.camera}, camera moves about ${GRAMMARS[name].duration.camera} s, transitions about ${GRAMMARS[name].duration.transition} s.`),
+    `camera? {mode: "cuts" | "world", layout?: ${STORY_CAMERA_LAYOUTS.join(' | ')}, spacing?: 0–1, parallax?: boolean, blur?: boolean}. "cuts" (default): scenes replace each other. "world": every track-0 scene sits in one world and the camera travels to it, with a slow drift (never fully still), a parallax background (0.3×) and overlays at 1.15×.`,
+    'Camera transitions (scene.in or ending.in, track-0 scenes only): pan {direction: where the next scene sits, e.g. "right"}, whip-pan (fast, motion-blurred), orbit (pan with a slight turn), pull (dolly out to a wider scene) and, in world mode only, push (dolly into a named object: in.from_object "s3.gap-bracket", else the scene content). In cuts mode push keeps its slide meaning, and pan/whip-pan/orbit/pull still move a camera between the two scenes.',
+    'Choose by meaning and art direction: pan for continuation along a path, push to go deeper into a detail, pull to reveal the bigger picture, orbit for a change of angle on the same subject, whip-pan for energy or a time jump, cut/fade when the story jumps. Give camera moves 0.6–1.2 s (whip-pan 0.3–0.5 s) and keep scenes at least 2 s longer than their move.',
+    'In world mode, an ending {"loop_to": "s1", "in": {"type": "whip-pan", "dur": 0.4}} travels home for a seamless loop.',
+    'Lanes: footage-led keeps camera.mode "cuts" and uses punch-in for emphasis (no camera transitions). The motion and voiceover-motion lanes may use the world camera; use it when the direction asks for travel or the grammar is playful, snappy or smooth.'
+  ];
+  if (artDirection) {
+    const suggestion = suggestMotion({ artDirection, lane });
+    lines.push(`For this request: motion.grammar "${suggestion.grammar}" and camera.mode "${suggestion.camera.mode}" (${suggestion.reason}).`);
+  }
+  return lines;
 }
 
 // ---------------------------------------------------------------------------
@@ -227,7 +279,7 @@ function contractLines() {
     'format: {width, height, fps, duration, platform?} and brand: {colors, fonts} are given; copy them unchanged.',
     'audio: {voice?, words?, music?, sfx?}; base: null, or the recording path for footage-led.',
     `scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: ${STORY_TRANSITIONS.join(' | ')}, dur, direction?, from_object?}, params, hits?}].`,
-    'in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus.',
+    'in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus; camera moves (pan, whip-pan, orbit, pull, world push) are under "Motion grammar and camera".',
     'overlays: [captions]. ending: {loop_to: "<first scene id>"} for a seamless loop (Shorts).',
     'Vary the modules: a 20–40 s piece uses at least four different modules and never the same module three times in a row.'
   ];
@@ -309,7 +361,7 @@ function section(title, lines) {
  * fixed inputs (copied into the prompt); words: optional measured narration
  * (NARRATION.json words) for word anchors.
  */
-export function planningPrompt({ tier = 'structured', lane, format, brand, words } = {}) {
+export function planningPrompt({ tier = 'structured', lane, format, brand, words, artDirection } = {}) {
   if (!PLANNER_TIERS.includes(tier)) throw new Error(`tier must be one of ${PLANNER_TIERS.join(', ')}`);
   if (lane !== undefined && !STORY_LANES.includes(lane)) throw new Error(`lane must be one of ${STORY_LANES.join(', ')}`);
   const lines = [
@@ -323,6 +375,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ]),
     ...section('Contract', contractLines().map((line) => `- ${line}`)),
     ...section('Lane rules', laneRules(lane).map((line) => `- ${line}`)),
+    ...section('Motion grammar and camera', motionLines({ lane, artDirection }).map((line) => `- ${line}`)),
     ...section(`Tier rules (${tier})`, tierRules(tier).map((line) => `- ${line}`)),
     ...section('Time anchors', anchorLines().map((line) => `- ${line}`)),
     ...section('Safe zone', safeZoneLines(format).map((line) => `- ${line}`)),
@@ -362,6 +415,7 @@ export function storyboardModulesReference() {
     ]),
     ...section('Contract', contractLines().map((line) => `- ${line}`)),
     ...section('Lane rules', laneRules().map((line) => `- ${line}`)),
+    ...section('Motion grammar and camera', motionLines().map((line) => `- ${line}`)),
     ...section('Time anchors', anchorLines().map((line) => `- ${line}`)),
     ...section('Safe zone', safeZoneLines().map((line) => `- ${line}`)),
     ...section('Captions', captionLines().map((line) => `- ${line}`)),
