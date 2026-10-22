@@ -37,7 +37,7 @@ test("HyperFrames: plates carry the background field and scenes the drift wrappe
   assert.ok(field && field.blobs.length >= 3);
   // s1, s2 and the loop clone are plates: each holds its own copy of the field, under the content.
   for (const id of ["s1", "s2", "s1-loop"]) {
-    const layer = new RegExp(`<div id="lc-layer-${id}" class="lc-layer"><div class="lc-ambient-field" aria-hidden="true">((?:<div id="lc-amb-${id}-b\\d+" class="lc-ambient-blob" style="[^"]+"></div>)+)</div>`).exec(html);
+    const layer = new RegExp(`<div id="lc-layer-${id}" class="lc-layer"><div id="lc-amb-field-${id}" class="lc-ambient-field" aria-hidden="true">((?:<div id="lc-amb-${id}-b\\d+" class="lc-ambient-blob" style="[^"]+"></div>)+)</div>`).exec(html);
     assert.ok(layer, `${id} starts with the ambient field`);
     assert.equal(layer[1].match(/lc-ambient-blob/g).length, field.blobs.length);
   }

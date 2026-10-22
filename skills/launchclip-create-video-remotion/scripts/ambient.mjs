@@ -422,6 +422,32 @@ export function sceneDrift(story, scene, model, { window, geometry } = {}) {
   return driftPlan({ rect, level: sceneAmbient(story, scene).level, start, end, canvas, bounds, minTextPx: Number.isFinite(model.minTextPx) ? model.minTextPx : null, minTextLimit: geometry?.minTextPx ?? null });
 }
 
+// ---------------------------------------------------------------------------
+// Composition with a camera (world camera / parallax layers)
+
+/** Default depth of the background field under a world camera: it moves at 0.3× the camera. */
+export const FIELD_PARALLAX = 0.3;
+
+/**
+ * A camera state seen from a layer at `depth` (0 = fixed to the screen,
+ * 1 = moves with the camera): → {x, y, scale}. camera = {x, y, scale} is the
+ * camera's offset at one instant (a pure function of time on the camera
+ * side). A camera move drives the field container with
+ * parallaxState(camera(t), FIELD_PARALLAX); the blobs inside keep their own
+ * glide, so the two compose by nesting transforms, never by editing blobs.
+ */
+export function parallaxState(camera, depth = FIELD_PARALLAX) {
+  const x = Number(camera?.x) || 0, y = Number(camera?.y) || 0;
+  const scale = Number.isFinite(Number(camera?.scale)) ? Number(camera.scale) : 1;
+  return { x: x * depth, y: y * depth, scale: 1 + (scale - 1) * depth };
+}
+
+/** Parallax state → inline CSS (camelCase keys), pivoting on the canvas centre. */
+export function parallaxStyle(camera, depth = FIELD_PARALLAX) {
+  const state = parallaxState(camera, depth);
+  return { transformOrigin: '50% 50%', transform: `translate(${round(state.x, 3)}px, ${round(state.y, 3)}px) scale(${round(state.scale, 5)})` };
+}
+
 /** Drift wrapper state at absolute time t → {x, y, scale}. Identity before start. */
 export function driftStateAt(drift, t) {
   if (!drift) return { x: 0, y: 0, scale: 1 };

@@ -429,8 +429,37 @@ both layers are compiler-level wrappers. A `sceneFilter` compile and
   or onto a neighbour is therefore a layout error. The report lists the
   drifting scenes (`drifted`).
 
+### Composition with a world camera
+
+Camera moves and parallax (the world-camera grammar) compose with ambient
+motion by **nesting transforms**. They never edit blobs or drift values:
+
+```
+scene layer (.lc-layer / SceneLayer)   ← typed transition tweens
+├─ field container                      ← camera at FIELD_PARALLAX depth (0.3×)
+│  #lc-amb-field-<scene> / <AmbientField style>
+│  └─ blobs                             ← their own glide, bob and breathe
+└─ camera content wrapper (camera, 1×)  ← owned by the camera grammar
+   └─ drift wrapper #lc-drift-<scene>   ← hold drift, innermost
+      └─ module content
+```
+
+- `parallaxState(camera, depth = FIELD_PARALLAX)` → `{x, y, scale}` and
+  `parallaxStyle(camera, depth)` map a camera offset (a pure function of
+  time on the camera side) to a layer at `depth`. HyperFrames tweens
+  `#lc-amb-field-<scene>` with seek-safe `fromTo`s of those values; Remotion
+  passes `style={parallaxStyle(camera(t))}` to `<AmbientField>`. The field
+  container is otherwise untouched, so the camera owns its transform.
+- The camera's content wrapper goes **outside** the drift wrapper, so the
+  drift stays a small push about the module rect inside whatever framing
+  the camera sets. layout-check inflates rects by the drift only. A camera
+  that reframes key content must add its own extent check.
+- Every ambient function stays pure and exported, so a camera module can
+  sample `blobStateAt`, `driftStateAt` and `sceneDrift` at any time.
+
 ```js
-export const AMBIENT_LEVELS, AMBIENT_PRESETS
+export const AMBIENT_LEVELS, AMBIENT_PRESETS, FIELD_PARALLAX
+export function parallaxState(camera, depth) / parallaxStyle(camera, depth)
 export function sceneAmbient(story, scene)      // → {level, background, drift}
 export function ambientErrors(value, path)       // → string[]
 export function ambientField(story)              // → {level, direction, blobs} | null

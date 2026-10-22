@@ -119,7 +119,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       return `<div id="lc-amb-${key}-${blob.id}" class="lc-ambient-blob" style="width:${num(blob.size)}px;height:${num(blob.size)}px;background:${blobBackground(blob)};transform:translate(${num(state.x)}px, ${num(state.y)}px) scale(${round(state.scale, 5)})"></div>`;
     }).join('');
     const lines = field.blobs.flatMap((blob) => blobTweens(blob, from, to).map((tw) => `tl.fromTo(${js(`#lc-amb-${key}-${blob.id}`)}, ${js({ [tw.prop]: tw.from, force3D: false })}, ${js({ [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false, force3D: false })}, ${num(tw.at)});`));
-    return { html: `<div class="lc-ambient-field" aria-hidden="true">${html}</div>`, motion: lines };
+    return { html: `<div id="lc-amb-field-${key}" class="lc-ambient-field" aria-hidden="true">${html}</div>`, motion: lines };
   };
   const boundaryFor = new Map(boundaries.map((entry) => [entry.to_id, entry]));
   let z = 10;

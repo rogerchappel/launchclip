@@ -192,3 +192,12 @@ test("sceneDrift applies eligibility: placeholders, decor cameras and root video
   const media = sceneDrift(s, s.scenes[0], { layout: { rect: { x: 0, y: 300, width: 1080, height: 600 }, role: "media" } }, { window: { start: 0, end: 4 }, geometry });
   assert.ok(inside({ x: 0, y: 0, ...canvas }, driftExtent({ x: 0, y: 300, width: 1080, height: 600 }, media)));
 });
+
+test("a world camera drives the field container at a parallax depth", async () => {
+  const { FIELD_PARALLAX, parallaxState, parallaxStyle } = await import("../kit/core/ambient.mjs");
+  assert.equal(FIELD_PARALLAX, 0.3);
+  assert.deepEqual(parallaxState({ x: 100, y: -40, scale: 1.2 }), { x: 30, y: -12, scale: 1 + 0.2 * 0.3 });
+  assert.deepEqual(parallaxState({ x: 100, y: -40, scale: 1.2 }, 1), { x: 100, y: -40, scale: 1.2 });
+  assert.deepEqual(parallaxState(null), { x: 0, y: 0, scale: 1 });
+  assert.deepEqual(parallaxStyle({ x: 10, y: 0, scale: 1 }), { transformOrigin: "50% 50%", transform: "translate(3px, 0px) scale(1)" });
+});

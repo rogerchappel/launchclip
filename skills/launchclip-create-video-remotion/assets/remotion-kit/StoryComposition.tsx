@@ -90,8 +90,9 @@ export function resolveSceneElement(scene: any, story: any, { end, customModules
 
 // Background field (kit/core/ambient.mjs): soft brand-colour blobs at their
 // absolute-time positions, drawn under the plate content.
-export const AmbientField: React.FC<{ blobs: any[]; t: number }> = ({ blobs, t }) => (
-  <AbsoluteFill style={{ overflow: "hidden", pointerEvents: "none" }} aria-hidden>
+// style: an outer transform a world camera may drive (parallaxStyle(camera, FIELD_PARALLAX)).
+export const AmbientField: React.FC<{ blobs: any[]; t: number; style?: React.CSSProperties }> = ({ blobs, t, style }) => (
+  <AbsoluteFill style={{ overflow: "hidden", pointerEvents: "none", ...style }} aria-hidden>
     {blobs.map((blob: any) => (
       <div key={blob.id} style={{ position: "absolute", left: 0, top: 0, width: blob.size, height: blob.size, borderRadius: "50%", transformOrigin: "50% 50%", background: blobBackground(blob), ...blobStyle(blob, t) }} />
     ))}
