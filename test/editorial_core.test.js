@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {EDITORIAL_KINDS, EDITORIAL_STYLE, EDITORIAL_SYMBOLS, resolveEditorialModule} from '../kit/core/editorial-core.mjs';
 import {buildEditorialModule} from '../skills/launchclip-create-video/scripts/editorial-ui-modules.mjs';
@@ -17,6 +18,25 @@ test('golden corpus covers every kind with outputs and errors', () => {
   const kinds = new Set(corpus.filter(entry => entry.output).map(entry => entry.spec.kind));
   assert.deepEqual([...kinds].sort(), [...EDITORIAL_KINDS].sort());
   assert.ok(corpus.filter(entry => entry.error).length >= 150);
+});
+
+// Explicit-rect 16:9 fixtures resolve at density scale 1, so their outputs and
+// errors must stay byte-identical to the corpus captured before the density
+// change (sha256 of the subset as it stood at dacadc4). The 9:16 and
+// default-rect fixtures were regenerated for content-derived rects and the
+// portrait type scale.
+const EXPLICIT_16X9_SHA256 = '0767cad85d2becb1f24cdebe2ef51b7494267c56f99e639acfa7b12d7a8fff33';
+const explicit16x9 = entry => entry.spec && typeof entry.spec === 'object' && !Array.isArray(entry.spec) && entry.spec.aspect === '16:9' && entry.spec.rect !== undefined;
+
+test('explicit-rect 16:9 golden outputs are unchanged by the density work', () => {
+  const subset = corpus.filter(explicit16x9);
+  assert.equal(subset.length, 656);
+  assert.equal(createHash('sha256').update(JSON.stringify(subset)).digest('hex'), EXPLICIT_16X9_SHA256);
+  for (const entry of subset) {
+    const result = attempt(() => buildEditorialModule(entry.spec));
+    if (entry.error !== undefined) assert.equal(result.error, entry.error, entry.name);
+    else assert.equal(JSON.stringify(result.value), JSON.stringify(entry.output), entry.name);
+  }
 });
 
 test('HyperFrames emitter output is byte-identical to the golden corpus', () => {
