@@ -357,6 +357,30 @@ test("audio.narration is validated and defers the voice, words and word anchors"
   assert.equal(validateStory(baseStory({ audio: { narration: { text: "x".repeat(4000), speed: 0.5 } } })).ok, true);
 });
 
+test("audio.music accepts synth, none, a file or a provider object with prompt, bpm and sync", () => {
+  const ok = (music) => assert.deepEqual(validateStory(baseStory({ audio: { music } })).errors, [], JSON.stringify(music));
+  ok("synth");
+  ok("none");
+  ok("assets/audio/song.mp3");
+  ok({ source: "synth", bpm: 100, key: "A" });
+  ok({ provider: "elevenlabs", prompt: "Warm lo-fi house", bpm: 104, sync: "cuts", seed: 7, model: "music_v1", volume: 0.3 });
+  ok({ provider: "file", file: "assets/audio/song.mp3", sync: "off" });
+  ok({ bpm: 96 });
+  const errors = (music) => validateStory(baseStory({ audio: { music } })).errors.join("\n");
+  assert.match(errors({ provider: "suno" }), /audio\.music\.provider must be one of synth, elevenlabs, file/);
+  assert.match(errors({ provider: "file" }), /needs audio\.music\.file/);
+  assert.match(errors({ provider: "elevenlabs", file: "assets/audio/song.mp3" }), /only used with provider "file"/);
+  assert.match(errors({ file: "/etc/song.mp3" }), /audio\.music\.file must be a project-relative path/);
+  assert.match(errors({ sync: "always" }), /audio\.music\.sync must be one of auto, off, cuts, hits/);
+  assert.match(errors({ prompt: "" }), /audio\.music\.prompt must be a non-empty string/);
+  assert.match(errors({ prompt: "x".repeat(2001) }), /at most 2000 characters/);
+  assert.match(errors({ seed: -1 }), /audio\.music\.seed must be a non-negative integer/);
+  assert.match(errors({ bpm: 400 }), /audio\.music\.bpm must be a number between 1 and 300/);
+  const warnings = validateStory(baseStory({ audio: { music: { provider: "synth", prompt: "x", tempo: 3 } } })).warnings.join("\n");
+  assert.match(warnings, /audio\.music\.prompt is only used by the elevenlabs provider/);
+  assert.match(warnings, /audio\.music\.tempo is not a music field/);
+});
+
 test("story validate fails a scene whose module params would render a placeholder", async () => {
   // Regression: a process-steps hit 0.2 s into the scene passed validate with
   // zero warnings, then both compilers drew the "Missing module" placeholder.

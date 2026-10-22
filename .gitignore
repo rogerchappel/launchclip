@@ -1,5 +1,5 @@
 # Dependencies
-/node_modules/
+/node_modules
 
 # LaunchClip workspaces and generated output
 /.launchclip/*
@@ -56,3 +56,9 @@ qa/voice/
 
 # World camera QA (contact sheets, mid-move stills, finish runs)
 qa/camera/
+
+# Music generation and beat-sync proof runs
+qa/music/
+
+# SFX library QA renders and auditions
+qa/sfx/

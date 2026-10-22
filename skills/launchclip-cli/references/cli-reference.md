@@ -19,6 +19,8 @@ the current workflow and the decisions an operating agent must not guess.
 - [Local-first OSS packet lane](#local-first-oss-packet-lane)
 - [Storyboard (storyboard.json)](#storyboard-storyboardjson)
 - [Finish: storyboard to mastered video in one command](#finish-storyboard-to-mastered-video-in-one-command)
+  - [Sound effects](#sound-effects)
+- [Export: an editable timeline for Final Cut Pro, Premiere Pro and Resolve](#export-an-editable-timeline-for-final-cut-pro-premiere-pro-and-resolve)
 
 - [Voice providers](#voice-providers)
 - [Failure handling](#failure-handling)
@@ -45,6 +47,7 @@ Provider requirements:
 | local-first frame authoring or repair | a running Ollama server; no model API key for the local attempt |
 | OpenRouter frame authoring or repair | `OPENROUTER_API_KEY` |
 | generated narration and music | `ELEVENLABS_API_KEY` plus `ELEVENLABS_VOICE_ID` or `--voice-id` for narration |
+| ElevenLabs SFX library (`launchclip sfx seed`) | `ELEVENLABS_API_KEY`; without it the library seeds from the procedural kit |
 | supplied voiceover without a transcript | `ELEVENLABS_API_KEY` for transcription |
 | supplied voiceover with `--transcript` | no transcription call required |
 | visual-only production | `--no-audio`; OpenAI model calls still occur |
@@ -608,7 +611,9 @@ candidate as `<out>.rejected.json`. Review the storyboard, then run
 
 ```bash
 launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] \
-  [--voice kokoro|elevenlabs|supplied|test] [--out renders/final.mp4] [--force] [--json]
+  [--voice kokoro|elevenlabs|supplied|test] [--music synth|elevenlabs|none] \
+  [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] \
+  [--force] [--json]
 ```
 
 `finish` is the recommended way to turn a `storyboard.json` project into a
@@ -620,7 +625,7 @@ finished video. It runs these stages in order and stops at the first failure
 | `voice` | When `audio.narration` (`{text, provider?, voice?, speed?}`) is set, synthesises it through the voice provider (`--voice` overrides `provider`; the default is `kokoro`). Skipped when `audio.voice` is a supplied file, unless `--voice` is given. | `assets/audio/narration.wav`, `NARRATION.json` |
 | `validate` | Validates the story, resolves its anchors against the synthesised words, and runs the geometric layout check. Errors fail the run; warnings are reported. | `.launchclip/finish/storyboard.json`, `.launchclip/finish/story.resolved.json` |
 | `captions` | Chunks the words into caption lines when a captions overlay has no `src`. | `assets/captions/captions.json` |
-| `sound` | Binds a procedural kit cue to every hit (`hit.cue`, else the named module event's cue, else a default from the event name) and to every module event that carries a `cue`, adds a whoosh under push, whip and zoom transitions, picks a music bed from scene `energy` (tempo, level and kick window), and mixes everything with the music ducked under the voice. Skipped when the storyboard sets `audio.mix`. `audio.sfx: "none"` and `audio.music: "none"` turn the parts off. | `assets/audio/mix.wav`, `assets/audio/kit/`, `AUDIO-MANIFEST.json`, `qa/sfx.json` |
+| `sound` | Binds a cue to every hit (`hit.cue`, else the named module event's cue, else a default from the event name) and to every module event that carries a `cue`, adds a whoosh under push, whip and zoom transitions, resolves each cue to a file through the SFX library (see [Sound effects](#sound-effects)), renders a typing track for typed code, resolves the music (see [Music](#music)): the procedural bed from scene `energy`, an ElevenLabs track generated (or reused from the cache) for the story, or a supplied file; analyses its beats, applies beat sync, and mixes everything with the music ducked under the voice. Skipped when the storyboard sets `audio.mix`. `audio.sfx: "none"` and `audio.music: "none"` (or `--music none`) turn the parts off. | `assets/audio/mix.wav`, `assets/audio/kit/`, `assets/audio/typing.wav`, `AUDIO-MANIFEST.json`, `qa/sfx.json`, `BEATS.json`, `qa/beat-sync.json`, `assets/audio/music.mp3` (ElevenLabs) |
 | `render` | Renders the filled copy through the renderer adapter. The default renderer is `remotion` when the project has no `index.html`, otherwise `hyperframes`; HyperFrames compiles to `.launchclip/finish/hyperframes/` first. | `.launchclip/finish/render-<quality>.mp4` |
 | `master` | Masters the render's audio to −14 LUFS and at most −1 dBTP, re-measured after encoding. | `renders/draft.mp4` (draft) or `renders/final.mp4` (high), or `--out` |
 | `evidence` | Builds the phase-2 temporal evidence (browser stills plus encoded frames) and critic contact sheets. | `qa/temporal-evidence/`, `qa/critic-sheets/` |
@@ -645,6 +650,201 @@ whole pipeline can be exercised offline. Never ship it. The `kokoro`,
 
 After finish, a fresh-context critic reviews `qa/critic-sheets/` and writes
 `qa/critic.json`; `launchclip cinematic-check` then closes the critic gate.
+
+### Music
+
+`finish` picks the music in this order: `--music synth|elevenlabs|none`, then
+`audio.music` in the storyboard, then ElevenLabs when `ELEVENLABS_API_KEY` is
+set, else the procedural synth bed. `audio.music` accepts:
+
+| Value | Music |
+| --- | --- |
+| absent | the default above |
+| `"synth"` | the license-free procedural bed (`synth-audio-kit.mjs`): tempo, level and kick window follow scene `energy` |
+| `"none"` | no music |
+| `"assets/audio/song.mp3"` | a supplied track (its licence is yours to check) |
+| `{provider, prompt?, bpm?, key?, file?, sync?, seed?, model?, volume?}` | `provider` is `"synth"`, `"elevenlabs"` or `"file"`; `sync` is `"auto"` (default), `"off"`, `"cuts"` or `"hits"` |
+
+**ElevenLabs (paid).** `finish` prints a one-line notice that a paid API is in
+use and where generations are cached, then calls `POST /v1/music`. Without a
+`prompt` it sends a `music_v1` composition plan: global styles from the story
+(tone from the title, notes and brand background, the target BPM, steady 4/4,
+instrumental, and negative styles for vocals of any kind) and one section per
+energy segment of the story (calm intro → build → payoff; sections shorter
+than 3 s merge into a neighbour). With a `prompt` it sends that text plus the
+tempo, the energy arc and "instrumental only, no vocals", with
+`force_instrumental: true`. The track runs the story's length plus 2 s, so beat
+sync can trim the start. The target BPM is `audio.music.bpm`, else the tempo
+the energy implies (84–116). Every generation is cached by a hash of the
+prompt or plan, length, model and seed under
+`$LAUNCHCLIP_CACHE/elevenlabs/music` (default
+`~/.cache/launchclip/elevenlabs/music`); a cached track is never generated
+again, even without a key. The key is read from the environment, sent only in
+the `xi-api-key` header, and never logged, cached or put in an error. Before
+mixing, generated and supplied music is brought to −16 LUFS so the volume and
+the voice-to-music margin behave like the synth bed. `--music elevenlabs`
+without a key fails before anything is sent; `audio.music.provider:
+"elevenlabs"` without a key falls back to the synth bed with a warning. Output
+terms: see `THIRD_PARTY_NOTICES.md`.
+
+**Beats.** The track's tempo, beat grid and downbeats are measured
+(`src/music/beats.js`: FFmpeg decode, spectral-flux onsets, autocorrelation
+with the requested BPM as a prior, a global grid fit) and written to
+`BEATS.json` (`launchclip.beats.v1`, in story time), so `beat:n` and
+`downbeat:n` anchors resolve against the real music. The synth bed's grid is
+exact and needs no analysis. A `BEATS.json` you wrote yourself is never
+overwritten; the music's grid then goes to `assets/audio/BEATS.json`.
+
+**Beat sync.** The strategy follows the lane:
+
+- **Narrated stories** (a voice, words or `audio.narration`): the narration
+  timing is fixed, so the music moves. `finish` scores every start offset into
+  the track (and tempo changes up to ±3% with FFmpeg `atempo`, kept only when
+  they score at least 5% better) so downbeats land on the first cut after the
+  hook, the payoff/CTA scene start, the other cuts and strong hits. No story
+  time changes.
+- **Motion stories** (no narration): the music is aligned the same way, then
+  second-timed scene cuts snap to the nearest downbeat (or beat) and
+  second-timed hits to the nearest beat, within 0.25 s. Every move is
+  re-resolved, validated and checked against its module's params, and
+  reverted when it breaks one; layout-check runs again on the result and a
+  failure reverts all snaps.
+
+Word-anchored times never move off their word, and beat anchors are on the
+grid already. `sync: "cuts"` aligns and snaps cuts only, `"hits"` only hits,
+`"off"` turns beat sync off. `qa/beat-sync.json` records the strategy, the
+requested and measured BPM, the offset and tempo chosen, every key moment's
+distance to the nearest downbeat and beat, and each change, fallback and skip.
+
+### Environment and `.env`
+
+At startup the CLI reads `.env` from the working directory and, for commands
+that take a project or workspace directory (such as `finish`), from that
+directory too. Variables already set in the shell always win, and a `.env`
+never overrides them. It uses Node's `process.loadEnvFile` (with a small
+fallback parser). Copy `.env.example` to start; `.env` is gitignored.
+
+### Sound effects
+
+```bash
+launchclip sfx seed [--provider elevenlabs|synth] [--variants 3] [--only whoosh,impact] \
+  [--reroll typing] [--dir .launchclip/sfx] [--force]
+launchclip sfx reroll <family> [--dir .launchclip/sfx]
+launchclip sfx list [--dir .launchclip/sfx]
+launchclip sfx audition <family> [--dir .launchclip/sfx] [--out audition.wav] [--gap 0.35]
+```
+
+The SFX library is a locked set of processed WAV files per cue family,
+described by `<dir>/library.json` (`launchclip.sfx-library.v1`). Families:
+`whoosh`, `impact`, `riser`, `tick`, `pop`, `shimmer`, `subdrop`, `click`,
+`keystroke`, `keystroke-space` and `keystroke-enter` (aliases: `typing` for
+the three keystroke families, `ui` for click, tick and pop).
+
+- **Seed once.** `sfx seed` fills every family the library does not have yet.
+  With `ELEVENLABS_API_KEY` in the environment the default provider is
+  `elevenlabs`: it runs the checked-in prompt set (`src/sfx/prompts.json`:
+  per family a prompt, duration, prompt influence and variant count) through
+  `POST /v1/sound-generation`. Without a key the default is `synth`, the
+  original procedural kit (`synth-audio-kit.mjs`, local FFmpeg, no samples, no
+  cost). A default ElevenLabs seed is 24 generations; `--variants N` changes
+  the number per family and `--only` limits the families. The key is read from
+  the process environment only; `.env` loading is handled separately by the
+  CLI. It is never logged, written or included in an error.
+- **Cache.** Every download is stored as `<dir>/cache/<request-hash>.mp3`. A
+  cached request is never sent again, so `--force` (re-process everything)
+  costs nothing, and it works without the key.
+- **Post-processing** (`src/sfx/process.js`): 48 kHz WAV, DC removed, leading
+  silence trimmed by onset detection so the transient starts within 5 ms, the
+  tail trimmed against the noise floor with a short fade, a per-family length
+  cap (keystroke 120 ms, tick 150 ms, whoosh 1.2 s), peak normalised to
+  −3 dBFS. Silent and flat-top clipped clips are rejected; a single-hit family
+  (impact, tick, pop, click, keystrokes) keeps the cleanest hit of a multi-hit
+  clip, or rejects it. Each kept file records its onset, duration, peak, peak
+  time, RMS and (from 0.4 s) integrated loudness. A family whose takes are all
+  rejected falls back to the procedural kit, with a warning.
+- **Locked.** Re-running `sfx seed` leaves seeded families alone.
+  `--reroll <family>` (or `sfx reroll <family>`) replaces just that family
+  with new generations; the family's `roll` number is part of the request
+  hash.
+- **Audition.** `sfx list` shows the libraries and where each family resolves;
+  `sfx audition <family>` writes a contact WAV of every variant with short gaps
+  (default `<dir>/audition/<family>.wav`).
+
+`finish` resolves each cue family from the first source that has it: an
+explicit library (`--sfx-library`, or a style pack's `sound.sfx_library`),
+the project library (`<project>/.launchclip/sfx`), the user library
+(`~/.launchclip/sfx`, or `$LAUNCHCLIP_SFX_HOME`), then the procedural kit. The
+variant for each event is picked from a hash of the story id and the event, so
+repeated cues vary while renders stay reproducible; a library riser is placed
+so its measured peak lands on its moment. `--sfx-density low` drops about half
+of the optional cues (module events, transitions, word ticks; hits always
+stay) by a deterministic hash and caps typing at 15 keys per second; `high`
+raises the typing cap to 30.
+
+**Typing track.** For a `code-snippet` with `typing: true`, finish places one
+keystroke on each character's visible time (`charTimes`), a space-bar key on
+spaces and an enter key between typed lines, rotating variants without
+immediate repeats, with seeded ±1.5 dB level and ±1.5 semitone pitch jitter,
+and a cap of 25 keys per second (thinned deterministically). Modules that emit
+`*-typing-start` events without `charTimes` get evenly spaced keys over the
+typing window. Per-word reveals (`emphasis-caption` `word-<i>` events,
+`archive-card` quote words) get a soft click. The track is rendered to
+`assets/audio/typing.wav` and mixed as one input; `qa/sfx.json` lists every
+keystroke.
+
+## Export: an editable timeline for Final Cut Pro, Premiere Pro and Resolve
+
+```bash
+launchclip export <project> --format fcpxml|premiere|edl|otio|all \
+  [--overlays prores4444|png|none] [--out exports/] [--fps 24|25|29.97|30|60] \
+  [--name name] [--absolute] [--dtd FCPXMLv1_10.dtd] [--force] [--json]
+```
+
+`export` turns a finished storyboard project (run `finish` first) into an
+editable NLE timeline whose clips line up frame for frame with the render.
+`--format` takes one format, a comma list or `all`:
+
+| `--format` | File | For |
+| --- | --- | --- |
+| `fcpxml` | `<name>.fcpxml` (FCPXML 1.10) | Final Cut Pro, DaVinci Resolve |
+| `premiere` | `<name>.xml` (FCP 7 xmeml v4) | Premiere Pro, DaVinci Resolve |
+| `edl` | `<name>.edl` (CMX 3600, V1 only) | Avid and conform tools |
+| `otio` | `<name>.otio` (OpenTimelineIO JSON) | Resolve, Hiero, RV, otio tools |
+
+Output goes to `<out>/<name>/` (default `exports/<project-folder>/`): the
+format files, `captions.srt`, `timeline.json` (the timeline model),
+`EXPORT.json` (files, tracks, overlay renders, warnings, validation) and
+`media/` with every referenced file copied in (APFS clones where possible).
+Media paths are relative; `--absolute` writes absolute `file://` URLs.
+
+Tracks: V1 is the base (footage-led trim segments, each a clip on the original
+recording with its source in point, or a solid `brand.colors.bg` plate in
+motion lanes); V2 and up are the overlay scenes, each rendered on its own as
+ProRes 4444 with alpha (`--codec prores --prores-profile 4444 --pixel-format
+yuva444p10le`) from the Remotion kit's `SceneOverlay` composition, stacked so a
+transitioning scene sits above the one it overlaps; the top video track is the
+finished render, disabled, for reference. A1 is the voice (or the recording's
+audio, linked to V1), A2 the music bed, A3 and up the SFX cues as individual
+clips with their levels and the typing track, then the finished mix (disabled). Captions are a
+subtitle track (FCPXML caption role; `captions.srt` elsewhere) and markers sit
+at scene starts, hits and camera moves.
+
+`--overlays none` skips the overlay renders and enables the finished render as
+the picture above V1; `--overlays png` writes PNG sequences instead (referenced
+by the OTIO only). Overlay renders are reused while the story and kit are
+unchanged; `--force` re-renders. `--fps 29.97` (or 59.94, 23.976) writes an exact
+NTSC timeline (30000/1001) with drop-frame timecode and renders the overlays at
+that rate. Camera moves (punch-in), music ducking and word-highlight caption
+styling are not carried; they are listed in `EXPORT.json` warnings. Overlays
+always come from Remotion: the HyperFrames compiler cannot isolate a scene on
+alpha yet.
+
+Every file is read back and compared with the timeline model (clip starts,
+durations, source in points, markers, captions). FCPXML also gets structural
+checks and Apple's DTD check when Final Cut Pro is installed (or `--dtd` /
+`LAUNCHCLIP_FCPXML_DTD` names the DTD); the `.otio` is also opened with the
+Python `opentimelineio` package when it is installed. A failed check exits
+non-zero after writing the files.
 
 ### Renderer eval (npm script, repository checkout)
 

@@ -510,13 +510,22 @@ launchclip finish <project> --renderer hyperframes --quality high    # renders/f
 
 It synthesises `audio.narration` when set (`--voice kokoro|elevenlabs|supplied`),
 validates and layout-checks the storyboard, writes captions, builds the SFX
-and music mix from the hits, module cues and scene energy, compiles the
+and music mix from the hits, module cues, scene energy and the beat-synced
+music (`--music synth|elevenlabs|none`), compiles the
 storyboard to `.launchclip/finish/hyperframes/`, renders, masters to −14 LUFS /
 −1 dBTP, builds the temporal evidence and critic sheets, and runs the motion,
 audio, loudness, layout and evidence gates. It never rewrites
 `storyboard.json`, skips stages whose inputs have not changed, and writes
 `finish.json`. The critic gate stays `pending` until the fresh-context critic
 has reviewed `qa/critic-sheets/`.
+
+<!-- include: shared/music-beat-sync.md -->
+
+To keep editing in Final Cut Pro, Premiere Pro or DaVinci Resolve after
+finish, export an editable timeline (base clips with their in points, each
+overlay scene as an alpha clip, voice, music, per-cue SFX, captions and
+markers): `launchclip export <project> --format fcpxml|premiere|edl|otio|all`.
+See [finishing-in-an-nle.md](finishing-in-an-nle.md).
 
 Hand-authored `index.html` projects (no storyboard) use the manual render
 below.

@@ -43,11 +43,46 @@ review its terms before redistributing a bundle that includes it.
 - <https://github.com/hexgrad/kokoro>
 - <https://github.com/espeak-ng/espeak-ng>
 
-## ElevenLabs voice (optional, opt-in)
+## ElevenLabs voice and music (optional, paid)
 
-The ElevenLabs provider calls the ElevenLabs API only when
-`ELEVENLABS_API_KEY` is set. Use of that service and of its output is
-governed by the ElevenLabs terms of service.
+The ElevenLabs voice provider and music provider call the ElevenLabs API only
+when `ELEVENLABS_API_KEY` is set (for music, `launchclip finish` uses
+ElevenLabs by default once the key is set and prints a notice; `--music synth`
+or `audio.music: "synth"` keeps the license-free procedural bed). Use of that
+service and of its output is governed by the ElevenLabs terms of service and
+the plan of the account that made the request, not by LaunchClip's licence.
+
+For generated music (Eleven Music), at the time of writing ElevenLabs states
+that:
+
+- free-plan output is not licensed for commercial use and must be attributed
+  to "Eleven Music" when distributed;
+- paid self-serve plans include a commercial licence for online and offline
+  use, with exceptions (such as film, TV and games) reserved for Enterprise
+  plans;
+- prompts must not name artists, songs, albums or labels.
+
+Check the current terms at <https://elevenlabs.io/terms-of-use> and
+<https://elevenlabs.io/music> before you publish or redistribute generated
+music. LaunchClip never bundles ElevenLabs output: generated tracks stay in
+your project (`assets/audio/music.mp3`) and your local cache
+(`$LAUNCHCLIP_CACHE/elevenlabs/music`), and `AUDIO-MANIFEST.json` records the
+provider of every track.
+
+## Sound effects
+
+The procedural SFX kit (`skills/launchclip-create-video/scripts/synth-audio-kit.mjs`:
+whooshes, impacts, risers, ticks, pops, shimmers, sub drops, UI clicks and
+mechanical keystrokes) is original synthesis with local FFmpeg. It contains
+no third-party samples and is covered by LaunchClip's MIT License.
+
+`launchclip sfx seed --provider elevenlabs` (opt-in, needs
+`ELEVENLABS_API_KEY`) generates library sounds with the ElevenLabs sound
+effects API. LaunchClip ships no ElevenLabs audio; generated files stay in the
+user's library (`.launchclip/sfx/` or `~/.launchclip/sfx/`), and their use is
+governed by the ElevenLabs terms of service for the account that generated
+them. `finish` records the source of every cue in `qa/sfx.json` and states
+the licence in `AUDIO-MANIFEST.json`.
 
 ## Bundled fonts
 

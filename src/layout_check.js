@@ -29,7 +29,8 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   }
   const narration = options.words ?? await readOptionalJson(narrationFile(project, story));
   const words = Array.isArray(narration) ? narration : Array.isArray(narration?.words) ? narration.words : [];
-  const beats = await readOptionalJson(path.join(project, "BEATS.json"));
+  // options.beats: a grid the caller already holds (finish, before BEATS.json is written).
+  const beats = options.beats ?? await readOptionalJson(path.join(project, "BEATS.json"));
   const resolved = storyCore.resolveStory(story, { words, beats, edl: await readStoryEdl(project, story) });
   const catalogue = catalogModules();
 
