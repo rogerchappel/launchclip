@@ -2,7 +2,7 @@
 // element tree (view) and renderer-neutral animation ops (timeline).
 // Registered in kit/core/catalog-b.mjs; conventions are documented there.
 
-import {CATALOG_B_STYLE, alphaHex, createBase, fitText, mixColor, r2, rt, textWidth} from './catalog-b-base.mjs';
+import {CATALOG_B_STYLE, alphaHex, createBase, fitText, mixColor, r2, rt, textWidth, timingRules} from './catalog-b-base.mjs';
 import {abs, el, set, text, transformString, tw} from './catalog-b-view.mjs';
 import {grammarStagger} from './grammar.mjs';
 
@@ -160,6 +160,7 @@ export const archiveCard = {
     params: {quote: 'string ≤ 160 (quote or title required)', title: 'string ≤ 60', source: 'string ≤ 80 (required)', date: 'string ≤ 24, e.g. "1701"',
       stamp: 'string | {text, at?} | false (default: the date)', kicker: 'string ≤ 20 (default "ARCHIVE")', image: 'assets/… local image (optional)', reveal_at: at, rect},
     events: ['quote', 'stamp'],
+    timing: timingRules({rules: ['stamp.at defaults to 0.35 s after the quote finishes revealing']}),
   resolve,
   view,
   timeline

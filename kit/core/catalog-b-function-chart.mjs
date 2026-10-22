@@ -2,7 +2,7 @@
 // element tree (view) and renderer-neutral animation ops (timeline).
 // Registered in kit/core/catalog-b.mjs; conventions are documented there.
 
-import {alphaHex, createBase, fitText, formatNumber, frameSamples, overlaps, parseExpression, progress, r2, rt, textWidth, ticks, withUnit} from './catalog-b-base.mjs';
+import {alphaHex, createBase, fitText, formatNumber, frameSamples, overlaps, parseExpression, progress, r2, rt, textWidth, ticks, withUnit, timingRules} from './catalog-b-base.mjs';
 import {abs, el, hex2, sampleTime, set, svgRoot, text, transformString, tw} from './catalog-b-view.mjs';
 
 const color = 'primary | accent | paper | #rrggbb (contrast ≥ 3:1 on bg)';
@@ -394,6 +394,7 @@ export const functionChart = {
       gap_bars: '[x, …] or [{x, at?, label?}] up to 5; events gap-bar-0…', probe: 'true (default) | false | {label}', tail_zoom: '{from: x, at?, corner?} — magnified inset of the tail; event tail-zoom',
       draw: '{at?, duration?, ease?}; event draw', decimals: 'integer 0–3', color, rect},
     events: ['draw', 'gap-bar-<i>', 'probe-settle', 'tail-zoom'],
+    timing: timingRules({rules: ['draw.at ≤ scene − 0.65 − draw duration + 0.3 s', 'gap_bars[].at default to when the line passes them', 'tail_zoom.at ≥ the end of the draw and ≤ scene − 0.65 − zoom duration − 0.4 s']}),
   resolve,
   view,
   timeline

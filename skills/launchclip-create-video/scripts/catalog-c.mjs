@@ -167,14 +167,14 @@ function punchScale(t, {scale, punchAt, releaseAt, fps}) {
 }
 
 function resolvePunchIn(params, ctx) {
-  const b = createFootageBase('punch-in', params, ctx, {allowed: ['scale', 'at', 'focus', 'release'], minDuration: 0.8});
+  const b = createFootageBase('punch-in', params, ctx, {allowed: ['scale', 'at', 'focus', 'release'], minDuration: CATALOG_C_TIMING['punch-in'].minDuration});
   const {check, canvas, fps, start, end, duration} = b;
   const p = b.params;
   const scale = p.scale === undefined ? 1.12 : check.num(p.scale, 'params.scale', 1.06, 1.25);
   const baseFocus = ctx.base?.focus && Number.isFinite(ctx.base.focus.x) && Number.isFinite(ctx.base.focus.y) ? ctx.base.focus : {x: 0.5, y: 0.42};
   const focusIn = p.focus === undefined ? baseFocus : fraction(check, p.focus, 'params.focus');
   const release = p.release === undefined ? Math.min(0.5, r2(duration * 0.3)) : check.num(p.release, 'params.release', 0.3, 2);
-  const punchAt = b.timeOf('punch', p.at, 'params.at', 0, {min: 0, max: duration - release - 0.25});
+  const punchAt = b.timeOf('punch', p.at, 'params.at', 0, {min: 0, max: duration - release - CATALOG_C_TIMING['punch-in'].releaseHold});
   const releaseAt = rt(end - release);
   if (releaseAt - punchAt < 0.25 - 1e-6) check.fail('params.release', `leaves ${r2(releaseAt - punchAt)} s between the punch and the release; it needs 0.25 s`);
   const focus = {x: r2(focusIn.x * canvas.width), y: r2(focusIn.y * canvas.height)};
@@ -279,7 +279,7 @@ function resolveCallout(params, ctx) {
   const xs = corners.map(c => c.x), ys = corners.map(c => c.y);
   const bounds = {x: r2(Math.min(...xs)), y: r2(Math.min(...ys)), width: r2(Math.max(...xs) - Math.min(...xs)), height: r2(Math.max(...ys) - Math.min(...ys))};
 
-  const dotAt = b.timeOf('point', p.at, 'params.at', 0.1, {min: 0, max: duration - 1.1});
+  const dotAt = b.timeOf('point', p.at, 'params.at', 0.1, {min: 0, max: duration - CATALOG_C_TIMING['footage-callout'].leadOut});
   const lineAt = rt(dotAt + 0.12), stickerAt = rt(dotAt + 0.36);
   const exitStart = rt(end - 0.3);
   b.events.push({id: `${b.id}-point`, name: 'point', time: dotAt, endTime: rt(dotAt + 0.3), role: 'anchor', cue: 'tick'});
@@ -336,7 +336,7 @@ function calloutTimeline(model, ops) {
 const LOWER_THIRD_TONES = ['dark', 'primary'];
 
 function resolveLowerThird(params, ctx) {
-  const b = createFootageBase('lower-third', params, ctx, {allowed: ['name', 'title', 'at', 'align', 'tone'], required: ['name'], minDuration: 2});
+  const b = createFootageBase('lower-third', params, ctx, {allowed: ['name', 'title', 'at', 'align', 'tone'], required: ['name'], minDuration: CATALOG_C_TIMING['lower-third'].minDuration});
   const {check, u, safe, colors, theme, end, duration} = b;
   const p = b.params;
   const name = check.str(p.name, 'params.name', 32);
@@ -359,7 +359,7 @@ function resolveLowerThird(params, ctx) {
   const height = r2(padY * 2 + nameFit.size * 1.15 + (titleFit ? gapLines + titleFit.size * 1.2 : 0));
   const x = r2(align === 'left' ? safe.x : safe.x + (safe.width - width) / 2);
   const y = r2(safe.y + safe.height - height);
-  const t0 = b.timeOf('name', p.at, 'params.at', 0, {min: 0, max: duration - 1.2});
+  const t0 = b.timeOf('name', p.at, 'params.at', 0, {min: 0, max: duration - CATALOG_C_TIMING['lower-third'].leadOut});
   const exitStart = rt(end - 0.32);
   b.events.push({id: `${b.id}-name`, name: 'name', time: t0, endTime: rt(t0 + 0.55), role: 'title', cue: 'whoosh'});
   if (title) b.events.push({id: `${b.id}-title`, name: 'title', time: rt(t0 + 0.3), endTime: rt(t0 + 0.65), role: 'subtitle'});
@@ -419,7 +419,7 @@ function resolveEmphasis(params, ctx) {
   const centreY = position === 'upper' ? (portrait ? 520 : 300) * ref : position === 'lower' ? (portrait ? 1250 : 800) * ref : (portrait ? 860 : 540) * ref;
   const y = r2(Math.min(Math.max(centreY - height / 2, safe.y), safe.y + safe.height - height));
   const rect = {x: r2(safe.x + (safe.width - blockW) / 2), y, width: blockW, height};
-  const t0 = b.timeOf('pop', p.at, 'params.at', 0.05, {min: 0, max: Math.max(0, duration - 0.45 - stagger * (words.length - 1))});
+  const t0 = b.timeOf('pop', p.at, 'params.at', 0.05, {min: 0, max: Math.max(0, duration - CATALOG_C_TIMING['emphasis-caption'].leadOut - stagger * (words.length - 1))});
   const exitStart = rt(Math.max(t0 + stagger * (words.length - 1) + 0.4, end - 0.25));
   const items = words.map((word, i) => ({index: i, text: word, time: rt(t0 + i * stagger)}));
   b.events.push({id: `${b.id}-pop`, name: 'pop', time: t0, endTime: rt(t0 + 0.38), role: 'emphasis', cue: 'impact'});
@@ -451,6 +451,21 @@ function emphasisTimeline(model, ops) {
 // ---------------------------------------------------------------------------
 // Registry, root, camera
 
+// Timing constants per module (seconds, scene-relative), the single source for
+// the checks above and each MODULES entry's `timing` table.
+export const CATALOG_C_TIMING = Object.freeze({
+  'punch-in': Object.freeze({minDuration: 0.8, releaseHold: 0.25}),
+  'footage-callout': Object.freeze({minDuration: 1.5, leadOut: 1.1}),
+  'lower-third': Object.freeze({minDuration: 2, leadOut: 1.2}),
+  'emphasis-caption': Object.freeze({minDuration: 0.8, leadOut: 0.45})
+});
+const TIMING_C = {
+  'punch-in': {minDuration: CATALOG_C_TIMING['punch-in'].minDuration, leadIn: 0, leadOut: null, gaps: [], rules: [`at ≤ scene − release − ${CATALOG_C_TIMING['punch-in'].releaseHold} s (release 0.3–2 s, default min(0.5, 0.3 × scene))`]},
+  'footage-callout': {minDuration: CATALOG_C_TIMING['footage-callout'].minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING['footage-callout'].leadOut, gaps: [], rules: []},
+  'lower-third': {minDuration: CATALOG_C_TIMING['lower-third'].minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING['lower-third'].leadOut, gaps: [], rules: []},
+  'emphasis-caption': {minDuration: CATALOG_C_TIMING['emphasis-caption'].minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING['emphasis-caption'].leadOut, gaps: [], rules: [`at ≤ scene − ${CATALOG_C_TIMING['emphasis-caption'].leadOut} s − stagger × (words − 1) (stagger 0–0.3 s, default 0.09)`]}
+};
+
 const DEFINITIONS = [
   {id: 'punch-in', describe: 'Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay).',
     params: {scale: '1.06–1.25 (default 1.12)', at, focus: '{x, y} canvas fractions (default base.focus, else {0.5, 0.42})', release: 'seconds before the scene end when the zoom springs back (0.3–2, default min(0.5, 30% of the scene))'},
@@ -466,7 +481,7 @@ const DEFINITIONS = [
     events: ['pop', 'word-<i>'], resolve: resolveEmphasis, view: emphasisView, timeline: emphasisTimeline}
 ];
 
-export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, resolve: def.resolve}]));
+export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: TIMING_C[def.id], resolve: def.resolve}]));
 const BY_ID = Object.fromEntries(DEFINITIONS.map(def => [def.id, def]));
 
 function definition(model) {

@@ -2,7 +2,7 @@
 // element tree (view) and renderer-neutral animation ops (timeline).
 // Registered in kit/core/catalog-b.mjs; conventions are documented there.
 
-import {alphaHex, createBase, fitText, mixColor, r2, rt} from './catalog-b-base.mjs';
+import {alphaHex, createBase, fitText, mixColor, r2, rt, timingRules} from './catalog-b-base.mjs';
 import {abs, el, hex2, set, text, transformString, tw} from './catalog-b-view.mjs';
 
 const color = 'primary | accent | paper | #rrggbb (contrast ≥ 3:1 on bg)';
@@ -127,6 +127,7 @@ export const flowCompare = {
     describe: 'Two pipes whose particles stream at different rates: "big X → fast, small X → slow".',
     params: {top: `{label, rate (relative > 0), value? (tag such as "fast"), color?, at?}`, bottom: '{label, rate, value?, color?, at?}', title: 'string ≤ 48 (optional)', note: 'string ≤ 60 (optional)', rect},
     events: ['top-flow', 'bottom-flow'],
+    timing: timingRules(),
   resolve,
   view,
   timeline

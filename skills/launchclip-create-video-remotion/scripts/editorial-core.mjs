@@ -195,6 +195,51 @@ export const EDITORIAL_STYLE = Object.freeze({
   symbol: Object.freeze({viewBox: '0 0 24 24', strokeWidth: 1.6})
 });
 
+// Timing constants, the single source for the validation below and for the
+// generated timing table (EDITORIAL_TIMING_RULES, kit/core/modules.mjs
+// moduleTiming(), the skill's storyboard-modules.md and `launchclip module fit`).
+// Seconds; `at` values are scene-relative.
+const TIMING = Object.freeze({
+  minDuration: 1, enter: .28, exit: .22, leadOut: .45, motionHold: .5,
+  series: Object.freeze({gap: .65, leadOut: .8}),
+  gaps: Object.freeze({'step-rail': .3, 'status-rack': .3, 'code-snippet': .3, chart: .5}),
+  callout: Object.freeze({settle: .4}),
+  focus: Object.freeze({arrive: .24, stagger: .08, hold: .2, chosenSettle: .9, progressHold: .35}),
+  growthDefaultHold: 2.4,
+  settle: Object.freeze({'date-card': .32, 'excerpt-window': .5, 'code-snippet': .24})
+});
+
+/**
+ * Timing rules per editorial kind, from TIMING: {minDuration (s), leadIn (the
+ * earliest `at`), leadOut (the latest `at` is scene duration − leadOut),
+ * gaps: [{between, seconds}], rules: [string]}. Defaults without spec.motion;
+ * with motion, leadIn is motion.enterDuration and leadOut max(0.45,
+ * motion.exitDuration + 0.3), and the scene needs enter + exit + 0.5 s.
+ */
+export const EDITORIAL_TIMING = TIMING;
+export function editorialTimingRules(kind) {
+  const T = TIMING, gap = (between, seconds) => ({between, seconds});
+  const base = {minDuration: T.minDuration, leadIn: T.enter, leadOut: T.leadOut, gaps: [], rules: []};
+  const settleBeforeExit = `every state settles before the ${T.exit} s exit begins`;
+  switch (kind) {
+    case 'media-window': return {...base, leadIn: null, leadOut: null, rules: ['no timed beats; the window holds for the scene']};
+    case 'checklist': return {...base, rules: ['rows[].doneAt comes after rows[].at (status "active" only)']};
+    case 'step-rail': return {...base, gaps: [gap('steps[].at', T.gaps['step-rail'])]};
+    case 'callout': return {...base, rules: [`treated: underlineAt ≥ treatment.at + ${T.callout.settle} s; the treatment settles ${T.callout.settle} s after treatment.at, before the exit`]};
+    case 'audience-grid': return {...base};
+    case 'trend-chart': return {...base, gaps: [gap('chart.points[].at', T.gaps.chart)]};
+    case 'growth-chart': return {...base, gaps: [gap('growth.points[].at', T.gaps.chart)], rules: [`default points (no growth.points) need a scene of at least ${round2(T.enter + T.exit + T.growthDefaultHold)} s`]};
+    case 'metric': case 'progress': return {...base, leadOut: T.series.leadOut, gaps: [gap(`${kind}.values[].at`, T.series.gap)]};
+    case 'date-card': return {...base, rules: [`the day settles ${T.settle['date-card']} s after date.at; ${settleBeforeExit}`]};
+    case 'status-rack': return {...base, gaps: [gap('rack.rows[].states[].at (per row)', T.gaps['status-rack'])], rules: [settleBeforeExit]};
+    case 'code-snippet': return {...base, gaps: [gap('code.lines[].at', T.gaps['code-snippet'])], rules: ['with typing, a line starts after the previous line finishes typing (at + typeDuration; typeDuration 0.12–2 s, default 0.6)', settleBeforeExit]};
+    case 'excerpt-window': return {...base, rules: [`the focus settles ${T.settle['excerpt-window']} s after focus.at; ${settleBeforeExit}`]};
+    case 'focus-flow': return {...base, rules: [`chooseAt ≥ arriveAt + ${T.focus.arrive} + ${T.focus.stagger} × (options − 1) + ${T.focus.hold} s`, `progressAt ≥ chooseAt + ${T.focus.chosenSettle} s`, `progressAt + progressDuration + ${T.focus.progressHold} s ≤ scene duration − ${T.exit} s`]};
+    default: return base;
+  }
+}
+const round2 = value => Math.round(value * 100) / 100;
+
 const PANEL_KINDS = ['date-card', 'status-rack', 'code-snippet', 'excerpt-window', 'focus-flow', 'growth-chart'];
 const DIRECTIONS = ['left', 'right', 'up', 'down', 'none'];
 const MONTHS = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
@@ -230,8 +275,8 @@ function series(config, label, duration, enterDuration = .28, exitDuration = nul
   config.values.forEach((entry, i) => {
     object(entry, `${label}.values[${i}]`, ['value', 'at']);
     number(entry.value, 'value', -1_000_000_000, 1_000_000_000);
-    number(entry.at, 'at', enterDuration, duration - Math.max(.8, (exitDuration ?? 0) + .6));
-    if (entry.at <= previous || (previous >= 0 && entry.at - previous + 1e-6 < .65)) throw new Error('value times must increase with at least 0.65s between events');
+    number(entry.at, 'at', enterDuration, duration - Math.max(TIMING.series.leadOut, (exitDuration ?? 0) + .6));
+    if (entry.at <= previous || (previous >= 0 && entry.at - previous + 1e-6 < TIMING.series.gap)) throw new Error(`value times must increase with at least ${TIMING.series.gap}s between events`);
     previous = entry.at;
   });
   return config.mode === 'illustration' ? 'Illustration · example values' : `Source: ${config.source}`;
@@ -459,9 +504,9 @@ function resolveAt(options, input, suppliedRect, density, source) {
   const kind = input.kind, id = input.id;
   const canvas = input.aspect === '16:9' ? {width: 1920, height: 1080} : {width: 1080, height: 1920};
   const start = number(input.start, 'start', 0, 86400);
-  const duration = number(input.duration, 'duration', 1, 3600);
+  const duration = number(input.duration, 'duration', TIMING.minDuration, 3600);
   const movement = motionSpec(input.motion, duration);
-  const enterDuration = movement?.enterDuration ?? .28, exitDuration = movement?.exitDuration ?? .22;
+  const enterDuration = movement?.enterDuration ?? TIMING.enter, exitDuration = movement?.exitDuration ?? TIMING.exit;
   // Motion grammar (grammar.mjs): editorial keeps .28/.22 and power3.out /
   // power2.in exactly; other grammars scale the default shell durations
   // (clamped to the motion-spec range) and swap the enter/exit eases. Event
@@ -513,7 +558,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
   const C = EDITORIAL_STYLE.color;
   const theme = custom ?? {surface: panel ? C.panel : C.surface, foreground: C.foreground, muted: C.muted, border: panel ? C.panelBorder : C.border, accentText: accent};
   const events = [{id: `${id}-enter`, time: start + enterDuration}];
-  const at = (value, label) => number(value, label, enterDuration, duration - (movement ? Math.max(.45, exitDuration + .3) : .45));
+  const at = (value, label) => number(value, label, enterDuration, duration - (movement ? Math.max(TIMING.leadOut, exitDuration + .3) : TIMING.leadOut));
   const motion = movement
     ? {supplied: true, enter: movement.enter, exit: movement.exit, distance: movement.distance, exitDistance: movement.distance, scale: movement.scale, enterDuration, exitDuration,
       enterFrom: {opacity: 0, ...offset(movement.enter, movement.distance), scale: movement.scale}, exitTo: {opacity: 0, ...offset(movement.exit, movement.distance), scale: movement.scale}}
@@ -571,7 +616,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
       natural = inset * 3 + headingHeight + lines * font * 1.3 + 8;
       const time = start + at(treatment.at ?? enterDuration, 'treatment.at');
       underlines.forEach(({index, underline}) => {
-        if (underline.time < time + .4) throw new Error('underline must follow treatment settle');
+        if (underline.time < time + TIMING.callout.settle) throw new Error('underline must follow treatment settle');
         events.push({id: `${id}-underline-${index}-settle`, time: underline.time + .28});
       });
       if (treatment.corners && (rect.x < 12 || rect.y < 12 || rect.x + rect.width > canvas.width - 12 || rect.y + rect.height > canvas.height - 12)) throw new Error('corners require 12px canvas clearance');
@@ -664,7 +709,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
       let previous = -1, previousLights = [false, false, false], previousColours = [lightOff, lightOff, lightOff];
       const states = row.states.map((state, n) => {
         object(state, 'rack state', ['at', 'lights', 'tone']); const stateOffset = at(state.at, 'rack state.at');
-        if (stateOffset <= previous || previous >= 0 && stateOffset - previous < .3 - 1e-6) throw new Error('rack state times must increase by at least 0.3s'); previous = stateOffset;
+        if (stateOffset <= previous || previous >= 0 && stateOffset - previous < TIMING.gaps['status-rack'] - 1e-6) throw new Error(`rack state times must increase by at least ${TIMING.gaps['status-rack']}s`); previous = stateOffset;
         if (!Array.isArray(state.lights) || state.lights.length !== 3 || state.lights.some(light => typeof light !== 'boolean' && !(tones && STATUS_TONES.includes(light)))) throw new Error(tones ? `rack lights must be exactly three entries, each a boolean or a tone (${STATUS_TONES.join(', ')})` : 'rack lights must be exactly three booleans');
         if (state.tone !== undefined && !STATUS_TONES.includes(state.tone)) throw new Error(`rack state.tone must be ${STATUS_TONES.join(', ')}`);
         const time = start + stateOffset;
@@ -713,7 +758,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
       const typeDuration = typing ? number(line.typeDuration ?? .6, 'line.typeDuration', .12, 2) : .24;
       if (typing && lineOffset < typingEnd - 1e-6) throw new Error('typing lines must not overlap');
       typingEnd = lineOffset + typeDuration;
-      if (lineOffset <= previous || previous >= 0 && lineOffset - previous < .3 - 1e-6) throw new Error('code line times must increase by at least 0.3s'); previous = lineOffset;
+      if (lineOffset <= previous || previous >= 0 && lineOffset - previous < TIMING.gaps['code-snippet'] - 1e-6) throw new Error(`code line times must increase by at least ${TIMING.gaps['code-snippet']}s`); previous = lineOffset;
       if (!Array.isArray(line.tokens) || line.tokens.length < 1 || line.tokens.length > 24) throw new Error('code line requires 1–24 tokens');
       let length = 0, characters = 0;
       const tokens = line.tokens.map(token => {
@@ -773,8 +818,9 @@ function resolveAt(options, input, suppliedRect, density, source) {
     if (focus.icon !== undefined && !Object.hasOwn(EDITORIAL_SYMBOLS, focus.icon)) throw new Error('focus.icon must be a built-in symbolic icon');
     const arrive = at(focus.arriveAt, 'focus.arriveAt'), choose = at(focus.chooseAt, 'focus.chooseAt'), progress = at(focus.progressAt, 'focus.progressAt');
     const progressDuration = number(focus.progressDuration ?? .8, 'focus.progressDuration', .3, 2);
-    if (choose < arrive + .24 + (options.length - 1) * .08 + .2 || progress < choose + .9) throw new Error('focus must hold options before choosing and settle the chosen task before progress');
-    if (progress + progressDuration + .35 > duration - exitDuration) throw new Error('focus progress must finish with a readable hold before exit');
+    const F = TIMING.focus;
+    if (choose < arrive + F.arrive + (options.length - 1) * F.stagger + F.hold || progress < choose + F.chosenSettle) throw new Error('focus must hold options before choosing and settle the chosen task before progress');
+    if (progress + progressDuration + F.progressHold > duration - exitDuration) throw new Error('focus progress must finish with a readable hold before exit');
     const label = focus.progressLabel === undefined ? 'Illustrative progress' : text(focus.progressLabel, 'focus.progressLabel', 32);
     const rowHeight = 64, gap = 14, horizontal = input.aspect === '16:9' && box.width >= 900;
     const stageHeight = horizontal ? 96 : options.length * (rowHeight + gap) - gap;
@@ -803,7 +849,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
     const defaultPoints = isGrowth && supplied.points === undefined;
     if (defaultPoints) {
       if (supplied.mode !== 'illustration') throw new Error('real growth data requires supplied points');
-      if (duration < enterDuration + exitDuration + 2.4) throw new Error('default growth illustration needs a longer duration');
+      if (duration < enterDuration + exitDuration + TIMING.growthDefaultHold) throw new Error('default growth illustration needs a longer duration');
       const interval = (duration - enterDuration - exitDuration - .9) / 3;
       chart = {...supplied, points: [1, 3, 8, 20].map((value, i) => ({label: ['Start', 'Next', 'Later', 'Reach'][i], value, at: enterDuration + i * interval}))};
     }
@@ -827,7 +873,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
       if (isGrowth && i > 0 && point.value < points[i - 1].value) throw new Error('growth values must not decrease; use trend-chart for declines');
       if (point.label.length > Math.floor(columnWidth / (labelFont * .65)) * 2) throw new Error('point label too long for rect');
       const pointOffset = at(point.at, 'point.at');
-      if (pointOffset <= previous || (previous >= 0 && pointOffset - previous + 1e-6 < .5)) throw new Error('point times must increase with at least 0.5s between events');
+      if (pointOffset <= previous || (previous >= 0 && pointOffset - previous + 1e-6 < TIMING.gaps.chart)) throw new Error(`point times must increase with at least ${TIMING.gaps.chart}s between events`);
       previous = pointOffset;
     });
     const maximum = Math.max(1, ...points.map(point => point.value));
@@ -920,7 +966,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
       text(step.label, 'step.label', 22);
       if (step.label.length > Math.floor(labelWidth / (Math.max(22, font - 4) * .65)) * 2) throw new Error('step label too long for rect; shorten it or widen the module');
       const stepOffset = at(step.at, 'step.at');
-      if (stepOffset <= previous || (previous >= 0 && stepOffset - previous + 1e-6 < .3)) throw new Error('step times must strictly increase with at least 0.3s between events');
+      if (stepOffset <= previous || (previous >= 0 && stepOffset - previous + 1e-6 < TIMING.gaps['step-rail'])) throw new Error(`step times must strictly increase with at least ${TIMING.gaps['step-rail']}s between events`);
       previous = stepOffset;
       const time = start + stepOffset;
       events.push({id: `${id}-step-${i}-settle`, time: time + .3});

@@ -7,7 +7,7 @@
 //
 // Canonical copy: kit/core/modules.mjs.
 
-import { EDITORIAL_KINDS, resolveEditorialModule } from './editorial-core.mjs';
+import { EDITORIAL_KINDS, editorialTimingRules, resolveEditorialModule } from './editorial-core.mjs';
 import { fontStack } from './fonts.mjs';
 import { MODULES as CATALOG_A } from './catalog-a.mjs';
 import { MODULES as CATALOG_B } from './catalog-b.mjs';
@@ -39,6 +39,27 @@ export function knownModules() {
 
 export function isEditorialKind(id) {
   return EDITORIAL_KINDS.includes(id);
+}
+
+/**
+ * Timing rules for a module id, generated from the module code's own timing
+ * constants: {minDuration, leadIn, leadOut, gaps: [{between, seconds}],
+ * rules: [string]} (seconds; leadIn is the earliest `at`, leadOut how long
+ * before the scene end the last `at` may fall; null when the module has no
+ * such beat). Editorial kinds come from editorial-core.mjs
+ * editorialTimingRules(), catalogue modules from their MODULES[id].timing.
+ * null for an unknown id.
+ */
+export function moduleTiming(id) {
+  if (isEditorialKind(id)) return editorialTimingRules(id);
+  const definition = catalogModules()[id];
+  return definition?.timing ?? null;
+}
+
+/** The `at` window a timing table allows in a scene of `duration` s: {from, to} | null. */
+export function timingWindow(timing, duration) {
+  if (!timing || timing.leadIn == null || timing.leadOut == null || !(duration > 0)) return null;
+  return { from: timing.leadIn, to: Math.round((duration - timing.leadOut) * 100) / 100 };
 }
 
 /** Scene id → a DOM-safe module id (scene ids may contain "_"). */

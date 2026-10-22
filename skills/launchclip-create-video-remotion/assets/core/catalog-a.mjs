@@ -44,6 +44,17 @@ export const CATALOG_A_IDS = Object.freeze(['hook-title', 'kinetic-words', 'coun
 export const ANIMATED_PROPS = Object.freeze(['opacity', 'x', 'y', 'scale', 'scaleX', 'rotation', 'blur', 'color']);
 export const MIN_CONTRAST = 3;
 
+// Timing constants per module (seconds, scene-relative), the single source for
+// the checks below and for each MODULES entry's `timing` table. Every scene is
+// at least 0.5 s (baseContext).
+export const CATALOG_A_TIMING = Object.freeze({
+  'hook-title': Object.freeze({minDuration: 1.5, leadOut: .5, kickerLeadOut: .6}),
+  'kinetic-words': Object.freeze({gap: Object.freeze({replace: .3, stack: .2}), leadOut: .45}),
+  'count-up': Object.freeze({leadOut: 1, countLeadOut: .85}),
+  'equation-lockup': Object.freeze({leadOut: 1, landLeadOut: .6, highlightAfterLand: .42, highlightLeadOut: .6}),
+  cta: Object.freeze({minDuration: 2})
+});
+
 // ---------------------------------------------------------------------------
 // Validation helpers. Messages start with the parameter path.
 
@@ -452,12 +463,12 @@ function phraseTokens(value, phrases, path) {
 function resolveHookTitle(params, ctx) {
   const base = baseContext(ctx), d = base.duration;
   fields(params, 'params', ['headline', 'emphasis', 'kicker', 'kickerAt', 'eyebrow', 'color', 'align', 'rect'], ['headline']);
-  if (d < 1.5) throw new Error('hook-title needs a scene of at least 1.5 s');
+  if (d < CATALOG_A_TIMING['hook-title'].minDuration) throw new Error(`hook-title needs a scene of at least ${CATALOG_A_TIMING['hook-title'].minDuration} s`);
   const headline = text(params.headline, 'params.headline', 90);
   const eyebrow = optional(params.eyebrow, null, value => text(value, 'params.eyebrow', 32));
   const kicker = optional(params.kicker, null, value => text(value, 'params.kicker', 18));
   if (params.kickerAt !== undefined && !kicker) throw new Error('params.kickerAt needs params.kicker');
-  const kickerAt = kicker ? optional(params.kickerAt, Math.min(d * .55, d - .9), value => sceneTime(value, 'params.kickerAt', d, .6)) : null;
+  const kickerAt = kicker ? optional(params.kickerAt, Math.min(d * .55, d - .9), value => sceneTime(value, 'params.kickerAt', d, CATALOG_A_TIMING['hook-title'].kickerLeadOut)) : null;
   const align = optional(params.align, 'center', value => oneOf(value, 'params.align', ['center', 'left']));
   const colorRole = optional(params.color, 'primary', value => value);
   const emphasisInput = optional(params.emphasis, [], value => {
@@ -470,7 +481,7 @@ function resolveHookTitle(params, ctx) {
     fields(entry, path, ['text', 'at', 'color'], ['text']);
     return {
       text: text(entry.text, `${path}.text`, 40),
-      at: optional(entry.at, Math.min(.45 + index * .9, d - .8), value => sceneTime(value, `${path}.at`, d, .5)),
+      at: optional(entry.at, Math.min(.45 + index * .9, d - .8), value => sceneTime(value, `${path}.at`, d, CATALOG_A_TIMING['hook-title'].leadOut)),
       colorRole: optional(entry.color, colorRole, value => oneOf(value, `${path}.color`, ['primary', 'accent']))
     };
   });
@@ -574,7 +585,7 @@ function resolveKineticWords(params, ctx) {
   const {theme, contrast} = moduleTheme(ctx.brand, colorRole, 'params.color');
   const maxBeats = layout === 'stack' ? 5 : 12;
   if (!Array.isArray(params.words) || params.words.length < 1 || params.words.length > maxBeats) throw new Error(`params.words must list 1–${maxBeats} beats for the ${layout} layout`);
-  const minGap = layout === 'replace' ? .3 : .2;
+  const minGap = CATALOG_A_TIMING['kinetic-words'].gap[layout];
   const beats = params.words.map((entry, index) => {
     const path = `params.words[${index}]`;
     fields(entry, path, ['text', 'at', 'emphasis', 'color'], ['text', 'at']);
@@ -583,7 +594,7 @@ function resolveKineticWords(params, ctx) {
     if (parts.length > 3) throw new Error(`${path}.text must be 1–3 words (one beat); split it into more beats`);
     const role = optional(entry.color, colorRole, color => oneOf(color, `${path}.color`, ['primary', 'accent']));
     if (role !== colorRole) requireContrast(contrast, `${role} on bg`, theme[role], theme.bg);
-    return {index, text: value, parts, at: sceneTime(entry.at, `${path}.at`, d, .45), emphasis: optional(entry.emphasis, false, flag => bool(flag, `${path}.emphasis`)), color: theme[role]};
+    return {index, text: value, parts, at: sceneTime(entry.at, `${path}.at`, d, CATALOG_A_TIMING['kinetic-words'].leadOut), emphasis: optional(entry.emphasis, false, flag => bool(flag, `${path}.emphasis`)), color: theme[role]};
   });
   beats.forEach((beat, index) => {
     if (index && beat.at < beats[index - 1].at + minGap - 1e-6) throw new Error(`params.words[${index}].at must be at least ${minGap} s after the previous beat`);
@@ -696,7 +707,7 @@ function resolveCountUp(params, ctx) {
   const suffix = optional(params.suffix, '', input => text(input, 'params.suffix', 6));
   const label = text(params.label, 'params.label', 60);
   const note = optional(params.note, null, input => text(input, 'params.note', 48));
-  const countAt = optional(params.countAt, .35, input => sceneTime(input, 'params.countAt', d, 1));
+  const countAt = optional(params.countAt, .35, input => sceneTime(input, 'params.countAt', d, CATALOG_A_TIMING['count-up'].leadOut));
   const countDuration = optional(params.countDuration, 1.2, input => number(input, 'params.countDuration', .3, 6));
   const hit = optional(params.hit, 'underline', input => oneOf(input, 'params.hit', ['underline', 'spark', 'both', 'none']));
   const colorRole = optional(params.color, 'primary', input => input);
@@ -882,7 +893,7 @@ function resolveEquationLockup(params, ctx) {
   if (terms.length > 9) throw new Error(`${params.equation !== undefined ? 'params.equation' : 'params.terms'} must have 1–9 terms; group terms with parentheses`);
   const name = optional(params.name, null, value => text(value, 'params.name', 48));
   const note = optional(params.note, null, value => text(value, 'params.note', 70));
-  const at = optional(params.at, .35, value => sceneTime(value, 'params.at', d, 1));
+  const at = optional(params.at, .35, value => sceneTime(value, 'params.at', d, CATALOG_A_TIMING['equation-lockup'].leadOut));
   const stagger = optional(params.stagger, grammarStagger(base.grammar, .22, {min: .06, max: .6}), value => number(value, 'params.stagger', .06, 1.5));
   let highlight = null;
   if (params.highlight !== undefined) {
@@ -917,7 +928,7 @@ function resolveEquationLockup(params, ctx) {
   const size = Math.floor(Math.min((st.portrait ? 150 : 140) * k, maxWidth / emWidth));
   if (size < 64 * k) throw new Error('the equation is too long to set at 64 px or more on one line; split it or shorten it');
   const lastLand = termModels[termModels.length - 1].time + .42;
-  const highlightAt = highlight === null ? null : optional(params.highlightAt, Math.min(lastLand - s + .35, d - exitDur - .7), value => sceneTime(value, 'params.highlightAt', d, .6));
+  const highlightAt = highlight === null ? null : optional(params.highlightAt, Math.min(lastLand - s + .35, d - exitDur - .7), value => sceneTime(value, 'params.highlightAt', d, CATALOG_A_TIMING['equation-lockup'].highlightLeadOut));
   if (lastLand > base.end - exitDur - .3 + 1e-9) throw new Error(`the terms land at ${round(lastLand - s, 3)} s, too late for a ${round(d, 3)} s scene; lower params.at or params.stagger`);
   if (highlightAt !== null && s + highlightAt < termModels[highlight].time + .42 - 1e-6) throw new Error('params.highlightAt must come after the highlighted term has landed');
 
@@ -1028,7 +1039,7 @@ export const CTA_ICONS = Object.freeze({
 function resolveCta(params, ctx) {
   const base = baseContext(ctx), d = base.duration;
   fields(params, 'params', ['action', 'emphasis', 'detail', 'handle', 'icon', 'loop', 'color', 'rect'], ['action']);
-  if (d < 2) throw new Error('cta needs a scene of at least 2 s');
+  if (d < CATALOG_A_TIMING.cta.minDuration) throw new Error(`cta needs a scene of at least ${CATALOG_A_TIMING.cta.minDuration} s`);
   const action = text(params.action, 'params.action', 40);
   const detail = optional(params.detail, null, value => text(value, 'params.detail', CTA_DETAIL_MAX));
   const handle = optional(params.handle, null, value => {
@@ -1167,6 +1178,8 @@ export const MODULES = {
       color: COLOR, align: {type: 'string', enum: ['center', 'left'], default: 'center'}, rect: RECT
     },
     events: ['title', 'emphasis-<n>', 'kicker'],
+    timing: {minDuration: CATALOG_A_TIMING['hook-title'].minDuration, leadIn: 0, leadOut: CATALOG_A_TIMING['hook-title'].leadOut, gaps: [],
+      rules: [`emphasis[].at ≤ scene − ${CATALOG_A_TIMING['hook-title'].leadOut} s; kickerAt ≤ scene − ${CATALOG_A_TIMING['hook-title'].kickerLeadOut} s`]},
     resolve: resolveHookTitle
   },
   'kinetic-words': {
@@ -1178,6 +1191,8 @@ export const MODULES = {
       color: COLOR, rect: RECT
     },
     events: ['beat-<n>'],
+    timing: {minDuration: .5, leadIn: 0, leadOut: CATALOG_A_TIMING['kinetic-words'].leadOut,
+      gaps: [{between: 'words[].at (replace)', seconds: CATALOG_A_TIMING['kinetic-words'].gap.replace}, {between: 'words[].at (stack)', seconds: CATALOG_A_TIMING['kinetic-words'].gap.stack}], rules: []},
     resolve: resolveKineticWords
   },
   'count-up': {
@@ -1193,6 +1208,8 @@ export const MODULES = {
       color: COLOR, rect: RECT
     },
     events: ['count', 'hit'],
+    timing: {minDuration: .5, leadIn: 0, leadOut: CATALOG_A_TIMING['count-up'].leadOut, gaps: [],
+      rules: [`countAt + countDuration ≤ scene − ${CATALOG_A_TIMING['count-up'].countLeadOut} s (countDuration 0.3–6 s, default 1.2)`]},
     resolve: resolveCountUp
   },
   'equation-lockup': {
@@ -1207,6 +1224,8 @@ export const MODULES = {
       color: COLOR, rect: RECT
     },
     events: ['term-<n>', 'lockup', 'highlight'],
+    timing: {minDuration: .5, leadIn: 0, leadOut: CATALOG_A_TIMING['equation-lockup'].leadOut, gaps: [],
+      rules: [`the last term lands at at + stagger × (terms − 1) + ${CATALOG_A_TIMING['equation-lockup'].highlightAfterLand} s, which must be ≤ scene − ${CATALOG_A_TIMING['equation-lockup'].landLeadOut} s`, `highlightAt ≥ the highlighted term's time + ${CATALOG_A_TIMING['equation-lockup'].highlightAfterLand} s (once it has landed) and ≤ scene − ${CATALOG_A_TIMING['equation-lockup'].highlightLeadOut} s`]},
     resolve: resolveEquationLockup
   },
   cta: {
@@ -1219,6 +1238,7 @@ export const MODULES = {
       loop: {type: 'boolean', default: false}, color: COLOR, rect: RECT
     },
     events: ['action', 'handle', 'loop'],
+    timing: {minDuration: CATALOG_A_TIMING.cta.minDuration, leadIn: null, leadOut: null, gaps: [], rules: ['no timed params; the handle pops at 0.6 s']},
     resolve: resolveCta
   }
 };

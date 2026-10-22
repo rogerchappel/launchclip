@@ -13,7 +13,7 @@
 
 import { STORY_SCHEMA, STORY_LANES, STORY_TRANSITIONS, STORY_CAPTION_STYLES, STORY_CAMERA_LAYOUTS, STORY_AMBIENT_LEVELS } from './story.mjs';
 import { GRAMMARS, GRAMMAR_NAMES } from './grammar.mjs';
-import { knownModules, catalogModules, isEditorialKind } from './modules.mjs';
+import { knownModules, catalogModules, isEditorialKind, moduleTiming } from './modules.mjs';
 import { SAFE_ZONE_PROFILES } from './layout-check.mjs';
 import { stylePromptLines } from './style.mjs';
 import { CAPTION_PRESETS } from './captions.mjs';
@@ -412,6 +412,28 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
  * Markdown reference for the create-video skills
  * (skills-src/references/storyboard-modules.md, generated).
  */
+const seconds = (value) => (value == null ? '—' : `${Math.round(value * 1000) / 1000} s`);
+
+/**
+ * The per-module timing table (kit/core/modules.mjs moduleTiming(), generated
+ * from each module's own timing constants) as markdown lines.
+ */
+export function timingTableLines() {
+  const rows = knownModules().map((id) => {
+    const timing = moduleTiming(id);
+    if (!timing) return `| ${id} | — | — | — | — |`;
+    const notes = [...timing.gaps.map((gap) => `${gap.between}: ≥ ${seconds(gap.seconds)} apart`), ...timing.rules].join('; ') || '—';
+    return `| ${id} | ${seconds(timing.minDuration)} | ${seconds(timing.leadIn)} | ${timing.leadOut == null ? '—' : `scene − ${seconds(timing.leadOut)}`} | ${notes.replace(/\|/g, '\\|')} |`;
+  });
+  return [
+    'Generated from the modules\' own timing constants (`moduleTiming(id)` in kit/core/modules.mjs; `launchclip module fit <module>` prints the same rules with the window for a given `--duration`). `at` values are seconds from the scene start: the first beat no earlier than the lead-in, the last no later than the lead-out before the scene end. A faster motion grammar can shorten a catalogue B enter, which only moves its lead-in earlier.',
+    '',
+    '| Module | Min scene | First `at` | Last `at` | Gaps and rules |',
+    '| --- | --- | --- | --- | --- |',
+    ...rows
+  ];
+}
+
 export function storyboardModulesReference() {
   const lines = [
     '# Storyboard modules',
@@ -437,6 +459,7 @@ export function storyboardModulesReference() {
     ...section('Captions', captionLines().map((line) => `- ${line}`)),
     ...section('Phrase → module', ['| The script… | Module |', '| --- | --- |', ...phraseLines()]),
     ...section('Modules', moduleLines('guided')),
+    ...section('Timing rules', timingTableLines()),
     ...section('Example', ['```json', JSON.stringify(exampleStoryboard(), null, 2), '```'])
   ];
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';

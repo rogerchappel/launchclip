@@ -45,11 +45,11 @@ import {flowCompare} from './catalog-b-flow-compare.mjs';
 import {gaugeCompare} from './catalog-b-gauge-compare.mjs';
 import {functionChart} from './catalog-b-function-chart.mjs';
 
-export {parseExpression, contrastRatio, luminance, mixColor, formatNumber, withUnit, sampleIndex, SAMPLE_LEAD, CATALOG_B_STYLE} from './catalog-b-base.mjs';
+export {parseExpression, contrastRatio, luminance, mixColor, formatNumber, withUnit, sampleIndex, SAMPLE_LEAD, CATALOG_B_STYLE, CATALOG_B_TIMING} from './catalog-b-base.mjs';
 
 const DEFINITIONS = [functionChart, gaugeCompare, flowCompare, processSteps, archiveCard, logoRow];
 
-export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, resolve: def.resolve}]));
+export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve}]));
 const BY_ID = Object.fromEntries(DEFINITIONS.map(def => [def.id, def]));
 
 function definition(model) {

@@ -2,7 +2,7 @@
 // element tree (view) and renderer-neutral animation ops (timeline).
 // Registered in kit/core/catalog-b.mjs; conventions are documented there.
 
-import {createBase, fitText, r2, rt} from './catalog-b-base.mjs';
+import {createBase, fitText, r2, rt, timingRules} from './catalog-b-base.mjs';
 import {abs, el, set, text, transformString, tw} from './catalog-b-view.mjs';
 import {grammarStagger} from './grammar.mjs';
 
@@ -97,6 +97,7 @@ export const logoRow = {
     describe: 'A row or grid of 2–6 local logos with labels that pop in with a stagger.',
     params: {logos: '[{src: "assets/…(.svg|.png|.jpg|.webp)", label ≤ 20, at?}] 2–6', title: 'string ≤ 48 (optional)', at: 'first pop time', stagger: 'seconds between pops (default 0.14)', rect},
     events: ['logo-<i>'],
+    timing: timingRules({rules: ['logos pop in order; with no at, the first pops at 0.65 s and the rest follow by stagger (default 0.14 s)']}),
   resolve,
   view,
   timeline

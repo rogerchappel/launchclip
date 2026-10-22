@@ -6,7 +6,7 @@
 // width and the minimum width at its height. A width table lists the minimum
 // height at common widths either way.
 import { readFile } from "node:fs/promises";
-import { isEditorialKind, knownModules, moduleFit, resolveModule } from "../kit/core/modules.mjs";
+import { isEditorialKind, knownModules, moduleFit, moduleTiming, resolveModule, timingWindow } from "../kit/core/modules.mjs";
 
 const FORMATS = { "16:9": { width: 1920, height: 1080 }, "9:16": { width: 1080, height: 1920 } };
 // A neutral brand for catalogue modules (they need brand colours and fonts);
@@ -31,7 +31,10 @@ export async function runModuleFit(moduleName, flags = {}) {
 }
 
 export function moduleFitReport(scene, story, { aspect } = {}) {
-  const report = { module: scene.module, aspect, rect: scene.params?.rect ?? null, fits: false, error: null, resolved: null, natural: null, minHeight: null, widthAtHeight: null, widths: [] };
+  const duration = Number(scene.end) - Number(scene.start);
+  const timing = moduleTiming(scene.module);
+  const report = { module: scene.module, aspect, rect: scene.params?.rect ?? null, fits: false, error: null, resolved: null, natural: null, minHeight: null, widthAtHeight: null, widths: [],
+    timing: timing ? { ...timing, duration: round(duration), window: timingWindow(timing, duration) } : null };
   try {
     const model = resolveModule(scene, story);
     const rect = model.rect ?? model.layout?.rect;
@@ -77,6 +80,14 @@ export function formatModuleFit(report) {
   if (report.widths.length) {
     lines.push("  minimum height by width:");
     for (const { width, minHeight } of report.widths) lines.push(`    width ${String(width).padStart(4)} → ${minHeight === null ? "does not fit" : `${minHeight} px`}`);
+  }
+  const timing = report.timing;
+  if (timing) {
+    lines.push("  timing:");
+    lines.push(`    scene at least ${timing.minDuration} s${timing.duration < timing.minDuration ? ` (this ${timing.duration} s scene is too short)` : ""}`);
+    if (timing.window) lines.push(`    at from ${timing.leadIn} s to scene − ${timing.leadOut} s (${timing.window.from}–${timing.window.to} s in a ${timing.duration} s scene)`);
+    for (const gap of timing.gaps) lines.push(`    ${gap.between}: at least ${gap.seconds} s apart`);
+    for (const rule of timing.rules) lines.push(`    ${rule}`);
   }
   return `${lines.join("\n")}\n`;
 }

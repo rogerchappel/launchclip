@@ -26,6 +26,15 @@ export const CATALOG_B_STYLE = Object.freeze({
   letterSpacing: Object.freeze({meta: '0.14em', display: '0.01em'})
 });
 
+// Timing shared by every catalogue B module (seconds, scene-relative): scenes
+// of at least minDuration; event times between leadIn (the enter) and scene −
+// leadOut (the exit plus 0.3 s). A grammar that shortens the enter or exit
+// only widens that window. timingRules() merges a module's own gaps and rules.
+export const CATALOG_B_TIMING = Object.freeze({minDuration: 2, leadIn: CATALOG_B_STYLE.enterDuration, leadOut: CATALOG_B_STYLE.exitDuration + 0.3, exitHold: 0.3});
+export function timingRules({gaps = [], rules = []} = {}) {
+  return {minDuration: CATALOG_B_TIMING.minDuration, leadIn: CATALOG_B_TIMING.leadIn, leadOut: Math.round(CATALOG_B_TIMING.leadOut * 1000) / 1000, gaps, rules};
+}
+
 const ROLE_NAMES = ['primary', 'accent', 'paper'];
 // Conservative average advance per character, as a fraction of font size.
 // Calibrated on the bundled role defaults (fonts.mjs FONT_REGISTRY advances): Anton,
@@ -305,7 +314,7 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
   const format = ctx.format ?? {};
   const width = check.int(format.width, 'format.width', 240, 7680), height = check.int(format.height, 'format.height', 240, 7680);
   const fps = check.num(format.fps ?? 30, 'format.fps', 1, 120);
-  const start = check.num(ctx.start, 'start', 0, 86400), duration = check.num(ctx.duration, 'duration', 2, 3600);
+  const start = check.num(ctx.start, 'start', 0, 86400), duration = check.num(ctx.duration, 'duration', CATALOG_B_TIMING.minDuration, 3600);
   const canvas = {width, height};
   const portrait = height > width;
   const aspect = ctx.aspect ?? (portrait ? '9:16' : '16:9');
@@ -375,7 +384,7 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
     enterEase: grammarEase(grammar, S.enterEase), exitEase: grammarEase(grammar, S.exitEase)};
   const hits = Array.isArray(ctx.hits) ? ctx.hits.filter(hit => hit && typeof hit.event === 'string' && typeof hit.at === 'number') : [];
   // Latest allowed event time leaves 0.3 s before the exit begins.
-  const lastEvent = duration - Math.min(exitDuration, S.exitDuration) - 0.3;
+  const lastEvent = duration - Math.min(exitDuration, S.exitDuration) - CATALOG_B_TIMING.exitHold;
   /** Absolute time for event `name`: params `at` (scene-relative) > ctx hit > fallback (scene-relative). */
   const timeOf = (name, at, path, fallback, {min = Math.min(enterDuration, S.enterDuration), max = lastEvent} = {}) => {
     let rel;
