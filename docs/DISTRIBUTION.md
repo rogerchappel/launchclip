@@ -88,9 +88,9 @@ launchclip skills install --agent claude
 ```
 
 Codex uses `$HOME/.agents/skills`; Claude Code uses `$HOME/.claude/skills` and
-must be version 2.1.203 or newer for symlinked skills. Both skills are installed
-by default. Select one with `--skill launchclip-create-video` or
-`--skill launchclip-cli`, and resolve the packaged source without knowing npm or
+must be version 2.1.203 or newer for symlinked skills. Every bundled skill is
+installed by default. Select one with `--skill launchclip-create-video`,
+`--skill launchclip-create-video-remotion` or `--skill launchclip-cli`, and resolve the packaged source without knowing npm or
 Homebrew's layout with `launchclip skills path [skill-name]`.
 
 Installation is idempotent and preflights every selected destination before it
@@ -108,7 +108,11 @@ retention edit, narration-first timing, rendered-draft critique, and up to three
 bounded repairs—then uses the model-free `launchclip cinematic-check` command
 to write `CINEMATIC-READINESS.json` before preview. Optional voice, music,
 image, or other paid providers still require explicit user approval and their
-own credentials.
+own credentials. `launchclip-create-video-remotion` runs the same funnel and
+gates with Remotion as the renderer: the agent authors `storyboard.json`, and the
+skill ships its own copy of the Remotion kit under `assets/remotion-kit`.
+Both create-video skills are generated from `skills-src/` by
+`npm run skills:sync`, and `npm run skills:check` fails when they drift.
 
 Local discovery behavior follows the current agent documentation:
 

@@ -18,7 +18,8 @@ const REQUIRED_PACKAGE_FILES = [
   "public/icons/check.svg",
   "remotion/index.jsx",
   "skills/launchclip-cli/SKILL.md",
-  "skills/launchclip-create-video/SKILL.md"
+  "skills/launchclip-create-video/SKILL.md",
+  "skills/launchclip-create-video-remotion/SKILL.md"
 ];
 
 export const VERSION = PACKAGE.version;
@@ -83,7 +84,7 @@ export async function diagnoseInstallation(options = {}) {
       subscription_agent: {
         available: coreReady,
         requires_api_key: false,
-        skills: ["launchclip-create-video", "launchclip-cli"]
+        skills: ["launchclip-create-video", "launchclip-create-video-remotion", "launchclip-cli"]
       },
       model_directed_cli: {
         available: coreReady && apiCredentialConfigured,

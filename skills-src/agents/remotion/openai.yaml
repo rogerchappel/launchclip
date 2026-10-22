@@ -1,0 +1,4 @@
+interface:
+  display_name: "LaunchClip Create Video (Remotion)"
+  short_description: "Create cinematic subscription-agent videos with Remotion"
+  default_prompt: "Use $launchclip-create-video-remotion to turn my source into a cinematic, locally verified Remotion video from a storyboard.json file."

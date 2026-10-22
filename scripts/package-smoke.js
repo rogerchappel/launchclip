@@ -34,7 +34,10 @@ try {
     "skills/launchclip-create-video/SKILL.md",
     "skills/launchclip-create-video/agents/openai.yaml",
     "skills/launchclip-create-video/references/cinematic-production.md",
-    "skills/launchclip-create-video/references/standalone-hyperframes.md"
+    "skills/launchclip-create-video/references/standalone-hyperframes.md",
+    "skills/launchclip-create-video-remotion/SKILL.md",
+    "skills/launchclip-create-video-remotion/agents/openai.yaml",
+    "skills/launchclip-create-video-remotion/references/standalone-remotion.md"
   ];
   const packedFiles = new Set(artifact.files.map((entry) => entry.path));
   const generatedExampleFiles = [...packedFiles].filter((file) =>
@@ -79,7 +82,7 @@ try {
   const doctor = JSON.parse((await run(bin, ["doctor"], consumer)).stdout);
   if (!doctor.package?.complete) throw new Error(`Installed CLI doctor is missing: ${doctor.package?.missing?.join(", ")}`);
   const skills = JSON.parse((await run(bin, ["skills", "list"], consumer)).stdout);
-  if (skills.skills?.length !== 2 || !skills.skills.some((skill) => skill.name === "launchclip-create-video")) {
+  if (skills.skills?.length !== 3 || !skills.skills.some((skill) => skill.name === "launchclip-create-video") || !skills.skills.some((skill) => skill.name === "launchclip-create-video-remotion")) {
     throw new Error("Installed CLI did not expose its bundled skills.");
   }
   const subscriptionSkill = JSON.parse((await run(bin, ["skills", "path", "launchclip-create-video"], consumer)).stdout);

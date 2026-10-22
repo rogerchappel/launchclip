@@ -2,6 +2,19 @@
 
 Use this skill when Roger wants to promote a local OSS repo with a reviewable packet before anything is posted.
 
+## Related Bundled Skills
+
+This root skill covers the OSS promotion packet. For a full video, use one of
+the bundled skills under `skills/` instead:
+
+- [`launchclip-create-video`](skills/launchclip-create-video/SKILL.md): the
+  subscription-agent cinematic workflow, rendered with HyperFrames.
+- [`launchclip-create-video-remotion`](skills/launchclip-create-video-remotion/SKILL.md):
+  the same workflow, authored as a `storyboard.json` file and rendered with
+  Remotion and React.
+- [`launchclip-cli`](skills/launchclip-cli/SKILL.md): operate the LaunchClip
+  CLI production and packet lanes.
+
 ## Workflow
 
 1. Identify the repo path, intended audience, and approved demo command.
