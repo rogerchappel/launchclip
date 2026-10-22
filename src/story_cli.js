@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { deriveBoundaries, resolveStory, storyFormat, storyHits, validateStory as validateStoryShape } from "./story.js";
-import { knownModules } from "../kit/core/modules.mjs";
+import { knownModules, resolveModule } from "../kit/core/modules.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 import { getRenderer } from "./renderers/index.js";
 import { remotionInvocation, COMPOSITION_ID } from "./renderers/remotion.js";
@@ -16,6 +16,21 @@ export function validateStory(story) {
   const unknown = result.errors.filter((message) => UNKNOWN_MODULE.test(message));
   const errors = result.errors.filter((message) => !UNKNOWN_MODULE.test(message));
   return { ok: errors.length === 0, errors, warnings: [...result.warnings, ...unknown.map((message) => `${message} in this kit; it renders as a placeholder`)] };
+}
+
+// Resolves every known-module scene of a resolved story through the kit's
+// module registry, the step both compilers take. A scene whose params do not
+// resolve renders as a placeholder in both renderers, so validation reports it
+// as an error instead of letting it pass. Unknown modules stay warnings above.
+export function moduleParamErrors(resolved) {
+  const known = new Set(knownModules());
+  const errors = [];
+  for (const scene of Array.isArray(resolved?.scenes) ? resolved.scenes : []) {
+    if (!scene || scene.module === "custom" || !known.has(scene.module)) continue;
+    try { resolveModule(scene, resolved); }
+    catch (error) { errors.push(`${error.message} (both renderers would draw a placeholder)`); }
+  }
+  return errors;
 }
 
 // launchclip story <validate|resolve> <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out file]
@@ -39,7 +54,10 @@ export async function runStoryCommand(action, storyPath, flags = {}) {
         const resolved = resolveStory(story, { words: words?.list ?? [], beats });
         const second = validateStory(resolved);
         errors.push(...second.errors.filter((entry) => !errors.includes(entry)));
-        if (second.ok) boundaries = deriveBoundaries(resolved);
+        if (second.ok) {
+          boundaries = deriveBoundaries(resolved);
+          errors.push(...moduleParamErrors(resolved));
+        }
         resolvedChecked = true;
       } catch (error) {
         errors.push(error.message);

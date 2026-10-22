@@ -337,3 +337,32 @@ test("CLI validates and resolves stories", async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("story validate fails a scene whose module params would render a placeholder", async () => {
+  // Regression: a process-steps hit 0.2 s into the scene passed validate with
+  // zero warnings, then both compilers drew the "Missing module" placeholder.
+  const directory = await mkdtemp(path.join(os.tmpdir(), "launchclip-story-params-"));
+  try {
+    const story = {
+      schema: STORY_SCHEMA, lane: "motion",
+      format: { width: 1920, height: 1080, fps: 30, duration: 6 },
+      brand: { colors: { bg: "#0b1020", primary: "#ffb547", accent: "#4fd1c5", ink: "#0b1020", paper: "#f4f1ea" }, fonts: { display: "anton", body: "space-grotesk", meta: "jetbrains-mono" } },
+      scenes: [{ id: "s1", module: "process-steps", start: 0, end: 6, params: { steps: ["Connect", "Pick", "Publish"] }, hits: [{ at: 0.2, event: "step-0" }] }]
+    };
+    const file = path.join(directory, "storyboard.json");
+    await writeFile(file, JSON.stringify(story));
+    const chunks = [];
+    await runCli(["story", "validate", file], { stdout: { write: (value) => chunks.push(value) } });
+    const output = JSON.parse(chunks.join(""));
+    assert.equal(output.status, "failed");
+    assert.match(output.errors.join("\n"), /scenes\[0\] \(s1\): module "process-steps" params: .*step-0.*placeholder/);
+
+    story.scenes[0].hits[0].at = 0.8;
+    await writeFile(file, JSON.stringify(story));
+    chunks.length = 0;
+    await runCli(["story", "validate", file], { stdout: { write: (value) => chunks.push(value) } });
+    assert.deepEqual(JSON.parse(chunks.join("")).errors, []);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
