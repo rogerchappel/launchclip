@@ -1,0 +1,82 @@
+{
+  "schema": "launchclip.demo-record.v1",
+  "out": "examples/story/demo-autopilot-16x9/assets/demo",
+  "recorded_at": "2026-10-22T20:19:41.119Z",
+  "app": {
+    "repo": "examples/demo-app",
+    "url": "http://localhost:4310",
+    "start": "npm run dev",
+    "seed": "npm run seed"
+  },
+  "browser": "(the cached Playwright Chromium 148)",
+  "account": {
+    "email": "demo@pulseboard.test",
+    "source": "scripts/seed.js"
+  },
+  "plan": "../../DEMO-PLAN.json",
+  "plan_source": "file",
+  "commands": [
+    {
+      "kind": "seed",
+      "command": "npm run seed",
+      "exit_code": 0
+    },
+    {
+      "kind": "start",
+      "command": "npm run dev",
+      "pid": 90129
+    }
+  ],
+  "flows": [
+    {
+      "id": "sign-in",
+      "title": "Sign in",
+      "duration": 9.685,
+      "review": "approved",
+      "video": "sign-in.mp4",
+      "log": "sign-in.actions.json",
+      "sheet": "sign-in.sheet.png",
+      "actions": [
+        "goto /login",
+        "type \"Email\"",
+        "type \"Password\"",
+        "click \"Sign in\"",
+        "wait-for \"Visitors this week\""
+      ],
+      "reviewed_at": "2026-10-22T20:21:37.274Z"
+    },
+    {
+      "id": "create-project",
+      "title": "Create a project",
+      "duration": 11.216,
+      "review": "approved",
+      "video": "create-project.mp4",
+      "log": "create-project.actions.json",
+      "sheet": "create-project.sheet.png",
+      "actions": [
+        "goto /dashboard",
+        "click \"New project\"",
+        "type \"Project name\"",
+        "click \"Goal: Upgrades\"",
+        "click \"Create project\"",
+        "wait-for \"Summer launch\""
+      ],
+      "reviewed_at": "2026-10-22T20:21:37.274Z"
+    },
+    {
+      "id": "analytics",
+      "title": "Analytics",
+      "duration": 6.462,
+      "review": "approved",
+      "video": "analytics.mp4",
+      "log": "analytics.actions.json",
+      "sheet": "analytics.sheet.png",
+      "actions": [
+        "goto /dashboard",
+        "click \"Analytics\"",
+        "assert-visible \"Sunday: 96 signups\""
+      ],
+      "reviewed_at": "2026-10-22T20:21:37.274Z"
+    }
+  ]
+}

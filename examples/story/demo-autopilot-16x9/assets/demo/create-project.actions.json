@@ -1,0 +1,166 @@
+{
+  "schema": "launchclip.demo-actions.v1",
+  "flow": {
+    "id": "create-project",
+    "title": "Create a project",
+    "goal": "Track a new launch in under a minute"
+  },
+  "video": "create-project.mp4",
+  "viewport": {
+    "width": 1920,
+    "height": 1080,
+    "deviceScaleFactor": 1
+  },
+  "frame": {
+    "width": 1920,
+    "height": 1080
+  },
+  "fps": 30,
+  "duration": 11.216,
+  "frames": 388,
+  "recorded_at": "2026-10-22T20:19:18.788Z",
+  "actions": [
+    {
+      "index": 0,
+      "type": "goto",
+      "path": "/dashboard",
+      "label": null,
+      "url": "http://localhost:4310/dashboard",
+      "start": 0,
+      "end": 0,
+      "box": null,
+      "callout": null
+    },
+    {
+      "index": 1,
+      "type": "pause",
+      "selector": null,
+      "text": null,
+      "label": null,
+      "start": 0.715,
+      "end": 1.319,
+      "box": null,
+      "callout": null,
+      "url": "http://localhost:4310/dashboard"
+    },
+    {
+      "index": 2,
+      "type": "click",
+      "selector": "header a[href='/projects/new']",
+      "text": "New project",
+      "label": "New project",
+      "start": 1.374,
+      "end": 2.909,
+      "box": {
+        "x": 1740.6,
+        "y": 52.5,
+        "width": 131.4,
+        "height": 48
+      },
+      "callout": null,
+      "at": 2.311,
+      "url": "http://localhost:4310/projects/new"
+    },
+    {
+      "index": 3,
+      "type": "type",
+      "selector": null,
+      "text": "Project name",
+      "label": "Project name",
+      "start": 2.94,
+      "end": 5.952,
+      "box": {
+        "x": 333,
+        "y": 205,
+        "width": 590,
+        "height": 50
+      },
+      "callout": null,
+      "at": 4.047,
+      "keys": [
+        4.308,
+        4.383,
+        4.474,
+        4.571,
+        4.656,
+        4.724,
+        4.82,
+        4.932,
+        5.004,
+        5.09,
+        5.185,
+        5.286,
+        5.4
+      ],
+      "value": "Summer launch",
+      "chars": 13,
+      "url": "http://localhost:4310/projects/new"
+    },
+    {
+      "index": 4,
+      "type": "click",
+      "selector": null,
+      "text": "Upgrades",
+      "label": "Goal: Upgrades",
+      "start": 5.974,
+      "end": 7.088,
+      "box": {
+        "x": 533.7,
+        "y": 304,
+        "width": 188.7,
+        "height": 54
+      },
+      "callout": null,
+      "at": 6.528,
+      "url": "http://localhost:4310/projects/new"
+    },
+    {
+      "index": 5,
+      "type": "click",
+      "selector": null,
+      "text": "Create project",
+      "label": "Create project",
+      "start": 7.123,
+      "end": 8.225,
+      "box": {
+        "x": 333,
+        "y": 384,
+        "width": 148.4,
+        "height": 48
+      },
+      "callout": "Tracking starts now",
+      "at": 7.66,
+      "url": "http://localhost:4310/dashboard"
+    },
+    {
+      "index": 6,
+      "type": "wait-for",
+      "selector": null,
+      "text": "Summer launch",
+      "label": "Summer launch",
+      "start": 8.225,
+      "end": 8.709,
+      "box": {
+        "x": 345,
+        "y": 395.8,
+        "width": 121.1,
+        "height": 18
+      },
+      "callout": null,
+      "at": 8.257,
+      "url": "http://localhost:4310/dashboard"
+    },
+    {
+      "index": 7,
+      "type": "pause",
+      "selector": null,
+      "text": null,
+      "label": null,
+      "start": 8.709,
+      "end": 10.313,
+      "box": null,
+      "callout": null,
+      "url": "http://localhost:4310/dashboard"
+    }
+  ]
+}

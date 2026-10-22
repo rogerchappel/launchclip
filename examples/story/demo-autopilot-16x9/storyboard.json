@@ -1,0 +1,364 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Pulseboard launch (demo autopilot proof, 16:9)",
+  "notes": "Demo autopilot proof: examples/demo-app (Pulseboard, a fictional SaaS) recorded with launchclip demo record from DEMO-PLAN.json, edited into product-demo scenes. Pulseboard, its data and its URL are made up.",
+  "lane": "voiceover-motion",
+  "format": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "duration": 45,
+    "platform": "youtube"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#10132a",
+      "primary": "#7c70ff",
+      "accent": "#22c3ee",
+      "ink": "#10132a",
+      "paper": "#f4f2ff"
+    },
+    "fonts": {
+      "display": "space-grotesk",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "audio": {
+    "narration": {
+      "provider": "kokoro",
+      "speed": 0.95,
+      "text": "Launch day shouldn't mean five dashboards and a spreadsheet. Pulseboard puts every launch in one place. Sign in with your team account, and this week's visitors, live projects and conversion are already waiting. Starting a new launch takes seconds. Give it a name, pick the goal you care about, and hit create. Your new project is live at the top of the board, and tracking starts right away. Then see what's working. One click, and you know which day drove your signups. Track it. Learn from it. Launch again. Pulseboard: launch analytics for small teams. Try it free today."
+    },
+    "words": "NARRATION.json"
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "hook-title",
+      "start": 0,
+      "end": 3.9,
+      "energy": 1,
+      "params": {
+        "eyebrow": "Pulseboard",
+        "headline": "Launch day shouldn't mean five dashboards.",
+        "emphasis": [
+          {
+            "text": "five",
+            "at": 1.9
+          },
+          {
+            "text": "dashboards.",
+            "at": 2.2
+          }
+        ]
+      }
+    },
+    {
+      "id": "s2",
+      "module": "product-demo",
+      "start": 3.9,
+      "end": 13.58,
+      "energy": 1,
+      "in": {
+        "type": "fade",
+        "dur": 0.4
+      },
+      "params": {
+        "media": {
+          "src": "assets/demo/sign-in.mp4",
+          "sourceStart": 0
+        },
+        "viewport": {
+          "width": 1920,
+          "height": 1080
+        },
+        "actions": [
+          {
+            "at": 1.317,
+            "type": "type",
+            "box": {
+              "x": 781,
+              "y": 502.5,
+              "width": 358,
+              "height": 50
+            },
+            "keys": [
+              1.584,
+              1.636,
+              1.723,
+              1.792,
+              1.874,
+              1.975,
+              2.071,
+              2.17,
+              2.236,
+              2.325,
+              2.433,
+              2.529,
+              2.602,
+              2.652,
+              2.734,
+              2.795,
+              2.875,
+              2.963,
+              3.022,
+              3.126
+            ],
+            "until": 3.126,
+            "label": "Email"
+          },
+          {
+            "at": 4.265,
+            "type": "type",
+            "box": {
+              "x": 781,
+              "y": 597.5,
+              "width": 358,
+              "height": 50
+            },
+            "keys": [
+              4.522,
+              4.627,
+              4.686,
+              4.754,
+              4.829,
+              4.926,
+              4.976,
+              5.068,
+              5.148,
+              5.206,
+              5.281,
+              5.342,
+              5.398
+            ],
+            "until": 5.398,
+            "label": "Password"
+          },
+          {
+            "at": 6.528,
+            "type": "click",
+            "box": {
+              "x": 781,
+              "y": 673.5,
+              "width": 358,
+              "height": 48
+            },
+            "label": "Sign in"
+          }
+        ],
+        "callouts": [
+          {
+            "at": 6.844,
+            "text": "Your whole team, one login",
+            "box": {
+              "x": 781,
+              "y": 673.5,
+              "width": 358,
+              "height": 48
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "s3",
+      "module": "product-demo",
+      "start": 13.58,
+      "end": 24.78,
+      "energy": 2,
+      "in": {
+        "type": "push",
+        "dur": 0.5,
+        "direction": "left"
+      },
+      "params": {
+        "media": {
+          "src": "assets/demo/create-project.mp4",
+          "sourceStart": 0
+        },
+        "viewport": {
+          "width": 1920,
+          "height": 1080
+        },
+        "actions": [
+          {
+            "at": 2.311,
+            "type": "click",
+            "box": {
+              "x": 1740.6,
+              "y": 52.5,
+              "width": 131.4,
+              "height": 48
+            },
+            "label": "New project"
+          },
+          {
+            "at": 4.047,
+            "type": "type",
+            "box": {
+              "x": 333,
+              "y": 205,
+              "width": 590,
+              "height": 50
+            },
+            "keys": [
+              4.308,
+              4.383,
+              4.474,
+              4.571,
+              4.656,
+              4.724,
+              4.82,
+              4.932,
+              5.004,
+              5.09,
+              5.185,
+              5.286,
+              5.4
+            ],
+            "until": 5.4,
+            "label": "Project name"
+          },
+          {
+            "at": 6.528,
+            "type": "click",
+            "box": {
+              "x": 533.7,
+              "y": 304,
+              "width": 188.7,
+              "height": 54
+            },
+            "label": "Goal: Upgrades"
+          },
+          {
+            "at": 7.66,
+            "type": "click",
+            "box": {
+              "x": 333,
+              "y": 384,
+              "width": 148.4,
+              "height": 48
+            },
+            "label": "Create project"
+          }
+        ],
+        "callouts": [
+          {
+            "at": 7.975,
+            "text": "Tracking starts now",
+            "box": {
+              "x": 333,
+              "y": 384,
+              "width": 148.4,
+              "height": 48
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "s4",
+      "module": "product-demo",
+      "start": 24.78,
+      "end": 30.68,
+      "energy": 2,
+      "in": {
+        "type": "push",
+        "dur": 0.5,
+        "direction": "left"
+      },
+      "params": {
+        "media": {
+          "src": "assets/demo/analytics.mp4",
+          "sourceStart": 0
+        },
+        "viewport": {
+          "width": 1920,
+          "height": 1080
+        },
+        "actions": [
+          {
+            "at": 2.281,
+            "type": "click",
+            "box": {
+              "x": 20,
+              "y": 190,
+              "width": 220,
+              "height": 46
+            },
+            "label": "Analytics"
+          }
+        ],
+        "callouts": [
+          {
+            "at": 3.108,
+            "text": "Your best day, at a glance",
+            "box": {
+              "x": 1382.3,
+              "y": 196.5,
+              "width": 464.7,
+              "height": 33
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "s5",
+      "module": "kinetic-words",
+      "start": 30.68,
+      "end": 35.4,
+      "energy": 3,
+      "in": {
+        "type": "whip",
+        "dur": 0.35
+      },
+      "params": {
+        "words": [
+          {
+            "text": "Track it.",
+            "at": 0.14
+          },
+          {
+            "text": "Learn from it.",
+            "at": 1.66
+          },
+          {
+            "text": "Launch again.",
+            "at": 3.28,
+            "emphasis": true
+          }
+        ],
+        "layout": "stack",
+        "variant": "rise"
+      }
+    },
+    {
+      "id": "s6",
+      "module": "cta",
+      "start": 35.4,
+      "end": 45,
+      "energy": 2,
+      "in": {
+        "type": "fade",
+        "dur": 0.4
+      },
+      "params": {
+        "action": "Try Pulseboard free",
+        "emphasis": "free",
+        "detail": "Launch analytics for small teams",
+        "handle": "pulseboard.test"
+      }
+    }
+  ],
+  "overlays": [
+    {
+      "type": "captions",
+      "style": "word-highlight"
+    }
+  ],
+  "ending": {
+    "loop": false
+  }
+}

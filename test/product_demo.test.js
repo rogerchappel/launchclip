@@ -138,3 +138,18 @@ test('HyperFrames: the video and the overlay are hoisted to the root, overlay ab
   const z = tag => Number(/z-index:(\d+)/.exec(html.slice(html.indexOf(tag)))[1]);
   assert.equal(z('<div id="demo-overlay"'), z('<video id="demo-media"') + 1);
 });
+
+test('the demo autopilot proof story validates and every scene resolves', async () => {
+  const dir = path.join(ROOT, 'examples/story/demo-autopilot-16x9');
+  const story = JSON.parse(await readFile(path.join(dir, 'storyboard.json'), 'utf8'));
+  const narration = JSON.parse(await readFile(path.join(dir, 'NARRATION.json'), 'utf8'));
+  assert.deepEqual(validateStory(story, {modules: knownModules()}).errors, []);
+  const resolved = resolveStory(story, {words: narration.words});
+  const demos = resolved.scenes.filter(scene => scene.module === 'product-demo');
+  assert.equal(demos.length, 3);
+  for (const scene of resolved.scenes) assert.doesNotThrow(() => resolveModule(scene, resolved), scene.id);
+  for (const scene of demos) {
+    const log = JSON.parse(await readFile(path.join(dir, scene.params.media.src.replace(/\.mp4$/, '.actions.json')), 'utf8'));
+    assert.ok(scene.end - scene.start <= log.duration + 1e-3, `${scene.id} fits its clip`);
+  }
+});

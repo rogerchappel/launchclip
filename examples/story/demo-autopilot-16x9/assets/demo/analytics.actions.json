@@ -1,0 +1,95 @@
+{
+  "schema": "launchclip.demo-actions.v1",
+  "flow": {
+    "id": "analytics",
+    "title": "Analytics",
+    "goal": "See which day drove signups"
+  },
+  "video": "analytics.mp4",
+  "viewport": {
+    "width": 1920,
+    "height": 1080,
+    "deviceScaleFactor": 1
+  },
+  "frame": {
+    "width": 1920,
+    "height": 1080
+  },
+  "fps": 30,
+  "duration": 6.462,
+  "frames": 128,
+  "recorded_at": "2026-10-22T20:19:32.451Z",
+  "actions": [
+    {
+      "index": 0,
+      "type": "goto",
+      "path": "/dashboard",
+      "label": null,
+      "url": "http://localhost:4310/dashboard",
+      "start": 0,
+      "end": 0,
+      "box": null,
+      "callout": null
+    },
+    {
+      "index": 1,
+      "type": "pause",
+      "selector": null,
+      "text": null,
+      "label": null,
+      "start": 0.719,
+      "end": 1.323,
+      "box": null,
+      "callout": null,
+      "url": "http://localhost:4310/dashboard"
+    },
+    {
+      "index": 2,
+      "type": "click",
+      "selector": null,
+      "text": "Analytics",
+      "label": "Analytics",
+      "start": 1.362,
+      "end": 2.877,
+      "box": {
+        "x": 20,
+        "y": 190,
+        "width": 220,
+        "height": 46
+      },
+      "callout": null,
+      "at": 2.281,
+      "url": "http://localhost:4310/analytics"
+    },
+    {
+      "index": 3,
+      "type": "assert-visible",
+      "selector": null,
+      "text": "Sunday: 96 signups",
+      "label": "Sunday: 96 signups",
+      "start": 2.877,
+      "end": 3.358,
+      "box": {
+        "x": 1382.3,
+        "y": 196.5,
+        "width": 464.7,
+        "height": 33
+      },
+      "callout": "Your best day, at a glance",
+      "at": 2.908,
+      "url": "http://localhost:4310/analytics"
+    },
+    {
+      "index": 4,
+      "type": "pause",
+      "selector": null,
+      "text": null,
+      "label": null,
+      "start": 3.358,
+      "end": 5.561,
+      "box": null,
+      "callout": null,
+      "url": "http://localhost:4310/analytics"
+    }
+  ]
+}
