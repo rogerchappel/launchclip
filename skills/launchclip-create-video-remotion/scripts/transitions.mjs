@@ -1,7 +1,7 @@
 // Typed scene transitions and scene render windows, shared by the HyperFrames
 // compiler (as GSAP fromTo calls) and the Remotion StoryComposition (evaluated
 // per frame through motion.mjs), so both renderers move the same layers by
-// the same amounts with the same eases. Plain ESM with no imports.
+// the same amounts with the same eases. Plain ESM; imports only grammar.mjs.
 // Canonical copy: kit/core/transitions.mjs.
 //
 // Model: every track-0 scene is an opaque plate (brand background). A scene's
@@ -10,14 +10,59 @@
 // render window is extended, because the validator forbids same-track
 // overlap), and receives the matching "out" tweens. Scenes on higher tracks
 // are transparent overlays and only receive "in" tweens.
+//
+// Motion grammar (kit/core/grammar.mjs): the tween eases follow the story's
+// grammar; editorial keeps every ease below exactly.
+// Camera transitions (pan, pull, orbit, whip-pan, and push when camera.mode
+// is "world") move the camera, not the layers (kit/core/camera-world.mjs):
+// here they only hold the outgoing plate and add the crossfades a dolly
+// needs. In world mode plates are transparent, so layered transitions (fade,
+// zoom, iris) also fade the outgoing plate out.
+//
+// Empty plates: a short gap between two plates (a gap in scene timing, plus
+// any lead-in before the next scene draws anything, sceneLeadIn) would show a
+// dead frame. When that whole span is under HOLD_GAP seconds the previous
+// plate is held on screen through it (its render window ends where the next
+// scene's content starts); longer gaps are reported by emptyPlates() and show
+// the background.
 
-export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph']);
+import { grammarEase, resolveGrammar } from './grammar.mjs';
+
+export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan']);
+export const CAMERA_TRANSITION_TYPES = Object.freeze(['pan', 'pull', 'orbit', 'whip-pan']);
+
+/** Whether a transition moves the world camera (push only in world mode). */
+export function isCameraTransition(transition, mode = 'cuts') {
+  const type = transition?.type;
+  return CAMERA_TRANSITION_TYPES.includes(type) || (type === 'push' && mode === 'world');
+}
 
 /** Identity state of a scene layer. iris: null = no clip. */
 export const LAYER_IDENTITY = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1, blur: 0, iris: null });
 
 const EPS = 1e-6;
 const ADJACENT = 0.1;
+/** Empty spans shorter than this (seconds) are covered by holding the previous plate. */
+export const HOLD_GAP = 0.5;
+
+// Seconds after its start before a scene's module draws anything, read from
+// its params (no module resolution, so every caller of sceneWindows agrees).
+// kinetic-words draws nothing until its first beat; a beat at or before the
+// first frame is settled on frame 0 (catalog-a.mjs).
+const LEAD_IN = {
+  'kinetic-words': (params, fps) => {
+    const at = Number(params?.words?.[0]?.at);
+    return Number.isFinite(at) && at > 1 / fps + EPS ? at : 0;
+  }
+};
+
+/** Seconds from a scene's start until its module first draws content. */
+export function sceneLeadIn(scene, fps = 30) {
+  const rule = LEAD_IN[scene?.module];
+  const lead = rule ? rule(scene?.params ?? {}, fps) : 0;
+  const length = Number(scene?.end) - Number(scene?.start);
+  return Number.isFinite(lead) && lead > 0 ? Math.min(lead, Number.isFinite(length) ? length : lead) : 0;
+}
 
 /** Radius (px) of a circle centred on the canvas that covers every corner. */
 export function irisRadius(width, height) {
@@ -30,20 +75,34 @@ export function irisRadius(width, height) {
  * Tween = {prop: "opacity"|"x"|"y"|"scale"|"blur"|"iris", from, to, start, duration, ease}
  * where start is seconds relative to the transition start.
  */
-export function transitionTweens(transition, { width, height }) {
+export function transitionTweens(transition, { width, height, grammar = null, mode = 'cuts' }) {
   const type = transition?.type ?? 'cut';
   const d = Number(transition?.dur ?? 0);
   const direction = transition?.direction ?? 'left';
   if (!TRANSITION_TYPES.includes(type)) throw new Error(`unknown transition type ${JSON.stringify(type)}`);
-  const t = (prop, from, to, ease, start = 0, duration = d) => ({ prop, from, to, start, duration, ease });
+  const roles = ['enter', 'exit', 'emphasis', 'move'];
+  const t = (prop, from, to, ease, start = 0, duration = d) => ({ prop, from, to, start, duration, ease: grammarEase(grammar, ease, { props: [prop], roles }) });
   if (type === 'cut' || !(d > 0)) return { type: 'cut', duration: 0, in: [], out: [] };
+  if (isCameraTransition(transition, mode)) {
+    // The camera travels (camera-world.mjs). A dolly lands on a scene drawn
+    // inside (push) or around (pull) the outgoing one, so the two plates
+    // crossfade while the camera moves.
+    // The outgoing plate is gone before the object it zooms into fills the
+    // frame, so its magnified content never sits on top of the new scene.
+    if (type === 'push') return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', d * 0.15, d * 0.45)], out: [t('opacity', 1, 0, 'power1.inOut', d * 0.3, d * 0.35)] };
+    if (type === 'pull') return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', 0, d * 0.5)], out: [t('opacity', 1, 0, 'power1.inOut', d * 0.3, d * 0.7)] };
+    return { type, duration: d, camera: true, in: [], out: [] };
+  }
+  // World mode: plates are transparent, so a layered reveal also fades the
+  // outgoing plate (cuts mode covers it with the incoming opaque plate).
+  const fadeOut = mode === 'world' ? [t('opacity', 1, 0, 'power1.inOut')] : [];
   const axis = direction === 'up' || direction === 'down' ? 'y' : 'x';
   const span = axis === 'x' ? width : height;
   // "left" = the content travels left: the incoming plate enters from the right.
   const sign = direction === 'left' || direction === 'up' ? -1 : 1;
   switch (type) {
     case 'fade':
-      return { type, duration: d, in: [t('opacity', 0, 1, 'power1.inOut')], out: [] };
+      return { type, duration: d, in: [t('opacity', 0, 1, 'power1.inOut')], out: fadeOut };
     case 'morph':
       // Crossfade; the module pair hands the named shared object across.
       return { type, duration: d, in: [t('opacity', 0, 1, 'power2.inOut')], out: [t('opacity', 1, 0, 'power2.inOut')] };
@@ -55,9 +114,9 @@ export function transitionTweens(transition, { width, height }) {
       return { type, duration: d, in: [t(axis, -sign * span, 0, 'expo.inOut'), ...blurs], out: [t(axis, 0, sign * span, 'expo.inOut'), ...blurs] };
     }
     case 'zoom':
-      return { type, duration: d, in: [t('scale', 0.6, 1, 'power3.out'), t('opacity', 0, 1, 'power2.out', 0, d * 0.6)], out: [t('scale', 1, 1.5, 'power3.in')] };
+      return { type, duration: d, in: [t('scale', 0.6, 1, 'power3.out'), t('opacity', 0, 1, 'power2.out', 0, d * 0.6)], out: [t('scale', 1, 1.5, 'power3.in'), ...fadeOut] };
     case 'iris':
-      return { type, duration: d, in: [t('iris', 0, irisRadius(width, height), 'power2.inOut')], out: [] };
+      return { type, duration: d, in: [t('iris', 0, irisRadius(width, height), 'power2.inOut')], out: fadeOut };
     default:
       return { type: 'cut', duration: 0, in: [], out: [] };
   }
@@ -113,6 +172,9 @@ export function sceneWindows(story) {
   const width = format.width, height = format.height;
   const duration = Number(story?.resolved?.duration ?? format.duration);
   const fps = Number(story?.resolved?.fps ?? format.fps ?? 30);
+  const grammar = resolveGrammar(story);
+  const mode = story?.camera?.mode === 'world' && story?.lane !== 'footage-led' ? 'world' : 'cuts';
+  const options = { width, height, grammar, mode };
   const scenes = (Array.isArray(story?.scenes) ? story.scenes : []).map((scene, index) => {
     if (typeof scene?.start !== 'number' || typeof scene?.end !== 'number') throw new Error(`sceneWindows needs a resolved story; scenes[${index}] has unresolved start/end`);
     const track = Number.isInteger(scene.track) ? scene.track : 0;
@@ -122,8 +184,9 @@ export function sceneWindows(story) {
   for (const entry of scenes) {
     const transition = entry.scene.in;
     if (!transition || typeof transition !== 'object') continue;
-    const tweens = transitionTweens(transition, { width, height });
+    const tweens = transitionTweens(transition, options);
     entry.transitionIn = { type: tweens.type, dur: tweens.duration, direction: transition.direction ?? null, from_object: transition.from_object ?? null };
+    if (tweens.camera) entry.transitionIn.camera = true;
     entry.tweens.push(...tweens.in.map((tw) => ({ ...tw, at: entry.start + tw.start, role: 'in' })));
     if (!entry.plate || tweens.type === 'cut') continue;
     // Only an adjacent plate (gap of at most ADJACENT seconds) is carried
@@ -134,16 +197,38 @@ export function sceneWindows(story) {
     previous.renderEnd = Math.max(previous.renderEnd, Math.min(duration, entry.start + tweens.duration));
     previous.tweens.push(...tweens.out.map((tw) => ({ ...tw, at: entry.start + tw.start, role: 'out' })));
   }
+  // Hold the previous plate through a short empty span (timing gap plus the
+  // next scene's lead-in), so the cut never shows a dead frame.
+  for (let i = 1; i < plates.length; i += 1) {
+    const entry = plates[i];
+    const previous = plates.slice(0, i).filter((other) => other.end <= entry.start + EPS).reduce((best, other) => (!best || other.end > best.end + EPS ? other : best), null);
+    if (!previous) continue;
+    const lead = sceneLeadIn(entry.scene, fps), contentStart = entry.start + lead;
+    const held = Math.max(previous.renderEnd, previous.end);
+    // A transition that already carries the previous plate into this scene
+    // owns the hand-over.
+    if (held > entry.start + EPS) continue;
+    if (!(contentStart - held > EPS && contentStart - previous.end < HOLD_GAP - EPS)) continue;
+    previous.renderEnd = Math.min(duration, round(contentStart, 6));
+    // The incoming plate is opaque: on a cut, keep it transparent through its
+    // lead-in so the held plate shows, then show it as its content arrives. (A
+    // layered transition in reveals the held plate by itself.)
+    if (lead > EPS && entry.tweens.length === 0) {
+      entry.tweens.push({ prop: 'opacity', from: 0, to: 0, start: 0, duration: round(lead, 6), ease: 'none', at: entry.start, role: 'hold' },
+        { prop: 'opacity', from: 0, to: 1, start: 0, duration: 0, ease: 'none', at: round(contentStart, 6), role: 'hold' });
+    }
+  }
   for (const entry of scenes) entry.tweens.sort((a, b) => a.at - b.at);
   let loop = null;
   const ending = story?.ending;
   if (ending && typeof ending === 'object' && typeof ending.loop_to === 'string' && scenes.some((entry) => entry.id === ending.loop_to)) {
     const target = scenes.find((entry) => entry.id === ending.loop_to);
     if (ending.in && typeof ending.in === 'object') {
-      const tweens = transitionTweens(ending.in, { width, height });
+      const tweens = transitionTweens(ending.in, options);
       const start = round(duration - tweens.duration, 6);
       loop = { sceneId: target.id, scene: target.scene, start, end: duration, transitionIn: { type: tweens.type, dur: tweens.duration, direction: ending.in.direction ?? null, from_object: ending.in.from_object ?? null },
         tweens: tweens.in.map((tw) => ({ ...tw, at: start + tw.start, role: 'in' })) };
+      if (tweens.camera) loop.transitionIn.camera = true;
       const last = plates.reduce((best, entry) => (!best || entry.end >= best.end ? entry : best), null);
       if (last && tweens.type !== 'cut') {
         last.tweens.push(...tweens.out.map((tw) => ({ ...tw, at: start + tw.start, role: 'out' })));
@@ -156,6 +241,27 @@ export function sceneWindows(story) {
   }
   scenes.sort((a, b) => a.track - b.track || a.start - b.start || a.index - b.index);
   return { scenes, loop };
+}
+
+/**
+ * Spans with no plate content on screen: from where one plate's render window
+ * ends (or the story starts) to where the next plate's content starts (its
+ * start plus sceneLeadIn), when longer than one frame. → [{from, to, before,
+ * after}] (scene ids; before is null at the story start). Spans under HOLD_GAP
+ * are normally covered by the hold in sceneWindows, so these are the gaps a
+ * viewer sees as an empty plate.
+ */
+export function emptyPlates(story, windows = sceneWindows(story)) {
+  const fps = Number(story?.resolved?.fps ?? story?.format?.fps ?? 30);
+  const plates = windows.scenes.filter((entry) => entry.plate).sort((a, b) => a.start - b.start || a.index - b.index);
+  const out = [];
+  let shown = 0, before = null;
+  for (const entry of plates) {
+    const contentStart = entry.start + sceneLeadIn(entry.scene, fps);
+    if (contentStart - shown > 1 / fps + EPS) out.push({ from: round(shown, 3), to: round(contentStart, 3), before, after: entry.id });
+    if (entry.renderEnd > shown) { shown = entry.renderEnd; before = entry.id; }
+  }
+  return out;
 }
 
 function round(value, digits = 3) {

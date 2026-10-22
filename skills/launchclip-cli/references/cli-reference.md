@@ -19,9 +19,13 @@ the current workflow and the decisions an operating agent must not guess.
 - [Local-first OSS packet lane](#local-first-oss-packet-lane)
 - [Storyboard (storyboard.json)](#storyboard-storyboardjson)
 - [Finish: storyboard to mastered video in one command](#finish-storyboard-to-mastered-video-in-one-command)
+  - [The iteration loop: re-render one scene](#the-iteration-loop-re-render-one-scene)
+  - [Sound effects](#sound-effects)
+- [Export: an editable timeline for Final Cut Pro, Premiere Pro and Resolve](#export-an-editable-timeline-for-final-cut-pro-premiere-pro-and-resolve)
 
 - [Voice providers](#voice-providers)
 - [Failure handling](#failure-handling)
+- [Command usage](#command-usage) (generated from the CLI usage table)
 
 ## Runtime and credentials
 
@@ -45,6 +49,7 @@ Provider requirements:
 | local-first frame authoring or repair | a running Ollama server; no model API key for the local attempt |
 | OpenRouter frame authoring or repair | `OPENROUTER_API_KEY` |
 | generated narration and music | `ELEVENLABS_API_KEY` plus `ELEVENLABS_VOICE_ID` or `--voice-id` for narration |
+| ElevenLabs SFX library (`launchclip sfx seed`) | `ELEVENLABS_API_KEY`; without it the library seeds from the procedural kit |
 | supplied voiceover without a transcript | `ELEVENLABS_API_KEY` for transcription |
 | supplied voiceover with `--transcript` | no transcription call required |
 | visual-only production | `--no-audio`; OpenAI model calls still occur |
@@ -147,6 +152,40 @@ then a matching pack name or directory passed to `--style`, then the existing
 free-form style-family behavior. This keeps old commands compatible. Commit
 `.launchclip/styles/**` when the channel identity should travel with the
 project; other `.launchclip` workspaces remain generated output.
+
+### Style pack v2 (storyboards)
+
+A v2 pack is `.launchclip/styles/<name>/style.json` with
+`"schema": "launchclip.style.v2"`: palette and bundled fonts, motion grammar,
+camera, ambient level, caption preset and options, SFX density and music hints,
+preferred/avoided modules and per-module param defaults, layout rules, an
+optional intro/outro and loop. A storyboard selects it with
+`"style": "<name>"`, `"style": "./path/style.json"` or
+`"style": {"name": "<name>", "intro": true, "outro": true}`. Names resolve in
+`<project>/.launchclip/styles`, then `~/.launchclip/styles` (or
+`$LAUNCHCLIP_HOME/styles`), then the built-in starters: `editorial-dark`,
+`bold-creator`, `minimal-tech`, `warm-documentary`, `neon-explainer`. The pack
+is merged before validation in every command that reads a storyboard (story
+validate/resolve/compile, layout-check, finish, both renderer adapters,
+cinematic-check and the renderer eval); explicit storyboard values always win.
+
+```bash
+launchclip style list                       # project packs and built-in starters
+launchclip style show bold-creator          # the resolved v2 pack
+launchclip style upgrade ai-news            # v1 (frame.md) → style.json v2, keeps style.v1.json
+launchclip style create my-channel --from-reference old-1.mp4 old-2.mp4 [--from-images thumb.png] [--font-hint "Bebas Neue, Inter"] [--force]
+launchclip style check <project> --against my-channel [--video renders/final.mp4] [--out qa/style-check.json]
+```
+
+`style create --from-reference` measures the references locally (no model
+calls): palette by k-means with contrast-checked roles, pacing from cuts and
+structural scene boundaries, activity for the ambient level, approximate caption
+position/size/highlight, loudness and transients for sound, and the nearest
+bundled font families. It writes `style.json` and `reference-report.md` (each
+value with a confidence). Reference media is never copied into the pack. `style
+check` measures a render the same way and reports drift (palette distance,
+median shot, cut rate, activity, loudness) against the pack's
+`reference_stats`, or against its palette and grammar when it has none.
 
 ## Model-directed production
 
@@ -374,7 +413,27 @@ captions show, unless the scene sets `hides_captions`), `min-text-size` (key
 text under 44 px on Shorts), and `module-spec` (an editorial spec that does not
 build). Warnings: `hero-fill` (hero outside 70–90% of the safe width on
 Shorts), `lower-third-empty` (nothing below the safe-zone midpoint for over
-3 s on Shorts), and `centre-of-mass` (sustained drift from y 860 on Shorts).
+3 s on Shorts), `centre-of-mass` (sustained drift from y 860 on Shorts), and
+`empty-plate` (a span where no scene draws anything: a gap in scene timing, or a
+scene whose first content arrives after the previous scene has gone; spans
+under 0.5 s are covered by holding the previous scene, so only longer ones are
+reported). `story validate` also warns about gaps in scene timing.
+
+Whether content fits a rect depends on the rect's width (text wraps, and
+editorial type follows the width), so a `module-spec` sizing error names the
+size that fits: "checklist needs 566 px height at width 900 (or width ≤ 670 at
+this height)". To size a rect before authoring it:
+
+```bash
+launchclip module fit <module> [--params params.json] [--aspect 16:9|9:16] [--story storyboard.json] [--brand brand.json] [--duration 4] [--json]
+```
+
+`--params` is the scene's params object. Without `params.rect` it prints the
+content's natural size and the rect the module derives; with one, whether it
+fits, the minimum height at its width and the nearest width that fits its
+height. Either way it lists the minimum height at common widths.
+`--story` borrows a storyboard's brand and format; catalogue modules otherwise
+use a neutral brand.
 
 Without `--json` the command prints a one-line-per-finding summary. It checks
 declarations only; confirm contrast (3:1 minimum) and a filled lower third on
@@ -545,6 +604,20 @@ launchclip story compile <project> --renderer remotion
 `<project>` is the directory holding `storyboard.json` (or the file itself).
 Anchors are resolved against `NARRATION.json` and `BEATS.json` when present.
 
+Captions are one overlay: `{"type": "captions", "preset": "<name>", ...options}`
+(or the legacy `"style": "word-highlight" | "line" | "none"`; `line` draws the
+`minimal-line` preset). Presets: `word-highlight` (default), `karaoke-fill`,
+`pop-word`, `bounce`, `typewriter`, `box-highlight`, `underline-sweep`,
+`kinetic-stack`, `minimal-line`, `glow`, `outline-heavy`, `split-color`,
+`lower-band`, `bubble`. Options: `position` (bottom|middle|top|auto),
+`max_words`, `max_chars`, `case` (as-is|upper|title), `emphasis` ("auto", "none"
+or a word list) and `keywords`, `font` (display|body|meta), `size` (scale),
+`colors` (brand roles or hex: idle, active, spoken, accent, box, boxText, plate,
+band, bandEdge, chip), `stroke`, `shadow`, `entrance`
+(pop|fade|slide-up|slide-left|scale|none), `exit`
+(fade-up|fade|slide-down|shrink|none) and `offset` (seconds). Both renderers
+draw the same plan.
+
 - `--renderer hyperframes` writes a complete HyperFrames project (default
   `<project>/hyperframes/`): `index.html` with one paused GSAP timeline, every
   scene's module, typed transitions, the phase-2 boundary attributes, one root
@@ -568,7 +641,7 @@ launchclip story plan --brief brief.md [--narration NARRATION.json] \
   [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] \
   [--base assets/recording.mp4] [--voice assets/audio/narration.wav] \
   [--format 1080x1920|shorts|landscape|square] [--fps 30] [--duration seconds] \
-  [--brand brand.json] [--max-repairs 2]
+  [--brand brand.json] [--style name|path] [--max-repairs 2]
 ```
 
 One model call authors `storyboard.json` from the brief, with the planning
@@ -590,6 +663,10 @@ Repairs target scenes and params; the checks never relax.
   modules.
 - `--duration` defaults to the last narration word plus 0.6 s, or 30 s.
   `--brand` is a JSON file with `colors` and `fonts`.
+- `--style <name|path>` plans for a style pack: the prompt carries its
+  preferred and avoided modules, caption preset, grammar and sound density, the
+  pack's brand becomes the fixed brand (unless `--brand` is given), the
+  storyboard names the pack, and the checks run on the merged story.
 - `--model` is `provider:model[@reasoning]`: `anthropic:<model-id>`
   (`ANTHROPIC_API_KEY`), `openai:<model>` (`OPENAI_API_KEY`),
   `openrouter:<vendor>/<model>` (`OPENROUTER_API_KEY`), `ollama:<model>`
@@ -608,7 +685,9 @@ candidate as `<out>.rejected.json`. Review the storyboard, then run
 
 ```bash
 launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] \
-  [--voice kokoro|elevenlabs|supplied|test] [--out renders/final.mp4] [--force] [--json]
+  [--voice kokoro|elevenlabs|supplied|test] [--music synth|elevenlabs|none] \
+  [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] \
+  [--scene s3[,s4] | --preview-scene s3] [--force] [--json]
 ```
 
 `finish` is the recommended way to turn a `storyboard.json` project into a
@@ -620,8 +699,8 @@ finished video. It runs these stages in order and stops at the first failure
 | `voice` | When `audio.narration` (`{text, provider?, voice?, speed?}`) is set, synthesises it through the voice provider (`--voice` overrides `provider`; the default is `kokoro`). Skipped when `audio.voice` is a supplied file, unless `--voice` is given. | `assets/audio/narration.wav`, `NARRATION.json` |
 | `validate` | Validates the story, resolves its anchors against the synthesised words, and runs the geometric layout check. Errors fail the run; warnings are reported. | `.launchclip/finish/storyboard.json`, `.launchclip/finish/story.resolved.json` |
 | `captions` | Chunks the words into caption lines when a captions overlay has no `src`. | `assets/captions/captions.json` |
-| `sound` | Binds a procedural kit cue to every hit (`hit.cue`, else the named module event's cue, else a default from the event name) and to every module event that carries a `cue`, adds a whoosh under push, whip and zoom transitions, picks a music bed from scene `energy` (tempo, level and kick window), and mixes everything with the music ducked under the voice. Skipped when the storyboard sets `audio.mix`. `audio.sfx: "none"` and `audio.music: "none"` turn the parts off. | `assets/audio/mix.wav`, `assets/audio/kit/`, `AUDIO-MANIFEST.json`, `qa/sfx.json` |
-| `render` | Renders the filled copy through the renderer adapter. The default renderer is `remotion` when the project has no `index.html`, otherwise `hyperframes`; HyperFrames compiles to `.launchclip/finish/hyperframes/` first. | `.launchclip/finish/render-<quality>.mp4` |
+| `sound` | Binds a cue to every hit (`hit.cue`, else the named module event's cue, else a default from the event name) and to every module event that carries a `cue`, adds a whoosh under push, whip and zoom transitions, resolves each cue to a file through the SFX library (see [Sound effects](#sound-effects)), renders a typing track for typed code, resolves the music (see [Music](#music)): the procedural bed from scene `energy`, an ElevenLabs track generated (or reused from the cache) for the story, or a supplied file; analyses its beats, applies beat sync, and mixes everything with the music ducked under the voice. Skipped when the storyboard sets `audio.mix`. `audio.sfx: "none"` and `audio.music: "none"` (or `--music none`) turn the parts off. | `assets/audio/mix.wav`, `assets/audio/kit/`, `assets/audio/typing.wav`, `AUDIO-MANIFEST.json`, `qa/sfx.json`, `BEATS.json`, `qa/beat-sync.json`, `assets/audio/music.mp3` (ElevenLabs) |
+| `render` | Renders the filled copy through the renderer adapter and the segment cache (see the iteration loop below): unchanged segments are reused and the summary reports how many were reused, rendered and the time saved. The default renderer is `remotion` when the project has no `index.html`, otherwise `hyperframes`; HyperFrames compiles to `.launchclip/finish/hyperframes/` first. | `.launchclip/finish/render-<quality>.mp4`, `.launchclip/finish/segments/` |
 | `master` | Masters the render's audio to −14 LUFS and at most −1 dBTP, re-measured after encoding. | `renders/draft.mp4` (draft) or `renders/final.mp4` (high), or `--out` |
 | `evidence` | Builds the phase-2 temporal evidence (browser stills plus encoded frames) and critic contact sheets. | `qa/temporal-evidence/`, `qa/critic-sheets/` |
 | `gates` | Runs the renderer-neutral gates: layout, loudness, motion and audio analysis of the mastered MP4, and the temporal evidence manifest. The critic gate is reported as `pending`, with the next step. | `qa/finish/` |
@@ -645,6 +724,248 @@ whole pipeline can be exercised offline. Never ship it. The `kokoro`,
 
 After finish, a fresh-context critic reviews `qa/critic-sheets/` and writes
 `qa/critic.json`; `launchclip cinematic-check` then closes the critic gate.
+
+### The iteration loop: re-render one scene
+
+The render stage splits the timeline into segments where the set of layers on
+screen changes: each scene's body is one segment and each transition overlap
+(the incoming scene plus the outgoing scene held under it) is its own, so a
+join never falls mid-transition. Every segment is hashed from what can change
+its pixels: the scenes on screen in it (params, timing, transition tweens, a
+morph's source scene, referenced asset files), the caption chunks and timed
+overlays on screen in its window (a chunk that crosses a join counts for
+both), the global settings (brand, format, lane and any other top-level field
+such as a world camera or ambient drift: these touch every segment), the
+fonts, a content hash of the kit sources that render, and the renderer.
+Audio-only fields (`audio.mix`, `mix_volume`, `voice`, `music`, `sfx`) and the
+title do not touch the picture. Segments live in
+`.launchclip/finish/segments/<renderer>/<hash>.mp4`, so after an edit only
+the segments whose hash changed render again: editing one scene's copy
+re-renders its body and the two transitions that show it; editing a
+transition re-renders the segments of both scenes it joins.
+
+With Remotion, missing segments render by frame range through one bundle and
+one browser as lossless H.264, join with an FFmpeg concat stream copy, and are
+encoded once with the delivery settings `remotion render` uses; the soundtrack
+is muxed once over the whole timeline. A partial render is frame-identical to
+a fresh render of every segment. The HyperFrames CLI has no frame range, so
+HyperFrames renders whole videos, cached by the hash of the whole timeline:
+partial rendering is Remotion-only for now.
+
+```bash
+launchclip finish <project> --scene s3        # second pass on s3 (comma-separate several)
+launchclip finish <project> --preview-scene s3 # just s3, to renders/scene-s3.mp4
+```
+
+`--scene s3[,s4]` forces those scenes' segments to re-render even when their
+hash is unchanged, re-runs `master`, `evidence` (all samples: build-evidence
+has no partial mode) and `gates`, and writes before/after stills of each scene
+from the middle of its own segment to `qa/finish/scenes/` (`<id>-before.png`,
+`<id>-after.png` and `<id>-before-after.png` side by side), listed in the
+summary and in `finish.json` as `scene_stills`. Edits need no flag: an edited
+scene's segments re-render on the next plain `finish`; `--scene` is for a
+re-render the hashes cannot see and for the before/after check.
+
+`--preview-scene s3` renders only the segments that show `s3` (reusing cached
+ones and caching the new ones for the next full run) to
+`renders/scene-s3.mp4` with its slice of the soundtrack, then stops: master,
+evidence and gates are skipped, the final and the finish state are untouched,
+and the report's `status` is `preview`. Unknown scene ids are an error.
+
+### Music
+
+`finish` picks the music in this order: `--music synth|elevenlabs|none`, then
+`audio.music` in the storyboard, then ElevenLabs when `ELEVENLABS_API_KEY` is
+set, else the procedural synth bed. `audio.music` accepts:
+
+| Value | Music |
+| --- | --- |
+| absent | the default above |
+| `"synth"` | the license-free procedural bed (`synth-audio-kit.mjs`): tempo, level and kick window follow scene `energy` |
+| `"none"` | no music |
+| `"assets/audio/song.mp3"` | a supplied track (its licence is yours to check) |
+| `{provider, prompt?, bpm?, key?, file?, sync?, seed?, model?, volume?}` | `provider` is `"synth"`, `"elevenlabs"` or `"file"`; `sync` is `"auto"` (default), `"off"`, `"cuts"` or `"hits"` |
+
+**ElevenLabs (paid).** `finish` prints a one-line notice that a paid API is in
+use and where generations are cached, then calls `POST /v1/music`. Without a
+`prompt` it sends a `music_v1` composition plan: global styles from the story
+(tone from the title, notes and brand background, the target BPM, steady 4/4,
+instrumental, and negative styles for vocals of any kind) and one section per
+energy segment of the story (calm intro → build → payoff; sections shorter
+than 3 s merge into a neighbour). With a `prompt` it sends that text plus the
+tempo, the energy arc and "instrumental only, no vocals", with
+`force_instrumental: true`. The track runs the story's length plus 2 s, so beat
+sync can trim the start. The target BPM is `audio.music.bpm`, else the tempo
+the energy implies (84–116). Every generation is cached by a hash of the
+prompt or plan, length, model and seed under
+`$LAUNCHCLIP_CACHE/elevenlabs/music` (default
+`~/.cache/launchclip/elevenlabs/music`); a cached track is never generated
+again, even without a key. The key is read from the environment, sent only in
+the `xi-api-key` header, and never logged, cached or put in an error. Before
+mixing, generated and supplied music is brought to −16 LUFS so the volume and
+the voice-to-music margin behave like the synth bed. `--music elevenlabs`
+without a key fails before anything is sent; `audio.music.provider:
+"elevenlabs"` without a key falls back to the synth bed with a warning. Output
+terms: see `THIRD_PARTY_NOTICES.md`.
+
+**Beats.** The track's tempo, beat grid and downbeats are measured
+(`src/music/beats.js`: FFmpeg decode, spectral-flux onsets, autocorrelation
+with the requested BPM as a prior, a global grid fit) and written to
+`BEATS.json` (`launchclip.beats.v1`, in story time), so `beat:n` and
+`downbeat:n` anchors resolve against the real music. The synth bed's grid is
+exact and needs no analysis. A `BEATS.json` you wrote yourself is never
+overwritten; the music's grid then goes to `assets/audio/BEATS.json`.
+
+**Beat sync.** The strategy follows the lane:
+
+- **Narrated stories** (a voice, words or `audio.narration`): the narration
+  timing is fixed, so the music moves. `finish` scores every start offset into
+  the track (and tempo changes up to ±3% with FFmpeg `atempo`, kept only when
+  they score at least 5% better) so downbeats land on the first cut after the
+  hook, the payoff/CTA scene start, the other cuts and strong hits. No story
+  time changes.
+- **Motion stories** (no narration): the music is aligned the same way, then
+  second-timed scene cuts snap to the nearest downbeat (or beat) and
+  second-timed hits to the nearest beat, within 0.25 s. Every move is
+  re-resolved, validated and checked against its module's params, and
+  reverted when it breaks one; layout-check runs again on the result and a
+  failure reverts all snaps.
+
+Word-anchored times never move off their word, and beat anchors are on the
+grid already. `sync: "cuts"` aligns and snaps cuts only, `"hits"` only hits,
+`"off"` turns beat sync off. `qa/beat-sync.json` records the strategy, the
+requested and measured BPM, the offset and tempo chosen, every key moment's
+distance to the nearest downbeat and beat, and each change, fallback and skip.
+
+### Environment and `.env`
+
+At startup the CLI reads `.env` from the working directory and, for commands
+that take a project or workspace directory (such as `finish`), from that
+directory too. Variables already set in the shell always win, and a `.env`
+never overrides them. It uses Node's `process.loadEnvFile` (with a small
+fallback parser). Copy `.env.example` to start; `.env` is gitignored.
+
+### Sound effects
+
+```bash
+launchclip sfx seed [--provider elevenlabs|synth] [--variants 3] [--only whoosh,impact] \
+  [--reroll typing] [--dir .launchclip/sfx] [--force]
+launchclip sfx reroll <family> [--dir .launchclip/sfx]
+launchclip sfx list [--dir .launchclip/sfx]
+launchclip sfx audition <family> [--dir .launchclip/sfx] [--out audition.wav] [--gap 0.35]
+```
+
+The SFX library is a locked set of processed WAV files per cue family,
+described by `<dir>/library.json` (`launchclip.sfx-library.v1`). Families:
+`whoosh`, `impact`, `riser`, `tick`, `pop`, `shimmer`, `subdrop`, `click`,
+`keystroke`, `keystroke-space` and `keystroke-enter` (aliases: `typing` for
+the three keystroke families, `ui` for click, tick and pop).
+
+- **Seed once.** `sfx seed` fills every family the library does not have yet.
+  With `ELEVENLABS_API_KEY` in the environment the default provider is
+  `elevenlabs`: it runs the checked-in prompt set (`src/sfx/prompts.json`:
+  per family a prompt, duration, prompt influence and variant count) through
+  `POST /v1/sound-generation`. Without a key the default is `synth`, the
+  original procedural kit (`synth-audio-kit.mjs`, local FFmpeg, no samples, no
+  cost). A default ElevenLabs seed is 24 generations; `--variants N` changes
+  the number per family and `--only` limits the families. The key is read from
+  the process environment only; `.env` loading is handled separately by the
+  CLI. It is never logged, written or included in an error.
+- **Cache.** Every download is stored as `<dir>/cache/<request-hash>.mp3`. A
+  cached request is never sent again, so `--force` (re-process everything)
+  costs nothing, and it works without the key.
+- **Post-processing** (`src/sfx/process.js`): 48 kHz WAV, DC removed, leading
+  silence trimmed by onset detection so the transient starts within 5 ms, the
+  tail trimmed against the noise floor with a short fade, a per-family length
+  cap (keystroke 120 ms, tick 150 ms, whoosh 1.2 s), peak normalised to
+  −3 dBFS. Silent and flat-top clipped clips are rejected; a single-hit family
+  (impact, tick, pop, click, keystrokes) keeps the cleanest hit of a multi-hit
+  clip, or rejects it. Each kept file records its onset, duration, peak, peak
+  time, RMS and (from 0.4 s) integrated loudness. A family whose takes are all
+  rejected falls back to the procedural kit, with a warning.
+- **Locked.** Re-running `sfx seed` leaves seeded families alone.
+  `--reroll <family>` (or `sfx reroll <family>`) replaces just that family
+  with new generations; the family's `roll` number is part of the request
+  hash.
+- **Audition.** `sfx list` shows the libraries and where each family resolves;
+  `sfx audition <family>` writes a contact WAV of every variant with short gaps
+  (default `<dir>/audition/<family>.wav`).
+
+`finish` resolves each cue family from the first source that has it: an
+explicit library (`--sfx-library`, or a style pack's `sound.sfx_library`),
+the project library (`<project>/.launchclip/sfx`), the user library
+(`~/.launchclip/sfx`, or `$LAUNCHCLIP_SFX_HOME`), then the procedural kit. The
+variant for each event is picked from a hash of the story id and the event, so
+repeated cues vary while renders stay reproducible; a library riser is placed
+so its measured peak lands on its moment. `--sfx-density low` drops about half
+of the optional cues (module events, transitions, word ticks; hits always
+stay) by a deterministic hash and caps typing at 15 keys per second; `high`
+raises the typing cap to 30.
+
+**Typing track.** For a `code-snippet` with `typing: true`, finish places one
+keystroke on each character's visible time (`charTimes`), a space-bar key on
+spaces and an enter key between typed lines, rotating variants without
+immediate repeats, with seeded ±1.5 dB level and ±1.5 semitone pitch jitter,
+and a cap of 25 keys per second (thinned deterministically). Modules that emit
+`*-typing-start` events without `charTimes` get evenly spaced keys over the
+typing window. Per-word reveals (`emphasis-caption` `word-<i>` events,
+`archive-card` quote words) get a soft click. The track is rendered to
+`assets/audio/typing.wav` and mixed as one input; `qa/sfx.json` lists every
+keystroke.
+
+## Export: an editable timeline for Final Cut Pro, Premiere Pro and Resolve
+
+```bash
+launchclip export <project> --format fcpxml|premiere|edl|otio|all \
+  [--overlays prores4444|png|none] [--out exports/] [--fps 24|25|29.97|30|60] \
+  [--name name] [--absolute] [--dtd FCPXMLv1_10.dtd] [--force] [--json]
+```
+
+`export` turns a finished storyboard project (run `finish` first) into an
+editable NLE timeline whose clips line up frame for frame with the render.
+`--format` takes one format, a comma list or `all`:
+
+| `--format` | File | For |
+| --- | --- | --- |
+| `fcpxml` | `<name>.fcpxml` (FCPXML 1.10) | Final Cut Pro, DaVinci Resolve |
+| `premiere` | `<name>.xml` (FCP 7 xmeml v4) | Premiere Pro, DaVinci Resolve |
+| `edl` | `<name>.edl` (CMX 3600, V1 only) | Avid and conform tools |
+| `otio` | `<name>.otio` (OpenTimelineIO JSON) | Resolve, Hiero, RV, otio tools |
+
+Output goes to `<out>/<name>/` (default `exports/<project-folder>/`): the
+format files, `captions.srt`, `timeline.json` (the timeline model),
+`EXPORT.json` (files, tracks, overlay renders, warnings, validation) and
+`media/` with every referenced file copied in (APFS clones where possible).
+Media paths are relative; `--absolute` writes absolute `file://` URLs.
+
+Tracks: V1 is the base (footage-led trim segments, each a clip on the original
+recording with its source in point, or a solid `brand.colors.bg` plate in
+motion lanes); V2 and up are the overlay scenes, each rendered on its own as
+ProRes 4444 with alpha (`--codec prores --prores-profile 4444 --pixel-format
+yuva444p10le`) from the Remotion kit's `SceneOverlay` composition, stacked so a
+transitioning scene sits above the one it overlaps; the top video track is the
+finished render, disabled, for reference. A1 is the voice (or the recording's
+audio, linked to V1), A2 the music bed, A3 and up the SFX cues as individual
+clips with their levels and the typing track, then the finished mix (disabled). Captions are a
+subtitle track (FCPXML caption role; `captions.srt` elsewhere) and markers sit
+at scene starts, hits and camera moves.
+
+`--overlays none` skips the overlay renders and enables the finished render as
+the picture above V1; `--overlays png` writes PNG sequences instead (referenced
+by the OTIO only). Overlay renders are reused while the story and kit are
+unchanged; `--force` re-renders. `--fps 29.97` (or 59.94, 23.976) writes an exact
+NTSC timeline (30000/1001) with drop-frame timecode and renders the overlays at
+that rate. Camera moves (punch-in), music ducking and word-highlight caption
+styling are not carried; they are listed in `EXPORT.json` warnings. Overlays
+always come from Remotion: the HyperFrames compiler cannot isolate a scene on
+alpha yet.
+
+Every file is read back and compared with the timeline model (clip starts,
+durations, source in points, markers, captions). FCPXML also gets structural
+checks and Apple's DTD check when Final Cut Pro is installed (or `--dtd` /
+`LAUNCHCLIP_FCPXML_DTD` names the DTD); the `.otio` is also opened with the
+Python `opentimelineio` package when it is installed. A failed check exits
+non-zero after writing the files.
 
 ### Renderer eval (npm script, repository checkout)
 
@@ -738,3 +1059,390 @@ speech. Filler-word and noise removal are not part of this step yet.
 - Resume from the failed stage with the same options that affect its inputs.
 - Do not use fallback or quality-gate bypass flags merely to obtain a green exit
   code.
+
+## Command usage
+
+<!-- usage:start -->
+<!-- Generated from src/cli_usage.js by npm run skills:sync; edit the table there. -->
+
+Every command answers `--help` or `-h` with its own usage (`launchclip finish --help`, `launchclip story validate --help`).
+
+- `doctor`: Check the host: Node, FFmpeg, browsers, renderers and provider keys (presence only).
+
+  ```text
+  launchclip doctor
+  ```
+
+- `skills list`: List the bundled agent skills.
+
+  ```text
+  launchclip skills list
+  ```
+
+- `skills path`: Print the path of a bundled skill.
+
+  ```text
+  launchclip skills path [launchclip-create-video|launchclip-create-video-remotion|launchclip-cli]
+  ```
+
+- `skills install`: Install the bundled skills for Codex or Claude.
+
+  ```text
+  launchclip skills install --agent codex|claude [--skill launchclip-create-video|launchclip-create-video-remotion|launchclip-cli|all] [--force]
+  ```
+
+- `style create`: Create a style pack from a video, a style directory or reference media.
+
+  ```text
+  launchclip style create <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]
+  launchclip style create <name> --from-reference a.mp4 [b.mp4 ...] [--from-images x.png ...] [--font-hint "Display, Body"] [--root .launchclip/styles] [--force]
+  ```
+
+- `style save`: Save a style pack from a video or style directory.
+
+  ```text
+  launchclip style save <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]
+  ```
+
+- `style list`: List project and built-in style packs.
+
+  ```text
+  launchclip style list [--root .launchclip/styles]
+  ```
+
+- `style show`: Show a style pack (upgraded in memory when it is v1).
+
+  ```text
+  launchclip style show <name|path> [--root .launchclip/styles]
+  ```
+
+- `style upgrade`: Upgrade a v1 style pack to v2 on disk.
+
+  ```text
+  launchclip style upgrade <name> [--root .launchclip/styles]
+  ```
+
+- `style check`: Check a rendered project against a style pack.
+
+  ```text
+  launchclip style check <project> --against <name|path> [--video renders/final.mp4] [--out qa/style-check.json]
+  ```
+
+- `intake`: Write a production workspace from a source (repository, product, topic or voiceover).
+
+  ```text
+  launchclip intake <source> [--profile standard|cinematic] [--kind repository|product|topic|voiceover] [--resource path] [--assets path] [--style auto|family|name|path] [--style-root .launchclip/styles] [--style-file frame.md] [--style-reference path|url] [--reference url] [--voiceover audio|video] [--transcript text] [--presenter video] [--heygen-avatar video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
+  ```
+
+- `edit-recording`: Edit a raw recording: trim silence, drop retakes and fillers, QA the joins.
+
+  ```text
+  launchclip edit-recording <media> --out <directory> [--recording-transcript word-timed.json] [--silence-duration 0.8] [--silence-padding 0.15] [--retake-window 90] [--retake-decisions semantic.json|--retake-model local-model] [--min-repeat-words 6] [--recording-model base.en] [--keep-fillers] [--no-audio-silence] [--audio-silence-duration 0.4] [--audio-silence-padding 0.08] [--audio-threshold-db -35] [--qa-model local-model|--qa-decisions reviews.json] [--qa-attempts 3] [--qa-recording-model base.en] [--no-trim-silence] [--aspect 16:9|9:16|1:1]
+  ```
+
+- `broll-plan`: Plan b-roll inserts from a word-timed transcript.
+
+  ```text
+  launchclip broll-plan <word-timed.json> --out <directory> [--aspect 16:9|9:16|1:1] [--duration seconds]
+  ```
+
+- `produce`: Run the model-directed production lane end to end.
+
+  ```text
+  launchclip produce <source> [--profile standard|cinematic] [intake flags] [--heygen-avatar generated.mp4] [--review] [--model-policy cost-aware|local-first|quality|free] [--free-model-candidates 5] [--free-model-state path] [--free-vision-model-candidates 3] [--free-vision-model-state path] [--refresh-free-models] [--free-scene-concurrency 3] [--local-model qwen2.5-coder:latest] [--frame-route provider:model@reasoning] [--rendered-candidates 2] [--rendered-candidate-shots 2] [--candidate-judge-route provider:model@reasoning] [--candidate-judge-reasoning high] [--candidate-judge-max-output-tokens 5000] [--critic-route provider:model@reasoning] [--repair-route provider:model@reasoning] [--brand-assets-dir path] [--edit-recording] [--recording-transcript word-timed.json] [--no-trim-silence] [--planning-mode auto|single|hierarchical] [--voice-id id] [--sfx-dir path] [--concurrency 4] [--max-frame-cost-usd 5] [--no-audio] [--fast-eval]
+  ```
+
+- `evidence`: Collect evidence for a production workspace.
+
+  ```text
+  launchclip evidence <workspace>
+  ```
+
+- `source-preprocess`: Preprocess the workspace's source media.
+
+  ```text
+  launchclip source-preprocess <workspace> [--edit-recording] [--recording-transcript word-timed.json] [--no-trim-silence] [--silence-duration seconds] [--silence-padding seconds]
+  ```
+
+- `source-media`: Sample and describe the workspace's source media.
+
+  ```text
+  launchclip source-media <workspace> [--media-samples 12] [--media-reasoning high] [--transcribe-all]
+  ```
+
+- `resolve-entities`: Resolve brand entities and logos for the workspace.
+
+  ```text
+  launchclip resolve-entities <workspace> [--brand-assets-dir ~/.launchclip/brand-assets]
+  ```
+
+- `concept-tournament`: Generate and judge concepts for the workspace.
+
+  ```text
+  launchclip concept-tournament <workspace> [--concept-route provider:model@reasoning] [--concept-judge-route provider:model@reasoning]
+  ```
+
+- `retention-story`: Write and edit the retention story.
+
+  ```text
+  launchclip retention-story <workspace> [--story-writer-route provider:model@reasoning] [--story-editor-route provider:model@reasoning]
+  ```
+
+- `cinematic-narration`: Generate the cinematic narration.
+
+  ```text
+  launchclip cinematic-narration <workspace> [--voice-id id] [--voice-model id] [--no-voice]
+  ```
+
+- `creative-plan`: Write the creative plan.
+
+  ```text
+  launchclip creative-plan <workspace> [--planning-mode auto|single|hierarchical] [--hierarchical-threshold 180] [--chapter-concurrency 3] [--plan-semantic-attempts 2] [--visual-history-dir path] [--visual-history-limit 8] [--visual-similarity-limit 0.58] [--max-output-tokens 48000] [--foreground]
+  ```
+
+- `production-audio`: Generate voice, music and SFX for the workspace.
+
+  ```text
+  launchclip production-audio <workspace> [--voice-id id] [--music-model music_v2] [--sfx-dir path] [--no-voice] [--no-music] [--no-sfx]
+  ```
+
+- `direct-frames`: Author the frames for the creative plan.
+
+  ```text
+  launchclip direct-frames <workspace> [--profile standard|cinematic] [--model-policy cost-aware|local-first|quality|free] [--free-model-candidates 5] [--free-model-state path] [--refresh-free-models] [--free-scene-concurrency 3] [--blueprint-semantic-attempts 2] [--frame-route provider:model@reasoning] [--rendered-candidates 2] [--rendered-candidate-shots 2] [--candidate-judge-route provider:model@reasoning] [--candidate-judge-reasoning high] [--candidate-judge-max-output-tokens 5000] [--concurrency 4] [--semantic-attempts 2] [--pending-frame-reasoning medium] [--max-frame-cost-usd amount] [--allow-frame-fallback]
+  ```
+
+- `assemble`: Assemble the production composition.
+
+  ```text
+  launchclip assemble <workspace> [--music-volume 0.35]
+  ```
+
+- `production-verify`: Verify the assembled production.
+
+  ```text
+  launchclip production-verify <workspace> [--inspect-samples 15] [--shot-inspect-concurrency 2] [--snapshot-frames 12]
+  ```
+
+- `production-draft`: Render and critique a draft of the production.
+
+  ```text
+  launchclip production-draft <workspace> [--model-policy free] [--draft-quality draft] [--critic-route provider:model@reasoning] [--free-vision-model-state path] [--shot-inspect-concurrency 2] [--reference-video local.mp4]
+  ```
+
+- `production-preview`: Open the production preview server.
+
+  ```text
+  launchclip production-preview <workspace> [--port 3002] [--no-open]
+  ```
+
+- `review`: Review a workspace (production studio review, or the legacy packet review).
+
+  ```text
+  launchclip review <workspace> [--model-policy free] [--port 3002] [--no-open] [--critic-route provider:model@reasoning] [--repair-route provider:model@reasoning]
+  launchclip review <workspace>
+  ```
+
+- `production-critique`: Run the visual critic on the production draft.
+
+  ```text
+  launchclip production-critique <workspace> [--critic-route provider:model@reasoning] [--model-policy free] [--free-vision-model-candidates 3] [--free-vision-model-state path] [--refresh-free-vision-models] [--critic-reasoning xhigh] [--critic-pro]
+  ```
+
+- `production-repair`: Repair the production from the critic's findings.
+
+  ```text
+  launchclip production-repair <workspace> [--model-policy cost-aware|local-first|quality|free] [--repair-route provider:model@reasoning] [--repair-text-only] [--repair-scoped-source] [--repair-semantic-attempts 2] [--repair-snapshots 8] [--repair-issues-per-shot 4] [--max-patch-ratio 0.35]
+  ```
+
+- `production-render`: Render the approved production at final quality.
+
+  ```text
+  launchclip production-render <workspace> --approve [--quality high] [--critic-route provider:model@reasoning] [--shot-inspect-concurrency 2] [--reference-video local.mp4]
+  ```
+
+- `story validate`: Validate a storyboard.json (errors and warnings).
+
+  ```text
+  launchclip story validate <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out report.json]
+  ```
+
+- `story resolve`: Resolve a storyboard.json's time anchors to seconds.
+
+  ```text
+  launchclip story resolve <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out story.resolved.json]
+  ```
+
+- `story compile`: Compile a story project for HyperFrames or Remotion.
+
+  ```text
+  launchclip story compile <project> --renderer hyperframes|remotion [--out dir]
+  ```
+
+- `story plan`: Plan a storyboard.json from a brief with a model.
+
+  ```text
+  launchclip story plan --brief brief.md [--narration NARRATION.json] [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] [--base assets/recording.mp4] [--voice assets/audio/narration.wav] [--format 1080x1920] [--fps 30] [--duration seconds] [--brand brand.json] [--style name|path] [--max-repairs 2]
+  ```
+
+- `cinematic-check`: Check a finished project against the cinematic gates and receipts.
+
+  ```text
+  launchclip cinematic-check <project> [--renderer hyperframes|remotion] [--video renders/draft.mp4] [--audio-manifest AUDIO-MANIFEST.json] [--music-volume 0.32] [--expect-audio] [--critique qa/critic.json]
+  ```
+
+- `layout-check`: Check a storyboard's declared geometry: safe zone, collisions, caption band (at rest and through camera moves), text size.
+
+  ```text
+  launchclip layout-check <project> [--profile shorts|landscape] [--json]
+  ```
+
+- `module fit`: Measure one module's params against the frame and report what fits.
+
+  ```text
+  launchclip module fit <module> [--params params.json] [--aspect 16:9|9:16] [--story storyboard.json] [--brand brand.json] [--duration 4] [--json]
+  ```
+
+- `finish`: Storyboard to mastered video in one command: voice, music, SFX, render, master and gates. --candidate renders a draft candidate with no paid calls (synth or no music, a cached or free voice, else the test voice; no evidence or gates) and records it in the rendered-candidate receipt.
+
+  ```text
+  launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--voice kokoro|elevenlabs|supplied|test] [--music synth|elevenlabs|none] [--music-regenerate] [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] [--scene s3[,s4] | --preview-scene s3] [--force] [--json]
+  launchclip finish <candidate-project> --candidate <id> [--into <project>] [--kind opening|transition] [--boundary s3] [--comparison id] [--at 0.4,1.2,2.6] [--music synth|none] [--renderer remotion|hyperframes] # cheap rendered candidate: no paid calls, receipt in <project>/qa/rendered-candidates.json
+  ```
+
+- `voice`: Generate the narration (NARRATION.json and the voice track) for a project or a text.
+
+  ```text
+  launchclip voice <project | --text "..."> [--voice kokoro|elevenlabs|test|<voice id>] [--provider kokoro|elevenlabs|test] [--speed 1.2] [--out NARRATION.json] [--json]
+  ```
+
+- `export`: Export an editable timeline for Final Cut Pro, Premiere Pro or Resolve.
+
+  ```text
+  launchclip export <project> --format fcpxml|premiere|edl|otio|all [--overlays prores4444|png|none] [--out exports/] [--fps 24|25|29.97|30|60] [--name name] [--absolute] [--force] [--json]
+  ```
+
+- `sfx seed`: Seed the user SFX library (ElevenLabs, or the procedural kit with --provider synth). --missing fills only the families the library lacks (sfx list names them).
+
+  ```text
+  launchclip sfx seed [--provider elevenlabs|synth] [--variants 3] [--only whoosh,impact | --missing] [--reroll typing] [--dir .launchclip/sfx] [--force]
+  ```
+
+- `sfx reroll`: Regenerate one SFX family.
+
+  ```text
+  launchclip sfx reroll <family> [--dir .launchclip/sfx]
+  ```
+
+- `sfx list`: List the SFX libraries, what each family resolves to, and the families missing compared with the prompt set.
+
+  ```text
+  launchclip sfx list [--dir .launchclip/sfx]
+  ```
+
+- `sfx audition`: Write one audition file with every variant of a family.
+
+  ```text
+  launchclip sfx audition <family> [--dir .launchclip/sfx] [--out audition.wav] [--gap 0.35]
+  ```
+
+- `init`: Initialise a packet workspace for a repository.
+
+  ```text
+  launchclip init <repo> --out <workspace>
+  ```
+
+- `demo`: Capture a demo for the packet workspace.
+
+  ```text
+  launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]
+  ```
+
+- `plan`: Plan the packet video.
+
+  ```text
+  launchclip plan <workspace> --format short-15 --renderer none|hyperframes [--style proof-card|ugc-split|ugc-demo-punchy|premium-product-short|data-story-benchmark] [--assets-dir path/to/assets] [--talking-head heygen --avatar-id avatar_123]
+  ```
+
+- `captions`: Write social captions for the packet.
+
+  ```text
+  launchclip captions <workspace> --platforms x,linkedin,tiktok,bluesky
+  ```
+
+- `render`: Render the packet video.
+
+  ```text
+  launchclip render <workspace> --provider product-videogen --dry-run
+  launchclip render <workspace> --provider hyperframes [--quality high] [--strict-all] [--inspect-samples 15] [--skip-quality-gates] [--voiceover local-say|elevenlabs] [--music elevenlabs]
+  launchclip render <workspace> --provider remotion [--assets-dir path/to/assets] [--voiceover local-say|elevenlabs]
+  launchclip render <workspace> --provider local-ffmpeg [--voiceover local-say|elevenlabs]
+  ```
+
+- `analyze-render`: Analyse a rendered packet video.
+
+  ```text
+  launchclip analyze-render <workspace> [--video video/launchclip-hyperframes.mp4]
+  ```
+
+- `submit-review`: Submit the packet for review.
+
+  ```text
+  launchclip submit-review <workspace> --provider product-videogen --dry-run
+  ```
+
+- `validate`: Validate a packet workspace.
+
+  ```text
+  launchclip validate <workspace>
+  ```
+
+- `run`: Run the whole packet lane for a repository.
+
+  ```text
+  launchclip run <repo> --out <workspace> --demo-cmd "npm run smoke" --demo-media path/to/demo.mp4 --angle "..." --audience "..." [--style premium-product-short --assets-dir path/to/assets --talking-head heygen]
+  ```
+
+- `script`: Write a teleprompter script from the planned voiceover.
+
+  ```text
+  launchclip script <workspace> [--wpm 150]          # teleprompter from the planned voiceover
+  ```
+
+- `align`: Align a recorded take to word timings and a motion timeline.
+
+  ```text
+  launchclip align <workspace> --media take.mp4      # whisper word timings + heuristic motion timeline
+  launchclip align <workspace> --media take.mp4 --words words.json
+  ```
+
+- `motion-render`: Render video/motion.mp4 with the motion engine.
+
+  ```text
+  launchclip motion-render <workspace>               # render video/motion.mp4 via the motion engine
+  ```
+
+- `music`: Generate a music bed for a workspace.
+
+  ```text
+  launchclip music <workspace> [--prompt "..."] [--duration 18] [--output music/bed.mp3] [--music-model music_v1] [--force]
+  ```
+
+- `preprocess-presenter`: Preprocess presenter footage (speed, crop).
+
+  ```text
+  launchclip preprocess-presenter public/base/presenter.mp4 [--out public/base/presenter-prepped.mp4] [--speed 1.08] [--crop-x center]
+  ```
+
+- `direct`: Direct a talking-head or TTS video from a creative prompt.
+
+  ```text
+  launchclip direct <workspace> --voice record --prompt "creative direction" # writes script + teleprompter, waits for take
+  launchclip direct <workspace> --voice record --take take.mp4 [--words w.json] # aligns take, directs, renders
+  launchclip direct <workspace> --voice tts --prompt "creative direction" # generates voice + timings, directs, renders
+  launchclip direct <workspace> --prompt "creative direction" [--format software_demo|explainer]
+  [--words w.json --take base/take.mp4 | --script-text "..."] [--duration 45] [--no-render] [--quality fast|high]
+  [--music-prompt "..."] [--no-music] [--sfx-dir path/to/sfx] [--allow-placeholder-sfx]
+  [--provider anthropic|openai] [--model <id>]   # LLM: ANTHROPIC_API_KEY (default) or OPENAI_API_KEY
+  ```
+<!-- usage:end -->

@@ -370,6 +370,24 @@ test("kinetic-words stack layout keeps earlier beats and dims them", () => {
   checkEmitter(model);
 });
 
+test("kinetic-words: a beat at t <= one frame is settled on frame 0 with no enter, in every variant", () => {
+  for (const variant of ["scale", "rise"]) for (const at of [0, 1 / 30]) for (const layout of ["replace", "stack"]) {
+    const model = resolve("kinetic-words", { variant, layout, words: [{ text: "Ship it", at, emphasis: layout === "replace" }, { text: "today", at: 0.8 }] });
+    const label = `${variant}/${layout}/at ${at}`;
+    const start = model.start;
+    // No tween animates beat 0 (or its lines and bar) in before or at frame 0.
+    const enters = model.animations.filter((a) => /^beat-0(-|$)/.test(a.node) && a.start < start + 0.5);
+    assert.deepEqual(enters, [], label);
+    assert.equal(model.content.beats[0].settleTime, model.content.beats[0].time, label);
+    const props = sampleNode(model, "beat-0", start);
+    assert.ok(props.opacity === undefined || props.opacity === 1, label);
+    checkEmitter(model);
+  }
+  // A later beat still enters with its animation.
+  const later = resolve("kinetic-words", { words: [{ text: "Ship it", at: 0.1 }] });
+  assert.ok(later.animations.some((a) => a.node === "beat-0" && a.from.opacity === 0), "beat at 0.1 s still enters");
+});
+
 test("kinetic-words validates beats", () => {
   const bad = (params, pattern) => assert.throws(() => resolve("kinetic-words", params), pattern);
   bad({}, /kinetic-words: params\.words is required/);
@@ -565,6 +583,33 @@ test("cta validates its params and the pill contrast", () => {
   bad({ action: "Follow" }, /needs a scene of at least 2 s/, { duration: 1.5 });
   bad({ action: "Follow", handle: "@a" }, /brand contrast too low: ink on primary/, { brand: { colors: { ...BRAND.colors, ink: "#ffffff" } } });
   assert.ok(resolve("cta", { action: "Follow" }, { brand: { colors: { ...BRAND.colors, ink: "#ffffff" } } }), "no pill, no ink check");
+});
+
+test("cta fits repo URLs: a 64-character handle limit, and the pill and detail shrink to the 44 px floor before failing", () => {
+  const repo = "github.com/rogerchappel/launchclip";
+  // Landscape: the full repo URL fits at the default 50 px.
+  const wide = resolve("cta", { action: "Star it on GitHub", handle: repo, detail: `Open source: ${repo}` }, { format: LANDSCAPE, aspect: "16:9" });
+  assert.equal(wide.content.handle, repo);
+  assert.equal(wide.styles["pill-body"].fontSize, "50px");
+  assert.equal(wide.styles.detail.fontSize, "52px");
+  assert.deepEqual(wide.content.detailLines, [`Open source: ${repo}`]);
+  // Portrait: the detail that failed in the blind test ("too long for two lines") now resolves
+  // at the floor or above, wrapping the URL after a slash when words alone cannot fit.
+  const tall = resolve("cta", { action: "Star it on GitHub", detail: `Open source: ${repo}`, handle: "rogerchappel/launchclip" });
+  assert.ok(tall.content.detailLines.length <= 2);
+  assert.equal(tall.content.detailLines.join(" ").replace(/\/ /g, "/"), `Open source: ${repo}`.replace(/\/ /g, "/"));
+  assert.ok(Math.min(...tall.content.keyTextPx) >= 44, `key text ${tall.content.keyTextPx}`);
+  // A handle a little too wide at 50 px shrinks instead of failing.
+  const shrunk = resolve("cta", { action: "Star it", handle: "rogerchappel/launchclip-cli", icon: "none" });
+  assert.ok(Number.parseFloat(shrunk.styles["pill-body"].fontSize) < 50 && Number.parseFloat(shrunk.styles["pill-body"].fontSize) >= 44);
+  // The default sample is untouched (50 px pill, 52 px detail).
+  const sample = resolve("cta", CTA);
+  assert.equal(sample.styles["pill-body"].fontSize, "50px");
+  assert.equal(sample.styles["pill-body"].gap, "20px");
+  assert.equal(sample.styles.detail.fontSize, "52px");
+  // Past the floor it still fails, naming the floor and the github.com/ hint.
+  assert.throws(() => resolve("cta", { action: "Star it", handle: repo }), /needs \d+ px even at the 44 px text floor.*drop the 'github\.com\/' prefix/);
+  assert.throws(() => resolve("cta", { action: "Star it", handle: `https://${"x".repeat(60)}` }), /params\.handle must be a string of 1–64 characters/);
 });
 
 test("cta parity fixture resolves", async () => {

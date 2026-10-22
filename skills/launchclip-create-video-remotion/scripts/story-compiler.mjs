@@ -23,8 +23,11 @@ import path from 'node:path';
 import { deriveBoundaries, storyBase, validateStory } from './story.mjs';
 import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from './modules.mjs';
 import { gsapVars, layerStateAt, sceneWindows } from './transitions.mjs';
+import { backgroundFieldTiles, backgroundLayer, cameraPlan, captionDipWindows, overlayOps, placementTransform, sceneObjectLookup } from './camera-world.mjs';
 import { getEase } from './motion.mjs';
-import { captionCss, CAPTION_DEFAULT_COLORS, captionChunksFrom, captionRuntime, chunkWords, narrationWords } from './captions.mjs';
+import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTweens, driftGsap, sceneAmbient, sceneDrift } from './ambient.mjs';
+import { profileGeometry } from './layout-check.mjs';
+import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from './captions.mjs';
 import { brandFontStacks, fontFaceRule, fontSlug, frozenFontFaces, projectFontFamilies, registryFontFaces } from './fonts.mjs';
 import { EMITTERS as EDITORIAL_EMITTERS } from './editorial-ui-modules.mjs';
 import { EMITTERS as CATALOG_A_EMITTERS } from './hyperframes-catalog-a.mjs';
@@ -105,8 +108,49 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   const motion = [];
   const hide = [];
   const boundaries = isolate ? [] : deriveBoundaries(story);
+  // Ambient motion (kit/core/ambient.mjs): the background field inside every
+  // track-0 plate and the hold drift wrapper around each scene's content. A
+  // sceneFilter compile is a module review and, like ModuleReview, has none.
+  const field = isolate ? null : ambientField(story);
+  const geometry = profileGeometry({ width: W, height: H });
+  const fieldLayer = (key, from, to) => {
+    if (!field) return { html: '', motion: [] };
+    const html = field.blobs.map((blob) => {
+      const state = blobStateAt(blob, from);
+      return `<div id="lc-amb-${key}-${blob.id}" class="lc-ambient-blob" style="width:${num(blob.size)}px;height:${num(blob.size)}px;background:${blobBackground(blob)};transform:translate(${num(state.x)}px, ${num(state.y)}px) scale(${round(state.scale, 5)})"></div>`;
+    }).join('');
+    const lines = field.blobs.flatMap((blob) => blobTweens(blob, from, to).map((tw) => `tl.fromTo(${js(`#lc-amb-${key}-${blob.id}`)}, ${js({ [tw.prop]: tw.from, force3D: false })}, ${js({ [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false, force3D: false })}, ${num(tw.at)});`));
+    return { html: `<div id="lc-amb-field-${key}" class="lc-ambient-field" aria-hidden="true">${html}</div>`, motion: lines };
+  };
+  // World mode: the field as one continuous backdrop in the depth layer.
+  // Every copy of a blob (camera-world.mjs backgroundFieldTiles) sits in a
+  // static translate wrapper and shares the blob's class, so one set of
+  // tweens per blob moves all of its copies; nothing is clipped, so the field
+  // has no edge anywhere the camera travels.
+  const worldFieldLayer = (tiles) => {
+    if (!field || !tiles.length) return { html: '', motion: [] };
+    const byId = new Map(field.blobs.map((blob) => [blob.id, blob]));
+    const html = tiles.map((tile) => {
+      const blob = byId.get(tile.blob);
+      const state = blobStateAt(blob, 0);
+      return `<div class="lc-world-tile" style="transform:${fieldTileTransform(tile)}"><div class="lc-ambient-blob lc-amb-world-${blob.id}" style="width:${num(blob.size)}px;height:${num(blob.size)}px;background:${blobBackground(blob)};transform:translate(${num(state.x)}px, ${num(state.y)}px) scale(${round(state.scale, 5)})"></div></div>`;
+    }).join('');
+    const used = field.blobs.filter((blob) => tiles.some((tile) => tile.blob === blob.id));
+    const lines = used.flatMap((blob) => blobTweens(blob, 0, D).map((tw) => `tl.fromTo(${js(`.lc-amb-world-${blob.id}`)}, ${js({ [tw.prop]: tw.from, force3D: false })}, ${js({ [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false, force3D: false })}, ${num(tw.at)});`));
+    return { html: `<div id="lc-amb-field-world" class="lc-world-field" aria-hidden="true">${html}</div>`, motion: lines };
+  };
   const boundaryFor = new Map(boundaries.map((entry) => [entry.to_id, entry]));
   let z = 10;
+  // World camera (kit/core/camera-world.mjs): world mode, or a camera
+  // transition in a cuts story. Plates then live inside one world container
+  // (#lc-cam-pan in #lc-cam-zoom in #lc-cam-drift in #lc-camera) that the
+  // camera ops move; without a camera nothing below changes.
+  const plan = isolate ? null : cameraPlan(story, { windows, objects: sceneObjectLookup(story, (scene, value) => resolveModule(scene, value)) });
+  const world = [];
+  const cameraMotion = plan ? cameraGsapLines(plan) : [];
+  const worldField = plan?.background ? worldFieldLayer(backgroundFieldTiles(plan, field)) : { html: '', motion: [] };
+  cameraMotion.push(...worldField.motion);
+  const plateStyle = (sceneId, placement) => (plan && placement ? `;transform-origin:0 0;transform:${placementTransform(placement)}` : '');
 
   const build = (entry, { idSuffix = '', track, clone = false } = {}) => {
     const scene = idSuffix ? { ...entry.scene, id: `${entry.scene.id}${idSuffix}` } : entry.scene;
@@ -153,11 +197,30 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       if (follow.unsupported.length) warnings.push(`${entry.scene.id}: root media does not follow the ${follow.unsupported.join(', ')} of its ${entry.transitionIn?.type ?? 'transition'} (HyperFrames keeps <video>/<audio> on the root)`);
     }
     const boundary = boundaryFor.get(entry.scene.id);
-    markup.push(`<div id="${outer}" class="lc-scene${entry.plate ? ' lc-plate' : ''}" data-launchclip-scene="${id}" data-launchclip-module="${attr(entry.scene.module)}" data-launchclip-start="${num(entry.start)}" data-launchclip-render-end="${num(entry.renderEnd)}"${boundaryAttrs(boundary)} style="z-index:${z}"><div id="${inner}" class="lc-layer">${media.html}</div></div>`);
+    const inWorld = Boolean(plan && entry.plate);
+    const worldMode = plan?.mode === 'world';
+    const worldClass = inWorld && worldMode ? ' lc-world-plate' : '';
+    if (inWorld && media.elements.length) warnings.push(`${entry.scene.id}: root media stays on the root and does not follow the world camera`);
+    // Ambient field: inside every plate, except in world mode, where the one
+    // field is the camera's depth layer (#lc-world-bg) instead, tiled across the world.
+    const ambient = entry.plate && !worldMode && sceneAmbient(story, entry.scene).background ? fieldLayer(id, entry.start, entry.renderEnd) : { html: '', motion: [] };
+    const drift = isolate ? null : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry });
+    const content = drift ? `<div id="lc-drift-${id}" class="lc-drift" style="transform-origin:${num(drift.origin.x)}px ${num(drift.origin.y)}px">${media.html}</div>` : media.html;
+    // Overlays slide 1.15× the camera's travel (parallax) inside a wrapper.
+    const parallax = plan && !entry.plate ? overlayOps(plan, { start: entry.start, end: entry.renderEnd }) : [];
+    const layer = `<div id="${inner}" class="lc-layer">${ambient.html}${content}</div>`;
+    const body = parallax.length ? `<div id="lc-par-${id}" class="lc-parallax">${layer}</div>` : layer;
+    (inWorld ? world : markup).push(`<div id="${outer}" class="lc-scene${entry.plate ? ' lc-plate' : ''}${worldClass}" data-launchclip-scene="${id}" data-launchclip-module="${attr(entry.scene.module)}" data-launchclip-start="${num(entry.start)}" data-launchclip-render-end="${num(entry.renderEnd)}"${boundaryAttrs(boundary)} style="z-index:${z}${inWorld ? plateStyle(entry.id, plan.placements[entry.id]) : ''}">${body}</div>`);
     css.push(out.css ?? '');
     motion.push(`// ${entry.scene.id} (${entry.scene.module}) ${num(entry.start)}–${num(entry.renderEnd)}s`);
     motion.push(...toggle(`#${outer}`, entry.start, entry.renderEnd, D));
     motion.push(...entry.tweens.map((tw) => tweenCode(`#${inner}`, tw)));
+    motion.push(...opsGsap(parallax, { overlay: `#lc-par-${id}` }));
+    motion.push(...ambient.motion);
+    if (drift) {
+      const { from, to, position } = driftGsap(drift);
+      motion.push(`tl.fromTo(${js(`#lc-drift-${id}`)}, ${js(from)}, ${js(to)}, ${num(position)});`);
+    }
     if (out.motion) motion.push(`{\n${out.motion}\n}`);
     motion.push(...mediaMotion);
     z += 10;
@@ -172,7 +235,12 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const outer = `lc-scene-${id}`, inner = `lc-layer-${id}`;
     const media = hoistMedia(out.html ?? '');
     const boundary = boundaries.find((item) => item.to_id === loop.sceneId && Math.abs(item.start_seconds - loop.start) < 1e-3);
-    markup.push(`<div id="${outer}" class="lc-scene lc-plate lc-loop" data-launchclip-scene="${id}" data-launchclip-loop-to="${attr(loop.sceneId)}" data-launchclip-start="${num(loop.start)}"${boundaryAttrs(boundary)} style="z-index:${z}"><div id="${inner}" class="lc-layer">${unclip(media.html)}</div></div>`);
+    // The clone holds the scene's first state, where its drift is identity;
+    // the field keeps moving with absolute time (in world mode it is the
+    // camera's depth layer instead).
+    const ambient = plan?.mode !== 'world' && sceneAmbient(story, entry.scene).background ? fieldLayer(id, loop.start, loop.end) : { html: '', motion: [] };
+    (plan ? world : markup).push(`<div id="${outer}" class="lc-scene lc-plate lc-loop${plan?.mode === 'world' ? ' lc-world-plate' : ''}" data-launchclip-scene="${id}" data-launchclip-loop-to="${attr(loop.sceneId)}" data-launchclip-start="${num(loop.start)}"${boundaryAttrs(boundary)} style="z-index:${z}${plateStyle(loop.sceneId, plan?.loop)}"><div id="${inner}" class="lc-layer">${ambient.html}${unclip(media.html)}</div></div>`);
+    motion.push(...ambient.motion);
     if (media.elements.length) warnings.push(`${loop.sceneId}: root media is not repeated in the loop ending`);
     css.push(out.css ?? '');
     motion.push(`// loop ending → ${loop.sceneId} at its first state, ${num(loop.start)}–${num(loop.end)}s`);
@@ -182,6 +250,11 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       motion.push(`{\nconst loopTl = gsap.timeline({ paused: true });\n((tl) => {\n${out.motion}\n})(loopTl);\ntl.fromTo(loopTl, { time: ${num(entry.scene.start)} }, { time: ${num(entry.scene.start)}, duration: ${num(Math.max(0.001, loop.end - loop.start + TOGGLE_LEAD))}, ease: 'none', immediateRender: false }, ${num(Math.max(0, loop.start - TOGGLE_LEAD))});\n}`);
     }
     z += 10;
+  }
+
+  if (plan) {
+    motion.push(`// world camera (${plan.mode}, ${plan.grammar}): ${plan.moves.length} move(s)${plan.drift ? ', drift' : ''}${plan.parallax ? ', parallax' : ''}${plan.blurSamples.length ? ', motion blur' : ''}`);
+    motion.push(...cameraMotion);
   }
 
   // Base: one muted root <video> per trim segment (HyperFrames lifts and
@@ -214,12 +287,16 @@ export async function compileStoryToHyperFrames(story, options = {}) {
 
   // Captions.
   let captions = null;
-  const overlay = isolate ? null : (story.overlays ?? []).find((entry) => entry?.type === 'captions' && entry.style !== 'none');
+  const overlay = isolate ? null : captionsOverlayOf(story);
   if (overlay) {
     const chunks = await loadCaptionChunks(story, overlay, sourceDir, warnings);
     if (chunks?.length) {
       for (const range of overlay.hide ?? []) hide.push([Number(range[0]), Number(range[1])]);
-      captions = { chunks, hide };
+      const captionsPlan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide });
+      // Camera moves that sweep panels through the band dip the captions out
+      // (captions.hide_during_moves, camera-world.mjs captionDipWindows).
+      const dips = captionDipTweens(captionDipWindows(plan, captionMoveHide(overlay)));
+      if (captionsPlan.nodes.length) captions = { chunks, hide, plan: captionsPlan, dips };
     }
   }
 
@@ -244,9 +321,12 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     #lc-bg { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; background: ${bg}; }
     .lc-scene { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; opacity: 0; isolation: isolate; overflow: hidden; pointer-events: none; }
     .lc-layer { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; }
-    .lc-plate > .lc-layer { background: ${bg}; }
+    .lc-plate > .lc-layer { background: ${bg}; }${plan ? `\n    ${cameraCss(plan, W, H)}` : ''}
+    .lc-ambient-field { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; overflow: hidden; pointer-events: none; }
+    .lc-ambient-blob { position: absolute; left: 0; top: 0; border-radius: 50%; transform-origin: 50% 50%; }
+    .lc-drift { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; }
     ${placeholderCss()}
-    ${captions ? `${captionCss(format).trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}
+    ${captions ? `${captions.plan.css.trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}
     ${css.filter(Boolean).join('\n    ')}
   </style>
   <script>${FONT_WARMUP}</script>
@@ -256,15 +336,16 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     <div id="lc-bg" class="clip" data-start="0" data-duration="${num(D)}" data-track-index="1"></div>
     ${baseMarkup.join('\n    ')}
     ${audio}
+    ${plan ? cameraMarkup(plan, story.brand, world, worldField.html) : ''}
     ${hoisted.join('\n    ')}
     ${markup.join('\n    ')}
     ${captions ? '<div id="lc-captions" class="lc-captions"></div>' : ''}
-    ${captions ? `<script>\n${captionRuntime(captions.chunks)}</script>` : ''}
+    ${captions ? `<script>\n${captionPlanRuntime(captions.plan)}</script>` : ''}
     <script>
       window.__timelines = window.__timelines || {};
       const tl = gsap.timeline({ paused: true });
 ${motion.join('\n').split('\n').map((line) => `      ${line}`).join('\n')}
-      ${captions ? `window.mountCaptions(tl, document.getElementById("lc-captions"), { hide: ${JSON.stringify(captions.hide)} });` : ''}
+      ${captions ? 'window.mountCaptions(tl, document.getElementById("lc-captions"));' : ''}${captions?.dips.length ? `\n      // captions dip out during sweeping camera moves\n      ${captions.dips.map((dip) => `tl.fromTo('#lc-captions', { opacity: ${dip.from} }, { opacity: ${dip.to}, duration: ${num(dip.dur)}, ease: 'none', immediateRender: false }, ${num(dip.at)});`).join('\n      ')}` : ''}
       window.__timelines["${COMPOSITION_ID}"] = tl;
     </script>
   </div>
@@ -284,6 +365,66 @@ ${motion.join('\n').split('\n').map((line) => `      ${line}`).join('\n')}
     files.push('index.html');
   }
   return { html, files, warnings, boundaries, compositionId: COMPOSITION_ID };
+}
+
+// World camera containers. #lc-world-bg is the background depth layer (world
+// mode); #lc-camera carries the motion-blur filter (an SVG feGaussianBlur with
+// separate x/y deviations, switched on through --lc-cam-filter only while a
+// blurred move runs), then drift, zoom (about the canvas centre) and pan.
+const CAMERA_SELECTORS = Object.freeze({ pan: '#lc-cam-pan', zoom: '#lc-cam-zoom', drift: '#lc-cam-drift', background: '#lc-world-bg' });
+
+function cameraMarkup(plan, brand, plates, field = '') {
+  const parts = [];
+  if (plan.background) {
+    // The depth layer (world mode): ambient motion's background field tiled
+    // across the world when the story has one, else the brand glows (world
+    // plates are transparent, so the one field moves behind them, at 0.3×
+    // with parallax and 1× without, instead of once inside every plate).
+    // Never both: stacked translucent gradients dither differently in the two
+    // renderers (16:9 parity fell to 0.963 with glows under the field).
+    const glows = field ? [] : backgroundLayer(plan, brand).glows;
+    parts.push(`<div id="lc-world-bg" class="lc-world-bg" aria-hidden="true">${glows.map((glow) => `<div class="lc-world-glow" style="left:${glow.left}px;top:${glow.top}px;width:${glow.size}px;height:${glow.size}px;background:${glow.background}"></div>`).join('')}${field}</div>`);
+  }
+  const defs = plan.blurSamples.length ? '<svg class="lc-cam-defs" width="0" height="0" aria-hidden="true"><defs><filter id="lc-cam-blur" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB"><feGaussianBlur id="lc-cam-blur-k" in="SourceGraphic" stdDeviation="0 0"></feGaussianBlur></filter></defs></svg>' : '';
+  parts.push(`${defs}<div id="lc-camera" class="lc-camera" data-launchclip-camera="${plan.mode}"><div id="lc-cam-drift" class="lc-cam"><div id="lc-cam-zoom" class="lc-cam"><div id="lc-cam-pan" class="lc-cam">${plates.join('')}</div></div></div></div>`);
+  return parts.join('\n    ');
+}
+
+function cameraCss(plan, W, H) {
+  const rules = [
+    `.lc-camera { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; overflow: hidden; z-index: 5; --lc-cam-filter: none; filter: var(--lc-cam-filter); }`,
+    `.lc-cam { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; }`,
+    '.lc-cam-defs { position: absolute; left: 0; top: 0; width: 0; height: 0; }',
+    `.lc-parallax { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; }`
+  ];
+  if (plan.mode === 'world') rules.push('.lc-world-plate > .lc-layer { background: transparent; }');
+  if (plan.background) rules.push(`.lc-world-bg { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; pointer-events: none; }`, '.lc-world-glow { position: absolute; border-radius: 50%; }', `.lc-world-field, .lc-world-tile { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; overflow: visible; pointer-events: none; }`);
+  return rules.join('\n    ');
+}
+
+/** Camera ops (camera-world.mjs) → GSAP calls on the camera containers. */
+export function cameraGsapLines(plan) {
+  return opsGsap(plan.ops, CAMERA_SELECTORS);
+}
+
+// Renderer-neutral ops → seek-safe GSAP: explicit fromTo states with
+// immediateRender false, 2D transforms (force3D false keeps text rasterised
+// at its final scale), sets for sampled values.
+function opsGsap(ops, selectors) {
+  const lines = [];
+  for (const op of ops) {
+    if (op.target === 'blur') {
+      const on = op.props.x > 0 || op.props.y > 0;
+      lines.push(`tl.set("#lc-cam-blur-k", { attr: { stdDeviation: "${num(op.props.x)} ${num(op.props.y)}" } }, ${num(op.time)});`);
+      lines.push(`tl.set("#lc-camera", { "--lc-cam-filter": "${on ? 'url(#lc-cam-blur)' : 'none'}" }, ${num(op.time)});`);
+      continue;
+    }
+    const selector = selectors[op.target];
+    if (!selector) continue;
+    if (op.type === 'set') lines.push(`tl.set(${js(selector)}, ${js({ ...op.props, force3D: false })}, ${num(op.time)});`);
+    else lines.push(`tl.fromTo(${js(selector)}, ${js({ ...op.from, force3D: false })}, ${js({ ...op.to, duration: round(op.duration, 6), ease: op.ease, immediateRender: false, force3D: false })}, ${num(op.start)});`);
+  }
+  return lines;
 }
 
 function sceneSelector(filter) {

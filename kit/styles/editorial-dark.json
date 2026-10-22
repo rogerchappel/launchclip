@@ -1,0 +1,71 @@
+{
+  "schema": "launchclip.style.v2",
+  "name": "editorial-dark",
+  "description": "Magazine-like explainers: near-black paper, warm gold accents, a literary serif display face, quiet captions and sparse sound.",
+  "brand": {
+    "colors": {
+      "bg": "#0e0f12",
+      "paper": "#f1ede4",
+      "ink": "#0e0f12",
+      "primary": "#e8b04a",
+      "accent": "#7fb8a4"
+    },
+    "fonts": {
+      "display": "stix-two-text",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "grammar": "editorial"
+  },
+  "camera": {
+    "mode": "cuts"
+  },
+  "ambient": {
+    "level": "subtle"
+  },
+  "captions": {
+    "preset": "minimal-line",
+    "position": "auto"
+  },
+  "sound": {
+    "sfx_density": "low",
+    "music": {
+      "prompt_hints": [
+        "sparse felt piano",
+        "soft analogue pads",
+        "no drums in the first bars"
+      ],
+      "bpm_range": [
+        72,
+        92
+      ],
+      "energy_curve": "slow-build"
+    }
+  },
+  "modules": {
+    "prefer": [
+      "archive-card",
+      "function-chart",
+      "excerpt-window",
+      "equation-lockup",
+      "date-card"
+    ],
+    "avoid": [
+      "logo-row"
+    ],
+    "params": {
+      "checklist": {
+        "presentation": "solid"
+      },
+      "callout": {
+        "presentation": "solid"
+      }
+    }
+  },
+  "layout": {
+    "title_case": false
+  },
+  "loop": true
+}

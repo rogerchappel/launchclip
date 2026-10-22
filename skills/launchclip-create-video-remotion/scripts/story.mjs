@@ -7,11 +7,30 @@
 export const STORY_SCHEMA = "launchclip.story.v1";
 
 export const STORY_LANES = ["motion", "voiceover-motion", "footage-led"];
-export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph"];
+export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan"];
+export const STORY_ENDING_KEYS = Object.freeze(["loop_to", "in", "loop", "final"]);
+export const STORY_ENDING_FINALS = Object.freeze(["hold", "fade", "exit"]);
+// Camera transitions (kit/core/camera-world.mjs): the camera travels to the
+// next scene instead of the layers moving. `push` is a camera dolly only in
+// camera.mode "world"; in "cuts" it keeps its slide meaning.
+export const STORY_CAMERA_TRANSITIONS = ["pan", "pull", "orbit", "whip-pan"];
+export const STORY_CAMERA_MODES = ["cuts", "world"];
+export const STORY_CAMERA_LAYOUTS = ["row", "column", "grid", "path", "auto"];
+// story.motion.grammar presets (kit/core/grammar.mjs GRAMMAR_NAMES).
+export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "documentary"];
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
+// Caption presets (kit/core/captions.mjs CAPTION_PRESETS; kept in step by test/caption_presets.test.js).
+export const STORY_CAPTION_PRESETS = ["word-highlight", "karaoke-fill", "pop-word", "bounce", "typewriter", "box-highlight", "underline-sweep", "kinetic-stack", "minimal-line", "glow", "outline-heavy", "split-color", "lower-band", "bubble"];
+const CAPTION_OPTION_ENUMS = { position: ["bottom", "middle", "top", "auto"], case: ["as-is", "upper", "title"], font: ["display", "body", "meta"], entrance: ["pop", "fade", "slide-up", "slide-left", "scale", "none"], exit: ["fade-up", "fade", "slide-down", "shrink", "none"] };
+const CAPTION_COLOR_KEYS = ["idle", "active", "spoken", "accent", "box", "boxText", "plate", "band", "bandEdge", "chip"];
 // audio.narration.provider: voice providers `launchclip finish` can synthesise with.
 export const STORY_VOICE_PROVIDERS = ["kokoro", "elevenlabs", "supplied", "test"];
+// audio.music.provider and audio.music.sync (launchclip finish's music stage).
+export const STORY_MUSIC_PROVIDERS = ["synth", "elevenlabs", "file"];
+export const STORY_MUSIC_SYNC = ["auto", "off", "cuts", "hits"];
+// story.ambient / scenes[i].ambient levels (kit/core/ambient.mjs AMBIENT_LEVELS).
+export const STORY_AMBIENT_LEVELS = ["off", "subtle", "standard", "lively"];
 
 const ASPECTS = [["9:16", 9 / 16], ["16:9", 16 / 9], ["1:1", 1], ["4:5", 4 / 5]];
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -22,7 +41,9 @@ const WORD_ANCHOR = new RegExp(`^word:([^#\\s]+?)(?:#(\\d+))?${OFFSET}$`);
 const BEAT_ANCHOR = new RegExp(`^(beat|downbeat):(\\d+)${OFFSET}$`);
 const NUMERIC = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/;
 const EPS = 1e-6;
-const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract"]);
+// style: a style pack (src/story_style.js merges it before validation);
+// motion, camera, ambient, layout: style-driven settings, carried through as data.
+const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -138,6 +159,14 @@ export function validateStory(story, { modules } = {}) {
   if (story.cinematic_contract !== undefined && story.cinematic_contract !== "phase-2") err('cinematic_contract must be "phase-2" when set');
   for (const key of Object.keys(story)) if (!TOP_LEVEL.has(key)) warn(`${key} is not a story.json v1 field and is ignored`);
 
+  if (story.style !== undefined && story.style !== null) {
+    const style = story.style;
+    if (isObject(style)) {
+      if (!nonEmpty(style.name)) err("style.name must name a style pack or a path to its style.json");
+      for (const key of ["intro", "outro", "loop"]) if (style[key] !== undefined && typeof style[key] !== "boolean") err(`style.${key} must be true or false`);
+    } else if (!nonEmpty(style)) err("style must be a style pack name, a path to a style.json, or {name, intro?, outro?, loop?}");
+  }
+
   if (!STORY_LANES.includes(story.lane)) err(`lane must be one of ${STORY_LANES.join(", ")}`);
 
   // format
@@ -176,12 +205,7 @@ export function validateStory(story, { modules } = {}) {
     if (audio.music !== undefined && audio.music !== null) {
       if (typeof audio.music === "string") { if (audio.music !== "synth" && audio.music !== "none") assetPath(audio.music, "audio.music", err); }
       else if (!isObject(audio.music)) err("audio.music must be an object, \"synth\", \"none\" or an assets/ path");
-      else {
-        if (!nonEmpty(audio.music.source)) err("audio.music.source must be \"synth\" or an assets/ path");
-        else if (audio.music.source !== "synth") assetPath(audio.music.source, "audio.music.source", err);
-        if (audio.music.bpm !== undefined && !(typeof audio.music.bpm === "number" && audio.music.bpm > 0 && audio.music.bpm <= 300)) err("audio.music.bpm must be a number between 1 and 300");
-        if (audio.music.key !== undefined && !nonEmpty(audio.music.key)) err("audio.music.key must be a non-empty string");
-      }
+      else validateMusic(audio.music, { err, warn });
     }
     if (audio.sfx !== undefined && audio.sfx !== null && !["auto", "none"].includes(audio.sfx) && audio.sfx !== false) err("audio.sfx must be \"auto\", \"none\" or false");
     // audio.narration: text that `launchclip finish` synthesises into audio.voice and audio.words.
@@ -204,6 +228,13 @@ export function validateStory(story, { modules } = {}) {
     if (!isObject(audio) || !audio.voice) err("audio.voice is required for the voiceover-motion lane (or set audio.narration to synthesise it)");
     if (!isObject(audio) || !audio.words) err("audio.words (NARRATION.json) is required for the voiceover-motion lane (or set audio.narration to synthesise it)");
   }
+
+  // motion.grammar and camera (kit/core/grammar.mjs, kit/core/camera-world.mjs).
+  validateMotion(story.motion, err);
+  const camera = validateCamera(story.camera, { err, warn, lane: story.lane });
+
+  // ambient: the ambient-motion control (kit/core/ambient.mjs).
+  validateAmbient(story.ambient, "ambient", err);
 
   // base: the footage-led recording (see validateBase).
   if (story.base !== undefined && story.base !== null) validateBase(story.base, { err, warn, duration, resolved: isObject(story.resolved) });
@@ -268,6 +299,8 @@ export function validateStory(story, { modules } = {}) {
       err(`${path}.energy must be 0, 1, 2, 3 or "build"`);
     }
 
+    validateAmbient(scene.ambient, `${path}.ambient`, err);
+
     if (scene.in !== undefined && scene.in !== null) {
       const transition = scene.in;
       if (!isObject(transition)) err(`${path}.in must be an object`);
@@ -278,6 +311,7 @@ export function validateStory(story, { modules } = {}) {
         if (transition.direction !== undefined && !STORY_DIRECTIONS.includes(transition.direction)) err(`${path}.in.direction must be one of ${STORY_DIRECTIONS.join(", ")}`);
         if (transition.from_object !== undefined) fromObjects.push({ index, path: `${path}.in.from_object`, value: transition.from_object });
         if (transition.type === "morph" && transition.from_object === undefined) warn(`${label} morphs without in.from_object; name the object handed across the boundary`);
+        cameraTransitionRules(transition, `${path}.in`, { err, lane: story.lane, camera, track });
       }
     }
 
@@ -324,6 +358,20 @@ export function validateStory(story, { modules } = {}) {
       if (list[i].start < list[i - 1].end - EPS) err(`${list[i].label} overlaps ${list[i - 1].label} on track ${track}; move one to another track or adjust start/end`);
     }
   }
+  // Gaps between track-0 scenes are empty plates (no footage base fills them).
+  // The compilers hold the previous scene through gaps under 0.5 s; longer
+  // gaps show the bare background.
+  const plates = byTrack.get(0);
+  if (plates && !story.base && plates.length === timing.filter((entry) => entry && entry.track === 0).length) {
+    const frame = 1 / (Number(story.format?.fps) > 0 ? Number(story.format.fps) : 30);
+    let covered = 0, previous = null;
+    for (const entry of plates) {
+      if (entry.start - covered > frame + EPS) {
+        warn(`empty plate from ${round3(covered)} s to ${round3(entry.start)} s (${previous ? `between ${previous.label} and ${entry.label}` : `before ${entry.label}`}): no scene covers it; ${entry.start - covered < 0.5 - EPS && previous ? 'the previous scene is held through it' : 'the bare background shows'}. Extend the scenes to meet.`);
+      }
+      if (entry.end > covered) { covered = entry.end; previous = entry; }
+    }
+  }
 
   // overlays
   if (story.overlays !== undefined && story.overlays !== null) {
@@ -332,7 +380,8 @@ export function validateStory(story, { modules } = {}) {
       const path = `overlays[${index}]`;
       if (!isObject(overlay)) { err(`${path} must be an object`); continue; }
       if (!nonEmpty(overlay.type)) err(`${path}.type must be a non-empty string`);
-      if (overlay.type === "captions" && overlay.style !== undefined && !STORY_CAPTION_STYLES.includes(overlay.style)) err(`${path}.style must be one of ${STORY_CAPTION_STYLES.join(", ")}`);
+      if (overlay.type === "captions" && overlay.style !== undefined && !STORY_CAPTION_STYLES.includes(overlay.style) && !STORY_CAPTION_PRESETS.includes(overlay.style)) err(`${path}.style must be one of ${STORY_CAPTION_STYLES.join(", ")} or a caption preset (${STORY_CAPTION_PRESETS.join(", ")})`);
+      if (overlay.type === "captions") validateCaptionOptions(overlay, path, err);
       if (overlay.type === "captions") {
         if (overlay.src !== undefined && overlay.src !== null) assetPath(overlay.src, `${path}.src`, err);
         if (overlay.hide !== undefined) {
@@ -354,21 +403,37 @@ export function validateStory(story, { modules } = {}) {
   }
 
   // ending
+  // ending: {loop_to: "<scene id>", in?} loops; {loop_to: null} or
+  // {loop: false} (or no ending) does not, and then `final` says how the last
+  // scene ends: "hold" (default: settled, no exit), "fade" (completes its exit
+  // to the background by the final frame) or "exit" (plays its own exit,
+  // ending at format.duration).
   if (story.ending !== undefined && story.ending !== null) {
     if (!isObject(story.ending)) err("ending must be an object or null");
     else {
-      if (story.ending.loop_to !== undefined) {
-        if (typeof story.ending.loop_to !== "string" || !ids.has(story.ending.loop_to)) err(`ending.loop_to must reference a scene id; got ${JSON.stringify(story.ending.loop_to)}`);
+      for (const key of Object.keys(story.ending)) if (!STORY_ENDING_KEYS.includes(key)) err(`ending.${key} is not a known ending key (allowed: ${STORY_ENDING_KEYS.join(", ")}); for a held last frame use ending.final: "hold"`);
+      const loops = typeof story.ending.loop_to === "string";
+      if (story.ending.loop_to !== undefined && story.ending.loop_to !== null) {
+        if (typeof story.ending.loop_to !== "string" || !ids.has(story.ending.loop_to)) err(`ending.loop_to must reference a scene id, or be null for no loop; got ${JSON.stringify(story.ending.loop_to)}`);
+      }
+      if (story.ending.loop !== undefined) {
+        if (story.ending.loop !== false) err("ending.loop must be false (no loop); to loop, set ending.loop_to to a scene id");
+        else if (loops) err("ending.loop: false contradicts ending.loop_to; drop one");
+      }
+      if (story.ending.final !== undefined) {
+        if (!STORY_ENDING_FINALS.includes(story.ending.final)) err(`ending.final must be one of ${STORY_ENDING_FINALS.join(", ")}`);
+        else if (loops) err("ending.final only applies without a loop; a looping story returns to ending.loop_to instead");
       }
       if (story.ending.in !== undefined && story.ending.in !== null) {
         const transition = story.ending.in;
-        if (story.ending.loop_to === undefined) err("ending.in requires ending.loop_to");
+        if (!loops) err("ending.in requires ending.loop_to");
         if (!isObject(transition)) err("ending.in must be an object");
         else {
           if (!STORY_TRANSITIONS.includes(transition.type)) err(`ending.in.type must be one of ${STORY_TRANSITIONS.join(", ")}`);
           if (typeof transition.dur !== "number" || !Number.isFinite(transition.dur) || transition.dur <= 0) err("ending.in.dur must be a positive number of seconds");
           else if (duration !== null && transition.dur >= duration) err("ending.in.dur must be shorter than format.duration");
           if (transition.direction !== undefined && !STORY_DIRECTIONS.includes(transition.direction)) err(`ending.in.direction must be one of ${STORY_DIRECTIONS.join(", ")}`);
+          cameraTransitionRules(transition, "ending.in", { err, lane: story.lane, camera, track: 0 });
           if (transition.from_object !== undefined) {
             const sceneId = typeof transition.from_object === "string" ? transition.from_object.split(".")[0] : null;
             if (!sceneId || !ids.has(sceneId)) err(`ending.in.from_object references unknown scene "${sceneId ?? transition.from_object}"`);
@@ -383,6 +448,56 @@ export function validateStory(story, { modules } = {}) {
   if (usesWords && !(isObject(audio) && audio.words) && !narrated) warn("word anchors are used but audio.words is not set; pass narration timings when resolving");
 
   return { ok: errors.length === 0, errors, warnings };
+}
+
+// audio.music as an object: {provider?, prompt?, bpm?, key?, file?, sync?,
+// seed?, model?, volume?}; `source` ("synth" or an assets/ path) is the older
+// spelling and still accepted.
+const MUSIC_KEYS = new Set(["provider", "source", "file", "prompt", "bpm", "key", "sync", "seed", "model", "volume"]);
+
+function validateMusic(music, { err, warn }) {
+  for (const key of Object.keys(music)) if (!MUSIC_KEYS.has(key)) warn(`audio.music.${key} is not a music field and is ignored (allowed: ${[...MUSIC_KEYS].join(", ")})`);
+  if (music.provider !== undefined && !STORY_MUSIC_PROVIDERS.includes(music.provider)) err(`audio.music.provider must be one of ${STORY_MUSIC_PROVIDERS.join(", ")}`);
+  if (music.source !== undefined) {
+    if (!nonEmpty(music.source)) err("audio.music.source must be \"synth\" or an assets/ path");
+    else if (music.source !== "synth") assetPath(music.source, "audio.music.source", err);
+  }
+  if (music.file !== undefined) assetPath(music.file, "audio.music.file", err);
+  if (music.file !== undefined && nonEmpty(music.source) && music.source !== "synth") err("audio.music.file and audio.music.source name the same track; keep audio.music.file");
+  const hasFile = music.file !== undefined || (nonEmpty(music.source) && music.source !== "synth");
+  if (music.provider === "file" && !hasFile) err("audio.music.provider \"file\" needs audio.music.file (an assets/ path)");
+  if (hasFile && music.provider !== undefined && music.provider !== "file") err(`audio.music.file is only used with provider "file"; got provider "${music.provider}"`);
+  if (music.prompt !== undefined) {
+    if (!nonEmpty(music.prompt)) err("audio.music.prompt must be a non-empty string");
+    else if (music.prompt.length > 2000) err(`audio.music.prompt must be at most 2000 characters; got ${music.prompt.length}`);
+    else if (music.provider === "synth" || music.provider === "file" || music.source === "synth" || hasFile) warn("audio.music.prompt is only used by the elevenlabs provider");
+  }
+  if (music.bpm !== undefined && !(typeof music.bpm === "number" && music.bpm > 0 && music.bpm <= 300)) err("audio.music.bpm must be a number between 1 and 300");
+  if (music.key !== undefined && !nonEmpty(music.key)) err("audio.music.key must be a non-empty string");
+  if (music.sync !== undefined && !STORY_MUSIC_SYNC.includes(music.sync)) err(`audio.music.sync must be one of ${STORY_MUSIC_SYNC.join(", ")}`);
+  if (music.seed !== undefined && !(Number.isInteger(music.seed) && music.seed >= 0 && music.seed <= 4294967295)) err("audio.music.seed must be a non-negative integer");
+  if (music.model !== undefined && !nonEmpty(music.model)) err("audio.music.model must be a non-empty string such as \"music_v1\"");
+  if (music.volume !== undefined && !(typeof music.volume === "number" && music.volume >= 0 && music.volume <= 1)) err("audio.music.volume must be a number between 0 and 1");
+}
+
+function validateCaptionOptions(overlay, path, err) {
+  if (overlay.preset !== undefined && overlay.preset !== "none" && !STORY_CAPTION_PRESETS.includes(overlay.preset)) err(`${path}.preset must be one of ${STORY_CAPTION_PRESETS.join(", ")} (or "none")`);
+  for (const [key, values] of Object.entries(CAPTION_OPTION_ENUMS)) if (overlay[key] !== undefined && !values.includes(overlay[key])) err(`${path}.${key} must be one of ${values.join(", ")}`);
+  for (const key of ["max_words", "max_chars"]) if (overlay[key] !== undefined && !(Number.isInteger(overlay[key]) && overlay[key] >= 1 && overlay[key] <= 40)) err(`${path}.${key} must be an integer between 1 and 40`);
+  if (overlay.size !== undefined && !(typeof overlay.size === "number" && overlay.size >= 0.4 && overlay.size <= 2.5)) err(`${path}.size must be a scale between 0.4 and 2.5`);
+  if (overlay.offset !== undefined && !(typeof overlay.offset === "number" && Math.abs(overlay.offset) <= 0.5)) err(`${path}.offset must be seconds between -0.5 and 0.5`);
+  if (overlay.stroke !== undefined && overlay.stroke !== false && !(typeof overlay.stroke === "number" && overlay.stroke >= 0 && overlay.stroke <= 40)) err(`${path}.stroke must be false or a width in px (0-40)`);
+  if (overlay.shadow !== undefined && overlay.shadow !== false && typeof overlay.shadow !== "string") err(`${path}.shadow must be false or a CSS text-shadow`);
+  if (overlay.emphasis !== undefined && !(overlay.emphasis === "auto" || overlay.emphasis === "none" || overlay.emphasis === false || (Array.isArray(overlay.emphasis) && overlay.emphasis.every(nonEmpty)))) err(`${path}.emphasis must be "auto", "none", false or a list of words`);
+  if (overlay.hide_during_moves !== undefined && !(overlay.hide_during_moves === "auto" || typeof overlay.hide_during_moves === "boolean")) err(`${path}.hide_during_moves must be "auto" (dip out for vertical pans, push, pull and orbit), true (every camera move) or false`);
+  if (overlay.keywords !== undefined && !(Array.isArray(overlay.keywords) && overlay.keywords.every(nonEmpty))) err(`${path}.keywords must be a list of words`);
+  if (overlay.colors !== undefined) {
+    if (!isObject(overlay.colors)) err(`${path}.colors must be an object of brand roles or hex colours`);
+    else for (const [key, value] of Object.entries(overlay.colors)) {
+      if (!CAPTION_COLOR_KEYS.includes(key)) err(`${path}.colors.${key} is not a caption colour (${CAPTION_COLOR_KEYS.join(", ")})`);
+      else if (!nonEmpty(value) || (value.startsWith("#") && !/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(value))) err(`${path}.colors.${key} must be a brand colour role or a hex colour`);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -499,6 +614,90 @@ export function storyHits(story) {
 }
 
 // ---------------------------------------------------------------------------
+// Motion grammar and camera (kit/core/grammar.mjs, kit/core/camera-world.mjs).
+// The same rules as grammarErrors() and resolveCamera() there, kept here so
+// this file stays import-free.
+
+const GRAMMAR_KEYS = ["base", "ease", "duration", "overshoot", "stagger", "defaultTransition", "camera", "ambient"];
+const EASE_ROLES = ["enter", "exit", "move", "camera", "emphasis"];
+const DURATION_ROLES = ["enter", "exit", "transition", "camera"];
+const EASE_NAME = /^(none|linear|(power[0-4]|quad|cubic|quart|quint|strong|expo|circ|sine|bounce|back|elastic)(\.(in|out|inOut))?(\(\s*[\d.]+\s*(,\s*[\d.]+\s*)?\))?|steps\(\d+\))$/;
+
+function validateMotion(motion, err) {
+  if (motion === undefined || motion === null) return;
+  if (!isObject(motion)) { err("motion must be an object {grammar}"); return; }
+  for (const key of Object.keys(motion)) if (key !== "grammar") err(`motion.${key} is not supported (allowed: grammar)`);
+  const grammar = motion.grammar;
+  if (grammar === undefined || grammar === null) return;
+  if (typeof grammar === "string") {
+    if (!STORY_GRAMMARS.includes(grammar)) err(`motion.grammar must be one of ${STORY_GRAMMARS.join(", ")} or an object {base, ...overrides}`);
+    return;
+  }
+  if (!isObject(grammar)) { err("motion.grammar must be a grammar name or an object {base, ...overrides}"); return; }
+  for (const key of Object.keys(grammar)) if (!GRAMMAR_KEYS.includes(key)) err(`motion.grammar.${key} is not supported (allowed: ${GRAMMAR_KEYS.join(", ")})`);
+  if (grammar.base !== undefined && !STORY_GRAMMARS.includes(grammar.base)) err(`motion.grammar.base must be one of ${STORY_GRAMMARS.join(", ")}`);
+  if (grammar.ease !== undefined) {
+    if (!isObject(grammar.ease)) err("motion.grammar.ease must be an object of role → ease name");
+    else for (const [role, name] of Object.entries(grammar.ease)) {
+      if (!EASE_ROLES.includes(role)) err(`motion.grammar.ease.${role} is not a role (allowed: ${EASE_ROLES.join(", ")})`);
+      else if (typeof name !== "string" || !EASE_NAME.test(name.trim())) err(`motion.grammar.ease.${role} must be a GSAP ease name such as "power3.out"`);
+    }
+  }
+  if (grammar.duration !== undefined) {
+    if (!isObject(grammar.duration)) err("motion.grammar.duration must be an object of role → seconds");
+    else for (const [role, seconds] of Object.entries(grammar.duration)) {
+      if (!DURATION_ROLES.includes(role)) err(`motion.grammar.duration.${role} is not a role (allowed: ${DURATION_ROLES.join(", ")})`);
+      else if (!(typeof seconds === "number" && seconds >= 0.05 && seconds <= 3)) err(`motion.grammar.duration.${role} must be between 0.05 and 3 seconds`);
+    }
+  }
+  if (grammar.overshoot !== undefined && !(typeof grammar.overshoot === "number" && grammar.overshoot >= 0 && grammar.overshoot <= 0.5)) err("motion.grammar.overshoot must be between 0 and 0.5");
+  if (grammar.stagger !== undefined && !(typeof grammar.stagger === "number" && grammar.stagger >= 0.25 && grammar.stagger <= 3)) err("motion.grammar.stagger must be a multiplier between 0.25 and 3");
+  if (grammar.ambient !== undefined && !["off", "subtle", "standard", "lively"].includes(grammar.ambient)) err("motion.grammar.ambient must be off, subtle, standard or lively");
+  if (grammar.camera !== undefined && !isObject(grammar.camera)) err("motion.grammar.camera must be an object");
+}
+
+// → the effective camera mode ("cuts" | "world") for the transition rules.
+function validateCamera(camera, { err, warn, lane }) {
+  if (camera === undefined || camera === null) return "cuts";
+  if (!isObject(camera)) { err("camera must be an object {mode, layout?, spacing?, parallax?, blur?}"); return "cuts"; }
+  for (const key of Object.keys(camera)) if (!["mode", "layout", "spacing", "parallax", "blur"].includes(key)) err(`camera.${key} is not supported (allowed: mode, layout, spacing, parallax, blur)`);
+  const mode = camera.mode ?? "cuts";
+  if (!STORY_CAMERA_MODES.includes(mode)) err(`camera.mode must be one of ${STORY_CAMERA_MODES.join(", ")}`);
+  if (camera.layout !== undefined && !STORY_CAMERA_LAYOUTS.includes(camera.layout)) err(`camera.layout must be one of ${STORY_CAMERA_LAYOUTS.join(", ")}`);
+  if (camera.spacing !== undefined && !(typeof camera.spacing === "number" && camera.spacing >= 0 && camera.spacing <= 1)) err("camera.spacing must be a number between 0 and 1 (the gap between scenes, as a fraction of the canvas)");
+  for (const key of ["parallax", "blur"]) if (camera[key] !== undefined && typeof camera[key] !== "boolean") err(`camera.${key} must be true or false`);
+  // A style pack may carry a world camera into any lane; footage-led ignores it.
+  if (mode === "world" && lane === "footage-led") { warn("camera.mode \"world\" is ignored in the footage-led lane, which keeps cuts and punch-ins"); return "cuts"; }
+  return mode === "world" ? "world" : "cuts";
+}
+
+function cameraTransitionRules(transition, path, { err, lane, camera, track }) {
+  const type = transition.type;
+  const moving = STORY_CAMERA_TRANSITIONS.includes(type) || (type === "push" && camera === "world");
+  if (!moving) return;
+  if (lane === "footage-led") err(`${path}.type "${type}" moves a world camera; footage-led stories keep cuts and punch-ins`);
+  else if (track !== 0) err(`${path}.type "${type}" moves the camera between track-0 scenes; overlays (track ≥ 1) cannot use it`);
+}
+
+// ---------------------------------------------------------------------------
+// Ambient motion control
+
+// `ambient` is a level string or {level?, background?, drift?}; the same rules
+// as kit/core/ambient.mjs ambientErrors(), kept here so this file stays
+// import-free.
+function validateAmbient(value, path, err) {
+  if (value === undefined || value === null) return;
+  if (typeof value === "string") {
+    if (!STORY_AMBIENT_LEVELS.includes(value)) err(`${path} must be one of ${STORY_AMBIENT_LEVELS.join(", ")} or an object {level?, background?, drift?}`);
+    return;
+  }
+  if (!isObject(value)) { err(`${path} must be a level string or an object {level?, background?, drift?}`); return; }
+  for (const key of Object.keys(value)) if (!["level", "background", "drift"].includes(key)) err(`${path}.${key} is not supported (allowed: level, background, drift)`);
+  if (value.level !== undefined && !STORY_AMBIENT_LEVELS.includes(value.level)) err(`${path}.level must be one of ${STORY_AMBIENT_LEVELS.join(", ")}`);
+  for (const key of ["background", "drift"]) if (value[key] !== undefined && typeof value[key] !== "boolean") err(`${path}.${key} must be true or false`);
+}
+
+// ---------------------------------------------------------------------------
 // Footage-led base
 
 export const BASE_FITS = ["cover", "contain"];
@@ -600,6 +799,10 @@ export function storyBase(story) {
 
 function round6(value) {
   return Math.round(value * 1e6) / 1e6;
+}
+
+function round3(value) {
+  return Math.round(value * 1e3) / 1e3;
 }
 
 /** "9:16" | "16:9" | "1:1" | "4:5" | null */

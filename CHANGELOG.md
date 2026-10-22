@@ -4,6 +4,38 @@
 
 ### Added
 
+- Add partial rendering to `launchclip finish`: the render stage caches the
+  timeline in segments (scene bodies and whole transition overlaps) hashed
+  from everything that can change their pixels, and re-renders only the
+  segments an edit touches. Remotion renders them by frame range as lossless
+  segments, joins them with a stream copy and encodes once, frame-identical
+  to a fresh full render; HyperFrames caches whole renders by hash. Add
+  `--scene s3[,s4]` (force those scenes, re-run master, evidence and gates,
+  before/after stills) and `--preview-scene s3` (just that scene to
+  `renders/scene-s3.mp4`).
+- Add ElevenLabs music and beat sync to `launchclip finish`. A music provider
+  registry (`src/music/`: `synth`, `elevenlabs`, `file`) picks the music from
+  `--music synth|elevenlabs|none`, `audio.music` (now also
+  `{provider, prompt?, bpm?, file?, sync?}`) or, by default, ElevenLabs when
+  `ELEVENLABS_API_KEY` is set. ElevenLabs tracks come from `POST /v1/music`
+  with a composition plan that follows the story's energy arc, instrumental
+  at the target BPM, cached by request hash under
+  `$LAUNCHCLIP_CACHE/elevenlabs/music`. Beat analysis writes `BEATS.json`;
+  narrated stories move the music (offset, tempo ≤ 3%) so downbeats land on
+  key moments, motion stories snap cuts to downbeats and hits to beats within
+  0.25 s with module and layout re-checks; `qa/beat-sync.json` records it.
+- The CLI loads `.env` from the working and project directories at startup
+  without overriding the shell (`process.loadEnvFile`); see `.env.example`.
+- Add `launchclip export <project> --format fcpxml|premiere|edl|otio|all`: a
+  finished storyboard project as an editable timeline for Final Cut Pro,
+  Premiere Pro and DaVinci Resolve. V1 holds the base trim segments (with their
+  source in points) or a plate, V2+ each overlay scene rendered as ProRes 4444
+  with alpha (or a PNG sequence) from the new Remotion `SceneOverlay`
+  composition, A1–A3+ the voice, music bed and per-cue SFX, plus captions and
+  markers. FCPXML 1.10, xmeml v4, CMX 3600 EDL + SRT and OTIO writers share one
+  frame-exact timeline model (`src/nle/`), with exact NTSC rates and drop-frame
+  timecode, and every file is read back and checked against the model.
+
 - Add the `launchclip-create-video-remotion` skill: the same subscription-agent
   cinematic workflow with Remotion 4.0.536 and React 19.3 as the renderer,
   `storyboard.json` as the primary artefact, and a new `standalone-remotion.md`
@@ -28,6 +60,16 @@
   so platform normalization and re-encoding neither bury nor clip the mix.
 - Portrait shorts in the metered director lane now burn in word-synced captions
   inside the safe zone instead of relying on typography alone.
+
+### Fixed
+
+- A partial render can no longer ship a video a frame short. Each Remotion
+  segment must hold exactly its frame range before it is cached (a short one
+  is re-rendered once, else the render fails naming it), a short segment left
+  in the cache is re-rendered, the join stamps every frame from its index, the
+  delivery encode passes frames through, the soundtrack mux is limited by
+  frame count instead of `-shortest`/`-t`, and the joined, encoded and final
+  files must each hold the story's frame count.
 
 ## 0.1.1 - 2026-07-18
 

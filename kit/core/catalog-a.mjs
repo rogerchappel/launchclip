@@ -34,13 +34,26 @@
 // stay visible; key text is at least 44 px at 1080 (scaled with the canvas);
 // every brand colour pair used for text or a filled accent clears 3:1 WCAG
 // contrast or resolve() throws; blur is 0 at settle.
+import {formatBound, withinBounds} from './bounds.mjs';
 import {profileGeometry} from './layout-check.mjs';
 import {fontFamilyName, fontStack, fontWidthScale} from './fonts.mjs';
 import {countUp, splitWords, tween} from './motion.mjs';
+import {grammarDuration, grammarEase, grammarStagger, grammarTweens} from './grammar.mjs';
 
 export const CATALOG_A_IDS = Object.freeze(['hook-title', 'kinetic-words', 'count-up', 'equation-lockup', 'cta']);
 export const ANIMATED_PROPS = Object.freeze(['opacity', 'x', 'y', 'scale', 'scaleX', 'rotation', 'blur', 'color']);
 export const MIN_CONTRAST = 3;
+
+// Timing constants per module (seconds, scene-relative), the single source for
+// the checks below and for each MODULES entry's `timing` table. Every scene is
+// at least 0.5 s (baseContext).
+export const CATALOG_A_TIMING = Object.freeze({
+  'hook-title': Object.freeze({minDuration: 1.5, leadOut: .5, kickerLeadOut: .6}),
+  'kinetic-words': Object.freeze({gap: Object.freeze({replace: .3, stack: .2}), leadOut: .45}),
+  'count-up': Object.freeze({leadOut: 1, countLeadOut: .85}),
+  'equation-lockup': Object.freeze({leadOut: 1, landLeadOut: .6, highlightAfterLand: .42, highlightLeadOut: .6}),
+  cta: Object.freeze({minDuration: 2})
+});
 
 // ---------------------------------------------------------------------------
 // Validation helpers. Messages start with the parameter path.
@@ -58,7 +71,7 @@ function text(value, path, max, min = 1) {
   return value.trim().replace(/\s+/g, ' ');
 }
 function number(value, path, min, max) {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) throw new Error(`${path} must be a number between ${min} and ${max}`);
+  if (typeof value !== 'number' || !Number.isFinite(value) || !withinBounds(value, min, max)) throw new Error(`${path} must be a number between ${formatBound(min)} and ${formatBound(max)}`);
   return value;
 }
 function integer(value, path, min, max) {
@@ -78,7 +91,7 @@ function optional(value, fallback, check) { return value === undefined ? fallbac
 // Scene-relative time inside [0, duration - tail].
 function sceneTime(value, path, duration, tail = 0) {
   const max = Math.max(0, duration - tail);
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > max + 1e-9) throw new Error(`${path} must be seconds from the scene start between 0 and ${round(max, 3)} (the scene is ${round(duration, 3)} s)`);
+  if (typeof value !== 'number' || !Number.isFinite(value) || !withinBounds(value, 0, max)) throw new Error(`${path} must be seconds from the scene start between 0 and ${formatBound(max)} (the scene is ${formatBound(duration)} s)`);
   return value;
 }
 
@@ -215,11 +228,11 @@ export function textWidth(value, size, kind = 'body', tracking = 0) {
  * an array of token arrays, or null when a token alone is too wide or the
  * tokens need more lines.
  */
-function balance(tokens, maxWidth, lines, measure) {
+function balance(tokens, maxWidth, lines, measure, join = list => list.join(' ')) {
   const n = tokens.length;
   if (lines > n) return null;
-  const width = (i, j) => measure(tokens.slice(i, j).join(' '));
-  for (const token of tokens) if (measure(token) > maxWidth) return null;
+  const width = (i, j) => measure(join(tokens.slice(i, j)));
+  for (const token of tokens) if (measure(join([token])) > maxWidth) return null;
   // cost[l][j]: smallest possible widest line for tokens[0..j) in exactly l lines.
   const cost = Array.from({length: lines + 1}, () => new Array(n + 1).fill(Infinity));
   const cut = Array.from({length: lines + 1}, () => new Array(n + 1).fill(-1));
@@ -244,12 +257,12 @@ function balance(tokens, maxWidth, lines, measure) {
  * 6% penalty per extra line, so "HOT COFFEE / COOLS FAST" beats one word per
  * line at a hair larger size.
  */
-function fitLines(tokens, {kind, maxWidth, maxLines, maxSize, minSize, lineHeight, maxHeight, tracking = 0}) {
+function fitLines(tokens, {kind, maxWidth, maxLines, maxSize, minSize, lineHeight, maxHeight, tracking = 0, join}) {
   let best = null;
   for (let count = 1; count <= Math.min(maxLines, tokens.length); count++) {
     for (let size = Math.floor(maxSize); size >= minSize; size -= 2) {
       if (count * size * lineHeight > maxHeight) continue;
-      const lines = balance(tokens, maxWidth, count, value => textWidth(value, size, kind, tracking));
+      const lines = balance(tokens, maxWidth, count, value => textWidth(value, size, kind, tracking), join);
       if (!lines) continue;
       const score = size * (1 - .06 * (count - 1));
       if (!best || score > best.score + 1e-9) best = {size, lines, score};
@@ -384,7 +397,7 @@ function baseContext(ctx) {
   integer(format.width, 'ctx.format.width', 160, 7680);
   integer(format.height, 'ctx.format.height', 160, 7680);
   number(format.fps ?? 30, 'ctx.format.fps', 1, 240);
-  return {id, start, duration, end: T(start + duration), fps: format.fps ?? 30};
+  return {id, start, duration, end: T(start + duration), fps: format.fps ?? 30, grammar: ctx.grammar ?? null};
 }
 
 function assemble({module, ctx, base, st, rect, theme, contrast, fonts, hidesCaptions, motion, content, styles, classes = {}, anim, texts = [], events}) {
@@ -395,12 +408,15 @@ function assemble({module, ctx, base, st, rect, theme, contrast, fonts, hidesCap
   // footprint, empty rules and bars would otherwise collapse to 0 px.
   for (const [node, style] of Object.entries(styles)) if (node !== 'root' && style.position !== 'absolute' && !('flexShrink' in style)) style.flexShrink = '0';
   styles.root = {...styles.root, color: theme.paper, fontFamily: fonts.body, fontSize: px(44 * st.k), lineHeight: '1.2', letterSpacing: 'normal', fontStyle: 'normal', fontWeight: '400', WebkitFontSmoothing: 'antialiased'};
+  // Motion grammar (grammar.mjs): entrance, exit and pop eases follow the
+  // story's grammar; editorial leaves every ease as designed.
+  grammarTweens(anim.animations, base.grammar);
   const model = {
     id, module, aspect: ctx.aspect ?? (st.portrait ? '9:16' : '16:9'), canvas: st.canvas, start, duration, end, fps: base.fps,
     track: ctx.track ?? 0, scale: round(st.k, 4), rect, safeZone: st.zone, minTextPx: round(st.minText, 2),
     theme, contrast, fonts, hidesCaptions,
     motion: {enter: T(motion.enterEnd - start), exit: T(end - motion.exitStart), enterStart: start, enterEnd: T(motion.enterEnd), exitStart: T(motion.exitStart), end,
-      enterFrom: motion.enterFrom, exitTo: motion.exitTo, enterEase: motion.enterEase, exitEase: motion.exitEase},
+      enterFrom: motion.enterFrom, exitTo: motion.exitTo, enterEase: grammarEase(base.grammar, motion.enterEase, {props: motion.enterFrom}), exitEase: grammarEase(base.grammar, motion.exitEase, {props: motion.exitTo})},
     content, styles, classes, animations: anim.animations, texts,
     events: events.map(event => ({...event, time: T(event.time), ...(event.endTime !== undefined ? {endTime: T(event.endTime)} : {})})).sort((a, b) => a.time - b.time),
     layout: {canvas: st.canvas, rect, motion: {enterEnd: T(motion.enterEnd), exitStart: T(motion.exitStart), end}}
@@ -414,6 +430,7 @@ const rootStyle = (rect, extra = {}) => ({position: 'absolute', left: px(rect.x)
 const glowStyle = (color, w, h, offsetY = 0) => ({position: 'absolute', left: '50%', top: '50%', width: px(w), height: px(h), marginLeft: px(-w / 2), marginTop: px(-h / 2 + offsetY), borderRadius: '50%', background: `radial-gradient(closest-side, ${alpha(color, .26)}, ${alpha(color, .1)} 55%, ${alpha(color, 0)})`, pointerEvents: 'none'});
 
 function standardExit(anim, base, st, exit = .3) {
+  exit = grammarDuration(base.grammar, 'exit', exit, {min: .18, max: .45});
   const exitStart = base.end - exit;
   anim.add('root', exitStart, exit, 'power2.in', {opacity: 1, y: 0}, {opacity: 0, y: -40 * st.k});
   return {exitStart, exitTo: {opacity: 0, y: round(-40 * st.k)}, exitEase: 'power2.in'};
@@ -446,12 +463,12 @@ function phraseTokens(value, phrases, path) {
 function resolveHookTitle(params, ctx) {
   const base = baseContext(ctx), d = base.duration;
   fields(params, 'params', ['headline', 'emphasis', 'kicker', 'kickerAt', 'eyebrow', 'color', 'align', 'rect'], ['headline']);
-  if (d < 1.5) throw new Error('hook-title needs a scene of at least 1.5 s');
+  if (d < CATALOG_A_TIMING['hook-title'].minDuration) throw new Error(`hook-title needs a scene of at least ${CATALOG_A_TIMING['hook-title'].minDuration} s`);
   const headline = text(params.headline, 'params.headline', 90);
   const eyebrow = optional(params.eyebrow, null, value => text(value, 'params.eyebrow', 32));
   const kicker = optional(params.kicker, null, value => text(value, 'params.kicker', 18));
   if (params.kickerAt !== undefined && !kicker) throw new Error('params.kickerAt needs params.kicker');
-  const kickerAt = kicker ? optional(params.kickerAt, Math.min(d * .55, d - .9), value => sceneTime(value, 'params.kickerAt', d, .6)) : null;
+  const kickerAt = kicker ? optional(params.kickerAt, Math.min(d * .55, d - .9), value => sceneTime(value, 'params.kickerAt', d, CATALOG_A_TIMING['hook-title'].kickerLeadOut)) : null;
   const align = optional(params.align, 'center', value => oneOf(value, 'params.align', ['center', 'left']));
   const colorRole = optional(params.color, 'primary', value => value);
   const emphasisInput = optional(params.emphasis, [], value => {
@@ -464,7 +481,7 @@ function resolveHookTitle(params, ctx) {
     fields(entry, path, ['text', 'at', 'color'], ['text']);
     return {
       text: text(entry.text, `${path}.text`, 40),
-      at: optional(entry.at, Math.min(.45 + index * .9, d - .8), value => sceneTime(value, `${path}.at`, d, .5)),
+      at: optional(entry.at, Math.min(.45 + index * .9, d - .8), value => sceneTime(value, `${path}.at`, d, CATALOG_A_TIMING['hook-title'].leadOut)),
       colorRole: optional(entry.color, colorRole, value => oneOf(value, `${path}.color`, ['primary', 'accent']))
     };
   });
@@ -568,7 +585,7 @@ function resolveKineticWords(params, ctx) {
   const {theme, contrast} = moduleTheme(ctx.brand, colorRole, 'params.color');
   const maxBeats = layout === 'stack' ? 5 : 12;
   if (!Array.isArray(params.words) || params.words.length < 1 || params.words.length > maxBeats) throw new Error(`params.words must list 1–${maxBeats} beats for the ${layout} layout`);
-  const minGap = layout === 'replace' ? .3 : .2;
+  const minGap = CATALOG_A_TIMING['kinetic-words'].gap[layout];
   const beats = params.words.map((entry, index) => {
     const path = `params.words[${index}]`;
     fields(entry, path, ['text', 'at', 'emphasis', 'color'], ['text', 'at']);
@@ -577,10 +594,10 @@ function resolveKineticWords(params, ctx) {
     if (parts.length > 3) throw new Error(`${path}.text must be 1–3 words (one beat); split it into more beats`);
     const role = optional(entry.color, colorRole, color => oneOf(color, `${path}.color`, ['primary', 'accent']));
     if (role !== colorRole) requireContrast(contrast, `${role} on bg`, theme[role], theme.bg);
-    return {index, text: value, parts, at: sceneTime(entry.at, `${path}.at`, d, .45), emphasis: optional(entry.emphasis, false, flag => bool(flag, `${path}.emphasis`)), color: theme[role]};
+    return {index, text: value, parts, at: sceneTime(entry.at, `${path}.at`, d, CATALOG_A_TIMING['kinetic-words'].leadOut), emphasis: optional(entry.emphasis, false, flag => bool(flag, `${path}.emphasis`)), color: theme[role]};
   });
   beats.forEach((beat, index) => {
-    if (index && beat.at < beats[index - 1].at + minGap - 1e-9) throw new Error(`params.words[${index}].at must be at least ${minGap} s after the previous beat`);
+    if (index && beat.at < beats[index - 1].at + minGap - 1e-6) throw new Error(`params.words[${index}].at must be at least ${minGap} s after the previous beat`);
   });
   const fonts = brandFonts(ctx.brand), fk = fitKinds(ctx.brand);
   const st = stage(ctx, {captions: false});
@@ -625,9 +642,14 @@ function resolveKineticWords(params, ctx) {
     const gap = next === null ? exit.exitStart - at : next - at;
     const enter = Math.max(.18, Math.min(variant === 'rise' ? .42 : .34, gap - .12));
     const node = `beat-${index}`;
+    // A beat at or before the scene's first frame is the frame-0 hook: it is
+    // already settled on frame 0, with no enter animation (as hook-title).
+    const settled = beat.at <= 1 / base.fps + 1e-6;
     beat.time = T(at);
-    beat.settleTime = T(at + enter);
-    if (variant === 'scale') {
+    beat.settleTime = T(settled ? at : at + enter);
+    if (settled) {
+      // No enter: the node's resting style is its first-frame state.
+    } else if (variant === 'scale') {
       anim.add(node, at, enter, 'expo.out', {opacity: 0, scale: 1.5, blur: 16 * k}, {opacity: 1, scale: 1, blur: 0});
     } else {
       anim.add(node, at, .06, 'none', {opacity: 0}, {opacity: 1});
@@ -639,7 +661,7 @@ function resolveKineticWords(params, ctx) {
       anim.add(node, next - out, out, 'power2.in', props[0], props[1]);
     }
     if (layout === 'stack' && next !== null && !beat.emphasis) anim.add(`${node}-text`, next, .3, 'power2.out', {color: theme.paper}, {color: theme.muted});
-    if (beat.emphasis && layout === 'replace') anim.add(`${node}-bar`, at + .08, .36, 'expo.out', {scaleX: 0}, {scaleX: 1});
+    if (beat.emphasis && layout === 'replace' && !settled) anim.add(`${node}-bar`, at + .08, .36, 'expo.out', {scaleX: 0}, {scaleX: 1});
     events.push({id: `${base.id}-beat-${index}`, time: at, role: 'beat', cue: beat.emphasis ? 'impact' : 'pop'});
   });
   const styles = {root: rootStyle(box, layout === 'stack' ? {display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center'} : {})};
@@ -685,7 +707,7 @@ function resolveCountUp(params, ctx) {
   const suffix = optional(params.suffix, '', input => text(input, 'params.suffix', 6));
   const label = text(params.label, 'params.label', 60);
   const note = optional(params.note, null, input => text(input, 'params.note', 48));
-  const countAt = optional(params.countAt, .35, input => sceneTime(input, 'params.countAt', d, 1));
+  const countAt = optional(params.countAt, .35, input => sceneTime(input, 'params.countAt', d, CATALOG_A_TIMING['count-up'].leadOut));
   const countDuration = optional(params.countDuration, 1.2, input => number(input, 'params.countDuration', .3, 6));
   const hit = optional(params.hit, 'underline', input => oneOf(input, 'params.hit', ['underline', 'spark', 'both', 'none']));
   const colorRole = optional(params.color, 'primary', input => input);
@@ -871,8 +893,8 @@ function resolveEquationLockup(params, ctx) {
   if (terms.length > 9) throw new Error(`${params.equation !== undefined ? 'params.equation' : 'params.terms'} must have 1–9 terms; group terms with parentheses`);
   const name = optional(params.name, null, value => text(value, 'params.name', 48));
   const note = optional(params.note, null, value => text(value, 'params.note', 70));
-  const at = optional(params.at, .35, value => sceneTime(value, 'params.at', d, 1));
-  const stagger = optional(params.stagger, .22, value => number(value, 'params.stagger', .06, 1.5));
+  const at = optional(params.at, .35, value => sceneTime(value, 'params.at', d, CATALOG_A_TIMING['equation-lockup'].leadOut));
+  const stagger = optional(params.stagger, grammarStagger(base.grammar, .22, {min: .06, max: .6}), value => number(value, 'params.stagger', .06, 1.5));
   let highlight = null;
   if (params.highlight !== undefined) {
     if (typeof params.highlight === 'number') highlight = integer(params.highlight, 'params.highlight', 0, terms.length - 1);
@@ -906,9 +928,9 @@ function resolveEquationLockup(params, ctx) {
   const size = Math.floor(Math.min((st.portrait ? 150 : 140) * k, maxWidth / emWidth));
   if (size < 64 * k) throw new Error('the equation is too long to set at 64 px or more on one line; split it or shorten it');
   const lastLand = termModels[termModels.length - 1].time + .42;
-  const highlightAt = highlight === null ? null : optional(params.highlightAt, Math.min(lastLand - s + .35, d - exitDur - .7), value => sceneTime(value, 'params.highlightAt', d, .6));
+  const highlightAt = highlight === null ? null : optional(params.highlightAt, Math.min(lastLand - s + .35, d - exitDur - .7), value => sceneTime(value, 'params.highlightAt', d, CATALOG_A_TIMING['equation-lockup'].highlightLeadOut));
   if (lastLand > base.end - exitDur - .3 + 1e-9) throw new Error(`the terms land at ${round(lastLand - s, 3)} s, too late for a ${round(d, 3)} s scene; lower params.at or params.stagger`);
-  if (highlightAt !== null && s + highlightAt < termModels[highlight].time + .42 - 1e-9) throw new Error('params.highlightAt must come after the highlighted term has landed');
+  if (highlightAt !== null && s + highlightAt < termModels[highlight].time + .42 - 1e-6) throw new Error('params.highlightAt must come after the highlighted term has landed');
 
   const nameSize = Math.round(46 * k), noteSize = Math.round(52 * k);
   if (name && textWidth(name.toUpperCase(), nameSize, fk.body, .14) > area.width) throw new Error('params.name is too wide for one line; shorten it');
@@ -982,6 +1004,30 @@ function resolveEquationLockup(params, ctx) {
 // ---------------------------------------------------------------------------
 // cta
 
+// Handle and detail limits: long enough for a repo URL such as
+// github.com/<owner>/<repository>; the pill and the detail lines shrink to the
+// key-text floor before a long one is rejected.
+export const CTA_HANDLE_MAX = 64;
+export const CTA_DETAIL_MAX = 80;
+
+// Word tokens with long URL-like words split after "/" (and before the next
+// segment), so a URL can wrap across the two detail lines. A piece that
+// continues the previous word starts with WORD_JOINER and is joined without
+// a space.
+const WORD_JOINER = '\u2060';
+function breakableTokens(words) {
+  const out = [];
+  for (const word of words) {
+    if (word.length < 16 || !/[/]/.test(word)) { out.push(word); continue; }
+    const pieces = word.split(/(?<=\/)/).filter(Boolean);
+    pieces.forEach((piece, index) => out.push(index ? WORD_JOINER + piece : piece));
+  }
+  return out;
+}
+function joinBroken(list) {
+  return list.map((token, index) => (token.startsWith(WORD_JOINER) ? token.slice(1) : `${index ? ' ' : ''}${token}`)).join('');
+}
+
 // 24×24 stroke icons, drawn with stroke="currentColor".
 export const CTA_ICONS = Object.freeze({
   arrow: '<path d="M4 12h15"/><path d="m13 5 7 7-7 7"/>',
@@ -993,11 +1039,11 @@ export const CTA_ICONS = Object.freeze({
 function resolveCta(params, ctx) {
   const base = baseContext(ctx), d = base.duration;
   fields(params, 'params', ['action', 'emphasis', 'detail', 'handle', 'icon', 'loop', 'color', 'rect'], ['action']);
-  if (d < 2) throw new Error('cta needs a scene of at least 2 s');
+  if (d < CATALOG_A_TIMING.cta.minDuration) throw new Error(`cta needs a scene of at least ${CATALOG_A_TIMING.cta.minDuration} s`);
   const action = text(params.action, 'params.action', 40);
-  const detail = optional(params.detail, null, value => text(value, 'params.detail', 60));
+  const detail = optional(params.detail, null, value => text(value, 'params.detail', CTA_DETAIL_MAX));
   const handle = optional(params.handle, null, value => {
-    const clean = text(value, 'params.handle', 32);
+    const clean = text(value, 'params.handle', CTA_HANDLE_MAX);
     if (/\s/.test(clean)) throw new Error('params.handle must be one handle or URL without spaces');
     return clean;
   });
@@ -1013,12 +1059,36 @@ function resolveCta(params, ctx) {
   const st = stage(ctx, {captions: false});
   const k = st.k, rect = params.rect === undefined ? null : rectParam(params.rect, st, 'params.rect');
   const area = rect ?? st.zone;
-  const detailSize = Math.round(52 * k), handleSize = Math.round(50 * k), iconSize = Math.round(50 * k);
-  const pillPadY = 26 * k, pillPadX = 46 * k, pillGap = 64 * k, detailGap = 30 * k;
-  const pillWidth = handle ? textWidth(handle, handleSize, fk.meta) + pillPadX * 2 + (icon !== 'none' ? iconSize + 20 * k : 0) : 0;
-  if (pillWidth > area.width) throw new Error('params.handle is too wide for the handle pill; shorten it');
-  const detailFit = detail ? fitLines(splitWords(detail).map(word => word.text), {kind: fk.body, maxWidth: area.width * .86, maxLines: 2, maxSize: detailSize, minSize: detailSize, lineHeight: 1.25, maxHeight: detailSize * 2.6}) : null;
-  if (detail && !detailFit) throw new Error('params.detail is too long for two lines; shorten it');
+  // Handle pill: 50 px type (at 1080), shrinking in 2 px steps to the 44 px
+  // key-text floor before the handle is rejected; padding, icon and gap shrink
+  // with it. The detail line keeps 52 px when its words fit two lines, else
+  // shrinks to the floor, then lets a long URL break after "/" or ".".
+  const baseHandle = Math.round(50 * k), minKey = Math.ceil(st.minText - .01);
+  const pill = size => {
+    const r = size / baseHandle, iconPx = Math.round(50 * k * r);
+    const padX = 46 * k * r, gap = 20 * k * r;
+    return {size, iconSize: iconPx, pillPadY: 26 * k * r, pillPadX: padX, iconGap: gap, width: textWidth(handle, size, fk.meta) + padX * 2 + (icon !== 'none' ? iconPx + gap : 0)};
+  };
+  let handleFit = handle ? pill(baseHandle) : null;
+  for (let size = baseHandle - 2; handle && handleFit.width > area.width && size >= minKey; size -= 2) handleFit = pill(size);
+  if (handle && handleFit.width > area.width) throw new Error(`params.handle '${handle}' needs ${Math.ceil(handleFit.width)} px even at the ${minKey} px text floor; the pill fits ${Math.floor(area.width)} px: shorten it${/^(https?:\/\/)?(www\.)?github\.com\//i.test(handle) ? ", or drop the 'github.com/' prefix" : /^https?:\/\//i.test(handle) ? ", or drop the 'https://' prefix" : ''}${icon !== 'none' ? ", or set icon: 'none'" : ''}`);
+  const handleSize = handleFit ? handleFit.size : baseHandle, iconSize = handleFit ? handleFit.iconSize : Math.round(50 * k);
+  const pillPadY = handleFit ? handleFit.pillPadY : 26 * k, pillPadX = handleFit ? handleFit.pillPadX : 46 * k, iconGap = handleFit ? handleFit.iconGap : 20 * k;
+  const pillGap = 64 * k, detailGap = 30 * k;
+  const baseDetail = Math.round(52 * k);
+  const detailOptions = size => ({kind: fk.body, maxWidth: area.width * .86, maxLines: 2, maxSize: size, minSize: size, lineHeight: 1.25, maxHeight: size * 2.6});
+  let detailFit = null, detailSize = baseDetail;
+  if (detail) {
+    const words = splitWords(detail).map(word => word.text), broken = breakableTokens(words);
+    const attempts = [];
+    for (let size = baseDetail; size >= minKey; size -= 2) attempts.push([words, size, undefined]);
+    if (broken.length > words.length) for (let size = baseDetail; size >= minKey; size -= 2) attempts.push([broken, size, joinBroken]);
+    for (const [tokens, size, join] of attempts) {
+      const fit = fitLines(tokens, {...detailOptions(size), join});
+      if (fit) { detailFit = {lines: fit.lines.map(line => (join ?? (list => list.join(' ')))(line))}; detailSize = size; break; }
+    }
+  }
+  if (detail && !detailFit) throw new Error(`params.detail is too long for two lines even at the ${minKey} px text floor; shorten it`);
   const chrome = (detail ? detailGap + detailFit.lines.length * detailSize * 1.25 : 0) + (handle ? pillGap + handleSize * 1.2 + pillPadY * 2 : 0);
   const lineHeight = .95;
   const fit = fitLines(tokens.map(token => token.text.toUpperCase()), {kind: fk.display, maxWidth: area.width * .92, maxLines: 4, maxSize: (st.portrait ? 168 : 140) * k, minSize: 72 * k, lineHeight, maxHeight: area.height - chrome});
@@ -1077,7 +1147,7 @@ function resolveCta(params, ctx) {
     detail: {position: 'relative', marginTop: px(detailGap), fontFamily: fonts.body, fontSize: px(detailSize), lineHeight: '1.25', color: theme.muted, fontWeight: '500'},
     pill: {position: 'relative', display: 'inline-flex', marginTop: px(pillGap), transformOrigin: '50% 50%'},
     ring: {position: 'absolute', left: '0', top: '0', right: '0', bottom: '0', borderRadius: px(999), border: `${px(4 * k)} solid ${theme.emphasis}`, transformOrigin: '50% 50%'},
-    'pill-body': {position: 'relative', display: 'inline-flex', alignItems: 'center', gap: px(20 * k), padding: `${px(pillPadY)} ${px(pillPadX)}`, borderRadius: px(999), background: theme.emphasis, color: theme.ink, fontFamily: fonts.meta, fontSize: px(handleSize), lineHeight: '1.2', fontWeight: '700', whiteSpace: 'nowrap', boxShadow: `0 ${px(20 * k)} ${px(60 * k)} ${alpha(theme.emphasis, .35)}`},
+    'pill-body': {position: 'relative', display: 'inline-flex', alignItems: 'center', gap: px(iconGap), padding: `${px(pillPadY)} ${px(pillPadX)}`, borderRadius: px(999), background: theme.emphasis, color: theme.ink, fontFamily: fonts.meta, fontSize: px(handleSize), lineHeight: '1.2', fontWeight: '700', whiteSpace: 'nowrap', boxShadow: `0 ${px(20 * k)} ${px(60 * k)} ${alpha(theme.emphasis, .35)}`},
     icon: {display: 'block', width: px(iconSize), height: px(iconSize), flex: 'none', transformOrigin: '50% 50%'}
   };
   for (const line of lines) styles[`line-${line.index}`] = {display: 'block', whiteSpace: 'nowrap'};
@@ -1085,7 +1155,7 @@ function resolveCta(params, ctx) {
   if (detailFit) detailFit.lines.forEach((_, index) => { styles[`detail-line-${index}`] = {display: 'block'}; });
   return assemble({module: 'cta', ctx, base, st, rect: box, theme, contrast, fonts, hidesCaptions: true,
     motion: {enterEnd: handle ? Math.max(actionSettle, pillTime + .5) : actionSettle, enterFrom: {opacity: 0, y: round(size * .5)}, enterEase: 'expo.out', ...exit},
-    content: {action, emphasis: emphasisText, detail, detailLines: detailFit ? detailFit.lines.map(line => line.join(' ')) : [], handle, icon: handle ? icon : 'none', iconPaths: handle && icon !== 'none' ? CTA_ICONS[icon] : null, loop, size, lineHeight, lines,
+    content: {action, emphasis: emphasisText, detail, detailLines: detailFit ? detailFit.lines : [], handle, icon: handle ? icon : 'none', iconPaths: handle && icon !== 'none' ? CTA_ICONS[icon] : null, loop, size, lineHeight, lines,
       pillTime: pillTime === null ? null : T(pillTime), pulses, keyTextPx: [size, ...(detail ? [detailSize] : []), ...(handle ? [handleSize] : [])]},
     styles, anim, events});
 }
@@ -1108,6 +1178,8 @@ export const MODULES = {
       color: COLOR, align: {type: 'string', enum: ['center', 'left'], default: 'center'}, rect: RECT
     },
     events: ['title', 'emphasis-<n>', 'kicker'],
+    timing: {minDuration: CATALOG_A_TIMING['hook-title'].minDuration, leadIn: 0, leadOut: CATALOG_A_TIMING['hook-title'].leadOut, gaps: [],
+      rules: [`emphasis[].at ≤ scene − ${CATALOG_A_TIMING['hook-title'].leadOut} s; kickerAt ≤ scene − ${CATALOG_A_TIMING['hook-title'].kickerLeadOut} s`]},
     resolve: resolveHookTitle
   },
   'kinetic-words': {
@@ -1119,6 +1191,8 @@ export const MODULES = {
       color: COLOR, rect: RECT
     },
     events: ['beat-<n>'],
+    timing: {minDuration: .5, leadIn: 0, leadOut: CATALOG_A_TIMING['kinetic-words'].leadOut,
+      gaps: [{between: 'words[].at (replace)', seconds: CATALOG_A_TIMING['kinetic-words'].gap.replace}, {between: 'words[].at (stack)', seconds: CATALOG_A_TIMING['kinetic-words'].gap.stack}], rules: []},
     resolve: resolveKineticWords
   },
   'count-up': {
@@ -1134,6 +1208,8 @@ export const MODULES = {
       color: COLOR, rect: RECT
     },
     events: ['count', 'hit'],
+    timing: {minDuration: .5, leadIn: 0, leadOut: CATALOG_A_TIMING['count-up'].leadOut, gaps: [],
+      rules: [`countAt + countDuration ≤ scene − ${CATALOG_A_TIMING['count-up'].countLeadOut} s (countDuration 0.3–6 s, default 1.2)`]},
     resolve: resolveCountUp
   },
   'equation-lockup': {
@@ -1148,6 +1224,8 @@ export const MODULES = {
       color: COLOR, rect: RECT
     },
     events: ['term-<n>', 'lockup', 'highlight'],
+    timing: {minDuration: .5, leadIn: 0, leadOut: CATALOG_A_TIMING['equation-lockup'].leadOut, gaps: [],
+      rules: [`the last term lands at at + stagger × (terms − 1) + ${CATALOG_A_TIMING['equation-lockup'].highlightAfterLand} s, which must be ≤ scene − ${CATALOG_A_TIMING['equation-lockup'].landLeadOut} s`, `highlightAt ≥ the highlighted term's time + ${CATALOG_A_TIMING['equation-lockup'].highlightAfterLand} s (once it has landed) and ≤ scene − ${CATALOG_A_TIMING['equation-lockup'].highlightLeadOut} s`]},
     resolve: resolveEquationLockup
   },
   cta: {
@@ -1155,11 +1233,12 @@ export const MODULES = {
     params: {
       action: {type: 'string', max: 40, required: true, description: 'e.g. "Follow for part two"'},
       emphasis: {type: 'string', max: 30, description: 'whole words of the action to colour'},
-      detail: {type: 'string', max: 60}, handle: {type: 'string', max: 32, description: '@handle or URL, no spaces'},
+      detail: {type: 'string', max: 80, description: 'two lines at most; shrinks to the 44 px floor, and a long URL may wrap after "/"'}, handle: {type: 'string', max: 64, description: '@handle or URL, no spaces (fits github.com/<owner>/<repo>; the pill shrinks to the 44 px floor before failing)'},
       icon: {type: 'string', enum: ['arrow', 'plus', 'loop', 'bell', 'none'], default: 'arrow (loop when loop is true)'},
       loop: {type: 'boolean', default: false}, color: COLOR, rect: RECT
     },
     events: ['action', 'handle', 'loop'],
+    timing: {minDuration: CATALOG_A_TIMING.cta.minDuration, leadIn: null, leadOut: null, gaps: [], rules: ['no timed params; the handle pops at 0.6 s']},
     resolve: resolveCta
   }
 };

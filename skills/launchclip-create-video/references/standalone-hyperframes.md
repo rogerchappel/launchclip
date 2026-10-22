@@ -220,11 +220,55 @@ sourceDir})` from `scripts/story-compiler.mjs` (resolve the story first with
 root `launchclip-story` composition with one paused timeline, each scene's
 module inside a scene layer, typed transitions between track-0 scenes with the
 phase-2 boundary attributes, one root `<audio>` from `audio.mix`, word captions,
-the loop ending and the brand fonts. Unknown modules render a labelled
+the loop ending, the brand fonts and ambient motion. Unknown modules render a labelled
 placeholder and a compile warning. Keep the output in its own directory: a
 directory holding both `storyboard.json` and `index.html` is read as
 HyperFrames. Repair the storyboard and recompile rather than editing the
 generated `index.html`.
+
+`motion.grammar` and `camera` (see `storyboard-modules.md`, "Motion grammar
+and camera") change only the motion: the grammar's eases, durations and
+staggers reach module entrances and exits, pops and typed transitions, and a
+world camera (`camera.mode` "world", or a `pan`, `whip-pan`, `orbit` or
+`pull` transition in a cuts story) puts every track-0 plate inside one world
+container (`#lc-camera` › `#lc-cam-drift` › `#lc-cam-zoom` › `#lc-cam-pan`)
+moved by seek-safe `fromTo` tweens and per-frame `tl.set` calls, with a
+parallax `#lc-world-bg`, `.lc-parallax` wrappers on overlays and a directional
+SVG motion blur that is zero at rest. Root `<video>` media does not follow the
+camera, so keep media-window video out of world-camera stories. A story without
+either compiles exactly as before.
+
+Ambient motion (`scripts/ambient.mjs`) keeps settled frames moving between
+beats, so the piece does not read as a slideshow:
+
+- **Background field.** Each track-0 plate's layer starts with
+  `<div class="lc-ambient-field">`: a few large, soft, low-alpha blobs of the
+  brand `primary` and `accent` colours. They glide slowly across the canvas,
+  wrapping only while off canvas, bob gently and breathe in scale.
+- **Hold drift.** Each eligible scene's module output sits in
+  `<div id="lc-drift-<scene>" class="lc-drift">`. It pushes in linearly about
+  the module rect's centre (scale up to 2–4% plus a few px of vertical travel)
+  from the scene start to the end of its render window. The push is clamped to
+  the safe zone and kept clear of the caption band; a rect with no room gets a
+  small pull-back instead.
+
+Both layers are seek-safe GSAP on the master timeline: `tl.fromTo` with
+`immediateRender: false`, `force3D: false` (2D transforms keep text crisp),
+linear or `sine.inOut` eases and no `onUpdate`. Remotion evaluates the same
+functions per frame, so the renderers stay in parity.
+
+Control it with `story.ambient` (`off | subtle | standard | lively`, or
+`{level, background, drift}`) and a per-scene `ambient` override. The
+default level follows each scene's `energy` (0 → subtle, 1, 2 and `"build"` →
+standard, 3 → lively). The footage-led lane gets no field and drifts overlays
+only. Leave it on: with `"off"`, settled frames hold still and the cinematic
+motion gate fails. `launchclip layout-check` checks every drifting rect at its
+largest extent. Never hand-edit the generated field or drift; change the
+storyboard and recompile.
+
+In world mode the plates are transparent, so the one background field moves
+at 0.3× behind them inside `#lc-world-bg` instead of once inside every plate;
+the hold drift stays inside each plate and composes with the camera drift.
 
 A `footage-led` storyboard adds a `base` recording (`{src, trim | edl, volume,
 fit, focus}`; see `recorded-video.md`). The compiler mounts the base as muted
@@ -303,7 +347,14 @@ constraints:
 - Reserve hard cuts for contrast. Pushes preserve direction, zooms change scale,
   morphs preserve identity, whips create an energetic discontinuity, and masks
   redirect focus. Each must have a visibly different spatial behavior.
-- The first frame must already communicate an intentional state. The first
+- Prefer the storyboard's motion grammar and world camera to hand-tuned eases:
+  `motion.grammar` keeps one easing character across the piece, and
+  `camera.mode` "world" gives camera travel with parallax depth, a slow drift
+  through holds and velocity-shaped blur from one tested implementation.
+- The first frame must already communicate an intentional state: render and
+  inspect a still of frame 0 itself. A module whose entrance animates in can
+  be blank on frame 0 even at `at: 0`, so open on one that is readable on
+  frame 0 (`hook-title`), or check the still and adjust. The first
   second states the promise. The first four seconds contain at least three
   meaningful changes in layout, evidence, framing, or visual register for
   portrait, or two for landscape.
@@ -492,15 +543,137 @@ launchclip finish <project> --renderer hyperframes --quality draft   # renders/d
 launchclip finish <project> --renderer hyperframes --quality high    # renders/final.mp4, after approval
 ```
 
-It synthesises `audio.narration` when set (`--voice kokoro|elevenlabs|supplied`),
+It synthesises `audio.narration` when set (see "Narration" below;
+`--voice kokoro|elevenlabs|supplied|test` overrides its provider),
 validates and layout-checks the storyboard, writes captions, builds the SFX
-and music mix from the hits, module cues and scene energy, compiles the
+and music mix from the hits, module cues, scene energy and the beat-synced
+music (`--music synth|elevenlabs|none`), compiles the
 storyboard to `.launchclip/finish/hyperframes/`, renders, masters to −14 LUFS /
 −1 dBTP, builds the temporal evidence and critic sheets, and runs the motion,
 audio, loudness, layout and evidence gates. It never rewrites
 `storyboard.json`, skips stages whose inputs have not changed, and writes
 `finish.json`. The critic gate stays `pending` until the fresh-context critic
 has reviewed `qa/critic-sheets/`.
+
+`--scene s3` and `--preview-scene s3` work with HyperFrames too, but its CLI
+has no frame range: finish renders the whole video (cached by the hash of the
+whole timeline, so an unchanged story is never rendered twice), and a preview
+is cut from that render. Partial rendering is Remotion-only for now.
+
+#### Narration: `audio.narration`, `launchclip voice`, then word anchors
+
+For a synthesised voice, write the script into `storyboard.json` and let
+`finish` produce the voice and its word timings. Do not hand-write
+`audio.voice` or `audio.words` for a synthesised take:
+
+```json
+"audio": {
+  "narration": {
+    "text": "Your launch stalled at the last step. Here is why.",
+    "provider": "kokoro",
+    "voice": "af_heart",
+    "speed": 1.2
+  }
+}
+```
+
+| field | required | default | notes |
+| --- | --- | --- | --- |
+| `text` | yes | | The whole script, at most 4000 characters. Sentences end in `.`, `!` or `?`. |
+| `provider` | no | `kokoro` | `kokoro` (local, free), `elevenlabs` (paid, needs `ELEVENLABS_API_KEY` and the user's approval), `supplied` (audio you already have in `audio.voice`), `test` (offline placeholder tone). |
+| `voice` | no | `af_heart` for Kokoro | The provider's voice id. |
+| `speed` | no | `1.2` for Kokoro, else `1` | 0.5 to 2. Speed is a generation parameter, not a time-stretch, so change it to fit a target length. |
+
+`finish` synthesises the take into `assets/audio/narration.wav` and
+`NARRATION.json` (`launchclip.narration.v1`: the text, provider, voice, speed,
+`duration_seconds` and every word's `start`/`end`), then uses it for word
+anchors, captions, ducking and beat sync. `finish --voice <provider>`
+overrides `provider` for one run. Takes are cached in `.launchclip/voice` by
+text, provider, voice and speed, so an unchanged script is never synthesised
+twice.
+
+Work in this order:
+
+1. **Write the narration text first**, in `audio.narration`, before any
+   scenes (`"scenes": []` is fine at this point).
+2. **Measure it:** `launchclip voice <project>` (or
+   `launchclip voice --text "..." --voice kokoro --speed 1.2` without a
+   project). It synthesises the take (cached), writes `NARRATION.json`, and
+   prints the duration, word count, words per minute and one row per sentence
+   with its start, end and first-word anchor. Adjust the text or `speed` and
+   rerun until the duration fits the target; never guess the length from a
+   word count.
+3. **Size the scenes to the real take:** set `format.duration` to the
+   measured duration plus a short tail (about 0.3 to 0.8 s), and give each
+   beat the span of its sentences.
+4. **Anchor scenes and hits to words, not seconds:** `"start": "word:stalled"`,
+   `"at": "word:twelve"` (`word:<text>#2` for the second occurrence). Anchors
+   survive a re-take; seconds do not.
+5. **Run `finish`.** It reuses the measured take and fails validation if an
+   anchor names a word that is not in the narration.
+
+If you change the text, rerun `launchclip voice` before moving scenes, then
+check that every anchor still resolves with `launchclip story validate`.
+
+#### Music and beat sync in `launchclip finish`
+
+`finish` picks the music: `--music synth|elevenlabs|none`, then
+`audio.music`, then ElevenLabs when `ELEVENLABS_API_KEY` is set (the CLI reads
+`.env` from the working directory, the project directory and each parent up to
+the repo root, without overriding the shell), else the license-free synth bed.
+If `finish` warns that ElevenLabs was asked for but the key is not set, it
+used the synth bed: stop and fix the key rather than shipping that mix. `audio.music` takes `"synth"`,
+`"none"`, an `assets/` path, or
+`{provider: "elevenlabs" | "synth" | "file", prompt?, bpm?, file?, sync?: "auto" | "off" | "cuts" | "hits"}`.
+
+- **ElevenLabs is paid.** Use it only when the user has approved spending on
+  their account. The request comes from the story: tone, target BPM, the
+  scene-energy arc (as a composition plan with one section per energy segment)
+  and no vocals. The length is whole bars at the target BPM plus a tail, and
+  every section boundary snaps to a bar line, so nudging a cut by less than
+  half a bar maps to the same request. Every generation is cached by request
+  under `$LAUNCHCLIP_CACHE/elevenlabs/music`.
+- **The music lock.** After the first generation, `finish` writes
+  `.launchclip/music-lock.json` (request hash, the track copied to
+  `.launchclip/music/`, BPM, and the *music brief* that produced it) and
+  reuses that track while the brief is unchanged. The brief is the provider,
+  model, `audio.music.prompt`, target BPM, style-pack music hints, seed,
+  narrated or not, and a length bucket (the track must cover the story plus
+  1 s and run at most 8 bars past it). Scene timing, words and module edits
+  are not part of it: they only re-run beat sync and alignment against the
+  locked track. So **iterate freely on everything except the music brief**;
+  changing the brief (or scene energies you want the music to follow: pass
+  `--music-regenerate` then) is a new paid generation.
+- **Read the music line `finish` prints.** `music: REUSE locked ...` or
+  `music: REUSE cached ...` costs nothing; `music: PAID ElevenLabs generation
+  of N s (about $X) (reason)` spends credits and says why (no lock yet, which
+  brief field changed, the story outgrew the track, or
+  `--music-regenerate`). If you did not expect `PAID`, stop before the next
+  run and find out why. Output terms depend on the user's ElevenLabs plan
+  (see `THIRD_PARTY_NOTICES.md`).
+- **Set energy honestly** (calm intro, `"build"` before the payoff, 3 on the
+  payoff): it drives both the bed and the ElevenLabs sections.
+- **Beats.** The track's BPM, beats and downbeats are measured into
+  `BEATS.json` (`launchclip.beats.v1`), so `beat:n` / `downbeat:n` anchors
+  resolve against the real music. A hand-written `BEATS.json` is never
+  overwritten.
+- **Beat sync follows the lane.** Narrated: the music's start offset (and a
+  tempo change of at most 3%) is chosen so downbeats land on the first cut
+  after the hook, the payoff/CTA start and strong hits; story time never
+  changes. Motion (no narration): second-timed cuts snap to the nearest
+  downbeat and hits to the nearest beat within 0.25 s, each move re-checked
+  against its module and layout-check, and reverted when it breaks one.
+  Word anchors never move off their word.
+- **Check `qa/beat-sync.json`:** requested vs measured BPM, the offset and
+  tempo, every key moment's distance to its downbeat, and each change,
+  fallback and skip. Plan cuts on bar lines (bar = 4 × 60 / BPM s) so fewer
+  of them need to move.
+
+To keep editing in Final Cut Pro, Premiere Pro or DaVinci Resolve after
+finish, export an editable timeline (base clips with their in points, each
+overlay scene as an alpha clip, voice, music, per-cue SFX, captions and
+markers): `launchclip export <project> --format fcpxml|premiere|edl|otio|all`.
+See [finishing-in-an-nle.md](finishing-in-an-nle.md).
 
 Hand-authored `index.html` projects (no storyboard) use the manual render
 below.

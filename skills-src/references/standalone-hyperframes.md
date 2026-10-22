@@ -220,11 +220,55 @@ sourceDir})` from `scripts/story-compiler.mjs` (resolve the story first with
 root `launchclip-story` composition with one paused timeline, each scene's
 module inside a scene layer, typed transitions between track-0 scenes with the
 phase-2 boundary attributes, one root `<audio>` from `audio.mix`, word captions,
-the loop ending and the brand fonts. Unknown modules render a labelled
+the loop ending, the brand fonts and ambient motion. Unknown modules render a labelled
 placeholder and a compile warning. Keep the output in its own directory: a
 directory holding both `storyboard.json` and `index.html` is read as
 HyperFrames. Repair the storyboard and recompile rather than editing the
 generated `index.html`.
+
+`motion.grammar` and `camera` (see `storyboard-modules.md`, "Motion grammar
+and camera") change only the motion: the grammar's eases, durations and
+staggers reach module entrances and exits, pops and typed transitions, and a
+world camera (`camera.mode` "world", or a `pan`, `whip-pan`, `orbit` or
+`pull` transition in a cuts story) puts every track-0 plate inside one world
+container (`#lc-camera` › `#lc-cam-drift` › `#lc-cam-zoom` › `#lc-cam-pan`)
+moved by seek-safe `fromTo` tweens and per-frame `tl.set` calls, with a
+parallax `#lc-world-bg`, `.lc-parallax` wrappers on overlays and a directional
+SVG motion blur that is zero at rest. Root `<video>` media does not follow the
+camera, so keep media-window video out of world-camera stories. A story without
+either compiles exactly as before.
+
+Ambient motion (`scripts/ambient.mjs`) keeps settled frames moving between
+beats, so the piece does not read as a slideshow:
+
+- **Background field.** Each track-0 plate's layer starts with
+  `<div class="lc-ambient-field">`: a few large, soft, low-alpha blobs of the
+  brand `primary` and `accent` colours. They glide slowly across the canvas,
+  wrapping only while off canvas, bob gently and breathe in scale.
+- **Hold drift.** Each eligible scene's module output sits in
+  `<div id="lc-drift-<scene>" class="lc-drift">`. It pushes in linearly about
+  the module rect's centre (scale up to 2–4% plus a few px of vertical travel)
+  from the scene start to the end of its render window. The push is clamped to
+  the safe zone and kept clear of the caption band; a rect with no room gets a
+  small pull-back instead.
+
+Both layers are seek-safe GSAP on the master timeline: `tl.fromTo` with
+`immediateRender: false`, `force3D: false` (2D transforms keep text crisp),
+linear or `sine.inOut` eases and no `onUpdate`. Remotion evaluates the same
+functions per frame, so the renderers stay in parity.
+
+Control it with `story.ambient` (`off | subtle | standard | lively`, or
+`{level, background, drift}`) and a per-scene `ambient` override. The
+default level follows each scene's `energy` (0 → subtle, 1, 2 and `"build"` →
+standard, 3 → lively). The footage-led lane gets no field and drifts overlays
+only. Leave it on: with `"off"`, settled frames hold still and the cinematic
+motion gate fails. `launchclip layout-check` checks every drifting rect at its
+largest extent. Never hand-edit the generated field or drift; change the
+storyboard and recompile.
+
+In world mode the plates are transparent, so the one background field moves
+at 0.3× behind them inside `#lc-world-bg` instead of once inside every plate;
+the hold drift stays inside each plate and composes with the camera drift.
 
 A `footage-led` storyboard adds a `base` recording (`{src, trim | edl, volume,
 fit, focus}`; see `recorded-video.md`). The compiler mounts the base as muted
@@ -303,7 +347,14 @@ constraints:
 - Reserve hard cuts for contrast. Pushes preserve direction, zooms change scale,
   morphs preserve identity, whips create an energetic discontinuity, and masks
   redirect focus. Each must have a visibly different spatial behavior.
-- The first frame must already communicate an intentional state. The first
+- Prefer the storyboard's motion grammar and world camera to hand-tuned eases:
+  `motion.grammar` keeps one easing character across the piece, and
+  `camera.mode` "world" gives camera travel with parallax depth, a slow drift
+  through holds and velocity-shaped blur from one tested implementation.
+- The first frame must already communicate an intentional state: render and
+  inspect a still of frame 0 itself. A module whose entrance animates in can
+  be blank on frame 0 even at `at: 0`, so open on one that is readable on
+  frame 0 (`hook-title`), or check the still and adjust. The first
   second states the promise. The first four seconds contain at least three
   meaningful changes in layout, evidence, framing, or visual register for
   portrait, or two for landscape.
@@ -492,15 +543,32 @@ launchclip finish <project> --renderer hyperframes --quality draft   # renders/d
 launchclip finish <project> --renderer hyperframes --quality high    # renders/final.mp4, after approval
 ```
 
-It synthesises `audio.narration` when set (`--voice kokoro|elevenlabs|supplied`),
+It synthesises `audio.narration` when set (see "Narration" below;
+`--voice kokoro|elevenlabs|supplied|test` overrides its provider),
 validates and layout-checks the storyboard, writes captions, builds the SFX
-and music mix from the hits, module cues and scene energy, compiles the
+and music mix from the hits, module cues, scene energy and the beat-synced
+music (`--music synth|elevenlabs|none`), compiles the
 storyboard to `.launchclip/finish/hyperframes/`, renders, masters to −14 LUFS /
 −1 dBTP, builds the temporal evidence and critic sheets, and runs the motion,
 audio, loudness, layout and evidence gates. It never rewrites
 `storyboard.json`, skips stages whose inputs have not changed, and writes
 `finish.json`. The critic gate stays `pending` until the fresh-context critic
 has reviewed `qa/critic-sheets/`.
+
+`--scene s3` and `--preview-scene s3` work with HyperFrames too, but its CLI
+has no frame range: finish renders the whole video (cached by the hash of the
+whole timeline, so an unchanged story is never rendered twice), and a preview
+is cut from that render. Partial rendering is Remotion-only for now.
+
+<!-- include: shared/narration.md -->
+
+<!-- include: shared/music-beat-sync.md -->
+
+To keep editing in Final Cut Pro, Premiere Pro or DaVinci Resolve after
+finish, export an editable timeline (base clips with their in points, each
+overlay scene as an alpha clip, voice, music, per-cue SFX, captions and
+markers): `launchclip export <project> --format fcpxml|premiere|edl|otio|all`.
+See [finishing-in-an-nle.md](finishing-in-an-nle.md).
 
 Hand-authored `index.html` projects (no storyboard) use the manual render
 below.

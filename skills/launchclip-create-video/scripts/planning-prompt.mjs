@@ -11,9 +11,12 @@
 // Plain ESM; imports only sibling kit/core files. Canonical copy:
 // kit/core/planning-prompt.mjs.
 
-import { STORY_SCHEMA, STORY_LANES, STORY_TRANSITIONS, STORY_CAPTION_STYLES } from './story.mjs';
-import { knownModules, catalogModules, isEditorialKind } from './modules.mjs';
+import { STORY_SCHEMA, STORY_LANES, STORY_TRANSITIONS, STORY_CAPTION_STYLES, STORY_CAMERA_LAYOUTS, STORY_AMBIENT_LEVELS } from './story.mjs';
+import { GRAMMARS, GRAMMAR_NAMES } from './grammar.mjs';
+import { knownModules, catalogModules, isEditorialKind, moduleTiming } from './modules.mjs';
 import { SAFE_ZONE_PROFILES } from './layout-check.mjs';
+import { stylePromptLines } from './style.mjs';
+import { CAPTION_PRESETS } from './captions.mjs';
 
 export const PLANNER_TIERS = Object.freeze(['structured', 'guided', 'bespoke']);
 
@@ -35,14 +38,14 @@ export const EDITORIAL_SPECS = Object.freeze({
   metric: { describe: 'One formatted number panel that steps through 1–8 values, with an attribution line.', params: { metric: '{mode: "illustration" | "data", unit ≤ 18, format: "number" | "percent" | "currency", currency? (three-letter code, currency only), decimals?: 0–2, values: [{value, at}] 1–8 (≥ 0.65 s apart), source? (required for data)}' }, events: ['enter', 'value-<i>-settle'] },
   progress: { describe: 'A progress bar toward an explicit goal (not an elapsed-time clock).', params: { progress: '{mode, values: [{value, at}] 1–8, max?, label? ≤ 32, source?}' }, events: ['enter', 'value-<i>-settle'] },
   'date-card': { describe: 'A calendar card for one specific date, with an optional caption.', params: { date: '{month: 1–12, day, year?, caption? ≤ 42, at?}' }, events: ['enter', 'date-settle'] },
-  'status-rack': { describe: 'A rack of rows with three status lights each that change state over time.', params: { rack: '{mode, source?, rows: [{label ≤ 24, states: [{at, lights: [bool, bool, bool]}]}] 1–8}' }, events: ['enter', 'rack-<i>-state-<j>'] },
-  'code-snippet': { describe: 'One to three lines of tokenised code, optionally typed on.', params: { code: '{language? ≤ 24, typing?: boolean, lines: [{tokens: [{text, type: "plain" | "keyword" | "string" | "number" | "comment" | "operator"}], at, typeDuration?}] 1–3}' }, events: ['enter', 'code-<i>-settle', 'code-<i>-typing-start'] },
+  'status-rack': { describe: 'A rack of rows with three status lights each that change state over time.', params: { rack: '{mode, source?, rows: [{label ≤ 24, states: [{at, lights: [bool, bool, bool], tone?: "pending" | "active" | "pass" | "fail"}]}] 1–8}', palette: '"status" (optional: lights mean fail, active, pass by position, and tones colour red → green; a light may be a tone name instead of true)' }, events: ['enter', 'rack-<i>-state-<j>'] },
+  'code-snippet': { describe: 'One to three lines of tokenised code, optionally typed on.', params: { code: '{language? ≤ 24, source?: "example" | "real", filename? ≤ 40, typing?: boolean, lines: [{tokens: [{text, type: "plain" | "keyword" | "string" | "number" | "comment" | "operator"}], at, typeDuration?}] 1–3}', label: 'string ≤ 40 or false (label row; default "<language> · Example", the language alone for source "real", the filename when given)' }, events: ['enter', 'code-<i>-settle', 'code-<i>-typing-start'] },
   'excerpt-window': { describe: 'A passage from a doc, README or article that zooms to one line and highlights it.', params: { excerpt: '{mode, source?, lines: [{segments: [{text, highlight?}]}] 1–5, focus: {line, scale: 1–1.3, at}, highlightMotion?}' }, events: ['enter', 'excerpt-focus', 'highlight-sweep-settle'] },
   'focus-flow': { describe: 'Two to four options arrive, one is chosen, the others fade and a progress line runs.', params: { focus: '{options: [string ≤ 24] 2–4, selected: index, arriveAt?, chooseAt?, progressAt?, progressDuration?, progressLabel? ≤ 32, icon?}' }, events: ['enter', 'options-settle', 'chosen-task', 'focus-progress-settle'] }
 });
 
 const EDITORIAL_COMMON = 'title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends';
-const EDITORIAL_TUNING = 'rect, accent (#rrggbb), theme, presentation ("solid" | "glass"), motion';
+const EDITORIAL_TUNING = 'rect, density ("fill" with a rect), accent (#rrggbb), theme, presentation ("solid" | "glass"), motion';
 
 // RFC §5 phrase→module table, as data. `patterns` are case-insensitive regex
 // sources matched against one sentence of the brief or narration. A row whose
@@ -110,6 +113,58 @@ export function suggestModules(text, { lane, limit = 3 } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Motion grammar and camera from the art direction
+
+// Art-direction words → grammar. The first grammar with a match wins, in
+// this order; no match keeps editorial.
+export const ART_DIRECTION_GRAMMARS = Object.freeze([
+  { grammar: 'playful', patterns: ['\\bplayful\\b', '\\bfun\\b', '\\bbouncy\\b', '\\bquirky\\b', '\\bkids?\\b', '\\bcartoon', '\\bwhimsical\\b', '\\bcheeky\\b', '\\bfriendly\\b'] },
+  { grammar: 'snappy', patterns: ['\\bsnappy\\b', '\\bpunchy\\b', '\\benergetic\\b', '\\bhype\\b', '\\bbold\\b', '\\bfast[- ]paced\\b', '\\bkinetic\\b', '\\bhigh[- ]energy\\b', '\\bsporty\\b', '\\blaunch\\b'] },
+  { grammar: 'documentary', patterns: ['\\bdocumentary\\b', '\\bserious\\b', '\\bsober\\b', '\\brestrained\\b', '\\bhistorical\\b', '\\barchival\\b', '\\binvestigative\\b', '\\bjournalis', '\\bnews\\b', '\\bsolemn\\b'] },
+  { grammar: 'smooth', patterns: ['\\bsmooth\\b', '\\bcalm\\b', '\\belegant\\b', '\\bpremium\\b', '\\bluxur', '\\bsoft\\b', '\\bdreamy\\b', '\\bwellness\\b', '\\bflowing\\b', '\\bcinematic\\b', '\\bminimal'] }
+]);
+const WORLD_WORDS = ['\\bjourney\\b', '\\bexplore', '\\bmap\\b', '\\bworld\\b', '\\bcontinuous\\b', '\\bone[- ]take\\b', '\\bpans?\\b', '\\bcamera\\b', '\\bfly[- ]?through\\b', '\\btravel'];
+const CUT_WORDS = ['\\bhard cuts?\\b', '\\bjump cuts?\\b', '\\bno camera\\b', '\\bstatic\\b'];
+
+/**
+ * Motion grammar and camera mode for an art direction (free text: the brief
+ * or style notes) and lane. Footage-led stories always keep cuts and
+ * punch-ins; the motion and voiceover lanes get the world camera when the
+ * direction asks for travel, or when its grammar is playful, snappy or smooth
+ * (editorial and documentary keep cuts unless asked).
+ * → {grammar, camera: {mode, layout?}, reason}
+ */
+export function suggestMotion({ artDirection = '', lane } = {}) {
+  const text = String(artDirection ?? '');
+  const match = (list) => list.some((source) => new RegExp(source, 'i').test(text));
+  const row = ART_DIRECTION_GRAMMARS.find((entry) => match(entry.patterns));
+  const grammar = row?.grammar ?? 'editorial';
+  if (lane === 'footage-led') return { grammar, camera: { mode: 'cuts' }, reason: 'footage-led keeps cuts and punch-ins' };
+  if (match(CUT_WORDS)) return { grammar, camera: { mode: 'cuts' }, reason: 'the direction asks for cuts' };
+  if (match(WORLD_WORDS)) return { grammar, camera: { mode: 'world', layout: 'auto' }, reason: 'the direction asks for camera travel' };
+  if (['playful', 'snappy', 'smooth'].includes(grammar)) return { grammar, camera: { mode: 'world', layout: 'auto' }, reason: `${grammar} motion travels between scenes` };
+  return { grammar, camera: { mode: 'cuts' }, reason: `${grammar} motion cuts between scenes` };
+}
+
+function motionLines({ lane, artDirection } = {}) {
+  const lines = [
+    `motion? {grammar}: one feel for every entrance, exit, pop, stagger, transition and camera move. grammar is one of ${GRAMMAR_NAMES.join(', ')}, or {base, ...overrides} (ease: {enter, exit, move, camera, emphasis}, duration: {enter, exit, transition, camera}, stagger multiplier). Omit it for editorial, the default.`,
+    ...GRAMMAR_NAMES.map((name) => `${name}: ${GRAMMARS[name].describe} Camera ease ${GRAMMARS[name].ease.camera}, camera moves about ${GRAMMARS[name].duration.camera} s, transitions about ${GRAMMARS[name].duration.transition} s.`),
+    `camera? {mode: "cuts" | "world", layout?: ${STORY_CAMERA_LAYOUTS.join(' | ')}, spacing?: 0–1, parallax?: boolean, blur?: boolean}. "cuts" (default): scenes replace each other. "world": every track-0 scene sits in one world and the camera travels to it, with a slow drift (never fully still), a parallax background (0.3×) and overlays at 1.15×. Motion blur: whip-pans always; pans, pushes, pulls and orbits get a moderate blur in snappy and playful; blur true blurs every move fully, false none.`,
+    'Camera transitions (scene.in or ending.in, track-0 scenes only): pan {direction: where the next scene sits, e.g. "right"}, whip-pan (fast, motion-blurred), orbit (pan with a slight turn), pull (dolly out to a wider scene) and, in world mode only, push (dolly into a named object: in.from_object "s3.gap-bracket", else the scene content). In cuts mode push keeps its slide meaning, and pan/whip-pan/orbit/pull still move a camera between the two scenes.',
+    'Choose by meaning and art direction: pan for continuation along a path, push to go deeper into a detail, pull to reveal the bigger picture, orbit for a change of angle on the same subject, whip-pan for energy or a time jump, cut/fade when the story jumps. Give camera moves 0.6–1.2 s (whip-pan 0.3–0.5 s) and keep scenes at least 2 s longer than their move.',
+    'Captions and camera moves: a vertical pan or whip-pan (up/down), push, pull or orbit carries panels through the caption band mid-move, so the captions dip out for those moves by default (captions overlay hide_during_moves: "auto"; true dips for every move, false never). Horizontal pans keep their captions. layout-check samples every frame of every camera move and flags key content crossing visible captions (camera-caption-band). When a line must stay captioned through the move, pan left or right.',
+    'In world mode, an ending {"loop_to": "s1", "in": {"type": "whip-pan", "dur": 0.4}} travels home for a seamless loop.',
+    'Lanes: footage-led keeps camera.mode "cuts" and uses punch-in for emphasis (no camera transitions). The motion and voiceover-motion lanes may use the world camera; use it when the direction asks for travel or the grammar is playful, snappy or smooth.'
+  ];
+  if (artDirection) {
+    const suggestion = suggestMotion({ artDirection, lane });
+    lines.push(`For this request: motion.grammar "${suggestion.grammar}" and camera.mode "${suggestion.camera.mode}" (${suggestion.reason}).`);
+  }
+  return lines;
+}
+
+// ---------------------------------------------------------------------------
 // Module catalogue
 
 function hidesCaptionsFrom(describe) {
@@ -146,7 +201,7 @@ export function moduleCatalogue() {
         params: [
           { name: 'title', text: 'string ≤ 54, required', tuning: false },
           ...Object.entries(spec?.params ?? {}).map(([name, text]) => ({ name, text, tuning: false })),
-          ...['rect', 'accent', 'theme', 'presentation', 'motion'].map((name) => ({ name, text: name === 'rect' ? '{x, y, width, height} canvas px (width ≥ 420, height ≥ 160)' : name === 'accent' ? '#rrggbb' : name === 'presentation' ? '"solid" | "glass"' : name === 'motion' ? '{enter, exit, distance, enterDuration, exitDuration, scale}' : '{surface, foreground, muted, border, accentText?}', tuning: true }))
+          ...['rect', 'density', 'accent', 'theme', 'presentation', 'motion'].map((name) => ({ name, text: name === 'rect' ? '{x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it' : name === 'density' ? '"fill" (an explicit rect\'s text grows to fill it; recommended with rect in 16:9) | "fixed"' : name === 'accent' ? '#rrggbb' : name === 'presentation' ? '"solid" | "glass"' : name === 'motion' ? '{enter, exit, distance, enterDuration, exitDuration, scale}' : '{surface, foreground, muted, border, accentText?}', tuning: true }))
         ],
         events: spec?.events ?? ['enter'],
         hidesCaptions: false
@@ -185,7 +240,7 @@ function tierRules(tier) {
 
 function laneRules(lane) {
   const rules = {
-    motion: 'motion: no voice. Full-frame modules cover the whole duration back to back on track 0 (no gaps). Time scenes in seconds or beat anchors. audio.music may be "synth".',
+    motion: 'motion: no voice. Full-frame modules cover the whole duration back to back on track 0 (no gaps). Time scenes in seconds or beat anchors. finish snaps second-timed cuts to the nearest downbeat (within 0.25 s), so plan cuts on bar lines where you can.',
     'voiceover-motion': 'voiceover-motion: audio.voice and audio.words are fixed inputs; copy them unchanged. Full-frame modules cover the whole duration on track 0. Start scenes and place hits on word anchors from the narration so visuals land on the spoken word. Add a captions overlay.',
     'footage-led': 'footage-led: base (the edited recording under assets/) plays underneath and is a fixed input; copy it unchanged. Scenes are overlays and inserts on the strong lines only, covering 10–40% of the runtime (up to 50% with resource inserts); gaps show the recording. Prefer callout, kinetic-words, count-up and metric. Add a captions overlay.'
   };
@@ -200,13 +255,14 @@ function safeZoneLines(format) {
   return [
     ...lines,
     'Catalogue modules size and place themselves inside the safe zone and fail with a param error when copy is too long; shorten copy rather than shrinking it.',
-    'Editorial modules without a rect size and place themselves from their content inside the safe zone and above the caption band; omit rect unless the layout needs a specific position. They need a 1080x1920 or 1920x1080 format.'
+    'Editorial modules without a rect size and place themselves from their content inside the safe zone and above the caption band, with type scaled to fill the panel; omit rect unless the layout needs a specific position. With a rect in 16:9, also set density: "fill", or the text stays small and a bigger rect is just more empty panel. They need a 1080x1920 or 1920x1080 format.'
   ];
 }
 
 function captionLines() {
   return [
     `Captions are one overlay: {"type": "captions", "style": ${STORY_CAPTION_STYLES.map((value) => JSON.stringify(value)).join(' | ')}}. Use "word-highlight" whenever there is a voice.`,
+    `A caption preset may replace style: {"type": "captions", "preset": "<name>"}, one of ${Object.keys(CAPTION_PRESETS).join(', ')}. With a style pack, write {"type": "captions"} and let the pack choose the preset.`,
     'Modules marked "hides captions" hide them while on screen; every other module keeps them visible, so its content stays above the caption band.',
     'On-screen copy is shorter than the narration; never put a whole sentence on screen.'
   ];
@@ -226,10 +282,22 @@ function contractLines() {
     `schema: "${STORY_SCHEMA}" (exactly). lane: one of ${STORY_LANES.join(', ')} (given; never change it).`,
     'format: {width, height, fps, duration, platform?} and brand: {colors, fonts} are given; copy them unchanged.',
     'audio: {voice?, words?, music?, sfx?}; base: null, or the recording path for footage-led.',
-    `scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: ${STORY_TRANSITIONS.join(' | ')}, dur, direction?, from_object?}, params, hits?}].`,
-    'in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus.',
-    'overlays: [captions]. ending: {loop_to: "<first scene id>"} for a seamless loop (Shorts).',
+    'audio.music: omit it (finish picks ElevenLabs when a key is set, else the synth bed), or "synth", "none", an assets/ path, or {provider: "elevenlabs" | "synth" | "file", prompt?, bpm?, file?, sync?: "auto" | "off" | "cuts" | "hits"}. The music follows scene energy, so set energy honestly: calm intro, "build" before the payoff, 3 on the payoff. A prompt describes style only (no vocals is added for you).',
+    `scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: ${STORY_TRANSITIONS.join(' | ')}, dur, direction?, from_object?}, params, hits?, ambient?}].`,
+    'in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus; camera moves (pan, whip-pan, orbit, pull, world push) are under "Motion grammar and camera".',
+    'overlays: [captions]. ending: {loop_to: "<first scene id>"} for a seamless loop (Shorts). For no loop, set ending {loop: false} (or loop_to: null, or omit ending without a looping style pack); the last scene then holds settled to the final frame (ending.final "hold", the default), or use final "fade" to fade it fully to the background by the final frame, or "exit" to play its own exit. ending accepts only loop_to, in, loop and final.',
+    ...ambientLines(),
     'Vary the modules: a 20–40 s piece uses at least four different modules and never the same module three times in a row.'
+  ];
+}
+
+// Ambient motion (kit/core/ambient.mjs): what the planner may set and what
+// the default already does.
+function ambientLines() {
+  return [
+    `ambient? (optional): {level: ${STORY_AMBIENT_LEVELS.join(' | ')}, background?: boolean, drift?: boolean}, or just the level. Ambient motion keeps settled frames alive between beats: a slow push-in on each settled module (kept inside the safe zone) and soft brand-colour light drifting behind the plates.`,
+    'Usually leave ambient out: the level follows each scene\'s energy (0 → subtle, 1, 2 or "build" → standard, 3 → lively), and footage-led stories get no background field and drift overlays only. Set story ambient only to change the whole piece (for example "subtle" for a calm brand film); "off" makes settled frames hold still and fails the cinematic motion gate.',
+    'A scene may set ambient to override the story: "off" for one deliberately still beat, {"drift": false} when the module\'s own motion should stand alone, or a level.'
   ];
 }
 
@@ -271,7 +339,7 @@ export function exampleStoryboard({ format, brand } = {}) {
     lane: 'motion',
     format: fmt,
     brand: brand ?? DEFAULT_BRAND,
-    audio: { music: { source: 'synth', bpm: 100, key: 'A' }, sfx: 'auto' },
+    audio: { music: { provider: 'synth', bpm: 100, key: 'A' }, sfx: 'auto' },
     base: null,
     scenes: [
       { id: 's1', module: 'hook-title', start: 0, end: 3, energy: 1, params: { headline: 'Why does CI take 40 minutes?', emphasis: '40 minutes', kicker: 'Fix it' }, hits: [{ at: 0.8, event: 'emphasis-0' }] },
@@ -309,7 +377,7 @@ function section(title, lines) {
  * fixed inputs (copied into the prompt); words: optional measured narration
  * (NARRATION.json words) for word anchors.
  */
-export function planningPrompt({ tier = 'structured', lane, format, brand, words } = {}) {
+export function planningPrompt({ tier = 'structured', lane, format, brand, words, style, artDirection } = {}) {
   if (!PLANNER_TIERS.includes(tier)) throw new Error(`tier must be one of ${PLANNER_TIERS.join(', ')}`);
   if (lane !== undefined && !STORY_LANES.includes(lane)) throw new Error(`lane must be one of ${STORY_LANES.join(', ')}`);
   const lines = [
@@ -321,8 +389,10 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
       `format: ${format ? JSON.stringify(format) : '(given in the request)'}`,
       `brand: ${JSON.stringify(brand ?? DEFAULT_BRAND)}`
     ]),
+    ...(style ? section('Style pack (keep the channel consistent)', stylePromptLines(style).map((line) => `- ${line}`)) : []),
     ...section('Contract', contractLines().map((line) => `- ${line}`)),
     ...section('Lane rules', laneRules(lane).map((line) => `- ${line}`)),
+    ...section('Motion grammar and camera', motionLines({ lane, artDirection }).map((line) => `- ${line}`)),
     ...section(`Tier rules (${tier})`, tierRules(tier).map((line) => `- ${line}`)),
     ...section('Time anchors', anchorLines().map((line) => `- ${line}`)),
     ...section('Safe zone', safeZoneLines(format).map((line) => `- ${line}`)),
@@ -343,6 +413,28 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
  * Markdown reference for the create-video skills
  * (skills-src/references/storyboard-modules.md, generated).
  */
+const seconds = (value) => (value == null ? '—' : `${Math.round(value * 1000) / 1000} s`);
+
+/**
+ * The per-module timing table (kit/core/modules.mjs moduleTiming(), generated
+ * from each module's own timing constants) as markdown lines.
+ */
+export function timingTableLines() {
+  const rows = knownModules().map((id) => {
+    const timing = moduleTiming(id);
+    if (!timing) return `| ${id} | — | — | — | — |`;
+    const notes = [...timing.gaps.map((gap) => `${gap.between}: ≥ ${seconds(gap.seconds)} apart`), ...timing.rules].join('; ') || '—';
+    return `| ${id} | ${seconds(timing.minDuration)} | ${seconds(timing.leadIn)} | ${timing.leadOut == null ? '—' : `scene − ${seconds(timing.leadOut)}`} | ${notes.replace(/\|/g, '\\|')} |`;
+  });
+  return [
+    'Generated from the modules\' own timing constants (`moduleTiming(id)` in kit/core/modules.mjs; `launchclip module fit <module>` prints the same rules with the window for a given `--duration`). `at` values are seconds from the scene start: the first beat no earlier than the lead-in, the last no later than the lead-out before the scene end. A faster motion grammar can shorten a catalogue B enter, which only moves its lead-in earlier.',
+    '',
+    '| Module | Min scene | First `at` | Last `at` | Gaps and rules |',
+    '| --- | --- | --- | --- | --- |',
+    ...rows
+  ];
+}
+
 export function storyboardModulesReference() {
   const lines = [
     '# Storyboard modules',
@@ -362,11 +454,13 @@ export function storyboardModulesReference() {
     ]),
     ...section('Contract', contractLines().map((line) => `- ${line}`)),
     ...section('Lane rules', laneRules().map((line) => `- ${line}`)),
+    ...section('Motion grammar and camera', motionLines().map((line) => `- ${line}`)),
     ...section('Time anchors', anchorLines().map((line) => `- ${line}`)),
     ...section('Safe zone', safeZoneLines().map((line) => `- ${line}`)),
     ...section('Captions', captionLines().map((line) => `- ${line}`)),
     ...section('Phrase → module', ['| The script… | Module |', '| --- | --- |', ...phraseLines()]),
     ...section('Modules', moduleLines('guided')),
+    ...section('Timing rules', timingTableLines()),
     ...section('Example', ['```json', JSON.stringify(exampleStoryboard(), null, 2), '```'])
   ];
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';

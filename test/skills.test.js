@@ -16,7 +16,14 @@ test("CLI skill routes premium one-shot work through cinematic readiness", async
 });
 
 test("subscription skill requires the cinematic funnel and local output gate", async () => {
-  const skill = await text("skills/launchclip-create-video/SKILL.md");
+  // SKILL.md carries the quick path; references/workflow.md the full workflow.
+  const quick = await text("skills/launchclip-create-video/SKILL.md");
+  const skill = `${quick}\n${await text("skills/launchclip-create-video/references/workflow.md")}`;
+  for (const artifact of ["CONCEPTS.json", "STORY.json", "NARRATION.json", "AUDIO-MANIFEST.json", "CINEMATIC-READINESS.json", "qa/rendered-candidates.json", "qa/temporal-evidence/manifest.json"]) {
+    assert.ok(quick.includes(artifact), `SKILL.md names ${artifact}`);
+  }
+  assert.match(quick, /Do not run `launchclip produce`/);
+  assert.match(quick, /data-launchclip-cinematic-contract="phase-2"/);
   const reference = await text("skills/launchclip-create-video/references/cinematic-production.md");
   const runtime = await text("skills/launchclip-create-video/references/standalone-hyperframes.md");
   const metadata = await text("skills/launchclip-create-video/agents/openai.yaml");
@@ -58,3 +65,27 @@ test("subscription skill requires the cinematic funnel and local output gate", a
 async function text(relativePath) {
   return readFile(path.join(root, relativePath), "utf8");
 }
+
+test("both create-video skills open with a concise quick path in gate order", async () => {
+  for (const [dir, renderer] of [["skills/launchclip-create-video", "hyperframes"], ["skills/launchclip-create-video-remotion", "remotion"]]) {
+    const skill = await text(`${dir}/SKILL.md`);
+    assert.ok(Buffer.byteLength(skill) < 12_000, `${dir}/SKILL.md stays short (${Buffer.byteLength(skill)} bytes)`);
+    const quick = skill.slice(skill.indexOf("## Quick path"));
+    assert.ok(skill.indexOf("## Quick path") > 0 && skill.indexOf("## Quick path") < 2500, "the quick path comes first");
+    const order = ["BRIEF.md", "CONCEPTS.json", "launchclip voice", "storyboard-modules.md", "--candidate", `launchclip finish <project> --renderer ${renderer}`, "qa/critic.json", "launchclip cinematic-check"];
+    let at = -1;
+    for (const step of order) {
+      const next = quick.indexOf(step, at + 1);
+      assert.ok(next > at, `${dir}: ${step} follows the previous step`);
+      at = next;
+    }
+    for (const reference of ["workflow.md", "cinematic-production.md", "storyboard-modules.md", "shorts-delivery.md"]) {
+      assert.ok(skill.includes(`references/${reference}`), `${dir} links ${reference}`);
+      await text(`${dir}/references/${reference}`);
+    }
+    const workflow = await text(`${dir}/references/workflow.md`);
+    assert.doesNotMatch(workflow, /\]\(references\//, "workflow.md links its siblings directly");
+    assert.match(workflow, /## Author and repair/);
+    assert.match(workflow, /## Preserve the cost boundary/);
+  }
+});

@@ -21,6 +21,7 @@ import { STORY_LANES, resolveStory, validateStory } from "../kit/core/story.mjs"
 import { isEditorialKind, knownModules, formatAspect, resolveModule } from "../kit/core/modules.mjs";
 import { checkLayout, elementsFromEditorialLayout, elementsFromStory } from "../kit/core/layout-check.mjs";
 import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, planningPrompt, suggestModules } from "../kit/core/planning-prompt.mjs";
+import { applyStyle } from "../kit/core/style.mjs";
 import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { estimateModelUsageCost } from "./cost_tracker.js";
 
@@ -43,7 +44,10 @@ export const STORYBOARD_ENVELOPE_SCHEMA = Object.freeze({
  *  valid_first_attempt, errors, warnings, layout, usage, cost, elapsed_ms, phrase_hints}
  */
 export async function planStoryboard(options = {}) {
-  const { brief, words = null, beats = null, lane = "motion", format, brand = DEFAULT_BRAND, tier = "structured", model = null, client, audio = null, base = null, maxRepairs = DEFAULT_MAX_REPAIRS, now = () => Date.now() } = options;
+  const { brief, words = null, beats = null, lane = "motion", format, tier = "structured", model = null, client, audio = null, base = null, maxRepairs = DEFAULT_MAX_REPAIRS, now = () => Date.now(), style = null } = options;
+  // style: a loaded launchclip.style.v2 pack. Its brand is the default brand,
+  // the planned storyboard names it, and the checks run on the merged story.
+  const brand = options.brand ?? (style?.brand ? styleBrand(style) : DEFAULT_BRAND);
   if (!nonEmpty(brief)) throw new Error("planStoryboard needs a non-empty brief");
   if (!PLANNER_TIERS.includes(tier)) throw new Error(`tier must be one of ${PLANNER_TIERS.join(", ")}`);
   if (!STORY_LANES.includes(lane)) throw new Error(`lane must be one of ${STORY_LANES.join(", ")}`);
@@ -52,7 +56,8 @@ export async function planStoryboard(options = {}) {
   const repairs = Math.max(0, Math.min(5, Number.isInteger(maxRepairs) ? maxRepairs : DEFAULT_MAX_REPAIRS));
   const wordList = Array.isArray(words) ? words : Array.isArray(words?.words) ? words.words : [];
   const fixed = fixedInputs({ lane, format, brand, audio, base });
-  const instructions = planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined });
+  if (style?.name) fixed.style = style.name;
+  const instructions = planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief });
   const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane });
   const request = planRequest({ brief, fixed, hints });
   const started = now();
@@ -88,7 +93,7 @@ export async function planStoryboard(options = {}) {
     if (!extracted.ok) checked = { ok: false, errors: [`json: ${extracted.error}`], warnings: [], storyboard: null, layout: emptyLayout(), candidate: extracted.text ?? null };
     else {
       const pinned = pinInputs(extracted.storyboard, fixed);
-      checked = checkStoryboard(pinned.storyboard, { words: wordList, beats, tier });
+      checked = checkStoryboard(pinned.storyboard, { words: wordList, beats, tier, style });
       checked.warnings = [...pinned.warnings, ...checked.warnings];
       checked.candidate = extracted.storyboard;
     }
@@ -153,10 +158,12 @@ export async function planStoryboard(options = {}) {
  * {errors, warnings, findings}}. Error strings are prefixed by stage:
  * "validation:", "tier:", "anchors:", "params:", "layout:".
  */
-export function checkStoryboard(input, { words = [], beats = null, tier = "structured" } = {}) {
+export function checkStoryboard(raw, { words = [], beats = null, tier = "structured", style = null } = {}) {
   const errors = [];
   const warnings = [];
   const layout = emptyLayout();
+  // The checks see the story as every renderer will: with the style merged.
+  const input = style && raw && typeof raw === "object" && !Array.isArray(raw) && raw.style ? applyStyle(raw, style).story : raw;
   const validation = validateStory(input, { modules: knownModules() });
   errors.push(...validation.errors.map((entry) => `validation: ${entry}`));
   warnings.push(...validation.warnings);
@@ -233,6 +240,14 @@ export function tierErrors(story, tier) {
 // ---------------------------------------------------------------------------
 // Inputs and prompts
 
+/** A style pack's brand over the default brand (roles the pack omits keep the default). */
+export function styleBrand(pack) {
+  return {
+    colors: { ...DEFAULT_BRAND.colors, ...(pack?.brand?.colors ?? {}) },
+    fonts: { ...DEFAULT_BRAND.fonts, ...(pack?.brand?.fonts ?? {}) }
+  };
+}
+
 /** The tooling-owned fields: the model never chooses them (RFC §3). */
 export function fixedInputs({ lane, format, brand = DEFAULT_BRAND, audio = null, base = null }) {
   const fixed = {
@@ -264,6 +279,10 @@ export function pinInputs(story, fixed) {
   if (fixed.lane === "footage-led") copy.base = fixed.base;
   else if (copy.base !== undefined && copy.base !== null) { warnings.push("base is only for the footage-led lane and has been removed"); copy.base = null; }
   if (copy.schema === undefined) copy.schema = "launchclip.story.v1";
+  if (fixed.style) {
+    if (copy.style !== undefined && (typeof copy.style === "string" ? copy.style : copy.style?.name) !== fixed.style) warnings.push("style was changed by the model and has been reset to the fixed input");
+    copy.style = typeof copy.style === "object" && copy.style?.name === fixed.style ? copy.style : fixed.style;
+  }
   return { storyboard: copy, warnings };
 }
 
@@ -281,6 +300,7 @@ function planRequest({ brief, fixed, hints }) {
     `format: ${JSON.stringify(fixed.format)}`,
     `brand: ${JSON.stringify(fixed.brand)}`
   ];
+  if (fixed.style) lines.push(`style: ${JSON.stringify(fixed.style)}`);
   if (Object.keys(fixed.audio).length) lines.push(`audio: ${JSON.stringify(fixed.audio)} (add music and sfx as you see fit)`);
   if (fixed.base) lines.push(`base: ${JSON.stringify(fixed.base)}`);
   if (hints.length) {

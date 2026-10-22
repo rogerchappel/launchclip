@@ -23,7 +23,7 @@ const windowBar = (label, dots) => `<div class="ui-bar">${dots.map(dot => `<span
 
 function moduleMotion(target, model, origin) {
   const selector = js(target), m = model.motion;
-  if (!m.supplied) return [`tl.fromTo(${selector}, {opacity:0,y:18}, {opacity:1,y:0,duration:0.28,ease:'power3.out'}, ${m.enterStart});`, `tl.to(${selector}, {opacity:0,y:-8,duration:0.22,ease:'power2.in'}, ${m.exitStart});`];
+  if (!m.supplied) return [`tl.fromTo(${selector}, {opacity:0,y:18}, {opacity:1,y:0,duration:${m.enterDuration},ease:'${m.enterEase}'}, ${m.enterStart});`, `tl.to(${selector}, {opacity:0,y:-8,duration:${m.exitDuration},ease:'${m.exitEase}'}, ${m.exitStart});`];
   // Root media and chrome share the chrome's top-left pivot, despite their
   // distinct root DOM boxes. The media box begins 48px below that pivot.
   const from = {...m.enterFrom, transformOrigin: origin};
@@ -132,7 +132,7 @@ export function emitEditorialModule(model) {
       body += '</div>';
     } else if (kind === 'code-snippet') {
       css += `#${id} .ui-code-language{font:22px/1.3 ${F.mono};margin:0;padding:0 24px 16px;color:${C.codeLanguage}}#${id} .ui-code{margin:0;padding:0 24px 24px;font:${c.codeFont}px/1.5 ${F.mono}}#${id} .ui-code-line{display:block;height:${c.lineHeight}px;white-space:pre;opacity:0}#${id} .ui-token-keyword{color:${C.token.keyword}}#${id} .ui-token-string{color:${C.token.string}}#${id} .ui-token-number{color:${accent}}#${id} .ui-token-comment{color:${C.token.comment}}#${id} .ui-token-operator{color:${C.token.operator}}`;
-      body += `<p class="ui-code-language">${escape(c.label)}</p><pre class="ui-code">`;
+      body += `${c.label === null ? '' : `<p class="ui-code-language">${escape(c.label)}</p>`}<pre class="ui-code">`;
       for (const line of c.lines) {
         const i = line.index;
         let character = 0;
@@ -196,8 +196,10 @@ export function emitEditorialModule(model) {
       for (const row of c.rows) {
         const i = row.index;
         // Tick path reused from shipped public/icons/check.svg.
-        body += `<div id="${id}-row-${i}" class="ui-row" style="height:${c.rowHeight}px"><span class="ui-check"><svg viewBox="${c.check.viewBox}" aria-hidden="true"><path d="${c.check.path}" fill="none" stroke="${accent}" stroke-width="${c.check.strokeWidth}" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ui-label">${escape(row.label)}</span><span class="ui-status"><span id="${id}-status-${i}-pending">${escape(labels.pending)}</span><span id="${id}-status-${i}-active" style="opacity:0;position:absolute;right:0">${escape(labels.active)}</span><span id="${id}-status-${i}-done" style="opacity:0;position:absolute;right:0">${escape(labels.done)}</span></span></div>`;
-        if (row.status !== 'pending') motion.push(`tl.to(${js(`#${id}-status-${i}-pending`)}, {opacity:0,duration:0.01}, ${row.time});`, `tl.to(${js(`#${id}-status-${i}-${row.status}`)}, {opacity:1,duration:0.16}, ${row.time});`);
+        body += `<div id="${id}-row-${i}" class="ui-row" style="height:${c.rowHeight}px"><span class="ui-check"><svg viewBox="${c.check.viewBox}" aria-hidden="true"><path d="${c.check.path}" fill="none" stroke="${accent}" stroke-width="${c.check.strokeWidth}" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ui-label">${escape(row.label)}</span><span class="ui-status"><span id="${id}-status-${i}-pending"${row.status === 'pending' ? '' : ' style="opacity:0"'}>${escape(labels.pending)}</span><span id="${id}-status-${i}-active" style="opacity:0;position:absolute;right:0">${escape(labels.active)}</span><span id="${id}-status-${i}-done" style="opacity:0;position:absolute;right:0">${escape(labels.done)}</span></span></div>`;
+        // A row that turns active or done at its time shows no status label
+        // before it: the pending label would read as a state it never has.
+        if (row.status !== 'pending') motion.push(`tl.to(${js(`#${id}-status-${i}-${row.status}`)}, {opacity:1,duration:0.16}, ${row.time});`);
         if (row.status === 'done') motion.push(`tl.to(${js(`#${id}-row-${i} svg`)}, {opacity:1,duration:0.16,ease:'power2.out'}, ${row.time});`);
         if (row.status === 'active') motion.push(`tl.to(${js(`#${id}-row-${i} .ui-check`)}, {borderColor:${js(accent)},duration:0.16}, ${row.time});`, `tl.to(${js(`#${id}-row-${i}`)}, {backgroundColor:${js(accent + A.wash)},duration:0.16}, ${row.time});`);
         if (row.doneTime !== null) motion.push(`tl.to(${js(`#${id}-row-${i}`)}, {backgroundColor:${js(c.doneBackground)},duration:0.16}, ${row.doneTime});`, `tl.to(${js(`#${id}-status-${i}-active`)}, {opacity:0,duration:0.01}, ${row.doneTime});`, `tl.to(${js(`#${id}-status-${i}-done`)}, {opacity:1,duration:0.16}, ${row.doneTime});`, `tl.to(${js(`#${id}-row-${i} svg`)}, {opacity:1,duration:0.16,ease:'power2.out'}, ${row.doneTime});`);

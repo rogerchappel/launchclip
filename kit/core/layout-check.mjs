@@ -21,6 +21,10 @@ export const SAFE_ZONE_PROFILES = Object.freeze({
     centerOfMassY: 860,
     centerOfMassTolerance: 0.15,
     minTextPx: 44,
+    // Editorial body copy (textRole "body") and secondary text (notes,
+    // labels); see textRoles() in editorial-core.mjs.
+    minBodyTextPx: 32,
+    minSecondaryTextPx: 24,
     heroFill: Object.freeze([0.7, 0.9]),
     lowerThird: true,
     maxEmptySeconds: 3
@@ -34,6 +38,8 @@ export const SAFE_ZONE_PROFILES = Object.freeze({
     centerOfMassY: 540,
     centerOfMassTolerance: 0.2,
     minTextPx: 32,
+    minBodyTextPx: 22,
+    minSecondaryTextPx: 18,
     heroFill: null,
     lowerThird: false,
     maxEmptySeconds: 3
@@ -62,7 +68,9 @@ export function profileGeometry(canvas, profile) {
     captionBand: scale(resolved.captionBand),
     centerOfMassY: resolved.centerOfMassY == null ? canvas.height / 2 : resolved.centerOfMassY * sy,
     centerOfMassTolerance: (resolved.centerOfMassTolerance ?? 0.2) * canvas.height,
-    minTextPx: resolved.minTextPx == null ? null : resolved.minTextPx * sy
+    minTextPx: resolved.minTextPx == null ? null : resolved.minTextPx * sy,
+    minBodyTextPx: resolved.minBodyTextPx == null ? null : resolved.minBodyTextPx * sy,
+    minSecondaryTextPx: resolved.minSecondaryTextPx == null ? null : resolved.minSecondaryTextPx * sy
   };
 }
 
@@ -127,14 +135,20 @@ export function checkLayout({ canvas, elements, safeZone, captionBand, profile, 
     }
   }
 
-  // 4. Minimum key-text size.
-  if (geometry.minTextPx != null) {
-    for (const item of items) {
-      if (item.minTextPx == null || !(item.role === "text" || item.role === "hero" || item.role === "caption")) continue;
-      if (item.minTextPx + EPSILON < geometry.minTextPx) {
-        add("min-text-size", "error", [item.id], item.start,
-          `smallest key text is ${round(item.minTextPx)} px; ${resolvedProfile.id ?? "this profile"} needs at least ${round(geometry.minTextPx)} px`);
-      }
+  // 4. Minimum text sizes: key text against the profile floor (body copy,
+  // textRole "body", against the body floor), secondary text against the
+  // secondary floor.
+  for (const item of items) {
+    if (!(item.role === "text" || item.role === "hero" || item.role === "caption")) continue;
+    const body = item.textRole === "body";
+    const keyFloor = body ? geometry.minBodyTextPx ?? geometry.minTextPx : geometry.minTextPx;
+    if (item.minTextPx != null && keyFloor != null && item.minTextPx + EPSILON < keyFloor) {
+      add("min-text-size", "error", [item.id], item.start,
+        `smallest ${body ? "body" : "key"} text is ${round(item.minTextPx)} px; ${resolvedProfile.id ?? "this profile"} needs at least ${round(keyFloor)} px${body ? " (give the module a larger rect or drop density: \"fixed\" so its type can scale)" : ""}`);
+    }
+    if (item.minSecondaryTextPx != null && geometry.minSecondaryTextPx != null && item.minSecondaryTextPx + EPSILON < geometry.minSecondaryTextPx) {
+      add("min-text-size", "error", [item.id], item.start,
+        `smallest secondary text (notes, labels) is ${round(item.minSecondaryTextPx)} px; ${resolvedProfile.id ?? "this profile"} needs at least ${round(geometry.minSecondaryTextPx)} px`);
     }
   }
 
@@ -199,10 +213,52 @@ export function checkLayout({ canvas, elements, safeZone, captionBand, profile, 
   };
 }
 
+// Camera sweeps: key content carried through the caption band by a camera
+// move while captions are on screen. A layout check at rest cannot see it
+// (every plate is clear of the band once the camera settles), so the caller
+// samples each move frame by frame and passes the screen rect of every
+// visible plate element (src/layout_check.js transforms the declared rects by
+// the world camera, kit/core/camera-world.mjs). A crossing is a warning, or an
+// error once it lasts at least `errorSeconds`.
+//   frames: [{t, move: {sceneId, type, start, duration}, rects: [{id, rect}]}]
+//   captionVisible: [[from, to]] spans where captions are on screen
+//   step: seconds between frames (1 / fps)
+// minOverlap: the share of the band a rect must cover to count, so a panel
+// edge grazing the band through the camera drift is not a crossing.
+export const CAMERA_SWEEP = Object.freeze({ errorSeconds: 0.25, minOverlap: 0.05 });
+
+export function checkCameraSweeps({ band, frames = [], captionVisible = [], step = 1 / 30, errorSeconds = CAMERA_SWEEP.errorSeconds, minOverlap = CAMERA_SWEEP.minOverlap } = {}) {
+  if (!band) return [];
+  const bandArea = Math.max(EPSILON, area(band));
+  const visible = (t) => captionVisible.some(([from, to]) => t >= from - EPSILON && t < to - EPSILON);
+  const runs = new Map();
+  for (const frame of frames) {
+    if (!visible(frame.t)) continue;
+    for (const { id, rect } of frame.rects) {
+      if (intersectionArea(rect, band) / bandArea < minOverlap) continue;
+      const key = `${frame.move.sceneId}\u0000${id}`;
+      const run = runs.get(key) ?? { id, move: frame.move, first: frame.t, last: frame.t, count: 0 };
+      run.first = Math.min(run.first, frame.t); run.last = Math.max(run.last, frame.t); run.count += 1;
+      runs.set(key, run);
+    }
+  }
+  return [...runs.values()].map((run) => {
+    const seconds = run.count * step;
+    const direction = run.move.direction ? ` ${run.move.direction}` : "";
+    return {
+      rule: "camera-caption-band",
+      severity: seconds + EPSILON >= errorSeconds ? "error" : "warning",
+      ids: [run.id, run.move.sceneId],
+      at: round(run.first),
+      detail: `the ${run.move.type}${direction} into ${run.move.sceneId} carries ${run.id} through the caption band ${rectText(band)} while captions are on screen (${round(seconds)}s, ${round(run.first)}s–${round(run.last + step)}s); keep captions.hide_during_moves on ("auto" or true), use a horizontal pan, or move the panel`
+    };
+  });
+}
+
 // Adapts the `layout` object returned by editorial modules
 // ({canvas, rect, motion?: {enterEnd, exitStart, end}}) into elements.
 // Without motion the layout carries no timing, so pass start and end.
-export function elementsFromEditorialLayout(layout, { id, role = "text", start, end, track, enterDuration = 0.36, canvas, minTextPx, allowOcclusion, hidesCaptions } = {}) {
+export function elementsFromEditorialLayout(layout, { id, role = "text", start, end, track, enterDuration = 0.36, canvas, minTextPx, minSecondaryTextPx, textRole, allowOcclusion, hidesCaptions } = {}) {
   if (!layout || typeof layout !== "object" || !layout.rect) throw new Error("editorial layout must include rect");
   if (!id) throw new Error("editorial layout element needs an id");
   const motion = layout.motion;
@@ -222,6 +278,8 @@ export function elementsFromEditorialLayout(layout, { id, role = "text", start, 
   if (track !== undefined) element.track = track;
   if (motion) element.motion = { enterEnd: motion.enterEnd, exitStart: motion.exitStart };
   if (minTextPx !== undefined) element.minTextPx = minTextPx * sy;
+  if (minSecondaryTextPx !== undefined) element.minSecondaryTextPx = minSecondaryTextPx * sy;
+  if (textRole !== undefined) element.textRole = textRole;
   if (allowOcclusion) element.allowOcclusion = allowOcclusion;
   if (hidesCaptions) element.hidesCaptions = true;
   return [element];
@@ -253,7 +311,7 @@ export function elementsFromStory(resolvedStory, { moduleLayout, profile, captio
   const duration = Number(resolvedStory.resolved?.duration ?? format.duration ?? Math.max(0, ...elements.map((element) => element.end)));
   const overlays = Array.isArray(resolvedStory.overlays) ? resolvedStory.overlays : [];
   overlays.filter((overlay) => overlay?.type === "captions").forEach((overlay, index) => {
-    const band = overlay.rect ?? captionBand ?? profileGeometry(canvas, profile).captionBand;
+    const band = overlay.rect ?? captionBandAt(captionBand ?? profileGeometry(canvas, profile).captionBand, canvas, overlay.position);
     const hide = [
       ...(Array.isArray(overlay.hide) ? overlay.hide : []),
       ...resolvedStory.scenes.filter((scene) => scene.hides_captions === true).map((scene) => [Number(scene.start), Number(scene.end)])
@@ -268,6 +326,17 @@ export function elementsFromStory(resolvedStory, { moduleLayout, profile, captio
     });
   });
   return elements;
+}
+
+// Caption position (captions overlay `position`): the band moves up to the
+// top or the middle of the frame; kept in step with captionBandTop() in
+// kit/core/captions.mjs (test/caption_presets.test.js).
+export const CAPTION_POSITION_TOP = Object.freeze({ portrait: 0.13, landscape: 0.08 });
+export function captionBandAt(band, canvas, position) {
+  if (!band || (position !== "top" && position !== "middle")) return band;
+  const landscape = canvas.width > canvas.height;
+  const y = position === "top" ? canvas.height * (landscape ? CAPTION_POSITION_TOP.landscape : CAPTION_POSITION_TOP.portrait) : canvas.height / 2 - band.height / 2;
+  return { ...band, y };
 }
 
 function normalizeElement(element, index) {
@@ -288,6 +357,8 @@ function normalizeElement(element, index) {
     end,
     settled: exitStart - enterEnd > EPSILON ? [enterEnd, exitStart] : null,
     minTextPx: element.minTextPx == null ? null : Number(element.minTextPx),
+    minSecondaryTextPx: element.minSecondaryTextPx == null ? null : Number(element.minSecondaryTextPx),
+    textRole: element.textRole === "body" ? "body" : "key",
     allowOcclusion: Array.isArray(element.allowOcclusion) ? element.allowOcclusion.map(String) : [],
     hidesCaptions: element.hidesCaptions === true,
     hide: Array.isArray(element.hide) ? element.hide.map(([a, b]) => [Number(a), Number(b)]) : []

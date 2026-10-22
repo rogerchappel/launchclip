@@ -357,6 +357,30 @@ test("audio.narration is validated and defers the voice, words and word anchors"
   assert.equal(validateStory(baseStory({ audio: { narration: { text: "x".repeat(4000), speed: 0.5 } } })).ok, true);
 });
 
+test("audio.music accepts synth, none, a file or a provider object with prompt, bpm and sync", () => {
+  const ok = (music) => assert.deepEqual(validateStory(baseStory({ audio: { music } })).errors, [], JSON.stringify(music));
+  ok("synth");
+  ok("none");
+  ok("assets/audio/song.mp3");
+  ok({ source: "synth", bpm: 100, key: "A" });
+  ok({ provider: "elevenlabs", prompt: "Warm lo-fi house", bpm: 104, sync: "cuts", seed: 7, model: "music_v1", volume: 0.3 });
+  ok({ provider: "file", file: "assets/audio/song.mp3", sync: "off" });
+  ok({ bpm: 96 });
+  const errors = (music) => validateStory(baseStory({ audio: { music } })).errors.join("\n");
+  assert.match(errors({ provider: "suno" }), /audio\.music\.provider must be one of synth, elevenlabs, file/);
+  assert.match(errors({ provider: "file" }), /needs audio\.music\.file/);
+  assert.match(errors({ provider: "elevenlabs", file: "assets/audio/song.mp3" }), /only used with provider "file"/);
+  assert.match(errors({ file: "/etc/song.mp3" }), /audio\.music\.file must be a project-relative path/);
+  assert.match(errors({ sync: "always" }), /audio\.music\.sync must be one of auto, off, cuts, hits/);
+  assert.match(errors({ prompt: "" }), /audio\.music\.prompt must be a non-empty string/);
+  assert.match(errors({ prompt: "x".repeat(2001) }), /at most 2000 characters/);
+  assert.match(errors({ seed: -1 }), /audio\.music\.seed must be a non-negative integer/);
+  assert.match(errors({ bpm: 400 }), /audio\.music\.bpm must be a number between 1 and 300/);
+  const warnings = validateStory(baseStory({ audio: { music: { provider: "synth", prompt: "x", tempo: 3 } } })).warnings.join("\n");
+  assert.match(warnings, /audio\.music\.prompt is only used by the elevenlabs provider/);
+  assert.match(warnings, /audio\.music\.tempo is not a music field/);
+});
+
 test("story validate fails a scene whose module params would render a placeholder", async () => {
   // Regression: a process-steps hit 0.2 s into the scene passed validate with
   // zero warnings, then both compilers drew the "Missing module" placeholder.
@@ -384,4 +408,83 @@ test("story validate fails a scene whose module params would render a placeholde
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("story.ambient and scenes[i].ambient validate the ambient-motion control", async () => {
+  const { STORY_AMBIENT_LEVELS } = await import("../kit/core/story.mjs");
+  const { AMBIENT_LEVELS, ambientErrors } = await import("../kit/core/ambient.mjs");
+  assert.deepEqual(STORY_AMBIENT_LEVELS, AMBIENT_LEVELS, "story.mjs keeps its own copy of the levels");
+  const valid = baseStory({ ambient: { level: "subtle", background: false } });
+  valid.scenes[1].ambient = "lively";
+  assert.deepEqual(validateStory(valid), { ok: true, errors: [], warnings: [] });
+  assert.deepEqual(validateStory(baseStory({ ambient: "off" })).errors, []);
+  const invalid = baseStory({ ambient: { level: "loud", drift: "yes", speed: 1 } });
+  invalid.scenes[0].ambient = "wild";
+  invalid.scenes[1].ambient = [];
+  const { errors } = validateStory(invalid);
+  assert.deepEqual(errors, [
+    "ambient.speed is not supported (allowed: level, background, drift)",
+    "ambient.level must be one of off, subtle, standard, lively",
+    "ambient.drift must be true or false",
+    "scenes[0].ambient must be one of off, subtle, standard, lively or an object {level?, background?, drift?}",
+    "scenes[1].ambient must be a level string or an object {level?, background?, drift?}"
+  ]);
+  // The same rules as ambientErrors().
+  assert.deepEqual(ambientErrors({ level: "loud", drift: "yes", speed: 1 }), errors.slice(0, 3));
+});
+
+test("ending: loop_to null and loop false mean no loop, final picks hold/fade/exit, and unknown keys are errors", () => {
+  const errors = (ending) => validateStory(baseStory({ ending })).errors;
+  assert.deepEqual(errors({ loop_to: null }), []);
+  assert.deepEqual(errors({ loop: false }), []);
+  assert.deepEqual(errors({ final: "hold" }), []);
+  assert.deepEqual(errors({ loop_to: null, final: "fade" }), []);
+  assert.deepEqual(errors({ loop: false, final: "exit" }), []);
+  assert.deepEqual(errors({}), []);
+  assert.match(errors({ hold: 1.5 }).join("\n"), /^ending\.hold is not a known ending key \(allowed: loop_to, in, loop, final\)/);
+  assert.match(errors({ loop: true }).join("\n"), /ending\.loop must be false/);
+  assert.match(errors({ loop: false, loop_to: "s1" }).join("\n"), /contradicts ending\.loop_to/);
+  assert.match(errors({ final: "freeze" }).join("\n"), /ending\.final must be one of hold, fade, exit/);
+  assert.match(errors({ loop_to: "s1", final: "hold" }).join("\n"), /ending\.final only applies without a loop/);
+  assert.match(errors({ loop_to: null, in: { type: "fade", dur: 0.4 } }).join("\n"), /ending\.in requires ending\.loop_to/);
+  assert.match(errors({ loop_to: 3 }).join("\n"), /ending\.loop_to must reference a scene id, or be null for no loop/);
+  // style.loop is a boolean override of the pack's loop.
+  assert.deepEqual(validateStory(baseStory({ style: { name: "x", loop: false } })).errors, []);
+  assert.match(validateStory(baseStory({ style: { name: "x", loop: "no" } })).errors.join("\n"), /style\.loop must be true or false/);
+});
+
+test("ending.final: without a loop the last scene holds settled by default, fade completes its exit by the final frame, exit keeps it", async () => {
+  const { resolveModule, storyFinal, FINAL_HOLD_TAIL } = await import("../kit/core/modules.mjs");
+  const { sampleNode } = await import("../kit/core/catalog-a.mjs");
+  const brand = { colors: { bg: "#0a0b10", paper: "#f3efe6", primary: "#ffa630", ink: "#0a0b10" } };
+  const story = (ending, last = {}) => resolveStory({
+    schema: STORY_SCHEMA, lane: "motion", format: { width: 1920, height: 1080, fps: 30, duration: 8 }, brand,
+    scenes: [
+      { id: "s1", module: "hook-title", start: 0, end: 4, params: { headline: "Ship it" } },
+      { id: "s2", module: "cta", start: 4, end: 8, params: { action: "Star it on GitHub", handle: "rogerchappel/launchclip", ...last } }
+    ],
+    ...(ending === undefined ? {} : { ending })
+  });
+  const lastFrame = 8 - 1 / 30;
+  const opacityAtEnd = (resolved) => sampleNode(resolveModule(resolved.scenes[1], resolved), "root", lastFrame).opacity ?? 1;
+  // No ending (and loop_to null, loop false): hold. The exit falls past the end; the final frame is fully lit.
+  for (const ending of [undefined, {}, { loop_to: null }, { loop: false }, { final: "hold" }]) {
+    const resolved = story(ending);
+    assert.equal(storyFinal(resolved), "hold");
+    const model = resolveModule(resolved.scenes[1], resolved);
+    assert.equal(model.end, 8 + FINAL_HOLD_TAIL);
+    assert.equal(opacityAtEnd(resolved), 1, JSON.stringify(ending));
+  }
+  // The first scene is not the last one: unchanged.
+  assert.equal(resolveModule(story(undefined).scenes[0], story(undefined)).end, 4);
+  // fade: fully at the background on the final frame.
+  assert.equal(opacityAtEnd(story({ final: "fade" })), 0);
+  // exit: the scene's own exit, caught mid-way on the final frame (the old behaviour).
+  const exit = opacityAtEnd(story({ final: "exit" }));
+  assert.ok(exit > 0 && exit < 1, `exit opacity ${exit}`);
+  // A loop returns to loop_to; the last scene is untouched.
+  assert.equal(storyFinal(story({ loop_to: "s1" })), null);
+  assert.equal(resolveModule(story({ loop_to: "s1" }).scenes[1], story({ loop_to: "s1" })).end, 8);
+  // cta loop: true keeps its own fade to the background.
+  assert.equal(opacityAtEnd(story(undefined, { loop: true })), 0);
 });

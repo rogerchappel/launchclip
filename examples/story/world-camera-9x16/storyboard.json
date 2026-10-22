@@ -1,0 +1,221 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Why the second visit is instant (golden, 9:16 world camera)",
+  "notes": "Renderer-eval golden story: a 9:16 explainer in camera.mode world with the playful grammar. The camera pans right and down, pushes into the gauge's gap bracket, orbits to the end card and whip-pans home for the loop. Values are illustrative.",
+  "lane": "motion",
+  "phase": 2,
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 23,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0b1020",
+      "primary": "#ff7a59",
+      "accent": "#7ce7ff",
+      "ink": "#0b1020",
+      "paper": "#f5f1ea"
+    },
+    "fonts": {
+      "display": "bricolage-grotesque",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "grammar": "playful"
+  },
+  "camera": {
+    "mode": "world",
+    "layout": "auto",
+    "parallax": true
+  },
+  "audio": {
+    "words": "NARRATION.json",
+    "mix": "assets/audio/mix.m4a"
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "hook-title",
+      "start": 0,
+      "end": 2.7,
+      "energy": 1,
+      "params": {
+        "headline": "Why does the second visit feel instant?",
+        "emphasis": "instant",
+        "kicker": "Cache",
+        "kickerAt": 1.4
+      },
+      "hits": [
+        {
+          "at": "word:instant",
+          "event": "emphasis-0",
+          "cue": "pop"
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "module": "count-up",
+      "start": 2.7,
+      "end": 9.1,
+      "energy": 2,
+      "in": {
+        "type": "pan",
+        "dur": 0.75,
+        "direction": "right"
+      },
+      "params": {
+        "value": 2.4,
+        "decimals": 1,
+        "suffix": "s",
+        "label": "First load, every file over the network",
+        "note": "illustrative",
+        "countAt": 0.9,
+        "countDuration": 1.6
+      },
+      "hits": [
+        {
+          "at": "word:seconds",
+          "event": "hit",
+          "cue": "impact"
+        }
+      ]
+    },
+    {
+      "id": "s3",
+      "module": "gauge-compare",
+      "start": 9.1,
+      "end": 15.5,
+      "energy": 2,
+      "in": {
+        "type": "pan",
+        "dur": 0.75,
+        "direction": "down"
+      },
+      "params": {
+        "title": "Cold vs warm cache",
+        "left": {
+          "label": "Cold",
+          "value": 2400,
+          "unit": "ms"
+        },
+        "right": {
+          "label": "Warm",
+          "value": 300,
+          "unit": "ms",
+          "color": "accent"
+        },
+        "gap": {
+          "object": "gap-bracket",
+          "label": "Saved",
+          "value": 2100,
+          "unit": "ms"
+        },
+        "style": "column",
+        "decimals": 0
+      },
+      "hits": [
+        {
+          "at": "word:twenty",
+          "event": "left-fill",
+          "cue": "whoosh"
+        },
+        {
+          "at": "word:three",
+          "event": "right-fill",
+          "cue": "whoosh"
+        },
+        {
+          "at": "word:gap",
+          "event": "gap-bracket",
+          "cue": "riser-short"
+        }
+      ]
+    },
+    {
+      "id": "s4",
+      "module": "process-steps",
+      "start": 15.5,
+      "end": 20.4,
+      "energy": "build",
+      "in": {
+        "type": "push",
+        "dur": 0.9,
+        "from_object": "s3.gap-bracket"
+      },
+      "params": {
+        "title": "What the browser does",
+        "steps": [
+          "Ask",
+          "Check cache",
+          "Hit",
+          "Serve locally"
+        ]
+      },
+      "hits": [
+        {
+          "at": "word:asks",
+          "event": "step-0",
+          "cue": "tick"
+        },
+        {
+          "at": "word:checks",
+          "event": "step-1",
+          "cue": "tick"
+        },
+        {
+          "at": "word:hit",
+          "event": "step-2",
+          "cue": "tick"
+        },
+        {
+          "at": "word:serves",
+          "event": "step-3",
+          "cue": "pop"
+        }
+      ]
+    },
+    {
+      "id": "s5",
+      "module": "cta",
+      "start": 20.4,
+      "end": 23,
+      "energy": 3,
+      "in": {
+        "type": "orbit",
+        "dur": 0.8,
+        "direction": "right"
+      },
+      "params": {
+        "action": "Follow for part two",
+        "emphasis": "part two",
+        "handle": "@launchclip"
+      },
+      "hits": [
+        {
+          "at": "word:follow",
+          "event": "action",
+          "cue": "impact"
+        }
+      ]
+    }
+  ],
+  "overlays": [
+    {
+      "type": "captions",
+      "style": "word-highlight"
+    }
+  ],
+  "ending": {
+    "loop_to": "s1",
+    "in": {
+      "type": "whip-pan",
+      "dur": 0.45
+    }
+  }
+}

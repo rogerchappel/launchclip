@@ -12,7 +12,15 @@ reference. Work in this order:
 5. Run the five-concept tournament and fresh-context selection.
 6. Write and independently edit the canonical retention story.
 7. Produce or prepare narration, measure the real take, then freeze the
-   storyboard, design system, music/edit grid, and quality targets.
+   storyboard, design system, music/edit grid, and quality targets. For a
+   synthesised voice, write the script into `audio.narration`
+   (`{text, provider?, voice?, speed?}`; defaults Kokoro, `af_heart`, speed
+   1.2) before any scenes, run `launchclip voice <project>` to synthesise it
+   (cached) and print its real duration and per-sentence timing, adjust the
+   text or `speed` until it fits, then size `format.duration` and the scenes
+   to that take and anchor scene starts and hits to words (`word:<text>`).
+   `finish` reuses the measured take. See "Narration" in the runtime
+   reference.
 8. Put `data-launchclip-cinematic-contract="phase-2"` on the composition root.
    Render two independent opening candidates and two candidates for one
    representative unproven transition grammar. Compare their real pixels and
@@ -32,8 +40,12 @@ reference. Work in this order:
     the fresh-context critic to cite reviewed evidence IDs, and run
     `launchclip cinematic-check`.
 15. Repair the smallest responsible sequence, mix, or plan, then rerun the
-    failed gate. Stop after three bounded passes and report `needs-repair`
-    instead of weakening the contract.
+    failed gate. In a storyboard project, run second-pass scene fixes with
+    `launchclip finish <project> --scene <id>`: it re-runs master, evidence
+    and gates and writes a before/after still to inspect (HyperFrames
+    re-renders the whole video; partial rendering is Remotion-only). Stop
+    after three bounded passes and report `needs-repair` instead of weakening
+    the contract.
 
 Do not weaken checks, mark accidental overlaps as intentional, or use draft
 rendering to conceal a composition defect. Keep all motion deterministic and

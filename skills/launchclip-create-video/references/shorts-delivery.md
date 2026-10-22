@@ -114,7 +114,11 @@ deterministic:
   `ease: "steps(<12 × duration>)"`.
 - **Vignette:** a radial gradient overlay toward 60% black at the corners.
 - **Atmosphere:** two or three heavily blurred colour fields drifting slowly
-  over the full runtime, behind the subject plane.
+  over the full runtime, behind the subject plane. A `storyboard.json`
+  project gets this from its ambient layer, with no extra work: a brand-colour
+  background field in every plate, plus a slow hold drift on each settled
+  module. Tune it with `story.ambient` (`subtle | standard | lively`) rather
+  than adding a second field.
 - **Persistent HUD or frame:** one ambient object that carries continuity
   across every sequence and keeps updating (a readout, progress rail or
   chapter marker). Drive readouts like this from one full-duration
@@ -129,6 +133,15 @@ Shorts replay automatically, so viewers who rewatch help retention. Write the
 last spoken line so it runs into the first ("…it's why your" → "Coffee cools
 fast, then slow"), and end on the same image as frame zero. Skip
 subscribe end cards: they break the loop. Default duration is 25–35 seconds.
+
+When a cut should not loop (a landscape launch video, an end card that must stay
+up), write `"ending": {"loop": false}` (or `"loop_to": null`); that also
+overrides a style pack's `loop: true`, as does `"style": {"name": …, "loop":
+false}`. Without a loop the last scene holds settled through the final frame
+(`ending.final: "hold"`, the default), so the last frame is never caught half way
+through an exit. `"final": "fade"` fades it fully to the background by the final
+frame instead, and `"final": "exit"` plays the module's own exit. Unknown ending
+keys are errors.
 
 ## Export settings
 

@@ -12,6 +12,7 @@ file, `storyboard.json`, through the bundled `LaunchclipStory` composition.
 - [Local source preparation](#local-source-preparation)
 - [Composition contract](#composition-contract)
 - [Frame-pure rule](#frame-pure-rule)
+- [Motion grammar and world camera](#motion-grammar-and-world-camera)
 - [Modules and the custom escape hatch](#modules-and-the-custom-escape-hatch)
 - [Design and motion quality contract](#design-and-motion-quality-contract)
 - [Verification loop](#verification-loop)
@@ -208,8 +209,11 @@ modules. Treat these rules as the contract:
   is `ordinary`. These are the phase-2 declared boundaries that
   `cinematic-check` and the evidence builder read, with `boundary_id`
   `<scene-id>-in` and `sequence_id` set to the `from_object` scene.
-- `audio.mix` names the one offline mix; `overlays` holds captions; `ending`
-  can loop to a scene.
+- `audio.narration` (`{text, provider?, voice?, speed?}`) is the script
+  `launchclip finish` synthesises into `audio.voice` and `audio.words`
+  (defaults: Kokoro, `af_heart`, speed 1.2); see "Narration" under
+  "Render and verify". `audio.mix` names the one offline mix; `overlays`
+  holds captions; `ending` can loop to a scene.
 - Asset paths are project-relative under `assets/` (`"assets/media/demo.mp4"`),
   without a leading slash, and resolve through `staticFile(path)`.
 
@@ -252,6 +256,23 @@ overrides it and `kit/remotion/entry.tsx` otherwise; examples use the latter.
   background in between. The kit does not use `TransitionSeries`, which
   overlaps neighbours and shortens the series, so story times stay
   authoritative. Do not hand-build a `TransitionSeries` against story times.
+- Ambient motion from `kit/core/ambient.mjs`, evaluated at the absolute time
+  of every frame, so settled frames keep moving between beats. Each track-0
+  plate draws a background field under its content: a few large, soft,
+  low-alpha blobs of the brand `primary` and `accent` colours that glide
+  slowly across the canvas, wrapping only while off canvas. Each eligible
+  scene's content sits in a hold-drift wrapper: a linear push-in about the
+  module rect's centre (scale up to 2–4% plus a few px of vertical travel)
+  from the scene start to the end of its render window, clamped to the safe
+  zone and clear of the caption band, or a small pull-back when the rect has
+  no room. `story.ambient` (`off | subtle | standard | lively`, or
+  `{level, background, drift}`) and a per-scene `ambient` override control it.
+  The default level follows each scene's `energy` (0 → subtle, 1, 2 and
+  `"build"` → standard, 3 → lively). The footage-led lane gets no field and
+  drifts overlays only. Leave it on: with `ambient: "off"`, settled frames
+  hold still and the cinematic motion gate fails. The HyperFrames compiler
+  draws the same field and drift from the same functions, and
+  `launchclip layout-check` checks every drifting rect at its largest extent.
 - Exactly one `<Audio src={staticFile(story.audio.mix)} />` at the root, spanning
   the whole composition (the voice when there is no mix). No scene, module, or
   video plays its own audio.
@@ -407,6 +428,21 @@ export default function SignalLabel({ scene, params }) {
 }
 ```
 
+## Motion grammar and world camera
+
+`motion.grammar` (`editorial` default, `snappy`, `smooth`, `playful`,
+`documentary`) sets the eases, durations and staggers of module entrances and
+exits, pops and typed transitions; it reaches the components through the
+resolved models (`resolveModule`), so custom components should read
+`model.motion.enterEase`/`exitEase` rather than hard-coding eases. A world
+camera (`camera.mode` "world", or a `pan`, `whip-pan`, `orbit` or `pull`
+transition in a cuts story) makes `LaunchclipStory` draw the track-0 plates at
+their world placements inside `CameraWorld` (`kit/remotion/StoryComposition.tsx`),
+which evaluates `cameraPlan()` (`kit/core/camera-world.mjs`) per frame: pan,
+zoom and drift containers, the parallax background, overlay parallax and a
+directional SVG motion blur that is zero at rest. The HyperFrames compiler
+plays the same op list through GSAP, so both renderers match frame for frame.
+
 ## Modules and the custom escape hatch
 
 Build scenes from the catalogue first. A scene names a module and passes its
@@ -485,7 +521,14 @@ constraints:
 - Reserve hard cuts for contrast. Pushes preserve direction, zooms change scale,
   morphs preserve identity, whips create an energetic discontinuity, and irises
   redirect focus. Each must have a visibly different spatial behavior.
-- The first frame must already communicate an intentional state. The first
+- Prefer the storyboard's motion grammar and world camera to hand-tuned eases:
+  `motion.grammar` keeps one easing character across the piece, and
+  `camera.mode` "world" gives camera travel with parallax depth, a slow drift
+  through holds and velocity-shaped blur from one tested implementation.
+- The first frame must already communicate an intentional state: render and
+  inspect a still of frame 0 itself. A module whose entrance animates in can
+  be blank on frame 0 even at `at: 0`, so open on one that is readable on
+  frame 0 (`hook-title`), or check the still and adjust. The first
   second states the promise. The first four seconds contain at least three
   meaningful changes in layout, evidence, framing, or visual register for
   portrait, or two for landscape.
@@ -665,15 +708,46 @@ launchclip finish <project> --renderer remotion --quality draft   # renders/draf
 launchclip finish <project> --renderer remotion --quality high    # renders/final.mp4, after approval
 ```
 
-It synthesises `audio.narration` when set (`--voice kokoro|elevenlabs|supplied`),
+It synthesises `audio.narration` when set (see "Narration" below;
+`--voice kokoro|elevenlabs|supplied|test` overrides its provider),
 validates and layout-checks the storyboard, writes captions, builds the SFX
-and music mix from the hits, module cues and scene energy, renders, masters to
+and music mix from the hits, module cues, scene energy and the beat-synced
+music (`--music synth|elevenlabs|none`), renders, masters to
 −14 LUFS / −1 dBTP, builds the temporal evidence and critic sheets, and runs
 the motion, audio, loudness, layout and evidence gates. It never rewrites
 `storyboard.json` (the filled copy is `.launchclip/finish/storyboard.json`),
 skips stages whose inputs have not changed, and writes `finish.json`. The
 critic gate stays `pending`: run the fresh-context critic on
 `qa/critic-sheets/`, then `launchclip cinematic-check`.
+
+#### Second pass: re-render one scene
+
+The render stage caches the timeline in segments (each scene's body and each
+transition overlap), hashed from everything that can change their pixels, in
+`.launchclip/finish/segments/remotion/`. After an edit, a plain `launchclip
+finish` re-renders only the segments of the scenes you changed and reports how
+many it reused and the time saved. For a fix:
+
+```bash
+launchclip finish <project> --preview-scene s3   # fast look: renders/scene-s3.mp4 only
+launchclip finish <project> --scene s3           # re-render s3 into the final
+```
+
+`--preview-scene` renders just that scene with its slice of the soundtrack and
+touches neither the final nor the gates. `--scene s3[,s4]` forces those scenes'
+segments to re-render, re-runs master, evidence and gates, and writes
+before/after stills to `qa/finish/scenes/<id>-before-after.png`: inspect them.
+The joined result is frame-identical to a fresh full render.
+
+<!-- include: shared/narration.md -->
+
+<!-- include: shared/music-beat-sync.md -->
+
+To keep editing in Final Cut Pro, Premiere Pro or DaVinci Resolve after
+finish, export an editable timeline (base clips with their in points, each
+overlay scene as an alpha clip, voice, music, per-cue SFX, captions and
+markers): `launchclip export <project> --format fcpxml|premiere|edl|otio|all`.
+See [finishing-in-an-nle.md](finishing-in-an-nle.md).
 
 Use the manual commands below when the CLI is not available or a single step
 needs rerunning with different options.

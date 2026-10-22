@@ -180,7 +180,10 @@ async function elevenLabsLineItem(url, request, response) {
     return pricedItem({ provider: "elevenlabs", product: "transcription", model, requestId, usage: { audio_seconds: audioSeconds }, cost: audioSeconds / 3_600 * rate, rates: { unit: "USD per audio hour", transcription: rate }, source: SOURCES.elevenlabs, note: "Audio duration is estimated from the final timestamp returned by Scribe." });
   }
   if (url.pathname.endsWith("/music")) {
-    const generatedSeconds = Number(request.json?.music_length_ms ?? 0) / 1_000;
+    // A composition plan has no music_length_ms; its sections carry the length.
+    const sections = request.json?.composition_plan?.sections ?? request.json?.composition_plan?.chunks;
+    const planMs = Array.isArray(sections) ? sections.reduce((sum, section) => sum + Number(section?.duration_ms ?? 0), 0) : 0;
+    const generatedSeconds = Number(request.json?.music_length_ms ?? planMs) / 1_000;
     return pricedItem({ provider: "elevenlabs", product: "music-generation", model, requestId, usage: { generated_seconds: generatedSeconds }, cost: generatedSeconds / 60 * .15, rates: { unit: "USD per generated minute", music_generation: .15 }, source: SOURCES.elevenlabs });
   }
   return unpricedItem({ provider: "elevenlabs", product: url.pathname, model, requestId, warning: `No cost classifier is configured for ElevenLabs endpoint ${url.pathname}` });

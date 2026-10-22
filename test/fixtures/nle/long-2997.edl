@@ -1,0 +1,9 @@
+TITLE: long
+FCM: DROP FRAME
+
+001  PLATE    V     C        00:00:00;00 00:01:10;00 00:00:00;00 00:01:10;00
+* FROM CLIP NAME: plate.mp4
+* SOURCE FILE: media/plate.mp4
+
+* LOC: 00:00:00;00 BLUE   s1
+* LOC: 00:01:01;00 BLUE   s2

@@ -1,9 +1,14 @@
 import { narrationFile, readStoryEdl } from "./story_loader.js";
-import { catalogModules, resolveModule } from "../kit/core/modules.mjs";
+import { applyProjectStyle } from "./story_style.js";
+import { catalogModules, rectFitHint, resolveModule } from "../kit/core/modules.mjs";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { checkLayout, elementsFromEditorialLayout, elementsFromStory, SAFE_ZONE_PROFILES } from "../kit/core/layout-check.mjs";
+import { checkCameraSweeps, checkLayout, elementsFromEditorialLayout, elementsFromStory, profileGeometry, SAFE_ZONE_PROFILES } from "../kit/core/layout-check.mjs";
+import { cameraPlan, captionDipWindows, sceneObjectLookup, screenPoint, worldPoint } from "../kit/core/camera-world.mjs";
+import { captionDipHidden, captionMoveHide, captionsOverlayOf, chunkWords } from "../kit/core/captions.mjs";
+import { driftExtent, sceneDrift } from "../kit/core/ambient.mjs";
+import { emptyPlates, sceneWindows } from "../kit/core/transitions.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const STORY_MODULE = path.join(ROOT, "kit/core/story.mjs");
@@ -21,7 +26,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   const project = path.resolve(projectDir);
   const storyFile = path.join(project, "storyboard.json");
   if (!options.story && !(await exists(storyFile))) throw new Error(`layout-check needs ${storyFile}; author storyboard.json first`);
-  const story = options.story ?? JSON.parse(await readFile(storyFile, "utf8"));
+  const story = (await applyProjectStyle(options.story ?? JSON.parse(await readFile(storyFile, "utf8")), { projectDir: project })).story;
   const storyCore = adapters.storyCore ?? await loadStoryCore();
   if (typeof storyCore.validateStory === "function") {
     const validation = storyCore.validateStory(story);
@@ -29,7 +34,8 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   }
   const narration = options.words ?? await readOptionalJson(narrationFile(project, story));
   const words = Array.isArray(narration) ? narration : Array.isArray(narration?.words) ? narration.words : [];
-  const beats = await readOptionalJson(path.join(project, "BEATS.json"));
+  // options.beats: a grid the caller already holds (finish, before BEATS.json is written).
+  const beats = options.beats ?? await readOptionalJson(path.join(project, "BEATS.json"));
   const resolved = storyCore.resolveStory(story, { words, beats, edl: await readStoryEdl(project, story) });
   const catalogue = catalogModules();
 
@@ -42,6 +48,28 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   const specFindings = [];
   const moduleLayout = (scene) => {
     const params = scene.params ?? {};
+    if (EDITORIAL_KINDS.has(scene.module) && !adapters.buildEditorialModule) {
+      // The same resolver as validate and both compilers (brand defaults,
+      // grammar, durations rounded to 1e-6, shared bound tolerance), so the
+      // two commands accept and reject the same params.
+      try {
+        const model = resolveModule(scene, resolved);
+        return elementsFromEditorialLayout(model.layout, {
+          id: scene.id,
+          role: scene.module === "media-window" ? "media" : "text",
+          start: Number(scene.start),
+          end: Number(scene.end),
+          track: scene.track,
+          canvas,
+          ...(model.minTextPx != null ? { minTextPx: model.minTextPx } : {}),
+          ...(model.minSecondaryTextPx != null ? { minSecondaryTextPx: model.minSecondaryTextPx } : {}),
+          textRole: model.textRole ?? "key"
+        });
+      } catch (error) {
+        specFindings.push({ rule: "module-spec", severity: "error", ids: [scene.id], at: Number(scene.start), detail: `${scene.module}: ${error.message}` });
+        return [];
+      }
+    }
     if (EDITORIAL_KINDS.has(scene.module)) {
       const aspect = canvas.width > canvas.height ? "16:9" : "9:16";
       try {
@@ -63,7 +91,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
           canvas
         });
       } catch (error) {
-        specFindings.push({ rule: "module-spec", severity: "error", ids: [scene.id], at: Number(scene.start), detail: `${scene.module}: ${error.message}` });
+        specFindings.push({ rule: "module-spec", severity: "error", ids: [scene.id], at: Number(scene.start), detail: `${scene.module}: ${error.message}${rectFitHint(scene, resolved, error.message)}` });
         return [];
       }
     }
@@ -100,11 +128,31 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
     return [];
   };
 
-  const elements = elementsFromStory(resolved, { moduleLayout, profile });
+  // Ambient hold drift (kit/core/ambient.mjs): check each drifting scene's
+  // largest extent over its render window, computed exactly as both
+  // compilers compute the drift they draw, so a drift can never carry key
+  // text out of the safe zone, into the caption band or onto a neighbour.
+  const ambient = ambientDrift(resolved, canvas);
+  const elements = elementsFromStory(resolved, { moduleLayout: (scene, story) => ambient.inflate(scene, moduleLayout(scene, story)), profile });
   // Footage-led: the recording fills the frame under everything (media, never a collision).
   if (resolved.base) elements.unshift({ id: "base", role: "media", rect: { x: 0, y: 0, width: canvas.width, height: canvas.height }, start: 0, end: Number(resolved.resolved?.duration ?? resolved.format?.duration), allowOcclusion: ["*"] });
   const report = checkLayout({ canvas, elements, profile, duration: Number(resolved.resolved?.duration ?? resolved.format?.duration) || undefined });
-  const findings = [...specFindings, ...report.findings].sort((a, b) => a.at - b.at);
+  // Empty plates: spans where no scene draws anything (a gap in scene timing,
+  // or a module that has not drawn yet when the previous one has gone).
+  // Footage-led stories show the recording there instead.
+  const plateFindings = [];
+  if (!resolved.base) {
+    try {
+      for (const gap of emptyPlates(resolved)) {
+        plateFindings.push({ rule: "empty-plate", severity: "warning", ids: [gap.before, gap.after].filter(Boolean), at: gap.from,
+          detail: `empty plate from ${gap.from} s to ${gap.to} s (${gap.before ? `after ${gap.before}, ` : ""}before ${gap.after} draws anything); extend the previous scene, move the next scene's first beat earlier, or close the gap` });
+      }
+    } catch { /* unresolvable windows are reported elsewhere */ }
+  }
+  let sweepFindings = [];
+  try { sweepFindings = cameraSweepFindings(resolved, elements, words, report.captionBand); }
+  catch (error) { warnings.push(`camera sweep check skipped: ${error.message}`); }
+  const findings = [...specFindings, ...report.findings, ...plateFindings, ...sweepFindings].sort((a, b) => a.at - b.at);
   return {
     stage: "layout-check",
     project,
@@ -113,13 +161,102 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
     canvas,
     elements: elements.length,
     errors: findings.filter((finding) => finding.severity === "error").length,
+    drifted: ambient.drifted,
     warnings,
     findings
   };
 }
 
+// Camera moves: sample every frame of every world-camera move, transform each
+// visible plate element's declared rect by the camera at that frame, and
+// report crossings of the caption band while captions are on screen
+// (kit/core/layout-check.mjs checkCameraSweeps). Captions dipped out for the
+// move (captions.hide_during_moves, default "auto": vertical pans, dollies and
+// orbits) do not count.
+export function cameraSweepFindings(resolved, elements, words = [], band = null) {
+  const caption = elements.find((element) => element.role === "caption");
+  if (!caption) return [];
+  const windows = sceneWindows(resolved);
+  const plan = cameraPlan(resolved, { windows, objects: sceneObjectLookup(resolved, (scene, value) => resolveModule(scene, value)) });
+  if (!plan?.moves.length) return [];
+  const overlay = captionsOverlayOf(resolved);
+  const captionRect = caption.rect ?? band;
+  if (!captionRect) return [];
+  // Captions are on screen while a chunk is (narration words), within the
+  // overlay's window, outside its hide ranges and the move dips.
+  const chunks = words.length ? chunkWords(words).map((chunk) => [chunk.start, chunk.end]) : [[caption.start, caption.end]];
+  const holes = [...(caption.hide ?? []), ...captionDipHidden(captionDipWindows(plan, captionMoveHide(overlay)))];
+  const captionVisible = subtract(chunks.map(([a, b]) => [Math.max(a, caption.start), Math.min(b, caption.end)]).filter(([a, b]) => b > a), holes);
+  const byId = new Map(windows.scenes.map((entry) => [entry.id, entry]));
+  const plates = elements.filter((element) => {
+    const entry = byId.get(element.id);
+    return entry?.plate && plan.placements[element.id] && element.rect && ["text", "hero", "media"].includes(element.role) && !element.hidesCaptions && !overlaps(element.rect, captionRect);
+  });
+  const step = 1 / plan.fps;
+  const frames = [];
+  for (const move of plan.moves) {
+    const entry = byId.get(move.sceneId);
+    const info = { sceneId: move.sceneId, type: move.type, start: move.start, duration: move.duration, direction: entry?.transitionIn?.direction ?? null };
+    for (let f = Math.ceil(move.start * plan.fps - 1e-6); f <= Math.floor((move.start + move.duration) * plan.fps + 1e-6); f += 1) {
+      const t = f / plan.fps;
+      const rects = [];
+      for (const element of plates) {
+        const scene = byId.get(element.id);
+        if (t < Math.max(element.start, scene.start) - 1e-6 || t >= Math.max(element.end, scene.renderEnd) - 1e-6) continue;
+        const placement = plan.placements[element.id], r = element.rect;
+        const corners = [[r.x, r.y], [r.x + r.width, r.y], [r.x, r.y + r.height], [r.x + r.width, r.y + r.height]]
+          .map(([x, y]) => screenPoint(plan, worldPoint(placement, { x, y }), t));
+        const xs = corners.map((point) => point.x), ys = corners.map((point) => point.y);
+        rects.push({ id: element.id, rect: { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) } });
+      }
+      frames.push({ t, move: info, rects });
+    }
+  }
+  return checkCameraSweeps({ band: captionRect, frames, captionVisible, step });
+}
+
+function overlaps(a, b) {
+  return Math.min(a.x + a.width, b.x + b.width) > Math.max(a.x, b.x) && Math.min(a.y + a.height, b.y + b.height) > Math.max(a.y, b.y);
+}
+
+function subtract(spans, holes) {
+  let pieces = spans;
+  for (const [from, to] of holes) {
+    pieces = pieces.flatMap(([a, b]) => (to <= a || from >= b ? [[a, b]] : [[a, from], [to, b]].filter(([x, y]) => y - x > 1e-6)));
+  }
+  return pieces;
+}
+
+// → {inflate(scene, elements) → elements, drifted: scene ids}. Elements of a
+// drifting scene get the drift's extent as their rect, and a pull-back's
+// smaller key text as their minTextPx.
+function ambientDrift(resolved, canvas) {
+  const drifted = [];
+  let windows;
+  try { windows = new Map(sceneWindows(resolved).scenes.map((entry) => [entry.id, entry])); }
+  catch { return { inflate: (scene, elements) => elements, drifted }; }
+  const geometry = profileGeometry(canvas);
+  const inflate = (scene, produced) => {
+    const window = windows.get(scene.id);
+    if (!window || !produced) return produced;
+    let model;
+    try { model = resolveModule(scene, resolved, { end: window.renderEnd }); } catch { return produced; }
+    const drift = sceneDrift(resolved, scene, model, { window: { start: window.start, end: window.renderEnd }, geometry });
+    if (!drift) return produced;
+    drifted.push(scene.id);
+    const list = Array.isArray(produced) ? produced : [produced];
+    return list.map((element) => element && element.rect ? {
+      ...element,
+      rect: driftExtent(element.rect, drift),
+      ...(element.minTextPx != null && drift.scale < 1 ? { minTextPx: element.minTextPx * drift.scale } : {}),
+      ...(element.minSecondaryTextPx != null && drift.scale < 1 ? { minSecondaryTextPx: element.minSecondaryTextPx * drift.scale } : {})
+    } : element);
+  };
+  return { inflate, drifted };
+}
+
 export function formatLayoutReport(report) {
-  const lines = [`layout-check ${report.status} (${report.profile}, ${report.canvas.width}x${report.canvas.height}, ${report.elements} elements)`];
+  const lines = [`layout-check ${report.status} (${report.profile}, ${report.canvas.width}x${report.canvas.height}, ${report.elements} elements${report.drifted?.length ? `, ${report.drifted.length} with ambient drift` : ""})`];
   for (const finding of report.findings) {
     lines.push(`  ${finding.severity.padEnd(7)} ${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail}`);
   }

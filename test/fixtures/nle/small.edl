@@ -1,0 +1,18 @@
+TITLE: small
+FCM: NON-DROP FRAME
+
+001  REC      B     C        00:00:00:00 00:00:02:00 00:00:00:00 00:00:02:00
+* FROM CLIP NAME: rec.mp4
+* SOURCE FILE: media/rec.mp4
+
+002  REC      B     C        00:00:03:00 00:00:07:00 00:00:02:00 00:00:06:00
+* FROM CLIP NAME: rec.mp4
+* SOURCE FILE: media/rec.mp4
+
+* LOC: 00:00:00:15 BLUE   callout
+* LOC: 00:00:01:00 BLUE   cam
+* LOC: 00:00:01:00 PURPLE   cam:_camera
+* LOC: 00:00:01:00 YELLOW   callout:_point
+* LOC: 00:00:03:00 BLUE   insert
+* LOC: 00:00:03:15 YELLOW   insert:_hit
+* LOC: 00:00:04:00 BLUE   tail

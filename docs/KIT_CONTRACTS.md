@@ -11,7 +11,13 @@ kit/
   core/                 plain ESM .mjs, no npm imports, no node: imports
                         unless noted; safe for browsers and Remotion bundles
     story.mjs           storyboard.json (story v1) validate, resolve anchors, derive boundaries
+    style.mjs           style pack v2: validate, applyStyle, palette roles, v1 upgrade
+    captions.mjs        word chunking, caption presets (plan, frame-pure evaluator, GSAP runtime)
     motion.mjs          frame-pure easing, tracks, stagger, count-up, springs
+    grammar.mjs         motion grammars (editorial, snappy, smooth, playful, documentary)
+    transitions.mjs     typed transitions and scene render windows
+    camera-world.mjs    world layout, camera path, parallax and motion blur
+    ambient.mjs         frame-pure ambient motion: background field, hold drift
     editorial-core.mjs  editorial module spec → resolved model (no HTML)
     layout-check.mjs    geometric safe-zone and collision checks
   remotion/             TSX for Remotion 4.0.536 / React 19.3
@@ -38,9 +44,13 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
   the scene and the format.
 - Scenes may set `track` (default 0) and may overlap only on different tracks.
 - `in` on a scene describes the transition **into** it:
-  `{type: "cut"|"fade"|"push"|"whip"|"zoom"|"iris"|"morph", dur, from_object?, direction?}`.
+  `{type: "cut"|"fade"|"push"|"whip"|"zoom"|"iris"|"morph"|"pan"|"pull"|"orbit"|"whip-pan", dur, from_object?, direction?}`.
   A `morph` or a `from_object` makes the boundary kind `shared-world`; anything
-  else is `ordinary`.
+  else is `ordinary`. `pan`, `pull`, `orbit`, `whip-pan` (and `push` in
+  `camera.mode` "world") move the world camera; see "World camera".
+- `motion.grammar` (a grammar name or `{base, ...overrides}`) and `camera`
+  (`{mode, layout?, spacing?, parallax?, blur?}`): see "Motion grammar" and
+  "World camera".
 - Assets are project-relative paths under `assets/`.
 - `audio.narration` = `{text, provider?, voice?, speed?}` is narration that
   `launchclip finish` synthesises into `audio.voice` and `audio.words` (text
@@ -49,6 +59,9 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
   `audio.voice`/`audio.words` yet, and word anchors are checked after synthesis.
   Finish writes the filled fields to a resolved copy in `.launchclip/finish/`,
   never back into `storyboard.json`.
+- `ambient` (story) and `scenes[i].ambient` are a level (`off | subtle |
+  standard | lively`) or `{level?, background?, drift?}`; see
+  [Ambient motion](#ambient-motion-kitcoreambientmjs).
 
 Exports:
 
@@ -89,6 +102,72 @@ export function motionBlurPx(velocityPxPerFrame, {max = 24}) // → blur radius,
 The GSAP eases (`power3.out`, …) must match `gsap.parseEase()` to within 1e-6.
 GSAP is a devDependency for that test.
 
+## Motion grammar (`kit/core/grammar.mjs`)
+
+One named feel for every entrance, exit, pop, stagger, transition and camera
+move in a story.
+
+```json
+"motion": { "grammar": "snappy" }
+"motion": { "grammar": { "base": "smooth", "ease": { "enter": "power3.out" }, "duration": { "camera": 1.4 }, "stagger": 1.5 } }
+```
+
+| Grammar | enter / exit | move / camera | emphasis | durations (enter, exit, transition, camera) | overshoot | stagger | camera style | ambient hint |
+|---|---|---|---|---|---|---|---|---|
+| `editorial` (default) | power3.out / power2.in | power3.inOut / power3.inOut | back.out(1.7) | 0.28, 0.22, 0.45, 0.8 | 0.10 | 1× | steady, whip expo.inOut | standard |
+| `snappy` | expo.out / power3.in | expo.inOut / back.inOut(1.2) | back.out(1.2) | 0.20, 0.16, 0.32, 0.55 | 0.05 | 0.75× | snap (anticipates) | standard |
+| `smooth` | power2.out / sine.in | sine.inOut / sine.inOut | power2.out | 0.50, 0.36, 0.70, 1.1 | 0 | 1.25× | glide | subtle |
+| `playful` | back.out(1.7) / back.in(1.4) | back.inOut(1.4) / back.inOut(1.6) | elastic.out(1, 0.5) | 0.42, 0.26, 0.50, 0.75 | 0.20 | 1.6× | bounce (anticipates), whip back.inOut(1.2) | lively |
+| `documentary` | power1.out / power1.in | power1.inOut / power1.inOut | power1.out | 0.60, 0.45, 0.80, 1.3 | 0 | 1.3× | drift, whip power2.inOut | subtle |
+
+Each preset also has `defaultTransition` (`{cuts, world}`, planner guidance)
+and `camera` (`{style, drift, driftPeriod, breathe, whip, anticipation}`:
+drift amplitude in px at a 1080 px short side, drift period in seconds,
+breathing-scale amplitude, the whip-pan ease). `overshoot` is the measured
+peak overshoot of the enter and emphasis eases; `stagger` multiplies every
+module's default stagger.
+
+```js
+export const GRAMMARS, GRAMMAR_NAMES, DEFAULT_GRAMMAR;   // "editorial"
+export function resolveGrammar(story)                   // → {id, base, custom, ease, duration, overshoot, stagger, defaultTransition, camera, ambient}
+export function grammarErrors(value, path)              // validation messages (story.mjs mirrors them, import-free)
+export function isEditorialGrammar(grammar)
+export function easeRole(name)                          // "enter" (.out) | "exit" (.in) | "move" (.inOut) | "emphasis" (back/elastic/bounce .out) | null (linear, steps)
+export function grammarEase(grammar, name, {props, roles = ["enter", "exit", "emphasis"]})
+export function calmEase(name)                          // the family without overshoot (back.out → power2.out)
+export function grammarDuration(grammar, role, seconds, {min, max})
+export function grammarStagger(grammar, seconds, {min, max})
+export function grammarTweens(list, grammar, options)   // remap ops / animations in place
+```
+
+Rules:
+
+- **Editorial is the identity.** Every mapping returns its input when the
+  grammar's value for that role equals editorial's, so stories without
+  `motion` (and stories with `"editorial"`) compile byte for byte as before
+  (`test/grammar.test.js` pins the pre-grammar HyperFrames hashes of every
+  golden and the editorial corpus `EXPLICIT_16X9_SHA256`).
+- `resolveModule` passes the grammar as `ctx.grammar` to catalogue modules
+  and as `resolveEditorialModule(spec, {grammar})` to editorial kinds (only
+  when it is not editorial); non-editorial models carry `model.grammar`.
+- Where it applies: the module shell enter/exit eases and durations
+  (editorial kinds, catalogue B's `createBase`, catalogue C's `finish`,
+  catalogue A's `standardExit`); element entrances and pops in catalogue A
+  (every `.out`/`.in`/back/elastic animation); pops (back/elastic) in
+  catalogue B/C timelines; default staggers (equation-lockup, logo-row,
+  archive-card words, emphasis-caption); every typed transition ease
+  (`transitionTweens(…, {grammar})`); camera moves (`grammar.ease.camera`,
+  `grammar.camera.whip`).
+- `.inOut` content mechanics (chart draws, gauge fills, focus moves) keep
+  their designed ease, because some modules derive event times from them.
+- Overshooting eases drive transforms only; opacity, blur, colour, clip
+  radii and stroke offsets get `calmEase`, so opacity never passes 1 and blur
+  never goes negative.
+- Durations scale by the grammar's ratio to editorial and are clamped
+  (editorial shell 0.2–0.36 s in, 0.16–0.28 s out; catalogue B 0.3–0.7 /
+  0.2–0.5 s). Event windows and content defaults keep the editorial bounds,
+  so a grammar never turns a valid spec invalid.
+
 ## Editorial core (`kit/core/editorial-core.mjs`)
 
 ```js
@@ -107,12 +186,14 @@ export function resolveEditorialModule(spec)
 
 Density: without `rect` the core derives the footprint from the content (9:16:
 safe-zone width, natural height, centred near the RFC centre-of-mass target
-above the caption band; 16:9: the old lower-left footprint with a content
-height on the y 980 baseline). In 9:16 the kind lays out in
-`density.layout` (rect / scale) and renders scaled by `density.scale` (1–2)
-from the rect's top-left corner, inside one `.ui-density` wrapper in both
-renderers; rect-local geometry is in layout px. 16:9 always resolves at scale
-1, and explicit 16:9 output is byte-identical to the pre-density emitter.
+above the caption band; 16:9: a centred card, 1000 px wide or wider for dense
+content, inside title-safe at y 96–840, above the caption band). Derived
+rects, explicit 9:16 rects and explicit 16:9 rects with `density: "fill"` lay
+out in `density.layout` (rect / scale) and render scaled by `density.scale`
+(1–2; at most 1.75 in 16:9) from the rect's top-left corner, inside one
+`.ui-density` wrapper in both renderers; rect-local geometry is in layout px.
+An explicit 16:9 rect without the opt-in (and any rect with `density:
+"fixed"`) resolves at scale 1, byte-identical to the pre-density emitter.
 Details: skills-src/references/editorial-ui-modules.md, "Defaults and density".
 
 `buildEditorialModule()` in `skills/launchclip-create-video/scripts/editorial-ui-modules.mjs`
@@ -152,6 +233,116 @@ The project file is named **`storyboard.json`**. `story.json` would collide
 with the `STORY.json` creative receipt on case-insensitive filesystems. The
 schema id stays `launchclip.story.v1`.
 
+## Style pack v2 (`kit/core/style.mjs`, `src/style_store.js`, `src/story_style.js`)
+
+A style pack is `.launchclip/styles/<name>/style.json`:
+
+```
+{schema: "launchclip.style.v2", name, description?,
+ brand?: {colors: {bg, paper, ink, primary, accent, ...}, fonts: {display, body, meta}},
+ motion?: {grammar: name | {base, ...overrides}, ...},   // pass-through data
+ camera?: {mode, ...}, ambient?: {level: off|subtle|standard|lively, ...},
+ captions?: {preset, ...caption options},
+ sound?: {sfx_library?: path, sfx_density?: low|normal|high,
+          music?: {provider?, prompt_hints?, bpm_range?: [min, max], energy_curve?}},
+ modules?: {prefer?: [id], avoid?: [id], params?: {<module>: {param: default}}},
+ layout?: {safe_profile?: shorts|landscape, title_case?: boolean},
+ intro?: {module, params, duration}, outro?: {module, params, duration},
+ loop?: boolean, references?: [{name, sha256, kind, width, height, duration_seconds}],
+ reference_stats?: {palette, pacing, energy, sound}}
+```
+
+- `validateStylePack(pack, {modules})` → `{ok, errors, warnings}`.
+- `applyStyle(story, pack, {intro?, outro?})` → `{story, applied, warnings}`.
+  Explicit story values always win. Brand colours and fonts fill per role;
+  `motion`, `camera`, `ambient` and `layout` fill per key and are carried
+  through as data (renderers that do not read them ignore them); the captions
+  overlay gets the pack's preset only when it names neither `preset` nor
+  `style`, and its other options per key (a story with no `overlays` at all
+  gets one captions overlay); `sound` lands on `audio.sfx_density`,
+  `audio.sfx_library` and `audio.music_hints` (finish filters cues by density
+  and bounds the bed tempo by `bpm_range`); `modules.params` fill each scene of
+  that module; `loop` adds `ending.loop_to` (`loop: false` adds `ending.loop:
+false`) when the story has no ending, and the story's `style.loop` overrides
+the pack's (story.mjs `ending.final` then decides how a non-looping story's last
+scene ends: `hold` by default, `fade` or `exit`; modules.mjs `storyFinal`); intro
+  and outro scenes are added only when requested (`"style": {name, intro,
+  outro}`), and an intro is skipped on stories with a timed voice, mix, base or
+  anchors. The merged story carries `meta.style = {name, applied}`, which makes
+  the merge idempotent.
+- A storyboard names its pack with top-level `"style"` (a name, a path to a
+  `style.json` or pack directory, or `{name, intro?, outro?}`). Names resolve in
+  `<project>/.launchclip/styles`, then `~/.launchclip/styles`
+  (`$LAUNCHCLIP_HOME/styles`), then `kit/styles/<name>.json` (built-in
+  starters). `applyProjectStyle(story, {projectDir})` runs before validation in
+  `readProjectStory` (renderer adapters, cinematic checks, eval), `story
+  validate|resolve|compile`, `layout-check` and `finish`.
+- v1 packs (`launchclip.style-pack.v1`: `frame.md`, caption skin, audio notes)
+  load as v2 in memory with a warning; `launchclip style upgrade <name>` writes
+  the v2 `style.json` and keeps the v1 manifest as `style.v1.json`.
+- `stylePromptLines(pack)` is the planner section (`planningPrompt({style})`).
+- Starters: `editorial-dark`, `bold-creator`, `minimal-tech`,
+  `warm-documentary`, `neon-explainer`; each validates, passes the contrast
+  check (`checkPackContrast`: paper/bg 4.5:1, primary and accent/bg 3:1,
+  ink/primary 3:1) and merges into every golden story without param errors.
+
+### Mimic a reference (`src/style_reference.js`)
+
+`analyzeReference(file)` samples 24 frames (160 px wide) and measures: palette
+(`paletteClusters`: k-means k = 8 with deterministic k-means++ seeding, a
+second pass without the dominant colour and a third over saturated pixels);
+pacing (hard cuts from `analyzeRenderMotion` plus `structuralBoundaries`: share
+of content pixels that changed between t ± 0.5 s at 10 fps, and settle-after
+jumps); activity (1 − hold ratio); captions (`detectCaptions`: text-like
+edge rows per band, approximate); sound (`analyzeProductionAudio`: loudness,
+silence ratio, transients). `draftStyleFromReferences` maps them to a v2 pack
+(`assignPaletteRoles`, `grammarFromPacing`, `ambientFromEnergy`,
+`soundFromAudio`, `captionsFromDetection`, `fontsFromReference`) plus a
+`reference-report.md`. `compareToStyle(measured, pack)` reports drift for
+`launchclip style check`.
+
+## Caption presets (`kit/core/captions.mjs`)
+
+The captions overlay is `{type: "captions", preset | style, src?, hide?,
+position?, max_words?, max_chars?, case?, emphasis?, keywords?, font?, size?,
+colors?, stroke?, shadow?, entrance?, exit?, offset?, hide_during_moves?}`; legacy `style:
+"word-highlight" | "line" | "none"` still works (`line` → `minimal-line`,
+`style` may also name a preset, `preset` wins). `CAPTION_PRESETS` holds 14
+presets; `STORY_CAPTION_PRESETS` in `story.mjs` mirrors the names.
+
+`captionPlan(chunks, overlay, {brand, format, story, hide, fonts?})` →
+`{preset, options, css, nodes, tweens}`. `nodes` is a DOM tree (div/span with
+id, class, text, children), `css` its static styles, and `tweens` a list of
+GSAP calls `{id, at, dur, ease, from?, to, ir?}` over opacity, x, y, scale,
+scaleX, color, backgroundColor and width (%). Rules: per element and property
+only the first tween may render immediately, and a `to()` always follows an
+earlier tween of that property. HyperFrames mounts the plan with
+`captionPlanRuntime(plan)` (builds the nodes, adds the tweens with
+`force3D: false`); Remotion's `WordCaptions` builds the same plan and evaluates
+each element with `captionElementStateAt` (GSAP forward-seek semantics) and
+`captionInlineStyle`. `test/caption_presets.test.js` seeks a real GSAP
+timeline to every frame against the evaluator; `scripts/parity-captions.mjs`
+compares rendered stills per preset (`test/fixtures/parity-captions/`, SSIM ≥
+0.97, `LAUNCHCLIP_PARITY=1`). The layout check moves the caption band for
+`position: top|middle` (`captionBandAt`).
+
+Captions during camera moves: `hide_during_moves` is `"auto"` (default),
+`true` or `false`. Auto dips the captions out for every world-camera move that
+sweeps the plates vertically (`sweepingMove`: vertical travel above 1 px, a
+zoom change or a roll, so vertical pans and whip-pans, push, pull and orbit);
+horizontal pans keep their captions. `true` dips for every move, `false` never.
+`captionDipWindows(plan, mode)` (camera-world.mjs) gives the move spans;
+`captionDipTweens(windows)` turns them into linear opacity ramps of
+`CAPTION_DIP_RAMP` (0.12 s) on the captions container that sit just outside
+each move (out before it starts, back after it ends; windows closer than two
+ramps merge). HyperFrames adds them as `tl.fromTo('#lc-captions', …)`;
+Remotion's `WordCaptions` applies `captionDipOpacity(windows, t)` to its
+`.lc-captions` element. layout-check samples every frame of every camera move,
+transforms each visible plate element's rect by the camera (`screenPoint`) and
+reports `camera-caption-band` when key content covers at least 5% of the
+caption band while a caption chunk is on screen and not dipped: a warning, an
+error from 0.25 s (`checkCameraSweeps`, `CAMERA_SWEEP`).
+
 ## Wave 2: module registry, compilers, parity
 
 ### Story fields used by the compilers
@@ -159,7 +350,7 @@ schema id stays `launchclip.story.v1`.
 - `audio.mix`: an optional project path (`assets/audio/mix.wav`) to the premixed
   root track. Both compilers mount exactly one root audio element from it. If
   it is absent, the voice is mounted alone.
-- `overlays[]` captions: `{type: "captions", style, src?: "assets/captions/captions.json", hide?: [[start, end]]}`.
+- `overlays[]` captions: `{type: "captions", style | preset, src?: "assets/captions/captions.json", hide?: [[start, end]], ...options}` (see "Caption presets").
   When `src` is absent, the compilers chunk `audio.words` with `chunkWords()`
   from `word-captions.mjs`.
 - Scenes whose module sets `hidesCaptions` hide the captions while active.
@@ -231,6 +422,13 @@ the Shorts safe zone, key text at least 44 px at 1080 wide, contrast at least
   is resolved with that `end`, so its exit motion moves to the end of the
   transition. HyperFrames turns the tweens into GSAP `fromTo` calls; Remotion
   evaluates them per frame with `layerStateAt` (a test seeks GSAP against it).
+  Empty plates: when the span from one plate's end to the next plate's first
+  content (its start plus `sceneLeadIn(scene)`, e.g. a kinetic-words first
+  beat after the first frame) is under `HOLD_GAP` (0.5 s), the previous plate
+  is held through it, and on a cut the incoming plate stays transparent
+  (`role: "hold"` opacity tweens) until its content arrives. `emptyPlates()`
+  lists the longer spans; `story validate` warns about gaps in scene timing and
+  layout-check reports `empty-plate` warnings.
 - `kit/core/captions.mjs` (chunking, GSAP runtime, CSS, `CAPTION_MOTION`,
   `CAPTION_BAND`) and `kit/core/fonts.mjs` (`brandFontStacks`) are shared too.
 - `compileStoryToHyperFrames(resolvedStory, {projectDir, sourceDir?, sceneFilter?, write?, copyAssets?})`
@@ -315,6 +513,298 @@ node scripts/parity.mjs <fixture.json> [--out qa/parity/<id>] [--times enter,mid
   `report.json` plus side-by-side PNGs.
 - `test/parity.test.js` runs every fixture in `test/fixtures/parity/*.json`
   when `LAUNCHCLIP_PARITY=1` is set, and skips otherwise because it is slow.
+  It also compares whole-story stills (`runStoryParity`) of
+  `examples/story/minimal`, `explainer-9x16` and `promo-16x9` at times inside
+  holds, where the ambient field and drift are well under way.
+
+## Ambient motion (`kit/core/ambient.mjs`)
+
+Once a module's enter animation settles, nothing on a plate moves until the
+next event, so between beats a story reads as a slideshow and fails the
+cinematic motion gate (median frame-change energy, flow velocity p90). The
+ambient layer keeps settled frames alive. It is plain ESM that imports only
+`./motion.mjs`, and every value is a pure function of absolute time and the
+story. The HyperFrames compiler turns it into GSAP; `StoryComposition`
+evaluates the same functions per frame.
+
+### Control
+
+```jsonc
+"ambient": "standard"                          // story level: off | subtle | standard | lively
+"ambient": {"level": "subtle", "background": false, "drift": true}
+"scenes": [{ "id": "s3", "ambient": "off", … }]  // per-scene override (string or object)
+```
+
+- Precedence: `scene.ambient` ← `story.ambient` ← defaults.
+- The default level follows the scene's `energy`: 0 → `subtle`; 1, 2 and
+  `"build"` → `standard`; 3 → `lively`. A missing energy → `standard`.
+- `background` defaults to true, except in the `footage-led` lane, where the
+  base already moves. There the field is off and only overlays drift (track
+  ≥ 1, not `insert` plates), unless a scene sets `drift: true` explicitly.
+- `"off"` turns both layers off. Settled frames then hold still, and the
+  cinematic motion gate fails.
+- `validateStory` checks both fields (`STORY_AMBIENT_LEVELS` in `story.mjs`
+  mirrors `AMBIENT_LEVELS`; a test pins them together).
+
+### Layers
+
+1. **Background field.** `ambientField(story)` returns `{level, direction,
+   blobs}` or null. A blob is a large radial gradient of the brand `primary`
+   or `accent` colour at low alpha, with a many-stop Gaussian-like falloff so
+   no stop edge reads as a ring. The alpha is set so that the blob centre adds
+   `AMBIENT_PRESETS[level].field.contrast` BT.601 luma levels over
+   `brand.colors.bg` (22, 40 and 54 for subtle, standard and lively; alpha
+   capped at 0.45), so a brand with dim colours gets the same low-contrast
+   field as one with bright colours.
+   Each blob glides across the canvas at a steady speed
+   (`field.speed` canvas widths per second, about ±8% apart per blob for
+   parallax), wraps only while fully off canvas, bobs gently on the cross axis
+   and breathes in scale. Axes are `{kind: "glide", from, to, period, offset}`
+   (linear, wrapping) or `{kind: "wave", center, amp, period, phase}` (a cosine
+   whose extrema fall on multiples of half its period), so a chain of
+   `ease: "none"` or `"sine.inOut"` tweens reproduces them exactly:
+   `blobTweens(blob, from, to)`. The field level is story-wide
+   (`fieldLevel`): the field is one continuous backdrop and does not change
+   from plate to plate. The seed is a hash of the title, brand colours and
+   format (`ambientSeed`), so a story always gets the same field.
+   The field sits **inside** every track-0 plate's layer, under the content,
+   not behind the plates: plates stay opaque, so fades, zooms and pushes look
+   exactly as before, and in a crossfade both plates show the field at the same
+   absolute time, so it reads as continuous.
+2. **Hold drift.** `sceneDrift(story, scene, model, {window, geometry})`
+   returns `{start, duration, ease: "none", origin, scale, x, y, mode}` or
+   null. The scene's content sits in a wrapper that moves linearly from
+   identity at the scene start to `{scale, x, y}` at the end of its render
+   window, so it never stops dead at settle and hands its velocity to the exit
+   and the outgoing transition. The push is about the centre of
+   `model.layout.rect`. Its amplitude is `scaleRate`/`shiftRate` per second of
+   window, capped at `scaleMax`/`shiftMax`, then clamped by `driftBounds`: the
+   profile safe zone, shortened so that a rect clear of the caption band stays
+   clear of it while captions are on. A rect with too little room for half the
+   wanted push pulls back instead (`scale < 1`, which only shrinks it), never
+   shrinking key text below the profile minimum (`model.minTextPx`). Vertical
+   travel goes toward the side with more room. `driftEligible` skips
+   placeholders, decor (punch-in cameras) and media-window video, whose
+   `<video>` HyperFrames lifts out of the scene layer.
+3. **Accent life** is left to the modules' own glows: the field already lights
+   the plate.
+
+Module emitters, components and the editorial golden corpus are unchanged:
+both layers are compiler-level wrappers. A `sceneFilter` compile and
+`ModuleReview` have no ambient.
+
+### Renderers
+
+- HyperFrames: each plate's `.lc-layer` starts with
+  `<div class="lc-ambient-field">` holding one absolutely positioned
+  `.lc-ambient-blob` per blob (`lc-amb-<scene>-<blob>`), and the module
+  output sits in `<div id="lc-drift-<scene>" class="lc-drift">` with an inline
+  `transform-origin`. Every ambient tween is a `tl.fromTo` on the master
+  timeline with `immediateRender: false` and `force3D: false` (2D transforms,
+  so text is re-rasterised crisp each frame and matches Remotion), linear or
+  `sine.inOut` eases and no `onUpdate`. Field tweens cover only the plate's
+  render window.
+- Remotion: `SceneLayer` draws `<AmbientField blobs t/>` (inline
+  `blobStyle(blob, t)`) before the content and wraps the content in an
+  `AbsoluteFill` with `driftStyle(drift, t)`, both at the absolute time
+  `(startFrame + frame) / fps`. The loop clone keeps its frozen first state;
+  its field keeps moving.
+- `test/story_ambient.test.js` seeks the compiled GSAP against the
+  frame-pure state; story parity covers the pixels.
+
+### Safety
+
+- Drift is linear, small (`scaleMax` 2–4%) and unblurred: no motion blur is
+  applied to it, and the transforms stay 2D.
+- `src/layout_check.js` computes the same `sceneDrift` for every scene and
+  checks `driftExtent(rect, drift)` (the union of the rest rect and the end
+  state) instead of the rest rect, and a pull-back's smaller `minTextPx`. A
+  drift that would carry key text out of the safe zone, into the caption band
+  or onto a neighbour is therefore a layout error. The report lists the
+  drifting scenes (`drifted`).
+
+### Composition with a world camera
+
+Camera moves and parallax (the world-camera grammar) compose with ambient
+motion by **nesting transforms**. They never edit blobs or drift values:
+
+```
+scene layer (.lc-layer / SceneLayer)   ← typed transition tweens
+├─ field container                      ← camera at FIELD_PARALLAX depth (0.3×)
+│  #lc-amb-field-<scene> / <AmbientField style>
+│  └─ blobs                             ← their own glide, bob and breathe
+└─ camera content wrapper (camera, 1×)  ← owned by the camera grammar
+   └─ drift wrapper #lc-drift-<scene>   ← hold drift, innermost
+      └─ module content
+```
+
+- `parallaxState(camera, depth = FIELD_PARALLAX)` → `{x, y, scale}` and
+  `parallaxStyle(camera, depth)` map a camera offset (a pure function of
+  time on the camera side) to a layer at `depth`. HyperFrames tweens
+  `#lc-amb-field-<scene>` with seek-safe `fromTo`s of those values; Remotion
+  passes `style={parallaxStyle(camera(t))}` to `<AmbientField>`. The field
+  container is otherwise untouched, so the camera owns its transform.
+- The camera's content wrapper goes **outside** the drift wrapper, so the
+  drift stays a small push about the module rect inside whatever framing
+  the camera sets. layout-check inflates rects by the drift only. A camera
+  that reframes key content must add its own extent check.
+- Every ambient function stays pure and exported, so a camera module can
+  sample `blobStateAt`, `driftStateAt` and `sceneDrift` at any time.
+- The world camera (world mode) does not put a field in each plate: it draws
+  the field once, in its background depth layer, as one continuous backdrop.
+  `fieldTiles(field, region, {width, height})` repeats each blob one glide
+  wrap apart across and one canvas height apart down over `region`, as
+  static translates (`fieldTileTransform`) that are never clipped; the blobs
+  inside keep their own glide, bob and breathe. See "World camera".
+
+```js
+export const AMBIENT_LEVELS, AMBIENT_PRESETS, FIELD_PARALLAX
+export function parallaxState(camera, depth) / parallaxStyle(camera, depth)
+export function sceneAmbient(story, scene)      // → {level, background, drift}
+export function ambientErrors(value, path)       // → string[]
+export function ambientField(story)              // → {level, direction, blobs} | null
+export function blobStateAt(blob, t) / blobStyle(blob, t) / blobBackground(blob) / blobTweens(blob, from, to)
+export function fieldTiles(field, region, {width, height}) / fieldTileTransform(tile) // world-camera backdrop
+export function sceneDrift(story, scene, model, {window, geometry}) // → Drift | null
+export function driftPlan({rect, level, start, end, canvas, bounds, minTextPx, minTextLimit})
+export function driftStateAt(drift, t) / driftStyle(drift, t) / driftGsap(drift) / driftExtent(rect, drift)
+```
+
+## World camera (`kit/core/camera-world.mjs`)
+
+```json
+"camera": { "mode": "world", "layout": "auto", "spacing": 0.12, "parallax": true, "blur": false }
+```
+
+- `mode`: `"cuts"` (default) or `"world"`. World mode is for the motion and
+  voiceover-motion lanes; footage-led stories (a style pack may carry a world
+  camera into any lane) keep cuts, and validation warns.
+- `layout` (`row` | `column` | `grid` | `path` | `auto`, default `auto`): the
+  direction a camera move takes when its transition names none (row: right;
+  column: down; grid: a snake over ⌈√n⌉ columns; path: right, down, right…;
+  auto: right). An explicit `in.direction` always wins.
+- `spacing` (0–1, default 0.12): the gap between neighbouring plates, as a
+  fraction of the canvas along the move.
+- `parallax` (default true in world mode): the background depth layer moves
+  at 0.3× and overlays at 1.15×. `false` keeps the same background, moving
+  1× with the plates, and turns overlay parallax off (world plates are
+  transparent, so there is always a background behind them).
+- `blur` (default: the grammar's): whip-pans always blur at full strength;
+  pans, pushes, pulls and orbits blur at the grammar's `camera.moveBlur`
+  (snappy and playful 0.5: half the shutter and half the 18 px cap, so a fast
+  move reads as motion rather than a jump; editorial, smooth and documentary
+  0). `true` blurs every move at full strength, `false` none. The blur is
+  exactly 0 at rest either way (sub-threshold speeds round to 0).
+
+Camera transitions (`scene.in` / `ending.in`, track-0 scenes only; footage-led
+rejects them):
+
+| Type | World placement of the incoming plate | Layers |
+|---|---|---|
+| `pan` | beside the outgoing plate in `direction` (where the camera goes) | none |
+| `whip-pan` | as pan; the grammar's whip ease; motion blur by default | none |
+| `orbit` | as pan, turned ±9° (camera rolls back to upright) | none |
+| `push` (world mode only) | centred on `from_object` (`"s3.gap-bracket"`: `model.objects[name].rect`, else the scene's content rect), scaled down by min(W/w, H/h) clamped 1.6–3.2 | incoming fades in over 15–60%, outgoing out over 30–65% |
+| `pull` | centred on the outgoing plate (or its `from_object`), scaled up 2.2× | incoming in over 0–50%, outgoing out over 30–100% |
+
+In cuts mode `push` keeps its slide meaning; `pan`, `whip-pan`, `orbit` and
+`pull` still move a camera between the two (opaque) plates, and every other
+plate stacks where the camera rests. Any non-camera transition stacks the
+incoming plate on the outgoing one; in world mode `fade`, `zoom` and `iris`
+also fade the outgoing plate out, because world plates are transparent.
+A camera `ending.in` travels home to the loop scene's placement (its
+`direction` is ignored); any other ending shows the clone where the camera
+rests.
+
+Model:
+
+- Placement `{x, y, scale, rotation}` per plate (top-left corner in world px,
+  scale, degrees); the first plate sits at the origin. Camera state
+  `{x, y, zoom, rotation}` = the world point at the canvas centre, zoom and
+  roll; at rest on a plate, `zoom = 1/scale`, `rotation = −plate rotation`, so
+  the plate fills the canvas exactly.
+- Moves run over `[scene.start, scene.start + in.dur]` from rest to rest with
+  `grammar.ease.camera` (whip-pan: `grammar.camera.whip`). Every camera ease
+  is `.inOut` with zero velocity at both ends (snappy and playful use
+  `back.inOut`, which winds up first: anticipation), so position and velocity
+  are continuous at every boundary (`test/world_camera.test.js`).
+- Drift (world mode): `x`, `y` and a breathing `scale` wave on the drift
+  container, `centre + amp·cos(2πt/period)` with an extremum at t = 0 and
+  periods that divide the story duration (so the loop seam matches), amplitude
+  `grammar.camera.drift` px at a 1080 px short side. GSAP plays it as
+  half-period `sine.inOut` tweens; no frame repeats the previous camera state.
+  It composes with ambient motion's hold drift, which lives inside each plate.
+- Background and parallax (`PARALLAX`, `plan.depth`): every world story has
+  one background depth layer behind the transparent plates. It moves
+  `plan.depth` × the plates' screen travel (0.3 with parallax, `PARALLAX.flat`
+  = 1 with `parallax: false`; never scaled); overlays (track ≥ 1) move 1.15×
+  relative to the camera state where they settle (`overlayOps`, parallax
+  only). The layer is ambient motion's background field when the story has
+  one, else soft brand glows (`backgroundLayer`), never both. The field is
+  one continuous backdrop across the whole world extent
+  (`backgroundExtent`): each blob is repeated on its own lattice
+  (`fieldTiles` / `backgroundFieldTiles`), one glide wrap apart across and
+  one canvas height apart down, in static translate wrappers that are never
+  clipped, so no tile edge ever shows (the per-plate field's canvas-sized
+  `overflow: hidden` box showed its edge as a hard vertical seam after a
+  pan). Cuts mode keeps the per-plate field unchanged.
+- Motion blur: an SVG `feGaussianBlur` with separate x/y deviations on the
+  camera container, sampled once per frame from the screen velocity of the
+  canvas centre (direction) and corners (zoom), through `motionBlurPx`
+  (shutter 0.5, max 18 px): exactly 0 at rest. The filter is switched on
+  (`--lc-cam-filter`) only while a blurred move runs.
+
+```js
+export function resolveCamera(story)      // → {mode, layout, spacing, parallax, blur}
+export function cameraActive(story)       // world mode, or any camera transition
+export function worldLayout(story, windows, {objects}) // → {placements: Map, loop, order}
+export function sceneObjectLookup(story, resolveModule) // → (sceneId, name) → plate-local rect
+export function cameraPlan(story, {windows, objects})   // → plan | null (no camera: compilers emit exactly what they did before)
+export function cameraStateAt(plan, t) / containerState(plan, t) / screenPoint(plan, point, t)
+export function blurAt(plan, t)           // {x, y} deviations
+export function cameraOps(plan)           // renderer-neutral ops on "pan", "zoom", "drift", "background", "blur"
+export function overlayOps(plan, window)  // ops on "overlay"
+export function opsStateAt(ops, target, t)// frame-pure GSAP timeline semantics
+export function placementTransform(placement) / containerTransform(props) / backgroundLayer(plan, brand)
+export function backgroundExtent(plan)    // field-frame rect the camera can show
+export function backgroundFieldTiles(plan, field) // → [{blob, dx, dy}] (ambient.mjs fieldTiles over backgroundExtent)
+```
+
+Renderers:
+
+- **HyperFrames**: `#lc-world-bg` (the tiled field `#lc-amb-field-world` ›
+  `.lc-world-tile` › `.lc-amb-world-<blob>`, one tween set per blob class
+  moving all its copies; or the glows), then `#lc-camera` (z-index 5, the
+  blur filter) › `#lc-cam-drift` › `#lc-cam-zoom` (scale and roll about the
+  canvas centre) › `#lc-cam-pan` › the plates, each `.lc-scene` carrying its
+  placement as a static `transform` (origin 0 0). `cameraGsapLines(plan)` turns
+  the ops into `tl.fromTo(…, {immediateRender: false, force3D: false})` and
+  per-frame `tl.set` calls (blur: `attr.stdDeviation` and the filter variable),
+  so the paused timeline gives the same frame in any seek order. Overlays get a
+  `.lc-parallax` wrapper. Root media (video) stays on the root and does not
+  follow the camera (a warning says so).
+- **Remotion**: `CameraWorld` evaluates the same ops per frame with
+  `opsStateAt` and `blurAt`, and draws the same tiles with `WorldField`; `SceneLayer` takes the placement, a transparent
+  plate flag and the overlay parallax ops.
+
+Parity: camera stories hold the usual SSIM 0.97 floor (explainer-9x16 mid-pan
+0.997; world-camera-9x16 0.990–0.996 at rest, on the playful grammar's
+motion-blurred mid-pan frames, with the captions dipped through the pan down,
+mid-push, orbit, on blurred whip-pan frames and home again, and the same story
+in 16:9 0.991–0.997, compared on the frame grid; `test/parity_camera.test.js`, which
+also checks the rendered background has no column step across the former
+seam). `test/world_field.test.js` samples the composited field along rows
+through the former seam from both renderers' math.
+The depth layer's glows are small separate gradient elements on a fixed
+lattice that never scale: one huge multi-gradient layer scaled with the zoom
+dithered differently in the two Chrome pipelines (0.956).
+
+Partial re-render (`src/render_segments.js`): the camera path is derived
+across scenes, so each segment's hash has a `camera` part built from what the
+camera puts on screen during its frames (container states and blur per frame,
+its plates' placements, its overlays' parallax, the lattice glows or field
+tiles that cross the canvas). Changing one scene's pan direction re-renders the segments from
+that move on, including later scenes whose own fields did not change.
 
 ## Footage-led lane (RFC phase 6)
 

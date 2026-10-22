@@ -2,7 +2,10 @@
 // element tree (view) and renderer-neutral animation ops (timeline).
 // Registered in kit/core/catalog-b.mjs; conventions are documented there.
 
-import {alphaHex, createBase, fitText, r2, rt} from './catalog-b-base.mjs';
+import {alphaHex, createBase, fitText, r2, rt, timingRules} from './catalog-b-base.mjs';
+
+// Minimum spacing between step times (seconds).
+export const PROCESS_STEP_GAP = 0.35;
 import {abs, el, set, text, transformString, tw} from './catalog-b-view.mjs';
 
 const color = 'primary | accent | paper | #rrggbb (contrast ≥ 3:1 on bg)';
@@ -35,7 +38,7 @@ function resolve(params, ctx) {
     const label = check.str(entry.label, `${path}.label`, 32);
     const detail = entry.detail === undefined ? null : check.str(entry.detail, `${path}.detail`, 64);
     const time = b.timeOf(`step-${i}`, entry.at, `${path}.at`, Math.min(b.lastEvent, firstDefault + spacing * i));
-    if (time <= previous + 0.35) check.fail(`${path}.at`, 'must come at least 0.35 s after the previous step');
+    if (time < previous + PROCESS_STEP_GAP - 1e-6) check.fail(`${path}.at`, `must come at least ${PROCESS_STEP_GAP} s after the previous step (step ${i} settles at ${Math.round((previous - b.start) * 1000) / 1000} s, step ${i + 1} at ${Math.round((time - b.start) * 1000) / 1000} s in the scene): set it to ${Math.ceil((previous - b.start + 0.35) * 100 - 1e-6) / 100} or later`);
     previous = time;
     return {index: i, label, detail, time, number: String(i + 1)};
   });
@@ -139,6 +142,7 @@ export const processSteps = {
     describe: 'A sequence or mechanism as 2–5 connected numbered nodes that light up in order.',
     params: {steps: '[string | {label ≤ 32, detail? ≤ 64, at?}] 2–5', title: 'string ≤ 48 (optional)', layout: '"vertical" (portrait default) | "horizontal"', numbered: 'boolean (default true)', color, rect},
     events: ['step-<i>'],
+    timing: timingRules({gaps: [{between: 'steps[].at', seconds: PROCESS_STEP_GAP}]}),
   resolve,
   view,
   timeline

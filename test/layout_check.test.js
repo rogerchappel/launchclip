@@ -201,3 +201,104 @@ test("layout-check explains a missing kit/core/story.mjs", { skip: existsSync(pa
   await writeFile(path.join(project, "storyboard.json"), JSON.stringify({ format: { width: 1080, height: 1920 }, scenes: [] }));
   await assert.rejects(checkLayoutProject(project), /kit\/core\/story\.mjs/);
 });
+
+test("layout-check checks the ambient drift's largest extent, as the compilers draw it", async () => {
+  const { driftExtent, sceneDrift } = await import("../kit/core/ambient.mjs");
+  const { resolveModule } = await import("../kit/core/modules.mjs");
+  const { resolveStory } = await import("../kit/core/story.mjs");
+  const metric = { mode: "illustration", unit: "minutes", format: "number", values: [{ value: 48, at: 0.3 }] };
+  // Two overlays 12 px apart: at rest they never touch.
+  const story = (ambient) => ({
+    schema: "launchclip.story.v1", lane: "motion", title: "Drift extent",
+    format: { width: 1080, height: 1920, fps: 30, duration: 6 },
+    brand: { colors: { bg: "#06070d", primary: "#fdb022", paper: "#f2eee6" }, fonts: { display: "anton" } },
+    ...(ambient === undefined ? {} : { ambient }),
+    scenes: [
+      { id: "top", module: "metric", start: 0, end: 6, energy: 3, params: { title: "Before", rect: { x: 90, y: 300, width: 840, height: 420 }, metric } },
+      { id: "low", module: "metric", start: 0, end: 6, track: 1, energy: 3, params: { title: "After", rect: { x: 90, y: 732, width: 840, height: 420 }, metric } }
+    ]
+  });
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-layout-drift-"));
+  await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story(undefined)));
+  const drifting = await checkLayoutProject(project);
+  assert.deepEqual(drifting.drifted, ["top", "low"]);
+  assert.ok(drifting.findings.some((entry) => entry.rule === "collision" && entry.ids.includes("top") && entry.ids.includes("low")), "the pushed-in extents meet");
+  // The extent checked is exactly the drift both compilers draw.
+  const resolved = resolveStory(story(undefined));
+  const scene = resolved.scenes.find((entry) => entry.id === "top");
+  const drift = sceneDrift(resolved, scene, resolveModule(scene, resolved, { end: 6 }), { window: { start: 0, end: 6 }, geometry: profileGeometry(SHORTS) });
+  const extent = driftExtent(scene.params.rect, drift);
+  assert.ok(extent.height > 420 && extent.y >= 280, "pushed in, but inside the safe zone");
+  await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story("off")));
+  const still = await checkLayoutProject(project);
+  assert.deepEqual(still.drifted, []);
+  assert.ok(!still.findings.some((entry) => entry.rule === "collision"), "with ambient off the rest rects do not touch");
+});
+
+test("text-size floors hold for editorial modules: minTextPx (body copy) and minSecondaryTextPx per profile", async () => {
+  const { resolveModule } = await import("../kit/core/modules.mjs");
+  const lines = [{ segments: [{ text: "\"module\": \"hook-title\"," }] }, { segments: [{ text: "\"start\": 0," }] }, { segments: [{ text: "\"end\": \"word:launch\"" }] }];
+  const story = (width) => ({
+    schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 4 },
+    brand: { colors: { bg: "#0a0b10", paper: "#f3efe6", primary: "#ffa630" }, fonts: { display: "anton" } },
+    scenes: [{ id: "s3", module: "excerpt-window", start: 0, end: 4, params: { title: "storyboard.json", rect: { x: 200, y: 400, width, height: 560 }, excerpt: { mode: "illustration", lines, focus: { line: 0, scale: 1.1, at: 1 } } } }],
+    ending: { loop: false }
+  });
+  // A narrow portrait rect renders the excerpt at about 26 px: under the 32 px Shorts body floor.
+  const narrow = await mkdtemp(path.join(os.tmpdir(), "launchclip-textfloor-"));
+  await writeFile(path.join(narrow, "storyboard.json"), JSON.stringify(story(520)));
+  const report = await checkLayoutProject(narrow, { profile: "shorts" });
+  const finding = report.findings.find((entry) => entry.rule === "min-text-size");
+  assert.ok(finding, "the 26 px excerpt is flagged");
+  assert.match(finding.detail, /smallest body text is 26\.4 px; shorts needs at least 32 px/);
+  // Wide enough for the type to scale past the floor: no finding.
+  const wide = await mkdtemp(path.join(os.tmpdir(), "launchclip-textfloor-"));
+  await writeFile(path.join(wide, "storyboard.json"), JSON.stringify(story(700)));
+  assert.ok(!(await checkLayoutProject(wide, { profile: "shorts" })).findings.some((entry) => entry.rule === "min-text-size"));
+  // Every editorial model reports its smallest rendered text after the density scale.
+  const model = resolveModule(story(520).scenes[0], { ...story(520), resolved: { duration: 4, fps: 30 } });
+  assert.equal(model.minTextPx, 26.4);
+  assert.equal(model.minSecondaryTextPx, 24.2);
+  assert.equal(model.textRole, "body");
+  // Secondary floors: a landscape note at 22 px passes (18 px floor); the headline floor still applies to catalogue key text.
+  const geometry = profileGeometry(LANDSCAPE, "landscape");
+  assert.deepEqual([geometry.minTextPx, geometry.minBodyTextPx, geometry.minSecondaryTextPx], [32, 22, 18]);
+  const shorts = profileGeometry(SHORTS, "shorts");
+  assert.deepEqual([shorts.minTextPx, shorts.minBodyTextPx, shorts.minSecondaryTextPx], [44, 32, 24]);
+  const base = { role: "text", rect: { x: 300, y: 300, width: 400, height: 300 }, start: 0, end: 5 };
+  const sizes = (element) => checkLayout({ canvas: SHORTS, elements: [anchor(5), { id: "m", ...base, ...element }] }).findings.filter((entry) => entry.rule === "min-text-size").map((entry) => entry.detail);
+  assert.deepEqual(sizes({ minTextPx: 40, textRole: "body" }), []);
+  assert.equal(sizes({ minTextPx: 40 }).length, 1, "40 px key text is under the 44 px headline floor");
+  assert.match(sizes({ minTextPx: 40, textRole: "body", minSecondaryTextPx: 20 })[0], /secondary text \(notes, labels\) is 20 px; shorts needs at least 24 px/);
+});
+
+test("validate and layout-check agree on float bounds: one tolerance, bounds printed to 2 decimals", async () => {
+  const { resolveModule } = await import("../kit/core/modules.mjs");
+  const { resolveStory } = await import("../kit/core/story.mjs");
+  // 1.68 − 0.45 is 1.2299999999999998 in floating point, so the last valid state time
+  // (duration − 0.45) came out as 0.7799999999999998 on one path and 0.78 on the other.
+  const story = (at) => ({
+    schema: "launchclip.story.v1", lane: "motion", format: { width: 1920, height: 1080, fps: 30, duration: 4 },
+    brand: { colors: { bg: "#0a0b10", paper: "#f3efe6", primary: "#ffa630" }, fonts: { display: "anton" } },
+    scenes: [
+      { id: "s1", module: "status-rack", start: 0.45, end: 1.68, params: { title: "Gates", rect: { x: 400, y: 200, width: 1100, height: 400 }, rack: { mode: "illustration", rows: [{ label: "Tests", states: [{ at, lights: [true, true, true] }] }] } } },
+      { id: "s2", module: "hook-title", start: 1.68, end: 4, params: { headline: "Ship it" } }
+    ],
+    ending: { loop: false }
+  });
+  for (const [at, ok] of [[0.78, true], [0.79, false]]) {
+    const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-bounds-"));
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story(at)));
+    const resolved = resolveStory(story(at), {});
+    let validateError = null;
+    try { resolveModule(resolved.scenes[0], resolved); } catch (error) { validateError = error.message; }
+    const report = await checkLayoutProject(project, { profile: "landscape" });
+    const spec = report.findings.find((entry) => entry.rule === "module-spec");
+    assert.equal(validateError === null, ok, `validate at ${at}: ${validateError}`);
+    assert.equal(spec === undefined, ok, `layout-check at ${at}: ${spec?.detail}`);
+    if (!ok) {
+      assert.match(validateError, /rack state\.at must be between 0\.28 and 0\.78$/);
+      assert.match(spec.detail, /rack state\.at must be between 0\.28 and 0\.78$/);
+    }
+  }
+});

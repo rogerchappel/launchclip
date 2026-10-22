@@ -73,10 +73,14 @@ export async function sceneStory(story, sceneId) {
   }
   const scene = resolved.scenes?.find(item => item.id === sceneId);
   if (!scene) throw new Error(`scene ${sceneId} not found in the fixture story`);
-  // One module on the background: no captions, audio or ending, so the lane's
+  // One module on the background: no captions, audio or loop, so the lane's
   // audio requirements (voiceover-motion needs audio.words) no longer apply.
-  const filtered = {...structuredClone(resolved), lane: 'motion', scenes: [structuredClone(scene)], overlays: []};
-  delete filtered.ending;
+  // Ambient motion is off: ModuleReview draws the bare module, and story
+  // parity (runStoryParity) covers the ambient field and drift.
+  // ending.final "exit": the reviewed scene plays its own exit (and the
+  // samples cover it) even when it is the story's last scene, rather than
+  // holding settled past the end as a non-looping story's last scene does.
+  const filtered = {...structuredClone(resolved), lane: 'motion', ambient: 'off', scenes: [structuredClone(scene)], overlays: [], ending: {final: 'exit'}};
   delete filtered.audio;
   return {story: filtered, scene: filtered.scenes[0]};
 }
@@ -266,7 +270,7 @@ export async function compareStills(a, b) {
   return {ssim, psnr};
 }
 
-async function sideBySide(a, b, sideFile, diffFile) {
+export async function sideBySide(a, b, sideFile, diffFile) {
   await must('ffmpeg hstack', 'ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', a, '-i', b, '-filter_complex', '[0:v]format=rgb24[a];[1:v]format=rgb24[b];[a][b]hstack=inputs=2', '-frames:v', '1', sideFile]);
   await must('ffmpeg difference', 'ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', a, '-i', b, '-filter_complex', '[0:v]format=gbrp[a];[1:v]format=gbrp[b];[a][b]blend=all_mode=difference,lutrgb=r=val*4:g=val*4:b=val*4', '-frames:v', '1', diffFile]);
 }

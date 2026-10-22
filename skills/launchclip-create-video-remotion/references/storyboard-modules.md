@@ -19,16 +19,35 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - schema: "launchclip.story.v1" (exactly). lane: one of motion, voiceover-motion, footage-led (given; never change it).
 - format: {width, height, fps, duration, platform?} and brand: {colors, fonts} are given; copy them unchanged.
 - audio: {voice?, words?, music?, sfx?}; base: null, or the recording path for footage-led.
-- scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: cut | fade | push | whip | zoom | iris | morph, dur, direction?, from_object?}, params, hits?}].
-- in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus.
-- overlays: [captions]. ending: {loop_to: "<first scene id>"} for a seamless loop (Shorts).
+- audio.music: omit it (finish picks ElevenLabs when a key is set, else the synth bed), or "synth", "none", an assets/ path, or {provider: "elevenlabs" | "synth" | "file", prompt?, bpm?, file?, sync?: "auto" | "off" | "cuts" | "hits"}. The music follows scene energy, so set energy honestly: calm intro, "build" before the payoff, 3 on the payoff. A prompt describes style only (no vocals is added for you).
+- scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: cut | fade | push | whip | zoom | iris | morph | pan | pull | orbit | whip-pan, dur, direction?, from_object?}, params, hits?, ambient?}].
+- in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus; camera moves (pan, whip-pan, orbit, pull, world push) are under "Motion grammar and camera".
+- overlays: [captions]. ending: {loop_to: "<first scene id>"} for a seamless loop (Shorts). For no loop, set ending {loop: false} (or loop_to: null, or omit ending without a looping style pack); the last scene then holds settled to the final frame (ending.final "hold", the default), or use final "fade" to fade it fully to the background by the final frame, or "exit" to play its own exit. ending accepts only loop_to, in, loop and final.
+- ambient? (optional): {level: off | subtle | standard | lively, background?: boolean, drift?: boolean}, or just the level. Ambient motion keeps settled frames alive between beats: a slow push-in on each settled module (kept inside the safe zone) and soft brand-colour light drifting behind the plates.
+- Usually leave ambient out: the level follows each scene's energy (0 → subtle, 1, 2 or "build" → standard, 3 → lively), and footage-led stories get no background field and drift overlays only. Set story ambient only to change the whole piece (for example "subtle" for a calm brand film); "off" makes settled frames hold still and fails the cinematic motion gate.
+- A scene may set ambient to override the story: "off" for one deliberately still beat, {"drift": false} when the module's own motion should stand alone, or a level.
 - Vary the modules: a 20–40 s piece uses at least four different modules and never the same module three times in a row.
 
 ## Lane rules
 
-- motion: no voice. Full-frame modules cover the whole duration back to back on track 0 (no gaps). Time scenes in seconds or beat anchors. audio.music may be "synth".
+- motion: no voice. Full-frame modules cover the whole duration back to back on track 0 (no gaps). Time scenes in seconds or beat anchors. finish snaps second-timed cuts to the nearest downbeat (within 0.25 s), so plan cuts on bar lines where you can.
 - voiceover-motion: audio.voice and audio.words are fixed inputs; copy them unchanged. Full-frame modules cover the whole duration on track 0. Start scenes and place hits on word anchors from the narration so visuals land on the spoken word. Add a captions overlay.
 - footage-led: base (the edited recording under assets/) plays underneath and is a fixed input; copy it unchanged. Scenes are overlays and inserts on the strong lines only, covering 10–40% of the runtime (up to 50% with resource inserts); gaps show the recording. Prefer callout, kinetic-words, count-up and metric. Add a captions overlay.
+
+## Motion grammar and camera
+
+- motion? {grammar}: one feel for every entrance, exit, pop, stagger, transition and camera move. grammar is one of editorial, snappy, smooth, playful, documentary, or {base, ...overrides} (ease: {enter, exit, move, camera, emphasis}, duration: {enter, exit, transition, camera}, stagger multiplier). Omit it for editorial, the default.
+- editorial: Clean product-editorial motion: power3 entrances, quick power2 exits, no overshoot on entrances. The default. Camera ease power3.inOut, camera moves about 0.8 s, transitions about 0.45 s.
+- snappy: Fast and punchy: expo-out entrances, short durations, a slight overshoot on pops, whips and anticipating camera moves. Camera ease back.inOut(1.2), camera moves about 0.55 s, transitions about 0.32 s.
+- smooth: Calm and fluid: sine and power2 curves, long durations, no overshoot anywhere. Camera ease sine.inOut, camera moves about 1.1 s, transitions about 0.7 s.
+- playful: Springy and bouncy: back-out entrances, elastic pops, bigger staggers and a camera that winds up and overshoots. Camera ease back.inOut(1.6), camera moves about 0.75 s, transitions about 0.5 s.
+- documentary: Slow and restrained: power1 curves, long holds and gentle moves, nothing that calls attention to itself. Camera ease power1.inOut, camera moves about 1.3 s, transitions about 0.8 s.
+- camera? {mode: "cuts" | "world", layout?: row | column | grid | path | auto, spacing?: 0–1, parallax?: boolean, blur?: boolean}. "cuts" (default): scenes replace each other. "world": every track-0 scene sits in one world and the camera travels to it, with a slow drift (never fully still), a parallax background (0.3×) and overlays at 1.15×. Motion blur: whip-pans always; pans, pushes, pulls and orbits get a moderate blur in snappy and playful; blur true blurs every move fully, false none.
+- Camera transitions (scene.in or ending.in, track-0 scenes only): pan {direction: where the next scene sits, e.g. "right"}, whip-pan (fast, motion-blurred), orbit (pan with a slight turn), pull (dolly out to a wider scene) and, in world mode only, push (dolly into a named object: in.from_object "s3.gap-bracket", else the scene content). In cuts mode push keeps its slide meaning, and pan/whip-pan/orbit/pull still move a camera between the two scenes.
+- Choose by meaning and art direction: pan for continuation along a path, push to go deeper into a detail, pull to reveal the bigger picture, orbit for a change of angle on the same subject, whip-pan for energy or a time jump, cut/fade when the story jumps. Give camera moves 0.6–1.2 s (whip-pan 0.3–0.5 s) and keep scenes at least 2 s longer than their move.
+- Captions and camera moves: a vertical pan or whip-pan (up/down), push, pull or orbit carries panels through the caption band mid-move, so the captions dip out for those moves by default (captions overlay hide_during_moves: "auto"; true dips for every move, false never). Horizontal pans keep their captions. layout-check samples every frame of every camera move and flags key content crossing visible captions (camera-caption-band). When a line must stay captioned through the move, pan left or right.
+- In world mode, an ending {"loop_to": "s1", "in": {"type": "whip-pan", "dur": 0.4}} travels home for a seamless loop.
+- Lanes: footage-led keeps camera.mode "cuts" and uses punch-in for emphasis (no camera transitions). The motion and voiceover-motion lanes may use the world camera; use it when the direction asks for travel or the grammar is playful, snappy or smooth.
 
 ## Time anchors
 
@@ -42,11 +61,12 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - shorts (1080x1920): key content within x 80–940, y 280–1450; caption band x 65–918, y 1190–1420; centre of mass near y 860; key text at least 44 px; keep the lower third occupied.
 - landscape (1920x1080): key content within x 96–1824, y 54–1026; caption band x 192–1728, y 864–1004; centre of mass near y 540; key text at least 32 px.
 - Catalogue modules size and place themselves inside the safe zone and fail with a param error when copy is too long; shorten copy rather than shrinking it.
-- Editorial modules without a rect size and place themselves from their content inside the safe zone and above the caption band; omit rect unless the layout needs a specific position. They need a 1080x1920 or 1920x1080 format.
+- Editorial modules without a rect size and place themselves from their content inside the safe zone and above the caption band, with type scaled to fill the panel; omit rect unless the layout needs a specific position. With a rect in 16:9, also set density: "fill", or the text stays small and a bigger rect is just more empty panel. They need a 1080x1920 or 1920x1080 format.
 
 ## Captions
 
 - Captions are one overlay: {"type": "captions", "style": "word-highlight" | "line" | "none"}. Use "word-highlight" whenever there is a voice.
+- A caption preset may replace style: {"type": "captions", "preset": "<name>"}, one of word-highlight, karaoke-fill, pop-word, bounce, typewriter, box-highlight, underline-sweep, kinetic-stack, minimal-line, glow, outline-heavy, split-color, lower-band, bubble. With a style pack, write {"type": "captions"} and let the pack choose the preset.
 - Modules marked "hides captions" hide them while on screen; every other module keeps them visible, so its content stays above the caption band.
 - On-screen copy is shorter than the narration; never put a whole sentence on screen.
 
@@ -92,7 +112,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - media: {kind: "image" | "video", src: "assets/…", sourceStart?: seconds (video only)}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -106,7 +127,8 @@ params:
 - title: string ≤ 54, required
 - rows: [{label, status: "pending" | "active" | "done", at, doneAt?}] up to 6
 - statusLabels: {pending, active, done} ≤ 14 chars each (optional, e.g. "Covered")
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -120,7 +142,8 @@ params:
 - title: string ≤ 54, required
 - steps: [{label, at}] 2–6, strictly increasing at
 - numbered: boolean (optional)
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -134,7 +157,8 @@ params:
 - title: string ≤ 54, required
 - body: string ≤ 160 (plain)
 - treatment: {icon?: "terminal" | "branch" | "users" | "rocket" | "check" | "warning", monospace?, glow?, corners?, segments?: [{text, highlight?, underlineAt?}] (replace body), at?}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -147,7 +171,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - audience: {tiles: [{label ≤ 24, emoji?, at}] 2–12, columns?: 2–4}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -160,7 +185,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - chart: {mode: "illustration" | "data", points: [{label ≤ 16, value (whole number ≥ 0), at}] 2–8 (≥ 0.5 s apart), unit ≤ 18, source (required for data)}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -173,7 +199,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - metric: {mode: "illustration" | "data", unit ≤ 18, format: "number" | "percent" | "currency", currency? (three-letter code, currency only), decimals?: 0–2, values: [{value, at}] 1–8 (≥ 0.65 s apart), source? (required for data)}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -186,7 +213,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - progress: {mode, values: [{value, at}] 1–8, max?, label? ≤ 32, source?}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -199,7 +227,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - date: {month: 1–12, day, year?, caption? ≤ 42, at?}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -211,8 +240,10 @@ A rack of rows with three status lights each that change state over time.
 Common: title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends.
 params:
 - title: string ≤ 54, required
-- rack: {mode, source?, rows: [{label ≤ 24, states: [{at, lights: [bool, bool, bool]}]}] 1–8}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rack: {mode, source?, rows: [{label ≤ 24, states: [{at, lights: [bool, bool, bool], tone?: "pending" | "active" | "pass" | "fail"}]}] 1–8}
+- palette: "status" (optional: lights mean fail, active, pass by position, and tones colour red → green; a light may be a tone name instead of true)
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -224,8 +255,10 @@ One to three lines of tokenised code, optionally typed on.
 Common: title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends.
 params:
 - title: string ≤ 54, required
-- code: {language? ≤ 24, typing?: boolean, lines: [{tokens: [{text, type: "plain" | "keyword" | "string" | "number" | "comment" | "operator"}], at, typeDuration?}] 1–3}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- code: {language? ≤ 24, source?: "example" | "real", filename? ≤ 40, typing?: boolean, lines: [{tokens: [{text, type: "plain" | "keyword" | "string" | "number" | "comment" | "operator"}], at, typeDuration?}] 1–3}
+- label: string ≤ 40 or false (label row; default "<language> · Example", the language alone for source "real", the filename when given)
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -238,7 +271,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - excerpt: {mode, source?, lines: [{segments: [{text, highlight?}]}] 1–5, focus: {line, scale: 1–1.3, at}, highlightMotion?}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -251,7 +285,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - focus: {options: [string ≤ 24] 2–4, selected: index, arriveAt?, chooseAt?, progressAt?, progressDuration?, progressLabel? ≤ 32, icon?}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -264,7 +299,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - growth: {mode, points: [{label, value, at}] 2–8 non-decreasing, unit? (default "reach"), source?, showValues?}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -332,8 +368,8 @@ End card: big action line, optional detail, and a handle/URL pill with a pulsing
 params:
 - action: string, required, max 40 — e.g. "Follow for part two"
 - emphasis: string, max 30 — whole words of the action to colour
-- detail: string, max 60
-- handle: string, max 32 — @handle or URL, no spaces
+- detail: string, max 80 — two lines at most; shrinks to the 44 px floor, and a long URL may wrap after "/"
+- handle: string, max 64 — @handle or URL, no spaces (fits github.com/<owner>/<repo>; the pill shrinks to the 44 px floor before failing)
 - icon: string, one of "arrow" | "plus" | "loop" | "bell" | "none", default "arrow (loop when loop is true)"
 - loop: boolean, default false
 - color: string, one of "primary" | "accent", default "primary" — brand colour role for emphasis
@@ -457,6 +493,42 @@ params:
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: pop, word-<i>
 
+## Timing rules
+
+Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core/modules.mjs; `launchclip module fit <module>` prints the same rules with the window for a given `--duration`). `at` values are seconds from the scene start: the first beat no earlier than the lead-in, the last no later than the lead-out before the scene end. A faster motion grammar can shorten a catalogue B enter, which only moves its lead-in earlier.
+
+| Module | Min scene | First `at` | Last `at` | Gaps and rules |
+| --- | --- | --- | --- | --- |
+| media-window | 1 s | — | — | no timed beats; the window holds for the scene |
+| checklist | 1 s | 0.28 s | scene − 0.45 s | rows[].doneAt comes after rows[].at (status "active" only) |
+| step-rail | 1 s | 0.28 s | scene − 0.45 s | steps[].at: ≥ 0.3 s apart |
+| callout | 1 s | 0.28 s | scene − 0.45 s | treated: underlineAt ≥ treatment.at + 0.4 s; the treatment settles 0.4 s after treatment.at, before the exit |
+| audience-grid | 1 s | 0.28 s | scene − 0.45 s | — |
+| trend-chart | 1 s | 0.28 s | scene − 0.45 s | chart.points[].at: ≥ 0.5 s apart |
+| metric | 1 s | 0.28 s | scene − 0.8 s | metric.values[].at: ≥ 0.65 s apart |
+| progress | 1 s | 0.28 s | scene − 0.8 s | progress.values[].at: ≥ 0.65 s apart |
+| date-card | 1 s | 0.28 s | scene − 0.45 s | the day settles 0.32 s after date.at; every state settles before the 0.22 s exit begins |
+| status-rack | 1 s | 0.28 s | scene − 0.45 s | rack.rows[].states[].at (per row): ≥ 0.3 s apart; every state settles before the 0.22 s exit begins |
+| code-snippet | 1 s | 0.28 s | scene − 0.45 s | code.lines[].at: ≥ 0.3 s apart; with typing, a line starts after the previous line finishes typing (at + typeDuration; typeDuration 0.12–2 s, default 0.6); every state settles before the 0.22 s exit begins |
+| excerpt-window | 1 s | 0.28 s | scene − 0.45 s | the focus settles 0.5 s after focus.at; every state settles before the 0.22 s exit begins |
+| focus-flow | 1 s | 0.28 s | scene − 0.45 s | chooseAt ≥ arriveAt + 0.24 + 0.08 × (options − 1) + 0.2 s; progressAt ≥ chooseAt + 0.9 s; progressAt + progressDuration + 0.35 s ≤ scene duration − 0.22 s |
+| growth-chart | 1 s | 0.28 s | scene − 0.45 s | growth.points[].at: ≥ 0.5 s apart; default points (no growth.points) need a scene of at least 2.9 s |
+| hook-title | 1.5 s | 0 s | scene − 0.5 s | emphasis[].at ≤ scene − 0.5 s; kickerAt ≤ scene − 0.6 s |
+| kinetic-words | 0.5 s | 0 s | scene − 0.45 s | words[].at (replace): ≥ 0.3 s apart; words[].at (stack): ≥ 0.2 s apart |
+| count-up | 0.5 s | 0 s | scene − 1 s | countAt + countDuration ≤ scene − 0.85 s (countDuration 0.3–6 s, default 1.2) |
+| equation-lockup | 0.5 s | 0 s | scene − 1 s | the last term lands at at + stagger × (terms − 1) + 0.42 s, which must be ≤ scene − 0.6 s; highlightAt ≥ the highlighted term's time + 0.42 s (once it has landed) and ≤ scene − 0.6 s |
+| cta | 2 s | — | — | no timed params; the handle pops at 0.6 s |
+| function-chart | 2 s | 0.5 s | scene − 0.65 s | draw.at ≤ scene − 0.65 − draw duration + 0.3 s; gap_bars[].at default to when the line passes them; tail_zoom.at ≥ the end of the draw and ≤ scene − 0.65 − zoom duration − 0.4 s |
+| gauge-compare | 2 s | 0.5 s | scene − 0.65 s | gap.at ≥ both fills + 0.35 s and ≤ scene − 0.65 − 0.4 s |
+| flow-compare | 2 s | 0.5 s | scene − 0.65 s | — |
+| process-steps | 2 s | 0.5 s | scene − 0.65 s | steps[].at: ≥ 0.35 s apart |
+| archive-card | 2 s | 0.5 s | scene − 0.65 s | stamp.at defaults to 0.35 s after the quote finishes revealing |
+| logo-row | 2 s | 0.5 s | scene − 0.65 s | logos pop in order; with no at, the first pops at 0.65 s and the rest follow by stagger (default 0.14 s) |
+| punch-in | 0.8 s | 0 s | — | at ≤ scene − release − 0.25 s (release 0.3–2 s, default min(0.5, 0.3 × scene)) |
+| footage-callout | 1.5 s | 0 s | scene − 1.1 s | — |
+| lower-third | 2 s | 0 s | scene − 1.2 s | — |
+| emphasis-caption | 0.8 s | 0 s | scene − 0.45 s | at ≤ scene − 0.45 s − stagger × (words − 1) (stagger 0–0.3 s, default 0.09) |
+
 ## Example
 
 ```json
@@ -487,7 +559,7 @@ events: pop, word-<i>
   },
   "audio": {
     "music": {
-      "source": "synth",
+      "provider": "synth",
       "bpm": 100,
       "key": "A"
     },

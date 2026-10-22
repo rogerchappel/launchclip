@@ -3,6 +3,10 @@
 //
 //   voice → validate → captions → sound → render → master → evidence → gates → report
 //
+// The render stage goes through the segment cache (src/render_segments.js):
+// unchanged segments of the timeline are reused, so a second pass that edits
+// one scene re-renders only the seconds that scene is on screen.
+//
 // Every stage is idempotent. A stage records the hash of its inputs and of the
 // files it wrote in .launchclip/finish-state.json and is reported as `cached`
 // (not re-run) while both still match. The user's storyboard.json is never
@@ -18,18 +22,28 @@ import { promisify } from "node:util";
 import { chunkWords, narrationWords } from "../kit/core/captions.mjs";
 import { resolveModule } from "../kit/core/modules.mjs";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
-import { cinematicMotionExpectations } from "./cinematic_check.js";
+import { cinematicMotionExpectations, resolveMusicMix } from "./cinematic_check.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
+import { PARTIAL_RENDERERS, SEGMENTS_DIR, renderWithSegments, sceneStills } from "./render_segments.js";
 import { getRenderer, resolveRendererName } from "./renderers/index.js";
 import { remotionInvocation } from "./renderers/remotion.js";
 import { deriveBoundaries, resolveStory, storyFormat } from "./story.js";
 import { validateStory } from "./story_cli.js";
-import { hasExactFile } from "./story_loader.js";
+import { hasExactFile, readStoryEdl } from "./story_loader.js";
+import { applyProjectStyle } from "./story_style.js";
 import { hyperframesInvocation } from "./toolchain.js";
 import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
-import { normalizeLoudness } from "./voice/supplied.js";
+import { normalizeLoudness, parseLoudnormJson } from "./voice/supplied.js";
+import { applyDensity, densityTyping, eventKey, familySource, kitLibrary, libraryFallbacks, resolveCueFile, resolveLibraries, SFX_DENSITIES, userLibraryDir } from "./sfx/library.js";
+import { collectTyping, renderTypingTrack, typingSchedule } from "./sfx/typing.js";
+import { getMusicProvider, parseMusicSpec, resolveMusicChoice, MUSIC_FLAG_VALUES } from "./music/index.js";
+import { lockDecision, musicBrief, readMusicLock, writeMusicLock } from "./music/lock.js";
+import { narrationCacheKey, narrationDocument, narrationRequest, synthesizeNarration, voiceCacheDir } from "./voice/narrate.js";
+import { CANDIDATE_OUTPUT, candidateAudio, FREE_VOICE_PROVIDERS, recordCandidate } from "./candidate_receipt.js";
+import { analyzeBeatsFile, beatsDocument, gridFromBpm, transformGrid } from "./music/beats.js";
+import { BEAT_SYNC_SCHEMA, chooseAlignment, keyMoments, momentReport, snapStory, summarizeMoments, syncStrategy } from "./music/beat_sync.js";
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -58,11 +72,19 @@ export const PATHS = Object.freeze({
   kit: "assets/audio/kit",
   mix: "assets/audio/mix.wav",
   cues: "assets/audio/cues.json",
+  typing: "assets/audio/typing.wav",
   sfxManifest: "qa/sfx.json",
+  music: "assets/audio/music.mp3",
+  musicPrepared: "assets/audio/music.prepared.wav",
+  beats: "BEATS.json",
+  beatsFallback: "assets/audio/BEATS.json",
+  beatSync: "qa/beat-sync.json",
   audioManifest: "AUDIO-MANIFEST.json",
   evidence: "qa/temporal-evidence/manifest.json",
   gates: "qa/finish/gates.json",
   motion: "qa/finish/motion.json",
+  segments: SEGMENTS_DIR,
+  sceneStills: "qa/finish/scenes",
   audio: "qa/finish/audio.json",
   report: "finish.json"
 });
@@ -70,9 +92,10 @@ export const PATHS = Object.freeze({
 // ---------------------------------------------------------------------------
 // Sound design: hits and module events → SFX cues, scene energy → music bed.
 
-// The procedural kit's cues (synth-audio-kit.mjs SFX) and their mix levels.
-export const CUE_LEVELS = Object.freeze({ impact: 0.55, subdrop: 0.5, whoosh: 0.4, riser: 0.35, shimmer: 0.35, pop: 0.35, tick: 0.3 });
-export const CUE_DURATIONS = Object.freeze({ whoosh: 0.62, impact: 1.3, riser: 1.4, tick: 0.14, pop: 0.2, shimmer: 1.6, subdrop: 1.8 });
+// The cue families (synth-audio-kit.mjs SFX_FAMILIES, and the SFX library)
+// and their mix levels. Keystrokes normally arrive through the typing track.
+export const CUE_LEVELS = Object.freeze({ impact: 0.55, subdrop: 0.5, whoosh: 0.4, riser: 0.35, shimmer: 0.35, pop: 0.35, tick: 0.3, click: 0.3, keystroke: 0.3, "keystroke-space": 0.34, "keystroke-enter": 0.36 });
+export const CUE_DURATIONS = Object.freeze({ whoosh: 0.62, impact: 1.3, riser: 1.4, tick: 0.14, pop: 0.2, shimmer: 1.6, subdrop: 1.8, click: 0.06, keystroke: 0.11, "keystroke-space": 0.16, "keystroke-enter": 0.15 });
 const CUE_SPACING = 0.12;
 const WHOOSH_TRANSITIONS = new Set(["push", "whip", "zoom"]);
 const EVENT_CUES = [
@@ -95,8 +118,11 @@ export function defaultCueFor(event) {
  * Modifiers: -soft (quieter), -short (a shorter variant; same kit file).
  */
 export function kitCue(name) {
-  const [base, ...modifiers] = String(name ?? "").toLowerCase().split("-");
-  if (!Object.hasOwn(CUE_LEVELS, base)) return null;
+  const lower = String(name ?? "").toLowerCase();
+  // Longest family first, so "keystroke-space-soft" is keystroke-space + soft.
+  const base = Object.keys(CUE_LEVELS).sort((a, b) => b.length - a.length).find((family) => lower === family || lower.startsWith(`${family}-`));
+  if (!base) return null;
+  const modifiers = lower.slice(base.length).split("-").filter(Boolean);
   return { cue: base, gain: modifiers.includes("soft") ? 0.6 : 1, modifiers };
 }
 
@@ -159,10 +185,73 @@ export function bindCues(story, { models } = {}) {
       continue;
     }
     if (cues.some((cue) => cue.cue === kit.cue && Math.abs(cue.at - at) < CUE_SPACING)) continue;
-    cues.push({ cue: kit.cue, at, volume: round3(CUE_LEVELS[kit.cue] * kit.gain), shot: entry.shot, intent: `${entry.source} ${entry.event}`, source: entry.source, event: entry.event });
+    const cue = { cue: kit.cue, at, volume: round3(CUE_LEVELS[kit.cue] * kit.gain), shot: entry.shot, intent: `${entry.source} ${entry.event}`, source: entry.source, event: entry.event, optional: entry.source !== "hit" };
+    // A riser lands on its moment; library risers are re-anchored on their measured peak.
+    if (kit.cue === "riser") cue.lands_at = round3(entry.end ?? entry.at);
+    cues.push(cue);
   }
   cues.sort((a, b) => a.at - b.at || a.cue.localeCompare(b.cue));
   return { cues, warnings };
+}
+
+/**
+ * Cue → file: each bound cue gets a file from the first SFX source that has
+ * its family (explicit library, project library, user library, procedural
+ * kit), with a variant picked deterministically from the story id and the
+ * event, so repeats vary and renders stay reproducible. A library riser is
+ * re-anchored so its measured peak lands on its moment.
+ */
+export function resolveCueFiles(cues, { libraries = [], kit = null, storyId = "" } = {}) {
+  return cues.map((cue) => {
+    const resolved = resolveCueFile(cue, { libraries, kit, key: eventKey(storyId, cue) });
+    if (!resolved) return cue;
+    const placed = { ...cue, file: resolved.file, sfx_source: resolved.scope, sfx_origin: resolved.source, variant: resolved.variant };
+    const peak = Number(resolved.measurements?.peak_at_ms);
+    if (cue.cue === "riser" && Number.isFinite(cue.lands_at) && Number.isFinite(peak)) placed.at = round3(Math.max(0, cue.lands_at - peak / 1000));
+    return placed;
+  });
+}
+
+/** Keystroke banks for the typing track: {key, space, enter, word} → [{file, measurements}]. */
+export function typingBanks(libraries, kit) {
+  const bank = (family) => {
+    const source = familySource(family, libraries, kit);
+    return source ? source.files.map((file, index) => ({ file, measurements: source.measurements[index], scope: source.scope, source: source.source })) : [];
+  };
+  return { key: bank("keystroke"), space: bank("keystroke-space"), enter: bank("keystroke-enter"), word: bank("click") };
+}
+
+function firstKeyPerShot(keystrokes) {
+  const seen = new Set();
+  return keystrokes.filter((key) => key.kind !== "word" && !seen.has(key.shot) && seen.add(key.shot));
+}
+
+/** The licence line for the SFX actually used. origins: Set of "procedural" | "elevenlabs" | ... */
+export function sfxLicense(origins) {
+  const parts = ["Original procedural synthesis (synth-audio-kit.mjs); no third-party samples."];
+  if (origins.has("elevenlabs")) parts.push("Some SFX were generated with ElevenLabs sound effects (launchclip sfx seed); their use is governed by the ElevenLabs terms of service.");
+  const other = [...origins].filter((origin) => !["procedural", "elevenlabs"].includes(origin));
+  if (other.length) parts.push(`Other SFX library sources: ${other.join(", ")}.`);
+  return parts.join(" ");
+}
+
+// The music part of AUDIO-MANIFEST.json's licence line.
+function musicLicense(kind) {
+  if (kind === "elevenlabs") return "Music: generated with the ElevenLabs Music API under the account holder's ElevenLabs terms; see THIRD_PARTY_NOTICES.md.";
+  if (kind === "file") return "Music: supplied by the project; its licence is the project's responsibility.";
+  return null;
+}
+
+function sceneModels(story) {
+  const cache = new Map();
+  return (scene) => {
+    if (!cache.has(scene.id)) {
+      let model = null;
+      try { model = resolveModule(scene, story); } catch { model = null; }
+      cache.set(scene.id, model);
+    }
+    return cache.get(scene.id);
+  };
 }
 
 function energyValue(energy) {
@@ -188,7 +277,10 @@ export function chooseBed(story, music = {}) {
     total += length;
   }
   const energy = total > 0 ? round3(weighted / total) : 1;
-  const tempo = energy < 1 ? 84 : energy < 2 ? 96 : energy < 2.5 ? 108 : 116;
+  let tempo = energy < 1 ? 84 : energy < 2 ? 96 : energy < 2.5 ? 108 : 116;
+  // A style's music bpm_range bounds the energy-derived tempo.
+  const range = Array.isArray(music?.bpm_range) && music.bpm_range.length === 2 ? music.bpm_range.map(Number) : null;
+  if (range && range.every(Number.isFinite)) tempo = Math.round(Math.min(range[1], Math.max(range[0], tempo)));
   const loud = pool.filter((scene) => scene.energy === "build" || energyValue(scene.energy) >= 2);
   const starts = loud.map((scene) => (scene.energy === "build" ? Number(scene.end) : Number(scene.start)));
   const kickFrom = loud.length ? round3(Math.min(...starts)) : duration;
@@ -204,15 +296,25 @@ export function chooseBed(story, music = {}) {
   };
 }
 
-/** audio.music → {kind: "synth"|"file"|"none", file?, bpm?, key?}. Absent means synth. */
+/**
+ * audio.music → {kind: "synth"|"file"|"elevenlabs"|"none", file?, bpm?, key?}.
+ * Absent means synth here; the run-time default (ElevenLabs when a key is
+ * set) is resolveMusicChoice() in src/music/index.js.
+ */
 export function musicSpec(audio) {
   const music = audio?.music;
   if (music === undefined || music === null || music === "synth") return { kind: "synth" };
   if (music === "none" || music === false) return { kind: "none" };
-  if (typeof music === "string") return { kind: "file", file: music };
-  if (music.source === "synth") return { kind: "synth", bpm: music.bpm, key: music.key };
-  return { kind: "file", file: music.source, bpm: music.bpm, key: music.key };
+  if (typeof music === "string") return music === "elevenlabs" ? { kind: "elevenlabs" } : { kind: "file", file: music };
+  const spec = parseMusicSpec(music);
+  if (spec.provider === "file") return { kind: "file", file: spec.file, bpm: music.bpm, key: music.key };
+  return { kind: spec.provider ?? "synth", bpm: music.bpm, key: music.key };
 }
+
+// Loudness the generated or supplied music is brought to before mixing, so
+// audio.music volume means the same for every provider (the synth bed peaks
+// at about this level once mixed).
+export const MUSIC_LUFS = -16;
 
 // ---------------------------------------------------------------------------
 // Stage bookkeeping
@@ -267,7 +369,7 @@ export function buildFinishCopy(story, { voice, words, captions, mix } = {}) {
 }
 
 function captionsOverlay(story) {
-  return (Array.isArray(story?.overlays) ? story.overlays : []).find((overlay) => overlay?.type === "captions" && overlay.style !== "none") ?? null;
+  return (Array.isArray(story?.overlays) ? story.overlays : []).find((overlay) => overlay?.type === "captions" && overlay.style !== "none" && overlay.preset !== "none") ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -284,12 +386,18 @@ function defaultAdapters() {
       const { compileStoryToHyperFrames } = await import("../kit/hyperframes/story-compiler.mjs");
       return compileStoryToHyperFrames(resolved, options);
     },
+    env: process.env,
+    notice: (line) => process.stderr.write(`${line}\n`),
+    musicProvider: (name, options) => getMusicProvider(name, options),
+    analyzeBeats: (file, options) => analyzeBeatsFile(file, options),
+    prepareMusic: (input, output, options) => prepareMusicTrack(input, output, options),
     async synthKit(outDir, bed) {
       const args = [SCRIPT.synth, outDir];
       if (bed) args.push("--bed", String(bed.seconds), "--bpm", String(bed.bpm), "--key", String(bed.key), "--kick-from", String(bed.kick_from), "--kick-to", String(bed.kick_to));
       await execFileAsync(process.execPath, args, { maxBuffer: 1 << 26 });
       return JSON.parse(await readFile(path.join(outDir, "AUDIO-KIT.json"), "utf8"));
     },
+    renderTyping: (schedule, banks, options) => renderTypingTrack(schedule, banks, options),
     async buildMix(options) {
       const { buildMix, normalizeCues } = await import(SCRIPT.mix);
       const cues = normalizeCues(options.cues, options.sfxDir);
@@ -317,7 +425,14 @@ function defaultAdapters() {
 // Pipeline
 
 /**
- * options: {renderer, quality: "draft"|"high", voice: provider name, out, force}
+ * options: {renderer, quality: "draft"|"high", voice: provider name, music:
+ * "synth"|"elevenlabs"|"none", musicHints (style-pack sound.music hints for
+ * the ElevenLabs brief), out, force, musicRegenerate (ignore the music lock
+ * and the cache: a new, paid ElevenLabs generation; --music-regenerate),
+ *   scenes: scene ids (or "s3,s4") whose render segments re-render, re-running
+ *     master, evidence and gates, with before/after stills (--scene);
+ *   previewScene: render only that scene to renders/scene-<id>.mp4 and stop
+ *     (--preview-scene)}
  * adapters: any of defaultAdapters() to replace.
  * Returns the finish.json report; it never throws for a stage failure (the
  * report's status is "failed"), only for an unreadable project.
@@ -327,25 +442,51 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
   const project = path.resolve(projectPath);
   const storyFile = path.join(project, "storyboard.json");
   if (!hasExactFile(project, "storyboard.json")) throw new Error(`launchclip finish needs ${storyFile}; author storyboard.json first`);
-  const story = await readJson(storyFile, "storyboard.json");
+  // The style pack is merged into the working copy; storyboard.json stays as written.
+  const styled = await applyProjectStyle(await readJson(storyFile, "storyboard.json"), { projectDir: project });
+  const story = styled.story;
   const quality = String(options.quality ?? "draft").toLowerCase();
   if (!["draft", "high"].includes(quality)) throw new Error(`--quality must be draft or high; got ${options.quality}`);
   if (options.voice != null && !listVoiceProviders().includes(String(options.voice).toLowerCase())) throw new Error(`Unknown --voice ${options.voice}. Available providers: ${listVoiceProviders().join(", ")}`);
+  if (options.music != null && !MUSIC_FLAG_VALUES.includes(String(options.music).toLowerCase())) throw new Error(`Unknown --music ${options.music}. Use one of ${MUSIC_FLAG_VALUES.join(", ")}`);
   const rendererName = resolveRendererName(project, options.renderer);
-  const out = projectFile(project, options.out ?? (quality === "high" ? "renders/final.mp4" : "renders/draft.mp4"));
+  // --candidate <id>: a cheap draft candidate with no paid calls (synth or no
+  // music, a cached or free voice, else the test voice; no evidence or gates),
+  // recorded into the rendered-candidate receipt (src/candidate_receipt.js).
+  const candidateNotes = [];
+  if (options.candidate != null && options.candidate !== false) {
+    if (quality !== "draft") throw new Error("--candidate renders drafts only; drop --quality high");
+    if (options.voice != null && !FREE_VOICE_PROVIDERS.includes(String(options.voice).toLowerCase())) throw new Error(`--candidate makes no paid calls, so it cannot use --voice ${options.voice}; use kokoro, supplied or test (or drop --voice to reuse a cached take)`);
+    if (options.musicRegenerate) throw new Error("--candidate makes no paid calls; drop --music-regenerate");
+    const narration = story.audio?.narration;
+    let request = null;
+    try { request = narration && typeof narration === "object" && narration.text ? narrationRequest(narration, options.voice ? { provider: options.voice } : {}) : null; } catch { request = null; }
+    const cachedTake = Boolean(request) && existsSync(path.join(voiceCacheDir(project), `${narrationCacheKey(request)}.wav`));
+    const audio = candidateAudio({ narrationProvider: request?.provider, cachedTake, musicFlag: options.music, musicSpecProvider: parseMusicSpec(story.audio?.music).provider });
+    options = { ...options, music: audio.music, ...(audio.voice ? { voice: audio.voice } : {}) };
+    candidateNotes.push(...audio.notes);
+  }
+  const candidate = options.candidate != null && options.candidate !== false ? String(options.candidate) : null;
+  const iteration = iterationOptions(story, options);
+  const out = projectFile(project, options.out ?? (candidate ? CANDIDATE_OUTPUT : quality === "high" ? "renders/final.mp4" : "renders/draft.mp4"));
   const started = adapters.now();
   const ctx = {
     project,
     story,
     copy: buildFinishCopy(story),
     adapters,
-    options: { ...options, quality },
+    options: { ...options, quality, ...iteration },
+    forceStages: new Set([...(iteration.scenes.length ? ["render", "master", "evidence", "gates"] : []), ...(options.musicRegenerate ? ["sound"] : [])]),
+    halt: null,
+    preview: null,
     rendererName,
     quality,
     out,
     raw: path.join(project, ".launchclip", "finish", `render-${quality}.mp4`),
     state: await readState(project),
-    warnings: [],
+    warnings: [...(styled.style?.warnings ?? []), ...candidateNotes],
+    candidate,
+    style: styled.style,
     words: null,
     resolved: null,
     gates: null
@@ -357,9 +498,22 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
       stages.push({ name: definition.name, status: "blocked", reason: `${failed} failed`, seconds: 0, outputs: [] });
       continue;
     }
+    if (ctx.halt) {
+      stages.push({ name: definition.name, status: "skipped", reason: ctx.halt, seconds: 0, outputs: [] });
+      continue;
+    }
     const entry = await runStage(ctx, definition);
     stages.push(entry);
     if (entry.status === "failed") failed = entry.name;
+  }
+  if (candidate && !failed && existsSync(out)) {
+    const fps = Number(ctx.resolved?.resolved?.fps ?? ctx.resolved?.format?.fps ?? 30);
+    const duration = Number(ctx.resolved?.resolved?.duration ?? ctx.resolved?.format?.duration);
+    const into = options.into ? path.resolve(options.into) : project;
+    ctx.candidateReceipt = await (adapters.recordCandidate ?? recordCandidate)({
+      into, id: candidate, comparison: options.comparison, kind: options.kind, boundary: options.boundary, at: options.at,
+      video: out, fps, duration, source: path.relative(into, project).split(path.sep).join("/") || "."
+    });
   }
   const report = buildReport(ctx, stages, { seconds: round3((adapters.now() - started) / 1000), failed });
   await writeJson(path.join(project, PATHS.report), report);
@@ -379,7 +533,7 @@ async function runStage(ctx, definition) {
       const outputs = {};
       for (const file of plan.outputs ?? []) outputs[file] = await fileHash(path.join(ctx.project, file));
       const previous = ctx.state.stages?.[definition.name];
-      const decision = plan.always ? { action: "run", reason: plan.always } : stageDecision(previous, { inputHash: plan.inputHash, outputs }, { force: ctx.options.force });
+      const decision = plan.always ? { action: "run", reason: plan.always } : stageDecision(previous, { inputHash: plan.inputHash, outputs }, { force: ctx.options.force || ctx.forceStages.has(definition.name) });
       entry.reason = decision.reason;
       entry.outputs = plan.outputs ?? [];
       if (decision.action === "cached") {
@@ -426,45 +580,31 @@ const STAGES = [
       if (supplied === PATHS.voice && !generatedBefore && provider !== "supplied" && !ctx.options.voice && existsSync(path.join(ctx.project, supplied))) {
         return { skip: `audio.voice is supplied (${supplied}) and was not synthesised by finish; pass --voice to resynthesise` };
       }
-      const request = { text: narration.text, provider, voice: narration.voice ?? null, speed: narration.speed ?? 1 };
+      // Provider defaults fill voice and speed (Kokoro: af_heart at 1.2), the
+      // same request `launchclip voice` measures, so its cached take is reused.
+      const request = narrationRequest(narration, { provider });
       if (provider === "supplied") request.source = supplied ? await fileHash(path.join(ctx.project, supplied)) : null;
       return { inputHash: hashValue(request), outputs: [PATHS.voice, PATHS.words], request };
     },
     async run(ctx, { request }) {
-      const provider = ctx.adapters.voiceProvider(request.provider, {});
       const outFile = path.join(ctx.project, PATHS.voice);
-      await mkdir(path.dirname(outFile), { recursive: true });
-      const synthesis = { text: request.text, voice: request.voice ?? undefined, speed: request.speed, outFile };
-      if (request.provider === "supplied" && ctx.story.audio?.voice) synthesis.source = path.join(ctx.project, ctx.story.audio.voice);
-      const result = await provider.synthesize(synthesis);
-      if (!result || !Array.isArray(result.words) || !result.words.length) throw new Error(`voice provider "${request.provider}" returned no word timings`);
-      const produced = path.resolve(result.file ?? outFile);
-      if (produced !== outFile) await copyFile(produced, outFile);
       // Synthesised voices arrive at their engine's level (Kokoro is about
-      // -22 LUFS), which leaves too little voice-to-music margin in the mix.
-      // Bring them to the -17 LUFS supplied voiceovers already get.
-      let loudness = null;
-      // The offline "test" voice is a placeholder tone and needs no levelling.
-      if (request.provider !== "supplied" && request.provider !== "test") {
-        const normalized = `${outFile}.norm.wav`;
-        loudness = await ctx.adapters.normalizeVoice(outFile, normalized);
-        await rename(normalized, outFile);
-      }
-      const words = result.words.map((word) => ({ text: String(word.text), start: round3(Number(word.start)), end: round3(Number(word.end)) }));
-      const duration = round3(Number(result.duration ?? words.at(-1).end));
-      await writeJson(path.join(ctx.project, PATHS.words), {
-        schema_version: "launchclip.narration.v1",
-        provider: request.provider,
-        voice: request.voice,
-        speed: request.speed,
-        text: request.text,
-        sample_rate: result.sampleRate ?? null,
-        duration_seconds: duration,
-        words
+      // -22 LUFS), which leaves too little voice-to-music margin in the mix,
+      // so synthesizeNarration brings them to the -17 LUFS supplied
+      // voiceovers get (the offline test tone is left alone). Takes are
+      // cached in .launchclip/voice, shared with `launchclip voice`.
+      const take = await synthesizeNarration(request, {
+        outFile,
+        cacheDir: voiceCacheDir(ctx.project),
+        voiceProvider: ctx.adapters.voiceProvider,
+        normalizeVoice: ctx.adapters.normalizeVoice,
+        source: request.provider === "supplied" && ctx.story.audio?.voice ? path.join(ctx.project, ctx.story.audio.voice) : undefined
       });
+      const { words, duration, loudness } = take;
+      await writeJson(path.join(ctx.project, PATHS.words), narrationDocument(request, take));
       const format = storyFormat(ctx.copy);
       if (Number.isFinite(format.duration) && duration > format.duration + 0.05) ctx.warnings.push(`narration runs ${duration}s, longer than format.duration (${format.duration}s); the end is cut off`);
-      const details = { provider: request.provider, voice: request.voice, speed: request.speed, loudness, duration_seconds: duration, word_count: words.length, voice_file: PATHS.voice, words_file: PATHS.words };
+      const details = { provider: request.provider, voice: request.voice, speed: request.speed, loudness, duration_seconds: duration, word_count: words.length, voice_file: PATHS.voice, words_file: PATHS.words, cached_take: take.cached };
       STAGES[0].restore(ctx, details);
       return details;
     },
@@ -483,14 +623,23 @@ const STAGES = [
       ctx.warnings.push(...validation.warnings);
       ctx.words = await loadWords(ctx.project, ctx.copy);
       ctx.beats = await readOptionalJson(path.join(ctx.project, "BEATS.json"));
-      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats });
+      if (!ctx.beats && JSON.stringify(ctx.copy.scenes ?? []).includes("beat:")) {
+        // The music (and its BEATS.json) is made in the sound stage; until then
+        // beat anchors resolve on a provisional grid at the requested tempo.
+        const bpm = Number(ctx.copy.audio?.music?.bpm) > 0 ? Number(ctx.copy.audio.music.bpm) : 100;
+        ctx.beats = { ...gridFromBpm(bpm, Number(ctx.copy.format?.duration) || 60), provisional: true };
+        ctx.warnings.push(`BEATS.json is missing; beat anchors use a provisional ${bpm} BPM grid until the sound stage writes it`);
+      }
+      // Footage-led: base.edl (the edit-recording plan) becomes base.trim.
+      ctx.edl = await readStoryEdl(ctx.project, ctx.copy);
+      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl });
       const second = validateStory(resolved);
       if (!second.ok) throw new Error(`resolved storyboard is invalid:\n- ${second.errors.join("\n- ")}`);
       ctx.warnings.push(...second.warnings);
       ctx.resolved = resolved;
       ctx.boundaries = deriveBoundaries(resolved);
       const { checkLayoutProject } = await import("./layout_check.js");
-      const layout = await checkLayoutProject(ctx.project, { story: ctx.copy, words: ctx.words ?? [] });
+      const layout = await checkLayoutProject(ctx.project, { story: ctx.copy, words: ctx.words ?? [], beats: ctx.beats ?? undefined });
       ctx.layout = { status: layout.status, profile: layout.profile, errors: layout.errors, elements: layout.elements, warnings: layout.warnings, findings: layout.findings };
       ctx.warnings.push(...layout.warnings.map((message) => `layout: ${message}`));
       await writeResolvedCopy(ctx);
@@ -530,21 +679,60 @@ const STAGES = [
       if (ctx.story.audio?.mix) return { skip: `audio.mix is supplied (${ctx.story.audio.mix})` };
       const audio = ctx.copy.audio ?? {};
       const sfxOn = !(audio.sfx === "none" || audio.sfx === false);
-      const music = musicSpec(audio);
-      const bound = sfxOn ? bindCues(ctx.resolved) : { cues: [], warnings: [] };
+      const choice = resolveMusicChoice(audio, { flag: ctx.options.music, env: ctx.adapters.env ?? process.env });
+      const music = musicPlanSpec(choice);
+      // --sfx-density wins over the style pack's sound.sfx_density (audio.sfx_density).
+      const density = String(ctx.options.sfxDensity ?? audio.sfx_density ?? "normal").toLowerCase();
+      if (!SFX_DENSITIES.includes(density)) throw new Error(`--sfx-density must be one of ${SFX_DENSITIES.join(", ")}; got ${ctx.options.sfxDensity}`);
+      const storyId = String(ctx.story.id ?? ctx.story.title ?? path.basename(ctx.project));
+      const models = sceneModels(ctx.resolved);
+      const bound = sfxOn ? bindCues(ctx.resolved, { models }) : { cues: [], warnings: [] };
+      bound.cues = applyDensity(bound.cues, density, storyId);
+      const typing = sfxOn ? typingSchedule(collectTyping(ctx.resolved, { models }), { seed: storyId, ...densityTyping(density) }) : [];
+      const libraries = sfxOn ? await resolveLibraries({ project: ctx.project, library: ctx.options.sfxLibrary ?? (audio.sfx_library ? path.resolve(ctx.project, audio.sfx_library) : undefined), home: ctx.options.sfxHome }) : [];
+      // One line when a cue family is missing from every SFX library and falls
+      // back to the procedural kit (it would sound unlike the library's set).
+      const used = [...bound.cues.map((cue) => cue.cue), ...(typing.length ? ["keystroke", "keystroke-space", "keystroke-enter", "click"] : [])];
+      const fallbacks = libraryFallbacks(used, libraries);
+      if (fallbacks.length) ctx.warnings.push(`sfx: ${fallbacks.join(", ")} ${fallbacks.length === 1 ? "is" : "are"} not in the SFX library (${libraries.map((library) => library.dir === userLibraryDir({ home: ctx.options.sfxHome }) ? "~/.launchclip/sfx" : library.dir).join(", ")}), so ${fallbacks.length === 1 ? "it uses" : "they use"} the procedural kit; fill only the missing families with: launchclip sfx seed --missing`);
       const voice = audio.voice && existsSync(path.join(ctx.project, audio.voice)) ? audio.voice : null;
-      if (!bound.cues.length && music.kind === "none") return { skip: voice ? "no SFX or music: the voice is mounted directly" : "no voice, SFX or music to mix" };
+      if (!bound.cues.length && !typing.length && music.kind === "none") return { skip: voice ? "no SFX or music: the voice is mounted directly" : "no voice, SFX or music to mix" };
       if (music.kind === "file" && !existsSync(path.join(ctx.project, music.file))) throw new Error(`audio.music file not found: ${music.file}`);
-      const bed = music.kind === "synth" ? chooseBed(ctx.resolved, music) : music.kind === "file" ? { ...chooseBed(ctx.resolved, music), file: music.file } : null;
+      const bed = music.kind === "none" ? null : { ...chooseBed(ctx.resolved, { ...music, bpm_range: audio.music_hints?.bpm_range }), ...(music.kind === "file" ? { file: music.file } : {}), ...(Number(music.volume) >= 0 && music.volume !== undefined ? { volume: Number(music.volume) } : {}) };
+      // ElevenLabs: the music lock (.launchclip/music-lock.json) keeps the
+      // project's track while the music brief is unchanged; otherwise the
+      // request (no network, bar-quantised) names the cached track. Either
+      // way the stage hashes the track's identity, so scene timing alone
+      // re-runs beat sync but never asks for a new generation.
+      let request = null;
+      let provider = null;
+      let lock = null;
+      let trackKey = null;
+      if (music.kind === "elevenlabs") {
+        provider = await ctx.adapters.musicProvider("elevenlabs", { env: ctx.adapters.env ?? process.env, model: music.model });
+        const params = musicParams(music, bed, Boolean(voice), ctx.options.musicHints ?? audio.music_hints);
+        const built = provider.request(ctx.resolved, params);
+        const brief = musicBrief({ provider: "elevenlabs", model: built.body?.model_id ?? music.model ?? null, prompt: music.prompt, bpm: built.bpm, hints: params.hints, seed: music.seed, narrated: Boolean(voice) });
+        lock = { ...lockDecision(await readMusicLock(ctx.project), { brief, durationMs: Number(ctx.resolved.resolved.duration) * 1000, project: ctx.project, regenerate: Boolean(ctx.options.musicRegenerate) }), brief, params };
+        trackKey = lock.reuse ? lock.lock.request_hash : (provider.cacheStatus?.(ctx.resolved, params)?.cache_key ?? hashValue(built.body));
+        request = { track: trackKey, bpm: lock.reuse ? lock.lock.bpm : built.bpm };
+        bed.bpm = request.bpm;
+      }
+      const sync = { mode: choice.sync ?? "auto", strategy: music.kind === "none" ? "off" : syncStrategy(ctx.copy, { sync: choice.sync, narrated: Boolean(voice) }) };
       const inputHash = hashValue({
         cues: bound.cues,
         bed,
+        music: { kind: music.kind, request, sync, lufs: music.kind === "synth" ? null : MUSIC_LUFS },
         music_file: music.kind === "file" ? await fileHash(path.join(ctx.project, music.file)) : null,
         voice: voice ? await fileHash(path.join(ctx.project, voice)) : null,
         duration: ctx.resolved.resolved.duration,
-        scripts: [await fileHash(SCRIPT.synth), await fileHash(SCRIPT.mix)]
+        timing: sync.strategy === "snap" ? storyTiming(ctx.copy) : null,
+        scripts: [await fileHash(SCRIPT.synth), await fileHash(SCRIPT.mix), await fileHash(path.join(ROOT, "src", "music", "beats.js")), await fileHash(path.join(ROOT, "src", "music", "beat_sync.js"))],
+        sfx: { density, typing, libraries: libraries.map((library) => ({ scope: library.scope, dir: library.dir, families: hashValue(library.manifest.families) })) }
       });
-      return { inputHash, outputs: [PATHS.mix, PATHS.audioManifest, PATHS.sfxManifest], cues: bound.cues, cueWarnings: bound.warnings, bed, music, voice };
+      const outputs = [PATHS.mix, PATHS.audioManifest, PATHS.sfxManifest, ...(typing.length ? [PATHS.typing] : [])];
+      if (music.kind !== "none") outputs.push(PATHS.beatSync, await beatsTarget(ctx.project));
+      return { inputHash, outputs, sfxOn, cues: bound.cues, cueWarnings: [...choice.warnings, ...bound.warnings], bed, music, choice, voice, provider, lock, trackKey, sync, typing, libraries, storyId, density };
     },
     async run(ctx, plan) {
       ctx.warnings.push(...plan.cueWarnings);
@@ -554,66 +742,136 @@ const STAGES = [
       const previousKit = ctx.state.stages?.sound?.details?.kit_key;
       let kitReused = previousKit === kitKey && existsSync(path.join(kitDir, "AUDIO-KIT.json")) && (!synthBed || existsSync(path.join(kitDir, "music", "bed.wav")));
       if (!kitReused) await ctx.adapters.synthKit(kitDir, synthBed);
-      const musicFile = plan.music.kind === "synth" ? path.join(kitDir, "music", "bed.wav") : plan.music.kind === "file" ? path.join(ctx.project, plan.music.file) : null;
       const voiceFile = plan.voice ? path.join(ctx.project, plan.voice) : null;
+      const duration = Number(ctx.resolved.resolved.duration);
+      // Music: generate or reuse the track, analyse its beats, then beat sync.
+      const track = await resolveMusicTrack(ctx, plan, kitDir);
+      const synced = track ? await beatSync(ctx, plan, track, { duration }) : null;
+      const musicFile = synced?.file ?? null;
+      // Snapping moved scenes and hits: bind the SFX cues and the typing track
+      // to the moved times.
+      let boundCues = plan.cues;
+      let typingPlan = plan.typing;
+      if (synced?.changed && plan.sfxOn) {
+        const models = sceneModels(ctx.resolved);
+        boundCues = applyDensity(bindCues(ctx.resolved, { models }).cues, plan.density, plan.storyId);
+        typingPlan = typingSchedule(collectTyping(ctx.resolved, { models }), { seed: plan.storyId, ...densityTyping(plan.density) });
+      }
       const mixFile = path.join(ctx.project, PATHS.mix);
-      await writeJson(path.join(ctx.project, PATHS.cues), plan.cues);
-      const mixed = await ctx.adapters.buildMix({ voice: voiceFile, music: musicFile, cues: plan.cues, sfxDir: path.join(kitDir, "sfx"), duration: ctx.resolved.resolved.duration, out: mixFile, musicVolume: plan.bed?.volume ?? 0.42 });
-      const placed = mixed?.cues ?? plan.cues.map((cue) => ({ ...cue, file: path.join(kitDir, "sfx", `${cue.cue}.wav`) }));
+      // SFX cue → file: library first (explicit, project, user), then the kit.
+      const kit = kitLibrary(path.join(kitDir, "sfx"), await readOptionalJson(path.join(kitDir, "AUDIO-KIT.json")));
+      const cues = resolveCueFiles(boundCues, { libraries: plan.libraries, kit, storyId: plan.storyId });
+      let typing = null;
+      if (typingPlan.length) {
+        const rendered = await ctx.adapters.renderTyping(typingPlan, typingBanks(plan.libraries, kit), { out: path.join(ctx.project, PATHS.typing), duration });
+        typing = { file: path.join(ctx.project, PATHS.typing), keystrokes: rendered.keystrokes, counts: rendered.counts };
+        cues.push({ cue: "typing", at: 0, volume: 1, shot: null, intent: `typing track (${rendered.keystrokes.length} keys)`, source: "typing", file: typing.file });
+      }
+      await writeJson(path.join(ctx.project, PATHS.cues), cues);
+      const mixed = await ctx.adapters.buildMix({ voice: voiceFile, music: musicFile, cues, sfxDir: path.join(kitDir, "sfx"), duration, out: mixFile, musicVolume: plan.bed?.volume ?? 0.42 });
+      const placed = (mixed?.cues ?? cues).map((cue, index) => ({ ...cues[index], ...cue, file: cues[index]?.file ?? cue.file ?? path.join(kitDir, "sfx", `${cue.cue}.wav`) }));
       const sfxManifest = path.join(ctx.project, PATHS.sfxManifest);
       // Same shape build-mix.mjs --sfx-manifest writes; cinematic-check reads it through AUDIO-MANIFEST.json.
-      await writeJson(sfxManifest, { cues: placed.map((cue, i) => ({ id: `sfx-${String(i + 1).padStart(2, "0")}-${cue.cue}`, cue: cue.cue, shot_id: cue.shot ?? null, at_seconds: cue.at, volume: cue.volume, intent: cue.intent ?? "", file: path.resolve(cue.file) })) });
+      // The typing track is listed as one cue per typed line (its first key) plus the full keystroke schedule.
+      const typingCues = typing ? firstKeyPerShot(typing.keystrokes).map((key) => ({ cue: "typing", shot: key.shot, at: key.at, volume: 1, intent: "typing track", file: typing.file })) : [];
+      const listed = [...placed.filter((cue) => cue.source !== "typing"), ...typingCues].sort((a, b) => a.at - b.at);
+      await writeJson(sfxManifest, {
+        cues: listed.map((cue, i) => ({ id: `sfx-${String(i + 1).padStart(2, "0")}-${cue.cue}`, cue: cue.cue, shot_id: cue.shot ?? null, at_seconds: cue.at, volume: cue.volume, intent: cue.intent ?? "", file: path.resolve(cue.file), source: cue.sfx_source ?? (cue.cue === "typing" ? "typing" : "kit"), variant: cue.variant ?? null })),
+        typing: typing ? { file: typing.file, counts: typing.counts, keystrokes: typing.keystrokes } : null,
+        density: plan.density,
+        libraries: plan.libraries.map((library) => ({ scope: library.scope, manifest: library.file }))
+      });
+      const origins = new Set(cues.map((cue) => cue.sfx_origin).filter(Boolean));
+      if (typing) for (const kind of Object.values(typingBanks(plan.libraries, kit))) for (const entry of kind) origins.add(entry.source);
       await writeJson(path.join(ctx.project, PATHS.audioManifest), {
         schema_version: "launchclip.audio-manifest.v1",
         generated_by: "launchclip finish",
-        mix: { path: mixFile, duration_seconds: ctx.resolved.resolved.duration, ducking: voiceFile && musicFile ? "sidechain under voice" : null },
+        mix: { path: mixFile, duration_seconds: duration, ducking: voiceFile && musicFile ? "sidechain under voice" : null },
         voiceover: voiceFile ? { path: voiceFile, provider: ctx.state.stages?.voice?.details?.provider ?? "supplied" } : null,
-        music: musicFile ? { path: musicFile, source: plan.music.kind, volume: plan.bed.volume, bpm: plan.bed.bpm, key: plan.bed.key, kick_from: plan.bed.kick_from, kick_to: plan.bed.kick_to, energy: plan.bed.energy } : null,
+        music: musicFile ? {
+          path: musicFile,
+          source: plan.music.kind,
+          provider: plan.music.kind,
+          volume: plan.bed.volume,
+          bpm: plan.bed.bpm,
+          key: plan.bed.key,
+          kick_from: plan.bed.kick_from,
+          kick_to: plan.bed.kick_to,
+          energy: plan.bed.energy,
+          original: track.original ? rel(ctx.project, track.original) : null,
+          analysed_bpm: synced.grid?.bpm ?? null,
+          beats: synced.beats_file,
+          beat_sync: PATHS.beatSync,
+          alignment: synced.alignment ? { offset: synced.alignment.offset, tempo: synced.alignment.tempo } : null,
+          generation: track.generation ?? null
+        } : null,
         sfx_manifest: sfxManifest,
         sfx_kit: path.join(kitDir, "AUDIO-KIT.json"),
-        license: "Original procedural synthesis (synth-audio-kit.mjs); no third-party samples."
+        sfx_libraries: plan.libraries.map((library) => ({ scope: library.scope, manifest: library.file })),
+        license: [sfxLicense(origins), musicLicense(plan.music.kind)].filter(Boolean).join(" ")
       });
       const details = {
         mix_file: PATHS.mix,
-        cues: plan.cues.length,
-        cue_sources: countBy(plan.cues, "source"),
+        cues: cues.length,
+        cue_sources: countBy(cues, "source"),
         bed: plan.bed,
+        music: musicFile ? { provider: plan.music.kind, file: rel(ctx.project, musicFile), cached: track.cached ?? null, generation: track.generation ?? null } : null,
+        sync: synced?.summary ?? null,
+        timing: synced?.changed ? storyTiming(ctx.copy) : null,
+        layout: synced?.changed ? ctx.layout : null,
+        beats_file: synced?.beats_file ?? null,
         voice: Boolean(voiceFile),
         kit_key: kitKey,
-        kit_reused: kitReused
+        kit_reused: kitReused,
+        sfx_density: plan.density,
+        sfx_sources: countBy(cues.map((cue) => ({ scope: cue.sfx_source ?? (cue.source === "typing" ? "typing" : "kit") })), "scope"),
+        typing_keys: typing ? typing.keystrokes.length : 0
       };
       STAGES[3].restore(ctx, details);
       return details;
     },
     restore(ctx, details) {
       ctx.copy = buildFinishCopy(ctx.copy, { mix: details.mix_file ?? PATHS.mix });
+      // Re-apply the beat-snapped timing the stage chose (it lives only in the copy).
+      if (details.timing) {
+        ctx.copy = applyTiming(ctx.copy, details.timing);
+        if (details.layout) ctx.layout = details.layout;
+      }
     }
   },
   {
     name: "render",
     async plan(ctx) {
-      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null });
+      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null });
       ctx.resolved = resolved;
       await writeResolvedCopy(ctx);
       const assets = {};
       for (const asset of collectAssets(resolved)) assets[asset] = await fileHash(path.join(ctx.project, asset));
       const missing = Object.entries(assets).filter(([, hash]) => hash === null).map(([asset]) => asset);
       if (missing.length) ctx.warnings.push(`referenced assets not found: ${missing.join(", ")}`);
+      if (ctx.options.previewScene) return { always: `--preview-scene ${ctx.options.previewScene} renders that scene only`, outputs: [] };
       const inputHash = hashValue({ renderer: ctx.rendererName, quality: ctx.quality, story: resolved, assets, words: ctx.words, version: VERSION, kit: await treeFingerprint(path.join(ROOT, "kit")), projectEntry: await fileHash(path.join(ctx.project, "remotion", "entry.tsx")) });
       return { inputHash, outputs: [rel(ctx.project, ctx.raw)] };
     },
     async run(ctx) {
       const adapter = ctx.adapters.renderer(ctx.rendererName);
-      await mkdir(path.dirname(ctx.raw), { recursive: true });
-      if (ctx.rendererName === "hyperframes") {
-        const hfDir = path.join(ctx.project, PATHS.hyperframes);
-        const compiled = await ctx.adapters.compileHyperFrames(ctx.resolved, { projectDir: hfDir, sourceDir: ctx.project });
-        ctx.warnings.push(...(compiled?.warnings ?? []).filter((message) => !ctx.warnings.includes(message)).map((message) => `hyperframes: ${message}`));
-        await adapter.render(hfDir, ctx.raw, { quality: ctx.quality });
-        return { renderer: "hyperframes", compiled: PATHS.hyperframes, raw: rel(ctx.project, ctx.raw) };
+      const tools = ctx.adapters.segmentTools;
+      if (ctx.options.previewScene) {
+        const output = path.join(ctx.project, previewPath(ctx.options.previewScene));
+        const segments = await renderStory(ctx, adapter, { output, previewScene: ctx.options.previewScene });
+        ctx.preview = { scene: ctx.options.previewScene, output };
+        ctx.halt = `--preview-scene ${ctx.options.previewScene}: only that scene was rendered; the final is untouched`;
+        return { renderer: ctx.rendererName, preview: rel(ctx.project, output), segments };
       }
-      await adapter.render(ctx.project, ctx.raw, { quality: ctx.quality, story: ctx.resolved });
-      return { renderer: "remotion", raw: rel(ctx.project, ctx.raw) };
+      await mkdir(path.dirname(ctx.raw), { recursive: true });
+      const scenes = ctx.options.scenes;
+      const stillsDir = path.join(ctx.project, PATHS.sceneStills);
+      const before = scenes.length && existsSync(ctx.raw) ? await sceneStills(ctx.resolved, ctx.raw, scenes, stillsDir, { suffix: "before", tools }).catch(() => []) : [];
+      const segments = await renderStory(ctx, adapter, { output: ctx.raw, scenes });
+      if (scenes.length && segments?.mode === "whole") ctx.warnings.push(`partial rendering is Remotion-only: --scene ${scenes.join(",")} re-rendered the whole ${ctx.rendererName} video`);
+      const details = { renderer: ctx.rendererName, raw: rel(ctx.project, ctx.raw), ...(ctx.rendererName === "hyperframes" ? { compiled: PATHS.hyperframes } : {}), ...(segments ? { segments } : {}) };
+      if (scenes.length) details.scene_stills = await compareStills(ctx, scenes, before, stillsDir, tools);
+      return details;
     }
   },
   {
@@ -638,6 +896,7 @@ const STAGES = [
   {
     name: "evidence",
     async plan(ctx) {
+      if (ctx.candidate) return { skip: "candidate render: evidence skipped" };
       return { inputHash: hashValue({ video: await fileHash(ctx.out), story: ctx.resolved, renderer: ctx.rendererName, script: await fileHash(SCRIPT.evidence) }), outputs: [PATHS.evidence] };
     },
     async run(ctx) {
@@ -657,6 +916,7 @@ const STAGES = [
   {
     name: "gates",
     async plan(ctx) {
+      if (ctx.candidate) return { skip: "candidate render: judge it from the pixels (no gates)" };
       const inputHash = hashValue({
         video: await fileHash(ctx.out),
         evidence: await fileHash(path.join(ctx.project, PATHS.evidence)),
@@ -678,6 +938,70 @@ const STAGES = [
     }
   }
 ];
+
+// ---------------------------------------------------------------------------
+// Render: the segment cache (src/render_segments.js)
+
+/** --scene / --preview-scene → {scenes: [ids], previewScene: id|null}, checked against the story. */
+export function iterationOptions(story, options = {}) {
+  const list = (value) => (Array.isArray(value) ? value : value == null || value === false ? [] : [value]).flatMap((item) => String(item).split(",")).map((item) => item.trim()).filter(Boolean);
+  const scenes = [...new Set(list(options.scenes ?? options.scene))];
+  const preview = list(options.previewScene);
+  if (preview.length > 1) throw new Error(`--preview-scene takes one scene id; got ${preview.join(", ")}`);
+  if (preview.length && scenes.length) throw new Error("use --scene or --preview-scene, not both");
+  const ids = (Array.isArray(story?.scenes) ? story.scenes : []).map((scene) => scene?.id);
+  for (const id of [...scenes, ...preview]) {
+    if (!ids.includes(id)) throw new Error(`unknown scene "${id}"; storyboard.json has ${ids.join(", ")}`);
+  }
+  return { scenes, previewScene: preview[0] ?? null };
+}
+
+export function previewPath(sceneId) {
+  return `renders/scene-${sceneId}.mp4`;
+}
+
+// Remotion renders through the segment cache; HyperFrames renders whole
+// videos, cached by hash; an adapter without renderSegments (a custom or
+// injected Remotion adapter) renders the whole story directly.
+async function renderStory(ctx, adapter, { output, scenes = [], previewScene = null }) {
+  const common = { project: ctx.project, story: ctx.resolved, renderer: ctx.rendererName, adapter, quality: ctx.quality, output, scenes, previewScene, tools: ctx.adapters.segmentTools, now: ctx.adapters.now };
+  if (ctx.rendererName === "hyperframes") {
+    return renderWithSegments({
+      ...common,
+      renderWhole: async (file) => {
+        const hfDir = path.join(ctx.project, PATHS.hyperframes);
+        const compiled = await ctx.adapters.compileHyperFrames(ctx.resolved, { projectDir: hfDir, sourceDir: ctx.project });
+        ctx.warnings.push(...(compiled?.warnings ?? []).filter((message) => !ctx.warnings.includes(message)).map((message) => `hyperframes: ${message}`));
+        await adapter.render(hfDir, file, { quality: ctx.quality });
+      }
+    });
+  }
+  if (PARTIAL_RENDERERS.includes(ctx.rendererName) && typeof adapter.renderSegments === "function") return renderWithSegments(common);
+  if (previewScene) throw new Error(`--preview-scene needs a renderer adapter that renders frame ranges; the ${ctx.rendererName} adapter in use has no renderSegments`);
+  await adapter.render(ctx.project, output, { quality: ctx.quality, story: ctx.resolved });
+  return null;
+}
+
+// Before/after stills of each --scene, side by side: the eye check for a
+// second-pass fix.
+async function compareStills(ctx, scenes, before, dir, tools) {
+  const after = await sceneStills(ctx.resolved, ctx.raw, scenes, dir, { suffix: "after", tools });
+  const out = [];
+  for (const still of after) {
+    const previous = before.find((entry) => entry.scene === still.scene);
+    let compare = null;
+    if (previous) {
+      compare = path.join(dir, `${still.scene}-before-after.png`);
+      try { await (tools?.sideBySide ?? defaultSideBySide)(previous.file, still.file, compare); } catch { compare = null; }
+    }
+    out.push({ scene: still.scene, seconds: still.seconds, before: previous ? rel(ctx.project, previous.file) : null, after: rel(ctx.project, still.file), compare: compare ? rel(ctx.project, compare) : null });
+  }
+  return out;
+}
+
+async function defaultSideBySide(left, right, output) {
+  await execFileAsync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", left, "-i", right, "-filter_complex", "[0][1]hstack=inputs=2,scale=iw/2:-2", "-frames:v", "1", output]);
+}
 
 // The renderer-neutral gates cinematic-check runs, minus the critic: layout
 // (geometric, from the validate stage), loudness (master), motion and audio
@@ -706,7 +1030,10 @@ async function runGates(ctx) {
 
   try {
     const manifest = existsSync(path.join(ctx.project, PATHS.audioManifest)) ? path.join(ctx.project, PATHS.audioManifest) : null;
-    const audio = await ctx.adapters.audio(ctx.out, manifest, { musicVolume: ctx.state.stages?.sound?.details?.bed?.volume ?? 0.15 });
+    // The same music volume cinematic-check resolves, so the two gates agree.
+    const mixSettings = await resolveMusicMix(ctx.project, manifest, { soundDetails: ctx.state.stages?.sound?.details ?? null });
+    const audio = await ctx.adapters.audio(ctx.out, manifest, { musicVolume: mixSettings.music_volume });
+    if (audio && typeof audio === "object") audio.mix_settings = mixSettings;
     await writeJson(path.join(ctx.project, PATHS.audio), audio);
     gates.audio = { status: audio?.quality?.ok ? "passed" : "failed", report: PATHS.audio, manifest: manifest ? PATHS.audioManifest : null, findings: (audio?.quality?.findings ?? []).slice(0, 12) };
   } catch (error) {
@@ -737,8 +1064,9 @@ async function runGates(ctx) {
 function buildReport(ctx, stages, { seconds, failed }) {
   const gates = ctx.gates ?? {};
   const gateStatuses = Object.values(gates).map((gate) => gate.status);
-  const status = failed ? "failed" : gateStatuses.includes("failed") ? "needs-repair" : "ready-for-review";
+  const status = failed ? "failed" : ctx.preview ? "preview" : ctx.candidate ? "candidate" : gateStatuses.includes("failed") ? "needs-repair" : "ready-for-review";
   const nextSteps = [];
+  const render = stages.find((stage) => stage.name === "render");
   if (failed) {
     const entry = stages.find((stage) => stage.name === failed);
     nextSteps.push(`Fix the ${failed} stage (${firstLine(entry?.error)}) and run launchclip finish again; finished stages are reused.`);
@@ -746,6 +1074,8 @@ function buildReport(ctx, stages, { seconds, failed }) {
     for (const [name, gate] of Object.entries(gates)) if (gate.status === "failed") nextSteps.push(`Repair the ${name} gate (see ${gate.report ?? PATHS.gates}).`);
     if (gates.critic?.next_step) nextSteps.push(gates.critic.next_step);
   }
+  if (!failed && ctx.candidateReceipt) nextSteps.push(`Score candidate ${ctx.candidate} (0-10 per field) in ${ctx.candidateReceipt.receipt} from its frames, then set selected_candidate_id (highest mean, ties by candidate_order), selection_rationale and a rejection_reason for each loser.`);
+  if (!failed && ctx.preview) nextSteps.push(`Look at ${rel(ctx.project, ctx.preview.output)}; when it is right, run launchclip finish ${ctx.project} --scene ${ctx.preview.scene} to re-render it into the final.`);
   return {
     schema_version: FINISH_REPORT_VERSION,
     status,
@@ -754,9 +1084,13 @@ function buildReport(ctx, stages, { seconds, failed }) {
     resolved_copy: PATHS.copy,
     renderer: ctx.rendererName,
     quality: ctx.quality,
+    style: ctx.style ? { name: ctx.style.name, source: ctx.style.source, file: ctx.style.file, applied: ctx.style.applied.length } : null,
     voice: ctx.state.stages?.voice?.details?.provider && stages.find((stage) => stage.name === "voice")?.status !== "skipped" ? ctx.state.stages.voice.details.provider : null,
-    final: !failed && existsSync(ctx.out) ? ctx.out : null,
+    final: !failed && !ctx.preview && existsSync(ctx.out) ? ctx.out : null,
     output: ctx.out,
+    ...(ctx.preview ? { preview: { scene: ctx.preview.scene, output: ctx.preview.output } } : {}),
+    ...(ctx.candidate ? { candidate: { id: ctx.candidate, ...(ctx.candidateReceipt ?? {}) } } : {}),
+    ...(ctx.options.scenes?.length ? { scenes: ctx.options.scenes, scene_stills: render?.details?.scene_stills ?? [] } : {}),
     seconds,
     stages,
     gates,
@@ -766,13 +1100,25 @@ function buildReport(ctx, stages, { seconds, failed }) {
   };
 }
 
+/** "10 segments: 8 reused, 2 rendered (~11.3s saved)" */
+export function segmentSummary(segments) {
+  if (segments.mode === "whole") return `whole-video cache (${segments.renderer} has no frame range): ${segments.reused ? `reused${segments.seconds_saved ? ` (~${segments.seconds_saved}s saved)` : ""}` : "rendered"}`;
+  const forced = segments.forced ? `, ${segments.forced} forced by --scene` : "";
+  return `${segments.segments} segments: ${segments.reused} reused, ${segments.rendered} rendered${forced}${segments.reused ? ` (~${segments.seconds_saved}s saved)` : ""}`;
+}
+
 /** Human summary of a finish report. */
 export function formatFinishSummary(report) {
   const lines = [`launchclip finish: ${report.status} (${report.renderer}, ${report.quality}, ${report.seconds}s)`];
   for (const stage of report.stages) {
     const note = stage.error ? firstLine(stage.error) : stage.reason ?? "";
     lines.push(`  ${stage.name.padEnd(9)} ${stage.status.padEnd(8)} ${String(stage.seconds).padStart(7)}s  ${note}`.trimEnd());
+    const segments = stage.name === "render" ? stage.details?.segments : null;
+    if (segments) lines.push(`            ${segmentSummary(segments)}`);
   }
+  if (report.preview) lines.push(`preview: ${report.preview.output}`);
+  if (report.candidate?.receipt) lines.push(`candidate ${report.candidate.id} (${report.candidate.comparison}): ${report.candidate.artifacts.join(", ")} -> ${report.candidate.receipt}`);
+  for (const still of report.scene_stills ?? []) lines.push(`scene ${still.scene} @${still.seconds}s: ${still.compare ?? still.after}${still.compare ? " (before | after)" : ""}`);
   const gates = Object.entries(report.gates ?? {});
   if (gates.length) {
     lines.push("gates:");
@@ -783,6 +1129,254 @@ export function formatFinishSummary(report) {
   for (const step of report.next_steps ?? []) lines.push(`next: ${step}`);
   lines.push(`report: ${path.join(report.project, PATHS.report)}`);
   return `${lines.join("\n")}\n`;
+}
+
+// ---------------------------------------------------------------------------
+// Music: provider → track → beats → beat sync (the sound stage's music part)
+
+// The music decision as the sound stage plans with it.
+function musicPlanSpec(choice) {
+  const spec = { kind: choice.provider, sync: choice.sync ?? "auto" };
+  for (const key of ["file", "bpm", "key", "prompt", "seed", "model", "volume"]) if (choice[key] !== undefined) spec[key] = choice[key];
+  return spec;
+}
+
+function musicParams(music, bed, narrated, hints) {
+  const params = { seconds: bed.seconds, bpm: bed.bpm, narrated };
+  if (music.prompt) params.prompt = music.prompt;
+  if (Number.isInteger(music.seed)) params.seed = music.seed;
+  if (music.model) params.model = music.model;
+  if (hints) params.hints = hints;
+  return params;
+}
+
+// Where finish writes BEATS.json: the project root (so beat:n anchors
+// resolve) unless the user authored a root BEATS.json, which is never
+// overwritten.
+async function beatsTarget(project) {
+  const root = await readOptionalJson(path.join(project, PATHS.beats)).catch(() => null);
+  return !root || root.generated_by === "launchclip finish" ? PATHS.beats : PATHS.beatsFallback;
+}
+
+/** Scene timing fields of a story copy: {sceneId: {start, end, hits: [at…]}} (anchors kept as written). */
+export function storyTiming(story) {
+  const timing = {};
+  for (const scene of Array.isArray(story?.scenes) ? story.scenes : []) {
+    if (!scene?.id) continue;
+    timing[scene.id] = { start: scene.start, end: scene.end, hits: (Array.isArray(scene.hits) ? scene.hits : []).map((hit) => hit?.at) };
+  }
+  return timing;
+}
+
+/** A copy of story with the timing fields from storyTiming() applied. */
+export function applyTiming(story, timing) {
+  const copy = JSON.parse(JSON.stringify(story));
+  for (const scene of Array.isArray(copy.scenes) ? copy.scenes : []) {
+    const entry = timing?.[scene?.id];
+    if (!entry) continue;
+    if (entry.start !== undefined) scene.start = entry.start;
+    if (entry.end !== undefined) scene.end = entry.end;
+    (Array.isArray(scene.hits) ? scene.hits : []).forEach((hit, index) => { if (entry.hits?.[index] !== undefined) hit.at = entry.hits[index]; });
+  }
+  return copy;
+}
+
+// Generate or reuse the track and know its beat grid (music time).
+// → {file, original, grid, length, exactGrid, cached, generation} or null
+async function resolveMusicTrack(ctx, plan, kitDir) {
+  const duration = Number(ctx.resolved.resolved.duration);
+  if (plan.music.kind === "none") return null;
+  if (plan.music.kind === "synth") {
+    // The procedural bed's grid is exact: its own BEATS.json, else from its tempo.
+    const kitBeats = await readOptionalJson(path.join(kitDir, "BEATS.json")).catch(() => null);
+    const grid = Array.isArray(kitBeats?.beats) && kitBeats.beats.length ? kitBeats : gridFromBpm(plan.bed.bpm, duration);
+    return { file: path.join(kitDir, "music", "bed.wav"), original: null, grid, length: duration, exactGrid: true, cached: null, generation: null };
+  }
+  if (plan.music.kind === "elevenlabs") {
+    const outFile = path.join(ctx.project, PATHS.music);
+    const decision = plan.lock;
+    if (decision?.reuse) {
+      // The locked track: no request at all, so no spend.
+      const locked = decision.lock;
+      await mkdir(path.dirname(outFile), { recursive: true });
+      await copyFile(path.join(ctx.project, locked.file), outFile);
+      ctx.adapters.notice?.(`music: REUSE locked ElevenLabs track ${locked.file} (music brief unchanged; no paid generation). Scene timing changes only re-run beat sync; pass --music-regenerate for a new track.`);
+      const grid = await analyse(ctx, outFile, locked.bpm);
+      return {
+        file: outFile,
+        original: outFile,
+        grid,
+        length: grid?.duration ?? locked.length_ms / 1000,
+        exactGrid: false,
+        cached: true,
+        generation: { provider: "elevenlabs", endpoint: "POST /v1/music", mode: locked.mode ?? null, requested_bpm: locked.bpm, length_ms: locked.length_ms, cached: true, locked: true, lock_file: ".launchclip/music-lock.json", request_hash: locked.request_hash, cache_file: locked.cache_file ?? null, generated_seconds: 0, cost_usd_estimate: 0, song_id: locked.song_id ?? null }
+      };
+    }
+    const provider = plan.provider ?? await ctx.adapters.musicProvider("elevenlabs", { env: ctx.adapters.env ?? process.env, model: plan.music.model });
+    const params = decision?.params ?? musicParams(plan.music, plan.bed, Boolean(plan.voice), ctx.options.musicHints ?? ctx.copy.audio?.music_hints);
+    const force = Boolean(ctx.options.musicRegenerate);
+    const status = provider.cacheStatus?.(ctx.resolved, params) ?? null;
+    const why = decision?.reason ? ` (${decision.reason})` : "";
+    if (status && status.cached && !force) {
+      ctx.adapters.notice?.(`music: REUSE cached ElevenLabs track for this exact request${why}; no paid generation (${status.cache_file})`);
+    } else if (status) {
+      ctx.adapters.notice?.(`music: PAID ElevenLabs generation of ${(status.length_ms / 1000).toFixed(1)} s (about $${status.cost_usd_estimate})${why}; it will be cached in ${provider.cacheDir} and locked for this project`);
+    } else {
+      ctx.adapters.notice?.(`music: ElevenLabs Music API (paid; POST /v1/music)${why} — generations are cached in ${provider.cacheDir}`);
+    }
+    const result = await provider.generate(ctx.resolved, params, { outFile, force });
+    ctx.adapters.notice?.(result.cached ? `music: cache hit, no new generation (${result.cache_file})` : `music: generated ${result.generated_seconds}s (about $${result.cost_usd}); cached as ${result.cache_file}`);
+    if (decision?.brief) {
+      const written = await writeMusicLock(ctx.project, { brief: decision.brief, sourceFile: outFile, cacheKey: plan.trackKey ?? result.cache_key, cacheFile: result.cache_file ?? null, bpm: result.request?.bpm ?? plan.bed.bpm, lengthMs: result.request?.length_ms ?? Math.round(Number(ctx.resolved.resolved.duration) * 1000 + 2000), mode: result.request?.mode ?? null, songId: result.song_id ?? null, clock: ctx.adapters.clock });
+      ctx.adapters.notice?.(`music: locked ${written.file} in .launchclip/music-lock.json; later runs reuse it while the music brief (provider, model, prompt, BPM, style hints, length bucket) is unchanged`);
+    }
+    const grid = await analyse(ctx, outFile, plan.bed.bpm);
+    return {
+      file: outFile,
+      original: outFile,
+      grid,
+      length: grid?.duration ?? (result.request?.length_ms ?? 0) / 1000,
+      exactGrid: false,
+      cached: result.cached,
+      generation: { provider: "elevenlabs", endpoint: "POST /v1/music", mode: result.request?.mode, model: result.model, requested_bpm: result.request?.bpm, length_ms: result.request?.length_ms, arc: result.request?.arc, cached: result.cached, cache_file: result.cache_file, generated_seconds: result.generated_seconds, cost_usd_estimate: result.cost_usd, song_id: result.song_id }
+    };
+  }
+  const file = path.join(ctx.project, plan.music.file);
+  const grid = await analyse(ctx, file, Number(plan.music.bpm) > 0 ? Number(plan.music.bpm) : null);
+  return { file, original: file, grid, length: grid?.duration ?? null, exactGrid: false, cached: true, generation: null };
+}
+
+async function analyse(ctx, file, bpmHint) {
+  try {
+    return await ctx.adapters.analyzeBeats(file, { bpmHint });
+  } catch (error) {
+    ctx.warnings.push(`music: beat analysis of ${rel(ctx.project, file)} failed (${firstLine(error.message)}); the music is mixed without beat sync`);
+    return null;
+  }
+}
+
+// Choose the music offset/tempo (align), snap the copy's cuts and hits (snap),
+// prepare the track, write BEATS.json and qa/beat-sync.json.
+async function beatSync(ctx, plan, track, { duration }) {
+  const strategy = track.grid ? plan.sync.strategy : "off";
+  const mode = plan.sync.mode === "off" ? "off" : plan.sync.mode;
+  const momentsBefore = keyMoments(ctx.resolved, { hits: mode !== "cuts" });
+  let alignment = { offset: 0, tempo: 1, score: null, baseline: null, gain: 0, tried: 0 };
+  if (track.grid && strategy !== "off" && !track.exactGrid && mode !== "hits") {
+    // Before snapping, prefer grids that bring cuts within the snap tolerance.
+    alignment = chooseAlignment(track.grid, momentsBefore, { duration, musicLength: track.length ?? duration + 2, allowTempo: true, sigma: strategy === "snap" ? 0.12 : undefined });
+  }
+  let file = track.file;
+  if (!track.exactGrid) {
+    file = path.join(ctx.project, PATHS.musicPrepared);
+    await ctx.adapters.prepareMusic(track.file, file, { offset: alignment.offset, tempo: alignment.tempo, duration, lufs: MUSIC_LUFS });
+  }
+  const storyGrid = track.grid ? transformGrid(track.grid, { offset: alignment.offset, tempo: alignment.tempo, duration }) : null;
+  const beatsFile = await beatsTarget(ctx.project);
+  const ownsRoot = beatsFile === PATHS.beats;
+  if (!ownsRoot) ctx.warnings.push(`BEATS.json is user-authored, so finish wrote the music's grid to ${PATHS.beatsFallback}; beat anchors keep using BEATS.json`);
+  if (storyGrid) {
+    const document = beatsDocument(storyGrid, {
+      generated_by: "launchclip finish",
+      source: rel(ctx.project, file),
+      music_source: track.original ? rel(ctx.project, track.original) : rel(ctx.project, track.file),
+      provider: plan.music.kind,
+      alignment: { offset: alignment.offset, tempo: alignment.tempo },
+      analysis: track.exactGrid ? { method: "synth bed grid (exact)" } : { bpm: track.grid.bpm, confidence: track.grid.confidence ?? null, method: track.grid.method ?? null },
+      duration
+    });
+    await writeJson(path.join(ctx.project, beatsFile), document);
+    if (ownsRoot) ctx.beats = document;
+  }
+  const beatsForAnchors = ownsRoot ? storyGrid : ctx.beats;
+  let changes = [];
+  let reverted = [];
+  let skipped = [];
+  let changed = false;
+  if (storyGrid && strategy === "snap" && mode !== "off") {
+    const before = ctx.copy;
+    const result = snapStory(ctx.copy, storyGrid, { mode, words: ctx.words ?? [], beats: beatsForAnchors });
+    ({ changes, reverted, skipped } = result);
+    if (changes.length) {
+      // Re-validate and re-run layout-check on the snapped copy; fall back
+      // to the unsnapped timing when either fails.
+      const resolved = resolveStory(result.story, { words: ctx.words ?? [], beats: beatsForAnchors });
+      const validation = validateStory(resolved);
+      const { checkLayoutProject } = await import("./layout_check.js");
+      const layout = validation.ok ? await checkLayoutProject(ctx.project, { story: result.story, words: ctx.words ?? [], beats: beatsForAnchors ?? undefined }) : null;
+      const layoutBroke = layout && layout.status === "failed" && ctx.layout?.status !== "failed";
+      if (!validation.ok || layoutBroke) {
+        const reason = !validation.ok ? `the snapped story is invalid: ${validation.errors[0]}` : `layout-check failed after snapping: ${layout.findings.find((finding) => finding.severity === "error")?.rule ?? "error"}`;
+        reverted = [...reverted, ...changes.map((change) => ({ ...change, reason }))];
+        changes = [];
+        ctx.copy = before;
+      } else {
+        ctx.copy = result.story;
+        ctx.resolved = resolved;
+        ctx.boundaries = deriveBoundaries(resolved);
+        ctx.layout = { status: layout.status, profile: layout.profile, errors: layout.errors, elements: layout.elements, warnings: layout.warnings, findings: layout.findings };
+        changed = true;
+        await writeResolvedCopy(ctx);
+      }
+    }
+  }
+  const moments = storyGrid ? momentReport(keyMoments(ctx.resolved, { hits: mode !== "cuts" }), storyGrid) : [];
+  const summary = summarizeMoments(moments);
+  const requestedBpm = Number(plan.bed?.bpm) || null;
+  const report = {
+    schema_version: BEAT_SYNC_SCHEMA,
+    generated_by: "launchclip finish",
+    strategy,
+    mode,
+    lane: ctx.copy.lane,
+    narrated: Boolean(plan.voice),
+    music: {
+      provider: plan.music.kind,
+      file: rel(ctx.project, file),
+      original: track.original ? rel(ctx.project, track.original) : null,
+      requested_bpm: requestedBpm,
+      analysed_bpm: track.grid?.bpm ?? null,
+      bpm_error: requestedBpm && track.grid?.bpm ? Math.round((track.grid.bpm - requestedBpm) * 100) / 100 : null,
+      confidence: track.grid?.confidence ?? null,
+      beats_file: storyGrid ? beatsFile : null
+    },
+    alignment: { offset: alignment.offset, tempo: alignment.tempo, score: alignment.score, baseline: alignment.baseline, gain: alignment.gain, candidates: alignment.tried ?? 0, ...(alignment.rejected_tempo ? { rejected_tempo: alignment.rejected_tempo } : {}) },
+    summary,
+    moments,
+    changes,
+    reverted,
+    skipped,
+    notes: strategy === "align" ? ["Narration timing is fixed: the music moved (offset/tempo); no story time changed."] : strategy === "snap" ? ["Second-timed cuts snap to downbeats and hits to beats within 0.25 s; word and beat anchors never move."] : ["Beat sync is off."]
+  };
+  await writeJson(path.join(ctx.project, PATHS.beatSync), report);
+  return {
+    file,
+    grid: track.grid ? { bpm: track.grid.bpm, confidence: track.grid.confidence ?? null } : null,
+    alignment,
+    changed,
+    beats_file: storyGrid ? beatsFile : null,
+    summary: { strategy, mode, offset: alignment.offset, tempo: alignment.tempo, analysed_bpm: track.grid?.bpm ?? null, changes: changes.length, reverted: reverted.length, ...summary, report: PATHS.beatSync }
+  };
+}
+
+/**
+ * Trim `offset` seconds from the start, change tempo by `tempo` (atempo),
+ * cut to the story length plus a short tail and bring the track to `lufs`
+ * (two-pass loudnorm). Writes 48 kHz stereo PCM.
+ */
+export async function prepareMusicTrack(input, output, { offset = 0, tempo = 1, duration, lufs = MUSIC_LUFS } = {}) {
+  const chain = [];
+  if (Math.abs(tempo - 1) > 1e-4) chain.push(`atempo=${tempo.toFixed(4)}`);
+  const length = Number(duration) > 0 ? Number(duration) + 0.5 : null;
+  const head = ["-hide_banner", "-nostdin", "-ss", String(Math.max(0, offset)), "-i", input];
+  const tail = length ? ["-t", length.toFixed(3)] : [];
+  const filter = `loudnorm=I=${lufs}:TP=-2:LRA=11`;
+  const first = await execFileAsync("ffmpeg", [...head, ...tail, "-af", [...chain, `${filter}:print_format=json`].join(","), "-f", "null", "-"], { maxBuffer: 1 << 26 });
+  const measured = parseLoudnormJson(first.stderr);
+  const apply = `${filter}:measured_I=${measured.input_i}:measured_TP=${measured.input_tp}:measured_LRA=${measured.input_lra}:measured_thresh=${measured.input_thresh}:offset=${measured.target_offset}:linear=true`;
+  await mkdir(path.dirname(output), { recursive: true });
+  await execFileAsync("ffmpeg", [...head, ...tail, "-y", "-af", [...chain, apply].join(","), "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le", output], { maxBuffer: 1 << 26 });
+  return { output, offset, tempo, input_lufs: Number(measured.input_i), target_lufs: lufs };
 }
 
 // ---------------------------------------------------------------------------

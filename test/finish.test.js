@@ -7,6 +7,8 @@ import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { runCli } from "../src/cli.js";
+import { checkCinematicProject, resolveMusicMix } from "../src/cinematic_check.js";
+import { evaluateAudioQuality } from "../src/render_audio_analysis.js";
 import { PATHS, bindCues, buildFinishCopy, chooseBed, defaultCueFor, formatFinishSummary, kitCue, musicSpec, runFinish, stageDecision } from "../src/finish.js";
 import { createTestVoiceProvider, getVoiceProvider, listVoiceProviders, registerVoiceProvider, testVoiceTimings } from "../src/voice/index.js";
 
@@ -37,6 +39,9 @@ function fakeAdapters({ renderError } = {}) {
   const touch = async (file, content = "x") => { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, content); };
   const adapters = {
     calls,
+    // No ELEVENLABS_API_KEY: the music stays on the offline synth bed.
+    env: {},
+    notice() {},
     renderer: (name) => ({
       name,
       async render(project, out, options) {
@@ -377,6 +382,413 @@ test("launchclip finish prints a summary by default", async () => {
   }
 });
 
+// fakeAdapters() plus a frame-range renderer and FFmpeg stand-ins, so the
+// render stage goes through the segment cache.
+function segmentAdapters() {
+  const adapters = fakeAdapters();
+  adapters.segmentCalls = [];
+  const touch = async (file, content) => { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, content); };
+  adapters.renderer = (name) => ({
+    name,
+    segmentEncoder: () => ({ fake: true }),
+    async renderSegments(project, segments, options) {
+      adapters.segmentCalls.push(segments.map((segment) => [segment.startFrame, segment.endFrame]));
+      for (const segment of segments) await touch(segment.output, `${segment.startFrame}-${segment.endFrame} ${options.story.scenes.map((scene) => scene.params?.title).join("|")}\n`);
+      return { segments: segments.map(() => ({ seconds: 2 })) };
+    },
+    async encodeDelivery(input, output) { await touch(output, await readFile(input, "utf8")); },
+    async render() { throw new Error("the segment path must not render whole videos"); }
+  });
+  adapters.segmentTools = {
+    async concat(files, output) { await touch(output, (await Promise.all(files.map((file) => readFile(file, "utf8")))).join("")); },
+    async encodeAudio({ output }) { await touch(output, "aac"); },
+    async mux({ video, output }) { await touch(output, await readFile(video, "utf8")); },
+    async countFrames() { return NaN; },
+    async still(video, frame, output) { await touch(output, `${frame}: ${await readFile(video, "utf8")}`); },
+    async sideBySide(left, right, output) { await touch(output, `${await readFile(left, "utf8")}|${await readFile(right, "utf8")}`); }
+  };
+  return adapters;
+}
+
+test("--scene re-renders that scene's segments, re-runs master, evidence and gates, and shows before/after stills", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-scene-"));
+  try {
+    await cp(MINIMAL, project, { recursive: true });
+    const adapters = segmentAdapters();
+    const first = await runFinish(project, { renderer: "remotion" }, adapters);
+    const render = first.stages.find((stage) => stage.name === "render");
+    assert.equal(render.details.segments.mode, "segments");
+    assert.deepEqual(render.details.segments.plan.map((entry) => entry.id), ["00-s1", "01-s1+s2", "02-s2", "03-s2+s1~loop"]);
+    assert.deepEqual([render.details.segments.reused, render.details.segments.rendered], [0, 4]);
+    assert.ok(existsSync(path.join(project, PATHS.segments, "remotion", "index.json")));
+    assert.match(formatFinishSummary(first), /4 segments: 0 reused, 4 rendered/);
+
+    // An unchanged rerun reuses the whole render stage.
+    const cached = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(cached.stages.find((stage) => stage.name === "render").status, "cached");
+
+    // An edit to s2 re-renders the three segments that show s2.
+    const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+    story.scenes[1].params.title = "Three fixes";
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story));
+    const edited = await runFinish(project, { renderer: "remotion" }, adapters);
+    const segments = edited.stages.find((stage) => stage.name === "render").details.segments;
+    assert.deepEqual([segments.reused, segments.rendered], [1, 3]);
+    assert.deepEqual(adapters.segmentCalls.at(-1), [[90, 102], [102, 179], [179, 180]]);
+    assert.ok(segments.seconds_saved > 0);
+    assert.match(formatFinishSummary(edited), /4 segments: 1 reused, 3 rendered \(~[\d.]+s saved\)/);
+
+    // --scene s1 forces s1's segments and every stage after render, even with no input change.
+    const before = { ...adapters.calls };
+    const forced = await runFinish(project, { renderer: "remotion", scenes: "s1" }, adapters);
+    assert.deepEqual(forced.stages.map((stage) => stage.status), ["skipped", "done", "cached", "skipped", "done", "done", "done", "done"]);
+    assert.deepEqual(forced.stages.slice(4).map((stage) => stage.reason), ["forced", "forced", "forced", "forced"]);
+    const forcedSegments = forced.stages.find((stage) => stage.name === "render").details.segments;
+    assert.deepEqual([forcedSegments.reused, forcedSegments.rendered, forcedSegments.forced], [1, 3, 3]);
+    assert.deepEqual(adapters.segmentCalls.at(-1), [[0, 90], [90, 102], [179, 180]]);
+    assert.equal(adapters.calls.master, before.master + 1);
+    assert.equal(adapters.calls.evidence, before.evidence + 1);
+    assert.deepEqual(forced.scenes, ["s1"]);
+    const [still] = forced.scene_stills;
+    assert.equal(still.scene, "s1");
+    assert.equal(still.before, "qa/finish/scenes/s1-before.png");
+    assert.equal(still.after, "qa/finish/scenes/s1-after.png");
+    assert.equal(still.compare, "qa/finish/scenes/s1-before-after.png");
+    assert.equal(still.seconds, 1.467, "the middle of s1's own segment");
+    assert.ok(existsSync(path.join(project, still.compare)));
+    assert.match(formatFinishSummary(forced), /scene s1 @1\.467s: qa\/finish\/scenes\/s1-before-after\.png \(before \| after\)/);
+    assert.match(formatFinishSummary(forced), /3 forced by --scene/);
+
+    await assert.rejects(runFinish(project, { scenes: "s9" }, adapters), /unknown scene "s9"; storyboard\.json has s1, s2/);
+    await assert.rejects(runFinish(project, { scenes: "s1", previewScene: "s2" }, adapters), /--scene or --preview-scene, not both/);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+
+// ---------------------------------------------------------------------------
+// Music: provider choice, ElevenLabs (stubbed), beat sync
+
+// A stub ElevenLabs provider and beat analysis: a 120 BPM track whose first
+// downbeat sits 0.3 s in, so finish must trim the start to line it up.
+function musicAdapters(base = fakeAdapters(), { env = { ELEVENLABS_API_KEY: "sk_test_never_sent" } } = {}) {
+  const notices = [];
+  const music = { requests: 0, generated: 0, prepared: [] };
+  const grid = { bpm: 120, beat_seconds: 0.5, beats: [], downbeats: [], confidence: 0.9, duration: 8.5, method: "stub" };
+  for (let t = 0.3; t < 8.5; t += 0.5) grid.beats.push(Math.round(t * 1000) / 1000);
+  grid.downbeats = grid.beats.filter((_, index) => index % 4 === 0);
+  let cached = false;
+  Object.assign(base, {
+    env,
+    notice: (line) => notices.push(line),
+    musicProvider: () => ({
+      name: "elevenlabs",
+      cacheDir: "/cache/elevenlabs/music",
+      request(story, params) { music.requests += 1; music.lastParams = params; return { mode: "plan", body: { composition_plan: { sections: [] }, model_id: "music_v1" }, bpm: params.bpm, length_ms: 8000 }; },
+      async generate(story, params, { outFile }) {
+        await mkdir(path.dirname(outFile), { recursive: true });
+        await writeFile(outFile, "mp3");
+        const wasCached = cached;
+        if (!cached) music.generated += 1;
+        cached = true;
+        return { file: outFile, cached: wasCached, cache_file: "/cache/elevenlabs/music/abc.mp3", request: { mode: "plan", bpm: params.bpm, length_ms: 8000 }, generated_seconds: wasCached ? 0 : 8, cost_usd: wasCached ? 0 : 0.02, model: "music_v1", song_id: "song_1" };
+      }
+    }),
+    async analyzeBeats() { return grid; },
+    async prepareMusic(input, output, options) { music.prepared.push(options); await mkdir(path.dirname(output), { recursive: true }); await writeFile(output, `prepared ${options.offset} ${options.tempo}`); return { output }; }
+  });
+  return { adapters: base, notices, music };
+}
+
+test("finish defaults to ElevenLabs music with a key, aligns it to the narration and caches it", async () => {
+  const project = await narratedProject();
+  try {
+    const { adapters, notices, music } = musicAdapters();
+    const report = await runFinish(project, { renderer: "remotion" }, adapters);
+    const sound = report.stages.find((stage) => stage.name === "sound");
+    assert.equal(sound.status, "done", sound.error);
+    assert.equal(sound.details.music.provider, "elevenlabs");
+    assert.ok(notices.some((line) => /paid/.test(line) && /\/cache\/elevenlabs\/music/.test(line)), notices.join("\n"));
+    assert.ok(!notices.join("\n").includes("sk_test_never_sent"));
+    const sync = JSON.parse(await readFile(path.join(project, PATHS.beatSync), "utf8"));
+    assert.equal(sync.schema_version, "launchclip.beat-sync.v1");
+    assert.equal(sync.strategy, "align", "narrated: the music moves, the story does not");
+    assert.equal(sync.changes.length, 0);
+    assert.ok(sync.alignment.offset > 0, JSON.stringify(sync.alignment));
+    assert.equal(sync.music.analysed_bpm, 120);
+    assert.ok(sync.summary.key_moments_on_downbeat >= 1, JSON.stringify(sync.moments));
+    const beats = JSON.parse(await readFile(path.join(project, "BEATS.json"), "utf8"));
+    assert.equal(beats.schema_version, "launchclip.beats.v1");
+    assert.equal(beats.generated_by, "launchclip finish");
+    assert.equal(beats.alignment.offset, sync.alignment.offset);
+    assert.equal(music.prepared[0].offset, sync.alignment.offset);
+    assert.equal(adapters.lastMix.music, path.join(project, PATHS.musicPrepared));
+    const manifest = JSON.parse(await readFile(path.join(project, PATHS.audioManifest), "utf8"));
+    assert.equal(manifest.music.provider, "elevenlabs");
+    assert.equal(manifest.music.generation.endpoint, "POST /v1/music");
+    assert.match(manifest.license, /ElevenLabs/);
+    // The story copy keeps the narration timing.
+    const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
+    assert.equal(resolved.scenes[1].start, 3);
+
+    const again = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(again.stages.find((stage) => stage.name === "sound").status, "cached");
+    assert.equal(music.generated, 1, "the track is generated once");
+    // --music synth overrides the default without touching the cache.
+    const synth = await runFinish(project, { renderer: "remotion", music: "synth" }, adapters);
+    assert.equal(synth.stages.find((stage) => stage.name === "sound").details.music.provider, "synth");
+    await assert.rejects(runFinish(project, { music: "lofi" }, adapters), /Unknown --music lofi/);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("finish and cinematic-check judge the same mix with the same music volume", async () => {
+  const project = await narratedProject();
+  try {
+    const adapters = fakeAdapters();
+    const seen = {};
+    adapters.audio = async (_video, manifest, options) => { seen.finish = options.musicVolume; return { quality: { ok: true, findings: [] } }; };
+    const report = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(report.status === "failed", false, JSON.stringify(report.stages.find((stage) => stage.status === "failed")));
+    const manifest = JSON.parse(await readFile(path.join(project, PATHS.audioManifest), "utf8"));
+    const bedVolume = manifest.music.volume;
+    assert.ok(bedVolume > 0.15, `finish's bed is louder than the old 0.15 assumption (${bedVolume})`);
+    assert.equal(seen.finish, bedVolume);
+
+    const checkAdapters = {
+      verifyProject: async () => ({ schema_version: "launchclip.subscription-verification.v1", status: "passed", failed: [] }),
+      writeMotionReport: async (_video, output) => { await writeFile(output, "{}"); return { quality: { ok: true, findings: [] } }; },
+      analyzeProductionAudio: async (_video, _manifest, options) => { seen.check = options.musicVolume; return { expected_audio: true, stream: {}, output: {}, sources: {}, cues: [], quality: { ok: true, findings: [] } }; }
+    };
+    const checked = await checkCinematicProject(project, { video: report.final ?? "renders/draft.mp4" }, checkAdapters);
+    assert.equal(seen.check, bedVolume, "cinematic-check reads the bed volume finish used");
+    const audioReport = JSON.parse(await readFile(checked.audio, "utf8"));
+    assert.equal(audioReport.mix_settings.source, "AUDIO-MANIFEST.json music.volume");
+    assert.equal(audioReport.mix_settings.ducking, manifest.mix.ducking);
+
+    // With the same measured sources both verdicts match; the old 0.15 would not.
+    const sources = (volume) => ({ voiceover: { integrated_lufs: -16 }, music: { integrated_lufs: -16.5 }, music_gain_db: 20 * Math.log10(volume) });
+    const verdict = (volume) => evaluateAudioQuality({ sources: sources(volume), cues: [] }).ok;
+    assert.equal(verdict(seen.check), verdict(seen.finish));
+
+    // No manifest volume: finish.json's sound stage; an explicit flag wins over both.
+    delete manifest.music.volume;
+    await writeFile(path.join(project, PATHS.audioManifest), JSON.stringify(manifest));
+    const fromFinish = await resolveMusicMix(project, path.join(project, PATHS.audioManifest));
+    assert.equal(fromFinish.music_volume, bedVolume);
+    assert.match(fromFinish.source, /finish\.json/);
+    assert.equal((await resolveMusicMix(project, null, { musicVolume: "0.4" })).music_volume, 0.4);
+    await assert.rejects(resolveMusicMix(project, null, { musicVolume: "loud" }), /--music-volume must be a number/);
+    // A manual project with nothing to read falls back to 0.15.
+    const bare = await mkdtemp(path.join(os.tmpdir(), "launchclip-mix-"));
+    assert.equal((await resolveMusicMix(bare, null)).music_volume, 0.15);
+    await rm(bare, { recursive: true, force: true });
+
+    // The CLI takes --music-volume and keeps --musicVolume as an alias.
+    for (const flag of ["--music-volume", "--musicVolume"]) {
+      seen.check = null;
+      await runCli(["cinematic-check", project, flag, "0.27"], { stdout: { write() {} }, stderr: { write() {} }, productionAdapters: { cinematicCheck: checkAdapters } });
+      assert.equal(seen.check, 0.27, flag);
+    }
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("finish locks the ElevenLabs track: scene timing reuses it, a new brief or --music-regenerate pays", async () => {
+  const project = await narratedProject();
+  try {
+    const { adapters, notices, music } = musicAdapters();
+    // A provider with a real cache lookup, keyed by the request body.
+    const cache = new Set();
+    const stub = adapters.musicProvider();
+    adapters.musicProvider = () => ({
+      ...stub,
+      request(story, params) { return { mode: "prompt", body: { prompt: `bpm ${params.bpm}`, model_id: "music_v1" }, bpm: params.bpm, length_ms: 10000 }; },
+      cacheStatus(story, params) { const key = `k${params.bpm}`; return { cached: cache.has(key), cache_key: key, cache_file: `/cache/${key}.mp3`, length_ms: 10000, cost_usd_estimate: 0.03 }; },
+      async generate(story, params, { outFile, force }) {
+        const key = `k${params.bpm}`;
+        await mkdir(path.dirname(outFile), { recursive: true });
+        await writeFile(outFile, `mp3 ${key} ${music.generated}`);
+        const hit = cache.has(key) && !force;
+        if (!hit) music.generated += 1;
+        cache.add(key);
+        return { file: outFile, cached: hit, cache_key: key, cache_file: `/cache/${key}.mp3`, request: { mode: "prompt", bpm: params.bpm, length_ms: 10000 }, generated_seconds: hit ? 0 : 10, cost_usd: hit ? 0 : 0.03, model: "music_v1", song_id: null };
+      }
+    });
+    const first = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(first.stages.find((stage) => stage.name === "sound").status, "done");
+    assert.equal(music.generated, 1);
+    assert.ok(notices.some((line) => /^music: PAID ElevenLabs generation/.test(line) && /no music lock yet/.test(line)), notices.join("\n"));
+    const lock = JSON.parse(await readFile(path.join(project, ".launchclip/music-lock.json"), "utf8"));
+    assert.equal(lock.schema_version, "launchclip.music-lock.v1");
+    assert.equal(lock.request_hash, `k${lock.bpm}`);
+    assert.equal(lock.brief.provider, "elevenlabs");
+    assert.ok(existsSync(path.join(project, lock.file)));
+
+    // Move a scene boundary: the brief is unchanged, so the locked track is reused.
+    notices.length = 0;
+    const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+    story.scenes[0].end = 3.3;
+    story.scenes[1].start = 3.3;
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story));
+    await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(music.generated, 1, "timing edits never trigger a paid generation");
+    assert.ok(notices.some((line) => /^music: REUSE locked ElevenLabs track/.test(line)), notices.join("\n"));
+    assert.ok(!notices.some((line) => /PAID/.test(line)));
+    const manifest = JSON.parse(await readFile(path.join(project, PATHS.audioManifest), "utf8"));
+    assert.equal(manifest.music.generation.locked, true);
+
+    // A changed music brief (BPM) is a new, paid generation, and the lock follows it.
+    notices.length = 0;
+    story.audio.music = { provider: "elevenlabs", bpm: 128 };
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story));
+    await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(music.generated, 2);
+    assert.ok(notices.some((line) => /PAID/.test(line) && /music brief changed \(bpm\)/.test(line)), notices.join("\n"));
+    assert.equal(JSON.parse(await readFile(path.join(project, ".launchclip/music-lock.json"), "utf8")).bpm, 128);
+
+    // --music-regenerate forces one more, even though the stage would be cached.
+    notices.length = 0;
+    await runFinish(project, { renderer: "remotion", musicRegenerate: true }, adapters);
+    assert.equal(music.generated, 3);
+    assert.ok(notices.some((line) => /PAID/.test(line) && /--music-regenerate/.test(line)), notices.join("\n"));
+    // And the next plain run reuses that track.
+    notices.length = 0;
+    const settled = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(settled.stages.find((stage) => stage.name === "sound").status, "cached");
+    assert.equal(music.generated, 3);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("--preview-scene renders one scene to renders/scene-<id>.mp4 and leaves the final alone", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-preview-"));
+  try {
+    await cp(MINIMAL, project, { recursive: true });
+    const adapters = segmentAdapters();
+    const first = await runFinish(project, { renderer: "remotion" }, adapters);
+    const final = await readFile(first.final, "utf8");
+    const state = await readFile(path.join(project, PATHS.state), "utf8");
+
+    const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+    story.scenes[1].params.title = "Three fixes";
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story));
+    let out = "";
+    await runCli(["finish", project, "--preview-scene", "s2"], { stdout: { write: (text) => { out += text; } }, stderr: { write() {} }, productionAdapters: { finish: adapters } });
+    const report = JSON.parse(await readFile(path.join(project, "finish.json"), "utf8"));
+    assert.equal(report.status, "preview");
+    assert.equal(report.final, null);
+    assert.deepEqual(report.preview, { scene: "s2", output: path.join(project, "renders/scene-s2.mp4") });
+    assert.deepEqual(report.stages.map((stage) => stage.status), ["skipped", "done", "cached", "skipped", "done", "skipped", "skipped", "skipped"]);
+    assert.match(report.stages[5].reason, /--preview-scene s2: only that scene was rendered; the final is untouched/);
+    const segments = report.stages[4].details.segments;
+    assert.deepEqual(segments.frames, { start: 90, end: 180, count: 90 });
+    assert.deepEqual(segments.plan.map((entry) => entry.status), ["rendered", "rendered", "rendered"]);
+    assert.match(await readFile(path.join(project, "renders/scene-s2.mp4"), "utf8"), /^90-102 Build time\|Three fixes\n102-179/);
+    assert.equal(await readFile(first.final, "utf8"), final, "the final is untouched");
+    assert.equal(await readFile(path.join(project, PATHS.state), "utf8").then((text) => JSON.parse(text).stages.render.input_hash), JSON.parse(state).stages.render.input_hash);
+    assert.match(out, /^launchclip finish: preview/);
+    assert.match(out, /preview: .*renders\/scene-s2\.mp4/);
+    assert.match(report.next_steps.at(-1), /--scene s2 to re-render it into the final/);
+
+    // The full run that follows reuses the segments the preview rendered.
+    const full = await runFinish(project, { renderer: "remotion" }, adapters);
+    const reused = full.stages.find((stage) => stage.name === "render").details.segments;
+    assert.deepEqual([reused.reused, reused.rendered], [4, 0]);
+    assert.match(await readFile(full.final, "utf8"), /Three fixes/);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("launchclip finish --scene takes a comma-separated list", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-scenes-"));
+  try {
+    await cp(MINIMAL, project, { recursive: true });
+    const adapters = segmentAdapters();
+    await runFinish(project, { renderer: "remotion" }, adapters);
+    let out = "";
+    await runCli(["finish", project, "--scene", "s1,s2", "--json"], { stdout: { write: (text) => { out += text; } }, stderr: { write() {} }, productionAdapters: { finish: adapters } });
+    const report = JSON.parse(out);
+    assert.deepEqual(report.scenes, ["s1", "s2"]);
+    assert.deepEqual(report.scene_stills.map((still) => still.scene), ["s1", "s2"]);
+    assert.equal(report.stages.find((stage) => stage.name === "render").details.segments.forced, 4);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+
+test("finish snaps a motion story's cuts and hits to the music grid", async () => {
+  const project = await narratedProject({
+    mutate: (story) => {
+      delete story.audio.narration;
+      story.overlays = [];
+      story.scenes[0].hits = [{ at: 1.1, event: "settle", cue: "tick" }];
+      story.scenes[1].hits = [{ at: 3.9, event: "rows-start" }];
+      story.scenes[0].end = 2.9;
+      story.scenes[1].start = 2.9;
+    }
+  });
+  try {
+    const { adapters } = musicAdapters(fakeAdapters(), { env: {} });
+    const report = await runFinish(project, { renderer: "remotion" }, adapters);
+    const sound = report.stages.find((stage) => stage.name === "sound");
+    assert.equal(sound.status, "done", sound.error);
+    assert.equal(sound.details.music.provider, "synth");
+    const sync = JSON.parse(await readFile(path.join(project, PATHS.beatSync), "utf8"));
+    assert.equal(sync.strategy, "snap");
+    // Synth bed at 96 BPM: beats every 0.625 s, downbeats every 2.5 s.
+    assert.deepEqual(sync.changes.map((change) => [change.kind, change.scene, change.from, change.to, change.grid]), [
+      ["cut", "s2", 2.9, 3.125, "beat"],
+      ["hit", "s1", 1.1, 1.25, "beat"],
+      // s2's hit first moves with its scene (+0.225 s), then onto the beat.
+      ["hit", "s2", 4.125, 4.375, "beat"]
+    ]);
+    const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
+    assert.equal(resolved.scenes[1].start, 3.125);
+    assert.equal(resolved.scenes[0].end, 3.125);
+    // The user's storyboard is untouched and the SFX follow the moved hit.
+    assert.equal(JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8")).scenes[1].start, 2.9);
+    const sfx = JSON.parse(await readFile(path.join(project, PATHS.sfxManifest), "utf8"));
+    assert.ok(sfx.cues.some((cue) => cue.at_seconds === 1.25), JSON.stringify(sfx.cues));
+    // Cached rerun re-applies the snapped timing to the copy.
+    const again = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(again.stages.find((stage) => stage.name === "sound").status, "cached");
+    assert.equal(JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8")).scenes[1].start, 3.125);
+    assert.equal(again.stages.find((stage) => stage.name === "render").status, "cached");
+    // sync: off leaves the story alone.
+    const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+    story.audio.music = { provider: "synth", sync: "off" };
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story));
+    await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8")).scenes[1].start, 2.9);
+    // --music none: no music, no beat sync.
+    const none = await runFinish(project, { renderer: "remotion", music: "none" }, adapters);
+    assert.equal(none.stages.find((stage) => stage.name === "sound").details.music, null);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("--music elevenlabs without a key fails before anything is sent", async () => {
+  const project = await narratedProject();
+  try {
+    const { adapters, music } = musicAdapters(fakeAdapters(), { env: {} });
+    const report = await runFinish(project, { music: "elevenlabs" }, adapters);
+    const sound = report.stages.find((stage) => stage.name === "sound");
+    assert.equal(sound.status, "failed");
+    assert.match(sound.error, /--music elevenlabs needs ELEVENLABS_API_KEY/);
+    assert.equal(music.generated, 0);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
 async function chromeAvailable() {
   try {
     await execFileAsync("ffmpeg", ["-version"]);
@@ -394,7 +806,7 @@ test("end to end: examples/story/minimal with the test voice through remotion", 
   const project = await narratedProject();
   try {
     const started = performance.now();
-    const report = await runFinish(project, { renderer: "remotion", voice: "test" });
+    const report = await runFinish(project, { renderer: "remotion", voice: "test" }, { env: {} });
     const seconds = (performance.now() - started) / 1000;
     t.diagnostic(`finish took ${seconds.toFixed(1)}s: ${report.stages.map((stage) => `${stage.name} ${stage.seconds}s`).join(", ")}`);
     assert.notEqual(report.status, "failed", JSON.stringify(report.stages.filter((stage) => stage.error)));
@@ -414,5 +826,24 @@ test("end to end: examples/story/minimal with the test voice through remotion", 
     assert.ok(existsSync(path.join(project, "qa/critic-sheets/index.json")));
   } finally {
     await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("finish notes in one line the SFX families that fall back to the kit", async () => {
+  const project = await narratedProject();
+  const home = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-sfx-home-"));
+  try {
+    const dir = path.join(home, ".launchclip/sfx");
+    await mkdir(path.join(dir, "impact"), { recursive: true });
+    await writeFile(path.join(dir, "impact/impact-1.wav"), "wav");
+    await writeFile(path.join(dir, "library.json"), JSON.stringify({ schema_version: "launchclip.sfx-library.v1", families: { impact: { source: "elevenlabs", variants: [{ file: "impact/impact-1.wav", source: "elevenlabs" }] } } }));
+    const report = await runFinish(project, { renderer: "remotion", sfxHome: home }, fakeAdapters());
+    const notes = report.warnings.filter((line) => line.startsWith("sfx: "));
+    assert.equal(notes.length, 1, report.warnings.join("\n"));
+    assert.match(notes[0], /not in the SFX library .* procedural kit; fill only the missing families with: launchclip sfx seed --missing/);
+    assert.ok(!/\bimpact\b/.test(notes[0].split(" not in ")[0]), "families the library has are not listed");
+  } finally {
+    await rm(project, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
   }
 });

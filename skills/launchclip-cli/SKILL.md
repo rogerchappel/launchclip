@@ -176,6 +176,15 @@ launchclip produce ./next-brief.md --kind topic --style ai-news \
   --out .launchclip/next-ai-video
 ```
 
+For storyboards, use a v2 pack: set `"style": "<name>"` in `storyboard.json`
+(built-in starters: editorial-dark, bold-creator, minimal-tech,
+warm-documentary, neon-explainer) and plan with `launchclip story plan --style
+<name>`. To mimic earlier videos or a reference, draft a pack with `launchclip
+style create <name> --from-reference a.mp4 [b.mp4 ...]`, review its
+`reference-report.md`, and measure later renders with `launchclip style check
+<project> --against <name>`. Upgrade v1 packs with `launchclip style upgrade
+<name>`.
+
 Style management is local and makes no model calls. Do not overwrite a pack
 unless the user explicitly authorizes `--force`. Keep `.launchclip/styles/**`
 in source control when the visual identity should be shared; leave generated

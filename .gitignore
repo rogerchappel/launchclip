@@ -1,5 +1,5 @@
 # Dependencies
-/node_modules/
+/node_modules
 
 # LaunchClip workspaces and generated output
 /.launchclip/*
@@ -45,11 +45,27 @@ Thumbs.db
 # Renderer parity reports (scripts/parity.mjs)
 qa/parity/
 qa/parity-ci/
+qa/parity-captions/
 qa/density/
 
 # Renderer eval reports (npm run eval:renderers)
 qa/renderer-eval/
+qa/ambient/
 
 
 # Voice provider QA samples
 qa/voice/
+qa/style/
+
+# World camera QA (contact sheets, mid-move stills, finish runs)
+qa/camera/
+
+# Music generation and beat-sync proof runs
+qa/music/
+
+# SFX library QA renders and auditions
+qa/sfx/
+qa/parity-footage/
+qa/seams/
+qa/blind/
+qa/blind2/

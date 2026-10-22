@@ -21,8 +21,14 @@
     "validate": true,
     "layout": true,
     "compile": true,
-    "motion": "report",
+    "motion": true,
     "audio": true
   },
-  "stories": {}
+  "stories": {
+    "footage": {
+      "audio": {
+        "max_residual_db": -25
+      }
+    }
+  }
 }

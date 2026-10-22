@@ -1,5 +1,8 @@
 // Editorial module core: spec → resolved model. Renderer-neutral, plain ESM;
-// imports only fonts.mjs. The HyperFrames emitter (skills/launchclip-create-video/scripts/
+// imports only bounds.mjs (the shared bound tolerance), fonts.mjs and
+// grammar.mjs (the motion grammar, which sets the
+// shell enter/exit eases and durations; editorial is the identity). The
+// HyperFrames emitter (skills/launchclip-create-video/scripts/
 // editorial-ui-modules.mjs) and the Remotion modules (kit/remotion/modules/)
 // both draw from this model, so validation, defaults, geometry, timing, events
 // and theme live here only. Contract: docs/KIT_CONTRACTS.md, "Editorial core".
@@ -53,7 +56,8 @@
  * @property {{scale:number,hero:boolean,source:'explicit'|'derived'|'legacy',layout:{width:number,height:number},natural:number}} density
  *   The kind lays out in `layout` (rect / scale, layout px) and renders scaled
  *   by `scale` from the rect's top-left corner; `natural` is the content's
- *   natural height in layout px. scale is 1 in 16:9 and for media-window.
+ *   natural height in layout px. scale is 1 for media-window, for explicit
+ *   16:9 rects without density: "fill" and for density: "fixed".
  *   chrome, cell/bar/stage/rail geometry and every kind-CSS size are layout px.
  *
  * Content shapes (all times absolute):
@@ -85,12 +89,19 @@
  *   durations:{day:0.32}}
  *
  * status-rack: {mode, source|null, note, noteLines, lightOn, lightOff,
+ *   palette?:'status', tones?:{pending, active, pass, fail},
  *   rows:[{index, label, enterTime, states:[{index, time, lights:[3 bool],
- *   changes:[{light, on, color}], settleTime|null}]}]}
+ *   colors?:[3 hex], changes:[{light, on, color}], settleTime|null}]}]}
+ *   palette/tones/colors appear only with the status palette (spec.palette
+ *   "status", spec.tones, a state tone or a tone-named light); lit lights are
+ *   then coloured by tone, and a change of colour alone is a change.
  *   settleTime is null for a state that changes nothing (no event).
  *   durations:{row:0.22 (row enter), light:0.18 (each light colour change)}
  *
- * code-snippet: {language, label ("<language> · Example"), typing, codeFont,
+ * code-snippet: {language, label (string | null: spec.label, false → null;
+ *   else code.filename; else the language for code.source "real" (null
+ *   without a language); else "<language> · Example"), filename, source
+ *   ('example' | 'real'), typing, codeFont,
  *   lineHeight, lines:[{index, time, typeDuration, endTime, length,
  *   characters, tokens:[{text, type, chars?}], charTimes: null | number[]}]}
  *   With typing, character j becomes visible at charTimes[j]; the line itself
@@ -135,7 +146,9 @@
  *   fill is the rail scaleX reached at that step (0..1).
  */
 
+import {formatBound, withinBounds} from './bounds.mjs';
 import {fontStack} from './fonts.mjs';
+import {grammarDuration, grammarEase} from './grammar.mjs';
 
 export const EDITORIAL_KINDS = ['media-window', 'checklist', 'step-rail', 'callout', 'audience-grid', 'trend-chart', 'metric', 'progress', 'date-card', 'status-rack', 'code-snippet', 'excerpt-window', 'focus-flow', 'growth-chart'];
 
@@ -182,6 +195,51 @@ export const EDITORIAL_STYLE = Object.freeze({
   symbol: Object.freeze({viewBox: '0 0 24 24', strokeWidth: 1.6})
 });
 
+// Timing constants, the single source for the validation below and for the
+// generated timing table (EDITORIAL_TIMING_RULES, kit/core/modules.mjs
+// moduleTiming(), the skill's storyboard-modules.md and `launchclip module fit`).
+// Seconds; `at` values are scene-relative.
+const TIMING = Object.freeze({
+  minDuration: 1, enter: .28, exit: .22, leadOut: .45, motionHold: .5,
+  series: Object.freeze({gap: .65, leadOut: .8}),
+  gaps: Object.freeze({'step-rail': .3, 'status-rack': .3, 'code-snippet': .3, chart: .5}),
+  callout: Object.freeze({settle: .4}),
+  focus: Object.freeze({arrive: .24, stagger: .08, hold: .2, chosenSettle: .9, progressHold: .35}),
+  growthDefaultHold: 2.4,
+  settle: Object.freeze({'date-card': .32, 'excerpt-window': .5, 'code-snippet': .24})
+});
+
+/**
+ * Timing rules per editorial kind, from TIMING: {minDuration (s), leadIn (the
+ * earliest `at`), leadOut (the latest `at` is scene duration − leadOut),
+ * gaps: [{between, seconds}], rules: [string]}. Defaults without spec.motion;
+ * with motion, leadIn is motion.enterDuration and leadOut max(0.45,
+ * motion.exitDuration + 0.3), and the scene needs enter + exit + 0.5 s.
+ */
+export const EDITORIAL_TIMING = TIMING;
+export function editorialTimingRules(kind) {
+  const T = TIMING, gap = (between, seconds) => ({between, seconds});
+  const base = {minDuration: T.minDuration, leadIn: T.enter, leadOut: T.leadOut, gaps: [], rules: []};
+  const settleBeforeExit = `every state settles before the ${T.exit} s exit begins`;
+  switch (kind) {
+    case 'media-window': return {...base, leadIn: null, leadOut: null, rules: ['no timed beats; the window holds for the scene']};
+    case 'checklist': return {...base, rules: ['rows[].doneAt comes after rows[].at (status "active" only)']};
+    case 'step-rail': return {...base, gaps: [gap('steps[].at', T.gaps['step-rail'])]};
+    case 'callout': return {...base, rules: [`treated: underlineAt ≥ treatment.at + ${T.callout.settle} s; the treatment settles ${T.callout.settle} s after treatment.at, before the exit`]};
+    case 'audience-grid': return {...base};
+    case 'trend-chart': return {...base, gaps: [gap('chart.points[].at', T.gaps.chart)]};
+    case 'growth-chart': return {...base, gaps: [gap('growth.points[].at', T.gaps.chart)], rules: [`default points (no growth.points) need a scene of at least ${round2(T.enter + T.exit + T.growthDefaultHold)} s`]};
+    case 'metric': case 'progress': return {...base, leadOut: T.series.leadOut, gaps: [gap(`${kind}.values[].at`, T.series.gap)]};
+    case 'date-card': return {...base, rules: [`the day settles ${T.settle['date-card']} s after date.at; ${settleBeforeExit}`]};
+    case 'status-rack': return {...base, gaps: [gap('rack.rows[].states[].at (per row)', T.gaps['status-rack'])], rules: [settleBeforeExit]};
+    case 'code-snippet': return {...base, gaps: [gap('code.lines[].at', T.gaps['code-snippet'])], rules: ['with typing, a line starts after the previous line finishes typing (at + typeDuration; typeDuration 0.12–2 s, default 0.6)', settleBeforeExit]};
+    case 'excerpt-window': return {...base, rules: [`the focus settles ${T.settle['excerpt-window']} s after focus.at; ${settleBeforeExit}`]};
+    case 'focus-flow': return {...base, rules: [`chooseAt ≥ arriveAt + ${T.focus.arrive} + ${T.focus.stagger} × (options − 1) + ${T.focus.hold} s`, `progressAt ≥ chooseAt + ${T.focus.chosenSettle} s`, `progressAt + progressDuration + ${T.focus.progressHold} s ≤ scene duration − ${T.exit} s`]};
+    default: return base;
+  }
+}
+const round2 = value => Math.round(value * 100) / 100;
+
 const PANEL_KINDS = ['date-card', 'status-rack', 'code-snippet', 'excerpt-window', 'focus-flow', 'growth-chart'];
 const DIRECTIONS = ['left', 'right', 'up', 'down', 'none'];
 const MONTHS = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
@@ -193,7 +251,7 @@ function object(value, label, keys) {
   for (const key of Object.keys(value)) if (!keys.includes(key)) throw new Error(`${label}: unsupported ${key}`);
 }
 function number(value, label, min, max) {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) throw new Error(`${label} must be between ${min} and ${max}`);
+  if (typeof value !== 'number' || !Number.isFinite(value) || !withinBounds(value, min, max)) throw new Error(`${label} must be between ${formatBound(min)} and ${formatBound(max)}`);
   return value;
 }
 function text(value, label, max) {
@@ -217,8 +275,8 @@ function series(config, label, duration, enterDuration = .28, exitDuration = nul
   config.values.forEach((entry, i) => {
     object(entry, `${label}.values[${i}]`, ['value', 'at']);
     number(entry.value, 'value', -1_000_000_000, 1_000_000_000);
-    number(entry.at, 'at', enterDuration, duration - Math.max(.8, (exitDuration ?? 0) + .6));
-    if (entry.at <= previous || (previous >= 0 && entry.at - previous + 1e-9 < .65)) throw new Error('value times must increase with at least 0.65s between events');
+    number(entry.at, 'at', enterDuration, duration - Math.max(TIMING.series.leadOut, (exitDuration ?? 0) + .6));
+    if (entry.at <= previous || (previous >= 0 && entry.at - previous + 1e-6 < TIMING.series.gap)) throw new Error(`value times must increase with at least ${TIMING.series.gap}s between events`);
     previous = entry.at;
   });
   return config.mode === 'illustration' ? 'Illustration · example values' : `Source: ${config.source}`;
@@ -250,13 +308,54 @@ function offset(direction, distance) {
 }
 const hex = value => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
 
+// Status palette (status-rack palette: "status", per-state or per-light tone).
+// pending: the muted foreground; active: the accent (brand primary); pass and
+// fail: a green and a red, taken from spec.tones (brand.colors.pass / fail via
+// the module registry) or derived, then pushed toward the foreground until each
+// lit light clears 3:1 against the surface (WCAG non-text contrast).
+export const STATUS_TONES = Object.freeze(['pending', 'active', 'pass', 'fail']);
+const STATUS_POSITIONS = Object.freeze(['fail', 'active', 'pass']);
+const STATUS_BASE = Object.freeze({pass: '#2fbf71', fail: '#f2545b'});
+const channels = value => [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16));
+const luminance = value => {
+  const [r, g, b] = channels(value).map(c => c / 255).map(c => (c <= .03928 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4));
+  return .2126 * r + .7152 * g + .0722 * b;
+};
+export function statusContrast(a, b) {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + .05) / (lo + .05);
+}
+const mix = (top, bottom, amount) => `#${channels(top).map((c, i) => Math.round(c * amount + channels(bottom)[i] * (1 - amount)).toString(16).padStart(2, '0')).join('')}`;
+function legible(colour, surface, foreground) {
+  for (let step = 0; step <= 10; step++) {
+    const candidate = step ? mix(foreground, colour, step / 10) : colour;
+    if (statusContrast(candidate, surface) >= 3) return candidate;
+  }
+  return foreground;
+}
+function statusTones(input, theme, accent) {
+  if (input.palette !== undefined && input.palette !== 'status') throw new Error('palette must be "status"');
+  if (input.tones !== undefined) {
+    object(input.tones, 'tones', STATUS_TONES);
+    for (const [key, value] of Object.entries(input.tones)) if (!hex(value)) throw new Error(`tones.${key} must be a six-digit hex color`);
+  }
+  const used = input.palette === 'status' || input.tones !== undefined || (Array.isArray(input.rack?.rows) && input.rack.rows.some(row => Array.isArray(row?.states) && row.states.some(state => state?.tone !== undefined || (Array.isArray(state?.lights) && state.lights.some(light => typeof light === 'string')))));
+  if (!used) return null;
+  const supplied = input.tones ?? {};
+  return {pending: legible(supplied.pending ?? theme.muted, theme.surface, theme.foreground), active: legible(supplied.active ?? accent, theme.surface, theme.foreground),
+    pass: legible(supplied.pass ?? STATUS_BASE.pass, theme.surface, theme.foreground), fail: legible(supplied.fail ?? STATUS_BASE.fail, theme.surface, theme.foreground)};
+}
+
 // Density (docs: skills-src/references/editorial-ui-modules.md, "Defaults").
 // A module lays out in a "layout box" of rect / scale and renders scaled by
 // `scale` from the rect's top-left corner, so every size in the kind CSS and
 // every rect-local geometry value is in layout px (canvas px = layout px *
-// scale). 16:9 always resolves at scale 1, byte-identical to the pre-density
-// output for explicit rects. 9:16 picks the largest scale, from DENSITY.max
-// down to 1, at which the content validates and its natural height fits.
+// scale). The largest scale, from DENSITY.max down to 1, at which the content
+// validates and its natural height fits is used for derived rects (no rect)
+// in both aspects, for explicit 9:16 rects, and for explicit 16:9 rects that
+// opt in with density: "fill". An explicit 16:9 rect without the opt-in (or
+// any rect with density: "fixed") resolves at scale 1, byte-identical to the
+// pre-density output.
 export const DENSITY = Object.freeze({
   max: 2, min: 1, step: .05,
   // RFC §5 Shorts geometry, reference 1080x1920: safe zone, the caption band
@@ -264,58 +363,123 @@ export const DENSITY = Object.freeze({
   // centre sits just below the lower-third line (safe.y + safe.height / 2) so
   // the lower third is never empty.
   portrait: Object.freeze({x: 90, width: 840, top: 280, captionTop: 1190, bottom: 1450, centre: 880, mediaHeight: 521}),
-  landscape: Object.freeze({x: 80, width: 680, top: 80, baseline: 980}),
-  // Hero numbers may grow to this layout size in 9:16: the metric number is
-  // the hero; a progress card's hero is its bar, so its number stays smaller.
+  // Landscape geometry, reference 1920x1080 (layout-check's landscape
+  // profile): title-safe x 96–1824 / y 54–1026, caption band from y 864. The
+  // default card is centred horizontally, kept inside top–captionTop (a
+  // breathing margin inside title-safe, 24 px clear of the caption band) and
+  // centred on the frame centre where it fits. widths: the card widths tried
+  // in turn (a composed centre column, then wider for dense content, then the
+  // whole safe width); minScale: the smallest scale each width accepts before
+  // the next is tried. Body copy follows the card width (about 45 px at 1000
+  // wide); maxScale caps padding and fixed-size type, so cards read big on a
+  // 1920-wide frame without crowding it. safeX/safeWidth/bottom document the
+  // title-safe zone.
+  landscape: Object.freeze({maxScale: 1.75, safeX: 96, safeWidth: 1728, top: 96, captionTop: 840, bottom: 1026, centre: 540,
+    widths: Object.freeze([1000, 1440, 1728]), minScale: Object.freeze([1.4, 1, 1]), mediaWidth: 1200}),
+  // Hero numbers may grow to this layout size when density applies: the metric
+  // number is the hero; a progress card's hero is its bar, so its number stays
+  // smaller.
   heroNumber: 120, heroProgressNumber: 88, numberCap: 64
 });
 const LEGACY_RECT = {'16:9': {x: 80, y: 480, width: 680, height: 500}, '9:16': {x: 90, y: 960, width: 900, height: 740}};
 const BASE = Object.freeze({scale: 1, hero: false});
+const DENSITY_MODES = ['fill', 'fixed'];
 
-function candidates() {
+function candidates(max = DENSITY.max) {
   const list = [];
-  for (let scale = DENSITY.max; scale >= DENSITY.min - 1e-9; scale -= DENSITY.step) list.push({scale: Math.round(scale * 100) / 100, hero: true});
+  for (let scale = max; scale >= DENSITY.min - 1e-9; scale -= DENSITY.step) list.push({scale: Math.round(scale * 100) / 100, hero: true});
   return list;
 }
 
+// Largest density candidate at which the content validates and its natural
+// height fits the explicit rect; else the scale-1 resolution (or its error).
+// With an explicit density: "fill" the search is grow-only: a candidate must
+// reach the module's default placement for that aspect (the content-derived
+// card) in type scale or in rendered text size (minTextPx), so a short rect
+// can never give smaller type than leaving the rect out. When no candidate
+// does, it throws a "rect too short" error that the module registry extends
+// with a fit hint, as a rect that fits nothing does without fill.
+function fillRect(options, input, rect, max) {
+  if (rect && typeof rect === 'object' && input.kind !== 'media-window') {
+    const floor = input.density === 'fill' ? defaultDensity(options, input) : null;
+    const grows = model => floor === null || model.density.scale >= floor.scale - 1e-9 || (model.minTextPx !== null && floor.minTextPx !== null && model.minTextPx >= floor.minTextPx - .01);
+    for (const candidate of candidates(max)) {
+      try {
+        const model = resolveAt(options, input, rect, candidate, 'explicit');
+        if (model.density.natural <= model.density.layout.height + .5 && grows(model)) return model;
+      } catch { /* try a smaller scale */ }
+    }
+    if (floor !== null) {
+      const base = resolveAt(options, input, rect, BASE, 'explicit');
+      if (grows(base)) return base;
+      throw new Error(`density "fill" never shrinks type: this rect is too short to hold the ${input.kind} at its default scale ${formatBound(floor.scale)} (${formatBound(floor.minTextPx ?? 0)} px text); enlarge the rect, omit it for the default card, or drop density: "fill" to keep scale 1`);
+    }
+  }
+  return resolveAt(options, input, rect, BASE, 'explicit');
+}
+
+// Scale and minTextPx of the module's default (content-derived) placement;
+// null when it does not resolve or falls back to the legacy footprint.
+function defaultDensity(options, input) {
+  const {rect: _rect, density: _density, ...rest} = input;
+  try {
+    const model = resolveEditorialModule(rest, options);
+    return model.density.source === 'derived' ? {scale: model.density.scale, minTextPx: model.minTextPx} : null;
+  } catch { return null; }
+}
+
+// Content-derived placement: for each pass, the largest candidate scale whose
+// natural height fits the band at that width; the card hugs its content and is
+// centred on `centre`, kept inside top..limit. Returns null when nothing fits.
+function derivedRect(options, input, passes, scales) {
+  for (const {x, width, top, limit, centre, maxHeight = Infinity, minScale = 0} of passes) {
+    const band = limit - top;
+    for (const candidate of scales) {
+      if (candidate.scale < minScale) break;
+      let probe;
+      try { probe = resolveAt(options, input, {x, y: top, width, height: band}, candidate, 'derived'); } catch { continue; }
+      const height = Math.max(160, Math.ceil(probe.density.natural * candidate.scale));
+      if (height > Math.min(band, maxHeight)) continue;
+      const y = Math.round(Math.min(limit - height, Math.max(top, centre - height / 2)));
+      try { return resolveAt(options, input, {x, y, width, height}, candidate, 'derived'); } catch { /* next candidate */ }
+    }
+  }
+  return null;
+}
+
 /** @returns {EditorialModel} */
-export function resolveEditorialModule(input) {
+export function resolveEditorialModule(input, options = {}) {
   const plain = input && typeof input === 'object' && !Array.isArray(input);
-  if (!plain || !['16:9', '9:16'].includes(input.aspect) || !EDITORIAL_KINDS.includes(input.kind)) return resolveAt(input, input?.rect, BASE, 'explicit');
+  if (!plain || !['16:9', '9:16'].includes(input.aspect) || !EDITORIAL_KINDS.includes(input.kind) || (input.density !== undefined && !DENSITY_MODES.includes(input.density))) return resolveAt(options, input, input?.rect, BASE, 'explicit');
   const explicit = input.rect !== undefined;
   const portrait = input.aspect === '9:16';
-  if (explicit && !portrait) return resolveAt(input, input.rect, BASE, 'explicit');
+  const fixed = input.density === 'fixed';
   if (explicit) {
-    // Explicit 9:16 rect: keep the rect, grow the type until the content
-    // would no longer fit. The final BASE attempt is the pre-density
-    // behaviour, so any spec that resolved before still resolves (or throws
-    // the same error).
-    const rect = input.rect;
-    if (rect && typeof rect === 'object' && input.kind !== 'media-window') {
-      for (const candidate of candidates()) {
-        try {
-          const model = resolveAt(input, rect, candidate, 'explicit');
-          if (model.density.natural <= model.density.layout.height + .5) return model;
-        } catch { /* try a smaller scale */ }
-      }
-    }
-    return resolveAt(input, rect, BASE, 'explicit');
+    // Explicit rect: keep the rect and, where density applies (9:16, or 16:9
+    // with density: "fill"), grow the type until the content would no longer
+    // fit. The final BASE attempt is the pre-density behaviour, so any spec
+    // that resolved before still resolves (or throws the same error).
+    if (fixed || (!portrait && input.density !== 'fill')) return resolveAt(options, input, input.rect, BASE, 'explicit');
+    return fillRect(options, input, input.rect, portrait ? DENSITY.max : DENSITY.landscape.maxScale);
   }
   if (input.kind === 'media-window') {
-    if (!portrait) return resolveAt(input, LEGACY_RECT['16:9'], BASE, 'legacy');
+    if (!portrait) {
+      // 16:9 media frame (16:9 media under the 48 px bar), centred, above the
+      // caption band.
+      const L = DENSITY.landscape, width = L.mediaWidth, height = Math.round(width * 9 / 16) + 48;
+      const y = Math.round(Math.min(L.captionTop - height, Math.max(L.top, L.centre - height / 2)));
+      return resolveAt(options, input, {x: Math.round((1920 - width) / 2), y, width, height}, BASE, 'derived');
+    }
     const P = DENSITY.portrait, height = P.mediaHeight;
-    return resolveAt(input, {x: P.x, y: Math.round(P.centre - height / 2), width: P.width, height}, BASE, 'derived');
+    return resolveAt(options, input, {x: P.x, y: Math.round(P.centre - height / 2), width: P.width, height}, BASE, 'derived');
   }
+  const scales = fixed ? [BASE] : candidates(portrait ? DENSITY.max : DENSITY.landscape.maxScale);
   if (!portrait) {
-    // 16:9 default: the old lower-left footprint, its height taken from the
-    // content and its bottom edge kept on the old baseline (y 980).
+    // 16:9 default: a centred card inside the landscape title-safe zone,
+    // above the caption band, at the largest scale its content allows.
     const L = DENSITY.landscape;
-    try {
-      const probe = resolveAt(input, {x: L.x, y: L.top, width: L.width, height: L.baseline - L.top}, BASE, 'derived');
-      const height = Math.max(160, Math.ceil(probe.density.natural));
-      if (height <= L.baseline - L.top) return resolveAt(input, {x: L.x, y: L.baseline - height, width: L.width, height}, BASE, 'derived');
-    } catch { /* fall back to the legacy rect and its error */ }
-    return resolveAt(input, LEGACY_RECT['16:9'], BASE, 'legacy');
+    const passes = L.widths.map((width, i) => ({x: Math.round((1920 - width) / 2), width, top: L.top, limit: L.captionTop, centre: L.centre, minScale: fixed ? 0 : L.minScale[i]}));
+    return derivedRect(options, input, passes, scales) ?? resolveAt(options, input, LEGACY_RECT['16:9'], BASE, 'legacy');
   }
   // 9:16 default: safe-zone width, the largest scale whose natural height
   // fits above the caption band (else above the safe-zone bottom), centred
@@ -324,35 +488,33 @@ export function resolveEditorialModule(input) {
   // phone scale; then any scale above the caption band; then the whole safe
   // zone.
   const P = DENSITY.portrait, lowerThird = P.top + (P.bottom - P.top) / 2;
-  const passes = [{limit: P.captionTop, maxHeight: 2 * (P.captionTop - lowerThird - 1), minScale: 1.8}, {limit: P.captionTop}, {limit: P.bottom}];
-  for (const {limit, maxHeight = Infinity, minScale = 0} of passes) {
-    const band = limit - P.top;
-    for (const candidate of candidates()) {
-      if (candidate.scale < minScale) break;
-      let probe;
-      try { probe = resolveAt(input, {x: P.x, y: P.top, width: P.width, height: band}, candidate, 'derived'); } catch { continue; }
-      const height = Math.max(160, Math.ceil(probe.density.natural * candidate.scale));
-      if (height > Math.min(band, maxHeight)) continue;
-      const y = Math.round(Math.min(limit - height, Math.max(P.top, P.centre - height / 2)));
-      try { return resolveAt(input, {x: P.x, y, width: P.width, height}, candidate, 'derived'); } catch { /* next candidate */ }
-    }
-  }
-  return resolveAt(input, LEGACY_RECT['9:16'], BASE, 'legacy');
+  const column = {x: P.x, width: P.width, top: P.top, centre: P.centre};
+  const passes = [{...column, limit: P.captionTop, maxHeight: 2 * (P.captionTop - lowerThird - 1), minScale: fixed ? 0 : 1.8}, {...column, limit: P.captionTop}, {...column, limit: P.bottom}];
+  return derivedRect(options, input, passes, scales) ?? resolveAt(options, input, LEGACY_RECT['9:16'], BASE, 'legacy');
 }
 
-function resolveAt(input, suppliedRect, density, source) {
-  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt', 'theme', 'focus', 'growth']);
+function resolveAt(options, input, suppliedRect, density, source) {
+  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'density', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt', 'theme', 'focus', 'growth', 'label', 'palette', 'tones']);
   if (!/^[a-z][a-z0-9-]{0,59}$/.test(input.id ?? '')) throw new Error('id must be a unique lowercase DOM-safe identifier');
   if (!EDITORIAL_KINDS.includes(input.kind)) throw new Error(`kind must be ${EDITORIAL_KINDS.join(', ')}`);
   if (input.presentation !== undefined && !['solid', 'glass'].includes(input.presentation)) throw new Error('presentation must be solid or glass');
   if (input.numbered !== undefined && (input.kind !== 'step-rail' || typeof input.numbered !== 'boolean')) throw new Error('numbered is a boolean for step-rail only');
   if (!['16:9', '9:16'].includes(input.aspect)) throw new Error('aspect must be 16:9 or 9:16');
+  if (input.density !== undefined && !DENSITY_MODES.includes(input.density)) throw new Error('density must be fill or fixed');
   const kind = input.kind, id = input.id;
   const canvas = input.aspect === '16:9' ? {width: 1920, height: 1080} : {width: 1080, height: 1920};
   const start = number(input.start, 'start', 0, 86400);
-  const duration = number(input.duration, 'duration', 1, 3600);
+  const duration = number(input.duration, 'duration', TIMING.minDuration, 3600);
   const movement = motionSpec(input.motion, duration);
-  const enterDuration = movement?.enterDuration ?? .28, exitDuration = movement?.exitDuration ?? .22;
+  const enterDuration = movement?.enterDuration ?? TIMING.enter, exitDuration = movement?.exitDuration ?? TIMING.exit;
+  // Motion grammar (grammar.mjs): editorial keeps .28/.22 and power3.out /
+  // power2.in exactly; other grammars scale the default shell durations
+  // (clamped to the motion-spec range) and swap the enter/exit eases. Event
+  // windows and content defaults keep the editorial durations, so a grammar
+  // never makes a valid spec invalid.
+  const grammar = options.grammar ?? null;
+  const shellEnter = movement ? enterDuration : grammarDuration(grammar, 'enter', enterDuration, {min: .2, max: .36});
+  const shellExit = movement ? exitDuration : grammarDuration(grammar, 'exit', exitDuration, {min: .16, max: .28});
   const rect = suppliedRect ?? LEGACY_RECT[input.aspect];
   object(rect, 'rect', ['x', 'y', 'width', 'height']);
   number(rect.width, 'rect.width', 420, canvas.width);
@@ -377,6 +539,8 @@ function resolveAt(input, suppliedRect, density, source) {
   }
   const allowed = {'media-window': ['media'], checklist: ['rows'], 'step-rail': ['steps'], callout: ['body', 'treatment'], 'audience-grid': ['audience'], 'trend-chart': ['chart'], metric: ['metric'], progress: ['progress'], 'date-card': ['date'], 'status-rack': ['rack'], 'code-snippet': ['code'], 'excerpt-window': ['excerpt'], 'focus-flow': ['focus'], 'growth-chart': ['growth']}[kind];
   for (const key of ['media', 'rows', 'steps', 'body', 'audience', 'chart', 'metric', 'progress', 'treatment', 'date', 'rack', 'code', 'excerpt', 'focus', 'growth']) if (input[key] !== undefined && !allowed.includes(key)) throw new Error(`${kind} does not accept ${key}`);
+  if (input.label !== undefined && kind !== 'code-snippet') throw new Error('label is only for code-snippet');
+  for (const key of ['palette', 'tones']) if (input[key] !== undefined && kind !== 'status-rack') throw new Error(`${key} is only for status-rack`);
   const statusLabels = {pending: 'Pending', active: 'Active', done: 'Done', ...(input.statusLabels ?? {})};
   if (input.statusLabels !== undefined) {
     if (kind !== 'checklist') throw new Error('statusLabels is only for checklist');
@@ -394,13 +558,13 @@ function resolveAt(input, suppliedRect, density, source) {
   const C = EDITORIAL_STYLE.color;
   const theme = custom ?? {surface: panel ? C.panel : C.surface, foreground: C.foreground, muted: C.muted, border: panel ? C.panelBorder : C.border, accentText: accent};
   const events = [{id: `${id}-enter`, time: start + enterDuration}];
-  const at = (value, label) => number(value, label, enterDuration, duration - (movement ? Math.max(.45, exitDuration + .3) : .45));
+  const at = (value, label) => number(value, label, enterDuration, duration - (movement ? Math.max(TIMING.leadOut, exitDuration + .3) : TIMING.leadOut));
   const motion = movement
     ? {supplied: true, enter: movement.enter, exit: movement.exit, distance: movement.distance, exitDistance: movement.distance, scale: movement.scale, enterDuration, exitDuration,
       enterFrom: {opacity: 0, ...offset(movement.enter, movement.distance), scale: movement.scale}, exitTo: {opacity: 0, ...offset(movement.exit, movement.distance), scale: movement.scale}}
-    : {supplied: false, enter: 'down', exit: 'up', distance: 18, exitDistance: 8, scale: 1, enterDuration, exitDuration,
+    : {supplied: false, enter: 'down', exit: 'up', distance: 18, exitDistance: 8, scale: 1, enterDuration: shellEnter, exitDuration: shellExit,
       enterFrom: {opacity: 0, x: 0, y: 18, scale: 1}, exitTo: {opacity: 0, x: 0, y: -8, scale: 1}};
-  Object.assign(motion, {enterStart: start, enterEnd: start + enterDuration, exitStart: start + duration - exitDuration, end: start + duration, enterEase: 'power3.out', exitEase: 'power2.in', transformOrigin: '0px 0px'});
+  Object.assign(motion, {enterStart: start, enterEnd: start + shellEnter, exitStart: start + duration - shellExit, end: start + duration, enterEase: grammarEase(grammar, 'power3.out'), exitEase: grammarEase(grammar, 'power2.in'), transformOrigin: '0px 0px'});
   let content;
 
   if (kind === 'media-window') {
@@ -452,7 +616,7 @@ function resolveAt(input, suppliedRect, density, source) {
       natural = inset * 3 + headingHeight + lines * font * 1.3 + 8;
       const time = start + at(treatment.at ?? enterDuration, 'treatment.at');
       underlines.forEach(({index, underline}) => {
-        if (underline.time < time + .4) throw new Error('underline must follow treatment settle');
+        if (underline.time < time + TIMING.callout.settle) throw new Error('underline must follow treatment settle');
         events.push({id: `${id}-underline-${index}-settle`, time: underline.time + .28});
       });
       if (treatment.corners && (rect.x < 12 || rect.y < 12 || rect.x + rect.width > canvas.width - 12 || rect.y + rect.height > canvas.height - 12)) throw new Error('corners require 12px canvas clearance');
@@ -528,6 +692,7 @@ function resolveAt(input, suppliedRect, density, source) {
   } else if (kind === 'status-rack') {
     object(input.rack, 'rack', ['mode', 'source', 'rows']);
     const rack = input.rack;
+    const tones = statusTones(input, theme, accent);
     if (!['illustration', 'data'].includes(rack.mode)) throw new Error('rack.mode must be illustration or data');
     if (rack.mode === 'data') text(rack.source, 'rack.source', 80);
     else if (rack.source !== undefined) throw new Error('illustration cannot claim a real data source');
@@ -541,40 +706,59 @@ function resolveAt(input, suppliedRect, density, source) {
       object(row, 'rack row', ['label', 'states']); text(row.label, 'rack.label', 24);
       if (row.label.length > Math.floor((box.width - 48 - 24 - 22 - 24 - 70) / (22 * .65))) throw new Error('rack label too long for rect');
       if (!Array.isArray(row.states) || row.states.length < 1 || row.states.length > 8) throw new Error('row.states must contain 1–8 states');
-      let previous = -1, previousLights = [false, false, false];
+      let previous = -1, previousLights = [false, false, false], previousColours = [lightOff, lightOff, lightOff];
       const states = row.states.map((state, n) => {
-        object(state, 'rack state', ['at', 'lights']); const stateOffset = at(state.at, 'rack state.at');
-        if (stateOffset <= previous || previous >= 0 && stateOffset - previous < .3 - 1e-9) throw new Error('rack state times must increase by at least 0.3s'); previous = stateOffset;
-        if (!Array.isArray(state.lights) || state.lights.length !== 3 || state.lights.some(light => typeof light !== 'boolean')) throw new Error('rack lights must be exactly three booleans');
+        object(state, 'rack state', ['at', 'lights', 'tone']); const stateOffset = at(state.at, 'rack state.at');
+        if (stateOffset <= previous || previous >= 0 && stateOffset - previous < TIMING.gaps['status-rack'] - 1e-6) throw new Error(`rack state times must increase by at least ${TIMING.gaps['status-rack']}s`); previous = stateOffset;
+        if (!Array.isArray(state.lights) || state.lights.length !== 3 || state.lights.some(light => typeof light !== 'boolean' && !(tones && STATUS_TONES.includes(light)))) throw new Error(tones ? `rack lights must be exactly three entries, each a boolean or a tone (${STATUS_TONES.join(', ')})` : 'rack lights must be exactly three booleans');
+        if (state.tone !== undefined && !STATUS_TONES.includes(state.tone)) throw new Error(`rack state.tone must be ${STATUS_TONES.join(', ')}`);
         const time = start + stateOffset;
         const changes = [];
-        state.lights.forEach((light, j) => {if (light !== previousLights[j]) changes.push({light: j, on: light, color: light ? accent : lightOff});});
-        previousLights = [...state.lights];
+        // Lit colour: a light's own tone, else the state's tone, else (palette
+        // "status") the light's position (fail, active, pass), else the accent.
+        const colours = state.lights.map((light, j) => light === false ? lightOff : tones ? tones[typeof light === 'string' ? light : state.tone ?? STATUS_POSITIONS[j]] : accent);
+        state.lights.forEach((light, j) => {const on = light !== false; if (on !== previousLights[j] || colours[j] !== previousColours[j]) changes.push({light: j, on, color: colours[j]});});
+        previousLights = state.lights.map(light => light !== false); previousColours = colours;
         const changed = n === 0 || changes.length > 0;
         const settleTime = changed ? time + (n === 0 ? .22 : .18) : null;
         if (changed) events.push({id: `${id}-rack-${i}-state-${n}`, time: settleTime});
-        return {index: n, time, lights: [...state.lights], changes, settleTime};
+        return {index: n, time, lights: state.lights.map(light => light !== false), ...(tones ? {colors: colours} : {}), changes, settleTime};
       });
       return {index: i, label: row.label, enterTime: states[0].time, states};
     });
-    content = {mode: rack.mode, source: rack.mode === 'data' ? rack.source : null, note, noteLines, lightOn: accent, lightOff, rows, durations: {row: .22, light: .18}};
+    content = {mode: rack.mode, source: rack.mode === 'data' ? rack.source : null, note, noteLines, lightOn: accent, lightOff, ...(tones ? {palette: 'status', tones} : {}), rows, durations: {row: .22, light: .18}};
   } else if (kind === 'code-snippet') {
-    object(input.code, 'code', ['language', 'lines', 'typing']); const code = input.code;
+    object(input.code, 'code', ['language', 'lines', 'typing', 'source', 'filename']); const code = input.code;
     if (code.typing !== undefined && typeof code.typing !== 'boolean') throw new Error('code.typing must be a boolean');
+    if (code.source !== undefined && !['example', 'real'].includes(code.source)) throw new Error('code.source must be example or real');
     const language = code.language === undefined ? 'Example code' : text(code.language, 'code.language', 24);
+    const filename = code.filename === undefined ? null : text(code.filename, 'code.filename', 40);
+    if (filename !== null && /[\r\n\t]/.test(filename)) throw new Error('code.filename must be one line');
+    // Label row: an explicit label (false hides the row), else the filename,
+    // else the language alone for real code, else the "<language> · Example"
+    // marker for illustrative snippets (the default).
+    let label;
+    if (input.label === false) label = null;
+    else if (input.label !== undefined) {
+      label = text(input.label, 'label', 40);
+      if (/[\r\n\t]/.test(label)) throw new Error('label must be one line');
+    } else if (filename !== null) label = filename;
+    else if (code.source === 'real') label = code.language === undefined ? null : language;
+    else label = `${language} · Example`;
+    const labelRow = label === null ? 0 : 44;
     if (!Array.isArray(code.lines) || code.lines.length < 1 || code.lines.length > 3) throw new Error('code.lines must contain 1–3 lines');
     const codeFont = Math.max(22, Math.min(28, Math.floor(box.width / 28))), lineHeight = Math.ceil(codeFont * 1.5);
-    if (box.height < header + 44 + code.lines.length * lineHeight + 24) throw new Error('code-snippet rect too short');
-    natural = header + 44 + code.lines.length * lineHeight + 24 + 4;
+    if (box.height < header + labelRow + code.lines.length * lineHeight + 24) throw new Error('code-snippet rect too short');
+    natural = header + labelRow + code.lines.length * lineHeight + 24 + 4;
     const typing = code.typing === true;
     let previous = -1, typingEnd = -1;
     const lines = code.lines.map((line, i) => {
       object(line, 'code line', ['tokens', 'at', 'typeDuration']); const lineOffset = at(line.at, 'code line.at');
       if (!typing && line.typeDuration !== undefined) throw new Error('line.typeDuration requires code.typing');
       const typeDuration = typing ? number(line.typeDuration ?? .6, 'line.typeDuration', .12, 2) : .24;
-      if (typing && lineOffset < typingEnd - 1e-9) throw new Error('typing lines must not overlap');
+      if (typing && lineOffset < typingEnd - 1e-6) throw new Error('typing lines must not overlap');
       typingEnd = lineOffset + typeDuration;
-      if (lineOffset <= previous || previous >= 0 && lineOffset - previous < .3 - 1e-9) throw new Error('code line times must increase by at least 0.3s'); previous = lineOffset;
+      if (lineOffset <= previous || previous >= 0 && lineOffset - previous < TIMING.gaps['code-snippet'] - 1e-6) throw new Error(`code line times must increase by at least ${TIMING.gaps['code-snippet']}s`); previous = lineOffset;
       if (!Array.isArray(line.tokens) || line.tokens.length < 1 || line.tokens.length > 24) throw new Error('code line requires 1–24 tokens');
       let length = 0, characters = 0;
       const tokens = line.tokens.map(token => {
@@ -586,7 +770,7 @@ function resolveAt(input, suppliedRect, density, source) {
         const chars = Array.from(token.text); characters += chars.length;
         return typing ? {text: token.text, type: token.type, chars} : {text: token.text, type: token.type};
       });
-      if (length > Math.floor((box.width - 48) / (codeFont * .65))) throw new Error('code line too long for rect; shorten the example or widen the module');
+      if (length > Math.floor((box.width - 48) / (codeFont * .65))) throw new Error(`code line ${i + 1} is ${length} chars; this rect (${Math.round(rect.width)} px wide) fits ${Math.floor((box.width - 48) / (codeFont * .65))} at ${codeFont} px: ${Math.ceil((48 + length * 28 * .65) * scale) <= canvas.width ? `widen the rect to ≥ ${Math.ceil((48 + length * 28 * .65) * scale)} px, or shorten the line or split it (up to 3 lines)` : `no rect at ${input.aspect} fits it, so shorten the line or split it (up to 3 lines)`}`);
       const time = start + lineOffset;
       let charTimes = null;
       if (typing) {
@@ -597,7 +781,7 @@ function resolveAt(input, suppliedRect, density, source) {
       events.push({id: `${id}-code-${i}-settle`, time: start + lineOffset + typeDuration});
       return {index: i, time, typeDuration, endTime: start + lineOffset + typeDuration, length, characters, tokens, charTimes};
     });
-    content = {language, label: `${language} · Example`, typing, codeFont, lineHeight, lines, durations: {line: .24}};
+    content = {language, label, filename, source: code.source ?? 'example', typing, codeFont, lineHeight, lines, durations: {line: .24}};
   } else if (kind === 'audience-grid') {
     object(input.audience, 'audience', ['tiles', 'columns']);
     const {tiles} = input.audience;
@@ -634,8 +818,9 @@ function resolveAt(input, suppliedRect, density, source) {
     if (focus.icon !== undefined && !Object.hasOwn(EDITORIAL_SYMBOLS, focus.icon)) throw new Error('focus.icon must be a built-in symbolic icon');
     const arrive = at(focus.arriveAt, 'focus.arriveAt'), choose = at(focus.chooseAt, 'focus.chooseAt'), progress = at(focus.progressAt, 'focus.progressAt');
     const progressDuration = number(focus.progressDuration ?? .8, 'focus.progressDuration', .3, 2);
-    if (choose < arrive + .24 + (options.length - 1) * .08 + .2 || progress < choose + .9) throw new Error('focus must hold options before choosing and settle the chosen task before progress');
-    if (progress + progressDuration + .35 > duration - exitDuration) throw new Error('focus progress must finish with a readable hold before exit');
+    const F = TIMING.focus;
+    if (choose < arrive + F.arrive + (options.length - 1) * F.stagger + F.hold || progress < choose + F.chosenSettle) throw new Error('focus must hold options before choosing and settle the chosen task before progress');
+    if (progress + progressDuration + F.progressHold > duration - exitDuration) throw new Error('focus progress must finish with a readable hold before exit');
     const label = focus.progressLabel === undefined ? 'Illustrative progress' : text(focus.progressLabel, 'focus.progressLabel', 32);
     const rowHeight = 64, gap = 14, horizontal = input.aspect === '16:9' && box.width >= 900;
     const stageHeight = horizontal ? 96 : options.length * (rowHeight + gap) - gap;
@@ -664,7 +849,7 @@ function resolveAt(input, suppliedRect, density, source) {
     const defaultPoints = isGrowth && supplied.points === undefined;
     if (defaultPoints) {
       if (supplied.mode !== 'illustration') throw new Error('real growth data requires supplied points');
-      if (duration < enterDuration + exitDuration + 2.4) throw new Error('default growth illustration needs a longer duration');
+      if (duration < enterDuration + exitDuration + TIMING.growthDefaultHold) throw new Error('default growth illustration needs a longer duration');
       const interval = (duration - enterDuration - exitDuration - .9) / 3;
       chart = {...supplied, points: [1, 3, 8, 20].map((value, i) => ({label: ['Start', 'Next', 'Later', 'Reach'][i], value, at: enterDuration + i * interval}))};
     }
@@ -688,7 +873,7 @@ function resolveAt(input, suppliedRect, density, source) {
       if (isGrowth && i > 0 && point.value < points[i - 1].value) throw new Error('growth values must not decrease; use trend-chart for declines');
       if (point.label.length > Math.floor(columnWidth / (labelFont * .65)) * 2) throw new Error('point label too long for rect');
       const pointOffset = at(point.at, 'point.at');
-      if (pointOffset <= previous || (previous >= 0 && pointOffset - previous + 1e-9 < .5)) throw new Error('point times must increase with at least 0.5s between events');
+      if (pointOffset <= previous || (previous >= 0 && pointOffset - previous + 1e-6 < TIMING.gaps.chart)) throw new Error(`point times must increase with at least ${TIMING.gaps.chart}s between events`);
       previous = pointOffset;
     });
     const maximum = Math.max(1, ...points.map(point => point.value));
@@ -762,7 +947,7 @@ function resolveAt(input, suppliedRect, density, source) {
       if (!['pending', 'active', 'done'].includes(row.status)) throw new Error('row.status must be pending, active or done');
       const eventTime = start + at(row.at, 'row.at');
       const doneTime = row.doneAt === undefined ? null : start + at(row.doneAt, 'row.doneAt');
-      if (doneTime !== null && (row.status !== 'active' || doneTime <= eventTime)) throw new Error('doneAt requires an active row and must follow at');
+      if (doneTime !== null && (row.status !== 'active' || doneTime <= eventTime)) throw new Error(row.status !== 'active' ? `rows[${i}].doneAt needs status "active" (got "${row.status}"): doneAt is when an active row ticks to done, so set status: "active", or drop doneAt for a row that starts done` : `rows[${i}].doneAt (${row.doneAt} s) must come after rows[${i}].at (${row.at} s): set doneAt later than at`);
       if (row.label.length > Math.floor(labelWidth / (font * .65)) * 2) throw new Error('row label too long for rect; shorten it or widen the module');
       const stateSettle = row.status !== 'pending' ? eventTime + .16 : null;
       if (stateSettle !== null) events.push({id: `${id}-row-${i}-state`, time: stateSettle});
@@ -781,7 +966,7 @@ function resolveAt(input, suppliedRect, density, source) {
       text(step.label, 'step.label', 22);
       if (step.label.length > Math.floor(labelWidth / (Math.max(22, font - 4) * .65)) * 2) throw new Error('step label too long for rect; shorten it or widen the module');
       const stepOffset = at(step.at, 'step.at');
-      if (stepOffset <= previous || (previous >= 0 && stepOffset - previous + 1e-9 < .3)) throw new Error('step times must strictly increase with at least 0.3s between events');
+      if (stepOffset <= previous || (previous >= 0 && stepOffset - previous + 1e-6 < TIMING.gaps['step-rail'])) throw new Error(`step times must strictly increase with at least ${TIMING.gaps['step-rail']}s between events`);
       previous = stepOffset;
       const time = start + stepOffset;
       events.push({id: `${id}-step-${i}-settle`, time: time + .3});
@@ -793,8 +978,40 @@ function resolveAt(input, suppliedRect, density, source) {
   }
   if ((movement || input.treatment || PANEL_KINDS.includes(kind)) && events.some(event => event.time > start + duration - exitDuration + 1e-9)) throw new Error('content must settle before motion exit begins');
   const layout = {canvas, rect: {...rect}, ...(movement ? {motion: {enterEnd: start + enterDuration, exitStart: start + duration - exitDuration, end: start + duration}} : {})};
+  const roles = textRoles(kind, content, font, input.numbered === true);
+  const smallest = list => (list.length ? Math.round(Math.min(...list) * scale * 100) / 100 : null);
   return {id, kind, aspect: input.aspect, canvas: {...canvas}, start, duration, end: start + duration, rect: {x: rect.x, y: rect.y, width: rect.width, height: rect.height},
     title, accent, theme, customTheme: custom !== null, presentation: input.presentation === 'glass' ? 'glass' : 'solid', surface: panel ? 'panel' : 'standard', track,
     chrome: {font, titleFont: font + 4, pad, titleLines, header, statusWidth}, motion, content, events, layout,
-    density: {scale, hero, source, layout: {width: box.width, height: box.height}, natural: Math.ceil(natural || box.height)}};
+    density: {scale, hero, source, layout: {width: box.width, height: box.height}, natural: Math.ceil(natural || box.height)},
+    minTextPx: smallest(roles.key), minSecondaryTextPx: smallest(roles.secondary), textRole: 'body'};
+}
+
+// Rendered text sizes by role, in layout px (the model multiplies by the
+// density scale). key: the text a viewer reads (titles, rows, labels, numbers,
+// code, excerpt lines, options), reported as minTextPx with textRole "body":
+// editorial modules are body copy, so layout-check holds them to the profile's
+// body floor (minBodyTextPx: 32 px Shorts, 22 px landscape) rather than the
+// headline floor catalogue modules meet (44 / 32 px). secondary: supporting
+// text (source and illustration notes, window-bar labels, status words,
+// units, chart axis labels, the code label row, step numbers), reported as
+// minSecondaryTextPx and held to minSecondaryTextPx (24 px Shorts, 18 px
+// landscape). All floors scale with the canvas.
+function textRoles(kind, c, font, numbered) {
+  const small = EDITORIAL_STYLE.size.small, title = font + 4;
+  switch (kind) {
+    case 'media-window': return {key: [], secondary: [small]};
+    case 'callout': return {key: c.variant === 'treated' ? [font + 2, font] : [title, font], secondary: []};
+    case 'checklist': return {key: [title, font], secondary: [font - 6]};
+    case 'step-rail': return {key: [title, Math.max(22, font - 4)], secondary: numbered ? [EDITORIAL_STYLE.size.stepNumber] : []};
+    case 'audience-grid': return {key: [title, c.labelFont], secondary: [small]};
+    case 'trend-chart': case 'growth-chart': return {key: [title, ...(c.showValues ? [c.countFont] : [])], secondary: [small, c.labelFont]};
+    case 'metric': case 'progress': return {key: [title, c.numberFont], secondary: [small]};
+    case 'date-card': return {key: [title, EDITORIAL_STYLE.size.day], secondary: [small]};
+    case 'status-rack': return {key: [title, small], secondary: [small]};
+    case 'code-snippet': return {key: [title, c.codeFont], secondary: c.label === null ? [] : [small]};
+    case 'excerpt-window': return {key: [c.textFont], secondary: [small]};
+    case 'focus-flow': return {key: [title, c.optionFont], secondary: [small]};
+    default: return {key: [title], secondary: []};
+  }
 }

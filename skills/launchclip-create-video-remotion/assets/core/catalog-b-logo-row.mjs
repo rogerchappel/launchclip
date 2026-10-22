@@ -2,8 +2,9 @@
 // element tree (view) and renderer-neutral animation ops (timeline).
 // Registered in kit/core/catalog-b.mjs; conventions are documented there.
 
-import {createBase, fitText, r2, rt} from './catalog-b-base.mjs';
+import {createBase, fitText, r2, rt, timingRules} from './catalog-b-base.mjs';
 import {abs, el, set, text, transformString, tw} from './catalog-b-view.mjs';
+import {grammarStagger} from './grammar.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
 const rect = '{x, y, width, height} canvas px inside the safe zone (optional)';
@@ -17,7 +18,7 @@ function resolve(params, ctx) {
   const p = b.params;
   const logosIn = check.arr(p.logos, 'params.logos', 2, 6);
   const title = p.title === undefined ? null : check.str(p.title, 'params.title', 48);
-  const stagger = p.stagger === undefined ? 0.14 : check.num(p.stagger, 'params.stagger', 0.05, 0.6);
+  const stagger = p.stagger === undefined ? grammarStagger(ctx.grammar, 0.14, {min: 0.05, max: 0.6}) : check.num(p.stagger, 'params.stagger', 0.05, 0.6);
   const W = rect.width, H = rect.height;
   const n = logosIn.length;
   const cols = portrait ? (n <= 3 ? n : n === 4 ? 2 : 3) : n;
@@ -96,6 +97,7 @@ export const logoRow = {
     describe: 'A row or grid of 2–6 local logos with labels that pop in with a stagger.',
     params: {logos: '[{src: "assets/…(.svg|.png|.jpg|.webp)", label ≤ 20, at?}] 2–6', title: 'string ≤ 48 (optional)', at: 'first pop time', stagger: 'seconds between pops (default 0.14)', rect},
     events: ['logo-<i>'],
+    timing: timingRules({rules: ['logos pop in order; with no at, the first pops at 0.65 s and the rest follow by stagger (default 0.14 s)']}),
   resolve,
   view,
   timeline

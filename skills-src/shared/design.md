@@ -87,6 +87,32 @@ for a quieter treatment:
   crisp at departure, strongest near the midpoint, and fully crisp at the
   settle. Extend the outgoing clip through the complete move so it cannot pop
   away before the transition finishes.
+- Pick one motion grammar for the whole piece from the art direction and set
+  it as `motion.grammar` in `storyboard.json`: `editorial` (the default; clean
+  product editorial), `snappy` (punchy, energetic launches: expo-out, short,
+  slight overshoot), `smooth` (calm, premium, elegant: sine/power2, long, no
+  overshoot), `playful` (fun, friendly, for kids: back/elastic, springy, bigger
+  staggers) or `documentary` (serious, archival, news: slow power1). One
+  grammar keeps every entrance, exit, pop, stagger, transition and camera move
+  in the same voice; override single roles with `{base, ease, duration,
+  stagger}` only when the brief asks for it.
+- Choose the camera from the lane and the direction. Footage-led stories keep
+  `camera.mode` "cuts" with punch-ins. Motion and voiceover stories use
+  `camera.mode` "world" when the direction asks for travel (a journey, a map,
+  one continuous take) or the grammar is playful, snappy or smooth: the scenes
+  then sit in one world, the camera pans (`pan` with a direction), dollies in
+  (`push` into a named object such as `s3.gap-bracket`) or out (`pull`), turns
+  (`orbit`) or whips (`whip-pan`, motion-blurred) between them, drifts slowly
+  through every hold and moves a parallax background behind them. A cuts story
+  can still use one `pan` where a camera move says "the next idea is beside
+  this one". End a world-camera loop with a short `whip-pan` home.
+- Inspect settled world-camera frames at delivery size, not only the moves.
+  If the parallax background shows hard edges or vertical seams on a hold,
+  set `camera.parallax: false` (the camera still travels, but this also
+  removes the moving background field, leaving the flat background colour)
+  or switch to `camera.mode` "cuts" and keep the travel as typed camera
+  transitions (`pan`, `push`, `orbit`, `whip-pan`), which keeps the ambient
+  field. Record which one you chose and why.
 - Select transitions by meaning: hard cut for contrast, push for continuation,
   whip for speed, zoom for scale change, morph for identity, and aperture/mask
   for focus. Do not disguise one generic crossfade with different names.

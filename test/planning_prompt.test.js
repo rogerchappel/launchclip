@@ -97,9 +97,18 @@ test("the prompt carries lane rules, anchors, safe zone, captions, fixed inputs 
   assert.match(prompt, /"word-highlight"/);
   assert.match(prompt, new RegExp(JSON.stringify(brand).replace(/[{}[\]()*+?.\\^$|]/g, "\\$&")));
   assert.match(prompt, /Coffee@0\.1 cools@0\.45/);
+  // Ambient motion: the planner knows the control, the default and the per-scene override.
+  assert.match(prompt, /ambient\? \(optional\): \{level: off \| subtle \| standard \| lively, background\?: boolean, drift\?: boolean\}/);
+  assert.match(prompt, /the level follows each scene's energy \(0 → subtle, 1, 2 or "build" → standard, 3 → lively\)/);
+  assert.match(prompt, /footage-led stories get no background field and drift overlays only/);
+  assert.match(prompt, /A scene may set ambient to override the story/);
+  assert.match(prompt, /params, hits\?, ambient\?\}/);
   const landscape = planningPrompt({ tier: "guided", lane: "footage-led", format: { width: 1920, height: 1080, fps: 30, duration: 60 } });
   assert.match(landscape, /landscape \(1920x1080\)/);
   assert.match(landscape, /footage-led: base/);
+  // Editorial panels: omit rect, or pair a 16:9 rect with density "fill" so the text fills it.
+  assert.match(landscape, /omit rect unless the layout needs a specific position\. With a rect in 16:9, also set density: "fill"/);
+  assert.match(landscape, /density: "fill" \(an explicit rect's text grows to fill it; recommended with rect in 16:9\)/);
 });
 
 test("the example storyboard validates and resolves through every module", () => {

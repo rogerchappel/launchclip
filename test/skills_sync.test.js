@@ -89,7 +89,10 @@ test("sync copies kit core into both skills and the Remotion kit into assets", a
 
 test("Remotion skill mirrors the cinematic contract with the Remotion runtime", async () => {
   const dir = path.join(root, "skills/launchclip-create-video-remotion");
-  const skill = await readFile(path.join(dir, "SKILL.md"), "utf8");
+  const quick = await readFile(path.join(dir, "SKILL.md"), "utf8");
+  // SKILL.md carries the quick path; references/workflow.md the full workflow.
+  const skill = `${quick}\n${await readFile(path.join(dir, "references/workflow.md"), "utf8")}`;
+  assert.match(quick, /launchclip cinematic-check <project> --renderer remotion/);
   const runtime = await readFile(path.join(dir, "references/standalone-remotion.md"), "utf8");
   const reference = await readFile(path.join(dir, "references/cinematic-production.md"), "utf8");
   const metadata = await readFile(path.join(dir, "agents/openai.yaml"), "utf8");

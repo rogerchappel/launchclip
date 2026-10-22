@@ -2,7 +2,10 @@
 // element tree (view) and renderer-neutral animation ops (timeline).
 // Registered in kit/core/catalog-b.mjs; conventions are documented there.
 
-import {alphaHex, createBase, decimalsOf, fitText, formatNumber, frameSamples, mixColor, niceStep, progress, r2, rt, textWidth, ticks, withUnit} from './catalog-b-base.mjs';
+import {alphaHex, createBase, decimalsOf, fitText, formatNumber, frameSamples, mixColor, niceStep, progress, r2, rt, textWidth, ticks, withUnit, timingRules} from './catalog-b-base.mjs';
+
+// The gap bracket lands at least this long after both fills start (seconds).
+export const GAUGE_GAP_AFTER = 0.35;
 import {abs, el, hex2, sampleTime, set, svgRoot, text, transformString, tw} from './catalog-b-view.mjs';
 
 const color = 'primary | accent | paper | #rrggbb (contrast ≥ 3:1 on bg)';
@@ -56,7 +59,7 @@ function resolve(params, ctx) {
   const fillDuration = 1.0, fillEase = 'power3.out';
   let gapTime = null;
   if (gap) gapTime = b.timeOf('gap-bracket', gap.at, 'params.gap.at', Math.min(b.lastEvent - 0.4, Math.max(rightTime - start + 1.0, 0.6 + avail * 0.68)), {max: b.lastEvent - 0.4});
-  if (gap && gapTime < Math.max(leftTime, rightTime) + 0.35 - 1e-9) check.fail('params.gap.at', 'must come at least 0.35 s after both gauges start filling');
+  if (gap && gapTime < Math.max(leftTime, rightTime) + GAUGE_GAP_AFTER - 1e-6) check.fail('params.gap.at', `must come at least ${GAUGE_GAP_AFTER} s after both gauges start filling`);
 
   // Geometry (rect-local)
   const titleFit = title ? fitText(check, 'params.title', title, {family: 'body', width: W, preferred: u(52), min: b.min.key, maxLines: 1}) : null;
@@ -204,6 +207,7 @@ export const gaugeCompare = {
       gap: '{object? ("gap-bracket"), label? ("Gap"), value? (must equal |left − right|), unit?, at?} or false', scale: '{min, max} (optional, default 0..nice max)',
       title: 'string ≤ 48 (optional)', style: '"thermometer" | "column"', decimals: 'integer 0–2', rect},
     events: ['left-fill', 'right-fill', 'gap-bracket'],
+    timing: timingRules({rules: [`gap.at ≥ both fills + ${GAUGE_GAP_AFTER} s and ≤ scene − 0.65 − 0.4 s`]}),
   resolve,
   view,
   timeline

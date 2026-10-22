@@ -1,4 +1,4 @@
-// code-snippet: language label, then up to three lines that slide in at
+// code-snippet: label row (unless hidden), then up to three lines that slide in at
 // their time; with typing, every character appears at its charTime.
 import React from "react";
 // @ts-ignore plain ESM core, bundled by Remotion
@@ -15,7 +15,7 @@ export const CodeSnippet: React.FC<{ model: Model }> = ({ model }) => {
   return (
     <Section model={model} t={t}>
       <Title model={model} />
-      <p style={{ ...BOX, font: `22px/1.3 ${F.mono}`, margin: 0, padding: "0 24px 16px", color: p.custom ? theme.muted : C.codeLanguage }}>{c.label}</p>
+      {c.label !== null && <p style={{ ...BOX, font: `22px/1.3 ${F.mono}`, margin: 0, padding: "0 24px 16px", color: p.custom ? theme.muted : C.codeLanguage }}>{c.label}</p>}
       <pre style={{ ...BOX, margin: 0, padding: "0 24px 24px", font: `${c.codeFont}px/1.5 ${F.mono}` }}>
         {c.lines.map((line: any) => {
           // tl.fromTo(line, {opacity:0,x:12}, {opacity:1,x:0,duration:0.24,ease:'power3.out'}, line.time)

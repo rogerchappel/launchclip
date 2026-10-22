@@ -37,6 +37,7 @@
 // 3:1 (throws otherwise), and no blur at settle (nothing here blurs).
 
 import {rootNode, rootOps} from './catalog-b-view.mjs';
+import {grammarTweens} from './grammar.mjs';
 import {logoRow} from './catalog-b-logo-row.mjs';
 import {archiveCard} from './catalog-b-archive-card.mjs';
 import {processSteps} from './catalog-b-process-steps.mjs';
@@ -44,11 +45,11 @@ import {flowCompare} from './catalog-b-flow-compare.mjs';
 import {gaugeCompare} from './catalog-b-gauge-compare.mjs';
 import {functionChart} from './catalog-b-function-chart.mjs';
 
-export {parseExpression, contrastRatio, luminance, mixColor, formatNumber, withUnit, sampleIndex, SAMPLE_LEAD, CATALOG_B_STYLE} from './catalog-b-base.mjs';
+export {parseExpression, contrastRatio, luminance, mixColor, formatNumber, withUnit, sampleIndex, SAMPLE_LEAD, CATALOG_B_STYLE, CATALOG_B_TIMING} from './catalog-b-base.mjs';
 
 const DEFINITIONS = [functionChart, gaugeCompare, flowCompare, processSteps, archiveCard, logoRow];
 
-export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, resolve: def.resolve}]));
+export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve}]));
 const BY_ID = Object.fromEntries(DEFINITIONS.map(def => [def.id, def]));
 
 function definition(model) {
@@ -68,5 +69,7 @@ export function catalogBTimeline(model) {
   const ops = [];
   rootOps(model, ops);
   def.timeline(model, ops);
+  // Motion grammar: pops (back/elastic eases) follow the story's grammar.
+  if (model.grammar) grammarTweens(ops, model.grammar, {roles: ['emphasis']});
   return ops;
 }

@@ -27,7 +27,9 @@ export const CI_FIXTURES = Object.freeze([
   {file: 'b-code-snippet-typing.json', fonts: 'JetBrains Mono (editorial code)'}
 ]);
 export const CI_TIMES = 'settle,mid';
-export const CI_STORY = Object.freeze({project: path.join(ROOT, 'examples', 'story', 'minimal'), times: [1.2, 3.6]});
+// Story times: a settled hold (ambient field and drift well under way), the
+// s1→s2 fade, and late in s2's hold.
+export const CI_STORY = Object.freeze({project: path.join(ROOT, 'examples', 'story', 'minimal'), times: [1.2, 2.6, 3.6, 5.5]});
 
 async function main(argv) {
   const outIndex = argv.indexOf('--out');
@@ -45,7 +47,7 @@ async function main(argv) {
     }
     const t0 = Date.now();
     const story = await runStoryParity(CI_STORY.project, {times: CI_STORY.times, out: path.join(out, 'story-minimal')});
-    rows.push({name: 'story: examples/story/minimal', fonts: 'brand roles + captions', minSsim: story.minSsim, threshold: story.threshold.ssim, pass: story.pass, seconds: (Date.now() - t0) / 1000, failures: story.samples.filter(sample => !sample.pass)});
+    rows.push({name: 'story: examples/story/minimal', fonts: 'brand roles + captions + ambient', minSsim: story.minSsim, threshold: story.threshold.ssim, pass: story.pass, seconds: (Date.now() - t0) / 1000, failures: story.samples.filter(sample => !sample.pass)});
   } finally {
     await rm(work, {recursive: true, force: true});
   }

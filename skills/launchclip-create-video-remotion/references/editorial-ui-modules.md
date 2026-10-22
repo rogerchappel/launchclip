@@ -139,7 +139,7 @@ Event timestamps represent the visible settle, not necessarily the tween start.
 Use the returned events rather than recomputing a contact from a guessed delay.
 
 All kinds accept `id`, `kind`, `aspect`, `start`, `duration`, `title`, optional
-`rect`, six-digit hex `accent`, `presentation: "solid"` (default) or `"glass"`,
+`rect`, optional `density` (`"fill"` or `"fixed"`), six-digit hex `accent`, `presentation: "solid"` (default) or `"glass"`,
 and optional integer `track` (1–98, default
 2). Media-window chrome uses the following track; reserve distinct track pairs
 for intentional simultaneous media windows. Use `16:9` (1920×1080) or `9:16`
@@ -161,7 +161,7 @@ Without `rect`, the footprint comes from the content rather than a fixed box:
   safe-zone width at all it falls back to the old `{x: 90, y: 960, width: 900,
   height: 740}` footprint.
   A short card is never shorter than 160 px.
-- **9:16 type scale.** The module lays out in a smaller layout box and renders
+- **Type scale (9:16 and derived 16:9).** The module lays out in a smaller layout box and renders
   scaled into its rect (`model.density.scale`, 1–2). The resolver picks the
   largest scale at which the content still validates and fits, preferring at
   least 1.8 with the card centre below the lower third. At 1.8–2 titles render
@@ -171,12 +171,46 @@ Without `rect`, the footprint comes from the content rather than a fixed box:
   rects keep their footprint and get the same scale search, so text grows only
   as far as the rect allows; a rect that fits nothing larger resolves exactly
   as before.
-- **16:9, overlays on footage.** Scale stays 1 and explicit rects are
-  unchanged. The default keeps the lower-left footprint (x 80, width 680) with
-  its height taken from the content and its bottom edge on y 980.
+- **16:9, full frame.** The default card is centred horizontally, 1000 px
+  wide (1440, then the whole 1728 px title-safe width, for content too dense
+  for that), inside the landscape title-safe zone and above the caption band
+  (y 96–840; the band starts at y 864), centred on the frame where it fits. It
+  gets the same type-scale search (1–1.75), so body copy reads about 45 px and
+  titles about 53 px on a 1920-wide frame: a big, confident panel that hugs its
+  content instead of small text in a large dark card.
+- **Explicit 16:9 rects** resolve at scale 1 by default, so existing
+  footprints stay byte-identical: text does not grow with the rect, and a
+  bigger rect is just more empty panel. Add `density: "fill"` (in a storyboard,
+  `params.density`) to give an explicit 16:9 rect the type-scale search, so
+  the text grows to fill it. `fill` is grow-only: the rect must hold the
+  content at the default card's type scale or text size for that aspect, so a
+  short rect never gives smaller type than omitting the rect. When it cannot,
+  resolution fails with "density "fill" never shrinks type … too short" plus
+  the size that fits (`checklist needs 710 px height at width 1000`); enlarge
+  the rect, omit it, or drop `fill`. `density: "fixed"` keeps scale 1 in either
+  aspect.
 - **media-window** keeps scale 1. Its 9:16 default is an 840×521 window (a
-  16:9 frame under the 48 px bar) centred on the target; 16:9 keeps
-  `{x: 80, y: 480, width: 680, height: 500}`.
+  16:9 frame under the 48 px bar) centred on the target; its 16:9 default is a
+  centred 1200×723 window (16:9 media under the bar) above the caption band.
+
+**Recommendation:** omit `rect` and let the module size itself; when the shot
+needs a specific footprint in 16:9, add `density: "fill"` so the panel's text
+fills it. `launchclip module fit <module> --params params.json --aspect 16:9`
+prints a spec's natural size, or for a given rect the minimum height at its
+width and the width that fits its height.
+
+**Text-size floors.** Every model reports its smallest rendered text after the
+density scale: `model.minTextPx` (the text a viewer reads: titles, rows,
+labels, numbers, code, excerpt lines, options) and `model.minSecondaryTextPx`
+(source and illustration notes, window-bar labels, status words, units, chart
+axis labels, the code label row). Editorial modules are body copy
+(`model.textRole: "body"`), so `launchclip layout-check` holds `minTextPx` to
+the body floor, 32 px in Shorts (1080×1920) and 22 px in landscape
+(1920×1080), and `minSecondaryTextPx` to 24 px and 18 px. Catalogue modules
+(headlines, hero numbers) keep the headline floor: 44 px Shorts, 32 px
+landscape. Floors scale with the canvas. A narrow explicit rect that renders an
+excerpt at 26 px in a Short fails; widen the rect (or omit it) so the type can
+scale.
 
 Rect-local geometry in the model (`chrome`, cells, bars, stages) is in layout
 px; multiply by `model.density.scale` for canvas px. `model.rect` and
@@ -452,8 +486,8 @@ cards. Omit `treatment` to retain the original callout output exactly.
 | Kind | Required content |
 | --- | --- |
 | `date-card` | `date: {month: 1..12, day: 1..31, year?, caption?, at}`; calendar-valid integers, optional caption ≤42 characters |
-| `status-rack` | `rack: {mode: "illustration" or "data", source?, rows: [{label, states: [{at, lights: [boolean, boolean, boolean]}]}]}`; 1–8 rows, 1–8 states per row |
-| `code-snippet` | `code: {language?, lines: [{at, tokens: [{text, type}]}]}`; 1–3 lines, 1–24 tokens per line |
+| `status-rack` | `rack: {mode: "illustration" or "data", source?, rows: [{label, states: [{at, lights: [boolean, boolean, boolean], tone?}]}]}`; 1–8 rows, 1–8 states per row; optional top-level `palette: "status"` and `tones: {pending?, active?, pass?, fail?}` |
+| `code-snippet` | `code: {language?, source?: "example" or "real", filename?, lines: [{at, tokens: [{text, type}]}]}`; 1–3 lines, 1–24 tokens per line; optional top-level `label` (string ≤40, or `false` to hide the label row) |
 
 The date card uses a colored month band, a large independently settling day, and
 short context. A supplied year validates leap days; without a year February 29
@@ -469,14 +503,30 @@ real data requires a source attribution. A light turning on represents the
 supplied state, not a software/security certification. Shorten labels to fit the
 chosen width; the helper rejects overfull racks.
 
+By default every lit light is the accent (brand primary), so a rack cannot show
+red turning green. Opt in to the status palette with `palette: "status"`: the
+three lights then mean fail, active and pass by position (red, primary, green).
+A state's `tone` (`pending`, `active`, `pass` or `fail`) colours all of its lit
+lights, and a light may name its own tone instead of `true`
+(`lights: [false, false, "pass"]`). So `{"at": 0.4, "lights": [true, true, true],
+"tone": "fail"}` then `{"at": 1.2, "lights": [true, true, true], "tone": "pass"}`
+turns a row from red to green; a colour change alone counts as a state change.
+Pending is the muted foreground, active the accent, and pass and fail a green and
+a red; `brand.colors.pass` (or `success`) and `brand.colors.fail` (or `danger`,
+`error`) replace the derived ones, as does an explicit `tones` object. Every tone
+is pushed toward the foreground until it clears 3:1 against the panel surface.
+
 Code token types are `plain`, `keyword`, `string`, `number`, `comment`, and
 `operator`. Explicit typed tokens receive restrained syntax colors, and each
 line acquires independently. Preserve spaces in token strings; tabs/newlines are
 rejected. Line offsets must increase by at least 0.3 seconds. Lines must fit their
 width without scrolling or clipping, so show a short excerpt instead of an entire
-program. Token styling does not parse or execute code. The language label is
-optional; the module retains an `Example` marker rather than implying product
-proof. All copy is escaped.
+program. Token styling does not parse or execute code. The label row above the
+code reads `<language> · Example` by default, so an illustrative snippet never
+implies product proof. For real code, drop the marker: `code.source: "real"`
+shows the language alone (no row without a language), `code.filename` shows the
+file name, and a top-level `label` sets the row text outright (`label: false`
+hides the row and gives its height back to the code). All copy is escaped.
 
 These widgets accept the existing aspect, rect, track, accent, and directional
 motion options. Supply explicit rectangles appropriate to the footage and inspect

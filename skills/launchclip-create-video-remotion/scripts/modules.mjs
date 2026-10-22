@@ -7,12 +7,14 @@
 //
 // Canonical copy: kit/core/modules.mjs.
 
-import { EDITORIAL_KINDS, resolveEditorialModule } from './editorial-core.mjs';
+import { EDITORIAL_KINDS, editorialTimingRules, resolveEditorialModule } from './editorial-core.mjs';
 import { fontStack } from './fonts.mjs';
 import { MODULES as CATALOG_A } from './catalog-a.mjs';
 import { MODULES as CATALOG_B } from './catalog-b.mjs';
 import { MODULES as CATALOG_C } from './catalog-c.mjs';
 import { storyBase } from './story.mjs';
+import { isEditorialGrammar, resolveGrammar } from './grammar.mjs';
+import { profileGeometry } from './layout-check.mjs';
 
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
@@ -37,6 +39,27 @@ export function knownModules() {
 
 export function isEditorialKind(id) {
   return EDITORIAL_KINDS.includes(id);
+}
+
+/**
+ * Timing rules for a module id, generated from the module code's own timing
+ * constants: {minDuration, leadIn, leadOut, gaps: [{between, seconds}],
+ * rules: [string]} (seconds; leadIn is the earliest `at`, leadOut how long
+ * before the scene end the last `at` may fall; null when the module has no
+ * such beat). Editorial kinds come from editorial-core.mjs
+ * editorialTimingRules(), catalogue modules from their MODULES[id].timing.
+ * null for an unknown id.
+ */
+export function moduleTiming(id) {
+  if (isEditorialKind(id)) return editorialTimingRules(id);
+  const definition = catalogModules()[id];
+  return definition?.timing ?? null;
+}
+
+/** The `at` window a timing table allows in a scene of `duration` s: {from, to} | null. */
+export function timingWindow(timing, duration) {
+  if (!timing || timing.leadIn == null || timing.leadOut == null || !(duration > 0)) return null;
+  return { from: timing.leadIn, to: Math.round((duration - timing.leadOut) * 100) / 100 };
 }
 
 /** Scene id → a DOM-safe module id (scene ids may contain "_"). */
@@ -89,6 +112,24 @@ export function brandModuleDefaults(brand) {
   return defaults;
 }
 
+// status-rack tones from brand roles: brand.colors.pass (or success) and
+// brand.colors.fail (or danger / error) seed the status palette's green and
+// red; the editorial core still checks their contrast. Only added when the
+// scene opts in to the status palette, so a plain rack is untouched.
+function statusRackDefaults(module, brand, params) {
+  if (module !== 'status-rack' || params.tones !== undefined) return {};
+  const rows = Array.isArray(params.rack?.rows) ? params.rack.rows : [];
+  const opted = params.palette === 'status' || rows.some((row) => Array.isArray(row?.states) && row.states.some((state) => state?.tone !== undefined || (Array.isArray(state?.lights) && state.lights.some((light) => typeof light === 'string'))));
+  if (!opted) return {};
+  const colors = brand && typeof brand.colors === 'object' && brand.colors ? brand.colors : {};
+  const pick = (...roles) => roles.map((role) => colors[role]).find((value) => HEX.test(value ?? ''));
+  const tones = {};
+  const pass = pick('pass', 'success'), fail = pick('fail', 'danger', 'error');
+  if (pass) tones.pass = pass;
+  if (fail) tones.fail = fail;
+  return Object.keys(tones).length ? { tones } : {};
+}
+
 function scenePath(scene, story) {
   const scenes = Array.isArray(story?.scenes) ? story.scenes : [];
   let index = scenes.indexOf(scene);
@@ -106,11 +147,175 @@ function scenePath(scene, story) {
  */
 export function resolveModule(scene, story, { track, end } = {}) {
   const where = scenePath(scene, story);
+  const finalEnd = endingEnd(scene, story, end);
   try {
-    return resolveModuleInner(scene, story, { track, end });
+    return resolveModuleInner(scene, story, { track, end: finalEnd });
   } catch (error) {
-    throw new Error(`${where}: ${error.message}`);
+    throw new Error(`${where}: ${error.message}${rectFitHint(scene, story, error.message, { end: finalEnd })}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// The last scene of a story that does not loop. ending.final (story.mjs):
+//   "hold" (default) → the module resolves with its end FINAL_HOLD_TAIL past
+//     the story end, so its exit falls after the last frame and the final
+//     frame shows it settled;
+//   "fade" → its end is pulled in to the final frame, so the exit completes
+//     to the background by the last frame (never a half-dim final frame);
+//   "exit" → unchanged (the exit ends exactly at format.duration).
+// Applies to every scene still on screen at the story end (scene.end at the
+// duration). Not applied when the story loops (ending.loop_to) or to
+// footage-led stories (they end on the recording). A cta with params.loop
+// (its own fade to the background) ends as "fade" under "hold".
+export const FINAL_HOLD_TAIL = 2;
+
+/** 'hold' | 'fade' | 'exit' | null (the story loops) for a story's last scene. */
+export function storyFinal(story) {
+  const ending = story?.ending;
+  if (ending && typeof ending === 'object' && typeof ending.loop_to === 'string') return null;
+  if (storyBase(story)) return 'exit';
+  const final = ending && typeof ending === 'object' ? ending.final : undefined;
+  return final === 'fade' || final === 'exit' ? final : 'hold';
+}
+
+function endingEnd(scene, story, end) {
+  const final = storyFinal(story);
+  if (!final || final === 'exit' || !scene || typeof scene !== 'object') return end;
+  const duration = Number(story?.resolved?.duration ?? story?.format?.duration);
+  const sceneEnd = Number(scene.end), start = Number(scene.start);
+  if (!Number.isFinite(duration) || !Number.isFinite(sceneEnd) || sceneEnd < duration - 1e-6) return end;
+  const current = Number(end ?? sceneEnd);
+  // A cta with params.loop fades itself to the background: it ends as "fade".
+  if (final === 'hold' && !(scene.module === 'cta' && scene.params?.loop === true)) return current + FINAL_HOLD_TAIL;
+  const fps = Number(story?.resolved?.fps ?? story?.format?.fps ?? 30);
+  // The final frame's time, floored to the model's 1e-6 grid so the exit has
+  // completed on that frame in both renderers.
+  const last = Math.floor(((Math.round(duration * fps) - 1) / fps) * 1e6) / 1e6;
+  return last - start >= 1 ? Math.min(current, last) : end;
+}
+
+// ---------------------------------------------------------------------------
+// Rect fitting. Whether content fits a rect depends on its width (text wraps
+// and editorial type follows the width), so "rect too short" alone leaves the
+// author guessing. These helpers search the rect sizes that resolve.
+
+const GEOMETRY_ERROR = /rect|too short|too long|too wide|too narrow|too tall|does not fit|leaves (only|too little|no room)|needs \d+ px|room for/i;
+const FIT_STEP = 8;
+
+function fitBounds(story) {
+  const canvas = { width: Number(story?.format?.width), height: Number(story?.format?.height) };
+  if (!(canvas.width > 0 && canvas.height > 0)) return null;
+  const { safeZone } = profileGeometry(canvas);
+  return { canvas, safe: safeZone };
+}
+
+// Positions to try for a probe size: the authored position (when it still
+// fits the canvas), centred in the safe zone, then the safe zone's top-left.
+function probePositions(width, height, bounds, rect) {
+  const { canvas, safe } = bounds, out = [];
+  const add = (x, y) => {
+    x = Math.round(x); y = Math.round(y);
+    if (x < 0 || y < 0 || x + width > canvas.width || y + height > canvas.height) return;
+    if (!out.some((p) => p.x === x && p.y === y)) out.push({ x, y });
+  };
+  if (rect && Number.isFinite(rect.x) && Number.isFinite(rect.y)) add(rect.x, rect.y);
+  add(safe.x + (safe.width - width) / 2, safe.y + (safe.height - height) / 2);
+  add(Math.ceil(safe.x), Math.ceil(safe.y));
+  return out;
+}
+
+function fitsRect(scene, story, width, height, bounds, rect, end) {
+  for (const position of probePositions(width, height, bounds, rect)) {
+    const probe = { ...scene, params: { ...(scene.params ?? {}), rect: { ...position, width, height } } };
+    try { resolveModuleInner(probe, story, { end }); return true; } catch { /* next position */ }
+  }
+  return false;
+}
+
+// Smallest integer in [lo, hi] where test() holds; null when it never does.
+// A coarse scan finds the first fitting step (sizes too large fail too, so
+// the range has no monotone top end), then a 1 px scan refines it.
+function smallest(lo, hi, test) {
+  lo = Math.ceil(lo); hi = Math.floor(hi);
+  let previous = lo - 1;
+  for (let value = lo; value <= hi + FIT_STEP - 1; value += FIT_STEP) {
+    const at = Math.min(value, hi);
+    if (test(at)) {
+      for (let fine = previous + 1; fine < at; fine += 1) if (test(fine)) return fine;
+      return at;
+    }
+    previous = at;
+    if (at === hi) break;
+  }
+  return null;
+}
+
+// Largest integer in [lo, hi] where test() holds, scanning down from hi.
+function largest(lo, hi, test) {
+  lo = Math.ceil(lo); hi = Math.floor(hi);
+  let previous = hi + 1;
+  for (let value = hi; value >= lo - FIT_STEP + 1; value -= FIT_STEP) {
+    const at = Math.max(value, lo);
+    if (test(at)) {
+      for (let fine = previous - 1; fine > at; fine -= 1) if (test(fine)) return fine;
+      return at;
+    }
+    previous = at;
+    if (at === lo) break;
+  }
+  return null;
+}
+
+/**
+ * Sizes that fit a scene's content. options.width / options.height (default:
+ * params.rect's) pick the fixed dimension. → {width, height, minHeight: the
+ * least height that fits at `width` | null, widthAtHeight: the nearest width
+ * that fits at `height` ({op: '≥', value} — the least width at or above
+ * `width` — else {op: '≤', value}, the largest below it) | null}. Probes stay
+ * inside the canvas and try the safe zone, so a catalogue module's own
+ * safe-zone bound holds.
+ */
+export function moduleFit(scene, story, { width, height, end } = {}) {
+  const bounds = fitBounds(story);
+  if (!bounds) throw new Error('moduleFit needs story.format width and height');
+  const rect = scene?.params?.rect;
+  const w = Number(width ?? rect?.width), h = Number(height ?? rect?.height);
+  const out = { width: Number.isFinite(w) ? w : null, height: Number.isFinite(h) ? h : null, minHeight: null, widthAtHeight: null };
+  if (out.width !== null) out.minHeight = smallest(120, bounds.canvas.height, (value) => fitsRect(scene, story, out.width, value, bounds, rect, end));
+  if (out.height !== null) {
+    const at = (value) => fitsRect(scene, story, value, out.height, bounds, rect, end);
+    const from = out.width ?? 200;
+    const wider = smallest(from, bounds.canvas.width, at);
+    if (wider !== null) out.widthAtHeight = { op: '≥', value: wider };
+    else {
+      const narrower = largest(200, from, at);
+      if (narrower !== null) out.widthAtHeight = { op: '≤', value: narrower };
+    }
+  }
+  return out;
+}
+
+/**
+ * Suffix for a geometry error on a scene with an explicit params.rect:
+ * "; checklist needs 640 px height at width 900 (or width ≥ 1100 at this
+ * height)". Empty when the error is not about geometry or no size fits.
+ */
+export function rectFitHint(scene, story, message, { end } = {}) {
+  const rect = scene?.params?.rect;
+  if (!rect || typeof rect !== 'object' || !GEOMETRY_ERROR.test(String(message ?? ''))) return '';
+  if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height)) return '';
+  let fit;
+  try { fit = moduleFit(scene, story, { end }); } catch { return ''; }
+  const name = scene.module, W = Math.round(rect.width), H = Math.round(rect.height);
+  const width = fit.widthAtHeight && `width ${fit.widthAtHeight.op} ${fit.widthAtHeight.value}`;
+  if (fit.minHeight !== null && fit.minHeight > H) return `; ${name} needs ${fit.minHeight} px height at width ${W} (${width ? `or ${width} at this height` : `no width fits height ${H}`})`;
+  if (fit.minHeight !== null) {
+    // The size fits at some position: the error is the authored position.
+    if (!fit.widthAtHeight || fit.widthAtHeight.value === W) return '';
+    return `; ${name} needs ${width} at height ${H}`;
+  }
+  if (width) return `; ${name} fits no height at width ${W}; it needs ${width} at height ${H}`;
+  return '';
 }
 
 function resolveModuleInner(scene, story, { track, end }) {
@@ -126,16 +331,20 @@ function resolveModuleInner(scene, story, { track, end }) {
   const format = { width: story?.format?.width, height: story?.format?.height, fps: story?.resolved?.fps ?? story?.format?.fps, duration: story?.resolved?.duration ?? story?.format?.duration };
   const aspect = formatAspect(format);
   const module = scene.module;
+  // Motion grammar (grammar.mjs): editorial is the identity, so editorial
+  // models are exactly what they were before grammars existed.
+  const grammar = resolveGrammar(story);
+  const styled = !isEditorialGrammar(grammar);
 
   if (isEditorialKind(module)) {
     const canvas = EDITORIAL_CANVAS[aspect];
     if (!canvas || canvas.width !== format.width || canvas.height !== format.height) {
       throw new Error(`module "${module}": editorial modules need a 1080x1920 (9:16) or 1920x1080 (16:9) format; got ${format.width}x${format.height}`);
     }
-    const spec = { ...brandModuleDefaults(story?.brand), ...params, id, kind: module, aspect, start, duration };
+    const spec = { ...brandModuleDefaults(story?.brand), ...statusRackDefaults(module, story?.brand, params), ...params, id, kind: module, aspect, start, duration };
     if (track !== undefined) spec.track = track;
     let model;
-    try { model = resolveEditorialModule(spec); }
+    try { model = styled ? resolveEditorialModule(spec, { grammar }) : resolveEditorialModule(spec); }
     catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
     return finishModel(model, { module, scene });
   }
@@ -144,11 +353,13 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!definition) throw new Error(`module "${module}" is not a known module`);
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
-  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), lane: story?.lane ?? null }); }
+  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), lane: story?.lane ?? null, grammar }); }
   catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });
   if (track !== undefined) finished.track = track;
+  // Catalogue B/C timelines remap their pop eases from model.grammar.
+  if (styled) finished.grammar = grammar;
   return finished;
 }
 

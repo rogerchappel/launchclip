@@ -7,7 +7,9 @@
 // Imports only sibling kit/core files, so it bundles into Remotion and copies
 // into skills unchanged.
 
+import {formatBound, withinBounds} from './bounds.mjs';
 import {getEase} from './motion.mjs';
+import {grammarDuration, grammarEase} from './grammar.mjs';
 import {profileGeometry} from './layout-check.mjs';
 import {fontStack as registryStack} from './fonts.mjs';
 
@@ -23,6 +25,15 @@ export const CATALOG_B_STYLE = Object.freeze({
   serif: registryStack(null, 'serif'),
   letterSpacing: Object.freeze({meta: '0.14em', display: '0.01em'})
 });
+
+// Timing shared by every catalogue B module (seconds, scene-relative): scenes
+// of at least minDuration; event times between leadIn (the enter) and scene −
+// leadOut (the exit plus 0.3 s). A grammar that shortens the enter or exit
+// only widens that window. timingRules() merges a module's own gaps and rules.
+export const CATALOG_B_TIMING = Object.freeze({minDuration: 2, leadIn: CATALOG_B_STYLE.enterDuration, leadOut: CATALOG_B_STYLE.exitDuration + 0.3, exitHold: 0.3});
+export function timingRules({gaps = [], rules = []} = {}) {
+  return {minDuration: CATALOG_B_TIMING.minDuration, leadIn: CATALOG_B_TIMING.leadIn, leadOut: Math.round(CATALOG_B_TIMING.leadOut * 1000) / 1000, gaps, rules};
+}
 
 const ROLE_NAMES = ['primary', 'accent', 'paper'];
 // Conservative average advance per character, as a fraction of font size.
@@ -201,8 +212,8 @@ export function makeCheck(prefix) {
       return value;
     },
     num(value, path, min, max) {
-      if (typeof value !== 'number' || !Number.isFinite(value)) fail(path, `must be a number between ${min} and ${max}`);
-      if (value < min || value > max) fail(path, `must be between ${min} and ${max}, got ${value}`);
+      if (typeof value !== 'number' || !Number.isFinite(value)) fail(path, `must be a number between ${formatBound(min)} and ${formatBound(max)}`);
+      if (!withinBounds(value, min, max)) fail(path, `must be between ${formatBound(min)} and ${formatBound(max)}, got ${value}`);
       return value;
     },
     int(value, path, min, max) {
@@ -303,7 +314,7 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
   const format = ctx.format ?? {};
   const width = check.int(format.width, 'format.width', 240, 7680), height = check.int(format.height, 'format.height', 240, 7680);
   const fps = check.num(format.fps ?? 30, 'format.fps', 1, 120);
-  const start = check.num(ctx.start, 'start', 0, 86400), duration = check.num(ctx.duration, 'duration', 2, 3600);
+  const start = check.num(ctx.start, 'start', 0, 86400), duration = check.num(ctx.duration, 'duration', CATALOG_B_TIMING.minDuration, 3600);
   const canvas = {width, height};
   const portrait = height > width;
   const aspect = ctx.aspect ?? (portrait ? '9:16' : '16:9');
@@ -362,24 +373,27 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
   }
 
   // Motion
-  const S = CATALOG_B_STYLE;
-  const enterDuration = S.enterDuration, exitDuration = S.exitDuration;
+  // Motion grammar (grammar.mjs): editorial keeps CATALOG_B_STYLE exactly.
+  // Event windows keep the editorial bounds, so a slower grammar never makes
+  // a default event time invalid.
+  const S = CATALOG_B_STYLE, grammar = ctx.grammar ?? null;
+  const enterDuration = grammarDuration(grammar, 'enter', S.enterDuration, {min: 0.3, max: 0.7}), exitDuration = grammarDuration(grammar, 'exit', S.exitDuration, {min: 0.2, max: 0.5});
   const end = rt(start + duration);
   const motion = {enterStart: rt(start), enterEnd: rt(start + enterDuration), exitStart: rt(end - exitDuration), end, enterDuration, exitDuration,
     enterFrom: {opacity: 0, x: 0, y: r2(40 * unit), scale: 0.97}, exitTo: {opacity: 0, x: 0, y: r2(-28 * unit), scale: 1},
-    enterEase: S.enterEase, exitEase: S.exitEase};
+    enterEase: grammarEase(grammar, S.enterEase), exitEase: grammarEase(grammar, S.exitEase)};
   const hits = Array.isArray(ctx.hits) ? ctx.hits.filter(hit => hit && typeof hit.event === 'string' && typeof hit.at === 'number') : [];
   // Latest allowed event time leaves 0.3 s before the exit begins.
-  const lastEvent = duration - exitDuration - 0.3;
+  const lastEvent = duration - Math.min(exitDuration, S.exitDuration) - CATALOG_B_TIMING.exitHold;
   /** Absolute time for event `name`: params `at` (scene-relative) > ctx hit > fallback (scene-relative). */
-  const timeOf = (name, at, path, fallback, {min = enterDuration, max = lastEvent} = {}) => {
+  const timeOf = (name, at, path, fallback, {min = Math.min(enterDuration, S.enterDuration), max = lastEvent} = {}) => {
     let rel;
     if (at !== undefined) rel = check.num(at, path, 0, duration);
     else {
       const hit = hits.find(entry => entry.event === name);
       rel = hit ? hit.at - start : fallback;
     }
-    if (rel < min - 1e-9 || rel > max + 1e-9) check.fail(at !== undefined ? path : `${path} (default for "${name}")`, `must fall between ${r2(min)} s and ${r2(max)} s after the scene start; got ${r2(rel)} s${at === undefined ? ' — lengthen the scene or set it explicitly' : ''}`);
+    if (!withinBounds(rel, min, max)) check.fail(at !== undefined ? path : `${path} (default for "${name}")`, `must fall between ${formatBound(min)} s and ${formatBound(max)} s after the scene start; got ${r2(rel)} s${at === undefined ? ' — lengthen the scene or set it explicitly' : ''}`);
     return rt(start + rel);
   };
 
