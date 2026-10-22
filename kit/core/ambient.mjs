@@ -28,13 +28,15 @@ import { getEase } from './motion.mjs';
 export const AMBIENT_LEVELS = Object.freeze(['off', 'subtle', 'standard', 'lively']);
 
 // Per-level tuning. Drift lengths are px at a 1080 px short side and scale
-// with the canvas; field.speed is canvas widths per second. scaleRate/shiftRate are per second of the drift window, capped at
+// with the canvas. field.contrast is the luma step (0–255) a blob centre adds
+// over brand.colors.bg, so every brand gets the same low-contrast field
+// whatever its colours; field.speed is canvas widths per second. scaleRate/shiftRate are per second of the drift window, capped at
 // scaleMax/shiftMax, so short and long scenes drift at a similar speed.
 export const AMBIENT_PRESETS = Object.freeze({
   off: null,
-  subtle: Object.freeze({ scaleRate: 0.004, scaleMax: 0.02, shiftRate: 1.5, shiftMax: 8, field: Object.freeze({ alpha: 0.12, speed: 0.06, count: 4 }) }),
-  standard: Object.freeze({ scaleRate: 0.007, scaleMax: 0.03, shiftRate: 2.5, shiftMax: 14, field: Object.freeze({ alpha: 0.22, speed: 0.11, count: 4 }) }),
-  lively: Object.freeze({ scaleRate: 0.010, scaleMax: 0.04, shiftRate: 3.5, shiftMax: 20, field: Object.freeze({ alpha: 0.30, speed: 0.14, count: 4 }) })
+  subtle: Object.freeze({ scaleRate: 0.004, scaleMax: 0.02, shiftRate: 1.5, shiftMax: 8, field: Object.freeze({ contrast: 22, speed: 0.06, count: 4 }) }),
+  standard: Object.freeze({ scaleRate: 0.007, scaleMax: 0.03, shiftRate: 2.5, shiftMax: 14, field: Object.freeze({ contrast: 40, speed: 0.11, count: 4 }) }),
+  lively: Object.freeze({ scaleRate: 0.010, scaleMax: 0.04, shiftRate: 3.5, shiftMax: 20, field: Object.freeze({ contrast: 54, speed: 0.14, count: 4 }) })
 });
 
 // Scene energy (0 calm … 3 full, "build") → default ambient level.
@@ -186,7 +188,8 @@ export function ambientField(story) {
   const palette = [colors.primary, colors.accent, colors.secondary].filter((value) => HEX.test(value ?? ''));
   if (!palette.length) palette.push(HEX.test(colors.paper ?? '') ? colors.paper : '#ffffff');
   const random = seededRandom(ambientSeed(story));
-  const { alpha, speed, count } = preset.field;
+  const { contrast, speed, count } = preset.field;
+  const bg = HEX.test(colors.bg ?? '') ? colors.bg : '#000000';
   const direction = random() < 0.5 ? -1 : 1;
   const base = Math.max(width, height) * 0.55;
   const blobs = [];
@@ -205,7 +208,7 @@ export function ambientField(story) {
       id: `b${index}`,
       color,
       rgb: rgb(color),
-      alpha: round(alpha * (index % 2 ? 0.85 : 1), 4),
+      alpha: round(blobAlpha(color, bg, contrast) * (index % 2 ? 0.85 : 1), 4),
       size,
       x: { kind: 'glide', from: round(from, 3), to: round(to, 3), period, offset: round(period * ((index + random() * 0.4) / count), 4) },
       y: { kind: 'wave', center: round(height * (row + (random() - 0.5) * 0.12), 3), amp: round(height * (0.03 + random() * 0.02), 3), period: round(16 + random() * 8, 3), phase: random() < 0.5 ? 0 : 1 },
@@ -216,6 +219,19 @@ export function ambientField(story) {
 }
 
 const frac = (value) => value - Math.floor(value);
+const MAX_ALPHA = 0.45;
+
+/** BT.601 luma (0–255) of a #rrggbb colour, the grey the motion analyser measures. */
+export function luma(hex) {
+  const [r, g, b] = rgb(hex);
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+/** Alpha at which `color` over `bg` changes luma by `contrast` levels (capped at 0.45). */
+export function blobAlpha(color, bg, contrast) {
+  const step = Math.abs(luma(color) - luma(bg));
+  return step > 1 ? Math.min(MAX_ALPHA, contrast / step) : MAX_ALPHA;
+}
 
 /** Value of one field axis at absolute time t. */
 export function axisValue(axis, t) {

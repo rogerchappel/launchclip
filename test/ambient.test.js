@@ -5,7 +5,7 @@ import test from "node:test";
 import gsap from "gsap";
 import {
   AMBIENT_LEVELS, AMBIENT_PRESETS, ambientErrors, ambientField, ambientSeed, axisSegments, axisValue, blobBackground, blobStateAt, blobTweens,
-  driftBounds, driftEligible, driftExtent, driftGsap, driftPlan, driftStateAt, driftStyle, fieldLevel, levelForEnergy, sceneAmbient, sceneDrift
+  blobAlpha, driftBounds, driftEligible, driftExtent, driftGsap, driftPlan, driftStateAt, driftStyle, fieldLevel, levelForEnergy, luma, sceneAmbient, sceneDrift
 } from "../kit/core/ambient.mjs";
 import { profileGeometry } from "../kit/core/layout-check.mjs";
 
@@ -81,7 +81,10 @@ test("the field is deterministic, seeded by the story and skipped when no plate 
   assert.equal(fieldLevel(story({ ambient: { level: "lively" } })), "lively");
   for (const blob of a.blobs) {
     assert.ok(["#fdb022", "#46d4ff"].includes(blob.color), "brand primary/accent");
-    assert.ok(blob.alpha > 0 && blob.alpha <= AMBIENT_PRESETS.standard.field.alpha);
+    // Every brand gets the same low-contrast field: the blob centre adds `contrast` luma levels over bg.
+    const step = Math.abs(luma(blob.color) - luma("#06070d"));
+    const wanted = AMBIENT_PRESETS.standard.field.contrast * (Number(blob.id.slice(1)) % 2 ? 0.85 : 1);
+    assert.ok(Math.abs(blob.alpha * step - wanted) < 0.1, `${blob.id} adds ${blob.alpha * step} levels`);
     assert.match(blobBackground(blob), /^radial-gradient\(closest-side, rgba\(\d+, \d+, \d+, [\d.]+\) 0%,.* 100%\)$/);
   }
 });
