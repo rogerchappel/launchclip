@@ -6,7 +6,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { checkLayout, elementsFromEditorialLayout, elementsFromStory, profileGeometry, SAFE_ZONE_PROFILES } from "../kit/core/layout-check.mjs";
 import { driftExtent, sceneDrift } from "../kit/core/ambient.mjs";
-import { sceneWindows } from "../kit/core/transitions.mjs";
+import { emptyPlates, sceneWindows } from "../kit/core/transitions.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const STORY_MODULE = path.join(ROOT, "kit/core/story.mjs");
@@ -113,7 +113,19 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   // Footage-led: the recording fills the frame under everything (media, never a collision).
   if (resolved.base) elements.unshift({ id: "base", role: "media", rect: { x: 0, y: 0, width: canvas.width, height: canvas.height }, start: 0, end: Number(resolved.resolved?.duration ?? resolved.format?.duration), allowOcclusion: ["*"] });
   const report = checkLayout({ canvas, elements, profile, duration: Number(resolved.resolved?.duration ?? resolved.format?.duration) || undefined });
-  const findings = [...specFindings, ...report.findings].sort((a, b) => a.at - b.at);
+  // Empty plates: spans where no scene draws anything (a gap in scene timing,
+  // or a module that has not drawn yet when the previous one has gone).
+  // Footage-led stories show the recording there instead.
+  const plateFindings = [];
+  if (!resolved.base) {
+    try {
+      for (const gap of emptyPlates(resolved)) {
+        plateFindings.push({ rule: "empty-plate", severity: "warning", ids: [gap.before, gap.after].filter(Boolean), at: gap.from,
+          detail: `empty plate from ${gap.from} s to ${gap.to} s (${gap.before ? `after ${gap.before}, ` : ""}before ${gap.after} draws anything); extend the previous scene, move the next scene's first beat earlier, or close the gap` });
+      }
+    } catch { /* unresolvable windows are reported elsewhere */ }
+  }
+  const findings = [...specFindings, ...report.findings, ...plateFindings].sort((a, b) => a.at - b.at);
   return {
     stage: "layout-check",
     project,

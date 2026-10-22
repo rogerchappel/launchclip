@@ -412,7 +412,11 @@ captions show, unless the scene sets `hides_captions`), `min-text-size` (key
 text under 44 px on Shorts), and `module-spec` (an editorial spec that does not
 build). Warnings: `hero-fill` (hero outside 70–90% of the safe width on
 Shorts), `lower-third-empty` (nothing below the safe-zone midpoint for over
-3 s on Shorts), and `centre-of-mass` (sustained drift from y 860 on Shorts).
+3 s on Shorts), `centre-of-mass` (sustained drift from y 860 on Shorts), and
+`empty-plate` (a span where no scene draws anything: a gap in scene timing, or a
+scene whose first content arrives after the previous scene has gone; spans
+under 0.5 s are covered by holding the previous scene, so only longer ones are
+reported). `story validate` also warns about gaps in scene timing.
 
 Whether content fits a rect depends on the rect's width (text wraps, and
 editorial type follows the width), so a `module-spec` sizing error names the

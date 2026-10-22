@@ -402,6 +402,13 @@ the Shorts safe zone, key text at least 44 px at 1080 wide, contrast at least
   is resolved with that `end`, so its exit motion moves to the end of the
   transition. HyperFrames turns the tweens into GSAP `fromTo` calls; Remotion
   evaluates them per frame with `layerStateAt` (a test seeks GSAP against it).
+  Empty plates: when the span from one plate's end to the next plate's first
+  content (its start plus `sceneLeadIn(scene)`, e.g. a kinetic-words first
+  beat after the first frame) is under `HOLD_GAP` (0.5 s), the previous plate
+  is held through it, and on a cut the incoming plate stays transparent
+  (`role: "hold"` opacity tweens) until its content arrives. `emptyPlates()`
+  lists the longer spans; `story validate` warns about gaps in scene timing and
+  layout-check reports `empty-plate` warnings.
 - `kit/core/captions.mjs` (chunking, GSAP runtime, CSS, `CAPTION_MOTION`,
   `CAPTION_BAND`) and `kit/core/fonts.mjs` (`brandFontStacks`) are shared too.
 - `compileStoryToHyperFrames(resolvedStory, {projectDir, sourceDir?, sceneFilter?, write?, copyAssets?})`

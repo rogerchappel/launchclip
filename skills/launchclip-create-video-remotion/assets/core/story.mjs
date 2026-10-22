@@ -356,6 +356,20 @@ export function validateStory(story, { modules } = {}) {
       if (list[i].start < list[i - 1].end - EPS) err(`${list[i].label} overlaps ${list[i - 1].label} on track ${track}; move one to another track or adjust start/end`);
     }
   }
+  // Gaps between track-0 scenes are empty plates (no footage base fills them).
+  // The compilers hold the previous scene through gaps under 0.5 s; longer
+  // gaps show the bare background.
+  const plates = byTrack.get(0);
+  if (plates && !story.base && plates.length === timing.filter((entry) => entry && entry.track === 0).length) {
+    const frame = 1 / (Number(story.format?.fps) > 0 ? Number(story.format.fps) : 30);
+    let covered = 0, previous = null;
+    for (const entry of plates) {
+      if (entry.start - covered > frame + EPS) {
+        warn(`empty plate from ${round3(covered)} s to ${round3(entry.start)} s (${previous ? `between ${previous.label} and ${entry.label}` : `before ${entry.label}`}): no scene covers it; ${entry.start - covered < 0.5 - EPS && previous ? 'the previous scene is held through it' : 'the bare background shows'}. Extend the scenes to meet.`);
+      }
+      if (entry.end > covered) { covered = entry.end; previous = entry; }
+    }
+  }
 
   // overlays
   if (story.overlays !== undefined && story.overlays !== null) {
@@ -767,6 +781,10 @@ export function storyBase(story) {
 
 function round6(value) {
   return Math.round(value * 1e6) / 1e6;
+}
+
+function round3(value) {
+  return Math.round(value * 1e3) / 1e3;
 }
 
 /** "9:16" | "16:9" | "1:1" | "4:5" | null */
