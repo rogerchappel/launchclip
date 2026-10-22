@@ -751,7 +751,7 @@ yuva444p10le`) from the Remotion kit's `SceneOverlay` composition, stacked so a
 transitioning scene sits above the one it overlaps; the top video track is the
 finished render, disabled, for reference. A1 is the voice (or the recording's
 audio, linked to V1), A2 the music bed, A3 and up the SFX cues as individual
-clips with their levels, then the finished mix (disabled). Captions are a
+clips with their levels and the typing track, then the finished mix (disabled). Captions are a
 subtitle track (FCPXML caption role; `captions.srt` elsewhere) and markers sit
 at scene starts, hits and camera moves.
 

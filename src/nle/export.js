@@ -305,6 +305,8 @@ async function collectMedia(project, story, adapters, warnings) {
     media.sfx = [];
     const durations = new Map();
     for (const cue of sfxManifest.cues) {
+      // Typing cues mark lines of the typing track, which is one timeline-length file (below).
+      if (cue.cue === "typing" || cue.source === "typing") continue;
       const file = located(cue.file);
       if (!file) { warnings.push(`SFX ${cue.id ?? cue.cue} file not found: ${cue.file}`); continue; }
       if (!durations.has(file)) durations.set(file, await probe(file));
@@ -312,6 +314,11 @@ async function collectMedia(project, story, adapters, warnings) {
       if (!info) continue;
       media.sfx.push({ id: cue.id, cue: cue.cue, source: file, at: Number(cue.at_seconds), volume: Number(cue.volume ?? 1), duration: info.duration, shot: cue.shot_id ?? null, audioChannels: info.audioChannels, audioRate: info.audioRate });
     }
+  }
+  const typingFile = manifest ? located(sfxManifest?.typing?.file) : null;
+  if (typingFile) {
+    const info = await probe(typingFile);
+    if (info) media.typing = { source: typingFile, duration: info.duration, keystrokes: Array.isArray(sfxManifest.typing.keystrokes) ? sfxManifest.typing.keystrokes.length : null, audioChannels: info.audioChannels, audioRate: info.audioRate };
   }
   const mixFile = located(manifest?.mix?.path) ?? existingProjectFile(project, story.audio?.mix);
   if (mixFile) {

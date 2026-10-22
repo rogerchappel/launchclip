@@ -46,8 +46,9 @@ relative unless `--absolute` is passed.
   against.
 - **A1** is the voice (the narration, or the recording's own audio linked to its
   V1 clips), **A2** the music bed at its level, **A3 and up** every SFX cue as
-  its own clip at its time with its level, then the finished mix (disabled) as a
-  reference. A project that supplies a premixed `audio.mix` and no stems gets
+  its own clip at its time with its level, the typing track (one
+  timeline-length file) when finish rendered one, then the finished mix
+  (disabled) as a reference. A project that supplies a premixed `audio.mix` and no stems gets
   the mix on A1.
 - **Captions** are a subtitle track (FCPXML caption role
   `SRT?captionFormat=SRT.en`; `captions.srt` for the other formats).

@@ -15,7 +15,8 @@
 //           enabled picture clip with --overlays none
 //   A1      the voice (narration, or the recording's own audio, linked to V1)
 //   A2      the music bed
-//   A3…     every SFX cue as its own clip at its time
+//   A3…     every SFX cue as its own clip at its time, then the typing
+//           track (one timeline-length file) when finish rendered one
 //   last    the reference mix (disabled), or the only audio when the project
 //           supplies a premixed track and no stems
 //   ST1     captions, one subtitle per caption chunk
@@ -76,6 +77,7 @@ export function overlayPlan(story, { models } = {}) {
  *   music:    {source, duration, volume, ducked}
  *   mix:      {source, duration}
  *   sfx:      [{id, cue, source, at, volume, duration, shot}]
+ *   typing:   {source, duration, keystrokes}  (the timeline-length typing track)
  *   captions: [{start, end, text}]
  *   render:   {source, duration, width, height}
  *   overlays: {[key]: {source, kind: "mov"|"png-sequence", frames, pattern, firstFrame}}
@@ -208,6 +210,12 @@ export function buildTimeline(story, media = {}, options = {}) {
     stems = true;
     const offGrid = cues.filter(({ cue, start }) => Math.abs(framesToSeconds(start, rate) - cue.at) > 1e-3).length;
     if (offGrid) warnings.push(`${offGrid} SFX cue${offGrid === 1 ? "" : "s"} snapped to the nearest frame (at most half a frame, ${Math.round(500 / rate.fps)} ms)`);
+  }
+  if (media.typing?.source) {
+    // The typing track is rendered timeline-aligned from 0 s, so it is one clip at the start.
+    const asset = addAsset({ kind: "audio", name: "typing", path: `media/audio/${baseName(media.typing.source)}`, source: media.typing.source, duration: floorFrames(media.typing.duration), hasVideo: false, hasAudio: true, audioChannels: media.typing.audioChannels ?? 2, audioRate: media.typing.audioRate ?? 48000, role: "sfx" });
+    audioTrack("Typing", "effects").clips.push(clip({ name: media.typing.keystrokes ? `typing (${media.typing.keystrokes} keys)` : "typing", asset: asset.id, start: 0, duration: Math.min(duration, asset.duration), kind: "typing" }));
+    stems = true;
   }
   if (media.mix?.source) {
     const asset = addAsset({ kind: "audio", name: "mix", path: `media/audio/${baseName(media.mix.source)}`, source: media.mix.source, duration: floorFrames(media.mix.duration), hasVideo: false, hasAudio: true, audioChannels: media.mix.audioChannels ?? 2, audioRate: media.mix.audioRate ?? 48000, role: "mix" });

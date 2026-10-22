@@ -117,6 +117,16 @@ test("buildTimeline: motion lane plate, staircase lanes for transitions, 29.97 f
   assert.equal(timeline.tracks.find((track) => track.id === "A1").name, "Voice");
 });
 
+test("buildTimeline: the typing track is one clip from 0 s on its own effects track", () => {
+  const media = { ...smallMedia(), typing: { source: "/project/assets/audio/typing.wav", duration: 6, keystrokes: 42 } };
+  const timeline = buildTimeline(smallFootageStory(), media, { name: "small", models: SMALL_MODELS });
+  assert.deepEqual(checkTimeline(timeline), []);
+  const typing = timeline.tracks.find((track) => track.name === "Typing");
+  assert.equal(typing.role, "effects");
+  assert.deepEqual(typing.clips.map((clip) => [clip.name, clip.start, clip.duration, clip.in]), [["typing (42 keys)", 0, 180, 0]]);
+  assert.equal(timeline.assets.find((asset) => asset.id === typing.clips[0].asset).path, "media/audio/typing.wav");
+});
+
 test("packLanes: stacked packing climbs above every overlapping clip", () => {
   const items = [{ start: 0, end: 10 }, { start: 8, end: 20 }, { start: 18, end: 30 }, { start: 40, end: 50 }];
   assert.deepEqual(packLanes(items).map((lane) => lane.length), [3, 1]);
