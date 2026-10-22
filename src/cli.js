@@ -14,6 +14,7 @@ import { checkCinematicProject } from "./cinematic_check.js";
 import { bundledSkillPath, installBundledSkills, listBundledSkills } from "./skill_install.js";
 import { prepareRecording, recordingOptions, writeBrollPlan } from "./recording_workflow.js";
 import { runStoryCommand } from "./story_cli.js";
+import { commandHelp, helpText, USAGE_GROUPS, wantsHelp } from "./cli_usage.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
 const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "story", "finish", "voice", "export", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
@@ -31,6 +32,14 @@ export async function runCli(argv, io = {}) {
   }
   if (!COMMANDS.has(command)) {
     throw new Error(`Unknown command: ${command}\n\n${help()}`);
+  }
+  // `launchclip <command> [action] --help | -h`: that command's usage, before
+  // any argument parsing (a project path or a flag value is never required).
+  const commandArgs = [firstArg, ...rest].filter((arg) => arg !== undefined);
+  if (wantsHelp(commandArgs)) {
+    const action = USAGE_GROUPS.includes(command) && firstArg && !firstArg.startsWith("-") ? firstArg : null;
+    stdout.write(commandHelp(command, action) ?? help());
+    return;
   }
 
   const styleInvocation = command === "style" ? parseStyleInvocation(firstArg, rest) : null;
@@ -108,7 +117,13 @@ export async function runCli(argv, io = {}) {
         scenes: flags.scene,
         previewScene: flags["preview-scene"],
         sfxLibrary: flags["sfx-library"],
-        sfxDensity: flags["sfx-density"]
+        sfxDensity: flags["sfx-density"],
+        candidate: flags.candidate,
+        into: flags.into,
+        comparison: flags.comparison,
+        kind: flags.kind,
+        boundary: flags.boundary,
+        at: flags.at
       }, productionAdapters.finish);
       stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatFinishSummary(report));
       if (report.status === "failed") {
@@ -292,7 +307,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "music-regenerate") {
+    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "music-regenerate" || name === "missing") {
       flags[name] = true;
       continue;
     }
@@ -316,84 +331,5 @@ function required(value, label) {
 }
 
 function help() {
-  return `launchclip creates dry-run-first OSS promotion packets.
-
-Usage:
-  launchclip --version
-  launchclip doctor
-  launchclip skills list
-  launchclip skills path [launchclip-create-video|launchclip-create-video-remotion|launchclip-cli]
-  launchclip skills install --agent codex|claude [--skill launchclip-create-video|launchclip-create-video-remotion|launchclip-cli|all] [--force]
-  launchclip style create <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]
-  launchclip style save <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]
-  launchclip style create <name> --from-reference a.mp4 [b.mp4 ...] [--from-images x.png ...] [--font-hint "Display, Body"] [--root .launchclip/styles] [--force]
-  launchclip style list [--root .launchclip/styles]
-  launchclip style show <name|path> [--root .launchclip/styles]
-  launchclip style upgrade <name> [--root .launchclip/styles]
-  launchclip style check <project> --against <name|path> [--video renders/final.mp4] [--out qa/style-check.json]
-  launchclip intake <source> [--profile standard|cinematic] [--kind repository|product|topic|voiceover] [--resource path] [--assets path] [--style auto|family|name|path] [--style-root .launchclip/styles] [--style-file frame.md] [--style-reference path|url] [--reference url] [--voiceover audio|video] [--transcript text] [--presenter video] [--heygen-avatar video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
-  launchclip edit-recording <media> --out <directory> [--recording-transcript word-timed.json] [--silence-duration 0.8] [--silence-padding 0.15] [--retake-window 90] [--retake-decisions semantic.json|--retake-model local-model] [--min-repeat-words 6] [--recording-model base.en] [--keep-fillers] [--no-audio-silence] [--audio-silence-duration 0.4] [--audio-silence-padding 0.08] [--audio-threshold-db -35] [--qa-model local-model|--qa-decisions reviews.json] [--qa-attempts 3] [--qa-recording-model base.en] [--no-trim-silence] [--aspect 16:9|9:16|1:1]
-  launchclip broll-plan <word-timed.json> --out <directory> [--aspect 16:9|9:16|1:1] [--duration seconds]
-  launchclip produce <source> [--profile standard|cinematic] [intake flags] [--heygen-avatar generated.mp4] [--review] [--model-policy cost-aware|local-first|quality|free] [--free-model-candidates 5] [--free-model-state path] [--free-vision-model-candidates 3] [--free-vision-model-state path] [--refresh-free-models] [--free-scene-concurrency 3] [--local-model qwen2.5-coder:latest] [--frame-route provider:model@reasoning] [--rendered-candidates 2] [--rendered-candidate-shots 2] [--candidate-judge-route provider:model@reasoning] [--candidate-judge-reasoning high] [--candidate-judge-max-output-tokens 5000] [--critic-route provider:model@reasoning] [--repair-route provider:model@reasoning] [--brand-assets-dir path] [--edit-recording] [--recording-transcript word-timed.json] [--no-trim-silence] [--planning-mode auto|single|hierarchical] [--voice-id id] [--sfx-dir path] [--concurrency 4] [--max-frame-cost-usd 5] [--no-audio] [--fast-eval]
-  launchclip evidence <workspace>
-  launchclip source-preprocess <workspace> [--edit-recording] [--recording-transcript word-timed.json] [--no-trim-silence] [--silence-duration seconds] [--silence-padding seconds]
-  launchclip source-media <workspace> [--media-samples 12] [--media-reasoning high] [--transcribe-all]
-  launchclip resolve-entities <workspace> [--brand-assets-dir ~/.launchclip/brand-assets]
-  launchclip concept-tournament <workspace> [--concept-route provider:model@reasoning] [--concept-judge-route provider:model@reasoning]
-  launchclip retention-story <workspace> [--story-writer-route provider:model@reasoning] [--story-editor-route provider:model@reasoning]
-  launchclip cinematic-narration <workspace> [--voice-id id] [--voice-model id] [--no-voice]
-  launchclip creative-plan <workspace> [--planning-mode auto|single|hierarchical] [--hierarchical-threshold 180] [--chapter-concurrency 3] [--plan-semantic-attempts 2] [--visual-history-dir path] [--visual-history-limit 8] [--visual-similarity-limit 0.58] [--max-output-tokens 48000] [--foreground]
-  launchclip production-audio <workspace> [--voice-id id] [--music-model music_v2] [--sfx-dir path] [--no-voice] [--no-music] [--no-sfx]
-  launchclip direct-frames <workspace> [--profile standard|cinematic] [--model-policy cost-aware|local-first|quality|free] [--free-model-candidates 5] [--free-model-state path] [--refresh-free-models] [--free-scene-concurrency 3] [--blueprint-semantic-attempts 2] [--frame-route provider:model@reasoning] [--rendered-candidates 2] [--rendered-candidate-shots 2] [--candidate-judge-route provider:model@reasoning] [--candidate-judge-reasoning high] [--candidate-judge-max-output-tokens 5000] [--concurrency 4] [--semantic-attempts 2] [--pending-frame-reasoning medium] [--max-frame-cost-usd amount] [--allow-frame-fallback]
-  launchclip assemble <workspace> [--music-volume 0.35]
-  launchclip production-verify <workspace> [--inspect-samples 15] [--shot-inspect-concurrency 2] [--snapshot-frames 12]
-  launchclip production-draft <workspace> [--model-policy free] [--draft-quality draft] [--critic-route provider:model@reasoning] [--free-vision-model-state path] [--shot-inspect-concurrency 2] [--reference-video local.mp4]
-  launchclip production-preview <workspace> [--port 3002] [--no-open]
-  launchclip review <workspace> [--model-policy free] [--port 3002] [--no-open] [--critic-route provider:model@reasoning] [--repair-route provider:model@reasoning]
-  launchclip production-critique <workspace> [--critic-route provider:model@reasoning] [--model-policy free] [--free-vision-model-candidates 3] [--free-vision-model-state path] [--refresh-free-vision-models] [--critic-reasoning xhigh] [--critic-pro]
-  launchclip production-repair <workspace> [--model-policy cost-aware|local-first|quality|free] [--repair-route provider:model@reasoning] [--repair-text-only] [--repair-scoped-source] [--repair-semantic-attempts 2] [--repair-snapshots 8] [--repair-issues-per-shot 4] [--max-patch-ratio 0.35]
-  launchclip production-render <workspace> --approve [--quality high] [--critic-route provider:model@reasoning] [--shot-inspect-concurrency 2] [--reference-video local.mp4]
-  launchclip story validate <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out report.json]
-  launchclip story resolve <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out story.resolved.json]
-  launchclip story compile <project> --renderer hyperframes|remotion [--out dir]
-  launchclip story plan --brief brief.md [--narration NARRATION.json] [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] [--base assets/recording.mp4] [--voice assets/audio/narration.wav] [--format 1080x1920] [--fps 30] [--duration seconds] [--brand brand.json] [--style name|path] [--max-repairs 2]
-  launchclip cinematic-check <project> [--renderer hyperframes|remotion] [--video renders/draft.mp4] [--audio-manifest AUDIO-MANIFEST.json] [--music-volume 0.32] [--expect-audio] [--critique qa/critic.json]
-  launchclip layout-check <project> [--profile shorts|landscape] [--json]
-  launchclip module fit <module> [--params params.json] [--aspect 16:9|9:16] [--story storyboard.json] [--brand brand.json] [--duration 4] [--json]
-  launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--voice kokoro|elevenlabs|supplied|test] [--music synth|elevenlabs|none] [--music-regenerate] [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] [--scene s3[,s4] | --preview-scene s3] [--force] [--json]
-  launchclip voice <project | --text "..."> [--voice kokoro|elevenlabs|test|<voice id>] [--provider kokoro|elevenlabs|test] [--speed 1.2] [--out NARRATION.json] [--json]
-  launchclip export <project> --format fcpxml|premiere|edl|otio|all [--overlays prores4444|png|none] [--out exports/] [--fps 24|25|29.97|30|60] [--name name] [--absolute] [--force] [--json]
-  launchclip sfx seed [--provider elevenlabs|synth] [--variants 3] [--only whoosh,impact] [--reroll typing] [--dir .launchclip/sfx] [--force]
-  launchclip sfx reroll <family> [--dir .launchclip/sfx]
-  launchclip sfx list [--dir .launchclip/sfx]
-  launchclip sfx audition <family> [--dir .launchclip/sfx] [--out audition.wav] [--gap 0.35]
-  launchclip init <repo> --out <workspace>
-  launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]
-  launchclip plan <workspace> --format short-15 --renderer none|hyperframes [--style proof-card|ugc-split|ugc-demo-punchy|premium-product-short|data-story-benchmark] [--assets-dir path/to/assets] [--talking-head heygen --avatar-id avatar_123]
-  launchclip captions <workspace> --platforms x,linkedin,tiktok,bluesky
-  launchclip render <workspace> --provider product-videogen --dry-run
-  launchclip render <workspace> --provider hyperframes [--quality high] [--strict-all] [--inspect-samples 15] [--skip-quality-gates] [--voiceover local-say|elevenlabs] [--music elevenlabs]
-  launchclip render <workspace> --provider remotion [--assets-dir path/to/assets] [--voiceover local-say|elevenlabs]
-  launchclip render <workspace> --provider local-ffmpeg [--voiceover local-say|elevenlabs]
-  launchclip analyze-render <workspace> [--video video/launchclip-hyperframes.mp4]
-  launchclip submit-review <workspace> --provider product-videogen --dry-run
-  launchclip review <workspace>
-  launchclip validate <workspace>
-  launchclip run <repo> --out <workspace> --demo-cmd "npm run smoke" --demo-media path/to/demo.mp4 --angle "..." --audience "..." [--style premium-product-short --assets-dir path/to/assets --talking-head heygen]
-
-Talking-head motion workflow:
-  launchclip script <workspace> [--wpm 150]            # teleprompter from the planned voiceover
-  launchclip align <workspace> --media take.mp4        # whisper word timings + heuristic motion timeline
-  launchclip align <workspace> --media take.mp4 --words words.json
-  launchclip motion-render <workspace>                 # render video/motion.mp4 via the motion engine
-  launchclip music <workspace> [--prompt "..."] [--duration 18] [--output music/bed.mp3] [--music-model music_v1] [--force]
-  launchclip preprocess-presenter public/base/presenter.mp4 [--out public/base/presenter-prepped.mp4] [--speed 1.08] [--crop-x center]
-  launchclip direct <workspace> --voice record --prompt "creative direction"       # writes script + teleprompter, waits for take
-  launchclip direct <workspace> --voice record --take take.mp4 [--words w.json]    # aligns take, directs, renders
-  launchclip direct <workspace> --voice tts --prompt "creative direction"          # generates voice + timings, directs, renders
-  launchclip direct <workspace> --prompt "creative direction" [--format software_demo|explainer]
-            [--words w.json --take base/take.mp4 | --script-text "..."] [--duration 45] [--no-render] [--quality fast|high]
-            [--music-prompt "..."] [--no-music] [--sfx-dir path/to/sfx] [--allow-placeholder-sfx]
-            [--provider anthropic|openai] [--model <id>]   # LLM: ANTHROPIC_API_KEY (default) or OPENAI_API_KEY
-`;
+  return helpText();
 }

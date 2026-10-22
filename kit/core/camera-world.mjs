@@ -37,9 +37,10 @@
 //   overlays do not slide.
 // - Motion blur: a directional Gaussian blur (SVG feGaussianBlur with
 //   separate x/y deviations) shaped by the screen velocity of the camera,
-//   sampled once per frame and exactly 0 at rest (RFC §5). It is on for
-//   whip-pans by default; camera.blur true turns it on for every move, false
-//   turns it off.
+//   sampled once per frame and exactly 0 at rest (RFC §5). By default it is
+//   full strength on whip-pans and the grammar's moveBlur (snappy and playful:
+//   0.5, a half shutter) on pans, pushes, pulls and orbits; camera.blur true
+//   turns full blur on for every move, false turns it off.
 //
 // The camera exists only when it has something to do: world mode, or a cuts
 // story that uses a camera transition. Otherwise cameraPlan() returns null
@@ -71,7 +72,7 @@ const isObject = (value) => Boolean(value) && typeof value === 'object' && !Arra
 const round = (value, digits = 4) => { const f = 10 ** digits; return Math.round(value * f) / f; };
 const rad = (deg) => (deg * Math.PI) / 180;
 
-/** story.camera with defaults → {mode, layout, spacing, parallax, blur} (blur null = whip-pans only). */
+/** story.camera with defaults → {mode, layout, spacing, parallax, blur} (blur null = the grammar default: whip-pans full, other moves at grammar.camera.moveBlur). */
 export function resolveCamera(story) {
   const own = isObject(story?.camera) ? story.camera : {};
   // Footage-led stories keep cuts and punch-ins, even when a style pack
@@ -276,7 +277,15 @@ export function cameraPlan(story, { windows, objects } = {}) {
   const layout = worldLayout(story, windows, { objects });
   const plates = windows.scenes.filter((entry) => entry.plate).sort((a, b) => a.start - b.start || a.index - b.index);
   const moves = [];
-  const blurFor = (type) => (camera.blur === null ? type === 'whip-pan' : camera.blur);
+  // Blur strength per move (0–1, 1 = a whip-pan's full shutter): camera.blur
+  // true / false forces 1 / 0 for every move; by default whip-pans blur fully
+  // and other moves at the grammar's moveBlur (snappy and playful 0.5).
+  const blurFor = (type) => {
+    if (camera.blur !== null) return camera.blur ? 1 : 0;
+    if (type === 'whip-pan') return 1;
+    const strength = Number(grammar.camera.moveBlur);
+    return Number.isFinite(strength) ? Math.min(1, Math.max(0, strength)) : 0;
+  };
   const moveFor = (sceneId, transition, start, from, to) => {
     const type = transition.type;
     const ease = type === 'whip-pan' ? grammar.camera.whip : grammar.ease.camera;
@@ -402,7 +411,7 @@ export function screenPoint(plan, point, t) {
  * the direction, the corners' radial spread adds the zoom component.
  * motionBlurPx resolves sub-threshold speeds to exactly 0.
  */
-export function velocityBlur(plan, t) {
+export function velocityBlur(plan, t, strength = 1) {
   const dt = 1 / plan.fps;
   const W = plan.width, H = plan.height;
   const inverse = (q, time) => worldAt(plan, q, time);
@@ -410,8 +419,12 @@ export function velocityBlur(plan, t) {
   const travel = probes.map((q) => { const now = screenPoint(plan, inverse(q, t - dt), t); return { x: now.x - q.x, y: now.y - q.y }; });
   const centre = travel[0];
   const radial = Math.max(...travel.slice(1).map((d) => Math.hypot(d.x - centre.x, d.y - centre.y)));
-  const zoomBlur = motionBlurPx(radial, { max: BLUR_MAX }) / 2;
-  return { x: round(Math.min(BLUR_MAX, Math.hypot(motionBlurPx(centre.x, { max: BLUR_MAX }), zoomBlur)), 3), y: round(Math.min(BLUR_MAX, Math.hypot(motionBlurPx(centre.y, { max: BLUR_MAX }), zoomBlur)), 3) };
+  // strength scales the shutter (and the cap), so a moderate blur keeps the
+  // same sub-threshold zero at the slow ends of the move.
+  const max = BLUR_MAX * strength, shutter = 0.5 * strength;
+  if (!(max > 0)) return { x: 0, y: 0 };
+  const zoomBlur = motionBlurPx(radial, { max, shutter }) / 2;
+  return { x: round(Math.min(max, Math.hypot(motionBlurPx(centre.x, { max, shutter }), zoomBlur)), 3), y: round(Math.min(max, Math.hypot(motionBlurPx(centre.y, { max, shutter }), zoomBlur)), 3) };
 }
 
 /** World point under screen point q at t (inverse of screenPoint). */
@@ -432,7 +445,7 @@ export function blurSamples(plan) {
     const first = Math.ceil(move.start * plan.fps - 1e-6) + 1, last = Math.floor((move.start + move.duration) * plan.fps + 1e-6) + 1;
     for (let f = first; f <= last; f += 1) {
       const t = f / plan.fps;
-      samples.push({ t: round(t, 6), ...(f === last ? { x: 0, y: 0 } : velocityBlur(plan, t)) });
+      samples.push({ t: round(t, 6), ...(f === last ? { x: 0, y: 0 } : velocityBlur(plan, t, move.blur === true ? 1 : Number(move.blur))) });
     }
   }
   return samples;
@@ -446,6 +459,34 @@ export function blurAt(plan, t) {
     value = { x: sample.x, y: sample.y };
   }
   return value;
+}
+
+// ---------------------------------------------------------------------------
+// Captions during camera moves. A move that carries the plates vertically
+// (a pan, whip-pan or orbit up or down), zooms them (push, pull) or rolls
+// them (orbit) sweeps panels through the caption band mid-move, so by default
+// ("auto") the captions dip out for those moves; horizontal moves keep their
+// captions. captions.hide_during_moves: true dips for every move, false never.
+
+/** Whether a move sweeps content across the frame vertically (vertical travel, zoom or roll). */
+export function sweepingMove(move) {
+  const zoom = Math.max(move.from.zoom, move.to.zoom);
+  const vertical = Math.abs(move.to.y - move.from.y) * zoom > 1;
+  const dolly = Math.abs(Math.log(move.to.zoom / move.from.zoom)) > 0.01;
+  const roll = Math.abs(move.to.rotation - move.from.rotation) > 0.5;
+  return vertical || dolly || roll;
+}
+
+/**
+ * Windows where the captions dip out for camera moves: [{start, end}] in
+ * seconds (each move's own span). mode: "auto" (sweeping moves only, the
+ * default), true (every move) or false (none). captions.mjs turns them into
+ * the opacity dip both renderers draw (captionDipTweens / captionDipOpacity).
+ */
+export function captionDipWindows(plan, mode = 'auto') {
+  if (!plan || mode === false) return [];
+  return plan.moves.filter((move) => mode === true || sweepingMove(move))
+    .map((move) => ({ start: round(move.start, 6), end: round(move.start + move.duration, 6) }));
 }
 
 // ---------------------------------------------------------------------------

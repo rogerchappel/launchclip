@@ -7,7 +7,7 @@
 import React from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 // @ts-ignore plain ESM from kit/core
-import { captionBandFor, captionElementStateAt, captionInlineStyle, captionPlan, CAPTION_DEFAULT_COLORS, indexCaptionTweens } from "../../core/captions.mjs";
+import { captionBandFor, captionDipOpacity, captionElementStateAt, captionInlineStyle, captionPlan, CAPTION_DEFAULT_COLORS, indexCaptionTweens } from "../../core/captions.mjs";
 
 export type CaptionWord = { text: string; start: number; end: number };
 export type CaptionChunk = { id: string; start: number; end: number; words: CaptionWord[] };
@@ -16,6 +16,8 @@ type PlanNode = { tag: string; id: string; cls?: string; text?: string; children
 export type WordCaptionsProps = {
   chunks: CaptionChunk[];
   hide?: Array<[number, number]>;
+  /** Camera-move windows ({start, end}) where the captions dip out (camera-world.mjs captionDipWindows). */
+  dips?: Array<{ start: number; end: number }>;
   /** The story's captions overlay ({type: "captions", preset|style, ...options}). */
   overlay?: any;
   /** The resolved story (brand colours and fonts, scene hits for auto emphasis). */
@@ -33,7 +35,7 @@ function renderNode(node: PlanNode, index: Map<string, any>, t: number): React.R
     ...(node.children ?? []).map((child) => renderNode(child, index, t)));
 }
 
-export const WordCaptions: React.FC<WordCaptionsProps> = ({ chunks, hide = [], overlay, story, idle = CAPTION_DEFAULT_COLORS.idle, active = CAPTION_DEFAULT_COLORS.active, spoken, fontFamily }) => {
+export const WordCaptions: React.FC<WordCaptionsProps> = ({ chunks, hide = [], dips = [], overlay, story, idle = CAPTION_DEFAULT_COLORS.idle, active = CAPTION_DEFAULT_COLORS.active, spoken, fontFamily }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const t = frame / fps;
@@ -55,7 +57,7 @@ export const WordCaptions: React.FC<WordCaptionsProps> = ({ chunks, hide = [], o
   return (
     <AbsoluteFill style={{ pointerEvents: "none", zIndex: B.zIndex }}>
       <style>{plan.css}</style>
-      <div className="lc-captions">{shown.map((node) => renderNode(node, index, t))}</div>
+      <div className="lc-captions" style={dips.length ? { opacity: captionDipOpacity(dips, t) } : undefined}>{shown.map((node) => renderNode(node, index, t))}</div>
     </AbsoluteFill>
   );
 };

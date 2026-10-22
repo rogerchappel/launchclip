@@ -107,8 +107,8 @@ export function kitLibrary(sfxDir, kitManifest = null) {
 /** Variants of a family from the first source that has it, or null. */
 export function familySource(family, libraries = [], kit = null) {
   for (const library of libraries) {
+    const variants = libraryVariants(library, family);
     const entry = library.manifest.families?.[family];
-    const variants = (entry?.variants ?? []).filter((variant) => variant?.file);
     if (variants.length) {
       return {
         scope: library.scope,
@@ -122,6 +122,26 @@ export function familySource(family, libraries = [], kit = null) {
   if (!kit) return null;
   const names = kit.families?.[family]?.length ? kit.families[family] : [`${family}.wav`];
   return { scope: "kit", dir: kit.dir, source: "procedural", files: names.map((name) => path.resolve(kit.dir, name)), measurements: names.map(() => null) };
+}
+
+/** A family's variants in a library whose files exist on disk (a deleted file never resolves). */
+export function libraryVariants(library, family) {
+  const entry = library?.manifest?.families?.[family];
+  return (entry?.variants ?? []).filter((variant) => variant?.file && existsSync(path.resolve(library.dir, variant.file)));
+}
+
+/** Families of `known` that a library has no usable variant for. */
+export function missingFamilies(library, known) {
+  return known.filter((family) => !libraryVariants(library, family).length);
+}
+
+/**
+ * Families `used` that no library has, so they fall back to the procedural
+ * kit, when there is at least one library to miss them from. → [family]
+ */
+export function libraryFallbacks(used, libraries = []) {
+  if (!libraries.length) return [];
+  return [...new Set(used)].filter((family) => !libraries.some((library) => libraryVariants(library, family).length)).sort();
 }
 
 /** A deterministic number in [0, 1) from a key. */
@@ -171,12 +191,13 @@ export function densityTyping(density = "normal") {
 }
 
 /** A short listing of a library for `launchclip sfx list`. */
-export function summarizeLibrary(loaded) {
+export function summarizeLibrary(loaded, known = null) {
   if (!loaded) return null;
   return {
     dir: loaded.dir,
     manifest: loaded.file,
     generations: loaded.manifest.generations ?? 0,
+    ...(known ? { missing: missingFamilies(loaded, known) } : {}),
     families: Object.fromEntries(Object.entries(loaded.manifest.families).map(([family, entry]) => [family, {
       source: entry.source,
       roll: entry.roll ?? 0,

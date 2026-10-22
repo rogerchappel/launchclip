@@ -23,11 +23,11 @@ import path from 'node:path';
 import { deriveBoundaries, storyBase, validateStory } from './story.mjs';
 import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from './modules.mjs';
 import { gsapVars, layerStateAt, sceneWindows } from './transitions.mjs';
-import { backgroundFieldTiles, backgroundLayer, cameraPlan, overlayOps, placementTransform, sceneObjectLookup } from './camera-world.mjs';
+import { backgroundFieldTiles, backgroundLayer, cameraPlan, captionDipWindows, overlayOps, placementTransform, sceneObjectLookup } from './camera-world.mjs';
 import { getEase } from './motion.mjs';
 import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTweens, driftGsap, sceneAmbient, sceneDrift } from './ambient.mjs';
 import { profileGeometry } from './layout-check.mjs';
-import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from './captions.mjs';
+import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from './captions.mjs';
 import { brandFontStacks, fontFaceRule, fontSlug, frozenFontFaces, projectFontFamilies, registryFontFaces } from './fonts.mjs';
 import { EMITTERS as EDITORIAL_EMITTERS } from './editorial-ui-modules.mjs';
 import { EMITTERS as CATALOG_A_EMITTERS } from './hyperframes-catalog-a.mjs';
@@ -292,8 +292,11 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const chunks = await loadCaptionChunks(story, overlay, sourceDir, warnings);
     if (chunks?.length) {
       for (const range of overlay.hide ?? []) hide.push([Number(range[0]), Number(range[1])]);
-      const plan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide });
-      if (plan.nodes.length) captions = { chunks, hide, plan };
+      const captionsPlan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide });
+      // Camera moves that sweep panels through the band dip the captions out
+      // (captions.hide_during_moves, camera-world.mjs captionDipWindows).
+      const dips = captionDipTweens(captionDipWindows(plan, captionMoveHide(overlay)));
+      if (captionsPlan.nodes.length) captions = { chunks, hide, plan: captionsPlan, dips };
     }
   }
 
@@ -342,7 +345,7 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
       window.__timelines = window.__timelines || {};
       const tl = gsap.timeline({ paused: true });
 ${motion.join('\n').split('\n').map((line) => `      ${line}`).join('\n')}
-      ${captions ? 'window.mountCaptions(tl, document.getElementById("lc-captions"));' : ''}
+      ${captions ? 'window.mountCaptions(tl, document.getElementById("lc-captions"));' : ''}${captions?.dips.length ? `\n      // captions dip out during sweeping camera moves\n      ${captions.dips.map((dip) => `tl.fromTo('#lc-captions', { opacity: ${dip.from} }, { opacity: ${dip.to}, duration: ${num(dip.dur)}, ease: 'none', immediateRender: false }, ${num(dip.at)});`).join('\n      ')}` : ''}
       window.__timelines["${COMPOSITION_ID}"] = tl;
     </script>
   </div>

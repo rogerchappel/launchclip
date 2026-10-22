@@ -43,7 +43,10 @@ const freezeDeep = (value) => {
 // stagger: a multiplier on every module's default stagger (editorial = 1).
 // camera: the world-camera style (camera-world.mjs): drift amplitude (px at a
 // 1080 px short side), drift period (s), breathing scale amplitude, the ease
-// of whip-pans, and whether moves anticipate (the camera ease winds up).
+// of whip-pans, whether moves anticipate (the camera ease winds up), and
+// moveBlur: the motion-blur strength (0–1, a fraction of a whip-pan's
+// shutter) on pans, pushes, pulls and orbits, so fast moves in the punchy
+// grammars read as motion instead of a jump (0 at rest, always).
 // ambient: the ambient level this grammar suits (a hint for the planner and
 // for ambient motion's story default).
 export const GRAMMARS = freezeDeep({
@@ -53,7 +56,7 @@ export const GRAMMARS = freezeDeep({
     duration: { enter: 0.28, exit: 0.22, transition: 0.45, camera: 0.8 },
     overshoot: 0.1, stagger: 1,
     defaultTransition: { cuts: { type: 'push', dur: 0.45, direction: 'up' }, world: { type: 'pan', dur: 0.8 } },
-    camera: { style: 'steady', drift: 7, driftPeriod: 11, breathe: 0.004, whip: 'expo.inOut', anticipation: false },
+    camera: { style: 'steady', drift: 7, driftPeriod: 11, breathe: 0.004, whip: 'expo.inOut', anticipation: false, moveBlur: 0 },
     ambient: 'standard'
   },
   snappy: {
@@ -62,7 +65,7 @@ export const GRAMMARS = freezeDeep({
     duration: { enter: 0.2, exit: 0.16, transition: 0.32, camera: 0.55 },
     overshoot: 0.05, stagger: 0.75,
     defaultTransition: { cuts: { type: 'whip-pan', dur: 0.32, direction: 'right' }, world: { type: 'whip-pan', dur: 0.4 } },
-    camera: { style: 'snap', drift: 6, driftPeriod: 9, breathe: 0.004, whip: 'expo.inOut', anticipation: true },
+    camera: { style: 'snap', drift: 6, driftPeriod: 9, breathe: 0.004, whip: 'expo.inOut', anticipation: true, moveBlur: 0.5 },
     ambient: 'standard'
   },
   smooth: {
@@ -71,7 +74,7 @@ export const GRAMMARS = freezeDeep({
     duration: { enter: 0.5, exit: 0.36, transition: 0.7, camera: 1.1 },
     overshoot: 0, stagger: 1.25,
     defaultTransition: { cuts: { type: 'fade', dur: 0.6 }, world: { type: 'pan', dur: 1.1 } },
-    camera: { style: 'glide', drift: 10, driftPeriod: 14, breathe: 0.005, whip: 'sine.inOut', anticipation: false },
+    camera: { style: 'glide', drift: 10, driftPeriod: 14, breathe: 0.005, whip: 'sine.inOut', anticipation: false, moveBlur: 0 },
     ambient: 'subtle'
   },
   playful: {
@@ -80,7 +83,7 @@ export const GRAMMARS = freezeDeep({
     duration: { enter: 0.42, exit: 0.26, transition: 0.5, camera: 0.75 },
     overshoot: 0.2, stagger: 1.6,
     defaultTransition: { cuts: { type: 'pan', dur: 0.5, direction: 'right' }, world: { type: 'pan', dur: 0.75 } },
-    camera: { style: 'bounce', drift: 12, driftPeriod: 8, breathe: 0.006, whip: 'back.inOut(1.2)', anticipation: true },
+    camera: { style: 'bounce', drift: 12, driftPeriod: 8, breathe: 0.006, whip: 'back.inOut(1.2)', anticipation: true, moveBlur: 0.5 },
     ambient: 'lively'
   },
   documentary: {
@@ -89,7 +92,7 @@ export const GRAMMARS = freezeDeep({
     duration: { enter: 0.6, exit: 0.45, transition: 0.8, camera: 1.3 },
     overshoot: 0, stagger: 1.3,
     defaultTransition: { cuts: { type: 'fade', dur: 0.8 }, world: { type: 'pan', dur: 1.3 } },
-    camera: { style: 'drift', drift: 8, driftPeriod: 16, breathe: 0.004, whip: 'power2.inOut', anticipation: false },
+    camera: { style: 'drift', drift: 8, driftPeriod: 16, breathe: 0.004, whip: 'power2.inOut', anticipation: false, moveBlur: 0 },
     ambient: 'subtle'
   }
 });
@@ -97,7 +100,7 @@ export const GRAMMARS = freezeDeep({
 const EDITORIAL = GRAMMARS.editorial;
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const OVERRIDE_KEYS = ['base', 'ease', 'duration', 'overshoot', 'stagger', 'defaultTransition', 'camera', 'ambient'];
-const CAMERA_KEYS = ['style', 'drift', 'driftPeriod', 'breathe', 'whip', 'anticipation'];
+const CAMERA_KEYS = ['style', 'drift', 'driftPeriod', 'breathe', 'whip', 'anticipation', 'moveBlur'];
 
 /**
  * Validation messages for story.motion.grammar (empty = valid): a preset name
@@ -130,7 +133,11 @@ export function grammarErrors(value, path = 'motion.grammar') {
   if (value.ambient !== undefined && !['off', 'subtle', 'standard', 'lively'].includes(value.ambient)) errors.push(`${path}.ambient must be off, subtle, standard or lively`);
   if (value.camera !== undefined) {
     if (!isObject(value.camera)) errors.push(`${path}.camera must be an object`);
-    else for (const key of Object.keys(value.camera)) if (!CAMERA_KEYS.includes(key)) errors.push(`${path}.camera.${key} is not supported (allowed: ${CAMERA_KEYS.join(', ')})`);
+    else {
+      for (const key of Object.keys(value.camera)) if (!CAMERA_KEYS.includes(key)) errors.push(`${path}.camera.${key} is not supported (allowed: ${CAMERA_KEYS.join(', ')})`);
+      const blur = value.camera.moveBlur;
+      if (blur !== undefined && !(typeof blur === 'number' && blur >= 0 && blur <= 1)) errors.push(`${path}.camera.moveBlur must be a strength between 0 and 1`);
+    }
   }
   return errors;
 }

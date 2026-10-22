@@ -305,7 +305,7 @@ silence ratio, transients). `draftStyleFromReferences` maps them to a v2 pack
 
 The captions overlay is `{type: "captions", preset | style, src?, hide?,
 position?, max_words?, max_chars?, case?, emphasis?, keywords?, font?, size?,
-colors?, stroke?, shadow?, entrance?, exit?, offset?}`; legacy `style:
+colors?, stroke?, shadow?, entrance?, exit?, offset?, hide_during_moves?}`; legacy `style:
 "word-highlight" | "line" | "none"` still works (`line` → `minimal-line`,
 `style` may also name a preset, `preset` wins). `CAPTION_PRESETS` holds 14
 presets; `STORY_CAPTION_PRESETS` in `story.mjs` mirrors the names.
@@ -325,6 +325,23 @@ timeline to every frame against the evaluator; `scripts/parity-captions.mjs`
 compares rendered stills per preset (`test/fixtures/parity-captions/`, SSIM ≥
 0.97, `LAUNCHCLIP_PARITY=1`). The layout check moves the caption band for
 `position: top|middle` (`captionBandAt`).
+
+Captions during camera moves: `hide_during_moves` is `"auto"` (default),
+`true` or `false`. Auto dips the captions out for every world-camera move that
+sweeps the plates vertically (`sweepingMove`: vertical travel above 1 px, a
+zoom change or a roll, so vertical pans and whip-pans, push, pull and orbit);
+horizontal pans keep their captions. `true` dips for every move, `false` never.
+`captionDipWindows(plan, mode)` (camera-world.mjs) gives the move spans;
+`captionDipTweens(windows)` turns them into linear opacity ramps of
+`CAPTION_DIP_RAMP` (0.12 s) on the captions container that sit just outside
+each move (out before it starts, back after it ends; windows closer than two
+ramps merge). HyperFrames adds them as `tl.fromTo('#lc-captions', …)`;
+Remotion's `WordCaptions` applies `captionDipOpacity(windows, t)` to its
+`.lc-captions` element. layout-check samples every frame of every camera move,
+transforms each visible plate element's rect by the camera (`screenPoint`) and
+reports `camera-caption-band` when key content covers at least 5% of the
+caption band while a caption chunk is on screen and not dipped: a warning, an
+error from 0.25 s (`checkCameraSweeps`, `CAMERA_SWEEP`).
 
 ## Wave 2: module registry, compilers, parity
 
@@ -672,8 +689,12 @@ export function driftStateAt(drift, t) / driftStyle(drift, t) / driftGsap(drift)
   at 0.3× and overlays at 1.15×. `false` keeps the same background, moving
   1× with the plates, and turns overlay parallax off (world plates are
   transparent, so there is always a background behind them).
-- `blur` (default: whip-pans only): `true` blurs every camera move, `false`
-  none.
+- `blur` (default: the grammar's): whip-pans always blur at full strength;
+  pans, pushes, pulls and orbits blur at the grammar's `camera.moveBlur`
+  (snappy and playful 0.5: half the shutter and half the 18 px cap, so a fast
+  move reads as motion rather than a jump; editorial, smooth and documentary
+  0). `true` blurs every move at full strength, `false` none. The blur is
+  exactly 0 at rest either way (sub-threshold speeds round to 0).
 
 Camera transitions (`scene.in` / `ending.in`, track-0 scenes only; footage-led
 rejects them):
@@ -766,10 +787,11 @@ Renderers:
   `opsStateAt` and `blurAt`, and draws the same tiles with `WorldField`; `SceneLayer` takes the placement, a transparent
   plate flag and the overlay parallax ops.
 
-Parity: camera stories hold the usual SSIM 0.97 (explainer-9x16 mid-pan
-0.997; world-camera-9x16 0.991–0.997 at rest, mid-pan, mid-push, orbit, on
-blurred whip-pan frames and home again, and the same story in 16:9
-0.991–0.997, compared on the frame grid; `test/parity_camera.test.js`, which
+Parity: camera stories hold the usual SSIM 0.97 floor (explainer-9x16 mid-pan
+0.997; world-camera-9x16 0.990–0.996 at rest, on the playful grammar's
+motion-blurred mid-pan frames, with the captions dipped through the pan down,
+mid-push, orbit, on blurred whip-pan frames and home again, and the same story
+in 16:9 0.991–0.997, compared on the frame grid; `test/parity_camera.test.js`, which
 also checks the rendered background has no column step across the former
 seam). `test/world_field.test.js` samples the composited field along rows
 through the former seam from both renderers' math.

@@ -828,3 +828,22 @@ test("end to end: examples/story/minimal with the test voice through remotion", 
     await rm(project, { recursive: true, force: true });
   }
 });
+
+test("finish notes in one line the SFX families that fall back to the kit", async () => {
+  const project = await narratedProject();
+  const home = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-sfx-home-"));
+  try {
+    const dir = path.join(home, ".launchclip/sfx");
+    await mkdir(path.join(dir, "impact"), { recursive: true });
+    await writeFile(path.join(dir, "impact/impact-1.wav"), "wav");
+    await writeFile(path.join(dir, "library.json"), JSON.stringify({ schema_version: "launchclip.sfx-library.v1", families: { impact: { source: "elevenlabs", variants: [{ file: "impact/impact-1.wav", source: "elevenlabs" }] } } }));
+    const report = await runFinish(project, { renderer: "remotion", sfxHome: home }, fakeAdapters());
+    const notes = report.warnings.filter((line) => line.startsWith("sfx: "));
+    assert.equal(notes.length, 1, report.warnings.join("\n"));
+    assert.match(notes[0], /not in the SFX library .* procedural kit; fill only the missing families with: launchclip sfx seed --missing/);
+    assert.ok(!/\bimpact\b/.test(notes[0].split(" not in ")[0]), "families the library has are not listed");
+  } finally {
+    await rm(project, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
+  }
+});

@@ -213,6 +213,48 @@ export function checkLayout({ canvas, elements, safeZone, captionBand, profile, 
   };
 }
 
+// Camera sweeps: key content carried through the caption band by a camera
+// move while captions are on screen. A layout check at rest cannot see it
+// (every plate is clear of the band once the camera settles), so the caller
+// samples each move frame by frame and passes the screen rect of every
+// visible plate element (src/layout_check.js transforms the declared rects by
+// the world camera, kit/core/camera-world.mjs). A crossing is a warning, or an
+// error once it lasts at least `errorSeconds`.
+//   frames: [{t, move: {sceneId, type, start, duration}, rects: [{id, rect}]}]
+//   captionVisible: [[from, to]] spans where captions are on screen
+//   step: seconds between frames (1 / fps)
+// minOverlap: the share of the band a rect must cover to count, so a panel
+// edge grazing the band through the camera drift is not a crossing.
+export const CAMERA_SWEEP = Object.freeze({ errorSeconds: 0.25, minOverlap: 0.05 });
+
+export function checkCameraSweeps({ band, frames = [], captionVisible = [], step = 1 / 30, errorSeconds = CAMERA_SWEEP.errorSeconds, minOverlap = CAMERA_SWEEP.minOverlap } = {}) {
+  if (!band) return [];
+  const bandArea = Math.max(EPSILON, area(band));
+  const visible = (t) => captionVisible.some(([from, to]) => t >= from - EPSILON && t < to - EPSILON);
+  const runs = new Map();
+  for (const frame of frames) {
+    if (!visible(frame.t)) continue;
+    for (const { id, rect } of frame.rects) {
+      if (intersectionArea(rect, band) / bandArea < minOverlap) continue;
+      const key = `${frame.move.sceneId}\u0000${id}`;
+      const run = runs.get(key) ?? { id, move: frame.move, first: frame.t, last: frame.t, count: 0 };
+      run.first = Math.min(run.first, frame.t); run.last = Math.max(run.last, frame.t); run.count += 1;
+      runs.set(key, run);
+    }
+  }
+  return [...runs.values()].map((run) => {
+    const seconds = run.count * step;
+    const direction = run.move.direction ? ` ${run.move.direction}` : "";
+    return {
+      rule: "camera-caption-band",
+      severity: seconds + EPSILON >= errorSeconds ? "error" : "warning",
+      ids: [run.id, run.move.sceneId],
+      at: round(run.first),
+      detail: `the ${run.move.type}${direction} into ${run.move.sceneId} carries ${run.id} through the caption band ${rectText(band)} while captions are on screen (${round(seconds)}s, ${round(run.first)}s–${round(run.last + step)}s); keep captions.hide_during_moves on ("auto" or true), use a horizontal pan, or move the panel`
+    };
+  });
+}
+
 // Adapts the `layout` object returned by editorial modules
 // ({canvas, rect, motion?: {enterEnd, exitStart, end}}) into elements.
 // Without motion the layout carries no timing, so pass start and end.
