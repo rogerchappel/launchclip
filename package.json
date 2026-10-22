@@ -38,6 +38,7 @@
     "bin",
     "examples/motion/golden-timeline.json",
     "examples/hyperframes-local",
+    "kit",
     "motion-engine",
     "public/base/README.md",
     "public/icons",

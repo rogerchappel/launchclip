@@ -64,7 +64,7 @@ export function analyzePng(buffer, options = {}) {
   };
 }
 
-function decodePng(input) {
+export function decodePng(input) {
   const buffer = Buffer.isBuffer(input) ? input : Buffer.from(input);
   if (buffer.length < PNG_SIGNATURE.length || !buffer.subarray(0, 8).equals(PNG_SIGNATURE)) throw new Error("Visual snapshot must be a PNG image");
   let offset = 8;

@@ -11,6 +11,7 @@ the current workflow and the decisions an operating agent must not guess.
 - [Project-local style packs](#project-local-style-packs)
 - [Model-directed production](#model-directed-production)
 - [Resume and repair commands](#resume-and-repair-commands)
+- [Layout check](#layout-check)
 - [Workspace artifacts](#workspace-artifacts)
 - [Studio review](#studio-review)
 - [Final render](#final-render)
@@ -340,6 +341,37 @@ without repeating intake, evidence, planning, frame generation, or audio.
 
 Infrastructure verification failures must be fixed in the local toolchain.
 Only use `production-repair` for scoped creative/structural findings.
+
+## Layout check
+
+For a `story.json` project (HyperFrames or Remotion), check the declared
+geometry before rendering:
+
+```bash
+launchclip layout-check <story-project> [--profile shorts|landscape] [--json]
+```
+
+The command resolves `story.json` (with `NARRATION.json` and `BEATS.json` when
+present), builds each editorial scene through `editorial-ui-modules.mjs` to get
+its rect and motion windows, and uses `scene.params.rect` (plus optional
+`params.role`, `params.minTextPx`, `params.allowOcclusion`) for other modules.
+Scenes without geometry are skipped with a note. A `captions` overlay becomes
+the delivery caption band. The profile defaults to `shorts` for portrait
+canvases and `landscape` otherwise.
+
+Errors (status `failed`): `safe-zone` (text or hero outside the safe zone at
+rest; Shorts y 280–1450, x 80–940 on 1080×1920, landscape 5% title-safe),
+`collision` (non-decor elements overlapping at rest unless `allowOcclusion`
+names the pair), `caption-band` (text or hero in the caption band while
+captions show, unless the scene sets `hides_captions`), `min-text-size` (key
+text under 44 px on Shorts), and `module-spec` (an editorial spec that does not
+build). Warnings: `hero-fill` (hero outside 70–90% of the safe width on
+Shorts), `lower-third-empty` (nothing below the safe-zone midpoint for over
+3 s on Shorts), and `centre-of-mass` (sustained drift from y 860 on Shorts).
+
+Without `--json` the command prints a one-line-per-finding summary. It checks
+declarations only; confirm contrast (3:1 minimum) and a filled lower third on
+rendered stills as well. On HyperFrames, keep running `hyperframes check` too.
 
 ## Workspace artifacts
 
