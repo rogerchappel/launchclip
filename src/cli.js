@@ -61,7 +61,7 @@ export async function runCli(argv, io = {}) {
         review: { input: stdin, output: stderr, ...productionAdapters.review }
       });
     } else if (command === "story") {
-      result = await runStoryCommand(storyInvocation.action, storyInvocation.file, flags);
+      result = await runStoryCommand(storyInvocation.action, storyInvocation.file, flags, productionAdapters.story ?? {});
     } else if (command === "cinematic-check") {
       result = await checkCinematicProject(required(firstArg, "project path"), {
         ...flags,
@@ -152,8 +152,9 @@ function parseSkillsInvocation(action, rest) {
 }
 
 function parseStoryInvocation(action, rest) {
-  if (!action) throw new Error("Missing story action; use validate, resolve or compile");
-  if (!new Set(["validate", "resolve", "compile"]).has(action)) throw new Error(`Unknown story action: ${action}`);
+  if (!action) throw new Error("Missing story action; use validate, resolve, compile or plan");
+  if (!new Set(["validate", "resolve", "compile", "plan"]).has(action)) throw new Error(`Unknown story action: ${action}`);
+  if (action === "plan") return { action, file: null, flagArgs: rest };
   const file = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   return { action, file: required(file, action === "compile" ? "story project path" : "story.json path"), flagArgs: rest.slice(1) };
 }
@@ -259,6 +260,7 @@ Usage:
   launchclip story validate <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out report.json]
   launchclip story resolve <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out story.resolved.json]
   launchclip story compile <project> --renderer hyperframes|remotion [--out dir]
+  launchclip story plan --brief brief.md [--narration NARRATION.json] [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] [--base assets/recording.mp4] [--voice assets/audio/narration.wav] [--format 1080x1920] [--fps 30] [--duration seconds] [--brand brand.json] [--max-repairs 2]
   launchclip cinematic-check <project> [--renderer hyperframes|remotion] [--video renders/draft.mp4] [--audio-manifest AUDIO-MANIFEST.json] [--expect-audio] [--critique qa/critic.json]
   launchclip layout-check <project> [--profile shorts|landscape] [--json]
   launchclip init <repo> --out <workspace>
