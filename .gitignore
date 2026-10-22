@@ -1,5 +1,5 @@
 # Dependencies
-/node_modules/
+/node_modules
 
 # LaunchClip workspaces and generated output
 /.launchclip/*
@@ -53,3 +53,6 @@ qa/renderer-eval/
 
 # Voice provider QA samples
 qa/voice/
+
+# SFX library QA renders and auditions
+qa/sfx/

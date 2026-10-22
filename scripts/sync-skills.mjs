@@ -49,6 +49,7 @@ const SHARED_REFERENCES = [
   'finishing-in-an-nle.md',
   'recorded-treatment-check.md',
   'recorded-video.md',
+  'sfx-library.md',
   'shorts-delivery.md'
 ];
 

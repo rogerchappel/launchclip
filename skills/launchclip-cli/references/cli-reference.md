@@ -19,6 +19,7 @@ the current workflow and the decisions an operating agent must not guess.
 - [Local-first OSS packet lane](#local-first-oss-packet-lane)
 - [Storyboard (storyboard.json)](#storyboard-storyboardjson)
 - [Finish: storyboard to mastered video in one command](#finish-storyboard-to-mastered-video-in-one-command)
+  - [Sound effects](#sound-effects)
 - [Export: an editable timeline for Final Cut Pro, Premiere Pro and Resolve](#export-an-editable-timeline-for-final-cut-pro-premiere-pro-and-resolve)
 
 - [Voice providers](#voice-providers)
@@ -46,6 +47,7 @@ Provider requirements:
 | local-first frame authoring or repair | a running Ollama server; no model API key for the local attempt |
 | OpenRouter frame authoring or repair | `OPENROUTER_API_KEY` |
 | generated narration and music | `ELEVENLABS_API_KEY` plus `ELEVENLABS_VOICE_ID` or `--voice-id` for narration |
+| ElevenLabs SFX library (`launchclip sfx seed`) | `ELEVENLABS_API_KEY`; without it the library seeds from the procedural kit |
 | supplied voiceover without a transcript | `ELEVENLABS_API_KEY` for transcription |
 | supplied voiceover with `--transcript` | no transcription call required |
 | visual-only production | `--no-audio`; OpenAI model calls still occur |
@@ -609,7 +611,8 @@ candidate as `<out>.rejected.json`. Review the storyboard, then run
 
 ```bash
 launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] \
-  [--voice kokoro|elevenlabs|supplied|test] [--out renders/final.mp4] [--force] [--json]
+  [--voice kokoro|elevenlabs|supplied|test] [--out renders/final.mp4] \
+  [--sfx-library dir] [--sfx-density low|normal|high] [--force] [--json]
 ```
 
 `finish` is the recommended way to turn a `storyboard.json` project into a
@@ -621,7 +624,7 @@ finished video. It runs these stages in order and stops at the first failure
 | `voice` | When `audio.narration` (`{text, provider?, voice?, speed?}`) is set, synthesises it through the voice provider (`--voice` overrides `provider`; the default is `kokoro`). Skipped when `audio.voice` is a supplied file, unless `--voice` is given. | `assets/audio/narration.wav`, `NARRATION.json` |
 | `validate` | Validates the story, resolves its anchors against the synthesised words, and runs the geometric layout check. Errors fail the run; warnings are reported. | `.launchclip/finish/storyboard.json`, `.launchclip/finish/story.resolved.json` |
 | `captions` | Chunks the words into caption lines when a captions overlay has no `src`. | `assets/captions/captions.json` |
-| `sound` | Binds a procedural kit cue to every hit (`hit.cue`, else the named module event's cue, else a default from the event name) and to every module event that carries a `cue`, adds a whoosh under push, whip and zoom transitions, picks a music bed from scene `energy` (tempo, level and kick window), and mixes everything with the music ducked under the voice. Skipped when the storyboard sets `audio.mix`. `audio.sfx: "none"` and `audio.music: "none"` turn the parts off. | `assets/audio/mix.wav`, `assets/audio/kit/`, `AUDIO-MANIFEST.json`, `qa/sfx.json` |
+| `sound` | Binds a cue to every hit (`hit.cue`, else the named module event's cue, else a default from the event name) and to every module event that carries a `cue`, adds a whoosh under push, whip and zoom transitions, resolves each cue to a file through the SFX library (see [Sound effects](#sound-effects)), renders a typing track for typed code, picks a music bed from scene `energy` (tempo, level and kick window), and mixes everything with the music ducked under the voice. Skipped when the storyboard sets `audio.mix`. `audio.sfx: "none"` and `audio.music: "none"` turn the parts off. | `assets/audio/mix.wav`, `assets/audio/kit/`, `assets/audio/typing.wav`, `AUDIO-MANIFEST.json`, `qa/sfx.json` |
 | `render` | Renders the filled copy through the renderer adapter. The default renderer is `remotion` when the project has no `index.html`, otherwise `hyperframes`; HyperFrames compiles to `.launchclip/finish/hyperframes/` first. | `.launchclip/finish/render-<quality>.mp4` |
 | `master` | Masters the render's audio to −14 LUFS and at most −1 dBTP, re-measured after encoding. | `renders/draft.mp4` (draft) or `renders/final.mp4` (high), or `--out` |
 | `evidence` | Builds the phase-2 temporal evidence (browser stills plus encoded frames) and critic contact sheets. | `qa/temporal-evidence/`, `qa/critic-sheets/` |
@@ -646,6 +649,74 @@ whole pipeline can be exercised offline. Never ship it. The `kokoro`,
 
 After finish, a fresh-context critic reviews `qa/critic-sheets/` and writes
 `qa/critic.json`; `launchclip cinematic-check` then closes the critic gate.
+
+### Sound effects
+
+```bash
+launchclip sfx seed [--provider elevenlabs|synth] [--variants 3] [--only whoosh,impact] \
+  [--reroll typing] [--dir .launchclip/sfx] [--force]
+launchclip sfx reroll <family> [--dir .launchclip/sfx]
+launchclip sfx list [--dir .launchclip/sfx]
+launchclip sfx audition <family> [--dir .launchclip/sfx] [--out audition.wav] [--gap 0.35]
+```
+
+The SFX library is a locked set of processed WAV files per cue family,
+described by `<dir>/library.json` (`launchclip.sfx-library.v1`). Families:
+`whoosh`, `impact`, `riser`, `tick`, `pop`, `shimmer`, `subdrop`, `click`,
+`keystroke`, `keystroke-space` and `keystroke-enter` (aliases: `typing` for
+the three keystroke families, `ui` for click, tick and pop).
+
+- **Seed once.** `sfx seed` fills every family the library does not have yet.
+  With `ELEVENLABS_API_KEY` in the environment the default provider is
+  `elevenlabs`: it runs the checked-in prompt set (`src/sfx/prompts.json`:
+  per family a prompt, duration, prompt influence and variant count) through
+  `POST /v1/sound-generation`. Without a key the default is `synth`, the
+  original procedural kit (`synth-audio-kit.mjs`, local FFmpeg, no samples, no
+  cost). A default ElevenLabs seed is 24 generations; `--variants N` changes
+  the number per family and `--only` limits the families. The key is read from
+  the process environment only; `.env` loading is handled separately by the
+  CLI. It is never logged, written or included in an error.
+- **Cache.** Every download is stored as `<dir>/cache/<request-hash>.mp3`. A
+  cached request is never sent again, so `--force` (re-process everything)
+  costs nothing, and it works without the key.
+- **Post-processing** (`src/sfx/process.js`): 48 kHz WAV, DC removed, leading
+  silence trimmed by onset detection so the transient starts within 5 ms, the
+  tail trimmed against the noise floor with a short fade, a per-family length
+  cap (keystroke 120 ms, tick 150 ms, whoosh 1.2 s), peak normalised to
+  −3 dBFS. Silent and flat-top clipped clips are rejected; a single-hit family
+  (impact, tick, pop, click, keystrokes) keeps the cleanest hit of a multi-hit
+  clip, or rejects it. Each kept file records its onset, duration, peak, peak
+  time, RMS and (from 0.4 s) integrated loudness. A family whose takes are all
+  rejected falls back to the procedural kit, with a warning.
+- **Locked.** Re-running `sfx seed` leaves seeded families alone.
+  `--reroll <family>` (or `sfx reroll <family>`) replaces just that family
+  with new generations; the family's `roll` number is part of the request
+  hash.
+- **Audition.** `sfx list` shows the libraries and where each family resolves;
+  `sfx audition <family>` writes a contact WAV of every variant with short gaps
+  (default `<dir>/audition/<family>.wav`).
+
+`finish` resolves each cue family from the first source that has it: an
+explicit library (`--sfx-library`, or a style pack's `sound.sfx_library`),
+the project library (`<project>/.launchclip/sfx`), the user library
+(`~/.launchclip/sfx`, or `$LAUNCHCLIP_SFX_HOME`), then the procedural kit. The
+variant for each event is picked from a hash of the story id and the event, so
+repeated cues vary while renders stay reproducible; a library riser is placed
+so its measured peak lands on its moment. `--sfx-density low` drops about half
+of the optional cues (module events, transitions, word ticks; hits always
+stay) by a deterministic hash and caps typing at 15 keys per second; `high`
+raises the typing cap to 30.
+
+**Typing track.** For a `code-snippet` with `typing: true`, finish places one
+keystroke on each character's visible time (`charTimes`), a space-bar key on
+spaces and an enter key between typed lines, rotating variants without
+immediate repeats, with seeded ±1.5 dB level and ±1.5 semitone pitch jitter,
+and a cap of 25 keys per second (thinned deterministically). Modules that emit
+`*-typing-start` events without `charTimes` get evenly spaced keys over the
+typing window. Per-word reveals (`emphasis-caption` `word-<i>` events,
+`archive-card` quote words) get a soft click. The track is rendered to
+`assets/audio/typing.wav` and mixed as one input; `qa/sfx.json` lists every
+keystroke.
 
 ## Export: an editable timeline for Final Cut Pro, Premiere Pro and Resolve
 
