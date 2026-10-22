@@ -735,9 +735,11 @@ function resolveCountUp(params, ctx) {
   const estimated = widthAt(numberSize);
   const sparks = [];
   if (spark) {
-    const count = 12, a = estimated / 2 + 40 * k, b = numberSize * .5 + 40 * k;
+    // A fan over the sides and top (165°–375°, 0° = right, 90° = down) so no
+    // ray crosses the underline or the label below the number.
+    const count = 11, a = estimated / 2 + 40 * k, b = numberSize * .5 + 40 * k;
     for (let i = 0; i < count; i++) {
-      const angle = (i / count) * 360 + 15, rad = angle * Math.PI / 180;
+      const angle = 165 + (i / (count - 1)) * 210, rad = angle * Math.PI / 180;
       const r = (a * b) / Math.sqrt((b * Math.cos(rad)) ** 2 + (a * Math.sin(rad)) ** 2);
       const node = `spark-${i}-ray`;
       anim.add(node, hitTime, .16, 'power2.out', {x: r, scaleX: 0}, {x: r + 28 * k, scaleX: 1});
@@ -762,6 +764,12 @@ function resolveCountUp(params, ctx) {
     note: {position: 'relative', marginTop: px(noteGap), fontFamily: fonts.meta, fontSize: px(noteSize), lineHeight: '1.3', letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.muted, whiteSpace: 'nowrap'}
   };
   labelFit.lines.forEach((_, index) => { styles[`label-line-${index}`] = {display: 'block'}; });
+  // Only nodes that are rendered keep a style.
+  if (!prefix) delete styles.prefix;
+  if (!suffix) delete styles.suffix;
+  if (!note) delete styles.note;
+  if (!underline) delete styles.bar;
+  if (!spark) delete styles.sparks;
   for (const item of sparks) {
     styles[`spark-${item.index}`] = {position: 'absolute', left: '0', top: '0', width: '0', height: '0', transform: `rotate(${item.angle}deg)`};
     styles[`spark-${item.index}-ray`] = {position: 'absolute', left: '0', top: px(-5 * k), width: px(56 * k), height: px(10 * k), borderRadius: px(5 * k), background: theme.emphasis, transformOrigin: '0% 50%'};

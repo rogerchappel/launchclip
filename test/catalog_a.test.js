@@ -131,7 +131,8 @@ function checkEmitter(model) {
         else assert.ok(sameColor(actual, value), `${id}.${prop} at ${t}: gsap ${actual} vs model ${value}`);
       }
     }
-    for (const entry of model.texts) assert.equal(targets[`#${model.id}-${entry.node}`].textContent, textAt(model, entry.node, t), `text at ${t}`);
+    // GSAP coerces numeric strings on plain objects ("70" → 70); the DOM keeps text.
+    for (const entry of model.texts) assert.equal(String(targets[`#${model.id}-${entry.node}`].textContent), textAt(model, entry.node, t), `text at ${t}`);
   }
   return out;
 }
@@ -386,6 +387,68 @@ test("kinetic-words validates beats", () => {
 test("kinetic-words parity fixtures resolve", async () => {
   await checkFixture("a-cat-kinetic-words.json");
   await checkFixture("a-cat-kinetic-words-stack.json");
+});
+
+// ---------------------------------------------------------------------------
+// count-up
+
+const COUNT = { value: 1250000, prefix: "$", label: "raised in the first week", note: "Illustrative", hit: "both", countAt: .3, countDuration: 1.2 };
+registerSample("count-up", COUNT, { captions: true });
+
+test("count-up counts in discrete frames and hits when the count lands", () => {
+  const model = resolve("count-up", COUNT);
+  assert.equal(model.hidesCaptions, false);
+  const c = model.content;
+  assert.equal(c.countStart, 2.3);
+  assert.equal(c.stateFrames, 36);
+  assert.equal(c.countEnd, 3.5);
+  assert.equal(c.initialText, "0");
+  assert.equal(c.finalText, "1,250,000");
+  const frames = model.texts[0].frames;
+  assert.equal(frames.at(-1).text, "1,250,000");
+  assert.ok(frames.every((frame, i) => !i || frame.time > frames[i - 1].time));
+  assert.equal(textAt(model, "digits", 2.29), "0");
+  assert.equal(textAt(model, "digits", 9), "1,250,000");
+  assert.deepEqual(model.events.map((e) => [e.id, e.time, e.endTime]), [["m1-count", 2.3, 3.5], ["m1-hit", 3.5, undefined]]);
+  assert.equal(sampleNode(model, "bar", 3.49).scaleX, 0);
+  assert.equal(sampleNode(model, "bar", 4.2).scaleX, 1);
+  assert.equal(sampleNode(model, "digits", 4).color, BRAND.colors.primary);
+  assert.equal(c.sparks.length, 11);
+  assert.ok(c.sparks.every((s) => s.angle >= 165 && s.angle <= 375), "sparks fan above the number");
+  assert.equal(sampleNode(model, "spark-0-ray", 4.2).scaleX, 0, "sparks finish invisible");
+  // Rect stays above the caption band.
+  assert.ok(model.rect.y + model.rect.height <= 1150 + .5);
+});
+
+test("count-up formats decimals, separators, signs and affixes", async () => {
+  const { formatNumber } = await import("../kit/core/catalog-a.mjs");
+  assert.equal(formatNumber(1234567.891, { decimals: 2 }), "1,234,567.89");
+  assert.equal(formatNumber(1234567, { separator: false }), "1234567");
+  assert.equal(formatNumber(-42.5, { decimals: 1 }), "−42.5");
+  assert.equal(formatNumber(-0.001, { decimals: 1 }), "0.0");
+  const model = resolve("count-up", { value: 17.5, from: 70, decimals: 1, suffix: "°C", label: "the gap" });
+  assert.equal(model.content.initialText, "70.0");
+  assert.equal(model.content.finalText, "17.5");
+  const out = EMITTERS["count-up"](model);
+  assert.match(out.html, /<span id="m1-suffix">°C<\/span>/);
+  assert.match(out.motion, /tl\.set\("#m1-digits", \{textContent:"70\.0"\}, 2\);/);
+});
+
+test("count-up validates its params", () => {
+  const bad = (params, pattern) => assert.throws(() => resolve("count-up", params), pattern);
+  bad({ label: "x" }, /count-up: params\.value is required/);
+  bad({ value: 5 }, /params\.label is required/);
+  bad({ value: 5, from: 5, label: "x" }, /params\.from must differ from params\.value/);
+  bad({ value: 5, label: "x", decimals: 1.5 }, /params\.decimals must be an integer between 0 and 3/);
+  bad({ value: 5, label: "x", suffix: "percent" }, /params\.suffix must be a string of 1–6 characters/);
+  bad({ value: 5, label: "x", countAt: 2, countDuration: 1.5 }, /must leave 0\.85 s before the scene ends/);
+  bad({ value: 5, label: "x", hit: "boom" }, /params\.hit must be one of "underline", "spark", "both", "none"/);
+  bad({ value: 1e12, decimals: 3, label: "x" }, /params\.value with its prefix and suffix is too wide/);
+  bad({ value: 5, label: "a label that is far too long to sit on two lines at this size okay" }, /params\.label must be a string of 1–60 characters/);
+});
+
+test("count-up parity fixture resolves", async () => {
+  await checkFixture("a-cat-count-up.json");
 });
 
 test("hook-title parity fixture and the golden story's s1 resolve", async () => {
