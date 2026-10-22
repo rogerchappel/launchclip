@@ -209,8 +209,11 @@ modules. Treat these rules as the contract:
   is `ordinary`. These are the phase-2 declared boundaries that
   `cinematic-check` and the evidence builder read, with `boundary_id`
   `<scene-id>-in` and `sequence_id` set to the `from_object` scene.
-- `audio.mix` names the one offline mix; `overlays` holds captions; `ending`
-  can loop to a scene.
+- `audio.narration` (`{text, provider?, voice?, speed?}`) is the script
+  `launchclip finish` synthesises into `audio.voice` and `audio.words`
+  (defaults: Kokoro, `af_heart`, speed 1.2); see "Narration" under
+  "Render and verify". `audio.mix` names the one offline mix; `overlays`
+  holds captions; `ending` can loop to a scene.
 - Asset paths are project-relative under `assets/` (`"assets/media/demo.mp4"`),
   without a leading slash, and resolve through `staticFile(path)`.
 
@@ -522,7 +525,10 @@ constraints:
   `motion.grammar` keeps one easing character across the piece, and
   `camera.mode` "world" gives camera travel with parallax depth, a slow drift
   through holds and velocity-shaped blur from one tested implementation.
-- The first frame must already communicate an intentional state. The first
+- The first frame must already communicate an intentional state: render and
+  inspect a still of frame 0 itself. A module whose entrance animates in can
+  be blank on frame 0 even at `at: 0`, so open on one that is readable on
+  frame 0 (`hook-title`), or check the still and adjust. The first
   second states the promise. The first four seconds contain at least three
   meaningful changes in layout, evidence, framing, or visual register for
   portrait, or two for landscape.
@@ -702,7 +708,8 @@ launchclip finish <project> --renderer remotion --quality draft   # renders/draf
 launchclip finish <project> --renderer remotion --quality high    # renders/final.mp4, after approval
 ```
 
-It synthesises `audio.narration` when set (`--voice kokoro|elevenlabs|supplied`),
+It synthesises `audio.narration` when set (see "Narration" below;
+`--voice kokoro|elevenlabs|supplied|test` overrides its provider),
 validates and layout-checks the storyboard, writes captions, builds the SFX
 and music mix from the hits, module cues, scene energy and the beat-synced
 music (`--music synth|elevenlabs|none`), renders, masters to
@@ -732,23 +739,97 @@ segments to re-render, re-runs master, evidence and gates, and writes
 before/after stills to `qa/finish/scenes/<id>-before-after.png`: inspect them.
 The joined result is frame-identical to a fresh full render.
 
+#### Narration: `audio.narration`, `launchclip voice`, then word anchors
+
+For a synthesised voice, write the script into `storyboard.json` and let
+`finish` produce the voice and its word timings. Do not hand-write
+`audio.voice` or `audio.words` for a synthesised take:
+
+```json
+"audio": {
+  "narration": {
+    "text": "Your launch stalled at the last step. Here is why.",
+    "provider": "kokoro",
+    "voice": "af_heart",
+    "speed": 1.2
+  }
+}
+```
+
+| field | required | default | notes |
+| --- | --- | --- | --- |
+| `text` | yes | | The whole script, at most 4000 characters. Sentences end in `.`, `!` or `?`. |
+| `provider` | no | `kokoro` | `kokoro` (local, free), `elevenlabs` (paid, needs `ELEVENLABS_API_KEY` and the user's approval), `supplied` (audio you already have in `audio.voice`), `test` (offline placeholder tone). |
+| `voice` | no | `af_heart` for Kokoro | The provider's voice id. |
+| `speed` | no | `1.2` for Kokoro, else `1` | 0.5 to 2. Speed is a generation parameter, not a time-stretch, so change it to fit a target length. |
+
+`finish` synthesises the take into `assets/audio/narration.wav` and
+`NARRATION.json` (`launchclip.narration.v1`: the text, provider, voice, speed,
+`duration_seconds` and every word's `start`/`end`), then uses it for word
+anchors, captions, ducking and beat sync. `finish --voice <provider>`
+overrides `provider` for one run. Takes are cached in `.launchclip/voice` by
+text, provider, voice and speed, so an unchanged script is never synthesised
+twice.
+
+Work in this order:
+
+1. **Write the narration text first**, in `audio.narration`, before any
+   scenes (`"scenes": []` is fine at this point).
+2. **Measure it:** `launchclip voice <project>` (or
+   `launchclip voice --text "..." --voice kokoro --speed 1.2` without a
+   project). It synthesises the take (cached), writes `NARRATION.json`, and
+   prints the duration, word count, words per minute and one row per sentence
+   with its start, end and first-word anchor. Adjust the text or `speed` and
+   rerun until the duration fits the target; never guess the length from a
+   word count.
+3. **Size the scenes to the real take:** set `format.duration` to the
+   measured duration plus a short tail (about 0.3 to 0.8 s), and give each
+   beat the span of its sentences.
+4. **Anchor scenes and hits to words, not seconds:** `"start": "word:stalled"`,
+   `"at": "word:twelve"` (`word:<text>#2` for the second occurrence). Anchors
+   survive a re-take; seconds do not.
+5. **Run `finish`.** It reuses the measured take and fails validation if an
+   anchor names a word that is not in the narration.
+
+If you change the text, rerun `launchclip voice` before moving scenes, then
+check that every anchor still resolves with `launchclip story validate`.
+
 #### Music and beat sync in `launchclip finish`
 
 `finish` picks the music: `--music synth|elevenlabs|none`, then
 `audio.music`, then ElevenLabs when `ELEVENLABS_API_KEY` is set (the CLI reads
-`.env` from the working and project directories without overriding the
-shell), else the license-free synth bed. `audio.music` takes `"synth"`,
+`.env` from the working directory, the project directory and each parent up to
+the repo root, without overriding the shell), else the license-free synth bed.
+If `finish` warns that ElevenLabs was asked for but the key is not set, it
+used the synth bed: stop and fix the key rather than shipping that mix. `audio.music` takes `"synth"`,
 `"none"`, an `assets/` path, or
 `{provider: "elevenlabs" | "synth" | "file", prompt?, bpm?, file?, sync?: "auto" | "off" | "cuts" | "hits"}`.
 
 - **ElevenLabs is paid.** Use it only when the user has approved spending on
-  their account; `finish` prints a one-line notice with the cache path. The
-  brief comes from the story: tone, target BPM, the scene-energy arc (as a
-  composition plan with one section per energy segment) and no vocals. Every
-  generation is cached by prompt or plan, length, model and seed under
-  `$LAUNCHCLIP_CACHE/elevenlabs/music` and is never generated twice, so iterate
-  freely on everything except the music brief. Output terms depend on the
-  user's ElevenLabs plan (see `THIRD_PARTY_NOTICES.md`).
+  their account. The request comes from the story: tone, target BPM, the
+  scene-energy arc (as a composition plan with one section per energy segment)
+  and no vocals. The length is whole bars at the target BPM plus a tail, and
+  every section boundary snaps to a bar line, so nudging a cut by less than
+  half a bar maps to the same request. Every generation is cached by request
+  under `$LAUNCHCLIP_CACHE/elevenlabs/music`.
+- **The music lock.** After the first generation, `finish` writes
+  `.launchclip/music-lock.json` (request hash, the track copied to
+  `.launchclip/music/`, BPM, and the *music brief* that produced it) and
+  reuses that track while the brief is unchanged. The brief is the provider,
+  model, `audio.music.prompt`, target BPM, style-pack music hints, seed,
+  narrated or not, and a length bucket (the track must cover the story plus
+  1 s and run at most 8 bars past it). Scene timing, words and module edits
+  are not part of it: they only re-run beat sync and alignment against the
+  locked track. So **iterate freely on everything except the music brief**;
+  changing the brief (or scene energies you want the music to follow: pass
+  `--music-regenerate` then) is a new paid generation.
+- **Read the music line `finish` prints.** `music: REUSE locked ...` or
+  `music: REUSE cached ...` costs nothing; `music: PAID ElevenLabs generation
+  of N s (about $X) (reason)` spends credits and says why (no lock yet, which
+  brief field changed, the story outgrew the track, or
+  `--music-regenerate`). If you did not expect `PAID`, stop before the next
+  run and find out why. Output terms depend on the user's ElevenLabs plan
+  (see `THIRD_PARTY_NOTICES.md`).
 - **Set energy honestly** (calm intro, `"build"` before the payoff, 3 on the
   payoff): it drives both the bed and the ElevenLabs sections.
 - **Beats.** The track's BPM, beats and downbeats are measured into

@@ -1026,7 +1026,7 @@ function resolveCta(params, ctx) {
   const detailSize = Math.round(52 * k), handleSize = Math.round(50 * k), iconSize = Math.round(50 * k);
   const pillPadY = 26 * k, pillPadX = 46 * k, pillGap = 64 * k, detailGap = 30 * k;
   const pillWidth = handle ? textWidth(handle, handleSize, fk.meta) + pillPadX * 2 + (icon !== 'none' ? iconSize + 20 * k : 0) : 0;
-  if (pillWidth > area.width) throw new Error('params.handle is too wide for the handle pill; shorten it');
+  if (pillWidth > area.width) throw new Error(`params.handle '${handle}' needs ${Math.ceil(pillWidth)} px; the pill fits ${Math.floor(area.width)} px at this size: shorten it${/^(https?:\/\/)?(www\.)?github\.com\//i.test(handle) ? ", or drop the 'github.com/' prefix" : /^https?:\/\//i.test(handle) ? ", or drop the 'https://' prefix" : ''}${icon !== 'none' ? ", or set icon: 'none'" : ''}`);
   const detailFit = detail ? fitLines(splitWords(detail).map(word => word.text), {kind: fk.body, maxWidth: area.width * .86, maxLines: 2, maxSize: detailSize, minSize: detailSize, lineHeight: 1.25, maxHeight: detailSize * 2.6}) : null;
   if (detail && !detailFit) throw new Error('params.detail is too long for two lines; shorten it');
   const chrome = (detail ? detailGap + detailFit.lines.length * detailSize * 1.25 : 0) + (handle ? pillGap + handleSize * 1.2 + pillPadY * 2 : 0);

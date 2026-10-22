@@ -209,8 +209,11 @@ modules. Treat these rules as the contract:
   is `ordinary`. These are the phase-2 declared boundaries that
   `cinematic-check` and the evidence builder read, with `boundary_id`
   `<scene-id>-in` and `sequence_id` set to the `from_object` scene.
-- `audio.mix` names the one offline mix; `overlays` holds captions; `ending`
-  can loop to a scene.
+- `audio.narration` (`{text, provider?, voice?, speed?}`) is the script
+  `launchclip finish` synthesises into `audio.voice` and `audio.words`
+  (defaults: Kokoro, `af_heart`, speed 1.2); see "Narration" under
+  "Render and verify". `audio.mix` names the one offline mix; `overlays`
+  holds captions; `ending` can loop to a scene.
 - Asset paths are project-relative under `assets/` (`"assets/media/demo.mp4"`),
   without a leading slash, and resolve through `staticFile(path)`.
 
@@ -522,7 +525,10 @@ constraints:
   `motion.grammar` keeps one easing character across the piece, and
   `camera.mode` "world" gives camera travel with parallax depth, a slow drift
   through holds and velocity-shaped blur from one tested implementation.
-- The first frame must already communicate an intentional state. The first
+- The first frame must already communicate an intentional state: render and
+  inspect a still of frame 0 itself. A module whose entrance animates in can
+  be blank on frame 0 even at `at: 0`, so open on one that is readable on
+  frame 0 (`hook-title`), or check the still and adjust. The first
   second states the promise. The first four seconds contain at least three
   meaningful changes in layout, evidence, framing, or visual register for
   portrait, or two for landscape.
@@ -702,7 +708,8 @@ launchclip finish <project> --renderer remotion --quality draft   # renders/draf
 launchclip finish <project> --renderer remotion --quality high    # renders/final.mp4, after approval
 ```
 
-It synthesises `audio.narration` when set (`--voice kokoro|elevenlabs|supplied`),
+It synthesises `audio.narration` when set (see "Narration" below;
+`--voice kokoro|elevenlabs|supplied|test` overrides its provider),
 validates and layout-checks the storyboard, writes captions, builds the SFX
 and music mix from the hits, module cues, scene energy and the beat-synced
 music (`--music synth|elevenlabs|none`), renders, masters to
@@ -731,6 +738,8 @@ touches neither the final nor the gates. `--scene s3[,s4]` forces those scenes'
 segments to re-render, re-runs master, evidence and gates, and writes
 before/after stills to `qa/finish/scenes/<id>-before-after.png`: inspect them.
 The joined result is frame-identical to a fresh full render.
+
+<!-- include: shared/narration.md -->
 
 <!-- include: shared/music-beat-sync.md -->
 

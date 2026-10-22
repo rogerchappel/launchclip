@@ -40,7 +40,7 @@ const PRE_GRAMMAR_HTML_SHA256 = {
   footage: "eae4b7cdc2bba79c3211741957d35c475f32ed03275e5de5c0951747311544b8"
 };
 // test/editorial_core.test.js: the explicit-rect 16:9 corpus subset.
-const EXPLICIT_16X9_SHA256 = "316b3f467e385385b4b4b3ced655f21e60169eebac95c8ee941f46f4f7beba67";
+const EXPLICIT_16X9_SHA256 = "2efd279cb4a201f51923b0c0dc41c765c81bc9bbed9343bd1e71289cb93d3003";
 
 async function goldenStory(id) {
   let dir = path.join(STORY, id), cleanup = async () => {};

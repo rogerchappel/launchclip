@@ -2,7 +2,10 @@ export const CINEMATIC_READINESS_VERSION = "launchclip.cinematic-readiness.v1";
 
 const STRUCTURAL_MOTION_CATEGORIES = new Set(["duration", "dimensions", "frames"]);
 
-export function assessCinematicReadiness({ concepts, story, narration, plan, verification, motion, audio, critique, assembly } = {}, options = {}) {
+// receipts (optional): {concepts, story} schema results ({ok, errors,
+// warnings}) from src/cinematic_receipts.js. A present receipt with errors
+// fails its gate; warnings are reported but do not.
+export function assessCinematicReadiness({ concepts, story, narration, plan, verification, motion, audio, critique, assembly, receipts = {} } = {}, options = {}) {
   const blockers = [];
   const repairFindings = [];
   for (const [id, value, message] of [
@@ -10,6 +13,15 @@ export function assessCinematicReadiness({ concepts, story, narration, plan, ver
     ["story", story, "Approved retention-story receipt is missing."],
     ["narration", narration, "Measured cinematic narration receipt is missing."]
   ]) if (!value) blockers.push(blocker(`${id}-missing`, id, message));
+  const file = { concepts: "CONCEPTS.json", story: "STORY.json" };
+  const receiptOk = {};
+  for (const id of ["concepts", "story"]) {
+    const check = receipts?.[id];
+    receiptOk[id] = !check || check.ok !== false;
+    if ((id === "concepts" ? concepts : story) && check && check.ok === false) {
+      blockers.push(blocker(`${id}-invalid`, id, `${file[id]} does not match its schema: ${check.errors.slice(0, 4).join("; ")}${check.errors.length > 4 ? `; and ${check.errors.length - 4} more` : ""}.`));
+    }
+  }
   const verificationOk = Boolean(verification && new Set(["ready", "passed"]).has(verification.status));
   if (!verification) blockers.push(blocker("verification-missing", "verification", "Native verification receipt is missing."));
   else if (!verificationOk) blockers.push(blocker("verification-failed", "verification", `Native verification is ${verification.status ?? "unknown"}: ${(verification.failed ?? []).join(", ") || "unspecified failure"}.`));
@@ -71,8 +83,8 @@ export function assessCinematicReadiness({ concepts, story, narration, plan, ver
   if (!plan) blockers.push(blocker("plan-missing", "plan", "Production plan is missing."));
 
   const gates = {
-    concepts: gate(Boolean(concepts), concepts ? "present" : "missing", 0),
-    story: gate(Boolean(story), story ? "present" : "missing", 0),
+    concepts: receiptGate(concepts, receipts?.concepts, receiptOk.concepts),
+    story: receiptGate(story, receipts?.story, receiptOk.story),
     narration: gate(Boolean(narration), narration ? "present" : "missing", 0),
     plan: gate(Boolean(plan), plan ? "present" : "missing", 0),
     verification: gate(verificationOk, verification?.status ?? "missing", verification?.failed?.length ?? 0),
@@ -111,6 +123,15 @@ function motionInstruction(category, message) {
   if (category === "hook") return "Replan the opening so multiple meaningful visual changes land inside the hook window and directly express the spoken promise.";
   if (category === "editing") return "Replan sequence boundaries and internal developments to remove inactive gaps without turning the film into a slideshow.";
   return `Replan material object, camera, and transition developments to resolve this measured motion failure: ${message ?? category}.`;
+}
+
+function receiptGate(value, check, valid) {
+  const entry = gate(Boolean(value) && valid, !value ? "missing" : !check ? "present" : valid ? "valid" : "invalid", check ? check.errors.length : 0);
+  if (value && check) {
+    entry.errors = check.errors;
+    entry.warnings = check.warnings;
+  }
+  return entry;
 }
 
 function blocker(id, gateName, message) {

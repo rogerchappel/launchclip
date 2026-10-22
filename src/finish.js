@@ -22,7 +22,7 @@ import { promisify } from "node:util";
 import { chunkWords, narrationWords } from "../kit/core/captions.mjs";
 import { resolveModule } from "../kit/core/modules.mjs";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
-import { cinematicMotionExpectations } from "./cinematic_check.js";
+import { cinematicMotionExpectations, resolveMusicMix } from "./cinematic_check.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
@@ -39,6 +39,8 @@ import { normalizeLoudness, parseLoudnormJson } from "./voice/supplied.js";
 import { applyDensity, densityTyping, eventKey, familySource, kitLibrary, resolveCueFile, resolveLibraries, SFX_DENSITIES } from "./sfx/library.js";
 import { collectTyping, renderTypingTrack, typingSchedule } from "./sfx/typing.js";
 import { getMusicProvider, parseMusicSpec, resolveMusicChoice, MUSIC_FLAG_VALUES } from "./music/index.js";
+import { lockDecision, musicBrief, readMusicLock, writeMusicLock } from "./music/lock.js";
+import { narrationDocument, narrationRequest, synthesizeNarration, voiceCacheDir } from "./voice/narrate.js";
 import { analyzeBeatsFile, beatsDocument, gridFromBpm, transformGrid } from "./music/beats.js";
 import { BEAT_SYNC_SCHEMA, chooseAlignment, keyMoments, momentReport, snapStory, summarizeMoments, syncStrategy } from "./music/beat_sync.js";
 
@@ -424,7 +426,8 @@ function defaultAdapters() {
 /**
  * options: {renderer, quality: "draft"|"high", voice: provider name, music:
  * "synth"|"elevenlabs"|"none", musicHints (style-pack sound.music hints for
- * the ElevenLabs brief), out, force,
+ * the ElevenLabs brief), out, force, musicRegenerate (ignore the music lock
+ * and the cache: a new, paid ElevenLabs generation; --music-regenerate),
  *   scenes: scene ids (or "s3,s4") whose render segments re-render, re-running
  *     master, evidence and gates, with before/after stills (--scene);
  *   previewScene: render only that scene to renders/scene-<id>.mp4 and stop
@@ -455,7 +458,7 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
     copy: buildFinishCopy(story),
     adapters,
     options: { ...options, quality, ...iteration },
-    forceStages: new Set(iteration.scenes.length ? ["render", "master", "evidence", "gates"] : []),
+    forceStages: new Set([...(iteration.scenes.length ? ["render", "master", "evidence", "gates"] : []), ...(options.musicRegenerate ? ["sound"] : [])]),
     halt: null,
     preview: null,
     rendererName,
@@ -549,45 +552,31 @@ const STAGES = [
       if (supplied === PATHS.voice && !generatedBefore && provider !== "supplied" && !ctx.options.voice && existsSync(path.join(ctx.project, supplied))) {
         return { skip: `audio.voice is supplied (${supplied}) and was not synthesised by finish; pass --voice to resynthesise` };
       }
-      const request = { text: narration.text, provider, voice: narration.voice ?? null, speed: narration.speed ?? 1 };
+      // Provider defaults fill voice and speed (Kokoro: af_heart at 1.2), the
+      // same request `launchclip voice` measures, so its cached take is reused.
+      const request = narrationRequest(narration, { provider });
       if (provider === "supplied") request.source = supplied ? await fileHash(path.join(ctx.project, supplied)) : null;
       return { inputHash: hashValue(request), outputs: [PATHS.voice, PATHS.words], request };
     },
     async run(ctx, { request }) {
-      const provider = ctx.adapters.voiceProvider(request.provider, {});
       const outFile = path.join(ctx.project, PATHS.voice);
-      await mkdir(path.dirname(outFile), { recursive: true });
-      const synthesis = { text: request.text, voice: request.voice ?? undefined, speed: request.speed, outFile };
-      if (request.provider === "supplied" && ctx.story.audio?.voice) synthesis.source = path.join(ctx.project, ctx.story.audio.voice);
-      const result = await provider.synthesize(synthesis);
-      if (!result || !Array.isArray(result.words) || !result.words.length) throw new Error(`voice provider "${request.provider}" returned no word timings`);
-      const produced = path.resolve(result.file ?? outFile);
-      if (produced !== outFile) await copyFile(produced, outFile);
       // Synthesised voices arrive at their engine's level (Kokoro is about
-      // -22 LUFS), which leaves too little voice-to-music margin in the mix.
-      // Bring them to the -17 LUFS supplied voiceovers already get.
-      let loudness = null;
-      // The offline "test" voice is a placeholder tone and needs no levelling.
-      if (request.provider !== "supplied" && request.provider !== "test") {
-        const normalized = `${outFile}.norm.wav`;
-        loudness = await ctx.adapters.normalizeVoice(outFile, normalized);
-        await rename(normalized, outFile);
-      }
-      const words = result.words.map((word) => ({ text: String(word.text), start: round3(Number(word.start)), end: round3(Number(word.end)) }));
-      const duration = round3(Number(result.duration ?? words.at(-1).end));
-      await writeJson(path.join(ctx.project, PATHS.words), {
-        schema_version: "launchclip.narration.v1",
-        provider: request.provider,
-        voice: request.voice,
-        speed: request.speed,
-        text: request.text,
-        sample_rate: result.sampleRate ?? null,
-        duration_seconds: duration,
-        words
+      // -22 LUFS), which leaves too little voice-to-music margin in the mix,
+      // so synthesizeNarration brings them to the -17 LUFS supplied
+      // voiceovers get (the offline test tone is left alone). Takes are
+      // cached in .launchclip/voice, shared with `launchclip voice`.
+      const take = await synthesizeNarration(request, {
+        outFile,
+        cacheDir: voiceCacheDir(ctx.project),
+        voiceProvider: ctx.adapters.voiceProvider,
+        normalizeVoice: ctx.adapters.normalizeVoice,
+        source: request.provider === "supplied" && ctx.story.audio?.voice ? path.join(ctx.project, ctx.story.audio.voice) : undefined
       });
+      const { words, duration, loudness } = take;
+      await writeJson(path.join(ctx.project, PATHS.words), narrationDocument(request, take));
       const format = storyFormat(ctx.copy);
       if (Number.isFinite(format.duration) && duration > format.duration + 0.05) ctx.warnings.push(`narration runs ${duration}s, longer than format.duration (${format.duration}s); the end is cut off`);
-      const details = { provider: request.provider, voice: request.voice, speed: request.speed, loudness, duration_seconds: duration, word_count: words.length, voice_file: PATHS.voice, words_file: PATHS.words };
+      const details = { provider: request.provider, voice: request.voice, speed: request.speed, loudness, duration_seconds: duration, word_count: words.length, voice_file: PATHS.voice, words_file: PATHS.words, cached_take: take.cached };
       STAGES[0].restore(ctx, details);
       return details;
     },
@@ -677,15 +666,24 @@ const STAGES = [
       if (!bound.cues.length && !typing.length && music.kind === "none") return { skip: voice ? "no SFX or music: the voice is mounted directly" : "no voice, SFX or music to mix" };
       if (music.kind === "file" && !existsSync(path.join(ctx.project, music.file))) throw new Error(`audio.music file not found: ${music.file}`);
       const bed = music.kind === "none" ? null : { ...chooseBed(ctx.resolved, { ...music, bpm_range: audio.music_hints?.bpm_range }), ...(music.kind === "file" ? { file: music.file } : {}), ...(Number(music.volume) >= 0 && music.volume !== undefined ? { volume: Number(music.volume) } : {}) };
-      // ElevenLabs: the request (no network) names the cached track, so a new
-      // prompt, length, model or seed reruns the stage and nothing else does.
+      // ElevenLabs: the music lock (.launchclip/music-lock.json) keeps the
+      // project's track while the music brief is unchanged; otherwise the
+      // request (no network, bar-quantised) names the cached track. Either
+      // way the stage hashes the track's identity, so scene timing alone
+      // re-runs beat sync but never asks for a new generation.
       let request = null;
       let provider = null;
+      let lock = null;
+      let trackKey = null;
       if (music.kind === "elevenlabs") {
         provider = await ctx.adapters.musicProvider("elevenlabs", { env: ctx.adapters.env ?? process.env, model: music.model });
-        const built = provider.request(ctx.resolved, musicParams(music, bed, Boolean(voice), ctx.options.musicHints ?? audio.music_hints));
-        request = { mode: built.mode, body: built.body, bpm: built.bpm };
-        bed.bpm = built.bpm;
+        const params = musicParams(music, bed, Boolean(voice), ctx.options.musicHints ?? audio.music_hints);
+        const built = provider.request(ctx.resolved, params);
+        const brief = musicBrief({ provider: "elevenlabs", model: built.body?.model_id ?? music.model ?? null, prompt: music.prompt, bpm: built.bpm, hints: params.hints, seed: music.seed, narrated: Boolean(voice) });
+        lock = { ...lockDecision(await readMusicLock(ctx.project), { brief, durationMs: Number(ctx.resolved.resolved.duration) * 1000, project: ctx.project, regenerate: Boolean(ctx.options.musicRegenerate) }), brief, params };
+        trackKey = lock.reuse ? lock.lock.request_hash : (provider.cacheStatus?.(ctx.resolved, params)?.cache_key ?? hashValue(built.body));
+        request = { track: trackKey, bpm: lock.reuse ? lock.lock.bpm : built.bpm };
+        bed.bpm = request.bpm;
       }
       const sync = { mode: choice.sync ?? "auto", strategy: music.kind === "none" ? "off" : syncStrategy(ctx.copy, { sync: choice.sync, narrated: Boolean(voice) }) };
       const inputHash = hashValue({
@@ -701,7 +699,7 @@ const STAGES = [
       });
       const outputs = [PATHS.mix, PATHS.audioManifest, PATHS.sfxManifest, ...(typing.length ? [PATHS.typing] : [])];
       if (music.kind !== "none") outputs.push(PATHS.beatSync, await beatsTarget(ctx.project));
-      return { inputHash, outputs, sfxOn, cues: bound.cues, cueWarnings: [...choice.warnings, ...bound.warnings], bed, music, choice, voice, provider, sync, typing, libraries, storyId, density };
+      return { inputHash, outputs, sfxOn, cues: bound.cues, cueWarnings: [...choice.warnings, ...bound.warnings], bed, music, choice, voice, provider, lock, trackKey, sync, typing, libraries, storyId, density };
     },
     async run(ctx, plan) {
       ctx.warnings.push(...plan.cueWarnings);
@@ -997,7 +995,10 @@ async function runGates(ctx) {
 
   try {
     const manifest = existsSync(path.join(ctx.project, PATHS.audioManifest)) ? path.join(ctx.project, PATHS.audioManifest) : null;
-    const audio = await ctx.adapters.audio(ctx.out, manifest, { musicVolume: ctx.state.stages?.sound?.details?.bed?.volume ?? 0.15 });
+    // The same music volume cinematic-check resolves, so the two gates agree.
+    const mixSettings = await resolveMusicMix(ctx.project, manifest, { soundDetails: ctx.state.stages?.sound?.details ?? null });
+    const audio = await ctx.adapters.audio(ctx.out, manifest, { musicVolume: mixSettings.music_volume });
+    if (audio && typeof audio === "object") audio.mix_settings = mixSettings;
     await writeJson(path.join(ctx.project, PATHS.audio), audio);
     gates.audio = { status: audio?.quality?.ok ? "passed" : "failed", report: PATHS.audio, manifest: manifest ? PATHS.audioManifest : null, findings: (audio?.quality?.findings ?? []).slice(0, 12) };
   } catch (error) {
@@ -1154,11 +1155,43 @@ async function resolveMusicTrack(ctx, plan, kitDir) {
     return { file: path.join(kitDir, "music", "bed.wav"), original: null, grid, length: duration, exactGrid: true, cached: null, generation: null };
   }
   if (plan.music.kind === "elevenlabs") {
-    const provider = plan.provider ?? await ctx.adapters.musicProvider("elevenlabs", { env: ctx.adapters.env ?? process.env, model: plan.music.model });
     const outFile = path.join(ctx.project, PATHS.music);
-    ctx.adapters.notice?.(`music: ElevenLabs Music API (paid; POST /v1/music) — generations are cached in ${provider.cacheDir}`);
-    const result = await provider.generate(ctx.resolved, musicParams(plan.music, plan.bed, Boolean(plan.voice), ctx.options.musicHints), { outFile });
+    const decision = plan.lock;
+    if (decision?.reuse) {
+      // The locked track: no request at all, so no spend.
+      const locked = decision.lock;
+      await mkdir(path.dirname(outFile), { recursive: true });
+      await copyFile(path.join(ctx.project, locked.file), outFile);
+      ctx.adapters.notice?.(`music: REUSE locked ElevenLabs track ${locked.file} (music brief unchanged; no paid generation). Scene timing changes only re-run beat sync; pass --music-regenerate for a new track.`);
+      const grid = await analyse(ctx, outFile, locked.bpm);
+      return {
+        file: outFile,
+        original: outFile,
+        grid,
+        length: grid?.duration ?? locked.length_ms / 1000,
+        exactGrid: false,
+        cached: true,
+        generation: { provider: "elevenlabs", endpoint: "POST /v1/music", mode: locked.mode ?? null, requested_bpm: locked.bpm, length_ms: locked.length_ms, cached: true, locked: true, lock_file: ".launchclip/music-lock.json", request_hash: locked.request_hash, cache_file: locked.cache_file ?? null, generated_seconds: 0, cost_usd_estimate: 0, song_id: locked.song_id ?? null }
+      };
+    }
+    const provider = plan.provider ?? await ctx.adapters.musicProvider("elevenlabs", { env: ctx.adapters.env ?? process.env, model: plan.music.model });
+    const params = decision?.params ?? musicParams(plan.music, plan.bed, Boolean(plan.voice), ctx.options.musicHints ?? ctx.copy.audio?.music_hints);
+    const force = Boolean(ctx.options.musicRegenerate);
+    const status = provider.cacheStatus?.(ctx.resolved, params) ?? null;
+    const why = decision?.reason ? ` (${decision.reason})` : "";
+    if (status && status.cached && !force) {
+      ctx.adapters.notice?.(`music: REUSE cached ElevenLabs track for this exact request${why}; no paid generation (${status.cache_file})`);
+    } else if (status) {
+      ctx.adapters.notice?.(`music: PAID ElevenLabs generation of ${(status.length_ms / 1000).toFixed(1)} s (about $${status.cost_usd_estimate})${why}; it will be cached in ${provider.cacheDir} and locked for this project`);
+    } else {
+      ctx.adapters.notice?.(`music: ElevenLabs Music API (paid; POST /v1/music)${why} — generations are cached in ${provider.cacheDir}`);
+    }
+    const result = await provider.generate(ctx.resolved, params, { outFile, force });
     ctx.adapters.notice?.(result.cached ? `music: cache hit, no new generation (${result.cache_file})` : `music: generated ${result.generated_seconds}s (about $${result.cost_usd}); cached as ${result.cache_file}`);
+    if (decision?.brief) {
+      const written = await writeMusicLock(ctx.project, { brief: decision.brief, sourceFile: outFile, cacheKey: plan.trackKey ?? result.cache_key, cacheFile: result.cache_file ?? null, bpm: result.request?.bpm ?? plan.bed.bpm, lengthMs: result.request?.length_ms ?? Math.round(Number(ctx.resolved.resolved.duration) * 1000 + 2000), mode: result.request?.mode ?? null, songId: result.song_id ?? null, clock: ctx.adapters.clock });
+      ctx.adapters.notice?.(`music: locked ${written.file} in .launchclip/music-lock.json; later runs reuse it while the music brief (provider, model, prompt, BPM, style hints, length bucket) is unchanged`);
+    }
     const grid = await analyse(ctx, outFile, plan.bed.bpm);
     return {
       file: outFile,

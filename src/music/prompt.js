@@ -9,7 +9,31 @@ export const MUSIC_MIN_MS = 3000;
 export const MUSIC_MAX_MS = 600000;
 // Requested music runs this much longer than the story so the start offset
 // chosen by beat sync (and a little tempo change) still covers the whole video.
+// The tail is rounded up to whole bars, like the story itself.
 export const MUSIC_TAIL_SECONDS = 2;
+export const BEATS_PER_BAR = 4;
+
+/** One 4/4 bar at bpm, in milliseconds. */
+export function barMs(bpm) {
+  return BEATS_PER_BAR * 60000 / Math.max(1, Number(bpm) || 100);
+}
+
+/**
+ * The requested music length for a story: the story rounded up to whole bars
+ * plus a tail of whole bars (at least tailSeconds). Small timing edits inside
+ * a bar map to the same length, and so to the same request.
+ * → {length_ms, bars, story_bars, tail_bars, bar_ms}
+ */
+export function quantisedLength(seconds, bpm, { tailSeconds = MUSIC_TAIL_SECONDS } = {}) {
+  const bar = barMs(bpm);
+  // A hair of tolerance so 19.9999 s does not become an extra bar.
+  const storyBars = Math.max(1, Math.ceil(Number(seconds) * 1000 / bar - 1e-6));
+  const tailBars = Math.max(0, Math.ceil(Number(tailSeconds) * 1000 / bar - 1e-6));
+  let bars = storyBars + tailBars;
+  while (bars * bar < MUSIC_MIN_MS) bars += 1;
+  while (bars > 1 && bars * bar > MUSIC_MAX_MS) bars -= 1;
+  return { length_ms: Math.round(bars * bar), bars, story_bars: storyBars, tail_bars: tailBars, bar_ms: bar };
+}
 
 export const NO_VOCALS = Object.freeze(["vocals", "singing", "lyrics", "spoken word", "choir", "vocal chops", "rap"]);
 
@@ -83,9 +107,12 @@ export function storyTone(story) {
  * longer than 120 s split, and the tail after the story joins the last one.
  * Returns [{name, energy, start_ms, duration_ms, scenes}] summing to lengthMs.
  */
-export function planSections(segments, lengthMs) {
+export function planSections(segments, lengthMs, { gridMs = null } = {}) {
   const total = Math.max(MUSIC_MIN_MS, Math.round(lengthMs));
-  let parts = segments.map((segment) => ({ energy: segment.energy, scenes: [...segment.scenes], start: Math.round(segment.start * 1000), end: Math.round(segment.end * 1000) }));
+  // With a grid (a bar at the target BPM) every boundary snaps to the nearest
+  // grid line, so moving a scene cut by less than half a bar changes nothing.
+  const snap = (ms) => (gridMs > 0 ? Math.min(total, Math.round(Math.round(ms / gridMs) * gridMs)) : Math.round(ms));
+  let parts = segments.map((segment) => ({ energy: segment.energy, scenes: [...segment.scenes], start: snap(segment.start * 1000), end: snap(segment.end * 1000) }));
   if (!parts.length) parts = [{ energy: 1, scenes: [], start: 0, end: total }];
   parts[0].start = 0;
   parts.at(-1).end = total;
@@ -120,7 +147,7 @@ export function planSections(segments, lengthMs) {
     const length = part.end - part.start;
     const pieces = Math.max(1, Math.ceil(length / SECTION_MAX_MS));
     for (let k = 0; k < pieces; k += 1) {
-      const end = k === pieces - 1 ? part.end : start + Math.round(length / pieces);
+      const end = k === pieces - 1 ? part.end : snap(start + length / pieces);
       sections.push({ energy: part.energy, scenes: part.scenes, start_ms: start, duration_ms: end - start });
       start = end;
     }
@@ -147,7 +174,10 @@ function sectionName(section, index, count) {
  * {prompt_hints?: string | string[], bpm_range?: [min, max], energy_curve?:
  * string | array}. prompt_hints join the tone words, bpm_range clamps the
  * tempo, and a string energy_curve is added to the brief.
- * → {mode: "plan"|"prompt", body, length_ms, bpm, arc, tone, sections?, description}
+ * → {mode: "plan"|"prompt", body, length_ms, bars, bar_ms, bpm, arc, tone, sections?, description}
+ * The length is whole bars at the target BPM (story bars plus tail bars) and
+ * every section boundary sits on a bar line, so the request (and its cache
+ * key) only changes when the music brief changes or the story crosses a bar.
  * A composition plan is used for music_v1 when the story has two or more
  * energy sections; otherwise (or with a user prompt) a text prompt with
  * force_instrumental. seed is only sent with a plan (the API rejects it with
@@ -159,13 +189,15 @@ export function buildMusicRequest(story, { seconds, bpm, prompt, model = "music_
   const style = normalizeHints(hints);
   let tempo = Math.round(Number(bpm) > 0 ? Number(bpm) : 100);
   if (style.bpmRange) tempo = clamp(tempo, style.bpmRange[0], style.bpmRange[1]);
-  const lengthMs = clamp(Math.round((duration + tailSeconds) * 1000), MUSIC_MIN_MS, MUSIC_MAX_MS);
+  const length = quantisedLength(duration, tempo, { tailSeconds });
+  const lengthMs = length.length_ms;
+  const grid = { bars: length.bars, bar_ms: length.bar_ms };
   const segments = storyEnergySegments(story);
   const arc = energyArc(segments);
   const tone = [...new Set([...style.promptHints, ...storyTone(story)])];
   const curve = style.energyCurve ? `; style energy curve: ${style.energyCurve}` : "";
   const bed = narrated ? "sits under a voiceover: leave the midrange clear, no busy lead melody" : "carries the video on its own: clear hooks and accents on the downbeats";
-  const sections = planSections(segments, lengthMs);
+  const sections = planSections(segments, lengthMs, { gridMs: length.bar_ms });
   const usePlan = !prompt && model === "music_v1" && sections.length >= 2;
   if (usePlan) {
     const body = {
@@ -183,17 +215,17 @@ export function buildMusicRequest(story, { seconds, bpm, prompt, model = "music_
       model_id: model
     };
     if (Number.isInteger(seed)) body.seed = seed;
-    return { mode: "plan", body, length_ms: lengthMs, bpm: tempo, arc, tone, sections, description: `${tone.join(", ")}; ${tempo} BPM; ${arc}; instrumental` };
+    return { mode: "plan", body, length_ms: lengthMs, ...grid, bpm: tempo, arc, tone, sections, description: `${tone.join(", ")}; ${tempo} BPM; ${arc}; instrumental` };
   }
   const text = [
-    prompt ? String(prompt).trim().replace(/\.?$/, ".") : `${capitalize(tone.join(", "))} instrumental music for a ${Math.round(duration)}-second video.`,
-    `${tempo} BPM, steady 4/4 time with a clear, quantised beat.`,
-    `Energy arc: ${arc}${curve}${sections.length > 1 ? ` (changes at ${sections.slice(1).map((section) => `${(section.start_ms / 1000).toFixed(1)}s`).join(", ")})` : ""}.`,
+    prompt ? String(prompt).trim().replace(/\.?$/, ".") : `${capitalize(tone.join(", "))} instrumental music for a ${length.story_bars}-bar video.`,
+    `${tempo} BPM, steady 4/4 time with a clear, quantised beat, ${length.bars} bars long.`,
+    `Energy arc: ${arc}${curve}${sections.length > 1 ? ` (changes at ${sections.slice(1).map((section) => `bar ${Math.round(section.start_ms / length.bar_ms) + 1}`).join(", ")})` : ""}.`,
     `It ${bed}.`,
     "Instrumental only, no vocals."
   ].join(" ");
   const body = { prompt: text.slice(0, 4100), music_length_ms: lengthMs, model_id: model, force_instrumental: true };
-  return { mode: "prompt", body, length_ms: lengthMs, bpm: tempo, arc, tone, sections, description: `${tone.join(", ")}; ${tempo} BPM; ${arc}; instrumental` };
+  return { mode: "prompt", body, length_ms: lengthMs, ...grid, bpm: tempo, arc, tone, sections, description: `${tone.join(", ")}; ${tempo} BPM; ${arc}; instrumental` };
 }
 
 /** Style-pack music hints → {promptHints: string[], bpmRange: [min, max] | null, energyCurve: string | null}. */

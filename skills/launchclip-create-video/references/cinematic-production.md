@@ -57,8 +57,50 @@ announced favorite. Score each criterion from 0–10:
 
 Subtract `0.8 × genericism`, `1.0 × slideshow risk`, and `1.5 × unsupported
 clickbait`. Select the deterministic highest score; break ties by original
-candidate order. Save candidates, scores, penalties, required improvements,
-and `selected_id` in `CONCEPTS.json`. Do not choose by taste after scoring.
+candidate order. Save the concepts, scores, penalties, required improvements,
+and the winner in `CONCEPTS.json`. Do not choose by taste after scoring.
+
+### `CONCEPTS.json` schema (`launchclip.concepts.v1`)
+
+`cinematic-check` validates it. Missing required fields fail the `concepts`
+gate; the rest are warnings in its report (`receipt_warnings`).
+
+| field | required | notes |
+| --- | --- | --- |
+| `schema_version` | warn | `"launchclip.concepts.v1"` |
+| `concepts` | yes | exactly 5 |
+| `concepts[].id`, `title`, `logline`, `hook` | yes | non-empty strings; `hook` is the spoken hook, 18 words or fewer (warn) |
+| `concepts[].scores` | yes | the nine criteria above, each 0–10 (missing criteria warn; a non-number fails) |
+| `concepts[].penalties` | warn | `{genericism, slideshow_risk, unsupported_clickbait}` |
+| `concepts[].total` | warn | weighted score minus penalties; a chosen concept that is not the highest total warns |
+| `concepts[].chosen` | yes | exactly one `true` |
+| `selected_id` | no | when present it must equal the chosen id |
+| `judging`, `required_improvements`, `rationale` | warn | how the fresh-context judge saw the concepts, and its fixes for the winner |
+
+```json
+{
+  "schema_version": "launchclip.concepts.v1",
+  "judging": "fresh-context subagent; saw only the brief, EVIDENCE.md and anonymous concepts",
+  "concepts": [
+    {
+      "id": "A",
+      "title": "The stalled launch",
+      "logline": "A release checklist where everything ships except the launch video, until one command unblocks it.",
+      "hook": "Shipping is the easy part. The launch video is what stalls you.",
+      "scores": { "scroll_stop": 7, "promise_clarity": 9, "audience_fit": 9, "causality": 9, "grounded_proof": 9, "visual_originality": 6, "motion_potential": 8, "sound_potential": 7, "feasibility": 8 },
+      "penalties": { "genericism": 4, "slideshow_risk": 3, "unsupported_clickbait": 0 },
+      "total": 72.8,
+      "chosen": true
+    }
+  ],
+  "selected_id": "A",
+  "required_improvements": ["Keep proof to a few beats with continuous camera travel."],
+  "rationale": "A covers the whole brief with built-in causality."
+}
+```
+
+(The example shows one concept; a real receipt has all five, four with
+`"chosen": false`.)
 
 ## Write and edit the retention story
 
@@ -82,6 +124,44 @@ Keep revising until the returned story meets every floor and all factual claims
 remain grounded. Save the canonical story, scores, findings, and concept link in
 `STORY.json`; write the exact final spoken copy to `SCRIPT.md`.
 
+### `STORY.json` schema (`launchclip.story-receipt.v1`)
+
+`cinematic-check` validates it against `CONCEPTS.json` and the format
+duration. Missing required fields fail the `story` gate; the rest warn.
+
+| field | required | notes |
+| --- | --- | --- |
+| `schema_version` | warn | `"launchclip.story-receipt.v1"` |
+| `concept_id` | yes | must be the chosen concept in `CONCEPTS.json` |
+| `beats` | yes | in order; the first should be the `hook` (warn); 20 s and longer need a `rehook` and an `escalation`, 30 s and longer six or more beats (warn) |
+| `beats[].role` | yes | `hook`, `promise`, `mechanism`, `proof`, `rehook`, `escalation`, `payoff`, `closing_reframe`, `cta_or_loop` (other values warn) |
+| `beats[].spoken` | yes | the exact spoken line; `""` for a silent beat |
+| `beats[].visual_noun` | warn | the concrete thing on screen |
+| `narration.source` | yes | `synthesised` (`audio.narration` through `launchclip voice` / `finish`), `supplied` (the user's recording, kept byte-for-byte), `generated` (another approved voice), or `none` (intentionally unnarrated) |
+| `narration.file`, `narration.script` | no | usually `NARRATION.json` and `SCRIPT.md` |
+| `scores` | warn | the eight retention-edit scores; any below its floor warns |
+| `editor`, `findings` | warn / no | who ran the fresh-context retention edit, and what it changed |
+
+```json
+{
+  "schema_version": "launchclip.story-receipt.v1",
+  "concept_id": "A",
+  "editor": "fresh-context subagent retention edit",
+  "beats": [
+    { "role": "hook", "spoken": "Shipping is the easy part. The launch video is what stalls you.", "visual_noun": "release checklist with 'Launch video' stalled" },
+    { "role": "promise", "spoken": "So describe the video, and get the video.", "visual_noun": "code panel typing launchclip finish" },
+    { "role": "proof", "spoken": "Two renderers draw the same storyboard, frame for frame.", "visual_noun": "0.98 SSIM count-up" },
+    { "role": "rehook", "spoken": "So what can it draw?", "visual_noun": "kinetic question" },
+    { "role": "escalation", "spoken": "Charts, counters, checklists, code.", "visual_noun": "module names" },
+    { "role": "payoff", "spoken": "Brief, storyboard, finish, video.", "visual_noun": "four-node process diagram" },
+    { "role": "cta_or_loop", "spoken": "Star it on GitHub.", "visual_noun": "CTA card with the repo handle" }
+  ],
+  "narration": { "source": "synthesised", "file": "NARRATION.json", "script": "SCRIPT.md" },
+  "scores": { "hook": 8, "compression": 8, "curiosity": 8, "clarity": 9, "proof": 8, "payoff": 8, "speakability": 8, "visuality": 9 },
+  "findings": ["Promise trimmed so the command lands by about 6 s."]
+}
+```
+
 ## Time the real narration before the edit
 
 Prepare narration before final storyboard timing:
@@ -93,6 +173,14 @@ Prepare narration before final storyboard timing:
 3. Record word timing, pauses, beat boundaries, source, delivery direction, and
    measured duration in `NARRATION.json`.
 4. Build the final edit grid and shot boundaries from that measured performance.
+
+With the LaunchClip CLI and a synthesised voice, steps 2 and 3 are one
+command: put the exact `SCRIPT.md` copy in `storyboard.json` as
+`audio.narration.text` (scenes can still be empty), run
+`launchclip voice <project>`, and read the duration, words per minute and
+per-sentence timing it prints; it writes `NARRATION.json` and caches the take
+for `finish`. Change `audio.narration.speed` (a generation parameter, not a
+time-stretch) or the copy until the duration fits, then size the scenes.
 
 Do not time-stretch a generated or supplied performance to rescue the plan.
 Allow at most ±2% final conformance; otherwise adjust pauses, revise generated
@@ -262,7 +350,13 @@ launchclip cinematic-check <project> \
   --audio-manifest AUDIO-MANIFEST.json
 ```
 
-Omit the two audio flags only when audio is intentionally absent. The command
+Omit the two audio flags only when audio is intentionally absent. The audio
+gate estimates the voice-to-music margin from the music gain the mix used: it
+reads `music.volume` from `AUDIO-MANIFEST.json` (which `launchclip finish`
+writes), then the sound stage's bed volume in `finish.json`, so it agrees with
+finish's own audio gate; `qa/cinematic/audio.json` records the value in
+`mix_settings`. For a hand-built mix with neither, pass the gain you mixed the
+music at with `--music-volume 0.32` (default 0.15). The command
 writes `CINEMATIC-READINESS.json` and fails closed on missing concept, story,
 narration, verification, critic, motion, audio, or authorship evidence. Require
 `status: ready`, `ok: true`, and every gate to pass before Studio preview.

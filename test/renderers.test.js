@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { buildEvidence, detectRenderer as detectEvidenceRenderer, remotionStillArgs } from "../skills/launchclip-create-video/scripts/build-evidence.mjs";
+import { buildEvidence, contactSheetLayout, detectRenderer as detectEvidenceRenderer, remotionStillArgs } from "../skills/launchclip-create-video/scripts/build-evidence.mjs";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "../src/cinematic_evidence.js";
 import { detectRenderer, getRenderer, resolveRendererName } from "../src/renderers/index.js";
 import { COMPOSITION_ID, frameAt } from "../src/renderers/remotion.js";
@@ -257,4 +257,22 @@ test("parseOutput reads a JSON report printed after a CLI notice", async () => {
   assert.deepEqual(parseOutput("Hyperframes collects anonymous usage data.\nRun `hyperframes telemetry disable` to opt out.\n{\n  \"ok\": true,\n  \"errorCount\": 0\n}\n"), { ok: true, errorCount: 0 });
   assert.equal(parseOutput("plain text, no report"), "plain text, no report");
   assert.equal(parseOutput(""), null);
+});
+
+test("build-evidence contact sheets keep the frame's aspect (16:9 tiles in a wider grid)", () => {
+  const landscape = contactSheetLayout({ width: 1920, height: 1080 });
+  assert.deepEqual(landscape.tile, { width: 480, height: 270 });
+  assert.equal(landscape.columns, 4);
+  assert.deepEqual(landscape.overview, { columns: 4, rows: 5 });
+  assert.equal(landscape.orientation, "landscape");
+  const portrait = contactSheetLayout({ width: 1080, height: 1920 });
+  assert.deepEqual(portrait.tile, { width: 270, height: 480 });
+  assert.deepEqual(portrait.overview, { columns: 5, rows: 4 });
+  assert.deepEqual(contactSheetLayout({ width: 1080, height: 1080 }).tile, { width: 480, height: 480 });
+  // 4:5 keeps its ratio with even dimensions (ffmpeg's yuv420 needs them).
+  assert.deepEqual(contactSheetLayout({ width: 1080, height: 1350 }).tile, { width: 384, height: 480 });
+  for (const size of [{ width: 1920, height: 1080 }, { width: 1080, height: 1920 }]) {
+    const { tile } = contactSheetLayout(size);
+    assert.ok(Math.abs(tile.width / tile.height - size.width / size.height) < 0.01);
+  }
 });

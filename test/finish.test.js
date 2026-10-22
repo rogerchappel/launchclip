@@ -7,6 +7,8 @@ import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { runCli } from "../src/cli.js";
+import { checkCinematicProject, resolveMusicMix } from "../src/cinematic_check.js";
+import { evaluateAudioQuality } from "../src/render_audio_analysis.js";
 import { PATHS, bindCues, buildFinishCopy, chooseBed, defaultCueFor, formatFinishSummary, kitCue, musicSpec, runFinish, stageDecision } from "../src/finish.js";
 import { createTestVoiceProvider, getVoiceProvider, listVoiceProviders, registerVoiceProvider, testVoiceTimings } from "../src/voice/index.js";
 
@@ -537,6 +539,127 @@ test("finish defaults to ElevenLabs music with a key, aligns it to the narration
     const synth = await runFinish(project, { renderer: "remotion", music: "synth" }, adapters);
     assert.equal(synth.stages.find((stage) => stage.name === "sound").details.music.provider, "synth");
     await assert.rejects(runFinish(project, { music: "lofi" }, adapters), /Unknown --music lofi/);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("finish and cinematic-check judge the same mix with the same music volume", async () => {
+  const project = await narratedProject();
+  try {
+    const adapters = fakeAdapters();
+    const seen = {};
+    adapters.audio = async (_video, manifest, options) => { seen.finish = options.musicVolume; return { quality: { ok: true, findings: [] } }; };
+    const report = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(report.status === "failed", false, JSON.stringify(report.stages.find((stage) => stage.status === "failed")));
+    const manifest = JSON.parse(await readFile(path.join(project, PATHS.audioManifest), "utf8"));
+    const bedVolume = manifest.music.volume;
+    assert.ok(bedVolume > 0.15, `finish's bed is louder than the old 0.15 assumption (${bedVolume})`);
+    assert.equal(seen.finish, bedVolume);
+
+    const checkAdapters = {
+      verifyProject: async () => ({ schema_version: "launchclip.subscription-verification.v1", status: "passed", failed: [] }),
+      writeMotionReport: async (_video, output) => { await writeFile(output, "{}"); return { quality: { ok: true, findings: [] } }; },
+      analyzeProductionAudio: async (_video, _manifest, options) => { seen.check = options.musicVolume; return { expected_audio: true, stream: {}, output: {}, sources: {}, cues: [], quality: { ok: true, findings: [] } }; }
+    };
+    const checked = await checkCinematicProject(project, { video: report.final ?? "renders/draft.mp4" }, checkAdapters);
+    assert.equal(seen.check, bedVolume, "cinematic-check reads the bed volume finish used");
+    const audioReport = JSON.parse(await readFile(checked.audio, "utf8"));
+    assert.equal(audioReport.mix_settings.source, "AUDIO-MANIFEST.json music.volume");
+    assert.equal(audioReport.mix_settings.ducking, manifest.mix.ducking);
+
+    // With the same measured sources both verdicts match; the old 0.15 would not.
+    const sources = (volume) => ({ voiceover: { integrated_lufs: -16 }, music: { integrated_lufs: -16.5 }, music_gain_db: 20 * Math.log10(volume) });
+    const verdict = (volume) => evaluateAudioQuality({ sources: sources(volume), cues: [] }).ok;
+    assert.equal(verdict(seen.check), verdict(seen.finish));
+
+    // No manifest volume: finish.json's sound stage; an explicit flag wins over both.
+    delete manifest.music.volume;
+    await writeFile(path.join(project, PATHS.audioManifest), JSON.stringify(manifest));
+    const fromFinish = await resolveMusicMix(project, path.join(project, PATHS.audioManifest));
+    assert.equal(fromFinish.music_volume, bedVolume);
+    assert.match(fromFinish.source, /finish\.json/);
+    assert.equal((await resolveMusicMix(project, null, { musicVolume: "0.4" })).music_volume, 0.4);
+    await assert.rejects(resolveMusicMix(project, null, { musicVolume: "loud" }), /--music-volume must be a number/);
+    // A manual project with nothing to read falls back to 0.15.
+    const bare = await mkdtemp(path.join(os.tmpdir(), "launchclip-mix-"));
+    assert.equal((await resolveMusicMix(bare, null)).music_volume, 0.15);
+    await rm(bare, { recursive: true, force: true });
+
+    // The CLI takes --music-volume and keeps --musicVolume as an alias.
+    for (const flag of ["--music-volume", "--musicVolume"]) {
+      seen.check = null;
+      await runCli(["cinematic-check", project, flag, "0.27"], { stdout: { write() {} }, stderr: { write() {} }, productionAdapters: { cinematicCheck: checkAdapters } });
+      assert.equal(seen.check, 0.27, flag);
+    }
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("finish locks the ElevenLabs track: scene timing reuses it, a new brief or --music-regenerate pays", async () => {
+  const project = await narratedProject();
+  try {
+    const { adapters, notices, music } = musicAdapters();
+    // A provider with a real cache lookup, keyed by the request body.
+    const cache = new Set();
+    const stub = adapters.musicProvider();
+    adapters.musicProvider = () => ({
+      ...stub,
+      request(story, params) { return { mode: "prompt", body: { prompt: `bpm ${params.bpm}`, model_id: "music_v1" }, bpm: params.bpm, length_ms: 10000 }; },
+      cacheStatus(story, params) { const key = `k${params.bpm}`; return { cached: cache.has(key), cache_key: key, cache_file: `/cache/${key}.mp3`, length_ms: 10000, cost_usd_estimate: 0.03 }; },
+      async generate(story, params, { outFile, force }) {
+        const key = `k${params.bpm}`;
+        await mkdir(path.dirname(outFile), { recursive: true });
+        await writeFile(outFile, `mp3 ${key} ${music.generated}`);
+        const hit = cache.has(key) && !force;
+        if (!hit) music.generated += 1;
+        cache.add(key);
+        return { file: outFile, cached: hit, cache_key: key, cache_file: `/cache/${key}.mp3`, request: { mode: "prompt", bpm: params.bpm, length_ms: 10000 }, generated_seconds: hit ? 0 : 10, cost_usd: hit ? 0 : 0.03, model: "music_v1", song_id: null };
+      }
+    });
+    const first = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(first.stages.find((stage) => stage.name === "sound").status, "done");
+    assert.equal(music.generated, 1);
+    assert.ok(notices.some((line) => /^music: PAID ElevenLabs generation/.test(line) && /no music lock yet/.test(line)), notices.join("\n"));
+    const lock = JSON.parse(await readFile(path.join(project, ".launchclip/music-lock.json"), "utf8"));
+    assert.equal(lock.schema_version, "launchclip.music-lock.v1");
+    assert.equal(lock.request_hash, `k${lock.bpm}`);
+    assert.equal(lock.brief.provider, "elevenlabs");
+    assert.ok(existsSync(path.join(project, lock.file)));
+
+    // Move a scene boundary: the brief is unchanged, so the locked track is reused.
+    notices.length = 0;
+    const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+    story.scenes[0].end = 3.3;
+    story.scenes[1].start = 3.3;
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story));
+    await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(music.generated, 1, "timing edits never trigger a paid generation");
+    assert.ok(notices.some((line) => /^music: REUSE locked ElevenLabs track/.test(line)), notices.join("\n"));
+    assert.ok(!notices.some((line) => /PAID/.test(line)));
+    const manifest = JSON.parse(await readFile(path.join(project, PATHS.audioManifest), "utf8"));
+    assert.equal(manifest.music.generation.locked, true);
+
+    // A changed music brief (BPM) is a new, paid generation, and the lock follows it.
+    notices.length = 0;
+    story.audio.music = { provider: "elevenlabs", bpm: 128 };
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story));
+    await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(music.generated, 2);
+    assert.ok(notices.some((line) => /PAID/.test(line) && /music brief changed \(bpm\)/.test(line)), notices.join("\n"));
+    assert.equal(JSON.parse(await readFile(path.join(project, ".launchclip/music-lock.json"), "utf8")).bpm, 128);
+
+    // --music-regenerate forces one more, even though the stage would be cached.
+    notices.length = 0;
+    await runFinish(project, { renderer: "remotion", musicRegenerate: true }, adapters);
+    assert.equal(music.generated, 3);
+    assert.ok(notices.some((line) => /PAID/.test(line) && /--music-regenerate/.test(line)), notices.join("\n"));
+    // And the next plain run reuses that track.
+    notices.length = 0;
+    const settled = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(settled.stages.find((stage) => stage.name === "sound").status, "cached");
+    assert.equal(music.generated, 3);
   } finally {
     await rm(project, { recursive: true, force: true });
   }

@@ -175,12 +175,43 @@ export async function buildEvidence(projectPath, { video = 'renders/draft.mp4', 
     }
   }
   writeFileSync(path.join(out, 'manifest.json'), `${JSON.stringify({ schema_version: 'launchclip.subscription-temporal-evidence.v1', renderer: engine, video_sha256: sha(draft), entries }, null, 2)}\n`);
-  const sheetFiles = sheets ? writeCriticSheets(project, schedule, draft, engine) : [];
+  const sheetFiles = sheets ? writeCriticSheets(project, schedule, draft, engine, frameSize(story, draft)) : [];
   return { renderer: engine, samples: schedule.entries.length, artifacts: entries.length, sheets: sheetFiles };
 }
 
+// The frame size for the contact sheets: the story's format, else the draft's
+// first video stream, else portrait 1080x1920.
+function frameSize(story, draft) {
+  const width = Number(story?.format?.width);
+  const height = Number(story?.format?.height);
+  if (width > 0 && height > 0) return { width, height };
+  try {
+    const [w, h] = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0:s=x', draft], { encoding: 'utf8' }).trim().split('x').map(Number);
+    if (w > 0 && h > 0) return { width: w, height: h };
+  } catch { /* fall through */ }
+  return { width: 1080, height: 1920 };
+}
+
+/**
+ * Aspect-aware contact-sheet geometry. Tiles keep the frame's aspect (the long
+ * side is 480 px), four tiles per row (two browser/encoded pairs), so a 16:9
+ * cut gets 480x270 tiles in a 1920 px wide sheet and a 9:16 cut 270x480 tiles.
+ * The overview grid is 5x4 for portrait and 4x5 for landscape or square.
+ * -> {tile: {width, height}, columns, overview: {columns, rows}, orientation}
+ */
+export function contactSheetLayout({ width, height } = {}) {
+  const w = Number(width) > 0 ? Number(width) : 1080;
+  const h = Number(height) > 0 ? Number(height) : 1920;
+  const even = (value) => Math.max(2, Math.round(value / 2) * 2);
+  const long = 480;
+  const tile = h >= w ? { width: even(long * w / h), height: long } : { width: long, height: even(long * h / w) };
+  const orientation = h > w ? 'portrait' : w > h ? 'landscape' : 'square';
+  return { tile, columns: 4, overview: orientation === 'portrait' ? { columns: 5, rows: 4 } : { columns: 4, rows: 5 }, orientation };
+}
+
 // Each sheet pairs browser (left) and encoded (right) tiles, six samples per sheet in schedule order.
-function writeCriticSheets(project, schedule, draft, engine) {
+function writeCriticSheets(project, schedule, draft, engine, size) {
+  const { tile, columns, overview, orientation } = contactSheetLayout(size);
   const dir = path.join(project, 'qa/critic-sheets');
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
@@ -191,15 +222,15 @@ function writeCriticSheets(project, schedule, draft, engine) {
     const group = ids.slice(i, i + 6);
     const inputs = group.flatMap((id) => ['-i', path.join(project, 'qa/temporal-evidence', `${id}-${BROWSER_SOURCE}.png`), '-i', path.join(project, 'qa/temporal-evidence', `${id}-encoded-draft.png`)]);
     const n = group.length * 2;
-    const scaled = Array.from({ length: n }, (_, j) => `[${j}]scale=270:480[s${j}]`).join(';');
-    const layout = Array.from({ length: n }, (_, j) => `${(j % 4) * 270}_${Math.floor(j / 4) * 480}`).join('|');
+    const scaled = Array.from({ length: n }, (_, j) => `[${j}]scale=${tile.width}:${tile.height}[s${j}]`).join(';');
+    const layout = Array.from({ length: n }, (_, j) => `${(j % columns) * tile.width}_${Math.floor(j / columns) * tile.height}`).join('|');
     const name = `sheet-${String(i / 6 + 1).padStart(2, '0')}.jpg`;
     execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...inputs, '-filter_complex', `${scaled};${Array.from({ length: n }, (_, j) => `[s${j}]`).join('')}xstack=inputs=${n}:layout=${layout}`, path.join(dir, name)]);
     written.push(name);
     index.push({ sheet: name, samples: group });
   }
-  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', draft, '-vf', 'fps=2/3,scale=270:480,tile=5x4', '-frames:v', '1', path.join(dir, 'overview-every-1.5s.jpg')]);
-  writeFileSync(path.join(dir, 'index.json'), `${JSON.stringify({ tiles: `each sample is a pair: left = ${engine} browser still, right = encoded draft; 4 tiles per row`, sheets: index }, null, 2)}\n`);
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', draft, '-vf', `fps=2/3,scale=${tile.width}:${tile.height},tile=${overview.columns}x${overview.rows}`, '-frames:v', '1', path.join(dir, 'overview-every-1.5s.jpg')]);
+  writeFileSync(path.join(dir, 'index.json'), `${JSON.stringify({ tiles: `each sample is a pair: left = ${engine} browser still, right = encoded draft; ${columns} tiles per row`, tile: { ...tile, orientation }, sheets: index }, null, 2)}\n`);
   return [...written, 'overview-every-1.5s.jpg', 'index.json'];
 }
 

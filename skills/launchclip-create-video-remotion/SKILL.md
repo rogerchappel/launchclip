@@ -265,10 +265,13 @@ tournament receipts:
   constraints
 - `EVIDENCE.md`: factual claims and their source locations; label inference,
   opinion, and unverified claims explicitly
-- `CONCEPTS.json`: five distinct treatments, complete fresh-context scorecard,
-  deterministic winner, and required improvements
-- `STORY.json`: the independently edited canonical retention story and its
-  score-floor receipt
+- `CONCEPTS.json` (`launchclip.concepts.v1`): five distinct treatments,
+  complete fresh-context scorecard, deterministic winner (`chosen: true`), and
+  required improvements
+- `STORY.json` (`launchclip.story-receipt.v1`): the independently edited
+  canonical retention story (`concept_id`, `beats`, `narration.source`) and
+  its score-floor receipt; both schemas, with examples, are in
+  `references/cinematic-production.md`, and `cinematic-check` validates them
 - `SCRIPT.md`: the exact approved narration; omit only for an intentionally
   unnarrated piece
 - `NARRATION.json`: measured word/beat timings from the real take, or an
@@ -424,6 +427,13 @@ for a quieter treatment:
   through every hold and moves a parallax background behind them. A cuts story
   can still use one `pan` where a camera move says "the next idea is beside
   this one". End a world-camera loop with a short `whip-pan` home.
+- Inspect settled world-camera frames at delivery size, not only the moves.
+  If the parallax background shows hard edges or vertical seams on a hold,
+  set `camera.parallax: false` (the camera still travels, but this also
+  removes the moving background field, leaving the flat background colour)
+  or switch to `camera.mode` "cuts" and keep the travel as typed camera
+  transitions (`pan`, `push`, `orbit`, `whip-pan`), which keeps the ambient
+  field. Record which one you chose and why.
 - Select transitions by meaning: hard cut for contrast, push for continuation,
   whip for speed, zoom for scale change, morph for identity, and aperture/mask
   for focus. Do not disguise one generic crossfade with different names.
@@ -452,7 +462,15 @@ reference. Work in this order:
 5. Run the five-concept tournament and fresh-context selection.
 6. Write and independently edit the canonical retention story.
 7. Produce or prepare narration, measure the real take, then freeze the
-   storyboard, design system, music/edit grid, and quality targets.
+   storyboard, design system, music/edit grid, and quality targets. For a
+   synthesised voice, write the script into `audio.narration`
+   (`{text, provider?, voice?, speed?}`; defaults Kokoro, `af_heart`, speed
+   1.2) before any scenes, run `launchclip voice <project>` to synthesise it
+   (cached) and print its real duration and per-sentence timing, adjust the
+   text or `speed` until it fits, then size `format.duration` and the scenes
+   to that take and anchor scene starts and hits to words (`word:<text>`).
+   `finish` reuses the measured take. See "Narration" in the runtime
+   reference.
 8. Write `storyboard.json` from the frozen storyboard. Its typed `in` transitions
    are the declared phase-2 boundaries that `cinematic-check` reads. Render two
    independent opening candidates and two candidates for one representative
@@ -508,6 +526,20 @@ If the user edits `storyboard.json`, a bespoke module, or the props in Studio, r
 stills before asking for approval. If those checks trigger a repair that
 changes the visible result, refresh Studio and obtain fresh approval of that
 repaired state.
+
+**Draft and final.** `launchclip finish` defaults to `--quality draft`,
+which writes `renders/draft.mp4`: the same resolution, frame rate, timing,
+mix, loudness master and gates as the final, encoded faster at a lower
+bitrate (Remotion CRF 28 `veryfast`; HyperFrames `--quality draft`, CRF 28
+with lighter frame capture). Every
+gate, the critic and `cinematic-check` judge this draft, and it is a
+reviewable deliverable. `--quality high` writes `renders/final.mp4` (the full-quality encode)
+and needs the user's explicit approval in this conversation after they have
+seen the draft or Studio preview, for example "render the final". A passing
+gate, a `ship` verdict from the critic, or the original request to make a
+video is not that approval. When the user has not approved yet, deliver
+`renders/draft.mp4`, say plainly that it is the gated draft, and give the
+one command that renders the final once they approve.
 
 After approval:
 

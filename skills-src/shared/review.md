@@ -8,6 +8,20 @@ requirements below apply to new-story creation only.
 
 <!-- include: renderers/{renderer}/preview.md -->
 
+**Draft and final.** `launchclip finish` defaults to `--quality draft`,
+which writes `renders/draft.mp4`: the same resolution, frame rate, timing,
+mix, loudness master and gates as the final, encoded faster at a lower
+bitrate (Remotion CRF 28 `veryfast`; HyperFrames `--quality draft`, CRF 28
+with lighter frame capture). Every
+gate, the critic and `cinematic-check` judge this draft, and it is a
+reviewable deliverable. `--quality high` writes `renders/final.mp4` (the full-quality encode)
+and needs the user's explicit approval in this conversation after they have
+seen the draft or Studio preview, for example "render the final". A passing
+gate, a `ship` verdict from the critic, or the original request to make a
+video is not that approval. When the user has not approved yet, deliver
+`renders/draft.mp4`, say plainly that it is the gated draft, and give the
+one command that renders the final once they approve.
+
 After approval:
 
 <!-- include: renderers/{renderer}/render.md -->
