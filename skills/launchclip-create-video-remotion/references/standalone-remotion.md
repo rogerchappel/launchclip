@@ -24,10 +24,12 @@ file, `storyboard.json`, through the bundled `LaunchclipStory` composition.
 - Node.js 22 or newer
 - FFmpeg and `ffprobe`
 - the pinned toolchain: `remotion@4.0.536`, `@remotion/cli@4.0.536`,
-  `@remotion/transitions@4.0.536`, `@remotion/google-fonts@4.0.536`,
-  `react@19.3.1` and `react-dom@19.3.1`
+  `@remotion/transitions@4.0.536`, `react@19.3.1` and `react-dom@19.3.1`
+- the bundled font packages (`@fontsource/*` and `@fontsource-variable/*`
+  at `5.3.0`, listed in the install command below); the kit imports their
+  files, so the bundle fails without them
 - network access for the first `npm install` and Chrome Headless Shell
-  download only; rendering itself needs none when fonts are local
+  download only; rendering itself fetches nothing
 
 Check the host first:
 
@@ -86,8 +88,13 @@ cp -R <skill>/assets/core <project>/kit/core
 cd <project>/..
 test -f package.json || npm init -y >/dev/null
 npm install --save-exact remotion@4.0.536 @remotion/cli@4.0.536 \
-  @remotion/transitions@4.0.536 @remotion/google-fonts@4.0.536 \
-  react@19.3.1 react-dom@19.3.1
+  @remotion/transitions@4.0.536 react@19.3.1 react-dom@19.3.1 \
+  @fontsource/anton@5.3.0 @fontsource/archivo-black@5.3.0 \
+  @fontsource/instrument-serif@5.3.0 @fontsource/stix-two-math@5.3.0 \
+  @fontsource-variable/bricolage-grotesque@5.3.0 @fontsource-variable/inter@5.3.0 \
+  @fontsource-variable/jetbrains-mono@5.3.0 @fontsource-variable/space-grotesk@5.3.0 \
+  @fontsource-variable/stix-two-text@5.3.0 @fontsource-variable/syne@5.3.0 \
+  @fontsource-variable/unbounded@5.3.0
 ```
 
 The default output, `.launchclip/agent-<slug>`, therefore installs into
@@ -257,8 +264,8 @@ overrides it and `kit/remotion/entry.tsx` otherwise; examples use the latter.
 - The loop ending, when `ending.loop_to` is set, returns to that scene's frame
   zero state: over `ending.in.dur` with the typed transition when `ending.in`
   is set, otherwise on the last frame.
-- Brand fonts load through `@remotion/google-fonts` (the families listed in
-  `kit/remotion/fonts.ts`) with a fallback stack per role.
+- Fonts come only from bundled files (see [Fonts](#fonts)), never from Google
+  Fonts or the host's installed fonts.
 - A scene whose module is unknown, invalid, or has no component renders a
   labelled placeholder box, never a blank frame.
 
@@ -310,10 +317,10 @@ hidden state becomes a visible defect.
   `random("<seed>")` from `remotion` for seeded variation.
 - No CSS `transition`, `animation`, `@keyframes`, or animated SVG `<animate>`.
   They run on wall-clock time, not on the frame.
-- Load fonts before the first frame. Use `loadFont()` from
-  `@remotion/google-fonts/<Family>` at module top level with explicit
-  `weights` and `subsets`, or package files under `assets/fonts/` and block
-  rendering until they load:
+- Load fonts before the first frame. The kit does this for every registry
+  family and frozen brand font (see [Fonts](#fonts)); a bespoke module that
+  needs another face packages its file under `assets/fonts/` and blocks
+  rendering until it loads:
 
 ```tsx
 import { cancelRender, continueRender, delayRender, staticFile } from "remotion";
@@ -325,9 +332,36 @@ display.load()
   .catch((error) => cancelRender(error));
 ```
 
-`@remotion/google-fonts` downloads from Google at render time; prefer local
-files when the render host is offline or the brief requires a frozen font.
+Never load fonts from the network (`@remotion/google-fonts` downloads from
+Google at render time, and the output then depends on the host).
 Every `delayRender()` must reach `continueRender()` or `cancelRender()`.
+
+### Fonts
+
+`kit/core/fonts.mjs` is the font registry both renderers share: Anton, Archivo
+Black, Bricolage Grotesque, Inter, Instrument Serif, JetBrains Mono, Space
+Grotesk, STIX Two Math, STIX Two Text, Syne and Unbounded, each from a pinned
+`@fontsource` package (OFL-1.1, latin subset). Every composition calls
+`ensureFonts(brand)` from `kit/remotion/fonts.ts`, which:
+
+- loads every role default (display Anton, body Inter, meta JetBrains Mono,
+  maths STIX Two Text, quote serif Instrument Serif), STIX Two Math as the
+  symbol fallback, and every family `brand.fonts` names;
+- imports each registry woff2 from `node_modules`, so the Remotion bundler
+  copies it into the bundle; nothing goes through `--public-dir` and nothing
+  is fetched, in Studio, `remotion render` and `remotion still` alike;
+- loads frozen files from `<public-dir>/assets/fonts/` with `staticFile()`
+  instead when they exist for a family, named
+  `<family-slug>-<weight>[-italic].woff2` (`poppins-700.woff2`), which is how
+  a brand family outside the registry is added;
+- adds each face with the FontFace API inside `delayRender()` and releases the
+  handle once `document.fonts` is ready, so no frame shows a fallback face.
+
+A family that is neither registered nor frozen logs a warning and renders in
+the role's bundled family. The HyperFrames compiler makes the same choice per
+family, which is what keeps the two renderers' text identical. A custom entry
+(`remotion/entry.tsx`) that renders its own compositions calls
+`ensureFonts(story.brand)` too.
 
 A minimal frame-pure bespoke module:
 
@@ -643,7 +677,8 @@ output without a separate explicit request.
 | --- | --- | --- |
 | Motion jumps, freezes, or differs between Studio scrubbing and the render | Animation state in `useState`/`useEffect`/refs, or a CSS transition | Derive the value from `useCurrentFrame()` with `motion.mjs` |
 | Two renders of the same props differ | `Math.random()`, `Date.now()`, or iteration over unordered data | Use `random("<seed>")` and stable ordering |
-| First frames show a fallback font, or text reflows mid-shot | Font not loaded before rendering | `loadFont()` at module top level, or `delayRender` until `FontFace.load()` resolves |
+| First frames show a fallback font, or text reflows mid-shot | Font not loaded before rendering, or a custom composition skips `ensureFonts` | Call `ensureFonts(story.brand)` from `kit/remotion/fonts.ts`; for other faces, `delayRender` until `FontFace.load()` resolves |
+| Bundling fails with `Can't resolve '@fontsource/…'` | The bundled font packages are not installed | Run the `npm install` command under [Scaffold without a skill pack](#scaffold-without-a-skill-pack) |
 | `delayRender() … was not cleared after 28000ms` | A missing `continueRender`, a 404 asset, or a slow font download | Fix the asset path, always settle the handle, use local fonts; raise `--timeout` only for genuinely slow assets |
 | `staticFile()` 404 or a black media panel | Leading slash, path outside the project, or an asset not copied under `assets/` | Use `assets/…` paths, run from the project, keep `--public-dir=.` |
 | Renders are slow and the bundle is huge | `node_modules` (or old renders) inside the public directory | Install the toolchain in the parent directory; keep large scratch files out of the project |

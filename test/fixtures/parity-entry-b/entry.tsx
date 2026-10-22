@@ -5,6 +5,7 @@
 // the scene start and the composition lasts the scene's duration.
 import React from "react";
 import { AbsoluteFill, Composition, registerRoot } from "remotion";
+import { ensureFonts } from "../../../kit/remotion/fonts";
 // @ts-ignore plain ESM core, bundled by Remotion
 import { resolveEditorialModule } from "../../../kit/core/editorial-core.mjs";
 import { COMPONENTS } from "../../../kit/remotion/modules/registry-b";
@@ -18,6 +19,7 @@ function sceneModel({ scene, story }: Props) {
 }
 
 const ModuleReview: React.FC<Props> = (props) => {
+  ensureFonts(props.story?.brand);
   const model = sceneModel(props);
   const Component = COMPONENTS[model.kind];
   if (!Component) throw new Error(`no batch B component for ${model.kind}`);

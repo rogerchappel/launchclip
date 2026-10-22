@@ -205,11 +205,6 @@ export function frozenFontFaces(family, fileNames) {
     }));
 }
 
-/** @deprecated "Space Grotesk" → "SpaceGrotesk"; kept until the renderers stop loading from Google Fonts. */
-export function googleFontModuleName(family) {
-  return String(family ?? '').replace(/[^A-Za-z0-9]+/g, '');
-}
-
 /** One @font-face rule (font-display: block, so text never paints in a fallback first). */
 export function fontFaceRule(face, url) {
   const safe = String(url).replace(/["\\\n]/g, (char) => encodeURIComponent(char));

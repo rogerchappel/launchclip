@@ -13,7 +13,7 @@
 // - one root <Audio> for audio.mix (or the voice);
 // - <WordCaptions> from captions.json or chunked NARRATION words;
 // - the loop ending (the loop_to scene's first state over the final window);
-// - brand fonts through @remotion/google-fonts with fallback stacks.
+// - the bundled registry fonts (kit/remotion/fonts.ts, kit/core/fonts.mjs).
 import React from "react";
 import { AbsoluteFill, Audio, Freeze, Sequence, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import type { CalculateMetadataFunction } from "remotion";
@@ -28,7 +28,7 @@ import { CAPTION_DEFAULT_COLORS, captionChunksFrom, chunkWords, narrationWords }
 import { moduleComponent } from "./modules";
 import { Placeholder } from "./Placeholder";
 import { WordCaptions } from "./captions/WordCaptions";
-import { ensureBrandFonts } from "./fonts";
+import { ensureFonts } from "./fonts";
 
 export type CustomModuleProps = { scene: any; params: any; brand: any; format: any; model: any };
 export type StoryProps = Record<string, any> & {
@@ -96,7 +96,7 @@ function captionOverlay(story: any) {
 export const StoryComposition: React.FC<StoryProps> = (props) => {
   const { customModules, __captions, ...story } = props;
   const { fps } = useVideoConfig();
-  const fonts = ensureBrandFonts(story.brand);
+  const fonts = ensureFonts(story.brand);
   const colors = story.brand?.colors ?? {};
   const background = colors.bg ?? "#000000";
   const windows = React.useMemo(() => sceneWindows(story), [story]);
@@ -157,7 +157,7 @@ export const calculateStoryMetadata: CalculateMetadataFunction<StoryProps> = asy
 export type ModuleReviewProps = { scene: any; story: any; customModules?: StoryProps["customModules"] };
 
 export const ModuleReview: React.FC<ModuleReviewProps> = ({ scene, story, customModules }) => {
-  ensureBrandFonts(story.brand);
+  ensureFonts(story.brand);
   const element = React.useMemo(() => resolveSceneElement(scene, story, { customModules }), [scene, story, customModules]);
   return <AbsoluteFill style={{ backgroundColor: story.brand?.colors?.bg ?? "#000000" }}>{element.render()}</AbsoluteFill>;
 };

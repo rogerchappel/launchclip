@@ -4,6 +4,7 @@
 // module on brand.colors.bg for the scene's duration (frame 0 = scene start).
 import React from 'react';
 import {AbsoluteFill, Composition, registerRoot} from 'remotion';
+import { ensureFonts } from '../../../kit/remotion/fonts';
 // @ts-ignore plain ESM core module
 import {MODULES} from '../../../kit/core/catalog-b.mjs';
 import {COMPONENTS} from '../../../kit/remotion/catalog/registry-b';
@@ -18,6 +19,7 @@ export function resolveScene({scene, story}: Props) {
 }
 
 const ModuleReview: React.FC<Props> = (props) => {
+  ensureFonts(props.story?.brand);
   const model = React.useMemo(() => resolveScene(props), [props]);
   const Component = COMPONENTS[model.module];
   return (

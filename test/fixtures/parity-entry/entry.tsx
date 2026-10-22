@@ -5,6 +5,7 @@
 // Frame 0 is the scene start, so t = scene.start + frame / fps.
 import React from 'react';
 import {AbsoluteFill, Composition, registerRoot} from 'remotion';
+import { ensureFonts } from '../../../kit/remotion/fonts';
 // @ts-ignore plain ESM core shared with HyperFrames
 import {resolveEditorialModule} from '../../../kit/core/editorial-core.mjs';
 // @ts-ignore plain ESM helper shared with scripts/parity.mjs
@@ -14,6 +15,7 @@ import {COMPONENTS} from '../../../kit/remotion/modules/registry-a';
 type ReviewProps = {scene: any; story: any};
 
 const ModuleReview: React.FC<ReviewProps> = ({scene, story}) => {
+  ensureFonts(story?.brand);
   const Component = COMPONENTS[scene.module];
   if (!Component) throw new Error(`parity entry: no registry-a component for ${scene.module}`);
   const model = resolveEditorialModule(editorialSpecFromScene(scene, story));
