@@ -126,7 +126,7 @@ export function writeFcpxml(timeline, options = {}) {
     start: t(item.in),
     enabled: track.enabled === false || item.enabled === false ? "0" : undefined,
     srcEnable: item.videoOnly ? "video" : undefined,
-    audioRole: track.kind === "audio" || (item.kind === "base" && !item.videoOnly) ? track.kind === "audio" ? track.role : "dialogue" : undefined
+    audioRole: track.kind === "audio" ? track.role : item.kind === "base" && timeline.assets.find((asset) => asset.id === item.asset)?.hasAudio ? "dialogue" : undefined
   });
   const volume = (item, indent) => (typeof item.volume === "number" && Math.abs(item.volume - 1) > 1e-6 ? element("adjust-volume", { amount: `${decibels(item.volume)}dB` }, null, indent) : null);
   const anchoredLine = (entry, indent) => {
