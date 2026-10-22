@@ -502,6 +502,12 @@ audio, loudness, layout and evidence gates. It never rewrites
 `finish.json`. The critic gate stays `pending` until the fresh-context critic
 has reviewed `qa/critic-sheets/`.
 
+To keep editing in Final Cut Pro, Premiere Pro or DaVinci Resolve after
+finish, export an editable timeline (base clips with their in points, each
+overlay scene as an alpha clip, voice, music, per-cue SFX, captions and
+markers): `launchclip export <project> --format fcpxml|premiere|edl|otio|all`.
+See [finishing-in-an-nle.md](finishing-in-an-nle.md).
+
 Hand-authored `index.html` projects (no storyboard) use the manual render
 below.
 

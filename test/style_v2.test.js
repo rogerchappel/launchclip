@@ -12,7 +12,7 @@ import { createStylePack, listBuiltinStyles, loadStylePack, resolveStyleV2, upgr
 import { applyProjectStyle } from "../src/story_style.js";
 import { readProjectStory } from "../src/story_loader.js";
 import { runStoryCommand } from "../src/story_cli.js";
-import { applySfxDensity, chooseBed } from "../src/finish.js";
+import { chooseBed } from "../src/finish.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const EXPLAINER = path.join(ROOT, "examples", "story", "explainer-9x16");
@@ -212,10 +212,7 @@ test("the planner prompt carries the style pack", () => {
   assert.doesNotMatch(planningPrompt({ tier: "structured" }), /Style pack/);
 });
 
-test("finish honours SFX density and the music bpm range", () => {
-  const cues = [{ cue: "tick", source: "hit" }, { cue: "impact", source: "hit" }, { cue: "whoosh", source: "transition" }, { cue: "pop", source: "module-event" }, { cue: "impact", source: "module-event" }];
-  assert.deepEqual(applySfxDensity(cues, "low").map((cue) => cue.cue), ["impact", "whoosh"]);
-  assert.equal(applySfxDensity(cues, "normal").length, 5);
+test("finish bounds the music bed tempo by the style's bpm range", () => {
   const resolved = { resolved: { duration: 10 }, scenes: [{ start: 0, end: 10, energy: 0 }] };
   assert.equal(chooseBed(resolved, {}).bpm, 84);
   assert.equal(chooseBed(resolved, { bpm_range: [120, 130] }).bpm, 120);

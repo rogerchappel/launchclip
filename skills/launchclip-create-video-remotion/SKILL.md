@@ -228,9 +228,14 @@ audio.
   subprocess. Generate one instrumental bed sized to the edit, leaving
   midrange space for narration and requesting a clean ending. Do not use an
   OpenAI key for subscription-mode orchestration or music.
-- **Sound effects:** support none, authorized local files, or the original
-  procedural kit from `scripts/synth-audio-kit.mjs` (local FFmpeg, no samples,
-  no cost). Inspect supplied
+- **Sound effects:** support none, authorized local files, the locked SFX
+  library, or the original procedural kit from `scripts/synth-audio-kit.mjs`
+  (local FFmpeg, no samples, no cost; several seeded variants per cue, UI
+  clicks and mechanical keystrokes). With the LaunchClip CLI, `launchclip
+  finish` resolves cues through the library seeded once with `launchclip sfx
+  seed` (ElevenLabs with the user's explicit approval, or the procedural kit),
+  then the kit; see
+  [references/sfx-library.md](references/sfx-library.md). Inspect supplied
   resources, project/style-pack audio, and the active LaunchClip checkout or
   installed package's `public/sfx` if it exists; do not assume every distribution
   includes a library. Recursively inventory `.wav`, `.mp3`, `.m4a`, `.aac`,
