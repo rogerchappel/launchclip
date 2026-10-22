@@ -35,8 +35,10 @@ export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.4
   }
   if (hasMusic) {
     parts.push(`[${index}]volume=${musicVolume}[bedraw]`);
-    // Duck the bed under speech; with no voice the bed plays as is.
-    parts.push(hasVoice ? '[bedraw][key]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=320:makeup=1[bed]' : '[bedraw]anull[bed]');
+    // Duck the bed under speech; with no voice the bed plays as is. The key is
+    // padded to the full duration because sidechaincompress stops when its
+    // sidechain ends, which would cut the bed off after the last word.
+    parts.push(hasVoice ? `[key]apad=whole_dur=${duration}[keypad];[bedraw][keypad]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=320:makeup=1[bed]` : '[bedraw]anull[bed]');
     mixInputs.push('[bed]');
     index += 1;
   }

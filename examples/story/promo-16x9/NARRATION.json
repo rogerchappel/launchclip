@@ -1,0 +1,239 @@
+{
+  "schema_version": "launchclip.narration.v1",
+  "source": "assets/audio/mix.m4a",
+  "voice": "macos-say:Samantha (word-fitted)",
+  "duration_seconds": 26,
+  "text": "Ship release notes in minutes, not days. Teams at Orbit, Lumen and Northwind already ship with Relay. Connect your repo. Pick the changes. Publish everywhere. Release prep time drops by eighty percent. Here is the editor, drafting a post live. Try Relay free today. Link below.",
+  "words": [
+    {
+      "text": "Ship",
+      "start": 0.3,
+      "end": 0.568
+    },
+    {
+      "text": "release",
+      "start": 0.608,
+      "end": 1.002
+    },
+    {
+      "text": "notes",
+      "start": 1.042,
+      "end": 1.352
+    },
+    {
+      "text": "in",
+      "start": 1.392,
+      "end": 1.576
+    },
+    {
+      "text": "minutes,",
+      "start": 1.616,
+      "end": 2.01
+    },
+    {
+      "text": "not",
+      "start": 2.11,
+      "end": 2.336
+    },
+    {
+      "text": "days.",
+      "start": 2.376,
+      "end": 2.644
+    },
+    {
+      "text": "Teams",
+      "start": 4.6,
+      "end": 4.91
+    },
+    {
+      "text": "at",
+      "start": 4.95,
+      "end": 5.134
+    },
+    {
+      "text": "Orbit,",
+      "start": 5.174,
+      "end": 5.484
+    },
+    {
+      "text": "Lumen",
+      "start": 5.584,
+      "end": 5.894
+    },
+    {
+      "text": "and",
+      "start": 5.934,
+      "end": 6.16
+    },
+    {
+      "text": "Northwind",
+      "start": 6.2,
+      "end": 6.678
+    },
+    {
+      "text": "already",
+      "start": 6.718,
+      "end": 7.112
+    },
+    {
+      "text": "ship",
+      "start": 7.152,
+      "end": 7.42
+    },
+    {
+      "text": "with",
+      "start": 7.46,
+      "end": 7.728
+    },
+    {
+      "text": "Relay.",
+      "start": 7.768,
+      "end": 8.078
+    },
+    {
+      "text": "Connect",
+      "start": 8.8,
+      "end": 9.194
+    },
+    {
+      "text": "your",
+      "start": 9.234,
+      "end": 9.502
+    },
+    {
+      "text": "repo.",
+      "start": 9.542,
+      "end": 9.81
+    },
+    {
+      "text": "Pick",
+      "start": 10.01,
+      "end": 10.278
+    },
+    {
+      "text": "the",
+      "start": 10.318,
+      "end": 10.544
+    },
+    {
+      "text": "changes.",
+      "start": 10.584,
+      "end": 10.978
+    },
+    {
+      "text": "Publish",
+      "start": 11.178,
+      "end": 11.572
+    },
+    {
+      "text": "everywhere.",
+      "start": 11.612,
+      "end": 12.112
+    },
+    {
+      "text": "Release",
+      "start": 13.8,
+      "end": 14.194
+    },
+    {
+      "text": "prep",
+      "start": 14.234,
+      "end": 14.502
+    },
+    {
+      "text": "time",
+      "start": 14.542,
+      "end": 14.81
+    },
+    {
+      "text": "drops",
+      "start": 14.85,
+      "end": 15.16
+    },
+    {
+      "text": "by",
+      "start": 15.2,
+      "end": 15.384
+    },
+    {
+      "text": "eighty",
+      "start": 15.424,
+      "end": 15.776
+    },
+    {
+      "text": "percent.",
+      "start": 15.816,
+      "end": 16.21
+    },
+    {
+      "text": "Here",
+      "start": 17.9,
+      "end": 18.168
+    },
+    {
+      "text": "is",
+      "start": 18.208,
+      "end": 18.392
+    },
+    {
+      "text": "the",
+      "start": 18.432,
+      "end": 18.658
+    },
+    {
+      "text": "editor,",
+      "start": 18.698,
+      "end": 19.05
+    },
+    {
+      "text": "drafting",
+      "start": 19.15,
+      "end": 19.586
+    },
+    {
+      "text": "a",
+      "start": 19.626,
+      "end": 19.768
+    },
+    {
+      "text": "post",
+      "start": 19.808,
+      "end": 20.076
+    },
+    {
+      "text": "live.",
+      "start": 20.116,
+      "end": 20.384
+    },
+    {
+      "text": "Try",
+      "start": 22.2,
+      "end": 22.426
+    },
+    {
+      "text": "Relay",
+      "start": 22.466,
+      "end": 22.776
+    },
+    {
+      "text": "free",
+      "start": 22.816,
+      "end": 23.084
+    },
+    {
+      "text": "today.",
+      "start": 23.124,
+      "end": 23.434
+    },
+    {
+      "text": "Link",
+      "start": 23.634,
+      "end": 23.902
+    },
+    {
+      "text": "below.",
+      "start": 23.942,
+      "end": 24.252
+    }
+  ]
+}

@@ -467,6 +467,31 @@ this workflow.
 
 ## Render and verify
 
+### Recommended for storyboard projects: `launchclip finish`
+
+When the project is driven by a `storyboard.json` and the LaunchClip CLI is
+installed, finish it in one command:
+
+```bash
+launchclip finish <project> --renderer hyperframes --quality draft   # renders/draft.mp4
+launchclip finish <project> --renderer hyperframes --quality high    # renders/final.mp4, after approval
+```
+
+It synthesises `audio.narration` when set (`--voice kokoro|elevenlabs|supplied`),
+validates and layout-checks the storyboard, writes captions, builds the SFX
+and music mix from the hits, module cues and scene energy, compiles the
+storyboard to `.launchclip/finish/hyperframes/`, renders, masters to −14 LUFS /
+−1 dBTP, builds the temporal evidence and critic sheets, and runs the motion,
+audio, loudness, layout and evidence gates. It never rewrites
+`storyboard.json`, skips stages whose inputs have not changed, and writes
+`finish.json`. The critic gate stays `pending` until the fresh-context critic
+has reviewed `qa/critic-sheets/`.
+
+Hand-authored `index.html` projects (no storyboard) use the manual render
+below.
+
+### Manual render
+
 Render from the CLI only after approval:
 
 ```bash

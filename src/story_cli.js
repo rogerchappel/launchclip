@@ -1,11 +1,13 @@
 import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { deriveBoundaries, resolveStory, storyFormat, storyHits, validateStory as validateStoryShape } from "./story.js";
-import { knownModules } from "../kit/core/modules.mjs";
+import { knownModules, resolveModule } from "../kit/core/modules.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 import { getRenderer } from "./renderers/index.js";
 import { remotionInvocation, COMPOSITION_ID } from "./renderers/remotion.js";
 import { captureCommand, runCommand } from "./renderers/command.js";
+import { createPlannerClient, planStoryboard } from "./storyboard_planner.js";
+import { DEFAULT_BRAND } from "../kit/core/planning-prompt.mjs";
 
 const UNKNOWN_MODULE = /\.module "[^"]+" is not a known module$/;
 
@@ -18,12 +20,29 @@ export function validateStory(story) {
   return { ok: errors.length === 0, errors, warnings: [...result.warnings, ...unknown.map((message) => `${message} in this kit; it renders as a placeholder`)] };
 }
 
+// Resolves every known-module scene of a resolved story through the kit's
+// module registry, the step both compilers take. A scene whose params do not
+// resolve renders as a placeholder in both renderers, so validation reports it
+// as an error instead of letting it pass. Unknown modules stay warnings above.
+export function moduleParamErrors(resolved) {
+  const known = new Set(knownModules());
+  const errors = [];
+  for (const scene of Array.isArray(resolved?.scenes) ? resolved.scenes : []) {
+    if (!scene || scene.module === "custom" || !known.has(scene.module)) continue;
+    try { resolveModule(scene, resolved); }
+    catch (error) { errors.push(`${error.message} (both renderers would draw a placeholder)`); }
+  }
+  return errors;
+}
+
 // launchclip story <validate|resolve> <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out file]
 // launchclip story compile <project> --renderer hyperframes|remotion [--out dir]
+// launchclip story plan --brief brief.md [...] (see planStoryCommand)
 // Without --narration, audio.words is read relative to the story file when it exists.
-export async function runStoryCommand(action, storyPath, flags = {}) {
-  if (!new Set(["validate", "resolve", "compile"]).has(action)) throw new Error(`Unknown story action: ${action}; use validate, resolve or compile`);
+export async function runStoryCommand(action, storyPath, flags = {}, adapters = {}) {
+  if (!new Set(["validate", "resolve", "compile", "plan"]).has(action)) throw new Error(`Unknown story action: ${action}; use validate, resolve, compile or plan`);
   if (action === "compile") return compileStoryCommand(storyPath, flags);
+  if (action === "plan") return planStoryCommand(flags, adapters);
   const file = path.resolve(storyPath);
   const story = await readJson(file, "story.json");
   const words = await loadWords(flags.narration, story, path.dirname(file));
@@ -39,7 +58,10 @@ export async function runStoryCommand(action, storyPath, flags = {}) {
         const resolved = resolveStory(story, { words: words?.list ?? [], beats });
         const second = validateStory(resolved);
         errors.push(...second.errors.filter((entry) => !errors.includes(entry)));
-        if (second.ok) boundaries = deriveBoundaries(resolved);
+        if (second.ok) {
+          boundaries = deriveBoundaries(resolved);
+          errors.push(...moduleParamErrors(resolved));
+        }
         resolvedChecked = true;
       } catch (error) {
         errors.push(error.message);
@@ -119,6 +141,104 @@ export async function compileStoryCommand(target, flags = {}, { run = runCommand
   const listed = listing.ok && text.split(/\s+/).includes(COMPOSITION_ID);
   if (!listed) throw new Error(`remotion compositions did not list ${COMPOSITION_ID} (exit ${listing.exit_code}):\n${String(listing.stderr || text).trim().split("\n").slice(-12).join("\n")}`);
   return { ...base, status: "compiled", out: propsFile, entry, composition_id: COMPOSITION_ID, compositions: text.split(/\s+/).filter(Boolean), files: [path.relative(project, propsFile)], warnings: validation.warnings };
+}
+
+// launchclip story plan --brief brief.md [--narration NARRATION.json] [--tier structured]
+//   [--model provider:model] [--out storyboard.json] [--base assets/…] [--voice assets/…]
+//   [--format WxH] [--fps n] [--duration s] [--brand brand.json] [--max-repairs n]
+// The lane follows the inputs (RFC §3): --base → footage-led, --narration →
+// voiceover-motion, otherwise motion. adapters.client replaces the model client.
+export async function planStoryCommand(flags = {}, adapters = {}) {
+  if (!flags.brief || flags.brief === true) throw new Error("story plan needs --brief <brief.md>");
+  const briefFile = path.resolve(String(flags.brief));
+  let brief;
+  try { brief = await readFile(briefFile, "utf8"); } catch { throw new Error(`Cannot read brief: ${briefFile}`); }
+  const out = path.resolve(String(flags.out ?? "storyboard.json"));
+  const outDir = path.dirname(out);
+  const narrationFile = flags.narration ? path.resolve(String(flags.narration)) : null;
+  const words = narrationFile ? await loadWords(narrationFile, null, outDir) : null;
+  const lane = String(flags.lane ?? (flags.base ? "footage-led" : words ? "voiceover-motion" : "motion"));
+  const format = planFormat(flags, words?.list ?? []);
+  const brand = flags.brand ? await readJson(path.resolve(String(flags.brand)), "brand.json") : DEFAULT_BRAND;
+  const warnings = [];
+  const audio = {};
+  if (words) {
+    const relative = path.relative(outDir, words.file).split(path.sep).join("/");
+    if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) audio.words = relative;
+    else {
+      audio.words = "NARRATION.json";
+      warnings.push(`${words.file} is outside the storyboard's folder; audio.words is set to NARRATION.json, so copy the narration there`);
+    }
+    audio.voice = String(flags.voice ?? "assets/audio/narration.wav");
+  } else if (flags.voice) audio.voice = String(flags.voice);
+  const modelSpec = flags.model ?? process.env.LAUNCHCLIP_PLANNER_MODEL ?? null;
+  const client = adapters.client ?? createPlannerClient(modelSpec, adapters.clientOptions ?? {}).client;
+  const maxRepairs = flags["max-repairs"] === undefined ? undefined : Number(flags["max-repairs"]);
+  const report = await planStoryboard({
+    brief,
+    words: words?.list ?? null,
+    lane,
+    format,
+    brand,
+    tier: String(flags.tier ?? "structured"),
+    model: modelSpec,
+    client,
+    audio,
+    base: flags.base ? String(flags.base) : null,
+    ...(maxRepairs === undefined ? {} : { maxRepairs })
+  });
+  const reportFile = path.join(outDir, ".launchclip", "storyboard-plan.json");
+  await writeJson(reportFile, { ...report, brief: briefFile, narration: words?.file ?? null, out });
+  const summary = {
+    stage: "story",
+    action: "plan",
+    status: report.status,
+    tier: report.tier,
+    lane: report.lane,
+    model: report.model,
+    out: report.status === "passed" ? out : null,
+    report: reportFile,
+    valid_first_attempt: report.valid_first_attempt,
+    repairs_used: report.repairs_used,
+    attempts: report.attempts.map((entry) => ({ attempt: entry.attempt, kind: entry.kind, ok: entry.ok, errors: entry.errors.length, layout_errors: entry.layout.errors, layout_warnings: entry.layout.warnings })),
+    usage: report.usage,
+    cost: report.cost,
+    warnings: [...warnings, ...report.warnings]
+  };
+  if (report.status === "passed") {
+    await writeJson(out, report.storyboard);
+    return summary;
+  }
+  let rejected = null;
+  if (report.storyboard) {
+    rejected = out.replace(/\.json$/i, "") + ".rejected.json";
+    await writeJson(rejected, report.storyboard);
+  }
+  const error = new Error(`story plan failed after ${report.attempts.length} attempt(s):\n- ${report.errors.join("\n- ")}\nReport: ${reportFile}${rejected ? `\nLast candidate: ${rejected}` : ""}`);
+  error.result = summary;
+  throw error;
+}
+
+function planFormat(flags, words) {
+  let width = 1080, height = 1920;
+  if (flags.format) {
+    const named = { shorts: [1080, 1920], portrait: [1080, 1920], landscape: [1920, 1080], square: [1080, 1080] }[String(flags.format).toLowerCase()];
+    const match = /^(\d+)x(\d+)$/i.exec(String(flags.format));
+    if (named) [width, height] = named;
+    else if (match) [width, height] = [Number(match[1]), Number(match[2])];
+    else throw new Error(`--format must be WIDTHxHEIGHT (e.g. 1080x1920) or shorts, landscape or square; got ${flags.format}`);
+  }
+  const fps = flags.fps === undefined ? 30 : Number(flags.fps);
+  if (!Number.isInteger(fps) || fps <= 0) throw new Error("--fps must be a positive integer");
+  let duration = flags.duration === undefined ? null : Number(flags.duration);
+  if (duration !== null && !(duration > 0)) throw new Error("--duration must be a positive number of seconds");
+  if (duration === null) {
+    const last = Math.max(0, ...words.map((entry) => Number(entry?.end ?? entry?.start)).filter(Number.isFinite));
+    duration = last > 0 ? Math.ceil((last + 0.6) * 10) / 10 : 30;
+  }
+  const format = { width, height, fps, duration };
+  if (height > width && duration <= 60) format.platform = "youtube-shorts";
+  return format;
 }
 
 async function existsFile(file) {

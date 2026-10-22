@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { readProjectStory } from "../story_loader.js";
+import { loadStoryModule, readProjectStory } from "../story_loader.js";
 import { adapterError, captureCommand, runCommand } from "./command.js";
 
 const require = createRequire(import.meta.url);
@@ -52,9 +52,11 @@ export function createRemotionRenderer(defaults = {}) {
 
     // Resolves storyboard.json and writes <project>/.launchclip/story.resolved.json,
     // which is passed to Remotion as --props.
+    // opts.story: an already resolved story to render instead of the project's
+    // storyboard.json (launchclip finish passes its resolved copy).
     async prepare(projectDir, opts = {}) {
       const project = path.resolve(projectDir);
-      const loaded = await readProjectStory(project, { storyModule: option(opts, "storyModule") });
+      const loaded = opts.story ? await injectedStory(opts.story, option(opts, "storyModule")) : await readProjectStory(project, { storyModule: option(opts, "storyModule") });
       if (!loaded) throw new Error(`Remotion projects need storyboard.json: none found in ${project}`);
       let props = loaded.resolved;
       if (opts.fps) props = withFps(props, Number(opts.fps));
@@ -141,6 +143,14 @@ export function createRemotionRenderer(defaults = {}) {
     }
   };
   return adapter;
+}
+
+async function injectedStory(story, storyModule) {
+  const module = await loadStoryModule(storyModule);
+  if (!story?.resolved || !Array.isArray(story.scenes) || story.scenes.some((scene) => typeof scene?.start !== "number" || typeof scene?.end !== "number")) {
+    throw new Error("opts.story must be a resolved story (run resolveStory first)");
+  }
+  return { file: null, story, resolved: story, format: module.storyFormat(story), module };
 }
 
 function sharedArgs(propsFile, project) {

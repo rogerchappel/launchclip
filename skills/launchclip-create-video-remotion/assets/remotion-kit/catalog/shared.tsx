@@ -1,21 +1,19 @@
 // Shared helpers for the catalogue A components. Everything is a pure
-// function of the current frame: t = model.start + frame / fps, and each
+// function of the current frame: t = useSceneTime(model.start), and each
 // node's animated props come from sampleNode() (kit/core/catalog-a.mjs),
 // which evaluates the model's tweens with kit/core/motion.mjs, the same
 // tweens the HyperFrames emitter hands to GSAP.
 import React from "react";
-import { useCurrentFrame, useVideoConfig } from "remotion";
+import { useSceneTime } from "../clock";
 // @ts-ignore plain ESM core without type declarations
 import { cssFromProps, nodeId, sampleNode, textAt } from "../../core/catalog-a.mjs";
 
 export type Model = any;
 export type Styler = (node: string) => React.CSSProperties;
 
-/** Absolute module time for the current frame (the parent Sequence starts at model.start). */
+/** Absolute composition time for the current frame (kit/remotion/clock.tsx). */
 export function useModuleTime(model: Model): number {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  return model.start + frame / fps;
+  return useSceneTime(model.start);
 }
 
 /** node → static style plus the animated props at time t. */

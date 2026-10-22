@@ -21,8 +21,9 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { deriveBoundaries, validateStory } from './story.mjs';
 import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from './modules.mjs';
-import { gsapVars, sceneWindows } from './transitions.mjs';
-import { CAPTION_CSS, CAPTION_DEFAULT_COLORS, captionChunksFrom, captionRuntime, chunkWords, narrationWords } from './captions.mjs';
+import { gsapVars, layerStateAt, sceneWindows } from './transitions.mjs';
+import { getEase } from './motion.mjs';
+import { captionCss, CAPTION_DEFAULT_COLORS, captionChunksFrom, captionRuntime, chunkWords, narrationWords } from './captions.mjs';
 import { brandFontStacks, fontFaceRule, fontSlug, frozenFontFaces, projectFontFamilies, registryFontFaces } from './fonts.mjs';
 import { EMITTERS as EDITORIAL_EMITTERS } from './editorial-ui-modules.mjs';
 import { EMITTERS as CATALOG_A_EMITTERS } from './hyperframes-catalog-a.mjs';
@@ -133,7 +134,12 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const outer = `lc-scene-${id}`, inner = `lc-layer-${id}`;
     const media = hoistMedia(out.html ?? '');
     for (const element of media.elements) hoisted.push(withZIndex(element, z + 5));
-    if (media.elements.length && entry.tweens.some((tw) => tw.prop !== 'opacity')) warnings.push(`${entry.scene.id}: root media does not follow ${entry.transitionIn?.type ?? 'transition'} transforms (HyperFrames keeps <video>/<audio> on the root)`);
+    const mediaMotion = [];
+    for (const element of media.elements) {
+      const follow = mediaLayerTweens(element, entry.tweens);
+      mediaMotion.push(...follow.lines);
+      if (follow.unsupported.length) warnings.push(`${entry.scene.id}: root media does not follow the ${follow.unsupported.join(', ')} of its ${entry.transitionIn?.type ?? 'transition'} (HyperFrames keeps <video>/<audio> on the root)`);
+    }
     const boundary = boundaryFor.get(entry.scene.id);
     markup.push(`<div id="${outer}" class="lc-scene${entry.plate ? ' lc-plate' : ''}" data-launchclip-scene="${id}" data-launchclip-module="${attr(entry.scene.module)}" data-launchclip-start="${num(entry.start)}" data-launchclip-render-end="${num(entry.renderEnd)}"${boundaryAttrs(boundary)} style="z-index:${z}"><div id="${inner}" class="lc-layer">${media.html}</div></div>`);
     css.push(out.css ?? '');
@@ -141,6 +147,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     motion.push(...toggle(`#${outer}`, entry.start, entry.renderEnd, D));
     motion.push(...entry.tweens.map((tw) => tweenCode(`#${inner}`, tw)));
     if (out.motion) motion.push(`{\n${out.motion}\n}`);
+    motion.push(...mediaMotion);
     z += 10;
   }
 
@@ -204,7 +211,7 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     .lc-layer { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; }
     .lc-plate > .lc-layer { background: ${bg}; }
     ${placeholderCss()}
-    ${captions ? `${CAPTION_CSS.trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}
+    ${captions ? `${captionCss(format).trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}
     ${css.filter(Boolean).join('\n    ')}
   </style>
   <script>${FONT_WARMUP}</script>
@@ -282,6 +289,38 @@ function hoistMedia(html) {
   const elements = [];
   const rest = html.replace(/<(video|audio)\b[^>]*>(?:[\s\S]*?<\/\1>)?/gi, (match) => { elements.push(match); return ''; });
   return { html: rest, elements };
+}
+
+// Root media sits outside its scene layer, so it would ignore the layer's
+// transition (a morph's crossfade, a push or whip) that Remotion applies to
+// everything in the scene. Replay the layer tweens on the media element with
+// properties the module's own motion never touches: x/y as xPercent/yPercent
+// of the element box (GSAP adds them to x/y as pure translations), opacity and
+// blur as one CSS filter, so they multiply with the module's opacity. Each
+// filter tween writes both components, holding the other at the layer's value.
+// Layer scale (zoom) and iris pivot on the canvas centre and are reported as
+// unsupported. → {lines: [GSAP calls], unsupported: [props]}
+export function mediaLayerTweens(element, tweens) {
+  const id = /\sid="([^"]+)"/.exec(element)?.[1];
+  const box = (name) => Number(new RegExp(`[;"\\s]${name}:\\s*(-?[\\d.]+)px`).exec(element)?.[1]);
+  const width = box('width'), height = box('height');
+  const lines = [];
+  const unsupported = new Set();
+  if (!id) return { lines, unsupported: [...new Set(tweens.map((tw) => tw.prop))] };
+  const selector = `#${id}`;
+  const filter = (state) => `opacity(${round(state.opacity, 4)}) blur(${round(state.blur, 3)}px)`;
+  for (const tw of tweens) {
+    const timing = { duration: round(tw.duration, 4), ease: tw.ease, immediateRender: false };
+    if ((tw.prop === 'x' && width > 0) || (tw.prop === 'y' && height > 0)) {
+      const key = tw.prop === 'x' ? 'xPercent' : 'yPercent', size = tw.prop === 'x' ? width : height;
+      lines.push(`tl.fromTo(${js(selector)}, ${js({ [key]: round(tw.from / size * 100, 4) })}, ${js({ [key]: round(tw.to / size * 100, 4), ...timing })}, ${num(tw.at)});`);
+    } else if (tw.prop === 'opacity' || tw.prop === 'blur') {
+      const before = { ...layerStateAt(tw.at, tweens, getEase), [tw.prop]: tw.from };
+      const after = { ...layerStateAt(tw.at + tw.duration, tweens, getEase), [tw.prop]: tw.to };
+      lines.push(`tl.fromTo(${js(selector)}, ${js({ filter: filter(before) })}, ${js({ filter: filter(after), ...timing })}, ${num(tw.at)});`);
+    } else unsupported.add(tw.prop);
+  }
+  return { lines, unsupported: [...unsupported] };
 }
 
 function withZIndex(element, z) {

@@ -50,6 +50,11 @@
  * @property {Array<{id:string,time:number,endTime?:number,duration?:number,role?:string}>} events
  * @property {{canvas:object,rect:object,motion?:{enterEnd:number,exitStart:number,end:number}}} layout
  *   layout.motion is present only when spec.motion was supplied.
+ * @property {{scale:number,hero:boolean,source:'explicit'|'derived'|'legacy',layout:{width:number,height:number},natural:number}} density
+ *   The kind lays out in `layout` (rect / scale, layout px) and renders scaled
+ *   by `scale` from the rect's top-left corner; `natural` is the content's
+ *   natural height in layout px. scale is 1 in 16:9 and for media-window.
+ *   chrome, cell/bar/stage/rail geometry and every kind-CSS size are layout px.
  *
  * Content shapes (all times absolute):
  *
@@ -148,12 +153,17 @@ export const EDITORIAL_SYMBOLS = Object.freeze({
 
 // Design tokens shared by both renderers. Hex alphas ("16", "22", …) are
 // appended to the accent or theme colors, as in CSS #RRGGBBAA.
+// Fonts never name a system family: system-ui is platform-specific, and the two
+// renderers resolved it to different faces (module text came out 10% wider in
+// one of them).
 export const EDITORIAL_STYLE = Object.freeze({
   font: Object.freeze({
-    // Bundled registry stacks (fonts.mjs): Inter and JetBrains Mono.
-    sans: fontStack(null, 'body'),
-    mono: fontStack(null, 'meta'),
-    display: fontStack(null, 'body')
+    // The story's brand stacks (--lc-font-body / --lc-font-meta, set on the root
+    // by both compilers), falling back to the bundled registry stacks (fonts.mjs:
+    // Inter and JetBrains Mono) outside a story.
+    sans: `var(--lc-font-body, ${fontStack(null, 'body')})`,
+    mono: `var(--lc-font-meta, ${fontStack(null, 'meta')})`,
+    display: `var(--lc-font-body, ${fontStack(null, 'body')})`
   }),
   size: Object.freeze({small: 22, lineHeight: 1.25, titleLineHeight: 1.15, day: 112, avatar: 52, count: 48, growthCount: 56, stepNumber: 24}),
   space: Object.freeze({pad: 24, bar: 48, inset: 18, gap: 16, rowGap: 18}),
@@ -240,8 +250,97 @@ function offset(direction, distance) {
 }
 const hex = value => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
 
+// Density (docs: skills-src/references/editorial-ui-modules.md, "Defaults").
+// A module lays out in a "layout box" of rect / scale and renders scaled by
+// `scale` from the rect's top-left corner, so every size in the kind CSS and
+// every rect-local geometry value is in layout px (canvas px = layout px *
+// scale). 16:9 always resolves at scale 1, byte-identical to the pre-density
+// output for explicit rects. 9:16 picks the largest scale, from DENSITY.max
+// down to 1, at which the content validates and its natural height fits.
+export const DENSITY = Object.freeze({
+  max: 2, min: 1, step: .05,
+  // RFC §5 Shorts geometry, reference 1080x1920: safe zone, the caption band
+  // top (shorts-delivery.md) and the centre-of-mass target. The default card
+  // centre sits just below the lower-third line (safe.y + safe.height / 2) so
+  // the lower third is never empty.
+  portrait: Object.freeze({x: 90, width: 840, top: 280, captionTop: 1190, bottom: 1450, centre: 880, mediaHeight: 521}),
+  landscape: Object.freeze({x: 80, width: 680, top: 80, baseline: 980}),
+  // Hero numbers may grow to this layout size in 9:16: the metric number is
+  // the hero; a progress card's hero is its bar, so its number stays smaller.
+  heroNumber: 120, heroProgressNumber: 88, numberCap: 64
+});
+const LEGACY_RECT = {'16:9': {x: 80, y: 480, width: 680, height: 500}, '9:16': {x: 90, y: 960, width: 900, height: 740}};
+const BASE = Object.freeze({scale: 1, hero: false});
+
+function candidates() {
+  const list = [];
+  for (let scale = DENSITY.max; scale >= DENSITY.min - 1e-9; scale -= DENSITY.step) list.push({scale: Math.round(scale * 100) / 100, hero: true});
+  return list;
+}
+
 /** @returns {EditorialModel} */
 export function resolveEditorialModule(input) {
+  const plain = input && typeof input === 'object' && !Array.isArray(input);
+  if (!plain || !['16:9', '9:16'].includes(input.aspect) || !EDITORIAL_KINDS.includes(input.kind)) return resolveAt(input, input?.rect, BASE, 'explicit');
+  const explicit = input.rect !== undefined;
+  const portrait = input.aspect === '9:16';
+  if (explicit && !portrait) return resolveAt(input, input.rect, BASE, 'explicit');
+  if (explicit) {
+    // Explicit 9:16 rect: keep the rect, grow the type until the content
+    // would no longer fit. The final BASE attempt is the pre-density
+    // behaviour, so any spec that resolved before still resolves (or throws
+    // the same error).
+    const rect = input.rect;
+    if (rect && typeof rect === 'object' && input.kind !== 'media-window') {
+      for (const candidate of candidates()) {
+        try {
+          const model = resolveAt(input, rect, candidate, 'explicit');
+          if (model.density.natural <= model.density.layout.height + .5) return model;
+        } catch { /* try a smaller scale */ }
+      }
+    }
+    return resolveAt(input, rect, BASE, 'explicit');
+  }
+  if (input.kind === 'media-window') {
+    if (!portrait) return resolveAt(input, LEGACY_RECT['16:9'], BASE, 'legacy');
+    const P = DENSITY.portrait, height = P.mediaHeight;
+    return resolveAt(input, {x: P.x, y: Math.round(P.centre - height / 2), width: P.width, height}, BASE, 'derived');
+  }
+  if (!portrait) {
+    // 16:9 default: the old lower-left footprint, its height taken from the
+    // content and its bottom edge kept on the old baseline (y 980).
+    const L = DENSITY.landscape;
+    try {
+      const probe = resolveAt(input, {x: L.x, y: L.top, width: L.width, height: L.baseline - L.top}, BASE, 'derived');
+      const height = Math.max(160, Math.ceil(probe.density.natural));
+      if (height <= L.baseline - L.top) return resolveAt(input, {x: L.x, y: L.baseline - height, width: L.width, height}, BASE, 'derived');
+    } catch { /* fall back to the legacy rect and its error */ }
+    return resolveAt(input, LEGACY_RECT['16:9'], BASE, 'legacy');
+  }
+  // 9:16 default: safe-zone width, the largest scale whose natural height
+  // fits above the caption band (else above the safe-zone bottom), centred
+  // on the RFC centre-of-mass target.
+  // First choice keeps the card centre below the lower-third line at near
+  // phone scale; then any scale above the caption band; then the whole safe
+  // zone.
+  const P = DENSITY.portrait, lowerThird = P.top + (P.bottom - P.top) / 2;
+  const passes = [{limit: P.captionTop, maxHeight: 2 * (P.captionTop - lowerThird - 1), minScale: 1.8}, {limit: P.captionTop}, {limit: P.bottom}];
+  for (const {limit, maxHeight = Infinity, minScale = 0} of passes) {
+    const band = limit - P.top;
+    for (const candidate of candidates()) {
+      if (candidate.scale < minScale) break;
+      let probe;
+      try { probe = resolveAt(input, {x: P.x, y: P.top, width: P.width, height: band}, candidate, 'derived'); } catch { continue; }
+      const height = Math.max(160, Math.ceil(probe.density.natural * candidate.scale));
+      if (height > Math.min(band, maxHeight)) continue;
+      const y = Math.round(Math.min(limit - height, Math.max(P.top, P.centre - height / 2)));
+      try { return resolveAt(input, {x: P.x, y, width: P.width, height}, candidate, 'derived'); } catch { /* next candidate */ }
+    }
+  }
+  return resolveAt(input, LEGACY_RECT['9:16'], BASE, 'legacy');
+}
+
+function resolveAt(input, suppliedRect, density, source) {
   object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt', 'theme', 'focus', 'growth']);
   if (!/^[a-z][a-z0-9-]{0,59}$/.test(input.id ?? '')) throw new Error('id must be a unique lowercase DOM-safe identifier');
   if (!EDITORIAL_KINDS.includes(input.kind)) throw new Error(`kind must be ${EDITORIAL_KINDS.join(', ')}`);
@@ -254,12 +353,18 @@ export function resolveEditorialModule(input) {
   const duration = number(input.duration, 'duration', 1, 3600);
   const movement = motionSpec(input.motion, duration);
   const enterDuration = movement?.enterDuration ?? .28, exitDuration = movement?.exitDuration ?? .22;
-  const rect = input.rect ?? (input.aspect === '16:9' ? {x: 80, y: 480, width: 680, height: 500} : {x: 90, y: 960, width: 900, height: 740});
+  const rect = suppliedRect ?? LEGACY_RECT[input.aspect];
   object(rect, 'rect', ['x', 'y', 'width', 'height']);
   number(rect.width, 'rect.width', 420, canvas.width);
   number(rect.height, 'rect.height', 160, canvas.height);
   number(rect.x, 'rect.x', 0, canvas.width - rect.width);
   number(rect.y, 'rect.y', 0, canvas.height - rect.height);
+  // Layout box: content sizes and rect-local geometry are in layout px.
+  const scale = density.scale, hero = density.hero;
+  const box = scale === 1 ? {width: rect.width, height: rect.height} : {width: rect.width / scale, height: rect.height / scale};
+  // The text-fit model assumes at least the 420 px minimum width.
+  if (box.width < 420) throw new Error('layout box too narrow for this scale');
+  let natural = 0;
   const title = text(input.title, 'title', 54);
   const accent = input.accent ?? '#FF6A00';
   if (!/^#[0-9a-fA-F]{6}$/.test(accent)) throw new Error('accent must be a six-digit hex color');
@@ -278,9 +383,9 @@ export function resolveEditorialModule(input) {
     object(input.statusLabels, 'statusLabels', ['pending', 'active', 'done']);
     for (const label of Object.values(statusLabels)) text(label, 'status label', 14);
   }
-  const font = Math.max(24, Math.min(36, Math.round(rect.width / 22)));
+  const font = Math.max(24, Math.min(36, Math.round(box.width / 22)));
   const statusWidth = Math.max(100, Math.ceil(Math.max(...Object.values(statusLabels).map(label => label.length)) * (font - 6) * .65));
-  const pad = EDITORIAL_STYLE.space.pad, titleLines = Math.ceil(title.length / Math.max(1, Math.floor((rect.width - 48) / ((font + 4) * .65))));
+  const pad = EDITORIAL_STYLE.space.pad, titleLines = Math.ceil(title.length / Math.max(1, Math.floor((box.width - 48) / ((font + 4) * .65))));
   const header = pad * 2 + titleLines * (font + 4) * 1.15;
   const track = input.track ?? 2;
   number(track, 'track', 1, 98);
@@ -308,8 +413,9 @@ export function resolveEditorialModule(input) {
   } else if (kind === 'callout') {
     if (input.treatment === undefined) {
       text(input.body, 'body', 160);
-      const lines = Math.ceil(input.body.length / Math.max(18, Math.floor((rect.width - pad * 2) / (font * .58))));
-      if (rect.height < header + lines * font * 1.25 + pad) throw new Error('callout rect too short for body');
+      const lines = Math.ceil(input.body.length / Math.max(18, Math.floor((box.width - pad * 2) / (font * .58))));
+      if (box.height < header + lines * font * 1.25 + pad) throw new Error('callout rect too short for body');
+      natural = header + Math.max(lines, Math.ceil(input.body.length / Math.max(1, Math.floor((box.width - pad * 2) / (font * .62))))) * font * 1.25 + pad;
       content = {variant: 'plain', body: input.body, bodyLines: lines};
     } else {
       const treatment = input.treatment;
@@ -327,7 +433,7 @@ export function resolveEditorialModule(input) {
           copy += segment.text;
           let underline = null;
           if (segment.underlineAt !== undefined) {
-            if (/[\r\n\t]/.test(segment.text) || segment.text.length * font * .68 > rect.width - 36) throw new Error('underlined phrase must fit one line');
+            if (/[\r\n\t]/.test(segment.text) || segment.text.length * font * .68 > box.width - 36) throw new Error('underlined phrase must fit one line');
             const time = start + at(segment.underlineAt, 'segment.underlineAt');
             underline = {time, endTime: time + .28}; chunks.push(segment.text.length);
           } else chunks.push(...(segment.text.match(/\S+\s*|\s+/g) ?? []).map(part => part.length));
@@ -337,12 +443,13 @@ export function resolveEditorialModule(input) {
       } else copy = text(input.body, 'body', 160);
       const underlines = (segments ?? []).filter(segment => segment.underline);
       const inset = 18, iconWidth = treatment.icon ? 60 : 0;
-      const headingLines = Math.ceil(title.length / Math.max(1, Math.floor((rect.width - inset * 2 - iconWidth) / ((font + 2) * .68))));
+      const headingLines = Math.ceil(title.length / Math.max(1, Math.floor((box.width - inset * 2 - iconWidth) / ((font + 2) * .68))));
       const headingHeight = Math.max(treatment.icon ? 48 : 0, headingLines * (font + 2) * 1.2);
-      const columns = Math.max(1, Math.floor((rect.width - inset * 2) / (font * .68)));
+      const columns = Math.max(1, Math.floor((box.width - inset * 2) / (font * .68)));
       let lines = Math.ceil(copy.length / columns);
       if (underlines.length) {let count = 1, used = 0; for (const chunk of chunks) {if (used && used + chunk > columns) {count++; used = 0;} count += Math.max(0, Math.ceil(chunk / columns) - 1); used = chunk > columns ? chunk % columns : used + chunk;} lines = Math.max(lines, count);}
-      if (rect.height < inset * 3 + headingHeight + lines * font * 1.3) throw new Error('treated callout rect too short for copy');
+      if (box.height < inset * 3 + headingHeight + lines * font * 1.3) throw new Error('treated callout rect too short for copy');
+      natural = inset * 3 + headingHeight + lines * font * 1.3 + 8;
       const time = start + at(treatment.at ?? enterDuration, 'treatment.at');
       underlines.forEach(({index, underline}) => {
         if (underline.time < time + .4) throw new Error('underline must follow treatment settle');
@@ -367,11 +474,12 @@ export function resolveEditorialModule(input) {
     if (!Number.isInteger(excerpt.focus.line)) throw new Error('focus.line must be an integer');
     const zoom = number(excerpt.focus.scale, 'focus.scale', 1, 1.3), time = start + at(excerpt.focus.at, 'focus.at');
     const note = excerpt.mode === 'illustration' ? 'Illustration · text excerpt' : `Source: ${excerpt.source}`;
-    const textFont = Math.max(24, Math.min(32, Math.floor(rect.width / 24))), lineHeight = Math.ceil(textFont * 1.5);
-    const noteHeight = Math.ceil(note.length / Math.floor((rect.width - 48) / (22 * .65))) * 29 + 16;
-    const viewWidth = rect.width - 48, viewHeight = rect.height - 48 - noteHeight - 48;
+    const textFont = Math.max(24, Math.min(32, Math.floor(box.width / 24))), lineHeight = Math.ceil(textFont * 1.5);
+    const noteHeight = Math.ceil(note.length / Math.floor((box.width - 48) / (22 * .65))) * 29 + 16;
+    const viewWidth = box.width - 48, viewHeight = box.height - 48 - noteHeight - 48;
     const textHeight = lineHeight * excerpt.lines.length;
     if (viewHeight < textHeight * zoom) throw new Error('excerpt-window rect too short for focused text');
+    natural = 48 + noteHeight + 48 + textHeight * zoom + lineHeight;
     let longest = 0;
     const lines = excerpt.lines.map(line => {
       object(line, 'excerpt line', ['segments']);
@@ -400,8 +508,8 @@ export function resolveEditorialModule(input) {
       focus: {line: excerpt.focus.line, scale: zoom, time, endTime: time + .5, duration: .5, x, y},
       highlight: sweep ? {motion: 'sweep', time, duration: .35, endTime: time + .35, color: accent + '55'} : {motion: 'fade', time: time + .16, duration: .24, endTime: time + .16 + .24, color: accent + '55'},
       bar: {height: 48, label: title, dots: [...C.dots]},
-      noteRect: {x: 0, y: 48, width: rect.width, height: noteHeight},
-      viewport: {x: 24, y: 48 + noteHeight + 24, width: viewWidth, height: rect.height - (48 + noteHeight + 24) - 24}};
+      noteRect: {x: 0, y: 48, width: box.width, height: noteHeight},
+      viewport: {x: 24, y: 48 + noteHeight + 24, width: viewWidth, height: box.height - (48 + noteHeight + 24) - 24}};
   } else if (kind === 'date-card') {
     object(input.date, 'date', ['month', 'day', 'year', 'caption', 'at']);
     const date = input.date;
@@ -411,8 +519,9 @@ export function resolveEditorialModule(input) {
     const leap = date.year === undefined || date.year % 4 === 0 && (date.year % 100 !== 0 || date.year % 400 === 0);
     if (date.day > [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][date.month - 1]) throw new Error('day does not exist in supplied month/year');
     const caption = date.caption === undefined ? '' : text(date.caption, 'date.caption', 42);
-    const captionLines = caption ? Math.ceil(caption.length / Math.floor((rect.width - 40) / (22 * .65))) : 0;
-    if (rect.height < 48 + 132 + titleLines * (font + 4) * 1.15 + 36 + captionLines * 29) throw new Error('date-card rect too short');
+    const captionLines = caption ? Math.ceil(caption.length / Math.floor((box.width - 40) / (22 * .65))) : 0;
+    if (box.height < 48 + 132 + titleLines * (font + 4) * 1.15 + 36 + captionLines * 29) throw new Error('date-card rect too short');
+    natural = 48 + 132 + titleLines * (font + 4) * 1.15 + 36 + captionLines * 29 + 24;
     const time = start + at(date.at, 'date.at'), monthName = MONTHS[date.month - 1];
     events.push({id: `${id}-date-settle`, time: time + .32});
     content = {month: date.month, day: date.day, year: date.year ?? null, monthName, monthLabel: `${monthName}${date.year === undefined ? '' : ` · ${date.year}`}`, caption: caption || null, captionLines, time, settleTime: time + .32, bandHeight: 48, dayHeight: 132, durations: {day: .32}};
@@ -424,12 +533,13 @@ export function resolveEditorialModule(input) {
     else if (rack.source !== undefined) throw new Error('illustration cannot claim a real data source');
     if (!Array.isArray(rack.rows) || rack.rows.length < 1 || rack.rows.length > 8) throw new Error('rack.rows must contain 1–8 rows');
     const note = rack.mode === 'illustration' ? 'Illustration · status states' : `Source: ${rack.source}`;
-    const noteLines = Math.ceil(note.length / Math.floor((rect.width - 48) / (22 * .65)));
-    if (rect.height < header + noteLines * 29 + 20 + rack.rows.length * 52 + 24) throw new Error('status-rack rect too short');
+    const noteLines = Math.ceil(note.length / Math.floor((box.width - 48) / (22 * .65)));
+    if (box.height < header + noteLines * 29 + 20 + rack.rows.length * 52 + 24) throw new Error('status-rack rect too short');
+    natural = header + noteLines * 29 + 20 + rack.rows.length * 52 + 24;
     const lightOff = custom ? custom.border : C.light;
     const rows = rack.rows.map((row, i) => {
       object(row, 'rack row', ['label', 'states']); text(row.label, 'rack.label', 24);
-      if (row.label.length > Math.floor((rect.width - 48 - 24 - 22 - 24 - 70) / (22 * .65))) throw new Error('rack label too long for rect');
+      if (row.label.length > Math.floor((box.width - 48 - 24 - 22 - 24 - 70) / (22 * .65))) throw new Error('rack label too long for rect');
       if (!Array.isArray(row.states) || row.states.length < 1 || row.states.length > 8) throw new Error('row.states must contain 1–8 states');
       let previous = -1, previousLights = [false, false, false];
       const states = row.states.map((state, n) => {
@@ -453,8 +563,9 @@ export function resolveEditorialModule(input) {
     if (code.typing !== undefined && typeof code.typing !== 'boolean') throw new Error('code.typing must be a boolean');
     const language = code.language === undefined ? 'Example code' : text(code.language, 'code.language', 24);
     if (!Array.isArray(code.lines) || code.lines.length < 1 || code.lines.length > 3) throw new Error('code.lines must contain 1–3 lines');
-    const codeFont = Math.max(22, Math.min(28, Math.floor(rect.width / 28))), lineHeight = Math.ceil(codeFont * 1.5);
-    if (rect.height < header + 44 + code.lines.length * lineHeight + 24) throw new Error('code-snippet rect too short');
+    const codeFont = Math.max(22, Math.min(28, Math.floor(box.width / 28))), lineHeight = Math.ceil(codeFont * 1.5);
+    if (box.height < header + 44 + code.lines.length * lineHeight + 24) throw new Error('code-snippet rect too short');
+    natural = header + 44 + code.lines.length * lineHeight + 24 + 4;
     const typing = code.typing === true;
     let previous = -1, typingEnd = -1;
     const lines = code.lines.map((line, i) => {
@@ -475,7 +586,7 @@ export function resolveEditorialModule(input) {
         const chars = Array.from(token.text); characters += chars.length;
         return typing ? {text: token.text, type: token.type, chars} : {text: token.text, type: token.type};
       });
-      if (length > Math.floor((rect.width - 48) / (codeFont * .65))) throw new Error('code line too long for rect; shorten the example or widen the module');
+      if (length > Math.floor((box.width - 48) / (codeFont * .65))) throw new Error('code line too long for rect; shorten the example or widen the module');
       const time = start + lineOffset;
       let charTimes = null;
       if (typing) {
@@ -491,13 +602,14 @@ export function resolveEditorialModule(input) {
     object(input.audience, 'audience', ['tiles', 'columns']);
     const {tiles} = input.audience;
     if (!Array.isArray(tiles) || tiles.length < 2 || tiles.length > 12) throw new Error('audience.tiles must contain 2–12 entries; split larger grids');
-    const columns = input.audience.columns ?? Math.min(tiles.length, rect.width < 600 ? 2 : 3);
+    const columns = input.audience.columns ?? Math.min(tiles.length, box.width < 600 ? 2 : 3);
     number(columns, 'audience.columns', 2, 4);
     if (!Number.isInteger(columns) || columns > tiles.length) throw new Error('columns must be an integer no larger than the tile count');
-    const cellWidth = (rect.width - 48 - 16 * (columns - 1)) / columns;
+    const cellWidth = (box.width - 48 - 16 * (columns - 1)) / columns;
     const cellHeight = font >= 32 ? 180 : 160, labelFont = Math.max(22, font - 6);
     const rowCount = Math.ceil(tiles.length / columns);
-    if (cellWidth < 130 || rect.height < header + 55 + 24 + rowCount * cellHeight + (rowCount - 1) * 16) throw new Error('audience grid does not fit rect; use fewer tiles/columns or a larger rect');
+    if (cellWidth < 130 || box.height < header + 55 + 24 + rowCount * cellHeight + (rowCount - 1) * 16) throw new Error('audience grid does not fit rect; use fewer tiles/columns or a larger rect');
+    natural = header + 55 + 24 + rowCount * cellHeight + (rowCount - 1) * 16;
     const gridTop = header + 22 * 1.3 + 20;
     content = {note: 'Illustration · audience tiles', columns, rowCount, cellWidth, cellHeight, labelFont, gap: 16, tiles: tiles.map((tile, i) => {
       object(tile, `audience.tiles[${i}]`, ['label', 'emoji', 'at']);
@@ -525,19 +637,20 @@ export function resolveEditorialModule(input) {
     if (choose < arrive + .24 + (options.length - 1) * .08 + .2 || progress < choose + .9) throw new Error('focus must hold options before choosing and settle the chosen task before progress');
     if (progress + progressDuration + .35 > duration - exitDuration) throw new Error('focus progress must finish with a readable hold before exit');
     const label = focus.progressLabel === undefined ? 'Illustrative progress' : text(focus.progressLabel, 'focus.progressLabel', 32);
-    const rowHeight = 64, gap = 14, horizontal = input.aspect === '16:9' && rect.width >= 900;
+    const rowHeight = 64, gap = 14, horizontal = input.aspect === '16:9' && box.width >= 900;
     const stageHeight = horizontal ? 96 : options.length * (rowHeight + gap) - gap;
-    const optionWidth = horizontal ? (rect.width - 48 - gap * (options.length - 1)) / options.length : rect.width - 48;
+    const optionWidth = horizontal ? (box.width - 48 - gap * (options.length - 1)) / options.length : box.width - 48;
     const optionFont = horizontal ? 22 : Math.max(24, font - 2), available = optionWidth - 32 - (focus.icon ? 46 : 0);
     if (options.some(option => option.length * optionFont * .65 > available * (horizontal ? 2 : 1))) throw new Error('focus option too long for rect');
-    if (label.length * 22 * .65 > rect.width - 48 || rect.height < header + 50 + stageHeight + 94) throw new Error('focus-flow does not fit rect');
-    const target = (stageHeight - rowHeight) / 2, targetX = (rect.width - 48 - optionWidth) / 2;
+    if (label.length * 22 * .65 > box.width - 48 || box.height < header + 50 + stageHeight + 94) throw new Error('focus-flow does not fit rect');
+    natural = header + 50 + stageHeight + 94 + 4;
+    const target = (stageHeight - rowHeight) / 2, targetX = (box.width - 48 - optionWidth) / 2;
     const arriveTime = start + arrive, chooseTime = start + choose, progressTime = start + progress;
     const optionsSettle = start + arrive + (options.length - 1) * .08 + .24, chosenSettle = start + choose + .6, progressSettle = start + progress + progressDuration;
     events.push({id: `${id}-options-settle`, time: optionsSettle}, {id: `${id}-chosen-task`, time: chosenSettle}, {id: `${id}-focus-progress-settle`, time: progressSettle});
     content = {note: 'Illustration · focus sequence', selected: focus.selected, icon: focus.icon ?? null, progressLabel: label, horizontal, rowHeight, gap, stageHeight, optionWidth, optionFont,
       target: {x: targetX, y: target}, chosenScale: horizontal ? 1.4 : 1, arriveTime, chooseTime, chosenMoveTime: chooseTime + .18, progressTime, progressDuration, optionsSettle, chosenSettle, progressSettle,
-      stage: {x: 24, y: header + 22 * 1.3 + 20, width: rect.width - 48, height: stageHeight},
+      stage: {x: 24, y: header + 22 * 1.3 + 20, width: box.width - 48, height: stageHeight},
       options: options.map((option, i) => ({index: i, label: option, selected: i === focus.selected,
         initial: {x: horizontal ? i * (optionWidth + gap) : 0, y: horizontal ? 0 : i * (rowHeight + gap)}, arriveTime: arriveTime + i * .08})),
       durations: {arrive: .24, chosenMove: .42, distractorFade: .16, distractorMove: .38, progressFade: .2}};
@@ -562,10 +675,10 @@ export function resolveEditorialModule(input) {
     if (mode === 'data') text(chart.source, 'chart.source for real data', 80);
     else if (chart.source !== undefined) throw new Error('illustration cannot claim a real data source');
     const attribution = mode === 'illustration' ? (isGrowth && !showValues ? 'Illustration · relative growth' : 'Illustration · example values') : `Source: ${chart.source}`;
-    const columnWidth = (rect.width - 48 - 16 * (points.length - 1)) / points.length;
+    const columnWidth = (box.width - 48 - 16 * (points.length - 1)) / points.length;
     const chartHeight = 180, labelFont = 22;
-    const attributionLines = Math.ceil(attribution.length / Math.floor((rect.width - 48) / (22 * .65)));
-    if (columnWidth < 40 || rect.height < header + attributionLines * 29 + 24 + (isGrowth ? (showValues ? 88 : 0) : 80) + chartHeight + 80) throw new Error('trend chart does not fit rect; use fewer points or a larger rect');
+    const attributionLines = Math.ceil(attribution.length / Math.floor((box.width - 48) / (22 * .65)));
+    if (columnWidth < 40 || box.height < header + attributionLines * 29 + 24 + (isGrowth ? (showValues ? 88 : 0) : 80) + chartHeight + 80) throw new Error('trend chart does not fit rect; use fewer points or a larger rect');
     let previous = -1;
     points.forEach((point, i) => {
       object(point, `chart.points[${i}]`, ['label', 'value', 'at']);
@@ -580,8 +693,10 @@ export function resolveEditorialModule(input) {
     });
     const maximum = Math.max(1, ...points.map(point => point.value));
     const formattedMaximum = Math.round(maximum).toLocaleString('en-US');
-    if (showValues && formattedMaximum.length * (isGrowth ? 56 : 48) * .65 + unit.length * 22 * .65 + 16 > rect.width - 48) throw new Error('metric and unit too wide for rect');
+    if (showValues && formattedMaximum.length * (isGrowth ? 56 : 48) * .65 + unit.length * 22 * .65 + 16 > box.width - 48) throw new Error('metric and unit too wide for rect');
     const metricHeight = !showValues ? 0 : isGrowth ? 88 : 80;
+    const pointLines = Math.max(...points.map(point => Math.min(2, Math.ceil(point.label.length * labelFont * .65 / columnWidth))));
+    natural = Math.max(header + attributionLines * 29 + 24 + (isGrowth ? (showValues ? 88 : 0) : 80) + chartHeight + 80, header + attributionLines * 22 * 1.3 + 20 + metricHeight + chartHeight + 12 + pointLines * labelFont * 1.25 + 24 + 4);
     const chartTop = header + attributionLines * 22 * 1.3 + 20 + metricHeight;
     content = {variant: isGrowth ? 'growth' : 'trend', mode, source: mode === 'data' ? chart.source : null, attribution, unit, showValues, defaultPoints, maximum, formattedMaximum,
       chartHeight, labelFont, countFont: isGrowth ? 56 : 48, metricHeight, columnWidth, gap: 16, attributionLines,
@@ -619,13 +734,14 @@ export function resolveEditorialModule(input) {
       format = value => `${Math.round(value / max * 100)}%`;
       formatSpec = {style: 'progress', decimals: 0, currency: null, max};
     }
-    const noteLines = Math.ceil(attribution.length / Math.floor((rect.width - 48) / (22 * .65)));
-    const numberFont = Math.max(36, Math.min(64, Math.floor((rect.width - 48) / (Math.max(...config.values.map(entry => format(entry.value).length)) * .68))));
-    if (Math.max(...config.values.map(entry => format(entry.value).length)) * numberFont * .68 > rect.width - 48) throw new Error('formatted metric too wide for rect');
+    const noteLines = Math.ceil(attribution.length / Math.floor((box.width - 48) / (22 * .65)));
+    const numberFont = Math.max(36, Math.min(hero ? (isMetric ? DENSITY.heroNumber : DENSITY.heroProgressNumber) : DENSITY.numberCap, Math.floor((box.width - 48) / (Math.max(...config.values.map(entry => format(entry.value).length)) * .68))));
+    if (Math.max(...config.values.map(entry => format(entry.value).length)) * numberFont * .68 > box.width - 48) throw new Error('formatted metric too wide for rect');
     const unitText = isMetric ? config.unit : (config.label ?? 'Progress');
-    const unitLines = Math.ceil(unitText.length / Math.floor((rect.width - 48) / (22 * .65)));
+    const unitLines = Math.ceil(unitText.length / Math.floor((box.width - 48) / (22 * .65)));
     const requiredHeight = 2 + header + noteLines * 22 * 1.3 + 20 + numberFont * 1.1 + 12 + unitLines * 22 * 1.25 + 20 + (isMetric ? 0 : 40);
-    if (rect.height < requiredHeight) throw new Error(`${kind} rect too short; requires at least ${Math.ceil(requiredHeight)}px`);
+    if (box.height < requiredHeight) throw new Error(`${kind} rect too short; requires at least ${Math.ceil(requiredHeight)}px`);
+    natural = requiredHeight + 4;
     const values = config.values.map((entry, i) => {
       const time = start + entry.at, from = i ? config.values[i - 1].value : entry.value;
       events.push({id: `${id}-value-${i}-settle`, time: time + (i ? .6 : .2)});
@@ -637,8 +753,9 @@ export function resolveEditorialModule(input) {
   } else if (kind === 'checklist') {
     if (!Array.isArray(input.rows) || input.rows.length < 1 || input.rows.length > 6) throw new Error('rows must contain 1–6 entries; split longer lists');
     const rowHeight = font * 2.5 + 28;
-    if (rect.height < header + input.rows.length * rowHeight) throw new Error('checklist rect too short; use fewer rows or a taller rect');
-    const labelWidth = rect.width - 48 - 36 - 36 - statusWidth;
+    if (box.height < header + input.rows.length * rowHeight) throw new Error('checklist rect too short; use fewer rows or a taller rect');
+    natural = header + input.rows.length * rowHeight + 2;
+    const labelWidth = box.width - 48 - 36 - 36 - statusWidth;
     const rows = input.rows.map((row, i) => {
       object(row, `rows[${i}]`, ['label', 'status', 'at', 'doneAt']);
       text(row.label, 'row.label', 54);
@@ -656,9 +773,9 @@ export function resolveEditorialModule(input) {
     content = {statusLabels, statusWidth, rowHeight, labelWidth, doneBackground: theme.surface, check: {...CHECK}, rows};
   } else {
     if (!Array.isArray(input.steps) || input.steps.length < 2 || input.steps.length > 6) throw new Error('steps must contain 2–6 entries; split longer rails');
-    if (rect.height < header + 160) throw new Error('step-rail rect must leave room for labels');
+    if (box.height < header + 160) throw new Error('step-rail rect must leave room for labels');
     let previous = -1;
-    const labelWidth = (rect.width - 48 - 12 * (input.steps.length - 1)) / input.steps.length;
+    const labelWidth = (box.width - 48 - 12 * (input.steps.length - 1)) / input.steps.length;
     const steps = input.steps.map((step, i) => {
       object(step, `steps[${i}]`, ['label', 'at']);
       text(step.label, 'step.label', 22);
@@ -670,11 +787,14 @@ export function resolveEditorialModule(input) {
       events.push({id: `${id}-step-${i}-settle`, time: time + .3});
       return {index: i, label: step.label, number: i + 1, time, settleTime: time + .3, fill: i / (input.steps.length - 1)};
     });
-    content = {numbered: input.numbered === true, activeColor: theme.accentText, labelWidth, rail: {x: pad, y: header + 20, width: rect.width - pad * 2, height: 8}, steps};
+    const stepFont = Math.max(22, font - 4), labelLines = Math.max(...input.steps.map(step => Math.min(2, Math.ceil(step.label.length * stepFont * .65 / labelWidth))));
+    natural = Math.max(header + 160, header + 20 + 8 + 22 + (input.numbered === true ? 48 : 0) + labelLines * stepFont * 1.25 + 22 + 4);
+    content = {numbered: input.numbered === true, activeColor: theme.accentText, labelWidth, rail: {x: pad, y: header + 20, width: box.width - pad * 2, height: 8}, steps};
   }
   if ((movement || input.treatment || PANEL_KINDS.includes(kind)) && events.some(event => event.time > start + duration - exitDuration + 1e-9)) throw new Error('content must settle before motion exit begins');
   const layout = {canvas, rect: {...rect}, ...(movement ? {motion: {enterEnd: start + enterDuration, exitStart: start + duration - exitDuration, end: start + duration}} : {})};
   return {id, kind, aspect: input.aspect, canvas: {...canvas}, start, duration, end: start + duration, rect: {x: rect.x, y: rect.y, width: rect.width, height: rect.height},
     title, accent, theme, customTheme: custom !== null, presentation: input.presentation === 'glass' ? 'glass' : 'solid', surface: panel ? 'panel' : 'standard', track,
-    chrome: {font, titleFont: font + 4, pad, titleLines, header, statusWidth}, motion, content, events, layout};
+    chrome: {font, titleFont: font + 4, pad, titleLines, header, statusWidth}, motion, content, events, layout,
+    density: {scale, hero, source, layout: {width: box.width, height: box.height}, natural: Math.ceil(natural || box.height)}};
 }

@@ -1,0 +1,118 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "The rule of 72 (golden, 9:16 explainer)",
+  "notes": "Renderer-eval golden story: 9:16 explainer covering kinetic-words, function-chart, flow-compare, archive-card and equation-lockup. Values are illustrative.",
+  "lane": "motion",
+  "phase": 2,
+  "format": { "width": 1080, "height": 1920, "fps": 30, "duration": 26, "platform": "youtube-shorts" },
+  "brand": {
+    "colors": { "bg": "#0a0f1a", "primary": "#ffd166", "accent": "#06d6a0", "ink": "#0a0f1a", "paper": "#f7f3e9" },
+    "fonts": { "display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono" }
+  },
+  "audio": { "words": "NARRATION.json", "mix": "assets/audio/mix.m4a" },
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "kinetic-words",
+      "start": 0,
+      "end": 4.4,
+      "energy": 2,
+      "params": {
+        "variant": "rise",
+        "layout": "stack",
+        "words": [
+          { "text": "Small gains", "at": 0.3 },
+          { "text": "every year", "at": 1.16 },
+          { "text": "then suddenly", "at": 1.98 },
+          { "text": "a lot", "at": 2.82, "emphasis": true, "color": "accent" }
+        ]
+      },
+      "hits": [
+        { "at": "word:small", "event": "beat-0", "cue": "pop" },
+        { "at": "word:every", "event": "beat-1", "cue": "pop" },
+        { "at": "word:suddenly", "event": "beat-2", "cue": "pop" },
+        { "at": "word:lot", "event": "beat-3", "cue": "impact" }
+      ]
+    },
+    {
+      "id": "s2",
+      "module": "function-chart",
+      "start": 4.4,
+      "end": 11.2,
+      "energy": 1,
+      "in": { "type": "push", "dur": 0.45, "direction": "up" },
+      "params": {
+        "fn": "100 * 1.07^t",
+        "x": [0, 40, "years"],
+        "y": [0, 1600, "USD"],
+        "title": "$100 at 7% a year",
+        "label": "illustrative values",
+        "gap_bars": [10, 20, 30],
+        "decimals": 0
+      },
+      "hits": [
+        { "at": "word:hundred", "event": "draw", "cue": "whoosh" },
+        { "at": "word:doubles", "event": "gap-bar-0", "cue": "tick" },
+        { "at": "word:every#2", "event": "gap-bar-1", "cue": "tick" },
+        { "at": "word:ten", "event": "gap-bar-2", "cue": "tick" }
+      ]
+    },
+    {
+      "id": "s3",
+      "module": "flow-compare",
+      "start": 11.2,
+      "end": 16.2,
+      "energy": "build",
+      "in": { "type": "morph", "dur": 0.5, "from_object": "s2.curve" },
+      "params": {
+        "title": "Same rate, bigger pile",
+        "top": { "label": "Early years", "rate": 0.25, "value": "trickle" },
+        "bottom": { "label": "Later years", "rate": 1, "value": "flood" },
+        "note": "Each year adds 7% of a bigger total."
+      },
+      "hits": [
+        { "at": "word:trickle", "event": "top-flow", "cue": "pop" },
+        { "at": "word:flood", "event": "bottom-flow", "cue": "whoosh" }
+      ]
+    },
+    {
+      "id": "s4",
+      "module": "archive-card",
+      "start": 16.2,
+      "end": 21.2,
+      "energy": 1,
+      "in": { "type": "fade", "dur": 0.4 },
+      "params": {
+        "quote": "To know in how many years a sum will double, divide 72 by the yearly rate.",
+        "source": "after Luca Pacioli, Summa de arithmetica",
+        "date": "1494",
+        "kicker": "Venice"
+      },
+      "hits": [
+        { "at": "word:shortcut", "event": "quote" },
+        { "at": "word:centuries", "event": "stamp", "cue": "impact" }
+      ]
+    },
+    {
+      "id": "s5",
+      "module": "equation-lockup",
+      "start": 21.2,
+      "end": 26,
+      "energy": 3,
+      "in": { "type": "zoom", "dur": 0.5 },
+      "params": {
+        "name": "The rule of 72",
+        "equation": "years ≈ 72/rate",
+        "note": "7% a year → about 10 years",
+        "highlight": "72/rate",
+        "highlightAt": 1.7
+      },
+      "hits": [
+        { "at": "word:seventy-two", "event": "lockup", "cue": "impact" },
+        { "at": "word:divide", "event": "highlight", "cue": "tick" }
+      ]
+    }
+  ],
+  "overlays": [{ "type": "captions", "style": "word-highlight" }],
+  "ending": { "loop_to": "s1", "in": { "type": "fade", "dur": 0.4 } }
+}

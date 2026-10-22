@@ -1,0 +1,133 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Relay product promo (golden, 16:9)",
+  "notes": "Renderer-eval golden story: 16:9 product promo covering hook-title, logo-row, process-steps, count-up, media-window (local test clip) and cta. Relay and the logos are fictional.",
+  "lane": "motion",
+  "phase": 2,
+  "format": { "width": 1920, "height": 1080, "fps": 30, "duration": 26, "platform": "youtube" },
+  "brand": {
+    "colors": { "bg": "#0b1020", "primary": "#ffb547", "accent": "#4fd1c5", "ink": "#0b1020", "paper": "#f4f1ea" },
+    "fonts": { "display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono" }
+  },
+  "audio": { "words": "NARRATION.json", "mix": "assets/audio/mix.m4a" },
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "hook-title",
+      "start": 0,
+      "end": 4.4,
+      "energy": 2,
+      "params": {
+        "eyebrow": "Relay for release notes",
+        "headline": "Ship release notes in minutes, not days.",
+        "emphasis": [{ "text": "minutes", "at": 1.62 }, { "text": "days", "at": 2.38 }]
+      },
+      "hits": [
+        { "at": "word:minutes", "event": "emphasis-0", "cue": "pop" },
+        { "at": "word:days", "event": "emphasis-1", "cue": "tick" }
+      ]
+    },
+    {
+      "id": "s2",
+      "module": "logo-row",
+      "start": 4.4,
+      "end": 8.25,
+      "energy": 1,
+      "in": { "type": "push", "dur": 0.45, "direction": "left" },
+      "params": {
+        "title": "Already shipping with Relay",
+        "logos": [
+          { "src": "assets/logos/orbit.svg", "label": "Orbit" },
+          { "src": "assets/logos/lumen.svg", "label": "Lumen" },
+          { "src": "assets/logos/north.svg", "label": "Northwind" }
+        ]
+      },
+      "hits": [
+        { "at": "word:orbit", "event": "logo-0", "cue": "tick" },
+        { "at": "word:lumen", "event": "logo-1", "cue": "tick" },
+        { "at": "word:northwind", "event": "logo-2", "cue": "tick" }
+      ]
+    },
+    {
+      "id": "s3",
+      "module": "process-steps",
+      "start": 8.25,
+      "end": 13.6,
+      "energy": "build",
+      "in": { "type": "fade", "dur": 0.4 },
+      "params": {
+        "title": "Three steps",
+        "layout": "horizontal",
+        "steps": [
+          { "label": "Connect your repo", "detail": "GitHub or GitLab" },
+          { "label": "Pick the changes", "detail": "Merged pull requests, grouped" },
+          { "label": "Publish everywhere", "detail": "Blog, email and changelog" }
+        ]
+      },
+      "hits": [
+        { "at": "word:connect", "event": "step-0", "cue": "pop" },
+        { "at": "word:pick", "event": "step-1", "cue": "pop" },
+        { "at": "word:publish", "event": "step-2", "cue": "pop" }
+      ]
+    },
+    {
+      "id": "s4",
+      "module": "count-up",
+      "start": 13.6,
+      "end": 17.6,
+      "energy": 3,
+      "in": { "type": "zoom", "dur": 0.5 },
+      "params": {
+        "value": 80,
+        "suffix": "%",
+        "label": "less time spent on release prep",
+        "note": "Illustrative example",
+        "hit": "both",
+        "countAt": 1.25,
+        "countDuration": 0.95
+      },
+      "hits": [
+        { "at": "word:drops", "event": "count", "cue": "riser" },
+        { "at": "word:percent", "event": "hit", "cue": "impact" }
+      ]
+    },
+    {
+      "id": "s5",
+      "module": "media-window",
+      "start": 17.6,
+      "end": 22.2,
+      "energy": 1,
+      "in": { "type": "morph", "dur": 0.5, "from_object": "s4.figure" },
+      "params": {
+        "title": "The Relay editor",
+        "rect": { "x": 360, "y": 96, "width": 1200, "height": 720 },
+        "media": { "kind": "video", "src": "assets/media/editor.mp4", "sourceStart": 0.5 }
+      },
+      "hits": [
+        { "at": "word:editor", "event": "media-focus", "cue": "whoosh" },
+        { "at": "word:drafting", "event": "media-play" }
+      ]
+    },
+    {
+      "id": "s6",
+      "module": "cta",
+      "start": 22.2,
+      "end": 26,
+      "energy": 3,
+      "in": { "type": "whip", "dur": 0.35, "direction": "left" },
+      "params": {
+        "action": "Try Relay free today",
+        "emphasis": "free",
+        "detail": "Release notes on autopilot",
+        "handle": "relay.example",
+        "loop": true
+      },
+      "hits": [
+        { "at": "word:try", "event": "action", "cue": "impact" },
+        { "at": "word:link", "event": "handle", "cue": "pop" }
+      ]
+    }
+  ],
+  "overlays": [{ "type": "captions", "style": "word-highlight" }],
+  "ending": { "loop_to": "s1" }
+}

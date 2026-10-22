@@ -28,6 +28,7 @@ import { CAPTION_DEFAULT_COLORS, captionChunksFrom, chunkWords, narrationWords }
 import { moduleComponent } from "./modules";
 import { Placeholder } from "./Placeholder";
 import { WordCaptions } from "./captions/WordCaptions";
+import { SceneStartFrame } from "./clock";
 import { ensureFonts } from "./fonts";
 
 export type CustomModuleProps = { scene: any; params: any; brand: any; format: any; model: any };
@@ -76,10 +77,12 @@ export function resolveSceneElement(scene: any, story: any, { end, customModules
   };
 }
 
-const SceneLayer: React.FC<{ start: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean; children: React.ReactNode }> = ({ start, tweens, plate, background, freeze, children }) => {
+// startFrame: the enclosing Sequence's from; tweens carry absolute times, so the
+// layer samples them at the absolute composition time (kit/remotion/clock.tsx).
+const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean; children: React.ReactNode }> = ({ startFrame, tweens, plate, background, freeze, children }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const style = layerStyle(layerStateAt(start + frame / fps, tweens, getEase));
+  const style = layerStyle(layerStateAt((startFrame + frame) / fps, tweens, getEase));
   return (
     <AbsoluteFill style={{ overflow: "hidden", isolation: "isolate" }}>
       <AbsoluteFill style={{ ...style, transformOrigin: "50% 50%", ...(plate ? { backgroundColor: background } : {}) }}>
@@ -113,12 +116,14 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
     <AbsoluteFill style={{ backgroundColor: background, fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
       {layers.map(({ entry, render }: any) => (
         <Sequence key={entry.id} name={`${entry.id} · ${entry.scene.module}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps}>
-          <SceneLayer start={entry.start} tweens={entry.tweens} plate={entry.plate} background={background}>{render()}</SceneLayer>
+          <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background}>
+            <SceneStartFrame.Provider value={frames(entry.start)}>{render()}</SceneStartFrame.Provider>
+          </SceneLayer>
         </Sequence>
       ))}
       {loop ? (
         <Sequence key="loop" name={`loop → ${loop.sceneId}`} from={frames(loop.start)} durationInFrames={Math.max(1, frames(loop.end) - frames(loop.start))} premountFor={fps}>
-          <SceneLayer start={loop.start} tweens={loop.tweens} plate background={background} freeze>{loop.render()}</SceneLayer>
+          <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate background={background} freeze>{loop.render()}</SceneLayer>
         </Sequence>
       ) : null}
       {overlay && Array.isArray(__captions) && __captions.length ? (

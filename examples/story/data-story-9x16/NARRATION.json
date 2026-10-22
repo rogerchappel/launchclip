@@ -1,0 +1,299 @@
+{
+  "schema_version": "launchclip.narration.v1",
+  "source": "assets/audio/mix.m4a",
+  "voice": "macos-say:Samantha (word-fitted)",
+  "duration_seconds": 31,
+  "text": "Our build minutes per week fell from four hundred twenty to one hundred twenty. Meanwhile, deploys per week kept climbing. Three changes did it: cache, split, slim. Every pull request now runs lint, test, build, ship. The cache fix is two lines of config. The postmortem said it plainly: measure first. Next up, we pick the flaky tests.",
+  "words": [
+    {
+      "text": "Our",
+      "start": 0.3,
+      "end": 0.526
+    },
+    {
+      "text": "build",
+      "start": 0.566,
+      "end": 0.876
+    },
+    {
+      "text": "minutes",
+      "start": 0.916,
+      "end": 1.31
+    },
+    {
+      "text": "per",
+      "start": 1.35,
+      "end": 1.576
+    },
+    {
+      "text": "week",
+      "start": 1.616,
+      "end": 1.884
+    },
+    {
+      "text": "fell",
+      "start": 1.924,
+      "end": 2.192
+    },
+    {
+      "text": "from",
+      "start": 2.232,
+      "end": 2.5
+    },
+    {
+      "text": "four",
+      "start": 2.54,
+      "end": 2.808
+    },
+    {
+      "text": "hundred",
+      "start": 2.848,
+      "end": 3.242
+    },
+    {
+      "text": "twenty",
+      "start": 3.282,
+      "end": 3.634
+    },
+    {
+      "text": "to",
+      "start": 3.674,
+      "end": 3.858
+    },
+    {
+      "text": "one",
+      "start": 3.898,
+      "end": 4.124
+    },
+    {
+      "text": "hundred",
+      "start": 4.164,
+      "end": 4.558
+    },
+    {
+      "text": "twenty.",
+      "start": 4.598,
+      "end": 4.95
+    },
+    {
+      "text": "Meanwhile,",
+      "start": 5.3,
+      "end": 5.778
+    },
+    {
+      "text": "deploys",
+      "start": 5.878,
+      "end": 6.272
+    },
+    {
+      "text": "per",
+      "start": 6.312,
+      "end": 6.538
+    },
+    {
+      "text": "week",
+      "start": 6.578,
+      "end": 6.846
+    },
+    {
+      "text": "kept",
+      "start": 6.886,
+      "end": 7.154
+    },
+    {
+      "text": "climbing.",
+      "start": 7.194,
+      "end": 7.63
+    },
+    {
+      "text": "Three",
+      "start": 9.8,
+      "end": 10.11
+    },
+    {
+      "text": "changes",
+      "start": 10.15,
+      "end": 10.544
+    },
+    {
+      "text": "did",
+      "start": 10.584,
+      "end": 10.81
+    },
+    {
+      "text": "it:",
+      "start": 10.85,
+      "end": 11.034
+    },
+    {
+      "text": "cache,",
+      "start": 11.234,
+      "end": 11.544
+    },
+    {
+      "text": "split,",
+      "start": 11.644,
+      "end": 11.954
+    },
+    {
+      "text": "slim.",
+      "start": 12.054,
+      "end": 12.322
+    },
+    {
+      "text": "Every",
+      "start": 14.3,
+      "end": 14.61
+    },
+    {
+      "text": "pull",
+      "start": 14.65,
+      "end": 14.918
+    },
+    {
+      "text": "request",
+      "start": 14.958,
+      "end": 15.352
+    },
+    {
+      "text": "now",
+      "start": 15.392,
+      "end": 15.618
+    },
+    {
+      "text": "runs",
+      "start": 15.658,
+      "end": 15.926
+    },
+    {
+      "text": "lint,",
+      "start": 15.966,
+      "end": 16.234
+    },
+    {
+      "text": "test,",
+      "start": 16.334,
+      "end": 16.602
+    },
+    {
+      "text": "build,",
+      "start": 16.702,
+      "end": 17.012
+    },
+    {
+      "text": "ship.",
+      "start": 17.112,
+      "end": 17.38
+    },
+    {
+      "text": "The",
+      "start": 18.8,
+      "end": 19.026
+    },
+    {
+      "text": "cache",
+      "start": 19.066,
+      "end": 19.376
+    },
+    {
+      "text": "fix",
+      "start": 19.416,
+      "end": 19.642
+    },
+    {
+      "text": "is",
+      "start": 19.682,
+      "end": 19.866
+    },
+    {
+      "text": "two",
+      "start": 19.906,
+      "end": 20.132
+    },
+    {
+      "text": "lines",
+      "start": 20.172,
+      "end": 20.482
+    },
+    {
+      "text": "of",
+      "start": 20.522,
+      "end": 20.706
+    },
+    {
+      "text": "config.",
+      "start": 20.746,
+      "end": 21.098
+    },
+    {
+      "text": "The",
+      "start": 23.3,
+      "end": 23.526
+    },
+    {
+      "text": "postmortem",
+      "start": 23.566,
+      "end": 24.066
+    },
+    {
+      "text": "said",
+      "start": 24.106,
+      "end": 24.374
+    },
+    {
+      "text": "it",
+      "start": 24.414,
+      "end": 24.598
+    },
+    {
+      "text": "plainly:",
+      "start": 24.638,
+      "end": 25.032
+    },
+    {
+      "text": "measure",
+      "start": 25.232,
+      "end": 25.626
+    },
+    {
+      "text": "first.",
+      "start": 25.666,
+      "end": 25.976
+    },
+    {
+      "text": "Next",
+      "start": 27.3,
+      "end": 27.568
+    },
+    {
+      "text": "up,",
+      "start": 27.608,
+      "end": 27.792
+    },
+    {
+      "text": "we",
+      "start": 27.892,
+      "end": 28.076
+    },
+    {
+      "text": "pick",
+      "start": 28.116,
+      "end": 28.384
+    },
+    {
+      "text": "the",
+      "start": 28.424,
+      "end": 28.65
+    },
+    {
+      "text": "flaky",
+      "start": 28.69,
+      "end": 29
+    },
+    {
+      "text": "tests.",
+      "start": 29.04,
+      "end": 29.35
+    }
+  ]
+}

@@ -18,9 +18,19 @@ export const CAPTION_MOTION = Object.freeze({
   lineOut: Object.freeze({ to: Object.freeze({ opacity: 0, y: -10 }), duration: 0.1, ease: 'power2.in', minShow: 0.12, lead: 0.1 })
 });
 
-// Caption band and type, in the units CAPTION_CSS uses (fractions of the
-// canvas for the band, px for type).
+// Caption band and type, in the units captionCss() uses (fractions of the
+// canvas for the band, px for type). The band is the layout check's caption
+// band (kit/core/layout-check.mjs SAFE_ZONE_PROFILES), so the geometry it
+// checks is where the captions render: Shorts (portrait, square and 4:5)
+// clears the right-hand action rail; landscape sits in the lower title-safe
+// band, below the content instead of across its middle.
 export const CAPTION_BAND = Object.freeze({ left: 0.06, right: 0.15, top: 0.62, height: 0.12, fontSize: 74, fontWeight: 900, lineHeight: 1.05, gap: 0.42, stroke: 10, zIndex: 50 });
+export const CAPTION_BAND_LANDSCAPE = Object.freeze({ ...CAPTION_BAND, left: 0.1, right: 0.1, top: 0.8, height: 140 / 1080 });
+
+/** Caption band for a format {width, height}: landscape when wider than tall. */
+export function captionBandFor(format) {
+  return Number(format?.width) > Number(format?.height) ? CAPTION_BAND_LANDSCAPE : CAPTION_BAND;
+}
 
 export const CAPTION_DEFAULT_COLORS = Object.freeze({ idle: '#ffffff', active: '#ffd23f' });
 
@@ -112,9 +122,17 @@ export function captionRuntime(chunks) {
 `;
 }
 
-export const CAPTION_CSS = `.lc-captions { position: absolute; left: 6%; right: 15%; top: 62%; height: 12%; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 50; }
-.lc-cap { position: absolute; display: flex; gap: 0.42em; flex-wrap: wrap; justify-content: center; font: 900 74px/1.05 var(--cap-font, 'Anton', 'STIX Two Math', sans-serif); letter-spacing: -0.01em; text-transform: uppercase; opacity: 0; }
-.lc-cap-w { display: inline-block; paint-order: stroke fill; -webkit-text-stroke: 10px rgba(0,0,0,.92); text-shadow: 0 6px 0 rgba(0,0,0,.55), 0 12px 28px rgba(0,0,0,.45); transform-origin: 50% 70%; }
+/** Caption CSS for the HyperFrames compiler, placed on the format's band. */
+export function captionCss(format) {
+  const b = captionBandFor(format);
+  const pct = (value) => `${round(value * 100)}%`;
+  return `.lc-captions { position: absolute; left: ${pct(b.left)}; right: ${pct(b.right)}; top: ${pct(b.top)}; height: ${pct(b.height)}; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: ${b.zIndex}; }
+.lc-cap { position: absolute; display: flex; gap: ${b.gap}em; flex-wrap: wrap; justify-content: center; font: ${b.fontWeight} ${b.fontSize}px/${b.lineHeight} var(--cap-font, 'Anton', 'STIX Two Math', sans-serif); letter-spacing: -0.01em; text-transform: uppercase; opacity: 0; }
+.lc-cap-w { display: inline-block; paint-order: stroke fill; -webkit-text-stroke: ${b.stroke}px rgba(0,0,0,.92); text-shadow: 0 6px 0 rgba(0,0,0,.55), 0 12px 28px rgba(0,0,0,.45); transform-origin: 50% 70%; }
 `;
+}
+
+/** Portrait caption CSS (the band every format used before captionCss). */
+export const CAPTION_CSS = captionCss({ width: 1080, height: 1920 });
 
 function round(value) { return Math.round(value * 1000) / 1000; }

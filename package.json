@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "parity:ci": "node ./scripts/parity-ci.mjs",
     "eval:production": "node ./src/production_eval.js",
+    "eval:renderers": "node ./src/renderer_eval.js",
     "package:smoke": "node ./scripts/package-smoke.js",
     "release:check": "npm run check && npm run package:smoke",
     "skills:sync": "node ./scripts/sync-skills.mjs",
