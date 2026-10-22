@@ -45,6 +45,29 @@ test("plans long-form productions as resumable outline and parallel chapter jobs
   assert.deepEqual(store.get("creative-plan").depends_on, ["creative-chapter:chapter-1", "creative-chapter:chapter-2"]);
 });
 
+test("routes the presenter take to every chapter and checks the presenter mix on the whole video", async () => {
+  const workspace = await tempWorkspace();
+  const { intake, evidence } = context(workspace);
+  intake.resources.push({ id: "presenter", role: "presenter", type: "video", location: "/tmp/presenter.mp4", sha256: "presenter" });
+  const chapterInputs = [];
+  const client = { runStructured: async (request) => {
+    if (request.metadata.job_id === "creative-outline") return response(outline());
+    chapterInputs.push(JSON.parse(request.input));
+    const value = chapterPlan(request.metadata.chapter_id);
+    if (request.metadata.chapter_id === "chapter-1") {
+      value.shots[0].presenter = { mode: "companion", visible: true, placement: "top-left", size: "small", treatment: "rounded" };
+      value.shots[0].resource_ids = ["screen", "presenter"];
+    }
+    return response(value);
+  } };
+  const result = await planLongFormProduction(workspace, { intake, evidence, options: { chapterConcurrency: 2 } }, { client });
+  assert.equal(result.status, "ready");
+  for (const input of chapterInputs) {
+    assert.ok(input.resources.some((entry) => entry.id === "presenter"));
+    assert.ok(input.chapter.resource_ids.includes("presenter"));
+  }
+});
+
 test("stitches an authoritative supplied transcript exactly across chapter plans", () => {
   const full = "One two three four.";
   const words = [

@@ -389,9 +389,12 @@ export function validateProductionPlan(plan, context = {}) {
     }
     cursor = end;
   }
-  if (presenterIds.size && !visiblePresenterShots) errors.push("at least one shot must show the supplied presenter");
-  if (presenterIds.size && duration > 20 && plan.shots.length > 2 && !voiceoverOnlyShots) errors.push("presenter-led videos longer than 20 seconds require at least one presenter.mode voiceover shot");
-  if (presenterIds.size && duration > 20 && presenterModes.size < 2) errors.push("presenter-led videos longer than 20 seconds must use at least two presenter visual modes");
+  // A long-form chapter is part of a video, so the whole-video presenter mix is checked once after stitching.
+  if (context.presenterMixScope !== "chapter") {
+    if (presenterIds.size && !visiblePresenterShots) errors.push("at least one shot must show the supplied presenter");
+    if (presenterIds.size && duration > 20 && plan.shots.length > 2 && !voiceoverOnlyShots) errors.push("presenter-led videos longer than 20 seconds require at least one presenter.mode voiceover shot");
+    if (presenterIds.size && duration > 20 && presenterModes.size < 2) errors.push("presenter-led videos longer than 20 seconds must use at least two presenter visual modes");
+  }
   if (Number.isFinite(duration) && Math.abs(cursor - duration) > 0.05) errors.push(`shots must cover the full duration (expected ${duration}, got ${cursor})`);
   for (const [index, claim] of (plan.claims ?? []).entries()) {
     if (claim?.confidence !== "creative" && !claim?.evidence_ids?.length) errors.push(`claims[${index}] requires evidence_ids unless confidence is creative`);
