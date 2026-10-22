@@ -1,0 +1,61 @@
+{
+  "sceneId": "checklist",
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 7
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#ff6a00",
+        "ink": "#ffb37a",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui",
+        "meta": "ui-monospace"
+      }
+    },
+    "scenes": [
+      {
+        "id": "checklist",
+        "module": "checklist",
+        "start": 1,
+        "end": 7,
+        "params": {
+          "title": "Release checklist",
+          "rect": {
+            "x": 90,
+            "y": 600,
+            "width": 900,
+            "height": 760
+          },
+          "rows": [
+            {
+              "label": "Write the changelog",
+              "status": "active",
+              "at": 0.6,
+              "doneAt": 2
+            },
+            {
+              "label": "Tag the release",
+              "status": "done",
+              "at": 2.6
+            },
+            {
+              "label": "Announce it",
+              "status": "pending",
+              "at": 3
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

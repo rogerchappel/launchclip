@@ -1,0 +1,62 @@
+{
+  "sceneId": "checklist",
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 7
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#2fb3a0"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "scenes": [
+      {
+        "id": "checklist",
+        "module": "checklist",
+        "start": 1,
+        "end": 7,
+        "params": {
+          "title": "Launch day",
+          "rect": {
+            "x": 120,
+            "y": 200,
+            "width": 1000,
+            "height": 640
+          },
+          "statusLabels": {
+            "pending": "Later",
+            "active": "Now",
+            "done": "Shipped"
+          },
+          "rows": [
+            {
+              "label": "Record the demo",
+              "status": "done",
+              "at": 0.6
+            },
+            {
+              "label": "Publish the post",
+              "status": "active",
+              "at": 1.6
+            },
+            {
+              "label": "Reply to comments",
+              "status": "pending",
+              "at": 2.4
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

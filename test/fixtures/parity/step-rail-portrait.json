@@ -1,0 +1,62 @@
+{
+  "sceneId": "steprail",
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 7
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#ff6a00",
+        "ink": "#ffb37a",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui",
+        "meta": "ui-monospace"
+      }
+    },
+    "scenes": [
+      {
+        "id": "steprail",
+        "module": "step-rail",
+        "start": 1,
+        "end": 7,
+        "params": {
+          "title": "From idea to clip",
+          "rect": {
+            "x": 90,
+            "y": 600,
+            "width": 900,
+            "height": 420
+          },
+          "numbered": true,
+          "steps": [
+            {
+              "label": "Plan",
+              "at": 0.6
+            },
+            {
+              "label": "Record",
+              "at": 1.6
+            },
+            {
+              "label": "Edit",
+              "at": 2.6
+            },
+            {
+              "label": "Share",
+              "at": 3.6
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

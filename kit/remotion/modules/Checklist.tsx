@@ -1,0 +1,63 @@
+// checklist. Mirrors the emitter's checklist branch: status labels swap, the
+// tick fades in (power2.out), active rows take the accent wash and border,
+// and doneAt rows return to the surface with the tick drawn.
+import React from 'react';
+import {A, C, ModuleShell, TRANSPARENT, chain, useModuleTime, type ModuleProps, type Model, type Segment} from './shared';
+
+export function rowState(model: Model, row: any, t: number) {
+  const {accent, content: c} = model;
+  const swap = .16, cut = .01;
+  const pending: Segment[] = [], active: Segment[] = [], done: Segment[] = [], tick: Segment[] = [], wash: Segment[] = [], border: Segment[] = [];
+  if (row.status !== 'pending') {
+    pending.push({start: row.time, duration: cut, to: 0});
+    (row.status === 'active' ? active : done).push({start: row.time, duration: swap, to: 1});
+  }
+  if (row.status === 'done') tick.push({start: row.time, duration: swap, to: 1, ease: 'power2.out'});
+  if (row.status === 'active') {
+    border.push({start: row.time, duration: swap, to: accent});
+    wash.push({start: row.time, duration: swap, to: accent + A.wash});
+  }
+  if (row.doneTime !== null) {
+    wash.push({start: row.doneTime, duration: swap, to: c.doneBackground});
+    active.push({start: row.doneTime, duration: cut, to: 0});
+    done.push({start: row.doneTime, duration: swap, to: 1});
+    tick.push({start: row.doneTime, duration: swap, to: 1, ease: 'power2.out'});
+  }
+  const custom = model.customTheme;
+  return {
+    pending: chain(t, 1, pending), active: chain(t, 0, active), done: chain(t, 0, done), tick: chain(t, 0, tick),
+    background: wash.length ? chain(t, custom ? model.theme.surface : TRANSPARENT, wash) : undefined,
+    borderColor: border.length ? chain(t, custom ? model.theme.border : C.checkBorder, border) : undefined
+  };
+}
+
+export const Checklist: React.FC<ModuleProps> = ({model}) => {
+  const t = useModuleTime(model);
+  const {id, accent, content: c} = model;
+  const labels = c.statusLabels;
+  return (
+    <ModuleShell model={model} t={t}>
+      <h2 className="ui-title">{model.title}</h2>
+      {c.rows.map((row: any) => {
+        const i = row.index, state = rowState(model, row, t);
+        return (
+          <div key={i} id={`${id}-row-${i}`} className="ui-row" style={{height: `${c.rowHeight}px`, ...(state.background ? {backgroundColor: state.background} : {})}}>
+            <span className="ui-check" style={state.borderColor ? {borderColor: state.borderColor} : undefined}>
+              <svg viewBox={c.check.viewBox} aria-hidden="true" style={{opacity: state.tick}}>
+                <path d={c.check.path} fill="none" stroke={accent} strokeWidth={c.check.strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <span className="ui-label">{row.label}</span>
+            <span className="ui-status">
+              <span id={`${id}-status-${i}-pending`} style={{opacity: state.pending}}>{labels.pending}</span>
+              <span id={`${id}-status-${i}-active`} style={{opacity: state.active, position: 'absolute', right: 0}}>{labels.active}</span>
+              <span id={`${id}-status-${i}-done`} style={{opacity: state.done, position: 'absolute', right: 0}}>{labels.done}</span>
+            </span>
+          </div>
+        );
+      })}
+    </ModuleShell>
+  );
+};
+
+export default Checklist;
