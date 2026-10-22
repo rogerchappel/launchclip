@@ -10,9 +10,14 @@ import {
   buildTemporalEvidenceSchedule,
   parseDeclaredSequenceBoundaries,
   readCinematicContractMarker,
+  TEMPORAL_EVIDENCE_SOURCES,
+  canonicalTemporalEvidenceSource,
+  declaredBoundariesForProject,
+  readStoryCinematicContractMarker,
   validateRenderedCandidateReceipt,
   validateTemporalEvidenceManifest
 } from "../src/cinematic_evidence.js";
+import * as storyModule from "./fixtures/story-stub.mjs";
 
 test("detects only an explicit phase-2 composition-root marker", () => {
   assert.equal(readCinematicContractMarker('<div data-composition-id="main" data-launchclip-cinematic-contract="phase-2"></div>'), "phase-2");
@@ -108,7 +113,7 @@ test("requires independent opening and transition rendered-candidate comparisons
   assert.match((await validateRenderedCandidateReceipt(project, textArtifact, { boundaryIds: ["boundary-1"] })).errors.join(" "), /not a recognized rendered image or video/);
 });
 
-test("requires hashed browser and encoded-draft evidence for every temporal sample", async () => {
+for (const browserSource of ["browser-still", "hyperframes"]) test(`requires hashed browser and encoded-draft evidence for every temporal sample (${browserSource} source)`, async () => {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-temporal-evidence-"));
   const evidenceDir = path.join(project, "qa", "temporal-evidence");
   await mkdir(path.join(project, "renders"), { recursive: true });
@@ -118,7 +123,7 @@ test("requires hashed browser and encoded-draft evidence for every temporal samp
   const schedule = buildTemporalEvidenceSchedule(.3);
   const entries = [];
   for (const expected of schedule.entries) {
-    for (const source of ["hyperframes", "encoded-draft"]) {
+    for (const source of [browserSource, "encoded-draft"]) {
       const evidenceId = `${expected.evidence_id}-${source}`;
       const file = path.join(evidenceDir, `${evidenceId}.png`);
       const content = renderedPng(`frame-${evidenceId}`);
@@ -137,7 +142,81 @@ test("requires hashed browser and encoded-draft evidence for every temporal samp
   outOfRange.entries[0].at_seconds = 99;
   assert.match((await validateTemporalEvidenceManifest(project, outOfRange, video, schedule)).errors.join(" "), /out-of-range timestamp/);
   assert.equal((await validateTemporalEvidenceManifest(project, { ...manifest, video_sha256: "stale" }, video, schedule)).ok, false);
+  const unsupported = structuredClone(manifest);
+  unsupported.entries[0].source = "screenshot";
+  assert.match((await validateTemporalEvidenceManifest(project, unsupported, video, schedule)).errors.join(" "), /unsupported evidence source/);
+  // A legacy and a current browser artifact for the same sample are two browser stills, not one.
+  const duplicated = structuredClone(manifest);
+  const browserEntry = duplicated.entries.find((entry) => entry.source === browserSource);
+  duplicated.entries.push({ ...browserEntry, evidence_id: `${browserEntry.sample_id}-dup`, source: browserSource === "hyperframes" ? "browser-still" : "hyperframes" });
+  assert.match((await validateTemporalEvidenceManifest(project, duplicated, video, schedule)).errors.join(" "), /requires exactly one browser-still artifact/);
 });
+
+test("writes browser-still and accepts hyperframes only as a legacy alias", () => {
+  assert.deepEqual(TEMPORAL_EVIDENCE_SOURCES, ["browser-still", "encoded-draft"]);
+  assert.equal(canonicalTemporalEvidenceSource("browser-still"), "browser-still");
+  assert.equal(canonicalTemporalEvidenceSource("hyperframes"), "browser-still");
+  assert.equal(canonicalTemporalEvidenceSource("encoded-draft"), "encoded-draft");
+  assert.equal(canonicalTemporalEvidenceSource("remotion"), null);
+  assert.equal(canonicalTemporalEvidenceSource("toString"), null);
+});
+
+test("derives declared boundaries from storyboard.json before index.html", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-story-boundaries-"));
+  await writeFile(path.join(project, "index.html"), '<div data-composition-id="main" data-duration="9" data-width="1080" data-height="1920"><i data-launchclip-boundary-id="html-1" data-launchclip-transition-start="2" data-launchclip-transition-duration=".5"></i></div>');
+  const fromHtml = await declaredBoundariesForProject(project, { storyModule });
+  assert.equal(fromHtml.source, "index.html");
+  assert.deepEqual(fromHtml.boundaries.map((entry) => entry.boundary_id), ["html-1"]);
+  assert.equal(fromHtml.format.duration, 9);
+
+  await writeFile(path.join(project, "NARRATION.json"), JSON.stringify({ words: [{ text: "cools", start: 4.2, end: 4.6 }] }));
+  await writeFile(path.join(project, "storyboard.json"), JSON.stringify(storyFixture()));
+  const fromStory = await declaredBoundariesForProject(project, { storyModule });
+  assert.equal(fromStory.source, "storyboard.json");
+  assert.equal(fromStory.ok, true);
+  assert.deepEqual(fromStory.format, { duration: 8, width: 1080, height: 1920, fps: 30 });
+  assert.deepEqual(fromStory.boundaries, [
+    { boundary_id: "s2-in", sequence_id: null, kind: "ordinary", start_seconds: 3, duration_seconds: .4, from_id: "s1", to_id: "s2" },
+    { boundary_id: "s3-in", sequence_id: "s2", kind: "shared-world", start_seconds: 4.2, duration_seconds: .6, from_id: "s2", to_id: "s3" }
+  ]);
+  const schedule = buildTemporalEvidenceSchedule(fromStory.format.duration, fromStory.boundaries);
+  assert.equal(schedule.transitions.filter((entry) => entry.boundary_id === "s3-in").length, 7);
+
+  const late = storyFixture();
+  late.scenes[2].in.dur = 9;
+  await writeFile(path.join(project, "storyboard.json"), JSON.stringify(late));
+  assert.match((await declaredBoundariesForProject(project, { storyModule })).errors.join(" "), /s3-in extends beyond the composition duration/);
+});
+
+test("ignores a creative STORY.json and explains a missing story module", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-story-missing-"));
+  await writeFile(path.join(project, "index.html"), '<div data-composition-id="main" data-duration="5"></div>');
+  await writeFile(path.join(project, "STORY.json"), JSON.stringify({ concept_id: "concept-1" }));
+  assert.equal((await declaredBoundariesForProject(project, { storyModule: path.join(project, "nope.mjs") })).source, "index.html");
+  const storyProject = await mkdtemp(path.join(os.tmpdir(), "launchclip-story-missing-"));
+  await writeFile(path.join(storyProject, "storyboard.json"), JSON.stringify(storyFixture()));
+  await assert.rejects(declaredBoundariesForProject(storyProject, { storyModule: path.join(storyProject, "nope.mjs") }), /storyboard\.json support requires .*nope\.mjs.*kit\/core\/story\.mjs/s);
+});
+
+test("reads the phase-2 marker from a story", () => {
+  assert.equal(readStoryCinematicContractMarker({ phase: 2 }), "phase-2");
+  assert.equal(readStoryCinematicContractMarker({ cinematic_contract: "phase-2" }), "phase-2");
+  assert.equal(readStoryCinematicContractMarker({ cinematic_contract: "phase-3" }), "phase-3");
+  assert.equal(readStoryCinematicContractMarker({ phase: 1 }), null);
+  assert.equal(readStoryCinematicContractMarker(null), null);
+});
+
+function storyFixture() {
+  return {
+    schema: "launchclip.story.v1",
+    format: { width: 1080, height: 1920, fps: 30, duration: 8 },
+    scenes: [
+      { id: "s1", module: "metric", start: 0, end: 3 },
+      { id: "s2", module: "callout", start: 3, end: "word:cools", in: { type: "push", dur: .4 } },
+      { id: "s3", module: "growth-chart", start: "word:cools", end: 8, in: { type: "zoom", dur: .6, from_object: "s2.badge" } }
+    ]
+  };
+}
 
 function comparison(id, kind, candidateIds, selectedId, artifactHashes, boundaryId) {
   return {

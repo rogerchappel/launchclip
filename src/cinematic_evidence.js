@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
+import { readProjectStory } from "./story_loader.js";
 
 export const SUBSCRIPTION_CINEMATIC_CONTRACT = "phase-2";
 export const SUBSCRIPTION_CANDIDATE_RECEIPT_VERSION = "launchclip.subscription-rendered-candidates.v2";
@@ -19,7 +20,17 @@ const CANDIDATE_SCORE_FIELDS = [
   "crisp_settle",
   "implementation_feasibility"
 ];
-const TEMPORAL_EVIDENCE_SOURCES = ["hyperframes", "encoded-draft"];
+// Sources written into new temporal evidence manifests. The browser-side still
+// comes from whichever renderer drew the project (hyperframes snapshot or
+// remotion still).
+export const TEMPORAL_EVIDENCE_SOURCES = ["browser-still", "encoded-draft"];
+// Accepted when reading existing manifests: legacy name → canonical source.
+export const LEGACY_TEMPORAL_EVIDENCE_SOURCES = { hyperframes: "browser-still" };
+
+export function canonicalTemporalEvidenceSource(source) {
+  if (TEMPORAL_EVIDENCE_SOURCES.includes(source)) return source;
+  return Object.hasOwn(LEGACY_TEMPORAL_EVIDENCE_SOURCES, String(source)) ? LEGACY_TEMPORAL_EVIDENCE_SOURCES[source] : null;
+}
 
 export function readCinematicContractMarker(html) {
   const root = [...String(html ?? "").matchAll(/<[a-z][^>]*\bdata-composition-id\s*=\s*["'][^"']+["'][^>]*>/gi)][0]?.[0];
@@ -39,10 +50,6 @@ export function parseDeclaredSequenceBoundaries(html, durationSeconds) {
     const toId = attribute(tag, "data-launchclip-transition-to");
     const boundaryId = attribute(tag, "data-launchclip-boundary-id") ?? `${sequenceId ?? "boundary"}-${String(index + 1).padStart(3, "0")}`;
     const kind = attribute(tag, "data-launchclip-transition-kind") ?? (sequenceId ? "shared-world" : "ordinary");
-    if (!Number.isFinite(start) || start < 0 || start > duration) errors.push(`${boundaryId} has an invalid transition start`);
-    if (!Number.isFinite(transitionDuration) || transitionDuration <= 0) errors.push(`${boundaryId} has an invalid transition duration`);
-    if (Number.isFinite(start) && Number.isFinite(transitionDuration) && start + transitionDuration > duration + .001) errors.push(`${boundaryId} extends beyond the composition duration`);
-    if (!new Set(["ordinary", "shared-world"]).has(kind)) errors.push(`${boundaryId} has unsupported transition kind ${kind}`);
     boundaries.push({
       boundary_id: boundaryId,
       sequence_id: sequenceId,
@@ -53,9 +60,68 @@ export function parseDeclaredSequenceBoundaries(html, durationSeconds) {
       to_id: toId
     });
   }
+  errors.push(...boundaryErrors(boundaries, duration));
+  return { ok: errors.length === 0, boundaries, errors };
+}
+
+function boundaryErrors(boundaries, duration) {
+  const errors = [];
+  for (const boundary of boundaries) {
+    const boundaryId = boundary.boundary_id;
+    const start = Number(boundary.start_seconds);
+    const transitionDuration = Number(boundary.duration_seconds);
+    if (!Number.isFinite(start) || start < 0 || start > duration) errors.push(`${boundaryId} has an invalid transition start`);
+    if (!Number.isFinite(transitionDuration) || transitionDuration <= 0) errors.push(`${boundaryId} has an invalid transition duration`);
+    if (Number.isFinite(start) && Number.isFinite(transitionDuration) && start + transitionDuration > duration + .001) errors.push(`${boundaryId} extends beyond the composition duration`);
+    if (!new Set(["ordinary", "shared-world"]).has(boundary.kind)) errors.push(`${boundaryId} has unsupported transition kind ${boundary.kind}`);
+  }
   const ids = boundaries.map((entry) => entry.boundary_id);
   if (new Set(ids).size !== ids.length) errors.push("Declared transition boundary IDs must be unique");
-  return { ok: errors.length === 0, boundaries, errors };
+  return errors;
+}
+
+// Declared transition boundaries for a project, renderer-neutral. storyboard.json
+// wins (resolved against NARRATION.json/BEATS.json, then deriveBoundaries);
+// otherwise the data-launchclip-transition-* attributes in index.html.
+// Returns {ok, boundaries, errors, source: "storyboard.json"|"index.html", format}.
+export async function declaredBoundariesForProject(projectDir, options = {}) {
+  const project = path.resolve(projectDir);
+  const story = await readProjectStory(project, { storyModule: options.storyModule });
+  if (story) {
+    const duration = positiveDuration(options.duration ?? story.format?.duration);
+    const boundaries = (story.module.deriveBoundaries(story.resolved) ?? []).map((entry) => ({
+      boundary_id: entry.boundary_id,
+      sequence_id: entry.sequence_id ?? null,
+      kind: entry.kind,
+      start_seconds: Number(entry.start_seconds),
+      duration_seconds: Number(entry.duration_seconds),
+      from_id: entry.from_id ?? null,
+      to_id: entry.to_id ?? null
+    }));
+    const errors = boundaryErrors(boundaries, duration);
+    return { ok: errors.length === 0, boundaries, errors, source: "storyboard.json", format: { ...story.format, duration }, story };
+  }
+  const html = await readFile(path.join(project, "index.html"), "utf8");
+  const duration = positiveDuration(options.duration ?? attribute(html, "data-duration"));
+  const parsed = parseDeclaredSequenceBoundaries(html, duration);
+  const width = Number(attribute(html, "data-width"));
+  const height = Number(attribute(html, "data-height"));
+  const fps = Number(attribute(html, "data-fps"));
+  return {
+    ...parsed,
+    source: "index.html",
+    format: { duration, width: width || null, height: height || null, fps: fps || null },
+    html
+  };
+}
+
+// Phase-2 marker for story projects: story.phase === 2 or
+// story.cinematic_contract === "phase-2". Returns the marker string or null.
+export function readStoryCinematicContractMarker(story) {
+  if (!story || typeof story !== "object") return null;
+  if (typeof story.cinematic_contract === "string" && story.cinematic_contract) return story.cinematic_contract;
+  if (Number(story.phase) === 2) return SUBSCRIPTION_CINEMATIC_CONTRACT;
+  return null;
 }
 
 export function buildTemporalEvidenceSchedule(durationSeconds, boundaries = []) {
@@ -218,13 +284,13 @@ export async function validateTemporalEvidenceManifest(projectPath, manifest, vi
     const timestamp = entry?.at_seconds;
     if (typeof sampleId !== "string" || !sampleId) errors.push(`${evidenceId} has no sample ID`);
     else bySample.set(sampleId, [...(bySample.get(sampleId) ?? []), entry]);
-    if (!TEMPORAL_EVIDENCE_SOURCES.includes(entry?.source)) errors.push(`${evidenceId} has an unsupported evidence source`);
+    if (!canonicalTemporalEvidenceSource(entry?.source)) errors.push(`${evidenceId} has an unsupported evidence source`);
     if (typeof timestamp !== "number" || !Number.isFinite(timestamp) || timestamp < 0 || timestamp > Number(schedule?.duration_seconds)) errors.push(`${evidenceId} has an out-of-range timestamp`);
   }
   for (const expected of schedule?.entries ?? []) {
     const samples = bySample.get(expected.evidence_id) ?? [];
     for (const source of TEMPORAL_EVIDENCE_SOURCES) {
-      const matches = samples.filter((entry) => entry?.source === source);
+      const matches = samples.filter((entry) => canonicalTemporalEvidenceSource(entry?.source) === source);
       if (matches.length !== 1) {
         errors.push(`temporal evidence ${expected.evidence_id} requires exactly one ${source} artifact`);
         continue;
