@@ -260,7 +260,7 @@ export function evaluateMotionQuality(metrics, expected = {}) {
   const familyEnergyFloor = expected.minimum_change_energy_p50_by_family?.[motionFamily];
   const minimumChangeEnergy = familyEnergyFloor ?? expected.minimum_change_energy_p50;
   if (minimumChangeEnergy != null && Number(metrics.motion?.change_energy?.p50 ?? 0) < Number(minimumChangeEnergy)) {
-    findings.push(finding("motion", "major", `Median frame-change energy is ${Number(metrics.motion?.change_energy?.p50 ?? 0).toFixed(2)}; expected at least ${Number(minimumChangeEnergy).toFixed(2)} for ${motionFamily}.`));
+    findings.push(finding("motion", "major", `Median frame-change energy is ${Number(metrics.motion?.change_energy?.p50 ?? 0).toFixed(3)}; expected at least ${Number(minimumChangeEnergy).toFixed(3)} for ${motionFamily}.`));
   }
   if (expected.minimum_flow_velocity_p90 != null && Number(metrics.optical_flow?.velocity_pixels_per_second?.p90 ?? 0) < Number(expected.minimum_flow_velocity_p90)) {
     findings.push(finding("motion", "major", `90th-percentile motion velocity is ${Number(metrics.optical_flow?.velocity_pixels_per_second?.p90 ?? 0).toFixed(1)} px/s; expected at least ${Number(expected.minimum_flow_velocity_p90).toFixed(1)} px/s.`));
