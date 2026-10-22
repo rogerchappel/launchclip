@@ -56,16 +56,16 @@
   ],
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
-    "@react-three/fiber": "9.6.1",
-    "@remotion/cli": "4.0.489",
-    "@remotion/google-fonts": "4.0.489",
-    "@remotion/motion-blur": "4.0.489",
-    "@remotion/three": "4.0.489",
-    "@remotion/transitions": "4.0.489",
+    "@react-three/fiber": "9.8.2",
+    "@remotion/cli": "4.0.536",
+    "@remotion/google-fonts": "4.0.536",
+    "@remotion/motion-blur": "4.0.536",
+    "@remotion/three": "4.0.536",
+    "@remotion/transitions": "4.0.536",
     "hyperframes": "0.7.58",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "remotion": "4.0.489",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "remotion": "4.0.536",
     "three": "0.184.0"
   },
   "bugs": {
@@ -74,5 +74,10 @@
   "homepage": "https://github.com/rogerchappel/launchclip#readme",
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "gsap": "^3.14.2",
+    "typescript": "^5.9.3"
   }
 }
