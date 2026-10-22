@@ -3,6 +3,10 @@
 //
 //   voice → validate → captions → sound → render → master → evidence → gates → report
 //
+// The render stage goes through the segment cache (src/render_segments.js):
+// unchanged segments of the timeline are reused, so a second pass that edits
+// one scene re-renders only the seconds that scene is on screen.
+//
 // Every stage is idempotent. A stage records the hash of its inputs and of the
 // files it wrote in .launchclip/finish-state.json and is reported as `cached`
 // (not re-run) while both still match. The user's storyboard.json is never
@@ -22,6 +26,7 @@ import { cinematicMotionExpectations } from "./cinematic_check.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
+import { PARTIAL_RENDERERS, SEGMENTS_DIR, renderWithSegments, sceneStills } from "./render_segments.js";
 import { getRenderer, resolveRendererName } from "./renderers/index.js";
 import { remotionInvocation } from "./renderers/remotion.js";
 import { deriveBoundaries, resolveStory, storyFormat } from "./story.js";
@@ -63,6 +68,8 @@ export const PATHS = Object.freeze({
   evidence: "qa/temporal-evidence/manifest.json",
   gates: "qa/finish/gates.json",
   motion: "qa/finish/motion.json",
+  segments: SEGMENTS_DIR,
+  sceneStills: "qa/finish/scenes",
   audio: "qa/finish/audio.json",
   report: "finish.json"
 });
@@ -317,7 +324,11 @@ function defaultAdapters() {
 // Pipeline
 
 /**
- * options: {renderer, quality: "draft"|"high", voice: provider name, out, force}
+ * options: {renderer, quality: "draft"|"high", voice: provider name, out, force,
+ *   scenes: scene ids (or "s3,s4") whose render segments re-render, re-running
+ *     master, evidence and gates, with before/after stills (--scene);
+ *   previewScene: render only that scene to renders/scene-<id>.mp4 and stop
+ *     (--preview-scene)}
  * adapters: any of defaultAdapters() to replace.
  * Returns the finish.json report; it never throws for a stage failure (the
  * report's status is "failed"), only for an unreadable project.
@@ -332,6 +343,7 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
   if (!["draft", "high"].includes(quality)) throw new Error(`--quality must be draft or high; got ${options.quality}`);
   if (options.voice != null && !listVoiceProviders().includes(String(options.voice).toLowerCase())) throw new Error(`Unknown --voice ${options.voice}. Available providers: ${listVoiceProviders().join(", ")}`);
   const rendererName = resolveRendererName(project, options.renderer);
+  const iteration = iterationOptions(story, options);
   const out = projectFile(project, options.out ?? (quality === "high" ? "renders/final.mp4" : "renders/draft.mp4"));
   const started = adapters.now();
   const ctx = {
@@ -339,7 +351,10 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
     story,
     copy: buildFinishCopy(story),
     adapters,
-    options: { ...options, quality },
+    options: { ...options, quality, ...iteration },
+    forceStages: new Set(iteration.scenes.length ? ["render", "master", "evidence", "gates"] : []),
+    halt: null,
+    preview: null,
     rendererName,
     quality,
     out,
@@ -355,6 +370,10 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
   for (const definition of STAGES) {
     if (failed) {
       stages.push({ name: definition.name, status: "blocked", reason: `${failed} failed`, seconds: 0, outputs: [] });
+      continue;
+    }
+    if (ctx.halt) {
+      stages.push({ name: definition.name, status: "skipped", reason: ctx.halt, seconds: 0, outputs: [] });
       continue;
     }
     const entry = await runStage(ctx, definition);
@@ -379,7 +398,7 @@ async function runStage(ctx, definition) {
       const outputs = {};
       for (const file of plan.outputs ?? []) outputs[file] = await fileHash(path.join(ctx.project, file));
       const previous = ctx.state.stages?.[definition.name];
-      const decision = plan.always ? { action: "run", reason: plan.always } : stageDecision(previous, { inputHash: plan.inputHash, outputs }, { force: ctx.options.force });
+      const decision = plan.always ? { action: "run", reason: plan.always } : stageDecision(previous, { inputHash: plan.inputHash, outputs }, { force: ctx.options.force || ctx.forceStages.has(definition.name) });
       entry.reason = decision.reason;
       entry.outputs = plan.outputs ?? [];
       if (decision.action === "cached") {
@@ -599,21 +618,29 @@ const STAGES = [
       for (const asset of collectAssets(resolved)) assets[asset] = await fileHash(path.join(ctx.project, asset));
       const missing = Object.entries(assets).filter(([, hash]) => hash === null).map(([asset]) => asset);
       if (missing.length) ctx.warnings.push(`referenced assets not found: ${missing.join(", ")}`);
+      if (ctx.options.previewScene) return { always: `--preview-scene ${ctx.options.previewScene} renders that scene only`, outputs: [] };
       const inputHash = hashValue({ renderer: ctx.rendererName, quality: ctx.quality, story: resolved, assets, words: ctx.words, version: VERSION, kit: await treeFingerprint(path.join(ROOT, "kit")), projectEntry: await fileHash(path.join(ctx.project, "remotion", "entry.tsx")) });
       return { inputHash, outputs: [rel(ctx.project, ctx.raw)] };
     },
     async run(ctx) {
       const adapter = ctx.adapters.renderer(ctx.rendererName);
-      await mkdir(path.dirname(ctx.raw), { recursive: true });
-      if (ctx.rendererName === "hyperframes") {
-        const hfDir = path.join(ctx.project, PATHS.hyperframes);
-        const compiled = await ctx.adapters.compileHyperFrames(ctx.resolved, { projectDir: hfDir, sourceDir: ctx.project });
-        ctx.warnings.push(...(compiled?.warnings ?? []).filter((message) => !ctx.warnings.includes(message)).map((message) => `hyperframes: ${message}`));
-        await adapter.render(hfDir, ctx.raw, { quality: ctx.quality });
-        return { renderer: "hyperframes", compiled: PATHS.hyperframes, raw: rel(ctx.project, ctx.raw) };
+      const tools = ctx.adapters.segmentTools;
+      if (ctx.options.previewScene) {
+        const output = path.join(ctx.project, previewPath(ctx.options.previewScene));
+        const segments = await renderStory(ctx, adapter, { output, previewScene: ctx.options.previewScene });
+        ctx.preview = { scene: ctx.options.previewScene, output };
+        ctx.halt = `--preview-scene ${ctx.options.previewScene}: only that scene was rendered; the final is untouched`;
+        return { renderer: ctx.rendererName, preview: rel(ctx.project, output), segments };
       }
-      await adapter.render(ctx.project, ctx.raw, { quality: ctx.quality, story: ctx.resolved });
-      return { renderer: "remotion", raw: rel(ctx.project, ctx.raw) };
+      await mkdir(path.dirname(ctx.raw), { recursive: true });
+      const scenes = ctx.options.scenes;
+      const stillsDir = path.join(ctx.project, PATHS.sceneStills);
+      const before = scenes.length && existsSync(ctx.raw) ? await sceneStills(ctx.resolved, ctx.raw, scenes, stillsDir, { suffix: "before", tools }).catch(() => []) : [];
+      const segments = await renderStory(ctx, adapter, { output: ctx.raw, scenes });
+      if (scenes.length && segments?.mode === "whole") ctx.warnings.push(`partial rendering is Remotion-only: --scene ${scenes.join(",")} re-rendered the whole ${ctx.rendererName} video`);
+      const details = { renderer: ctx.rendererName, raw: rel(ctx.project, ctx.raw), ...(ctx.rendererName === "hyperframes" ? { compiled: PATHS.hyperframes } : {}), ...(segments ? { segments } : {}) };
+      if (scenes.length) details.scene_stills = await compareStills(ctx, scenes, before, stillsDir, tools);
+      return details;
     }
   },
   {
@@ -679,6 +706,70 @@ const STAGES = [
   }
 ];
 
+// ---------------------------------------------------------------------------
+// Render: the segment cache (src/render_segments.js)
+
+/** --scene / --preview-scene → {scenes: [ids], previewScene: id|null}, checked against the story. */
+export function iterationOptions(story, options = {}) {
+  const list = (value) => (Array.isArray(value) ? value : value == null || value === false ? [] : [value]).flatMap((item) => String(item).split(",")).map((item) => item.trim()).filter(Boolean);
+  const scenes = [...new Set(list(options.scenes ?? options.scene))];
+  const preview = list(options.previewScene);
+  if (preview.length > 1) throw new Error(`--preview-scene takes one scene id; got ${preview.join(", ")}`);
+  if (preview.length && scenes.length) throw new Error("use --scene or --preview-scene, not both");
+  const ids = (Array.isArray(story?.scenes) ? story.scenes : []).map((scene) => scene?.id);
+  for (const id of [...scenes, ...preview]) {
+    if (!ids.includes(id)) throw new Error(`unknown scene "${id}"; storyboard.json has ${ids.join(", ")}`);
+  }
+  return { scenes, previewScene: preview[0] ?? null };
+}
+
+export function previewPath(sceneId) {
+  return `renders/scene-${sceneId}.mp4`;
+}
+
+// Remotion renders through the segment cache; HyperFrames renders whole
+// videos, cached by hash; an adapter without renderSegments (a custom or
+// injected Remotion adapter) renders the whole story directly.
+async function renderStory(ctx, adapter, { output, scenes = [], previewScene = null }) {
+  const common = { project: ctx.project, story: ctx.resolved, renderer: ctx.rendererName, adapter, quality: ctx.quality, output, scenes, previewScene, tools: ctx.adapters.segmentTools, now: ctx.adapters.now };
+  if (ctx.rendererName === "hyperframes") {
+    return renderWithSegments({
+      ...common,
+      renderWhole: async (file) => {
+        const hfDir = path.join(ctx.project, PATHS.hyperframes);
+        const compiled = await ctx.adapters.compileHyperFrames(ctx.resolved, { projectDir: hfDir, sourceDir: ctx.project });
+        ctx.warnings.push(...(compiled?.warnings ?? []).filter((message) => !ctx.warnings.includes(message)).map((message) => `hyperframes: ${message}`));
+        await adapter.render(hfDir, file, { quality: ctx.quality });
+      }
+    });
+  }
+  if (PARTIAL_RENDERERS.includes(ctx.rendererName) && typeof adapter.renderSegments === "function") return renderWithSegments(common);
+  if (previewScene) throw new Error(`--preview-scene needs a renderer adapter that renders frame ranges; the ${ctx.rendererName} adapter in use has no renderSegments`);
+  await adapter.render(ctx.project, output, { quality: ctx.quality, story: ctx.resolved });
+  return null;
+}
+
+// Before/after stills of each --scene, side by side: the eye check for a
+// second-pass fix.
+async function compareStills(ctx, scenes, before, dir, tools) {
+  const after = await sceneStills(ctx.resolved, ctx.raw, scenes, dir, { suffix: "after", tools });
+  const out = [];
+  for (const still of after) {
+    const previous = before.find((entry) => entry.scene === still.scene);
+    let compare = null;
+    if (previous) {
+      compare = path.join(dir, `${still.scene}-before-after.png`);
+      try { await (tools?.sideBySide ?? defaultSideBySide)(previous.file, still.file, compare); } catch { compare = null; }
+    }
+    out.push({ scene: still.scene, seconds: still.seconds, before: previous ? rel(ctx.project, previous.file) : null, after: rel(ctx.project, still.file), compare: compare ? rel(ctx.project, compare) : null });
+  }
+  return out;
+}
+
+async function defaultSideBySide(left, right, output) {
+  await execFileAsync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", left, "-i", right, "-filter_complex", "[0][1]hstack=inputs=2,scale=iw/2:-2", "-frames:v", "1", output]);
+}
+
 // The renderer-neutral gates cinematic-check runs, minus the critic: layout
 // (geometric, from the validate stage), loudness (master), motion and audio
 // analysis of the final MP4, and the temporal evidence manifest.
@@ -737,8 +828,9 @@ async function runGates(ctx) {
 function buildReport(ctx, stages, { seconds, failed }) {
   const gates = ctx.gates ?? {};
   const gateStatuses = Object.values(gates).map((gate) => gate.status);
-  const status = failed ? "failed" : gateStatuses.includes("failed") ? "needs-repair" : "ready-for-review";
+  const status = failed ? "failed" : ctx.preview ? "preview" : gateStatuses.includes("failed") ? "needs-repair" : "ready-for-review";
   const nextSteps = [];
+  const render = stages.find((stage) => stage.name === "render");
   if (failed) {
     const entry = stages.find((stage) => stage.name === failed);
     nextSteps.push(`Fix the ${failed} stage (${firstLine(entry?.error)}) and run launchclip finish again; finished stages are reused.`);
@@ -746,6 +838,7 @@ function buildReport(ctx, stages, { seconds, failed }) {
     for (const [name, gate] of Object.entries(gates)) if (gate.status === "failed") nextSteps.push(`Repair the ${name} gate (see ${gate.report ?? PATHS.gates}).`);
     if (gates.critic?.next_step) nextSteps.push(gates.critic.next_step);
   }
+  if (!failed && ctx.preview) nextSteps.push(`Look at ${rel(ctx.project, ctx.preview.output)}; when it is right, run launchclip finish ${ctx.project} --scene ${ctx.preview.scene} to re-render it into the final.`);
   return {
     schema_version: FINISH_REPORT_VERSION,
     status,
@@ -755,8 +848,10 @@ function buildReport(ctx, stages, { seconds, failed }) {
     renderer: ctx.rendererName,
     quality: ctx.quality,
     voice: ctx.state.stages?.voice?.details?.provider && stages.find((stage) => stage.name === "voice")?.status !== "skipped" ? ctx.state.stages.voice.details.provider : null,
-    final: !failed && existsSync(ctx.out) ? ctx.out : null,
+    final: !failed && !ctx.preview && existsSync(ctx.out) ? ctx.out : null,
     output: ctx.out,
+    ...(ctx.preview ? { preview: { scene: ctx.preview.scene, output: ctx.preview.output } } : {}),
+    ...(ctx.options.scenes?.length ? { scenes: ctx.options.scenes, scene_stills: render?.details?.scene_stills ?? [] } : {}),
     seconds,
     stages,
     gates,
@@ -766,13 +861,24 @@ function buildReport(ctx, stages, { seconds, failed }) {
   };
 }
 
+/** "10 segments: 8 reused, 2 rendered (~11.3s saved)" */
+export function segmentSummary(segments) {
+  if (segments.mode === "whole") return `whole-video cache (${segments.renderer} has no frame range): ${segments.reused ? `reused${segments.seconds_saved ? ` (~${segments.seconds_saved}s saved)` : ""}` : "rendered"}`;
+  const forced = segments.forced ? `, ${segments.forced} forced by --scene` : "";
+  return `${segments.segments} segments: ${segments.reused} reused, ${segments.rendered} rendered${forced}${segments.reused ? ` (~${segments.seconds_saved}s saved)` : ""}`;
+}
+
 /** Human summary of a finish report. */
 export function formatFinishSummary(report) {
   const lines = [`launchclip finish: ${report.status} (${report.renderer}, ${report.quality}, ${report.seconds}s)`];
   for (const stage of report.stages) {
     const note = stage.error ? firstLine(stage.error) : stage.reason ?? "";
     lines.push(`  ${stage.name.padEnd(9)} ${stage.status.padEnd(8)} ${String(stage.seconds).padStart(7)}s  ${note}`.trimEnd());
+    const segments = stage.name === "render" ? stage.details?.segments : null;
+    if (segments) lines.push(`            ${segmentSummary(segments)}`);
   }
+  if (report.preview) lines.push(`preview: ${report.preview.output}`);
+  for (const still of report.scene_stills ?? []) lines.push(`scene ${still.scene} @${still.seconds}s: ${still.compare ?? still.after}${still.compare ? " (before | after)" : ""}`);
   const gates = Object.entries(report.gates ?? {});
   if (gates.length) {
     lines.push("gates:");
