@@ -8,7 +8,9 @@
 //           recording with its in point) or, in motion lanes, a solid plate in
 //           brand.colors.bg
 //   V2…     overlay clips with alpha, one per scene, packed into lanes per
-//           story track (track 0 first; footage-led inserts are opaque)
+//           story track (track 0 first, on its brand plate as rendered); a
+//           scene that transitions in sits above the scene it overlaps, as in
+//           the render, so a run of transitions climbs one lane per boundary
 //   top     the finished render: a disabled reference track, or the one
 //           enabled picture clip with --overlays none
 //   A1      the voice (narration, or the recording's own audio, linked to V1)
@@ -35,6 +37,10 @@ export const AUDIO_ROLES = ["dialogue", "music", "effects"];
  * resolved story: every scene except footage-led cameras (punch-in moves the
  * base and is exported as markers), over its render window (an outgoing track-0
  * scene stays until the incoming transition settles), plus the loop ending.
+ * Track-0 scenes (and the loop) keep their brand.colors.bg plate, exactly as in
+ * the render: during a fade or zoom the incoming plate covers the outgoing
+ * scene, so a transparent track-0 clip would composite differently. Their
+ * alpha still carries the transition (a push or fade reveals what is below).
  * → {clips: [{key, sceneId, module, track, start, end, plate, loop}], cameras: [{sceneId, module, start, end, camera}]}
  */
 export function overlayPlan(story, { models } = {}) {
@@ -42,7 +48,6 @@ export function overlayPlan(story, { models } = {}) {
     if (models && Object.hasOwn(models, scene.id)) return models[scene.id];
     try { return resolveModule(scene, story); } catch { return null; }
   };
-  const footage = story?.lane === "footage-led";
   const windows = sceneWindows(story);
   const clips = [];
   const cameras = [];
@@ -53,10 +58,10 @@ export function overlayPlan(story, { models } = {}) {
       cameras.push({ sceneId: scene.id, module: scene.module, start: entry.start, end: entry.end, camera: model.camera });
       continue;
     }
-    clips.push({ key: scene.id, sceneId: scene.id, module: scene.module, track: entry.track, start: entry.start, end: entry.renderEnd, plate: footage && entry.track === 0, loop: false, hidesCaptions: Boolean(model?.hidesCaptions) });
+    clips.push({ key: scene.id, sceneId: scene.id, module: scene.module, track: entry.track, start: entry.start, end: entry.renderEnd, plate: entry.track === 0, loop: false, hidesCaptions: Boolean(model?.hidesCaptions) });
   }
   if (windows.loop) {
-    clips.push({ key: `${windows.loop.sceneId}-loop`, sceneId: windows.loop.sceneId, module: windows.loop.scene.module, track: 0, start: windows.loop.start, end: windows.loop.end, plate: footage, loop: true, hidesCaptions: false });
+    clips.push({ key: `${windows.loop.sceneId}-loop`, sceneId: windows.loop.sceneId, module: windows.loop.scene.module, track: 0, start: windows.loop.start, end: windows.loop.end, plate: true, loop: true, hidesCaptions: false });
   }
   return { clips, cameras };
 }
@@ -139,10 +144,10 @@ export function buildTimeline(story, media = {}, options = {}) {
     }
     for (const storyTrack of [...byTrack.keys()].sort((a, b) => a - b)) {
       const entries = byTrack.get(storyTrack).map((entry) => ({ entry, start: f(entry.start), end: Math.min(duration, f(entry.end)) })).filter((item) => item.end > item.start);
-      const lanes = packLanes(entries);
+      const lanes = packLanes(entries, { stack: true });
       const label = storyTrack === 0 ? (base ? "Inserts" : "Scenes") : `Overlays ${storyTrack}`;
       lanes.forEach((lane, index) => {
-        const track = addTrack({ id: `V${tracks.filter((t) => t.kind === "video").length + 1}`, kind: "video", name: lanes.length > 1 ? `${label} ${String.fromCharCode(65 + index)}` : label, role: "video", storyTrack });
+        const track = addTrack({ id: `V${tracks.filter((t) => t.kind === "video").length + 1}`, kind: "video", name: lanes.length > 1 ? `${label} ${index + 1}` : label, role: "video", storyTrack });
         for (const { entry, start, end } of lane) {
           const rendered = media.overlays?.[entry.key];
           if (!rendered?.source) { warnings.push(`overlay ${entry.key} has no render; it is missing from ${track.id}`); continue; }
@@ -151,9 +156,9 @@ export function buildTimeline(story, media = {}, options = {}) {
             kind: sequence ? "image-sequence" : "video", name: entry.key,
             path: sequence ? `media/overlays/${entry.key}` : `media/overlays/${entry.key}.mov`,
             source: rendered.source, duration: rendered.frames ?? end - start, hasVideo: true, hasAudio: false, width, height,
-            alpha: !entry.plate, role: "overlay", pattern: rendered.pattern, firstFrame: rendered.firstFrame
+            alpha: true, role: "overlay", pattern: rendered.pattern, firstFrame: rendered.firstFrame
           });
-          track.clips.push(clip({ name: entry.loop ? `${entry.sceneId} (loop)` : `${entry.sceneId} · ${entry.module}`, asset: asset.id, start, duration: Math.min(end - start, asset.duration), kind: "overlay", sceneId: entry.sceneId, module: entry.module, alpha: !entry.plate }));
+          track.clips.push(clip({ name: entry.loop ? `${entry.sceneId} (loop)` : `${entry.sceneId} · ${entry.module}`, asset: asset.id, start, duration: Math.min(end - start, asset.duration), kind: "overlay", sceneId: entry.sceneId, module: entry.module, alpha: true, plate: entry.plate }));
         }
       });
     }
@@ -257,13 +262,20 @@ export function buildTimeline(story, media = {}, options = {}) {
   };
 }
 
-/** Greedy lane packing: items {start, end} sorted by start → lanes with no overlap. */
-export function packLanes(items) {
+/**
+ * Lane packing: items {start, end} → lanes (arrays) with no overlap inside a
+ * lane. stack: a later item sits above every item it overlaps, as it does in
+ * the renders (the incoming scene of a transition draws over the outgoing
+ * one), so overlapping chains climb one lane per boundary.
+ */
+export function packLanes(items, { stack = false } = {}) {
   const lanes = [];
   for (const item of [...items].sort((a, b) => a.start - b.start || a.end - b.end)) {
-    const lane = lanes.find((candidate) => candidate.at(-1).end <= item.start);
-    if (lane) lane.push(item);
-    else lanes.push([item]);
+    const overlaps = (other) => other.start < item.end && item.start < other.end;
+    const floor = stack ? lanes.reduce((top, lane, index) => (lane.some(overlaps) ? index + 1 : top), 0) : 0;
+    let index = lanes.findIndex((lane, k) => k >= floor && !lane.some(overlaps));
+    if (index < 0) { lanes.push([]); index = lanes.length - 1; }
+    lanes[index].push(item);
   }
   return lanes;
 }
