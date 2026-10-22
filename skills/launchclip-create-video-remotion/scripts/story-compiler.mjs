@@ -23,9 +23,9 @@ import path from 'node:path';
 import { deriveBoundaries, storyBase, validateStory } from './story.mjs';
 import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from './modules.mjs';
 import { gsapVars, layerStateAt, sceneWindows } from './transitions.mjs';
-import { backgroundLayer, cameraPlan, overlayOps, placementTransform, sceneObjectLookup } from './camera-world.mjs';
+import { backgroundFieldTiles, backgroundLayer, cameraPlan, overlayOps, placementTransform, sceneObjectLookup } from './camera-world.mjs';
 import { getEase } from './motion.mjs';
-import { ambientField, blobBackground, blobStateAt, blobTweens, driftGsap, sceneAmbient, sceneDrift } from './ambient.mjs';
+import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTweens, driftGsap, sceneAmbient, sceneDrift } from './ambient.mjs';
 import { profileGeometry } from './layout-check.mjs';
 import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from './captions.mjs';
 import { brandFontStacks, fontFaceRule, fontSlug, frozenFontFaces, projectFontFamilies, registryFontFaces } from './fonts.mjs';
@@ -122,6 +122,23 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const lines = field.blobs.flatMap((blob) => blobTweens(blob, from, to).map((tw) => `tl.fromTo(${js(`#lc-amb-${key}-${blob.id}`)}, ${js({ [tw.prop]: tw.from, force3D: false })}, ${js({ [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false, force3D: false })}, ${num(tw.at)});`));
     return { html: `<div id="lc-amb-field-${key}" class="lc-ambient-field" aria-hidden="true">${html}</div>`, motion: lines };
   };
+  // World mode: the field as one continuous backdrop in the depth layer.
+  // Every copy of a blob (camera-world.mjs backgroundFieldTiles) sits in a
+  // static translate wrapper and shares the blob's class, so one set of
+  // tweens per blob moves all of its copies; nothing is clipped, so the field
+  // has no edge anywhere the camera travels.
+  const worldFieldLayer = (tiles) => {
+    if (!field || !tiles.length) return { html: '', motion: [] };
+    const byId = new Map(field.blobs.map((blob) => [blob.id, blob]));
+    const html = tiles.map((tile) => {
+      const blob = byId.get(tile.blob);
+      const state = blobStateAt(blob, 0);
+      return `<div class="lc-world-tile" style="transform:${fieldTileTransform(tile)}"><div class="lc-ambient-blob lc-amb-world-${blob.id}" style="width:${num(blob.size)}px;height:${num(blob.size)}px;background:${blobBackground(blob)};transform:translate(${num(state.x)}px, ${num(state.y)}px) scale(${round(state.scale, 5)})"></div></div>`;
+    }).join('');
+    const used = field.blobs.filter((blob) => tiles.some((tile) => tile.blob === blob.id));
+    const lines = used.flatMap((blob) => blobTweens(blob, 0, D).map((tw) => `tl.fromTo(${js(`.lc-amb-world-${blob.id}`)}, ${js({ [tw.prop]: tw.from, force3D: false })}, ${js({ [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false, force3D: false })}, ${num(tw.at)});`));
+    return { html: `<div id="lc-amb-field-world" class="lc-world-field" aria-hidden="true">${html}</div>`, motion: lines };
+  };
   const boundaryFor = new Map(boundaries.map((entry) => [entry.to_id, entry]));
   let z = 10;
   // World camera (kit/core/camera-world.mjs): world mode, or a camera
@@ -131,7 +148,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   const plan = isolate ? null : cameraPlan(story, { windows, objects: sceneObjectLookup(story, (scene, value) => resolveModule(scene, value)) });
   const world = [];
   const cameraMotion = plan ? cameraGsapLines(plan) : [];
-  const worldField = plan?.parallax ? fieldLayer('world', 0, D) : { html: '', motion: [] };
+  const worldField = plan?.background ? worldFieldLayer(backgroundFieldTiles(plan, field)) : { html: '', motion: [] };
   cameraMotion.push(...worldField.motion);
   const plateStyle = (sceneId, placement) => (plan && placement ? `;transform-origin:0 0;transform:${placementTransform(placement)}` : '');
 
@@ -185,7 +202,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const worldClass = inWorld && worldMode ? ' lc-world-plate' : '';
     if (inWorld && media.elements.length) warnings.push(`${entry.scene.id}: root media stays on the root and does not follow the world camera`);
     // Ambient field: inside every plate, except in world mode, where the one
-    // field is the camera's parallax depth layer (#lc-world-bg) instead.
+    // field is the camera's depth layer (#lc-world-bg) instead, tiled across the world.
     const ambient = entry.plate && !worldMode && sceneAmbient(story, entry.scene).background ? fieldLayer(id, entry.start, entry.renderEnd) : { html: '', motion: [] };
     const drift = isolate ? null : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry });
     const content = drift ? `<div id="lc-drift-${id}" class="lc-drift" style="transform-origin:${num(drift.origin.x)}px ${num(drift.origin.y)}px">${media.html}</div>` : media.html;
@@ -347,7 +364,7 @@ ${motion.join('\n').split('\n').map((line) => `      ${line}`).join('\n')}
   return { html, files, warnings, boundaries, compositionId: COMPOSITION_ID };
 }
 
-// World camera containers. #lc-world-bg is the parallax depth layer (world
+// World camera containers. #lc-world-bg is the background depth layer (world
 // mode); #lc-camera carries the motion-blur filter (an SVG feGaussianBlur with
 // separate x/y deviations, switched on through --lc-cam-filter only while a
 // blurred move runs), then drift, zoom (about the canvas centre) and pan.
@@ -355,12 +372,15 @@ const CAMERA_SELECTORS = Object.freeze({ pan: '#lc-cam-pan', zoom: '#lc-cam-zoom
 
 function cameraMarkup(plan, brand, plates, field = '') {
   const parts = [];
-  if (plan.parallax) {
-    // The depth layer: the brand glows, plus ambient motion's background
-    // field when the story has one (world plates are transparent, so the one
-    // field moves at 0.3× behind them instead of once inside every plate).
-    const layer = backgroundLayer(plan, brand);
-    parts.push(`<div id="lc-world-bg" class="lc-world-bg" aria-hidden="true">${layer.glows.map((glow) => `<div class="lc-world-glow" style="left:${glow.left}px;top:${glow.top}px;width:${glow.size}px;height:${glow.size}px;background:${glow.background}"></div>`).join('')}${field}</div>`);
+  if (plan.background) {
+    // The depth layer (world mode): ambient motion's background field tiled
+    // across the world when the story has one, else the brand glows (world
+    // plates are transparent, so the one field moves behind them, at 0.3×
+    // with parallax and 1× without, instead of once inside every plate).
+    // Never both: stacked translucent gradients dither differently in the two
+    // renderers (16:9 parity fell to 0.963 with glows under the field).
+    const glows = field ? [] : backgroundLayer(plan, brand).glows;
+    parts.push(`<div id="lc-world-bg" class="lc-world-bg" aria-hidden="true">${glows.map((glow) => `<div class="lc-world-glow" style="left:${glow.left}px;top:${glow.top}px;width:${glow.size}px;height:${glow.size}px;background:${glow.background}"></div>`).join('')}${field}</div>`);
   }
   const defs = plan.blurSamples.length ? '<svg class="lc-cam-defs" width="0" height="0" aria-hidden="true"><defs><filter id="lc-cam-blur" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB"><feGaussianBlur id="lc-cam-blur-k" in="SourceGraphic" stdDeviation="0 0"></feGaussianBlur></filter></defs></svg>' : '';
   parts.push(`${defs}<div id="lc-camera" class="lc-camera" data-launchclip-camera="${plan.mode}"><div id="lc-cam-drift" class="lc-cam"><div id="lc-cam-zoom" class="lc-cam"><div id="lc-cam-pan" class="lc-cam">${plates.join('')}</div></div></div></div>`);
@@ -375,7 +395,7 @@ function cameraCss(plan, W, H) {
     `.lc-parallax { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; }`
   ];
   if (plan.mode === 'world') rules.push('.lc-world-plate > .lc-layer { background: transparent; }');
-  if (plan.parallax) rules.push(`.lc-world-bg { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; pointer-events: none; }`, '.lc-world-glow { position: absolute; border-radius: 50%; }');
+  if (plan.background) rules.push(`.lc-world-bg { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; pointer-events: none; }`, '.lc-world-glow { position: absolute; border-radius: 50%; }', `.lc-world-field, .lc-world-tile { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; overflow: visible; pointer-events: none; }`);
   return rules.join('\n    ');
 }
 

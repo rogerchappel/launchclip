@@ -442,6 +442,54 @@ export function parallaxState(camera, depth = FIELD_PARALLAX) {
   return { x: x * depth, y: y * depth, scale: 1 + (scale - 1) * depth };
 }
 
+/**
+ * The field as one continuous backdrop across a whole world, for a world
+ * camera's depth layer. Inside a plate (cuts mode) the field is a canvas-sized
+ * box with overflow hidden; a camera that travels past that box would show
+ * its edge as a hard vertical seam. Here each blob is instead repeated on its
+ * own lattice: copies `tileX = |glide to − from|` apart horizontally (the
+ * glide's wrap distance, so a copy takes over exactly where the blob wraps,
+ * the glide reads as one endless drift, and no other copy of the blob is ever
+ * on the home canvas) and one canvas height apart vertically (continuing the
+ * plate field's 0.3 / 0.7 row rhythm, so a camera that travels down sees the
+ * same density as at home rather than empty bands; only a blob's soft rim
+ * reaches into the home canvas from the row above or below). The copies are
+ * never clipped, so the field has no edges anywhere.
+ * Copies are static translates; the blob motion inside is the plate field's
+ * own (blobStateAt / blobTweens), so the result stays frame-pure.
+ *   region  {x0, y0, x1, y1}: the field-frame rect a camera can show
+ *           (camera-world.mjs backgroundExtent)
+ * → [{blob: id, dx, dy}] in blob order, then by row and column.
+ */
+export function fieldTiles(field, region, { width, height } = {}) {
+  const tiles = [];
+  if (!field?.blobs?.length || !region) return tiles;
+  for (const blob of field.blobs) {
+    const lo = Math.min(blob.x.from, blob.x.to), hi = Math.max(blob.x.from, blob.x.to);
+    const tileX = hi - lo;
+    const reach = (tileX - width) / 2;
+    const tileY = height;
+    if (!(tileX > 0 && tileY > 0)) continue;
+    const yLo = blob.y.center - Math.abs(blob.y.amp), yHi = blob.y.center + Math.abs(blob.y.amp);
+    // Copy (i, j) can cover [lo + i·tileX − reach, hi + i·tileX + reach] × [yLo + j·tileY − reach, …].
+    const i0 = Math.floor((region.x0 - hi - reach) / tileX), i1 = Math.ceil((region.x1 - lo + reach) / tileX);
+    const j0 = Math.floor((region.y0 - yHi - reach) / tileY), j1 = Math.ceil((region.y1 - yLo + reach) / tileY);
+    for (let j = j0; j <= j1; j += 1) {
+      if (yHi + j * tileY + reach < region.y0 || yLo + j * tileY - reach > region.y1) continue;
+      for (let i = i0; i <= i1; i += 1) {
+        if (hi + i * tileX + reach < region.x0 || lo + i * tileX - reach > region.x1) continue;
+        tiles.push({ blob: blob.id, dx: round(i * tileX, 3) + 0, dy: round(j * tileY, 3) + 0 });
+      }
+    }
+  }
+  return tiles;
+}
+
+/** A field tile → its wrapper's CSS transform (both renderers). */
+export function fieldTileTransform(tile) {
+  return `translate(${round(tile.dx, 3)}px, ${round(tile.dy, 3)}px)`;
+}
+
 /** Parallax state → inline CSS (camelCase keys), pivoting on the canvas centre. */
 export function parallaxStyle(camera, depth = FIELD_PARALLAX) {
   const state = parallaxState(camera, depth);

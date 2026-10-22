@@ -621,6 +621,12 @@ scene layer (.lc-layer / SceneLayer)   ← typed transition tweens
   that reframes key content must add its own extent check.
 - Every ambient function stays pure and exported, so a camera module can
   sample `blobStateAt`, `driftStateAt` and `sceneDrift` at any time.
+- The world camera (world mode) does not put a field in each plate: it draws
+  the field once, in its background depth layer, as one continuous backdrop.
+  `fieldTiles(field, region, {width, height})` repeats each blob one glide
+  wrap apart across and one canvas height apart down over `region`, as
+  static translates (`fieldTileTransform`) that are never clipped; the blobs
+  inside keep their own glide, bob and breathe. See "World camera".
 
 ```js
 export const AMBIENT_LEVELS, AMBIENT_PRESETS, FIELD_PARALLAX
@@ -629,6 +635,7 @@ export function sceneAmbient(story, scene)      // → {level, background, drift
 export function ambientErrors(value, path)       // → string[]
 export function ambientField(story)              // → {level, direction, blobs} | null
 export function blobStateAt(blob, t) / blobStyle(blob, t) / blobBackground(blob) / blobTweens(blob, from, to)
+export function fieldTiles(field, region, {width, height}) / fieldTileTransform(tile) // world-camera backdrop
 export function sceneDrift(story, scene, model, {window, geometry}) // → Drift | null
 export function driftPlan({rect, level, start, end, canvas, bounds, minTextPx, minTextLimit})
 export function driftStateAt(drift, t) / driftStyle(drift, t) / driftGsap(drift) / driftExtent(rect, drift)
@@ -649,8 +656,10 @@ export function driftStateAt(drift, t) / driftStyle(drift, t) / driftGsap(drift)
   auto: right). An explicit `in.direction` always wins.
 - `spacing` (0–1, default 0.12): the gap between neighbouring plates, as a
   fraction of the canvas along the move.
-- `parallax` (default true in world mode): the background depth layer and
-  overlay parallax.
+- `parallax` (default true in world mode): the background depth layer moves
+  at 0.3× and overlays at 1.15×. `false` keeps the same background, moving
+  1× with the plates, and turns overlay parallax off (world plates are
+  transparent, so there is always a background behind them).
 - `blur` (default: whip-pans only): `true` blurs every camera move, `false`
   none.
 
@@ -692,11 +701,20 @@ Model:
   `grammar.camera.drift` px at a 1080 px short side. GSAP plays it as
   half-period `sine.inOut` tweens; no frame repeats the previous camera state.
   It composes with ambient motion's hold drift, which lives inside each plate.
-- Parallax (`PARALLAX`): the background layer moves 0.3× the plates' screen
-  travel (never scaled), plates 1×, overlays (track ≥ 1) 1.15× relative to
-  the camera state where they settle (`overlayOps`). The layer is ambient
-  motion's background field when that is present, else soft brand glows
-  (`backgroundLayer`).
+- Background and parallax (`PARALLAX`, `plan.depth`): every world story has
+  one background depth layer behind the transparent plates. It moves
+  `plan.depth` × the plates' screen travel (0.3 with parallax, `PARALLAX.flat`
+  = 1 with `parallax: false`; never scaled); overlays (track ≥ 1) move 1.15×
+  relative to the camera state where they settle (`overlayOps`, parallax
+  only). The layer is ambient motion's background field when the story has
+  one, else soft brand glows (`backgroundLayer`), never both. The field is
+  one continuous backdrop across the whole world extent
+  (`backgroundExtent`): each blob is repeated on its own lattice
+  (`fieldTiles` / `backgroundFieldTiles`), one glide wrap apart across and
+  one canvas height apart down, in static translate wrappers that are never
+  clipped, so no tile edge ever shows (the per-plate field's canvas-sized
+  `overflow: hidden` box showed its edge as a hard vertical seam after a
+  pan). Cuts mode keeps the per-plate field unchanged.
 - Motion blur: an SVG `feGaussianBlur` with separate x/y deviations on the
   camera container, sampled once per frame from the screen velocity of the
   canvas centre (direction) and corners (zoom), through `motionBlurPx`
@@ -715,11 +733,15 @@ export function cameraOps(plan)           // renderer-neutral ops on "pan", "zoo
 export function overlayOps(plan, window)  // ops on "overlay"
 export function opsStateAt(ops, target, t)// frame-pure GSAP timeline semantics
 export function placementTransform(placement) / containerTransform(props) / backgroundLayer(plan, brand)
+export function backgroundExtent(plan)    // field-frame rect the camera can show
+export function backgroundFieldTiles(plan, field) // → [{blob, dx, dy}] (ambient.mjs fieldTiles over backgroundExtent)
 ```
 
 Renderers:
 
-- **HyperFrames**: `#lc-world-bg` (glows), then `#lc-camera` (z-index 5, the
+- **HyperFrames**: `#lc-world-bg` (the tiled field `#lc-amb-field-world` ›
+  `.lc-world-tile` › `.lc-amb-world-<blob>`, one tween set per blob class
+  moving all its copies; or the glows), then `#lc-camera` (z-index 5, the
   blur filter) › `#lc-cam-drift` › `#lc-cam-zoom` (scale and roll about the
   canvas centre) › `#lc-cam-pan` › the plates, each `.lc-scene` carrying its
   placement as a static `transform` (origin 0 0). `cameraGsapLines(plan)` turns
@@ -729,12 +751,16 @@ Renderers:
   `.lc-parallax` wrapper. Root media (video) stays on the root and does not
   follow the camera (a warning says so).
 - **Remotion**: `CameraWorld` evaluates the same ops per frame with
-  `opsStateAt` and `blurAt`; `SceneLayer` takes the placement, a transparent
+  `opsStateAt` and `blurAt`, and draws the same tiles with `WorldField`; `SceneLayer` takes the placement, a transparent
   plate flag and the overlay parallax ops.
 
 Parity: camera stories hold the usual SSIM 0.97 (explainer-9x16 mid-pan
-0.997; world-camera-9x16 0.987–0.994 at rest, mid-pan, mid-push, orbit and on
-blurred whip-pan frames, compared on the frame grid; `test/parity_camera.test.js`).
+0.997; world-camera-9x16 0.991–0.997 at rest, mid-pan, mid-push, orbit, on
+blurred whip-pan frames and home again, and the same story in 16:9
+0.991–0.997, compared on the frame grid; `test/parity_camera.test.js`, which
+also checks the rendered background has no column step across the former
+seam). `test/world_field.test.js` samples the composited field along rows
+through the former seam from both renderers' math.
 The depth layer's glows are small separate gradient elements on a fixed
 lattice that never scale: one huge multi-gradient layer scaled with the zoom
 dithered differently in the two Chrome pipelines (0.956).
@@ -742,8 +768,8 @@ dithered differently in the two Chrome pipelines (0.956).
 Partial re-render (`src/render_segments.js`): the camera path is derived
 across scenes, so each segment's hash has a `camera` part built from what the
 camera puts on screen during its frames (container states and blur per frame,
-its plates' placements, its overlays' parallax, the lattice glows that cross
-the canvas). Changing one scene's pan direction re-renders the segments from
+its plates' placements, its overlays' parallax, the lattice glows or field
+tiles that cross the canvas). Changing one scene's pan direction re-renders the segments from
 that move on, including later scenes whose own fields did not change.
 
 ## Footage-led lane (RFC phase 6)

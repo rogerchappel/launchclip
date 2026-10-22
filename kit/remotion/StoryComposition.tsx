@@ -37,9 +37,9 @@ import { captionChunksFrom, captionsOverlayOf, chunkWords, narrationWords } from
 // @ts-ignore plain ESM from kit/core
 import { storyBase } from "../core/story.mjs";
 // @ts-ignore plain ESM from kit/core
-import { backgroundLayer, blurAt, cameraPlan, containerTransform, opsStateAt, overlayOps, placementTransform, sceneObjectLookup } from "../core/camera-world.mjs";
+import { backgroundFieldTiles, backgroundLayer, blurAt, cameraPlan, containerTransform, opsStateAt, overlayOps, placementTransform, sceneObjectLookup } from "../core/camera-world.mjs";
 // @ts-ignore plain ESM from kit/core
-import { ambientField, blobBackground, blobStyle, driftStyle, sceneAmbient, sceneDrift } from "../core/ambient.mjs";
+import { ambientField, blobBackground, blobStyle, fieldTileTransform, driftStyle, sceneAmbient, sceneDrift } from "../core/ambient.mjs";
 // @ts-ignore plain ESM from kit/core
 import { profileGeometry } from "../core/layout-check.mjs";
 import { moduleComponent } from "./modules";
@@ -106,6 +106,28 @@ export const AmbientField: React.FC<{ blobs: any[]; t: number; style?: React.CSS
   </AbsoluteFill>
 );
 
+// World mode: the field as one continuous backdrop in the depth layer, each
+// blob repeated on its own lattice (camera-world.mjs backgroundFieldTiles) in
+// static translate wrappers, never clipped, so it has no edge anywhere the
+// camera travels. Matches the HyperFrames .lc-world-tile markup.
+export const WorldField: React.FC<{ blobs: any[]; tiles: any[]; t: number }> = ({ blobs, tiles, t }) => {
+  const { width, height } = useVideoConfig();
+  const byId = React.useMemo(() => new Map(blobs.map((blob: any) => [blob.id, blob])), [blobs]);
+  const box: React.CSSProperties = { position: "absolute", left: 0, top: 0, width, height, overflow: "visible", pointerEvents: "none" };
+  return (
+    <div style={box} aria-hidden>
+      {tiles.map((tile: any, index: number) => {
+        const blob: any = byId.get(tile.blob);
+        return (
+          <div key={index} style={{ ...box, transform: fieldTileTransform(tile) }}>
+            <div style={{ position: "absolute", left: 0, top: 0, width: blob.size, height: blob.size, borderRadius: "50%", transformOrigin: "50% 50%", background: blobBackground(blob), ...blobStyle(blob, t) }} />
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 // startFrame: the enclosing Sequence's from; tweens carry absolute times, so the
 // layer samples them at the absolute composition time (kit/remotion/clock.tsx).
 // World camera: placement = the plate's world transform; transparent = a
@@ -137,11 +159,14 @@ const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; 
 // frame from the plan's ops exactly as GSAP plays them in HyperFrames:
 // parallax background, then the blur-filtered camera with drift, zoom (about
 // the canvas centre) and pan around the plates.
-export const CameraWorld: React.FC<{ plan: any; brand: any; field?: any[] | null; children: React.ReactNode }> = ({ plan, brand, field, children }) => {
+export const CameraWorld: React.FC<{ plan: any; brand: any; field?: any | null; children: React.ReactNode }> = ({ plan, brand, field, children }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const t = frame / fps;
-  const layer = React.useMemo(() => (plan.parallax ? backgroundLayer(plan, brand) : null), [plan, brand]);
+  // The depth layer exists in every world story (0.3× with parallax, 1× without).
+  // It is the tiled ambient field when the story has one, else the brand glows (never both).
+  const tiles = React.useMemo(() => backgroundFieldTiles(plan, field), [plan, field]);
+  const layer = React.useMemo(() => (plan.background ? { glows: tiles.length ? [] : backgroundLayer(plan, brand).glows } : null), [plan, brand, tiles]);
   const blur = plan.blurSamples.length ? blurAt(plan, t) : { x: 0, y: 0 };
   const blurring = blur.x > 0 || blur.y > 0;
   const box: React.CSSProperties = { position: "absolute", left: 0, top: 0, width, height, transformOrigin: "50% 50%" };
@@ -152,7 +177,7 @@ export const CameraWorld: React.FC<{ plan: any; brand: any; field?: any[] | null
           {layer.glows.map((glow: any, index: number) => (
             <div key={index} style={{ position: "absolute", left: glow.left, top: glow.top, width: glow.size, height: glow.size, borderRadius: "50%", background: glow.background }} />
           ))}
-          {field ? <AmbientField blobs={field} t={t} /> : null}
+          {field && tiles.length ? <WorldField blobs={field.blobs} tiles={tiles} t={t} /> : null}
         </div>
       ) : null}
       {plan.blurSamples.length ? (
@@ -242,7 +267,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
     );
     return (
       <AbsoluteFill style={{ backgroundColor: background, fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
-        <CameraWorld plan={plan} brand={story.brand} field={plan.parallax && field ? field.blobs : null}>
+        <CameraWorld plan={plan} brand={story.brand} field={world ? field : null}>
           {layers.filter((layer: any) => layer.entry.plate).map(sceneLayer)}
           {loop ? (
             <Sequence key="loop" name={`loop → ${loop.sceneId}`} from={frames(loop.start)} durationInFrames={Math.max(1, frames(loop.end) - frames(loop.start))} premountFor={fps}>
