@@ -1,6 +1,6 @@
 {
   "schema_version": "launchclip.renderer-thresholds.v1",
-  "description": "Pass/fail limits for npm run eval:renderers (src/renderer_eval.js). parity.min_ssim applies to every frame on the temporal-evidence schedule; min_ssim_all_frames (null = report only) to the per-frame scan of the whole video. duration compares video frame counts with each other and with the story. loudness compares the two renders. audio.max_offset_ms allows the 1024-sample (21.3 ms) AAC priming delay HyperFrames leaves in its mux; max_residual_db applies after aligning that offset. gates: true = must pass, \"report\" = measured and shown but never fails, false = skipped; motion is report-only because the golden stories hold settled editorial frames below the cinematic change-energy floor in both renderers. stories.<id> overrides any of these for one golden story. world-camera-9x16 uses parity.min_ssim 0.965: its parallax background glows are soft gradients that the two Chrome pipelines dither differently (0.968-0.976 on otherwise identical frames, 0.997 after a 2 px blur).",
+  "description": "Pass/fail limits for npm run eval:renderers (src/renderer_eval.js). parity.min_ssim applies to every frame on the temporal-evidence schedule; min_ssim_all_frames (null = report only) to the per-frame scan of the whole video. duration compares video frame counts with each other and with the story. loudness compares the two renders. audio.max_offset_ms allows the 1024-sample (21.3 ms) AAC priming delay HyperFrames leaves in its mux; max_residual_db applies after aligning that offset. gates: true = must pass, \"report\" = measured and shown but never fails, false = skipped; motion is enforced: the ambient layer (kit/core/ambient.mjs) keeps settled frames above the cinematic change-energy and flow floors in both renderers. stories.<id> overrides any of these for one golden story; footage allows a -25 dB aligned audio residual because the two renderers resample and mix the base recording's own sound differently (measured -27.6 dB before and after ambient motion). world-camera-9x16 uses parity.min_ssim 0.96: its parallax background glows are soft gradients that the two Chrome pipelines dither differently (0.963-0.976 on otherwise identical frames, with ambient motion's field also in the depth layer, 0.997 after a 2 px blur).",
   "parity": {
     "min_ssim": 0.97,
     "min_ssim_all_frames": null
@@ -21,13 +21,18 @@
     "validate": true,
     "layout": true,
     "compile": true,
-    "motion": "report",
+    "motion": true,
     "audio": true
   },
   "stories": {
+    "footage": {
+      "audio": {
+        "max_residual_db": -25
+      }
+    },
     "world-camera-9x16": {
       "parity": {
-        "min_ssim": 0.965
+        "min_ssim": 0.96
       }
     }
   }

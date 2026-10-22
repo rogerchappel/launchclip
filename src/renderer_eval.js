@@ -48,7 +48,8 @@ export const GOLDEN_STORIES = Object.freeze([
   { id: "promo-16x9", dir: "examples/story/promo-16x9" },
   { id: "explainer-9x16", dir: "examples/story/explainer-9x16" },
   { id: "data-story-9x16", dir: "examples/story/data-story-9x16" },
-  { id: "world-camera-9x16", dir: "examples/story/world-camera-9x16" }
+  { id: "world-camera-9x16", dir: "examples/story/world-camera-9x16" },
+  { id: "footage", dir: "examples/story/footage" }
 ].map(Object.freeze));
 
 export const DEFAULT_THRESHOLDS = Object.freeze({

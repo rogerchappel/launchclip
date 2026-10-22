@@ -177,6 +177,15 @@ test("the checked-in thresholds file loads and sets the documented limits", asyn
   assert.equal(merged.loudness.max_lufs_delta, 0.5);
   assert.equal(thresholds.schema_version, undefined, "metadata keys are stripped");
   for (const id of Object.keys(thresholds.stories ?? {})) assert.ok(GOLDEN_STORIES.some((story) => story.id === id), `override for unknown story ${id}`);
+  // Ambient motion lifts every golden story over the cinematic motion gate, so it is enforced.
+  for (const story of GOLDEN_STORIES) {
+    const gates = thresholdsFor(thresholds, story.id).gates;
+    assert.equal(gates.motion, true, `${story.id} enforces the motion gate`);
+    // world-camera-9x16: parallax gradients dither differently per renderer (docs/KIT_CONTRACTS.md, "World camera").
+    const floor = story.id === "world-camera-9x16" ? 0.96 : 0.97;
+    assert.equal(thresholdsFor(thresholds, story.id).parity.min_ssim, floor, `${story.id} keeps min SSIM ${floor}`);
+  }
+  assert.ok(GOLDEN_STORIES.some((story) => story.id === "footage"), "the footage-led example is in the eval set");
 });
 
 test("buildReport shapes the summary, markdown and exit code", () => {

@@ -3,7 +3,9 @@ import { catalogModules, resolveModule } from "../kit/core/modules.mjs";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { checkLayout, elementsFromEditorialLayout, elementsFromStory, SAFE_ZONE_PROFILES } from "../kit/core/layout-check.mjs";
+import { checkLayout, elementsFromEditorialLayout, elementsFromStory, profileGeometry, SAFE_ZONE_PROFILES } from "../kit/core/layout-check.mjs";
+import { driftExtent, sceneDrift } from "../kit/core/ambient.mjs";
+import { sceneWindows } from "../kit/core/transitions.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const STORY_MODULE = path.join(ROOT, "kit/core/story.mjs");
@@ -101,7 +103,12 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
     return [];
   };
 
-  const elements = elementsFromStory(resolved, { moduleLayout, profile });
+  // Ambient hold drift (kit/core/ambient.mjs): check each drifting scene's
+  // largest extent over its render window, computed exactly as both
+  // compilers compute the drift they draw, so a drift can never carry key
+  // text out of the safe zone, into the caption band or onto a neighbour.
+  const ambient = ambientDrift(resolved, canvas);
+  const elements = elementsFromStory(resolved, { moduleLayout: (scene, story) => ambient.inflate(scene, moduleLayout(scene, story)), profile });
   // Footage-led: the recording fills the frame under everything (media, never a collision).
   if (resolved.base) elements.unshift({ id: "base", role: "media", rect: { x: 0, y: 0, width: canvas.width, height: canvas.height }, start: 0, end: Number(resolved.resolved?.duration ?? resolved.format?.duration), allowOcclusion: ["*"] });
   const report = checkLayout({ canvas, elements, profile, duration: Number(resolved.resolved?.duration ?? resolved.format?.duration) || undefined });
@@ -114,13 +121,41 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
     canvas,
     elements: elements.length,
     errors: findings.filter((finding) => finding.severity === "error").length,
+    drifted: ambient.drifted,
     warnings,
     findings
   };
 }
 
+// → {inflate(scene, elements) → elements, drifted: scene ids}. Elements of a
+// drifting scene get the drift's extent as their rect, and a pull-back's
+// smaller key text as their minTextPx.
+function ambientDrift(resolved, canvas) {
+  const drifted = [];
+  let windows;
+  try { windows = new Map(sceneWindows(resolved).scenes.map((entry) => [entry.id, entry])); }
+  catch { return { inflate: (scene, elements) => elements, drifted }; }
+  const geometry = profileGeometry(canvas);
+  const inflate = (scene, produced) => {
+    const window = windows.get(scene.id);
+    if (!window || !produced) return produced;
+    let model;
+    try { model = resolveModule(scene, resolved, { end: window.renderEnd }); } catch { return produced; }
+    const drift = sceneDrift(resolved, scene, model, { window: { start: window.start, end: window.renderEnd }, geometry });
+    if (!drift) return produced;
+    drifted.push(scene.id);
+    const list = Array.isArray(produced) ? produced : [produced];
+    return list.map((element) => element && element.rect ? {
+      ...element,
+      rect: driftExtent(element.rect, drift),
+      ...(element.minTextPx != null && drift.scale < 1 ? { minTextPx: element.minTextPx * drift.scale } : {})
+    } : element);
+  };
+  return { inflate, drifted };
+}
+
 export function formatLayoutReport(report) {
-  const lines = [`layout-check ${report.status} (${report.profile}, ${report.canvas.width}x${report.canvas.height}, ${report.elements} elements)`];
+  const lines = [`layout-check ${report.status} (${report.profile}, ${report.canvas.width}x${report.canvas.height}, ${report.elements} elements${report.drifted?.length ? `, ${report.drifted.length} with ambient drift` : ""})`];
   for (const finding of report.findings) {
     lines.push(`  ${finding.severity.padEnd(7)} ${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail}`);
   }

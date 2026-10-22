@@ -15,6 +15,7 @@ kit/
     grammar.mjs         motion grammars (editorial, snappy, smooth, playful, documentary)
     transitions.mjs     typed transitions and scene render windows
     camera-world.mjs    world layout, camera path, parallax and motion blur
+    ambient.mjs         frame-pure ambient motion: background field, hold drift
     editorial-core.mjs  editorial module spec → resolved model (no HTML)
     layout-check.mjs    geometric safe-zone and collision checks
   remotion/             TSX for Remotion 4.0.536 / React 19.3
@@ -56,6 +57,9 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
   `audio.voice`/`audio.words` yet, and word anchors are checked after synthesis.
   Finish writes the filled fields to a resolved copy in `.launchclip/finish/`,
   never back into `storyboard.json`.
+- `ambient` (story) and `scenes[i].ambient` are a level (`off | subtle |
+  standard | lively`) or `{level?, background?, drift?}`; see
+  [Ambient motion](#ambient-motion-kitcoreambientmjs).
 
 Exports:
 
@@ -388,6 +392,155 @@ node scripts/parity.mjs <fixture.json> [--out qa/parity/<id>] [--times enter,mid
   `report.json` plus side-by-side PNGs.
 - `test/parity.test.js` runs every fixture in `test/fixtures/parity/*.json`
   when `LAUNCHCLIP_PARITY=1` is set, and skips otherwise because it is slow.
+  It also compares whole-story stills (`runStoryParity`) of
+  `examples/story/minimal`, `explainer-9x16` and `promo-16x9` at times inside
+  holds, where the ambient field and drift are well under way.
+
+## Ambient motion (`kit/core/ambient.mjs`)
+
+Once a module's enter animation settles, nothing on a plate moves until the
+next event, so between beats a story reads as a slideshow and fails the
+cinematic motion gate (median frame-change energy, flow velocity p90). The
+ambient layer keeps settled frames alive. It is plain ESM that imports only
+`./motion.mjs`, and every value is a pure function of absolute time and the
+story. The HyperFrames compiler turns it into GSAP; `StoryComposition`
+evaluates the same functions per frame.
+
+### Control
+
+```jsonc
+"ambient": "standard"                          // story level: off | subtle | standard | lively
+"ambient": {"level": "subtle", "background": false, "drift": true}
+"scenes": [{ "id": "s3", "ambient": "off", … }]  // per-scene override (string or object)
+```
+
+- Precedence: `scene.ambient` ← `story.ambient` ← defaults.
+- The default level follows the scene's `energy`: 0 → `subtle`; 1, 2 and
+  `"build"` → `standard`; 3 → `lively`. A missing energy → `standard`.
+- `background` defaults to true, except in the `footage-led` lane, where the
+  base already moves. There the field is off and only overlays drift (track
+  ≥ 1, not `insert` plates), unless a scene sets `drift: true` explicitly.
+- `"off"` turns both layers off. Settled frames then hold still, and the
+  cinematic motion gate fails.
+- `validateStory` checks both fields (`STORY_AMBIENT_LEVELS` in `story.mjs`
+  mirrors `AMBIENT_LEVELS`; a test pins them together).
+
+### Layers
+
+1. **Background field.** `ambientField(story)` returns `{level, direction,
+   blobs}` or null. A blob is a large radial gradient of the brand `primary`
+   or `accent` colour at low alpha, with a many-stop Gaussian-like falloff so
+   no stop edge reads as a ring. The alpha is set so that the blob centre adds
+   `AMBIENT_PRESETS[level].field.contrast` BT.601 luma levels over
+   `brand.colors.bg` (22, 40 and 54 for subtle, standard and lively; alpha
+   capped at 0.45), so a brand with dim colours gets the same low-contrast
+   field as one with bright colours.
+   Each blob glides across the canvas at a steady speed
+   (`field.speed` canvas widths per second, about ±8% apart per blob for
+   parallax), wraps only while fully off canvas, bobs gently on the cross axis
+   and breathes in scale. Axes are `{kind: "glide", from, to, period, offset}`
+   (linear, wrapping) or `{kind: "wave", center, amp, period, phase}` (a cosine
+   whose extrema fall on multiples of half its period), so a chain of
+   `ease: "none"` or `"sine.inOut"` tweens reproduces them exactly:
+   `blobTweens(blob, from, to)`. The field level is story-wide
+   (`fieldLevel`): the field is one continuous backdrop and does not change
+   from plate to plate. The seed is a hash of the title, brand colours and
+   format (`ambientSeed`), so a story always gets the same field.
+   The field sits **inside** every track-0 plate's layer, under the content,
+   not behind the plates: plates stay opaque, so fades, zooms and pushes look
+   exactly as before, and in a crossfade both plates show the field at the same
+   absolute time, so it reads as continuous.
+2. **Hold drift.** `sceneDrift(story, scene, model, {window, geometry})`
+   returns `{start, duration, ease: "none", origin, scale, x, y, mode}` or
+   null. The scene's content sits in a wrapper that moves linearly from
+   identity at the scene start to `{scale, x, y}` at the end of its render
+   window, so it never stops dead at settle and hands its velocity to the exit
+   and the outgoing transition. The push is about the centre of
+   `model.layout.rect`. Its amplitude is `scaleRate`/`shiftRate` per second of
+   window, capped at `scaleMax`/`shiftMax`, then clamped by `driftBounds`: the
+   profile safe zone, shortened so that a rect clear of the caption band stays
+   clear of it while captions are on. A rect with too little room for half the
+   wanted push pulls back instead (`scale < 1`, which only shrinks it), never
+   shrinking key text below the profile minimum (`model.minTextPx`). Vertical
+   travel goes toward the side with more room. `driftEligible` skips
+   placeholders, decor (punch-in cameras) and media-window video, whose
+   `<video>` HyperFrames lifts out of the scene layer.
+3. **Accent life** is left to the modules' own glows: the field already lights
+   the plate.
+
+Module emitters, components and the editorial golden corpus are unchanged:
+both layers are compiler-level wrappers. A `sceneFilter` compile and
+`ModuleReview` have no ambient.
+
+### Renderers
+
+- HyperFrames: each plate's `.lc-layer` starts with
+  `<div class="lc-ambient-field">` holding one absolutely positioned
+  `.lc-ambient-blob` per blob (`lc-amb-<scene>-<blob>`), and the module
+  output sits in `<div id="lc-drift-<scene>" class="lc-drift">` with an inline
+  `transform-origin`. Every ambient tween is a `tl.fromTo` on the master
+  timeline with `immediateRender: false` and `force3D: false` (2D transforms,
+  so text is re-rasterised crisp each frame and matches Remotion), linear or
+  `sine.inOut` eases and no `onUpdate`. Field tweens cover only the plate's
+  render window.
+- Remotion: `SceneLayer` draws `<AmbientField blobs t/>` (inline
+  `blobStyle(blob, t)`) before the content and wraps the content in an
+  `AbsoluteFill` with `driftStyle(drift, t)`, both at the absolute time
+  `(startFrame + frame) / fps`. The loop clone keeps its frozen first state;
+  its field keeps moving.
+- `test/story_ambient.test.js` seeks the compiled GSAP against the
+  frame-pure state; story parity covers the pixels.
+
+### Safety
+
+- Drift is linear, small (`scaleMax` 2–4%) and unblurred: no motion blur is
+  applied to it, and the transforms stay 2D.
+- `src/layout_check.js` computes the same `sceneDrift` for every scene and
+  checks `driftExtent(rect, drift)` (the union of the rest rect and the end
+  state) instead of the rest rect, and a pull-back's smaller `minTextPx`. A
+  drift that would carry key text out of the safe zone, into the caption band
+  or onto a neighbour is therefore a layout error. The report lists the
+  drifting scenes (`drifted`).
+
+### Composition with a world camera
+
+Camera moves and parallax (the world-camera grammar) compose with ambient
+motion by **nesting transforms**. They never edit blobs or drift values:
+
+```
+scene layer (.lc-layer / SceneLayer)   ← typed transition tweens
+├─ field container                      ← camera at FIELD_PARALLAX depth (0.3×)
+│  #lc-amb-field-<scene> / <AmbientField style>
+│  └─ blobs                             ← their own glide, bob and breathe
+└─ camera content wrapper (camera, 1×)  ← owned by the camera grammar
+   └─ drift wrapper #lc-drift-<scene>   ← hold drift, innermost
+      └─ module content
+```
+
+- `parallaxState(camera, depth = FIELD_PARALLAX)` → `{x, y, scale}` and
+  `parallaxStyle(camera, depth)` map a camera offset (a pure function of
+  time on the camera side) to a layer at `depth`. HyperFrames tweens
+  `#lc-amb-field-<scene>` with seek-safe `fromTo`s of those values; Remotion
+  passes `style={parallaxStyle(camera(t))}` to `<AmbientField>`. The field
+  container is otherwise untouched, so the camera owns its transform.
+- The camera's content wrapper goes **outside** the drift wrapper, so the
+  drift stays a small push about the module rect inside whatever framing
+  the camera sets. layout-check inflates rects by the drift only. A camera
+  that reframes key content must add its own extent check.
+- Every ambient function stays pure and exported, so a camera module can
+  sample `blobStateAt`, `driftStateAt` and `sceneDrift` at any time.
+
+```js
+export const AMBIENT_LEVELS, AMBIENT_PRESETS, FIELD_PARALLAX
+export function parallaxState(camera, depth) / parallaxStyle(camera, depth)
+export function sceneAmbient(story, scene)      // → {level, background, drift}
+export function ambientErrors(value, path)       // → string[]
+export function ambientField(story)              // → {level, direction, blobs} | null
+export function blobStateAt(blob, t) / blobStyle(blob, t) / blobBackground(blob) / blobTweens(blob, from, to)
+export function sceneDrift(story, scene, model, {window, geometry}) // → Drift | null
+export function driftPlan({rect, level, start, end, canvas, bounds, minTextPx, minTextLimit})
+export function driftStateAt(drift, t) / driftStyle(drift, t) / driftGsap(drift) / driftExtent(rect, drift)
+```
 
 ## World camera (`kit/core/camera-world.mjs`)
 
@@ -489,7 +642,7 @@ Renderers:
 Parity: cuts-mode camera moves hold SSIM ≥ 0.97 (explainer-9x16 mid-pan
 0.997). In world mode the parallax glows are soft gradients that the two
 Chrome pipelines dither differently (0.968–0.976 on otherwise identical
-frames, 0.997 after a 2 px blur), so the world golden uses 0.965
+frames, 0.997 after a 2 px blur), so the world golden uses 0.96
 (`eval/renderer-thresholds.json`, `test/parity_camera.test.js`). Blurred
 whip-pan frames match (≥ 0.970) when compared on the frame grid.
 

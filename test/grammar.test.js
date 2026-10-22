@@ -23,15 +23,18 @@ const STORY = path.join(ROOT, "examples", "story");
 const sha = (value) => createHash("sha256").update(value).digest("hex");
 
 // sha256 of compileStoryToHyperFrames(...).html for each golden story, taken
-// on origin/main (80d3107) before motion grammars existed. explainer-9x16 is
+// before motion grammars existed: on feat/ambient-motion (9d5ea0b, origin/main
+// plus ambient motion, which changes every golden's HTML; the origin/main
+// 80d3107 hashes were f4e7d778…, 18a9a026…, 61f55488…, 7826c5d0…, 02ec0fc1…,
+// b1efd64e…). explainer-9x16 is
 // compiled with its original s2 push (the golden now pans into s2).
 const PRE_GRAMMAR_HTML_SHA256 = {
-  cooling: "f4e7d778c294649b8d1760ebec42b7ef0a7513d9e0bbdf8baee12bb2a6d6ae62",
-  minimal: "18a9a026813d2b472c2b881fb3197b0b1b937cd11e6124605fbf9758311e7866",
-  "promo-16x9": "61f55488c243100e94a1a208a2fbe6d74ba1a0690ec59ba9cd083fea26f3fcad",
-  "explainer-9x16": "7826c5d07182419a92eb2c176bb7f7639b683cd71ca1c0b87177f9e5ee54b7c8",
-  "data-story-9x16": "02ec0fc1319c08ff2cdfa1dcfaa771ba917fea72b5dd43380a941fcd421e5a00",
-  footage: "b1efd64ebbd34b5eaf859ca9387798f7d22a0f70bbb7680037123590d075d4b7"
+  cooling: "39db23d0e50e83b4ac5441bbd6cc2089cd48ffac579f55586f452b3a1415260f",
+  minimal: "e7224c12eb937eeadd7275237cef0cd4947c3d736c618c02d17498c331d496df",
+  "promo-16x9": "5a5110b25e6dd8dc38f2ee0fcb53459f09d03043aebbe7622ce22d1f7f4e9a37",
+  "explainer-9x16": "88f0b3f6de60a1139366f03fdc40209a13efa450c70667b7a4845293378319d1",
+  "data-story-9x16": "7eeffadc27b7ce6308d16cfd3e8d90866dfa36b516e7c14594aa8acbbf2a15f8",
+  footage: "88e88f48199fe33d09bb8485837c5f16e0c7f24179c8a32b7a2c19d65fa87631"
 };
 // test/editorial_core.test.js: the explicit-rect 16:9 corpus subset.
 const EXPLICIT_16X9_SHA256 = "6412f1e1e2ca59865cfa95b4834c09e8c142462cfd7525672424522860983508";

@@ -220,7 +220,7 @@ sourceDir})` from `scripts/story-compiler.mjs` (resolve the story first with
 root `launchclip-story` composition with one paused timeline, each scene's
 module inside a scene layer, typed transitions between track-0 scenes with the
 phase-2 boundary attributes, one root `<audio>` from `audio.mix`, word captions,
-the loop ending and the brand fonts. Unknown modules render a labelled
+the loop ending, the brand fonts and ambient motion. Unknown modules render a labelled
 placeholder and a compile warning. Keep the output in its own directory: a
 directory holding both `storyboard.json` and `index.html` is read as
 HyperFrames. Repair the storyboard and recompile rather than editing the
@@ -237,6 +237,38 @@ parallax `#lc-world-bg`, `.lc-parallax` wrappers on overlays and a directional
 SVG motion blur that is zero at rest. Root `<video>` media does not follow the
 camera, so keep media-window video out of world-camera stories. A story without
 either compiles exactly as before.
+
+Ambient motion (`scripts/ambient.mjs`) keeps settled frames moving between
+beats, so the piece does not read as a slideshow:
+
+- **Background field.** Each track-0 plate's layer starts with
+  `<div class="lc-ambient-field">`: a few large, soft, low-alpha blobs of the
+  brand `primary` and `accent` colours. They glide slowly across the canvas,
+  wrapping only while off canvas, bob gently and breathe in scale.
+- **Hold drift.** Each eligible scene's module output sits in
+  `<div id="lc-drift-<scene>" class="lc-drift">`. It pushes in linearly about
+  the module rect's centre (scale up to 2–4% plus a few px of vertical travel)
+  from the scene start to the end of its render window. The push is clamped to
+  the safe zone and kept clear of the caption band; a rect with no room gets a
+  small pull-back instead.
+
+Both layers are seek-safe GSAP on the master timeline: `tl.fromTo` with
+`immediateRender: false`, `force3D: false` (2D transforms keep text crisp),
+linear or `sine.inOut` eases and no `onUpdate`. Remotion evaluates the same
+functions per frame, so the renderers stay in parity.
+
+Control it with `story.ambient` (`off | subtle | standard | lively`, or
+`{level, background, drift}`) and a per-scene `ambient` override. The
+default level follows each scene's `energy` (0 → subtle, 1, 2 and `"build"` →
+standard, 3 → lively). The footage-led lane gets no field and drifts overlays
+only. Leave it on: with `"off"`, settled frames hold still and the cinematic
+motion gate fails. `launchclip layout-check` checks every drifting rect at its
+largest extent. Never hand-edit the generated field or drift; change the
+storyboard and recompile.
+
+In world mode the plates are transparent, so the one background field moves
+at 0.3× behind them inside `#lc-world-bg` instead of once inside every plate;
+the hold drift stays inside each plate and composes with the camera drift.
 
 A `footage-led` storyboard adds a `base` recording (`{src, trim | edl, volume,
 fit, focus}`; see `recorded-video.md`). The compiler mounts the base as muted

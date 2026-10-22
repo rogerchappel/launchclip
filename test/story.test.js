@@ -409,3 +409,26 @@ test("story validate fails a scene whose module params would render a placeholde
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("story.ambient and scenes[i].ambient validate the ambient-motion control", async () => {
+  const { STORY_AMBIENT_LEVELS } = await import("../kit/core/story.mjs");
+  const { AMBIENT_LEVELS, ambientErrors } = await import("../kit/core/ambient.mjs");
+  assert.deepEqual(STORY_AMBIENT_LEVELS, AMBIENT_LEVELS, "story.mjs keeps its own copy of the levels");
+  const valid = baseStory({ ambient: { level: "subtle", background: false } });
+  valid.scenes[1].ambient = "lively";
+  assert.deepEqual(validateStory(valid), { ok: true, errors: [], warnings: [] });
+  assert.deepEqual(validateStory(baseStory({ ambient: "off" })).errors, []);
+  const invalid = baseStory({ ambient: { level: "loud", drift: "yes", speed: 1 } });
+  invalid.scenes[0].ambient = "wild";
+  invalid.scenes[1].ambient = [];
+  const { errors } = validateStory(invalid);
+  assert.deepEqual(errors, [
+    "ambient.speed is not supported (allowed: level, background, drift)",
+    "ambient.level must be one of off, subtle, standard, lively",
+    "ambient.drift must be true or false",
+    "scenes[0].ambient must be one of off, subtle, standard, lively or an object {level?, background?, drift?}",
+    "scenes[1].ambient must be a level string or an object {level?, background?, drift?}"
+  ]);
+  // The same rules as ambientErrors().
+  assert.deepEqual(ambientErrors({ level: "loud", drift: "yes", speed: 1 }), errors.slice(0, 3));
+});
