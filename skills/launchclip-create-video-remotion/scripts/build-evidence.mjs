@@ -4,7 +4,7 @@
 // qa/temporal-evidence/manifest.json, plus paired contact sheets for the
 // fresh-context critic.
 // Usage: node build-evidence.mjs <project> [--renderer hyperframes|remotion] [--video renders/draft.mp4] [--entry <remotion-entry>] [--no-sheets]
-// The renderer defaults to remotion when the project has story.json and no
+// The renderer defaults to remotion when the project has storyboard.json and no
 // index.html, otherwise hyperframes.
 // HyperFrames stills: set HYPERFRAMES_BIN to a local hyperframes binary; otherwise npx is used.
 // Remotion stills: set REMOTION_BIN to a local remotion binary; otherwise npx is used.
@@ -41,7 +41,7 @@ function attr(html, name) {
 }
 
 export function detectRenderer(project) {
-  return hasExactFile(project, 'story.json') && !hasExactFile(project, 'index.html') ? 'remotion' : 'hyperframes';
+  return hasExactFile(project, 'storyboard.json') && !hasExactFile(project, 'index.html') ? 'remotion' : 'hyperframes';
 }
 
 export function evidenceSchedule(html) {
@@ -58,7 +58,7 @@ export async function loadStoryModule(source) {
   if (source && typeof source === 'object') return source;
   const candidates = source ? [path.resolve(source)] : [path.join(HERE, 'story.mjs'), path.resolve(HERE, '../../../kit/core/story.mjs')];
   const file = candidates.find((candidate) => existsSync(candidate));
-  if (!file) throw new Error(`story.json support needs story.mjs (looked in ${candidates.join(', ')})`);
+  if (!file) throw new Error(`storyboard.json support needs story.mjs (looked in ${candidates.join(', ')})`);
   return import(pathToFileURL(file).href);
 }
 
@@ -66,19 +66,19 @@ function readOptionalJson(file) {
   return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null;
 }
 
-// Resolves story.json against NARRATION.json and BEATS.json.
+// Resolves storyboard.json against NARRATION.json and BEATS.json.
 export async function resolveProjectStory(project, { storyModule } = {}) {
   const module = await loadStoryModule(storyModule);
-  const story = JSON.parse(readFileSync(path.join(project, 'story.json'), 'utf8'));
+  const story = JSON.parse(readFileSync(path.join(project, 'storyboard.json'), 'utf8'));
   const words = readOptionalJson(path.join(project, 'NARRATION.json'))?.words ?? [];
   const resolved = module.resolveStory(story, { words, beats: readOptionalJson(path.join(project, 'BEATS.json')) });
   return { module, story, resolved, format: module.storyFormat(resolved) };
 }
 
-// story.json wins over index.html, matching declaredBoundariesForProject() in src/cinematic_evidence.js.
+// storyboard.json wins over index.html, matching declaredBoundariesForProject() in src/cinematic_evidence.js.
 export async function projectEvidenceSchedule(projectPath, { storyModule } = {}) {
   const project = path.resolve(projectPath);
-  if (!hasExactFile(project, 'story.json')) return { schedule: evidenceSchedule(readFileSync(path.join(project, 'index.html'), 'utf8')), story: null };
+  if (!hasExactFile(project, 'storyboard.json')) return { schedule: evidenceSchedule(readFileSync(path.join(project, 'index.html'), 'utf8')), story: null };
   const story = await resolveProjectStory(project, { storyModule });
   const boundaries = story.module.deriveBoundaries(story.resolved);
   return { schedule: buildTemporalEvidenceSchedule(story.format.duration, boundaries), story };
@@ -143,7 +143,7 @@ export async function buildEvidence(projectPath, { video = 'renders/draft.mp4', 
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
   if (engine === 'remotion') {
-    if (!story) throw new Error('the remotion renderer needs story.json');
+    if (!story) throw new Error('the remotion renderer needs storyboard.json');
     remotionStills(project, schedule, out, story, entry);
   } else {
     hyperframesStills(project, schedule, out);

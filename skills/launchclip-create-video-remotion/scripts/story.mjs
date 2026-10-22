@@ -20,7 +20,7 @@ const WORD_ANCHOR = new RegExp(`^word:([^#\\s]+?)(?:#(\\d+))?${OFFSET}$`);
 const BEAT_ANCHOR = new RegExp(`^(beat|downbeat):(\\d+)${OFFSET}$`);
 const NUMERIC = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/;
 const EPS = 1e-6;
-const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta"]);
+const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -132,6 +132,8 @@ export function validateStory(story, { modules } = {}) {
     const major = typeof story.schema === "string" && /^launchclip\.story\.v\d+/.test(story.schema);
     err(major ? `schema ${story.schema} is not supported; this tool reads ${STORY_SCHEMA}` : `schema must be "${STORY_SCHEMA}"`);
   }
+  if (story.phase !== undefined && story.phase !== 2) err("phase must be 2 when set (the phase-2 cinematic contract)");
+  if (story.cinematic_contract !== undefined && story.cinematic_contract !== "phase-2") err('cinematic_contract must be "phase-2" when set');
   for (const key of Object.keys(story)) if (!TOP_LEVEL.has(key)) warn(`${key} is not a story.json v1 field and is ignored`);
 
   if (!STORY_LANES.includes(story.lane)) err(`lane must be one of ${STORY_LANES.join(", ")}`);

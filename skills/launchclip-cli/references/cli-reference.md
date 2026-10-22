@@ -17,7 +17,7 @@ the current workflow and the decisions an operating agent must not guess.
 - [Final render](#final-render)
 - [Cinematic check](#cinematic-check)
 - [Local-first OSS packet lane](#local-first-oss-packet-lane)
-- [Storyboard (story.json)](#storyboard-storyjson)
+- [Storyboard (storyboard.json)](#storyboard-storyboardjson)
 - [Failure handling](#failure-handling)
 
 ## Runtime and credentials
@@ -62,7 +62,7 @@ the repository pack's redistribution terms permit bundling it.
 ## Bundled agent skills
 
 npm and Homebrew installs include `launchclip-create-video` (HyperFrames),
-`launchclip-create-video-remotion` (Remotion, authored as `story.json`) and
+`launchclip-create-video-remotion` (Remotion, authored as `storyboard.json`) and
 `launchclip-cli`. Inspect the installed copies without assuming a package-manager
 layout:
 
@@ -348,14 +348,14 @@ Only use `production-repair` for scoped creative/structural findings.
 
 ## Layout check
 
-For a `story.json` project (HyperFrames or Remotion), check the declared
+For a `storyboard.json` project (HyperFrames or Remotion), check the declared
 geometry before rendering:
 
 ```bash
 launchclip layout-check <story-project> [--profile shorts|landscape] [--json]
 ```
 
-The command resolves `story.json` (with `NARRATION.json` and `BEATS.json` when
+The command resolves `storyboard.json` (with `NARRATION.json` and `BEATS.json` when
 present), builds each editorial scene through `editorial-ui-modules.mjs` to get
 its rect and motion windows, and uses `scene.params.rect` (plus optional
 `params.role`, `params.minTextPx`, `params.allowOcclusion`) for other modules.
@@ -387,7 +387,7 @@ Important model-directed paths:
     intake.json
     evidence.json
     concepts.json
-    story.json
+    storyboard.json
     plan.json
     SCRIPT.md
     STORYBOARD.md
@@ -458,14 +458,14 @@ launchclip cinematic-check <project> [--renderer hyperframes|remotion] \
 ```
 
 - `--renderer` picks the adapter that verifies the project. Without it,
-  LaunchClip uses `remotion` when the project has `story.json` and no
+  LaunchClip uses `remotion` when the project has `storyboard.json` and no
   `index.html`, and `hyperframes` otherwise.
 - `hyperframes` runs `hyperframes lint --json` and
   `hyperframes check --json --strict --snapshots --at-transitions`.
-- `remotion` resolves `story.json` into `.launchclip/story.resolved.json`,
+- `remotion` resolves `storyboard.json` into `.launchclip/story.resolved.json`,
   runs `remotion compositions` to prove the story bundles, then the geometric
   layout check when the kit provides one.
-- When `story.json` exists, the duration, size and declared transition
+- When `storyboard.json` exists, the duration, size and declared transition
   boundaries come from it; otherwise they come from the `index.html` root.
   A story opts into the phase-2 evidence contract with `"phase": 2` or
   `"cinematic_contract": "phase-2"`.
@@ -497,14 +497,14 @@ Local render options include `remotion`, `hyperframes`, and `local-ffmpeg`.
 Keep product-videogen and Review Feed operations in `--dry-run` unless the user
 explicitly authorizes a supported live integration.
 
-## Storyboard (story.json)
+## Storyboard (storyboard.json)
 
-`story.json` (`launchclip.story.v1`) is the renderer-agnostic storyboard. Check
+`storyboard.json` (`launchclip.story.v1`) is the renderer-agnostic storyboard. Check
 it and resolve its time anchors before compiling or rendering:
 
 ```bash
-launchclip story validate story.json [--narration NARRATION.json] [--beats BEATS.json] [--out report.json]
-launchclip story resolve story.json [--narration NARRATION.json] [--beats BEATS.json] [--out .launchclip/story.resolved.json]
+launchclip story validate storyboard.json [--narration NARRATION.json] [--beats BEATS.json] [--out report.json]
+launchclip story resolve storyboard.json [--narration NARRATION.json] [--beats BEATS.json] [--out .launchclip/story.resolved.json]
 ```
 
 `validate` reports every error with its path (for example `scenes[2].in.type`)
@@ -520,7 +520,7 @@ Anchors are seconds, `word:<text>[#n]` (case-insensitive, punctuation ignored;
 `word:thirty-five` also matches "thirty" "five"; `#n` is the 1-based
 occurrence), `beat:<n>` or `downbeat:<n>` (0-based, from `BEATS.json`), each
 with an optional offset such as `word:fast+0.1`. A golden example lives in
-`examples/story/cooling.story.json`.
+`examples/story/cooling.storyboard.json`.
 
 ## Failure handling
 
