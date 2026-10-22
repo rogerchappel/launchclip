@@ -252,6 +252,23 @@ overrides it and `kit/remotion/entry.tsx` otherwise; examples use the latter.
   background in between. The kit does not use `TransitionSeries`, which
   overlaps neighbours and shortens the series, so story times stay
   authoritative. Do not hand-build a `TransitionSeries` against story times.
+- Ambient motion from `kit/core/ambient.mjs`, evaluated at the absolute time
+  of every frame, so settled frames keep moving between beats. Each track-0
+  plate draws a background field under its content: a few large, soft,
+  low-alpha blobs of the brand `primary` and `accent` colours that glide
+  slowly across the canvas, wrapping only while off canvas. Each eligible
+  scene's content sits in a hold-drift wrapper: a linear push-in about the
+  module rect's centre (scale up to 2–4% plus a few px of vertical travel)
+  from the scene start to the end of its render window, clamped to the safe
+  zone and clear of the caption band, or a small pull-back when the rect has
+  no room. `story.ambient` (`off | subtle | standard | lively`, or
+  `{level, background, drift}`) and a per-scene `ambient` override control it.
+  The default level follows each scene's `energy` (0 → subtle, 1, 2 and
+  `"build"` → standard, 3 → lively). The footage-led lane gets no field and
+  drifts overlays only. Leave it on: with `ambient: "off"`, settled frames
+  hold still and the cinematic motion gate fails. The HyperFrames compiler
+  draws the same field and drift from the same functions, and
+  `launchclip layout-check` checks every drifting rect at its largest extent.
 - Exactly one `<Audio src={staticFile(story.audio.mix)} />` at the root, spanning
   the whole composition (the voice when there is no mix). No scene, module, or
   video plays its own audio.
