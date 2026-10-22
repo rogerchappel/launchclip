@@ -297,3 +297,13 @@ node scripts/parity.mjs <fixture.json> [--out qa/parity/<id>] [--times enter,mid
   `report.json` plus side-by-side PNGs.
 - `test/parity.test.js` runs every fixture in `test/fixtures/parity/*.json`
   when `LAUNCHCLIP_PARITY=1` is set, and skips otherwise because it is slow.
+- The HyperFrames side compiles the one-scene story with
+  `compileStoryToHyperFrames` (lane forced to `motion`, audio, captions and
+  ending dropped); the Remotion bundle uses the fixture directory as its public
+  dir, so `assets/…` media resolve in both renderers.
+- `runStoryParity(projectDir, {times})` compares full-frame stills of a whole
+  storyboard project through both renderer adapters.
+- `npm run parity:ci` (`scripts/parity-ci.mjs`) is the cross-OS smoke the CI
+  `parity` job runs on ubuntu: five fixtures that between them draw every
+  default registry font, at the settle and mid-hold times, plus two stills of
+  `examples/story/minimal`, with one shared Remotion bundle.

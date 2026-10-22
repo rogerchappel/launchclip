@@ -73,8 +73,11 @@ export async function sceneStory(story, sceneId) {
   }
   const scene = resolved.scenes?.find(item => item.id === sceneId);
   if (!scene) throw new Error(`scene ${sceneId} not found in the fixture story`);
-  const filtered = {...structuredClone(resolved), scenes: [structuredClone(scene)], overlays: []};
+  // One module on the background: no captions, audio or ending, so the lane's
+  // audio requirements (voiceover-motion needs audio.words) no longer apply.
+  const filtered = {...structuredClone(resolved), lane: 'motion', scenes: [structuredClone(scene)], overlays: []};
   delete filtered.ending;
+  delete filtered.audio;
   return {story: filtered, scene: filtered.scenes[0]};
 }
 
@@ -211,26 +214,42 @@ export async function hyperframesStills(projectDir, samples, outDir) {
 // ---------------------------------------------------------------------------
 // Remotion
 
-export async function remotionStills({entry, scene, story, samples, outDir, workDir}) {
-  const props = path.join(workDir, 'props.json');
-  await writeFile(props, JSON.stringify({scene, story}));
-  const bundle = path.join(workDir, 'bundle');
-  await must('remotion bundle', process.execPath, [REMOTION_CLI, 'bundle', entry, '--out-dir', bundle, '--log', 'error']);
-  // ModuleReview may span the scene (frame 0 = scene start) or the story.
-  const listing = await must('remotion compositions', process.execPath, [REMOTION_CLI, 'compositions', bundle, `--props=${props}`]);
-  // Row: "ModuleReview    30      1080x1920      180 (6.00 sec)"
-  const row = /^\s*ModuleReview\s+(\d+(?:\.\d+)?)\s+\d+x\d+\s+(\d+)/m.exec(listing.stdout + listing.stderr);
-  const fps = row ? Number(row[1]) : story.format.fps;
-  const durationInFrames = row ? Number(row[2]) : null;
-  const base = durationInFrames !== null && durationInFrames === Math.round(sceneDuration(scene) * fps) ? scene.start : 0;
-  const outputs = [];
-  for (const sample of samples) {
-    const frame = Math.round((sample.time - base) * fps);
-    const target = path.join(outDir, `${sample.name}.remotion.png`);
-    await must(`remotion still ${sample.name}`, process.execPath, [REMOTION_CLI, 'still', bundle, 'ModuleReview', target, `--props=${props}`, `--frame=${frame}`, '--log', 'error']);
-    outputs.push({file: target, frame});
+/**
+ * Bundle a Remotion entry once. publicDir is the directory staticFile()
+ * resolves against (the fixture directory, so assets/… resolve as in
+ * HyperFrames). Pass the result to runParity({bundle}) to reuse it.
+ */
+export async function bundleRemotion(entry, outDir, {publicDir} = {}) {
+  const args = [REMOTION_CLI, 'bundle', entry, '--out-dir', outDir, '--log', 'error'];
+  if (publicDir) args.push('--public-dir', publicDir);
+  await must('remotion bundle', process.execPath, args);
+  return outDir;
+}
+
+export async function remotionStills({entry, scene, story, samples, outDir, workDir, bundle: prebuilt, publicDir}) {
+  await writeFile(path.join(workDir, 'props.json'), JSON.stringify({scene, story}));
+  const bundle = prebuilt ?? await bundleRemotion(entry, path.join(workDir, 'bundle'), {publicDir});
+  // One browser for the composition lookup and every still (the same
+  // renderStill() that `remotion still` runs, without a launch per frame).
+  const {openBrowser, selectComposition, renderStill} = await import('@remotion/renderer');
+  const inputProps = {scene, story};
+  const browser = await openBrowser('chrome');
+  try {
+    const composition = await selectComposition({serveUrl: bundle, id: 'ModuleReview', inputProps, puppeteerInstance: browser, logLevel: 'error'});
+    // ModuleReview may span the scene (frame 0 = scene start) or the story.
+    const fps = composition.fps;
+    const base = composition.durationInFrames === Math.round(sceneDuration(scene) * fps) ? scene.start : 0;
+    const outputs = [];
+    for (const sample of samples) {
+      const frame = Math.min(Math.round((sample.time - base) * fps), composition.durationInFrames - 1);
+      const target = path.join(outDir, `${sample.name}.remotion.png`);
+      await renderStill({serveUrl: bundle, composition, inputProps, frame, output: target, imageFormat: 'png', puppeteerInstance: browser, logLevel: 'error'});
+      outputs.push({file: target, frame});
+    }
+    return {outputs, frameBase: base, fps};
+  } finally {
+    await browser.close({silent: true}).catch(() => {});
   }
-  return {outputs, frameBase: base, fps};
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +274,7 @@ async function sideBySide(a, b, sideFile, diffFile) {
 // ---------------------------------------------------------------------------
 // Orchestration
 
-export async function runParity(fixturePath, {out, times, entry, compiler = 'auto', keep = false, compileHyperFrames} = {}) {
+export async function runParity(fixturePath, {out, times, entry, compiler = 'auto', keep = false, compileHyperFrames, bundle} = {}) {
   const fixture = await loadFixture(fixturePath);
   const {story, scene} = await sceneStory(fixture.story, fixture.sceneId);
   const model = await resolveSceneModel(scene, story);
@@ -273,7 +292,7 @@ export async function runParity(fixturePath, {out, times, entry, compiler = 'aut
     const context = {fixturePath: path.resolve(fixturePath), story, scene, model, projectDir: path.join(workDir, 'hyperframes'), warnings};
     const compiled = compileHyperFrames ? await compileHyperFrames(context) : await defaultCompileHyperFrames(context, {compiler});
     const hf = await hyperframesStills(compiled.projectDir ?? context.projectDir, samples, outDir);
-    const rm = await remotionStills({entry: remotionEntry, scene, story, samples, outDir, workDir});
+    const rm = await remotionStills({entry: remotionEntry, scene, story, samples, outDir, workDir, bundle, publicDir: path.dirname(path.resolve(fixturePath))});
     const results = [];
     for (const [i, sample] of samples.entries()) {
       const metrics = await compareStills(hf[i], rm.outputs[i].file);
@@ -288,6 +307,53 @@ export async function runParity(fixturePath, {out, times, entry, compiler = 'aut
       pass: results.every(item => item.pass), warnings, samples: results};
     await writeFile(path.join(outDir, 'report.json'), `${JSON.stringify(report, (key, value) => (value === Infinity ? 'inf' : value), 2)}\n`);
     if (keep) report.workDir = workDir;
+    return {...report, outDir};
+  } finally {
+    if (!keep) await rm(workDir, {recursive: true, force: true});
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Whole-story parity: a storyboard project through both renderer adapters
+
+/**
+ * Compile a storyboard project (storyboard.json + assets/) with both
+ * renderers and compare full-frame stills at the given story times: captions,
+ * transitions, plates and every module together.
+ *   → {project, threshold, minSsim, pass, samples:[{name, time, ssim, psnr, pass, …}], outDir}
+ */
+export async function runStoryParity(projectDir, {times = [1, 3.2], out, threshold = DEFAULT_THRESHOLD.ssim, keep = false} = {}) {
+  const {getRenderer} = await import(pathToFileURL(path.join(ROOT, 'src', 'renderers', 'index.js')).href);
+  const {compileStoryToHyperFrames} = await import(pathToFileURL(STORY_COMPILER).href);
+  const {readProjectStory} = await import(pathToFileURL(path.join(ROOT, 'src', 'story_loader.js')).href);
+  const source = path.resolve(projectDir);
+  const id = path.basename(source);
+  const outDir = path.resolve(out ?? path.join(ROOT, 'qa', 'parity', `story-${id}`));
+  await mkdir(outDir, {recursive: true});
+  const workDir = await mkdtemp(path.join(os.tmpdir(), `launchclip-parity-story-${id}-`));
+  try {
+    // Work on a copy: the Remotion adapter writes .launchclip/ into the project.
+    const project = path.join(workDir, 'project');
+    await must('copy project', 'cp', ['-R', source, project]);
+    const loaded = await readProjectStory(project);
+    const hfDir = path.join(workDir, 'hyperframes');
+    const compiled = await compileStoryToHyperFrames(loaded.resolved, {projectDir: hfDir, sourceDir: project});
+    const hyperframes = getRenderer('hyperframes'), remotion = getRenderer('remotion');
+    const samples = [];
+    for (const time of times) {
+      const name = `t${time}`;
+      const hf = path.join(outDir, `${name}.hyperframes.png`), rmFile = path.join(outDir, `${name}.remotion.png`);
+      await hyperframes.still(hfDir, time, hf);
+      await remotion.still(project, time, rmFile);
+      const metrics = await compareStills(hf, rmFile);
+      const sideFile = path.join(outDir, `${name}.side-by-side.png`), diffFile = path.join(outDir, `${name}.diff.png`);
+      await sideBySide(hf, rmFile, sideFile, diffFile);
+      samples.push({name, time, ssim: metrics.ssim, psnr: metrics.psnr, pass: metrics.ssim >= threshold,
+        hyperframes: path.basename(hf), remotion: path.basename(rmFile), sideBySide: path.basename(sideFile), diff: path.basename(diffFile)});
+    }
+    const report = {project: path.relative(ROOT, source), threshold: {ssim: threshold}, warnings: compiled.warnings,
+      minSsim: Math.min(...samples.map(item => item.ssim)), pass: samples.every(item => item.pass), samples};
+    await writeFile(path.join(outDir, 'report.json'), `${JSON.stringify(report, (key, value) => (value === Infinity ? 'inf' : value), 2)}\n`);
     return {...report, outDir};
   } finally {
     if (!keep) await rm(workDir, {recursive: true, force: true});
