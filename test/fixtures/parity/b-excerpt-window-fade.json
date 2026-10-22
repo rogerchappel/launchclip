@@ -1,0 +1,71 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 10
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#ff6a00",
+        "paper": "#f4efe6",
+        "ink": "#171612"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "scenes": [
+      {
+        "id": "note",
+        "module": "excerpt-window",
+        "start": 1,
+        "end": 9,
+        "params": {
+          "title": "Design notes",
+          "theme": {
+            "surface": "#FFF1CE",
+            "foreground": "#171612",
+            "muted": "#5D5548",
+            "border": "#9B8769",
+            "accentText": "#A43C0A"
+          },
+          "excerpt": {
+            "mode": "illustration",
+            "lines": [
+              {
+                "segments": [
+                  {
+                    "text": "Keep the subject"
+                  }
+                ]
+              },
+              {
+                "segments": [
+                  {
+                    "text": "in "
+                  },
+                  {
+                    "text": "clear view",
+                    "highlight": true
+                  }
+                ]
+              }
+            ],
+            "focus": {
+              "line": 1,
+              "scale": 1.2,
+              "at": 2
+            }
+          }
+        }
+      }
+    ]
+  },
+  "sceneId": "note"
+}

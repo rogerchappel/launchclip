@@ -1,0 +1,61 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 10
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#ff6a00",
+        "paper": "#f4efe6",
+        "ink": "#171612"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "scenes": [
+      {
+        "id": "date",
+        "module": "date-card",
+        "start": 1,
+        "end": 9,
+        "params": {
+          "title": "Public launch",
+          "rect": {
+            "x": 700,
+            "y": 240,
+            "width": 520,
+            "height": 520
+          },
+          "date": {
+            "month": 11,
+            "day": 14,
+            "year": 2026,
+            "caption": "Open source release",
+            "at": 0.8
+          },
+          "theme": {
+            "surface": "#FFF1CE",
+            "foreground": "#171612",
+            "muted": "#5D5548",
+            "border": "#9B8769",
+            "accentText": "#A43C0A"
+          },
+          "motion": {
+            "enter": "down",
+            "exit": "none",
+            "scale": 0.95
+          }
+        }
+      }
+    ]
+  },
+  "sceneId": "date"
+}
