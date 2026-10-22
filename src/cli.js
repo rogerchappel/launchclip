@@ -8,7 +8,8 @@ import { runProductionStage } from "./production_cli.js";
 import { isProductionReviewWorkspace } from "./production_review.js";
 import { createCostTracker } from "./cost_tracker.js";
 import { diagnoseInstallation, VERSION } from "./doctor.js";
-import { createStylePack, listStylePacks, projectStyleRoot, resolveStylePack } from "./style_store.js";
+import { createStylePack, listBuiltinStyles, listStylePacks, projectStyleRoot, resolveStylePack, resolveStyleV2, upgradeStylePack } from "./style_store.js";
+import { checkStyleCommand, createStyleFromReferences } from "./style_commands.js";
 import { checkCinematicProject } from "./cinematic_check.js";
 import { bundledSkillPath, installBundledSkills, listBundledSkills } from "./skill_install.js";
 import { prepareRecording, recordingOptions, writeBrollPlan } from "./recording_workflow.js";
@@ -176,15 +177,23 @@ function parseStoryInvocation(action, rest) {
 
 async function runStyleCommand(action, name, flags) {
   const root = flags.root ?? flags["style-root"];
+  if (action === "create" && (flags["from-reference"] || flags["from-images"])) {
+    return createStyleFromReferences(required(name, "style name"), flags, { root });
+  }
+  if (action === "upgrade") return upgradeStylePack(required(name, "style name"), { root });
+  if (action === "check") return checkStyleCommand(required(name, "project path"), flags, { root });
   if (action === "create" || action === "save") {
     const result = await createStylePack(required(name, "style name"), { from: flags.from, root, force: Boolean(flags.force) });
     return { ...result, action };
   }
   if (action === "list") {
-    return { stage: "style", action, status: "ready", root: projectStyleRoot({ root }), styles: await listStylePacks({ root }) };
+    return { stage: "style", action, status: "ready", root: projectStyleRoot({ root }), styles: await listStylePacks({ root }), builtin: await listBuiltinStyles() };
   }
-  const pack = await resolveStylePack(required(name, "style name or path"), { root });
-  if (!pack) throw new Error(`Style pack does not exist: ${name}`);
+  const pack = await resolveStylePack(required(name, "style name or path"), { root }).catch(() => null);
+  if (!pack || pack.pack) {
+    const v2 = await resolveStyleV2(name, { root });
+    return { stage: "style", action: "show", status: "ready", name: v2.name, source: v2.source, path: v2.file, pack: v2.pack, upgraded_in_memory: v2.upgraded, warnings: v2.warnings };
+  }
   return {
     stage: "style",
     action: "show",
@@ -199,11 +208,20 @@ async function runStyleCommand(action, name, flags) {
 }
 
 function parseStyleInvocation(action, rest) {
-  if (!action) throw new Error("Missing style action; use create, save, list, or show");
-  if (!new Set(["create", "save", "list", "show"]).has(action)) throw new Error(`Unknown style action: ${action}`);
+  if (!action) throw new Error("Missing style action; use create, save, list, show, upgrade or check");
+  if (!new Set(["create", "save", "list", "show", "upgrade", "check"]).has(action)) throw new Error(`Unknown style action: ${action}`);
   const takesName = action !== "list";
   const hasName = takesName && rest[0] && !rest[0].startsWith("--");
-  return { action, name: hasName ? rest[0] : null, flagArgs: hasName ? rest.slice(1) : rest };
+  const flagArgs = hasName ? rest.slice(1) : rest;
+  // --from-reference a.mp4 b.mp4 / --from-images x.png y.png take several files.
+  const expanded = [];
+  let multi = null;
+  for (const token of flagArgs) {
+    if (token.startsWith("--")) { multi = ["--from-reference", "--from-images", "--font-hint"].includes(token) ? token : null; expanded.push(token); continue; }
+    if (multi && expanded.at(-1) !== multi) expanded.push(multi);
+    expanded.push(token);
+  }
+  return { action, name: hasName ? rest[0] : null, flagArgs: expanded };
 }
 
 export function parseFlags(args) {
@@ -248,8 +266,11 @@ Usage:
   launchclip skills install --agent codex|claude [--skill launchclip-create-video|launchclip-create-video-remotion|launchclip-cli|all] [--force]
   launchclip style create <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]
   launchclip style save <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]
+  launchclip style create <name> --from-reference a.mp4 [b.mp4 ...] [--from-images x.png ...] [--font-hint "Display, Body"] [--root .launchclip/styles] [--force]
   launchclip style list [--root .launchclip/styles]
   launchclip style show <name|path> [--root .launchclip/styles]
+  launchclip style upgrade <name> [--root .launchclip/styles]
+  launchclip style check <project> --against <name|path> [--video renders/final.mp4] [--out qa/style-check.json]
   launchclip intake <source> [--profile standard|cinematic] [--kind repository|product|topic|voiceover] [--resource path] [--assets path] [--style auto|family|name|path] [--style-root .launchclip/styles] [--style-file frame.md] [--style-reference path|url] [--reference url] [--voiceover audio|video] [--transcript text] [--presenter video] [--heygen-avatar video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
   launchclip edit-recording <media> --out <directory> [--recording-transcript word-timed.json] [--silence-duration 0.8] [--silence-padding 0.15] [--retake-window 90] [--retake-decisions semantic.json|--retake-model local-model] [--min-repeat-words 6] [--recording-model base.en] [--keep-fillers] [--no-audio-silence] [--audio-silence-duration 0.4] [--audio-silence-padding 0.08] [--audio-threshold-db -35] [--qa-model local-model|--qa-decisions reviews.json] [--qa-attempts 3] [--qa-recording-model base.en] [--no-trim-silence] [--aspect 16:9|9:16|1:1]
   launchclip broll-plan <word-timed.json> --out <directory> [--aspect 16:9|9:16|1:1] [--duration seconds]
@@ -275,7 +296,7 @@ Usage:
   launchclip story validate <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out report.json]
   launchclip story resolve <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out story.resolved.json]
   launchclip story compile <project> --renderer hyperframes|remotion [--out dir]
-  launchclip story plan --brief brief.md [--narration NARRATION.json] [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] [--base assets/recording.mp4] [--voice assets/audio/narration.wav] [--format 1080x1920] [--fps 30] [--duration seconds] [--brand brand.json] [--max-repairs 2]
+  launchclip story plan --brief brief.md [--narration NARRATION.json] [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] [--base assets/recording.mp4] [--voice assets/audio/narration.wav] [--format 1080x1920] [--fps 30] [--duration seconds] [--brand brand.json] [--style name|path] [--max-repairs 2]
   launchclip cinematic-check <project> [--renderer hyperframes|remotion] [--video renders/draft.mp4] [--audio-manifest AUDIO-MANIFEST.json] [--expect-audio] [--critique qa/critic.json]
   launchclip layout-check <project> [--profile shorts|landscape] [--json]
   launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--voice kokoro|elevenlabs|supplied|test] [--out renders/final.mp4] [--force] [--json]

@@ -1,0 +1,81 @@
+// launchclip style create --from-reference / style check: thin CLI wrappers
+// around src/style_reference.js and src/style_store.js.
+import { existsSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { analyzeReference, compareToStyle, draftStyleFromReferences } from "./style_reference.js";
+import { resolveStyleV2, writeStyleV2 } from "./style_store.js";
+
+const list = (value) => (value === undefined || value === true ? [] : Array.isArray(value) ? value : [value]).map(String);
+
+/** Draft a v2 pack from reference videos and images; writes style.json and reference-report.md. */
+export async function createStyleFromReferences(name, flags = {}, { root, cwd = process.cwd() } = {}, adapters = {}) {
+  const videos = list(flags["from-reference"]).map((file) => path.resolve(cwd, file));
+  const images = list(flags["from-images"]).map((file) => path.resolve(cwd, file));
+  if (!videos.length && !images.length) throw new Error("style create needs --from-reference <video ...> or --from-images <image ...>");
+  for (const file of [...videos, ...images]) if (!existsSync(file)) throw new Error(`Reference not found: ${file}`);
+  const references = [];
+  for (const file of videos) references.push(await analyzeReference(file, {}, adapters));
+  for (const file of images) references.push(await analyzeReference(file, { image: true }, adapters));
+  const fontHints = list(flags["font-hint"]).flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
+  const { pack, report, inferred } = draftStyleFromReferences(name, references, { fontHints });
+  const written = await writeStyleV2(pack, { root, cwd, force: Boolean(flags.force), files: { "reference-report.md": report } });
+  return {
+    stage: "style",
+    action: "create",
+    status: "drafted",
+    name,
+    path: written.path,
+    files: written.files,
+    references: references.map((entry) => entry.name),
+    inferred: {
+      colors: pack.brand.colors,
+      grammar: inferred.grammar.grammar,
+      ambient: inferred.ambient.level,
+      captions: pack.captions,
+      sfx_density: pack.sound.sfx_density,
+      fonts: pack.brand.fonts
+    },
+    report: path.join(written.path, "reference-report.md"),
+    warnings: written.warnings
+  };
+}
+
+/** Find the render of a project to check: --video, else renders/final.mp4, renders/draft.mp4. */
+export function projectRender(project, video) {
+  if (video) return path.resolve(project, String(video));
+  for (const candidate of ["renders/final.mp4", "renders/draft.mp4", "renders/hyperframes.mp4", "renders/remotion.mp4"]) {
+    const file = path.join(project, candidate);
+    if (existsSync(file)) return file;
+  }
+  throw new Error(`No render found in ${project}; pass --video <file> (looked for renders/final.mp4 and renders/draft.mp4)`);
+}
+
+/** launchclip style check <project> --against <name>: measured stats vs the pack's reference stats. */
+export async function checkStyleCommand(projectPath, flags = {}, { root } = {}, adapters = {}) {
+  const against = flags.against;
+  if (!against || against === true) throw new Error("style check needs --against <style name|path>");
+  const project = path.resolve(projectPath);
+  const style = await resolveStyleV2(String(against), { projectDir: project, root });
+  const video = projectRender(project, flags.video);
+  const measured = await analyzeReference(video, {}, adapters);
+  const comparison = compareToStyle(measured, style.pack);
+  const result = {
+    stage: "style",
+    action: "check",
+    status: comparison.status,
+    style: style.name,
+    style_source: style.source,
+    video,
+    reference_stats: Boolean(style.pack.reference_stats),
+    metrics: comparison.metrics,
+    measured: { palette: measured.palette.slice(0, 6), pacing: measured.pacing, energy: measured.energy, sound: measured.sound }
+  };
+  if (flags.out && flags.out !== true) {
+    const out = path.resolve(String(flags.out));
+    await mkdir(path.dirname(out), { recursive: true });
+    await writeFile(out, `${JSON.stringify(result, null, 2)}\n`);
+    result.out = out;
+  }
+  return result;
+}
