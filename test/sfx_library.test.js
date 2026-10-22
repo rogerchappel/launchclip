@@ -136,6 +136,11 @@ test("reroll replaces only that family; other families stay locked", async () =>
     assert.equal(after.families.tick.roll, 1);
     assert.equal(await readFile(path.join(dir, "tick/tick-1.wav"), "utf8"), "processed tick.wav 3");
     await assert.rejects(seedLibrary({ dir, provider: "synth", prompts, synthKit, processFile, env: {}, reroll: "kazoo" }), /Unknown SFX family "kazoo"/);
+    // A reroll whose clips are all rejected fails and keeps the current files.
+    const reject = async () => ({ ok: false, reason: "silent" });
+    await assert.rejects(seedLibrary({ dir, provider: "synth", prompts, synthKit, processFile: reject, env: {}, reroll: "tick" }), /no usable clip/);
+    assert.equal(await readFile(path.join(dir, "tick/tick-1.wav"), "utf8"), "processed tick.wav 3");
+    assert.equal(JSON.parse(await readFile(path.join(dir, "library.json"), "utf8")).families.tick.roll, 1);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

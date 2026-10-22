@@ -295,6 +295,8 @@ export function processSamples(input, sampleRate, family, { harvest = 0 } = {}) 
   const { onsets, strong, segments } = hitSegments(mono, sampleRate, rules);
   stats.onsets = onsets.length;
   stats.hits = strong.length;
+  // A soft-attack sound in a multi-event family starts where it becomes audible.
+  if (!segments.length && !rules.single) return shapeOne({ start: 0, end: mono.length, onsetSample: swellStart(mono, rawPeak) });
   if (!segments.length) return { ok: false, reason: "no onset found", stats };
   if (!rules.single || strong.length === 1) {
     const first = rules.single ? segments[0] : { start: 0, end: mono.length, onset: onsets[0] };

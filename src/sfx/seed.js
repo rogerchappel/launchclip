@@ -16,7 +16,7 @@
 // handled by the CLI separately.)
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { decodeAudio, processFile, writeWavFile, SAMPLE_RATE } from "./process.js";
@@ -84,10 +84,6 @@ function extensionFor(outputFormat) {
   return "bin";
 }
 
-async function clearFamilyFiles(dir, family) {
-  await rm(path.join(dir, family), { recursive: true, force: true });
-}
-
 /**
  * Seed (or reroll) a library. options: {dir, provider: "elevenlabs"|"synth",
  * variants, only, reroll, force, env, fetch, log, now, prompts,
@@ -130,7 +126,12 @@ export async function seedLibrary(options = {}) {
     const spec = prompts.families[family];
     const previous = manifest.families[family];
     const roll = reroll.includes(family) ? (previous?.roll ?? 0) + 1 : (previous?.roll ?? 0);
+    // New files are processed into a staging folder and swapped in only when
+    // the family succeeds, so a failed reroll never loses the current sound.
     const familyDir = path.join(dir, family);
+    const stagingDir = path.join(dir, ".staging", family);
+    await rm(stagingDir, { recursive: true, force: true });
+    const finalPath = (file) => path.join(family, path.basename(file));
     const kept = [];
     const rejected = [];
     let source = requested === "elevenlabs" ? "elevenlabs" : "procedural";
@@ -158,23 +159,22 @@ export async function seedLibrary(options = {}) {
         }
         staged.push({ raw, hash, take });
       }
-      if (staged.length) await clearFamilyFiles(dir, family);
       for (const { raw, hash, take } of staged) {
         if (kept.length >= keep) break;
-        const output = path.join(familyDir, `${family}-${kept.length + 1}.wav`);
+        const output = path.join(stagingDir, `${family}-${kept.length + 1}.wav`);
         const processed = await process_(raw, output, family, { harvest: spec.harvest ? keep - kept.length : 0 });
         if (!processed.ok) { rejected.push({ take, hash, reason: processed.reason }); continue; }
         const hits = processed.harvested?.length ? processed.harvested : [{ file: processed.file, measurements: processed.measurements, stats: processed.stats }];
         for (const [index, hit] of hits.entries()) {
           if (kept.length >= keep) break;
           let file = hit.file;
-          const target = path.join(familyDir, `${family}-${kept.length + 1}.wav`);
+          const target = path.join(stagingDir, `${family}-${kept.length + 1}.wav`);
           if (path.resolve(file) !== path.resolve(target)) {
             await writeFile(target, await readFile(file));
             await rm(file, { force: true });
             file = target;
           }
-          kept.push({ file: path.relative(dir, file), source: "elevenlabs", hash, take, hit: index + 1, prompt: spec.prompt, raw: path.relative(dir, raw), measurements: hit.measurements, stats: hit.stats });
+          kept.push({ file: finalPath(file), source: "elevenlabs", hash, take, hit: index + 1, prompt: spec.prompt, raw: path.relative(dir, raw), measurements: hit.measurements, stats: hit.stats });
         }
       }
       if (!kept.length) {
@@ -186,16 +186,19 @@ export async function seedLibrary(options = {}) {
       const kit = await proceduralKit();
       const names = kit.families[family] ?? [`${family}.wav`];
       const limit = variantsOverride ?? names.length;
-      await clearFamilyFiles(dir, family);
+      await rm(stagingDir, { recursive: true, force: true });
       for (const name of names.slice(0, limit)) {
         const input = path.join(kit.dir, name);
-        const output = path.join(familyDir, `${family}-${kept.length + 1}.wav`);
+        const output = path.join(stagingDir, `${family}-${kept.length + 1}.wav`);
         const processed = await process_(input, output, family, {});
         if (!processed.ok) { rejected.push({ file: name, reason: processed.reason }); continue; }
-        kept.push({ file: path.relative(dir, output), source: "procedural", hash: hashOf(await readFile(input)), kit_file: name, prompt: null, measurements: processed.measurements, stats: processed.stats });
+        kept.push({ file: finalPath(output), source: "procedural", hash: hashOf(await readFile(input)), kit_file: name, prompt: null, measurements: processed.measurements, stats: processed.stats });
       }
       if (!kept.length) throw new Error(`${family}: the procedural kit produced no usable clip (${rejected.map((entry) => entry.reason).join("; ")})`);
     }
+    await rm(familyDir, { recursive: true, force: true });
+    await rename(stagingDir, familyDir);
+    await rm(path.join(dir, ".staging"), { recursive: true, force: true }).catch(() => {});
     manifest.families[family] = {
       source,
       prompt: source === "elevenlabs" ? spec.prompt : null,
