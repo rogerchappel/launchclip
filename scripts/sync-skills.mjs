@@ -38,6 +38,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wri
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { storyboardModulesReference } from '../kit/core/planning-prompt.mjs';
+import { usageMarkdown } from '../src/cli_usage.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'skills-src');
@@ -209,7 +210,22 @@ export function planOutputs({ root = ROOT } = {}) {
       }
     }
   }
+  // The CLI reference's "Command usage" section is generated from the usage
+  // table behind every `launchclip <command> --help` (src/cli_usage.js).
+  const cliReference = 'skills/launchclip-cli/references/cli-reference.md';
+  if (existsSync(path.join(root, cliReference))) files.set(cliReference, withUsageSection(readFileSync(path.join(root, cliReference), 'utf8')));
   return { files, managedDirs };
+}
+
+export const USAGE_START = '<!-- usage:start -->';
+export const USAGE_END = '<!-- usage:end -->';
+
+/** The CLI reference with its generated usage block replaced (or appended as "## Command usage"). */
+export function withUsageSection(text) {
+  const block = `${USAGE_START}\n${usageMarkdown()}${USAGE_END}`;
+  const start = text.indexOf(USAGE_START), end = text.indexOf(USAGE_END);
+  if (start >= 0 && end > start) return `${text.slice(0, start)}${block}${text.slice(end + USAGE_END.length)}`;
+  return `${text.trimEnd()}\n\n## Command usage\n\n${block}\n`;
 }
 
 // → { changed: [{path, action: "write"|"delete"}] }

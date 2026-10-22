@@ -25,6 +25,7 @@ the current workflow and the decisions an operating agent must not guess.
 
 - [Voice providers](#voice-providers)
 - [Failure handling](#failure-handling)
+- [Command usage](#command-usage) (generated from the CLI usage table)
 
 ## Runtime and credentials
 
@@ -1058,3 +1059,389 @@ speech. Filler-word and noise removal are not part of this step yet.
 - Resume from the failed stage with the same options that affect its inputs.
 - Do not use fallback or quality-gate bypass flags merely to obtain a green exit
   code.
+
+## Command usage
+
+<!-- usage:start -->
+<!-- Generated from src/cli_usage.js by npm run skills:sync; edit the table there. -->
+
+Every command answers `--help` or `-h` with its own usage (`launchclip finish --help`, `launchclip story validate --help`).
+
+- `doctor`: Check the host: Node, FFmpeg, browsers, renderers and provider keys (presence only).
+
+  ```text
+  launchclip doctor
+  ```
+
+- `skills list`: List the bundled agent skills.
+
+  ```text
+  launchclip skills list
+  ```
+
+- `skills path`: Print the path of a bundled skill.
+
+  ```text
+  launchclip skills path [launchclip-create-video|launchclip-create-video-remotion|launchclip-cli]
+  ```
+
+- `skills install`: Install the bundled skills for Codex or Claude.
+
+  ```text
+  launchclip skills install --agent codex|claude [--skill launchclip-create-video|launchclip-create-video-remotion|launchclip-cli|all] [--force]
+  ```
+
+- `style create`: Create a style pack from a video, a style directory or reference media.
+
+  ```text
+  launchclip style create <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]
+  launchclip style create <name> --from-reference a.mp4 [b.mp4 ...] [--from-images x.png ...] [--font-hint "Display, Body"] [--root .launchclip/styles] [--force]
+  ```
+
+- `style save`: Save a style pack from a video or style directory.
+
+  ```text
+  launchclip style save <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]
+  ```
+
+- `style list`: List project and built-in style packs.
+
+  ```text
+  launchclip style list [--root .launchclip/styles]
+  ```
+
+- `style show`: Show a style pack (upgraded in memory when it is v1).
+
+  ```text
+  launchclip style show <name|path> [--root .launchclip/styles]
+  ```
+
+- `style upgrade`: Upgrade a v1 style pack to v2 on disk.
+
+  ```text
+  launchclip style upgrade <name> [--root .launchclip/styles]
+  ```
+
+- `style check`: Check a rendered project against a style pack.
+
+  ```text
+  launchclip style check <project> --against <name|path> [--video renders/final.mp4] [--out qa/style-check.json]
+  ```
+
+- `intake`: Write a production workspace from a source (repository, product, topic or voiceover).
+
+  ```text
+  launchclip intake <source> [--profile standard|cinematic] [--kind repository|product|topic|voiceover] [--resource path] [--assets path] [--style auto|family|name|path] [--style-root .launchclip/styles] [--style-file frame.md] [--style-reference path|url] [--reference url] [--voiceover audio|video] [--transcript text] [--presenter video] [--heygen-avatar video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]
+  ```
+
+- `edit-recording`: Edit a raw recording: trim silence, drop retakes and fillers, QA the joins.
+
+  ```text
+  launchclip edit-recording <media> --out <directory> [--recording-transcript word-timed.json] [--silence-duration 0.8] [--silence-padding 0.15] [--retake-window 90] [--retake-decisions semantic.json|--retake-model local-model] [--min-repeat-words 6] [--recording-model base.en] [--keep-fillers] [--no-audio-silence] [--audio-silence-duration 0.4] [--audio-silence-padding 0.08] [--audio-threshold-db -35] [--qa-model local-model|--qa-decisions reviews.json] [--qa-attempts 3] [--qa-recording-model base.en] [--no-trim-silence] [--aspect 16:9|9:16|1:1]
+  ```
+
+- `broll-plan`: Plan b-roll inserts from a word-timed transcript.
+
+  ```text
+  launchclip broll-plan <word-timed.json> --out <directory> [--aspect 16:9|9:16|1:1] [--duration seconds]
+  ```
+
+- `produce`: Run the model-directed production lane end to end.
+
+  ```text
+  launchclip produce <source> [--profile standard|cinematic] [intake flags] [--heygen-avatar generated.mp4] [--review] [--model-policy cost-aware|local-first|quality|free] [--free-model-candidates 5] [--free-model-state path] [--free-vision-model-candidates 3] [--free-vision-model-state path] [--refresh-free-models] [--free-scene-concurrency 3] [--local-model qwen2.5-coder:latest] [--frame-route provider:model@reasoning] [--rendered-candidates 2] [--rendered-candidate-shots 2] [--candidate-judge-route provider:model@reasoning] [--candidate-judge-reasoning high] [--candidate-judge-max-output-tokens 5000] [--critic-route provider:model@reasoning] [--repair-route provider:model@reasoning] [--brand-assets-dir path] [--edit-recording] [--recording-transcript word-timed.json] [--no-trim-silence] [--planning-mode auto|single|hierarchical] [--voice-id id] [--sfx-dir path] [--concurrency 4] [--max-frame-cost-usd 5] [--no-audio] [--fast-eval]
+  ```
+
+- `evidence`: Collect evidence for a production workspace.
+
+  ```text
+  launchclip evidence <workspace>
+  ```
+
+- `source-preprocess`: Preprocess the workspace's source media.
+
+  ```text
+  launchclip source-preprocess <workspace> [--edit-recording] [--recording-transcript word-timed.json] [--no-trim-silence] [--silence-duration seconds] [--silence-padding seconds]
+  ```
+
+- `source-media`: Sample and describe the workspace's source media.
+
+  ```text
+  launchclip source-media <workspace> [--media-samples 12] [--media-reasoning high] [--transcribe-all]
+  ```
+
+- `resolve-entities`: Resolve brand entities and logos for the workspace.
+
+  ```text
+  launchclip resolve-entities <workspace> [--brand-assets-dir ~/.launchclip/brand-assets]
+  ```
+
+- `concept-tournament`: Generate and judge concepts for the workspace.
+
+  ```text
+  launchclip concept-tournament <workspace> [--concept-route provider:model@reasoning] [--concept-judge-route provider:model@reasoning]
+  ```
+
+- `retention-story`: Write and edit the retention story.
+
+  ```text
+  launchclip retention-story <workspace> [--story-writer-route provider:model@reasoning] [--story-editor-route provider:model@reasoning]
+  ```
+
+- `cinematic-narration`: Generate the cinematic narration.
+
+  ```text
+  launchclip cinematic-narration <workspace> [--voice-id id] [--voice-model id] [--no-voice]
+  ```
+
+- `creative-plan`: Write the creative plan.
+
+  ```text
+  launchclip creative-plan <workspace> [--planning-mode auto|single|hierarchical] [--hierarchical-threshold 180] [--chapter-concurrency 3] [--plan-semantic-attempts 2] [--visual-history-dir path] [--visual-history-limit 8] [--visual-similarity-limit 0.58] [--max-output-tokens 48000] [--foreground]
+  ```
+
+- `production-audio`: Generate voice, music and SFX for the workspace.
+
+  ```text
+  launchclip production-audio <workspace> [--voice-id id] [--music-model music_v2] [--sfx-dir path] [--no-voice] [--no-music] [--no-sfx]
+  ```
+
+- `direct-frames`: Author the frames for the creative plan.
+
+  ```text
+  launchclip direct-frames <workspace> [--profile standard|cinematic] [--model-policy cost-aware|local-first|quality|free] [--free-model-candidates 5] [--free-model-state path] [--refresh-free-models] [--free-scene-concurrency 3] [--blueprint-semantic-attempts 2] [--frame-route provider:model@reasoning] [--rendered-candidates 2] [--rendered-candidate-shots 2] [--candidate-judge-route provider:model@reasoning] [--candidate-judge-reasoning high] [--candidate-judge-max-output-tokens 5000] [--concurrency 4] [--semantic-attempts 2] [--pending-frame-reasoning medium] [--max-frame-cost-usd amount] [--allow-frame-fallback]
+  ```
+
+- `assemble`: Assemble the production composition.
+
+  ```text
+  launchclip assemble <workspace> [--music-volume 0.35]
+  ```
+
+- `production-verify`: Verify the assembled production.
+
+  ```text
+  launchclip production-verify <workspace> [--inspect-samples 15] [--shot-inspect-concurrency 2] [--snapshot-frames 12]
+  ```
+
+- `production-draft`: Render and critique a draft of the production.
+
+  ```text
+  launchclip production-draft <workspace> [--model-policy free] [--draft-quality draft] [--critic-route provider:model@reasoning] [--free-vision-model-state path] [--shot-inspect-concurrency 2] [--reference-video local.mp4]
+  ```
+
+- `production-preview`: Open the production preview server.
+
+  ```text
+  launchclip production-preview <workspace> [--port 3002] [--no-open]
+  ```
+
+- `review`: Review a workspace (production studio review, or the legacy packet review).
+
+  ```text
+  launchclip review <workspace> [--model-policy free] [--port 3002] [--no-open] [--critic-route provider:model@reasoning] [--repair-route provider:model@reasoning]
+  launchclip review <workspace>
+  ```
+
+- `production-critique`: Run the visual critic on the production draft.
+
+  ```text
+  launchclip production-critique <workspace> [--critic-route provider:model@reasoning] [--model-policy free] [--free-vision-model-candidates 3] [--free-vision-model-state path] [--refresh-free-vision-models] [--critic-reasoning xhigh] [--critic-pro]
+  ```
+
+- `production-repair`: Repair the production from the critic's findings.
+
+  ```text
+  launchclip production-repair <workspace> [--model-policy cost-aware|local-first|quality|free] [--repair-route provider:model@reasoning] [--repair-text-only] [--repair-scoped-source] [--repair-semantic-attempts 2] [--repair-snapshots 8] [--repair-issues-per-shot 4] [--max-patch-ratio 0.35]
+  ```
+
+- `production-render`: Render the approved production at final quality.
+
+  ```text
+  launchclip production-render <workspace> --approve [--quality high] [--critic-route provider:model@reasoning] [--shot-inspect-concurrency 2] [--reference-video local.mp4]
+  ```
+
+- `story validate`: Validate a storyboard.json (errors and warnings).
+
+  ```text
+  launchclip story validate <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out report.json]
+  ```
+
+- `story resolve`: Resolve a storyboard.json's time anchors to seconds.
+
+  ```text
+  launchclip story resolve <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out story.resolved.json]
+  ```
+
+- `story compile`: Compile a story project for HyperFrames or Remotion.
+
+  ```text
+  launchclip story compile <project> --renderer hyperframes|remotion [--out dir]
+  ```
+
+- `story plan`: Plan a storyboard.json from a brief with a model.
+
+  ```text
+  launchclip story plan --brief brief.md [--narration NARRATION.json] [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] [--base assets/recording.mp4] [--voice assets/audio/narration.wav] [--format 1080x1920] [--fps 30] [--duration seconds] [--brand brand.json] [--style name|path] [--max-repairs 2]
+  ```
+
+- `cinematic-check`: Check a finished project against the cinematic gates and receipts.
+
+  ```text
+  launchclip cinematic-check <project> [--renderer hyperframes|remotion] [--video renders/draft.mp4] [--audio-manifest AUDIO-MANIFEST.json] [--music-volume 0.32] [--expect-audio] [--critique qa/critic.json]
+  ```
+
+- `layout-check`: Check a storyboard's declared geometry: safe zone, collisions, caption band (at rest and through camera moves), text size.
+
+  ```text
+  launchclip layout-check <project> [--profile shorts|landscape] [--json]
+  ```
+
+- `module fit`: Measure one module's params against the frame and report what fits.
+
+  ```text
+  launchclip module fit <module> [--params params.json] [--aspect 16:9|9:16] [--story storyboard.json] [--brand brand.json] [--duration 4] [--json]
+  ```
+
+- `finish`: Storyboard to mastered video in one command: voice, music, SFX, render, master and gates.
+
+  ```text
+  launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--voice kokoro|elevenlabs|supplied|test] [--music synth|elevenlabs|none] [--music-regenerate] [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] [--scene s3[,s4] | --preview-scene s3] [--force] [--json]
+  ```
+
+- `voice`: Generate the narration (NARRATION.json and the voice track) for a project or a text.
+
+  ```text
+  launchclip voice <project | --text "..."> [--voice kokoro|elevenlabs|test|<voice id>] [--provider kokoro|elevenlabs|test] [--speed 1.2] [--out NARRATION.json] [--json]
+  ```
+
+- `export`: Export an editable timeline for Final Cut Pro, Premiere Pro or Resolve.
+
+  ```text
+  launchclip export <project> --format fcpxml|premiere|edl|otio|all [--overlays prores4444|png|none] [--out exports/] [--fps 24|25|29.97|30|60] [--name name] [--absolute] [--force] [--json]
+  ```
+
+- `sfx seed`: Seed the user SFX library (ElevenLabs, or the procedural kit with --provider synth).
+
+  ```text
+  launchclip sfx seed [--provider elevenlabs|synth] [--variants 3] [--only whoosh,impact] [--reroll typing] [--dir .launchclip/sfx] [--force]
+  ```
+
+- `sfx reroll`: Regenerate one SFX family.
+
+  ```text
+  launchclip sfx reroll <family> [--dir .launchclip/sfx]
+  ```
+
+- `sfx list`: List the SFX library's families and variants.
+
+  ```text
+  launchclip sfx list [--dir .launchclip/sfx]
+  ```
+
+- `sfx audition`: Write one audition file with every variant of a family.
+
+  ```text
+  launchclip sfx audition <family> [--dir .launchclip/sfx] [--out audition.wav] [--gap 0.35]
+  ```
+
+- `init`: Initialise a packet workspace for a repository.
+
+  ```text
+  launchclip init <repo> --out <workspace>
+  ```
+
+- `demo`: Capture a demo for the packet workspace.
+
+  ```text
+  launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]
+  ```
+
+- `plan`: Plan the packet video.
+
+  ```text
+  launchclip plan <workspace> --format short-15 --renderer none|hyperframes [--style proof-card|ugc-split|ugc-demo-punchy|premium-product-short|data-story-benchmark] [--assets-dir path/to/assets] [--talking-head heygen --avatar-id avatar_123]
+  ```
+
+- `captions`: Write social captions for the packet.
+
+  ```text
+  launchclip captions <workspace> --platforms x,linkedin,tiktok,bluesky
+  ```
+
+- `render`: Render the packet video.
+
+  ```text
+  launchclip render <workspace> --provider product-videogen --dry-run
+  launchclip render <workspace> --provider hyperframes [--quality high] [--strict-all] [--inspect-samples 15] [--skip-quality-gates] [--voiceover local-say|elevenlabs] [--music elevenlabs]
+  launchclip render <workspace> --provider remotion [--assets-dir path/to/assets] [--voiceover local-say|elevenlabs]
+  launchclip render <workspace> --provider local-ffmpeg [--voiceover local-say|elevenlabs]
+  ```
+
+- `analyze-render`: Analyse a rendered packet video.
+
+  ```text
+  launchclip analyze-render <workspace> [--video video/launchclip-hyperframes.mp4]
+  ```
+
+- `submit-review`: Submit the packet for review.
+
+  ```text
+  launchclip submit-review <workspace> --provider product-videogen --dry-run
+  ```
+
+- `validate`: Validate a packet workspace.
+
+  ```text
+  launchclip validate <workspace>
+  ```
+
+- `run`: Run the whole packet lane for a repository.
+
+  ```text
+  launchclip run <repo> --out <workspace> --demo-cmd "npm run smoke" --demo-media path/to/demo.mp4 --angle "..." --audience "..." [--style premium-product-short --assets-dir path/to/assets --talking-head heygen]
+  ```
+
+- `script`: Write a teleprompter script from the planned voiceover.
+
+  ```text
+  launchclip script <workspace> [--wpm 150]          # teleprompter from the planned voiceover
+  ```
+
+- `align`: Align a recorded take to word timings and a motion timeline.
+
+  ```text
+  launchclip align <workspace> --media take.mp4      # whisper word timings + heuristic motion timeline
+  launchclip align <workspace> --media take.mp4 --words words.json
+  ```
+
+- `motion-render`: Render video/motion.mp4 with the motion engine.
+
+  ```text
+  launchclip motion-render <workspace>               # render video/motion.mp4 via the motion engine
+  ```
+
+- `music`: Generate a music bed for a workspace.
+
+  ```text
+  launchclip music <workspace> [--prompt "..."] [--duration 18] [--output music/bed.mp3] [--music-model music_v1] [--force]
+  ```
+
+- `preprocess-presenter`: Preprocess presenter footage (speed, crop).
+
+  ```text
+  launchclip preprocess-presenter public/base/presenter.mp4 [--out public/base/presenter-prepped.mp4] [--speed 1.08] [--crop-x center]
+  ```
+
+- `direct`: Direct a talking-head or TTS video from a creative prompt.
+
+  ```text
+  launchclip direct <workspace> --voice record --prompt "creative direction" # writes script + teleprompter, waits for take
+  launchclip direct <workspace> --voice record --take take.mp4 [--words w.json] # aligns take, directs, renders
+  launchclip direct <workspace> --voice tts --prompt "creative direction" # generates voice + timings, directs, renders
+  launchclip direct <workspace> --prompt "creative direction" [--format software_demo|explainer]
+  [--words w.json --take base/take.mp4 | --script-text "..."] [--duration 45] [--no-render] [--quality fast|high]
+  [--music-prompt "..."] [--no-music] [--sfx-dir path/to/sfx] [--allow-placeholder-sfx]
+  [--provider anthropic|openai] [--model <id>]   # LLM: ANTHROPIC_API_KEY (default) or OPENAI_API_KEY
+  ```
+<!-- usage:end -->
