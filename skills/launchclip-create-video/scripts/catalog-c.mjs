@@ -35,6 +35,7 @@
 // 1080); every text/fill pair at least 3:1 (throws otherwise); no blur.
 
 import {springValue} from './motion.mjs';
+import {grammarEase, grammarStagger, grammarTweens} from './grammar.mjs';
 import {CATALOG_B_STYLE, contrastRatio, fitText, makeCheck, mixColor, r2, rt, textWidth} from './catalog-b-base.mjs';
 import {abs, el, sampleTime, set, svgRoot, transformString, tw} from './catalog-b-view.mjs';
 import {profileGeometry} from './layout-check.mjs';
@@ -137,7 +138,7 @@ export function createFootageBase(moduleId, params, ctx, {allowed, required = []
     const exitTo = {opacity: 0, x: 0, y: 0, scale: 1, ...(motion.exitTo ?? {})};
     const exitStart = rt(motion.exitStart);
     model.motion = {enterStart: rt(motion.enterStart ?? start), enterEnd: rt(motion.enterEnd), exitStart, end, enterDuration: rt(motion.enterEnd - (motion.enterStart ?? start)), exitDuration: rt(end - exitStart),
-      enterFrom, exitTo, enterEase: motion.enterEase ?? 'power3.out', exitEase: motion.exitEase ?? 'power2.in', origin: motion.origin ?? {x: r2(width / 2), y: r2(height / 2)}};
+      enterFrom, exitTo, enterEase: grammarEase(ctx.grammar, motion.enterEase ?? 'power3.out'), exitEase: grammarEase(ctx.grammar, motion.exitEase ?? 'power2.in'), origin: motion.origin ?? {x: r2(width / 2), y: r2(height / 2)}};
     model.content = content;
     model.rect = {...rect};
     model.minTextPx = minTextPx;
@@ -408,7 +409,7 @@ function resolveEmphasis(params, ctx) {
   const stroke = colors.bg;
   const color = b.resolveColor(p.color, 'params.color', 'primary', stroke, 'brand.colors.bg (outline)');
   const position = p.position === undefined ? 'center' : check.oneOf(p.position, 'params.position', POSITIONS);
-  const stagger = p.stagger === undefined ? 0.09 : check.num(p.stagger, 'params.stagger', 0, 0.3);
+  const stagger = p.stagger === undefined ? grammarStagger(ctx.grammar, 0.09, {max: 0.3}) : check.num(p.stagger, 'params.stagger', 0, 0.3);
   // The word block spans 88% of the safe width (the RFC hero fill is 70–90%).
   const blockW = r2(safe.width * 0.88);
   const fit = fitText(check, 'params.text', text, {family: 'display', width: blockW - u(24), preferred: u(portrait ? 180 : 150), min: Math.max(b.min.key, u(96)), maxLines: 2});
@@ -493,6 +494,8 @@ export function catalogCTimeline(model) {
   if (m.exitDuration > 0) tw(ops, model.id, m.exitStart, m.exitDuration, m.exitEase, identity, {opacity: e.opacity, x: e.x, y: e.y, scaleX: e.scale, scaleY: e.scale});
   set(ops, model.id, model.end, {opacity: 0});
   def.timeline(model, ops);
+  // Motion grammar: pops (back/elastic eases) follow the story's grammar.
+  if (model.grammar) grammarTweens(ops, model.grammar, {roles: ['emphasis']});
   return ops;
 }
 

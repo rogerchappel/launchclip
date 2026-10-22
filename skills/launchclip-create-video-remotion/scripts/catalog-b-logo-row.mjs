@@ -4,6 +4,7 @@
 
 import {createBase, fitText, r2, rt} from './catalog-b-base.mjs';
 import {abs, el, set, text, transformString, tw} from './catalog-b-view.mjs';
+import {grammarStagger} from './grammar.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
 const rect = '{x, y, width, height} canvas px inside the safe zone (optional)';
@@ -17,7 +18,7 @@ function resolve(params, ctx) {
   const p = b.params;
   const logosIn = check.arr(p.logos, 'params.logos', 2, 6);
   const title = p.title === undefined ? null : check.str(p.title, 'params.title', 48);
-  const stagger = p.stagger === undefined ? 0.14 : check.num(p.stagger, 'params.stagger', 0.05, 0.6);
+  const stagger = p.stagger === undefined ? grammarStagger(ctx.grammar, 0.14, {min: 0.05, max: 0.6}) : check.num(p.stagger, 'params.stagger', 0.05, 0.6);
   const W = rect.width, H = rect.height;
   const n = logosIn.length;
   const cols = portrait ? (n <= 3 ? n : n === 4 ? 2 : 3) : n;

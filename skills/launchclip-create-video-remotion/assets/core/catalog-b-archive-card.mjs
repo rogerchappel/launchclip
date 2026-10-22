@@ -4,6 +4,7 @@
 
 import {CATALOG_B_STYLE, alphaHex, createBase, fitText, mixColor, r2, rt, textWidth} from './catalog-b-base.mjs';
 import {abs, el, set, text, transformString, tw} from './catalog-b-view.mjs';
+import {grammarStagger} from './grammar.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
 const rect = '{x, y, width, height} canvas px inside the safe zone (optional)';
@@ -55,7 +56,7 @@ function resolve(params, ctx) {
     quoteFit = fitText(check, 'params.quote', text, {family: 'serif', width: innerW, preferred: u(image ? 50 : 60), min: b.min.key, maxLines: image ? 4 : 6});
     quoteY = r2(y); y += quoteFit.lines * quoteFit.size * 1.28 + u(28);
     const split = text.split(/\s+/).filter(Boolean);
-    const each = Math.min(0.07, 1.4 / split.length);
+    const each = grammarStagger(ctx.grammar, Math.min(0.07, 1.4 / split.length), {max: 0.12});
     words = split.map((word, i) => ({text: word, time: rt(revealTime + i * each)}));
   }
   const ruleBottom = r2(y); y += u(28);

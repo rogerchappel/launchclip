@@ -37,6 +37,7 @@
 // 3:1 (throws otherwise), and no blur at settle (nothing here blurs).
 
 import {rootNode, rootOps} from './catalog-b-view.mjs';
+import {grammarTweens} from './grammar.mjs';
 import {logoRow} from './catalog-b-logo-row.mjs';
 import {archiveCard} from './catalog-b-archive-card.mjs';
 import {processSteps} from './catalog-b-process-steps.mjs';
@@ -68,5 +69,7 @@ export function catalogBTimeline(model) {
   const ops = [];
   rootOps(model, ops);
   def.timeline(model, ops);
+  // Motion grammar: pops (back/elastic eases) follow the story's grammar.
+  if (model.grammar) grammarTweens(ops, model.grammar, {roles: ['emphasis']});
   return ops;
 }

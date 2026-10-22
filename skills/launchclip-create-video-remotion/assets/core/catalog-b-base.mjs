@@ -8,6 +8,7 @@
 // into skills unchanged.
 
 import {getEase} from './motion.mjs';
+import {grammarDuration, grammarEase} from './grammar.mjs';
 import {profileGeometry} from './layout-check.mjs';
 import {fontStack as registryStack} from './fonts.mjs';
 
@@ -362,17 +363,20 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
   }
 
   // Motion
-  const S = CATALOG_B_STYLE;
-  const enterDuration = S.enterDuration, exitDuration = S.exitDuration;
+  // Motion grammar (grammar.mjs): editorial keeps CATALOG_B_STYLE exactly.
+  // Event windows keep the editorial bounds, so a slower grammar never makes
+  // a default event time invalid.
+  const S = CATALOG_B_STYLE, grammar = ctx.grammar ?? null;
+  const enterDuration = grammarDuration(grammar, 'enter', S.enterDuration, {min: 0.3, max: 0.7}), exitDuration = grammarDuration(grammar, 'exit', S.exitDuration, {min: 0.2, max: 0.5});
   const end = rt(start + duration);
   const motion = {enterStart: rt(start), enterEnd: rt(start + enterDuration), exitStart: rt(end - exitDuration), end, enterDuration, exitDuration,
     enterFrom: {opacity: 0, x: 0, y: r2(40 * unit), scale: 0.97}, exitTo: {opacity: 0, x: 0, y: r2(-28 * unit), scale: 1},
-    enterEase: S.enterEase, exitEase: S.exitEase};
+    enterEase: grammarEase(grammar, S.enterEase), exitEase: grammarEase(grammar, S.exitEase)};
   const hits = Array.isArray(ctx.hits) ? ctx.hits.filter(hit => hit && typeof hit.event === 'string' && typeof hit.at === 'number') : [];
   // Latest allowed event time leaves 0.3 s before the exit begins.
-  const lastEvent = duration - exitDuration - 0.3;
+  const lastEvent = duration - Math.min(exitDuration, S.exitDuration) - 0.3;
   /** Absolute time for event `name`: params `at` (scene-relative) > ctx hit > fallback (scene-relative). */
-  const timeOf = (name, at, path, fallback, {min = enterDuration, max = lastEvent} = {}) => {
+  const timeOf = (name, at, path, fallback, {min = Math.min(enterDuration, S.enterDuration), max = lastEvent} = {}) => {
     let rel;
     if (at !== undefined) rel = check.num(at, path, 0, duration);
     else {

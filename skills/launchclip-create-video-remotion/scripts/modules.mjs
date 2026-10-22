@@ -13,6 +13,7 @@ import { MODULES as CATALOG_A } from './catalog-a.mjs';
 import { MODULES as CATALOG_B } from './catalog-b.mjs';
 import { MODULES as CATALOG_C } from './catalog-c.mjs';
 import { storyBase } from './story.mjs';
+import { isEditorialGrammar, resolveGrammar } from './grammar.mjs';
 
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
@@ -126,6 +127,10 @@ function resolveModuleInner(scene, story, { track, end }) {
   const format = { width: story?.format?.width, height: story?.format?.height, fps: story?.resolved?.fps ?? story?.format?.fps, duration: story?.resolved?.duration ?? story?.format?.duration };
   const aspect = formatAspect(format);
   const module = scene.module;
+  // Motion grammar (grammar.mjs): editorial is the identity, so editorial
+  // models are exactly what they were before grammars existed.
+  const grammar = resolveGrammar(story);
+  const styled = !isEditorialGrammar(grammar);
 
   if (isEditorialKind(module)) {
     const canvas = EDITORIAL_CANVAS[aspect];
@@ -135,7 +140,7 @@ function resolveModuleInner(scene, story, { track, end }) {
     const spec = { ...brandModuleDefaults(story?.brand), ...params, id, kind: module, aspect, start, duration };
     if (track !== undefined) spec.track = track;
     let model;
-    try { model = resolveEditorialModule(spec); }
+    try { model = styled ? resolveEditorialModule(spec, { grammar }) : resolveEditorialModule(spec); }
     catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
     return finishModel(model, { module, scene });
   }
@@ -144,11 +149,13 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!definition) throw new Error(`module "${module}" is not a known module`);
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
-  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), lane: story?.lane ?? null }); }
+  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), lane: story?.lane ?? null, grammar }); }
   catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });
   if (track !== undefined) finished.track = track;
+  // Catalogue B/C timelines remap their pop eases from model.grammar.
+  if (styled) finished.grammar = grammar;
   return finished;
 }
 

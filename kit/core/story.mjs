@@ -7,7 +7,15 @@
 export const STORY_SCHEMA = "launchclip.story.v1";
 
 export const STORY_LANES = ["motion", "voiceover-motion", "footage-led"];
-export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph"];
+export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan"];
+// Camera transitions (kit/core/camera-world.mjs): the camera travels to the
+// next scene instead of the layers moving. `push` is a camera dolly only in
+// camera.mode "world"; in "cuts" it keeps its slide meaning.
+export const STORY_CAMERA_TRANSITIONS = ["pan", "pull", "orbit", "whip-pan"];
+export const STORY_CAMERA_MODES = ["cuts", "world"];
+export const STORY_CAMERA_LAYOUTS = ["row", "column", "grid", "path", "auto"];
+// story.motion.grammar presets (kit/core/grammar.mjs GRAMMAR_NAMES).
+export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "documentary"];
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
 // audio.narration.provider: voice providers `launchclip finish` can synthesise with.
@@ -22,7 +30,7 @@ const WORD_ANCHOR = new RegExp(`^word:([^#\\s]+?)(?:#(\\d+))?${OFFSET}$`);
 const BEAT_ANCHOR = new RegExp(`^(beat|downbeat):(\\d+)${OFFSET}$`);
 const NUMERIC = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/;
 const EPS = 1e-6;
-const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract"]);
+const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "motion", "camera"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -205,6 +213,10 @@ export function validateStory(story, { modules } = {}) {
     if (!isObject(audio) || !audio.words) err("audio.words (NARRATION.json) is required for the voiceover-motion lane (or set audio.narration to synthesise it)");
   }
 
+  // motion.grammar and camera (kit/core/grammar.mjs, kit/core/camera-world.mjs).
+  validateMotion(story.motion, err);
+  const camera = validateCamera(story.camera, { err, lane: story.lane });
+
   // base: the footage-led recording (see validateBase).
   if (story.base !== undefined && story.base !== null) validateBase(story.base, { err, warn, duration, resolved: isObject(story.resolved) });
   if (story.lane === "footage-led" && (story.base === undefined || story.base === null)) err("base is required for the footage-led lane");
@@ -278,6 +290,7 @@ export function validateStory(story, { modules } = {}) {
         if (transition.direction !== undefined && !STORY_DIRECTIONS.includes(transition.direction)) err(`${path}.in.direction must be one of ${STORY_DIRECTIONS.join(", ")}`);
         if (transition.from_object !== undefined) fromObjects.push({ index, path: `${path}.in.from_object`, value: transition.from_object });
         if (transition.type === "morph" && transition.from_object === undefined) warn(`${label} morphs without in.from_object; name the object handed across the boundary`);
+        cameraTransitionRules(transition, `${path}.in`, { err, lane: story.lane, camera, track });
       }
     }
 
@@ -369,6 +382,7 @@ export function validateStory(story, { modules } = {}) {
           if (typeof transition.dur !== "number" || !Number.isFinite(transition.dur) || transition.dur <= 0) err("ending.in.dur must be a positive number of seconds");
           else if (duration !== null && transition.dur >= duration) err("ending.in.dur must be shorter than format.duration");
           if (transition.direction !== undefined && !STORY_DIRECTIONS.includes(transition.direction)) err(`ending.in.direction must be one of ${STORY_DIRECTIONS.join(", ")}`);
+          cameraTransitionRules(transition, "ending.in", { err, lane: story.lane, camera, track: 0 });
           if (transition.from_object !== undefined) {
             const sceneId = typeof transition.from_object === "string" ? transition.from_object.split(".")[0] : null;
             if (!sceneId || !ids.has(sceneId)) err(`ending.in.from_object references unknown scene "${sceneId ?? transition.from_object}"`);
@@ -496,6 +510,71 @@ export function storyHits(story) {
     }
   }
   return hits.map((hit, index) => ({ hit, index })).sort((a, b) => a.hit.at - b.hit.at || a.index - b.index).map((entry) => entry.hit);
+}
+
+// ---------------------------------------------------------------------------
+// Motion grammar and camera (kit/core/grammar.mjs, kit/core/camera-world.mjs).
+// The same rules as grammarErrors() and resolveCamera() there, kept here so
+// this file stays import-free.
+
+const GRAMMAR_KEYS = ["base", "ease", "duration", "overshoot", "stagger", "defaultTransition", "camera", "ambient"];
+const EASE_ROLES = ["enter", "exit", "move", "camera", "emphasis"];
+const DURATION_ROLES = ["enter", "exit", "transition", "camera"];
+const EASE_NAME = /^(none|linear|(power[0-4]|quad|cubic|quart|quint|strong|expo|circ|sine|bounce|back|elastic)(\.(in|out|inOut))?(\(\s*[\d.]+\s*(,\s*[\d.]+\s*)?\))?|steps\(\d+\))$/;
+
+function validateMotion(motion, err) {
+  if (motion === undefined || motion === null) return;
+  if (!isObject(motion)) { err("motion must be an object {grammar}"); return; }
+  for (const key of Object.keys(motion)) if (key !== "grammar") err(`motion.${key} is not supported (allowed: grammar)`);
+  const grammar = motion.grammar;
+  if (grammar === undefined || grammar === null) return;
+  if (typeof grammar === "string") {
+    if (!STORY_GRAMMARS.includes(grammar)) err(`motion.grammar must be one of ${STORY_GRAMMARS.join(", ")} or an object {base, ...overrides}`);
+    return;
+  }
+  if (!isObject(grammar)) { err("motion.grammar must be a grammar name or an object {base, ...overrides}"); return; }
+  for (const key of Object.keys(grammar)) if (!GRAMMAR_KEYS.includes(key)) err(`motion.grammar.${key} is not supported (allowed: ${GRAMMAR_KEYS.join(", ")})`);
+  if (grammar.base !== undefined && !STORY_GRAMMARS.includes(grammar.base)) err(`motion.grammar.base must be one of ${STORY_GRAMMARS.join(", ")}`);
+  if (grammar.ease !== undefined) {
+    if (!isObject(grammar.ease)) err("motion.grammar.ease must be an object of role → ease name");
+    else for (const [role, name] of Object.entries(grammar.ease)) {
+      if (!EASE_ROLES.includes(role)) err(`motion.grammar.ease.${role} is not a role (allowed: ${EASE_ROLES.join(", ")})`);
+      else if (typeof name !== "string" || !EASE_NAME.test(name.trim())) err(`motion.grammar.ease.${role} must be a GSAP ease name such as "power3.out"`);
+    }
+  }
+  if (grammar.duration !== undefined) {
+    if (!isObject(grammar.duration)) err("motion.grammar.duration must be an object of role → seconds");
+    else for (const [role, seconds] of Object.entries(grammar.duration)) {
+      if (!DURATION_ROLES.includes(role)) err(`motion.grammar.duration.${role} is not a role (allowed: ${DURATION_ROLES.join(", ")})`);
+      else if (!(typeof seconds === "number" && seconds >= 0.05 && seconds <= 3)) err(`motion.grammar.duration.${role} must be between 0.05 and 3 seconds`);
+    }
+  }
+  if (grammar.overshoot !== undefined && !(typeof grammar.overshoot === "number" && grammar.overshoot >= 0 && grammar.overshoot <= 0.5)) err("motion.grammar.overshoot must be between 0 and 0.5");
+  if (grammar.stagger !== undefined && !(typeof grammar.stagger === "number" && grammar.stagger >= 0.25 && grammar.stagger <= 3)) err("motion.grammar.stagger must be a multiplier between 0.25 and 3");
+  if (grammar.ambient !== undefined && !["off", "subtle", "standard", "lively"].includes(grammar.ambient)) err("motion.grammar.ambient must be off, subtle, standard or lively");
+  if (grammar.camera !== undefined && !isObject(grammar.camera)) err("motion.grammar.camera must be an object");
+}
+
+// → the effective camera mode ("cuts" | "world") for the transition rules.
+function validateCamera(camera, { err, lane }) {
+  if (camera === undefined || camera === null) return "cuts";
+  if (!isObject(camera)) { err("camera must be an object {mode, layout?, spacing?, parallax?, blur?}"); return "cuts"; }
+  for (const key of Object.keys(camera)) if (!["mode", "layout", "spacing", "parallax", "blur"].includes(key)) err(`camera.${key} is not supported (allowed: mode, layout, spacing, parallax, blur)`);
+  const mode = camera.mode ?? "cuts";
+  if (!STORY_CAMERA_MODES.includes(mode)) err(`camera.mode must be one of ${STORY_CAMERA_MODES.join(", ")}`);
+  if (camera.layout !== undefined && !STORY_CAMERA_LAYOUTS.includes(camera.layout)) err(`camera.layout must be one of ${STORY_CAMERA_LAYOUTS.join(", ")}`);
+  if (camera.spacing !== undefined && !(typeof camera.spacing === "number" && camera.spacing >= 0 && camera.spacing <= 1)) err("camera.spacing must be a number between 0 and 1 (the gap between scenes, as a fraction of the canvas)");
+  for (const key of ["parallax", "blur"]) if (camera[key] !== undefined && typeof camera[key] !== "boolean") err(`camera.${key} must be true or false`);
+  if (mode === "world" && lane === "footage-led") err("camera.mode \"world\" is for the motion and voiceover-motion lanes; footage-led stories keep cuts and punch-ins");
+  return mode === "world" ? "world" : "cuts";
+}
+
+function cameraTransitionRules(transition, path, { err, lane, camera, track }) {
+  const type = transition.type;
+  const moving = STORY_CAMERA_TRANSITIONS.includes(type) || (type === "push" && camera === "world");
+  if (!moving) return;
+  if (lane === "footage-led") err(`${path}.type "${type}" moves a world camera; footage-led stories keep cuts and punch-ins`);
+  else if (track !== 0) err(`${path}.type "${type}" moves the camera between track-0 scenes; overlays (track ≥ 1) cannot use it`);
 }
 
 // ---------------------------------------------------------------------------

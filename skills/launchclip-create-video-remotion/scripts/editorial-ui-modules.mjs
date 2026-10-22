@@ -23,7 +23,7 @@ const windowBar = (label, dots) => `<div class="ui-bar">${dots.map(dot => `<span
 
 function moduleMotion(target, model, origin) {
   const selector = js(target), m = model.motion;
-  if (!m.supplied) return [`tl.fromTo(${selector}, {opacity:0,y:18}, {opacity:1,y:0,duration:0.28,ease:'power3.out'}, ${m.enterStart});`, `tl.to(${selector}, {opacity:0,y:-8,duration:0.22,ease:'power2.in'}, ${m.exitStart});`];
+  if (!m.supplied) return [`tl.fromTo(${selector}, {opacity:0,y:18}, {opacity:1,y:0,duration:${m.enterDuration},ease:'${m.enterEase}'}, ${m.enterStart});`, `tl.to(${selector}, {opacity:0,y:-8,duration:${m.exitDuration},ease:'${m.exitEase}'}, ${m.exitStart});`];
   // Root media and chrome share the chrome's top-left pivot, despite their
   // distinct root DOM boxes. The media box begins 48px below that pivot.
   const from = {...m.enterFrom, transformOrigin: origin};

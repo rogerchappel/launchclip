@@ -1,5 +1,6 @@
 // Editorial module core: spec → resolved model. Renderer-neutral, plain ESM;
-// imports only fonts.mjs. The HyperFrames emitter (skills/launchclip-create-video/scripts/
+// imports only fonts.mjs and grammar.mjs (the motion grammar, which sets the
+// shell enter/exit eases and durations; editorial is the identity). The HyperFrames emitter (skills/launchclip-create-video/scripts/
 // editorial-ui-modules.mjs) and the Remotion modules (kit/remotion/modules/)
 // both draw from this model, so validation, defaults, geometry, timing, events
 // and theme live here only. Contract: docs/KIT_CONTRACTS.md, "Editorial core".
@@ -136,6 +137,7 @@
  */
 
 import {fontStack} from './fonts.mjs';
+import {grammarDuration, grammarEase} from './grammar.mjs';
 
 export const EDITORIAL_KINDS = ['media-window', 'checklist', 'step-rail', 'callout', 'audience-grid', 'trend-chart', 'metric', 'progress', 'date-card', 'status-rack', 'code-snippet', 'excerpt-window', 'focus-flow', 'growth-chart'];
 
@@ -279,12 +281,12 @@ function candidates() {
 }
 
 /** @returns {EditorialModel} */
-export function resolveEditorialModule(input) {
+export function resolveEditorialModule(input, options = {}) {
   const plain = input && typeof input === 'object' && !Array.isArray(input);
-  if (!plain || !['16:9', '9:16'].includes(input.aspect) || !EDITORIAL_KINDS.includes(input.kind)) return resolveAt(input, input?.rect, BASE, 'explicit');
+  if (!plain || !['16:9', '9:16'].includes(input.aspect) || !EDITORIAL_KINDS.includes(input.kind)) return resolveAt(options, input, input?.rect, BASE, 'explicit');
   const explicit = input.rect !== undefined;
   const portrait = input.aspect === '9:16';
-  if (explicit && !portrait) return resolveAt(input, input.rect, BASE, 'explicit');
+  if (explicit && !portrait) return resolveAt(options, input, input.rect, BASE, 'explicit');
   if (explicit) {
     // Explicit 9:16 rect: keep the rect, grow the type until the content
     // would no longer fit. The final BASE attempt is the pre-density
@@ -294,28 +296,28 @@ export function resolveEditorialModule(input) {
     if (rect && typeof rect === 'object' && input.kind !== 'media-window') {
       for (const candidate of candidates()) {
         try {
-          const model = resolveAt(input, rect, candidate, 'explicit');
+          const model = resolveAt(options, input, rect, candidate, 'explicit');
           if (model.density.natural <= model.density.layout.height + .5) return model;
         } catch { /* try a smaller scale */ }
       }
     }
-    return resolveAt(input, rect, BASE, 'explicit');
+    return resolveAt(options, input, rect, BASE, 'explicit');
   }
   if (input.kind === 'media-window') {
-    if (!portrait) return resolveAt(input, LEGACY_RECT['16:9'], BASE, 'legacy');
+    if (!portrait) return resolveAt(options, input, LEGACY_RECT['16:9'], BASE, 'legacy');
     const P = DENSITY.portrait, height = P.mediaHeight;
-    return resolveAt(input, {x: P.x, y: Math.round(P.centre - height / 2), width: P.width, height}, BASE, 'derived');
+    return resolveAt(options, input, {x: P.x, y: Math.round(P.centre - height / 2), width: P.width, height}, BASE, 'derived');
   }
   if (!portrait) {
     // 16:9 default: the old lower-left footprint, its height taken from the
     // content and its bottom edge kept on the old baseline (y 980).
     const L = DENSITY.landscape;
     try {
-      const probe = resolveAt(input, {x: L.x, y: L.top, width: L.width, height: L.baseline - L.top}, BASE, 'derived');
+      const probe = resolveAt(options, input, {x: L.x, y: L.top, width: L.width, height: L.baseline - L.top}, BASE, 'derived');
       const height = Math.max(160, Math.ceil(probe.density.natural));
-      if (height <= L.baseline - L.top) return resolveAt(input, {x: L.x, y: L.baseline - height, width: L.width, height}, BASE, 'derived');
+      if (height <= L.baseline - L.top) return resolveAt(options, input, {x: L.x, y: L.baseline - height, width: L.width, height}, BASE, 'derived');
     } catch { /* fall back to the legacy rect and its error */ }
-    return resolveAt(input, LEGACY_RECT['16:9'], BASE, 'legacy');
+    return resolveAt(options, input, LEGACY_RECT['16:9'], BASE, 'legacy');
   }
   // 9:16 default: safe-zone width, the largest scale whose natural height
   // fits above the caption band (else above the safe-zone bottom), centred
@@ -330,17 +332,17 @@ export function resolveEditorialModule(input) {
     for (const candidate of candidates()) {
       if (candidate.scale < minScale) break;
       let probe;
-      try { probe = resolveAt(input, {x: P.x, y: P.top, width: P.width, height: band}, candidate, 'derived'); } catch { continue; }
+      try { probe = resolveAt(options, input, {x: P.x, y: P.top, width: P.width, height: band}, candidate, 'derived'); } catch { continue; }
       const height = Math.max(160, Math.ceil(probe.density.natural * candidate.scale));
       if (height > Math.min(band, maxHeight)) continue;
       const y = Math.round(Math.min(limit - height, Math.max(P.top, P.centre - height / 2)));
-      try { return resolveAt(input, {x: P.x, y, width: P.width, height}, candidate, 'derived'); } catch { /* next candidate */ }
+      try { return resolveAt(options, input, {x: P.x, y, width: P.width, height}, candidate, 'derived'); } catch { /* next candidate */ }
     }
   }
-  return resolveAt(input, LEGACY_RECT['9:16'], BASE, 'legacy');
+  return resolveAt(options, input, LEGACY_RECT['9:16'], BASE, 'legacy');
 }
 
-function resolveAt(input, suppliedRect, density, source) {
+function resolveAt(options, input, suppliedRect, density, source) {
   object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt', 'theme', 'focus', 'growth']);
   if (!/^[a-z][a-z0-9-]{0,59}$/.test(input.id ?? '')) throw new Error('id must be a unique lowercase DOM-safe identifier');
   if (!EDITORIAL_KINDS.includes(input.kind)) throw new Error(`kind must be ${EDITORIAL_KINDS.join(', ')}`);
@@ -353,6 +355,14 @@ function resolveAt(input, suppliedRect, density, source) {
   const duration = number(input.duration, 'duration', 1, 3600);
   const movement = motionSpec(input.motion, duration);
   const enterDuration = movement?.enterDuration ?? .28, exitDuration = movement?.exitDuration ?? .22;
+  // Motion grammar (grammar.mjs): editorial keeps .28/.22 and power3.out /
+  // power2.in exactly; other grammars scale the default shell durations
+  // (clamped to the motion-spec range) and swap the enter/exit eases. Event
+  // windows and content defaults keep the editorial durations, so a grammar
+  // never makes a valid spec invalid.
+  const grammar = options.grammar ?? null;
+  const shellEnter = movement ? enterDuration : grammarDuration(grammar, 'enter', enterDuration, {min: .2, max: .36});
+  const shellExit = movement ? exitDuration : grammarDuration(grammar, 'exit', exitDuration, {min: .16, max: .28});
   const rect = suppliedRect ?? LEGACY_RECT[input.aspect];
   object(rect, 'rect', ['x', 'y', 'width', 'height']);
   number(rect.width, 'rect.width', 420, canvas.width);
@@ -398,9 +408,9 @@ function resolveAt(input, suppliedRect, density, source) {
   const motion = movement
     ? {supplied: true, enter: movement.enter, exit: movement.exit, distance: movement.distance, exitDistance: movement.distance, scale: movement.scale, enterDuration, exitDuration,
       enterFrom: {opacity: 0, ...offset(movement.enter, movement.distance), scale: movement.scale}, exitTo: {opacity: 0, ...offset(movement.exit, movement.distance), scale: movement.scale}}
-    : {supplied: false, enter: 'down', exit: 'up', distance: 18, exitDistance: 8, scale: 1, enterDuration, exitDuration,
+    : {supplied: false, enter: 'down', exit: 'up', distance: 18, exitDistance: 8, scale: 1, enterDuration: shellEnter, exitDuration: shellExit,
       enterFrom: {opacity: 0, x: 0, y: 18, scale: 1}, exitTo: {opacity: 0, x: 0, y: -8, scale: 1}};
-  Object.assign(motion, {enterStart: start, enterEnd: start + enterDuration, exitStart: start + duration - exitDuration, end: start + duration, enterEase: 'power3.out', exitEase: 'power2.in', transformOrigin: '0px 0px'});
+  Object.assign(motion, {enterStart: start, enterEnd: start + shellEnter, exitStart: start + duration - shellExit, end: start + duration, enterEase: grammarEase(grammar, 'power3.out'), exitEase: grammarEase(grammar, 'power2.in'), transformOrigin: '0px 0px'});
   let content;
 
   if (kind === 'media-window') {

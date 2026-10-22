@@ -37,6 +37,7 @@
 import {profileGeometry} from './layout-check.mjs';
 import {fontFamilyName, fontStack, fontWidthScale} from './fonts.mjs';
 import {countUp, splitWords, tween} from './motion.mjs';
+import {grammarDuration, grammarEase, grammarStagger, grammarTweens} from './grammar.mjs';
 
 export const CATALOG_A_IDS = Object.freeze(['hook-title', 'kinetic-words', 'count-up', 'equation-lockup', 'cta']);
 export const ANIMATED_PROPS = Object.freeze(['opacity', 'x', 'y', 'scale', 'scaleX', 'rotation', 'blur', 'color']);
@@ -384,7 +385,7 @@ function baseContext(ctx) {
   integer(format.width, 'ctx.format.width', 160, 7680);
   integer(format.height, 'ctx.format.height', 160, 7680);
   number(format.fps ?? 30, 'ctx.format.fps', 1, 240);
-  return {id, start, duration, end: T(start + duration), fps: format.fps ?? 30};
+  return {id, start, duration, end: T(start + duration), fps: format.fps ?? 30, grammar: ctx.grammar ?? null};
 }
 
 function assemble({module, ctx, base, st, rect, theme, contrast, fonts, hidesCaptions, motion, content, styles, classes = {}, anim, texts = [], events}) {
@@ -395,12 +396,15 @@ function assemble({module, ctx, base, st, rect, theme, contrast, fonts, hidesCap
   // footprint, empty rules and bars would otherwise collapse to 0 px.
   for (const [node, style] of Object.entries(styles)) if (node !== 'root' && style.position !== 'absolute' && !('flexShrink' in style)) style.flexShrink = '0';
   styles.root = {...styles.root, color: theme.paper, fontFamily: fonts.body, fontSize: px(44 * st.k), lineHeight: '1.2', letterSpacing: 'normal', fontStyle: 'normal', fontWeight: '400', WebkitFontSmoothing: 'antialiased'};
+  // Motion grammar (grammar.mjs): entrance, exit and pop eases follow the
+  // story's grammar; editorial leaves every ease as designed.
+  grammarTweens(anim.animations, base.grammar);
   const model = {
     id, module, aspect: ctx.aspect ?? (st.portrait ? '9:16' : '16:9'), canvas: st.canvas, start, duration, end, fps: base.fps,
     track: ctx.track ?? 0, scale: round(st.k, 4), rect, safeZone: st.zone, minTextPx: round(st.minText, 2),
     theme, contrast, fonts, hidesCaptions,
     motion: {enter: T(motion.enterEnd - start), exit: T(end - motion.exitStart), enterStart: start, enterEnd: T(motion.enterEnd), exitStart: T(motion.exitStart), end,
-      enterFrom: motion.enterFrom, exitTo: motion.exitTo, enterEase: motion.enterEase, exitEase: motion.exitEase},
+      enterFrom: motion.enterFrom, exitTo: motion.exitTo, enterEase: grammarEase(base.grammar, motion.enterEase, {props: motion.enterFrom}), exitEase: grammarEase(base.grammar, motion.exitEase, {props: motion.exitTo})},
     content, styles, classes, animations: anim.animations, texts,
     events: events.map(event => ({...event, time: T(event.time), ...(event.endTime !== undefined ? {endTime: T(event.endTime)} : {})})).sort((a, b) => a.time - b.time),
     layout: {canvas: st.canvas, rect, motion: {enterEnd: T(motion.enterEnd), exitStart: T(motion.exitStart), end}}
@@ -414,6 +418,7 @@ const rootStyle = (rect, extra = {}) => ({position: 'absolute', left: px(rect.x)
 const glowStyle = (color, w, h, offsetY = 0) => ({position: 'absolute', left: '50%', top: '50%', width: px(w), height: px(h), marginLeft: px(-w / 2), marginTop: px(-h / 2 + offsetY), borderRadius: '50%', background: `radial-gradient(closest-side, ${alpha(color, .26)}, ${alpha(color, .1)} 55%, ${alpha(color, 0)})`, pointerEvents: 'none'});
 
 function standardExit(anim, base, st, exit = .3) {
+  exit = grammarDuration(base.grammar, 'exit', exit, {min: .18, max: .45});
   const exitStart = base.end - exit;
   anim.add('root', exitStart, exit, 'power2.in', {opacity: 1, y: 0}, {opacity: 0, y: -40 * st.k});
   return {exitStart, exitTo: {opacity: 0, y: round(-40 * st.k)}, exitEase: 'power2.in'};
@@ -872,7 +877,7 @@ function resolveEquationLockup(params, ctx) {
   const name = optional(params.name, null, value => text(value, 'params.name', 48));
   const note = optional(params.note, null, value => text(value, 'params.note', 70));
   const at = optional(params.at, .35, value => sceneTime(value, 'params.at', d, 1));
-  const stagger = optional(params.stagger, .22, value => number(value, 'params.stagger', .06, 1.5));
+  const stagger = optional(params.stagger, grammarStagger(base.grammar, .22, {min: .06, max: .6}), value => number(value, 'params.stagger', .06, 1.5));
   let highlight = null;
   if (params.highlight !== undefined) {
     if (typeof params.highlight === 'number') highlight = integer(params.highlight, 'params.highlight', 0, terms.length - 1);
