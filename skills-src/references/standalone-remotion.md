@@ -667,7 +667,8 @@ launchclip finish <project> --renderer remotion --quality high    # renders/fina
 
 It synthesises `audio.narration` when set (`--voice kokoro|elevenlabs|supplied`),
 validates and layout-checks the storyboard, writes captions, builds the SFX
-and music mix from the hits, module cues and scene energy, renders, masters to
+and music mix from the hits, module cues, scene energy and the beat-synced
+music (`--music synth|elevenlabs|none`), renders, masters to
 −14 LUFS / −1 dBTP, builds the temporal evidence and critic sheets, and runs
 the motion, audio, loudness, layout and evidence gates. It never rewrites
 `storyboard.json` (the filled copy is `.launchclip/finish/storyboard.json`),
@@ -693,6 +694,8 @@ touches neither the final nor the gates. `--scene s3[,s4]` forces those scenes'
 segments to re-render, re-runs master, evidence and gates, and writes
 before/after stills to `qa/finish/scenes/<id>-before-after.png`: inspect them.
 The joined result is frame-identical to a fresh full render.
+
+<!-- include: shared/music-beat-sync.md -->
 
 To keep editing in Final Cut Pro, Premiere Pro or DaVinci Resolve after
 finish, export an editable timeline (base clips with their in points, each

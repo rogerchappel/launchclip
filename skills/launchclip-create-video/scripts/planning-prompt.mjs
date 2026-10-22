@@ -185,7 +185,7 @@ function tierRules(tier) {
 
 function laneRules(lane) {
   const rules = {
-    motion: 'motion: no voice. Full-frame modules cover the whole duration back to back on track 0 (no gaps). Time scenes in seconds or beat anchors. audio.music may be "synth".',
+    motion: 'motion: no voice. Full-frame modules cover the whole duration back to back on track 0 (no gaps). Time scenes in seconds or beat anchors. finish snaps second-timed cuts to the nearest downbeat (within 0.25 s), so plan cuts on bar lines where you can.',
     'voiceover-motion': 'voiceover-motion: audio.voice and audio.words are fixed inputs; copy them unchanged. Full-frame modules cover the whole duration on track 0. Start scenes and place hits on word anchors from the narration so visuals land on the spoken word. Add a captions overlay.',
     'footage-led': 'footage-led: base (the edited recording under assets/) plays underneath and is a fixed input; copy it unchanged. Scenes are overlays and inserts on the strong lines only, covering 10–40% of the runtime (up to 50% with resource inserts); gaps show the recording. Prefer callout, kinetic-words, count-up and metric. Add a captions overlay.'
   };
@@ -226,6 +226,7 @@ function contractLines() {
     `schema: "${STORY_SCHEMA}" (exactly). lane: one of ${STORY_LANES.join(', ')} (given; never change it).`,
     'format: {width, height, fps, duration, platform?} and brand: {colors, fonts} are given; copy them unchanged.',
     'audio: {voice?, words?, music?, sfx?}; base: null, or the recording path for footage-led.',
+    'audio.music: omit it (finish picks ElevenLabs when a key is set, else the synth bed), or "synth", "none", an assets/ path, or {provider: "elevenlabs" | "synth" | "file", prompt?, bpm?, file?, sync?: "auto" | "off" | "cuts" | "hits"}. The music follows scene energy, so set energy honestly: calm intro, "build" before the payoff, 3 on the payoff. A prompt describes style only (no vocals is added for you).',
     `scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: ${STORY_TRANSITIONS.join(' | ')}, dur, direction?, from_object?}, params, hits?}].`,
     'in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus.',
     'overlays: [captions]. ending: {loop_to: "<first scene id>"} for a seamless loop (Shorts).',
@@ -271,7 +272,7 @@ export function exampleStoryboard({ format, brand } = {}) {
     lane: 'motion',
     format: fmt,
     brand: brand ?? DEFAULT_BRAND,
-    audio: { music: { source: 'synth', bpm: 100, key: 'A' }, sfx: 'auto' },
+    audio: { music: { provider: 'synth', bpm: 100, key: 'A' }, sfx: 'auto' },
     base: null,
     scenes: [
       { id: 's1', module: 'hook-title', start: 0, end: 3, energy: 1, params: { headline: 'Why does CI take 40 minutes?', emphasis: '40 minutes', kicker: 'Fix it' }, hits: [{ at: 0.8, event: 'emphasis-0' }] },

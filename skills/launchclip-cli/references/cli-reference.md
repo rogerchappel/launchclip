@@ -612,8 +612,8 @@ candidate as `<out>.rejected.json`. Review the storyboard, then run
 
 ```bash
 launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] \
-  [--voice kokoro|elevenlabs|supplied|test] [--out renders/final.mp4] \
-  [--sfx-library dir] [--sfx-density low|normal|high] \
+  [--voice kokoro|elevenlabs|supplied|test] [--music synth|elevenlabs|none] \
+  [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] \
   [--scene s3[,s4] | --preview-scene s3] [--force] [--json]
 ```
 
@@ -626,7 +626,7 @@ finished video. It runs these stages in order and stops at the first failure
 | `voice` | When `audio.narration` (`{text, provider?, voice?, speed?}`) is set, synthesises it through the voice provider (`--voice` overrides `provider`; the default is `kokoro`). Skipped when `audio.voice` is a supplied file, unless `--voice` is given. | `assets/audio/narration.wav`, `NARRATION.json` |
 | `validate` | Validates the story, resolves its anchors against the synthesised words, and runs the geometric layout check. Errors fail the run; warnings are reported. | `.launchclip/finish/storyboard.json`, `.launchclip/finish/story.resolved.json` |
 | `captions` | Chunks the words into caption lines when a captions overlay has no `src`. | `assets/captions/captions.json` |
-| `sound` | Binds a cue to every hit (`hit.cue`, else the named module event's cue, else a default from the event name) and to every module event that carries a `cue`, adds a whoosh under push, whip and zoom transitions, resolves each cue to a file through the SFX library (see [Sound effects](#sound-effects)), renders a typing track for typed code, picks a music bed from scene `energy` (tempo, level and kick window), and mixes everything with the music ducked under the voice. Skipped when the storyboard sets `audio.mix`. `audio.sfx: "none"` and `audio.music: "none"` turn the parts off. | `assets/audio/mix.wav`, `assets/audio/kit/`, `assets/audio/typing.wav`, `AUDIO-MANIFEST.json`, `qa/sfx.json` |
+| `sound` | Binds a cue to every hit (`hit.cue`, else the named module event's cue, else a default from the event name) and to every module event that carries a `cue`, adds a whoosh under push, whip and zoom transitions, resolves each cue to a file through the SFX library (see [Sound effects](#sound-effects)), renders a typing track for typed code, resolves the music (see [Music](#music)): the procedural bed from scene `energy`, an ElevenLabs track generated (or reused from the cache) for the story, or a supplied file; analyses its beats, applies beat sync, and mixes everything with the music ducked under the voice. Skipped when the storyboard sets `audio.mix`. `audio.sfx: "none"` and `audio.music: "none"` (or `--music none`) turn the parts off. | `assets/audio/mix.wav`, `assets/audio/kit/`, `assets/audio/typing.wav`, `AUDIO-MANIFEST.json`, `qa/sfx.json`, `BEATS.json`, `qa/beat-sync.json`, `assets/audio/music.mp3` (ElevenLabs) |
 | `render` | Renders the filled copy through the renderer adapter and the segment cache (see the iteration loop below): unchanged segments are reused and the summary reports how many were reused, rendered and the time saved. The default renderer is `remotion` when the project has no `index.html`, otherwise `hyperframes`; HyperFrames compiles to `.launchclip/finish/hyperframes/` first. | `.launchclip/finish/render-<quality>.mp4`, `.launchclip/finish/segments/` |
 | `master` | Masters the render's audio to −14 LUFS and at most −1 dBTP, re-measured after encoding. | `renders/draft.mp4` (draft) or `renders/final.mp4` (high), or `--out` |
 | `evidence` | Builds the phase-2 temporal evidence (browser stills plus encoded frames) and critic contact sheets. | `qa/temporal-evidence/`, `qa/critic-sheets/` |
@@ -698,6 +698,79 @@ ones and caching the new ones for the next full run) to
 `renders/scene-s3.mp4` with its slice of the soundtrack, then stops: master,
 evidence and gates are skipped, the final and the finish state are untouched,
 and the report's `status` is `preview`. Unknown scene ids are an error.
+
+### Music
+
+`finish` picks the music in this order: `--music synth|elevenlabs|none`, then
+`audio.music` in the storyboard, then ElevenLabs when `ELEVENLABS_API_KEY` is
+set, else the procedural synth bed. `audio.music` accepts:
+
+| Value | Music |
+| --- | --- |
+| absent | the default above |
+| `"synth"` | the license-free procedural bed (`synth-audio-kit.mjs`): tempo, level and kick window follow scene `energy` |
+| `"none"` | no music |
+| `"assets/audio/song.mp3"` | a supplied track (its licence is yours to check) |
+| `{provider, prompt?, bpm?, key?, file?, sync?, seed?, model?, volume?}` | `provider` is `"synth"`, `"elevenlabs"` or `"file"`; `sync` is `"auto"` (default), `"off"`, `"cuts"` or `"hits"` |
+
+**ElevenLabs (paid).** `finish` prints a one-line notice that a paid API is in
+use and where generations are cached, then calls `POST /v1/music`. Without a
+`prompt` it sends a `music_v1` composition plan: global styles from the story
+(tone from the title, notes and brand background, the target BPM, steady 4/4,
+instrumental, and negative styles for vocals of any kind) and one section per
+energy segment of the story (calm intro → build → payoff; sections shorter
+than 3 s merge into a neighbour). With a `prompt` it sends that text plus the
+tempo, the energy arc and "instrumental only, no vocals", with
+`force_instrumental: true`. The track runs the story's length plus 2 s, so beat
+sync can trim the start. The target BPM is `audio.music.bpm`, else the tempo
+the energy implies (84–116). Every generation is cached by a hash of the
+prompt or plan, length, model and seed under
+`$LAUNCHCLIP_CACHE/elevenlabs/music` (default
+`~/.cache/launchclip/elevenlabs/music`); a cached track is never generated
+again, even without a key. The key is read from the environment, sent only in
+the `xi-api-key` header, and never logged, cached or put in an error. Before
+mixing, generated and supplied music is brought to −16 LUFS so the volume and
+the voice-to-music margin behave like the synth bed. `--music elevenlabs`
+without a key fails before anything is sent; `audio.music.provider:
+"elevenlabs"` without a key falls back to the synth bed with a warning. Output
+terms: see `THIRD_PARTY_NOTICES.md`.
+
+**Beats.** The track's tempo, beat grid and downbeats are measured
+(`src/music/beats.js`: FFmpeg decode, spectral-flux onsets, autocorrelation
+with the requested BPM as a prior, a global grid fit) and written to
+`BEATS.json` (`launchclip.beats.v1`, in story time), so `beat:n` and
+`downbeat:n` anchors resolve against the real music. The synth bed's grid is
+exact and needs no analysis. A `BEATS.json` you wrote yourself is never
+overwritten; the music's grid then goes to `assets/audio/BEATS.json`.
+
+**Beat sync.** The strategy follows the lane:
+
+- **Narrated stories** (a voice, words or `audio.narration`): the narration
+  timing is fixed, so the music moves. `finish` scores every start offset into
+  the track (and tempo changes up to ±3% with FFmpeg `atempo`, kept only when
+  they score at least 5% better) so downbeats land on the first cut after the
+  hook, the payoff/CTA scene start, the other cuts and strong hits. No story
+  time changes.
+- **Motion stories** (no narration): the music is aligned the same way, then
+  second-timed scene cuts snap to the nearest downbeat (or beat) and
+  second-timed hits to the nearest beat, within 0.25 s. Every move is
+  re-resolved, validated and checked against its module's params, and
+  reverted when it breaks one; layout-check runs again on the result and a
+  failure reverts all snaps.
+
+Word-anchored times never move off their word, and beat anchors are on the
+grid already. `sync: "cuts"` aligns and snaps cuts only, `"hits"` only hits,
+`"off"` turns beat sync off. `qa/beat-sync.json` records the strategy, the
+requested and measured BPM, the offset and tempo chosen, every key moment's
+distance to the nearest downbeat and beat, and each change, fallback and skip.
+
+### Environment and `.env`
+
+At startup the CLI reads `.env` from the working directory and, for commands
+that take a project or workspace directory (such as `finish`), from that
+directory too. Variables already set in the shell always win, and a `.env`
+never overrides them. It uses Node's `process.loadEnvFile` (with a small
+fallback parser). Copy `.env.example` to start; `.env` is gitignored.
 
 ### Sound effects
 

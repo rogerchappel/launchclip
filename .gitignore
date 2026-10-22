@@ -54,5 +54,8 @@ qa/renderer-eval/
 # Voice provider QA samples
 qa/voice/
 
+# Music generation and beat-sync proof runs
+qa/music/
+
 # SFX library QA renders and auditions
 qa/sfx/

@@ -494,7 +494,8 @@ launchclip finish <project> --renderer hyperframes --quality high    # renders/f
 
 It synthesises `audio.narration` when set (`--voice kokoro|elevenlabs|supplied`),
 validates and layout-checks the storyboard, writes captions, builds the SFX
-and music mix from the hits, module cues and scene energy, compiles the
+and music mix from the hits, module cues, scene energy and the beat-synced
+music (`--music synth|elevenlabs|none`), compiles the
 storyboard to `.launchclip/finish/hyperframes/`, renders, masters to −14 LUFS /
 −1 dBTP, builds the temporal evidence and critic sheets, and runs the motion,
 audio, loudness, layout and evidence gates. It never rewrites
@@ -506,6 +507,8 @@ has reviewed `qa/critic-sheets/`.
 has no frame range: finish renders the whole video (cached by the hash of the
 whole timeline, so an unchanged story is never rendered twice), and a preview
 is cut from that render. Partial rendering is Remotion-only for now.
+
+<!-- include: shared/music-beat-sync.md -->
 
 To keep editing in Final Cut Pro, Premiere Pro or DaVinci Resolve after
 finish, export an editable timeline (base clips with their in points, each
