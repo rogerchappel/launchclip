@@ -41,9 +41,9 @@ test("code-snippet names the line, its length, what the rect fits and the width 
 test("cta handle says how wide it is, what the pill fits, and to drop a github.com/ prefix", () => {
   const handle = "github.com/rogerchappel/launch";
   assert.throws(() => CATALOG_A.cta.resolve({ action: "Star it on GitHub", handle, rect: { x: 140, y: 600, width: 600, height: 600 } }, ctx()),
-    /^Error: cta: params.handle 'github\.com\/rogerchappel\/launch' needs \d+ px; the pill fits 600 px at this size: shorten it, or drop the 'github\.com\/' prefix, or set icon: 'none'$/);
+    /^Error: cta: params.handle 'github\.com\/rogerchappel\/launch' needs \d+ px even at the 44 px text floor; the pill fits 600 px: shorten it, or drop the 'github\.com\/' prefix, or set icon: 'none'$/);
   assert.throws(() => CATALOG_A.cta.resolve({ action: "Star it", handle: "https://launchclip.example", icon: "none", rect: { x: 140, y: 600, width: 500, height: 600 } }, ctx()),
-    /needs \d+ px; the pill fits 500 px at this size: shorten it, or drop the 'https:\/\/' prefix$/);
+    /needs \d+ px even at the 44 px text floor; the pill fits 500 px: shorten it, or drop the 'https:\/\/' prefix$/);
 });
 
 test("process-steps spacing names both step times and the earliest valid at", () => {

@@ -298,11 +298,11 @@ export function validateStylePack(pack, { modules } = {}) {
 // ---------------------------------------------------------------------------
 // Merge
 
-/** {name, intro, outro} from a story's `style` value (string or object). */
+/** {name, intro, outro, loop: boolean | null} from a story's `style` value (string or object). */
 export function storyStyleRequest(story) {
   const value = story?.style;
-  if (typeof value === 'string' && value.trim()) return { name: value.trim(), intro: false, outro: false };
-  if (isObject(value) && nonEmpty(value.name)) return { name: value.name.trim(), intro: value.intro === true, outro: value.outro === true };
+  if (typeof value === 'string' && value.trim()) return { name: value.trim(), intro: false, outro: false, loop: null };
+  if (isObject(value) && nonEmpty(value.name)) return { name: value.name.trim(), intro: value.intro === true, outro: value.outro === true, loop: typeof value.loop === 'boolean' ? value.loop : null };
   return null;
 }
 
@@ -327,7 +327,7 @@ function uniqueId(story, base) {
 
 /**
  * Merge a style pack into a story. Explicit story values always win.
- * options: {intro, outro} (default: the story's style object). Returns
+ * options: {intro, outro, loop} (default: the story's style object). Returns
  * {story, applied: ["brand.colors.primary", ...], warnings}. The merged story
  * carries meta.style = {name, applied}; a story that already has it is
  * returned unchanged (the merge is idempotent).
@@ -339,7 +339,7 @@ export function applyStyle(story, pack, options = {}) {
   const out = clone(story);
   const applied = [];
   const warnings = [];
-  const request = storyStyleRequest(story) ?? { intro: false, outro: false };
+  const request = storyStyleRequest(story) ?? { intro: false, outro: false, loop: null };
   const wantIntro = options.intro ?? request.intro;
   const wantOutro = options.outro ?? request.outro;
   const fill = (target, source, path) => {
@@ -404,8 +404,13 @@ export function applyStyle(story, pack, options = {}) {
     }
   }
 
-  // Loop: when the story declares no ending.
-  if (pack.loop === true && out.ending === undefined && out.scenes?.[0]?.id) { out.ending = { loop_to: out.scenes[0].id }; applied.push('ending.loop_to'); }
+  // Loop: when the story declares no ending. options.loop, then the story's
+  // style.loop, then the pack's loop decide; false is honoured too, written
+  // as ending {loop: false} so the story says it does not loop (and its last
+  // scene holds, see ending.final in story.mjs).
+  const loop = typeof options.loop === 'boolean' ? options.loop : typeof request.loop === 'boolean' ? request.loop : typeof pack.loop === 'boolean' ? pack.loop : null;
+  if (out.ending === undefined && loop === true && out.scenes?.[0]?.id) { out.ending = { loop_to: out.scenes[0].id }; applied.push('ending.loop_to'); }
+  else if (out.ending === undefined && loop === false) { out.ending = { loop: false }; applied.push('ending.loop'); }
 
   // Intro/outro scenes, only when the story asks for them.
   const duration = Number(out.format?.duration);

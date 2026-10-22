@@ -174,6 +174,15 @@ last spoken line so it runs into the first ("…it's why your" → "Coffee cools
 fast, then slow"), and end on the same image as frame zero. Skip
 subscribe end cards: they break the loop. Default duration is 25–35 seconds.
 
+When a cut should not loop (a landscape launch video, an end card that must stay
+up), write `"ending": {"loop": false}` (or `"loop_to": null`); that also
+overrides a style pack's `loop: true`, as does `"style": {"name": …, "loop":
+false}`. Without a loop the last scene holds settled through the final frame
+(`ending.final: "hold"`, the default), so the last frame is never caught half way
+through an exit. `"final": "fade"` fades it fully to the background by the final
+frame instead, and `"final": "exit"` plays the module's own exit. Unknown ending
+keys are errors.
+
 ## Export settings
 
 - Render the composition at 1080×1920. For a 60 fps upload, render kinetic-type

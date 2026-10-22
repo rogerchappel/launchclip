@@ -126,11 +126,51 @@ function scenePath(scene, story) {
  */
 export function resolveModule(scene, story, { track, end } = {}) {
   const where = scenePath(scene, story);
+  const finalEnd = endingEnd(scene, story, end);
   try {
-    return resolveModuleInner(scene, story, { track, end });
+    return resolveModuleInner(scene, story, { track, end: finalEnd });
   } catch (error) {
-    throw new Error(`${where}: ${error.message}${rectFitHint(scene, story, error.message, { end })}`);
+    throw new Error(`${where}: ${error.message}${rectFitHint(scene, story, error.message, { end: finalEnd })}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// The last scene of a story that does not loop. ending.final (story.mjs):
+//   "hold" (default) → the module resolves with its end FINAL_HOLD_TAIL past
+//     the story end, so its exit falls after the last frame and the final
+//     frame shows it settled;
+//   "fade" → its end is pulled in to the final frame, so the exit completes
+//     to the background by the last frame (never a half-dim final frame);
+//   "exit" → unchanged (the exit ends exactly at format.duration).
+// Applies to every scene still on screen at the story end (scene.end at the
+// duration). Not applied when the story loops (ending.loop_to) or to
+// footage-led stories (they end on the recording). A cta with params.loop
+// (its own fade to the background) ends as "fade" under "hold".
+export const FINAL_HOLD_TAIL = 2;
+
+/** 'hold' | 'fade' | 'exit' | null (the story loops) for a story's last scene. */
+export function storyFinal(story) {
+  const ending = story?.ending;
+  if (ending && typeof ending === 'object' && typeof ending.loop_to === 'string') return null;
+  if (storyBase(story)) return 'exit';
+  const final = ending && typeof ending === 'object' ? ending.final : undefined;
+  return final === 'fade' || final === 'exit' ? final : 'hold';
+}
+
+function endingEnd(scene, story, end) {
+  const final = storyFinal(story);
+  if (!final || final === 'exit' || !scene || typeof scene !== 'object') return end;
+  const duration = Number(story?.resolved?.duration ?? story?.format?.duration);
+  const sceneEnd = Number(scene.end), start = Number(scene.start);
+  if (!Number.isFinite(duration) || !Number.isFinite(sceneEnd) || sceneEnd < duration - 1e-6) return end;
+  const current = Number(end ?? sceneEnd);
+  // A cta with params.loop fades itself to the background: it ends as "fade".
+  if (final === 'hold' && !(scene.module === 'cta' && scene.params?.loop === true)) return current + FINAL_HOLD_TAIL;
+  const fps = Number(story?.resolved?.fps ?? story?.format?.fps ?? 30);
+  // The final frame's time, floored to the model's 1e-6 grid so the exit has
+  // completed on that frame in both renderers.
+  const last = Math.floor(((Math.round(duration * fps) - 1) / fps) * 1e6) / 1e6;
+  return last - start >= 1 ? Math.min(current, last) : end;
 }
 
 // ---------------------------------------------------------------------------

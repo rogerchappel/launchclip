@@ -217,3 +217,21 @@ test("finish bounds the music bed tempo by the style's bpm range", () => {
   assert.equal(chooseBed(resolved, {}).bpm, 84);
   assert.equal(chooseBed(resolved, { bpm_range: [120, 130] }).bpm, 120);
 });
+
+test("applyStyle honours loop: false as well as loop: true, and the story's style.loop overrides the pack", () => {
+  const story = (extra = {}) => ({ schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 6 },
+    scenes: [{ id: "s1", module: "hook-title", start: 0, end: 6, params: { headline: "Hi" } }], ...extra });
+  assert.deepEqual(applyStyle(story(), { loop: true }).story.ending, { loop_to: "s1" });
+  const off = applyStyle(story(), { loop: false });
+  assert.deepEqual(off.story.ending, { loop: false });
+  assert.ok(off.applied.includes("ending.loop"));
+  assert.deepEqual(validateStory({ ...off.story, brand: { colors: { bg: "#000000", primary: "#ffffff" }, fonts: { display: "anton" } } }).errors, []);
+  // The story's own style.loop wins over the pack, either way.
+  assert.deepEqual(applyStyle(story({ style: { name: "dark", loop: false } }), { loop: true }).story.ending, { loop: false });
+  assert.deepEqual(applyStyle(story({ style: { name: "dark", loop: true } }), { loop: false }).story.ending, { loop_to: "s1" });
+  // An explicit ending always wins, including the no-loop forms.
+  assert.deepEqual(applyStyle(story({ ending: { loop_to: null } }), { loop: true }).story.ending, { loop_to: null });
+  assert.deepEqual(applyStyle(story({ ending: { final: "fade" } }), { loop: true }).story.ending, { final: "fade" });
+  // No loop setting anywhere: no ending is written.
+  assert.equal(applyStyle(story(), {}).story.ending, undefined);
+});

@@ -262,7 +262,10 @@ A style pack is `.launchclip/styles/<name>/style.json`:
   gets one captions overlay); `sound` lands on `audio.sfx_density`,
   `audio.sfx_library` and `audio.music_hints` (finish filters cues by density
   and bounds the bed tempo by `bpm_range`); `modules.params` fill each scene of
-  that module; `loop` adds `ending.loop_to` when the story has no ending; intro
+  that module; `loop` adds `ending.loop_to` (`loop: false` adds `ending.loop:
+false`) when the story has no ending, and the story's `style.loop` overrides
+the pack's (story.mjs `ending.final` then decides how a non-looping story's last
+scene ends: `hold` by default, `fade` or `exit`; modules.mjs `storyFinal`); intro
   and outro scenes are added only when requested (`"style": {name, intro,
   outro}`), and an intro is skipped on stories with a timed voice, mix, base or
   anchors. The merged story carries `meta.style = {name, applied}`, which makes

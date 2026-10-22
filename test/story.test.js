@@ -432,3 +432,59 @@ test("story.ambient and scenes[i].ambient validate the ambient-motion control", 
   // The same rules as ambientErrors().
   assert.deepEqual(ambientErrors({ level: "loud", drift: "yes", speed: 1 }), errors.slice(0, 3));
 });
+
+test("ending: loop_to null and loop false mean no loop, final picks hold/fade/exit, and unknown keys are errors", () => {
+  const errors = (ending) => validateStory(baseStory({ ending })).errors;
+  assert.deepEqual(errors({ loop_to: null }), []);
+  assert.deepEqual(errors({ loop: false }), []);
+  assert.deepEqual(errors({ final: "hold" }), []);
+  assert.deepEqual(errors({ loop_to: null, final: "fade" }), []);
+  assert.deepEqual(errors({ loop: false, final: "exit" }), []);
+  assert.deepEqual(errors({}), []);
+  assert.match(errors({ hold: 1.5 }).join("\n"), /^ending\.hold is not a known ending key \(allowed: loop_to, in, loop, final\)/);
+  assert.match(errors({ loop: true }).join("\n"), /ending\.loop must be false/);
+  assert.match(errors({ loop: false, loop_to: "s1" }).join("\n"), /contradicts ending\.loop_to/);
+  assert.match(errors({ final: "freeze" }).join("\n"), /ending\.final must be one of hold, fade, exit/);
+  assert.match(errors({ loop_to: "s1", final: "hold" }).join("\n"), /ending\.final only applies without a loop/);
+  assert.match(errors({ loop_to: null, in: { type: "fade", dur: 0.4 } }).join("\n"), /ending\.in requires ending\.loop_to/);
+  assert.match(errors({ loop_to: 3 }).join("\n"), /ending\.loop_to must reference a scene id, or be null for no loop/);
+  // style.loop is a boolean override of the pack's loop.
+  assert.deepEqual(validateStory(baseStory({ style: { name: "x", loop: false } })).errors, []);
+  assert.match(validateStory(baseStory({ style: { name: "x", loop: "no" } })).errors.join("\n"), /style\.loop must be true or false/);
+});
+
+test("ending.final: without a loop the last scene holds settled by default, fade completes its exit by the final frame, exit keeps it", async () => {
+  const { resolveModule, storyFinal, FINAL_HOLD_TAIL } = await import("../kit/core/modules.mjs");
+  const { sampleNode } = await import("../kit/core/catalog-a.mjs");
+  const brand = { colors: { bg: "#0a0b10", paper: "#f3efe6", primary: "#ffa630", ink: "#0a0b10" } };
+  const story = (ending, last = {}) => resolveStory({
+    schema: STORY_SCHEMA, lane: "motion", format: { width: 1920, height: 1080, fps: 30, duration: 8 }, brand,
+    scenes: [
+      { id: "s1", module: "hook-title", start: 0, end: 4, params: { headline: "Ship it" } },
+      { id: "s2", module: "cta", start: 4, end: 8, params: { action: "Star it on GitHub", handle: "rogerchappel/launchclip", ...last } }
+    ],
+    ...(ending === undefined ? {} : { ending })
+  });
+  const lastFrame = 8 - 1 / 30;
+  const opacityAtEnd = (resolved) => sampleNode(resolveModule(resolved.scenes[1], resolved), "root", lastFrame).opacity ?? 1;
+  // No ending (and loop_to null, loop false): hold. The exit falls past the end; the final frame is fully lit.
+  for (const ending of [undefined, {}, { loop_to: null }, { loop: false }, { final: "hold" }]) {
+    const resolved = story(ending);
+    assert.equal(storyFinal(resolved), "hold");
+    const model = resolveModule(resolved.scenes[1], resolved);
+    assert.equal(model.end, 8 + FINAL_HOLD_TAIL);
+    assert.equal(opacityAtEnd(resolved), 1, JSON.stringify(ending));
+  }
+  // The first scene is not the last one: unchanged.
+  assert.equal(resolveModule(story(undefined).scenes[0], story(undefined)).end, 4);
+  // fade: fully at the background on the final frame.
+  assert.equal(opacityAtEnd(story({ final: "fade" })), 0);
+  // exit: the scene's own exit, caught mid-way on the final frame (the old behaviour).
+  const exit = opacityAtEnd(story({ final: "exit" }));
+  assert.ok(exit > 0 && exit < 1, `exit opacity ${exit}`);
+  // A loop returns to loop_to; the last scene is untouched.
+  assert.equal(storyFinal(story({ loop_to: "s1" })), null);
+  assert.equal(resolveModule(story({ loop_to: "s1" }).scenes[1], story({ loop_to: "s1" })).end, 8);
+  // cta loop: true keeps its own fade to the background.
+  assert.equal(opacityAtEnd(story(undefined, { loop: true })), 0);
+});

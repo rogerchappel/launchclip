@@ -8,6 +8,8 @@ export const STORY_SCHEMA = "launchclip.story.v1";
 
 export const STORY_LANES = ["motion", "voiceover-motion", "footage-led"];
 export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan"];
+export const STORY_ENDING_KEYS = Object.freeze(["loop_to", "in", "loop", "final"]);
+export const STORY_ENDING_FINALS = Object.freeze(["hold", "fade", "exit"]);
 // Camera transitions (kit/core/camera-world.mjs): the camera travels to the
 // next scene instead of the layers moving. `push` is a camera dolly only in
 // camera.mode "world"; in "cuts" it keeps its slide meaning.
@@ -161,8 +163,8 @@ export function validateStory(story, { modules } = {}) {
     const style = story.style;
     if (isObject(style)) {
       if (!nonEmpty(style.name)) err("style.name must name a style pack or a path to its style.json");
-      for (const key of ["intro", "outro"]) if (style[key] !== undefined && typeof style[key] !== "boolean") err(`style.${key} must be true or false`);
-    } else if (!nonEmpty(style)) err("style must be a style pack name, a path to a style.json, or {name, intro?, outro?}");
+      for (const key of ["intro", "outro", "loop"]) if (style[key] !== undefined && typeof style[key] !== "boolean") err(`style.${key} must be true or false`);
+    } else if (!nonEmpty(style)) err("style must be a style pack name, a path to a style.json, or {name, intro?, outro?, loop?}");
   }
 
   if (!STORY_LANES.includes(story.lane)) err(`lane must be one of ${STORY_LANES.join(", ")}`);
@@ -401,15 +403,30 @@ export function validateStory(story, { modules } = {}) {
   }
 
   // ending
+  // ending: {loop_to: "<scene id>", in?} loops; {loop_to: null} or
+  // {loop: false} (or no ending) does not, and then `final` says how the last
+  // scene ends: "hold" (default: settled, no exit), "fade" (completes its exit
+  // to the background by the final frame) or "exit" (plays its own exit,
+  // ending at format.duration).
   if (story.ending !== undefined && story.ending !== null) {
     if (!isObject(story.ending)) err("ending must be an object or null");
     else {
-      if (story.ending.loop_to !== undefined) {
-        if (typeof story.ending.loop_to !== "string" || !ids.has(story.ending.loop_to)) err(`ending.loop_to must reference a scene id; got ${JSON.stringify(story.ending.loop_to)}`);
+      for (const key of Object.keys(story.ending)) if (!STORY_ENDING_KEYS.includes(key)) err(`ending.${key} is not a known ending key (allowed: ${STORY_ENDING_KEYS.join(", ")}); for a held last frame use ending.final: "hold"`);
+      const loops = typeof story.ending.loop_to === "string";
+      if (story.ending.loop_to !== undefined && story.ending.loop_to !== null) {
+        if (typeof story.ending.loop_to !== "string" || !ids.has(story.ending.loop_to)) err(`ending.loop_to must reference a scene id, or be null for no loop; got ${JSON.stringify(story.ending.loop_to)}`);
+      }
+      if (story.ending.loop !== undefined) {
+        if (story.ending.loop !== false) err("ending.loop must be false (no loop); to loop, set ending.loop_to to a scene id");
+        else if (loops) err("ending.loop: false contradicts ending.loop_to; drop one");
+      }
+      if (story.ending.final !== undefined) {
+        if (!STORY_ENDING_FINALS.includes(story.ending.final)) err(`ending.final must be one of ${STORY_ENDING_FINALS.join(", ")}`);
+        else if (loops) err("ending.final only applies without a loop; a looping story returns to ending.loop_to instead");
       }
       if (story.ending.in !== undefined && story.ending.in !== null) {
         const transition = story.ending.in;
-        if (story.ending.loop_to === undefined) err("ending.in requires ending.loop_to");
+        if (!loops) err("ending.in requires ending.loop_to");
         if (!isObject(transition)) err("ending.in must be an object");
         else {
           if (!STORY_TRANSITIONS.includes(transition.type)) err(`ending.in.type must be one of ${STORY_TRANSITIONS.join(", ")}`);
