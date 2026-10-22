@@ -506,7 +506,7 @@ export function assetManifestLines(ctx) {
     const src = `assets/${item.path}`;
     const size = item.width && item.height ? `${item.width}×${item.height}` : "unknown size";
     const use = lane === "footage-led"
-      ? `a full-frame insert: a media-window scene with insert: true and params.media {kind: "${item.kind}", src: "${src}"}`
+      ? `a full-frame insert that covers the speaker: {"module": "media-window", "insert": true, "params": {"title": "…", "media": {"kind": "${item.kind}", "src": "${src}"}}} (insert is a scene key, never inside params; no track)`
       : `a media-window scene with params.media {kind: "${item.kind}", src: "${src}"${item.kind === "video" ? ", sourceStart?" : ""}}`;
     out.push({ src, kind: item.kind, line: `${src} — ${item.kind}, ${item.role}, ${size}${item.duration ? `, ${item.duration}s` : ""}: ${item.description}. Use as ${use}.` });
   }
