@@ -152,10 +152,10 @@ function parseSkillsInvocation(action, rest) {
 }
 
 function parseStoryInvocation(action, rest) {
-  if (!action) throw new Error("Missing story action; use validate or resolve");
-  if (!new Set(["validate", "resolve"]).has(action)) throw new Error(`Unknown story action: ${action}`);
+  if (!action) throw new Error("Missing story action; use validate, resolve or compile");
+  if (!new Set(["validate", "resolve", "compile"]).has(action)) throw new Error(`Unknown story action: ${action}`);
   const file = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
-  return { action, file: required(file, "story.json path"), flagArgs: rest.slice(1) };
+  return { action, file: required(file, action === "compile" ? "story project path" : "story.json path"), flagArgs: rest.slice(1) };
 }
 
 async function runStyleCommand(action, name, flags) {
@@ -258,6 +258,7 @@ Usage:
   launchclip production-render <workspace> --approve [--quality high] [--critic-route provider:model@reasoning] [--shot-inspect-concurrency 2] [--reference-video local.mp4]
   launchclip story validate <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out report.json]
   launchclip story resolve <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out story.resolved.json]
+  launchclip story compile <project> --renderer hyperframes|remotion [--out dir]
   launchclip cinematic-check <project> [--renderer hyperframes|remotion] [--video renders/draft.mp4] [--audio-manifest AUDIO-MANIFEST.json] [--expect-audio] [--critique qa/critic.json]
   launchclip layout-check <project> [--profile shorts|landscape] [--json]
   launchclip init <repo> --out <workspace>

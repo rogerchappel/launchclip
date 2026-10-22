@@ -520,7 +520,39 @@ Anchors are seconds, `word:<text>[#n]` (case-insensitive, punctuation ignored;
 `word:thirty-five` also matches "thirty" "five"; `#n` is the 1-based
 occurrence), `beat:<n>` or `downbeat:<n>` (0-based, from `BEATS.json`), each
 with an optional offset such as `word:fast+0.1`. A golden example lives in
-`examples/story/cooling.storyboard.json`.
+`examples/story/cooling.story.json`; a minimal two-scene project that renders
+in both renderers lives in `examples/story/minimal/`.
+
+`validate` also checks every `module` against the kit's module registry
+(`kit/core/modules.mjs`: the 14 editorial kinds plus the catalogue). An
+unknown module is reported as a warning, because both compilers render it as
+a visible labelled placeholder rather than failing.
+
+### Compile a storyboard for a renderer
+
+```bash
+launchclip story compile <project> --renderer hyperframes [--out <dir>]
+launchclip story compile <project> --renderer remotion
+```
+
+`<project>` is the directory holding `storyboard.json` (or the file itself).
+Anchors are resolved against `NARRATION.json` and `BEATS.json` when present.
+
+- `--renderer hyperframes` writes a complete HyperFrames project (default
+  `<project>/hyperframes/`): `index.html` with one paused GSAP timeline, every
+  scene's module, typed transitions, the phase-2 boundary attributes, one root
+  `<audio>` from `audio.mix` (or `audio.voice`), word captions and the loop
+  ending, plus a copy of `assets/`. Render it with
+  `npx hyperframes render <dir>` or the HyperFrames renderer adapter. It is a
+  separate directory on purpose: a project root with both `storyboard.json`
+  and `index.html` is treated as HyperFrames everywhere else.
+- `--renderer remotion` writes `<project>/.launchclip/story.resolved.json` (the
+  `LaunchclipStory` props) and verifies the bundle with
+  `remotion compositions`; `--out` names a different props file.
+
+The JSON result lists `files`, `warnings` (placeholders for unknown modules,
+missing audio, captions skipped) and the derived `boundaries`. An invalid
+story fails the command.
 
 ## Failure handling
 

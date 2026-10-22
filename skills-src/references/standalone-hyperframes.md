@@ -205,6 +205,27 @@ For modular scenes, each file in `compositions/` must wrap its root in a
 `<template>`. Put its styles and scripts inside that template. The host slot's
 composition id, the inner root id, and its timeline key must match exactly.
 
+### Compiling a storyboard.json
+
+When the project is authored as a `storyboard.json` (`launchclip.story.v1`),
+compile it instead of hand-writing `index.html`:
+
+```bash
+launchclip story compile <project> --renderer hyperframes --out <project>/hyperframes
+```
+
+Without the CLI, call `compileStoryToHyperFrames(resolvedStory, {projectDir,
+sourceDir})` from `scripts/story-compiler.mjs` (resolve the story first with
+`resolveStory` from `scripts/story.mjs`). The output keeps this contract: one
+root `launchclip-story` composition with one paused timeline, each scene's
+module inside a scene layer, typed transitions between track-0 scenes with the
+phase-2 boundary attributes, one root `<audio>` from `audio.mix`, word captions,
+the loop ending and the brand fonts. Unknown modules render a labelled
+placeholder and a compile warning. Keep the output in its own directory: a
+directory holding both `storyboard.json` and `index.html` is read as
+HyperFrames. Repair the storyboard and recompile rather than editing the
+generated `index.html`.
+
 ## Design and motion quality contract
 
 Treat `DESIGN.md`, `STORYBOARD.md`, and `QUALITY.md` as executable creative
