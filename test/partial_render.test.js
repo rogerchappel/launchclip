@@ -2,7 +2,7 @@
 // and encoded once, are frame-identical to a fresh full render.
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -34,6 +34,28 @@ async function frameCount(file) {
   return Number(String(stdout).trim());
 }
 
+// Decoded frame count of every segment of a render, as cached: each must hold
+// exactly its frame range (renderWithSegments verifies this before caching;
+// this checks it independently, by decoding).
+async function segmentFrames(result, project) {
+  const dir = path.isAbsolute(result.cache) ? result.cache : path.join(project, result.cache);
+  const files = await readdir(dir);
+  const out = [];
+  for (const entry of result.plan) {
+    const name = files.find((file) => file.startsWith(entry.hash) && file.endsWith(".mp4"));
+    out.push([entry.id, entry.frames[1] - entry.frames[0], name ? await frameCount(path.join(dir, name)) : null]);
+  }
+  return out;
+}
+
+// A render under heavy load may re-render a segment that came back short; say so.
+function noteRetries(t, label, result) {
+  for (const entry of result.plan) {
+    if (entry.retried) t.diagnostic(`${label}: segment ${entry.id} ${entry.retried} and was re-rendered`);
+    if (entry.repaired) t.diagnostic(`${label}: segment ${entry.id}: ${entry.repaired}; re-rendered`);
+  }
+}
+
 // Per-frame SSIM (FFmpeg's ssim filter) of two videos of the same size.
 async function ssimPerFrame(a, b, dir) {
   const stats = path.join(dir, `ssim-${path.basename(a)}-${path.basename(b)}.txt`);
@@ -60,17 +82,27 @@ test("a Remotion partial render (cached segments + re-rendered ones) equals a fr
 
     const original = await storyOf(project);
     const full = await render(original, "full.mp4", "cache");
+    noteRetries(t, "full", full);
     assert.deepEqual([full.segments, full.reused, full.rendered], [4, 0, 4]);
+    assert.deepEqual(full.frames, { start: 0, end: 180, count: 180 });
+    assert.equal(await frameCount(path.join(work, "full.mp4")), 180);
+    for (const [id, expected, actual] of await segmentFrames(full, project)) assert.equal(actual, expected, `cached segment ${id}`);
 
     // Edit s2's copy: only the three segments that show s2 re-render.
     const edited = await storyOf(project, (story) => { story.scenes[1].params.title = "Three fixes"; });
     const partial = await render(edited, "partial.mp4", "cache");
+    noteRetries(t, "partial", partial);
     assert.deepEqual(partial.plan.map((entry) => [entry.id, entry.status]), [["00-s1", "reused"], ["01-s1+s2", "rendered"], ["02-s2", "rendered"], ["03-s2+s1~loop", "rendered"]]);
     t.diagnostic(`full ${full.seconds.total}s (render ${full.seconds.render}s); partial ${partial.seconds.total}s (render ${partial.seconds.render}s), ~${partial.seconds_saved}s saved`);
 
     // A fresh full render of the edited story through an empty cache.
     const fresh = await render(edited, "fresh.mp4", "fresh-cache");
+    noteRetries(t, "fresh", fresh);
     assert.equal(fresh.reused, 0);
+    // Every segment of both renders holds its exact range, and so do the joins.
+    for (const result of [partial, fresh]) {
+      for (const [id, expected, actual] of await segmentFrames(result, project)) assert.equal(actual, expected, `cached segment ${id}`);
+    }
     const [partialFrames, freshFrames] = [await frameCount(path.join(work, "partial.mp4")), await frameCount(path.join(work, "fresh.mp4"))];
     assert.deepEqual([partialFrames, freshFrames], [180, 180]);
     const ssim = await ssimPerFrame(path.join(work, "partial.mp4"), path.join(work, "fresh.mp4"), work);
