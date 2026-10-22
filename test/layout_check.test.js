@@ -188,7 +188,7 @@ test("layout-check CLI reads storyboard.json and editorial specs", async () => {
 
   const help = [];
   await runCli(["--help"], { stdout: { write: (value) => help.push(value) } });
-  assert.match(help.join(""), /layout-check <project> \[--profile shorts\|landscape\] \[--json\]/);
+  assert.match(help.join(""), /layout-check <story-project> \[--profile shorts\|landscape\] \[--json\]/);
 });
 
 test("layout-check explains a missing storyboard.json", async () => {
