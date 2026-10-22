@@ -118,7 +118,7 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
   plan = qa.plan;
   const editedTranscript = { text: plan.text, words: plan.words, duration_seconds: plan.duration_seconds };
   await readCaptureTracker(files, editedTranscript, { durationSeconds: plan.duration_seconds, aspect: options.aspect ?? "16:9" });
-  const audioEnhancement = await enhanceBaseEdit(qa, plan, output, files.audio_enhance, { preset: enhancePreset, voiceIsolation }, adapters);
+  const audioEnhancement = await enhanceBaseEdit(qa, plan, output, files.audio_enhance, { preset: enhancePreset, voiceIsolation, source: input }, adapters);
   const rendered = { rendered_duration_seconds: qa.rendered_duration_seconds };
   await writeJson(files.rendered_transcript, JSON.parse(await readFile(qa.files.rendered_transcript, "utf8")));
   await writeJson(files.qa_report, qa.report);
@@ -161,7 +161,8 @@ async function enhanceBaseEdit(qa, plan, output, reportPath, enhance, adapters) 
   const notice = adapters.notice ?? ((line) => process.stderr.write(`${line}\n`));
   const enhanced = path.join(path.dirname(output), `.base-edit.enhanced-${randomUUID()}.mp4`);
   try {
-    const report = await (adapters.enhanceRecordingAudio ?? enhanceRecordingAudio)(qa.files.media, enhanced, { preset: enhance.preset, voiceIsolation: enhance.voiceIsolation, report: false, notice });
+    const noiseProfile = enhance.source ? removedPauseWindow(plan) : null;
+    const report = await (adapters.enhanceRecordingAudio ?? enhanceRecordingAudio)(qa.files.media, enhanced, { preset: enhance.preset, voiceIsolation: enhance.voiceIsolation, report: false, notice, ...(noiseProfile ? { noiseProfile: { file: enhance.source, ...noiseProfile } } : {}) });
     let status = report.status;
     let reason = null;
     let joins = null;
@@ -188,6 +189,19 @@ async function enhanceBaseEdit(qa, plan, output, reportPath, enhance, adapters) 
   } finally {
     await rm(enhanced, { force: true });
   }
+}
+
+/**
+ * The edit removes the take's pauses, so the original recording holds the
+ * longest noise-only stretches: the middle of the longest measured pause the
+ * edit cut (at most 2 s) is where the denoiser learns its noise profile.
+ */
+export function removedPauseWindow(plan) {
+  const pauses = (plan.removed_segments ?? []).filter((segment) => ["waveform-silence", "silence"].includes(segment.reason) && segment.source_end_seconds - segment.source_start_seconds >= 0.45);
+  const longest = pauses.sort((a, b) => (b.source_end_seconds - b.source_start_seconds) - (a.source_end_seconds - a.source_start_seconds))[0];
+  if (!longest) return null;
+  const start = longest.source_start_seconds + 0.1;
+  return { start_seconds: start, end_seconds: Math.min(longest.source_end_seconds - 0.1, start + 2) };
 }
 
 export async function writeBrollPlan(transcriptPath, options = {}) {

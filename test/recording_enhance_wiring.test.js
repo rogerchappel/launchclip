@@ -58,6 +58,12 @@ test("the base edit is the enhanced accepted candidate, re-checked by join QA", 
   assert.match(f.enhanceCalls[0].source, /qa[\\/]attempt-1[\\/]video\.mp4$/, "enhancement runs on the QA-accepted candidate, after the cuts");
   assert.equal(f.enhanceCalls[0].options.preset, "podcast");
   assert.equal(f.enhanceCalls[0].options.voiceIsolation, "none");
+  // The denoiser learns from a pause the edit removed from the original take.
+  const profile = f.enhanceCalls[0].options.noiseProfile;
+  assert.equal(profile.file, f.input);
+  const removed = JSON.parse(await readFile(result.files.edit_plan, "utf8")).removed_segments.filter((segment) => segment.reason === "waveform-silence");
+  assert.ok(removed.some((segment) => profile.start_seconds >= segment.source_start_seconds && profile.end_seconds <= segment.source_end_seconds), "the profile window lies inside a removed pause");
+  assert.ok(profile.end_seconds - profile.start_seconds >= 0.25 && profile.end_seconds - profile.start_seconds <= 2);
   assert.equal(await readFile(result.output, "utf8"), "enhanced candidate");
   assert.ok(f.joinChecks.some((media) => media.includes(".base-edit.enhanced-")), "join QA re-ran on the enhanced media");
   assert.deepEqual({ preset: result.audio_enhancement.preset, status: result.audio_enhancement.status }, { preset: "podcast", status: "enhanced" });
