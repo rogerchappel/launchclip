@@ -99,6 +99,7 @@
     "typescript": "^5.9.3"
   },
   "optionalDependencies": {
-    "kokoro-js": "1.2.1"
+    "kokoro-js": "1.2.1",
+    "playwright": "1.64.1"
   }
 }

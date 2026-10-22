@@ -43,6 +43,17 @@ review its terms before redistributing a bundle that includes it.
 - <https://github.com/hexgrad/kokoro>
 - <https://github.com/espeak-ng/espeak-ng>
 
+## Playwright (optional, demo autopilot)
+
+Demo autopilot (`launchclip demo record`) drives Chromium with `playwright`
+1.64.1 (Apache-2.0, by Microsoft), declared as an optional dependency. It never
+downloads a browser: it uses `LAUNCHCLIP_CHROMIUM`, Playwright's pinned build,
+the newest Chromium already in the Playwright cache, or a system Chrome, in
+that order. Video is encoded by the system `ffmpeg`, not Playwright's ffmpeg
+build.
+
+- <https://github.com/microsoft/playwright>
+
 ## ElevenLabs voice and music (optional, paid)
 
 The ElevenLabs voice provider and music provider call the ElevenLabs API only
