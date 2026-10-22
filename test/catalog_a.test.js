@@ -517,6 +517,60 @@ test("equation-lockup parity fixture and the golden story's s5 resolve", async (
   checkContract(model, { captions: false });
 });
 
+// ---------------------------------------------------------------------------
+// cta
+
+const CTA = { action: "Follow for part two", emphasis: "part two", detail: "New physics every week", handle: "@launchclip" };
+registerSample("cta", CTA);
+
+test("cta lands the action, pops the handle pill and pulses its ring seek-safely", () => {
+  const model = resolve("cta", CTA);
+  const c = model.content;
+  assert.equal(model.hidesCaptions, true);
+  assert.equal(c.icon, "arrow");
+  assert.deepEqual(model.events.map((e) => e.id), ["m1-action", "m1-handle"]);
+  assert.equal(c.pillTime, 2.6);
+  assert.ok(c.pulses.length >= 2, "ring pulses repeat until the exit");
+  const emphasisWords = c.lines.flatMap((line) => line.words).filter((word) => word.emphasis).map((word) => word.text);
+  assert.deepEqual(emphasisWords, ["part two"]);
+  // Ring: visible at the start of each pulse, gone at its end, never overlapping.
+  for (const pulse of c.pulses) {
+    assert.ok(sampleNode(model, "ring", pulse.time + .08).opacity > .8);
+    assert.equal(sampleNode(model, "ring", pulse.time + .95).opacity, 0);
+  }
+  // Ordinary exit lifts out.
+  assert.equal(model.motion.exitTo.y, -40);
+  assert.deepEqual(sampleNode(model, "root", model.end), { opacity: 0, y: -40 });
+});
+
+test("cta loop ending fades in place to the background and spins the loop icon", () => {
+  const model = resolve("cta", { ...CTA, loop: true });
+  assert.equal(model.content.icon, "loop");
+  assert.deepEqual(model.motion.exitTo, { opacity: 0 });
+  assert.equal(model.motion.exit, .5);
+  assert.deepEqual(sampleNode(model, "root", model.end), { opacity: 0 });
+  assert.ok(model.events.some((e) => e.id === "m1-loop" && e.role === "loop" && e.time === model.motion.exitStart));
+  assert.equal(sampleNode(model, "icon", model.end).rotation, 360);
+  assert.match(EMITTERS.cta(model).html, /<span id="m1-icon" aria-hidden="true"><svg/);
+});
+
+test("cta validates its params and the pill contrast", () => {
+  const bad = (params, pattern, overrides) => assert.throws(() => resolve("cta", params, overrides), pattern);
+  bad({}, /cta: params\.action is required/);
+  bad({ action: "Follow", handle: "@a b" }, /params\.handle must be one handle or URL without spaces/);
+  bad({ action: "Follow", icon: "star", handle: "@a" }, /params\.icon must be one of "arrow", "plus", "loop", "bell", "none"/);
+  bad({ action: "Follow", icon: "plus" }, /params\.icon needs params\.handle/);
+  bad({ action: "Follow", loop: "yes" }, /params\.loop must be true or false/);
+  bad({ action: "Follow", emphasis: "later" }, /params\.emphasis\[0\]\.text "later" must match whole words/);
+  bad({ action: "Follow" }, /needs a scene of at least 2 s/, { duration: 1.5 });
+  bad({ action: "Follow", handle: "@a" }, /brand contrast too low: ink on primary/, { brand: { colors: { ...BRAND.colors, ink: "#ffffff" } } });
+  assert.ok(resolve("cta", { action: "Follow" }, { brand: { colors: { ...BRAND.colors, ink: "#ffffff" } } }), "no pill, no ink check");
+});
+
+test("cta parity fixture resolves", async () => {
+  await checkFixture("a-cat-cta.json");
+});
+
 test("hook-title parity fixture and the golden story's s1 resolve", async () => {
   await checkFixture("a-cat-hook-title.json");
   const golden = JSON.parse(await readFile(path.join(ROOT, "examples", "story", "cooling.story.json"), "utf8"));
