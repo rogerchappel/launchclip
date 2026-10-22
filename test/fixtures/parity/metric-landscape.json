@@ -1,0 +1,66 @@
+{
+  "sceneId": "metric",
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 7
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#2fb3a0"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "scenes": [
+      {
+        "id": "metric",
+        "module": "metric",
+        "start": 1,
+        "end": 7,
+        "params": {
+          "title": "Monthly revenue",
+          "rect": {
+            "x": 120,
+            "y": 200,
+            "width": 1000,
+            "height": 520
+          },
+          "presentation": "glass",
+          "motion": {
+            "enter": "right",
+            "exit": "left",
+            "distance": 64,
+            "enterDuration": 0.4,
+            "exitDuration": 0.26,
+            "scale": 0.98
+          },
+          "metric": {
+            "mode": "data",
+            "source": "Example ledger",
+            "unit": "revenue",
+            "format": "currency",
+            "currency": "USD",
+            "values": [
+              {
+                "value": 1200,
+                "at": 0.6
+              },
+              {
+                "value": 4850.5,
+                "at": 2.2
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

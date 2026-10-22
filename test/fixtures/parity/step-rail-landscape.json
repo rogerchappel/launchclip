@@ -1,0 +1,59 @@
+{
+  "sceneId": "steprail",
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 7
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#2fb3a0"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "scenes": [
+      {
+        "id": "steprail",
+        "module": "step-rail",
+        "start": 1,
+        "end": 7,
+        "params": {
+          "title": "Deploy pipeline",
+          "rect": {
+            "x": 120,
+            "y": 200,
+            "width": 1000,
+            "height": 360
+          },
+          "motion": {
+            "enter": "up",
+            "exit": "down",
+            "distance": 40
+          },
+          "steps": [
+            {
+              "label": "Build",
+              "at": 0.6
+            },
+            {
+              "label": "Test",
+              "at": 1.8
+            },
+            {
+              "label": "Ship",
+              "at": 3
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

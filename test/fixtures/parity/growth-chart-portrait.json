@@ -1,0 +1,69 @@
+{
+  "sceneId": "growthchart",
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 7
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#ff6a00",
+        "ink": "#ffb37a",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui",
+        "meta": "ui-monospace"
+      }
+    },
+    "scenes": [
+      {
+        "id": "growthchart",
+        "module": "growth-chart",
+        "start": 1,
+        "end": 7,
+        "params": {
+          "title": "Stars after launch",
+          "rect": {
+            "x": 90,
+            "y": 600,
+            "width": 900,
+            "height": 760
+          },
+          "growth": {
+            "mode": "illustration",
+            "unit": "stars",
+            "points": [
+              {
+                "label": "Day 1",
+                "value": 40,
+                "at": 0.6
+              },
+              {
+                "label": "Week 1",
+                "value": 320,
+                "at": 1.4
+              },
+              {
+                "label": "Month 1",
+                "value": 1250,
+                "at": 2.2
+              },
+              {
+                "label": "Month 3",
+                "value": 2800,
+                "at": 3
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 10
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#ff6a00",
+        "paper": "#f4efe6",
+        "ink": "#171612"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "scenes": [
+      {
+        "id": "quote",
+        "module": "excerpt-window",
+        "start": 1,
+        "end": 9,
+        "params": {
+          "title": "README.md",
+          "rect": {
+            "x": 200,
+            "y": 140,
+            "width": 1100,
+            "height": 760
+          },
+          "excerpt": {
+            "mode": "data",
+            "source": "README.md",
+            "highlightMotion": true,
+            "lines": [
+              {
+                "segments": [
+                  {
+                    "text": "Make launch videos from "
+                  },
+                  {
+                    "text": "local evidence",
+                    "highlight": true
+                  }
+                ]
+              },
+              {
+                "segments": [
+                  {
+                    "text": "with one storyboard."
+                  }
+                ]
+              },
+              {
+                "segments": [
+                  {
+                    "text": "Two renderers, ",
+                    "highlight": true
+                  },
+                  {
+                    "text": "one look."
+                  }
+                ]
+              }
+            ],
+            "focus": {
+              "line": 0,
+              "scale": 1.15,
+              "at": 1.6
+            }
+          }
+        }
+      }
+    ]
+  },
+  "sceneId": "quote"
+}

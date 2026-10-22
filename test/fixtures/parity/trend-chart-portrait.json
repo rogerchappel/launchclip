@@ -1,0 +1,69 @@
+{
+  "sceneId": "trendchart",
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 7
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#ff6a00",
+        "ink": "#ffb37a",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui",
+        "meta": "ui-monospace"
+      }
+    },
+    "scenes": [
+      {
+        "id": "trendchart",
+        "module": "trend-chart",
+        "start": 1,
+        "end": 7,
+        "params": {
+          "title": "Build minutes per week",
+          "rect": {
+            "x": 90,
+            "y": 600,
+            "width": 900,
+            "height": 760
+          },
+          "chart": {
+            "mode": "illustration",
+            "unit": "minutes",
+            "points": [
+              {
+                "label": "W1",
+                "value": 420,
+                "at": 0.6
+              },
+              {
+                "label": "W2",
+                "value": 380,
+                "at": 1.3
+              },
+              {
+                "label": "W3",
+                "value": 190,
+                "at": 2
+              },
+              {
+                "label": "W4",
+                "value": 120,
+                "at": 2.7
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

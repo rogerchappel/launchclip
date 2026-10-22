@@ -1,0 +1,95 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 10
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#ff6a00",
+        "paper": "#f4efe6",
+        "ink": "#171612"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "scenes": [
+      {
+        "id": "code",
+        "module": "code-snippet",
+        "start": 1,
+        "end": 9,
+        "params": {
+          "title": "Install in one line",
+          "accent": "#36c2a8",
+          "rect": {
+            "x": 200,
+            "y": 200,
+            "width": 1100,
+            "height": 520
+          },
+          "code": {
+            "language": "Shell",
+            "typing": true,
+            "lines": [
+              {
+                "at": 0.6,
+                "typeDuration": 1.2,
+                "tokens": [
+                  {
+                    "text": "npm ",
+                    "type": "keyword"
+                  },
+                  {
+                    "text": "install ",
+                    "type": "plain"
+                  },
+                  {
+                    "text": "launchclip",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "at": 2.4,
+                "typeDuration": 0.8,
+                "tokens": [
+                  {
+                    "text": "launchclip ",
+                    "type": "plain"
+                  },
+                  {
+                    "text": "--fps ",
+                    "type": "operator"
+                  },
+                  {
+                    "text": "30",
+                    "type": "number"
+                  }
+                ]
+              },
+              {
+                "at": 3.6,
+                "typeDuration": 0.6,
+                "tokens": [
+                  {
+                    "text": "# done",
+                    "type": "comment"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "sceneId": "code"
+}

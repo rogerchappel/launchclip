@@ -1,0 +1,61 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 10
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#ff6a00",
+        "paper": "#f4efe6",
+        "ink": "#171612"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "scenes": [
+      {
+        "id": "focus",
+        "module": "focus-flow",
+        "start": 1,
+        "end": 9,
+        "params": {
+          "title": "One task at a time",
+          "rect": {
+            "x": 90,
+            "y": 600,
+            "width": 900,
+            "height": 640
+          },
+          "focus": {
+            "options": [
+              "Inbox",
+              "Review the PR",
+              "Meetings"
+            ],
+            "selected": 1,
+            "arriveAt": 0.5,
+            "chooseAt": 1.5,
+            "progressAt": 3,
+            "progressDuration": 1.2,
+            "progressLabel": "Shipping the review",
+            "icon": "check"
+          },
+          "motion": {
+            "enter": "right",
+            "exit": "down",
+            "distance": 64
+          }
+        }
+      }
+    ]
+  },
+  "sceneId": "focus"
+}

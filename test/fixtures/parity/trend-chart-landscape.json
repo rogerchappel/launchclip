@@ -1,0 +1,63 @@
+{
+  "sceneId": "trendchart",
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 7
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#2fb3a0"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "scenes": [
+      {
+        "id": "trendchart",
+        "module": "trend-chart",
+        "start": 1,
+        "end": 7,
+        "params": {
+          "title": "Issues closed",
+          "rect": {
+            "x": 120,
+            "y": 200,
+            "width": 1000,
+            "height": 680
+          },
+          "presentation": "glass",
+          "chart": {
+            "mode": "data",
+            "source": "Example tracker",
+            "unit": "issues",
+            "points": [
+              {
+                "label": "Jan",
+                "value": 12,
+                "at": 0.6
+              },
+              {
+                "label": "Feb",
+                "value": 30,
+                "at": 1.4
+              },
+              {
+                "label": "Mar",
+                "value": 26,
+                "at": 2.2
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

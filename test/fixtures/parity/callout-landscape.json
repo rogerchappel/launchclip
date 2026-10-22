@@ -1,0 +1,42 @@
+{
+  "sceneId": "callout",
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 7
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#2fb3a0"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "scenes": [
+      {
+        "id": "callout",
+        "module": "callout",
+        "start": 1,
+        "end": 7,
+        "params": {
+          "title": "One useful idea",
+          "rect": {
+            "x": 120,
+            "y": 200,
+            "width": 1000,
+            "height": 380
+          },
+          "presentation": "glass",
+          "body": "Short claims read faster than paragraphs on a busy frame."
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 10
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#ff6a00",
+        "paper": "#f4efe6",
+        "ink": "#171612"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "scenes": [
+      {
+        "id": "crowd",
+        "module": "audience-grid",
+        "start": 1,
+        "end": 9,
+        "params": {
+          "title": "Who this is for",
+          "rect": {
+            "x": 200,
+            "y": 120,
+            "width": 1100,
+            "height": 760
+          },
+          "audience": {
+            "columns": 3,
+            "tiles": [
+              {
+                "label": "Maintainers",
+                "emoji": "🛠️",
+                "at": 0.6
+              },
+              {
+                "label": "Founders",
+                "emoji": "🚀",
+                "at": 1
+              },
+              {
+                "label": "Designers",
+                "emoji": "🎨",
+                "at": 1.4
+              },
+              {
+                "label": "Developers",
+                "emoji": "🧑‍💻",
+                "at": 1.8
+              },
+              {
+                "label": "Writers",
+                "at": 2.2
+              },
+              {
+                "label": "Educators",
+                "emoji": "📚",
+                "at": 2.6
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "sceneId": "crowd"
+}

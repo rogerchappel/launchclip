@@ -1,0 +1,52 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 10
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#ff6a00",
+        "paper": "#f4efe6",
+        "ink": "#171612"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "scenes": [
+      {
+        "id": "shot",
+        "module": "media-window",
+        "start": 1,
+        "end": 9,
+        "params": {
+          "title": "Dashboard capture",
+          "rect": {
+            "x": 160,
+            "y": 120,
+            "width": 1200,
+            "height": 760
+          },
+          "media": {
+            "kind": "image",
+            "src": "assets/testsrc.png"
+          },
+          "motion": {
+            "enter": "up",
+            "exit": "left",
+            "distance": 48,
+            "scale": 0.96
+          }
+        }
+      }
+    ]
+  },
+  "sceneId": "shot"
+}

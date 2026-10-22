@@ -76,22 +76,24 @@
  *   The text block translates to (x, y) and scales from its top-left corner.
  *
  * date-card: {month, day, year|null, monthName, monthLabel, caption|null,
- *   captionLines, time, settleTime, bandHeight:48, dayHeight:132}
+ *   captionLines, time, settleTime, bandHeight:48, dayHeight:132,
+ *   durations:{day:0.32}}
  *
  * status-rack: {mode, source|null, note, noteLines, lightOn, lightOff,
  *   rows:[{index, label, enterTime, states:[{index, time, lights:[3 bool],
  *   changes:[{light, on, color}], settleTime|null}]}]}
  *   settleTime is null for a state that changes nothing (no event).
+ *   durations:{row:0.22 (row enter), light:0.18 (each light colour change)}
  *
  * code-snippet: {language, label ("<language> · Example"), typing, codeFont,
  *   lineHeight, lines:[{index, time, typeDuration, endTime, length,
  *   characters, tokens:[{text, type, chars?}], charTimes: null | number[]}]}
  *   With typing, character j becomes visible at charTimes[j]; the line itself
- *   fades in over 0.24s at `time` either way.
+ *   fades in over 0.24s at `time` either way. durations:{line:0.24}
  *
  * audience-grid: {note, columns, rowCount, cellWidth, cellHeight, labelFont,
  *   gap:16, tiles:[{index, label, emoji, time, settleTime,
- *   cell (rect-local estimate)}]}
+ *   cell (rect-local estimate)}], durations:{tile:0.24}}
  *
  * focus-flow: {note, options:[{index, label, selected, initial:{x,y},
  *   arriveTime}], selected, icon|null, progressLabel, horizontal, rowHeight,
@@ -99,6 +101,8 @@
  *   arriveTime, chooseTime, chosenMoveTime, progressTime, progressDuration,
  *   optionsSettle, chosenSettle, progressSettle, stage (rect-local estimate)}
  *   Option x/y are relative to the stage; distractors fade at chooseTime.
+ *   durations:{arrive:0.24, chosenMove:0.42, distractorFade:0.16,
+ *   distractorMove:0.38, progressFade:0.2}
  *
  * trend-chart / growth-chart: {variant:'trend'|'growth', mode, source|null,
  *   attribution, unit, showValues, defaultPoints, maximum, formattedMaximum,
@@ -408,7 +412,7 @@ export function resolveEditorialModule(input) {
     if (rect.height < 48 + 132 + titleLines * (font + 4) * 1.15 + 36 + captionLines * 29) throw new Error('date-card rect too short');
     const time = start + at(date.at, 'date.at'), monthName = MONTHS[date.month - 1];
     events.push({id: `${id}-date-settle`, time: time + .32});
-    content = {month: date.month, day: date.day, year: date.year ?? null, monthName, monthLabel: `${monthName}${date.year === undefined ? '' : ` · ${date.year}`}`, caption: caption || null, captionLines, time, settleTime: time + .32, bandHeight: 48, dayHeight: 132};
+    content = {month: date.month, day: date.day, year: date.year ?? null, monthName, monthLabel: `${monthName}${date.year === undefined ? '' : ` · ${date.year}`}`, caption: caption || null, captionLines, time, settleTime: time + .32, bandHeight: 48, dayHeight: 132, durations: {day: .32}};
   } else if (kind === 'status-rack') {
     object(input.rack, 'rack', ['mode', 'source', 'rows']);
     const rack = input.rack;
@@ -440,7 +444,7 @@ export function resolveEditorialModule(input) {
       });
       return {index: i, label: row.label, enterTime: states[0].time, states};
     });
-    content = {mode: rack.mode, source: rack.mode === 'data' ? rack.source : null, note, noteLines, lightOn: accent, lightOff, rows};
+    content = {mode: rack.mode, source: rack.mode === 'data' ? rack.source : null, note, noteLines, lightOn: accent, lightOff, rows, durations: {row: .22, light: .18}};
   } else if (kind === 'code-snippet') {
     object(input.code, 'code', ['language', 'lines', 'typing']); const code = input.code;
     if (code.typing !== undefined && typeof code.typing !== 'boolean') throw new Error('code.typing must be a boolean');
@@ -479,7 +483,7 @@ export function resolveEditorialModule(input) {
       events.push({id: `${id}-code-${i}-settle`, time: start + lineOffset + typeDuration});
       return {index: i, time, typeDuration, endTime: start + lineOffset + typeDuration, length, characters, tokens, charTimes};
     });
-    content = {language, label: `${language} · Example`, typing, codeFont, lineHeight, lines};
+    content = {language, label: `${language} · Example`, typing, codeFont, lineHeight, lines, durations: {line: .24}};
   } else if (kind === 'audience-grid') {
     object(input.audience, 'audience', ['tiles', 'columns']);
     const {tiles} = input.audience;
@@ -503,7 +507,7 @@ export function resolveEditorialModule(input) {
       events.push({id: `${id}-viewer-${i}-settle`, time: time + .24});
       const column = i % columns, row = Math.floor(i / columns);
       return {index: i, label: tile.label, emoji, time, settleTime: time + .24, cell: {x: 24 + column * (cellWidth + 16), y: gridTop + row * (cellHeight + 16), width: cellWidth, height: cellHeight}};
-    })};
+    }), durations: {tile: .24}};
   } else if (kind === 'focus-flow') {
     object(input.focus, 'focus', ['options', 'selected', 'arriveAt', 'chooseAt', 'progressAt', 'progressDuration', 'progressLabel', 'icon']);
     const focus = input.focus, options = focus.options;
@@ -532,7 +536,8 @@ export function resolveEditorialModule(input) {
       target: {x: targetX, y: target}, chosenScale: horizontal ? 1.4 : 1, arriveTime, chooseTime, chosenMoveTime: chooseTime + .18, progressTime, progressDuration, optionsSettle, chosenSettle, progressSettle,
       stage: {x: 24, y: header + 22 * 1.3 + 20, width: rect.width - 48, height: stageHeight},
       options: options.map((option, i) => ({index: i, label: option, selected: i === focus.selected,
-        initial: {x: horizontal ? i * (optionWidth + gap) : 0, y: horizontal ? 0 : i * (rowHeight + gap)}, arriveTime: arriveTime + i * .08}))};
+        initial: {x: horizontal ? i * (optionWidth + gap) : 0, y: horizontal ? 0 : i * (rowHeight + gap)}, arriveTime: arriveTime + i * .08})),
+      durations: {arrive: .24, chosenMove: .42, distractorFade: .16, distractorMove: .38, progressFade: .2}};
   } else if (kind === 'trend-chart' || kind === 'growth-chart') {
     const isGrowth = kind === 'growth-chart';
     const supplied = isGrowth ? input.growth : input.chart;

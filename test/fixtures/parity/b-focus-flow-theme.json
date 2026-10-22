@@ -1,0 +1,62 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 10
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#ff6a00",
+        "paper": "#f4efe6",
+        "ink": "#171612"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "scenes": [
+      {
+        "id": "focus",
+        "module": "focus-flow",
+        "start": 1,
+        "end": 9,
+        "params": {
+          "title": "Pick the next build",
+          "rect": {
+            "x": 160,
+            "y": 300,
+            "width": 1300,
+            "height": 420
+          },
+          "focus": {
+            "options": [
+              "Compare",
+              "New tools",
+              "Side quests",
+              "The next build"
+            ],
+            "selected": 3,
+            "arriveAt": 0.4,
+            "chooseAt": 1.4,
+            "progressAt": 3,
+            "icon": "terminal"
+          },
+          "theme": {
+            "surface": "#FFF1CE",
+            "foreground": "#171612",
+            "muted": "#5D5548",
+            "border": "#9B8769",
+            "accentText": "#A43C0A"
+          }
+        }
+      }
+    ]
+  },
+  "sceneId": "focus"
+}

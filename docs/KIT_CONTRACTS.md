@@ -146,7 +146,10 @@ schema id stays `launchclip.story.v1`.
   from `word-captions.mjs`.
 - Scenes whose module sets `hidesCaptions` hide the captions while active.
 - Brand-to-module defaults: editorial `accent` defaults to `brand.colors.primary`.
-  Editorial `theme` defaults to `{surface: brand.colors.bg, foreground: brand.colors.paper, muted: <paper at 62% over bg, hex>, border: <paper at 18% over bg, hex>, accentText: brand.colors.ink}`.
+  Editorial `theme` defaults to `{surface: brand.colors.bg, foreground: brand.colors.paper, muted: <paper at 62% over bg, hex>, border: <paper at 18% over bg, hex>, accentText}`, where `accentText` is
+  `brand.colors.primary` when it reaches 3:1 on `bg`, otherwise `paper`
+  (amended in wave 2: `ink` is the dark text colour for use *on* the primary,
+  so on a dark `bg` it was invisible).
   Values set explicitly in `params` win.
 
 ### Unified module registry (`kit/core/modules.mjs`, owned by the compiler agent)
@@ -190,6 +193,43 @@ the Shorts safe zone, key text at least 44 px at 1080 wide, contrast at least
   `useCurrentFrame()` is local to the sequence.
 - All motion goes through `kit/core/motion.mjs` using the model's ease names, so
   it stays in step with GSAP.
+
+### Compiler wiring (as implemented in wave 2)
+
+- `resolveModule(scene, story, {track, end} = {})`: the optional third
+  argument is compiler-only. `track` sets `model.track` (the HyperFrames track
+  index; an emitter may use `track` and `track + 1`), and `end` extends the
+  model to the scene's render window (see below). Error messages start with
+  `scenes[i] (id): `. Models also carry `sceneId`. `placeholderModel(scene,
+  story, reason)` and `PLACEHOLDER_STYLE` define the labelled box both
+  renderers draw for unknown, invalid or unimplemented modules (it uses
+  `params.rect` when the scene declares one).
+- `kit/core/transitions.mjs` is shared by both compilers:
+  `sceneWindows(resolvedStory) → {scenes, loop}` and
+  `transitionTweens(in, {width, height})`. Track-0 scenes are opaque plates in
+  `brand.colors.bg`. Because same-track scenes cannot overlap, the outgoing
+  adjacent (gap ≤ 0.1 s) track-0 scene is held until the incoming transition
+  settles: its render window ends at `next.start + next.in.dur` and its model
+  is resolved with that `end`, so its exit motion moves to the end of the
+  transition. HyperFrames turns the tweens into GSAP `fromTo` calls; Remotion
+  evaluates them per frame with `layerStateAt` (a test seeks GSAP against it).
+- `kit/core/captions.mjs` (chunking, GSAP runtime, CSS, `CAPTION_MOTION`,
+  `CAPTION_BAND`) and `kit/core/fonts.mjs` (`brandFontStacks`) are shared too.
+- `compileStoryToHyperFrames(resolvedStory, {projectDir, sourceDir?, sceneFilter?, write?, copyAssets?})`
+  is async and returns `{html, files, warnings, boundaries, compositionId}`.
+  `projectDir` is the output; `sourceDir` (default `projectDir`) holds
+  `assets/`, captions and words, and its `assets/` is copied into the output.
+  With `sceneFilter` (id, id array or predicate) only those scenes are compiled,
+  on the background, with absolute times kept and **no** transitions,
+  captions, audio or loop, matching `ModuleReview`. The root composition id is
+  `launchclip-story`.
+- Skills ship `kit/hyperframes/*.mjs` in `scripts/` beside the `kit/core`
+  copies; a HyperFrames file named like a core file ships as
+  `hyperframes-<name>` (`hyperframes-catalog-a.mjs`), with imports rewritten.
+- `StoryComposition` props may carry `__captions` (filled by
+  `calculateMetadata` from the overlay `src` or chunked `audio.words`).
+  Custom modules register through `<LaunchclipCompositions customModules={…}/>`
+  from `kit/remotion/Root.tsx`, and receive `{scene, params, brand, format, model}`.
 
 ### Review compositions (registered in `kit/remotion/Root.tsx`)
 

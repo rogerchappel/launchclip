@@ -1,0 +1,62 @@
+{
+  "sceneId": "metric",
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 7
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#ff6a00",
+        "ink": "#ffb37a",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui",
+        "meta": "ui-monospace"
+      }
+    },
+    "scenes": [
+      {
+        "id": "metric",
+        "module": "metric",
+        "start": 1,
+        "end": 7,
+        "params": {
+          "title": "Weekly active viewers",
+          "rect": {
+            "x": 90,
+            "y": 600,
+            "width": 900,
+            "height": 560
+          },
+          "metric": {
+            "mode": "illustration",
+            "unit": "viewers per week",
+            "format": "number",
+            "values": [
+              {
+                "value": 12,
+                "at": 0.6
+              },
+              {
+                "value": 1800,
+                "at": 2
+              },
+              {
+                "value": 2450,
+                "at": 3.6
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

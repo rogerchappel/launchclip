@@ -28,6 +28,9 @@
 // The renderer-neutral scripts are maintained in
 // skills/launchclip-create-video/scripts/ and copied into the Remotion skill.
 // kit/core/*.mjs is canonical for its files and is copied into both skills.
+// kit/hyperframes/*.mjs (the HyperFrames emitters, including
+// editorial-ui-modules.mjs, and the story compiler) is canonical too: both
+// skills get copies whose ../core/ imports are rewritten to ./.
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -128,6 +131,22 @@ function listFiles(dir, base = dir) {
   return files;
 }
 
+// Skill file name of a kit/hyperframes file. Skills keep kit/core and
+// kit/hyperframes side by side in scripts/, so a HyperFrames file whose name
+// is also a kit/core file (catalog-a.mjs) ships as hyperframes-<name>.
+export function hyperframesSkillName(file, kitCore) {
+  return kitCore.includes(file) ? `hyperframes-${file}` : file;
+}
+
+// A kit/hyperframes file as shipped in a skill's scripts/: imports of
+// ../core/<file> point at the sibling copies of kit/core, and imports of a
+// renamed sibling (./catalog-a.mjs) follow the rename.
+export function hyperframesCopy(root, file, kitCore = []) {
+  const source = readFileSync(path.join(root, 'kit/hyperframes', file), 'utf8')
+    .replace(/(['"])\.\/([A-Za-z0-9_.-]+\.mjs)\1/g, (match, quote, name) => `${quote}./${hyperframesSkillName(name, kitCore)}${quote}`);
+  return source.replace(/(['"])\.\.\/core\//g, '$1./');
+}
+
 // → { files: Map<repo-relative path, Buffer|string>, managedDirs: repo-relative dirs owned wholesale }
 export function planOutputs({ root = ROOT } = {}) {
   const srcRoot = path.join(root, 'skills-src');
@@ -135,6 +154,7 @@ export function planOutputs({ root = ROOT } = {}) {
   const managedDirs = [];
   const kitCore = listFiles(path.join(root, 'kit/core')).filter((file) => !file.includes(path.sep) && file.endsWith('.mjs'));
   const kitRemotion = listFiles(path.join(root, 'kit/remotion'));
+  const kitHyperframes = listFiles(path.join(root, 'kit/hyperframes')).filter((file) => !file.includes(path.sep) && file.endsWith('.mjs'));
   const hyperframesScripts = path.join(root, 'skills/launchclip-create-video/scripts');
 
   for (const skill of SKILLS) {
@@ -151,6 +171,14 @@ export function planOutputs({ root = ROOT } = {}) {
     for (const file of kitCore) {
       if (SHARED_SCRIPTS.includes(file)) throw new Error(`kit/core/${file} collides with a shared skill script`);
       files.set(`${dir}/scripts/${file}`, readFileSync(path.join(root, 'kit/core', file)));
+    }
+    // kit/hyperframes is canonical for the HyperFrames emitters and the story
+    // compiler (including editorial-ui-modules.mjs, which therefore overrides
+    // the shared-script copy). Skills keep core beside them in scripts/.
+    for (const file of kitHyperframes) {
+      const name = hyperframesSkillName(file, kitCore);
+      if (name !== file && kitHyperframes.includes(name)) throw new Error(`kit/hyperframes/${name} collides with the skill copy of kit/hyperframes/${file}`);
+      files.set(`${dir}/scripts/${name}`, hyperframesCopy(root, file, kitCore));
     }
     if (skill.remotionKit) {
       managedDirs.push(`${dir}/assets`);
