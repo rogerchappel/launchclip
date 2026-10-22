@@ -1,6 +1,8 @@
 // Compositions of the LaunchClip Remotion kit:
 //   LaunchclipStory  props: the resolved story (.launchclip/story.resolved.json)
 //   ModuleReview     props: {scene, story}, one module on brand.colors.bg
+//   SceneOverlay     props: {story, sceneId, loop?, plate?}, one scene on a
+//                    transparent background (launchclip export overlays)
 // Size, fps and duration always come from the props (calculateMetadata).
 //
 // A project with bespoke modules registers the same compositions with its
@@ -13,6 +15,8 @@ import React from "react";
 import { Composition } from "remotion";
 import { ModuleReview, StoryComposition, calculateModuleReviewMetadata, calculateStoryMetadata } from "./StoryComposition";
 import type { ModuleReviewProps, StoryProps } from "./StoryComposition";
+import { SceneOverlay, calculateSceneOverlayMetadata } from "./SceneOverlay";
+import type { SceneOverlayProps } from "./SceneOverlay";
 
 // Placeholder props so `remotion compositions` and Studio open without
 // --props. Real renders always pass the resolved storyboard.
@@ -29,6 +33,7 @@ export const LaunchclipCompositions: React.FC<{ customModules?: StoryProps["cust
   // Components are not serialisable props, so custom modules ride in a closure.
   const Story = React.useMemo(() => (customModules ? (props: StoryProps) => <StoryComposition {...props} customModules={customModules} /> : StoryComposition), [customModules]);
   const Review = React.useMemo(() => (customModules ? (props: ModuleReviewProps) => <ModuleReview {...props} customModules={customModules} /> : ModuleReview), [customModules]);
+  const Overlay = React.useMemo(() => (customModules ? (props: SceneOverlayProps) => <SceneOverlay {...props} customModules={customModules} /> : SceneOverlay), [customModules]);
   return (
   <>
     <Composition
@@ -50,6 +55,16 @@ export const LaunchclipCompositions: React.FC<{ customModules?: StoryProps["cust
       durationInFrames={90}
       defaultProps={{ scene: DEFAULT_STORY.scenes[0], story: DEFAULT_STORY } as ModuleReviewProps}
       calculateMetadata={calculateModuleReviewMetadata}
+    />
+    <Composition
+      id="SceneOverlay"
+      component={Overlay}
+      width={1080}
+      height={1920}
+      fps={30}
+      durationInFrames={90}
+      defaultProps={{ story: DEFAULT_STORY, sceneId: DEFAULT_STORY.scenes[0].id } as SceneOverlayProps}
+      calculateMetadata={calculateSceneOverlayMetadata}
     />
   </>
   );

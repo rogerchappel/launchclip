@@ -19,6 +19,7 @@ the current workflow and the decisions an operating agent must not guess.
 - [Local-first OSS packet lane](#local-first-oss-packet-lane)
 - [Storyboard (storyboard.json)](#storyboard-storyboardjson)
 - [Finish: storyboard to mastered video in one command](#finish-storyboard-to-mastered-video-in-one-command)
+- [Export: an editable timeline for Final Cut Pro, Premiere Pro and Resolve](#export-an-editable-timeline-for-final-cut-pro-premiere-pro-and-resolve)
 
 - [Voice providers](#voice-providers)
 - [Failure handling](#failure-handling)
@@ -645,6 +646,60 @@ whole pipeline can be exercised offline. Never ship it. The `kokoro`,
 
 After finish, a fresh-context critic reviews `qa/critic-sheets/` and writes
 `qa/critic.json`; `launchclip cinematic-check` then closes the critic gate.
+
+## Export: an editable timeline for Final Cut Pro, Premiere Pro and Resolve
+
+```bash
+launchclip export <project> --format fcpxml|premiere|edl|otio|all \
+  [--overlays prores4444|png|none] [--out exports/] [--fps 24|25|29.97|30|60] \
+  [--name name] [--absolute] [--dtd FCPXMLv1_10.dtd] [--force] [--json]
+```
+
+`export` turns a finished storyboard project (run `finish` first) into an
+editable NLE timeline whose clips line up frame for frame with the render.
+`--format` takes one format, a comma list or `all`:
+
+| `--format` | File | For |
+| --- | --- | --- |
+| `fcpxml` | `<name>.fcpxml` (FCPXML 1.10) | Final Cut Pro, DaVinci Resolve |
+| `premiere` | `<name>.xml` (FCP 7 xmeml v4) | Premiere Pro, DaVinci Resolve |
+| `edl` | `<name>.edl` (CMX 3600, V1 only) | Avid and conform tools |
+| `otio` | `<name>.otio` (OpenTimelineIO JSON) | Resolve, Hiero, RV, otio tools |
+
+Output goes to `<out>/<name>/` (default `exports/<project-folder>/`): the
+format files, `captions.srt`, `timeline.json` (the timeline model),
+`EXPORT.json` (files, tracks, overlay renders, warnings, validation) and
+`media/` with every referenced file copied in (APFS clones where possible).
+Media paths are relative; `--absolute` writes absolute `file://` URLs.
+
+Tracks: V1 is the base (footage-led trim segments, each a clip on the original
+recording with its source in point, or a solid `brand.colors.bg` plate in
+motion lanes); V2 and up are the overlay scenes, each rendered on its own as
+ProRes 4444 with alpha (`--codec prores --prores-profile 4444 --pixel-format
+yuva444p10le`) from the Remotion kit's `SceneOverlay` composition, stacked so a
+transitioning scene sits above the one it overlaps; the top video track is the
+finished render, disabled, for reference. A1 is the voice (or the recording's
+audio, linked to V1), A2 the music bed, A3 and up the SFX cues as individual
+clips with their levels, then the finished mix (disabled). Captions are a
+subtitle track (FCPXML caption role; `captions.srt` elsewhere) and markers sit
+at scene starts, hits and camera moves.
+
+`--overlays none` skips the overlay renders and enables the finished render as
+the picture above V1; `--overlays png` writes PNG sequences instead (referenced
+by the OTIO only). Overlay renders are reused while the story and kit are
+unchanged; `--force` re-renders. `--fps 29.97` (or 59.94, 23.976) writes an exact
+NTSC timeline (30000/1001) with drop-frame timecode and renders the overlays at
+that rate. Camera moves (punch-in), music ducking and word-highlight caption
+styling are not carried; they are listed in `EXPORT.json` warnings. Overlays
+always come from Remotion: the HyperFrames compiler cannot isolate a scene on
+alpha yet.
+
+Every file is read back and compared with the timeline model (clip starts,
+durations, source in points, markers, captions). FCPXML also gets structural
+checks and Apple's DTD check when Final Cut Pro is installed (or `--dtd` /
+`LAUNCHCLIP_FCPXML_DTD` names the DTD); the `.otio` is also opened with the
+Python `opentimelineio` package when it is installed. A failed check exits
+non-zero after writing the files.
 
 ### Renderer eval (npm script, repository checkout)
 
