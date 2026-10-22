@@ -8,6 +8,7 @@ import {
   proportionalAlign, readWav, snapOnsets, splitSentences, tokenizeText, validateWords, writeWav
 } from "../src/voice/words.js";
 import * as kokoro from "../src/voice/kokoro.js";
+import * as elevenlabs from "../src/voice/elevenlabs.js";
 
 /** Silence with tone bursts at [start, end] seconds. */
 function bursts(sampleRate, duration, spans, { amplitude = 0.3, frequency = 220 } = {}) {
@@ -231,4 +232,53 @@ test("real Kokoro synthesis produces aligned words", { skip: kokoroReady ? false
   assert.ok(result.duration > 1.5 && result.duration < 6, `duration ${result.duration}`);
   validateWords(result.words, result.duration);
   assert.ok(result.timing.onset_error_ms === null || result.timing.onset_error_ms < 40, `onset error ${result.timing.onset_error_ms}`);
+});
+
+// ---------------------------------------------------------------- ElevenLabs
+
+function alignmentFor(text, secondsPerCharacter = 0.05) {
+  const characters = Array.from(text);
+  return {
+    characters,
+    character_start_times_seconds: characters.map((_, index) => index * secondsPerCharacter),
+    character_end_times_seconds: characters.map((_, index) => (index + 1) * secondsPerCharacter)
+  };
+}
+
+test("ElevenLabs refuses to send anything without an API key", async (t) => {
+  const directory = await tempDir(t);
+  let called = false;
+  const provider = elevenlabs.create({ env: {}, fetch: async () => { called = true; } });
+  await assert.rejects(provider.synthesize({ text: "Hello", voice: "v", outFile: path.join(directory, "e.wav") }), /ELEVENLABS_API_KEY/);
+  assert.equal(called, false);
+});
+
+test("ElevenLabs uses with-timestamps and turns character alignment into words", async (t) => {
+  const directory = await tempDir(t);
+  const text = "Hot coffee, cools fast.";
+  const pcm = Buffer.alloc(24000 * 2 * 2); // 2 s of silence
+  const requests = [];
+  const fetch = async (url, init) => {
+    requests.push({ url, init });
+    return { ok: true, status: 200, json: async () => ({ audio_base64: pcm.toString("base64"), alignment: alignmentFor(text) }) };
+  };
+  const provider = elevenlabs.create({ env: { ELEVENLABS_API_KEY: "test-key", ELEVENLABS_VOICE_ID: "voice123" }, fetch });
+  const outFile = path.join(directory, "e.wav");
+  const result = await provider.synthesize({ text, speed: 1.5, outFile });
+  assert.equal(requests.length, 1);
+  assert.match(requests[0].url, /\/v1\/text-to-speech\/voice123\/with-timestamps\?output_format=pcm_24000$/);
+  assert.equal(requests[0].init.headers["xi-api-key"], "test-key");
+  const body = JSON.parse(requests[0].init.body);
+  assert.equal(body.text, text);
+  assert.equal(body.voice_settings.speed, 1.2, "speed is clamped to the provider range");
+  assert.deepEqual(result.words.map((word) => word.text), ["Hot", "coffee,", "cools", "fast."]);
+  assert.deepEqual(result.words[1], { text: "coffee,", start: 0.2, end: 0.55 });
+  assert.equal(result.duration, 2);
+  assert.equal((await readWav(outFile)).sampleRate, 24000);
+});
+
+test("ElevenLabs surfaces HTTP errors", async (t) => {
+  const directory = await tempDir(t);
+  const provider = elevenlabs.create({ apiKey: "k", fetch: async () => ({ ok: false, status: 401, text: async () => "invalid key" }) });
+  await assert.rejects(provider.synthesize({ text: "Hi", voice: "v", outFile: path.join(directory, "e.wav") }), /401.*invalid key/);
 });
