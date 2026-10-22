@@ -667,13 +667,16 @@ launchclip finish <project> --renderer remotion --quality high    # renders/fina
 
 It synthesises `audio.narration` when set (`--voice kokoro|elevenlabs|supplied`),
 validates and layout-checks the storyboard, writes captions, builds the SFX
-and music mix from the hits, module cues and scene energy, renders, masters to
+and music mix from the hits, module cues, scene energy and the beat-synced
+music (`--music synth|elevenlabs|none`), renders, masters to
 −14 LUFS / −1 dBTP, builds the temporal evidence and critic sheets, and runs
 the motion, audio, loudness, layout and evidence gates. It never rewrites
 `storyboard.json` (the filled copy is `.launchclip/finish/storyboard.json`),
 skips stages whose inputs have not changed, and writes `finish.json`. The
 critic gate stays `pending`: run the fresh-context critic on
 `qa/critic-sheets/`, then `launchclip cinematic-check`.
+
+<!-- include: shared/music-beat-sync.md -->
 
 Use the manual commands below when the CLI is not available or a single step
 needs rerunning with different options.

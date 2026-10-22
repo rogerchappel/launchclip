@@ -43,11 +43,31 @@ review its terms before redistributing a bundle that includes it.
 - <https://github.com/hexgrad/kokoro>
 - <https://github.com/espeak-ng/espeak-ng>
 
-## ElevenLabs voice (optional, opt-in)
+## ElevenLabs voice and music (optional, paid)
 
-The ElevenLabs provider calls the ElevenLabs API only when
-`ELEVENLABS_API_KEY` is set. Use of that service and of its output is
-governed by the ElevenLabs terms of service.
+The ElevenLabs voice provider and music provider call the ElevenLabs API only
+when `ELEVENLABS_API_KEY` is set (for music, `launchclip finish` uses
+ElevenLabs by default once the key is set and prints a notice; `--music synth`
+or `audio.music: "synth"` keeps the license-free procedural bed). Use of that
+service and of its output is governed by the ElevenLabs terms of service and
+the plan of the account that made the request, not by LaunchClip's licence.
+
+For generated music (Eleven Music), at the time of writing ElevenLabs states
+that:
+
+- free-plan output is not licensed for commercial use and must be attributed
+  to "Eleven Music" when distributed;
+- paid self-serve plans include a commercial licence for online and offline
+  use, with exceptions (such as film, TV and games) reserved for Enterprise
+  plans;
+- prompts must not name artists, songs, albums or labels.
+
+Check the current terms at <https://elevenlabs.io/terms-of-use> and
+<https://elevenlabs.io/music> before you publish or redistribute generated
+music. LaunchClip never bundles ElevenLabs output: generated tracks stay in
+your project (`assets/audio/music.mp3`) and your local cache
+(`$LAUNCHCLIP_CACHE/elevenlabs/music`), and `AUDIO-MANIFEST.json` records the
+provider of every track.
 
 ## Bundled fonts
 

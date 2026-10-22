@@ -53,3 +53,6 @@ qa/renderer-eval/
 
 # Voice provider QA samples
 qa/voice/
+
+# Music generation and beat-sync proof runs
+qa/music/
