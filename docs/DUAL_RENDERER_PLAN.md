@@ -81,8 +81,8 @@ emitters and the gates share.
 - Bump all `remotion` / `@remotion/*` packages to 4.0.536 and React to 19.3.
   Run the existing Remotion tests (`test/pipeline.test.js`, `test/motion.test.js`).
 - New Remotion code is TSX under `remotion/story/`. The Remotion bundler
-  compiles it, so no separate `tsc` step is needed for rendering. Add a
-  type-check script.
+  compiles it, so no separate `tsc` step is needed for rendering.
+  `npm run typecheck` (tsconfig.json: strict, noEmit) checks kit/remotion and the test entries in CI.
 - Keep `@remotion/three` confined to the legacy `premium` composition. Portable
   modules use only DOM, SVG and CSS.
 

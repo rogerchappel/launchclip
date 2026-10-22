@@ -9,7 +9,8 @@
   "scripts": {
     "test": "node --test",
     "smoke": "node ./scripts/smoke.js",
-    "check": "npm test && npm run smoke",
+    "check": "npm test && npm run typecheck && npm run smoke",
+    "typecheck": "tsc -p tsconfig.json",
     "eval:production": "node ./src/production_eval.js",
     "package:smoke": "node ./scripts/package-smoke.js",
     "release:check": "npm run check && npm run package:smoke",
