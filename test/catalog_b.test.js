@@ -470,3 +470,44 @@ test('process-steps: emitter output is seek-safe and matches the Remotion evalua
 test('process-steps: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not installed'}, () => {
   assert.ok(remotionStill('process-steps', 3.3) > 20000);
 });
+
+// ---------------------------------------------------------------------------
+// archive-card
+
+test('archive-card: fixture model meets the contract; the stamp slams after the quote', () => {
+  const {model} = loadFixture('archive-card');
+  assertModelContract(model, 'archive-card');
+  const c = model.content;
+  assert.equal(model.hidesCaptions, true);
+  assert.deepEqual(model.events.map(e => e.name), ['enter', 'quote', 'stamp']);
+  assert.equal(c.meta.text, 'ROYAL SOCIETY · 1701');
+  assert.equal(c.stamp.text, '1701');
+  assert.ok(c.stamp.time > c.quote.words.at(-1).time, 'stamp after the last word');
+  assert.equal(model.events.at(-1).cue, 'impact');
+  for (const pair of ['ink/paper', 'source/paper', 'ink/primary']) assert.ok(model.contrast[pair] >= 3, pair);
+  // The card is centred near the Shorts centre of mass (y 860).
+  const centre = model.rect.y + c.card.y + c.card.height / 2;
+  assert.ok(Math.abs(centre - 860) < 40, `card centre ${centre}`);
+});
+
+test('archive-card: title plates, local images only, strict validation', () => {
+  const resolve = MODULES['archive-card'].resolve;
+  const plate = resolve({title: 'Newton’s cooling law', source: 'Philosophical Transactions', date: '1701', image: 'assets/plates/newton.jpg'}, ctx());
+  assert.equal(plate.content.quote, null);
+  assert.equal(plate.content.image.src, 'assets/plates/newton.jpg');
+  assert.equal(resolve({quote: 'Short.', source: 'Somebody', stamp: false, date: '1701'}, ctx()).content.stamp, null);
+  assert.throws(() => resolve({quote: 'x', source: 'y', image: 'https://example.com/a.jpg'}, ctx()), /params\.image must be a project-local assets\/ path/);
+  assert.throws(() => resolve({quote: 'x', source: 'y', image: 'assets/../secret.png'}, ctx()), /params\.image must be a project-local/);
+  assert.throws(() => resolve({source: 'y'}, ctx()), /params needs a quote or a title/);
+  assert.throws(() => resolve({quote: 'x'}, ctx()), /params\.source is required/);
+  assert.throws(() => resolve({quote: 'x', source: 'y', stamp: {text: 'OK', at: 0.1}}, ctx()), /params\.stamp\.at must fall between/);
+  assert.throws(() => resolve({quote: 'x', source: 'y'}, ctx({brand: {...brand, colors: {...brand.colors, ink: '#d8d4cc'}}})), /ink on brand\.colors\.paper/);
+});
+
+test('archive-card: emitter output is seek-safe and matches the Remotion evaluator', () => {
+  assertEmitter(loadFixture('archive-card').model);
+});
+
+test('archive-card: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not installed'}, () => {
+  assert.ok(remotionStill('archive-card', 3) > 20000);
+});
