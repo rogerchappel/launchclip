@@ -1,0 +1,21 @@
+{
+  "schema": "launchclip.style.v2",
+  "name": "neon-explainer",
+  "description": "Playful science explainers: deep violet night, cyan and magenta neon, a rounded grotesque display face, glowing captions and lively motion.",
+  "brand": {
+    "colors": { "bg": "#07051a", "paper": "#f4f1ff", "ink": "#07051a", "primary": "#19f0ff", "accent": "#ff4fd8" },
+    "fonts": { "display": "bricolage-grotesque", "body": "space-grotesk", "meta": "jetbrains-mono" }
+  },
+  "motion": { "grammar": "playful" },
+  "camera": { "mode": "float" },
+  "ambient": { "level": "lively" },
+  "captions": { "preset": "glow", "position": "auto" },
+  "sound": { "sfx_density": "normal", "music": { "prompt_hints": ["retro synthwave", "arpeggiated synths", "gated reverb snare"], "bpm_range": [100, 118], "energy_curve": "build-to-drop" } },
+  "modules": {
+    "prefer": ["function-chart", "gauge-compare", "flow-compare", "equation-lockup", "kinetic-words"],
+    "avoid": ["excerpt-window"],
+    "params": { "callout": { "presentation": "glass" } }
+  },
+  "layout": { "title_case": false },
+  "loop": true
+}

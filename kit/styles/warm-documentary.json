@@ -1,0 +1,20 @@
+{
+  "schema": "launchclip.style.v2",
+  "name": "warm-documentary",
+  "description": "Archival documentary feel: warm umber canvas, cream serif type, a broadcast lower band for captions, slow pushes and restrained sound.",
+  "brand": {
+    "colors": { "bg": "#1c1612", "paper": "#f3e6d0", "ink": "#1c1612", "primary": "#e08a34", "accent": "#9cbf86" },
+    "fonts": { "display": "instrument-serif", "body": "stix-two-text", "meta": "jetbrains-mono" }
+  },
+  "motion": { "grammar": "documentary" },
+  "camera": { "mode": "slow-push" },
+  "ambient": { "level": "standard", "grain": true },
+  "captions": { "preset": "lower-band", "position": "auto" },
+  "sound": { "sfx_density": "low", "music": { "prompt_hints": ["warm acoustic guitar", "solo cello", "room tone"], "bpm_range": [64, 84], "energy_curve": "arc" } },
+  "modules": {
+    "prefer": ["archive-card", "date-card", "excerpt-window", "media-window", "lower-third"],
+    "avoid": ["kinetic-words", "count-up"],
+    "params": { "date-card": { "presentation": "solid" } }
+  },
+  "layout": { "title_case": false }
+}

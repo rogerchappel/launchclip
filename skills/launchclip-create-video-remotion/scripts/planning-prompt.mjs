@@ -14,6 +14,8 @@
 import { STORY_SCHEMA, STORY_LANES, STORY_TRANSITIONS, STORY_CAPTION_STYLES } from './story.mjs';
 import { knownModules, catalogModules, isEditorialKind } from './modules.mjs';
 import { SAFE_ZONE_PROFILES } from './layout-check.mjs';
+import { stylePromptLines } from './style.mjs';
+import { CAPTION_PRESETS } from './captions.mjs';
 
 export const PLANNER_TIERS = Object.freeze(['structured', 'guided', 'bespoke']);
 
@@ -207,6 +209,7 @@ function safeZoneLines(format) {
 function captionLines() {
   return [
     `Captions are one overlay: {"type": "captions", "style": ${STORY_CAPTION_STYLES.map((value) => JSON.stringify(value)).join(' | ')}}. Use "word-highlight" whenever there is a voice.`,
+    `A caption preset may replace style: {"type": "captions", "preset": "<name>"}, one of ${Object.keys(CAPTION_PRESETS).join(', ')}. With a style pack, write {"type": "captions"} and let the pack choose the preset.`,
     'Modules marked "hides captions" hide them while on screen; every other module keeps them visible, so its content stays above the caption band.',
     'On-screen copy is shorter than the narration; never put a whole sentence on screen.'
   ];
@@ -309,7 +312,7 @@ function section(title, lines) {
  * fixed inputs (copied into the prompt); words: optional measured narration
  * (NARRATION.json words) for word anchors.
  */
-export function planningPrompt({ tier = 'structured', lane, format, brand, words } = {}) {
+export function planningPrompt({ tier = 'structured', lane, format, brand, words, style } = {}) {
   if (!PLANNER_TIERS.includes(tier)) throw new Error(`tier must be one of ${PLANNER_TIERS.join(', ')}`);
   if (lane !== undefined && !STORY_LANES.includes(lane)) throw new Error(`lane must be one of ${STORY_LANES.join(', ')}`);
   const lines = [
@@ -321,6 +324,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
       `format: ${format ? JSON.stringify(format) : '(given in the request)'}`,
       `brand: ${JSON.stringify(brand ?? DEFAULT_BRAND)}`
     ]),
+    ...(style ? section('Style pack (keep the channel consistent)', stylePromptLines(style).map((line) => `- ${line}`)) : []),
     ...section('Contract', contractLines().map((line) => `- ${line}`)),
     ...section('Lane rules', laneRules(lane).map((line) => `- ${line}`)),
     ...section(`Tier rules (${tier})`, tierRules(tier).map((line) => `- ${line}`)),

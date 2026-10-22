@@ -459,6 +459,8 @@ export async function stageStory(definition, project, { root = ROOT } = {}) {
     const source = path.resolve(root, definition.dir);
     const skip = new Set(["hyperframes", ".launchclip", "renders", "qa"]);
     await cp(source, project, { recursive: true, filter: (from) => !skip.has(path.relative(source, from).split(path.sep)[0]) });
+    // Project style packs travel with the story (storyboard "style").
+    if (existsSync(path.join(source, ".launchclip", "styles"))) await cp(path.join(source, ".launchclip", "styles"), path.join(project, ".launchclip", "styles"), { recursive: true });
     storyFile = path.join(project, "storyboard.json");
   } else {
     const source = path.resolve(root, definition.story);

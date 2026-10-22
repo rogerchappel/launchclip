@@ -27,6 +27,7 @@ import { remotionInvocation } from "./renderers/remotion.js";
 import { deriveBoundaries, resolveStory, storyFormat } from "./story.js";
 import { validateStory } from "./story_cli.js";
 import { hasExactFile } from "./story_loader.js";
+import { applyProjectStyle } from "./story_style.js";
 import { hyperframesInvocation } from "./toolchain.js";
 import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
 import { normalizeLoudness } from "./voice/supplied.js";
@@ -165,6 +166,15 @@ export function bindCues(story, { models } = {}) {
   return { cues, warnings };
 }
 
+// audio.sfx_density (a style pack's sound.sfx_density): low keeps only the
+// big moments (impact, subdrop, riser, whoosh from hits and transitions);
+// normal and high keep every bound cue.
+const LOW_DENSITY_CUES = new Set(["impact", "subdrop", "riser", "whoosh"]);
+export function applySfxDensity(cues, density = "normal") {
+  if (density !== "low") return cues;
+  return cues.filter((cue) => LOW_DENSITY_CUES.has(cue.cue) && cue.source !== "module-event");
+}
+
 function energyValue(energy) {
   if (energy === "build") return 2;
   return Number.isInteger(energy) ? energy : 1;
@@ -188,7 +198,10 @@ export function chooseBed(story, music = {}) {
     total += length;
   }
   const energy = total > 0 ? round3(weighted / total) : 1;
-  const tempo = energy < 1 ? 84 : energy < 2 ? 96 : energy < 2.5 ? 108 : 116;
+  let tempo = energy < 1 ? 84 : energy < 2 ? 96 : energy < 2.5 ? 108 : 116;
+  // A style's music bpm_range bounds the energy-derived tempo.
+  const range = Array.isArray(music?.bpm_range) && music.bpm_range.length === 2 ? music.bpm_range.map(Number) : null;
+  if (range && range.every(Number.isFinite)) tempo = Math.round(Math.min(range[1], Math.max(range[0], tempo)));
   const loud = pool.filter((scene) => scene.energy === "build" || energyValue(scene.energy) >= 2);
   const starts = loud.map((scene) => (scene.energy === "build" ? Number(scene.end) : Number(scene.start)));
   const kickFrom = loud.length ? round3(Math.min(...starts)) : duration;
@@ -267,7 +280,7 @@ export function buildFinishCopy(story, { voice, words, captions, mix } = {}) {
 }
 
 function captionsOverlay(story) {
-  return (Array.isArray(story?.overlays) ? story.overlays : []).find((overlay) => overlay?.type === "captions" && overlay.style !== "none") ?? null;
+  return (Array.isArray(story?.overlays) ? story.overlays : []).find((overlay) => overlay?.type === "captions" && overlay.style !== "none" && overlay.preset !== "none") ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -327,7 +340,9 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
   const project = path.resolve(projectPath);
   const storyFile = path.join(project, "storyboard.json");
   if (!hasExactFile(project, "storyboard.json")) throw new Error(`launchclip finish needs ${storyFile}; author storyboard.json first`);
-  const story = await readJson(storyFile, "storyboard.json");
+  // The style pack is merged into the working copy; storyboard.json stays as written.
+  const styled = await applyProjectStyle(await readJson(storyFile, "storyboard.json"), { projectDir: project });
+  const story = styled.story;
   const quality = String(options.quality ?? "draft").toLowerCase();
   if (!["draft", "high"].includes(quality)) throw new Error(`--quality must be draft or high; got ${options.quality}`);
   if (options.voice != null && !listVoiceProviders().includes(String(options.voice).toLowerCase())) throw new Error(`Unknown --voice ${options.voice}. Available providers: ${listVoiceProviders().join(", ")}`);
@@ -345,7 +360,8 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
     out,
     raw: path.join(project, ".launchclip", "finish", `render-${quality}.mp4`),
     state: await readState(project),
-    warnings: [],
+    warnings: [...(styled.style?.warnings ?? [])],
+    style: styled.style,
     words: null,
     resolved: null,
     gates: null
@@ -532,10 +548,12 @@ const STAGES = [
       const sfxOn = !(audio.sfx === "none" || audio.sfx === false);
       const music = musicSpec(audio);
       const bound = sfxOn ? bindCues(ctx.resolved) : { cues: [], warnings: [] };
+      bound.cues = applySfxDensity(bound.cues, audio.sfx_density);
       const voice = audio.voice && existsSync(path.join(ctx.project, audio.voice)) ? audio.voice : null;
       if (!bound.cues.length && music.kind === "none") return { skip: voice ? "no SFX or music: the voice is mounted directly" : "no voice, SFX or music to mix" };
       if (music.kind === "file" && !existsSync(path.join(ctx.project, music.file))) throw new Error(`audio.music file not found: ${music.file}`);
-      const bed = music.kind === "synth" ? chooseBed(ctx.resolved, music) : music.kind === "file" ? { ...chooseBed(ctx.resolved, music), file: music.file } : null;
+      const bedMusic = { ...music, bpm_range: audio.music_hints?.bpm_range };
+      const bed = music.kind === "synth" ? chooseBed(ctx.resolved, bedMusic) : music.kind === "file" ? { ...chooseBed(ctx.resolved, bedMusic), file: music.file } : null;
       const inputHash = hashValue({
         cues: bound.cues,
         bed,
@@ -754,6 +772,7 @@ function buildReport(ctx, stages, { seconds, failed }) {
     resolved_copy: PATHS.copy,
     renderer: ctx.rendererName,
     quality: ctx.quality,
+    style: ctx.style ? { name: ctx.style.name, source: ctx.style.source, file: ctx.style.file, applied: ctx.style.applied.length } : null,
     voice: ctx.state.stages?.voice?.details?.provider && stages.find((stage) => stage.name === "voice")?.status !== "skipped" ? ctx.state.stages.voice.details.provider : null,
     final: !failed && existsSync(ctx.out) ? ctx.out : null,
     output: ctx.out,

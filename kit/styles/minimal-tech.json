@@ -1,0 +1,20 @@
+{
+  "schema": "launchclip.style.v2",
+  "name": "minimal-tech",
+  "description": "Light, precise product explainers: off-white canvas, electric blue, grotesk type, glass panels, underline captions and smooth motion.",
+  "brand": {
+    "colors": { "bg": "#f4f5f7", "paper": "#0f1720", "ink": "#ffffff", "primary": "#2257e8", "accent": "#00866a" },
+    "fonts": { "display": "space-grotesk", "body": "inter", "meta": "jetbrains-mono" }
+  },
+  "motion": { "grammar": "smooth" },
+  "camera": { "mode": "drift" },
+  "ambient": { "level": "subtle" },
+  "captions": { "preset": "underline-sweep", "position": "auto", "shadow": false },
+  "sound": { "sfx_density": "normal", "music": { "prompt_hints": ["minimal electronic", "clean plucks", "light four-on-the-floor"], "bpm_range": [100, 116], "energy_curve": "steady" } },
+  "modules": {
+    "prefer": ["code-snippet", "status-rack", "process-steps", "trend-chart", "focus-flow"],
+    "avoid": ["archive-card"],
+    "params": { "checklist": { "presentation": "glass" }, "status-rack": { "presentation": "glass" }, "callout": { "presentation": "glass" }, "focus-flow": { "presentation": "glass" } }
+  },
+  "layout": { "title_case": true }
+}
