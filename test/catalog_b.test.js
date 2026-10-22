@@ -511,3 +511,60 @@ test('archive-card: emitter output is seek-safe and matches the Remotion evaluat
 test('archive-card: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not installed'}, () => {
   assert.ok(remotionStill('archive-card', 3) > 20000);
 });
+
+// ---------------------------------------------------------------------------
+// logo-row
+
+test('logo-row: fixture model meets the contract; logos pop on a stagger', () => {
+  const {model} = loadFixture('logo-row');
+  assertModelContract(model, 'logo-row');
+  const logos = model.content.logos;
+  assert.deepEqual(model.events.map(e => e.name), ['enter', 'logo-0', 'logo-1', 'logo-2']);
+  assert.deepEqual(logos.map(l => Math.round((l.time - logos[0].time) * 100) / 100), [0, 0.14, 0.28]);
+  for (const logo of logos) {
+    assert.ok(existsSync(join(FIXTURES, logo.src)), `${logo.src} exists in the fixture assets`);
+    assert.ok(logo.tile.x >= 0 && logo.tile.x + logo.tile.size <= model.rect.width + 1e-6);
+  }
+  assert.ok(model.content.title.y > 0, 'title travels with the grid');
+});
+
+test('logo-row: grids, local assets only, strict validation', () => {
+  const resolve = MODULES['logo-row'].resolve;
+  const logos = n => Array.from({length: n}, (_, i) => ({src: `assets/logos/l${i}.svg`, label: `Logo ${i}`}));
+  const five = resolve({logos: logos(5)}, ctx());
+  assert.deepEqual([...new Set(five.content.logos.map(l => l.tile.y))].length, 2, 'two rows in portrait');
+  const wide = resolve({logos: logos(5)}, ctx({format: {width: 1920, height: 1080, fps: 30}, aspect: '16:9'}));
+  assert.deepEqual([...new Set(wide.content.logos.map(l => l.tile.y))].length, 1, 'one row in landscape');
+  assert.throws(() => resolve({logos: [{src: 'https://cdn.example.com/a.svg', label: 'A'}, {src: 'assets/b.svg', label: 'B'}]}, ctx()), /params\.logos\[0\]\.src must be a project-local assets\/ path/);
+  assert.throws(() => resolve({logos: [{src: 'assets/a.gif', label: 'A'}, {src: 'assets/b.svg', label: 'B'}]}, ctx()), /must be an \.svg, \.png, \.jpg or \.webp image/);
+  assert.throws(() => resolve({logos: logos(1)}, ctx()), /params\.logos must be an array of 2–6/);
+  assert.throws(() => resolve({logos: logos(7)}, ctx()), /params\.logos must be an array of 2–6/);
+  assert.throws(() => resolve({logos: [{src: 'assets/a.svg'}, {src: 'assets/b.svg', label: 'B'}]}, ctx()), /params\.logos\[0\]\.label is required/);
+  assert.throws(() => resolve({logos: logos(3), at: 5.9}, ctx()), /params\.at must fall between/);
+});
+
+test('logo-row: emitter output is seek-safe and matches the Remotion evaluator', () => {
+  const {model} = loadFixture('logo-row');
+  assertEmitter(model);
+  assert.match(EMITTERS['logo-row'](model).html, /<img src="assets\/logos\/orbit\.svg"/);
+});
+
+test('logo-row: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not installed'}, () => {
+  assert.ok(remotionStill('logo-row', 2) > 20000);
+});
+
+test('catalogue B: every module is registered in all three registries', async () => {
+  const ids = ['function-chart', 'gauge-compare', 'flow-compare', 'process-steps', 'archive-card', 'logo-row'];
+  assert.deepEqual(Object.keys(MODULES).sort(), [...ids].sort());
+  assert.deepEqual(Object.keys(EMITTERS).sort(), [...ids].sort());
+  const registry = readFileSync(join(ROOT, 'kit/remotion/catalog/registry-b.ts'), 'utf8');
+  for (const id of ids) {
+    assert.match(registry, new RegExp(`'${id}': \\w+`));
+    assert.equal(typeof MODULES[id].describe, 'string');
+    assert.ok(Array.isArray(MODULES[id].events));
+  }
+  for (const file of readdirSync(FIXTURES).filter(name => /^b-cat-.*\.json$/.test(name))) {
+    const fixture = JSON.parse(readFileSync(join(FIXTURES, file), 'utf8'));
+    assert.ok(fixture.story.scenes.some(scene => scene.id === fixture.sceneId), file);
+  }
+});
