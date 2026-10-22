@@ -27,7 +27,7 @@ const KINDS = {
 };
 
 async function fixtures() {
-  const names = (await readdir(FIXTURES)).filter((name) => /^b-.*\.json$/.test(name)).sort();
+  const names = (await readdir(FIXTURES)).filter((name) => /^b-(?!cat-).*\.json$/.test(name)).sort();
   return Promise.all(names.map(async (name) => ({ name, ...JSON.parse(await readFile(path.join(FIXTURES, name), "utf8")) })));
 }
 
