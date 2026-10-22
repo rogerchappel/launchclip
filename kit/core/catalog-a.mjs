@@ -630,9 +630,14 @@ function resolveKineticWords(params, ctx) {
     const gap = next === null ? exit.exitStart - at : next - at;
     const enter = Math.max(.18, Math.min(variant === 'rise' ? .42 : .34, gap - .12));
     const node = `beat-${index}`;
+    // A beat at or before the scene's first frame is the frame-0 hook: it is
+    // already settled on frame 0, with no enter animation (as hook-title).
+    const settled = beat.at <= 1 / base.fps + 1e-6;
     beat.time = T(at);
-    beat.settleTime = T(at + enter);
-    if (variant === 'scale') {
+    beat.settleTime = T(settled ? at : at + enter);
+    if (settled) {
+      // No enter: the node's resting style is its first-frame state.
+    } else if (variant === 'scale') {
       anim.add(node, at, enter, 'expo.out', {opacity: 0, scale: 1.5, blur: 16 * k}, {opacity: 1, scale: 1, blur: 0});
     } else {
       anim.add(node, at, .06, 'none', {opacity: 0}, {opacity: 1});
@@ -644,7 +649,7 @@ function resolveKineticWords(params, ctx) {
       anim.add(node, next - out, out, 'power2.in', props[0], props[1]);
     }
     if (layout === 'stack' && next !== null && !beat.emphasis) anim.add(`${node}-text`, next, .3, 'power2.out', {color: theme.paper}, {color: theme.muted});
-    if (beat.emphasis && layout === 'replace') anim.add(`${node}-bar`, at + .08, .36, 'expo.out', {scaleX: 0}, {scaleX: 1});
+    if (beat.emphasis && layout === 'replace' && !settled) anim.add(`${node}-bar`, at + .08, .36, 'expo.out', {scaleX: 0}, {scaleX: 1});
     events.push({id: `${base.id}-beat-${index}`, time: at, role: 'beat', cue: beat.emphasis ? 'impact' : 'pop'});
   });
   const styles = {root: rootStyle(box, layout === 'stack' ? {display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center'} : {})};
