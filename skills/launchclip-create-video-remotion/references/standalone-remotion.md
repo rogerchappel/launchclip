@@ -603,6 +603,31 @@ the project as part of this workflow.
 
 ## Render and verify
 
+### Recommended: one command with `launchclip finish`
+
+When the LaunchClip CLI is installed, finish the project in one command
+instead of running the steps below by hand:
+
+```bash
+launchclip finish <project> --renderer remotion --quality draft   # renders/draft.mp4
+launchclip finish <project> --renderer remotion --quality high    # renders/final.mp4, after approval
+```
+
+It synthesises `audio.narration` when set (`--voice kokoro|elevenlabs|supplied`),
+validates and layout-checks the storyboard, writes captions, builds the SFX
+and music mix from the hits, module cues and scene energy, renders, masters to
+−14 LUFS / −1 dBTP, builds the temporal evidence and critic sheets, and runs
+the motion, audio, loudness, layout and evidence gates. It never rewrites
+`storyboard.json` (the filled copy is `.launchclip/finish/storyboard.json`),
+skips stages whose inputs have not changed, and writes `finish.json`. The
+critic gate stays `pending`: run the fresh-context critic on
+`qa/critic-sheets/`, then `launchclip cinematic-check`.
+
+Use the manual commands below when the CLI is not available or a single step
+needs rerunning with different options.
+
+### Manual render
+
 Draft renders, used for evidence and the critic, keep delivery geometry:
 
 ```bash

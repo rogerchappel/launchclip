@@ -337,3 +337,22 @@ test("CLI validates and resolves stories", async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("audio.narration is validated and defers the voice, words and word anchors", () => {
+  const story = baseStory({ lane: "voiceover-motion", audio: { narration: { text: "Hot coffee cools fast.", provider: "kokoro", voice: "af_heart", speed: 1.2 } } });
+  story.scenes[1].start = "word:fast";
+  story.scenes[0].end = "word:fast";
+  const result = validateStory(story);
+  assert.deepEqual(result.errors, []);
+  assert.ok(!result.warnings.some((entry) => /word anchors are used/.test(entry)));
+
+  const bad = baseStory({ audio: { narration: { text: "", provider: "say", voice: "", speed: 3 } } });
+  const errors = validateStory(bad).errors.join("\n");
+  assert.match(errors, /audio\.narration\.text must be a non-empty string/);
+  assert.match(errors, /audio\.narration\.provider must be one of kokoro, elevenlabs, supplied, test/);
+  assert.match(errors, /audio\.narration\.voice must be a non-empty string/);
+  assert.match(errors, /audio\.narration\.speed must be a number between 0\.5 and 2/);
+  assert.match(validateStory(baseStory({ audio: { narration: { text: "x".repeat(4001) } } })).errors.join("\n"), /at most 4000 characters/);
+  assert.match(validateStory(baseStory({ audio: { narration: "hello" } })).errors.join("\n"), /audio\.narration must be an object/);
+  assert.equal(validateStory(baseStory({ audio: { narration: { text: "x".repeat(4000), speed: 0.5 } } })).ok, true);
+});

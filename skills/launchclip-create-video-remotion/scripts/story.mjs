@@ -10,6 +10,8 @@ export const STORY_LANES = ["motion", "voiceover-motion", "footage-led"];
 export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph"];
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
+// audio.narration.provider: voice providers `launchclip finish` can synthesise with.
+export const STORY_VOICE_PROVIDERS = ["kokoro", "elevenlabs", "supplied", "test"];
 
 const ASPECTS = [["9:16", 9 / 16], ["16:9", 16 / 9], ["1:1", 1], ["4:5", 4 / 5]];
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -182,10 +184,25 @@ export function validateStory(story, { modules } = {}) {
       }
     }
     if (audio.sfx !== undefined && audio.sfx !== null && !["auto", "none"].includes(audio.sfx) && audio.sfx !== false) err("audio.sfx must be \"auto\", \"none\" or false");
+    // audio.narration: text that `launchclip finish` synthesises into audio.voice and audio.words.
+    if (audio.narration !== undefined && audio.narration !== null) {
+      const narration = audio.narration;
+      if (!isObject(narration)) err("audio.narration must be an object with text, and optional provider, voice and speed");
+      else {
+        if (typeof narration.text !== "string" || !narration.text.trim()) err("audio.narration.text must be a non-empty string");
+        else if (narration.text.length > 4000) err(`audio.narration.text must be at most 4000 characters; got ${narration.text.length}`);
+        if (narration.provider !== undefined && !STORY_VOICE_PROVIDERS.includes(narration.provider)) err(`audio.narration.provider must be one of ${STORY_VOICE_PROVIDERS.join(", ")}`);
+        if (narration.voice !== undefined && !nonEmpty(narration.voice)) err("audio.narration.voice must be a non-empty string");
+        if (narration.speed !== undefined && !(typeof narration.speed === "number" && narration.speed >= 0.5 && narration.speed <= 2)) err("audio.narration.speed must be a number between 0.5 and 2");
+      }
+    }
   }
-  if (story.lane === "voiceover-motion") {
-    if (!isObject(audio) || !audio.voice) err("audio.voice is required for the voiceover-motion lane");
-    if (!isObject(audio) || !audio.words) err("audio.words (NARRATION.json) is required for the voiceover-motion lane");
+  // Narration text means the voice and its word timings are synthesised later
+  // (launchclip finish), so they are not required yet and word anchors wait.
+  const narrated = isObject(audio) && isObject(audio.narration);
+  if (story.lane === "voiceover-motion" && !narrated) {
+    if (!isObject(audio) || !audio.voice) err("audio.voice is required for the voiceover-motion lane (or set audio.narration to synthesise it)");
+    if (!isObject(audio) || !audio.words) err("audio.words (NARRATION.json) is required for the voiceover-motion lane (or set audio.narration to synthesise it)");
   }
 
   // base
@@ -357,7 +374,7 @@ export function validateStory(story, { modules } = {}) {
     }
   }
 
-  if (usesWords && !(isObject(audio) && audio.words)) warn("word anchors are used but audio.words is not set; pass narration timings when resolving");
+  if (usesWords && !(isObject(audio) && audio.words) && !narrated) warn("word anchors are used but audio.words is not set; pass narration timings when resolving");
 
   return { ok: errors.length === 0, errors, warnings };
 }

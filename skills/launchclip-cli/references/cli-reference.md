@@ -18,6 +18,7 @@ the current workflow and the decisions an operating agent must not guess.
 - [Cinematic check](#cinematic-check)
 - [Local-first OSS packet lane](#local-first-oss-packet-lane)
 - [Storyboard (storyboard.json)](#storyboard-storyboardjson)
+- [Finish: storyboard to mastered video in one command](#finish-storyboard-to-mastered-video-in-one-command)
 - [Failure handling](#failure-handling)
 
 ## Runtime and credentials
@@ -596,6 +597,48 @@ warnings, layout findings, modules, tokens and estimated cost. When repairs
 are exhausted the command fails, writes no storyboard, and keeps the last
 candidate as `<out>.rejected.json`. Review the storyboard, then run
 `story validate`, `layout-check` and `story compile` as usual.
+
+## Finish: storyboard to mastered video in one command
+
+```bash
+launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] \
+  [--voice kokoro|elevenlabs|supplied|test] [--out renders/final.mp4] [--force] [--json]
+```
+
+`finish` is the recommended way to turn a `storyboard.json` project into a
+finished video. It runs these stages in order and stops at the first failure
+(later stages are reported as `blocked`):
+
+| Stage | What it does | Writes |
+| --- | --- | --- |
+| `voice` | When `audio.narration` (`{text, provider?, voice?, speed?}`) is set, synthesises it through the voice provider (`--voice` overrides `provider`; the default is `kokoro`). Skipped when `audio.voice` is a supplied file, unless `--voice` is given. | `assets/audio/narration.wav`, `NARRATION.json` |
+| `validate` | Validates the story, resolves its anchors against the synthesised words, and runs the geometric layout check. Errors fail the run; warnings are reported. | `.launchclip/finish/storyboard.json`, `.launchclip/finish/story.resolved.json` |
+| `captions` | Chunks the words into caption lines when a captions overlay has no `src`. | `assets/captions/captions.json` |
+| `sound` | Binds a procedural kit cue to every hit (`hit.cue`, else the named module event's cue, else a default from the event name) and to every module event that carries a `cue`, adds a whoosh under push, whip and zoom transitions, picks a music bed from scene `energy` (tempo, level and kick window), and mixes everything with the music ducked under the voice. Skipped when the storyboard sets `audio.mix`. `audio.sfx: "none"` and `audio.music: "none"` turn the parts off. | `assets/audio/mix.wav`, `assets/audio/kit/`, `AUDIO-MANIFEST.json`, `qa/sfx.json` |
+| `render` | Renders the filled copy through the renderer adapter. The default renderer is `remotion` when the project has no `index.html`, otherwise `hyperframes`; HyperFrames compiles to `.launchclip/finish/hyperframes/` first. | `.launchclip/finish/render-<quality>.mp4` |
+| `master` | Masters the render's audio to −14 LUFS and at most −1 dBTP, re-measured after encoding. | `renders/draft.mp4` (draft) or `renders/final.mp4` (high), or `--out` |
+| `evidence` | Builds the phase-2 temporal evidence (browser stills plus encoded frames) and critic contact sheets. | `qa/temporal-evidence/`, `qa/critic-sheets/` |
+| `gates` | Runs the renderer-neutral gates: layout, loudness, motion and audio analysis of the mastered MP4, and the temporal evidence manifest. The critic gate is reported as `pending`, with the next step. | `qa/finish/` |
+
+The user's `storyboard.json` is never rewritten: the voice, words, captions and
+mix are set on the copy in `.launchclip/finish/`. Each stage records the hashes
+of its inputs and outputs in `.launchclip/finish-state.json` and is reported as
+`cached` while they still match, so a second run after a fix only redoes the
+affected stages. `--force` reruns everything.
+
+The report is written to `<project>/finish.json` (per-stage status, timings,
+outputs, gate results, warnings, next steps and the final path) and printed as
+a short summary, or as JSON with `--json`. `status` is `ready-for-review` when
+every gate that ran passed (the critic stays pending), `needs-repair` when a
+gate failed, and `failed` (with a non-zero exit) when a stage failed.
+
+The `test` voice writes a quiet tone with evenly spaced word timings, so the
+whole pipeline can be exercised offline. Never ship it. The `kokoro`,
+`elevenlabs` and `supplied` providers load from `src/voice/` and report
+"provider not installed" when they are absent.
+
+After finish, a fresh-context critic reviews `qa/critic-sheets/` and writes
+`qa/critic.json`; `launchclip cinematic-check` then closes the critic gate.
 
 ## Failure handling
 

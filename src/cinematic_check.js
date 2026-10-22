@@ -45,20 +45,7 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
   const profile = resolveProductionProfile("cinematic", { aspect: { orientation }, durationSeconds: duration });
   const motionPath = path.join(qaDir, "motion.json");
   const motion = await (adapters.writeMotionReport ?? writeMotionReport)(video, motionPath, {
-    expected: {
-      duration_seconds: duration,
-      width,
-      height,
-      duration_tolerance_seconds: .15,
-      maximum_hold_ratio: .8,
-      minimum_bursts_per_minute: 20,
-      minimum_change_energy_p50: .35,
-      minimum_change_energy_p50_by_family: { "developing-card": .15 },
-      minimum_flow_velocity_p90: 2,
-      maximum_first_motion_seconds: .35,
-      hook_window_seconds: profile.craft.hook_window_seconds,
-      minimum_hook_events: profile.craft.minimum_hook_material_changes
-    }
+    expected: cinematicMotionExpectations({ duration, width, height })
   }, adapters.motion);
 
   const audioManifest = await optionalProjectFile(project, options.audioManifest ?? "AUDIO-MANIFEST.json");
@@ -127,6 +114,26 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
     blockers: readiness.blockers,
     repair_findings: readiness.repair_findings,
     ...(phase2Evidence ? { cinematic_contract: phase2Evidence.summary } : {})
+  };
+}
+
+// The motion gate thresholds for a cinematic render (shared with launchclip finish).
+export function cinematicMotionExpectations({ duration, width, height }) {
+  const orientation = height > width ? "portrait" : width > height ? "landscape" : "square";
+  const profile = resolveProductionProfile("cinematic", { aspect: { orientation }, durationSeconds: duration });
+  return {
+    duration_seconds: duration,
+    width,
+    height,
+    duration_tolerance_seconds: .15,
+    maximum_hold_ratio: .8,
+    minimum_bursts_per_minute: 20,
+    minimum_change_energy_p50: .35,
+    minimum_change_energy_p50_by_family: { "developing-card": .15 },
+    minimum_flow_velocity_p90: 2,
+    maximum_first_motion_seconds: .35,
+    hook_window_seconds: profile.craft.hook_window_seconds,
+    minimum_hook_events: profile.craft.minimum_hook_material_changes
   };
 }
 

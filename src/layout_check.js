@@ -13,17 +13,20 @@ const PARAM_ROLES = new Set(["text", "hero", "media", "caption", "decor"]);
 
 // Geometric layout check for a storyboard.json project. Works for both renderers
 // because it reads declared rects and timing, not rendered pixels.
+// options.story / options.words: check this (unresolved) story and these
+// narration words instead of reading storyboard.json and its NARRATION.json
+// (launchclip finish passes its resolved copy).
 export async function checkLayoutProject(projectDir, options = {}, adapters = {}) {
   const project = path.resolve(projectDir);
   const storyFile = path.join(project, "storyboard.json");
-  if (!(await exists(storyFile))) throw new Error(`layout-check needs ${storyFile}; author storyboard.json first`);
-  const story = JSON.parse(await readFile(storyFile, "utf8"));
+  if (!options.story && !(await exists(storyFile))) throw new Error(`layout-check needs ${storyFile}; author storyboard.json first`);
+  const story = options.story ?? JSON.parse(await readFile(storyFile, "utf8"));
   const storyCore = adapters.storyCore ?? await loadStoryCore();
   if (typeof storyCore.validateStory === "function") {
     const validation = storyCore.validateStory(story);
     if (validation && validation.ok === false) throw new Error(`storyboard.json is invalid:\n- ${validation.errors.join("\n- ")}`);
   }
-  const narration = await readOptionalJson(narrationFile(project, story));
+  const narration = options.words ?? await readOptionalJson(narrationFile(project, story));
   const words = Array.isArray(narration) ? narration : Array.isArray(narration?.words) ? narration.words : [];
   const beats = await readOptionalJson(path.join(project, "BEATS.json"));
   const resolved = storyCore.resolveStory(story, { words, beats });
