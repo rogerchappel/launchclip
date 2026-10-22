@@ -31,7 +31,9 @@ function storyboard({ duration, media = "assets/ui.mp4", width = 1920, height = 
       { id: "s2", module: "media-window", start: "word:ledgerly", end: "word:try", energy: 2, in: { type: "fade", dur: 0.3 }, params: { title: "Ledgerly matches every payout", media: { kind: "video", src: media } } },
       { id: "s3", module: "cta", start: "word:try", end: duration, energy: 1, in: { type: "fade", dur: 0.3 }, params: { action: "Try Ledgerly free" } }
     ],
-    overlays: [{ type: "captions", style: "word-highlight" }]
+    overlays: [{ type: "captions", style: "word-highlight" }],
+    grammar: "editorial",
+    ending: { loop_to: "s1" }
   };
 }
 
@@ -124,12 +126,16 @@ test("make runs the motion lane end to end with a fake model, the test voice and
     const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
     assert.deepEqual(story.audio.narration, { text: NARRATION, provider: "test" });
     assert.equal(story.lane, "motion");
+    assert.equal(story.ending, undefined, "a 16:9 video does not loop back to its hook");
+    assert.deepEqual(story.motion, { grammar: "editorial" });
+    assert.equal(story.grammar, undefined);
     const expected = Math.round((testVoiceTimings(NARRATION).duration + 0.8) * 10) / 10;
     assert.equal(story.format.duration, expected);
     assert.deepEqual(finishCalls[0].options, { renderer: "remotion", quality: "draft", music: "synth" });
     const brief = await readFile(path.join(project, "BRIEF.md"), "utf8");
     assert.match(brief, /assets\/ui\.mp4 — video, screen-recording/);
     assert.match(brief, /Ledgerly reconciles Stripe payouts/);
+    assert.match(brief, /## Facts/);
     assert.match(formatMakeSummary(report), /launchclip make: ready-for-review \(motion lane/);
 
     // Rerun: script and storyboard are reused, no model calls.

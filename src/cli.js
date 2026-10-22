@@ -149,7 +149,9 @@ export async function runCli(argv, io = {}) {
         critic: flags["no-critic"] ? false : flags.critic ? true : undefined,
         maxRepairs: flags["max-repairs"] === undefined ? undefined : Number(flags["max-repairs"])
       }, { notice: (line) => stderr.write(`${line}\n`), ...productionAdapters.make });
+      // The tracked HTTP costs (actual usage, cache pricing included) join make's own estimates.
       report.api_costs = tracker.summary();
+      await (await import("node:fs/promises")).writeFile((await import("node:path")).join(report.project, "MAKE.json"), `${JSON.stringify(report, null, 2)}\n`);
       stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatMakeSummary(report));
       if (report.status === "failed") throw new Error(`launchclip make failed at the ${report.failed_stage} stage: ${report.stages[report.failed_stage]?.error ?? ""}\nnext: ${report.next_steps[0] ?? ""}`.trim());
       return;

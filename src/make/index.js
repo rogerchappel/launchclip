@@ -430,6 +430,18 @@ export function finalizeStory(storyboard, ctx) {
   if (ctx.routing.music && ctx.options.music == null) story.audio.music = `assets/${ctx.routing.music.path}`;
   else if (typeof story.audio.music === "string" && story.audio.music.startsWith("assets/") && !ctx.routing.music) delete story.audio.music;
   if (!story.title && ctx.script?.title) story.title = ctx.script.title;
+  // Loop endings are a Shorts device (portrait, 60 s or less); a landscape or
+  // longer video ends on its last scene instead of replaying the hook.
+  const { width, height, duration } = story.format ?? {};
+  if (story.ending?.loop_to && !(height > width && Number(duration) <= 60)) {
+    delete story.ending;
+    ctx.report.warnings.push("dropped ending.loop_to: loop endings are for portrait Shorts of 60 s or less; the video holds on its last scene");
+  }
+  // A grammar the model put at the top level belongs in motion.grammar.
+  if (story.grammar !== undefined) {
+    if (!story.motion?.grammar && typeof story.grammar === "string") story.motion = { ...(story.motion ?? {}), grammar: story.grammar };
+    delete story.grammar;
+  }
   story.meta = { ...(story.meta ?? {}), made_by: "launchclip make", prompt: ctx.text };
   return story;
 }
@@ -517,6 +529,7 @@ async function composeBrief(ctx, manifest) {
   if (manifest.length) {
     lines.push("These are the only files you may reference, by exact path. Do not invent other assets/ paths.", "", ...manifest.map((item) => `- ${item.line}`), "");
     if (manifest.some((item) => item.kind === "video" || item.kind === "image")) lines.push("Show the real product media: give at least one scene to each screenshot or screen recording above, on the line that describes it.", "");
+  lines.push("## Facts", "", "Use only figures, names, URLs and handles that appear in the prompt, notes or narration. When none are given, prefer modules that need no numbers (checklist, process-steps, callout, media-window, kinetic-words) over count-up, metric or gauge-compare with made-up values, and never use a placeholder unit such as \"time\". A call to action names the product, not an invented domain.", "");
   } else lines.push("No media files were supplied: build every scene from catalogue modules (no media-window).", "");
   return `${lines.join("\n")}\n`;
 }
