@@ -303,7 +303,10 @@ export function processSamples(input, sampleRate, family, { harvest = 0 } = {}) 
     return result;
   }
   // Several strong hits in a single-hit family: keep the cleanest, or reject.
-  const clean_ = segments.filter((segment) => segment.onset.isolationDb >= MIN_ISOLATION_DB);
+  // A clean hit stands clear of what came before (isolation) and rings for at
+  // least 40% of the family's length before the next hit cuts in.
+  const minSamples = Math.round(sampleRate * rules.maxMs * 0.4 / 1000);
+  const clean_ = segments.filter((segment) => segment.onset.isolationDb >= MIN_ISOLATION_DB && segment.end - segment.onset.sample >= minSamples);
   if (!clean_.length) return { ok: false, reason: `multi-hit (${strong.length} hits) with no isolated hit`, stats };
   const best = shapeOne({ start: clean_[0].start, end: clean_[0].end, onsetSample: clean_[0].onset.sample });
   if (!best.ok) return { ...best, stats };

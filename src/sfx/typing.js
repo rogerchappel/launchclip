@@ -98,9 +98,10 @@ export function keyKind(char) {
 }
 
 /**
- * Deterministic thinning to at most maxRate keystrokes per second: a key is
- * kept when it is at least 1/maxRate after the last kept key; a space or
- * enter is kept from 0.6 of that spacing, so word breaks survive thinning.
+ * Deterministic thinning to at most maxRate keystrokes in any one-second
+ * window: a key is kept when it is at least 1/maxRate after the last kept
+ * key; a space or enter is kept from 0.6 of that spacing, so word breaks
+ * survive thinning.
  */
 export function thinKeys(chars, maxRate = TYPING_DEFAULTS.maxRate) {
   const spacing = 1 / maxRate;
@@ -109,6 +110,10 @@ export function thinKeys(chars, maxRate = TYPING_DEFAULTS.maxRate) {
   for (const entry of chars) {
     const gap = entry.at - last;
     const heavy = keyKind(entry.char) !== "key";
+    // Never more than maxRate keys in any one-second window.
+    let window = 0;
+    for (let k = kept.length - 1; k >= 0 && entry.at - kept[k].at < 1 - 1e-9; k--) window++;
+    if (window >= maxRate) continue;
     if (gap + 1e-9 >= spacing || (heavy && gap + 1e-9 >= spacing * 0.6)) {
       kept.push(entry);
       last = entry.at;
