@@ -1,0 +1,11 @@
+{
+  "name": "pulseboard-demo-app",
+  "private": true,
+  "version": "0.0.0",
+  "description": "A tiny fictional SaaS app for LaunchClip demo autopilot tests and examples.",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js --port 4310",
+    "seed": "node scripts/seed.js"
+  }
+}

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pulseboard</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="shell" id="shell" hidden>
+    <aside class="sidebar">
+      <div class="brand"><span class="logo"></span>Pulseboard</div>
+      <nav>
+        <a href="/dashboard" data-nav>Dashboard</a>
+        <a href="/projects/new" data-nav>New project</a>
+        <a href="/analytics" data-nav>Analytics</a>
+      </nav>
+      <div class="team" id="team">Lighthouse Labs</div>
+    </aside>
+    <main id="main"></main>
+  </div>
+
+  <section class="auth" id="auth" hidden>
+    <form class="card login" id="login-form">
+      <div class="brand big"><span class="logo"></span>Pulseboard</div>
+      <h1>Welcome back</h1>
+      <p class="muted">Launch analytics for small teams.</p>
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" placeholder="you@company.com" autocomplete="off">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" placeholder="Your password" autocomplete="off">
+      <button type="submit" class="primary">Sign in</button>
+      <p class="error" id="login-error"></p>
+    </form>
+  </section>
+
+  <div class="toast" id="toast"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
