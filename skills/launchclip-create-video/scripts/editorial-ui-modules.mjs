@@ -132,7 +132,7 @@ export function emitEditorialModule(model) {
       body += '</div>';
     } else if (kind === 'code-snippet') {
       css += `#${id} .ui-code-language{font:22px/1.3 ${F.mono};margin:0;padding:0 24px 16px;color:${C.codeLanguage}}#${id} .ui-code{margin:0;padding:0 24px 24px;font:${c.codeFont}px/1.5 ${F.mono}}#${id} .ui-code-line{display:block;height:${c.lineHeight}px;white-space:pre;opacity:0}#${id} .ui-token-keyword{color:${C.token.keyword}}#${id} .ui-token-string{color:${C.token.string}}#${id} .ui-token-number{color:${accent}}#${id} .ui-token-comment{color:${C.token.comment}}#${id} .ui-token-operator{color:${C.token.operator}}`;
-      body += `<p class="ui-code-language">${escape(c.label)}</p><pre class="ui-code">`;
+      body += `${c.label === null ? '' : `<p class="ui-code-language">${escape(c.label)}</p>`}<pre class="ui-code">`;
       for (const line of c.lines) {
         const i = line.index;
         let character = 0;

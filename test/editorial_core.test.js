@@ -127,3 +127,29 @@ test('editorial core imports only the font registry and the motion grammar, and 
   assert.equal(EDITORIAL_STYLE.space.pad, 24);
   assert.ok(Object.isFrozen(EDITORIAL_STYLE) && Object.isFrozen(EDITORIAL_SYMBOLS));
 });
+
+test('code-snippet label: "<language> · Example" by default, the real label when the code is real, hidden with label: false', () => {
+  const spec = (code, extra = {}) => ({id: 'code', kind: 'code-snippet', aspect: '16:9', start: 0, duration: 3, rect: {x: 360, y: 300, width: 1200, height: 300}, title: 'Terminal',
+    code: {lines: [{at: .4, tokens: [{text: '$ ', type: 'comment'}, {text: 'launchclip finish', type: 'plain'}]}], ...code}, ...extra});
+  const label = (code, extra) => resolveEditorialModule(spec(code, extra)).content.label;
+  assert.equal(label({language: 'shell'}), 'shell · Example');
+  assert.equal(label({}), 'Example code · Example');
+  assert.equal(label({language: 'shell', source: 'real'}), 'shell');
+  assert.equal(label({source: 'real'}), null);
+  assert.equal(label({language: 'json', filename: 'storyboard.json'}), 'storyboard.json');
+  assert.equal(label({language: 'shell'}, {label: 'zsh — launch'}), 'zsh — launch');
+  assert.equal(label({language: 'shell'}, {label: false}), null);
+  // The default stays byte-identical; a hidden label drops the row from the markup.
+  const shown = buildEditorialModule(spec({language: 'shell'}));
+  assert.match(shown.html, /<p class="ui-code-language">shell · Example<\/p>/);
+  const hidden = buildEditorialModule(spec({language: 'shell'}, {label: false}));
+  assert.doesNotMatch(hidden.html, /ui-code-language">/);
+  const real = buildEditorialModule(spec({language: 'shell', source: 'real'}));
+  assert.match(real.html, /<p class="ui-code-language">shell<\/p>/);
+  // The hidden row gives its height back: a rect 44 px shorter still fits.
+  const tight = {x: 360, y: 300, width: 1200, height: 160};
+  assert.throws(() => resolveEditorialModule({...spec({language: 'shell'}), rect: tight}), /code-snippet rect too short/);
+  assert.doesNotThrow(() => resolveEditorialModule({...spec({language: 'shell'}, {label: false}), rect: tight}));
+  assert.throws(() => resolveEditorialModule(spec({source: 'yes'})), /code.source must be example or real/);
+  assert.throws(() => resolveEditorialModule({...spec({}), kind: 'callout', code: undefined, body: 'Hi', label: 'x'}), /label is only for code-snippet/);
+});

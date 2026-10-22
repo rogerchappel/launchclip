@@ -540,7 +540,7 @@ cards. Omit `treatment` to retain the original callout output exactly.
 | --- | --- |
 | `date-card` | `date: {month: 1..12, day: 1..31, year?, caption?, at}`; calendar-valid integers, optional caption ≤42 characters |
 | `status-rack` | `rack: {mode: "illustration" or "data", source?, rows: [{label, states: [{at, lights: [boolean, boolean, boolean]}]}]}`; 1–8 rows, 1–8 states per row |
-| `code-snippet` | `code: {language?, lines: [{at, tokens: [{text, type}]}]}`; 1–3 lines, 1–24 tokens per line |
+| `code-snippet` | `code: {language?, source?: "example" or "real", filename?, lines: [{at, tokens: [{text, type}]}]}`; 1–3 lines, 1–24 tokens per line; optional top-level `label` (string ≤40, or `false` to hide the label row) |
 
 The date card uses a colored month band, a large independently settling day, and
 short context. A supplied year validates leap days; without a year February 29
@@ -561,9 +561,12 @@ Code token types are `plain`, `keyword`, `string`, `number`, `comment`, and
 line acquires independently. Preserve spaces in token strings; tabs/newlines are
 rejected. Line offsets must increase by at least 0.3 seconds. Lines must fit their
 width without scrolling or clipping, so show a short excerpt instead of an entire
-program. Token styling does not parse or execute code. The language label is
-optional; the module retains an `Example` marker rather than implying product
-proof. All copy is escaped.
+program. Token styling does not parse or execute code. The label row above the
+code reads `<language> · Example` by default, so an illustrative snippet never
+implies product proof. For real code, drop the marker: `code.source: "real"`
+shows the language alone (no row without a language), `code.filename` shows the
+file name, and a top-level `label` sets the row text outright (`label: false`
+hides the row and gives its height back to the code). All copy is escaped.
 
 These widgets accept the existing aspect, rect, track, accent, and directional
 motion options. Supply explicit rectangles appropriate to the footage and inspect

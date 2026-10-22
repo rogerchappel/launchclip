@@ -93,7 +93,10 @@
  *   settleTime is null for a state that changes nothing (no event).
  *   durations:{row:0.22 (row enter), light:0.18 (each light colour change)}
  *
- * code-snippet: {language, label ("<language> · Example"), typing, codeFont,
+ * code-snippet: {language, label (string | null: spec.label, false → null;
+ *   else code.filename; else the language for code.source "real" (null
+ *   without a language); else "<language> · Example"), filename, source
+ *   ('example' | 'real'), typing, codeFont,
  *   lineHeight, lines:[{index, time, typeDuration, endTime, length,
  *   characters, tokens:[{text, type, chars?}], charTimes: null | number[]}]}
  *   With typing, character j becomes visible at charTimes[j]; the line itself
@@ -379,7 +382,7 @@ export function resolveEditorialModule(input, options = {}) {
 }
 
 function resolveAt(options, input, suppliedRect, density, source) {
-  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'density', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt', 'theme', 'focus', 'growth']);
+  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'density', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt', 'theme', 'focus', 'growth', 'label']);
   if (!/^[a-z][a-z0-9-]{0,59}$/.test(input.id ?? '')) throw new Error('id must be a unique lowercase DOM-safe identifier');
   if (!EDITORIAL_KINDS.includes(input.kind)) throw new Error(`kind must be ${EDITORIAL_KINDS.join(', ')}`);
   if (input.presentation !== undefined && !['solid', 'glass'].includes(input.presentation)) throw new Error('presentation must be solid or glass');
@@ -424,6 +427,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
   }
   const allowed = {'media-window': ['media'], checklist: ['rows'], 'step-rail': ['steps'], callout: ['body', 'treatment'], 'audience-grid': ['audience'], 'trend-chart': ['chart'], metric: ['metric'], progress: ['progress'], 'date-card': ['date'], 'status-rack': ['rack'], 'code-snippet': ['code'], 'excerpt-window': ['excerpt'], 'focus-flow': ['focus'], 'growth-chart': ['growth']}[kind];
   for (const key of ['media', 'rows', 'steps', 'body', 'audience', 'chart', 'metric', 'progress', 'treatment', 'date', 'rack', 'code', 'excerpt', 'focus', 'growth']) if (input[key] !== undefined && !allowed.includes(key)) throw new Error(`${kind} does not accept ${key}`);
+  if (input.label !== undefined && kind !== 'code-snippet') throw new Error('label is only for code-snippet');
   const statusLabels = {pending: 'Pending', active: 'Active', done: 'Done', ...(input.statusLabels ?? {})};
   if (input.statusLabels !== undefined) {
     if (kind !== 'checklist') throw new Error('statusLabels is only for checklist');
@@ -606,13 +610,28 @@ function resolveAt(options, input, suppliedRect, density, source) {
     });
     content = {mode: rack.mode, source: rack.mode === 'data' ? rack.source : null, note, noteLines, lightOn: accent, lightOff, rows, durations: {row: .22, light: .18}};
   } else if (kind === 'code-snippet') {
-    object(input.code, 'code', ['language', 'lines', 'typing']); const code = input.code;
+    object(input.code, 'code', ['language', 'lines', 'typing', 'source', 'filename']); const code = input.code;
     if (code.typing !== undefined && typeof code.typing !== 'boolean') throw new Error('code.typing must be a boolean');
+    if (code.source !== undefined && !['example', 'real'].includes(code.source)) throw new Error('code.source must be example or real');
     const language = code.language === undefined ? 'Example code' : text(code.language, 'code.language', 24);
+    const filename = code.filename === undefined ? null : text(code.filename, 'code.filename', 40);
+    if (filename !== null && /[\r\n\t]/.test(filename)) throw new Error('code.filename must be one line');
+    // Label row: an explicit label (false hides the row), else the filename,
+    // else the language alone for real code, else the "<language> · Example"
+    // marker for illustrative snippets (the default).
+    let label;
+    if (input.label === false) label = null;
+    else if (input.label !== undefined) {
+      label = text(input.label, 'label', 40);
+      if (/[\r\n\t]/.test(label)) throw new Error('label must be one line');
+    } else if (filename !== null) label = filename;
+    else if (code.source === 'real') label = code.language === undefined ? null : language;
+    else label = `${language} · Example`;
+    const labelRow = label === null ? 0 : 44;
     if (!Array.isArray(code.lines) || code.lines.length < 1 || code.lines.length > 3) throw new Error('code.lines must contain 1–3 lines');
     const codeFont = Math.max(22, Math.min(28, Math.floor(box.width / 28))), lineHeight = Math.ceil(codeFont * 1.5);
-    if (box.height < header + 44 + code.lines.length * lineHeight + 24) throw new Error('code-snippet rect too short');
-    natural = header + 44 + code.lines.length * lineHeight + 24 + 4;
+    if (box.height < header + labelRow + code.lines.length * lineHeight + 24) throw new Error('code-snippet rect too short');
+    natural = header + labelRow + code.lines.length * lineHeight + 24 + 4;
     const typing = code.typing === true;
     let previous = -1, typingEnd = -1;
     const lines = code.lines.map((line, i) => {
@@ -644,7 +663,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
       events.push({id: `${id}-code-${i}-settle`, time: start + lineOffset + typeDuration});
       return {index: i, time, typeDuration, endTime: start + lineOffset + typeDuration, length, characters, tokens, charTimes};
     });
-    content = {language, label: `${language} · Example`, typing, codeFont, lineHeight, lines, durations: {line: .24}};
+    content = {language, label, filename, source: code.source ?? 'example', typing, codeFont, lineHeight, lines, durations: {line: .24}};
   } else if (kind === 'audience-grid') {
     object(input.audience, 'audience', ['tiles', 'columns']);
     const {tiles} = input.audience;
