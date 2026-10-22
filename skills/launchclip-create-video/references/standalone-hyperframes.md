@@ -338,6 +338,12 @@ ffmpeg -hide_banner -loglevel error -i <project>/renders/draft.mp4 \
   <project>/qa/temporal-evidence/<sample-id>-encoded-draft.png
 ```
 
+`scripts/build-evidence.mjs <project>` does all of this in one step: it
+derives the schedule from the declared boundaries, captures both sources,
+writes the hashed manifest, and builds paired contact sheets for the critic in
+`qa/critic-sheets/` (left tile = HyperFrames, right tile = encoded draft). Set
+`HYPERFRAMES_BIN` to a local binary to skip `npx`. To do it by hand instead:
+
 Copy or rename each HyperFrames result to
 `qa/temporal-evidence/<sample-id>-hyperframes.png`, then hash the current draft
 and every evidence file. Do not reuse the browser snapshot as encoded-draft

@@ -6,6 +6,8 @@ import { resolveDeliveryProfile, SHORTS_SAFE_ZONE } from "../src/production_prof
 import { chunkWords, captionRuntime } from "../skills/launchclip-create-video/scripts/word-captions.mjs";
 import { SFX, bedExpressions } from "../skills/launchclip-create-video/scripts/synth-audio-kit.mjs";
 import { parseEbur128Summary, parseLoudnormJson } from "../skills/launchclip-create-video/scripts/master-loudness.mjs";
+import { mixGraph, normalizeCues } from "../skills/launchclip-create-video/scripts/build-mix.mjs";
+import { evidenceSchedule } from "../skills/launchclip-create-video/scripts/build-evidence.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const words = (text, step = 0.3) => text.split(" ").map((word, index) => ({ text: word, start: index * step, end: index * step + step * 0.8 }));
@@ -56,4 +58,24 @@ test("subscription skill links the Shorts delivery floor", async () => {
   assert.match(reference, /−14 LUFS/);
   assert.match(reference, /word-captions\.mjs/);
   assert.match(reference, /synth-audio-kit\.mjs/);
+});
+
+test("builds a ducked mix graph with event-bound SFX", () => {
+  const cues = normalizeCues([{ cue: "whoosh", at: 5.72, volume: 0.5 }, { file: "hit.wav", at: 1 }], "sfx");
+  assert.equal(cues[0].file, path.resolve("sfx/whoosh.wav"));
+  assert.equal(cues[1].cue, "hit");
+  const graph = mixGraph({ cues, duration: 10, hasVoice: true, hasMusic: true });
+  assert.match(graph, /sidechaincompress/);
+  assert.match(graph, /\[2\]adelay=5720:all=1,volume=0\.5\[s0\]/);
+  assert.match(graph, /amix=inputs=4:normalize=0/);
+  assert.doesNotMatch(mixGraph({ cues: [], duration: 10, hasVoice: false, hasMusic: true }), /sidechaincompress/);
+  assert.throws(() => normalizeCues([{ cue: "tick" }], "sfx"), /non-negative "at"/);
+});
+
+test("derives the phase-2 evidence schedule from declared boundaries", () => {
+  const html = '<div id="root" data-composition-id="main" data-duration="12"><div data-launchclip-sequence-id="b" data-launchclip-boundary-id="b1" data-launchclip-transition-kind="shared-world" data-launchclip-transition-start="5" data-launchclip-transition-duration="0.5"></div></div>';
+  const schedule = evidenceSchedule(html);
+  assert.equal(schedule.entries.filter((entry) => entry.boundary_id === "b1").length, 7);
+  assert.equal(schedule.final_hold.at_seconds, 11.95);
+  assert.throws(() => evidenceSchedule("<div></div>"), /data-duration/);
 });

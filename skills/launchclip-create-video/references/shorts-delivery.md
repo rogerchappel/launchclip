@@ -60,9 +60,19 @@ YouTube normalizes playback to about −14 LUFS. A quieter master gets turned up
 with its noise; a louder one is turned down after its transients were already
 squashed. Peaks near 0 dBFS clip once YouTube re-encodes.
 
-1. Mix offline: narration, music bed ducked under the voice
-   (`sidechaincompress`), and SFX delayed to their event times. Mount one mixed
-   `<audio>` track at the composition root.
+1. Mix offline with `scripts/build-mix.mjs`: narration, a music bed ducked
+   under the voice, and SFX delayed to their event times from a `cues.json`
+   (`[{ "cue": "whoosh", "at": 5.72, "volume": 0.5, "shot": "B1" }]`). Mount
+   the one mixed `<audio>` track at the composition root.
+
+```bash
+node <skill>/scripts/build-mix.mjs --cues cues.json --duration <s> \
+  --voice assets/audio/narration.wav --music assets/audio/music/bed.wav \
+  --sfx-dir assets/audio/sfx --out assets/audio/mix.wav --sfx-manifest qa/sfx.json
+```
+
+   `--sfx-manifest` writes the cue receipt that `AUDIO-MANIFEST.json` points
+   to, so `cinematic-check` can verify each cue's transient.
 2. After rendering, master the file in two passes:
 
 ```bash

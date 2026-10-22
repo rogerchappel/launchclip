@@ -11,6 +11,10 @@
   (`word-captions.mjs`), an original procedural SFX and music-bed kit
   (`synth-audio-kit.mjs`), and two-pass loudness mastering
   (`master-loudness.mjs`).
+- Add `build-mix.mjs` (narration, ducked bed and event-bound SFX from a cue
+  list) and `build-evidence.mjs` (phase-2 temporal evidence, hashed manifest
+  and paired critic contact sheets) so the post-authoring steps run without
+  per-project scripts.
 
 ### Changed
 
