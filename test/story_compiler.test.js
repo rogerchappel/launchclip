@@ -10,6 +10,7 @@ import gsap from "gsap";
 import { compileStoryToHyperFrames, COMPOSITION_ID } from "../kit/hyperframes/story-compiler.mjs";
 import { brandModuleDefaults, contrastRatio, knownModules, placeholderModel, resolveModule } from "../kit/core/modules.mjs";
 import { layerStateAt, sceneWindows, transitionTweens, TRANSITION_TYPES } from "../kit/core/transitions.mjs";
+import { parseOutput } from "../src/renderers/command.js";
 import { getEase } from "../kit/core/motion.mjs";
 import { EDITORIAL_KINDS } from "../kit/core/editorial-core.mjs";
 import { brandFontStacks, fontFaceRule, fontFamilyName, projectFontFamilies, registryFontFaces } from "../kit/core/fonts.mjs";
@@ -102,8 +103,8 @@ test("the compiled minimal project passes hyperframes lint", async () => {
   try {
     await compileStoryToHyperFrames(await minimalStory(), { projectDir: out, sourceDir: MINIMAL });
     const { stdout } = await run(process.execPath, [HYPERFRAMES_CLI, "lint", "--json", out], { cwd: out });
-    const report = JSON.parse(stdout);
-    assert.equal(report.ok, true, stdout);
+    const report = parseOutput(stdout);
+    assert.equal(report?.ok, true, stdout);
     assert.equal(report.errorCount, 0);
     assert.equal(report.warningCount, 0, stdout);
   } finally {

@@ -250,3 +250,11 @@ test("remotion adapter renders a real still and MP4, and build-evidence validate
     else process.env.REMOTION_BIN = previous;
   }
 });
+
+test("parseOutput reads a JSON report printed after a CLI notice", async () => {
+  const { parseOutput } = await import("../src/renderers/command.js");
+  assert.deepEqual(parseOutput('{"ok":true}'), { ok: true });
+  assert.deepEqual(parseOutput("Hyperframes collects anonymous usage data.\nRun `hyperframes telemetry disable` to opt out.\n{\n  \"ok\": true,\n  \"errorCount\": 0\n}\n"), { ok: true, errorCount: 0 });
+  assert.equal(parseOutput("plain text, no report"), "plain text, no report");
+  assert.equal(parseOutput(""), null);
+});
