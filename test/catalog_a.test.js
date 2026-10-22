@@ -78,7 +78,8 @@ function checkAnimations(model) {
       assert.ok(list[i].start >= list[i - 1].start + list[i - 1].duration - 1e-6, `${key} tweens overlap at ${list[i].start}`);
       assert.equal(list[i].from[prop], list[i - 1].to[prop], `${key} continuity at ${list[i].start}`);
     }
-    if (key.endsWith(".blur")) assert.equal(list.at(-1).to.blur, 0, `${key} settles sharp`);
+    // Blur resolves to 0 at settle; only a tween that fades the node out may end blurred.
+    if (key.endsWith(".blur")) for (const a of list) assert.ok(a.to.blur === 0 || a.to.opacity === 0, `${key} settles sharp at ${a.start + a.duration}`);
   }
   for (const [key] of tracks) {
     const [node, prop] = [key.slice(0, key.lastIndexOf(".")), key.slice(key.lastIndexOf(".") + 1)];
@@ -328,6 +329,63 @@ test("hook-title enforces kicker ink contrast on the emphasis fill", () => {
   const brand = { colors: { ...BRAND.colors, ink: "#f2eee6" } };
   assert.throws(() => resolve("hook-title", { headline: "Hello there", kicker: "Why?" }, { brand }), /brand contrast too low: ink on primary/);
   assert.ok(resolve("hook-title", { headline: "Hello there" }, { brand }));
+});
+
+// ---------------------------------------------------------------------------
+// kinetic-words
+
+const KINETIC = { words: [{ text: "Big gap", at: 0.15 }, { text: "cools", at: 0.75 }, { text: "fast", at: 1.3, emphasis: true }, { text: "small gap", at: 2.1 }, { text: "crawls", at: 2.75, emphasis: true, color: "accent" }] };
+registerSample("kinetic-words", KINETIC);
+
+test("kinetic-words replaces one beat with the next on its word time", () => {
+  const model = resolve("kinetic-words", KINETIC);
+  assert.equal(model.hidesCaptions, true);
+  assert.deepEqual(model.events.map((e) => [e.id, e.time]), [["m1-beat-0", 2.15], ["m1-beat-1", 2.75], ["m1-beat-2", 3.3], ["m1-beat-3", 4.1], ["m1-beat-4", 4.75]]);
+  const visible = (t) => model.content.beats.filter((beat) => (sampleNode(model, `beat-${beat.index}`, t).opacity ?? 0) > .5).map((beat) => beat.index);
+  assert.deepEqual(visible(2.5), [0]);
+  assert.deepEqual(visible(3.6), [2]);
+  assert.deepEqual(visible(5.3), [4]);
+  // Scale variant: blurred and large on entry, sharp at settle.
+  const beat = model.content.beats[2];
+  assert.ok(sampleNode(model, "beat-2", beat.time + .02).blur > 5);
+  assert.deepEqual(sampleNode(model, "beat-2", beat.settleTime), { opacity: 1, scale: 1, blur: 0 });
+  // Single words fill most of the safe width; emphasis beats carry a bar.
+  assert.ok(beat.size >= 300, `single word set at ${beat.size}px`);
+  assert.ok(model.styles["beat-2-bar"] && !model.styles["beat-1-bar"]);
+  assert.equal(model.styles["beat-4-text"].color, BRAND.colors.accent);
+});
+
+test("kinetic-words stack layout keeps earlier beats and dims them", () => {
+  const model = resolve("kinetic-words", { layout: "stack", variant: "rise", words: KINETIC.words.slice(0, 4) });
+  const sizes = new Set(model.content.beats.map((beat) => beat.size));
+  assert.equal(sizes.size, 1);
+  assert.equal(sampleNode(model, "beat-0-text", 4).color, model.theme.muted);
+  assert.equal(sampleNode(model, "beat-0", 4).opacity, 1);
+  assert.equal(sampleNode(model, "beat-2", 4).opacity, 1, "emphasis beat stays");
+  assert.ok(!("beat-2-text" in Object.fromEntries(model.animations.map((a) => [a.node, 1]))), "emphasis beat is not dimmed");
+  assert.equal(sampleNode(model, "beat-3-line-0", model.content.beats[3].time).y, model.content.beats[3].size * 1.25);
+  assert.equal(sampleNode(model, "beat-3-line-0", 5.5).y, 0);
+  checkContract(model, { captions: false });
+  checkEmitter(model);
+});
+
+test("kinetic-words validates beats", () => {
+  const bad = (params, pattern) => assert.throws(() => resolve("kinetic-words", params), pattern);
+  bad({}, /kinetic-words: params\.words is required/);
+  bad({ words: [] }, /params\.words must list 1–12 beats for the replace layout/);
+  bad({ words: [{ text: "one two three four", at: 0 }] }, /params\.words\[0\]\.text must be 1–3 words/);
+  bad({ words: [{ text: "go" }] }, /params\.words\[0\]\.at is required/);
+  bad({ words: [{ text: "go", at: 0.5 }, { text: "now", at: 0.6 }] }, /params\.words\[1\]\.at must be at least 0\.3 s after the previous beat/);
+  bad({ words: [{ text: "go", at: 3.8 }] }, /params\.words\[0\]\.at must be seconds from the scene start between 0 and 3\.55/);
+  bad({ words: [{ text: "go", at: 0, emphasis: "yes" }] }, /params\.words\[0\]\.emphasis must be true or false/);
+  bad({ words: [{ text: "go", at: 0 }], variant: "spin" }, /params\.variant must be one of "scale", "rise"/);
+  bad({ words: Array.from({ length: 6 }, (_, i) => ({ text: "go", at: i * .4 })), layout: "stack" }, /1–5 beats for the stack layout/);
+  bad({ words: [{ text: "Pneumonoultramicroscopic", at: 0 }] }, /params\.words\[0\]\.text is too long/);
+});
+
+test("kinetic-words parity fixtures resolve", async () => {
+  await checkFixture("a-cat-kinetic-words.json");
+  await checkFixture("a-cat-kinetic-words-stack.json");
 });
 
 test("hook-title parity fixture and the golden story's s1 resolve", async () => {
