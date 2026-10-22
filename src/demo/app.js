@@ -138,7 +138,7 @@ export async function detectApp(repoPath) {
   for (const command of readme.commands) {
     if (start.some((entry) => entry.command === command)) {
       const entry = start.find((item) => item.command === command);
-      entry.confidence = Math.min(0.98, entry.confidence + 0.05);
+      entry.confidence = Math.round(Math.min(0.98, entry.confidence + 0.05) * 100) / 100;
       entry.source += " (also in the README)";
       continue;
     }
