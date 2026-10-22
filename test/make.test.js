@@ -195,6 +195,37 @@ test("make routes footage to footage-led and uses the base edit's output and wor
   }
 });
 
+test("a base edit that needs semantic review uses the candidate edit and leaves a pending base_edit_qa gate", async () => {
+  const assets = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-review-"));
+  const out = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-review-out-"));
+  try {
+    await writeFile(path.join(assets, "founder.mp4"), "recording");
+    const words = ["Ledgerly", "matches", "every", "payout", "today."].map((text, i) => ({ word: text, start: 0.3 + i * 0.5, end: 0.7 + i * 0.5 }));
+    const inventory = async (dir) => ({ dir, entries: [{ path: "founder.mp4", kind: "video", role: "talking-head", confidence: 0.9, signals: ["camera-look"], description: "Talking-head recording", media: { kind: "video", width: 720, height: 1280, duration: 4, orientation: "portrait", mountable: true }, speech: { present: true }, transcript: { text: "x", words: [] }, fingerprint: "1" }], counts: {}, summary: [] });
+    const prepareRecording = async (input, options) => {
+      const attempt = path.join(options.out, "qa/attempt-1");
+      await mkdir(attempt, { recursive: true });
+      await writeFile(path.join(attempt, "video.mp4"), "candidate");
+      await writeFile(path.join(attempt, "plan.json"), JSON.stringify({ words, duration_seconds: 3.2 }));
+      return { status: "needs-semantic-review", candidate: path.join(attempt, "video.mp4"), source_duration_seconds: 4, duration_seconds: 3.2, files: { plan: path.join(attempt, "plan.json") }, qa: { issues: [{ kind: "unconfirmed-boundary", start_seconds: 1.2, explanation: "No verified quiet separator was found. Review it." }] } };
+    };
+    const client = { provider: "openai", async runStructured() {
+      const board = { schema: "launchclip.story.v1", lane: "footage-led", format: { width: 1080, height: 1920, fps: 30, duration: 3.2 }, brand: DEFAULT_BRAND, audio: { words: "NARRATION.json" }, base: "assets/base-edit.mp4",
+        scenes: [{ id: "c1", module: "emphasis-caption", track: 1, start: "word:every", end: "word:today", params: { text: "Every payout" } }], overlays: [{ type: "captions", style: "word-highlight" }] };
+      return { model: "gpt-5.6-luna", value: { storyboard_json: JSON.stringify(board) }, usage: {} };
+    } };
+    const report = await runMake("Dress my clip", { assets, out, voice: "test" }, { env: {}, client: { client, provider: "openai", model: "gpt-5.6-luna", spec: "openai:gpt-5.6-luna", vision: false }, inventory, prepareRecording, finish: fakeFinish([]), notice() {} });
+    assert.equal(report.base_edit.status, "candidate");
+    assert.equal(await readFile(path.join(out, "assets/base-edit.mp4"), "utf8"), "candidate");
+    assert.equal(report.gates.base_edit_qa.status, "pending");
+    assert.match(report.gates.base_edit_qa.issues[0], /unconfirmed-boundary @1\.2s: No verified quiet separator was found/);
+    assert.equal(report.status, "ready-for-review");
+  } finally {
+    await rm(assets, { recursive: true, force: true });
+    await rm(out, { recursive: true, force: true });
+  }
+});
+
 test("a failing stage is reported with the next step, and the CLI exits non-zero", async () => {
   const out = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-fail-"));
   try {

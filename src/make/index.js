@@ -244,6 +244,20 @@ async function prepareFootage(ctx) {
     duration = Number(result.rendered_duration_seconds ?? result.duration_seconds);
     report.base_edit = { ...report.base_edit, status: "ready", output: MAKE_PATHS.base, source_seconds: result.source_duration_seconds, edited_seconds: duration, cached: Boolean(result.cached), manifest: path.relative(project, result.manifest ?? path.join(project, MAKE_PATHS.recording, "recording.json")) };
     ctx.base = { src: MAKE_PATHS.base, fit: "cover" };
+  } else if (result?.status === "needs-semantic-review" && result.candidate && existsSync(result.candidate) && result.files?.plan) {
+    // The QA found ambiguities it cannot settle without a semantic reviewer
+    // (an agent's --qa-decisions receipt or a local --qa-model), not defects.
+    // Headless, make uses the rendered candidate and leaves that review
+    // pending, with the issues, instead of throwing the edit away.
+    const plan = await readJson(result.files.plan);
+    words = (plan?.words ?? []).map((word) => ({ text: String(word.word ?? word.text), start: word.start, end: word.end }));
+    duration = Number(plan?.duration_seconds ?? result.duration_seconds);
+    await linkOrCopy(result.candidate, path.join(project, MAKE_PATHS.base), { replace: true });
+    const issues = (result.qa?.issues ?? []).map((issue) => `${issue.kind} @${round1(Number(issue.start_seconds ?? 0))}s: ${String(issue.explanation ?? "").split(". ")[0]}`);
+    report.base_edit = { ...report.base_edit, status: "candidate", qa_status: result.status, qa_issues: issues, output: MAKE_PATHS.base, source_seconds: result.source_duration_seconds, edited_seconds: duration };
+    report.warnings.push(`base edit QA needs a semantic review (${issues.length} ambiguous issue${issues.length === 1 ? "" : "s"}); make used the rendered candidate edit. Listen to ${MAKE_PATHS.base} around the listed times, or rerun edit-recording with --qa-decisions`);
+    ctx.baseEditQa = { status: "pending", reason: "edit-recording QA needs a semantic review of ambiguous joins", issues };
+    ctx.base = { src: MAKE_PATHS.base, fit: "cover" };
   } else {
     if (result) report.warnings.push(`base edit status ${result.status}: ${result.next_action ?? "see recording/recording-qa.json"}; using the unedited recording`);
     words = entry.transcript?.words ?? [];
@@ -433,6 +447,7 @@ async function stageFinish(ctx) {
   ctx.finish = finish;
   report.finish = { status: finish.status, report: "finish.json", seconds: finish.seconds, stages: finish.stages.map((stage) => ({ name: stage.name, status: stage.status, seconds: stage.seconds, ...(stage.error ? { error: stage.error.split("\n")[0] } : {}) })) };
   report.gates = Object.fromEntries(Object.entries(finish.gates ?? {}).map(([name, gate]) => [name, { status: gate.status, ...(gate.error ? { error: String(gate.error).split("\n")[0] } : {}), ...(gate.reason ? { reason: gate.reason } : {}) }]));
+  if (ctx.baseEditQa) report.gates.base_edit_qa = ctx.baseEditQa;
   report.final = finish.final ? path.relative(project, finish.final) : null;
   report.warnings.push(...(finish.warnings ?? []));
   const sound = finish.stages.find((stage) => stage.name === "sound");
