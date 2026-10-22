@@ -15,6 +15,8 @@ export const STORY_VOICE_PROVIDERS = ["kokoro", "elevenlabs", "supplied", "test"
 // audio.music.provider and audio.music.sync (launchclip finish's music stage).
 export const STORY_MUSIC_PROVIDERS = ["synth", "elevenlabs", "file"];
 export const STORY_MUSIC_SYNC = ["auto", "off", "cuts", "hits"];
+// story.ambient / scenes[i].ambient levels (kit/core/ambient.mjs AMBIENT_LEVELS).
+export const STORY_AMBIENT_LEVELS = ["off", "subtle", "standard", "lively"];
 
 const ASPECTS = [["9:16", 9 / 16], ["16:9", 16 / 9], ["1:1", 1], ["4:5", 4 / 5]];
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -25,7 +27,7 @@ const WORD_ANCHOR = new RegExp(`^word:([^#\\s]+?)(?:#(\\d+))?${OFFSET}$`);
 const BEAT_ANCHOR = new RegExp(`^(beat|downbeat):(\\d+)${OFFSET}$`);
 const NUMERIC = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/;
 const EPS = 1e-6;
-const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract"]);
+const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "ambient"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -203,6 +205,9 @@ export function validateStory(story, { modules } = {}) {
     if (!isObject(audio) || !audio.words) err("audio.words (NARRATION.json) is required for the voiceover-motion lane (or set audio.narration to synthesise it)");
   }
 
+  // ambient: the ambient-motion control (kit/core/ambient.mjs).
+  validateAmbient(story.ambient, "ambient", err);
+
   // base: the footage-led recording (see validateBase).
   if (story.base !== undefined && story.base !== null) validateBase(story.base, { err, warn, duration, resolved: isObject(story.resolved) });
   if (story.lane === "footage-led" && (story.base === undefined || story.base === null)) err("base is required for the footage-led lane");
@@ -265,6 +270,8 @@ export function validateStory(story, { modules } = {}) {
     if (scene.energy !== undefined && !(scene.energy === "build" || (Number.isInteger(scene.energy) && scene.energy >= 0 && scene.energy <= 3))) {
       err(`${path}.energy must be 0, 1, 2, 3 or "build"`);
     }
+
+    validateAmbient(scene.ambient, `${path}.ambient`, err);
 
     if (scene.in !== undefined && scene.in !== null) {
       const transition = scene.in;
@@ -524,6 +531,24 @@ export function storyHits(story) {
     }
   }
   return hits.map((hit, index) => ({ hit, index })).sort((a, b) => a.hit.at - b.hit.at || a.index - b.index).map((entry) => entry.hit);
+}
+
+// ---------------------------------------------------------------------------
+// Ambient motion control
+
+// `ambient` is a level string or {level?, background?, drift?}; the same rules
+// as kit/core/ambient.mjs ambientErrors(), kept here so this file stays
+// import-free.
+function validateAmbient(value, path, err) {
+  if (value === undefined || value === null) return;
+  if (typeof value === "string") {
+    if (!STORY_AMBIENT_LEVELS.includes(value)) err(`${path} must be one of ${STORY_AMBIENT_LEVELS.join(", ")} or an object {level?, background?, drift?}`);
+    return;
+  }
+  if (!isObject(value)) { err(`${path} must be a level string or an object {level?, background?, drift?}`); return; }
+  for (const key of Object.keys(value)) if (!["level", "background", "drift"].includes(key)) err(`${path}.${key} is not supported (allowed: level, background, drift)`);
+  if (value.level !== undefined && !STORY_AMBIENT_LEVELS.includes(value.level)) err(`${path}.level must be one of ${STORY_AMBIENT_LEVELS.join(", ")}`);
+  for (const key of ["background", "drift"]) if (value[key] !== undefined && typeof value[key] !== "boolean") err(`${path}.${key} must be true or false`);
 }
 
 // ---------------------------------------------------------------------------

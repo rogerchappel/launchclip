@@ -75,7 +75,9 @@ export async function sceneStory(story, sceneId) {
   if (!scene) throw new Error(`scene ${sceneId} not found in the fixture story`);
   // One module on the background: no captions, audio or ending, so the lane's
   // audio requirements (voiceover-motion needs audio.words) no longer apply.
-  const filtered = {...structuredClone(resolved), lane: 'motion', scenes: [structuredClone(scene)], overlays: []};
+  // Ambient motion is off: ModuleReview draws the bare module, and story
+  // parity (runStoryParity) covers the ambient field and drift.
+  const filtered = {...structuredClone(resolved), lane: 'motion', ambient: 'off', scenes: [structuredClone(scene)], overlays: []};
   delete filtered.ending;
   delete filtered.audio;
   return {story: filtered, scene: filtered.scenes[0]};

@@ -114,7 +114,11 @@ deterministic:
   `ease: "steps(<12 × duration>)"`.
 - **Vignette:** a radial gradient overlay toward 60% black at the corners.
 - **Atmosphere:** two or three heavily blurred colour fields drifting slowly
-  over the full runtime, behind the subject plane.
+  over the full runtime, behind the subject plane. A `storyboard.json`
+  project gets this from its ambient layer, with no extra work: a brand-colour
+  background field in every plate, plus a slow hold drift on each settled
+  module. Tune it with `story.ambient` (`subtle | standard | lively`) rather
+  than adding a second field.
 - **Persistent HUD or frame:** one ambient object that carries continuity
   across every sequence and keeps updating (a readout, progress rail or
   chapter marker). Drive readouts like this from one full-duration

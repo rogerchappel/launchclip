@@ -33,6 +33,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { captionChunksFrom, chunkWords, narrationWords, visibleChunks } from "../kit/core/captions.mjs";
 import { cameraOps } from "../kit/core/catalog-c.mjs";
+import { ambientField } from "../kit/core/ambient.mjs";
 import { allFontFaces } from "../kit/core/fonts.mjs";
 import { resolveModule } from "../kit/core/modules.mjs";
 import { storyBase } from "../kit/core/story.mjs";
@@ -331,7 +332,11 @@ export function globalSettings(story, { models = sceneModels(story), base = null
     overlays: (Array.isArray(story?.overlays) ? story.overlays : []).filter((entry) => entry?.type !== "captions" && !hasWindow(entry)),
     // The footage base runs under every segment, moved by a camera path built
     // from every scene's camera samples.
-    base: footage ? { base: footage, file: base, camera: cameraOps([...models.values()].filter(Boolean)) } : null
+    base: footage ? { base: footage, file: base, camera: cameraOps([...models.values()].filter(Boolean)) } : null,
+    // The ambient background field is seeded from the title and takes its
+    // default level from the dominant scene energy, so it varies with fields
+    // that are otherwise outside the hash.
+    ambient: ambientField(story)
   };
 }
 

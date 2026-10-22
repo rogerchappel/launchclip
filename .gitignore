@@ -49,6 +49,7 @@ qa/density/
 
 # Renderer eval reports (npm run eval:renderers)
 qa/renderer-eval/
+qa/ambient/
 
 
 # Voice provider QA samples

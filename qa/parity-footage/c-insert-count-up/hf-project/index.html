@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1080, height=1920">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Footage-led example: one recording, edited and dressed</title>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <style>
+    @font-face { font-family: 'Anton'; src: url("fonts/anton-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+    @font-face { font-family: 'Inter'; src: url("fonts/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: block; }
+    @font-face { font-family: 'JetBrains Mono'; src: url("fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: block; }
+    @font-face { font-family: 'STIX Two Text'; src: url("fonts/stix-two-text-latin-wght-normal.woff2") format("woff2"); font-weight: 400 700; font-style: normal; font-display: block; }
+    @font-face { font-family: 'STIX Two Text'; src: url("fonts/stix-two-text-latin-wght-italic.woff2") format("woff2"); font-weight: 400 700; font-style: italic; font-display: block; }
+    @font-face { font-family: 'Instrument Serif'; src: url("fonts/instrument-serif-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+    @font-face { font-family: 'Instrument Serif'; src: url("fonts/instrument-serif-latin-400-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: block; }
+    @font-face { font-family: 'STIX Two Math'; src: url("fonts/stix-two-math-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+    @font-face { font-family: 'Space Grotesk'; src: url("fonts/space-grotesk-latin-wght-normal.woff2") format("woff2"); font-weight: 300 700; font-style: normal; font-display: block; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: #06070d; }
+    #launchclip-root { position: relative; width: 1080px; height: 1920px; overflow: hidden; --lc-font-display: 'Anton', 'STIX Two Math', sans-serif; --lc-font-body: 'Space Grotesk', 'Inter', 'STIX Two Math', sans-serif; --lc-font-meta: 'JetBrains Mono', 'STIX Two Math', monospace; --cap-font: 'Anton', 'STIX Two Math', sans-serif; --cap-idle: #f2eee6; --cap-active: #fdb022; font-family: var(--lc-font-body); }
+    #lc-bg { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; background: #06070d; }
+    .lc-scene { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; opacity: 0; isolation: isolate; overflow: hidden; pointer-events: none; }
+    .lc-layer { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; transform-origin: 50% 50%; }
+    .lc-plate > .lc-layer { background: #06070d; }
+    .lc-placeholder { position: absolute; display: flex; flex-direction: column; justify-content: center; gap: 16px; padding: 40px; overflow: hidden; background: #1b1d24; color: #f7f7f8; border: 4px dashed #ff5a36; border-radius: 24px; font-family: 'Inter', 'STIX Two Math', sans-serif; }
+    .lc-placeholder-label { font-size: 52px; font-weight: 800; line-height: 1.1; overflow-wrap: anywhere; }
+    .lc-placeholder-detail { font-size: 28px; line-height: 1.3; color: #c4c7cf; overflow-wrap: anywhere; }
+    
+    #twelve{position:absolute;left:80px;top:458px;width:860px;height:692px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#f2eee6;font-family:'Space Grotesk', 'Inter', 'STIX Two Math', sans-serif;font-size:44px;line-height:1.2;letter-spacing:normal;font-style:normal;font-weight:400;-webkit-font-smoothing:antialiased;opacity:1;transform:translate(0px, 0px) rotate(0deg) scale(1, 1)}#twelve-glow{position:absolute;left:50%;top:50%;width:1188px;height:921.6px;margin-left:-594px;margin-top:-614.8px;border-radius:50%;background:radial-gradient(closest-side, #fdb02242, #fdb0221a 55%, #fdb02200);pointer-events:none;opacity:0}#twelve-number{position:relative;display:inline-flex;align-items:baseline;justify-content:center;white-space:nowrap;font-family:'Anton', 'STIX Two Math', sans-serif;font-size:384px;line-height:1;color:#f2eee6;font-variant-numeric:tabular-nums;transform-origin:50% 55%;padding-bottom:40px;flex-shrink:0;opacity:0;transform:translate(0px, 40px) rotate(0deg) scale(1, 1)}#twelve-digits{position:relative;flex-shrink:0;color:#f2eee6}#twelve-suffix{font-size:0.62em;color:#fdb022;margin-left:0.065em;flex-shrink:0}#twelve-bar{position:absolute;left:0;right:0;bottom:8px;height:14px;border-radius:7px;background:#fdb022;transform-origin:50% 50%;transform:translate(0px, 0px) rotate(0deg) scale(0, 1)}#twelve-sparks{position:absolute;left:50%;top:192px;width:0;height:0}#twelve-label{position:relative;margin-top:40px;font-family:'Space Grotesk', 'Inter', 'STIX Two Math', sans-serif;font-size:62px;line-height:1.2;font-weight:600;color:#f2eee6;max-width:774px;flex-shrink:0;opacity:0;transform:translate(0px, 24px) rotate(0deg) scale(1, 1)}#twelve-note{position:relative;margin-top:22px;font-family:'JetBrains Mono', 'STIX Two Math', monospace;font-size:44px;line-height:1.3;letter-spacing:0.08em;text-transform:uppercase;color:#989694;white-space:nowrap;flex-shrink:0;opacity:0;transform:translate(0px, 18px) rotate(0deg) scale(1, 1)}#twelve-label-line-0{display:block;flex-shrink:0}#twelve-label-line-1{display:block;flex-shrink:0}#twelve-spark-0{position:absolute;left:0;top:0;width:0;height:0;transform:rotate(165deg)}#twelve-spark-0-ray{position:absolute;left:0;top:-5px;width:56px;height:10px;border-radius:5px;background:#fdb022;transform-origin:0% 50%;transform:translate(396.1519px, 0px) rotate(0deg) scale(0, 1)}#twelve-spark-1{position:absolute;left:0;top:0;width:0;height:0;transform:rotate(186deg)}#twelve-spark-1-ray{position:absolute;left:0;top:-5px;width:56px;height:10px;border-radius:5px;background:#fdb022;transform-origin:0% 50%;transform:translate(421.1307px, 0px) rotate(0deg) scale(0, 1)}#twelve-spark-2{position:absolute;left:0;top:0;width:0;height:0;transform:rotate(207deg)}#twelve-spark-2-ray{position:absolute;left:0;top:-5px;width:56px;height:10px;border-radius:5px;background:#fdb022;transform-origin:0% 50%;transform:translate(349.3817px, 0px) rotate(0deg) scale(0, 1)}#twelve-spark-3{position:absolute;left:0;top:0;width:0;height:0;transform:rotate(228deg)}#twelve-spark-3-ray{position:absolute;left:0;top:-5px;width:56px;height:10px;border-radius:5px;background:#fdb022;transform-origin:0% 50%;transform:translate(280.3737px, 0px) rotate(0deg) scale(0, 1)}#twelve-spark-4{position:absolute;left:0;top:0;width:0;height:0;transform:rotate(249deg)}#twelve-spark-4-ray{position:absolute;left:0;top:-5px;width:56px;height:10px;border-radius:5px;background:#fdb022;transform-origin:0% 50%;transform:translate(243.2608px, 0px) rotate(0deg) scale(0, 1)}#twelve-spark-5{position:absolute;left:0;top:0;width:0;height:0;transform:rotate(270deg)}#twelve-spark-5-ray{position:absolute;left:0;top:-5px;width:56px;height:10px;border-radius:5px;background:#fdb022;transform-origin:0% 50%;transform:translate(232px, 0px) rotate(0deg) scale(0, 1)}#twelve-spark-6{position:absolute;left:0;top:0;width:0;height:0;transform:rotate(291deg)}#twelve-spark-6-ray{position:absolute;left:0;top:-5px;width:56px;height:10px;border-radius:5px;background:#fdb022;transform-origin:0% 50%;transform:translate(243.2608px, 0px) rotate(0deg) scale(0, 1)}#twelve-spark-7{position:absolute;left:0;top:0;width:0;height:0;transform:rotate(312deg)}#twelve-spark-7-ray{position:absolute;left:0;top:-5px;width:56px;height:10px;border-radius:5px;background:#fdb022;transform-origin:0% 50%;transform:translate(280.3737px, 0px) rotate(0deg) scale(0, 1)}#twelve-spark-8{position:absolute;left:0;top:0;width:0;height:0;transform:rotate(333deg)}#twelve-spark-8-ray{position:absolute;left:0;top:-5px;width:56px;height:10px;border-radius:5px;background:#fdb022;transform-origin:0% 50%;transform:translate(349.3817px, 0px) rotate(0deg) scale(0, 1)}#twelve-spark-9{position:absolute;left:0;top:0;width:0;height:0;transform:rotate(354deg)}#twelve-spark-9-ray{position:absolute;left:0;top:-5px;width:56px;height:10px;border-radius:5px;background:#fdb022;transform-origin:0% 50%;transform:translate(421.1307px, 0px) rotate(0deg) scale(0, 1)}#twelve-spark-10{position:absolute;left:0;top:0;width:0;height:0;transform:rotate(375deg)}#twelve-spark-10-ray{position:absolute;left:0;top:-5px;width:56px;height:10px;border-radius:5px;background:#fdb022;transform-origin:0% 50%;transform:translate(396.1519px, 0px) rotate(0deg) scale(0, 1)}
+  </style>
+  <script>if (document.fonts) for (const face of document.fonts) face.load().catch(() => {});</script>
+</head>
+<body>
+  <div id="launchclip-root" data-composition-id="launchclip-story" data-start="0" data-duration="20" data-width="1080" data-height="1920" data-fps="30" data-launchclip-cinematic-contract="phase-2" data-launchclip-story="launchclip.story.v1">
+    <div id="lc-bg" class="clip" data-start="0" data-duration="20" data-track-index="1"></div>
+    <video id="lc-base-0" class="clip lc-base-media" src="assets/recording.mp4" data-start="0" data-duration="8" data-media-start="0" data-track-index="2" data-launchclip-base-segment="0" muted playsinline style="position:absolute;left:0;top:0;width:1080px;height:1920px;object-fit:cover;object-position:50% 36%;transform-origin:50% 50%;z-index:1"></video>
+    <video id="lc-base-1" class="clip lc-base-media" src="assets/recording.mp4" data-start="8" data-duration="12" data-media-start="10" data-track-index="2" data-launchclip-base-segment="1" muted playsinline style="position:absolute;left:0;top:0;width:1080px;height:1920px;object-fit:cover;object-position:50% 36%;transform-origin:50% 50%;z-index:1"></video>
+    <div id="lc-scene-twelve" class="lc-scene lc-plate" data-launchclip-scene="twelve" data-launchclip-module="count-up" data-launchclip-start="11" data-launchclip-render-end="14.2" style="z-index:10"><div id="lc-layer-twelve" class="lc-layer"><section id="twelve" class="clip" data-start="11" data-duration="3.2" data-track-index="4" data-module="count-up"><div id="twelve-glow"></div><div id="twelve-number"><span id="twelve-digits">0</span><span id="twelve-suffix">min</span><div id="twelve-bar"></div><div id="twelve-sparks"><div id="twelve-spark-0"><div id="twelve-spark-0-ray"></div></div><div id="twelve-spark-1"><div id="twelve-spark-1-ray"></div></div><div id="twelve-spark-2"><div id="twelve-spark-2-ray"></div></div><div id="twelve-spark-3"><div id="twelve-spark-3-ray"></div></div><div id="twelve-spark-4"><div id="twelve-spark-4-ray"></div></div><div id="twelve-spark-5"><div id="twelve-spark-5-ray"></div></div><div id="twelve-spark-6"><div id="twelve-spark-6-ray"></div></div><div id="twelve-spark-7"><div id="twelve-spark-7-ray"></div></div><div id="twelve-spark-8"><div id="twelve-spark-8-ray"></div></div><div id="twelve-spark-9"><div id="twelve-spark-9-ray"></div></div><div id="twelve-spark-10"><div id="twelve-spark-10-ray"></div></div></div></div><div id="twelve-label"><span id="twelve-label-line-0">from recording</span><span id="twelve-label-line-1">to finished Short</span></div><div id="twelve-note">Illustrative timing</div></section></div></div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      // twelve (count-up) 11–14.2s
+      tl.fromTo("#lc-scene-twelve", { opacity: 0 }, { opacity: 1, duration: 0, immediateRender: false }, 10.9995);
+      tl.fromTo("#lc-scene-twelve", { opacity: 1 }, { opacity: 0, duration: 0, immediateRender: false }, 14.1995);
+      {
+      tl.set("#twelve", {"opacity":1,"y":0,"force3D":false}, 11);
+      tl.set("#twelve-number", {"opacity":0,"y":40,"scale":1,"force3D":false}, 11);
+      tl.set("#twelve-digits", {"color":"#f2eee6","force3D":false}, 11);
+      tl.set("#twelve-label", {"opacity":0,"y":24,"force3D":false}, 11);
+      tl.set("#twelve-note", {"opacity":0,"y":18,"force3D":false}, 11);
+      tl.set("#twelve-glow", {"opacity":0,"force3D":false}, 11);
+      tl.set("#twelve-bar", {"scaleX":0,"force3D":false}, 11);
+      tl.set("#twelve-spark-0-ray", {"x":396.151943803338,"scaleX":0,"force3D":false}, 11);
+      tl.set("#twelve-spark-1-ray", {"x":421.13067061883856,"scaleX":0,"force3D":false}, 11);
+      tl.set("#twelve-spark-2-ray", {"x":349.38166030993176,"scaleX":0,"force3D":false}, 11);
+      tl.set("#twelve-spark-3-ray", {"x":280.37367012325376,"scaleX":0,"force3D":false}, 11);
+      tl.set("#twelve-spark-4-ray", {"x":243.26082629440342,"scaleX":0,"force3D":false}, 11);
+      tl.set("#twelve-spark-5-ray", {"x":232,"scaleX":0,"force3D":false}, 11);
+      tl.set("#twelve-spark-6-ray", {"x":243.2608262944033,"scaleX":0,"force3D":false}, 11);
+      tl.set("#twelve-spark-7-ray", {"x":280.3736701232537,"scaleX":0,"force3D":false}, 11);
+      tl.set("#twelve-spark-8-ray", {"x":349.38166030993153,"scaleX":0,"force3D":false}, 11);
+      tl.set("#twelve-spark-9-ray", {"x":421.13067061883856,"scaleX":0,"force3D":false}, 11);
+      tl.set("#twelve-spark-10-ray", {"x":396.1519438033381,"scaleX":0,"force3D":false}, 11);
+      tl.fromTo("#twelve", {"opacity":1,"y":0}, {"opacity":0,"y":-40,"duration":0.3,"ease":"power2.in","immediateRender":false,"force3D":false}, 13.9);
+      tl.fromTo("#twelve-number", {"opacity":0,"y":40}, {"opacity":1,"y":0,"duration":0.5,"ease":"power3.out","immediateRender":false,"force3D":false}, 11);
+      tl.fromTo("#twelve-number", {"scale":1}, {"scale":1.07,"duration":0.12,"ease":"power2.out","immediateRender":false,"force3D":false}, 12.2);
+      tl.fromTo("#twelve-number", {"scale":1.07}, {"scale":1,"duration":0.42,"ease":"power3.out","immediateRender":false,"force3D":false}, 12.32);
+      tl.fromTo("#twelve-digits", {"color":"#f2eee6"}, {"color":"#fdb022","duration":0.24,"ease":"power2.out","immediateRender":false,"force3D":false}, 12.2);
+      tl.fromTo("#twelve-label", {"opacity":0,"y":24}, {"opacity":1,"y":0,"duration":0.5,"ease":"power3.out","immediateRender":false,"force3D":false}, 11.15);
+      tl.fromTo("#twelve-note", {"opacity":0,"y":18}, {"opacity":1,"y":0,"duration":0.5,"ease":"power3.out","immediateRender":false,"force3D":false}, 11.3);
+      tl.fromTo("#twelve-glow", {"opacity":0}, {"opacity":0.55,"duration":0.6,"ease":"power2.out","immediateRender":false,"force3D":false}, 11);
+      tl.fromTo("#twelve-glow", {"opacity":0.55}, {"opacity":1,"duration":0.2,"ease":"power2.out","immediateRender":false,"force3D":false}, 12.2);
+      tl.fromTo("#twelve-glow", {"opacity":1}, {"opacity":0.7,"duration":0.8,"ease":"power2.inOut","immediateRender":false,"force3D":false}, 12.4);
+      tl.fromTo("#twelve-bar", {"scaleX":0}, {"scaleX":1,"duration":0.45,"ease":"expo.out","immediateRender":false,"force3D":false}, 12.22);
+      tl.fromTo("#twelve-spark-0-ray", {"x":396.151943803338,"scaleX":0}, {"x":424.151943803338,"scaleX":1,"duration":0.16,"ease":"power2.out","immediateRender":false,"force3D":false}, 12.2);
+      tl.fromTo("#twelve-spark-0-ray", {"x":424.151943803338,"scaleX":1}, {"x":480.151943803338,"scaleX":0,"duration":0.32,"ease":"power2.in","immediateRender":false,"force3D":false}, 12.36);
+      tl.fromTo("#twelve-spark-1-ray", {"x":421.13067061883856,"scaleX":0}, {"x":449.13067061883856,"scaleX":1,"duration":0.16,"ease":"power2.out","immediateRender":false,"force3D":false}, 12.2);
+      tl.fromTo("#twelve-spark-1-ray", {"x":449.13067061883856,"scaleX":1}, {"x":505.13067061883856,"scaleX":0,"duration":0.32,"ease":"power2.in","immediateRender":false,"force3D":false}, 12.36);
+      tl.fromTo("#twelve-spark-2-ray", {"x":349.38166030993176,"scaleX":0}, {"x":377.38166030993176,"scaleX":1,"duration":0.16,"ease":"power2.out","immediateRender":false,"force3D":false}, 12.2);
+      tl.fromTo("#twelve-spark-2-ray", {"x":377.38166030993176,"scaleX":1}, {"x":433.38166030993176,"scaleX":0,"duration":0.32,"ease":"power2.in","immediateRender":false,"force3D":false}, 12.36);
+      tl.fromTo("#twelve-spark-3-ray", {"x":280.37367012325376,"scaleX":0}, {"x":308.37367012325376,"scaleX":1,"duration":0.16,"ease":"power2.out","immediateRender":false,"force3D":false}, 12.2);
+      tl.fromTo("#twelve-spark-3-ray", {"x":308.37367012325376,"scaleX":1}, {"x":364.37367012325376,"scaleX":0,"duration":0.32,"ease":"power2.in","immediateRender":false,"force3D":false}, 12.36);
+      tl.fromTo("#twelve-spark-4-ray", {"x":243.26082629440342,"scaleX":0}, {"x":271.2608262944034,"scaleX":1,"duration":0.16,"ease":"power2.out","immediateRender":false,"force3D":false}, 12.2);
+      tl.fromTo("#twelve-spark-4-ray", {"x":271.2608262944034,"scaleX":1}, {"x":327.2608262944034,"scaleX":0,"duration":0.32,"ease":"power2.in","immediateRender":false,"force3D":false}, 12.36);
+      tl.fromTo("#twelve-spark-5-ray", {"x":232,"scaleX":0}, {"x":260,"scaleX":1,"duration":0.16,"ease":"power2.out","immediateRender":false,"force3D":false}, 12.2);
+      tl.fromTo("#twelve-spark-5-ray", {"x":260,"scaleX":1}, {"x":316,"scaleX":0,"duration":0.32,"ease":"power2.in","immediateRender":false,"force3D":false}, 12.36);
+      tl.fromTo("#twelve-spark-6-ray", {"x":243.2608262944033,"scaleX":0}, {"x":271.2608262944033,"scaleX":1,"duration":0.16,"ease":"power2.out","immediateRender":false,"force3D":false}, 12.2);
+      tl.fromTo("#twelve-spark-6-ray", {"x":271.2608262944033,"scaleX":1}, {"x":327.2608262944033,"scaleX":0,"duration":0.32,"ease":"power2.in","immediateRender":false,"force3D":false}, 12.36);
+      tl.fromTo("#twelve-spark-7-ray", {"x":280.3736701232537,"scaleX":0}, {"x":308.3736701232537,"scaleX":1,"duration":0.16,"ease":"power2.out","immediateRender":false,"force3D":false}, 12.2);
+      tl.fromTo("#twelve-spark-7-ray", {"x":308.3736701232537,"scaleX":1}, {"x":364.3736701232537,"scaleX":0,"duration":0.32,"ease":"power2.in","immediateRender":false,"force3D":false}, 12.36);
+      tl.fromTo("#twelve-spark-8-ray", {"x":349.38166030993153,"scaleX":0}, {"x":377.38166030993153,"scaleX":1,"duration":0.16,"ease":"power2.out","immediateRender":false,"force3D":false}, 12.2);
+      tl.fromTo("#twelve-spark-8-ray", {"x":377.38166030993153,"scaleX":1}, {"x":433.38166030993153,"scaleX":0,"duration":0.32,"ease":"power2.in","immediateRender":false,"force3D":false}, 12.36);
+      tl.fromTo("#twelve-spark-9-ray", {"x":421.13067061883856,"scaleX":0}, {"x":449.13067061883856,"scaleX":1,"duration":0.16,"ease":"power2.out","immediateRender":false,"force3D":false}, 12.2);
+      tl.fromTo("#twelve-spark-9-ray", {"x":449.13067061883856,"scaleX":1}, {"x":505.13067061883856,"scaleX":0,"duration":0.32,"ease":"power2.in","immediateRender":false,"force3D":false}, 12.36);
+      tl.fromTo("#twelve-spark-10-ray", {"x":396.1519438033381,"scaleX":0}, {"x":424.1519438033381,"scaleX":1,"duration":0.16,"ease":"power2.out","immediateRender":false,"force3D":false}, 12.2);
+      tl.fromTo("#twelve-spark-10-ray", {"x":424.1519438033381,"scaleX":1}, {"x":480.1519438033381,"scaleX":0,"duration":0.32,"ease":"power2.in","immediateRender":false,"force3D":false}, 12.36);
+      tl.set("#twelve-digits", {textContent:"0"}, 11);
+      tl.set("#twelve-digits", {textContent:"1"}, 11.333333);
+      tl.set("#twelve-digits", {textContent:"2"}, 11.366667);
+      tl.set("#twelve-digits", {textContent:"4"}, 11.4);
+      tl.set("#twelve-digits", {textContent:"5"}, 11.433333);
+      tl.set("#twelve-digits", {textContent:"6"}, 11.466667);
+      tl.set("#twelve-digits", {textContent:"7"}, 11.533333);
+      tl.set("#twelve-digits", {textContent:"8"}, 11.566667);
+      tl.set("#twelve-digits", {textContent:"9"}, 11.633333);
+      tl.set("#twelve-digits", {textContent:"10"}, 11.666667);
+      tl.set("#twelve-digits", {textContent:"11"}, 11.766667);
+      tl.set("#twelve-digits", {textContent:"12"}, 11.9);
+      }
+      
+      window.__timelines["launchclip-story"] = tl;
+    </script>
+  </div>
+</body>
+</html>

@@ -33,5 +33,9 @@ test("every Remotion scene module reads time through the scene clock", async () 
   }
   const composition = await readFile(path.join(ROOT, "kit/remotion/StoryComposition.tsx"), "utf8");
   assert.match(composition, /<SceneStartFrame\.Provider value=\{frames\(entry\.start\)\}>/);
-  assert.match(composition, /layerStateAt\(\(startFrame \+ frame\) \/ fps, tweens, getEase\)/);
+  // Transitions and ambient motion sample the same absolute composition time.
+  assert.match(composition, /const t = \(startFrame \+ frame\) \/ fps;/);
+  assert.match(composition, /layerStateAt\(t, tweens, getEase\)/);
+  assert.match(composition, /<AmbientField blobs=\{field\} t=\{t\} \/>/);
+  assert.match(composition, /driftStyle\(drift, t\)/);
 });

@@ -1,0 +1,46 @@
+{
+  "fixture": "test/fixtures/parity-footage/c-punch-in.json",
+  "label": "punch-in (punch-demo)",
+  "mode": "module",
+  "threshold": 0.97,
+  "pass": true,
+  "min": 0.987853,
+  "warnings": [],
+  "rows": [
+    {
+      "label": "enter-mid",
+      "t": 2,
+      "ssim": 0.987853,
+      "pass": true,
+      "side": "/Users/roger/Developer/my-opensource/launchclip/qa/parity-footage/c-punch-in/side-enter-mid.png"
+    },
+    {
+      "label": "punch+0.4",
+      "t": 2.3333333333333335,
+      "ssim": 0.988692,
+      "pass": true,
+      "side": "/Users/roger/Developer/my-opensource/launchclip/qa/parity-footage/c-punch-in/side-punch+0.4.png"
+    },
+    {
+      "label": "settle",
+      "t": 2.433333333333333,
+      "ssim": 0.988855,
+      "pass": true,
+      "side": "/Users/roger/Developer/my-opensource/launchclip/qa/parity-footage/c-punch-in/side-settle.png"
+    },
+    {
+      "label": "release+0.4",
+      "t": 2.466666666666667,
+      "ssim": 0.988961,
+      "pass": true,
+      "side": "/Users/roger/Developer/my-opensource/launchclip/qa/parity-footage/c-punch-in/side-release+0.4.png"
+    },
+    {
+      "label": "exit-mid",
+      "t": 2.7,
+      "ssim": 0.988497,
+      "pass": true,
+      "side": "/Users/roger/Developer/my-opensource/launchclip/qa/parity-footage/c-punch-in/side-exit-mid.png"
+    }
+  ]
+}

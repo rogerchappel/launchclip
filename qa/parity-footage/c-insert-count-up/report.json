@@ -1,0 +1,46 @@
+{
+  "fixture": "test/fixtures/parity-footage/c-insert-count-up.json",
+  "label": "count-up (twelve)",
+  "mode": "module",
+  "threshold": 0.97,
+  "pass": true,
+  "min": 0.996355,
+  "warnings": [],
+  "rows": [
+    {
+      "label": "enter-mid",
+      "t": 11.266666666666667,
+      "ssim": 0.997014,
+      "pass": true,
+      "side": "/Users/roger/Developer/my-opensource/launchclip/qa/parity-footage/c-insert-count-up/side-enter-mid.png"
+    },
+    {
+      "label": "twelve-count+0.4",
+      "t": 11.7,
+      "ssim": 0.996815,
+      "pass": true,
+      "side": "/Users/roger/Developer/my-opensource/launchclip/qa/parity-footage/c-insert-count-up/side-twelve-count+0.4.png"
+    },
+    {
+      "label": "twelve-hit+0.4",
+      "t": 12.6,
+      "ssim": 0.996818,
+      "pass": true,
+      "side": "/Users/roger/Developer/my-opensource/launchclip/qa/parity-footage/c-insert-count-up/side-twelve-hit+0.4.png"
+    },
+    {
+      "label": "settle",
+      "t": 12.7,
+      "ssim": 0.996859,
+      "pass": true,
+      "side": "/Users/roger/Developer/my-opensource/launchclip/qa/parity-footage/c-insert-count-up/side-settle.png"
+    },
+    {
+      "label": "exit-mid",
+      "t": 14.066666666666666,
+      "ssim": 0.996355,
+      "pass": true,
+      "side": "/Users/roger/Developer/my-opensource/launchclip/qa/parity-footage/c-insert-count-up/side-exit-mid.png"
+    }
+  ]
+}

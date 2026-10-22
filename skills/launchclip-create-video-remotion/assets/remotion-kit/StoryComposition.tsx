@@ -13,6 +13,10 @@
 // - one root <Audio> for audio.mix (or the voice);
 // - <WordCaptions> from captions.json or chunked NARRATION words;
 // - the loop ending (the loop_to scene's first state over the final window);
+// - ambient motion (kit/core/ambient.mjs): the background field inside every
+//   track-0 plate and the hold-drift wrapper around each scene's content,
+//   evaluated per frame from the same functions the HyperFrames compiler
+//   turns into GSAP;
 // - the bundled registry fonts (kit/remotion/fonts.ts, kit/core/fonts.mjs).
 import React from "react";
 import { AbsoluteFill, Audio, Freeze, OffthreadVideo, Sequence, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
@@ -27,6 +31,10 @@ import { getEase } from "../core/motion.mjs";
 import { CAPTION_DEFAULT_COLORS, captionChunksFrom, chunkWords, narrationWords } from "../core/captions.mjs";
 // @ts-ignore plain ESM from kit/core
 import { storyBase } from "../core/story.mjs";
+// @ts-ignore plain ESM from kit/core
+import { ambientField, blobBackground, blobStyle, driftStyle, sceneAmbient, sceneDrift } from "../core/ambient.mjs";
+// @ts-ignore plain ESM from kit/core
+import { profileGeometry } from "../core/layout-check.mjs";
 import { moduleComponent } from "./modules";
 import { baseCameraOps, cameraStyle } from "./catalog/CatalogC";
 import { Placeholder } from "./Placeholder";
@@ -80,16 +88,31 @@ export function resolveSceneElement(scene: any, story: any, { end, customModules
   };
 }
 
+// Background field (kit/core/ambient.mjs): soft brand-colour blobs at their
+// absolute-time positions, drawn under the plate content.
+// style: an outer transform a world camera may drive (parallaxStyle(camera, FIELD_PARALLAX)).
+export const AmbientField: React.FC<{ blobs: any[]; t: number; style?: React.CSSProperties }> = ({ blobs, t, style }) => (
+  <AbsoluteFill style={{ overflow: "hidden", pointerEvents: "none", ...style }} aria-hidden>
+    {blobs.map((blob: any) => (
+      <div key={blob.id} style={{ position: "absolute", left: 0, top: 0, width: blob.size, height: blob.size, borderRadius: "50%", transformOrigin: "50% 50%", background: blobBackground(blob), ...blobStyle(blob, t) }} />
+    ))}
+  </AbsoluteFill>
+);
+
 // startFrame: the enclosing Sequence's from; tweens carry absolute times, so the
 // layer samples them at the absolute composition time (kit/remotion/clock.tsx).
-const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean; children: React.ReactNode }> = ({ startFrame, tweens, plate, background, freeze, children }) => {
+// field: the ambient blobs (plates only); drift: the hold-drift wrapper.
+const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean; field?: any[] | null; drift?: any; children: React.ReactNode }> = ({ startFrame, tweens, plate, background, freeze, field, drift, children }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const style = layerStyle(layerStateAt((startFrame + frame) / fps, tweens, getEase));
+  const t = (startFrame + frame) / fps;
+  const style = layerStyle(layerStateAt(t, tweens, getEase));
+  const content = freeze ? <Freeze frame={0}>{children}</Freeze> : children;
   return (
     <AbsoluteFill style={{ overflow: "hidden", isolation: "isolate" }}>
       <AbsoluteFill style={{ ...style, transformOrigin: "50% 50%", ...(plate ? { backgroundColor: background } : {}) }}>
-        {freeze ? <Freeze frame={0}>{children}</Freeze> : children}
+        {field ? <AmbientField blobs={field} t={t} /> : null}
+        {drift ? <AbsoluteFill style={driftStyle(drift, t)}>{content}</AbsoluteFill> : content}
       </AbsoluteFill>
     </AbsoluteFill>
   );
@@ -143,19 +166,22 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   const audio = base ? story.audio?.mix ?? null : story.audio?.mix ?? story.audio?.voice ?? null;
   const mixVolume = typeof story.audio?.mix_volume === "number" && audio === story.audio?.mix ? story.audio.mix_volume : 1;
   const frames = (seconds: number) => Math.round(seconds * fps);
+  const field = React.useMemo(() => ambientField(story), [story]);
+  const geometry = React.useMemo(() => profileGeometry({ width: story.format.width, height: story.format.height }), [story]);
+  const fieldFor = (scene: any) => (field && sceneAmbient(story, scene).background ? field.blobs : null);
   return (
     <AbsoluteFill style={{ backgroundColor: background, fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
       {base ? <BaseLayer base={base} cameraOps={cameraOps} /> : null}
-      {layers.map(({ entry, render }: any) => (
+      {layers.map(({ entry, render, model }: any) => (
         <Sequence key={entry.id} name={`${entry.id} · ${entry.scene.module}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps}>
-          <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background}>
+          <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background} field={entry.plate ? fieldFor(entry.scene) : null} drift={sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })}>
             <SceneStartFrame.Provider value={frames(entry.start)}>{render()}</SceneStartFrame.Provider>
           </SceneLayer>
         </Sequence>
       ))}
       {loop ? (
         <Sequence key="loop" name={`loop → ${loop.sceneId}`} from={frames(loop.start)} durationInFrames={Math.max(1, frames(loop.end) - frames(loop.start))} premountFor={fps}>
-          <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate background={background} freeze>{loop.render()}</SceneLayer>
+          <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate background={background} freeze field={fieldFor(loop.scene)}>{loop.render()}</SceneLayer>
         </Sequence>
       ) : null}
       {overlay && Array.isArray(__captions) && __captions.length ? (

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1080, height=1920">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Footage-led example: one recording, edited and dressed</title>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <style>
+    @font-face { font-family: 'Anton'; src: url("fonts/anton-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+    @font-face { font-family: 'Inter'; src: url("fonts/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: block; }
+    @font-face { font-family: 'JetBrains Mono'; src: url("fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: block; }
+    @font-face { font-family: 'STIX Two Text'; src: url("fonts/stix-two-text-latin-wght-normal.woff2") format("woff2"); font-weight: 400 700; font-style: normal; font-display: block; }
+    @font-face { font-family: 'STIX Two Text'; src: url("fonts/stix-two-text-latin-wght-italic.woff2") format("woff2"); font-weight: 400 700; font-style: italic; font-display: block; }
+    @font-face { font-family: 'Instrument Serif'; src: url("fonts/instrument-serif-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+    @font-face { font-family: 'Instrument Serif'; src: url("fonts/instrument-serif-latin-400-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: block; }
+    @font-face { font-family: 'STIX Two Math'; src: url("fonts/stix-two-math-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+    @font-face { font-family: 'Space Grotesk'; src: url("fonts/space-grotesk-latin-wght-normal.woff2") format("woff2"); font-weight: 300 700; font-style: normal; font-display: block; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: #06070d; }
+    #launchclip-root { position: relative; width: 1080px; height: 1920px; overflow: hidden; --lc-font-display: 'Anton', 'STIX Two Math', sans-serif; --lc-font-body: 'Space Grotesk', 'Inter', 'STIX Two Math', sans-serif; --lc-font-meta: 'JetBrains Mono', 'STIX Two Math', monospace; --cap-font: 'Anton', 'STIX Two Math', sans-serif; --cap-idle: #f2eee6; --cap-active: #fdb022; font-family: var(--lc-font-body); }
+    #lc-bg { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; background: #06070d; }
+    .lc-scene { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; opacity: 0; isolation: isolate; overflow: hidden; pointer-events: none; }
+    .lc-layer { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; transform-origin: 50% 50%; }
+    .lc-plate > .lc-layer { background: #06070d; }
+    .lc-placeholder { position: absolute; display: flex; flex-direction: column; justify-content: center; gap: 16px; padding: 40px; overflow: hidden; background: #1b1d24; color: #f7f7f8; border: 4px dashed #ff5a36; border-radius: 24px; font-family: 'Inter', 'STIX Two Math', sans-serif; }
+    .lc-placeholder-label { font-size: 52px; font-weight: 800; line-height: 1.1; overflow-wrap: anywhere; }
+    .lc-placeholder-detail { font-size: 28px; line-height: 1.3; color: #c4c7cf; overflow-wrap: anywhere; }
+    
+    #punch-demo{pointer-events:none}#punch-demo svg{display:block}
+  </style>
+  <script>if (document.fonts) for (const face of document.fonts) face.load().catch(() => {});</script>
+</head>
+<body>
+  <div id="launchclip-root" data-composition-id="launchclip-story" data-start="0" data-duration="20" data-width="1080" data-height="1920" data-fps="30" data-launchclip-cinematic-contract="phase-2" data-launchclip-story="launchclip.story.v1">
+    <div id="lc-bg" class="clip" data-start="0" data-duration="20" data-track-index="1"></div>
+    <video id="lc-base-0" class="clip lc-base-media" src="assets/recording.mp4" data-start="0" data-duration="8" data-media-start="0" data-track-index="2" data-launchclip-base-segment="0" muted playsinline style="position:absolute;left:0;top:0;width:1080px;height:1920px;object-fit:cover;object-position:50% 36%;transform-origin:50% 50%;z-index:1"></video>
+    <video id="lc-base-1" class="clip lc-base-media" src="assets/recording.mp4" data-start="8" data-duration="12" data-media-start="10" data-track-index="2" data-launchclip-base-segment="1" muted playsinline style="position:absolute;left:0;top:0;width:1080px;height:1920px;object-fit:cover;object-position:50% 36%;transform-origin:50% 50%;z-index:1"></video>
+    <div id="lc-scene-punch-demo" class="lc-scene" data-launchclip-scene="punch-demo" data-launchclip-module="punch-in" data-launchclip-start="1.6" data-launchclip-render-end="2.9" style="z-index:10"><div id="lc-layer-punch-demo" class="lc-layer"><div id="punch-demo" class="clip lc-catalog-c" data-start="1.6" data-duration="1.3" data-track-index="4" data-module="punch-in" data-launchclip-camera="base" style="position:absolute;left:0px;top:0px;width:1080px;height:1920px;box-sizing:border-box;opacity:1;transform:translate(0px, 0px);transform-origin:540px 960px"></div></div></div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      // punch-demo (punch-in) 1.6–2.9s
+      tl.fromTo("#lc-scene-punch-demo", { opacity: 0 }, { opacity: 1, duration: 0, immediateRender: false }, 1.5995);
+      tl.fromTo("#lc-scene-punch-demo", { opacity: 1 }, { opacity: 0, duration: 0, immediateRender: false }, 2.8995);
+      {
+      tl.set("#punch-demo", {"opacity":1,"x":0,"y":0,"scaleX":1,"scaleY":1}, 1.6);
+      tl.fromTo("#punch-demo", {"opacity":1,"x":0,"y":0,"scaleX":1,"scaleY":1}, {"opacity":1,"x":0,"y":0,"scaleX":1,"scaleY":1,"duration":0.39,"ease":"power2.in","immediateRender":false}, 2.51);
+      tl.set("#punch-demo", {"opacity":0}, 2.9);
+      }
+      // base camera (punch-demo)
+      tl.set(".lc-base-media", {"x":0,"y":0,"scaleX":1,"scaleY":1}, 0);
+      tl.set(".lc-base-media", {"x":0,"y":0,"scaleX":1,"scaleY":1}, 1.5995);
+      tl.set(".lc-base-media", {"x":0,"y":0,"scaleX":1,"scaleY":1}, 1.6328);
+      tl.set(".lc-base-media", {"x":0,"y":0,"scaleX":1,"scaleY":1}, 1.6662);
+      tl.set(".lc-base-media", {"x":0,"y":0,"scaleX":1,"scaleY":1}, 1.6995);
+      tl.set(".lc-base-media", {"x":0,"y":0,"scaleX":1,"scaleY":1}, 1.7328);
+      tl.set(".lc-base-media", {"x":0,"y":0,"scaleX":1,"scaleY":1}, 1.7662);
+      tl.set(".lc-base-media", {"x":0,"y":0,"scaleX":1,"scaleY":1}, 1.7995);
+      tl.set(".lc-base-media", {"x":0,"y":0,"scaleX":1,"scaleY":1}, 1.8328);
+      tl.set(".lc-base-media", {"x":0,"y":0,"scaleX":1,"scaleY":1}, 1.8662);
+      tl.set(".lc-base-media", {"x":0,"y":0,"scaleX":1,"scaleY":1}, 1.8995);
+      tl.set(".lc-base-media", {"x":0,"y":0.53,"scaleX":1.00197,"scaleY":1.00197}, 1.9328);
+      tl.set(".lc-base-media", {"x":0,"y":5.35,"scaleX":1.01992,"scaleY":1.01992}, 1.9662);
+      tl.set(".lc-base-media", {"x":0,"y":12.84,"scaleX":1.04775,"scaleY":1.04775}, 1.9995);
+      tl.set(".lc-base-media", {"x":0,"y":20.8,"scaleX":1.07738,"scaleY":1.07738}, 2.0328);
+      tl.set(".lc-base-media", {"x":0,"y":27.9,"scaleX":1.10378,"scaleY":1.10378}, 2.0662);
+      tl.set(".lc-base-media", {"x":0,"y":33.46,"scaleX":1.12449,"scaleY":1.12449}, 2.0995);
+      tl.set(".lc-base-media", {"x":0,"y":37.33,"scaleX":1.13888,"scaleY":1.13888}, 2.1328);
+      tl.set(".lc-base-media", {"x":0,"y":39.64,"scaleX":1.14748,"scaleY":1.14748}, 2.1662);
+      tl.set(".lc-base-media", {"x":0,"y":40.71,"scaleX":1.15144,"scaleY":1.15144}, 2.1995);
+      tl.set(".lc-base-media", {"x":0,"y":40.89,"scaleX":1.15212,"scaleY":1.15212}, 2.2328);
+      tl.set(".lc-base-media", {"x":0,"y":40.53,"scaleX":1.15077,"scaleY":1.15077}, 2.2662);
+      tl.set(".lc-base-media", {"x":0,"y":39.9,"scaleX":1.14843,"scaleY":1.14843}, 2.2995);
+      tl.set(".lc-base-media", {"x":0,"y":39.2,"scaleX":1.14584,"scaleY":1.14584}, 2.3328);
+      tl.set(".lc-base-media", {"x":0,"y":38.57,"scaleX":1.14348,"scaleY":1.14348}, 2.3662);
+      tl.set(".lc-base-media", {"x":0,"y":38.06,"scaleX":1.14159,"scaleY":1.14159}, 2.3995);
+      tl.set(".lc-base-media", {"x":0,"y":37.7,"scaleX":1.14026,"scaleY":1.14026}, 2.4328);
+      tl.set(".lc-base-media", {"x":0,"y":37.48,"scaleX":1.13944,"scaleY":1.13944}, 2.4662);
+      tl.set(".lc-base-media", {"x":0,"y":37.37,"scaleX":1.13904,"scaleY":1.13904}, 2.4995);
+      tl.set(".lc-base-media", {"x":0,"y":35.47,"scaleX":1.13194,"scaleY":1.13194}, 2.5328);
+      tl.set(".lc-base-media", {"x":0,"y":28.77,"scaleX":1.10705,"scaleY":1.10705}, 2.5662);
+      tl.set(".lc-base-media", {"x":0,"y":20.69,"scaleX":1.07698,"scaleY":1.07698}, 2.5995);
+      tl.set(".lc-base-media", {"x":0,"y":13.3,"scaleX":1.04948,"scaleY":1.04948}, 2.6328);
+      tl.set(".lc-base-media", {"x":0,"y":7.49,"scaleX":1.02785,"scaleY":1.02785}, 2.6662);
+      tl.set(".lc-base-media", {"x":0,"y":3.42,"scaleX":1.01272,"scaleY":1.01272}, 2.6995);
+      tl.set(".lc-base-media", {"x":0,"y":0.88,"scaleX":1.00327,"scaleY":1.00327}, 2.7328);
+      tl.set(".lc-base-media", {"x":0,"y":0,"scaleX":1,"scaleY":1}, 2.7662);
+      tl.set(".lc-base-media", {"x":0,"y":0,"scaleX":1,"scaleY":1}, 2.7995);
+      tl.set(".lc-base-media", {"x":0,"y":0,"scaleX":1,"scaleY":1}, 2.8328);
+      tl.set(".lc-base-media", {"x":0,"y":0,"scaleX":1,"scaleY":1}, 2.8662);
+      tl.set(".lc-base-media", {"x":0,"y":0,"scaleX":1,"scaleY":1}, 2.8995);
+      
+      window.__timelines["launchclip-story"] = tl;
+    </script>
+  </div>
+</body>
+</html>

@@ -178,10 +178,11 @@ which also strengthens the HyperFrames path:
 ### Phase 7: Parity and quality eval
 
 - **Renderer dimension: done** (`npm run eval:renderers`, `src/renderer_eval.js`).
-  Five golden storyboards under `examples/story/` (cooling, minimal,
-  promo-16x9, explainer-9x16, data-story-9x16) cover every catalogue and
-  editorial module the stories use, phase-2 boundaries with shared-world
-  morphs, word-anchored hits, captions and a premixed audio track. For each
+  Six golden storyboards under `examples/story/` (cooling, minimal,
+  promo-16x9, explainer-9x16, data-story-9x16 and the footage-led `footage`)
+  cover every catalogue and editorial module the stories use, phase-2
+  boundaries with shared-world morphs, word-anchored hits, captions, a
+  premixed audio track and a trimmed base recording with punch-in cameras. For each
   story and each renderer the eval compiles, renders the MP4 (timed), and runs
   `story validate`, layout-check and the cinematic-check motion and audio
   analyses on the MP4. Across the two MP4s it measures frame parity (ffmpeg
@@ -195,7 +196,7 @@ which also strengthens the HyperFrames path:
   `eval:production`, and the cross-model tiers from RFC §8 on top of this.
 
 ```bash
-npm run eval:renderers                                  # all five stories, draft quality
+npm run eval:renderers                                  # all six stories, draft quality
 npm run eval:renderers -- --stories minimal,promo-16x9 --out qa/renderer-eval
 npm run eval:renderers -- --thresholds eval/renderer-thresholds.json --worst 6
 ```
@@ -205,10 +206,14 @@ Thresholds (`eval/renderer-thresholds.json`, overridable per story under
 within one frame (between renderers and against the story), integrated
 loudness within 0.5 LU and true peak within 1 dB, matching audio streams with
 at most 25 ms offset and an aligned residual at or below -30 dB, and the
-validate, layout, compile (no placeholders) and audio gates passing. The
-motion gate runs in `"report"` mode: the golden stories hold settled editorial
-frames, so both renderers measure below the cinematic change-energy floor and
-the result is shown without failing the run.
+validate, layout, compile (no placeholders), motion and audio gates passing.
+The motion gate is enforced: ambient motion (`kit/core/ambient.mjs`, see
+KIT_CONTRACTS.md) keeps settled frames above the cinematic change-energy and
+flow-velocity floors in both renderers. Before it, the golden stories held
+settled editorial frames at a median change energy of 0.03–0.09 against the
+0.15 floor, and the gate ran in `"report"` mode. `footage` allows a -25 dB
+aligned audio residual: the renderers resample and mix the base recording's
+own sound slightly differently.
 
 Known renderer difference: HyperFrames muxes its AAC sidecar without an edit
 list, so its audio starts 1024 samples (21.3 ms) late; the 25 ms offset limit

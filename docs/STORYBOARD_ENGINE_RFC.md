@@ -105,7 +105,12 @@ Rules:
   default sound cue per event. The mix is then *generated* from `hits`, not
   hand-placed.
 - **Energy** (0 calm, 1 light, 2 groove, 3 full, `build`) drives the music
-  arrangement and ducking.
+  arrangement and ducking, and the default ambient-motion level.
+- **Ambient** (`story.ambient`, per-scene `ambient`: `off | subtle | standard
+  | lively` or `{level, background, drift}`) keeps settled frames moving
+  between beats. It adds a brand-colour background field inside the plates
+  and a slow hold drift on each module. See KIT_CONTRACTS.md, "Ambient
+  motion".
 - **Transitions** are typed (`cut`, `push`, `whip`, `zoom`, `iris`, `morph`)
   and may name the object handed across the boundary. These map onto the
   existing phase-2 boundary attributes.
@@ -158,7 +163,10 @@ Every module ships with:
   frame empty.
 - **Phone scale.** Key text is at least 44 px, and hero elements fill 70–90% of
   the safe width.
-- **Motion.** Velocity-shaped blur resolves to 0 at settle.
+- **Motion.** Velocity-shaped blur resolves to 0 at settle. A settled module
+  is never frozen: the compilers wrap it in the ambient hold drift (a slow
+  linear push-in, unblurred, clamped to the safe zone), and layout-check
+  verifies the drift's largest extent.
 - **Contrast.** Brand-role contrast is checked in code, so text cannot drop
   below 3:1.
 
