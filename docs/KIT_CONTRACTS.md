@@ -94,8 +94,19 @@ export function resolveEditorialModule(spec)
 //   motion:{enter, exit, distance, scale, enterStart, enterEnd, exitStart, end, enterEase:"power3.out", exitEase:"power2.in"},
 //   content: <kind-specific normalized data, e.g. metric:{label, from, to, prefix, suffix, decimals, countStart}>,
 //   events:[{id, time, endTime?, role?}],      // identical to buildEditorialModule().events
-//   layout:{canvas, rect, motion:{enterEnd, exitStart, end}} } // identical to buildEditorialModule().layout
+//   layout:{canvas, rect, motion:{enterEnd, exitStart, end}},  // identical to buildEditorialModule().layout
+//   density:{scale, hero, source:"explicit"|"derived"|"legacy", layout:{width,height}, natural} }
 ```
+
+Density: without `rect` the core derives the footprint from the content (9:16:
+safe-zone width, natural height, centred near the RFC centre-of-mass target
+above the caption band; 16:9: the old lower-left footprint with a content
+height on the y 980 baseline). In 9:16 the kind lays out in
+`density.layout` (rect / scale) and renders scaled by `density.scale` (1–2)
+from the rect's top-left corner, inside one `.ui-density` wrapper in both
+renderers; rect-local geometry is in layout px. 16:9 always resolves at scale
+1, and explicit 16:9 output is byte-identical to the pre-density emitter.
+Details: skills-src/references/editorial-ui-modules.md, "Defaults and density".
 
 `buildEditorialModule()` in `skills/launchclip-create-video/scripts/editorial-ui-modules.mjs`
 becomes the HyperFrames emitter on top of this, and its output stays
