@@ -226,6 +226,21 @@ directory holding both `storyboard.json` and `index.html` is read as
 HyperFrames. Repair the storyboard and recompile rather than editing the
 generated `index.html`.
 
+A `footage-led` storyboard adds a `base` recording (`{src, trim | edl, volume,
+fit, focus}`; see `recorded-video.md`). The compiler mounts the base as muted
+direct-root `<video class="clip lc-base-media">` clips, one per trim segment.
+Each clip's `data-media-start` is the segment's source in-point, so the
+timeline plays the trimmed recording back to back. The recording's sound is
+mounted as matching root `<audio>` clips at `base.volume`, and `audio.mix` is
+mounted only as the bed under it. `punch-in` scenes are cameras: their per-frame
+spring samples become `tl.set(".lc-base-media", {x, y, scaleX, scaleY})`
+calls, which zoom the base toward the focus point without exposing an edge.
+Overlays (`footage-callout`, `lower-third`, `emphasis-caption` and any
+catalogue module) sit on tracks 1 and up. `insert: true` scenes are track-0
+plates that cover the picture while the recording keeps sounding. Resolve
+`base.edl` first: `launchclip story compile` and `resolveStory(story, {edl})`
+do it, and the compiler warns when a story still carries an unresolved `edl`.
+
 ## Design and motion quality contract
 
 Treat `DESIGN.md`, `STORYBOARD.md`, and `QUALITY.md` as executable creative

@@ -66,9 +66,9 @@ test("suggestModules matches sentences to modules", () => {
   assert.deepEqual(hints[0], { sentence: "Why does coffee cool so fast?", modules: ["hook-title", "kinetic-words", "function-chart"] });
   assert.ok(hints[1].modules.includes("equation-lockup"));
   assert.ok(hints[2].modules.includes("cta"));
-  // Lane-scoped rows: punch-in (→ kinetic-words) only applies to footage-led.
+  // Lane-scoped rows: punch-in only applies to footage-led (it falls back to kinetic-words when the module is absent).
   assert.deepEqual(suggestModules("This is exactly it!", { lane: "motion" }), []);
-  assert.deepEqual(suggestModules("This is exactly it!", { lane: "footage-led" })[0].modules, ["kinetic-words"]);
+  assert.deepEqual(suggestModules("This is exactly it!", { lane: "footage-led" })[0].modules, ["punch-in"]);
 });
 
 test("tiers differ: structured forbids tuning and custom, bespoke allows custom", () => {

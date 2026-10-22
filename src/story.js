@@ -16,5 +16,8 @@ export {
   deriveBoundaries,
   storyFormat,
   storyHits,
+  storyBase,
+  edlTrim,
+  BASE_FITS,
   aspectName
 } from "../kit/core/story.mjs";

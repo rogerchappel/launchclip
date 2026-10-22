@@ -78,8 +78,11 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 | speaks to several audiences or groups | audience-grid |
 | picks one option from several | focus-flow |
 | calls to action, or the loop ending | cta |
-| footage-led emphasis on a word [footage-led] | kinetic-words (planned module punch-in; use kinetic-words) |
-| footage-led claim sticker or label | callout |
+| footage-led emphasis on a word [footage-led] | punch-in |
+| footage-led claim sticker or label pointing at something on screen [footage-led] | footage-callout |
+| introduces the speaker or a guest by name and title [footage-led] | lower-third |
+| one to three spoken words that deserve a big on-screen pop [footage-led] | emphasis-caption |
+| a short note, tip or warning card [motion, voiceover-motion] | callout |
 
 ## Modules
 
@@ -412,6 +415,47 @@ params:
 - stagger: seconds between pops (default 0.14)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: logo-<i>
+
+### punch-in (keeps captions)
+Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay).
+params:
+- scale: 1.06–1.25 (default 1.12)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+- focus: {x, y} canvas fractions (default base.focus, else {0.5, 0.42})
+- release: seconds before the scene end when the zoom springs back (0.3–2, default min(0.5, 30% of the scene))
+events: punch, release
+
+### footage-callout (keeps captions)
+Footage-led: a claim sticker anchored to a point on the footage by a leader line, placed inside the safe zone.
+params:
+- text: claim ≤ 42 chars, up to 2 lines
+- label: kicker ≤ 24 (optional)
+- point: {x, y} canvas fractions 0.04–0.96 (the anchored spot)
+- side: auto|above|below|left|right
+- tone: primary|paper|dark
+- tilt: degrees −6–6 (default −2)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: point, sticker
+
+### lower-third (keeps captions)
+Footage-led: a name and title bar that slides in above the caption band.
+params:
+- name: string ≤ 32
+- title: string ≤ 48 (optional)
+- align: left|center
+- tone: dark|primary
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: name, title
+
+### emphasis-caption (keeps captions)
+Footage-led: one to three big words that pop over the footage; hides the captions while on screen.
+params:
+- text: 1–3 words, ≤ 24 chars
+- color: primary|accent|paper or #hex (≥ 3:1 on the bg outline)
+- position: center|upper|lower
+- stagger: seconds between words (default 0.09)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: pop, word-<i>
 
 ## Example
 

@@ -261,6 +261,24 @@ overrides it and `kit/remotion/entry.tsx` otherwise; examples use the latter.
   `kit/remotion/fonts.ts`) with a fallback stack per role.
 - A scene whose module is unknown, invalid, or has no component renders a
   labelled placeholder box, never a blank frame.
+- A `footage-led` story adds a `base` recording (`{src, trim | edl, volume,
+  fit, focus}`; see `recorded-video.md`).
+  - `BaseLayer` mounts it under every scene: one
+    `<OffthreadVideo trimBefore={sourceStart * fps} volume={base.volume}>` per
+    trim segment, each in its own Sequence, so timeline time is trimmed base
+    time.
+  - This is the one exception to "no video plays its own audio". The
+    recording's sound comes from the base video, and the root `<Audio>` plays
+    only `audio.mix`, the bed, at `audio.mix_volume`.
+  - `punch-in` scenes render nothing themselves. Their `model.camera` samples
+    transform the base wrapper through the same op list that HyperFrames turns
+    into GSAP.
+  - `insert: true` scenes are track-0 plates over the base. Overlays sit on
+    tracks 1 and up.
+  - `ModuleReview` shows footage-led modules over the muted base.
+  - Resolve `base.edl` into `base.trim` with
+    `launchclip story resolve` or `resolveStory(story, {edl})` before
+    rendering.
 
 `launchclip story compile <project> --renderer remotion` resolves the story,
 writes `.launchclip/story.resolved.json` and proves the bundle lists

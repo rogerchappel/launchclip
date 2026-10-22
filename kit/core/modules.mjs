@@ -10,14 +10,16 @@
 import { EDITORIAL_KINDS, resolveEditorialModule } from './editorial-core.mjs';
 import { MODULES as CATALOG_A } from './catalog-a.mjs';
 import { MODULES as CATALOG_B } from './catalog-b.mjs';
+import { MODULES as CATALOG_C } from './catalog-c.mjs';
+import { storyBase } from './story.mjs';
 
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
 
-/** Every catalogue module definition, keyed by id (catalogue A, then B). */
+/** Every catalogue module definition, keyed by id (catalogue A, then B, then C). */
 export function catalogModules() {
   const merged = {};
-  for (const [label, table] of [['catalog-a', CATALOG_A], ['catalog-b', CATALOG_B]]) {
+  for (const [label, table] of [['catalog-a', CATALOG_A], ['catalog-b', CATALOG_B], ['catalog-c', CATALOG_C]]) {
     for (const [id, definition] of Object.entries(table ?? {})) {
       if (EDITORIAL_KINDS.includes(id)) throw new Error(`${label} module "${id}" collides with an editorial kind`);
       if (merged[id]) throw new Error(`${label} module "${id}" is defined twice`);
@@ -141,7 +143,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!definition) throw new Error(`module "${module}" is not a known module`);
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
-  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [] }); }
+  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), lane: story?.lane ?? null }); }
   catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });

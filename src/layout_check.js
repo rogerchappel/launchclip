@@ -1,4 +1,5 @@
-import { narrationFile } from "./story_loader.js";
+import { narrationFile, readStoryEdl } from "./story_loader.js";
+import { catalogModules, resolveModule } from "../kit/core/modules.mjs";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -29,7 +30,8 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   const narration = options.words ?? await readOptionalJson(narrationFile(project, story));
   const words = Array.isArray(narration) ? narration : Array.isArray(narration?.words) ? narration.words : [];
   const beats = await readOptionalJson(path.join(project, "BEATS.json"));
-  const resolved = storyCore.resolveStory(story, { words, beats });
+  const resolved = storyCore.resolveStory(story, { words, beats, edl: await readStoryEdl(project, story) });
+  const catalogue = catalogModules();
 
   const profile = options.profile == null ? null : String(options.profile);
   if (profile && !SAFE_ZONE_PROFILES[profile]) throw new Error(`Unknown --profile ${profile}; use shorts or landscape`);
@@ -78,11 +80,29 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
         ...(scene.hides_captions === true || params.hidesCaptions === true ? { hidesCaptions: true } : {})
       }];
     }
+    // Catalogue modules declare their own geometry in the resolved model.
+    if (Object.hasOwn(catalogue, scene.module)) {
+      try {
+        const model = resolveModule(scene, resolved);
+        const role = PARAM_ROLES.has(model.layout?.role) ? model.layout.role : "text";
+        return [{
+          id: scene.id, role, rect: model.layout.rect, start: Number(scene.start), end: Number(scene.end),
+          motion: { enterEnd: model.layout.motion.enterEnd, exitStart: model.layout.motion.exitStart },
+          ...(model.minTextPx != null && role !== "decor" ? { minTextPx: model.minTextPx } : {}),
+          ...(model.hidesCaptions ? { hidesCaptions: true } : {})
+        }];
+      } catch (error) {
+        specFindings.push({ rule: "module-spec", severity: "error", ids: [scene.id], at: Number(scene.start), detail: `${scene.module}: ${error.message}` });
+        return [];
+      }
+    }
     warnings.push(`scene ${scene.id} (${scene.module}) declares no geometry; skipped. Add params.rect to check it.`);
     return [];
   };
 
   const elements = elementsFromStory(resolved, { moduleLayout, profile });
+  // Footage-led: the recording fills the frame under everything (media, never a collision).
+  if (resolved.base) elements.unshift({ id: "base", role: "media", rect: { x: 0, y: 0, width: canvas.width, height: canvas.height }, start: 0, end: Number(resolved.resolved?.duration ?? resolved.format?.duration), allowOcclusion: ["*"] });
   const report = checkLayout({ canvas, elements, profile, duration: Number(resolved.resolved?.duration ?? resolved.format?.duration) || undefined });
   const findings = [...specFindings, ...report.findings].sort((a, b) => a.at - b.at);
   return {
