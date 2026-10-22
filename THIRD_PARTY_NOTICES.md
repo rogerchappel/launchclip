@@ -24,6 +24,33 @@ Review the current terms before use:
 - <https://www.remotion.dev/license>
 - <https://www.remotion.pro/license>
 
+## Bundled fonts
+
+Both renderers draw text with font files from these packages, pinned to exact
+versions and loaded from `node_modules` (latin subset, plus the unsubset STIX
+Two Math for symbols). The registry that names them is `kit/core/fonts.mjs`.
+Every family is licensed under the SIL Open Font License, Version 1.1
+(`OFL-1.1`); each package ships the licence text in its `LICENSE` file. The
+font software is not relicensed under LaunchClip's MIT License, and the fonts
+may not be sold on their own.
+
+| Family | Package | Copyright holder (from the package LICENSE) |
+|---|---|---|
+| Anton | `@fontsource/anton@5.3.0` | The Anton Project Authors |
+| Archivo Black | `@fontsource/archivo-black@5.3.0` | The Archivo Black Project Authors |
+| Bricolage Grotesque | `@fontsource-variable/bricolage-grotesque@5.3.0` | The Bricolage Grotesque Project Authors |
+| Inter | `@fontsource-variable/inter@5.3.0` | The Inter Project Authors |
+| Instrument Serif | `@fontsource/instrument-serif@5.3.0` | The Instrument Serif Project Authors |
+| JetBrains Mono | `@fontsource-variable/jetbrains-mono@5.3.0` | The JetBrains Mono Project Authors |
+| Space Grotesk | `@fontsource-variable/space-grotesk@5.3.0` | The Space Grotesk Project Authors |
+| STIX Two Math | `@fontsource/stix-two-math@5.3.0` | The STIX Fonts Project Authors |
+| STIX Two Text | `@fontsource-variable/stix-two-text@5.3.0` | The STIX Fonts Project Authors |
+| Syne | `@fontsource-variable/syne@5.3.0` | The Syne Project Authors |
+| Unbounded | `@fontsource-variable/unbounded@5.3.0` | The Unbounded Project Authors |
+
+A compiled HyperFrames project carries copies of the font files it uses in
+`fonts/`; keep the OFL notice with them when you redistribute a project.
+
 ## Other direct dependencies
 
 At the time of the 0.1.1 release candidate, HyperFrames declares Apache-2.0;

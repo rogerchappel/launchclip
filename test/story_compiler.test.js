@@ -80,7 +80,7 @@ test("compiles the minimal story into a HyperFrames project that follows the run
     assert.match(html, /tl\.fromTo\(loopTl, \{ time: 0 \}, \{ time: 0,/);
 
     // Brand fonts: role stacks with fallbacks.
-    assert.match(html, /--lc-font-display: 'Anton', 'Arial Narrow'/);
+    assert.match(html, /--lc-font-display: 'Anton', 'STIX Two Math', sans-serif;/);
     assert.match(html, /--cap-font: 'Anton'/);
   } finally {
     await rm(out, { recursive: true, force: true });
@@ -227,7 +227,7 @@ test("brand fonts resolve to family names and role stacks", () => {
   assert.equal(fontFamilyName("Inter Tight"), "Inter Tight");
   const stacks = brandFontStacks({ fonts: { display: "anton", body: "space-grotesk" } });
   assert.deepEqual(stacks.families, ["Anton", "Space Grotesk"]);
-  assert.match(stacks.meta, /^ui-monospace/);
+  assert.equal(stacks.meta, "'JetBrains Mono', 'STIX Two Math', monospace");
 });
 
 test("launchclip story compile --renderer hyperframes writes the project and reports boundaries", async () => {
