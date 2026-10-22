@@ -96,16 +96,47 @@ export async function projectEvidenceSchedule(projectPath, { storyModule, story:
   return { schedule: buildTemporalEvidenceSchedule(story.format.duration, boundaries), story };
 }
 
-function hyperframesStills(project, schedule, out) {
+// Every sample is one frame index, shared by the browser still and the
+// encoded-draft frame, so the pair always shows the same frame. Blind test 2:
+// the encoded frame came from `ffmpeg -ss t`, which returns the first frame at
+// or after t (ceil(t × fps)), while Remotion stills took round(t × fps) and
+// HyperFrames snapshots floor(t × fps), so at transition midpoints the draft
+// ran a frame ahead of the stills (more on a whip-pan's fastest frames).
+
+/** The frame index of a sample at t seconds: round(t × fps), clamped to the last frame. */
+export function evidenceFrame(t, fps, duration) {
+  const last = Number.isFinite(duration) && duration > 0 ? Math.max(0, Math.round(duration * fps) - 1) : Infinity;
+  return Math.max(0, Math.min(last, Math.round(t * fps + 1e-9)));
+}
+
+/** `hyperframes snapshot --at` time that lands on frame N (snapshot floors seconds × fps). */
+export function snapshotTime(frame, fps) {
+  return Math.round(((frame + 0.25) / fps) * 1e6) / 1e6;
+}
+
+/** ffmpeg args that decode frame N exactly (by frame number, never by seeking). */
+export function encodedFrameArgs(draft, frame, output) {
+  return ['-hide_banner', '-loglevel', 'error', '-i', draft, '-vf', `select=eq(n\\,${frame})`, '-vsync', '0', '-frames:v', '1', '-y', output];
+}
+
+function draftFps(draft) {
+  try {
+    const rate = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=r_frame_rate', '-of', 'csv=p=0', draft], { encoding: 'utf8' }).trim();
+    const [num, den = 1] = rate.split('/').map(Number);
+    if (num > 0 && den > 0) return num / den;
+  } catch { /* fall through */ }
+  return 30;
+}
+
+function hyperframesStills(project, schedule, out, frames) {
   const snapshots = path.join(project, 'snapshots');
   rmSync(snapshots, { recursive: true, force: true });
-  // snapshot floors seconds × fps; nudge each time well under a frame.
-  hyperframes(['snapshot', project, '--at', schedule.timestamps.map(t => Math.round((t + 1e-4) * 1e6) / 1e6).join(',')]);
+  hyperframes(['snapshot', project, '--at', schedule.timestamps.map((t) => snapshotTime(frames.of(t), frames.fps)).join(',')]);
   // Snapshot files are numbered in request order; HyperFrames may append extras after them.
-  const frames = readdirSync(snapshots).filter((file) => /^frame-\d+/.test(file)).sort();
-  if (frames.length < schedule.timestamps.length) throw new Error(`expected ${schedule.timestamps.length} snapshots, got ${frames.length}`);
+  const files = readdirSync(snapshots).filter((file) => /^frame-\d+/.test(file)).sort();
+  if (files.length < schedule.timestamps.length) throw new Error(`expected ${schedule.timestamps.length} snapshots, got ${files.length}`);
   for (const sample of schedule.entries) {
-    copyFileSync(path.join(snapshots, frames[schedule.timestamps.indexOf(sample.at_seconds)]), path.join(out, `${sample.evidence_id}-${BROWSER_SOURCE}.png`));
+    copyFileSync(path.join(snapshots, files[schedule.timestamps.indexOf(sample.at_seconds)]), path.join(out, `${sample.evidence_id}-${BROWSER_SOURCE}.png`));
   }
 }
 
@@ -122,12 +153,10 @@ function remotionEntry(project, entry) {
   return found;
 }
 
-function remotionStills(project, schedule, out, story, entry) {
+function remotionStills(project, schedule, out, story, entry, frames) {
   const propsFile = path.join(project, '.launchclip/story.resolved.json');
   mkdirSync(path.dirname(propsFile), { recursive: true });
   writeFileSync(propsFile, `${JSON.stringify(story.resolved, null, 2)}\n`);
-  const { fps, duration } = story.format;
-  const lastFrame = Math.max(0, Math.round(duration * fps) - 1);
   // Bundle once outside the project (the project is the public dir), then take every still from the bundle.
   const bundle = mkdtempSync(path.join(os.tmpdir(), 'launchclip-remotion-bundle-'));
   try {
@@ -135,7 +164,7 @@ function remotionStills(project, schedule, out, story, entry) {
     const byTime = new Map();
     for (const at of schedule.timestamps) {
       const output = path.join(out, `.still-${String(byTime.size).padStart(3, '0')}.png`);
-      remotion(remotionStillArgs({ serveUrl: bundle, bundled: true, propsFile, project, frame: Math.min(lastFrame, Math.round(at * fps)), output }));
+      remotion(remotionStillArgs({ serveUrl: bundle, bundled: true, propsFile, project, frame: frames.of(at), output }));
       byTime.set(at, output);
     }
     for (const sample of schedule.entries) copyFileSync(byTime.get(sample.at_seconds), path.join(out, `${sample.evidence_id}-${BROWSER_SOURCE}.png`));
@@ -159,19 +188,24 @@ export async function buildEvidence(projectPath, { video = 'renders/draft.mp4', 
   const out = path.join(project, 'qa/temporal-evidence');
   rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
+  const fps = Number(story?.format?.fps) > 0 ? Number(story.format.fps) : draftFps(draft);
+  const duration = Number(story?.format?.duration);
+  const frames = { fps, of: (t) => evidenceFrame(t, fps, duration) };
   if (engine === 'remotion') {
     if (!story) throw new Error('the remotion renderer needs storyboard.json');
-    remotionStills(project, schedule, out, story, entry);
+    remotionStills(project, schedule, out, story, entry, frames);
   } else {
-    hyperframesStills(path.resolve(stillsProject ?? project), schedule, out);
+    hyperframesStills(path.resolve(stillsProject ?? project), schedule, out, frames);
   }
   const entries = [];
   for (const sample of schedule.entries) {
     const browser = path.join(out, `${sample.evidence_id}-${BROWSER_SOURCE}.png`);
     const encoded = path.join(out, `${sample.evidence_id}-encoded-draft.png`);
-    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-ss', String(sample.at_seconds), '-i', draft, '-frames:v', '1', '-y', encoded]);
+    const frame = frames.of(sample.at_seconds);
+    execFileSync('ffmpeg', encodedFrameArgs(draft, frame, encoded));
+    if (!existsSync(encoded)) throw new Error(`ffmpeg wrote no frame ${frame} from ${draft}`);
     for (const [source, file] of [[BROWSER_SOURCE, browser], ['encoded-draft', encoded]]) {
-      entries.push({ sample_id: sample.evidence_id, evidence_id: `${sample.evidence_id}-${source}`, source, role: sample.role, at_seconds: sample.at_seconds, sequence_id: sample.sequence_id, boundary_id: sample.boundary_id, file: path.relative(project, file), sha256: sha(file) });
+      entries.push({ sample_id: sample.evidence_id, evidence_id: `${sample.evidence_id}-${source}`, source, role: sample.role, at_seconds: sample.at_seconds, frame, sequence_id: sample.sequence_id, boundary_id: sample.boundary_id, file: path.relative(project, file), sha256: sha(file) });
     }
   }
   writeFileSync(path.join(out, 'manifest.json'), `${JSON.stringify({ schema_version: 'launchclip.subscription-temporal-evidence.v1', renderer: engine, video_sha256: sha(draft), entries }, null, 2)}\n`);
