@@ -21,6 +21,10 @@ export const SAFE_ZONE_PROFILES = Object.freeze({
     centerOfMassY: 860,
     centerOfMassTolerance: 0.15,
     minTextPx: 44,
+    // Editorial body copy (textRole "body") and secondary text (notes,
+    // labels); see textRoles() in editorial-core.mjs.
+    minBodyTextPx: 32,
+    minSecondaryTextPx: 24,
     heroFill: Object.freeze([0.7, 0.9]),
     lowerThird: true,
     maxEmptySeconds: 3
@@ -34,6 +38,8 @@ export const SAFE_ZONE_PROFILES = Object.freeze({
     centerOfMassY: 540,
     centerOfMassTolerance: 0.2,
     minTextPx: 32,
+    minBodyTextPx: 22,
+    minSecondaryTextPx: 18,
     heroFill: null,
     lowerThird: false,
     maxEmptySeconds: 3
@@ -62,7 +68,9 @@ export function profileGeometry(canvas, profile) {
     captionBand: scale(resolved.captionBand),
     centerOfMassY: resolved.centerOfMassY == null ? canvas.height / 2 : resolved.centerOfMassY * sy,
     centerOfMassTolerance: (resolved.centerOfMassTolerance ?? 0.2) * canvas.height,
-    minTextPx: resolved.minTextPx == null ? null : resolved.minTextPx * sy
+    minTextPx: resolved.minTextPx == null ? null : resolved.minTextPx * sy,
+    minBodyTextPx: resolved.minBodyTextPx == null ? null : resolved.minBodyTextPx * sy,
+    minSecondaryTextPx: resolved.minSecondaryTextPx == null ? null : resolved.minSecondaryTextPx * sy
   };
 }
 
@@ -127,14 +135,20 @@ export function checkLayout({ canvas, elements, safeZone, captionBand, profile, 
     }
   }
 
-  // 4. Minimum key-text size.
-  if (geometry.minTextPx != null) {
-    for (const item of items) {
-      if (item.minTextPx == null || !(item.role === "text" || item.role === "hero" || item.role === "caption")) continue;
-      if (item.minTextPx + EPSILON < geometry.minTextPx) {
-        add("min-text-size", "error", [item.id], item.start,
-          `smallest key text is ${round(item.minTextPx)} px; ${resolvedProfile.id ?? "this profile"} needs at least ${round(geometry.minTextPx)} px`);
-      }
+  // 4. Minimum text sizes: key text against the profile floor (body copy,
+  // textRole "body", against the body floor), secondary text against the
+  // secondary floor.
+  for (const item of items) {
+    if (!(item.role === "text" || item.role === "hero" || item.role === "caption")) continue;
+    const body = item.textRole === "body";
+    const keyFloor = body ? geometry.minBodyTextPx ?? geometry.minTextPx : geometry.minTextPx;
+    if (item.minTextPx != null && keyFloor != null && item.minTextPx + EPSILON < keyFloor) {
+      add("min-text-size", "error", [item.id], item.start,
+        `smallest ${body ? "body" : "key"} text is ${round(item.minTextPx)} px; ${resolvedProfile.id ?? "this profile"} needs at least ${round(keyFloor)} px${body ? " (give the module a larger rect or drop density: \"fixed\" so its type can scale)" : ""}`);
+    }
+    if (item.minSecondaryTextPx != null && geometry.minSecondaryTextPx != null && item.minSecondaryTextPx + EPSILON < geometry.minSecondaryTextPx) {
+      add("min-text-size", "error", [item.id], item.start,
+        `smallest secondary text (notes, labels) is ${round(item.minSecondaryTextPx)} px; ${resolvedProfile.id ?? "this profile"} needs at least ${round(geometry.minSecondaryTextPx)} px`);
     }
   }
 
@@ -202,7 +216,7 @@ export function checkLayout({ canvas, elements, safeZone, captionBand, profile, 
 // Adapts the `layout` object returned by editorial modules
 // ({canvas, rect, motion?: {enterEnd, exitStart, end}}) into elements.
 // Without motion the layout carries no timing, so pass start and end.
-export function elementsFromEditorialLayout(layout, { id, role = "text", start, end, track, enterDuration = 0.36, canvas, minTextPx, allowOcclusion, hidesCaptions } = {}) {
+export function elementsFromEditorialLayout(layout, { id, role = "text", start, end, track, enterDuration = 0.36, canvas, minTextPx, minSecondaryTextPx, textRole, allowOcclusion, hidesCaptions } = {}) {
   if (!layout || typeof layout !== "object" || !layout.rect) throw new Error("editorial layout must include rect");
   if (!id) throw new Error("editorial layout element needs an id");
   const motion = layout.motion;
@@ -222,6 +236,8 @@ export function elementsFromEditorialLayout(layout, { id, role = "text", start, 
   if (track !== undefined) element.track = track;
   if (motion) element.motion = { enterEnd: motion.enterEnd, exitStart: motion.exitStart };
   if (minTextPx !== undefined) element.minTextPx = minTextPx * sy;
+  if (minSecondaryTextPx !== undefined) element.minSecondaryTextPx = minSecondaryTextPx * sy;
+  if (textRole !== undefined) element.textRole = textRole;
   if (allowOcclusion) element.allowOcclusion = allowOcclusion;
   if (hidesCaptions) element.hidesCaptions = true;
   return [element];
@@ -299,6 +315,8 @@ function normalizeElement(element, index) {
     end,
     settled: exitStart - enterEnd > EPSILON ? [enterEnd, exitStart] : null,
     minTextPx: element.minTextPx == null ? null : Number(element.minTextPx),
+    minSecondaryTextPx: element.minSecondaryTextPx == null ? null : Number(element.minSecondaryTextPx),
+    textRole: element.textRole === "body" ? "body" : "key",
     allowOcclusion: Array.isArray(element.allowOcclusion) ? element.allowOcclusion.map(String) : [],
     hidesCaptions: element.hidesCaptions === true,
     hide: Array.isArray(element.hide) ? element.hide.map(([a, b]) => [Number(a), Number(b)]) : []

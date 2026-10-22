@@ -419,7 +419,7 @@ export function sceneDrift(story, scene, model, { window, geometry } = {}) {
   const keyed = role === 'text' || role === 'hero';
   const bounds = geometry ? (keyed ? driftBounds(rect, { safeZone: geometry.safeZone, captionBand: geometry.captionBand, captions }) : null) : null;
   const start = Number(window?.start ?? scene.start), end = Number(window?.end ?? scene.end);
-  return driftPlan({ rect, level: sceneAmbient(story, scene).level, start, end, canvas, bounds, minTextPx: Number.isFinite(model.minTextPx) ? model.minTextPx : null, minTextLimit: geometry?.minTextPx ?? null });
+  return driftPlan({ rect, level: sceneAmbient(story, scene).level, start, end, canvas, bounds, minTextPx: Number.isFinite(model.minTextPx) ? model.minTextPx : null, minTextLimit: (model.textRole === 'body' ? geometry?.minBodyTextPx ?? geometry?.minTextPx : geometry?.minTextPx) ?? null });
 }
 
 // ---------------------------------------------------------------------------

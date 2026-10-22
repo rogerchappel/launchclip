@@ -909,8 +909,40 @@ function resolveAt(options, input, suppliedRect, density, source) {
   }
   if ((movement || input.treatment || PANEL_KINDS.includes(kind)) && events.some(event => event.time > start + duration - exitDuration + 1e-9)) throw new Error('content must settle before motion exit begins');
   const layout = {canvas, rect: {...rect}, ...(movement ? {motion: {enterEnd: start + enterDuration, exitStart: start + duration - exitDuration, end: start + duration}} : {})};
+  const roles = textRoles(kind, content, font, input.numbered === true);
+  const smallest = list => (list.length ? Math.round(Math.min(...list) * scale * 100) / 100 : null);
   return {id, kind, aspect: input.aspect, canvas: {...canvas}, start, duration, end: start + duration, rect: {x: rect.x, y: rect.y, width: rect.width, height: rect.height},
     title, accent, theme, customTheme: custom !== null, presentation: input.presentation === 'glass' ? 'glass' : 'solid', surface: panel ? 'panel' : 'standard', track,
     chrome: {font, titleFont: font + 4, pad, titleLines, header, statusWidth}, motion, content, events, layout,
-    density: {scale, hero, source, layout: {width: box.width, height: box.height}, natural: Math.ceil(natural || box.height)}};
+    density: {scale, hero, source, layout: {width: box.width, height: box.height}, natural: Math.ceil(natural || box.height)},
+    minTextPx: smallest(roles.key), minSecondaryTextPx: smallest(roles.secondary), textRole: 'body'};
+}
+
+// Rendered text sizes by role, in layout px (the model multiplies by the
+// density scale). key: the text a viewer reads (titles, rows, labels, numbers,
+// code, excerpt lines, options), reported as minTextPx with textRole "body":
+// editorial modules are body copy, so layout-check holds them to the profile's
+// body floor (minBodyTextPx: 32 px Shorts, 22 px landscape) rather than the
+// headline floor catalogue modules meet (44 / 32 px). secondary: supporting
+// text (source and illustration notes, window-bar labels, status words,
+// units, chart axis labels, the code label row, step numbers), reported as
+// minSecondaryTextPx and held to minSecondaryTextPx (24 px Shorts, 18 px
+// landscape). All floors scale with the canvas.
+function textRoles(kind, c, font, numbered) {
+  const small = EDITORIAL_STYLE.size.small, title = font + 4;
+  switch (kind) {
+    case 'media-window': return {key: [], secondary: [small]};
+    case 'callout': return {key: c.variant === 'treated' ? [font + 2, font] : [title, font], secondary: []};
+    case 'checklist': return {key: [title, font], secondary: [font - 6]};
+    case 'step-rail': return {key: [title, Math.max(22, font - 4)], secondary: numbered ? [EDITORIAL_STYLE.size.stepNumber] : []};
+    case 'audience-grid': return {key: [title, c.labelFont], secondary: [small]};
+    case 'trend-chart': case 'growth-chart': return {key: [title, ...(c.showValues ? [c.countFont] : [])], secondary: [small, c.labelFont]};
+    case 'metric': case 'progress': return {key: [title, c.numberFont], secondary: [small]};
+    case 'date-card': return {key: [title, EDITORIAL_STYLE.size.day], secondary: [small]};
+    case 'status-rack': return {key: [title, small], secondary: [small]};
+    case 'code-snippet': return {key: [title, c.codeFont], secondary: c.label === null ? [] : [small]};
+    case 'excerpt-window': return {key: [c.textFont], secondary: [small]};
+    case 'focus-flow': return {key: [title, c.optionFont], secondary: [small]};
+    default: return {key: [title], secondary: []};
+  }
 }

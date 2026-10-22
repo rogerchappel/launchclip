@@ -224,6 +224,19 @@ fills it. `launchclip module fit <module> --params params.json --aspect 16:9`
 prints a spec's natural size, or for a given rect the minimum height at its
 width and the width that fits its height.
 
+**Text-size floors.** Every model reports its smallest rendered text after the
+density scale: `model.minTextPx` (the text a viewer reads: titles, rows,
+labels, numbers, code, excerpt lines, options) and `model.minSecondaryTextPx`
+(source and illustration notes, window-bar labels, status words, units, chart
+axis labels, the code label row). Editorial modules are body copy
+(`model.textRole: "body"`), so `launchclip layout-check` holds `minTextPx` to
+the body floor, 32 px in Shorts (1080×1920) and 22 px in landscape
+(1920×1080), and `minSecondaryTextPx` to 24 px and 18 px. Catalogue modules
+(headlines, hero numbers) keep the headline floor: 44 px Shorts, 32 px
+landscape. Floors scale with the canvas. A narrow explicit rect that renders an
+excerpt at 26 px in a Short fails; widen the rect (or omit it) so the type can
+scale.
+
 Rect-local geometry in the model (`chrome`, cells, bars, stages) is in layout
 px; multiply by `model.density.scale` for canvas px. `model.rect` and
 `layout.rect` are always canvas px. Both renderers wrap the kind markup in one

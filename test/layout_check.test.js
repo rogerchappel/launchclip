@@ -235,6 +235,43 @@ test("layout-check checks the ambient drift's largest extent, as the compilers d
   assert.ok(!still.findings.some((entry) => entry.rule === "collision"), "with ambient off the rest rects do not touch");
 });
 
+test("text-size floors hold for editorial modules: minTextPx (body copy) and minSecondaryTextPx per profile", async () => {
+  const { resolveModule } = await import("../kit/core/modules.mjs");
+  const lines = [{ segments: [{ text: "\"module\": \"hook-title\"," }] }, { segments: [{ text: "\"start\": 0," }] }, { segments: [{ text: "\"end\": \"word:launch\"" }] }];
+  const story = (width) => ({
+    schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 4 },
+    brand: { colors: { bg: "#0a0b10", paper: "#f3efe6", primary: "#ffa630" }, fonts: { display: "anton" } },
+    scenes: [{ id: "s3", module: "excerpt-window", start: 0, end: 4, params: { title: "storyboard.json", rect: { x: 200, y: 400, width, height: 560 }, excerpt: { mode: "illustration", lines, focus: { line: 0, scale: 1.1, at: 1 } } } }],
+    ending: { loop: false }
+  });
+  // A narrow portrait rect renders the excerpt at about 26 px: under the 32 px Shorts body floor.
+  const narrow = await mkdtemp(path.join(os.tmpdir(), "launchclip-textfloor-"));
+  await writeFile(path.join(narrow, "storyboard.json"), JSON.stringify(story(520)));
+  const report = await checkLayoutProject(narrow, { profile: "shorts" });
+  const finding = report.findings.find((entry) => entry.rule === "min-text-size");
+  assert.ok(finding, "the 26 px excerpt is flagged");
+  assert.match(finding.detail, /smallest body text is 26\.4 px; shorts needs at least 32 px/);
+  // Wide enough for the type to scale past the floor: no finding.
+  const wide = await mkdtemp(path.join(os.tmpdir(), "launchclip-textfloor-"));
+  await writeFile(path.join(wide, "storyboard.json"), JSON.stringify(story(700)));
+  assert.ok(!(await checkLayoutProject(wide, { profile: "shorts" })).findings.some((entry) => entry.rule === "min-text-size"));
+  // Every editorial model reports its smallest rendered text after the density scale.
+  const model = resolveModule(story(520).scenes[0], { ...story(520), resolved: { duration: 4, fps: 30 } });
+  assert.equal(model.minTextPx, 26.4);
+  assert.equal(model.minSecondaryTextPx, 24.2);
+  assert.equal(model.textRole, "body");
+  // Secondary floors: a landscape note at 22 px passes (18 px floor); the headline floor still applies to catalogue key text.
+  const geometry = profileGeometry(LANDSCAPE, "landscape");
+  assert.deepEqual([geometry.minTextPx, geometry.minBodyTextPx, geometry.minSecondaryTextPx], [32, 22, 18]);
+  const shorts = profileGeometry(SHORTS, "shorts");
+  assert.deepEqual([shorts.minTextPx, shorts.minBodyTextPx, shorts.minSecondaryTextPx], [44, 32, 24]);
+  const base = { role: "text", rect: { x: 300, y: 300, width: 400, height: 300 }, start: 0, end: 5 };
+  const sizes = (element) => checkLayout({ canvas: SHORTS, elements: [anchor(5), { id: "m", ...base, ...element }] }).findings.filter((entry) => entry.rule === "min-text-size").map((entry) => entry.detail);
+  assert.deepEqual(sizes({ minTextPx: 40, textRole: "body" }), []);
+  assert.equal(sizes({ minTextPx: 40 }).length, 1, "40 px key text is under the 44 px headline floor");
+  assert.match(sizes({ minTextPx: 40, textRole: "body", minSecondaryTextPx: 20 })[0], /secondary text \(notes, labels\) is 20 px; shorts needs at least 24 px/);
+});
+
 test("validate and layout-check agree on float bounds: one tolerance, bounds printed to 2 decimals", async () => {
   const { resolveModule } = await import("../kit/core/modules.mjs");
   const { resolveStory } = await import("../kit/core/story.mjs");

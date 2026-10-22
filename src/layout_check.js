@@ -59,7 +59,9 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
           end: Number(scene.end),
           track: scene.track,
           canvas,
-          ...(model.minTextPx != null && scene.module !== "media-window" ? { minTextPx: model.minTextPx } : {})
+          ...(model.minTextPx != null ? { minTextPx: model.minTextPx } : {}),
+          ...(model.minSecondaryTextPx != null ? { minSecondaryTextPx: model.minSecondaryTextPx } : {}),
+          textRole: model.textRole ?? "key"
         });
       } catch (error) {
         specFindings.push({ rule: "module-spec", severity: "error", ids: [scene.id], at: Number(scene.start), detail: `${scene.module}: ${error.message}` });
@@ -181,7 +183,8 @@ function ambientDrift(resolved, canvas) {
     return list.map((element) => element && element.rect ? {
       ...element,
       rect: driftExtent(element.rect, drift),
-      ...(element.minTextPx != null && drift.scale < 1 ? { minTextPx: element.minTextPx * drift.scale } : {})
+      ...(element.minTextPx != null && drift.scale < 1 ? { minTextPx: element.minTextPx * drift.scale } : {}),
+      ...(element.minSecondaryTextPx != null && drift.scale < 1 ? { minSecondaryTextPx: element.minSecondaryTextPx * drift.scale } : {})
     } : element);
   };
   return { inflate, drifted };
