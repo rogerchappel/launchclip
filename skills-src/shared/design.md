@@ -106,6 +106,13 @@ for a quieter treatment:
   through every hold and moves a parallax background behind them. A cuts story
   can still use one `pan` where a camera move says "the next idea is beside
   this one". End a world-camera loop with a short `whip-pan` home.
+- Inspect settled world-camera frames at delivery size, not only the moves.
+  If the parallax background shows hard edges or vertical seams on a hold,
+  set `camera.parallax: false` (the camera still travels, but this also
+  removes the moving background field, leaving the flat background colour)
+  or switch to `camera.mode` "cuts" and keep the travel as typed camera
+  transitions (`pan`, `push`, `orbit`, `whip-pan`), which keeps the ambient
+  field. Record which one you chose and why.
 - Select transitions by meaning: hard cut for contrast, push for continuation,
   whip for speed, zoom for scale change, morph for identity, and aperture/mask
   for focus. Do not disguise one generic crossfade with different names.

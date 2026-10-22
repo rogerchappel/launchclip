@@ -351,7 +351,10 @@ constraints:
   `motion.grammar` keeps one easing character across the piece, and
   `camera.mode` "world" gives camera travel with parallax depth, a slow drift
   through holds and velocity-shaped blur from one tested implementation.
-- The first frame must already communicate an intentional state. The first
+- The first frame must already communicate an intentional state: render and
+  inspect a still of frame 0 itself. A module whose entrance animates in can
+  be blank on frame 0 even at `at: 0`, so open on one that is readable on
+  frame 0 (`hook-title`), or check the still and adjust. The first
   second states the promise. The first four seconds contain at least three
   meaningful changes in layout, evidence, framing, or visual register for
   portrait, or two for landscape.

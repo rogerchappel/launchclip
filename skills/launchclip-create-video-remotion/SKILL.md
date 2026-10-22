@@ -427,6 +427,13 @@ for a quieter treatment:
   through every hold and moves a parallax background behind them. A cuts story
   can still use one `pan` where a camera move says "the next idea is beside
   this one". End a world-camera loop with a short `whip-pan` home.
+- Inspect settled world-camera frames at delivery size, not only the moves.
+  If the parallax background shows hard edges or vertical seams on a hold,
+  set `camera.parallax: false` (the camera still travels, but this also
+  removes the moving background field, leaving the flat background colour)
+  or switch to `camera.mode` "cuts" and keep the travel as typed camera
+  transitions (`pan`, `push`, `orbit`, `whip-pan`), which keeps the ambient
+  field. Record which one you chose and why.
 - Select transitions by meaning: hard cut for contrast, push for continuation,
   whip for speed, zoom for scale change, morph for identity, and aperture/mask
   for focus. Do not disguise one generic crossfade with different names.
@@ -519,6 +526,20 @@ If the user edits `storyboard.json`, a bespoke module, or the props in Studio, r
 stills before asking for approval. If those checks trigger a repair that
 changes the visible result, refresh Studio and obtain fresh approval of that
 repaired state.
+
+**Draft and final.** `launchclip finish` defaults to `--quality draft`,
+which writes `renders/draft.mp4`: the same resolution, frame rate, timing,
+mix, loudness master and gates as the final, encoded faster at a lower
+bitrate (Remotion CRF 28 `veryfast`; HyperFrames `--quality draft`, CRF 28
+with lighter frame capture). Every
+gate, the critic and `cinematic-check` judge this draft, and it is a
+reviewable deliverable. `--quality high` writes `renders/final.mp4` (the full-quality encode)
+and needs the user's explicit approval in this conversation after they have
+seen the draft or Studio preview, for example "render the final". A passing
+gate, a `ship` verdict from the critic, or the original request to make a
+video is not that approval. When the user has not approved yet, deliver
+`renders/draft.mp4`, say plainly that it is the gated draft, and give the
+one command that renders the final once they approve.
 
 After approval:
 
