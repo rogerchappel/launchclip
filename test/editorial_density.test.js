@@ -1,5 +1,6 @@
 // Editorial density: content-derived default rects (both aspects), the type
-// scale for derived rects and explicit 9:16 rects
+// scale for derived rects, explicit 9:16 rects and explicit 16:9 rects with
+// density: "fill"
 // (kit/core/editorial-core.mjs, DENSITY). RFC §5 Shorts rules: key content in
 // y 280–1450 / x 80–940, centre of mass near y 860, lower third never empty,
 // key text at least 44 px.
@@ -87,7 +88,7 @@ test('the emitter scales 9:16 content through one .ui-density wrapper', () => {
   assert.deepEqual(built.layout.rect, model.rect);
 });
 
-test('explicit 16:9 rects stay at scale 1, untouched', () => {
+test('explicit 16:9 rects without the opt-in stay at scale 1, untouched', () => {
   const rect = {x: 80, y: 80, width: 850, height: 750};
   const explicit = resolveEditorialModule(spec('metric', {aspect: '16:9', rect}));
   assert.deepEqual(explicit.rect, rect);
@@ -95,6 +96,23 @@ test('explicit 16:9 rects stay at scale 1, untouched', () => {
   assert.equal(explicit.density.source, 'explicit');
   assert.equal(explicit.content.numberFont, 64);
   assert.doesNotMatch(buildEditorialModule(spec('metric', {aspect: '16:9', rect})).html, /ui-density/);
+  // density: "fixed" keeps scale 1 for any rect, in either aspect.
+  assert.equal(resolveEditorialModule(spec('metric', {aspect: '9:16', rect: {x: 90, y: 380, width: 900, height: 620}, density: 'fixed'})).density.scale, 1);
+  assert.throws(() => resolveEditorialModule(spec('metric', {aspect: '16:9', rect, density: 'big'})), /density must be fill or fixed/);
+});
+
+test('explicit 16:9 rects with density: "fill" grow the type to fill the panel', () => {
+  const rect = {x: 560, y: 190, width: 800, height: 620};
+  const plain = resolveEditorialModule(spec('checklist', {aspect: '16:9', rect}));
+  const fill = resolveEditorialModule(spec('checklist', {aspect: '16:9', rect, density: 'fill'}));
+  assert.deepEqual(fill.rect, rect);
+  assert.equal(fill.density.source, 'explicit');
+  assert.ok(fill.density.scale > 1.3, `scale ${fill.density.scale}`);
+  assert.ok(fill.density.scale <= DENSITY.landscape.maxScale);
+  assert.ok(fill.density.natural <= fill.density.layout.height + .5);
+  // The filled panel is far less empty than the scale-1 one.
+  assert.ok(fill.density.natural * fill.density.scale > plain.density.natural * 1.3);
+  assert.match(buildEditorialModule(spec('checklist', {aspect: '16:9', rect, density: 'fill'})).html, /ui-density/);
 });
 
 test('16:9 default rects sit centred in the landscape title-safe zone, above the caption band, at a confident scale', () => {

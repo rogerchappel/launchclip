@@ -186,12 +186,14 @@ export function resolveEditorialModule(spec)
 
 Density: without `rect` the core derives the footprint from the content (9:16:
 safe-zone width, natural height, centred near the RFC centre-of-mass target
-above the caption band; 16:9: the old lower-left footprint with a content
-height on the y 980 baseline). In 9:16 the kind lays out in
-`density.layout` (rect / scale) and renders scaled by `density.scale` (1–2)
-from the rect's top-left corner, inside one `.ui-density` wrapper in both
-renderers; rect-local geometry is in layout px. 16:9 always resolves at scale
-1, and explicit 16:9 output is byte-identical to the pre-density emitter.
+above the caption band; 16:9: a centred card, 1000 px wide or wider for dense
+content, inside title-safe at y 96–840, above the caption band). Derived
+rects, explicit 9:16 rects and explicit 16:9 rects with `density: "fill"` lay
+out in `density.layout` (rect / scale) and render scaled by `density.scale`
+(1–2; at most 1.75 in 16:9) from the rect's top-left corner, inside one
+`.ui-density` wrapper in both renderers; rect-local geometry is in layout px.
+An explicit 16:9 rect without the opt-in (and any rect with `density:
+"fixed"`) resolves at scale 1, byte-identical to the pre-density emitter.
 Details: skills-src/references/editorial-ui-modules.md, "Defaults and density".
 
 `buildEditorialModule()` in `skills/launchclip-create-video/scripts/editorial-ui-modules.mjs`

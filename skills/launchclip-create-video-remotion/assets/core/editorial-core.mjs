@@ -55,8 +55,8 @@
  * @property {{scale:number,hero:boolean,source:'explicit'|'derived'|'legacy',layout:{width:number,height:number},natural:number}} density
  *   The kind lays out in `layout` (rect / scale, layout px) and renders scaled
  *   by `scale` from the rect's top-left corner; `natural` is the content's
- *   natural height in layout px. scale is 1 for media-window and explicit
- *   16:9 rects.
+ *   natural height in layout px. scale is 1 for media-window, for explicit
+ *   16:9 rects without density: "fill" and for density: "fixed".
  *   chrome, cell/bar/stage/rail geometry and every kind-CSS size are layout px.
  *
  * Content shapes (all times absolute):
@@ -260,8 +260,10 @@ const hex = value => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value
 // every rect-local geometry value is in layout px (canvas px = layout px *
 // scale). The largest scale, from DENSITY.max down to 1, at which the content
 // validates and its natural height fits is used for derived rects (no rect)
-// in both aspects and for explicit 9:16 rects. An explicit 16:9 rect resolves
-// at scale 1, byte-identical to the pre-density output.
+// in both aspects, for explicit 9:16 rects, and for explicit 16:9 rects that
+// opt in with density: "fill". An explicit 16:9 rect without the opt-in (or
+// any rect with density: "fixed") resolves at scale 1, byte-identical to the
+// pre-density output.
 export const DENSITY = Object.freeze({
   max: 2, min: 1, step: .05,
   // RFC §5 Shorts geometry, reference 1080x1920: safe zone, the caption band
@@ -289,6 +291,7 @@ export const DENSITY = Object.freeze({
 });
 const LEGACY_RECT = {'16:9': {x: 80, y: 480, width: 680, height: 500}, '9:16': {x: 90, y: 960, width: 900, height: 740}};
 const BASE = Object.freeze({scale: 1, hero: false});
+const DENSITY_MODES = ['fill', 'fixed'];
 
 function candidates(max = DENSITY.max) {
   const list = [];
@@ -332,15 +335,16 @@ function derivedRect(options, input, passes, scales) {
 /** @returns {EditorialModel} */
 export function resolveEditorialModule(input, options = {}) {
   const plain = input && typeof input === 'object' && !Array.isArray(input);
-  if (!plain || !['16:9', '9:16'].includes(input.aspect) || !EDITORIAL_KINDS.includes(input.kind)) return resolveAt(options, input, input?.rect, BASE, 'explicit');
+  if (!plain || !['16:9', '9:16'].includes(input.aspect) || !EDITORIAL_KINDS.includes(input.kind) || (input.density !== undefined && !DENSITY_MODES.includes(input.density))) return resolveAt(options, input, input?.rect, BASE, 'explicit');
   const explicit = input.rect !== undefined;
   const portrait = input.aspect === '9:16';
+  const fixed = input.density === 'fixed';
   if (explicit) {
-    // Explicit rect: keep the rect and, in 9:16, grow the type until the
-    // content would no longer fit. The final BASE attempt is the pre-density
-    // behaviour, so any spec that resolved before still resolves (or throws
-    // the same error).
-    if (!portrait) return resolveAt(options, input, input.rect, BASE, 'explicit');
+    // Explicit rect: keep the rect and, where density applies (9:16, or 16:9
+    // with density: "fill"), grow the type until the content would no longer
+    // fit. The final BASE attempt is the pre-density behaviour, so any spec
+    // that resolved before still resolves (or throws the same error).
+    if (fixed || (!portrait && input.density !== 'fill')) return resolveAt(options, input, input.rect, BASE, 'explicit');
     return fillRect(options, input, input.rect, portrait ? DENSITY.max : DENSITY.landscape.maxScale);
   }
   if (input.kind === 'media-window') {
@@ -354,12 +358,12 @@ export function resolveEditorialModule(input, options = {}) {
     const P = DENSITY.portrait, height = P.mediaHeight;
     return resolveAt(options, input, {x: P.x, y: Math.round(P.centre - height / 2), width: P.width, height}, BASE, 'derived');
   }
-  const scales = candidates(portrait ? DENSITY.max : DENSITY.landscape.maxScale);
+  const scales = fixed ? [BASE] : candidates(portrait ? DENSITY.max : DENSITY.landscape.maxScale);
   if (!portrait) {
     // 16:9 default: a centred card inside the landscape title-safe zone,
     // above the caption band, at the largest scale its content allows.
     const L = DENSITY.landscape;
-    const passes = L.widths.map((width, i) => ({x: Math.round((1920 - width) / 2), width, top: L.top, limit: L.captionTop, centre: L.centre, minScale: L.minScale[i]}));
+    const passes = L.widths.map((width, i) => ({x: Math.round((1920 - width) / 2), width, top: L.top, limit: L.captionTop, centre: L.centre, minScale: fixed ? 0 : L.minScale[i]}));
     return derivedRect(options, input, passes, scales) ?? resolveAt(options, input, LEGACY_RECT['16:9'], BASE, 'legacy');
   }
   // 9:16 default: safe-zone width, the largest scale whose natural height
@@ -370,17 +374,18 @@ export function resolveEditorialModule(input, options = {}) {
   // zone.
   const P = DENSITY.portrait, lowerThird = P.top + (P.bottom - P.top) / 2;
   const column = {x: P.x, width: P.width, top: P.top, centre: P.centre};
-  const passes = [{...column, limit: P.captionTop, maxHeight: 2 * (P.captionTop - lowerThird - 1), minScale: 1.8}, {...column, limit: P.captionTop}, {...column, limit: P.bottom}];
+  const passes = [{...column, limit: P.captionTop, maxHeight: 2 * (P.captionTop - lowerThird - 1), minScale: fixed ? 0 : 1.8}, {...column, limit: P.captionTop}, {...column, limit: P.bottom}];
   return derivedRect(options, input, passes, scales) ?? resolveAt(options, input, LEGACY_RECT['9:16'], BASE, 'legacy');
 }
 
 function resolveAt(options, input, suppliedRect, density, source) {
-  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt', 'theme', 'focus', 'growth']);
+  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'density', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt', 'theme', 'focus', 'growth']);
   if (!/^[a-z][a-z0-9-]{0,59}$/.test(input.id ?? '')) throw new Error('id must be a unique lowercase DOM-safe identifier');
   if (!EDITORIAL_KINDS.includes(input.kind)) throw new Error(`kind must be ${EDITORIAL_KINDS.join(', ')}`);
   if (input.presentation !== undefined && !['solid', 'glass'].includes(input.presentation)) throw new Error('presentation must be solid or glass');
   if (input.numbered !== undefined && (input.kind !== 'step-rail' || typeof input.numbered !== 'boolean')) throw new Error('numbered is a boolean for step-rail only');
   if (!['16:9', '9:16'].includes(input.aspect)) throw new Error('aspect must be 16:9 or 9:16');
+  if (input.density !== undefined && !DENSITY_MODES.includes(input.density)) throw new Error('density must be fill or fixed');
   const kind = input.kind, id = input.id;
   const canvas = input.aspect === '16:9' ? {width: 1920, height: 1080} : {width: 1080, height: 1920};
   const start = number(input.start, 'start', 0, 86400);

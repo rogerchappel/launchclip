@@ -45,7 +45,7 @@ export const EDITORIAL_SPECS = Object.freeze({
 });
 
 const EDITORIAL_COMMON = 'title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends';
-const EDITORIAL_TUNING = 'rect, accent (#rrggbb), theme, presentation ("solid" | "glass"), motion';
+const EDITORIAL_TUNING = 'rect, density ("fill" with a rect), accent (#rrggbb), theme, presentation ("solid" | "glass"), motion';
 
 // RFC §5 phrase→module table, as data. `patterns` are case-insensitive regex
 // sources matched against one sentence of the brief or narration. A row whose
@@ -200,7 +200,7 @@ export function moduleCatalogue() {
         params: [
           { name: 'title', text: 'string ≤ 54, required', tuning: false },
           ...Object.entries(spec?.params ?? {}).map(([name, text]) => ({ name, text, tuning: false })),
-          ...['rect', 'accent', 'theme', 'presentation', 'motion'].map((name) => ({ name, text: name === 'rect' ? '{x, y, width, height} canvas px (width ≥ 420, height ≥ 160)' : name === 'accent' ? '#rrggbb' : name === 'presentation' ? '"solid" | "glass"' : name === 'motion' ? '{enter, exit, distance, enterDuration, exitDuration, scale}' : '{surface, foreground, muted, border, accentText?}', tuning: true }))
+          ...['rect', 'density', 'accent', 'theme', 'presentation', 'motion'].map((name) => ({ name, text: name === 'rect' ? '{x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it' : name === 'density' ? '"fill" (an explicit rect\'s text grows to fill it; recommended with rect in 16:9) | "fixed"' : name === 'accent' ? '#rrggbb' : name === 'presentation' ? '"solid" | "glass"' : name === 'motion' ? '{enter, exit, distance, enterDuration, exitDuration, scale}' : '{surface, foreground, muted, border, accentText?}', tuning: true }))
         ],
         events: spec?.events ?? ['enter'],
         hidesCaptions: false
@@ -254,7 +254,7 @@ function safeZoneLines(format) {
   return [
     ...lines,
     'Catalogue modules size and place themselves inside the safe zone and fail with a param error when copy is too long; shorten copy rather than shrinking it.',
-    'Editorial modules without a rect size and place themselves from their content inside the safe zone and above the caption band; omit rect unless the layout needs a specific position. They need a 1080x1920 or 1920x1080 format.'
+    'Editorial modules without a rect size and place themselves from their content inside the safe zone and above the caption band, with type scaled to fill the panel; omit rect unless the layout needs a specific position. With a rect in 16:9, also set density: "fill", or the text stays small and a bigger rect is just more empty panel. They need a 1080x1920 or 1920x1080 format.'
   ];
 }
 

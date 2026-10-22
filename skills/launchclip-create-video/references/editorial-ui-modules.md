@@ -132,7 +132,7 @@ Event timestamps represent the visible settle, not necessarily the tween start.
 Use the returned events rather than recomputing a contact from a guessed delay.
 
 All kinds accept `id`, `kind`, `aspect`, `start`, `duration`, `title`, optional
-`rect`, six-digit hex `accent`, `presentation: "solid"` (default) or `"glass"`,
+`rect`, optional `density` (`"fill"` or `"fixed"`), six-digit hex `accent`, `presentation: "solid"` (default) or `"glass"`,
 and optional integer `track` (1–98, default
 2). Media-window chrome uses the following track; reserve distinct track pairs
 for intentional simultaneous media windows. Use `16:9` (1920×1080) or `9:16`
@@ -154,7 +154,7 @@ Without `rect`, the footprint comes from the content rather than a fixed box:
   safe-zone width at all it falls back to the old `{x: 90, y: 960, width: 900,
   height: 740}` footprint.
   A short card is never shorter than 160 px.
-- **9:16 type scale.** The module lays out in a smaller layout box and renders
+- **Type scale (9:16 and derived 16:9).** The module lays out in a smaller layout box and renders
   scaled into its rect (`model.density.scale`, 1–2). The resolver picks the
   largest scale at which the content still validates and fits, preferring at
   least 1.8 with the card centre below the lower third. At 1.8–2 titles render
@@ -164,12 +164,25 @@ Without `rect`, the footprint comes from the content rather than a fixed box:
   rects keep their footprint and get the same scale search, so text grows only
   as far as the rect allows; a rect that fits nothing larger resolves exactly
   as before.
-- **16:9, overlays on footage.** Scale stays 1 and explicit rects are
-  unchanged. The default keeps the lower-left footprint (x 80, width 680) with
-  its height taken from the content and its bottom edge on y 980.
+- **16:9, full frame.** The default card is centred horizontally, 1000 px
+  wide (1440, then the whole 1728 px title-safe width, for content too dense
+  for that), inside the landscape title-safe zone and above the caption band
+  (y 96–840; the band starts at y 864), centred on the frame where it fits. It
+  gets the same type-scale search (1–1.75), so body copy reads about 45 px and
+  titles about 53 px on a 1920-wide frame: a big, confident panel that hugs its
+  content instead of small text in a large dark card.
+- **Explicit 16:9 rects** resolve at scale 1 by default, so existing
+  footprints stay byte-identical: text does not grow with the rect, and a
+  bigger rect is just more empty panel. Add `density: "fill"` (in a storyboard,
+  `params.density`) to give an explicit 16:9 rect the type-scale search, so
+  the text grows to fill it. `density: "fixed"` keeps scale 1 in either aspect.
 - **media-window** keeps scale 1. Its 9:16 default is an 840×521 window (a
-  16:9 frame under the 48 px bar) centred on the target; 16:9 keeps
-  `{x: 80, y: 480, width: 680, height: 500}`.
+  16:9 frame under the 48 px bar) centred on the target; its 16:9 default is a
+  centred 1200×723 window (16:9 media under the bar) above the caption band.
+
+**Recommendation:** omit `rect` and let the module size itself; when the shot
+needs a specific footprint in 16:9, add `density: "fill"` so the panel's text
+fills it.
 
 Rect-local geometry in the model (`chrome`, cells, bars, stages) is in layout
 px; multiply by `model.density.scale` for canvas px. `model.rect` and

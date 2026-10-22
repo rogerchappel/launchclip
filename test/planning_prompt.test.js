@@ -106,6 +106,9 @@ test("the prompt carries lane rules, anchors, safe zone, captions, fixed inputs 
   const landscape = planningPrompt({ tier: "guided", lane: "footage-led", format: { width: 1920, height: 1080, fps: 30, duration: 60 } });
   assert.match(landscape, /landscape \(1920x1080\)/);
   assert.match(landscape, /footage-led: base/);
+  // Editorial panels: omit rect, or pair a 16:9 rect with density "fill" so the text fills it.
+  assert.match(landscape, /omit rect unless the layout needs a specific position\. With a rect in 16:9, also set density: "fill"/);
+  assert.match(landscape, /density: "fill" \(an explicit rect's text grows to fill it; recommended with rect in 16:9\)/);
 });
 
 test("the example storyboard validates and resolves through every module", () => {
