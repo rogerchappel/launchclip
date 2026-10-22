@@ -16,7 +16,7 @@ import { prepareRecording, recordingOptions, writeBrollPlan } from "./recording_
 import { runStoryCommand } from "./story_cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "story", "finish", "export", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "story", "finish", "voice", "export", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -37,7 +37,9 @@ export async function runCli(argv, io = {}) {
   const skillsInvocation = command === "skills" ? parseSkillsInvocation(firstArg, rest) : null;
   const storyInvocation = command === "story" ? parseStoryInvocation(firstArg, rest) : null;
   const sfxInvocation = command === "sfx" ? parseSfxInvocation(firstArg, rest) : null;
-  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? rest);
+  // launchclip voice takes a project or only flags (--text "...").
+  const voiceInvocation = command === "voice" ? (firstArg && !firstArg.startsWith("--") ? { project: firstArg, flagArgs: rest } : { project: null, flagArgs: firstArg ? [firstArg, ...rest] : rest }) : null;
+  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
@@ -104,6 +106,11 @@ export async function runCli(argv, io = {}) {
         const failedStage = report.stages.find((stage) => stage.status === "failed");
         throw new Error(`launchclip finish failed at the ${failedStage?.name ?? "unknown"} stage: ${failedStage?.error ?? ""}`.trim());
       }
+      return;
+    } else if (command === "voice") {
+      const { runVoiceCommand } = await import("./voice_cli.js");
+      const report = await runVoiceCommand(voiceInvocation.project, { text: flags.text, voice: flags.voice, provider: flags.provider, speed: flags.speed, out: flags.out }, productionAdapters.voice);
+      stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : report.report);
       return;
     } else if (command === "export") {
       const { runExport, formatExportSummary } = await import("./nle/export.js");
@@ -337,6 +344,7 @@ Usage:
   launchclip cinematic-check <project> [--renderer hyperframes|remotion] [--video renders/draft.mp4] [--audio-manifest AUDIO-MANIFEST.json] [--music-volume 0.32] [--expect-audio] [--critique qa/critic.json]
   launchclip layout-check <project> [--profile shorts|landscape] [--json]
   launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--voice kokoro|elevenlabs|supplied|test] [--music synth|elevenlabs|none] [--music-regenerate] [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] [--scene s3[,s4] | --preview-scene s3] [--force] [--json]
+  launchclip voice <project | --text "..."> [--voice kokoro|elevenlabs|test|<voice id>] [--provider kokoro|elevenlabs|test] [--speed 1.2] [--out NARRATION.json] [--json]
   launchclip export <project> --format fcpxml|premiere|edl|otio|all [--overlays prores4444|png|none] [--out exports/] [--fps 24|25|29.97|30|60] [--name name] [--absolute] [--force] [--json]
   launchclip sfx seed [--provider elevenlabs|synth] [--variants 3] [--only whoosh,impact] [--reroll typing] [--dir .launchclip/sfx] [--force]
   launchclip sfx reroll <family> [--dir .launchclip/sfx]

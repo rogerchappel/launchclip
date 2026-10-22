@@ -40,6 +40,7 @@ import { applyDensity, densityTyping, eventKey, familySource, kitLibrary, resolv
 import { collectTyping, renderTypingTrack, typingSchedule } from "./sfx/typing.js";
 import { getMusicProvider, parseMusicSpec, resolveMusicChoice, MUSIC_FLAG_VALUES } from "./music/index.js";
 import { lockDecision, musicBrief, readMusicLock, writeMusicLock } from "./music/lock.js";
+import { narrationDocument, narrationRequest, synthesizeNarration, voiceCacheDir } from "./voice/narrate.js";
 import { analyzeBeatsFile, beatsDocument, gridFromBpm, transformGrid } from "./music/beats.js";
 import { BEAT_SYNC_SCHEMA, chooseAlignment, keyMoments, momentReport, snapStory, summarizeMoments, syncStrategy } from "./music/beat_sync.js";
 
@@ -551,45 +552,31 @@ const STAGES = [
       if (supplied === PATHS.voice && !generatedBefore && provider !== "supplied" && !ctx.options.voice && existsSync(path.join(ctx.project, supplied))) {
         return { skip: `audio.voice is supplied (${supplied}) and was not synthesised by finish; pass --voice to resynthesise` };
       }
-      const request = { text: narration.text, provider, voice: narration.voice ?? null, speed: narration.speed ?? 1 };
+      // Provider defaults fill voice and speed (Kokoro: af_heart at 1.2), the
+      // same request `launchclip voice` measures, so its cached take is reused.
+      const request = narrationRequest(narration, { provider });
       if (provider === "supplied") request.source = supplied ? await fileHash(path.join(ctx.project, supplied)) : null;
       return { inputHash: hashValue(request), outputs: [PATHS.voice, PATHS.words], request };
     },
     async run(ctx, { request }) {
-      const provider = ctx.adapters.voiceProvider(request.provider, {});
       const outFile = path.join(ctx.project, PATHS.voice);
-      await mkdir(path.dirname(outFile), { recursive: true });
-      const synthesis = { text: request.text, voice: request.voice ?? undefined, speed: request.speed, outFile };
-      if (request.provider === "supplied" && ctx.story.audio?.voice) synthesis.source = path.join(ctx.project, ctx.story.audio.voice);
-      const result = await provider.synthesize(synthesis);
-      if (!result || !Array.isArray(result.words) || !result.words.length) throw new Error(`voice provider "${request.provider}" returned no word timings`);
-      const produced = path.resolve(result.file ?? outFile);
-      if (produced !== outFile) await copyFile(produced, outFile);
       // Synthesised voices arrive at their engine's level (Kokoro is about
-      // -22 LUFS), which leaves too little voice-to-music margin in the mix.
-      // Bring them to the -17 LUFS supplied voiceovers already get.
-      let loudness = null;
-      // The offline "test" voice is a placeholder tone and needs no levelling.
-      if (request.provider !== "supplied" && request.provider !== "test") {
-        const normalized = `${outFile}.norm.wav`;
-        loudness = await ctx.adapters.normalizeVoice(outFile, normalized);
-        await rename(normalized, outFile);
-      }
-      const words = result.words.map((word) => ({ text: String(word.text), start: round3(Number(word.start)), end: round3(Number(word.end)) }));
-      const duration = round3(Number(result.duration ?? words.at(-1).end));
-      await writeJson(path.join(ctx.project, PATHS.words), {
-        schema_version: "launchclip.narration.v1",
-        provider: request.provider,
-        voice: request.voice,
-        speed: request.speed,
-        text: request.text,
-        sample_rate: result.sampleRate ?? null,
-        duration_seconds: duration,
-        words
+      // -22 LUFS), which leaves too little voice-to-music margin in the mix,
+      // so synthesizeNarration brings them to the -17 LUFS supplied
+      // voiceovers get (the offline test tone is left alone). Takes are
+      // cached in .launchclip/voice, shared with `launchclip voice`.
+      const take = await synthesizeNarration(request, {
+        outFile,
+        cacheDir: voiceCacheDir(ctx.project),
+        voiceProvider: ctx.adapters.voiceProvider,
+        normalizeVoice: ctx.adapters.normalizeVoice,
+        source: request.provider === "supplied" && ctx.story.audio?.voice ? path.join(ctx.project, ctx.story.audio.voice) : undefined
       });
+      const { words, duration, loudness } = take;
+      await writeJson(path.join(ctx.project, PATHS.words), narrationDocument(request, take));
       const format = storyFormat(ctx.copy);
       if (Number.isFinite(format.duration) && duration > format.duration + 0.05) ctx.warnings.push(`narration runs ${duration}s, longer than format.duration (${format.duration}s); the end is cut off`);
-      const details = { provider: request.provider, voice: request.voice, speed: request.speed, loudness, duration_seconds: duration, word_count: words.length, voice_file: PATHS.voice, words_file: PATHS.words };
+      const details = { provider: request.provider, voice: request.voice, speed: request.speed, loudness, duration_seconds: duration, word_count: words.length, voice_file: PATHS.voice, words_file: PATHS.words, cached_take: take.cached };
       STAGES[0].restore(ctx, details);
       return details;
     },
