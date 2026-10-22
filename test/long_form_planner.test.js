@@ -68,6 +68,31 @@ test("routes the presenter take to every chapter and checks the presenter mix on
   }
 });
 
+test("gives each chapter a chapter-local clock and word timings", async () => {
+  const workspace = await tempWorkspace();
+  const { intake, evidence } = context(workspace);
+  const transcript = "One two three four.";
+  const words = [
+    { word: "One", start: 0, end: 40 },
+    { word: "two", start: 50, end: 90 },
+    { word: "three", start: 100, end: 140 },
+    { word: "four.", start: 150, end: 190 }
+  ];
+  const chapterInputs = new Map();
+  const client = { runStructured: async (request) => {
+    if (request.metadata.job_id === "creative-outline") return response(outline("supplied"));
+    chapterInputs.set(request.metadata.chapter_id, JSON.parse(request.input));
+    return response(chapterPlan(request.metadata.chapter_id, "supplied"));
+  } };
+  await planLongFormProduction(workspace, { intake, evidence, suppliedNarration: { transcript, words, duration_seconds: 200 }, options: { chapterConcurrency: 2 } }, { client });
+  const second = chapterInputs.get("chapter-2");
+  assert.equal(second.chapter.start_seconds, 0);
+  assert.equal(second.chapter.end_seconds, 100);
+  assert.equal(second.chapter.video_offset_seconds, 100);
+  assert.deepEqual(second.supplied_narration.chapter_words.map((word) => [word.start, word.end]), [[0, 40], [50, 90]]);
+  assert.equal(second.neighbors.previous.start_seconds, undefined);
+});
+
 test("stitches an authoritative supplied transcript exactly across chapter plans", () => {
   const full = "One two three four.";
   const words = [
