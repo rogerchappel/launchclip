@@ -1,3 +1,4 @@
+import { narrationFile } from "./story_loader.js";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -22,7 +23,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
     const validation = storyCore.validateStory(story);
     if (validation && validation.ok === false) throw new Error(`storyboard.json is invalid:\n- ${validation.errors.join("\n- ")}`);
   }
-  const narration = await readOptionalJson(path.join(project, "NARRATION.json"));
+  const narration = await readOptionalJson(narrationFile(project, story));
   const words = Array.isArray(narration) ? narration : Array.isArray(narration?.words) ? narration.words : [];
   const beats = await readOptionalJson(path.join(project, "BEATS.json"));
   const resolved = storyCore.resolveStory(story, { words, beats });

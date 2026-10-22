@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {gsapText} from '../core/motion.mjs';
 import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -176,13 +177,13 @@ export function emitEditorialModule(model) {
       css += `#${id} .ui-note{margin:0;padding:0 24px 20px;color:${C.muted};font-size:${S.size.small}px;line-height:1.3;overflow-wrap:break-word}#${id} .ui-number{margin:0;padding:0 24px 12px;font-size:${c.numberFont}px;font-weight:750;line-height:1.1;font-variant-numeric:tabular-nums;white-space:nowrap}#${id} .ui-number-unit{padding:0 24px 20px;font-size:${S.size.small}px;color:${C.muted}}#${id} .ui-progress-track{height:16px;margin:0 24px 24px;background:${C.track};border-radius:${R.track}px;overflow:hidden}#${id} .ui-progress-fill{height:100%;background:${accent};transform-origin:left}`;
       body += `<p class="ui-note">${escape(c.attribution)}</p><div id="${id}-number" class="ui-number">${escape(c.initialText)}</div><div class="ui-number-unit">${escape(c.unitText)}</div>`;
       if (!isMetric) body += '<div class="ui-progress-track"><div class="ui-progress-fill"></div></div>';
-      motion.push(`tl.set(${js(`#${id}-number`)}, {textContent:${js(c.initialText)}}, ${start});`);
+      motion.push(`tl.set(${js(`#${id}-number`)}, {textContent:${js(gsapText(c.initialText))}}, ${start});`);
       if (!isMetric) motion.push(`tl.set(${js(`${selector} .ui-progress-fill`)}, {scaleX:${c.values[0].scale}}, ${start});`);
       for (const value of c.values) {
         // Text changes are finite timeline states, not callbacks or wall-clock
         // work. They restore even when a renderer seeks backwards.
         if (value.index === 0) motion.push(`tl.fromTo(${js(`#${id}-number`)}, {opacity:0.7}, {opacity:1,duration:0.2}, ${value.time});`);
-        else for (const frame of value.frames) motion.push(`tl.set(${js(`#${id}-number`)}, {textContent:${js(frame.text)}}, ${frame.time});`);
+        else for (const frame of value.frames) motion.push(`tl.set(${js(`#${id}-number`)}, {textContent:${js(gsapText(frame.text))}}, ${frame.time});`);
         if (!isMetric && value.index > 0) motion.push(`tl.to(${js(`${selector} .ui-progress-fill`)}, {scaleX:${value.scale},duration:0.6,ease:'power2.out'}, ${value.time});`);
       }
     } else if (kind === 'checklist') {

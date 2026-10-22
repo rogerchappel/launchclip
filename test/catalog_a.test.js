@@ -431,7 +431,7 @@ test("count-up formats decimals, separators, signs and affixes", async () => {
   assert.equal(model.content.finalText, "17.5");
   const out = EMITTERS["count-up"](model);
   assert.match(out.html, /<span id="m1-suffix">°C<\/span>/);
-  assert.match(out.motion, /tl\.set\("#m1-digits", \{textContent:"70\.0"\}, 2\);/);
+  assert.match(out.motion, /tl\.set\("#m1-digits", \{textContent:"\u206070\.0"\}, 2\);/);
 });
 
 test("count-up validates its params", () => {

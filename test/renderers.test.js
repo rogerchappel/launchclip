@@ -86,7 +86,7 @@ test("hyperframes adapter builds render, snapshot, check and preview invocations
   assert.ok(calls.every((call) => call.command === process.execPath && call.args[0] === HYPERFRAMES_CLI && call.options.cwd === project));
   assert.deepEqual(calls[0].args.slice(1), ["render", "--output", out, "--quality", "high", "--workers", "auto", "--fps", "60", project]);
   const snapshot = calls[1].args.slice(1);
-  assert.deepEqual([snapshot[0], snapshot[1], snapshot[2], snapshot[3]], ["snapshot", "--at", "1.25", "--no-end"]);
+  assert.deepEqual([snapshot[0], snapshot[1], snapshot[2], snapshot[3]], ["snapshot", "--at", "1.2501", "--no-end"]);
   assert.deepEqual(snapshot.slice(6), ["--describe", "false", project]);
   assert.equal(await readFile(path.join(project, "still.png"), "utf8"), "png");
   assert.deepEqual(calls[2].args.slice(1), ["lint", "--json", project]);

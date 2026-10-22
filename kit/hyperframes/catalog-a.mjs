@@ -8,6 +8,7 @@
 // (whose tweens never overlap per prop and chain end-to-start), discrete text
 // uses tl.set frames like the editorial textFrames, and nothing uses
 // onUpdate, proxies or call().
+import {gsapText} from '../core/motion.mjs';
 import {CTA_ICONS, animatedNodes, cssFromProps, initialNodeProps, nodeId} from '../core/catalog-a.mjs';
 
 const escape = value => String(value).replace(/[&<>"']/g, char => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char]));
@@ -46,8 +47,8 @@ function timeline(model) {
   }
   for (const entry of model.texts ?? []) {
     const selector = js(`#${nodeId(model, entry.node)}`);
-    lines.push(`tl.set(${selector}, {textContent:${js(entry.initial)}}, ${model.start});`);
-    for (const frame of entry.frames) lines.push(`tl.set(${selector}, {textContent:${js(frame.text)}}, ${frame.time});`);
+    lines.push(`tl.set(${selector}, {textContent:${js(gsapText(entry.initial))}}, ${model.start});`);
+    for (const frame of entry.frames) lines.push(`tl.set(${selector}, {textContent:${js(gsapText(frame.text))}}, ${frame.time});`);
   }
   return lines.join('\n');
 }

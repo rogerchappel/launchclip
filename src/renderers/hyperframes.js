@@ -39,7 +39,7 @@ export function createHyperframesRenderer(defaults = {}) {
       if (!Number.isFinite(at) || at < 0) throw new Error(`Invalid still time: ${seconds}`);
       const frames = await mkdtemp(path.join(os.tmpdir(), "launchclip-hf-still-"));
       try {
-        const args = ["snapshot", "--at", String(at), "--no-end", "--output", frames, "--describe", "false", project];
+        const args = ["snapshot", "--at", snapshotTime(at), "--no-end", "--output", frames, "--describe", "false", project];
         const result = await hf(runner(opts), args, { cwd: project });
         if (!result.ok) throw adapterError("HyperFrames snapshot", result);
         const files = (await readdir(frames)).filter((name) => /^frame-.*\.(?:png|jpe?g|webp)$/i.test(name)).sort();
@@ -84,3 +84,9 @@ export function createHyperframesRenderer(defaults = {}) {
 }
 
 export const hyperframesRenderer = createHyperframesRenderer();
+
+// `hyperframes snapshot --at` floors seconds × fps, so 9.0 can land on frame
+// 269 through float error. A nudge far below one frame keeps the intended frame.
+export function snapshotTime(seconds) {
+  return String(Math.round((Number(seconds) + 1e-4) * 1e6) / 1e6);
+}
