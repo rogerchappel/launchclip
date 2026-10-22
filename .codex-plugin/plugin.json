@@ -13,13 +13,14 @@
     "cli",
     "developer-tools",
     "hyperframes",
+    "remotion",
     "video"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "LaunchClip",
     "shortDescription": "Turn product evidence into launch videos.",
-    "longDescription": "Plan, build, review, and render evidence-grounded launch videos with either subscription agents or the LaunchClip CLI.",
+    "longDescription": "Plan, build, review, and render evidence-grounded launch videos with either subscription agents (HyperFrames or Remotion) or the LaunchClip CLI.",
     "developerName": "Roger Chappel",
     "category": "Developer Tools",
     "capabilities": [
@@ -30,6 +31,7 @@
     "websiteURL": "https://github.com/rogerchappel/launchclip",
     "defaultPrompt": [
       "Create a launch video from this repository.",
+      "Create a Remotion launch video from this repository.",
       "Guide me through a subscription-agent LaunchClip workflow.",
       "Audit this LaunchClip workspace before rendering."
     ],

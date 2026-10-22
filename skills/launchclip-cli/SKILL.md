@@ -19,7 +19,9 @@ Choose one lane:
   the existing production/graphics workflow. See the recorded-video commands
   below. This is separate from the older `align` motion workflow.
 - **Subscription/OAuth agent, no model API spend:** use the separate
-  `launchclip-create-video` skill. Do not call `launchclip produce`.
+  `launchclip-create-video` skill (HyperFrames), or
+  `launchclip-create-video-remotion` when the user wants Remotion. Do not call
+  `launchclip produce`.
 - **Model-directed production:** use `produce` or its resumable production
   stages. Planning and visual critique use OpenAI; frame authoring and bounded
   source-edit repairs may use OpenAI, OpenRouter, or local Ollama. This lane

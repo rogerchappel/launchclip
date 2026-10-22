@@ -9,6 +9,10 @@ export const BUNDLED_SKILLS = [
     description: "Create a cinematic LaunchClip video with the active subscription agent."
   },
   {
+    name: "launchclip-create-video-remotion",
+    description: "Create a cinematic LaunchClip video with the active subscription agent, rendered with Remotion from story.json."
+  },
+  {
     name: "launchclip-cli",
     description: "Operate LaunchClip CLI production and promotion-packet workflows."
   }
@@ -119,7 +123,7 @@ function selectSkills(selection) {
 
 function assertSkillName(name) {
   if (!BUNDLED_SKILLS.some((skill) => skill.name === name)) {
-    throw new Error(`Unknown bundled skill: ${name}. Use launchclip-create-video, launchclip-cli, or all.`);
+    throw new Error(`Unknown bundled skill: ${name}. Use launchclip-create-video, launchclip-create-video-remotion, launchclip-cli, or all.`);
   }
 }
 

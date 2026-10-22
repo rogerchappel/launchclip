@@ -4,6 +4,12 @@
 
 ### Added
 
+- Add the `launchclip-create-video-remotion` skill: the same subscription-agent
+  cinematic workflow with Remotion 4.0.536 and React 19.3 as the renderer,
+  `storyboard.json` as the primary artefact, and a new `standalone-remotion.md`
+  runtime contract. Both create-video skills are now generated from shared
+  sources in `skills-src/` by `scripts/sync-skills.mjs` (`npm run skills:sync`,
+  checked by `npm run skills:check` and a test).
 - Add a YouTube Shorts delivery floor (`resolveDeliveryProfile`): default
   word-highlight captions, a Shorts safe zone, loop endings, and a 25–35 s
   duration target for portrait videos of 60 s or less.

@@ -1,0 +1,80 @@
+#!/usr/bin/env node
+// Deterministic offline mix: narration + music bed ducked under the voice +
+// SFX cues placed on their visible events. Mount the result as the single
+// root <audio> track, then master the render with master-loudness.mjs.
+// Usage:
+//   node build-mix.mjs --cues <cues.json> --out <mix.wav> --duration <s>
+//     [--voice narration.wav] [--music bed.wav] [--sfx-dir assets/audio/sfx]
+//     [--music-volume 0.42] [--sfx-manifest qa/sfx.json]
+// cues.json: [{ "cue": "whoosh", "at": 5.72, "volume": 0.5, "shot": "B1", "intent": "pan" }]
+// A cue may name a file instead: { "file": "assets/audio/hit.wav", "at": 1.2 }.
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+export function normalizeCues(cues, sfxDir) {
+  if (!Array.isArray(cues)) throw new Error('cues must be an array');
+  return cues.map((cue, index) => {
+    const at = Number(cue.at ?? cue.at_seconds);
+    if (!Number.isFinite(at) || at < 0) throw new Error(`cue ${index + 1} needs a non-negative "at"`);
+    const file = cue.file ?? (cue.cue ? path.join(sfxDir, `${cue.cue}.wav`) : null);
+    if (!file) throw new Error(`cue ${index + 1} needs "cue" or "file"`);
+    return { cue: cue.cue ?? path.basename(file, path.extname(file)), at, volume: Number(cue.volume ?? 0.35), shot: cue.shot ?? null, intent: cue.intent ?? '', file: path.resolve(file) };
+  });
+}
+
+export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.42 }) {
+  const parts = [];
+  const mixInputs = [];
+  let index = 0;
+  if (hasVoice) {
+    parts.push(hasMusic ? `[${index}]asplit=2[vo][key]` : `[${index}]anull[vo]`);
+    mixInputs.push('[vo]');
+    index += 1;
+  }
+  if (hasMusic) {
+    parts.push(`[${index}]volume=${musicVolume}[bedraw]`);
+    // Duck the bed under speech; with no voice the bed plays as is.
+    parts.push(hasVoice ? '[bedraw][key]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=320:makeup=1[bed]' : '[bedraw]anull[bed]');
+    mixInputs.push('[bed]');
+    index += 1;
+  }
+  cues.forEach((cue, i) => {
+    parts.push(`[${index + i}]adelay=${Math.round(cue.at * 1000)}:all=1,volume=${cue.volume}[s${i}]`);
+    mixInputs.push(`[s${i}]`);
+  });
+  if (!mixInputs.length) throw new Error('nothing to mix: pass --voice, --music or cues');
+  const fadeStart = Math.max(0, duration - 0.25);
+  parts.push(`${mixInputs.join('')}amix=inputs=${mixInputs.length}:normalize=0,apad=whole_dur=${duration},atrim=0:${duration},afade=t=out:st=${fadeStart}:d=0.25,alimiter=limit=0.89:level=0[out]`);
+  return parts.join(';');
+}
+
+export function buildMix({ voice, music, cues = [], duration, out, musicVolume = 0.42 }) {
+  const inputs = [];
+  if (voice) inputs.push('-i', voice);
+  if (music) inputs.push('-i', music);
+  for (const cue of cues) inputs.push('-i', cue.file);
+  const filter = mixGraph({ cues, duration, hasVoice: Boolean(voice), hasMusic: Boolean(music), musicVolume });
+  mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...inputs, '-filter_complex', filter, '-map', '[out]', '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s16le', out]);
+}
+
+async function main(argv) {
+  const flag = (name, fallback) => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : fallback; };
+  const out = flag('--out');
+  const duration = Number(flag('--duration'));
+  if (!out || !Number.isFinite(duration) || duration <= 0) throw new Error('usage: build-mix.mjs --cues <cues.json> --out <mix.wav> --duration <s> [--voice v.wav] [--music bed.wav] [--sfx-dir dir] [--music-volume 0.42] [--sfx-manifest qa/sfx.json]');
+  const cuesPath = flag('--cues');
+  const cues = cuesPath ? normalizeCues(JSON.parse(readFileSync(cuesPath, 'utf8')), flag('--sfx-dir', 'assets/audio/sfx')) : [];
+  buildMix({ voice: flag('--voice'), music: flag('--music'), cues, duration, out, musicVolume: Number(flag('--music-volume', 0.42)) });
+  const manifest = flag('--sfx-manifest');
+  if (manifest) {
+    mkdirSync(path.dirname(path.resolve(manifest)), { recursive: true });
+    // Same shape cinematic-check reads through AUDIO-MANIFEST.json → sfx_manifest.
+    writeFileSync(manifest, `${JSON.stringify({ cues: cues.map((cue, i) => ({ id: `sfx-${String(i + 1).padStart(2, '0')}-${cue.cue}`, cue: cue.cue, shot_id: cue.shot, at_seconds: cue.at, volume: cue.volume, intent: cue.intent, file: cue.file })) }, null, 2)}\n`);
+  }
+  console.log(JSON.stringify({ out, cues: cues.length, voice: Boolean(flag('--voice')), music: Boolean(flag('--music')) }));
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) main(process.argv.slice(2)).catch((error) => { console.error(error.message); process.exit(1); });

@@ -228,8 +228,8 @@ Usage:
   launchclip --version
   launchclip doctor
   launchclip skills list
-  launchclip skills path [launchclip-create-video|launchclip-cli]
-  launchclip skills install --agent codex|claude [--skill launchclip-create-video|launchclip-cli|all] [--force]
+  launchclip skills path [launchclip-create-video|launchclip-create-video-remotion|launchclip-cli]
+  launchclip skills install --agent codex|claude [--skill launchclip-create-video|launchclip-create-video-remotion|launchclip-cli|all] [--force]
   launchclip style create <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]
   launchclip style save <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]
   launchclip style list [--root .launchclip/styles]
