@@ -13,6 +13,11 @@ async function library(dir, families) {
     manifest.families[family] = { source, roll: 0, variants: Array.from({ length: count }, (_, i) => ({ file: `${family}/${family}-${i + 1}.wav`, source, hash: `${family}${i}`, measurements: { onset_ms: 1, duration_ms: 100, peak_db: -3, peak_at_ms: peakAt } })), rejected: [] };
   }
   await writeLibrary(dir, manifest);
+  // Variants resolve only when their files exist.
+  for (const entry of Object.values(manifest.families)) for (const variant of entry.variants) {
+    await mkdir(path.dirname(path.join(dir, variant.file)), { recursive: true });
+    await writeFile(path.join(dir, variant.file), "wav");
+  }
   return manifest;
 }
 

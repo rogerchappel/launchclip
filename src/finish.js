@@ -36,7 +36,7 @@ import { applyProjectStyle } from "./story_style.js";
 import { hyperframesInvocation } from "./toolchain.js";
 import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
 import { normalizeLoudness, parseLoudnormJson } from "./voice/supplied.js";
-import { applyDensity, densityTyping, eventKey, familySource, kitLibrary, resolveCueFile, resolveLibraries, SFX_DENSITIES } from "./sfx/library.js";
+import { applyDensity, densityTyping, eventKey, familySource, kitLibrary, libraryFallbacks, resolveCueFile, resolveLibraries, SFX_DENSITIES, userLibraryDir } from "./sfx/library.js";
 import { collectTyping, renderTypingTrack, typingSchedule } from "./sfx/typing.js";
 import { getMusicProvider, parseMusicSpec, resolveMusicChoice, MUSIC_FLAG_VALUES } from "./music/index.js";
 import { lockDecision, musicBrief, readMusicLock, writeMusicLock } from "./music/lock.js";
@@ -690,6 +690,11 @@ const STAGES = [
       bound.cues = applyDensity(bound.cues, density, storyId);
       const typing = sfxOn ? typingSchedule(collectTyping(ctx.resolved, { models }), { seed: storyId, ...densityTyping(density) }) : [];
       const libraries = sfxOn ? await resolveLibraries({ project: ctx.project, library: ctx.options.sfxLibrary ?? (audio.sfx_library ? path.resolve(ctx.project, audio.sfx_library) : undefined), home: ctx.options.sfxHome }) : [];
+      // One line when a cue family is missing from every SFX library and falls
+      // back to the procedural kit (it would sound unlike the library's set).
+      const used = [...bound.cues.map((cue) => cue.cue), ...(typing.length ? ["keystroke", "keystroke-space", "keystroke-enter", "click"] : [])];
+      const fallbacks = libraryFallbacks(used, libraries);
+      if (fallbacks.length) ctx.warnings.push(`sfx: ${fallbacks.join(", ")} ${fallbacks.length === 1 ? "is" : "are"} not in the SFX library (${libraries.map((library) => library.dir === userLibraryDir({ home: ctx.options.sfxHome }) ? "~/.launchclip/sfx" : library.dir).join(", ")}), so ${fallbacks.length === 1 ? "it uses" : "they use"} the procedural kit; fill only the missing families with: launchclip sfx seed --missing`);
       const voice = audio.voice && existsSync(path.join(ctx.project, audio.voice)) ? audio.voice : null;
       if (!bound.cues.length && !typing.length && music.kind === "none") return { skip: voice ? "no SFX or music: the voice is mounted directly" : "no voice, SFX or music to mix" };
       if (music.kind === "file" && !existsSync(path.join(ctx.project, music.file))) throw new Error(`audio.music file not found: ${music.file}`);

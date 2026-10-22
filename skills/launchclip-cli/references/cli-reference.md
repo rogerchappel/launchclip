@@ -1322,10 +1322,10 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip export <project> --format fcpxml|premiere|edl|otio|all [--overlays prores4444|png|none] [--out exports/] [--fps 24|25|29.97|30|60] [--name name] [--absolute] [--force] [--json]
   ```
 
-- `sfx seed`: Seed the user SFX library (ElevenLabs, or the procedural kit with --provider synth).
+- `sfx seed`: Seed the user SFX library (ElevenLabs, or the procedural kit with --provider synth). --missing fills only the families the library lacks (sfx list names them).
 
   ```text
-  launchclip sfx seed [--provider elevenlabs|synth] [--variants 3] [--only whoosh,impact] [--reroll typing] [--dir .launchclip/sfx] [--force]
+  launchclip sfx seed [--provider elevenlabs|synth] [--variants 3] [--only whoosh,impact | --missing] [--reroll typing] [--dir .launchclip/sfx] [--force]
   ```
 
 - `sfx reroll`: Regenerate one SFX family.
@@ -1334,7 +1334,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip sfx reroll <family> [--dir .launchclip/sfx]
   ```
 
-- `sfx list`: List the SFX library's families and variants.
+- `sfx list`: List the SFX libraries, what each family resolves to, and the families missing compared with the prompt set.
 
   ```text
   launchclip sfx list [--dir .launchclip/sfx]

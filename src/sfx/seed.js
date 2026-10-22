@@ -20,7 +20,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { decodeAudio, processFile, writeWavFile, SAMPLE_RATE } from "./process.js";
-import { PROJECT_LIBRARY_DIR, emptyManifest, expandFamilies, familySource, hashOf, readLibrary, resolveLibraries, summarizeLibrary, userLibraryDir, writeLibrary } from "./library.js";
+import { PROJECT_LIBRARY_DIR, emptyManifest, expandFamilies, familySource, hashOf, libraryVariants, missingFamilies, readLibrary, resolveLibraries, summarizeLibrary, userLibraryDir, writeLibrary } from "./library.js";
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
@@ -108,11 +108,15 @@ export async function seedLibrary(options = {}) {
   const reroll = expandFamilies(options.reroll) ?? [];
   const known = Object.keys(prompts.families);
   for (const family of [...(only ?? []), ...reroll]) if (!known.includes(family)) throw new Error(`Unknown SFX family "${family}". Families: ${known.join(", ")} (aliases: typing, ui)`);
-  const candidates = only ?? (reroll.length ? reroll : known);
-  const targets = candidates.filter((family) => options.force || reroll.includes(family) || !manifest.families[family]?.variants?.length);
+  // --missing: only the families this library has no usable file for
+  // (absent, empty, or every variant file deleted), never the rest.
+  if (options.missing && (only || reroll.length || options.force)) throw new Error("--missing fills only the missing families; it cannot be combined with --only, --reroll or --force");
+  const loaded = { dir, manifest };
+  const candidates = options.missing ? missingFamilies(loaded, known) : only ?? (reroll.length ? reroll : known);
+  const targets = candidates.filter((family) => options.force || reroll.includes(family) || !libraryVariants(loaded, family).length);
   const variantsOverride = options.variants != null ? Number(options.variants) : null;
   if (variantsOverride != null && !(Number.isInteger(variantsOverride) && variantsOverride >= 1 && variantsOverride <= 8)) throw new Error("--variants must be an integer from 1 to 8");
-  const result = { dir, provider: requested, generations: 0, cached: 0, seeded: [], locked: candidates.filter((family) => !targets.includes(family)), kept: {}, rejected: {}, warnings: [] };
+  const result = { dir, provider: requested, generations: 0, cached: 0, seeded: [], locked: (options.missing ? known : candidates).filter((family) => !targets.includes(family)), kept: {}, rejected: {}, warnings: [], ...(options.missing ? { missing: targets } : {}) };
   let procedural = null;
   const proceduralKit = async () => {
     if (procedural) return procedural;
@@ -234,11 +238,19 @@ export async function runSynthKit(outDir, families) {
 export async function listLibraries({ dir, project = process.cwd(), home, env = process.env } = {}) {
   const libraries = await resolveLibraries({ project, library: dir, home, env });
   const prompts = await loadPrompts();
-  const families = Object.fromEntries(Object.keys(prompts.families).map((family) => {
+  const known = Object.keys(prompts.families);
+  const families = Object.fromEntries(known.map((family) => {
     const source = familySource(family, libraries, { dir: "(procedural kit)", families: {} });
     return [family, { resolves_to: source.scope, source: source.source, variants: source.scope === "kit" ? null : source.files.length }];
   }));
-  return { stage: "sfx", action: "list", status: "ready", user_library: userLibraryDir({ home, env }), libraries: libraries.map(summarizeLibrary), families };
+  // Families of the prompt set that fall back to the procedural kit.
+  const missing = known.filter((family) => families[family].resolves_to === "kit");
+  const target = dir ? path.resolve(dir) : userLibraryDir({ home, env });
+  return {
+    stage: "sfx", action: "list", status: "ready", user_library: userLibraryDir({ home, env }),
+    libraries: libraries.map((library) => summarizeLibrary(library, known)), families, missing,
+    ...(missing.length ? { next_step: `${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} not in any SFX library and fall back to the procedural kit; fill only those with: launchclip sfx seed --missing --dir ${target}` } : {})
+  };
 }
 
 /**
@@ -279,7 +291,7 @@ export async function auditionFamily(family, { dir, project = process.cwd(), out
 export async function runSfxCommand(action, name, flags = {}, io = {}) {
   const log = io.log ?? ((line) => process.stderr.write(`${line}\n`));
   if (action === "seed") {
-    const result = await seedLibrary({ dir: flags.dir, provider: flags.provider, variants: flags.variants, only: flags.only, reroll: flags.reroll, force: Boolean(flags.force), env: io.env, fetch: io.fetch, log });
+    const result = await seedLibrary({ dir: flags.dir, provider: flags.provider, variants: flags.variants, only: flags.only, reroll: flags.reroll, force: Boolean(flags.force), missing: Boolean(flags.missing), env: io.env, fetch: io.fetch, log });
     return { stage: "sfx", action: "seed", status: "ready", ...result };
   }
   if (action === "reroll") {

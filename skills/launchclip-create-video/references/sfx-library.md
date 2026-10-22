@@ -17,6 +17,12 @@ project sounds the same in every video until you decide to change it.
    `launchclip sfx reroll whoosh`) replaces just that family.
 5. Done. `launchclip finish` uses the library from now on.
 
+Missing families: `launchclip sfx list` names the families of the prompt set
+that no library has (`missing`); they fall back to the procedural kit, and
+`finish` says so in one `sfx:` warning line. `launchclip sfx seed --missing`
+fills only those families (paid only with a key and an uncached request; add
+`--provider synth` to stay free) and leaves every other family locked.
+
 ## Families
 
 | Family | Use | Kept length |
