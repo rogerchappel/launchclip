@@ -30,7 +30,15 @@ export function classifyFrames(samples, sampleRate, { frame = FRAME } = {}) {
     for (let offset = index * frame, end = offset + frame; offset < end; offset++) sum += samples[offset] * samples[offset];
     db[index] = 10 * Math.log10(sum / frame + EPS);
   }
-  const sorted = Array.from(db).sort((a, b) => a - b);
+  // Classify on a ~107 ms moving average of frame power, so the frame-to-frame
+  // flutter of broadband noise does not break up a pause.
+  const smooth = new Float64Array(count);
+  for (let index = 0; index < count; index++) {
+    let sum = 0; let n = 0;
+    for (let at = Math.max(0, index - 2); at <= Math.min(count - 1, index + 2); at++) { sum += 10 ** (db[at] / 10); n++; }
+    smooth[index] = 10 * Math.log10(sum / n);
+  }
+  const sorted = Array.from(smooth).sort((a, b) => a - b);
   const floor = sorted[Math.floor(sorted.length * 0.1)];
   const loud = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))];
   const range = Math.max(0, loud - floor);
@@ -41,13 +49,13 @@ export function classifyFrames(samples, sampleRate, { frame = FRAME } = {}) {
   const minRun = Math.ceil(MIN_SILENCE_SECONDS * sampleRate / frame);
   let runStart = -1;
   for (let index = 0; index <= count; index++) {
-    const quiet = index < count && db[index] < low;
+    const quiet = index < count && smooth[index] < low;
     if (quiet && runStart < 0) runStart = index;
     if (!quiet && runStart >= 0) {
       if (index - runStart >= minRun) for (let at = runStart; at < index; at++) silence[at] = 1;
       runStart = -1;
     }
-    if (index < count && db[index] >= high) speech[index] = 1;
+    if (index < count && smooth[index] >= high && db[index] >= high - 3) speech[index] = 1;
   }
   const silences = [];
   for (let index = 0; index < count; index++) {
@@ -65,12 +73,13 @@ export function measureVoice(samples, sampleRate, { mask } = {}) {
   const { frame } = frames;
   const count = Math.min(frames.count, Math.floor(samples.length / frame));
   let silencePower = 0; let silenceFrames = 0; let speechPower = 0; let speechFrames = 0;
+  const speechLevels = [];
   for (let index = 0; index < count; index++) {
-    let sum = 0;
-    for (let offset = index * frame, end = offset + frame; offset < end; offset++) sum += samples[offset] * samples[offset];
+    let sum = 0; let peak = 0;
+    for (let offset = index * frame, end = offset + frame; offset < end; offset++) { sum += samples[offset] * samples[offset]; peak = Math.max(peak, Math.abs(samples[offset])); }
     const power = sum / frame;
     if (frames.silence[index]) { silencePower += power; silenceFrames++; }
-    if (frames.speech[index]) { speechPower += power; speechFrames++; }
+    if (frames.speech[index]) { speechPower += power; speechFrames++; speechLevels.push(20 * Math.log10(peak + EPS)); }
   }
   const noise = silenceFrames ? silencePower / silenceFrames : null;
   const speech = speechFrames ? speechPower / speechFrames : null;
@@ -92,6 +101,8 @@ export function measureVoice(samples, sampleRate, { mask } = {}) {
     speech_seconds: round(speechFrames * frame / sampleRate, 3),
     noise_floor_dbfs: noise === null ? null : dbRound(noise),
     speech_level_dbfs: speech === null ? null : dbRound(speech),
+    // Loud syllables: the 90th percentile of per-frame sample peaks in speech.
+    speech_peak_dbfs: speechLevels.length ? round(speechLevels.sort((a, b) => a - b)[Math.floor(speechLevels.length * 0.9)], 1) : null,
     snr_db: noise === null || speech === null ? null : round(10 * Math.log10(Math.max(speech - noise, EPS) / Math.max(noise, EPS)), 1),
     speech_band_db: cleanSpeechBand === null ? null : dbRound(cleanSpeechBand),
     sibilance_ratio_db: speechSpectrum ? round(10 * Math.log10((band(speechSpectrum, 5000, 10000) + EPS) / (band(speechSpectrum, 300, 3400) + EPS)), 1) : null,

@@ -62,7 +62,8 @@ export const ENHANCE_PRESETS = Object.freeze({
     presence: { hz: 4000, q: 0.9, gain_db: 1.5 },
     deesser: { intensity: 0.25, harsh_intensity: 0.45, max_ducking: 0.5 },
     expander: { range_db: -6, ratio: 2 },
-    compressor: { ratio: 3, threshold_offset_db: -4, attack_ms: 15, release_ms: 180, knee: 3 },
+    max_limiting_db: 6,
+    compressor: { ratio: 3, threshold_below_peak_db: 6, attack_ms: 15, release_ms: 180, knee: 3 },
     leveler: null
   }),
   podcast: Object.freeze({
@@ -74,7 +75,8 @@ export const ENHANCE_PRESETS = Object.freeze({
     presence: { hz: 4000, q: 0.9, gain_db: 2.5 },
     deesser: { intensity: 0.35, harsh_intensity: 0.6, max_ducking: 0.6 },
     expander: { range_db: -10, ratio: 2.5 },
-    compressor: { ratio: 4, threshold_offset_db: -10, attack_ms: 8, release_ms: 120, knee: 4 },
+    max_limiting_db: 9,
+    compressor: { ratio: 4, threshold_below_peak_db: 10, attack_ms: 8, release_ms: 120, knee: 4 },
     leveler: { frame_ms: 250, gauss: 15, peak: 0.9, max_gain: 6 }
   })
 });
@@ -127,7 +129,7 @@ export function validateEnhanceOptions(options = {}) {
  * options: {preset: light|podcast|off, voiceIsolation: none|elevenlabs,
  *   targetLufs (-16), truePeakDbtp (-1.5), report (path | false; default
  *   audio-enhance.json beside output), channels, env, fetch, cacheDir,
- *   notice(line), signal}
+ *   notice(line), signal, presetOverrides}
  * adapters: {run, probe, isolate}
  * Returns the report (also written to `report`).
  */
@@ -202,7 +204,9 @@ export async function enhanceRecordingAudio(input, output, options = {}, adapter
       report.chain.push(leveled.entry);
       return await finish(file("final.wav"));
     }
-    const settings = ENHANCE_PRESETS[preset];
+    // presetOverrides: advanced tuning (and tests) on top of a named preset.
+    const settings = { ...ENHANCE_PRESETS[preset], ...(options.presetOverrides ?? {}) };
+    report.preset_overrides = options.presetOverrides ?? null;
     const working0 = report.metrics.after_isolation ?? before;
     const hum = working0.hum;
     report.detections.hum = hum;
@@ -237,13 +241,14 @@ export async function enhanceRecordingAudio(input, output, options = {}, adapter
 
     // 2. Voice stage.
     const harsh = clean.measured.sibilance_ratio_db !== null && clean.measured.sibilance_ratio_db > HARSH_SIBILANCE_DB;
-    const voice = voiceFilters(settings, { speechLevel: clean.measured.speech_level_dbfs, noiseFloor: clean.measured.noise_floor_dbfs, harsh });
+    const voice = voiceFilters(settings, { speechLevel: clean.measured.speech_level_dbfs, speechPeak: clean.measured.speech_peak_dbfs, noiseFloor: clean.measured.noise_floor_dbfs, harsh });
     await ff(["-i", clean.file, "-af", voice.map((filter) => filter.text).join(","), "-c:a", "pcm_f32le", file("voice.wav")]);
     report.detections.harsh_sibilance = harsh;
     report.chain.push({ stage: "voice", filters: voice.map(describeFilter) });
 
     // 3. Level stage.
-    const leveled = await levelStage(file("voice.wav"), file("final.wav"), { targetLufs, truePeak, run, ff, signal: options.signal });
+    const leveled = await levelStage(file("voice.wav"), file("final.wav"), { targetLufs, truePeak, maxLimitingDb: settings.max_limiting_db, run, ff, signal: options.signal });
+    if (leveled.entry.note) report.notes.push(leveled.entry.note);
     report.chain.push(leveled.entry);
     return await finish(file("final.wav"));
 
@@ -253,7 +258,7 @@ export async function enhanceRecordingAudio(input, output, options = {}, adapter
       const finalLength = (await readWav(final)).samples.length;
       const finalAnalysis0 = await analysisSamples(final, file("analysis-final0.wav"), ff);
       const lag = estimateLag(sourceAnalysis, finalAnalysis0, ANALYSIS_SAMPLE_RATE, { maxLagSeconds: 0.05 });
-      if (finalLength !== sourceLength || Math.abs(lag) > 1) {
+      if (finalLength !== sourceLength || Math.abs(lag) >= ANALYSIS_SAMPLE_RATE / 2000) {
         await alignAudio(final, file("final-aligned.wav"), Math.round(lag * PROCESS_RATE / ANALYSIS_SAMPLE_RATE), sourceLength, ff);
         final = file("final-aligned.wav");
         report.notes.push(`realigned the enhanced audio by ${round(lag / ANALYSIS_SAMPLE_RATE * 1000, 2)} ms and ${sourceLength - finalLength} samples to keep the source timing`);
@@ -299,9 +304,12 @@ export function cleanFilters(settings, { notches = [], nr, noiseFloor, profile }
 }
 
 /** FFmpeg filters for the voice stage: presence, de-ess, compression, leveller, pause expander. */
-export function voiceFilters(settings, { speechLevel, noiseFloor, harsh }) {
+export function voiceFilters(settings, { speechLevel, speechPeak, noiseFloor, harsh }) {
   const { presence, deesser, expander, compressor, leveler } = settings;
-  const threshold = clamp((speechLevel ?? -20) + compressor.threshold_offset_db, -50, -6);
+  // acompressor reacts close to sample peaks, so the threshold sits a fixed
+  // distance under the loud syllables' peaks: 3:1 then takes about 4 dB off
+  // the loudest speech whatever the recording level.
+  const threshold = clamp((speechPeak ?? (speechLevel ?? -20) + 10) - compressor.threshold_below_peak_db, -50, -3);
   const filters = [
     { name: "equalizer", text: `equalizer=f=${presence.hz}:t=q:w=${presence.q}:g=${presence.gain_db}`, purpose: "presence lift" },
     { name: "deesser", text: `deesser=i=${harsh ? deesser.harsh_intensity : deesser.intensity}:m=${deesser.max_ducking}:f=0.5:s=o`, purpose: harsh ? "de-ess (harsh sibilance measured)" : "de-ess" },
@@ -323,24 +331,33 @@ export function voiceFilters(settings, { speechLevel, noiseFloor, harsh }) {
   return filters;
 }
 
-async function levelStage(input, output, { targetLufs, truePeak, run, ff, signal }) {
+async function levelStage(input, output, { targetLufs, truePeak, maxLimitingDb = 6, run, ff, signal }) {
   const measured = await measureLoudness(input, run, signal);
   if (!Number.isFinite(measured.integrated_lufs) || measured.integrated_lufs < -69) throw new Error("Audio enhancement cannot level silent audio");
   // Limit before the gain so the post-gain peak lands under the target; the
   // limiter lowers the loudness a little, so correct the gain and rerun from
   // the same input (at most three passes).
-  let correction = 0;
+  // The limiter may take at most maxLimitingDb off the peaks: a take whose
+  // crest factor needs more to reach the target is delivered quieter rather
+  // than squashed (and the shortfall is recorded).
+  const floorCeiling = Number.isFinite(measured.true_peak_dbtp) ? measured.true_peak_dbtp - maxLimitingDb : -Infinity;
   let result = null;
-  let gain = 0; let ceiling = 0; let limit = 1;
-  for (let pass = 0; pass < 3; pass++) {
-    gain = targetLufs - measured.integrated_lufs + correction;
+  let gain = targetLufs - measured.integrated_lufs;
+  let ceiling = 0; let limit = 1;
+  let previous = null;
+  let capped = false;
+  for (let pass = 0; pass < 5; pass++) {
     ceiling = Math.min(-0.1, truePeak - gain - 0.5);
+    if (ceiling < floorCeiling) { ceiling = floorCeiling; gain = truePeak - 0.5 - ceiling; capped = true; }
     limit = clamp(linear(ceiling), 0.0625, 1);
     await ff(["-i", input, "-af", `alimiter=limit=${limit.toFixed(6)}:level=0:attack=5:release=50:latency=1,volume=${gain.toFixed(2)}dB`, "-c:a", "pcm_f32le", output]);
     result = await measureLoudness(output, run, signal);
     const miss = targetLufs - result.integrated_lufs;
-    if (!Number.isFinite(miss) || Math.abs(miss) <= 0.3) break;
-    correction += miss;
+    if (!Number.isFinite(miss) || Math.abs(miss) <= 0.3 || (capped && miss > 0)) break;
+    // Secant step: the limiter takes back part of every extra dB of gain.
+    const efficiency = previous && Math.abs(gain - previous.gain) > 0.01 ? (result.integrated_lufs - previous.lufs) / (gain - previous.gain) : 1;
+    previous = { gain, lufs: result.integrated_lufs };
+    gain += miss / clamp(efficiency, 0.25, 1);
   }
   let trim = 0;
   if (result.true_peak_dbtp > truePeak + 0.1) {
@@ -354,7 +371,7 @@ async function levelStage(input, output, { targetLufs, truePeak, run, ff, signal
   return { entry: { stage: "level", filters: [
     { name: "alimiter", filter: `alimiter=limit=${limit.toFixed(6)}:level=0:attack=5:release=50:latency=1`, purpose: `look-ahead limiter at ${ceiling.toFixed(1)} dBFS before gain (latency-compensated)` },
     { name: "volume", filter: `volume=${gain.toFixed(2)}dB`, purpose: `linear gain to ${targetLufs} LUFS` }
-  ], input_lufs: measured.integrated_lufs, gain_db: round(gain, 2), true_peak_trim_db: round(trim, 2), output_lufs: result.integrated_lufs, output_true_peak_dbtp: result.true_peak_dbtp } };
+  ], input_lufs: measured.integrated_lufs, gain_db: round(gain, 2), max_limiting_db: maxLimitingDb, limiting_capped: capped, true_peak_trim_db: round(trim, 2), output_lufs: result.integrated_lufs, output_true_peak_dbtp: result.true_peak_dbtp, ...(capped && result.integrated_lufs < targetLufs - 0.5 ? { note: `the loudness target needs more than ${maxLimitingDb} dB of limiting; delivered at ${result.integrated_lufs} LUFS instead of squashing the peaks` } : {}) } };
 }
 
 /** Integrated loudness and true peak through FFmpeg's EBU R128 meter. */
