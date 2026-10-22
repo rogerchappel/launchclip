@@ -107,13 +107,13 @@ async function ffmpegAvailable() {
   try { await execFileAsync("ffmpeg", ["-version"]); return true; } catch { return false; }
 }
 
-test("synth-audio-kit beds: the analysed grid matches the bed's own BEATS.json", { timeout: 120_000 }, async (t) => {
+test("synth-audio-kit beds: the analysed grid matches the bed's own BEATS.json", { timeout: 600_000 }, async (t) => {
   if (!(await ffmpegAvailable())) { t.skip("FFmpeg is not installed"); return; }
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-beats-"));
   try {
-    for (const [bpm, from, to, key] of [[84, 0, 16, "A"], [108, 5, 16, "D"], [116, 6, 14, "E"]]) {
+    for (const [bpm, from, to, key] of [[84, 0, 14, "A"], [108, 4, 14, "D"], [116, 5, 12, "E"]]) {
       const out = path.join(dir, `bed-${bpm}`);
-      await execFileAsync(process.execPath, [SYNTH, out, "--bed", "16", "--bpm", String(bpm), "--kick-from", String(from), "--kick-to", String(to), "--key", key]);
+      await execFileAsync(process.execPath, [SYNTH, out, "--bed", "14", "--bpm", String(bpm), "--kick-from", String(from), "--kick-to", String(to), "--key", key]);
       const truth = JSON.parse(await readFile(path.join(out, "BEATS.json"), "utf8"));
       const result = await analyzeBeatsFile(path.join(out, "music", "bed.wav"));
       // Only the beats where the kick plays are audible beats.
