@@ -72,16 +72,19 @@ export function measureVoice(samples, sampleRate, { mask } = {}) {
   const frames = mask ?? classifyFrames(samples, sampleRate);
   const { frame } = frames;
   const count = Math.min(frames.count, Math.floor(samples.length / frame));
-  let silencePower = 0; let silenceFrames = 0; let speechPower = 0; let speechFrames = 0;
+  const silencePowers = []; let speechPower = 0; let speechFrames = 0;
   const speechLevels = [];
   for (let index = 0; index < count; index++) {
     let sum = 0; let peak = 0;
     for (let offset = index * frame, end = offset + frame; offset < end; offset++) { sum += samples[offset] * samples[offset]; peak = Math.max(peak, Math.abs(samples[offset])); }
     const power = sum / frame;
-    if (frames.silence[index]) { silencePower += power; silenceFrames++; }
+    if (frames.silence[index]) silencePowers.push(power);
     if (frames.speech[index]) { speechPower += power; speechFrames++; speechLevels.push(20 * Math.log10(peak + EPS)); }
   }
-  const noise = silenceFrames ? silencePower / silenceFrames : null;
+  // The median, so a breath or word tail inside a short pause cannot stand in
+  // for the noise floor.
+  const silenceFrames = silencePowers.length;
+  const noise = silenceFrames ? silencePowers.sort((a, b) => a - b)[Math.floor(silenceFrames / 2)] : null;
   const speech = speechFrames ? speechPower / speechFrames : null;
   const speechSpectrum = averageSpectrum(samples, frames, "speech");
   const noiseSpectrum = averageSpectrum(samples, frames, "silence");
@@ -165,6 +168,8 @@ export function detectHum(samples, sampleRate) {
   return {
     detected,
     fundamental_hz: detected ? best.fundamental : null,
+    // Both mains fundamentals, so before/after comparisons always have a value.
+    fundamentals_db: Object.fromEntries(candidates.map((entry) => [entry.fundamental, entry.harmonics[0].prominence_db]).sort((a, b) => a[0] - b[0])),
     harmonics: best.harmonics.map((entry) => ({ ...entry, notch: detected && entry.prominence_db >= HUM_NOTCH_DB }))
   };
 }

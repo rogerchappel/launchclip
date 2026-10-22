@@ -66,7 +66,7 @@ test("filters: preset choices, profile window and the expander guard", () => {
   assert.deepEqual(light, ["equalizer", "deesser", "acompressor", "agate"]);
   assert.ok(voiceFilters(ENHANCE_PRESETS.podcast, { speechLevel: -18, noiseFloor: -50, harsh: true }).some((filter) => filter.name === "dynaudnorm"));
   // Speech too close to the floor: no expander, so quiet words are never chopped.
-  assert.ok(!voiceFilters(ENHANCE_PRESETS.light, { speechLevel: -30, noiseFloor: -42, harsh: false }).some((filter) => filter.name === "agate"));
+  assert.ok(!voiceFilters(ENHANCE_PRESETS.light, { speechLevel: -30, noiseFloor: -44, harsh: false }).some((filter) => filter.name === "agate"));
   assert.equal(noiseProfileWindow([{ start_seconds: 1, end_seconds: 1.2 }], 480000), null);
   assert.deepEqual(noiseProfileWindow([{ start_seconds: 1, end_seconds: 1.2 }, { start_seconds: 3, end_seconds: 6 }], 480000), { start: 146400, end: 242400 });
 });
@@ -85,7 +85,7 @@ test("light preset: lowers the noise floor, keeps speech-band energy, notches hu
   assert.equal(before.hum.detected, true);
   assert.deepEqual(report.chain[0].hum_notches_hz.slice(0, 1), [60]);
   const humBefore = before.hum.harmonics.find((entry) => entry.hz === 60).prominence_db;
-  const humAfter = after.hum.harmonics.find((entry) => entry.hz === 60)?.prominence_db ?? -Infinity;
+  const humAfter = after.hum.fundamentals_db[60];
   assert.ok(humBefore - humAfter >= 6, `60 Hz hum drops at least 6 dB against its neighbourhood (${humBefore} -> ${humAfter})`);
   // -16 LUFS unless reaching it would need more than the preset's 6 dB of
   // limiting (this synthetic voice is peak-dense); then it is delivered
@@ -131,6 +131,20 @@ test("over-processing guard backs denoise off and records why", ffmpegOnly, asyn
   const accepted = report.guard.checks.find((check) => check.passed);
   assert.ok(accepted.denoise_nr_db < 60);
   assert.equal(report.chain.find((stage) => stage.stage === "clean").denoise_nr_db, accepted.denoise_nr_db);
+});
+
+test("a noise-only window from the original take can supply the denoise profile", ffmpegOnly, async () => {
+  const { directory, file } = await fixture("edited", addNoise(syntheticVoice(), { snrDb: 15, humDb: null }));
+  const reference = path.join(directory, "original.wav");
+  await writeWav(reference, addNoise(new Float32Array(48000 * 3).fill(0).map((_, index) => index > 48000 * 2 ? 0.05 * Math.sin(index / 7) : 0), { snrDb: 15, humDb: null, seed: 7 }), 48000);
+  const report = await enhanceRecordingAudio(file, path.join(directory, "profiled.wav"), { noiseProfile: { file: reference, start_seconds: 0.2, end_seconds: 1.8 }, report: false });
+  assert.equal(report.status, "enhanced");
+  assert.equal(report.detections.noise_profile.source, "reference");
+  assert.equal(report.detections.noise_profile.file, reference);
+  assert.ok(Number.isFinite(report.detections.noise_profile.noise_floor_dbfs));
+  assert.equal(report.chain.find((stage) => stage.stage === "clean").noise_profile, true);
+  assert.equal((await readWav(path.join(directory, "profiled.wav"))).samples.length, 8 * 48000);
+  await assert.rejects(() => enhanceRecordingAudio(file, path.join(directory, "bad.wav"), { noiseProfile: { file: reference, start_seconds: 1, end_seconds: 1.1 }, report: false }), /at least 0.25 s/);
 });
 
 test("loudness reaches a delivery target; off preset and unmeasurable audio", ffmpegOnly, async () => {

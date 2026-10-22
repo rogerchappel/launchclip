@@ -7,16 +7,20 @@
 //      paid, cached by input hash, never called without the flag);
 //   1. clean:  high-pass (~80 Hz) for rumble; 50/60 Hz notches on the hum
 //              harmonics that were measured; broadband denoise with afftdn
-//              using a noise profile sampled from the longest detected
-//              silence (a tracked noise floor when there is no usable
-//              silence);
+//              using a noise profile sampled from a noise-only window (a
+//              pause the edit removed from the original take when the caller
+//              passes one, else the longest detected silence; a tracked
+//              noise floor when there is no usable silence);
 //   2. voice:  a small presence lift (~4 kHz), de-ess (deesser), gentle
-//              compression (acompressor ~3:1, threshold set from the
-//              measured speech level) and, for `podcast`, a dynamic leveller
-//              (dynaudnorm) for speakers recorded at different levels;
-//   3. level:  a latency-compensated look-ahead limiter and linear gain to
-//              -16 LUFS integrated (voice-only intermediates) or a delivery
-//              target, true peak -1.5 dBTP.
+//              compression (acompressor ~3:1, threshold 6 dB under the
+//              loud syllables' peaks), for `podcast` a dynamic leveller
+//              (dynaudnorm) for speakers recorded at different levels, and a
+//              range-limited pause expander (agate) so the gain stages do
+//              not lift residual noise;
+//   3. level:  a latency-compensated look-ahead limiter (at most 6 dB, 9 dB
+//              for podcast; a take that needs more is delivered quieter) and
+//              linear gain to -16 LUFS integrated (voice-only
+//              intermediates) or a delivery target, true peak -1.5 dBTP.
 //
 // Every run is measured before and after on the same speech/silence mask:
 // noise floor (in detected silences), estimated SNR, integrated LUFS, true
@@ -26,9 +30,20 @@
 // of speech regions beyond its limit, the denoise is backed off (half
 // strength, then none) and the reason is recorded in audio-enhance.json.
 //
-// RNNoise (arnndn) is not used: FFmpeg ships no model, and a model would have
-// to be bundled with a licence that permits redistribution. The chain stays
-// on afftdn, which needs no model file.
+// The guard limits (1.5/2.5 dB speech-band loss, 2/2.5 octaves of flatness
+// change) were calibrated on speech with pink noise at 15 dB SNR: afftdn at
+// nr 12 lowers speech flatness about 1.7 octaves there, nr 18 about 2.3 and
+// nr 40 about 3, by which point the speech spectrum is spikier than the
+// clean original's (spectral holes between harmonics).
+//
+// afftdn is not latency-compensated (it delays by half its 50 ms window);
+// the clean stage pads and trims that latency so nothing moves, and the
+// output is checked against its input for any residual shift.
+//
+// RNNoise (arnndn) is not used. FFmpeg ships no model; the common model set
+// (GregorR/rnnoise-models) has no licence file, only a statement that the
+// models are not creative work, and its training-data terms are unstated, so
+// no model is bundled. The chain stays on afftdn, which needs no model file.
 
 import { execFile } from "node:child_process";
 import { copyFile, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
@@ -129,7 +144,9 @@ export function validateEnhanceOptions(options = {}) {
  * options: {preset: light|podcast|off, voiceIsolation: none|elevenlabs,
  *   targetLufs (-16), truePeakDbtp (-1.5), report (path | false; default
  *   audio-enhance.json beside output), channels, env, fetch, cacheDir,
- *   notice(line), signal, presetOverrides}
+ *   notice(line), signal, presetOverrides, noiseProfile: {file, start_seconds,
+ *   end_seconds} (a noise-only window of the same recording to learn the
+ *   denoise profile from, e.g. a pause the edit removed)}
  * adapters: {run, probe, isolate}
  * Returns the report (also written to `report`).
  */
@@ -176,6 +193,9 @@ export async function enhanceRecordingAudio(input, output, options = {}, adapter
     report.detections.silence_seconds = before.silence_seconds;
 
     let working = file("source.wav");
+    // The chain's own timing is checked against its input (the source, or
+    // the isolated take once it has been aligned to the source).
+    let workingAnalysis = sourceAnalysis;
     if (voiceIsolation === "elevenlabs") {
       try {
         await ff(["-i", working, "-c:a", "pcm_s16le", file("isolation-input.wav")]);
@@ -190,6 +210,7 @@ export async function enhanceRecordingAudio(input, output, options = {}, adapter
         working = file("isolated.wav");
         const isolatedAligned = await analysisSamples(working, file("analysis-iso2.wav"), ff);
         report.metrics.after_isolation = measureVoice(isolatedAligned, ANALYSIS_SAMPLE_RATE, { mask });
+        workingAnalysis = isolatedAligned;
         report.voice_isolation = { requested: voiceIsolation, ...receipt, alignment_shift_ms: round(lag / ANALYSIS_SAMPLE_RATE * 1000, 2) };
         report.chain.push({ stage: "isolation", provider: "elevenlabs", status: receipt.status });
       } catch (error) {
@@ -211,8 +232,25 @@ export async function enhanceRecordingAudio(input, output, options = {}, adapter
     const hum = working0.hum;
     report.detections.hum = hum;
     const notches = hum.detected ? hum.harmonics.filter((entry) => entry.notch).map((entry) => entry.hz) : [];
-    const profile = noiseProfileWindow(mask.silences, sourceLength);
-    report.detections.noise_profile = profile ? { start_seconds: round(profile.start / PROCESS_RATE, 3), end_seconds: round(profile.end / PROCESS_RATE, 3) } : null;
+    let profile = noiseProfileWindow(mask.silences, sourceLength);
+    let profileFloor = working0.noise_floor_dbfs;
+    if (options.noiseProfile) {
+      // A noise-only window from another file of the same recording (the
+      // edit's removed pauses in the original take): longer and cleaner than
+      // the short pauses an edit keeps.
+      const { file: referenceFile, start_seconds: start, end_seconds: end } = options.noiseProfile;
+      if (!(end - start >= 0.25)) throw new Error("noiseProfile needs a window of at least 0.25 s");
+      await ff(["-ss", String(start), "-t", String(Math.min(2, end - start)), "-i", path.resolve(referenceFile), "-map", "0:a:0", "-vn", "-ac", "1", "-ar", String(PROCESS_RATE), "-c:a", "pcm_f32le", file("noise-reference.wav")]);
+      const noise = (await readWav(file("noise-reference.wav"))).samples;
+      if (noise.length < 0.25 * PROCESS_RATE) throw new Error("noiseProfile window decoded to less than 0.25 s of audio");
+      let power = 0;
+      for (const value of noise) power += value * value;
+      profileFloor = round(10 * Math.log10(power / noise.length + 1e-12), 1);
+      profile = { file: file("noise-reference.wav"), start: 0, end: noise.length };
+      report.detections.noise_profile = { source: "reference", file: path.resolve(referenceFile), start_seconds: start, end_seconds: round(start + noise.length / PROCESS_RATE, 3), noise_floor_dbfs: profileFloor };
+    } else {
+      report.detections.noise_profile = profile ? { source: "detected-silence", start_seconds: round(profile.start / PROCESS_RATE, 3), end_seconds: round(profile.end / PROCESS_RATE, 3) } : null;
+    }
     if (!profile) report.notes.push("no detected silence of 0.25 s or more: afftdn tracks the noise floor instead of sampling a profile");
 
     // 1. Clean stage, with the over-processing guard.
@@ -220,7 +258,7 @@ export async function enhanceRecordingAudio(input, output, options = {}, adapter
     let clean = null;
     for (const [attempt, nr] of strengths.entries()) {
       const out = file(`clean-${attempt}.wav`);
-      const filters = cleanFilters(settings, { notches, nr, noiseFloor: working0.noise_floor_dbfs, profile });
+      const filters = cleanFilters(settings, { notches, nr, noiseFloor: profile ? profileFloor : working0.noise_floor_dbfs, profile });
       await runCleanStage(working, out, filters, profile && nr > 0 ? profile : null, ff);
       const cleanAnalysis = await analysisSamples(out, file(`analysis-clean-${attempt}.wav`), ff);
       const measured = measureVoice(cleanAnalysis, ANALYSIS_SAMPLE_RATE, { mask });
@@ -257,8 +295,10 @@ export async function enhanceRecordingAudio(input, output, options = {}, adapter
       let final = finalFile;
       const finalLength = (await readWav(final)).samples.length;
       const finalAnalysis0 = await analysisSamples(final, file("analysis-final0.wav"), ff);
-      const lag = estimateLag(sourceAnalysis, finalAnalysis0, ANALYSIS_SAMPLE_RATE, { maxLagSeconds: 0.05 });
-      if (finalLength !== sourceLength || Math.abs(lag) >= ANALYSIS_SAMPLE_RATE / 2000) {
+      const lag = estimateLag(workingAnalysis, finalAnalysis0, ANALYSIS_SAMPLE_RATE, { maxLagSeconds: 0.05 });
+      // Filter phase moves the correlation peak by a millisecond or two; only
+      // a real latency (3 ms or more, e.g. an uncompensated filter) is undone.
+      if (finalLength !== sourceLength || Math.abs(lag) >= ANALYSIS_SAMPLE_RATE * 0.003) {
         await alignAudio(final, file("final-aligned.wav"), Math.round(lag * PROCESS_RATE / ANALYSIS_SAMPLE_RATE), sourceLength, ff);
         final = file("final-aligned.wav");
         report.notes.push(`realigned the enhanced audio by ${round(lag / ANALYSIS_SAMPLE_RATE * 1000, 2)} ms and ${sourceLength - finalLength} samples to keep the source timing`);
@@ -317,10 +357,11 @@ export function voiceFilters(settings, { speechLevel, speechPeak, noiseFloor, ha
   ];
   // A gentle range-limited downward expander: the compressor and loudness
   // gain would otherwise lift the residual noise in pauses. It
-  // only runs when speech stands at least 20 dB above the cleaned floor, and
-  // its threshold stays 18 dB under the speech level, so it never chops words.
-  if (expander && Number.isFinite(speechLevel) && Number.isFinite(noiseFloor) && speechLevel - noiseFloor >= 20) {
-    const gateDb = Math.min(noiseFloor + 8, speechLevel - 18);
+  // only runs when speech stands at least 16 dB above the cleaned floor, and
+  // its threshold stays 15 dB under the mean speech level (below quiet
+  // words), so it never chops them; at most range_db of attenuation.
+  if (expander && Number.isFinite(speechLevel) && Number.isFinite(noiseFloor) && speechLevel - noiseFloor >= 16) {
+    const gateDb = Math.min(noiseFloor + 8, speechLevel - 15);
     filters.push({ name: "agate", text: `agate=threshold=${linear(gateDb).toFixed(6)}:ratio=${expander.ratio}:range=${linear(expander.range_db).toFixed(6)}:attack=10:release=250:knee=2.828:detection=rms`, purpose: `pause expander below ${gateDb.toFixed(1)} dBFS (at most ${-expander.range_db} dB)` });
   }
   if (leveler) {
@@ -422,8 +463,8 @@ async function runCleanStage(input, output, filters, profile, ff) {
   const length = profile.end - profile.start;
   const seconds = length / PROCESS_RATE;
   const sampling = `asendcmd=c='0.0 afftdn sn start; ${(seconds - 0.01).toFixed(4)} afftdn sn stop'`;
-  const graph = `[1:a]atrim=start_sample=${profile.start}:end_sample=${profile.end},asetpts=N/SR/TB[noise];[noise][0:a]concat=n=2:v=0:a=1,${[...before, `apad=pad_len=${latency}`, sampling, chain[denoise], `atrim=start_sample=${length + latency}`, "asetpts=N/SR/TB", ...after].join(",")}[out]`;
-  await ff(["-i", input, "-i", input, "-filter_complex", graph, "-map", "[out]", "-c:a", "pcm_f32le", output]);
+  const graph = `[1:a]atrim=start_sample=${profile.start}:end_sample=${profile.end},asetpts=N/SR/TB,aformat=sample_fmts=flt:sample_rates=${PROCESS_RATE}:channel_layouts=mono[noise];[noise][0:a]concat=n=2:v=0:a=1,${[...before, `apad=pad_len=${latency}`, sampling, chain[denoise], `atrim=start_sample=${length + latency}`, "asetpts=N/SR/TB", ...after].join(",")}[out]`;
+  await ff(["-i", input, "-i", profile.file ?? input, "-filter_complex", graph, "-map", "[out]", "-c:a", "pcm_f32le", output]);
 }
 
 async function alignAudio(input, output, lagSamples, totalSamples, ff) {
