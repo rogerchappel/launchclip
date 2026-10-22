@@ -15,6 +15,13 @@ The minimum, in order, for a new story (a 30–60 s Short or promo). Every step
 names the reference that holds its detail; load a reference only when you
 reach its step. `launchclip <command> --help` prints any command's usage.
 
+There is also a CLI equivalent with no agent session: `launchclip make
+"<prompt>" [--assets <dir>]` routes the inputs to a lane, writes the script
+and storyboard with an API model (OpenAI or Anthropic key), and runs finish
+headlessly ("Make a video headlessly" in the launchclip-cli reference). Use it
+when the user wants a hands-off draft or has no agent subscription; use this
+skill when they want the bespoke, reviewed path below.
+
 1. **Brief.** Ask at most three grouped questions (story, delivery, materials
    and audio), default the rest, and write `BRIEF.md`, `EVIDENCE.md` and
    `SOURCE.md` into the output project (`.launchclip/agent-<slug>`).

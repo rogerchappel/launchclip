@@ -17,7 +17,7 @@ import { runStoryCommand } from "./story_cli.js";
 import { commandHelp, helpText, USAGE_GROUPS, wantsHelp } from "./cli_usage.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "story", "finish", "voice", "export", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "story", "finish", "make", "voice", "export", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -130,6 +130,30 @@ export async function runCli(argv, io = {}) {
         const failedStage = report.stages.find((stage) => stage.status === "failed");
         throw new Error(`launchclip finish failed at the ${failedStage?.name ?? "unknown"} stage: ${failedStage?.error ?? ""}`.trim());
       }
+      return;
+    } else if (command === "make") {
+      const { runMake, formatMakeSummary } = await import("./make/index.js");
+      if (!firstArg || firstArg.startsWith("--")) throw new Error("launchclip make needs a prompt: launchclip make \"A 30-second launch video for ...\" [--assets ./assets]");
+      const report = await runMake(firstArg, {
+        assets: flags.assets,
+        aspect: flags.aspect,
+        duration: flags.duration,
+        style: flags.style,
+        model: flags.model,
+        voice: flags.voice,
+        music: flags.music,
+        renderer: flags.renderer,
+        quality: flags.quality,
+        out: flags.out,
+        replan: Boolean(flags.replan),
+        critic: flags["no-critic"] ? false : flags.critic ? true : undefined,
+        maxRepairs: flags["max-repairs"] === undefined ? undefined : Number(flags["max-repairs"])
+      }, { notice: (line) => stderr.write(`${line}\n`), ...productionAdapters.make });
+      // The tracked HTTP costs (actual usage, cache pricing included) join make's own estimates.
+      report.api_costs = tracker.summary();
+      await (await import("node:fs/promises")).writeFile((await import("node:path")).join(report.project, "MAKE.json"), `${JSON.stringify(report, null, 2)}\n`);
+      stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatMakeSummary(report));
+      if (report.status === "failed") throw new Error(`launchclip make failed at the ${report.failed_stage} stage: ${report.stages[report.failed_stage]?.error ?? ""}\nnext: ${report.next_steps[0] ?? ""}`.trim());
       return;
     } else if (command === "voice") {
       const { runVoiceCommand } = await import("./voice_cli.js");
@@ -307,7 +331,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "music-regenerate" || name === "missing") {
+    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "music-regenerate" || name === "missing" || name === "replan" || name === "critic" || name === "no-critic") {
       flags[name] = true;
       continue;
     }

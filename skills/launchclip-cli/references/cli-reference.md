@@ -21,6 +21,7 @@ the current workflow and the decisions an operating agent must not guess.
 - [Finish: storyboard to mastered video in one command](#finish-storyboard-to-mastered-video-in-one-command)
   - [The iteration loop: re-render one scene](#the-iteration-loop-re-render-one-scene)
   - [Sound effects](#sound-effects)
+- [Make a video headlessly](#make-a-video-headlessly)
 - [Export: an editable timeline for Final Cut Pro, Premiere Pro and Resolve](#export-an-editable-timeline-for-final-cut-pro-premiere-pro-and-resolve)
 
 - [Voice providers](#voice-providers)
@@ -913,6 +914,84 @@ typing window. Per-word reveals (`emphasis-caption` `word-<i>` events,
 `assets/audio/typing.wav` and mixed as one input; `qa/sfx.json` lists every
 keystroke.
 
+## Make a video headlessly
+
+```bash
+launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] \
+  [--style <name|path>] [--model provider:model] [--voice kokoro|elevenlabs] \
+  [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] \
+  [--out <project-dir>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--json]
+```
+
+`make` is the headless equivalent of the create-video skills: one command from
+a prompt and an optional folder of assets to a finished, mastered video. An
+API model writes only the script and the storyboard; everything else is
+deterministic tooling. The project lands in `--out` (default
+`./launchclip-<slug>/`).
+
+| Stage | What it does | Writes |
+| --- | --- | --- |
+| `model` | `--model`, else `LAUNCHCLIP_MAKE_MODEL`, else `openai:gpt-5.6-luna` when `OPENAI_API_KEY` is set, else `anthropic:claude-opus-4-8` when `ANTHROPIC_API_KEY` is set (the IDs the cost table prices). Reasoning defaults to `medium` (`provider:model@high` overrides). | |
+| `inventory` | Classifies every file in `--assets` (below), probes durations and dimensions, transcribes speech with local Whisper, and links the files into `assets/`. Entries are reused while a file's size and mtime match. | `ASSETS.json`, `.launchclip/make/transcripts/` |
+| `route` | Picks the lane deterministically (below). | `MAKE.json` `routing` |
+| `prepare` | footage-led: the base edit (`edit-recording`: silences, bad takes, fillers, and audio enhancement when the build's `edit-recording` has an enhancement option, detected by feature check) → `assets/base-edit.mp4`, with its edited transcript as `NARRATION.json`. When the edit's QA asks for a semantic review (ambiguous joins, no detected defect), make uses the rendered candidate and reports a pending `base_edit_qa` gate with the issues; a QA failure falls back to the unedited recording. voiceover-motion: the supplied-voice prep (pauses tightened, levelled, word-timed) → `assets/audio/voiceover.wav`. motion: the script pass (narration sized to the duration at about 150 words a minute), a Kokoro take (cached in `.launchclip/voice`, shared with `launchclip voice` and finish), and one resize pass when the take misses the target by more than 15%. | `SCRIPT.json`, `NARRATION.json` |
+| `storyboard` | `story plan`'s planner and repair loop (at most `--max-repairs`, default 4 here: a module reports its first param error, so each repair can surface the next one) with the brief, the narration, the word anchors, the style pack, and an asset manifest: the model may reference only the listed files, and any other `assets/` path is sent back as a repair error. Reused while its inputs hash the same; `--replan` forces a new one. | `storyboard.json`, `BRIEF.md`, `.launchclip/storyboard-plan.json` |
+| `finish` | `launchclip finish` (voice, captions, sound, render, master, evidence, gates). Music: `--music`, else a music file in the assets, else (finish's default) ElevenLabs when `ELEVENLABS_API_KEY` is set (paid, locked and cached), else the synth bed. | `renders/draft.mp4` or `renders/final.mp4`, `finish.json`, `qa/` |
+| `critic` | With a vision-capable model (OpenAI or OpenRouter routes; on by default, `--no-critic` to skip), reviews `qa/critic-sheets/` and writes `qa/critic.json` in the cinematic format, citing the temporal evidence IDs. With the Anthropic adapter (text only) or `--no-critic`, the critic gate stays `pending` with the next step. | `qa/critic.json` |
+
+**Lane routing** (STORYBOARD_ENGINE_RFC.md §3; the model never chooses):
+
+1. A video with speech (a talking head, podcast footage, or a narrated screen
+   recording) → `footage-led`. A talking head beats a narrated demo; ties go to
+   the longest clip. Footage-led plans at the `guided` tier, because overlays
+   need `track` 1+ and the structured tier forbids `scene.track`.
+2. A voiceover audio file → `voiceover-motion` with the supplied voice.
+3. Otherwise → `motion`, with narration written by the model and synthesised.
+
+Silent screen recordings, b-roll, screenshots and product images become media
+(`media-window` scenes, or full-frame inserts in footage-led). Format follows
+`--aspect`, else the base recording's orientation, else 16:9. The target
+duration follows `--duration`, else a "45-second" phrase in the prompt, else
+the base or voiceover length, else 30 s; the final `format.duration` is the
+measured audio plus a short tail.
+
+**Asset classification** (local heuristics, each with a confidence and its signals in `ASSETS.json`):
+
+- Images: a filename hint (logo, icon, mark, brand) or an SVG, or a small
+  (≤ 1024 px) image with alpha or a square-ish shape, is a `logo`; larger or
+  wide images are `screenshot`s ("product", "photo", "hero" hints make a
+  `product-image`). No catalogue module shows one logo alone (`logo-row` takes
+  2–6), so the manifest tells the model to leave a single logo out unless it
+  is the only product shot.
+- Videos and audio: speech presence from the voice band (200–3400 Hz) and
+  `silencedetect`: voiced 25–97% of the clip with pauses between phrases.
+  Whisper then confirms it (≥ 0.6 words a second). A steady bed with no
+  pauses is music.
+- Camera vs UI: three frames at 64×36 grey. A UI capture is flat (≥ 55% of
+  pixels within one level of their neighbour) and hard-edged (≥ 6% of steps
+  over 20 levels); camera footage is noisy and a lit set is soft. Filename
+  hints (talk, podcast, presenter / screen, demo, capture) override. No face
+  detection.
+- `brand.json` (colour roles and fonts) becomes the storyboard brand; a
+  `style.json` becomes the style pack (copied into
+  `.launchclip/styles/<name>/` so finish resolves it); `.md`/`.txt` notes join
+  the brief.
+
+**Report.** `MAKE.json` holds the routing decision and its reasons, the model,
+the base edit or script passes, the repair attempts and their errors, every
+model call's tokens and estimated cost, stage timings, the finish gates, the
+critic result, warnings and next steps. Status: `ready` (every gate passed),
+`ready-for-review` (a gate is pending, normally the critic), `needs-repair` (a
+gate failed, including a critic `repair` or `replan` verdict), or `failed`
+(with the failing stage, a non-zero exit and the next step). Every paid call
+is announced on stderr before it is made (`model: PAID call to …`, ElevenLabs
+voice and music notices), and the summary prints the estimated total.
+
+**Resume.** Run the same command again: the inventory, script, storyboard,
+voice take, base edit, music lock and finish stages are reused. `--replan`
+plans a new storyboard (delete `SCRIPT.json` for a new script). Cheap
+candidate renders are skipped in headless mode; `MAKE.json` records why.
+
 ## Export: an editable timeline for Final Cut Pro, Premiere Pro and Resolve
 
 ```bash
@@ -1308,6 +1387,12 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   ```text
   launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--voice kokoro|elevenlabs|supplied|test] [--music synth|elevenlabs|none] [--music-regenerate] [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] [--scene s3[,s4] | --preview-scene s3] [--force] [--json]
   launchclip finish <candidate-project> --candidate <id> [--into <project>] [--kind opening|transition] [--boundary s3] [--comparison id] [--at 0.4,1.2,2.6] [--music synth|none] [--renderer remotion|hyperframes] # cheap rendered candidate: no paid calls, receipt in <project>/qa/rendered-candidates.json
+  ```
+
+- `make`: Prompt plus an optional assets folder to a finished video, headless: classify the assets, route the lane deterministically, write the script and storyboard with an API model (repair loop), then finish and an optional vision critic. Writes MAKE.json with routing, costs, timings and gates.
+
+  ```text
+  launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--style <name|path>] [--model provider:model] [--voice kokoro|elevenlabs] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--out <project-dir>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--json]
   ```
 
 - `voice`: Generate the narration (NARRATION.json and the voice track) for a project or a text.
