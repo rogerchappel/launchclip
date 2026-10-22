@@ -15,6 +15,7 @@ the current workflow and the decisions an operating agent must not guess.
 - [Workspace artifacts](#workspace-artifacts)
 - [Studio review](#studio-review)
 - [Final render](#final-render)
+- [Cinematic check](#cinematic-check)
 - [Local-first OSS packet lane](#local-first-oss-packet-lane)
 - [Storyboard (story.json)](#storyboard-storyjson)
 - [Failure handling](#failure-handling)
@@ -444,6 +445,30 @@ The final command reruns the current verification and output analysis. Do not
 override a missing or failed cinematic readiness receipt.
 
 Do not reuse `--approve` as blanket permission to publish or upload.
+
+## Cinematic check
+
+`cinematic-check` gates a subscription-authored project and its encoded draft:
+
+```bash
+launchclip cinematic-check <project> [--renderer hyperframes|remotion] \
+  [--video renders/draft.mp4] [--expect-audio]
+```
+
+- `--renderer` picks the adapter that verifies the project. Without it,
+  LaunchClip uses `remotion` when the project has `story.json` and no
+  `index.html`, and `hyperframes` otherwise.
+- `hyperframes` runs `hyperframes lint --json` and
+  `hyperframes check --json --strict --snapshots --at-transitions`.
+- `remotion` resolves `story.json` into `.launchclip/story.resolved.json`,
+  runs `remotion compositions` to prove the story bundles, then the geometric
+  layout check when the kit provides one.
+- When `story.json` exists, the duration, size and declared transition
+  boundaries come from it; otherwise they come from the `index.html` root.
+  A story opts into the phase-2 evidence contract with `"phase": 2` or
+  `"cinematic_contract": "phase-2"`.
+- Temporal evidence names the renderer's still source `browser-still`.
+  Manifests that still say `hyperframes` remain valid.
 
 ## Local-first OSS packet lane
 

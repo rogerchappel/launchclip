@@ -63,7 +63,7 @@ export async function runCli(argv, io = {}) {
     } else if (command === "story") {
       result = await runStoryCommand(storyInvocation.action, storyInvocation.file, flags);
     } else if (command === "cinematic-check") {
-      result = await checkCinematicProject(required(firstArg, "HyperFrames project path"), {
+      result = await checkCinematicProject(required(firstArg, "project path"), {
         ...flags,
         expectAudio: Boolean(flags["expect-audio"]),
         audioManifest: flags["audio-manifest"],
@@ -258,7 +258,7 @@ Usage:
   launchclip production-render <workspace> --approve [--quality high] [--critic-route provider:model@reasoning] [--shot-inspect-concurrency 2] [--reference-video local.mp4]
   launchclip story validate <story.json> [--narration NARRATION.json] [--beats BEATS.json] [--out report.json]
   launchclip story resolve <story.json> [--narration NARRATION.json] [--beats BEATS.json] [--out story.resolved.json]
-  launchclip cinematic-check <hyperframes-project> [--video renders/draft.mp4] [--audio-manifest AUDIO-MANIFEST.json] [--expect-audio] [--critique qa/critic.json]
+  launchclip cinematic-check <project> [--renderer hyperframes|remotion] [--video renders/draft.mp4] [--audio-manifest AUDIO-MANIFEST.json] [--expect-audio] [--critique qa/critic.json]
   launchclip layout-check <story-project> [--profile shorts|landscape] [--json]
   launchclip init <repo> --out <workspace>
   launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]

@@ -1,12 +1,11 @@
-import { execFile } from "node:child_process";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 import {
   SUBSCRIPTION_CINEMATIC_CONTRACT,
   buildTemporalEvidenceSchedule,
-  parseDeclaredSequenceBoundaries,
+  declaredBoundariesForProject,
   readCinematicContractMarker,
+  readStoryCinematicContractMarker,
   validateRenderedCandidateReceipt,
   validateTemporalEvidenceManifest
 } from "./cinematic_evidence.js";
@@ -14,24 +13,32 @@ import { assessCinematicReadiness } from "./production_readiness.js";
 import { resolveProductionProfile } from "./production_profiles.js";
 import { analyzeProductionAudio, evaluateAudioQuality } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
-import { runHyperframes } from "./toolchain.js";
+import { getRenderer, resolveRendererName } from "./renderers/index.js";
+import { hasExactFile, readProjectStory } from "./story_loader.js";
 
-const execFileAsync = promisify(execFile);
-
+// adapters (all optional, for tests and embedding):
+//   verifyProject(project, qaDir, options) replaces the renderer check entirely;
+//   renderer: a renderer adapter object; run, storyModule, rendererOptions: passed to getRenderer();
+//   writeMotionReport, analyzeProductionAudio, motion, audio: the media gates.
 export async function checkCinematicProject(projectPath, options = {}, adapters = {}) {
   const project = path.resolve(projectPath);
-  const html = await readFile(path.join(project, "index.html"), "utf8");
-  const duration = positiveNumber(options.duration ?? htmlAttribute(html, "data-duration"), "composition duration");
-  const width = positiveNumber(options.width ?? htmlAttribute(html, "data-width"), "composition width");
-  const height = positiveNumber(options.height ?? htmlAttribute(html, "data-height"), "composition height");
+  const rendererName = adapters.renderer?.name ?? resolveRendererName(project, options.renderer);
+  const storyModule = adapters.storyModule ?? options.storyModule;
+  const storyboard = await readProjectStory(project, { storyModule });
+  const html = hasExactFile(project, "index.html") ? await readFile(path.join(project, "index.html"), "utf8") : null;
+  if (!storyboard && html == null) throw new Error(`${project} has neither story.json nor index.html`);
+  const format = storyboard?.format ?? {};
+  const duration = positiveNumber(options.duration ?? format.duration ?? htmlAttribute(html, "data-duration"), "composition duration");
+  const width = positiveNumber(options.width ?? format.width ?? htmlAttribute(html, "data-width"), "composition width");
+  const height = positiveNumber(options.height ?? format.height ?? htmlAttribute(html, "data-height"), "composition height");
   const video = projectFile(project, options.video ?? "renders/draft.mp4");
   await access(video);
   const qaDir = projectFile(project, options.qaDir ?? "qa/cinematic");
   await mkdir(qaDir, { recursive: true });
 
   let verification = adapters.verifyProject
-    ? await adapters.verifyProject(project, qaDir, options)
-    : await verifyProject(project, qaDir, options, adapters);
+    ? await adapters.verifyProject(project, qaDir, { ...options, renderer: rendererName })
+    : await verifyProject(project, qaDir, rendererAdapter(rendererName, adapters, storyModule));
   await writeJson(path.join(qaDir, "verification.json"), verification);
 
   const orientation = height > width ? "portrait" : width > height ? "landscape" : "square";
@@ -73,14 +80,16 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
 
   const [concepts, story, narration, critique] = await Promise.all([
     readOptionalJson(projectFile(project, options.concepts ?? "CONCEPTS.json")),
-    readOptionalJson(projectFile(project, options.story ?? "STORY.json")),
+    // Exact-case default: on case-insensitive file systems STORY.json would
+    // otherwise resolve to the storyboard story.json.
+    options.story ? readOptionalJson(projectFile(project, options.story)) : hasExactFile(project, "STORY.json") ? readOptionalJson(path.join(project, "STORY.json")) : null,
     readOptionalJson(projectFile(project, options.narration ?? "NARRATION.json")),
     readOptionalJson(projectFile(project, options.critique ?? "qa/critic.json"))
   ]);
-  const contractMarker = readCinematicContractMarker(html);
+  const contractMarker = storyboard ? readStoryCinematicContractMarker(storyboard.story) : readCinematicContractMarker(html);
   let phase2Evidence = null;
   if (contractMarker) {
-    phase2Evidence = await verifyPhase2Evidence(project, html, duration, video, critique, contractMarker, options);
+    phase2Evidence = await verifyPhase2Evidence(project, duration, video, critique, contractMarker, { ...options, storyModule });
     verification = augmentVerification(verification, phase2Evidence.checks);
   }
   await writeJson(path.join(qaDir, "verification.json"), verification);
@@ -106,6 +115,8 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
   return {
     stage: "cinematic-check",
     status: readiness.ok ? "ready" : "needs-repair",
+    renderer: rendererName,
+    format_source: storyboard ? "story.json" : "index.html",
     project,
     video,
     qa: qaDir,
@@ -119,8 +130,8 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
   };
 }
 
-async function verifyPhase2Evidence(project, html, duration, video, critique, marker, options) {
-  const boundaryValidation = parseDeclaredSequenceBoundaries(html, duration);
+async function verifyPhase2Evidence(project, duration, video, critique, marker, options) {
+  const boundaryValidation = await declaredBoundariesForProject(project, { duration, storyModule: options.storyModule });
   const schedule = buildTemporalEvidenceSchedule(duration, boundaryValidation.boundaries);
   const [candidateReceipt, temporalManifest] = await Promise.all([
     readOptionalJson(projectFile(project, options.renderedCandidatesReceipt ?? "qa/rendered-candidates.json")),
@@ -205,46 +216,38 @@ function augmentVerification(verification, phase2Checks) {
   };
 }
 
-async function verifyProject(project, qaDir, options, adapters) {
-  const run = adapters.run ?? runCommand;
-  const checks = {};
-  for (const [name, args] of [
-    ["lint", ["lint", "--json", project]],
-    ["check", ["check", "--json", "--strict", "--snapshots", "--at-transitions", project]]
-  ]) {
-    try {
-      const result = await runHyperframes(run, args, { cwd: project });
-      const stdout = parseOutput(result.stdout);
-      checks[name] = { ok: structuredOk(stdout), exit_code: Number(result.exitCode ?? result.exit_code ?? 0), stdout, stderr: String(result.stderr ?? "") };
-    } catch (error) {
-      checks[name] = { ok: false, exit_code: Number(error.code ?? error.exitCode ?? 1), stdout: parseOutput(error.stdout), stderr: String(error.stderr ?? error.message ?? "") };
-    }
-    await writeJson(path.join(qaDir, `${name}.json`), checks[name]);
+function rendererAdapter(name, adapters, storyModule) {
+  if (adapters.renderer) return adapters.renderer;
+  return getRenderer(name, { run: adapters.run, storyModule, ...(adapters.rendererOptions ?? {}) });
+}
+
+// Runs the renderer adapter's check and records each sub-check as
+// <qaDir>/<name>.json (lint.json and check.json for HyperFrames;
+// story.json, compositions.json and layout.json for Remotion).
+async function verifyProject(project, qaDir, renderer) {
+  let result;
+  try {
+    result = await renderer.check(project, { strict: true });
+  } catch (error) {
+    result = { status: "failed", findings: [{ source: renderer.name, severity: "error", message: error.message }], raw: { checks: { [`${renderer.name}-check`]: { ok: false, error: error.message } } } };
   }
-  const failed = Object.entries(checks).filter(([, value]) => !value.ok).map(([name]) => name);
+  const checks = result?.raw?.checks && typeof result.raw.checks === "object" ? result.raw.checks : {};
+  for (const [name, value] of Object.entries(checks)) await writeJson(path.join(qaDir, `${name}.json`), value);
+  const failed = Object.entries(checks).filter(([, value]) => value?.ok !== true).map(([name]) => name);
+  if (result?.status !== "passed" && !failed.length) failed.push(`${renderer.name}-check`);
   return {
     schema_version: "launchclip.subscription-verification.v1",
     status: failed.length ? "failed" : "passed",
+    renderer: renderer.name,
     created_at: new Date().toISOString(),
-    checks: Object.fromEntries(Object.entries(checks).map(([name, value]) => [name, { ok: value.ok, exit_code: value.exit_code }])),
+    checks: Object.fromEntries(Object.entries(checks).map(([name, value]) => [name, { ok: value?.ok === true, ...(value?.exit_code != null ? { exit_code: value.exit_code } : {}) }])),
+    findings: Array.isArray(result?.findings) ? result.findings : [],
     failed
   };
 }
 
-function structuredOk(value) {
-  if (!value || typeof value !== "object") return false;
-  let failed = value.ok === false || Number(value.errorCount ?? value.error_count ?? 0) > 0;
-  const visit = (entry) => {
-    if (failed || entry == null || typeof entry !== "object") return;
-    if (entry.ok === false || Number(entry.errorCount ?? entry.error_count ?? 0) > 0) failed = true;
-    if (new Set(["error", "blocking", "fatal"]).has(String(entry.severity ?? "").toLowerCase())) failed = true;
-    for (const child of Object.values(entry)) visit(child);
-  };
-  visit(value);
-  return !failed;
-}
-
 function htmlAttribute(html, name) {
+  if (html == null) return undefined;
   return String(html).match(new RegExp(`\\b${name}\\s*=\\s*["']([^"']+)["']`, "i"))?.[1];
 }
 
@@ -267,11 +270,6 @@ async function writeJson(file, value) {
   await writeFile(file, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-function parseOutput(value) {
-  const text = String(value ?? "").trim();
-  if (!text) return null;
-  try { return JSON.parse(text); } catch { return text.slice(0, 40_000); }
-}
 
 function positiveNumber(value, label) {
   const number = Number(value);
@@ -279,6 +277,3 @@ function positiveNumber(value, label) {
   return number;
 }
 
-async function runCommand(command, args, options) {
-  return execFileAsync(command, args, { ...options, maxBuffer: 1024 * 1024 * 128 });
-}

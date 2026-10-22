@@ -341,12 +341,13 @@ ffmpeg -hide_banner -loglevel error -i <project>/renders/draft.mp4 \
 `scripts/build-evidence.mjs <project>` does all of this in one step: it
 derives the schedule from the declared boundaries, captures both sources,
 writes the hashed manifest, and builds paired contact sheets for the critic in
-`qa/critic-sheets/` (left tile = HyperFrames, right tile = encoded draft). Set
-`HYPERFRAMES_BIN` to a local binary to skip `npx`. To do it by hand instead:
+`qa/critic-sheets/` (left tile = browser still, right tile = encoded draft).
+Set `HYPERFRAMES_BIN` to a local binary to skip `npx`. To do it by hand instead:
 
 Copy or rename each HyperFrames result to
-`qa/temporal-evidence/<sample-id>-hyperframes.png`, then hash the current draft
-and every evidence file. Do not reuse the browser snapshot as encoded-draft
+`qa/temporal-evidence/<sample-id>-browser-still.png`, then hash the current
+draft and every evidence file. Older manifests that use the `hyperframes`
+source name stay valid. Do not reuse the browser snapshot as encoded-draft
 evidence.
 
 ```json
@@ -356,13 +357,13 @@ evidence.
   "entries": [
     {
       "sample_id": "hook-001",
-      "evidence_id": "hook-001-hyperframes",
-      "source": "hyperframes",
+      "evidence_id": "hook-001-browser-still",
+      "source": "browser-still",
       "role": "hook",
       "at_seconds": 0,
       "sequence_id": null,
       "boundary_id": null,
-      "file": "qa/temporal-evidence/hook-001-hyperframes.png",
+      "file": "qa/temporal-evidence/hook-001-browser-still.png",
       "sha256": "<sha256-of-this-image>"
     },
     {
