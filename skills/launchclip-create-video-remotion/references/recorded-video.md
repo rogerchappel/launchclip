@@ -149,6 +149,65 @@ in `qa/attempt-N/` with `qa/session.json`. Ready outputs include
 `rendered-transcript.json` and `recording-qa.json` beside the intended transcript
 and edit map. Existing exports require a new directory after this engine update.
 
+## Footage-led storyboard
+
+After the base edit is accepted, a dressed recording can be authored as a
+`storyboard.json` in the `footage-led` lane, rather than as a hand-built
+composition. The recording plays full-frame underneath, and the story adds
+overlays, punch-ins and full-frame inserts:
+
+```json
+{ "schema": "launchclip.story.v1", "lane": "footage-led",
+  "audio": { "words": "NARRATION.json" },
+  "base": { "src": "assets/recording.mp4", "edl": "recording/edit-plan.json",
+            "fit": "cover", "focus": { "x": 0.5, "y": 0.36 }, "volume": 1 },
+  "scenes": [
+    { "id": "punch", "module": "punch-in", "track": 2, "start": 1.6, "end": 2.9,
+      "params": { "scale": 1.14 }, "hits": [{ "at": "word:demo", "event": "punch" }] },
+    { "id": "who", "module": "lower-third", "track": 1, "start": 5.8, "end": 8.9,
+      "params": { "name": "Ada Park", "title": "Founder" } },
+    { "id": "stat", "module": "count-up", "insert": true, "start": 11, "end": 14.2,
+      "in": { "type": "fade", "dur": 0.3 }, "params": { "value": 12, "suffix": " min" } }
+  ],
+  "overlays": [{ "type": "captions", "style": "word-highlight" }] }
+```
+
+- **Base.** `base.edl` names the edit-recording `edit-plan.json`, and resolving
+  the story turns its kept segments into `base.trim` (`[[in, out], …]` source
+  ranges played back to back). Timeline time is edited time, so the
+  `words.json` timings from the edit drive `word:` anchors and captions. Point
+  `src` at the original recording when you use `edl` or `trim`. If you use
+  `base-edit.mp4`, which is already cut, leave both out.
+- **Overlays** sit on track 1 or higher; same-track scenes still cannot overlap.
+  **Inserts** (`insert: true`, track 0) cover the picture with any catalogue
+  module while the recording's audio keeps playing. Spend inserts on strong
+  lines: the RFC targets 10–40% motion share for footage-led cuts, and 20–50%
+  when resources supply inserts.
+- **Footage modules.**
+  - `punch-in`: a word-timed spring zoom (1.06–1.25) toward `focus`. It is a
+    camera on the base, not an overlay.
+  - `footage-callout`: a claim sticker with a leader line to `point`. It sits
+    in the safe zone, never covers the point, and comes in three tones.
+  - `lower-third`: a name and title bar on the caption band edge.
+  - `emphasis-caption`: one to three words popped over the footage. It hides
+    the captions.
+
+  Time each module with a `hits` entry naming its event (`punch`, `point`,
+  `name`, `pop`) on a `word:` anchor.
+- Keep scene starts on whole frames, so both renderers agree to the frame.
+- Audio: the recording is the voice, and `audio.mix` is only the music/SFX bed,
+  at `audio.mix_volume`. Duck the bed against the recording when you build it.
+- Run `launchclip story validate`, then `launchclip layout-check <project>`. The
+  check treats the base as full-frame media and verifies each catalogue box.
+  Then compile:
+  `launchclip story compile <project> --renderer remotion`. `LaunchclipStory`
+  mounts the base as `<OffthreadVideo>` per trim segment under the scenes, and
+  punch-ins transform the base layer.
+
+`examples/story/footage/` is a complete reference: a generated stand-in
+recording, its edit plan, three punch-ins, two callouts, a lower-third, an
+insert, an emphasis caption and captions.
+
 ## B-roll capture and placement
 
 Editing also writes `broll-plan.json` and `BROLL.md`. For an already clean video:
