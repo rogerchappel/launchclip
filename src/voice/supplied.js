@@ -13,7 +13,9 @@
 //      linear gain), because mono voice plays about 3 LU louder as stereo;
 //   5. transcribe the prepared audio with the repo's local Whisper path
 //      (transcribeRecording), align the recognised words back to `text` when
-//      given, and snap onsets to RMS energy onsets within 60 ms.
+//      given, pull word boundaries off quiet audio (Whisper tends to start a
+//      word at the end of the previous one, swallowing the pause), and snap
+//      onsets to RMS energy onsets within 60 ms.
 
 import { execFile } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -24,7 +26,7 @@ import { analyzeRecordingAudio } from "../recording_audio.js";
 import { normalizeRecordingTranscript } from "../recording_edit.js";
 import {
   alignWordsToText, detectOnsets, envelopeLevels, finalizeWords, onsetError, readWav,
-  rmsEnvelope, snapOnsets, writeWav
+  rmsEnvelope, snapOnsets, trimWordsToVoiced, writeWav
 } from "./words.js";
 
 const execute = promisify(execFile);
@@ -60,8 +62,11 @@ export function create(options = {}) {
         const transcript = await (options.transcribe ?? defaultTranscribe)(outFile, { model: options.model ?? "base.en", language: options.language ?? "en", signal });
         const recognised = normalizeRecordingTranscript(transcript).map((word) => ({ text: word.word, start: word.start, end: word.end }));
         const aligned = typeof text === "string" && text.trim() ? alignWordsToText(recognised, text) : recognised;
+        const envelope = rmsEnvelope(prepared.samples, prepared.sampleRate);
+        const levels = envelopeLevels(envelope);
+        const { words: voiced, moved } = trimWordsToVoiced(aligned, envelope, Math.max(levels.floor + 8, levels.speech - 35));
         const onsets = detectOnsets(prepared.samples, prepared.sampleRate);
-        const { words: snapped, snapped: snappedCount } = snapOnsets(aligned, onsets, { windowSeconds: 0.06 });
+        const { words: snapped, snapped: snappedCount } = snapOnsets(voiced, onsets, { windowSeconds: 0.06 });
         const words = finalizeWords(snapped, prepared.duration);
         return {
           file: outFile, words, sampleRate: prepared.sampleRate, duration: prepared.duration,
@@ -69,10 +74,10 @@ export function create(options = {}) {
           prep: {
             source_duration_seconds: audio.duration,
             leading_trim_seconds: plan.leading, trailing_trim_seconds: plan.trailing,
-            pauses_tightened: plan.tightened, removed_seconds: audio.duration - tightened.length / audio.sampleRate,
+            pauses_tightened: plan.tightened, keep_ranges: plan.keep, removed_seconds: audio.duration - tightened.length / audio.sampleRate,
             loudness_target_lufs: TARGET_LUFS, loudness_measured_lufs: loudness.output_i, true_peak_dbtp: loudness.output_tp
           },
-          timing: { method: typeof text === "string" && text.trim() ? "asr-aligned-to-text" : "asr", snapped_words: snappedCount, onset_error_ms: msOrNull(onsetError(words, onsets).mean_seconds) }
+          timing: { method: typeof text === "string" && text.trim() ? "asr-aligned-to-text" : "asr", trimmed_to_voiced: moved, snapped_words: snappedCount, onset_error_ms: msOrNull(onsetError(words, onsets).mean_seconds) }
         };
       } finally {
         await rm(temporary, { recursive: true, force: true });

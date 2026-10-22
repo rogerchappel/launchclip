@@ -148,6 +148,57 @@ export function snapOnsets(words, onsets, { windowSeconds = 0.06, minWordSeconds
   return { words: result, snapped };
 }
 
+/**
+ * Pull word boundaries off quiet audio. ASR often starts a word at the end of
+ * the previous one, so a pause lands inside the next word, and sometimes the
+ * boundary sits early, inside the previous word's audio. Two rules:
+ *
+ *   - a pause of at least `pauseSeconds` inside a word (after its first
+ *     frame) is taken as the real boundary: the word starts after it and the
+ *     previous word ends before it (stop closures inside a word are shorter);
+ *   - quiet of at least `minQuietSeconds` at either edge of a word is trimmed.
+ */
+export function trimWordsToVoiced(words, envelope, thresholdDb, { minQuietSeconds = 0.05, pauseSeconds = 0.12, minWordSeconds = 0.05 } = {}) {
+  const { db, hopSeconds, offsetSeconds } = envelope;
+  const frameAt = (time) => Math.max(0, Math.min(db.length - 1, Math.round((time - offsetSeconds) / hopSeconds)));
+  const timeAt = (frame) => offsetSeconds + frame * hopSeconds;
+  const pauseFrames = Math.ceil(pauseSeconds / hopSeconds);
+  let moved = 0;
+  const result = [];
+  for (const word of words) {
+    let start = word.start;
+    let end = word.end;
+    let first = frameAt(start);
+    const last = frameAt(end);
+    const previous = result.at(-1);
+    if (previous) {
+      // Last long pause inside the word that is followed by voice.
+      let runStart = -1;
+      let boundary = null;
+      for (let frame = first + 1; frame <= last; frame++) {
+        if (db[frame] < thresholdDb) { if (runStart < 0) runStart = frame; continue; }
+        if (runStart >= 0 && frame - runStart >= pauseFrames && db[first] >= thresholdDb) boundary = { quietStart: runStart, voiced: frame };
+        runStart = -1;
+      }
+      if (boundary && timeAt(boundary.voiced) < end - minWordSeconds) {
+        previous.end = Math.max(previous.start + minWordSeconds, timeAt(boundary.quietStart));
+        start = timeAt(boundary.voiced) - hopSeconds;
+        first = frameAt(start);
+      }
+    }
+    let voicedFirst = first;
+    while (voicedFirst < last && db[voicedFirst] < thresholdDb) voicedFirst++;
+    let voicedLast = last;
+    while (voicedLast > voicedFirst && db[voicedLast] < thresholdDb) voicedLast--;
+    if (voicedFirst < last && timeAt(voicedFirst) - start >= minQuietSeconds) start = timeAt(voicedFirst) - hopSeconds;
+    if (voicedLast > voicedFirst && end - timeAt(voicedLast) >= minQuietSeconds) end = timeAt(voicedLast) + hopSeconds;
+    if (end - start < minWordSeconds) { result.push({ ...word }); continue; }
+    if (start !== word.start || end !== word.end) moved += 1;
+    result.push({ ...word, start, end });
+  }
+  return { words: result, moved };
+}
+
 /** Mean absolute distance from word starts to the nearest onset within `maxSeconds`. */
 export function onsetError(words, onsets, { maxSeconds = 0.15 } = {}) {
   const sorted = [...onsets].sort((a, b) => a - b);

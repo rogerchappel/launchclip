@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   alignWordsToText, detectOnsets, encodeWav, finalizeWords, normalizeWord, onsetError,
-  proportionalAlign, readWav, snapOnsets, splitSentences, tokenizeText, validateWords, writeWav
+  proportionalAlign, readWav, rmsEnvelope, snapOnsets, splitSentences, tokenizeText, trimWordsToVoiced, validateWords, writeWav
 } from "../src/voice/words.js";
 import * as kokoro from "../src/voice/kokoro.js";
 import * as elevenlabs from "../src/voice/elevenlabs.js";
@@ -66,6 +66,21 @@ test("detectOnsets finds burst onsets and snapOnsets moves nearby word starts", 
   assert.ok(Math.abs(snapped[2].start - onsets[2]) < 1e-9);
   const error = onsetError(snapped, onsets);
   assert.equal(error.matched, 2);
+});
+
+test("trimWordsToVoiced moves ASR boundaries onto pauses", () => {
+  const sampleRate = 16000;
+  const envelope = rmsEnvelope(bursts(sampleRate, 2, [[0.2, 0.5], [0.9, 1.2], [1.5, 1.8]]), sampleRate);
+  const asr = [
+    { text: "one", start: 0.2, end: 0.35 }, // ends early, inside its own audio
+    { text: "two", start: 0.35, end: 1.2 }, // starts inside "one" and swallows the pause
+    { text: "three", start: 1.3, end: 1.8 } // starts in quiet
+  ];
+  const { words, moved } = trimWordsToVoiced(asr, envelope, -40);
+  assert.equal(moved, 2);
+  assert.ok(Math.abs(words[0].end - 0.5) < 0.015, `one ends ${words[0].end}`);
+  assert.ok(Math.abs(words[1].start - 0.9) < 0.015, `two starts ${words[1].start}`);
+  assert.ok(Math.abs(words[2].start - 1.5) < 0.015, `three starts ${words[2].start}`);
 });
 
 test("validateWords rejects unordered, empty and out-of-range words", () => {
