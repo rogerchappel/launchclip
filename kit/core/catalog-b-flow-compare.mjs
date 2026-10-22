@@ -2,8 +2,8 @@
 // element tree (view) and renderer-neutral animation ops (timeline).
 // Registered in kit/core/catalog-b.mjs; conventions are documented there.
 
-import {CATALOG_B_STYLE, alphaHex, createBase, decimalsOf, fitText, formatNumber, frameSamples, mixColor, niceStep, overlaps, parseExpression, progress, r2, rt, textWidth, ticks, withUnit} from './catalog-b-base.mjs';
-import {abs, el, hex2, sampleTime, set, svgRoot, text, transformString, tw} from './catalog-b-view.mjs';
+import {alphaHex, createBase, fitText, mixColor, r2, rt} from './catalog-b-base.mjs';
+import {abs, el, hex2, set, text, transformString, tw} from './catalog-b-view.mjs';
 
 const color = 'primary | accent | paper | #rrggbb (contrast ≥ 3:1 on bg)';
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';

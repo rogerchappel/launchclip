@@ -73,4 +73,10 @@ export function emitCatalogB(model) {
 }
 
 export const EMITTERS = {
+  'logo-row': emitCatalogB,
+  'archive-card': emitCatalogB,
+  'process-steps': emitCatalogB,
+  'flow-compare': emitCatalogB,
+  'gauge-compare': emitCatalogB,
+  'function-chart': emitCatalogB,
 };

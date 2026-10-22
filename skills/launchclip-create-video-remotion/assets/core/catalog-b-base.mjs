@@ -278,7 +278,7 @@ export function niceStep(range, target = 5) {
 }
 export function ticks(min, max, target = 5) {
   const step = niceStep(max - min, target), out = [];
-  for (let v = Math.ceil(min / step - 1e-9) * step; v <= max + step * 1e-9; v += step) out.push(Math.round(v * 1e9) / 1e9);
+  for (let v = Math.ceil(min / step - 1e-9) * step; v <= max + step * 1e-9; v += step) out.push(Math.round(v * 1e9) / 1e9 || 0);
   return out;
 }
 export const r2 = value => Math.round(value * 100) / 100;
@@ -349,7 +349,10 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
   const zone = geometry.safeZone, band = geometry.captionBand;
   const captionGap = 30 * unit;
   const bottom = hidesCaptions ? zone.y + zone.height : Math.min(zone.y + zone.height, band.y - captionGap);
-  const safe = {x: r2(zone.x), y: r2(zone.y), width: r2(zone.width), height: r2(bottom - zone.y)};
+  // Round inward to 0.01 px so the rect never pokes outside the zone.
+  const up = v => Math.ceil(v * 100 - 1e-6) / 100, down = v => Math.floor(v * 100 + 1e-6) / 100;
+  const sx = up(zone.x), sy = up(zone.y);
+  const safe = {x: sx, y: sy, width: r2(down(zone.x + zone.width) - sx), height: r2(down(bottom) - sy)};
   let rect = {...safe};
   if (params.rect !== undefined) {
     check.obj(params.rect, 'params.rect', ['x', 'y', 'width', 'height'], ['x', 'y', 'width', 'height']);
@@ -383,7 +386,8 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
     return rt(start + rel);
   };
 
-  const min = {key: r2(S.minKeyText * unit), meta: r2(S.minMetaText * unit)};
+  // Minimums round up so scaled canvases never dip below the floor.
+  const min = {key: Math.ceil(S.minKeyText * unit * 100 - 1e-6) / 100, meta: Math.ceil(S.minMetaText * unit * 100 - 1e-6) / 100};
   const events = [{id: `${id}-enter`, name: 'enter', time: motion.enterEnd, role: 'enter'}];
   const model = {id, module: moduleId, canvas, aspect, fps, unit: r2(unit), start: rt(start), duration: rt(duration), end, track: 2, rect, safe, motion, content: null, events,
     layout: null, hidesCaptions, theme, fonts, contrast, objects: {}, minTextPx: min.key};
