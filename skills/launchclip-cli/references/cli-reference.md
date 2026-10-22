@@ -1303,10 +1303,11 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip module fit <module> [--params params.json] [--aspect 16:9|9:16] [--story storyboard.json] [--brand brand.json] [--duration 4] [--json]
   ```
 
-- `finish`: Storyboard to mastered video in one command: voice, music, SFX, render, master and gates.
+- `finish`: Storyboard to mastered video in one command: voice, music, SFX, render, master and gates. --candidate renders a draft candidate with no paid calls (synth or no music, a cached or free voice, else the test voice; no evidence or gates) and records it in the rendered-candidate receipt.
 
   ```text
   launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--voice kokoro|elevenlabs|supplied|test] [--music synth|elevenlabs|none] [--music-regenerate] [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] [--scene s3[,s4] | --preview-scene s3] [--force] [--json]
+  launchclip finish <candidate-project> --candidate <id> [--into <project>] [--kind opening|transition] [--boundary s3] [--comparison id] [--at 0.4,1.2,2.6] [--music synth|none] [--renderer remotion|hyperframes] # cheap rendered candidate: no paid calls, receipt in <project>/qa/rendered-candidates.json
   ```
 
 - `voice`: Generate the narration (NARRATION.json and the voice track) for a project or a text.

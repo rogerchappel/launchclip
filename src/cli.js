@@ -117,7 +117,13 @@ export async function runCli(argv, io = {}) {
         scenes: flags.scene,
         previewScene: flags["preview-scene"],
         sfxLibrary: flags["sfx-library"],
-        sfxDensity: flags["sfx-density"]
+        sfxDensity: flags["sfx-density"],
+        candidate: flags.candidate,
+        into: flags.into,
+        comparison: flags.comparison,
+        kind: flags.kind,
+        boundary: flags.boundary,
+        at: flags.at
       }, productionAdapters.finish);
       stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatFinishSummary(report));
       if (report.status === "failed") {

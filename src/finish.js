@@ -40,7 +40,8 @@ import { applyDensity, densityTyping, eventKey, familySource, kitLibrary, resolv
 import { collectTyping, renderTypingTrack, typingSchedule } from "./sfx/typing.js";
 import { getMusicProvider, parseMusicSpec, resolveMusicChoice, MUSIC_FLAG_VALUES } from "./music/index.js";
 import { lockDecision, musicBrief, readMusicLock, writeMusicLock } from "./music/lock.js";
-import { narrationDocument, narrationRequest, synthesizeNarration, voiceCacheDir } from "./voice/narrate.js";
+import { narrationCacheKey, narrationDocument, narrationRequest, synthesizeNarration, voiceCacheDir } from "./voice/narrate.js";
+import { CANDIDATE_OUTPUT, candidateAudio, FREE_VOICE_PROVIDERS, recordCandidate } from "./candidate_receipt.js";
 import { analyzeBeatsFile, beatsDocument, gridFromBpm, transformGrid } from "./music/beats.js";
 import { BEAT_SYNC_SCHEMA, chooseAlignment, keyMoments, momentReport, snapStory, summarizeMoments, syncStrategy } from "./music/beat_sync.js";
 
@@ -449,8 +450,25 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
   if (options.voice != null && !listVoiceProviders().includes(String(options.voice).toLowerCase())) throw new Error(`Unknown --voice ${options.voice}. Available providers: ${listVoiceProviders().join(", ")}`);
   if (options.music != null && !MUSIC_FLAG_VALUES.includes(String(options.music).toLowerCase())) throw new Error(`Unknown --music ${options.music}. Use one of ${MUSIC_FLAG_VALUES.join(", ")}`);
   const rendererName = resolveRendererName(project, options.renderer);
+  // --candidate <id>: a cheap draft candidate with no paid calls (synth or no
+  // music, a cached or free voice, else the test voice; no evidence or gates),
+  // recorded into the rendered-candidate receipt (src/candidate_receipt.js).
+  const candidateNotes = [];
+  if (options.candidate != null && options.candidate !== false) {
+    if (quality !== "draft") throw new Error("--candidate renders drafts only; drop --quality high");
+    if (options.voice != null && !FREE_VOICE_PROVIDERS.includes(String(options.voice).toLowerCase())) throw new Error(`--candidate makes no paid calls, so it cannot use --voice ${options.voice}; use kokoro, supplied or test (or drop --voice to reuse a cached take)`);
+    if (options.musicRegenerate) throw new Error("--candidate makes no paid calls; drop --music-regenerate");
+    const narration = story.audio?.narration;
+    let request = null;
+    try { request = narration && typeof narration === "object" && narration.text ? narrationRequest(narration, options.voice ? { provider: options.voice } : {}) : null; } catch { request = null; }
+    const cachedTake = Boolean(request) && existsSync(path.join(voiceCacheDir(project), `${narrationCacheKey(request)}.wav`));
+    const audio = candidateAudio({ narrationProvider: request?.provider, cachedTake, musicFlag: options.music, musicSpecProvider: parseMusicSpec(story.audio?.music).provider });
+    options = { ...options, music: audio.music, ...(audio.voice ? { voice: audio.voice } : {}) };
+    candidateNotes.push(...audio.notes);
+  }
+  const candidate = options.candidate != null && options.candidate !== false ? String(options.candidate) : null;
   const iteration = iterationOptions(story, options);
-  const out = projectFile(project, options.out ?? (quality === "high" ? "renders/final.mp4" : "renders/draft.mp4"));
+  const out = projectFile(project, options.out ?? (candidate ? CANDIDATE_OUTPUT : quality === "high" ? "renders/final.mp4" : "renders/draft.mp4"));
   const started = adapters.now();
   const ctx = {
     project,
@@ -466,7 +484,8 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
     out,
     raw: path.join(project, ".launchclip", "finish", `render-${quality}.mp4`),
     state: await readState(project),
-    warnings: [...(styled.style?.warnings ?? [])],
+    warnings: [...(styled.style?.warnings ?? []), ...candidateNotes],
+    candidate,
     style: styled.style,
     words: null,
     resolved: null,
@@ -486,6 +505,15 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
     const entry = await runStage(ctx, definition);
     stages.push(entry);
     if (entry.status === "failed") failed = entry.name;
+  }
+  if (candidate && !failed && existsSync(out)) {
+    const fps = Number(ctx.resolved?.resolved?.fps ?? ctx.resolved?.format?.fps ?? 30);
+    const duration = Number(ctx.resolved?.resolved?.duration ?? ctx.resolved?.format?.duration);
+    const into = options.into ? path.resolve(options.into) : project;
+    ctx.candidateReceipt = await (adapters.recordCandidate ?? recordCandidate)({
+      into, id: candidate, comparison: options.comparison, kind: options.kind, boundary: options.boundary, at: options.at,
+      video: out, fps, duration, source: path.relative(into, project).split(path.sep).join("/") || "."
+    });
   }
   const report = buildReport(ctx, stages, { seconds: round3((adapters.now() - started) / 1000), failed });
   await writeJson(path.join(project, PATHS.report), report);
@@ -863,6 +891,7 @@ const STAGES = [
   {
     name: "evidence",
     async plan(ctx) {
+      if (ctx.candidate) return { skip: "candidate render: evidence skipped" };
       return { inputHash: hashValue({ video: await fileHash(ctx.out), story: ctx.resolved, renderer: ctx.rendererName, script: await fileHash(SCRIPT.evidence) }), outputs: [PATHS.evidence] };
     },
     async run(ctx) {
@@ -882,6 +911,7 @@ const STAGES = [
   {
     name: "gates",
     async plan(ctx) {
+      if (ctx.candidate) return { skip: "candidate render: judge it from the pixels (no gates)" };
       const inputHash = hashValue({
         video: await fileHash(ctx.out),
         evidence: await fileHash(path.join(ctx.project, PATHS.evidence)),
@@ -1029,7 +1059,7 @@ async function runGates(ctx) {
 function buildReport(ctx, stages, { seconds, failed }) {
   const gates = ctx.gates ?? {};
   const gateStatuses = Object.values(gates).map((gate) => gate.status);
-  const status = failed ? "failed" : ctx.preview ? "preview" : gateStatuses.includes("failed") ? "needs-repair" : "ready-for-review";
+  const status = failed ? "failed" : ctx.preview ? "preview" : ctx.candidate ? "candidate" : gateStatuses.includes("failed") ? "needs-repair" : "ready-for-review";
   const nextSteps = [];
   const render = stages.find((stage) => stage.name === "render");
   if (failed) {
@@ -1039,6 +1069,7 @@ function buildReport(ctx, stages, { seconds, failed }) {
     for (const [name, gate] of Object.entries(gates)) if (gate.status === "failed") nextSteps.push(`Repair the ${name} gate (see ${gate.report ?? PATHS.gates}).`);
     if (gates.critic?.next_step) nextSteps.push(gates.critic.next_step);
   }
+  if (!failed && ctx.candidateReceipt) nextSteps.push(`Score candidate ${ctx.candidate} (0-10 per field) in ${ctx.candidateReceipt.receipt} from its frames, then set selected_candidate_id (highest mean, ties by candidate_order), selection_rationale and a rejection_reason for each loser.`);
   if (!failed && ctx.preview) nextSteps.push(`Look at ${rel(ctx.project, ctx.preview.output)}; when it is right, run launchclip finish ${ctx.project} --scene ${ctx.preview.scene} to re-render it into the final.`);
   return {
     schema_version: FINISH_REPORT_VERSION,
@@ -1053,6 +1084,7 @@ function buildReport(ctx, stages, { seconds, failed }) {
     final: !failed && !ctx.preview && existsSync(ctx.out) ? ctx.out : null,
     output: ctx.out,
     ...(ctx.preview ? { preview: { scene: ctx.preview.scene, output: ctx.preview.output } } : {}),
+    ...(ctx.candidate ? { candidate: { id: ctx.candidate, ...(ctx.candidateReceipt ?? {}) } } : {}),
     ...(ctx.options.scenes?.length ? { scenes: ctx.options.scenes, scene_stills: render?.details?.scene_stills ?? [] } : {}),
     seconds,
     stages,
@@ -1080,6 +1112,7 @@ export function formatFinishSummary(report) {
     if (segments) lines.push(`            ${segmentSummary(segments)}`);
   }
   if (report.preview) lines.push(`preview: ${report.preview.output}`);
+  if (report.candidate?.receipt) lines.push(`candidate ${report.candidate.id} (${report.candidate.comparison}): ${report.candidate.artifacts.join(", ")} -> ${report.candidate.receipt}`);
   for (const still of report.scene_stills ?? []) lines.push(`scene ${still.scene} @${still.seconds}s: ${still.compare ?? still.after}${still.compare ? " (before | after)" : ""}`);
   const gates = Object.entries(report.gates ?? {});
   if (gates.length) {

@@ -257,8 +257,31 @@ creative independence by itself; Candidate B must still be authored from the
 frozen brief without Candidate A in context.
 
 Render each isolated candidate with the same delivery geometry and sampling
-times. Preserve either the encoded candidate clip or at least its entry, peak
-motion, and settled frames:
+times. The cheap path is `launchclip finish --candidate`: it renders a draft of
+the candidate project with **no paid calls** (synth or no music, the cached
+take of the narration or a free voice, else the offline test voice; no
+evidence, no gates), copies the clip and its entry, peak and settle frames
+(extracted by exact frame number) into
+`<project>/qa/rendered-candidates/<candidate-id>/`, and adds the candidate,
+with hashes and a render ID, to `<project>/qa/rendered-candidates.json`:
+
+```bash
+launchclip voice <project>        # once: cache the real take, so candidates share its timing
+launchclip finish <candidate-a-project> --candidate open-a --into <project>
+launchclip finish <candidate-b-project> --candidate open-b --into <project>
+launchclip finish <candidate-c-project> --candidate trans-a --into <project> --boundary s3
+launchclip finish <candidate-d-project> --candidate trans-b --into <project> --boundary s3
+```
+
+`--kind` defaults to opening, or transition with `--boundary`; `--at
+0.4,1.2,2.6` picks the lifecycle times (default 15%, 50% and 90% of the
+clip). Then judge the frames: fill each candidate's ten scores, set
+`selected_candidate_id` (highest mean, ties by `candidate_order`),
+`selection_rationale` and every loser's `rejection_reason`. A rerender keeps
+the scores and refreshes the hashes.
+
+To render a candidate by hand instead, preserve either the encoded candidate
+clip or at least its entry, peak motion, and settled frames:
 
 <!-- renderer: hyperframes -->
 ```bash
