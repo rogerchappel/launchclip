@@ -63,7 +63,7 @@
         "title": "The gap halves every 10 minutes",
         "accent": "#fdb022",
         "presentation": "solid",
-        "rect": { "x": 90, "y": 520, "width": 900, "height": 560 },
+        "rect": { "x": 90, "y": 520, "width": 840, "height": 560 },
         "theme": { "surface": "#0d111c", "foreground": "#f2eee6", "muted": "#9aa3b5", "border": "#2a3247", "accentText": "#fdb022" },
         "metric": {
           "mode": "illustration",
@@ -93,7 +93,7 @@
       "params": {
         "title": "What the gap decides",
         "accent": "#46d4ff",
-        "rect": { "x": 90, "y": 560, "width": 900, "height": 600 },
+        "rect": { "x": 90, "y": 560, "width": 840, "height": 600 },
         "statusLabels": { "pending": "Next", "active": "Now", "done": "True" },
         "rows": [
           { "label": "Big gap: fast cooling", "status": "done", "at": 0.45 },

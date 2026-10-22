@@ -17,7 +17,7 @@
       "energy": 1,
       "params": {
         "title": "Build time",
-        "rect": { "x": 90, "y": 380, "width": 900, "height": 620 },
+        "rect": { "x": 90, "y": 380, "width": 840, "height": 620 },
         "metric": {
           "mode": "illustration",
           "unit": "example minutes",
@@ -37,7 +37,7 @@
       "in": { "type": "fade", "dur": 0.4 },
       "params": {
         "title": "Three changes",
-        "rect": { "x": 90, "y": 380, "width": 900, "height": 620 },
+        "rect": { "x": 90, "y": 380, "width": 840, "height": 620 },
         "statusLabels": { "pending": "Next", "active": "Now", "done": "Done" },
         "rows": [
           { "label": "Cache dependencies", "status": "done", "at": 0.5 },
