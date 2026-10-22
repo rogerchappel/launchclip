@@ -21,7 +21,7 @@ import path from 'node:path';
 import { deriveBoundaries, validateStory } from './story.mjs';
 import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from './modules.mjs';
 import { gsapVars, sceneWindows } from './transitions.mjs';
-import { CAPTION_CSS, CAPTION_DEFAULT_COLORS, captionChunksFrom, captionRuntime, chunkWords, narrationWords } from './captions.mjs';
+import { captionCss, CAPTION_DEFAULT_COLORS, captionChunksFrom, captionRuntime, chunkWords, narrationWords } from './captions.mjs';
 import { brandFontStacks, fontSlug, googleFontModuleName } from './fonts.mjs';
 import { EMITTERS as EDITORIAL_EMITTERS } from './editorial-ui-modules.mjs';
 import { EMITTERS as CATALOG_A_EMITTERS } from './hyperframes-catalog-a.mjs';
@@ -203,7 +203,7 @@ ${fontCss.css}
     .lc-layer { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; }
     .lc-plate > .lc-layer { background: ${bg}; }
     ${placeholderCss()}
-    ${captions ? `${CAPTION_CSS.trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}
+    ${captions ? `${captionCss(format).trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}
     ${css.filter(Boolean).join('\n    ')}
   </style>
 </head>

@@ -5,7 +5,7 @@
 import React from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 // @ts-ignore plain ESM from kit/core
-import { CAPTION_BAND, CAPTION_DEFAULT_COLORS, CAPTION_MOTION, visibleChunks } from "../../core/captions.mjs";
+import { captionBandFor, CAPTION_DEFAULT_COLORS, CAPTION_MOTION, visibleChunks } from "../../core/captions.mjs";
 // @ts-ignore plain ESM from kit/core
 import { getEase, interpolateColor } from "../../core/motion.mjs";
 
@@ -22,7 +22,6 @@ export type WordCaptionsProps = {
 };
 
 const M = CAPTION_MOTION;
-const B = CAPTION_BAND;
 
 // GSAP fromTo/to progress at time t for a tween starting at `at`.
 function progress(t: number, at: number, duration: number, ease: string): number | null {
@@ -76,7 +75,8 @@ const round = (value: number, digits = 4) => Math.round(value * 10 ** digits) / 
 
 export const WordCaptions: React.FC<WordCaptionsProps> = ({ chunks, hide = [], idle = CAPTION_DEFAULT_COLORS.idle, active = CAPTION_DEFAULT_COLORS.active, spoken, fontFamily = "system-ui" }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
+  const B = captionBandFor({ width, height });
   const t = frame / fps;
   const colors = { idle, active, spoken: spoken ?? idle };
   const shown = (visibleChunks(chunks, hide) as CaptionChunk[]).filter((chunk) => t >= chunk.start - 0.001 && t <= chunk.end + 1);
