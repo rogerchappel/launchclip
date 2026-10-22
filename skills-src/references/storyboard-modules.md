@@ -42,7 +42,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - shorts (1080x1920): key content within x 80–940, y 280–1450; caption band x 65–918, y 1190–1420; centre of mass near y 860; key text at least 44 px; keep the lower third occupied.
 - landscape (1920x1080): key content within x 96–1824, y 54–1026; caption band x 192–1728, y 864–1004; centre of mass near y 540; key text at least 32 px.
 - Catalogue modules size and place themselves inside the safe zone and fail with a param error when copy is too long; shorten copy rather than shrinking it.
-- Editorial modules without a rect are placed by tooling at {"x":90,"y":420,"width":850,"height":720} (9:16) or {"x":160,"y":120,"width":1600,"height":700} (16:9). They need a 1080x1920 or 1920x1080 format.
+- Editorial modules without a rect size and place themselves from their content inside the safe zone and above the caption band; omit rect unless the layout needs a specific position. They need a 1080x1920 or 1920x1080 format.
 
 ## Captions
 

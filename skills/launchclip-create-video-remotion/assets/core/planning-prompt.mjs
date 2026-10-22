@@ -21,13 +21,6 @@ export const PLANNER_TIERS = Object.freeze(['structured', 'guided', 'bespoke']);
 // (RFC §7: catalogue modules only, no raw coordinates).
 export const TUNING_PARAMS = Object.freeze(['rect', 'theme', 'accent', 'motion', 'presentation', 'track']);
 
-// Where tooling places an editorial module that declares no rect: inside the
-// safe zone and above the caption band, so captions stay readable.
-export const SAFE_EDITORIAL_RECTS = Object.freeze({
-  '9:16': Object.freeze({ x: 90, y: 420, width: 850, height: 720 }),
-  '16:9': Object.freeze({ x: 160, y: 120, width: 1600, height: 700 })
-});
-
 // Spec summaries for the editorial kinds (kit/core/editorial-core.mjs has no
 // describe/params tables). A kind without an entry still appears in the prompt
 // with a generic line, and test/planning_prompt.test.js fails until it has one.
@@ -204,7 +197,7 @@ function safeZoneLines(format) {
   return [
     ...lines,
     'Catalogue modules size and place themselves inside the safe zone and fail with a param error when copy is too long; shorten copy rather than shrinking it.',
-    `Editorial modules without a rect are placed by tooling at ${JSON.stringify(SAFE_EDITORIAL_RECTS['9:16'])} (9:16) or ${JSON.stringify(SAFE_EDITORIAL_RECTS['16:9'])} (16:9). They need a 1080x1920 or 1920x1080 format.`
+    'Editorial modules without a rect size and place themselves from their content inside the safe zone and above the caption band; omit rect unless the layout needs a specific position. They need a 1080x1920 or 1920x1080 format.'
   ];
 }
 

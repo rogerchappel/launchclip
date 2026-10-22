@@ -6,8 +6,7 @@
 // 1. The model gets planningPrompt() (generated from the module registry) and
 //    the brief, and returns one storyboard JSON object.
 // 2. Tooling pins the fixed inputs (lane, format, brand, voice, words, base),
-//    places editorial modules that declare no rect in the safe slot, then
-//    checks the result: validateStory against knownModules(), the tier rules,
+//    then checks the result: validateStory against knownModules(), the tier rules,
 //    anchor resolution, resolveModule() for every scene (param errors), and the
 //    layout check on the declared geometry.
 // 3. On failure the exact errors go back to the model, which returns a
@@ -21,7 +20,7 @@
 import { STORY_LANES, resolveStory, validateStory } from "../kit/core/story.mjs";
 import { isEditorialKind, knownModules, formatAspect, resolveModule } from "../kit/core/modules.mjs";
 import { checkLayout, elementsFromEditorialLayout, elementsFromStory } from "../kit/core/layout-check.mjs";
-import { DEFAULT_BRAND, PLANNER_TIERS, SAFE_EDITORIAL_RECTS, TUNING_PARAMS, planningPrompt, suggestModules } from "../kit/core/planning-prompt.mjs";
+import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, planningPrompt, suggestModules } from "../kit/core/planning-prompt.mjs";
 import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { estimateModelUsageCost } from "./cost_tracker.js";
 
@@ -150,7 +149,7 @@ export async function planStoryboard(options = {}) {
 
 /**
  * Check one storyboard the way the planner does. Returns
- * {ok, errors, warnings, storyboard (with safe editorial rects applied), layout:
+ * {ok, errors, warnings, storyboard, layout:
  * {errors, warnings, findings}}. Error strings are prefixed by stage:
  * "validation:", "tier:", "anchors:", "params:", "layout:".
  */
@@ -164,7 +163,7 @@ export function checkStoryboard(input, { words = [], beats = null, tier = "struc
   errors.push(...tierErrors(input, tier).map((entry) => `tier: ${entry}`));
   if (errors.length) return { ok: false, errors, warnings, storyboard: input, layout };
 
-  const storyboard = applySafeDefaults(input);
+  const storyboard = JSON.parse(JSON.stringify(input));
   let resolved;
   try {
     resolved = resolveStory(storyboard, { words, beats });
@@ -229,19 +228,6 @@ export function tierErrors(story, tier) {
     if (scene?.track !== undefined && scene.track !== 0) errors.push(`${where}.track is not allowed in the structured tier; remove it`);
   });
   return errors;
-}
-
-/** Copy with every editorial scene that declares no rect placed in the safe slot. */
-export function applySafeDefaults(story) {
-  const copy = JSON.parse(JSON.stringify(story));
-  const rect = SAFE_EDITORIAL_RECTS[formatAspect(copy.format)];
-  if (!rect) return copy;
-  for (const scene of Array.isArray(copy.scenes) ? copy.scenes : []) {
-    if (!scene || !isEditorialKind(scene.module)) continue;
-    const params = scene.params && typeof scene.params === "object" ? scene.params : (scene.params = {});
-    if (params.rect === undefined) params.rect = { ...rect };
-  }
-  return copy;
 }
 
 // ---------------------------------------------------------------------------

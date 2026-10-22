@@ -109,9 +109,7 @@ test("the example storyboard validates and resolves through every module", () =>
     assert.deepEqual(validation.errors, []);
     const resolved = resolveStory(story);
     for (const scene of resolved.scenes) {
-      // checklist relies on the planner's safe rect; resolve it with one here.
-      const params = scene.module === "checklist" ? { ...scene.params, rect: format.width > format.height ? { x: 160, y: 120, width: 1600, height: 700 } : { x: 90, y: 420, width: 850, height: 720 } } : scene.params;
-      assert.doesNotThrow(() => resolveModule({ ...scene, params }, resolved), scene.id);
+      assert.doesNotThrow(() => resolveModule(scene, resolved), scene.id);
     }
   }
 });

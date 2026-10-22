@@ -67,7 +67,7 @@ const envelope = (story, usage = { input_tokens: 9000, output_tokens: 1200, tota
 
 const plan = (client, extra = {}) => planStoryboard({ brief: BRIEF, words: WORDS, lane: "voiceover-motion", format: FORMAT, audio: AUDIO, tier: "structured", model: "openai:gpt-5.6-luna", client, ...extra });
 
-test("success on the first attempt: prompt from the registry, envelope schema, safe rect, usage and cost", async () => {
+test("success on the first attempt: prompt from the registry, envelope schema, derived editorial rect, usage and cost", async () => {
   const client = fakeClient([envelope(goodStoryboard())]);
   const report = await plan(client);
   assert.equal(report.status, "passed", report.errors.join("\n"));
@@ -80,8 +80,8 @@ test("success on the first attempt: prompt from the registry, envelope schema, s
   assert.match(request.instructions, /coffee@0\.5/);
   assert.match(request.input, /Explain why hot coffee cools/);
   assert.match(request.input, /Phrase hints/);
-  // Tooling placed the editorial checklist in the safe slot.
-  assert.deepEqual(report.storyboard.scenes[2].params.rect, { x: 90, y: 420, width: 850, height: 720 });
+  // The editorial checklist keeps no rect: its content-derived default passes the layout check.
+  assert.equal(report.storyboard.scenes[2].params.rect, undefined);
   assert.equal(report.layout.errors, 0);
   assert.deepEqual(report.attempts[0].modules, ["hook-title", "equation-lockup", "checklist", "cta"]);
   assert.equal(report.usage.total_tokens, 10200);
