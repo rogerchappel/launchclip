@@ -1,0 +1,270 @@
+import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
+import gsap from "gsap";
+import { CATALOG_A_IDS, MODULES, ANIMATED_PROPS, contrastRatio, cssFromProps, initialNodeProps, mixHex, sampleNode, textAt } from "../kit/core/catalog-a.mjs";
+import { EMITTERS } from "../kit/hyperframes/catalog-a.mjs";
+import { getEase } from "../kit/core/motion.mjs";
+import { SAFE_ZONE_PROFILES } from "../kit/core/layout-check.mjs";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+export const BRAND = { colors: { bg: "#06070d", primary: "#fdb022", accent: "#46d4ff", ink: "#06070d", paper: "#f2eee6" }, fonts: { display: "anton", body: "space-grotesk", meta: "jetbrains-mono" } };
+const PORTRAIT = { width: 1080, height: 1920, fps: 30, duration: 30 };
+const LANDSCAPE = { width: 1920, height: 1080, fps: 30, duration: 30 };
+export const ctx = (overrides = {}) => ({ id: "m1", start: 2, duration: 4, format: PORTRAIT, brand: BRAND, aspect: "9:16", ...overrides });
+const resolve = (id, params, overrides) => MODULES[id].resolve(params, ctx(overrides));
+
+// Minimal valid params per module, extended by each module's own tests.
+export const SAMPLES = {};
+
+// ---------------------------------------------------------------------------
+// Shared contract checks, applied to every registered sample.
+
+function checkContract(model, { captions }) {
+  for (const key of ["id", "module", "canvas", "start", "duration", "end", "rect", "motion", "content", "events", "layout", "hidesCaptions", "theme"]) assert.ok(key in model, `model.${key}`);
+  for (const key of ["enterStart", "enterEnd", "exitStart", "end", "enterFrom", "exitTo", "enterEase", "exitEase"]) assert.ok(key in model.motion, `motion.${key}`);
+  assert.deepEqual(Object.keys(model.layout.motion), ["enterEnd", "exitStart", "end"]);
+  assert.equal(model.end, model.start + model.duration);
+  assert.ok(model.motion.enterStart <= model.motion.enterEnd && model.motion.enterEnd <= model.motion.exitStart && model.motion.exitStart < model.end);
+  getEase(model.motion.enterEase); getEase(model.motion.exitEase);
+  // Safe zone (and above the caption band when captions stay visible).
+  const profile = model.canvas.height > model.canvas.width ? SAFE_ZONE_PROFILES.shorts : SAFE_ZONE_PROFILES.landscape;
+  const sx = model.canvas.width / profile.reference.width, sy = model.canvas.height / profile.reference.height;
+  const zone = { x: profile.safeZone.x * sx, y: profile.safeZone.y * sy, right: (profile.safeZone.x + profile.safeZone.width) * sx, bottom: (profile.safeZone.y + profile.safeZone.height) * sy };
+  const r = model.rect;
+  assert.ok(r.x >= zone.x - .5 && r.y >= zone.y - .5 && r.x + r.width <= zone.right + .5 && r.y + r.height <= zone.bottom + .5, `rect ${JSON.stringify(r)} inside safe zone`);
+  if (captions) assert.ok(r.y + r.height <= profile.captionBand.y * sy, "rect clears the caption band");
+  assert.equal(model.hidesCaptions, !captions);
+  // Key text floor.
+  const k = Math.min(model.canvas.width, model.canvas.height) / 1080;
+  for (const size of model.content.keyTextPx) assert.ok(size >= 44 * k - .01, `key text ${size}px`);
+  // Contrast record: every pair at least 3:1.
+  for (const [pair, ratio] of Object.entries(model.contrast)) assert.ok(ratio >= 3, `${pair} ${ratio}`);
+  // Events sorted, ids prefixed, times inside the scene.
+  assert.ok(model.events.length > 0);
+  model.events.forEach((event, index) => {
+    assert.ok(event.id.startsWith(`${model.id}-`), event.id);
+    assert.ok(event.time >= model.start - 1e-9 && event.time <= model.end + 1e-9, `${event.id} at ${event.time}`);
+    if (index) assert.ok(event.time >= model.events[index - 1].time);
+  });
+  checkAnimations(model);
+}
+
+// Per node and prop: tweens never overlap and each starts where the previous
+// ended, blur is 0 at the end of the last tween, and static styles never set
+// opacity/transform/filter on animated nodes (GSAP owns those).
+function checkAnimations(model) {
+  const tracks = new Map();
+  for (const a of model.animations) {
+    assert.ok(model.styles[a.node], `styles for animated node ${a.node}`);
+    assert.ok(a.start >= model.start - 1e-9 && a.start + a.duration <= model.end + 1e-6, `${a.node} tween inside the scene`);
+    getEase(a.ease);
+    for (const prop of Object.keys(a.to)) {
+      assert.ok(ANIMATED_PROPS.includes(prop), prop);
+      const key = `${a.node}.${prop}`;
+      if (!tracks.has(key)) tracks.set(key, []);
+      tracks.get(key).push(a);
+    }
+  }
+  for (const [key, list] of tracks) {
+    list.sort((a, b) => a.start - b.start);
+    for (let i = 1; i < list.length; i++) {
+      const prop = key.split(".").pop();
+      assert.ok(list[i].start >= list[i - 1].start + list[i - 1].duration - 1e-6, `${key} tweens overlap at ${list[i].start}`);
+      assert.equal(list[i].from[prop], list[i - 1].to[prop], `${key} continuity at ${list[i].start}`);
+    }
+    if (key.endsWith(".blur")) assert.equal(list.at(-1).to.blur, 0, `${key} settles sharp`);
+  }
+  for (const node of new Set(model.animations.map((a) => a.node))) {
+    for (const prop of ["opacity", "transform", "filter"]) assert.ok(!(prop in model.styles[node]), `${node} static ${prop}`);
+  }
+}
+
+// Evaluate the emitted GSAP code against a fake timeline (shape) and against a
+// real paused GSAP timeline with fake targets (values), seeking forwards,
+// backwards and out of order: every sample must match sampleNode().
+function checkEmitter(model) {
+  const out = EMITTERS[model.module](model);
+  assert.deepEqual(Object.keys(out).sort(), ["css", "events", "html", "layout", "motion"]);
+  assert.match(out.html, new RegExp(`<section id="${model.id}" class="clip" data-start="${model.start}" data-duration="${model.duration}"`));
+  assert.equal(out.events, model.events);
+  assert.equal(out.layout, model.layout);
+  assert.doesNotMatch(out.motion, /onUpdate|onComplete|\.call\(|\.to\(|Proxy|Date\.now|Math\.random|requestAnimationFrame/);
+  const calls = [];
+  runInNewContext(out.motion, { tl: { fromTo: (...args) => calls.push(["fromTo", ...args]), set: (...args) => calls.push(["set", ...args]), to: () => assert.fail("tl.to is not seek-safe") } });
+  for (const call of calls.filter((c) => c[0] === "fromTo")) {
+    assert.equal(call[3].immediateRender, false);
+    assert.equal(typeof call[4], "number");
+  }
+  for (const node of Object.keys(model.styles)) {
+    const id = node === "root" ? model.id : `${model.id}-${node}`;
+    assert.ok(out.html.includes(`id="${id}"`), `html has #${id}`);
+    assert.ok(out.css.includes(`#${id}{`), `css has #${id}`);
+  }
+  // Real GSAP, fake targets: plain objects receive the tweened values.
+  const targets = {};
+  const target = (selector) => (targets[selector] ??= {});
+  const tl = gsap.timeline({ paused: true });
+  const proxyTl = {
+    set: (sel, vars, at) => tl.set(target(sel), plain(vars), at),
+    fromTo: (sel, from, to, at) => tl.fromTo(target(sel), plain(from), plain(to), at)
+  };
+  runInNewContext(out.motion, { tl: proxyTl });
+  const times = [model.end - .01, model.start, ...model.events.map((e) => e.time + .07), model.motion.enterEnd, model.start + model.duration / 2, model.motion.exitStart + .1, model.start + .05];
+  for (const t of times) {
+    tl.seek(t, false);
+    for (const node of new Set(model.animations.map((a) => a.node))) {
+      const id = `#${node === "root" ? model.id : `${model.id}-${node}`}`;
+      const expected = sampleNode(model, node, t);
+      for (const [prop, value] of Object.entries(expected)) {
+        const key = prop === "blur" ? "filterBlur" : prop;
+        const actual = targets[id][key];
+        if (typeof value === "number") assert.ok(Math.abs(actual - value) < 1e-3, `${id}.${prop} at ${t}: gsap ${actual} vs model ${value}`);
+        else assert.ok(sameColor(actual, value), `${id}.${prop} at ${t}: gsap ${actual} vs model ${value}`);
+      }
+    }
+    for (const entry of model.texts) assert.equal(targets[`#${model.id}-${entry.node}`].textContent, textAt(model, entry.node, t), `text at ${t}`);
+  }
+  return out;
+}
+
+function rgb(value) {
+  const text = String(value).trim().toLowerCase();
+  if (text.startsWith("#")) return [1, 3, 5].map((i) => parseInt(text.slice(i, i + 2), 16));
+  return text.match(/[0-9.]+/g).slice(0, 3).map(Number);
+}
+const sameColor = (a, b) => rgb(a).every((c, i) => Math.abs(c - rgb(b)[i]) <= 1);
+
+// GSAP cannot tween filter strings on plain objects; map blur to a number.
+function plain(vars) {
+  const out = { ...vars };
+  if ("filter" in out) { out.filterBlur = Number(/blur\(([-0-9.]+)px\)/.exec(out.filter)[1]); delete out.filter; }
+  delete out.force3D;
+  return out;
+}
+
+export function registerSample(id, params, { captions = false } = {}) {
+  SAMPLES[id] = { params, captions };
+}
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+
+test("contrastRatio follows WCAG 2 and mixHex blends in sRGB", () => {
+  assert.equal(Number(contrastRatio("#000000", "#ffffff").toFixed(2)), 21);
+  assert.equal(contrastRatio("#777777", "#777777"), 1);
+  assert.ok(Math.abs(contrastRatio("#fdb022", "#06070d") - contrastRatio("#06070d", "#fdb022")) < 1e-12);
+  assert.equal(mixHex("#ffffff", "#000000", .5), "#808080");
+  assert.throws(() => contrastRatio("red", "#000000"), /#rrggbb/);
+});
+
+test("cssFromProps composes transforms in GSAP order", () => {
+  assert.deepEqual(cssFromProps({ opacity: .5, x: 10, y: -4, scale: 1.2, blur: 3, color: "#ffffff" }),
+    { opacity: "0.5", color: "#ffffff", filter: "blur(3px)", transform: "translate(10px, -4px) rotate(0deg) scale(1.2, 1.2)" });
+  assert.deepEqual(cssFromProps({ scaleX: 0 }), { transform: "translate(0px, 0px) rotate(0deg) scale(0, 1)" });
+  assert.deepEqual(cssFromProps({}), {});
+});
+
+test("every catalogue A id is registered with describe, params and resolve", () => {
+  assert.deepEqual(Object.keys(MODULES).sort(), [...CATALOG_A_IDS].sort());
+  for (const id of CATALOG_A_IDS) {
+    assert.equal(typeof MODULES[id].describe, "string");
+    assert.ok(MODULES[id].describe.length > 20);
+    assert.equal(typeof MODULES[id].params, "object");
+    assert.equal(typeof MODULES[id].resolve, "function");
+    assert.ok(Object.isFrozen(MODULES[id]));
+  }
+});
+
+test("ctx and brand are validated before params", () => {
+  const id = "hook-title";
+  assert.throws(() => resolve(id, { headline: "Hello" }, { id: "1bad" }), new RegExp(`${id}: ctx\\.id`));
+  assert.throws(() => resolve(id, { headline: "Hello" }, { duration: 0 }), /ctx\.duration must be a number/);
+  assert.throws(() => resolve(id, { headline: "Hello" }, { brand: { colors: { bg: "#000000", paper: "#ffffff" } } }), /brand\.colors\.primary is required/);
+  assert.throws(() => resolve(id, { headline: "Hello" }, { brand: { colors: { bg: "#000", paper: "#ffffff", primary: "#ff0000" } } }), /brand\.colors\.bg must be a six-digit hex/);
+  assert.throws(() => resolve(id, { headline: "Hello" }, { brand: { ...BRAND, fonts: { display: "x;}" } } }), /brand\.fonts\.display/);
+});
+
+// ---------------------------------------------------------------------------
+// Module samples: contract, emitter, seek-safety, landscape.
+
+test("every sample satisfies the model contract and seeks identically in GSAP", () => {
+  for (const [id, { params, captions }] of Object.entries(SAMPLES)) {
+    const model = resolve(id, params);
+    assert.equal(model.module, id);
+    checkContract(model, { captions });
+    checkEmitter(model);
+    // Initial node props equal the first tween's from values.
+    for (const a of model.animations) for (const prop of Object.keys(a.from)) assert.ok(prop in initialNodeProps(model, a.node));
+  }
+});
+
+test("every sample also lays out on a landscape and a 720p portrait canvas", () => {
+  for (const [id, { params, captions }] of Object.entries(SAMPLES)) {
+    for (const format of [LANDSCAPE, { width: 720, height: 1280, fps: 30, duration: 30 }]) {
+      const model = resolve(id, params, { format, aspect: format.width > format.height ? "16:9" : "9:16" });
+      checkContract(model, { captions });
+    }
+  }
+});
+
+test("a brand that fails 3:1 throws for every module", () => {
+  const dull = { colors: { bg: "#202020", paper: "#f0f0f0", primary: "#3a3a3a" } };
+  for (const [id, { params }] of Object.entries(SAMPLES)) {
+    assert.throws(() => resolve(id, params, { brand: dull }), new RegExp(`${id}: brand contrast too low: primary on bg \\(#3a3a3a on #202020\\) is [0-9.]+:1; it needs at least 3:1`));
+  }
+});
+
+test("a params.rect outside the safe zone is rejected and one inside is used", () => {
+  for (const [id, { params }] of Object.entries(SAMPLES)) {
+    assert.throws(() => resolve(id, { ...params, rect: { x: 0, y: 300, width: 900, height: 900 } }), new RegExp(`${id}: params\\.rect must stay inside the safe zone`));
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Real Remotion stills, one per sample (skipped without Chrome Headless Shell).
+
+const ENTRY = path.join(ROOT, "test", "fixtures", "parity-entry-cat-a", "entry.tsx");
+
+test("each sample renders a real Remotion still through ModuleReview", { timeout: 600_000 }, async (t) => {
+  let renderer;
+  try {
+    renderer = await import("@remotion/renderer");
+    await renderer.ensureBrowser();
+  } catch (error) {
+    t.skip(`Chrome Headless Shell is unavailable: ${error.message}`);
+    return;
+  }
+  if (!Object.keys(SAMPLES).length) return;
+  const { bundle } = await import("@remotion/bundler");
+  const serveUrl = await bundle({ entryPoint: ENTRY, onProgress: () => {} });
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-cat-a-"));
+  try {
+    for (const [id, { params }] of Object.entries(SAMPLES)) {
+      const story = { format: PORTRAIT, brand: BRAND };
+      const scene = { id: "m1", module: id, start: 0, end: 4, params };
+      const inputProps = { scene, story };
+      const composition = await renderer.selectComposition({ serveUrl, id: "ModuleReview", inputProps, logLevel: "error" });
+      assert.equal(composition.durationInFrames, 120);
+      const output = path.join(dir, `${id}.png`);
+      await renderer.renderStill({ composition, serveUrl, output, frame: 60, inputProps, imageFormat: "png", logLevel: "error" });
+      const png = await readFile(output);
+      assert.equal(png.subarray(1, 4).toString("ascii"), "PNG");
+      assert.equal(png.readUInt32BE(16), 1080);
+      assert.equal(png.readUInt32BE(20), 1920);
+      assert.ok(png.length > 20_000, `${id} still has content (${png.length} bytes)`);
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("the throwaway parity verifier and its Remotion entry exist", () => {
+  assert.ok(existsSync(path.join(ROOT, "scripts", "parity-cat-a.mjs")));
+  assert.ok(existsSync(ENTRY));
+});
