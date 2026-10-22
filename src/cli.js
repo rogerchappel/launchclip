@@ -12,9 +12,10 @@ import { createStylePack, listStylePacks, projectStyleRoot, resolveStylePack } f
 import { checkCinematicProject } from "./cinematic_check.js";
 import { bundledSkillPath, installBundledSkills, listBundledSkills } from "./skill_install.js";
 import { prepareRecording, recordingOptions, writeBrollPlan } from "./recording_workflow.js";
+import { runStoryCommand } from "./story_cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "story", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -33,7 +34,8 @@ export async function runCli(argv, io = {}) {
 
   const styleInvocation = command === "style" ? parseStyleInvocation(firstArg, rest) : null;
   const skillsInvocation = command === "skills" ? parseSkillsInvocation(firstArg, rest) : null;
-  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? rest);
+  const storyInvocation = command === "story" ? parseStoryInvocation(firstArg, rest) : null;
+  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
@@ -58,6 +60,8 @@ export async function runCli(argv, io = {}) {
         ...productionAdapters,
         review: { input: stdin, output: stderr, ...productionAdapters.review }
       });
+    } else if (command === "story") {
+      result = await runStoryCommand(storyInvocation.action, storyInvocation.file, flags);
     } else if (command === "cinematic-check") {
       result = await checkCinematicProject(required(firstArg, "HyperFrames project path"), {
         ...flags,
@@ -137,6 +141,13 @@ function parseSkillsInvocation(action, rest) {
   if (!new Set(["list", "path", "install"]).has(action)) throw new Error(`Unknown skills action: ${action}`);
   const hasName = action === "path" && rest[0] && !rest[0].startsWith("--");
   return { action, name: hasName ? rest[0] : null, flagArgs: hasName ? rest.slice(1) : rest };
+}
+
+function parseStoryInvocation(action, rest) {
+  if (!action) throw new Error("Missing story action; use validate or resolve");
+  if (!new Set(["validate", "resolve"]).has(action)) throw new Error(`Unknown story action: ${action}`);
+  const file = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
+  return { action, file: required(file, "story.json path"), flagArgs: rest.slice(1) };
 }
 
 async function runStyleCommand(action, name, flags) {
@@ -237,6 +248,8 @@ Usage:
   launchclip production-critique <workspace> [--critic-route provider:model@reasoning] [--model-policy free] [--free-vision-model-candidates 3] [--free-vision-model-state path] [--refresh-free-vision-models] [--critic-reasoning xhigh] [--critic-pro]
   launchclip production-repair <workspace> [--model-policy cost-aware|local-first|quality|free] [--repair-route provider:model@reasoning] [--repair-text-only] [--repair-scoped-source] [--repair-semantic-attempts 2] [--repair-snapshots 8] [--repair-issues-per-shot 4] [--max-patch-ratio 0.35]
   launchclip production-render <workspace> --approve [--quality high] [--critic-route provider:model@reasoning] [--shot-inspect-concurrency 2] [--reference-video local.mp4]
+  launchclip story validate <story.json> [--narration NARRATION.json] [--beats BEATS.json] [--out report.json]
+  launchclip story resolve <story.json> [--narration NARRATION.json] [--beats BEATS.json] [--out story.resolved.json]
   launchclip cinematic-check <hyperframes-project> [--video renders/draft.mp4] [--audio-manifest AUDIO-MANIFEST.json] [--expect-audio] [--critique qa/critic.json]
   launchclip init <repo> --out <workspace>
   launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]

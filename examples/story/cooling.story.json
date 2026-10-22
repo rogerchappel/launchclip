@@ -1,0 +1,130 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Newton's law of cooling",
+  "lane": "voiceover-motion",
+  "format": { "width": 1080, "height": 1920, "fps": 30, "duration": 29.5, "platform": "youtube-shorts" },
+  "brand": {
+    "colors": { "bg": "#06070d", "primary": "#fdb022", "accent": "#46d4ff", "ink": "#06070d", "paper": "#f2eee6" },
+    "fonts": { "display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono" }
+  },
+  "audio": {
+    "voice": "assets/audio/narration.wav",
+    "words": "cooling.NARRATION.json",
+    "music": { "source": "synth", "bpm": 100, "key": "A" },
+    "sfx": "auto"
+  },
+  "base": null,
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "hook-title",
+      "start": 0,
+      "end": 5.75,
+      "energy": 1,
+      "params": {
+        "headline": "Hot coffee cools fast, then crawls.",
+        "kicker": "Why?",
+        "subject": "mug",
+        "readout": { "unit": "°C", "values": [[0, 90], [1.7, 62], [4.0, 58.4]] }
+      },
+      "hits": [
+        { "at": "word:fast", "event": "readout-plunge", "cue": "whoosh-down" },
+        { "at": "word:crawls", "event": "readout-slow" },
+        { "at": "word:why", "event": "kicker-pop", "cue": "tick" }
+      ]
+    },
+    {
+      "id": "s2",
+      "module": "gauge-compare",
+      "start": 5.75,
+      "end": 11.9,
+      "energy": 1,
+      "in": { "type": "push", "dur": 0.4, "direction": "left" },
+      "params": {
+        "left": { "label": "Mug", "value": 90, "unit": "°C", "color": "primary" },
+        "right": { "label": "Room", "value": 20, "unit": "°C", "color": "accent" },
+        "gap": { "object": "gap-bracket", "label": "Gap", "value": 70, "unit": "°C" }
+      },
+      "hits": [
+        { "at": "word:ninety", "event": "left-fill" },
+        { "at": "word:twenty", "event": "right-fill" },
+        { "at": "word:seventy", "event": "gap-bracket", "cue": "riser-short" }
+      ]
+    },
+    {
+      "id": "s3",
+      "module": "metric",
+      "start": 11.9,
+      "end": 20.6,
+      "energy": 2,
+      "in": { "type": "zoom", "dur": 0.6, "from_object": "s2.gap-bracket" },
+      "params": {
+        "title": "The gap halves every 10 minutes",
+        "accent": "#fdb022",
+        "presentation": "solid",
+        "rect": { "x": 90, "y": 520, "width": 900, "height": 560 },
+        "theme": { "surface": "#0d111c", "foreground": "#f2eee6", "muted": "#9aa3b5", "border": "#2a3247", "accentText": "#fdb022" },
+        "metric": {
+          "mode": "illustration",
+          "unit": "°C above the room",
+          "format": "number",
+          "decimals": 1,
+          "values": [
+            { "value": 70, "at": 0.6 },
+            { "value": 35, "at": 6.05 },
+            { "value": 17.5, "at": 6.94 }
+          ]
+        }
+      },
+      "hits": [
+        { "at": "word:gap#3", "event": "gap-halves" },
+        { "at": "word:thirty-five", "event": "gap-bar-1", "cue": "tick" },
+        { "at": "word:seventeen-0.05", "event": "gap-bar-2", "cue": "tick" }
+      ]
+    },
+    {
+      "id": "s4",
+      "module": "checklist",
+      "start": 20.6,
+      "end": 25.4,
+      "energy": "build",
+      "in": { "type": "whip", "dur": 0.35, "direction": "left" },
+      "params": {
+        "title": "What the gap decides",
+        "accent": "#46d4ff",
+        "rect": { "x": 90, "y": 560, "width": 900, "height": 600 },
+        "statusLabels": { "pending": "Next", "active": "Now", "done": "True" },
+        "rows": [
+          { "label": "Big gap: fast cooling", "status": "done", "at": 0.45 },
+          { "label": "Small gap: slow cooling", "status": "done", "at": 1.5 },
+          { "label": "Never drops below the room", "status": "done", "at": 2.85 }
+        ]
+      },
+      "hits": [
+        { "at": "word:big", "event": "row-0" },
+        { "at": "word:fast#2", "event": "row-0-emphasis" },
+        { "at": "word:small", "event": "row-1" },
+        { "at": "word:never", "event": "row-2", "cue": "thud-soft" }
+      ]
+    },
+    {
+      "id": "s5",
+      "module": "equation-lockup",
+      "start": 25.4,
+      "end": 29.5,
+      "energy": 3,
+      "in": { "type": "morph", "dur": 0.5, "from_object": "s4.gap-row" },
+      "params": {
+        "name": "Newton's law of cooling",
+        "equation": "dT/dt = −k (T − T_room)",
+        "note": "cooling rate ∝ the gap"
+      },
+      "hits": [
+        { "at": "word:newton's", "event": "lockup-land", "cue": "impact" },
+        { "at": "word:watch", "event": "loop-prime" }
+      ]
+    }
+  ],
+  "overlays": [{ "type": "captions", "style": "word-highlight" }],
+  "ending": { "loop_to": "s1", "in": { "type": "fade", "dur": 0.4 } }
+}
