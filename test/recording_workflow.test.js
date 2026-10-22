@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -25,7 +25,9 @@ async function fixture() {
     transcribeRendered: async () => ({ words: renderedPlan.words }),
     analyzeRecordingJoins: async () => ({ checked: true, issues: [] }),
     identifyRecordingCoherence: async (plan, actual, options) => ({ evidence_hash: recordingQaEvidenceHash(plan, actual, options.mediaSha256, options.sourceTranscript, options.acoustic), coverage_complete: true, findings: [], transcript_resolutions: [], acoustic_resolutions: [] }),
-    editRecording: async (_input, output, plan) => { renderedPlan = plan; renders++; await writeFile(output, "edited recording"); return { rendered_duration_seconds: plan.duration_seconds }; }
+    editRecording: async (_input, output, plan) => { renderedPlan = plan; renders++; await writeFile(output, "edited recording"); return { rendered_duration_seconds: plan.duration_seconds }; },
+    // Fake media: the audio clean-up is injected (test/audio_enhance.test.js covers the real chain).
+    enhanceRecordingAudio: async (input, output) => { await copyFile(input, output); return { status: "skipped", voice_isolation: { status: "not-requested" } }; }
   };
   return { directory, input, words, adapters, renders: () => renders, transcripts: () => transcripts };
 }

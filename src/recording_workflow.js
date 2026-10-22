@@ -10,7 +10,8 @@ import { normalizeRecordingTranscript, planRecordingEdit } from "./recording_edi
 import { createBrollPlan, renderBrollChecklist } from "./broll_plan.js";
 import { analyzeRecordingAudio, refineRecordingEditPlan } from "./recording_audio.js";
 import { identifySemanticRetakes, validateSemanticRetakes } from "./semantic_retakes.js";
-import { runRecordingQa } from "./recording_qa_workflow.js";
+import { inspectRecordingJoins, runRecordingQa } from "./recording_qa_workflow.js";
+import { AUDIO_ENHANCE_ENGINE_FILES, enhanceRecordingAudio, validateEnhanceOptions } from "./audio_enhance.js";
 
 const run = promisify(execFile);
 
@@ -36,6 +37,7 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
     semantic_retakes: path.join(directory, "semantic-retakes.json"),
     rendered_transcript: path.join(directory, "rendered-transcript.json"),
     qa_report: path.join(directory, "recording-qa.json"),
+    audio_enhance: path.join(directory, "audio-enhance.json"),
     broll_plan: path.join(directory, "broll-plan.json"),
     broll_checklist: path.join(directory, "BROLL.md")
   };
@@ -63,7 +65,11 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
   const qaDecisionsHash = options.qaDecisions ? await checksum(path.resolve(options.qaDecisions)) : null;
   const engineHash = digest(await Promise.all(["recording_workflow.js", "recording_edit.js", "recording_edit_media.js", "recording_audio.js", "semantic_retakes.js", "recording_qa_workflow.js", "recording_qa.js", "recording_qa_repair.js"].map(async (name) => readFile(new URL(name, import.meta.url), "utf8"))));
   const candidateHash = digest({ version: "recording-workflow.v3", qaModel: options.qaModel ?? null, qaBaseUrl: options.qaBaseUrl ?? null, qaAttempts: options.qaAttempts ?? 3, qaTranscriptionModel: options.qaTranscriptionModel ?? "base.en", engineHash, inputHash, transcriptHash, retakeDecisionsHash, retakeModel: options.retakeModel ?? null, retakeBaseUrl: options.retakeBaseUrl ?? null, policy, aspect: options.aspect ?? "16:9", model: options.model ?? "base.en", language: options.language ?? "en", crf: options.crf ?? 18 });
-  const requestHash = digest({ candidateHash, qaDecisionsHash });
+  // Audio clean-up runs after the cuts are QA'd, so it keys the published
+  // edit but not the QA session: changing --enhance reuses the QA evidence.
+  const { preset: enhancePreset, voiceIsolation } = validateEnhanceOptions({ preset: options.enhance, voiceIsolation: options.voiceIsolation });
+  const enhancement = { preset: enhancePreset, voice_isolation: voiceIsolation, engine: enhancePreset === "off" && voiceIsolation === "none" ? null : digest(await Promise.all(AUDIO_ENHANCE_ENGINE_FILES.map(async (name) => readFile(new URL(name, import.meta.url), "utf8")))) };
+  const requestHash = digest({ candidateHash, qaDecisionsHash, enhancement });
   const cached = await readCached(manifestPath, requestHash, files);
   if (cached) {
     const transcript = JSON.parse(await readFile(files.transcript, "utf8"));
@@ -112,7 +118,7 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
   plan = qa.plan;
   const editedTranscript = { text: plan.text, words: plan.words, duration_seconds: plan.duration_seconds };
   await readCaptureTracker(files, editedTranscript, { durationSeconds: plan.duration_seconds, aspect: options.aspect ?? "16:9" });
-  await link(qa.files.media, output);
+  const audioEnhancement = await enhanceBaseEdit(qa, plan, output, files.audio_enhance, { preset: enhancePreset, voiceIsolation }, adapters);
   const rendered = { rendered_duration_seconds: qa.rendered_duration_seconds };
   await writeJson(files.rendered_transcript, JSON.parse(await readFile(qa.files.rendered_transcript, "utf8")));
   await writeJson(files.qa_report, qa.report);
@@ -131,11 +137,57 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
     rendered_duration_seconds: rendered.rendered_duration_seconds ?? rendered.duration_seconds ?? plan.duration_seconds,
     take_policy: policy.takePolicy, filler_cleanup: policy.removeFillers,
     audio_silence: policy.audioSilence, semantic_retakes: semantic.retakes.length,
+    audio_enhancement: audioEnhancement,
     qa_status: "passed", qa_attempts: qa.attempts, qa_session: qa.files.qa_session,
     files, checksums, cached: false
   };
   await writeJson(manifestPath, result);
   return { ...result, manifest: manifestPath };
+}
+
+/**
+ * Clean up the accepted candidate's audio into the base edit, after the cuts
+ * passed QA. The enhanced media is published only when every join still
+ * passes the acoustic join QA and the duration is unchanged; otherwise the
+ * accepted candidate is published untouched and the reason is recorded.
+ */
+async function enhanceBaseEdit(qa, plan, output, reportPath, enhance, adapters) {
+  const summary = { preset: enhance.preset, voice_isolation: enhance.voiceIsolation, report: reportPath };
+  if (enhance.preset === "off" && enhance.voiceIsolation === "none") {
+    await link(qa.files.media, output);
+    await writeJson(reportPath, { schema_version: "launchclip.audio-enhance.v1", status: "off", preset: "off", voice_isolation: { requested: "none", status: "not-requested" }, input: qa.files.media, output, notes: ["--enhance off: the QA-accepted candidate is the base edit"] });
+    return { ...summary, status: "off" };
+  }
+  const notice = adapters.notice ?? ((line) => process.stderr.write(`${line}\n`));
+  const enhanced = path.join(path.dirname(output), `.base-edit.enhanced-${randomUUID()}.mp4`);
+  try {
+    const report = await (adapters.enhanceRecordingAudio ?? enhanceRecordingAudio)(qa.files.media, enhanced, { preset: enhance.preset, voiceIsolation: enhance.voiceIsolation, report: false, notice });
+    let status = report.status;
+    let reason = null;
+    let joins = null;
+    if (status === "enhanced") {
+      // Re-run the acoustic join QA on the enhanced media: processing must
+      // not introduce a click or discontinuity at any accepted join.
+      joins = await inspectRecordingJoins(enhanced, plan, adapters);
+      const acceptedJoins = qa.files.acoustic ? JSON.parse(await readFile(qa.files.acoustic, "utf8")) : { issues: [] };
+      const accepted = new Set((acceptedJoins.issues ?? []).map((issue) => issue.segment_index));
+      const introduced = (joins.issues ?? []).filter((issue) => !accepted.has(issue.segment_index));
+      const probe = await (adapters.probe ?? probeMedia)(enhanced);
+      const duration = Number(probe.format?.duration);
+      const expected = qa.rendered_duration_seconds ?? plan.duration_seconds;
+      if (introduced.length) reason = `enhanced audio introduced ${introduced.length} join issue(s) at segment(s) ${introduced.map((issue) => issue.segment_index).join(", ")}`;
+      else if (joins.checked === false) reason = "join QA could not check every join of the enhanced audio";
+      else if (!(Math.abs(duration - expected) <= 0.05)) reason = `enhanced media duration ${duration}s differs from the accepted ${expected}s`;
+      if (reason) status = "reverted";
+    }
+    if (status === "enhanced") await rename(enhanced, output);
+    else await link(qa.files.media, output);
+    if (reason) notice(`audio enhance: reverted to the unenhanced base edit (${reason})`);
+    await writeJson(reportPath, { ...report, status, output, ...(reason ? { revert_reason: reason } : {}), join_qa: joins ? { checked: joins.checked, total_joins: joins.total_joins, issues: joins.issues ?? [] } : null });
+    return { ...summary, status, ...(reason ? { revert_reason: reason } : {}), voice_isolation_status: report.voice_isolation?.status ?? null, paid_isolation_call: Boolean(report.voice_isolation?.paid_call) };
+  } finally {
+    await rm(enhanced, { force: true });
+  }
 }
 
 export async function writeBrollPlan(transcriptPath, options = {}) {
@@ -170,6 +222,7 @@ export function recordingOptions(flags = {}) {
     qaModel: flags["qa-model"], qaBaseUrl: flags["qa-base-url"], qaDecisions: flags["qa-decisions"],
     qaAttempts: flags["qa-attempts"] == null ? 3 : Number(flags["qa-attempts"]),
     qaTranscriptionModel: flags["qa-recording-model"] ?? "base.en",
+    enhance: flags.enhance ?? "light", voiceIsolation: flags["voice-isolation"] ?? "none",
     aspect: flags.aspect ?? "16:9", crf: flags["source-crf"] == null ? 18 : Number(flags["source-crf"])
   };
 }
