@@ -1,5 +1,15 @@
 ## Design the video
 
+Author `storyboard.json` from
+[references/storyboard-modules.md](references/storyboard-modules.md). It is
+generated from the module registry and lists every catalogue and editorial
+module with its params and events, the phrase→module table, the lane and tier
+rules, the time-anchor syntax, and the safe-zone and caption rules. Pick each
+scene's module from what its line says, fill the module's params, and anchor
+hits to measured words; reach for bespoke code only when no module carries the
+idea. `launchclip story plan` sends the same reference to a model when you
+want a first draft from a brief.
+
 Build one visual idea that develops across the whole piece rather than a stack
 of unrelated title cards. For every scene:
 

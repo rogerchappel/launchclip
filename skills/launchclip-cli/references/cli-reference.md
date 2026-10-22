@@ -554,6 +554,49 @@ The JSON result lists `files`, `warnings` (placeholders for unknown modules,
 missing audio, captions skipped) and the derived `boundaries`. An invalid
 story fails the command.
 
+### Plan a storyboard from a brief
+
+```bash
+launchclip story plan --brief brief.md [--narration NARRATION.json] \
+  [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] \
+  [--base assets/recording.mp4] [--voice assets/audio/narration.wav] \
+  [--format 1080x1920|shorts|landscape|square] [--fps 30] [--duration seconds] \
+  [--brand brand.json] [--max-repairs 2]
+```
+
+One model call authors `storyboard.json` from the brief, with the planning
+prompt generated from the module registry (`kit/core/planning-prompt.mjs`;
+the same text ships to the create-video skills as
+`references/storyboard-modules.md`). Tooling then pins the fixed inputs
+(lane, format, brand, voice, words, base), places editorial modules without a
+`rect` in the safe slot, and checks the result: the `story validate` rules
+with the module registry, the tier rules, anchor resolution, every scene's
+module params, and the layout check. On failure the exact errors go back to
+the model for at most `--max-repairs` (default 2) corrected storyboards.
+Repairs target scenes and params; the checks never relax.
+
+- The lane follows the inputs: `--base` → `footage-led`, `--narration` →
+  `voiceover-motion`, otherwise `motion`. `--lane` overrides it.
+- `--tier structured` (default) allows catalogue modules and their content
+  params only: no `rect`, `theme`, `accent`, `motion`, `presentation`, `track`
+  or `custom`. `guided` adds those tuning params; `bespoke` adds `custom`
+  modules.
+- `--duration` defaults to the last narration word plus 0.6 s, or 30 s.
+  `--brand` is a JSON file with `colors` and `fonts`.
+- `--model` is `provider:model[@reasoning]`: `anthropic:<model-id>`
+  (`ANTHROPIC_API_KEY`), `openai:<model>` (`OPENAI_API_KEY`),
+  `openrouter:<vendor>/<model>` (`OPENROUTER_API_KEY`), `ollama:<model>`
+  (local) or `compatible:<model>` (`OPENAI_COMPATIBLE_BASE_URL` and
+  `OPENAI_COMPATIBLE_API_KEY`). Without `--model`,
+  `LAUNCHCLIP_PLANNER_MODEL` is used; with neither the command fails.
+
+On success it writes `--out` (default `storyboard.json`). Every run writes
+`.launchclip/storyboard-plan.json` beside it with each attempt's errors,
+warnings, layout findings, modules, tokens and estimated cost. When repairs
+are exhausted the command fails, writes no storyboard, and keeps the last
+candidate as `<out>.rejected.json`. Review the storyboard, then run
+`story validate`, `layout-check` and `story compile` as usual.
+
 ## Failure handling
 
 - Preserve the workspace and receipts; do not delete them to retry.
