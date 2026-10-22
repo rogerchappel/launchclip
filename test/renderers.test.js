@@ -29,7 +29,7 @@ function story(overrides = {}) {
 
 async function storyProject(value = story()) {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-renderer-"));
-  await writeFile(path.join(project, "story.json"), JSON.stringify(value));
+  await writeFile(path.join(project, "storyboard.json"), JSON.stringify(value));
   return project;
 }
 
@@ -155,9 +155,9 @@ test("remotion adapter prefers the project entry and explains missing pieces", a
   assert.equal(getRenderer("remotion").resolveEntry(project), path.join(project, "remotion", "entry.tsx"));
   const bare = await mkdtemp(path.join(os.tmpdir(), "launchclip-renderer-"));
   const adapter = getRenderer("remotion", { run: async () => ({}), entry: FIXTURE_ENTRY, storyModule });
-  await assert.rejects(adapter.render(bare, path.join(bare, "out.mp4")), /need story\.json/);
+  await assert.rejects(adapter.render(bare, path.join(bare, "out.mp4")), /need storyboard\.json/);
   const missingModule = getRenderer("remotion", { run: async () => ({}), entry: FIXTURE_ENTRY, storyModule: path.join(bare, "story.mjs") });
-  await assert.rejects(missingModule.still(project, 0, path.join(project, "s.png")), /story\.json support requires .*kit\/core\/story\.mjs/s);
+  await assert.rejects(missingModule.still(project, 0, path.join(project, "s.png")), /storyboard\.json support requires .*kit\/core\/story\.mjs/s);
   const missingEntry = getRenderer("remotion", { run: async () => ({}), entry: path.join(bare, "missing.tsx"), storyModule });
   await assert.rejects(missingEntry.still(project, 0, path.join(project, "s.png")), /Remotion entry not found/);
 });
@@ -192,7 +192,7 @@ test("remotion check proves the story bundles and folds in the layout check", as
   assert.equal(unlisted.status, "failed");
   assert.match(unlisted.findings[0].message, /did not list LaunchclipStory/);
 
-  await writeFile(path.join(project, "story.json"), "{not json");
+  await writeFile(path.join(project, "storyboard.json"), "{not json");
   const broken = await getRenderer("remotion", { run, entry: FIXTURE_ENTRY, storyModule, layoutCheck: false }).check(project);
   assert.equal(broken.status, "failed");
   assert.equal(broken.findings[0].source, "story");

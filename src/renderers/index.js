@@ -14,10 +14,10 @@ export function getRenderer(name, defaults) {
   throw new Error(`Unknown renderer "${name}". Use one of: ${RENDERER_NAMES.join(", ")}`);
 }
 
-// Default renderer for a project: remotion when it holds story.json and no
+// Default renderer for a project: remotion when it holds storyboard.json and no
 // index.html, hyperframes otherwise.
 export function detectRenderer(projectDir) {
-  const hasStory = hasExactFile(projectDir, "story.json");
+  const hasStory = hasExactFile(projectDir, "storyboard.json");
   const hasHtml = hasExactFile(projectDir, "index.html");
   return hasStory && !hasHtml ? "remotion" : "hyperframes";
 }

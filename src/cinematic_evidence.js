@@ -80,10 +80,10 @@ function boundaryErrors(boundaries, duration) {
   return errors;
 }
 
-// Declared transition boundaries for a project, renderer-neutral. story.json
+// Declared transition boundaries for a project, renderer-neutral. storyboard.json
 // wins (resolved against NARRATION.json/BEATS.json, then deriveBoundaries);
 // otherwise the data-launchclip-transition-* attributes in index.html.
-// Returns {ok, boundaries, errors, source: "story.json"|"index.html", format}.
+// Returns {ok, boundaries, errors, source: "storyboard.json"|"index.html", format}.
 export async function declaredBoundariesForProject(projectDir, options = {}) {
   const project = path.resolve(projectDir);
   const story = await readProjectStory(project, { storyModule: options.storyModule });
@@ -99,7 +99,7 @@ export async function declaredBoundariesForProject(projectDir, options = {}) {
       to_id: entry.to_id ?? null
     }));
     const errors = boundaryErrors(boundaries, duration);
-    return { ok: errors.length === 0, boundaries, errors, source: "story.json", format: { ...story.format, duration }, story };
+    return { ok: errors.length === 0, boundaries, errors, source: "storyboard.json", format: { ...story.format, duration }, story };
   }
   const html = await readFile(path.join(project, "index.html"), "utf8");
   const duration = positiveDuration(options.duration ?? attribute(html, "data-duration"));

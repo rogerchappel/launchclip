@@ -10,17 +10,17 @@ const EDITORIAL_MODULE = path.join(ROOT, "skills/launchclip-create-video/scripts
 const EDITORIAL_KINDS = new Set(["media-window", "checklist", "step-rail", "callout", "audience-grid", "trend-chart", "metric", "progress", "date-card", "status-rack", "code-snippet", "excerpt-window", "focus-flow", "growth-chart"]);
 const PARAM_ROLES = new Set(["text", "hero", "media", "caption", "decor"]);
 
-// Geometric layout check for a story.json project. Works for both renderers
+// Geometric layout check for a storyboard.json project. Works for both renderers
 // because it reads declared rects and timing, not rendered pixels.
 export async function checkLayoutProject(projectDir, options = {}, adapters = {}) {
   const project = path.resolve(projectDir);
-  const storyFile = path.join(project, "story.json");
-  if (!(await exists(storyFile))) throw new Error(`layout-check needs ${storyFile}; author story.json first`);
+  const storyFile = path.join(project, "storyboard.json");
+  if (!(await exists(storyFile))) throw new Error(`layout-check needs ${storyFile}; author storyboard.json first`);
   const story = JSON.parse(await readFile(storyFile, "utf8"));
   const storyCore = adapters.storyCore ?? await loadStoryCore();
   if (typeof storyCore.validateStory === "function") {
     const validation = storyCore.validateStory(story);
-    if (validation && validation.ok === false) throw new Error(`story.json is invalid:\n- ${validation.errors.join("\n- ")}`);
+    if (validation && validation.ok === false) throw new Error(`storyboard.json is invalid:\n- ${validation.errors.join("\n- ")}`);
   }
   const narration = await readOptionalJson(path.join(project, "NARRATION.json"));
   const words = Array.isArray(narration) ? narration : Array.isArray(narration?.words) ? narration.words : [];
@@ -104,7 +104,7 @@ export function formatLayoutReport(report) {
 }
 
 async function loadStoryCore() {
-  if (!(await exists(STORY_MODULE))) throw new Error(`layout-check needs ${STORY_MODULE} to resolve story.json, and it is missing; install a LaunchClip build that ships kit/core/story.mjs`);
+  if (!(await exists(STORY_MODULE))) throw new Error(`layout-check needs ${STORY_MODULE} to resolve storyboard.json, and it is missing; install a LaunchClip build that ships kit/core/story.mjs`);
   const module = await import(pathToFileURL(STORY_MODULE).href);
   if (typeof module.resolveStory !== "function") throw new Error(`${STORY_MODULE} does not export resolveStory`);
   return module;

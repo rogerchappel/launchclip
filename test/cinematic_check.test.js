@@ -125,7 +125,7 @@ test("fails the HyperFrames adapter check on a blocking finding", async () => {
   assert.deepEqual(verification.failed, ["check"]);
 });
 
-test("auto-detects remotion for a story project and takes the format from story.json", async () => {
+test("auto-detects remotion for a story project and takes the format from storyboard.json", async () => {
   const project = await storyProjectFixture();
   const calls = [];
   const adapters = passingAdapters({ duration: 12, width: 720, height: 1280 });
@@ -136,9 +136,9 @@ test("auto-detects remotion for a story project and takes the format from story.
     calls.push(args.slice(1));
     return { stdout: "LaunchclipStory\n", stderr: "" };
   };
-  const result = await checkCinematicProject(project, { expectAudio: true, story: "qa/retention-story.json" }, adapters);
+  const result = await checkCinematicProject(project, { expectAudio: true, story: "qa/retention-storyboard.json" }, adapters);
   assert.equal(result.renderer, "remotion");
-  assert.equal(result.format_source, "story.json");
+  assert.equal(result.format_source, "storyboard.json");
   assert.equal(result.status, "ready");
   assert.equal(result.cinematic_contract, undefined);
   assert.deepEqual(calls, [[
@@ -160,16 +160,16 @@ test("fails a remotion check when the story does not bundle", async () => {
   adapters.storyModule = storyModule;
   adapters.rendererOptions = { entry: path.join(project, "entry.tsx"), layoutCheck: false };
   adapters.run = async () => { throw Object.assign(new Error("bundle failed"), { code: 1, stderr: "Module not found" }); };
-  const result = await checkCinematicProject(project, { expectAudio: true, story: "qa/retention-story.json" }, adapters);
+  const result = await checkCinematicProject(project, { expectAudio: true, story: "qa/retention-storyboard.json" }, adapters);
   assert.equal(result.status, "needs-repair");
   const verification = JSON.parse(await readFile(path.join(result.qa, "verification.json"), "utf8"));
   assert.deepEqual(verification.failed, ["compositions"]);
 });
 
 test("honours --renderer over auto-detection and rejects unknown renderers", async () => {
-  // No creative STORY.json here: on case-insensitive file systems it would share story.json's directory entry.
+  // No creative STORY.json here: on case-insensitive file systems it would share storyboard.json's directory entry.
   const project = await fixture({ complete: false });
-  await writeFile(path.join(project, "story.json"), JSON.stringify(storyboard()));
+  await writeFile(path.join(project, "storyboard.json"), JSON.stringify(storyboard()));
   const seen = [];
   const adapters = passingAdapters({ duration: 12, width: 720, height: 1280 });
   adapters.storyModule = storyModule;
@@ -187,7 +187,7 @@ test("enforces phase-2 evidence for a story marked phase 2 using story boundarie
   const project = await storyProjectFixture({ phase2: true });
   const adapters = passingAdapters({ duration: 12, width: 720, height: 1280 });
   adapters.storyModule = storyModule;
-  const options = { expectAudio: true, story: "qa/retention-story.json" };
+  const options = { expectAudio: true, story: "qa/retention-storyboard.json" };
   const missing = await checkCinematicProject(project, options, adapters);
   assert.equal(missing.status, "needs-repair");
   assert.equal(missing.cinematic_contract.marker, "phase-2");
@@ -220,11 +220,11 @@ async function storyProjectFixture({ phase2 = false } = {}) {
   await mkdir(path.join(project, "renders"), { recursive: true });
   await mkdir(path.join(project, "qa"), { recursive: true });
   await Promise.all([
-    writeFile(path.join(project, "story.json"), JSON.stringify(storyboard({ phase2 }))),
+    writeFile(path.join(project, "storyboard.json"), JSON.stringify(storyboard({ phase2 }))),
     writeFile(path.join(project, "entry.tsx"), "// placeholder entry; the injected run never bundles it\n"),
     writeFile(path.join(project, "renders", "draft.mp4"), "video"),
     writeFile(path.join(project, "CONCEPTS.json"), JSON.stringify({ selected_id: "concept-4" })),
-    writeFile(path.join(project, "qa", "retention-story.json"), JSON.stringify({ concept_id: "concept-4" })),
+    writeFile(path.join(project, "qa", "retention-storyboard.json"), JSON.stringify({ concept_id: "concept-4" })),
     writeFile(path.join(project, "NARRATION.json"), JSON.stringify({ duration_seconds: 12, words: [] })),
     writeFile(path.join(project, "AUDIO-MANIFEST.json"), JSON.stringify({ voiceover: { path: "voice.wav" }, music: null, sfx_manifest: null })),
     writeFile(path.join(project, "qa", "critic.json"), JSON.stringify({ verdict: "ship", findings: [] }))

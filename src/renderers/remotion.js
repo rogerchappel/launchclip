@@ -50,12 +50,12 @@ export function createRemotionRenderer(defaults = {}) {
       return entry;
     },
 
-    // Resolves story.json and writes <project>/.launchclip/story.resolved.json,
+    // Resolves storyboard.json and writes <project>/.launchclip/story.resolved.json,
     // which is passed to Remotion as --props.
     async prepare(projectDir, opts = {}) {
       const project = path.resolve(projectDir);
       const loaded = await readProjectStory(project, { storyModule: option(opts, "storyModule") });
-      if (!loaded) throw new Error(`Remotion projects need story.json: none found in ${project}`);
+      if (!loaded) throw new Error(`Remotion projects need storyboard.json: none found in ${project}`);
       let props = loaded.resolved;
       if (opts.fps) props = withFps(props, Number(opts.fps));
       const format = opts.fps ? loaded.module.storyFormat(props) : loaded.format;
@@ -120,7 +120,10 @@ export function createRemotionRenderer(defaults = {}) {
         if (!result.ok) findings.push({ source: "remotion-compositions", severity: "error", message: `remotion compositions failed (exit ${result.exit_code})` });
         else if (!listed) findings.push({ source: "remotion-compositions", severity: "error", message: `remotion compositions did not list ${COMPOSITION_ID}` });
 
-        const layout = await runLayoutCheck(prepared, option(opts, "layoutCheck"), { strict: opts.strict ?? true });
+        const layoutSource = option(opts, "layoutCheck");
+        const layout = layoutSource === undefined
+          ? await runProjectLayoutCheck(projectDir)
+          : await runLayoutCheck(prepared, layoutSource, { strict: opts.strict ?? true });
         checks.layout = layout.check;
         findings.push(...layout.findings);
       }
@@ -184,6 +187,19 @@ async function runLayoutCheck(prepared, source, { strict }) {
     return { check: { ok: ok === true, export: name, finding_count: findings.length, result }, findings };
   } catch (error) {
     return { check: { ok: false, export: name, error: error.message }, findings: [{ source: "layout-check", severity: "error", message: `layout check threw: ${error.message}` }] };
+  }
+}
+
+// Default: the geometric check from src/layout_check.js over the project's
+// storyboard.json, the same one `launchclip layout-check` runs.
+async function runProjectLayoutCheck(projectDir) {
+  try {
+    const { checkLayoutProject } = await import("../layout_check.js");
+    const report = await checkLayoutProject(projectDir);
+    const findings = (report.findings ?? []).map((entry) => ({ source: "layout-check", ...entry, severity: String(entry.severity ?? "error"), message: `${entry.rule}: ${entry.detail ?? ""}`.trim() }));
+    return { check: { ok: report.status !== "failed", export: "checkLayoutProject", finding_count: findings.length, result: report }, findings };
+  } catch (error) {
+    return { check: { ok: false, export: "checkLayoutProject", error: error.message }, findings: [{ source: "layout-check", severity: "error", message: `layout check threw: ${error.message}` }] };
   }
 }
 

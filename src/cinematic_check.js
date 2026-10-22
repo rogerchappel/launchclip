@@ -26,7 +26,7 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
   const storyModule = adapters.storyModule ?? options.storyModule;
   const storyboard = await readProjectStory(project, { storyModule });
   const html = hasExactFile(project, "index.html") ? await readFile(path.join(project, "index.html"), "utf8") : null;
-  if (!storyboard && html == null) throw new Error(`${project} has neither story.json nor index.html`);
+  if (!storyboard && html == null) throw new Error(`${project} has neither storyboard.json nor index.html`);
   const format = storyboard?.format ?? {};
   const duration = positiveNumber(options.duration ?? format.duration ?? htmlAttribute(html, "data-duration"), "composition duration");
   const width = positiveNumber(options.width ?? format.width ?? htmlAttribute(html, "data-width"), "composition width");
@@ -81,7 +81,7 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
   const [concepts, story, narration, critique] = await Promise.all([
     readOptionalJson(projectFile(project, options.concepts ?? "CONCEPTS.json")),
     // Exact-case default: on case-insensitive file systems STORY.json would
-    // otherwise resolve to the storyboard story.json.
+    // otherwise resolve to the storyboard storyboard.json.
     options.story ? readOptionalJson(projectFile(project, options.story)) : hasExactFile(project, "STORY.json") ? readOptionalJson(path.join(project, "STORY.json")) : null,
     readOptionalJson(projectFile(project, options.narration ?? "NARRATION.json")),
     readOptionalJson(projectFile(project, options.critique ?? "qa/critic.json"))
@@ -116,7 +116,7 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
     stage: "cinematic-check",
     status: readiness.ok ? "ready" : "needs-repair",
     renderer: rendererName,
-    format_source: storyboard ? "story.json" : "index.html",
+    format_source: storyboard ? "storyboard.json" : "index.html",
     project,
     video,
     qa: qaDir,
@@ -223,7 +223,7 @@ function rendererAdapter(name, adapters, storyModule) {
 
 // Runs the renderer adapter's check and records each sub-check as
 // <qaDir>/<name>.json (lint.json and check.json for HyperFrames;
-// story.json, compositions.json and layout.json for Remotion).
+// storyboard.json, compositions.json and layout.json for Remotion).
 async function verifyProject(project, qaDir, renderer) {
   let result;
   try {

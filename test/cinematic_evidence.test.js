@@ -161,7 +161,7 @@ test("writes browser-still and accepts hyperframes only as a legacy alias", () =
   assert.equal(canonicalTemporalEvidenceSource("toString"), null);
 });
 
-test("derives declared boundaries from story.json before index.html", async () => {
+test("derives declared boundaries from storyboard.json before index.html", async () => {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-story-boundaries-"));
   await writeFile(path.join(project, "index.html"), '<div data-composition-id="main" data-duration="9" data-width="1080" data-height="1920"><i data-launchclip-boundary-id="html-1" data-launchclip-transition-start="2" data-launchclip-transition-duration=".5"></i></div>');
   const fromHtml = await declaredBoundariesForProject(project, { storyModule });
@@ -170,9 +170,9 @@ test("derives declared boundaries from story.json before index.html", async () =
   assert.equal(fromHtml.format.duration, 9);
 
   await writeFile(path.join(project, "NARRATION.json"), JSON.stringify({ words: [{ text: "cools", start: 4.2, end: 4.6 }] }));
-  await writeFile(path.join(project, "story.json"), JSON.stringify(storyFixture()));
+  await writeFile(path.join(project, "storyboard.json"), JSON.stringify(storyFixture()));
   const fromStory = await declaredBoundariesForProject(project, { storyModule });
-  assert.equal(fromStory.source, "story.json");
+  assert.equal(fromStory.source, "storyboard.json");
   assert.equal(fromStory.ok, true);
   assert.deepEqual(fromStory.format, { duration: 8, width: 1080, height: 1920, fps: 30 });
   assert.deepEqual(fromStory.boundaries, [
@@ -184,7 +184,7 @@ test("derives declared boundaries from story.json before index.html", async () =
 
   const late = storyFixture();
   late.scenes[2].in.dur = 9;
-  await writeFile(path.join(project, "story.json"), JSON.stringify(late));
+  await writeFile(path.join(project, "storyboard.json"), JSON.stringify(late));
   assert.match((await declaredBoundariesForProject(project, { storyModule })).errors.join(" "), /s3-in extends beyond the composition duration/);
 });
 
@@ -194,8 +194,8 @@ test("ignores a creative STORY.json and explains a missing story module", async 
   await writeFile(path.join(project, "STORY.json"), JSON.stringify({ concept_id: "concept-1" }));
   assert.equal((await declaredBoundariesForProject(project, { storyModule: path.join(project, "nope.mjs") })).source, "index.html");
   const storyProject = await mkdtemp(path.join(os.tmpdir(), "launchclip-story-missing-"));
-  await writeFile(path.join(storyProject, "story.json"), JSON.stringify(storyFixture()));
-  await assert.rejects(declaredBoundariesForProject(storyProject, { storyModule: path.join(storyProject, "nope.mjs") }), /story\.json support requires .*nope\.mjs.*kit\/core\/story\.mjs/s);
+  await writeFile(path.join(storyProject, "storyboard.json"), JSON.stringify(storyFixture()));
+  await assert.rejects(declaredBoundariesForProject(storyProject, { storyModule: path.join(storyProject, "nope.mjs") }), /storyboard\.json support requires .*nope\.mjs.*kit\/core\/story\.mjs/s);
 });
 
 test("reads the phase-2 marker from a story", () => {

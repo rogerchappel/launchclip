@@ -151,7 +151,7 @@ test("builds story elements through an injected module layout and adds a caption
   assert.throws(() => elementsFromStory(story, {}), /moduleLayout/);
 });
 
-test("layout-check CLI reads story.json and editorial specs", async () => {
+test("layout-check CLI reads storyboard.json and editorial specs", async () => {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-layout-"));
   const story = {
     schema: "launchclip.story.v1",
@@ -164,7 +164,7 @@ test("layout-check CLI reads story.json and editorial specs", async () => {
     ],
     overlays: [{ type: "captions" }]
   };
-  await writeFile(path.join(project, "story.json"), JSON.stringify(story));
+  await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story));
   const storyCore = {
     validateStory: () => ({ ok: true, errors: [], warnings: [] }),
     resolveStory: (input) => ({ ...structuredClone(input), resolved: { duration: input.format.duration, fps: 30, frames: 240 } })
@@ -191,13 +191,13 @@ test("layout-check CLI reads story.json and editorial specs", async () => {
   assert.match(help.join(""), /layout-check <story-project> \[--profile shorts\|landscape\] \[--json\]/);
 });
 
-test("layout-check explains a missing story.json", async () => {
+test("layout-check explains a missing storyboard.json", async () => {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-layout-empty-"));
-  await assert.rejects(checkLayoutProject(project, {}, { storyCore: {} }), /needs .*story\.json/);
+  await assert.rejects(checkLayoutProject(project, {}, { storyCore: {} }), /needs .*storyboard\.json/);
 });
 
 test("layout-check explains a missing kit/core/story.mjs", { skip: existsSync(path.resolve(import.meta.dirname, "../kit/core/story.mjs")) }, async () => {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-layout-core-"));
-  await writeFile(path.join(project, "story.json"), JSON.stringify({ format: { width: 1080, height: 1920 }, scenes: [] }));
+  await writeFile(path.join(project, "storyboard.json"), JSON.stringify({ format: { width: 1080, height: 1920 }, scenes: [] }));
   await assert.rejects(checkLayoutProject(project), /kit\/core\/story\.mjs/);
 });
