@@ -711,6 +711,12 @@ shell), else the license-free synth bed. `audio.music` takes `"synth"`,
   fallback and skip. Plan cuts on bar lines (bar = 4 × 60 / BPM s) so fewer
   of them need to move.
 
+To keep editing in Final Cut Pro, Premiere Pro or DaVinci Resolve after
+finish, export an editable timeline (base clips with their in points, each
+overlay scene as an alpha clip, voice, music, per-cue SFX, captions and
+markers): `launchclip export <project> --format fcpxml|premiere|edl|otio|all`.
+See [finishing-in-an-nle.md](finishing-in-an-nle.md).
+
 Use the manual commands below when the CLI is not available or a single step
 needs rerunning with different options.
 

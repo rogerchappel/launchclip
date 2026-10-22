@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.10">
+    <resources>
+      <format id="r1" frameDuration="1/30s" width="1080" height="1920" colorSpace="1-1-1 (Rec. 709)"/>
+      <format id="r2" frameDuration="1/30s" width="720" height="1280" colorSpace="1-1-1 (Rec. 709)"/>
+      <asset id="r3" name="rec.mp4" uid="7F932C91569CA6F753C4865E6E1FA974" start="0s" duration="8s" hasVideo="1" format="r2" videoSources="1" hasAudio="1" audioSources="1" audioChannels="1" audioRate="48000">
+        <media-rep kind="original-media" src="media/rec.mp4"/>
+      </asset>
+      <asset id="r4" name="insert" uid="4223CAC71A3BCA4152A2A230D62B672E" start="0s" duration="3/2s" hasVideo="1" format="r1" videoSources="1">
+        <media-rep kind="original-media" src="media/overlays/insert.mov"/>
+      </asset>
+      <asset id="r5" name="callout" uid="A080DFC96506317445B425D820452118" start="0s" duration="2s" hasVideo="1" format="r1" videoSources="1">
+        <media-rep kind="original-media" src="media/overlays/callout.mov"/>
+      </asset>
+      <asset id="r6" name="tail" uid="B87260AE7E1B938B309A27EE445AE629" start="0s" duration="2s" hasVideo="1" format="r1" videoSources="1">
+        <media-rep kind="original-media" src="media/overlays/tail.mov"/>
+      </asset>
+      <asset id="r7" name="render" uid="BD195334A4E69A36B726BDD61422A704" start="0s" duration="6s" hasVideo="1" format="r1" videoSources="1" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+        <media-rep kind="original-media" src="media/reference/final.mp4"/>
+      </asset>
+      <asset id="r8" name="music" uid="8FA352BA9F718F09F99B81A3ED359635" start="0s" duration="31/5s" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+        <media-rep kind="original-media" src="media/audio/music-bed.wav"/>
+      </asset>
+      <asset id="r9" name="whoosh" uid="46B632ED920D3697E7D17A3D034D4B48" start="0s" duration="3/5s" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+        <media-rep kind="original-media" src="media/sfx/whoosh.wav"/>
+      </asset>
+      <asset id="r10" name="tick" uid="0926650A9902C150E9BCB8CC17A1640C" start="0s" duration="2/15s" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+        <media-rep kind="original-media" src="media/sfx/tick.wav"/>
+      </asset>
+      <asset id="r11" name="mix" uid="F13FCD59291F534124C92F37E134A111" start="0s" duration="6s" hasAudio="1" audioSources="1" audioChannels="2" audioRate="48000">
+        <media-rep kind="original-media" src="media/audio/mix.wav"/>
+      </asset>
+    </resources>
+    <library>
+        <event name="LaunchClip">
+            <project name="small">
+                <sequence format="r1" duration="6s" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
+                    <spine>
+                        <asset-clip name="rec 1" ref="r3" offset="0s" duration="2s" start="0s" audioRole="dialogue">
+                          <asset-clip name="finished render" ref="r7" lane="3" offset="0s" duration="6s" start="0s" enabled="0" srcEnable="video"/>
+                          <asset-clip name="music bed" ref="r8" lane="-2" offset="0s" duration="6s" start="0s" audioRole="music">
+                            <adjust-volume amount="-11.1dB"/>
+                          </asset-clip>
+                          <asset-clip name="finished mix (reference)" ref="r11" lane="-5" offset="0s" duration="6s" start="0s" enabled="0" audioRole="music"/>
+                          <caption name="caption 1" lane="4" offset="3/10s" duration="9/10s" role="SRT?captionFormat=SRT.en">
+                            <text placement="bottom"><text-style ref="ts1">Hello &amp; welcome</text-style></text>
+                            <text-style-def id="ts1">
+                              <text-style font=".AppleSystemUIFont" fontSize="13" fontFace="Regular" fontColor="1 1 1 1" backgroundColor="0 0 0 1"/>
+                            </text-style-def>
+                          </caption>
+                          <asset-clip name="callout · footage-callout" ref="r5" lane="2" offset="1/2s" duration="2s" start="0s"/>
+                          <asset-clip name="sfx-01-whoosh" ref="r9" lane="-3" offset="9/10s" duration="3/5s" start="0s" audioRole="effects">
+                            <adjust-volume amount="-8.0dB"/>
+                          </asset-clip>
+                          <asset-clip name="sfx-02-tick" ref="r10" lane="-4" offset="1s" duration="2/15s" start="0s" audioRole="effects">
+                            <adjust-volume amount="-10.5dB"/>
+                          </asset-clip>
+                          <caption name="caption 2" lane="4" offset="6/5s" duration="4/5s" role="SRT?captionFormat=SRT.en">
+                            <text placement="bottom"><text-style ref="ts2">from &lt;LaunchClip&gt;</text-style></text>
+                            <text-style-def id="ts2">
+                              <text-style font=".AppleSystemUIFont" fontSize="13" fontFace="Regular" fontColor="1 1 1 1" backgroundColor="0 0 0 1"/>
+                            </text-style-def>
+                          </caption>
+                          <marker start="1/2s" duration="1/30s" value="callout" note="scene callout · footage-callout · track 1"/>
+                          <marker start="1s" duration="1/30s" value="cam" note="scene cam · punch-in · track 2"/>
+                          <marker start="1s" duration="1/30s" value="cam: camera" note="camera punch-in ×1.1, 1–2s (not carried; re-create as a transform keyframe)"/>
+                          <marker start="1s" duration="1/30s" value="callout: point" note="hit"/>
+                        </asset-clip>
+                        <asset-clip name="rec 2" ref="r3" offset="2s" duration="4s" start="3s" audioRole="dialogue">
+                          <asset-clip name="insert · count-up" ref="r4" lane="1" offset="4s" duration="3/2s" start="0s"/>
+                          <asset-clip name="tail · lower-third" ref="r6" lane="2" offset="5s" duration="2s" start="0s"/>
+                          <caption name="caption 3" lane="4" offset="51/10s" duration="7/5s" role="SRT?captionFormat=SRT.en">
+                            <text placement="bottom"><text-style ref="ts3">Try it</text-style></text>
+                            <text-style-def id="ts3">
+                              <text-style font=".AppleSystemUIFont" fontSize="13" fontFace="Regular" fontColor="1 1 1 1" backgroundColor="0 0 0 1"/>
+                            </text-style-def>
+                          </caption>
+                          <asset-clip name="sfx-03-tick" ref="r10" lane="-3" offset="77/15s" duration="2/15s" start="0s" audioRole="effects">
+                            <adjust-volume amount="-10.5dB"/>
+                          </asset-clip>
+                          <marker start="4s" duration="1/30s" value="insert" note="scene insert · count-up"/>
+                          <marker start="9/2s" duration="1/30s" value="insert: hit" note="hit · cue impact"/>
+                          <marker start="5s" duration="1/30s" value="tail" note="scene tail · lower-third · track 1"/>
+                        </asset-clip>
+                    </spine>
+                </sequence>
+            </project>
+        </event>
+    </library>
+</fcpxml>

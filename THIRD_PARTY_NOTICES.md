@@ -69,6 +69,21 @@ your project (`assets/audio/music.mp3`) and your local cache
 (`$LAUNCHCLIP_CACHE/elevenlabs/music`), and `AUDIO-MANIFEST.json` records the
 provider of every track.
 
+## Sound effects
+
+The procedural SFX kit (`skills/launchclip-create-video/scripts/synth-audio-kit.mjs`:
+whooshes, impacts, risers, ticks, pops, shimmers, sub drops, UI clicks and
+mechanical keystrokes) is original synthesis with local FFmpeg. It contains
+no third-party samples and is covered by LaunchClip's MIT License.
+
+`launchclip sfx seed --provider elevenlabs` (opt-in, needs
+`ELEVENLABS_API_KEY`) generates library sounds with the ElevenLabs sound
+effects API. LaunchClip ships no ElevenLabs audio; generated files stay in the
+user's library (`.launchclip/sfx/` or `~/.launchclip/sfx/`), and their use is
+governed by the ElevenLabs terms of service for the account that generated
+them. `finish` records the source of every cue in `qa/sfx.json` and states
+the licence in `AUDIO-MANIFEST.json`.
+
 ## Bundled fonts
 
 Both renderers draw text with font files from these packages, pinned to exact

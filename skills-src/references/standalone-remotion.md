@@ -678,6 +678,12 @@ critic gate stays `pending`: run the fresh-context critic on
 
 <!-- include: shared/music-beat-sync.md -->
 
+To keep editing in Final Cut Pro, Premiere Pro or DaVinci Resolve after
+finish, export an editable timeline (base clips with their in points, each
+overlay scene as an alpha clip, voice, music, per-cue SFX, captions and
+markers): `launchclip export <project> --format fcpxml|premiere|edl|otio|all`.
+See [finishing-in-an-nle.md](finishing-in-an-nle.md).
+
 Use the manual commands below when the CLI is not available or a single step
 needs rerunning with different options.
 

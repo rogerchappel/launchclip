@@ -26,10 +26,12 @@ import { getRenderer, resolveRendererName } from "./renderers/index.js";
 import { remotionInvocation } from "./renderers/remotion.js";
 import { deriveBoundaries, resolveStory, storyFormat } from "./story.js";
 import { validateStory } from "./story_cli.js";
-import { hasExactFile } from "./story_loader.js";
+import { hasExactFile, readStoryEdl } from "./story_loader.js";
 import { hyperframesInvocation } from "./toolchain.js";
 import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
 import { normalizeLoudness, parseLoudnormJson } from "./voice/supplied.js";
+import { applyDensity, densityTyping, eventKey, familySource, kitLibrary, resolveCueFile, resolveLibraries, SFX_DENSITIES } from "./sfx/library.js";
+import { collectTyping, renderTypingTrack, typingSchedule } from "./sfx/typing.js";
 import { getMusicProvider, parseMusicSpec, resolveMusicChoice, MUSIC_FLAG_VALUES } from "./music/index.js";
 import { analyzeBeatsFile, beatsDocument, gridFromBpm, transformGrid } from "./music/beats.js";
 import { BEAT_SYNC_SCHEMA, chooseAlignment, keyMoments, momentReport, snapStory, summarizeMoments, syncStrategy } from "./music/beat_sync.js";
@@ -61,6 +63,7 @@ export const PATHS = Object.freeze({
   kit: "assets/audio/kit",
   mix: "assets/audio/mix.wav",
   cues: "assets/audio/cues.json",
+  typing: "assets/audio/typing.wav",
   sfxManifest: "qa/sfx.json",
   music: "assets/audio/music.mp3",
   musicPrepared: "assets/audio/music.prepared.wav",
@@ -78,9 +81,10 @@ export const PATHS = Object.freeze({
 // ---------------------------------------------------------------------------
 // Sound design: hits and module events → SFX cues, scene energy → music bed.
 
-// The procedural kit's cues (synth-audio-kit.mjs SFX) and their mix levels.
-export const CUE_LEVELS = Object.freeze({ impact: 0.55, subdrop: 0.5, whoosh: 0.4, riser: 0.35, shimmer: 0.35, pop: 0.35, tick: 0.3 });
-export const CUE_DURATIONS = Object.freeze({ whoosh: 0.62, impact: 1.3, riser: 1.4, tick: 0.14, pop: 0.2, shimmer: 1.6, subdrop: 1.8 });
+// The cue families (synth-audio-kit.mjs SFX_FAMILIES, and the SFX library)
+// and their mix levels. Keystrokes normally arrive through the typing track.
+export const CUE_LEVELS = Object.freeze({ impact: 0.55, subdrop: 0.5, whoosh: 0.4, riser: 0.35, shimmer: 0.35, pop: 0.35, tick: 0.3, click: 0.3, keystroke: 0.3, "keystroke-space": 0.34, "keystroke-enter": 0.36 });
+export const CUE_DURATIONS = Object.freeze({ whoosh: 0.62, impact: 1.3, riser: 1.4, tick: 0.14, pop: 0.2, shimmer: 1.6, subdrop: 1.8, click: 0.06, keystroke: 0.11, "keystroke-space": 0.16, "keystroke-enter": 0.15 });
 const CUE_SPACING = 0.12;
 const WHOOSH_TRANSITIONS = new Set(["push", "whip", "zoom"]);
 const EVENT_CUES = [
@@ -103,8 +107,11 @@ export function defaultCueFor(event) {
  * Modifiers: -soft (quieter), -short (a shorter variant; same kit file).
  */
 export function kitCue(name) {
-  const [base, ...modifiers] = String(name ?? "").toLowerCase().split("-");
-  if (!Object.hasOwn(CUE_LEVELS, base)) return null;
+  const lower = String(name ?? "").toLowerCase();
+  // Longest family first, so "keystroke-space-soft" is keystroke-space + soft.
+  const base = Object.keys(CUE_LEVELS).sort((a, b) => b.length - a.length).find((family) => lower === family || lower.startsWith(`${family}-`));
+  if (!base) return null;
+  const modifiers = lower.slice(base.length).split("-").filter(Boolean);
   return { cue: base, gain: modifiers.includes("soft") ? 0.6 : 1, modifiers };
 }
 
@@ -167,10 +174,73 @@ export function bindCues(story, { models } = {}) {
       continue;
     }
     if (cues.some((cue) => cue.cue === kit.cue && Math.abs(cue.at - at) < CUE_SPACING)) continue;
-    cues.push({ cue: kit.cue, at, volume: round3(CUE_LEVELS[kit.cue] * kit.gain), shot: entry.shot, intent: `${entry.source} ${entry.event}`, source: entry.source, event: entry.event });
+    const cue = { cue: kit.cue, at, volume: round3(CUE_LEVELS[kit.cue] * kit.gain), shot: entry.shot, intent: `${entry.source} ${entry.event}`, source: entry.source, event: entry.event, optional: entry.source !== "hit" };
+    // A riser lands on its moment; library risers are re-anchored on their measured peak.
+    if (kit.cue === "riser") cue.lands_at = round3(entry.end ?? entry.at);
+    cues.push(cue);
   }
   cues.sort((a, b) => a.at - b.at || a.cue.localeCompare(b.cue));
   return { cues, warnings };
+}
+
+/**
+ * Cue → file: each bound cue gets a file from the first SFX source that has
+ * its family (explicit library, project library, user library, procedural
+ * kit), with a variant picked deterministically from the story id and the
+ * event, so repeats vary and renders stay reproducible. A library riser is
+ * re-anchored so its measured peak lands on its moment.
+ */
+export function resolveCueFiles(cues, { libraries = [], kit = null, storyId = "" } = {}) {
+  return cues.map((cue) => {
+    const resolved = resolveCueFile(cue, { libraries, kit, key: eventKey(storyId, cue) });
+    if (!resolved) return cue;
+    const placed = { ...cue, file: resolved.file, sfx_source: resolved.scope, sfx_origin: resolved.source, variant: resolved.variant };
+    const peak = Number(resolved.measurements?.peak_at_ms);
+    if (cue.cue === "riser" && Number.isFinite(cue.lands_at) && Number.isFinite(peak)) placed.at = round3(Math.max(0, cue.lands_at - peak / 1000));
+    return placed;
+  });
+}
+
+/** Keystroke banks for the typing track: {key, space, enter, word} → [{file, measurements}]. */
+export function typingBanks(libraries, kit) {
+  const bank = (family) => {
+    const source = familySource(family, libraries, kit);
+    return source ? source.files.map((file, index) => ({ file, measurements: source.measurements[index], scope: source.scope, source: source.source })) : [];
+  };
+  return { key: bank("keystroke"), space: bank("keystroke-space"), enter: bank("keystroke-enter"), word: bank("click") };
+}
+
+function firstKeyPerShot(keystrokes) {
+  const seen = new Set();
+  return keystrokes.filter((key) => key.kind !== "word" && !seen.has(key.shot) && seen.add(key.shot));
+}
+
+/** The licence line for the SFX actually used. origins: Set of "procedural" | "elevenlabs" | ... */
+export function sfxLicense(origins) {
+  const parts = ["Original procedural synthesis (synth-audio-kit.mjs); no third-party samples."];
+  if (origins.has("elevenlabs")) parts.push("Some SFX were generated with ElevenLabs sound effects (launchclip sfx seed); their use is governed by the ElevenLabs terms of service.");
+  const other = [...origins].filter((origin) => !["procedural", "elevenlabs"].includes(origin));
+  if (other.length) parts.push(`Other SFX library sources: ${other.join(", ")}.`);
+  return parts.join(" ");
+}
+
+// The music part of AUDIO-MANIFEST.json's licence line.
+function musicLicense(kind) {
+  if (kind === "elevenlabs") return "Music: generated with the ElevenLabs Music API under the account holder's ElevenLabs terms; see THIRD_PARTY_NOTICES.md.";
+  if (kind === "file") return "Music: supplied by the project; its licence is the project's responsibility.";
+  return null;
+}
+
+function sceneModels(story) {
+  const cache = new Map();
+  return (scene) => {
+    if (!cache.has(scene.id)) {
+      let model = null;
+      try { model = resolveModule(scene, story); } catch { model = null; }
+      cache.set(scene.id, model);
+    }
+    return cache.get(scene.id);
+  };
 }
 
 function energyValue(energy) {
@@ -313,6 +383,7 @@ function defaultAdapters() {
       await execFileAsync(process.execPath, args, { maxBuffer: 1 << 26 });
       return JSON.parse(await readFile(path.join(outDir, "AUDIO-KIT.json"), "utf8"));
     },
+    renderTyping: (schedule, banks, options) => renderTypingTrack(schedule, banks, options),
     async buildMix(options) {
       const { buildMix, normalizeCues } = await import(SCRIPT.mix);
       const cues = normalizeCues(options.cues, options.sfxDir);
@@ -516,7 +587,9 @@ const STAGES = [
         ctx.beats = { ...gridFromBpm(bpm, Number(ctx.copy.format?.duration) || 60), provisional: true };
         ctx.warnings.push(`BEATS.json is missing; beat anchors use a provisional ${bpm} BPM grid until the sound stage writes it`);
       }
-      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats });
+      // Footage-led: base.edl (the edit-recording plan) becomes base.trim.
+      ctx.edl = await readStoryEdl(ctx.project, ctx.copy);
+      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl });
       const second = validateStory(resolved);
       if (!second.ok) throw new Error(`resolved storyboard is invalid:\n- ${second.errors.join("\n- ")}`);
       ctx.warnings.push(...second.warnings);
@@ -565,9 +638,16 @@ const STAGES = [
       const sfxOn = !(audio.sfx === "none" || audio.sfx === false);
       const choice = resolveMusicChoice(audio, { flag: ctx.options.music, env: ctx.adapters.env ?? process.env });
       const music = musicPlanSpec(choice);
-      const bound = sfxOn ? bindCues(ctx.resolved) : { cues: [], warnings: [] };
+      const density = String(ctx.options.sfxDensity ?? "normal").toLowerCase();
+      if (!SFX_DENSITIES.includes(density)) throw new Error(`--sfx-density must be one of ${SFX_DENSITIES.join(", ")}; got ${ctx.options.sfxDensity}`);
+      const storyId = String(ctx.story.id ?? ctx.story.title ?? path.basename(ctx.project));
+      const models = sceneModels(ctx.resolved);
+      const bound = sfxOn ? bindCues(ctx.resolved, { models }) : { cues: [], warnings: [] };
+      bound.cues = applyDensity(bound.cues, density, storyId);
+      const typing = sfxOn ? typingSchedule(collectTyping(ctx.resolved, { models }), { seed: storyId, ...densityTyping(density) }) : [];
+      const libraries = sfxOn ? await resolveLibraries({ project: ctx.project, library: ctx.options.sfxLibrary, home: ctx.options.sfxHome }) : [];
       const voice = audio.voice && existsSync(path.join(ctx.project, audio.voice)) ? audio.voice : null;
-      if (!bound.cues.length && music.kind === "none") return { skip: voice ? "no SFX or music: the voice is mounted directly" : "no voice, SFX or music to mix" };
+      if (!bound.cues.length && !typing.length && music.kind === "none") return { skip: voice ? "no SFX or music: the voice is mounted directly" : "no voice, SFX or music to mix" };
       if (music.kind === "file" && !existsSync(path.join(ctx.project, music.file))) throw new Error(`audio.music file not found: ${music.file}`);
       const bed = music.kind === "none" ? null : { ...chooseBed(ctx.resolved, music), ...(music.kind === "file" ? { file: music.file } : {}), ...(Number(music.volume) >= 0 && music.volume !== undefined ? { volume: Number(music.volume) } : {}) };
       // ElevenLabs: the request (no network) names the cached track, so a new
@@ -589,11 +669,12 @@ const STAGES = [
         voice: voice ? await fileHash(path.join(ctx.project, voice)) : null,
         duration: ctx.resolved.resolved.duration,
         timing: sync.strategy === "snap" ? storyTiming(ctx.copy) : null,
-        scripts: [await fileHash(SCRIPT.synth), await fileHash(SCRIPT.mix), await fileHash(path.join(ROOT, "src", "music", "beats.js")), await fileHash(path.join(ROOT, "src", "music", "beat_sync.js"))]
+        scripts: [await fileHash(SCRIPT.synth), await fileHash(SCRIPT.mix), await fileHash(path.join(ROOT, "src", "music", "beats.js")), await fileHash(path.join(ROOT, "src", "music", "beat_sync.js"))],
+        sfx: { density, typing, libraries: libraries.map((library) => ({ scope: library.scope, dir: library.dir, families: hashValue(library.manifest.families) })) }
       });
-      const outputs = [PATHS.mix, PATHS.audioManifest, PATHS.sfxManifest];
+      const outputs = [PATHS.mix, PATHS.audioManifest, PATHS.sfxManifest, ...(typing.length ? [PATHS.typing] : [])];
       if (music.kind !== "none") outputs.push(PATHS.beatSync, await beatsTarget(ctx.project));
-      return { inputHash, outputs, sfxOn, cues: bound.cues, cueWarnings: [...choice.warnings, ...bound.warnings], bed, music, choice, voice, provider, sync };
+      return { inputHash, outputs, sfxOn, cues: bound.cues, cueWarnings: [...choice.warnings, ...bound.warnings], bed, music, choice, voice, provider, sync, typing, libraries, storyId, density };
     },
     async run(ctx, plan) {
       ctx.warnings.push(...plan.cueWarnings);
@@ -609,15 +690,41 @@ const STAGES = [
       const track = await resolveMusicTrack(ctx, plan, kitDir);
       const synced = track ? await beatSync(ctx, plan, track, { duration }) : null;
       const musicFile = synced?.file ?? null;
-      // Snapping moved hits: bind the SFX cues to the moved times.
-      const cues = synced?.changed && plan.sfxOn ? bindCues(ctx.resolved).cues : plan.cues;
+      // Snapping moved scenes and hits: bind the SFX cues and the typing track
+      // to the moved times.
+      let boundCues = plan.cues;
+      let typingPlan = plan.typing;
+      if (synced?.changed && plan.sfxOn) {
+        const models = sceneModels(ctx.resolved);
+        boundCues = applyDensity(bindCues(ctx.resolved, { models }).cues, plan.density, plan.storyId);
+        typingPlan = typingSchedule(collectTyping(ctx.resolved, { models }), { seed: plan.storyId, ...densityTyping(plan.density) });
+      }
       const mixFile = path.join(ctx.project, PATHS.mix);
+      // SFX cue → file: library first (explicit, project, user), then the kit.
+      const kit = kitLibrary(path.join(kitDir, "sfx"), await readOptionalJson(path.join(kitDir, "AUDIO-KIT.json")));
+      const cues = resolveCueFiles(boundCues, { libraries: plan.libraries, kit, storyId: plan.storyId });
+      let typing = null;
+      if (typingPlan.length) {
+        const rendered = await ctx.adapters.renderTyping(typingPlan, typingBanks(plan.libraries, kit), { out: path.join(ctx.project, PATHS.typing), duration });
+        typing = { file: path.join(ctx.project, PATHS.typing), keystrokes: rendered.keystrokes, counts: rendered.counts };
+        cues.push({ cue: "typing", at: 0, volume: 1, shot: null, intent: `typing track (${rendered.keystrokes.length} keys)`, source: "typing", file: typing.file });
+      }
       await writeJson(path.join(ctx.project, PATHS.cues), cues);
       const mixed = await ctx.adapters.buildMix({ voice: voiceFile, music: musicFile, cues, sfxDir: path.join(kitDir, "sfx"), duration, out: mixFile, musicVolume: plan.bed?.volume ?? 0.42 });
-      const placed = mixed?.cues ?? cues.map((cue) => ({ ...cue, file: path.join(kitDir, "sfx", `${cue.cue}.wav`) }));
+      const placed = (mixed?.cues ?? cues).map((cue, index) => ({ ...cues[index], ...cue, file: cues[index]?.file ?? cue.file ?? path.join(kitDir, "sfx", `${cue.cue}.wav`) }));
       const sfxManifest = path.join(ctx.project, PATHS.sfxManifest);
       // Same shape build-mix.mjs --sfx-manifest writes; cinematic-check reads it through AUDIO-MANIFEST.json.
-      await writeJson(sfxManifest, { cues: placed.map((cue, i) => ({ id: `sfx-${String(i + 1).padStart(2, "0")}-${cue.cue}`, cue: cue.cue, shot_id: cue.shot ?? null, at_seconds: cue.at, volume: cue.volume, intent: cue.intent ?? "", file: path.resolve(cue.file) })) });
+      // The typing track is listed as one cue per typed line (its first key) plus the full keystroke schedule.
+      const typingCues = typing ? firstKeyPerShot(typing.keystrokes).map((key) => ({ cue: "typing", shot: key.shot, at: key.at, volume: 1, intent: "typing track", file: typing.file })) : [];
+      const listed = [...placed.filter((cue) => cue.source !== "typing"), ...typingCues].sort((a, b) => a.at - b.at);
+      await writeJson(sfxManifest, {
+        cues: listed.map((cue, i) => ({ id: `sfx-${String(i + 1).padStart(2, "0")}-${cue.cue}`, cue: cue.cue, shot_id: cue.shot ?? null, at_seconds: cue.at, volume: cue.volume, intent: cue.intent ?? "", file: path.resolve(cue.file), source: cue.sfx_source ?? (cue.cue === "typing" ? "typing" : "kit"), variant: cue.variant ?? null })),
+        typing: typing ? { file: typing.file, counts: typing.counts, keystrokes: typing.keystrokes } : null,
+        density: plan.density,
+        libraries: plan.libraries.map((library) => ({ scope: library.scope, manifest: library.file }))
+      });
+      const origins = new Set(cues.map((cue) => cue.sfx_origin).filter(Boolean));
+      if (typing) for (const kind of Object.values(typingBanks(plan.libraries, kit))) for (const entry of kind) origins.add(entry.source);
       await writeJson(path.join(ctx.project, PATHS.audioManifest), {
         schema_version: "launchclip.audio-manifest.v1",
         generated_by: "launchclip finish",
@@ -642,11 +749,8 @@ const STAGES = [
         } : null,
         sfx_manifest: sfxManifest,
         sfx_kit: path.join(kitDir, "AUDIO-KIT.json"),
-        license: plan.music.kind === "elevenlabs"
-          ? "SFX: original procedural synthesis (synth-audio-kit.mjs). Music: generated with the ElevenLabs Music API under the account holder's ElevenLabs terms; see THIRD_PARTY_NOTICES.md."
-          : plan.music.kind === "file"
-            ? "SFX: original procedural synthesis (synth-audio-kit.mjs). Music: supplied by the project; its licence is the project's responsibility."
-            : "Original procedural synthesis (synth-audio-kit.mjs); no third-party samples."
+        sfx_libraries: plan.libraries.map((library) => ({ scope: library.scope, manifest: library.file })),
+        license: [sfxLicense(origins), musicLicense(plan.music.kind)].filter(Boolean).join(" ")
       });
       const details = {
         mix_file: PATHS.mix,
@@ -660,7 +764,10 @@ const STAGES = [
         beats_file: synced?.beats_file ?? null,
         voice: Boolean(voiceFile),
         kit_key: kitKey,
-        kit_reused: kitReused
+        kit_reused: kitReused,
+        sfx_density: plan.density,
+        sfx_sources: countBy(cues.map((cue) => ({ scope: cue.sfx_source ?? (cue.source === "typing" ? "typing" : "kit") })), "scope"),
+        typing_keys: typing ? typing.keystrokes.length : 0
       };
       STAGES[3].restore(ctx, details);
       return details;
@@ -677,7 +784,7 @@ const STAGES = [
   {
     name: "render",
     async plan(ctx) {
-      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null });
+      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null });
       ctx.resolved = resolved;
       await writeResolvedCopy(ctx);
       const assets = {};

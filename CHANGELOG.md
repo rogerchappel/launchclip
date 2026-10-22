@@ -4,6 +4,16 @@
 
 ### Added
 
+- Add `launchclip export <project> --format fcpxml|premiere|edl|otio|all`: a
+  finished storyboard project as an editable timeline for Final Cut Pro,
+  Premiere Pro and DaVinci Resolve. V1 holds the base trim segments (with their
+  source in points) or a plate, V2+ each overlay scene rendered as ProRes 4444
+  with alpha (or a PNG sequence) from the new Remotion `SceneOverlay`
+  composition, A1–A3+ the voice, music bed and per-cue SFX, plus captions and
+  markers. FCPXML 1.10, xmeml v4, CMX 3600 EDL + SRT and OTIO writers share one
+  frame-exact timeline model (`src/nle/`), with exact NTSC rates and drop-frame
+  timecode, and every file is read back and checked against the model.
+
 - Add the `launchclip-create-video-remotion` skill: the same subscription-agent
   cinematic workflow with Remotion 4.0.536 and React 19.3 as the renderer,
   `storyboard.json` as the primary artefact, and a new `standalone-remotion.md`
