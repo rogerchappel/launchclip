@@ -81,8 +81,8 @@ emitters and the gates share.
 - Bump all `remotion` / `@remotion/*` packages to 4.0.536 and React to 19.3.
   Run the existing Remotion tests (`test/pipeline.test.js`, `test/motion.test.js`).
 - New Remotion code is TSX under `remotion/story/`. The Remotion bundler
-  compiles it, so no separate `tsc` step is needed for rendering. Add a
-  type-check script.
+  compiles it, so no separate `tsc` step is needed for rendering.
+  `npm run typecheck` (tsconfig.json: strict, noEmit) checks kit/remotion and the test entries in CI.
 - Keep `@remotion/three` confined to the legacy `premium` composition. Portable
   modules use only DOM, SVG and CSS.
 
@@ -177,10 +177,84 @@ which also strengthens the HyperFrames path:
 
 ### Phase 7: Parity and quality eval
 
-- Extend `eval:production` with a renderer dimension: each fixed brief runs on
-  both paths, recording gate pass rate, critic score, render time and frame
-  diff against the other renderer.
-- The cross-model tiers from RFC §8 follow on top of this.
+- **Renderer dimension: done** (`npm run eval:renderers`, `src/renderer_eval.js`).
+  Five golden storyboards under `examples/story/` (cooling, minimal,
+  promo-16x9, explainer-9x16, data-story-9x16) cover every catalogue and
+  editorial module the stories use, phase-2 boundaries with shared-world
+  morphs, word-anchored hits, captions and a premixed audio track. For each
+  story and each renderer the eval compiles, renders the MP4 (timed), and runs
+  `story validate`, layout-check and the cinematic-check motion and audio
+  analyses on the MP4. Across the two MP4s it measures frame parity (ffmpeg
+  SSIM on frames extracted at the temporal-evidence schedule of the derived
+  boundaries, plus a per-frame SSIM scan), frame counts, loudness (LUFS, true
+  peak) and the decoded audio (stream match, offset, aligned residual). It
+  writes `qa/renderer-eval/report.json` and `report.md` (a table per story
+  and contact sheets of the worst-matching frames side by side) and exits
+  non-zero when a threshold in `eval/renderer-thresholds.json` fails.
+- Still to do: the gate pass rate and critic score per fixed brief from
+  `eval:production`, and the cross-model tiers from RFC §8 on top of this.
+
+```bash
+npm run eval:renderers                                  # all five stories, draft quality
+npm run eval:renderers -- --stories minimal,promo-16x9 --out qa/renderer-eval
+npm run eval:renderers -- --thresholds eval/renderer-thresholds.json --worst 6
+```
+
+Thresholds (`eval/renderer-thresholds.json`, overridable per story under
+`stories.<id>`): SSIM ≥ 0.97 at every scheduled frame, frame counts equal
+within one frame (between renderers and against the story), integrated
+loudness within 0.5 LU and true peak within 1 dB, matching audio streams with
+at most 25 ms offset and an aligned residual at or below -30 dB, and the
+validate, layout, compile (no placeholders) and audio gates passing. The
+motion gate runs in `"report"` mode: the golden stories hold settled editorial
+frames, so both renderers measure below the cinematic change-energy floor and
+the result is shown without failing the run.
+
+Known renderer difference: HyperFrames muxes its AAC sidecar without an edit
+list, so its audio starts 1024 samples (21.3 ms) late; the 25 ms offset limit
+allows exactly that.
+
+### RFC phase 5 status: storyboard planner (model side)
+
+Done:
+
+- `kit/core/planning-prompt.mjs`: `planningPrompt({tier, lane, format, brand,
+  words})` builds the storyboard-authoring prompt from `knownModules()`, each
+  catalogue module's `describe`/`params`/`events`, the editorial kinds' spec
+  summaries, the RFC §5 phrase→module table (`PHRASE_MODULE_TABLE`, encoded
+  as patterns → module ids, with fallbacks for planned modules such as
+  `ui-showcase` → `media-window`), the lane and tier rules (§7), the
+  time-anchor syntax, the safe-zone and caption rules (read from
+  `layout-check.mjs`) and a validated example. A test fails if any known
+  module or editorial kind is missing, so new modules appear automatically.
+- `src/storyboard_planner.js`: `planStoryboard()` makes one model call, pins
+  the fixed inputs, places rect-less editorial modules in the safe slot, and
+  checks the storyboard (validation with the registry, tier rules, anchors,
+  `resolveModule` params, layout check). A bounded repair loop (at most two)
+  sends back the exact errors; repairs target scenes and params, never
+  thresholds. Attempts, errors, tokens and estimated cost are recorded. It
+  works with every `model_provider.js` client plus an Anthropic SDK adapter,
+  and runs keyless in tests with an injected client.
+- `launchclip story plan --brief brief.md [--narration NARRATION.json]
+  [--tier structured] [--model provider:model] [--out storyboard.json]`.
+- Both create-video skills ship `references/storyboard-modules.md`, generated
+  from the planning prompt by `scripts/sync-skills.mjs`, and their design step
+  points at it when authoring `storyboard.json`.
+
+Deferred: the cross-model eval (RFC §8: eight fixed briefs across the model
+tiers, first-attempt and post-repair pass rates, layout findings, module
+diversity, anchor coverage, cost and wall time, with frozen responses for CI)
+is not built yet. Until it is, run the planner by hand against a model once a
+key is set, for example:
+
+```bash
+export ANTHROPIC_API_KEY=…   # or OPENAI_API_KEY / OPENROUTER_API_KEY
+launchclip story plan --brief brief.md --narration NARRATION.json \
+  --tier structured --model anthropic:<model-id> --out storyboard.json
+```
+
+and read `.launchclip/storyboard-plan.json` for attempts, repairs, errors and
+cost.
 
 ## First slice (one PR)
 

@@ -7,6 +7,7 @@ export {
   STORY_TRANSITIONS,
   STORY_DIRECTIONS,
   STORY_CAPTION_STYLES,
+  STORY_VOICE_PROVIDERS,
   parseAnchor,
   isAnchor,
   resolveAnchor,
@@ -15,5 +16,8 @@ export {
   deriveBoundaries,
   storyFormat,
   storyHits,
+  storyBase,
+  edlTrim,
+  BASE_FITS,
   aspectName
 } from "../kit/core/story.mjs";

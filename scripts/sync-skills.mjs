@@ -25,6 +25,9 @@
 //                                              references/, agents/, scripts/,
 //                                              assets/remotion-kit/ and assets/core/)
 //
+// references/storyboard-modules.md is generated from kit/core/planning-prompt.mjs
+// (GENERATED_REFERENCES) into skills-src/references/ and both skills.
+//
 // The renderer-neutral scripts are maintained in
 // skills/launchclip-create-video/scripts/ and copied into the Remotion skill.
 // kit/core/*.mjs is canonical for its files and is copied into both skills.
@@ -34,6 +37,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { storyboardModulesReference } from '../kit/core/planning-prompt.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'skills-src');
@@ -46,6 +50,14 @@ const SHARED_REFERENCES = [
   'recorded-video.md',
   'shorts-delivery.md'
 ];
+
+// References generated from code rather than written by hand. Each is written
+// to skills-src/references/ (so the source tree shows it) and into both
+// skills; --check fails when either copy drifts from the generator. The
+// generator always reads this checkout's kit/core registry.
+export const GENERATED_REFERENCES = {
+  'storyboard-modules.md': storyboardModulesReference
+};
 
 // Renderer-neutral scripts, maintained in the HyperFrames skill.
 export const SHARED_SCRIPTS = [
@@ -156,6 +168,8 @@ export function planOutputs({ root = ROOT } = {}) {
   const kitRemotion = listFiles(path.join(root, 'kit/remotion'));
   const kitHyperframes = listFiles(path.join(root, 'kit/hyperframes')).filter((file) => !file.includes(path.sep) && file.endsWith('.mjs'));
   const hyperframesScripts = path.join(root, 'skills/launchclip-create-video/scripts');
+  const generated = Object.entries(GENERATED_REFERENCES).map(([name, build]) => [name, build()]);
+  for (const [name, content] of generated) files.set(`skills-src/references/${name}`, content);
 
   for (const skill of SKILLS) {
     const dir = `skills/${skill.name}`;
@@ -164,6 +178,7 @@ export function planOutputs({ root = ROOT } = {}) {
     files.set(`${dir}/agents/openai.yaml`, render(`agents/${skill.renderer}/openai.yaml`));
     managedDirs.push(`${dir}/references`, `${dir}/agents`);
     for (const reference of skill.references) files.set(`${dir}/references/${reference}`, render(`references/${reference}`));
+    for (const [name, content] of generated) files.set(`${dir}/references/${name}`, content);
     if (skill.sharedScripts) {
       managedDirs.push(`${dir}/scripts`);
       for (const script of SHARED_SCRIPTS) files.set(`${dir}/scripts/${script}`, readFileSync(path.join(hyperframesScripts, script)));

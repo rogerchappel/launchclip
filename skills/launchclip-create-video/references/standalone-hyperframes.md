@@ -226,14 +226,65 @@ directory holding both `storyboard.json` and `index.html` is read as
 HyperFrames. Repair the storyboard and recompile rather than editing the
 generated `index.html`.
 
+A `footage-led` storyboard adds a `base` recording (`{src, trim | edl, volume,
+fit, focus}`; see `recorded-video.md`). The compiler mounts the base as muted
+direct-root `<video class="clip lc-base-media">` clips, one per trim segment.
+Each clip's `data-media-start` is the segment's source in-point, so the
+timeline plays the trimmed recording back to back. The recording's sound is
+mounted as matching root `<audio>` clips at `base.volume`, and `audio.mix` is
+mounted only as the bed under it. `punch-in` scenes are cameras: their per-frame
+spring samples become `tl.set(".lc-base-media", {x, y, scaleX, scaleY})`
+calls, which zoom the base toward the focus point without exposing an edge.
+Overlays (`footage-callout`, `lower-third`, `emphasis-caption` and any
+catalogue module) sit on tracks 1 and up. `insert: true` scenes are track-0
+plates that cover the picture while the recording keeps sounding. Resolve
+`base.edl` first: `launchclip story compile` and `resolveStory(story, {edl})`
+do it, and the compiler warns when a story still carries an unresolved `edl`.
+
+### Fonts
+
+Text renders only from bundled font files, never from Google Fonts or the
+host's installed fonts. `scripts/fonts.mjs` is the registry: Anton, Archivo
+Black, Bricolage Grotesque, Inter, Instrument Serif, JetBrains Mono, Space
+Grotesk, STIX Two Math, STIX Two Text, Syne and Unbounded, each from a pinned
+`@fontsource` package (OFL-1.1, latin subset). The compiler:
+
+- loads every role default (display Anton, body Inter, meta JetBrains Mono,
+  maths STIX Two Text, quote serif Instrument Serif), STIX Two Math as the
+  symbol fallback, and every family `brand.fonts` names;
+- copies each registry file into `<out>/fonts/` and declares it with
+  `@font-face` (`font-display: block`), then starts every face loading so the
+  render's `document.fonts.ready` wait covers text that appears later;
+- uses frozen files under `assets/fonts/` instead when they exist for a family,
+  named `<family-slug>-<weight>[-italic].woff2` (`poppins-700.woff2`), which is
+  how a brand family outside the registry is added;
+- warns and keeps the role's bundled family when a family is neither in the
+  registry nor frozen.
+
+The compiler resolves the font files from `node_modules`, next to the compiler
+first and then next to the storyboard project. Outside the LaunchClip repo,
+install the exact packages once in the project:
+
+```bash
+npm install --save-exact @fontsource/anton@5.3.0 @fontsource/archivo-black@5.3.0 \
+  @fontsource/instrument-serif@5.3.0 @fontsource/stix-two-math@5.3.0 \
+  @fontsource-variable/bricolage-grotesque@5.3.0 @fontsource-variable/inter@5.3.0 \
+  @fontsource-variable/jetbrains-mono@5.3.0 @fontsource-variable/space-grotesk@5.3.0 \
+  @fontsource-variable/stix-two-text@5.3.0 @fontsource-variable/syne@5.3.0 \
+  @fontsource-variable/unbounded@5.3.0
+```
+
+A compile warning `font file … is not installed` means that step is missing.
+
 ## Design and motion quality contract
 
 Treat `DESIGN.md`, `STORYBOARD.md`, and `QUALITY.md` as executable creative
 constraints:
 
-- Package exact font files under `assets/fonts/` and declare them with
-  `@font-face`, or use another deterministic family proven available on the
-  render host. Use three explicit roles: display, body, and metadata. A silent
+- Use the bundled registry families (see [Fonts](#fonts)), or package exact
+  font files under `assets/fonts/` and declare them with `@font-face`. Never
+  rely on a font installed on the render host. Use three explicit roles:
+  display, body, and metadata. A silent
   fallback to Arial, Helvetica, Times, or generic monospace is a failed review
   unless the design deliberately specifies it.
 - Establish hierarchy through type scale, width, weight, tracking, space, and
@@ -430,6 +481,31 @@ refresh Studio and obtain fresh approval. Do not publish the project as part of
 this workflow.
 
 ## Render and verify
+
+### Recommended for storyboard projects: `launchclip finish`
+
+When the project is driven by a `storyboard.json` and the LaunchClip CLI is
+installed, finish it in one command:
+
+```bash
+launchclip finish <project> --renderer hyperframes --quality draft   # renders/draft.mp4
+launchclip finish <project> --renderer hyperframes --quality high    # renders/final.mp4, after approval
+```
+
+It synthesises `audio.narration` when set (`--voice kokoro|elevenlabs|supplied`),
+validates and layout-checks the storyboard, writes captions, builds the SFX
+and music mix from the hits, module cues and scene energy, compiles the
+storyboard to `.launchclip/finish/hyperframes/`, renders, masters to −14 LUFS /
+−1 dBTP, builds the temporal evidence and critic sheets, and runs the motion,
+audio, loudness, layout and evidence gates. It never rewrites
+`storyboard.json`, skips stages whose inputs have not changed, and writes
+`finish.json`. The critic gate stays `pending` until the fresh-context critic
+has reviewed `qa/critic-sheets/`.
+
+Hand-authored `index.html` projects (no storyboard) use the manual render
+below.
+
+### Manual render
 
 Render from the CLI only after approval:
 

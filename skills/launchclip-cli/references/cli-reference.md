@@ -18,6 +18,9 @@ the current workflow and the decisions an operating agent must not guess.
 - [Cinematic check](#cinematic-check)
 - [Local-first OSS packet lane](#local-first-oss-packet-lane)
 - [Storyboard (storyboard.json)](#storyboard-storyboardjson)
+- [Finish: storyboard to mastered video in one command](#finish-storyboard-to-mastered-video-in-one-command)
+
+- [Voice providers](#voice-providers)
 - [Failure handling](#failure-handling)
 
 ## Runtime and credentials
@@ -526,7 +529,11 @@ in both renderers lives in `examples/story/minimal/`.
 `validate` also checks every `module` against the kit's module registry
 (`kit/core/modules.mjs`: the 14 editorial kinds plus the catalogue). An
 unknown module is reported as a warning, because both compilers render it as
-a visible labelled placeholder rather than failing.
+a visible labelled placeholder rather than failing. Once anchors resolve, each
+known module's `params` are resolved too (the step both compilers take); a
+scene whose params the module rejects (for example a hit earlier than the
+module's minimum lead-in) is an error, because it would render as a
+placeholder in both renderers.
 
 ### Compile a storyboard for a renderer
 
@@ -553,6 +560,172 @@ Anchors are resolved against `NARRATION.json` and `BEATS.json` when present.
 The JSON result lists `files`, `warnings` (placeholders for unknown modules,
 missing audio, captions skipped) and the derived `boundaries`. An invalid
 story fails the command.
+
+### Plan a storyboard from a brief
+
+```bash
+launchclip story plan --brief brief.md [--narration NARRATION.json] \
+  [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] \
+  [--base assets/recording.mp4] [--voice assets/audio/narration.wav] \
+  [--format 1080x1920|shorts|landscape|square] [--fps 30] [--duration seconds] \
+  [--brand brand.json] [--max-repairs 2]
+```
+
+One model call authors `storyboard.json` from the brief, with the planning
+prompt generated from the module registry (`kit/core/planning-prompt.mjs`;
+the same text ships to the create-video skills as
+`references/storyboard-modules.md`). Tooling then pins the fixed inputs
+(lane, format, brand, voice, words, base), places editorial modules without a
+`rect` in the safe slot, and checks the result: the `story validate` rules
+with the module registry, the tier rules, anchor resolution, every scene's
+module params, and the layout check. On failure the exact errors go back to
+the model for at most `--max-repairs` (default 2) corrected storyboards.
+Repairs target scenes and params; the checks never relax.
+
+- The lane follows the inputs: `--base` → `footage-led`, `--narration` →
+  `voiceover-motion`, otherwise `motion`. `--lane` overrides it.
+- `--tier structured` (default) allows catalogue modules and their content
+  params only: no `rect`, `theme`, `accent`, `motion`, `presentation`, `track`
+  or `custom`. `guided` adds those tuning params; `bespoke` adds `custom`
+  modules.
+- `--duration` defaults to the last narration word plus 0.6 s, or 30 s.
+  `--brand` is a JSON file with `colors` and `fonts`.
+- `--model` is `provider:model[@reasoning]`: `anthropic:<model-id>`
+  (`ANTHROPIC_API_KEY`), `openai:<model>` (`OPENAI_API_KEY`),
+  `openrouter:<vendor>/<model>` (`OPENROUTER_API_KEY`), `ollama:<model>`
+  (local) or `compatible:<model>` (`OPENAI_COMPATIBLE_BASE_URL` and
+  `OPENAI_COMPATIBLE_API_KEY`). Without `--model`,
+  `LAUNCHCLIP_PLANNER_MODEL` is used; with neither the command fails.
+
+On success it writes `--out` (default `storyboard.json`). Every run writes
+`.launchclip/storyboard-plan.json` beside it with each attempt's errors,
+warnings, layout findings, modules, tokens and estimated cost. When repairs
+are exhausted the command fails, writes no storyboard, and keeps the last
+candidate as `<out>.rejected.json`. Review the storyboard, then run
+`story validate`, `layout-check` and `story compile` as usual.
+
+## Finish: storyboard to mastered video in one command
+
+```bash
+launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] \
+  [--voice kokoro|elevenlabs|supplied|test] [--out renders/final.mp4] [--force] [--json]
+```
+
+`finish` is the recommended way to turn a `storyboard.json` project into a
+finished video. It runs these stages in order and stops at the first failure
+(later stages are reported as `blocked`):
+
+| Stage | What it does | Writes |
+| --- | --- | --- |
+| `voice` | When `audio.narration` (`{text, provider?, voice?, speed?}`) is set, synthesises it through the voice provider (`--voice` overrides `provider`; the default is `kokoro`). Skipped when `audio.voice` is a supplied file, unless `--voice` is given. | `assets/audio/narration.wav`, `NARRATION.json` |
+| `validate` | Validates the story, resolves its anchors against the synthesised words, and runs the geometric layout check. Errors fail the run; warnings are reported. | `.launchclip/finish/storyboard.json`, `.launchclip/finish/story.resolved.json` |
+| `captions` | Chunks the words into caption lines when a captions overlay has no `src`. | `assets/captions/captions.json` |
+| `sound` | Binds a procedural kit cue to every hit (`hit.cue`, else the named module event's cue, else a default from the event name) and to every module event that carries a `cue`, adds a whoosh under push, whip and zoom transitions, picks a music bed from scene `energy` (tempo, level and kick window), and mixes everything with the music ducked under the voice. Skipped when the storyboard sets `audio.mix`. `audio.sfx: "none"` and `audio.music: "none"` turn the parts off. | `assets/audio/mix.wav`, `assets/audio/kit/`, `AUDIO-MANIFEST.json`, `qa/sfx.json` |
+| `render` | Renders the filled copy through the renderer adapter. The default renderer is `remotion` when the project has no `index.html`, otherwise `hyperframes`; HyperFrames compiles to `.launchclip/finish/hyperframes/` first. | `.launchclip/finish/render-<quality>.mp4` |
+| `master` | Masters the render's audio to −14 LUFS and at most −1 dBTP, re-measured after encoding. | `renders/draft.mp4` (draft) or `renders/final.mp4` (high), or `--out` |
+| `evidence` | Builds the phase-2 temporal evidence (browser stills plus encoded frames) and critic contact sheets. | `qa/temporal-evidence/`, `qa/critic-sheets/` |
+| `gates` | Runs the renderer-neutral gates: layout, loudness, motion and audio analysis of the mastered MP4, and the temporal evidence manifest. The critic gate is reported as `pending`, with the next step. | `qa/finish/` |
+
+The user's `storyboard.json` is never rewritten: the voice, words, captions and
+mix are set on the copy in `.launchclip/finish/`. Each stage records the hashes
+of its inputs and outputs in `.launchclip/finish-state.json` and is reported as
+`cached` while they still match, so a second run after a fix only redoes the
+affected stages. `--force` reruns everything.
+
+The report is written to `<project>/finish.json` (per-stage status, timings,
+outputs, gate results, warnings, next steps and the final path) and printed as
+a short summary, or as JSON with `--json`. `status` is `ready-for-review` when
+every gate that ran passed (the critic stays pending), `needs-repair` when a
+gate failed, and `failed` (with a non-zero exit) when a stage failed.
+
+The `test` voice writes a quiet tone with evenly spaced word timings, so the
+whole pipeline can be exercised offline. Never ship it. The `kokoro`,
+`elevenlabs` and `supplied` providers load from `src/voice/` and report
+"provider not installed" when they are absent.
+
+After finish, a fresh-context critic reviews `qa/critic-sheets/` and writes
+`qa/critic.json`; `launchclip cinematic-check` then closes the critic gate.
+
+### Renderer eval (npm script, repository checkout)
+
+```bash
+npm run eval:renderers [-- --stories a,b] [--quality draft] [--out qa/renderer-eval] [--thresholds eval/renderer-thresholds.json] [--worst 4]
+```
+
+Renders every golden storyboard in `examples/story/` (`cooling`, `minimal`,
+`promo-16x9`, `explainer-9x16`, `data-story-9x16`) with both renderers and
+measures whether they match and pass the same gates: render time per
+renderer, `story validate`, layout-check, the cinematic-check motion and audio
+analyses of each MP4, frame parity (ffmpeg SSIM at the temporal-evidence
+schedule of the story's boundaries, plus every frame), frame counts, loudness
+and the decoded audio. It writes `<out>/report.json` and `<out>/report.md`
+(one table per story, with a contact sheet of the worst frames:
+HyperFrames | Remotion | difference ×4) and exits 1 when a threshold in
+`eval/renderer-thresholds.json` fails (2 on a usage error). Gates there are
+`true` (must pass), `"report"` (shown, never fails) or `false` (skipped);
+`stories.<id>` overrides any limit for one story. Run it after any change
+under `kit/`; it needs both renderers' Chrome and takes a few minutes.
+Rebuild a golden story's audio with `node scripts/golden-story-audio.mjs
+examples/story/<id>` (macOS `say` and ffmpeg).
+
+## Voice providers
+
+Voice providers live in `src/voice/`. Each one exposes
+`synthesize({ text, voice, speed, outFile, signal })` and returns
+`{ file, words: [{ text, start, end }], sampleRate, duration }`, with word
+times in seconds on the written file's timeline. Words are validated: they
+are ordered, have positive length and lie inside the audio.
+
+| Provider | When | Output | Word timings |
+| --- | --- | --- | --- |
+| `kokoro` (default) | always; offline on CPU | 24 kHz mono WAV | model phoneme durations, no ASR |
+| `elevenlabs` | only with `ELEVENLABS_API_KEY` | 24 kHz mono WAV | provider character alignment |
+| `supplied` | a recorded voiceover (`source`) | 48 kHz mono WAV, about −17 LUFS | local Whisper aligned to the script |
+
+**Kokoro.** Kokoro-82M (Apache-2.0) through the optional dependency
+`kokoro-js@1.2.1`. The default voice is `af_heart` at speed 1.2. On first use
+the timestamped ONNX export (about 325 MB, fp32) downloads once to
+`$LAUNCHCLIP_CACHE/kokoro`, default `~/.cache/launchclip/kokoro`. If
+`kokoro-js` is not installed, the provider says how to install it. Timing
+method: the model predicts a duration for every phoneme. Phonemes are grouped
+into words at spaces and punctuation, the groups are mapped to the script's
+words (merging groups when text normalisation expanded a token, such as
+"35"), and each onset is snapped to an RMS energy onset within 50 ms. If a
+model returns no durations, each sentence's voiced span is split in proportion
+to phoneme counts and onsets are snapped within 80 ms. Measured on the
+25.5 s cooling narration, against an RMS onset detector (mean absolute error,
+nearest onset within 150 ms):
+
+| Method | All words | Words after a pause |
+| --- | --- | --- |
+| phoneme durations, before snapping | 38 ms | 17 ms |
+| phoneme durations, snapped (shipped) | 21 ms | 6 ms |
+| proportional fallback, before snapping | 44 ms | 33 ms |
+| random times (baseline) | 55 ms | n/a |
+
+In connected speech a word often has no clean energy onset, so the detector
+is a noisy reference. Words after a pause are the reliable check. Synthesis
+ran at a real-time factor of about 0.5 on an idle Apple M4 (25.5 s of audio in
+12.7 s), after a model load of about 2 s from the cache.
+
+**ElevenLabs.** Opt-in. Without `ELEVENLABS_API_KEY` it throws before sending
+anything. It calls `/v1/text-to-speech/{voice}/with-timestamps` with
+`output_format=pcm_24000` and groups the character alignment into the
+script's words. The voice comes from `voice` or `ELEVENLABS_VOICE_ID`. Speed
+is clamped to ElevenLabs' range of 0.7 to 1.2.
+
+**Supplied voiceover.** `create({ source })` prepares a recording instead of
+synthesising one. It trims leading and trailing silence (keeping 50 ms),
+shortens pauses longer than 0.6 s to 0.35 s, and normalises to about −17 LUFS
+with a true peak of −1.5 dBTP (mono voice plays about 3 LU louder as stereo).
+It then transcribes with the local Whisper path (`base.en` by default; no
+paid transcription), aligns the recognised words back to `text`, moves word
+boundaries onto pauses that Whisper placed inside a word, and snaps onsets
+within 60 ms. The result's `prep` field records the trims, the keep ranges
+and the measured loudness. Whisper `base.en` word starts are coarse: on a test
+take built from the Kokoro sample with known word times, the mean absolute
+error was 112 ms, mostly because Whisper starts words early in connected
+speech. Filler-word and noise removal are not part of this step yet.
 
 ## Failure handling
 

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {EDITORIAL_KINDS, EDITORIAL_STYLE, EDITORIAL_SYMBOLS, resolveEditorialModule} from '../kit/core/editorial-core.mjs';
 import {buildEditorialModule} from '../skills/launchclip-create-video/scripts/editorial-ui-modules.mjs';
@@ -17,6 +18,28 @@ test('golden corpus covers every kind with outputs and errors', () => {
   const kinds = new Set(corpus.filter(entry => entry.output).map(entry => entry.spec.kind));
   assert.deepEqual([...kinds].sort(), [...EDITORIAL_KINDS].sort());
   assert.ok(corpus.filter(entry => entry.error).length >= 150);
+});
+
+// Explicit-rect 16:9 fixtures resolve at density scale 1, so their outputs and
+// errors must stay byte-identical to the corpus captured before the density
+// change (sha256 of the subset as it stood at dacadc4). The 9:16 and
+// default-rect fixtures were regenerated for content-derived rects and the
+// portrait type scale. The hash was then re-taken once when editorial fonts
+// moved to the story's brand-font variables (var(--lc-font-*, <old stack>));
+// that capture differed from dacadc4 only in those font wrappers. Re-taken again
+// when the wrapper fallbacks became the bundled registry stacks (fonts only).
+const EXPLICIT_16X9_SHA256 = '6412f1e1e2ca59865cfa95b4834c09e8c142462cfd7525672424522860983508';
+const explicit16x9 = entry => entry.spec && typeof entry.spec === 'object' && !Array.isArray(entry.spec) && entry.spec.aspect === '16:9' && entry.spec.rect !== undefined;
+
+test('explicit-rect 16:9 golden outputs are unchanged by the density work', () => {
+  const subset = corpus.filter(explicit16x9);
+  assert.equal(subset.length, 656);
+  assert.equal(createHash('sha256').update(JSON.stringify(subset)).digest('hex'), EXPLICIT_16X9_SHA256);
+  for (const entry of subset) {
+    const result = attempt(() => buildEditorialModule(entry.spec));
+    if (entry.error !== undefined) assert.equal(result.error, entry.error, entry.name);
+    else assert.equal(JSON.stringify(result.value), JSON.stringify(entry.output), entry.name);
+  }
 });
 
 test('HyperFrames emitter output is byte-identical to the golden corpus', () => {
@@ -88,11 +111,14 @@ test('resolved content carries renderer-ready values', () => {
   assert.equal(plain.content.activeColor, plain.accent);
 });
 
-test('editorial core is import-free and the skill copy matches kit/core byte for byte', () => {
+test('editorial core imports only the font registry and the skill copy matches kit/core byte for byte', () => {
   const canonical = readFileSync(new URL('../kit/core/editorial-core.mjs', import.meta.url), 'utf8');
   const copy = readFileSync(new URL('../skills/launchclip-create-video/scripts/editorial-core.mjs', import.meta.url), 'utf8');
   assert.equal(copy, canonical);
-  assert.doesNotMatch(canonical, /^\s*import\b|\bimport\(|\brequire\(/m);
+  assert.deepEqual(canonical.match(/^[ \t]*import\b.*$/gm), ["import {fontStack} from './fonts.mjs';"]);
+  assert.doesNotMatch(canonical, /\bimport\(|\brequire\(/);
+  assert.equal(EDITORIAL_STYLE.font.sans, "var(--lc-font-body, 'Inter', 'STIX Two Math', sans-serif)");
+  assert.equal(EDITORIAL_STYLE.font.mono, "var(--lc-font-meta, 'JetBrains Mono', 'STIX Two Math', monospace)");
   assert.equal(EDITORIAL_KINDS.length, 14);
   assert.equal(EDITORIAL_STYLE.space.pad, 24);
   assert.ok(Object.isFrozen(EDITORIAL_STYLE) && Object.isFrozen(EDITORIAL_SYMBOLS));

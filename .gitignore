@@ -44,3 +44,12 @@ Thumbs.db
 
 # Renderer parity reports (scripts/parity.mjs)
 qa/parity/
+qa/parity-ci/
+qa/density/
+
+# Renderer eval reports (npm run eval:renderers)
+qa/renderer-eval/
+
+
+# Voice provider QA samples
+qa/voice/

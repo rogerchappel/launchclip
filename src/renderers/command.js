@@ -33,7 +33,14 @@ export async function captureCommand(run, command, args, options = {}) {
 export function parseOutput(value) {
   const text = String(value ?? "").trim();
   if (!text) return null;
-  try { return JSON.parse(text); } catch { return text.slice(0, 40_000); }
+  try { return JSON.parse(text); } catch { /* fall through */ }
+  // A CLI may print a one-off notice (first-run, update or telemetry banner)
+  // before its JSON report; parse the report from its first brace.
+  const start = text.search(/^[{[]/m);
+  if (start > 0) {
+    try { return JSON.parse(text.slice(start)); } catch { /* not JSON */ }
+  }
+  return text.slice(0, 40_000);
 }
 
 // True when a structured CLI report carries no failure, error count or

@@ -1,57 +1,150 @@
-// Brand font roles → CSS family names and fallback stacks, shared by the
-// HyperFrames compiler and the Remotion kit so both resolve brand.fonts the
-// same way. Plain ESM with no imports. Canonical copy: kit/core/fonts.mjs.
+// The LaunchClip font registry: every family both renderers can draw, the
+// exact font files that hold it, and the CSS stack each type role uses. The
+// HyperFrames compiler and the Remotion kit both read this file, so the two
+// renderers load the same files and resolve brand.fonts the same way. Plain
+// ESM with no imports. Canonical copy: kit/core/fonts.mjs.
+//
+// Files come from pinned @fontsource packages (dependencies in package.json,
+// latin subset, OFL-1.1, see THIRD_PARTY_NOTICES.md). Nothing is fetched at
+// render time:
+// - HyperFrames: the story compiler copies each face's file into the project
+//   (fonts/<file>) and declares it with @font-face.
+// - Remotion: kit/remotion/fonts.ts imports each file through the bundler and
+//   loads it with the FontFace API inside delayRender/continueRender.
 //
 // storyboard.json names fonts by slug ("space-grotesk") or by family
-// ("Space Grotesk"). Slugs map to Google Fonts family names.
+// ("Space Grotesk"). A family outside the registry still works when its files
+// are frozen under assets/fonts/ (frozenFontFaces); otherwise it falls back
+// to the role's registry family, never to a host system font.
 
-// Slugs whose family name is not simple title case.
-const SPECIAL = Object.freeze({
-  'jetbrains-mono': 'JetBrains Mono', 'ibm-plex-mono': 'IBM Plex Mono', 'ibm-plex-sans': 'IBM Plex Sans',
-  'ibm-plex-serif': 'IBM Plex Serif', 'ibm-plex-sans-condensed': 'IBM Plex Sans Condensed', 'dm-sans': 'DM Sans',
-  'dm-mono': 'DM Mono', 'dm-serif-display': 'DM Serif Display', 'pt-sans': 'PT Sans', 'pt-serif': 'PT Serif',
-  'pt-mono': 'PT Mono', 'eb-garamond': 'EB Garamond', 'noto-sans-jp': 'Noto Sans JP', 'mplus-1p': 'M PLUS 1p',
-  'source-code-pro': 'Source Code Pro', 'bebas-neue': 'Bebas Neue', 'sf-pro': 'SF Pro'
+/** Licence of every registered family (SIL Open Font License 1.1). */
+export const FONT_LICENSE = 'OFL-1.1';
+
+const variable = (slug, axes, styles = ['normal']) => styles.map((style) => ({ file: `${slug}-latin-wght-${style}.woff2`, weight: axes, style }));
+const fixed = (slug, weight, styles = ['normal']) => styles.map((style) => ({ file: `${slug}-latin-${weight}-${style}.woff2`, weight, style }));
+const entry = (family, pkg, generic, faces, [upper, lower]) => Object.freeze({ family, slug: pkg.split('/')[1], package: pkg, version: '5.3.0', license: FONT_LICENSE, generic, advance: Object.freeze({ upper, lower }), faces: Object.freeze(faces.map(Object.freeze)) });
+
+/**
+ * family → {family, slug, package, version, license, generic, advance:{upper, lower}, faces:[{file, weight, style}]}.
+ * `advance` is the mean advance width (em) of the latin capitals and of the
+ * lowercase letters, measured in Chrome at weight 650 (400 for static
+ * families); the text-fit models use it to scale their role tables.
+ * `weight` is a CSS font-weight descriptor: one weight for static files, a
+ * "min max" range for variable (wght axis) files. `package` + `/files/` +
+ * `file` is the module path of the woff2 inside node_modules.
+ */
+export const FONT_REGISTRY = Object.freeze({
+  'Anton': entry('Anton', '@fontsource/anton', 'sans-serif', fixed('anton', '400'), [0.46, 0.46]),
+  'Archivo Black': entry('Archivo Black', '@fontsource/archivo-black', 'sans-serif', fixed('archivo-black', '400'), [0.76, 0.61]),
+  'Bricolage Grotesque': entry('Bricolage Grotesque', '@fontsource-variable/bricolage-grotesque', 'sans-serif', variable('bricolage-grotesque', '200 800'), [0.64, 0.56]),
+  'Instrument Serif': entry('Instrument Serif', '@fontsource/instrument-serif', 'serif', fixed('instrument-serif', '400', ['normal', 'italic']), [0.47, 0.39]),
+  'Inter': entry('Inter', '@fontsource-variable/inter', 'sans-serif', variable('inter', '100 900'), [0.68, 0.56]),
+  'JetBrains Mono': entry('JetBrains Mono', '@fontsource-variable/jetbrains-mono', 'monospace', variable('jetbrains-mono', '100 800'), [0.6, 0.6]),
+  'Space Grotesk': entry('Space Grotesk', '@fontsource-variable/space-grotesk', 'sans-serif', variable('space-grotesk', '300 700'), [0.61, 0.56]),
+  'STIX Two Math': entry('STIX Two Math', '@fontsource/stix-two-math', 'serif', fixed('stix-two-math', '400'), [0.65, 0.47]),
+  'STIX Two Text': entry('STIX Two Text', '@fontsource-variable/stix-two-text', 'serif', variable('stix-two-text', '400 700', ['normal', 'italic']), [0.68, 0.52]),
+  'Syne': entry('Syne', '@fontsource-variable/syne', 'sans-serif', variable('syne', '400 800'), [0.76, 0.61]),
+  'Unbounded': entry('Unbounded', '@fontsource-variable/unbounded', 'sans-serif', variable('unbounded', '200 900'), [0.86, 0.73])
 });
 
-// Fallback stacks per role, so a font that fails to load degrades to a
-// deliberate system face, not to Times.
-export const FONT_FALLBACKS = Object.freeze({
-  display: "'Arial Narrow', 'Helvetica Neue', Impact, system-ui, sans-serif",
-  body: "system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
-  meta: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
+/**
+ * How much wider a family sets than its role's registry default, from the
+ * registry advances: max(1, upper and lower ratios). The text-fit models are
+ * calibrated on the role defaults and multiply by this, so a wide brand face
+ * (Unbounded, Syne) gets smaller type instead of overflowing. Families outside
+ * the registry, and narrower ones, return 1.
+ */
+export function fontWidthScale(family, role) {
+  const item = family ? FONT_REGISTRY[registeredFamily(family)] : null;
+  const base = FONT_REGISTRY[FONT_ROLE_DEFAULTS[role]];
+  if (!item || !base) return 1;
+  return Math.max(1, item.advance.upper / base.advance.upper, item.advance.lower / base.advance.lower);
+}
+
+/** The registry family each type role uses when brand.fonts does not name one. */
+export const FONT_ROLE_DEFAULTS = Object.freeze({
+  display: 'Anton',
+  body: 'Inter',
+  meta: 'JetBrains Mono',
+  math: 'STIX Two Text',
+  serif: 'Instrument Serif'
 });
+
+/**
+ * Last registered family in every stack. The fontsource files are latin
+ * subsets; STIX Two Math is not subset and covers arrows, operators and other
+ * symbols (→ ∝ ≈ ≤ ✓ …), so a glyph missing from the role font still comes
+ * from a bundled file instead of whatever the host has installed.
+ */
+export const SYMBOL_FALLBACK = 'STIX Two Math';
 
 export const FONT_ROLES = Object.freeze(['display', 'body', 'meta']);
+const ALL_ROLES = Object.freeze(['display', 'body', 'meta', 'math', 'serif']);
+const ROLE_GENERIC = Object.freeze({ display: 'sans-serif', body: 'sans-serif', meta: 'monospace', math: 'serif', serif: 'serif' });
 
-const GENERIC = new Set(['serif', 'sans-serif', 'monospace', 'system-ui', 'ui-serif', 'ui-sans-serif', 'ui-monospace', 'cursive']);
+const GENERIC = new Set(['serif', 'sans-serif', 'monospace', 'system-ui', 'ui-serif', 'ui-sans-serif', 'ui-monospace', 'cursive', 'math']);
 
-/** "space-grotesk" → "Space Grotesk"; a name with capitals or spaces is kept. */
-export function fontFamilyName(value) {
-  const raw = String(value ?? '').trim().replace(/^["']|["']$/g, '');
-  if (!raw) return null;
-  if (GENERIC.has(raw.toLowerCase())) return raw.toLowerCase();
-  if (/[A-Z\s]/.test(raw)) return raw;
-  const slug = raw.toLowerCase();
-  if (SPECIAL[slug]) return SPECIAL[slug];
-  return slug.split(/[-_]+/).filter(Boolean).map((part) => /^\d/.test(part) ? part : part[0].toUpperCase() + part.slice(1)).join(' ');
-}
-
-/** "Space Grotesk" → "SpaceGrotesk" (the @remotion/google-fonts module name). */
-export function googleFontModuleName(family) {
-  return String(family ?? '').replace(/[^A-Za-z0-9]+/g, '');
-}
+// Slugs whose family name is not simple title case (outside the registry).
+const SPECIAL = Object.freeze({
+  'ibm-plex-mono': 'IBM Plex Mono', 'ibm-plex-sans': 'IBM Plex Sans', 'ibm-plex-serif': 'IBM Plex Serif',
+  'ibm-plex-sans-condensed': 'IBM Plex Sans Condensed', 'dm-sans': 'DM Sans', 'dm-mono': 'DM Mono',
+  'dm-serif-display': 'DM Serif Display', 'pt-sans': 'PT Sans', 'pt-serif': 'PT Serif', 'pt-mono': 'PT Mono',
+  'eb-garamond': 'EB Garamond', 'noto-sans-jp': 'Noto Sans JP', 'mplus-1p': 'M PLUS 1p', 'source-code-pro': 'Source Code Pro',
+  'bebas-neue': 'Bebas Neue', 'sf-pro': 'SF Pro'
+});
 
 /** "Space Grotesk" → "space-grotesk" (file-name slug for frozen font files). */
 export function fontSlug(family) {
   return String(family ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
+const BY_SLUG = new Map(Object.keys(FONT_REGISTRY).map((family) => [fontSlug(family), family]));
+
+/** "jetbrains-mono" / "JETBRAINS MONO" / "JetBrains Mono" → "JetBrains Mono"; null when not registered. */
+export function registeredFamily(value) {
+  return BY_SLUG.get(fontSlug(String(value ?? '').replace(/^["']|["']$/g, ''))) ?? null;
+}
+
+/** "space-grotesk" → "Space Grotesk"; registered families get their canonical spelling, other names with capitals or spaces are kept. */
+export function fontFamilyName(value) {
+  const raw = String(value ?? '').trim().replace(/^["']|["']$/g, '');
+  if (!raw) return null;
+  if (GENERIC.has(raw.toLowerCase())) return raw.toLowerCase();
+  const registered = registeredFamily(raw);
+  if (registered) return registered;
+  if (/[A-Z\s]/.test(raw)) return raw;
+  const slug = raw.toLowerCase();
+  if (SPECIAL[slug]) return SPECIAL[slug];
+  return slug.split(/[-_]+/).filter(Boolean).map((part) => /^\d/.test(part) ? part : part[0].toUpperCase() + part.slice(1)).join(' ');
+}
+
+const quote = (family) => GENERIC.has(family) ? family : `'${family.replace(/'/g, '')}'`;
+
 /**
- * brand.fonts → {display, body, meta, families}: each role is a full CSS
- * font-family stack. Unknown role names in brand.fonts are kept as extra
- * families (so they load) but have no stack. A missing display role falls
- * back to the body family; any other missing role to its system stack.
+ * The CSS stack for a family in a role: the family, the role's registry
+ * family, the symbol fallback, then the role's generic family. Every named
+ * family in it is a bundled file, so no host font is ever reached while the
+ * files load. family may be null (the role default alone).
+ *   fontStack('space-grotesk', 'body') → "'Space Grotesk', 'Inter', 'STIX Two Math', sans-serif"
+ */
+export function fontStack(family, role = 'body') {
+  if (!ALL_ROLES.includes(role)) throw new Error(`unknown font role "${role}"; use ${ALL_ROLES.join(', ')}`);
+  const names = [];
+  const add = (name) => { if (name && !names.includes(name)) names.push(name); };
+  const named = family ? fontFamilyName(family) : null;
+  if (named && !GENERIC.has(named)) add(named);
+  add(FONT_ROLE_DEFAULTS[role]);
+  add(SYMBOL_FALLBACK);
+  add(ROLE_GENERIC[role]);
+  return names.map(quote).join(', ');
+}
+
+/**
+ * brand.fonts → {display, body, meta, math, serif, families}: each role is a
+ * full CSS font-family stack (fontStack). families lists the non-generic
+ * families brand.fonts names, in order (unknown role names are kept so they
+ * load). A missing display role uses the body family; meta (monospace) uses a
+ * "mono" entry; anything else missing uses the role's registry family.
  */
 export function brandFontStacks(brand) {
   const fonts = brand && typeof brand.fonts === 'object' && brand.fonts ? brand.fonts : {};
@@ -63,11 +156,74 @@ export function brandFontStacks(brand) {
     named[role] = family;
     if (!GENERIC.has(family) && !families.includes(family)) families.push(family);
   }
-  const quote = (family) => GENERIC.has(family) ? family : `'${family.replace(/'/g, '')}'`;
-  const stack = (role) => {
-    // display falls back to the body family; meta (monospace) only to a "mono" entry.
+  const pick = (role) => {
     const family = named[role] ?? (role === 'meta' ? named.mono : role === 'display' ? named.body : undefined);
-    return family ? `${quote(family)}, ${FONT_FALLBACKS[role]}` : FONT_FALLBACKS[role];
+    return fontStack(family && !GENERIC.has(family) ? family : null, role);
   };
-  return { display: stack('display'), body: stack('body'), meta: stack('meta'), families };
+  return { display: pick('display'), body: pick('body'), meta: pick('meta'), math: pick('math'), serif: pick('serif'), families };
+}
+
+/**
+ * The families a project loads: every role default, the symbol fallback and
+ * the brand families. Modules draw with role defaults even when the brand
+ * names other fonts (equation-lockup's maths serif, archive-card's quote
+ * serif, the editorial kinds), so both renderers always load all of them.
+ */
+export function projectFontFamilies(brand) {
+  const families = [...new Set([...Object.values(FONT_ROLE_DEFAULTS), SYMBOL_FALLBACK])];
+  for (const family of brandFontStacks(brand).families) if (!families.includes(family)) families.push(family);
+  return families;
+}
+
+/**
+ * Registered faces for a family list → [{family, package, file, module, weight, style, format}].
+ * module is the import specifier of the file ("@fontsource/anton/files/anton-latin-400-normal.woff2").
+ * Families outside the registry are skipped (see frozenFontFaces).
+ */
+export function registryFontFaces(families) {
+  const out = [];
+  for (const name of families) {
+    const family = registeredFamily(name);
+    if (!family) continue;
+    const item = FONT_REGISTRY[family];
+    for (const face of item.faces) out.push({ family, package: item.package, file: face.file, module: `${item.package}/files/${face.file}`, weight: face.weight, style: face.style, format: 'woff2' });
+  }
+  return out;
+}
+
+/** Every face in the registry, in registry order. */
+export function allFontFaces() {
+  return registryFontFaces(Object.keys(FONT_REGISTRY));
+}
+
+const FORMATS = Object.freeze({ woff2: 'woff2', woff: 'woff', ttf: 'truetype', otf: 'opentype' });
+
+/**
+ * Frozen files for a family outside the registry: file names under
+ * assets/fonts/ that start with the family slug (space-grotesk-700.woff2,
+ * a CamelCase name such as SpaceGrotesk-Bold.ttf does not match). The weight is the
+ * first standalone 100–900 in the name (or 700 for "bold", else 400) and the
+ * style is italic when the name says so.
+ *   → [{family, file, weight, style, format}] sorted by file name
+ */
+export function frozenFontFaces(family, fileNames) {
+  const slug = fontSlug(family);
+  if (!slug) return [];
+  return [...fileNames]
+    .map((name) => String(name).split('/').pop())
+    .filter((file) => /\.(woff2?|ttf|otf)$/i.test(file) && file.toLowerCase().replace(/[^a-z0-9]+/g, '-').startsWith(slug))
+    .sort()
+    .map((file) => ({
+      family,
+      file,
+      weight: file.match(/(?:^|[^0-9])([1-9]00)(?:[^0-9]|$)/)?.[1] ?? (/bold/i.test(file) ? '700' : '400'),
+      style: /italic/i.test(file) ? 'italic' : 'normal',
+      format: FORMATS[file.split('.').pop().toLowerCase()]
+    }));
+}
+
+/** One @font-face rule (font-display: block, so text never paints in a fallback first). */
+export function fontFaceRule(face, url) {
+  const safe = String(url).replace(/["\\\n]/g, (char) => encodeURIComponent(char));
+  return `@font-face { font-family: '${face.family.replace(/'/g, '')}'; src: url("${safe}") format("${face.format}"); font-weight: ${face.weight}; font-style: ${face.style}; font-display: block; }`;
 }

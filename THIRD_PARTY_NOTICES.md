@@ -24,6 +24,58 @@ Review the current terms before use:
 - <https://www.remotion.dev/license>
 - <https://www.remotion.pro/license>
 
+## Kokoro voice (optional)
+
+The default open-source voice uses `kokoro-js` 1.2.1 (Apache-2.0, by hexgrad
+and Xenova), declared as an optional dependency, so installs without it still
+work. It runs the Kokoro-82M v1.0 model (Apache-2.0, by hexgrad) through
+`@huggingface/transformers` (Apache-2.0) and `onnxruntime-node` (MIT).
+LaunchClip does not bundle the model: on first use the ONNX export
+`onnx-community/Kokoro-82M-v1.0-ONNX-timestamped` is downloaded from Hugging
+Face into `$LAUNCHCLIP_CACHE/kokoro` (default `~/.cache/launchclip/kokoro`).
+The voice style vectors ship inside the `kokoro-js` package.
+
+Phonemisation uses the `phonemizer` package (declared Apache-2.0), which is a
+WebAssembly build of eSpeak NG. Upstream eSpeak NG is licensed GPL-3.0-or-later;
+review its terms before redistributing a bundle that includes it.
+
+- <https://huggingface.co/hexgrad/Kokoro-82M>
+- <https://github.com/hexgrad/kokoro>
+- <https://github.com/espeak-ng/espeak-ng>
+
+## ElevenLabs voice (optional, opt-in)
+
+The ElevenLabs provider calls the ElevenLabs API only when
+`ELEVENLABS_API_KEY` is set. Use of that service and of its output is
+governed by the ElevenLabs terms of service.
+
+## Bundled fonts
+
+Both renderers draw text with font files from these packages, pinned to exact
+versions and loaded from `node_modules` (latin subset, plus the unsubset STIX
+Two Math for symbols). The registry that names them is `kit/core/fonts.mjs`.
+Every family is licensed under the SIL Open Font License, Version 1.1
+(`OFL-1.1`); each package ships the licence text in its `LICENSE` file. The
+font software is not relicensed under LaunchClip's MIT License, and the fonts
+may not be sold on their own.
+
+| Family | Package | Copyright holder (from the package LICENSE) |
+|---|---|---|
+| Anton | `@fontsource/anton@5.3.0` | The Anton Project Authors |
+| Archivo Black | `@fontsource/archivo-black@5.3.0` | The Archivo Black Project Authors |
+| Bricolage Grotesque | `@fontsource-variable/bricolage-grotesque@5.3.0` | The Bricolage Grotesque Project Authors |
+| Inter | `@fontsource-variable/inter@5.3.0` | The Inter Project Authors |
+| Instrument Serif | `@fontsource/instrument-serif@5.3.0` | The Instrument Serif Project Authors |
+| JetBrains Mono | `@fontsource-variable/jetbrains-mono@5.3.0` | The JetBrains Mono Project Authors |
+| Space Grotesk | `@fontsource-variable/space-grotesk@5.3.0` | The Space Grotesk Project Authors |
+| STIX Two Math | `@fontsource/stix-two-math@5.3.0` | The STIX Fonts Project Authors |
+| STIX Two Text | `@fontsource-variable/stix-two-text@5.3.0` | The STIX Fonts Project Authors |
+| Syne | `@fontsource-variable/syne@5.3.0` | The Syne Project Authors |
+| Unbounded | `@fontsource-variable/unbounded@5.3.0` | The Unbounded Project Authors |
+
+A compiled HyperFrames project carries copies of the font files it uses in
+`fonts/`; keep the OFL notice with them when you redistribute a project.
+
 ## Other direct dependencies
 
 At the time of the 0.1.1 release candidate, HyperFrames declares Apache-2.0;

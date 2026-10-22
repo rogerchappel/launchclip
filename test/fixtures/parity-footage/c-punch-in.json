@@ -1,0 +1,5 @@
+{
+  "project": "examples/story/footage",
+  "sceneId": "punch-demo",
+  "threshold": { "ssim": 0.97 }
+}

@@ -1,0 +1,599 @@
+# Storyboard modules
+
+<!-- Generated from kit/core/planning-prompt.mjs by scripts/sync-skills.mjs. Do not edit by hand; run `npm run skills:sync`. -->
+
+Use this reference when you author `storyboard.json` (launchclip.story.v1). It is generated from the module registry, so every module listed here exists in both renderers. The same text, specialised for one model tier, is what `launchclip story plan` sends to a model.
+
+Check every edit with `launchclip story validate storyboard.json` and `launchclip layout-check <project>`.
+
+## Model tiers
+
+| Tier | May write | May not |
+| --- | --- | --- |
+| structured | catalogue modules and their content params, hits | `rect`, `theme`, `accent`, `motion`, `presentation`, `track`, `custom` |
+| guided | the above plus enum variants and `rect`, `theme`, `accent`, `motion`, `presentation`, `track` | `custom` |
+| bespoke | the above plus `custom` modules (pure functions of time with a catalogue fallback) | bypassing gates |
+
+## Contract
+
+- schema: "launchclip.story.v1" (exactly). lane: one of motion, voiceover-motion, footage-led (given; never change it).
+- format: {width, height, fps, duration, platform?} and brand: {colors, fonts} are given; copy them unchanged.
+- audio: {voice?, words?, music?, sfx?}; base: null, or the recording path for footage-led.
+- scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: cut | fade | push | whip | zoom | iris | morph, dur, direction?, from_object?}, params, hits?}].
+- in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus.
+- overlays: [captions]. ending: {loop_to: "<first scene id>"} for a seamless loop (Shorts).
+- Vary the modules: a 20–40 s piece uses at least four different modules and never the same module three times in a row.
+
+## Lane rules
+
+- motion: no voice. Full-frame modules cover the whole duration back to back on track 0 (no gaps). Time scenes in seconds or beat anchors. audio.music may be "synth".
+- voiceover-motion: audio.voice and audio.words are fixed inputs; copy them unchanged. Full-frame modules cover the whole duration on track 0. Start scenes and place hits on word anchors from the narration so visuals land on the spoken word. Add a captions overlay.
+- footage-led: base (the edited recording under assets/) plays underneath and is a fixed input; copy it unchanged. Scenes are overlays and inserts on the strong lines only, covering 10–40% of the runtime (up to 50% with resource inserts); gaps show the recording. Prefer callout, kinetic-words, count-up and metric. Add a captions overlay.
+
+## Time anchors
+
+- scene.start, scene.end and hits[].at accept: seconds (2.5); "word:<text>" (the first time that word is spoken); "word:<text>#<n>" (its n-th occurrence); an optional offset ("word:fast-0.2"); "beat:<n>" or "downbeat:<n>" (from BEATS.json).
+- Word anchors must name a word that is actually in the narration (case and punctuation are ignored; a hyphenated anchor matches hyphenated or consecutive words).
+- Scenes on the same track must not overlap. scene.end must not exceed format.duration. A hit should fall inside its scene.
+- hits: [{"at": <anchor>, "event": "<module event name>", "cue"?: "<sound>"}]. When the event matches a module event (for example "hit" on count-up or "gap-bar-0" on function-chart), the hit times that event.
+
+## Safe zone
+
+- shorts (1080x1920): key content within x 80–940, y 280–1450; caption band x 65–918, y 1190–1420; centre of mass near y 860; key text at least 44 px; keep the lower third occupied.
+- landscape (1920x1080): key content within x 96–1824, y 54–1026; caption band x 192–1728, y 864–1004; centre of mass near y 540; key text at least 32 px.
+- Catalogue modules size and place themselves inside the safe zone and fail with a param error when copy is too long; shorten copy rather than shrinking it.
+- Editorial modules without a rect size and place themselves from their content inside the safe zone and above the caption band; omit rect unless the layout needs a specific position. They need a 1080x1920 or 1920x1080 format.
+
+## Captions
+
+- Captions are one overlay: {"type": "captions", "style": "word-highlight" | "line" | "none"}. Use "word-highlight" whenever there is a voice.
+- Modules marked "hides captions" hide them while on screen; every other module keeps them visible, so its content stays above the caption band.
+- On-screen copy is shorter than the narration; never put a whole sentence on screen.
+
+## Phrase → module
+
+| The script… | Module |
+| --- | --- |
+| opens on a question or claim (frame 0 visible) | hook-title |
+| lands 1–3 words per beat | kinetic-words |
+| describes a quantity over time or a curve | function-chart |
+| contrasts two values or states | gauge-compare |
+| says "big X → fast, small X → slow" | flow-compare |
+| gives a number, time, price or count | count-up |
+| gives a sourced figure that should stay on screen with captions | metric |
+| lists steps, features or duties | checklist |
+| explains a sequence or mechanism | process-steps |
+| walks through the stages of a workflow | step-rail |
+| names a law or formula | equation-lockup |
+| cites history, a source or a quote | archive-card |
+| names a specific date or launch day | date-card |
+| shows a product, site or repo (real capture) | media-window (planned module ui-showcase; use media-window) |
+| shows a command or a few lines of code | code-snippet |
+| names platforms or integrations | logo-row |
+| shows a trend across several data points | trend-chart |
+| shows growth that never declines | growth-chart |
+| reports progress toward a goal | progress |
+| reports the state of several systems | status-rack |
+| quotes a passage from a doc, README or article | excerpt-window |
+| speaks to several audiences or groups | audience-grid |
+| picks one option from several | focus-flow |
+| calls to action, or the loop ending | cta |
+| footage-led emphasis on a word [footage-led] | punch-in |
+| footage-led claim sticker or label pointing at something on screen [footage-led] | footage-callout |
+| introduces the speaker or a guest by name and title [footage-led] | lower-third |
+| one to three spoken words that deserve a big on-screen pop [footage-led] | emphasis-caption |
+| a short note, tip or warning card [motion, voiceover-motion] | callout |
+
+## Modules
+
+### media-window (editorial panel, keeps captions)
+A browser/desktop window showing a real local image or video capture of a product, site or repo.
+Common: title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends.
+params:
+- title: string ≤ 54, required
+- media: {kind: "image" | "video", src: "assets/…", sourceStart?: seconds (video only)}
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- accent: #rrggbb [guided and bespoke tiers only]
+- theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
+- presentation: "solid" | "glass" [guided and bespoke tiers only]
+- motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
+events: enter
+
+### checklist (editorial panel, keeps captions)
+Rows that tick from pending to active to done: a real list of steps, features or conditions.
+Common: title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends.
+params:
+- title: string ≤ 54, required
+- rows: [{label, status: "pending" | "active" | "done", at, doneAt?}] up to 6
+- statusLabels: {pending, active, done} ≤ 14 chars each (optional, e.g. "Covered")
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- accent: #rrggbb [guided and bespoke tiers only]
+- theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
+- presentation: "solid" | "glass" [guided and bespoke tiers only]
+- motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
+events: enter, row-<i>-state, row-<i>-covered
+
+### step-rail (editorial panel, keeps captions)
+Ordered stages on a rail that fills as each step lights up.
+Common: title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends.
+params:
+- title: string ≤ 54, required
+- steps: [{label, at}] 2–6, strictly increasing at
+- numbered: boolean (optional)
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- accent: #rrggbb [guided and bespoke tiers only]
+- theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
+- presentation: "solid" | "glass" [guided and bespoke tiers only]
+- motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
+events: enter, step-<i>-settle
+
+### callout (editorial panel, keeps captions)
+A short explanation panel: a title over one body line, or a treated panel with icon, glow and highlighted segments.
+Common: title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends.
+params:
+- title: string ≤ 54, required
+- body: string ≤ 160 (plain)
+- treatment: {icon?: "terminal" | "branch" | "users" | "rocket" | "check" | "warning", monospace?, glow?, corners?, segments?: [{text, highlight?, underlineAt?}] (replace body), at?}
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- accent: #rrggbb [guided and bespoke tiers only]
+- theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
+- presentation: "solid" | "glass" [guided and bespoke tiers only]
+- motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
+events: enter, treatment-settle, underline-<i>-settle
+
+### audience-grid (editorial panel, keeps captions)
+A grid of audience tiles that highlight in turn; illustrative, never a claim about real users.
+Common: title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends.
+params:
+- title: string ≤ 54, required
+- audience: {tiles: [{label ≤ 24, emoji?, at}] 2–12, columns?: 2–4}
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- accent: #rrggbb [guided and bespoke tiers only]
+- theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
+- presentation: "solid" | "glass" [guided and bespoke tiers only]
+- motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
+events: enter, viewer-<i>-settle
+
+### trend-chart (editorial panel, keeps captions)
+Bars for a trend across 2–8 points with a counter that follows the selected point.
+Common: title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends.
+params:
+- title: string ≤ 54, required
+- chart: {mode: "illustration" | "data", points: [{label ≤ 16, value (whole number ≥ 0), at}] 2–8 (≥ 0.5 s apart), unit ≤ 18, source (required for data)}
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- accent: #rrggbb [guided and bespoke tiers only]
+- theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
+- presentation: "solid" | "glass" [guided and bespoke tiers only]
+- motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
+events: enter, point-<i>-settle
+
+### metric (editorial panel, keeps captions)
+One formatted number panel that steps through 1–8 values, with an attribution line.
+Common: title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends.
+params:
+- title: string ≤ 54, required
+- metric: {mode: "illustration" | "data", unit ≤ 18, format: "number" | "percent" | "currency", currency? (three-letter code, currency only), decimals?: 0–2, values: [{value, at}] 1–8 (≥ 0.65 s apart), source? (required for data)}
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- accent: #rrggbb [guided and bespoke tiers only]
+- theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
+- presentation: "solid" | "glass" [guided and bespoke tiers only]
+- motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
+events: enter, value-<i>-settle
+
+### progress (editorial panel, keeps captions)
+A progress bar toward an explicit goal (not an elapsed-time clock).
+Common: title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends.
+params:
+- title: string ≤ 54, required
+- progress: {mode, values: [{value, at}] 1–8, max?, label? ≤ 32, source?}
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- accent: #rrggbb [guided and bespoke tiers only]
+- theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
+- presentation: "solid" | "glass" [guided and bespoke tiers only]
+- motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
+events: enter, value-<i>-settle
+
+### date-card (editorial panel, keeps captions)
+A calendar card for one specific date, with an optional caption.
+Common: title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends.
+params:
+- title: string ≤ 54, required
+- date: {month: 1–12, day, year?, caption? ≤ 42, at?}
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- accent: #rrggbb [guided and bespoke tiers only]
+- theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
+- presentation: "solid" | "glass" [guided and bespoke tiers only]
+- motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
+events: enter, date-settle
+
+### status-rack (editorial panel, keeps captions)
+A rack of rows with three status lights each that change state over time.
+Common: title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends.
+params:
+- title: string ≤ 54, required
+- rack: {mode, source?, rows: [{label ≤ 24, states: [{at, lights: [bool, bool, bool]}]}] 1–8}
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- accent: #rrggbb [guided and bespoke tiers only]
+- theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
+- presentation: "solid" | "glass" [guided and bespoke tiers only]
+- motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
+events: enter, rack-<i>-state-<j>
+
+### code-snippet (editorial panel, keeps captions)
+One to three lines of tokenised code, optionally typed on.
+Common: title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends.
+params:
+- title: string ≤ 54, required
+- code: {language? ≤ 24, typing?: boolean, lines: [{tokens: [{text, type: "plain" | "keyword" | "string" | "number" | "comment" | "operator"}], at, typeDuration?}] 1–3}
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- accent: #rrggbb [guided and bespoke tiers only]
+- theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
+- presentation: "solid" | "glass" [guided and bespoke tiers only]
+- motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
+events: enter, code-<i>-settle, code-<i>-typing-start
+
+### excerpt-window (editorial panel, keeps captions)
+A passage from a doc, README or article that zooms to one line and highlights it.
+Common: title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends.
+params:
+- title: string ≤ 54, required
+- excerpt: {mode, source?, lines: [{segments: [{text, highlight?}]}] 1–5, focus: {line, scale: 1–1.3, at}, highlightMotion?}
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- accent: #rrggbb [guided and bespoke tiers only]
+- theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
+- presentation: "solid" | "glass" [guided and bespoke tiers only]
+- motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
+events: enter, excerpt-focus, highlight-sweep-settle
+
+### focus-flow (editorial panel, keeps captions)
+Two to four options arrive, one is chosen, the others fade and a progress line runs.
+Common: title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends.
+params:
+- title: string ≤ 54, required
+- focus: {options: [string ≤ 24] 2–4, selected: index, arriveAt?, chooseAt?, progressAt?, progressDuration?, progressLabel? ≤ 32, icon?}
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- accent: #rrggbb [guided and bespoke tiers only]
+- theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
+- presentation: "solid" | "glass" [guided and bespoke tiers only]
+- motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
+events: enter, options-settle, chosen-task, focus-progress-settle
+
+### growth-chart (editorial panel, keeps captions)
+Growth bars whose values never decrease (use trend-chart for declines).
+Common: title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends.
+params:
+- title: string ≤ 54, required
+- growth: {mode, points: [{label, value, at}] 2–8 non-decreasing, unit? (default "reach"), source?, showValues?}
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- accent: #rrggbb [guided and bespoke tiers only]
+- theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
+- presentation: "solid" | "glass" [guided and bespoke tiers only]
+- motion: {enter, exit, distance, enterDuration, exitDuration, scale} [guided and bespoke tiers only]
+events: enter, point-<i>-settle
+
+### hook-title (hides captions)
+Opening claim or question, readable on frame 0, with 1–3 kinetic emphasis words and an optional kicker sticker. Hides captions.
+params:
+- headline: string, required, max 90 — the opening line (set in display caps, up to five balanced lines)
+- emphasis: string | [{text, at?, color?}], max 3 — whole words of the headline that light up at `at` (scene seconds) with a bar and glow
+- kicker: string, max 18 — short sticker line that pops in, e.g. "Why?"
+- kickerAt: seconds — scene seconds for the kicker pop
+- eyebrow: string, max 32 — small mono label above the headline
+- color: string, one of "primary" | "accent", default "primary" — brand colour role for emphasis
+- align: string, one of "center" | "left", default "center"
+- rect: object, optional — {x,y,width,height} canvas px inside the safe zone; default: centred near the centre of mass [guided and bespoke tiers only]
+events: title, emphasis-<n>, kicker
+
+### kinetic-words (hides captions)
+Lands 1–3 words per beat, timed to the voice; each beat replaces the last (or stacks into a sentence). Hides captions.
+params:
+- words: [{text, at, emphasis?, color?}], required, max 12 — beats: 1–3 words each, `at` in scene seconds (at least 0.3 s apart)
+- variant: string, one of "scale" | "rise", default "scale" — scale: punch in from large and blurred; rise: lines rise through a mask
+- layout: string, one of "replace" | "stack", default "replace" — stack keeps up to 5 beats on screen and dims earlier ones
+- color: string, one of "primary" | "accent", default "primary" — brand colour role for emphasis
+- rect: object, optional — {x,y,width,height} canvas px inside the safe zone; default: centred near the centre of mass [guided and bespoke tiers only]
+events: beat-<n>
+
+### count-up (keeps captions)
+One big number that counts from `from` to `value` with prefix/suffix, then hits with an underline and/or spark burst. Keeps captions.
+params:
+- value: number, required
+- from: number, default 0
+- prefix: string, max 4 — e.g. "$"
+- suffix: string, max 6 — e.g. "%", "k", "×"
+- decimals: integer, min 0, max 3, default 0
+- separator: boolean, default true — thousands commas
+- label: string, required, max 60 — what the number means (two lines at most)
+- note: string, max 48 — source or qualifier in small mono caps
+- countAt: seconds, default 0.35
+- countDuration: seconds, min 0.3, max 6, default 1.2
+- hit: string, one of "underline" | "spark" | "both" | "none", default "underline"
+- color: string, one of "primary" | "accent", default "primary" — brand colour role for emphasis
+- rect: object, optional — {x,y,width,height} canvas px inside the safe zone; default: centred near the centre of mass [guided and bespoke tiers only]
+events: count, hit
+
+### equation-lockup (hides captions)
+Names a law or formula: typeset terms land one by one, an optional term is boxed, with a name above and a caption line below. Hides captions.
+params:
+- equation: string, max 64 — e.g. "dT/dt = −k (T − T_room)"; spaces outside parentheses split terms; a/b is a fraction, x_sub and x^2 are scripts
+- terms: [string], max 9 — explicit terms instead of `equation`
+- name: string, max 48 — the law's name, set in small caps above
+- note: string, max 70 — one caption line below
+- highlight: integer | string — term index or exact term text to box in the emphasis colour
+- highlightAt: seconds
+- at: seconds, default 0.35 — first term lands
+- stagger: seconds, default 0.22
+- color: string, one of "primary" | "accent", default "primary" — brand colour role for emphasis
+- rect: object, optional — {x,y,width,height} canvas px inside the safe zone; default: centred near the centre of mass [guided and bespoke tiers only]
+events: term-<n>, lockup, highlight
+
+### cta (hides captions)
+End card: big action line, optional detail, and a handle/URL pill with a pulsing ring; `loop: true` fades to the background for a seamless loop. Hides captions.
+params:
+- action: string, required, max 40 — e.g. "Follow for part two"
+- emphasis: string, max 30 — whole words of the action to colour
+- detail: string, max 60
+- handle: string, max 32 — @handle or URL, no spaces
+- icon: string, one of "arrow" | "plus" | "loop" | "bell" | "none", default "arrow (loop when loop is true)"
+- loop: boolean, default false
+- color: string, one of "primary" | "accent", default "primary" — brand colour role for emphasis
+- rect: object, optional — {x,y,width,height} canvas px inside the safe zone; default: centred near the centre of mass [guided and bespoke tiers only]
+events: action, handle, loop
+
+### function-chart (keeps captions)
+Plots a formula over time as a line that draws on, with a probe readout riding the tip, optional baseline, gap bars and a tail-zoom inset.
+params:
+- fn: string expression in t (or x): + - * / ^ ( ), numbers, pi, e, exp log sqrt sin cos abs — e.g. "20 + 70 * 2^(-t/10)"
+- x: [min, max, unit?] or {min, max, unit?, label?}
+- y: [min, max, unit?] or {min, max, unit?, label?}
+- title: string ≤ 60 (optional)
+- label: disclaimer, e.g. "illustrative values" (optional)
+- baseline: number or {value, label?} — asymptote line, gap bars measure from it
+- gap_bars: [x, …] or [{x, at?, label?}] up to 5; events gap-bar-0…
+- probe: true (default) | false | {label}
+- tail_zoom: {from: x, at?, corner?} — magnified inset of the tail; event tail-zoom
+- draw: {at?, duration?, ease?}; event draw
+- decimals: integer 0–3
+- color: primary | accent | paper | #rrggbb (contrast ≥ 3:1 on bg)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: draw, gap-bar-<i>, probe-settle, tail-zoom
+
+### gauge-compare (keeps captions)
+Two thermometer (or column) gauges fill to their values with count-up readouts, then a bracket measures the gap between them (shared object for morphs).
+params:
+- left: {label, value, unit?, color? (primary | accent | paper | #rrggbb (contrast ≥ 3:1 on bg)), at? (seconds from scene start (optional; else a matching hit, else a default))}
+- right: {label, value, unit?, color?, at?} — same unit as left
+- gap: {object? ("gap-bracket"), label? ("Gap"), value? (must equal |left − right|), unit?, at?} or false
+- scale: {min, max} (optional, default 0..nice max)
+- title: string ≤ 48 (optional)
+- style: "thermometer" | "column"
+- decimals: integer 0–2
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: left-fill, right-fill, gap-bracket
+
+### flow-compare (keeps captions)
+Two pipes whose particles stream at different rates: "big X → fast, small X → slow".
+params:
+- top: {label, rate (relative > 0), value? (tag such as "fast"), color?, at?}
+- bottom: {label, rate, value?, color?, at?}
+- title: string ≤ 48 (optional)
+- note: string ≤ 60 (optional)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: top-flow, bottom-flow
+
+### process-steps (keeps captions)
+A sequence or mechanism as 2–5 connected numbered nodes that light up in order.
+params:
+- steps: [string | {label ≤ 32, detail? ≤ 64, at?}] 2–5
+- title: string ≤ 48 (optional)
+- layout: "vertical" (portrait default) | "horizontal"
+- numbered: boolean (default true)
+- color: primary | accent | paper | #rrggbb (contrast ≥ 3:1 on bg)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: step-<i>
+
+### archive-card (hides captions)
+A historical paper plate or quote card with a source line, date and a stamp that slams in. Hides captions.
+params:
+- quote: string ≤ 160 (quote or title required)
+- title: string ≤ 60
+- source: string ≤ 80 (required)
+- date: string ≤ 24, e.g. "1701"
+- stamp: string | {text, at?} | false (default: the date)
+- kicker: string ≤ 20 (default "ARCHIVE")
+- image: assets/… local image (optional)
+- reveal_at: seconds from scene start (optional; else a matching hit, else a default)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: quote, stamp
+
+### logo-row (keeps captions)
+A row or grid of 2–6 local logos with labels that pop in with a stagger.
+params:
+- logos: [{src: "assets/…(.svg|.png|.jpg|.webp)", label ≤ 20, at?}] 2–6
+- title: string ≤ 48 (optional)
+- at: first pop time
+- stagger: seconds between pops (default 0.14)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: logo-<i>
+
+### punch-in (keeps captions)
+Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay).
+params:
+- scale: 1.06–1.25 (default 1.12)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+- focus: {x, y} canvas fractions (default base.focus, else {0.5, 0.42})
+- release: seconds before the scene end when the zoom springs back (0.3–2, default min(0.5, 30% of the scene))
+events: punch, release
+
+### footage-callout (keeps captions)
+Footage-led: a claim sticker anchored to a point on the footage by a leader line, placed inside the safe zone.
+params:
+- text: claim ≤ 42 chars, up to 2 lines
+- label: kicker ≤ 24 (optional)
+- point: {x, y} canvas fractions 0.04–0.96 (the anchored spot)
+- side: auto|above|below|left|right
+- tone: primary|paper|dark
+- tilt: degrees −6–6 (default −2)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: point, sticker
+
+### lower-third (keeps captions)
+Footage-led: a name and title bar that slides in above the caption band.
+params:
+- name: string ≤ 32
+- title: string ≤ 48 (optional)
+- align: left|center
+- tone: dark|primary
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: name, title
+
+### emphasis-caption (keeps captions)
+Footage-led: one to three big words that pop over the footage; hides the captions while on screen.
+params:
+- text: 1–3 words, ≤ 24 chars
+- color: primary|accent|paper or #hex (≥ 3:1 on the bg outline)
+- position: center|upper|lower
+- stagger: seconds between words (default 0.09)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: pop, word-<i>
+
+## Example
+
+```json
+{
+  "schema": "launchclip.story.v1",
+  "title": "Faster builds",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 14,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#06070d",
+      "primary": "#fdb022",
+      "accent": "#46d4ff",
+      "ink": "#06070d",
+      "paper": "#f2eee6"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "audio": {
+    "music": {
+      "source": "synth",
+      "bpm": 100,
+      "key": "A"
+    },
+    "sfx": "auto"
+  },
+  "base": null,
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "hook-title",
+      "start": 0,
+      "end": 3,
+      "energy": 1,
+      "params": {
+        "headline": "Why does CI take 40 minutes?",
+        "emphasis": "40 minutes",
+        "kicker": "Fix it"
+      },
+      "hits": [
+        {
+          "at": 0.8,
+          "event": "emphasis-0"
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "module": "count-up",
+      "start": 3,
+      "end": 6.5,
+      "energy": 2,
+      "in": {
+        "type": "push",
+        "dur": 0.4,
+        "direction": "left"
+      },
+      "params": {
+        "value": 12,
+        "suffix": " min",
+        "label": "Same pipeline after caching",
+        "note": "illustrative"
+      },
+      "hits": [
+        {
+          "at": 4.6,
+          "event": "hit"
+        }
+      ]
+    },
+    {
+      "id": "s3",
+      "module": "checklist",
+      "start": 6.5,
+      "end": 11,
+      "energy": 2,
+      "in": {
+        "type": "whip",
+        "dur": 0.3,
+        "direction": "up"
+      },
+      "params": {
+        "title": "Three changes",
+        "rows": [
+          {
+            "label": "Cache dependencies",
+            "status": "done",
+            "at": 0.5
+          },
+          {
+            "label": "Split the test suite",
+            "status": "done",
+            "at": 1.4
+          },
+          {
+            "label": "Ship smaller images",
+            "status": "done",
+            "at": 2.3
+          }
+        ]
+      }
+    },
+    {
+      "id": "s4",
+      "module": "cta",
+      "start": 11,
+      "end": 14,
+      "energy": 1,
+      "in": {
+        "type": "fade",
+        "dur": 0.3
+      },
+      "params": {
+        "action": "Try it on your repo",
+        "handle": "@launchclip",
+        "loop": true
+      }
+    }
+  ],
+  "overlays": [
+    {
+      "type": "captions",
+      "style": "word-highlight"
+    }
+  ],
+  "ending": {
+    "loop_to": "s1"
+  }
+}
+```

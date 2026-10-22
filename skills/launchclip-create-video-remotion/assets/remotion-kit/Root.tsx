@@ -20,7 +20,7 @@ export const DEFAULT_STORY: StoryProps = {
   schema: "launchclip.story.v1",
   lane: "motion",
   format: { width: 1080, height: 1920, fps: 30, duration: 3 },
-  brand: { colors: { bg: "#06070d", primary: "#fdb022", paper: "#f2eee6", ink: "#06070d" }, fonts: { display: "system-ui", body: "system-ui" } },
+  brand: { colors: { bg: "#06070d", primary: "#fdb022", paper: "#f2eee6", ink: "#06070d" }, fonts: { display: "anton", body: "inter", meta: "jetbrains-mono" } },
   scenes: [{ id: "s1", module: "storyboard-missing", start: 0, end: 3 }],
   resolved: { duration: 3, fps: 30, frames: 90 }
 };

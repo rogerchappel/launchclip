@@ -42,6 +42,13 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
   A `morph` or a `from_object` makes the boundary kind `shared-world`; anything
   else is `ordinary`.
 - Assets are project-relative paths under `assets/`.
+- `audio.narration` = `{text, provider?, voice?, speed?}` is narration that
+  `launchclip finish` synthesises into `audio.voice` and `audio.words` (text
+  1–4000 characters; provider `kokoro`, `elevenlabs`, `supplied` or `test`;
+  speed 0.5–2). While it is set, the voiceover-motion lane does not require
+  `audio.voice`/`audio.words` yet, and word anchors are checked after synthesis.
+  Finish writes the filled fields to a resolved copy in `.launchclip/finish/`,
+  never back into `storyboard.json`.
 
 Exports:
 
@@ -94,8 +101,19 @@ export function resolveEditorialModule(spec)
 //   motion:{enter, exit, distance, scale, enterStart, enterEnd, exitStart, end, enterEase:"power3.out", exitEase:"power2.in"},
 //   content: <kind-specific normalized data, e.g. metric:{label, from, to, prefix, suffix, decimals, countStart}>,
 //   events:[{id, time, endTime?, role?}],      // identical to buildEditorialModule().events
-//   layout:{canvas, rect, motion:{enterEnd, exitStart, end}} } // identical to buildEditorialModule().layout
+//   layout:{canvas, rect, motion:{enterEnd, exitStart, end}},  // identical to buildEditorialModule().layout
+//   density:{scale, hero, source:"explicit"|"derived"|"legacy", layout:{width,height}, natural} }
 ```
+
+Density: without `rect` the core derives the footprint from the content (9:16:
+safe-zone width, natural height, centred near the RFC centre-of-mass target
+above the caption band; 16:9: the old lower-left footprint with a content
+height on the y 980 baseline). In 9:16 the kind lays out in
+`density.layout` (rect / scale) and renders scaled by `density.scale` (1–2)
+from the rect's top-left corner, inside one `.ui-density` wrapper in both
+renderers; rect-local geometry is in layout px. 16:9 always resolves at scale
+1, and explicit 16:9 output is byte-identical to the pre-density emitter.
+Details: skills-src/references/editorial-ui-modules.md, "Defaults and density".
 
 `buildEditorialModule()` in `skills/launchclip-create-video/scripts/editorial-ui-modules.mjs`
 becomes the HyperFrames emitter on top of this, and its output stays
@@ -231,6 +249,49 @@ the Shorts safe zone, key text at least 44 px at 1080 wide, contrast at least
   Custom modules register through `<LaunchclipCompositions customModules={…}/>`
   from `kit/remotion/Root.tsx`, and receive `{scene, params, brand, format, model}`.
 
+### Fonts (`kit/core/fonts.mjs`)
+
+Both renderers draw text only from bundled font files, so output does not
+depend on the render host's installed fonts or on the network.
+
+```js
+export const FONT_REGISTRY      // family → {family, slug, package, version, license, generic, faces:[{file, weight, style}]}
+export const FONT_ROLE_DEFAULTS // {display: "Anton", body: "Inter", meta: "JetBrains Mono", math: "STIX Two Text", serif: "Instrument Serif"}
+export const SYMBOL_FALLBACK    // "STIX Two Math" (unsubset: arrows, operators, ✓ …)
+export function fontStack(family, role)       // "'Space Grotesk', 'Inter', 'STIX Two Math', sans-serif"
+export function brandFontStacks(brand)        // → {display, body, meta, math, serif, families}
+export function projectFontFamilies(brand)    // role defaults + symbol fallback + brand families: what a project loads
+export function registryFontFaces(families)   // → [{family, package, file, module, weight, style, format}]
+export function frozenFontFaces(family, files)// assets/fonts/<slug>-<weight>[-italic].woff2 → faces
+export function fontFaceRule(face, url)       // one @font-face rule, font-display: block
+```
+
+- The registry families come from `@fontsource` / `@fontsource-variable`
+  packages pinned to exact versions in `package.json` (latin subset; variable
+  `wght` files where the family has one). Licences: THIRD_PARTY_NOTICES.md.
+- Stacks name only registered families before one generic family. A brand
+  family outside the registry sits in front of its role's registered family,
+  so a missing file degrades to a bundled face, never to a host font.
+- Modules take their stacks from here (`fontStack`, `brandFontStacks`); no
+  module hard-codes a system family.
+- Per family, frozen files under `assets/fonts/` win over the registry, in
+  both renderers.
+- **HyperFrames:** `compileStoryToHyperFrames` resolves each registry file
+  from `node_modules` (next to the compiler, then next to `sourceDir`), copies
+  it to `<projectDir>/fonts/<file>`, declares it with `@font-face`, and starts
+  every face loading so HyperFrames' `document.fonts.ready` wait covers them.
+  `projectFontFaces(brand, {sourceDir})` and `copyProjectFonts(copies, dir)`
+  are exported for hand-built projects (the parity verifiers). No Google
+  Fonts link and no remote `font-src`.
+- **Remotion:** `kit/remotion/fonts.ts` imports each registry woff2 through the
+  bundler (Remotion's webpack config treats fonts as `asset/resource`), so the
+  files travel inside the bundle and no `--public-dir` handling is needed.
+  Frozen files load with `staticFile("assets/fonts/<file>")`, found through
+  `getStaticFiles()`. `ensureFonts(brand)` adds every face with the FontFace
+  API inside `delayRender`, releasing the handle once `document.fonts` is
+  ready. `StoryComposition`, `ModuleReview` and the test parity entries call
+  it. `test/remotion_fonts.test.js` keeps its imports equal to the registry.
+
 ### Review compositions (registered in `kit/remotion/Root.tsx`)
 
 - `LaunchclipStory`: props are the resolved story. Dimensions come from
@@ -254,3 +315,135 @@ node scripts/parity.mjs <fixture.json> [--out qa/parity/<id>] [--times enter,mid
   `report.json` plus side-by-side PNGs.
 - `test/parity.test.js` runs every fixture in `test/fixtures/parity/*.json`
   when `LAUNCHCLIP_PARITY=1` is set, and skips otherwise because it is slow.
+
+## Footage-led lane (RFC phase 6)
+
+The `footage-led` lane plays a recording full-frame under the story. It uses
+the same storyboard contract, compilers and parity rules as the motion lanes.
+
+### `base` (`kit/core/story.mjs`)
+
+```json
+"base": { "src": "assets/recording.mp4", "start": 0, "trim": [[0, 8], [10, 22]],
+          "volume": 1, "fit": "cover", "focus": { "x": 0.5, "y": 0.36 },
+          "edl": "recording/edit-plan.json" }
+```
+
+- `src` (required): an `assets/` video (`.mp4`, `.m4v`, `.mov` or `.webm`). The
+  legacy forms `"base": "assets/x.mp4"` and `{source}` are still accepted.
+- `trim`: `[in, out]` source ranges in source order, without overlap. They play
+  back to back from timeline 0, so **timeline time is trimmed base time**.
+  Without `trim`, the base plays from source second `start` (default 0).
+- `edl`: a project path to an edit-recording plan (`edit-plan.json`,
+  `launchclip.recording-edit.v1`). `resolveStory(story, {edl})` copies its
+  `kept_segments` into `base.trim`; `readProjectStory`, `launchclip story` and
+  `layout-check` load the file. Point `src` at the **original** recording when
+  you use `edl` or `trim`; `base-edit.mp4` is already cut, so use it without
+  either. An unresolved story must not set both `trim` and `edl`.
+- `volume` (0–1, default 1) is the recording's level. `fit` is `cover`
+  (default) or `contain`. `focus` (fractions) is the `object-position`; under
+  `cover` that source point lands on the same canvas point, so it is also the
+  default punch-in focus.
+- Narration words (`audio.words`) are on the edited timeline, as edit-recording
+  writes them.
+- `audio.mix` is the music/SFX bed under the recording, at `audio.mix_volume`
+  (0–1, default 1). Duck the bed against the recording when building the mix.
+  `audio.voice` is never mounted in this lane, because the recording carries
+  the voice.
+
+Exports: `storyBase(resolvedStory)` returns
+`{src, fit, focus, volume, segments: [{index, start, end, duration, sourceStart}], length}` or
+`null`. Segment boundaries snap to the frame grid, so both renderers cut on the
+same frame. `edlTrim(plan)` returns `[[in, out], …]`.
+
+### Scenes
+
+- Track 0 is the base. A scene with `insert: true` is a full-frame plate on
+  track 0. It covers the picture while the recording's audio keeps playing,
+  and its `in` transition reveals it over the base. Its boundary's `from_id` is
+  `null`, unless an earlier insert sits on track 0.
+- Every other scene is an overlay on track 1 or higher. Validation rejects
+  overlays on track 0 and inserts on other tracks. `insert` outside this lane
+  is an error.
+- Keep scene starts on the frame grid (`start * fps` a whole number). Remotion
+  starts a Sequence on a whole frame, while module time is
+  `model.start + frame / fps`. An off-grid start therefore shifts Remotion up
+  to half a frame from GSAP.
+
+### Catalogue C (`kit/core/catalog-c.mjs`)
+
+Emitters live in `kit/hyperframes/catalog-c.mjs`, components in
+`kit/remotion/catalog/CatalogC.tsx` and `registry-c.ts`. They follow catalogue
+B's conventions: a JSON-only model, a shared view tree (`catalogCView`), a
+renderer-neutral op list (`catalogCTimeline`), `at` params in seconds from the
+scene start, and story hits timing events of the same name. Each model has a
+full-canvas root. `layout.rect` is the occupied box.
+
+| Module | Params | Events (cue) | Notes |
+|---|---|---|---|
+| `punch-in` | `scale` 1.06–1.25 (1.12), `at`, `focus {x,y}` (base.focus, else 0.5/0.42), `release` 0.3–2 s | `punch` (whoosh), `release` | Camera only; layout role `decor`; ≥ 0.8 s |
+| `footage-callout` | `text` ≤ 42, `label` ≤ 24, `point {x,y}` 0.04–0.96, `side` auto/above/below/left/right, `tone` primary/paper/dark, `tilt` −6–6°, `at` | `point` (tick), `sticker` (pop) | The sticker sits inside the safe zone, above the caption band, and never covers the point. The leader line runs from the point to the rotated sticker edge. ≥ 1.5 s |
+| `lower-third` | `name` ≤ 32, `title` ≤ 48, `align` left/center, `tone` dark/primary, `at` | `name` (whoosh), `title` | Bottom edge on the caption-band gap; ≥ 2 s |
+| `emphasis-caption` | `text` 1–3 words ≤ 24, `color` (≥ 3:1 on the bg outline), `position` center/upper/lower, `stagger`, `at` | `pop` (impact), `word-<i>` | `hidesCaptions`; 88% of the safe width; ≥ 0.8 s |
+
+`callout` stays the editorial text card, so the anchored sticker is
+`footage-callout`.
+
+### Camera model
+
+A module that moves the base sets `model.camera`:
+
+```js
+{ target: "base", focus: {x, y} /* canvas px */, scale, punchAt, releaseAt,
+  samples: [{t, scale, x, y}] /* one per frame over the scene, identity at the end */ }
+```
+
+Each sample scales the full-frame base about `focus`, with the transform
+origin at the canvas centre: `x = (1 − s)(fx − W/2)` and `y = (1 − s)(fy − H/2)`.
+With `s ≥ 1`, the scaled frame always covers the canvas. The spring
+(`PUNCH_SPRING`) is integrated per frame by `springValue`, so every sample is a
+pure function of time.
+
+`cameraOps(models)` merges every camera into one op list on `BASE_CAMERA`:
+identity at 0, then one `set` per sample at `t − SAMPLE_LEAD`, applied in start
+order. When cameras overlap, the later one wins, and `cameraOverlaps()` makes
+the compiler warn.
+
+### Compilers
+
+- **HyperFrames.** One muted root `<video class="clip lc-base-media">` per
+  segment (`data-start`, `data-duration`, `data-media-start` = source in-point,
+  track 2, z-index 1, `object-fit`/`object-position`), plus one root `<audio>`
+  per segment at `base.volume` on track 3. Scenes start at track 4.
+  `cameraGsap(models)` emits the camera as `tl.set(".lc-base-media", …)`.
+  With `sceneFilter`, the base videos stay (muted) and only the filtered
+  scenes' cameras apply.
+- **Remotion.** `BaseLayer` renders one `<OffthreadVideo>` per segment in its
+  own Sequence (`trimBefore` = source in-point, `volume` = `base.volume`)
+  inside a wrapper styled by `cameraStyle(cameraOps, t)`. `LaunchclipStory`
+  mounts it under the scenes, and the root `<Audio>` plays `audio.mix` only.
+  `ModuleReview` draws footage-led modules over the muted base, shifted so that
+  frame 0 is the scene start, and moved by that module's camera.
+- `layout-check` resolves `base.edl` and checks catalogue modules from their
+  model layout. It adds the base as full-frame `media` that may be occluded.
+
+### Footage parity (`scripts/parity-footage.mjs`)
+
+A fixture is `{project, sceneId?, mode?: "module"|"story", times?, threshold?}`,
+stored in `test/fixtures/parity-footage/`. The harness resolves the project
+exactly as the CLI does and renders it with the real compilers. It uses
+`kit/remotion/entry.tsx`, with the project as Remotion's public directory.
+`test/footage_lane.test.js` runs the fixtures when `LAUNCHCLIP_PARITY=1` is set.
+The example is `examples/story/footage/`; regenerate its recording with
+`node scripts/make-footage-example.mjs`.
+
+- The HyperFrames side compiles the one-scene story with
+  `compileStoryToHyperFrames` (lane forced to `motion`, audio, captions and
+  ending dropped); the Remotion bundle uses the fixture directory as its public
+  dir, so `assets/…` media resolve in both renderers.
+- `runStoryParity(projectDir, {times})` compares full-frame stills of a whole
+  storyboard project through both renderer adapters.
+- `npm run parity:ci` (`scripts/parity-ci.mjs`) is the cross-OS smoke the CI
+  `parity` job runs on ubuntu: five fixtures that between them draw every
+  default registry font, at the settle and mid-hold times, plus two stills of
+  `examples/story/minimal`, with one shared Remotion bundle.

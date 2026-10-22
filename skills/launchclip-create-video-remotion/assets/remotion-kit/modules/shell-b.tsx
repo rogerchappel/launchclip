@@ -5,11 +5,12 @@
 // enter/exit tweens, the solid/panel/glass surface, the custom theme overrides,
 // the window bar and the symbols. Kept small so it can merge into shared.tsx.
 import React from "react";
-import { useCurrentFrame, useVideoConfig } from "remotion";
+import { useSceneTime } from "../clock";
 // @ts-ignore plain ESM core, bundled by Remotion
 import { EDITORIAL_STYLE, EDITORIAL_SYMBOLS } from "../../core/editorial-core.mjs";
 // @ts-ignore plain ESM core, bundled by Remotion
 import { tween } from "../../core/motion.mjs";
+import { Density } from "./shared";
 
 export type Model = any;
 export const S = EDITORIAL_STYLE;
@@ -19,11 +20,9 @@ export const F = S.font;
 export const G = S.glass;
 export const A = S.accentAlpha;
 
-/** Absolute host time: the parent Sequence starts at model.start. */
+/** Absolute host time for the current frame (kit/remotion/clock.tsx). */
 export function useModuleTime(model: Model): number {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  return model.start + frame / fps;
+  return useSceneTime(model.start);
 }
 
 /** `#id *{box-sizing:border-box}` from the emitter, applied per element. */
@@ -144,7 +143,7 @@ export function surfaceStyle(model: Model): React.CSSProperties {
 /** <section> at the module rect, carrying the module enter/exit. */
 export const Section: React.FC<{ model: Model; t: number; children?: React.ReactNode; style?: React.CSSProperties }> = ({ model, t, children, style }) => (
   <section id={model.id} style={{ ...surfaceStyle(model), ...moduleMotion(model, t), ...style }}>
-    {children}
+    <Density model={model}>{children}</Density>
   </section>
 );
 

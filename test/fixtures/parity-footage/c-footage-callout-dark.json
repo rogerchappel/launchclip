@@ -1,0 +1,5 @@
+{
+  "project": "examples/story/footage",
+  "sceneId": "captions-note",
+  "threshold": { "ssim": 0.97 }
+}

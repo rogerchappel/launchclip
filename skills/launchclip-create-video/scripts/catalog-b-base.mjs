@@ -9,6 +9,7 @@
 
 import {getEase} from './motion.mjs';
 import {profileGeometry} from './layout-check.mjs';
+import {fontStack as registryStack} from './fonts.mjs';
 
 export const SAMPLE_LEAD = 0.0005;
 
@@ -19,18 +20,15 @@ export const CATALOG_B_STYLE = Object.freeze({
   exitEase: 'power2.in',
   minKeyText: 44,
   minMetaText: 26,
-  serif: "'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif",
+  serif: registryStack(null, 'serif'),
   letterSpacing: Object.freeze({meta: '0.14em', display: '0.01em'})
 });
 
 const ROLE_NAMES = ['primary', 'accent', 'paper'];
-const FONT_FALLBACK = {
-  display: "Impact,'Arial Narrow Bold','Arial Black',sans-serif",
-  body: "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif",
-  meta: "ui-monospace,'SF Mono',Menlo,Consolas,monospace"
-};
 // Conservative average advance per character, as a fraction of font size.
-const ADVANCE = {display: 0.56, body: 0.6, meta: 0.62, serif: 0.56};
+// Calibrated on the bundled role defaults (fonts.mjs FONT_REGISTRY advances): Anton,
+// Inter at 650, JetBrains Mono and Instrument Serif, with headroom for mixed case.
+const ADVANCE = {display: 0.56, body: 0.6, meta: 0.62, serif: 0.5};
 
 // ---------------------------------------------------------------------------
 // Safe expression parser (no eval, no Function)
@@ -289,10 +287,9 @@ export const overlaps = (a, b, pad = 0) => a.x < b.x + b.width + pad && b.x < a.
 // Shared base: canvas, safe zone, colours, fonts, motion, timing
 
 function fontStack(name, role, check, path) {
-  if (name === undefined) return FONT_FALLBACK[role];
+  if (name === undefined) return registryStack(null, role);
   if (typeof name !== 'string' || !/^[a-zA-Z0-9 -]{1,40}$/.test(name)) check.fail(path, 'must be a font name of letters, digits, spaces or hyphens');
-  const family = name.split(/[-\s]+/).filter(Boolean).map(part => part[0].toUpperCase() + part.slice(1)).join(' ');
-  return `'${family}',${FONT_FALLBACK[role]}`;
+  return registryStack(name, role);
 }
 
 export function createBase(moduleId, params, ctx, {allowed, required = [], hidesCaptions = false}) {

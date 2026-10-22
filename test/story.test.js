@@ -337,3 +337,51 @@ test("CLI validates and resolves stories", async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("audio.narration is validated and defers the voice, words and word anchors", () => {
+  const story = baseStory({ lane: "voiceover-motion", audio: { narration: { text: "Hot coffee cools fast.", provider: "kokoro", voice: "af_heart", speed: 1.2 } } });
+  story.scenes[1].start = "word:fast";
+  story.scenes[0].end = "word:fast";
+  const result = validateStory(story);
+  assert.deepEqual(result.errors, []);
+  assert.ok(!result.warnings.some((entry) => /word anchors are used/.test(entry)));
+
+  const bad = baseStory({ audio: { narration: { text: "", provider: "say", voice: "", speed: 3 } } });
+  const errors = validateStory(bad).errors.join("\n");
+  assert.match(errors, /audio\.narration\.text must be a non-empty string/);
+  assert.match(errors, /audio\.narration\.provider must be one of kokoro, elevenlabs, supplied, test/);
+  assert.match(errors, /audio\.narration\.voice must be a non-empty string/);
+  assert.match(errors, /audio\.narration\.speed must be a number between 0\.5 and 2/);
+  assert.match(validateStory(baseStory({ audio: { narration: { text: "x".repeat(4001) } } })).errors.join("\n"), /at most 4000 characters/);
+  assert.match(validateStory(baseStory({ audio: { narration: "hello" } })).errors.join("\n"), /audio\.narration must be an object/);
+  assert.equal(validateStory(baseStory({ audio: { narration: { text: "x".repeat(4000), speed: 0.5 } } })).ok, true);
+});
+
+test("story validate fails a scene whose module params would render a placeholder", async () => {
+  // Regression: a process-steps hit 0.2 s into the scene passed validate with
+  // zero warnings, then both compilers drew the "Missing module" placeholder.
+  const directory = await mkdtemp(path.join(os.tmpdir(), "launchclip-story-params-"));
+  try {
+    const story = {
+      schema: STORY_SCHEMA, lane: "motion",
+      format: { width: 1920, height: 1080, fps: 30, duration: 6 },
+      brand: { colors: { bg: "#0b1020", primary: "#ffb547", accent: "#4fd1c5", ink: "#0b1020", paper: "#f4f1ea" }, fonts: { display: "anton", body: "space-grotesk", meta: "jetbrains-mono" } },
+      scenes: [{ id: "s1", module: "process-steps", start: 0, end: 6, params: { steps: ["Connect", "Pick", "Publish"] }, hits: [{ at: 0.2, event: "step-0" }] }]
+    };
+    const file = path.join(directory, "storyboard.json");
+    await writeFile(file, JSON.stringify(story));
+    const chunks = [];
+    await runCli(["story", "validate", file], { stdout: { write: (value) => chunks.push(value) } });
+    const output = JSON.parse(chunks.join(""));
+    assert.equal(output.status, "failed");
+    assert.match(output.errors.join("\n"), /scenes\[0\] \(s1\): module "process-steps" params: .*step-0.*placeholder/);
+
+    story.scenes[0].hits[0].at = 0.8;
+    await writeFile(file, JSON.stringify(story));
+    chunks.length = 0;
+    await runCli(["story", "validate", file], { stdout: { write: (value) => chunks.push(value) } });
+    assert.deepEqual(JSON.parse(chunks.join("")).errors, []);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

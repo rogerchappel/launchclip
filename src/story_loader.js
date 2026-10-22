@@ -55,8 +55,22 @@ export async function readProjectStory(projectDir, { storyModule } = {}) {
     readOptionalJson(path.join(project, "BEATS.json"))
   ]);
   const words = Array.isArray(narration) ? narration : Array.isArray(narration?.words) ? narration.words : [];
-  const resolved = module.resolveStory(story, { words, beats: beats ?? null });
+  const edl = await readStoryEdl(project, story);
+  const resolved = module.resolveStory(story, { words, beats: beats ?? null, edl });
   return { file: storyFile, story, resolved, format: module.storyFormat(resolved), module };
+}
+
+// Footage-led: the edit-recording plan named by base.edl (project-relative),
+// which resolveStory turns into base.trim. Null when the story names none.
+export async function readStoryEdl(project, story) {
+  const declared = story?.base && typeof story.base === "object" && typeof story.base.edl === "string" ? story.base.edl : null;
+  if (!declared) return null;
+  const file = path.resolve(project, declared);
+  try { return JSON.parse(await readFile(file, "utf8")); }
+  catch (error) {
+    if (error.code === "ENOENT") throw new Error(`base.edl ${declared} was not found in ${project}; run launchclip edit-recording or point base.edl at its edit-plan.json`);
+    throw new Error(`base.edl ${declared} is not valid JSON: ${error.message}`);
+  }
 }
 
 // The story's own audio.words (project-relative) when set, else NARRATION.json,

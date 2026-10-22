@@ -8,34 +8,39 @@
 // GSAP timeline registered on window.__timelines, every module's emitter
 // html/css/motion inside a scene layer, typed transitions between track-0
 // scenes (kit/core/transitions.mjs, shared with the Remotion kit), the phase-2
-// boundary attributes from deriveBoundaries, one root <audio> (audio.mix, or
+// boundary attributes from deriveBoundaries, the footage-led base (root
+// <video>s per trim segment, moved by punch-in cameras), one root <audio> (audio.mix, or
 // the voice), word captions (kit/core/captions.mjs), the loop ending and the
 // brand fonts. Unknown modules render a labelled placeholder and a warning.
 //
 // Canonical copy: kit/hyperframes/story-compiler.mjs. Skills ship a copy whose
 // ../core/ imports point at ./ (scripts/sync-skills.mjs).
 
-import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { copyFile, cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { deriveBoundaries, validateStory } from '../core/story.mjs';
+import { deriveBoundaries, storyBase, validateStory } from '../core/story.mjs';
 import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from '../core/modules.mjs';
-import { gsapVars, sceneWindows } from '../core/transitions.mjs';
-import { CAPTION_CSS, CAPTION_DEFAULT_COLORS, captionChunksFrom, captionRuntime, chunkWords, narrationWords } from '../core/captions.mjs';
-import { brandFontStacks, fontSlug, googleFontModuleName } from '../core/fonts.mjs';
+import { gsapVars, layerStateAt, sceneWindows } from '../core/transitions.mjs';
+import { getEase } from '../core/motion.mjs';
+import { captionCss, CAPTION_DEFAULT_COLORS, captionChunksFrom, captionRuntime, chunkWords, narrationWords } from '../core/captions.mjs';
+import { brandFontStacks, fontFaceRule, fontSlug, frozenFontFaces, projectFontFamilies, registryFontFaces } from '../core/fonts.mjs';
 import { EMITTERS as EDITORIAL_EMITTERS } from './editorial-ui-modules.mjs';
 import { EMITTERS as CATALOG_A_EMITTERS } from './catalog-a.mjs';
 import { EMITTERS as CATALOG_B_EMITTERS } from './catalog-b.mjs';
+import { EMITTERS as CATALOG_C_EMITTERS, cameraGsap } from './catalog-c.mjs';
+import { cameraOverlaps } from '../core/catalog-c.mjs';
 
 export const COMPOSITION_ID = 'launchclip-story';
 export const GSAP_SRC = 'https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js';
-const CSP = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'";
+const CSP = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'";
 const FIRST_SCENE_TRACK = 2;
 const TOGGLE_LEAD = 0.0005;
 
 /** Every HyperFrames emitter, keyed by module id. */
 export function hyperframesEmitters() {
-  return { ...CATALOG_A_EMITTERS, ...CATALOG_B_EMITTERS, ...EDITORIAL_EMITTERS };
+  return { ...CATALOG_A_EMITTERS, ...CATALOG_B_EMITTERS, ...CATALOG_C_EMITTERS, ...EDITORIAL_EMITTERS };
 }
 
 /**
@@ -78,13 +83,20 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   if (isolate && !layers.length) throw new Error(`sceneFilter matched no scene (scenes: ${story.scenes.map((scene) => scene.id).join(', ')})`);
   if (isolate) for (const entry of layers) { entry.tweens = []; entry.renderEnd = entry.end; }
 
-  // Tracks: 0 audio, 1 background; each scene takes a pair (root, root+1),
-  // reused once its render window has ended.
+  // Footage-led base (storyBase: frame-snapped trim segments on the timeline).
+  const base = storyBase(story);
+  if (base && sourceDir && !existsSync(path.join(sourceDir, base.src))) warnings.push(`base recording ${base.src} was not found in ${sourceDir}`);
+  if (base && story.base?.edl && !story.base?.trim) warnings.push(`base.edl ${story.base.edl} was not resolved into base.trim (pass the edit plan to resolveStory as {edl}); the base plays untrimmed`);
+
+  // Tracks: 0 audio, 1 background, then (footage-led) 2 base video and 3 base
+  // audio; each scene takes a pair (root, root+1), reused once its render
+  // window has ended.
+  const firstTrack = base ? FIRST_SCENE_TRACK + 2 : FIRST_SCENE_TRACK;
   const trackEnds = [];
   const allocate = (start, end) => {
     let slot = trackEnds.findIndex((until) => until <= start + 1e-6);
     if (slot < 0) { slot = trackEnds.length; trackEnds.push(end); } else trackEnds[slot] = end;
-    return FIRST_SCENE_TRACK + slot * 2;
+    return firstTrack + slot * 2;
   };
 
   const css = [];
@@ -124,15 +136,22 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     return { model, out };
   };
 
+  const models = [];
   for (const entry of layers) {
     const track = allocate(entry.start, entry.renderEnd);
     const { model, out } = build(entry, { track });
+    models.push(model);
     if (model.hidesCaptions) hide.push([entry.start, entry.renderEnd]);
     const id = attr(entry.scene.id);
     const outer = `lc-scene-${id}`, inner = `lc-layer-${id}`;
     const media = hoistMedia(out.html ?? '');
     for (const element of media.elements) hoisted.push(withZIndex(element, z + 5));
-    if (media.elements.length && entry.tweens.some((tw) => tw.prop !== 'opacity')) warnings.push(`${entry.scene.id}: root media does not follow ${entry.transitionIn?.type ?? 'transition'} transforms (HyperFrames keeps <video>/<audio> on the root)`);
+    const mediaMotion = [];
+    for (const element of media.elements) {
+      const follow = mediaLayerTweens(element, entry.tweens);
+      mediaMotion.push(...follow.lines);
+      if (follow.unsupported.length) warnings.push(`${entry.scene.id}: root media does not follow the ${follow.unsupported.join(', ')} of its ${entry.transitionIn?.type ?? 'transition'} (HyperFrames keeps <video>/<audio> on the root)`);
+    }
     const boundary = boundaryFor.get(entry.scene.id);
     markup.push(`<div id="${outer}" class="lc-scene${entry.plate ? ' lc-plate' : ''}" data-launchclip-scene="${id}" data-launchclip-module="${attr(entry.scene.module)}" data-launchclip-start="${num(entry.start)}" data-launchclip-render-end="${num(entry.renderEnd)}"${boundaryAttrs(boundary)} style="z-index:${z}"><div id="${inner}" class="lc-layer">${media.html}</div></div>`);
     css.push(out.css ?? '');
@@ -140,6 +159,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     motion.push(...toggle(`#${outer}`, entry.start, entry.renderEnd, D));
     motion.push(...entry.tweens.map((tw) => tweenCode(`#${inner}`, tw)));
     if (out.motion) motion.push(`{\n${out.motion}\n}`);
+    motion.push(...mediaMotion);
     z += 10;
   }
 
@@ -164,10 +184,33 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     z += 10;
   }
 
-  // Audio: exactly one root track.
-  const audioSrc = isolate ? null : story.audio?.mix ?? story.audio?.voice ?? null;
+  // Base: one muted root <video> per trim segment (HyperFrames lifts and
+  // seeks direct-root media; data-media-start is the segment's source
+  // in-point), the punch-in cameras as tl.set calls on those videos, and one
+  // root <audio> per segment for the recording's sound, which keeps playing
+  // under full-frame inserts.
+  const baseMarkup = [];
+  if (base) {
+    const fit = `object-fit:${base.fit};object-position:${num(base.focus.x * 100)}% ${num(base.focus.y * 100)}%`;
+    for (const segment of base.segments) {
+      const timing = `data-start="${num(segment.start)}" data-duration="${num(segment.duration)}" data-media-start="${num(segment.sourceStart)}"`;
+      baseMarkup.push(`<video id="lc-base-${segment.index}" class="clip lc-base-media" src="${attr(base.src)}" ${timing} data-track-index="${FIRST_SCENE_TRACK}" data-launchclip-base-segment="${segment.index}" muted playsinline style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;${fit};transform-origin:50% 50%;z-index:1"></video>`);
+      if (!isolate && base.volume > 0) baseMarkup.push(`<audio id="lc-base-audio-${segment.index}" class="clip" src="${attr(base.src)}" ${timing} data-volume="${num(base.volume)}" data-track-index="${FIRST_SCENE_TRACK + 1}"></audio>`);
+    }
+    const camera = cameraGsap(models);
+    if (camera.length) {
+      motion.push(`// base camera (${models.filter((model) => model.camera).map((model) => model.sceneId ?? model.id).join(', ')})`);
+      motion.push(...camera);
+    }
+    for (const [a, b] of cameraOverlaps(models)) warnings.push(`${b}: its camera overlaps ${a}; the later punch-in wins while both run`);
+  } else if (models.some((model) => model.camera)) warnings.push('punch-in moves the base recording, but the story has no base; it has no effect');
+
+  // Audio: exactly one root track (footage-led: the bed under the base; the
+  // recording carries the voice).
+  const audioSrc = isolate ? null : base ? story.audio?.mix ?? null : story.audio?.mix ?? story.audio?.voice ?? null;
+  const mixVolume = typeof story.audio?.mix_volume === 'number' && audioSrc === story.audio?.mix ? story.audio.mix_volume : 1;
   if (audioSrc && sourceDir && !existsSync(path.join(sourceDir, audioSrc))) warnings.push(`audio file ${audioSrc} was not found in ${sourceDir}`);
-  const audio = audioSrc ? `<audio id="lc-audio" class="clip" src="${attr(audioSrc)}" data-start="0" data-duration="${num(D)}" data-media-start="0" data-volume="1" data-track-index="0"></audio>` : '';
+  const audio = audioSrc ? `<audio id="lc-audio" class="clip" src="${attr(audioSrc)}" data-start="0" data-duration="${num(D)}" data-media-start="0" data-volume="${num(mixVolume)}" data-track-index="0"></audio>` : '';
 
   // Captions.
   let captions = null;
@@ -181,7 +224,8 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   }
 
   const fonts = brandFontStacks(story.brand);
-  const fontCss = await fontFaces(fonts.families, sourceDir, warnings);
+  const fontCss = await projectFontFaces(story.brand, { sourceDir });
+  warnings.push(...fontCss.warnings);
   const capIdle = colors.paper ?? CAPTION_DEFAULT_COLORS.idle;
   const capActive = colors.primary ?? CAPTION_DEFAULT_COLORS.active;
   const html = `<!doctype html>
@@ -192,9 +236,8 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   <meta http-equiv="Content-Security-Policy" content="${CSP}">
   <title>${text(story.title ?? 'LaunchClip story')}</title>
   <script src="${GSAP_SRC}"></script>
-${fontCss.links.map((href) => `  <link rel="stylesheet" href="${attr(href)}">`).join('\n')}
   <style>
-${fontCss.css}
+${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     * { box-sizing: border-box; }
     html, body { margin: 0; width: ${W}px; height: ${H}px; overflow: hidden; background: ${bg}; }
     #launchclip-root { position: relative; width: ${W}px; height: ${H}px; overflow: hidden; --lc-font-display: ${fonts.display}; --lc-font-body: ${fonts.body}; --lc-font-meta: ${fonts.meta}; --cap-font: ${fonts.display}; --cap-idle: ${capIdle}; --cap-active: ${capActive}; font-family: var(--lc-font-body); }
@@ -203,13 +246,15 @@ ${fontCss.css}
     .lc-layer { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; }
     .lc-plate > .lc-layer { background: ${bg}; }
     ${placeholderCss()}
-    ${captions ? `${CAPTION_CSS.trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}
+    ${captions ? `${captionCss(format).trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}
     ${css.filter(Boolean).join('\n    ')}
   </style>
+  <script>${FONT_WARMUP}</script>
 </head>
 <body>
   <div id="launchclip-root" data-composition-id="${COMPOSITION_ID}" data-start="0" data-duration="${num(D)}" data-width="${W}" data-height="${H}" data-fps="${format.fps}" data-launchclip-cinematic-contract="phase-2" data-launchclip-story="${attr(story.schema)}">
     <div id="lc-bg" class="clip" data-start="0" data-duration="${num(D)}" data-track-index="1"></div>
+    ${baseMarkup.join('\n    ')}
     ${audio}
     ${hoisted.join('\n    ')}
     ${markup.join('\n    ')}
@@ -234,6 +279,7 @@ ${motion.join('\n').split('\n').map((line) => `      ${line}`).join('\n')}
       await cp(path.join(sourceDir, 'assets'), path.join(projectDir, 'assets'), { recursive: true, force: true });
       files.push('assets/');
     }
+    if (fontCss.copies.length) { await copyProjectFonts(fontCss.copies, projectDir); files.push('fonts/'); }
     await writeFile(path.join(projectDir, 'index.html'), html);
     files.push('index.html');
   }
@@ -281,6 +327,38 @@ function hoistMedia(html) {
   return { html: rest, elements };
 }
 
+// Root media sits outside its scene layer, so it would ignore the layer's
+// transition (a morph's crossfade, a push or whip) that Remotion applies to
+// everything in the scene. Replay the layer tweens on the media element with
+// properties the module's own motion never touches: x/y as xPercent/yPercent
+// of the element box (GSAP adds them to x/y as pure translations), opacity and
+// blur as one CSS filter, so they multiply with the module's opacity. Each
+// filter tween writes both components, holding the other at the layer's value.
+// Layer scale (zoom) and iris pivot on the canvas centre and are reported as
+// unsupported. → {lines: [GSAP calls], unsupported: [props]}
+export function mediaLayerTweens(element, tweens) {
+  const id = /\sid="([^"]+)"/.exec(element)?.[1];
+  const box = (name) => Number(new RegExp(`[;"\\s]${name}:\\s*(-?[\\d.]+)px`).exec(element)?.[1]);
+  const width = box('width'), height = box('height');
+  const lines = [];
+  const unsupported = new Set();
+  if (!id) return { lines, unsupported: [...new Set(tweens.map((tw) => tw.prop))] };
+  const selector = `#${id}`;
+  const filter = (state) => `opacity(${round(state.opacity, 4)}) blur(${round(state.blur, 3)}px)`;
+  for (const tw of tweens) {
+    const timing = { duration: round(tw.duration, 4), ease: tw.ease, immediateRender: false };
+    if ((tw.prop === 'x' && width > 0) || (tw.prop === 'y' && height > 0)) {
+      const key = tw.prop === 'x' ? 'xPercent' : 'yPercent', size = tw.prop === 'x' ? width : height;
+      lines.push(`tl.fromTo(${js(selector)}, ${js({ [key]: round(tw.from / size * 100, 4) })}, ${js({ [key]: round(tw.to / size * 100, 4), ...timing })}, ${num(tw.at)});`);
+    } else if (tw.prop === 'opacity' || tw.prop === 'blur') {
+      const before = { ...layerStateAt(tw.at, tweens, getEase), [tw.prop]: tw.from };
+      const after = { ...layerStateAt(tw.at + tw.duration, tweens, getEase), [tw.prop]: tw.to };
+      lines.push(`tl.fromTo(${js(selector)}, ${js({ filter: filter(before) })}, ${js({ filter: filter(after), ...timing })}, ${num(tw.at)});`);
+    } else unsupported.add(tw.prop);
+  }
+  return { lines, unsupported: [...unsupported] };
+}
+
 function withZIndex(element, z) {
   return /\sstyle="/.test(element) ? element.replace(/\sstyle="/, ` style="z-index:${z};`) : element.replace(/^<(\w+)/, `<$1 style="z-index:${z}"`);
 }
@@ -322,51 +400,73 @@ async function loadCaptionChunks(story, overlay, sourceDir, warnings) {
   }
 }
 
-// Brand fonts: frozen files under assets/fonts/ win (named <family-slug>*.woff2),
-// then the exact Google Fonts files @remotion/google-fonts would load (so both
-// renderers draw the same faces), then a Google Fonts stylesheet link.
-async function fontFaces(families, sourceDir, warnings) {
+// Project fonts (kit/core/fonts.mjs): every family the project draws with
+// (role defaults, the symbol fallback and the brand families) as @font-face
+// rules over local files, so a render never fetches a font or reaches a host
+// system font. For each family, frozen files under <sourceDir>/assets/fonts/
+// (named <family-slug>*.woff2) win; otherwise the registry's @fontsource file
+// is copied to <projectDir>/fonts/. The Remotion kit (kit/remotion/fonts.ts)
+// makes the same choice per family, so both renderers draw the same files.
+//
+//   const {css, copies, warnings} = await projectFontFaces(story.brand, {sourceDir});
+//   await copyProjectFonts(copies, projectDir);
+export async function projectFontFaces(brand, { sourceDir, resolveFrom = [] } = {}) {
   const rules = [];
-  const links = [];
+  const copies = [];
+  const warnings = [];
   let local = [];
   if (sourceDir && existsSync(path.join(sourceDir, 'assets/fonts'))) local = await readdir(path.join(sourceDir, 'assets/fonts'));
-  for (const family of families) {
-    const slug = fontSlug(family);
-    const files = local.filter((file) => /\.(woff2?|ttf|otf)$/i.test(file) && file.toLowerCase().replace(/[^a-z0-9]+/g, '-').startsWith(slug));
-    if (files.length) {
-      for (const file of files.sort()) {
-        const weight = file.match(/(?:^|[^0-9])([1-9]00)(?:[^0-9]|$)/)?.[1] ?? (/bold/i.test(file) ? '700' : '400');
-        const style = /italic/i.test(file) ? 'italic' : 'normal';
-        const format = { woff2: 'woff2', woff: 'woff', ttf: 'truetype', otf: 'opentype' }[file.split('.').pop().toLowerCase()];
-        rules.push(`    @font-face { font-family: '${family}'; src: url("assets/fonts/${attr(file)}") format("${format}"); font-weight: ${weight}; font-style: ${style}; font-display: block; }`);
-      }
+  for (const family of projectFontFamilies(brand)) {
+    const frozen = frozenFontFaces(family, local);
+    if (frozen.length) {
+      for (const face of frozen) rules.push(fontFaceRule(face, `assets/fonts/${face.file}`));
       continue;
     }
-    const info = await googleFontInfo(family);
-    if (info) {
-      for (const [weight, subsets] of Object.entries(info.fonts?.normal ?? {})) {
-        const subset = subsets.latin ? 'latin' : Object.keys(subsets)[0];
-        if (!subset) continue;
-        const range = info.unicodeRanges?.[subset];
-        rules.push(`    @font-face { font-family: '${family}'; src: url("${subsets[subset]}") format("woff2"); font-weight: ${weight}; font-style: normal; font-display: block;${range ? ` unicode-range: ${range};` : ''} }`);
-      }
+    const faces = registryFontFaces([family]);
+    if (!faces.length) {
+      warnings.push(`font "${family}" is not in the LaunchClip font registry and has no files under assets/fonts/ (named ${fontSlug(family)}-<weight>.woff2); its role's bundled family is used instead`);
       continue;
     }
-    warnings.push(`font "${family}" is not frozen under assets/fonts/; loading it from Google Fonts at render time`);
-    links.push(`https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, '+')}&display=block`);
+    for (const face of faces) {
+      const file = resolveFontFile(face.module, [sourceDir, ...resolveFrom]);
+      if (!file) {
+        warnings.push(`font file ${face.module} is not installed; run npm install (the @fontsource packages pinned in package.json) so ${family} renders`);
+        continue;
+      }
+      copies.push({ from: file, to: `fonts/${face.file}` });
+      rules.push(fontFaceRule(face, `fonts/${face.file}`));
+    }
   }
-  return { css: rules.join('\n'), links };
+  return { css: rules.join('\n'), copies, warnings };
 }
 
-async function googleFontInfo(family) {
-  try {
-    const module = await import(`@remotion/google-fonts/${googleFontModuleName(family)}`);
-    const info = module.getInfo?.();
-    return info?.fontFamily === family ? info : null;
-  } catch {
-    return null;
+/** Copy resolved font files into the project (fonts/<file>). → relative paths written */
+export async function copyProjectFonts(copies, projectDir) {
+  const written = [];
+  for (const { from, to } of copies) {
+    const target = path.join(projectDir, to);
+    await mkdir(path.dirname(target), { recursive: true });
+    await copyFile(from, target);
+    written.push(to);
   }
+  return written;
 }
+
+// A registry file inside node_modules: next to this compiler first (the repo
+// or an installed launchclip), then next to the storyboard project (a skill
+// copy of this file used in a project that installed the font packages).
+function resolveFontFile(specifier, roots) {
+  const bases = [import.meta.url, ...roots.filter(Boolean).map((dir) => path.join(path.resolve(dir), 'package.json')), path.join(process.cwd(), 'package.json')];
+  for (const base of bases) {
+    try { return createRequire(base).resolve(specifier); } catch { /* try the next base */ }
+  }
+  return null;
+}
+
+// Start every declared face loading as soon as the page parses, so the
+// renderer's document.fonts.ready wait covers faces whose text is not on
+// screen yet (captions, later scenes).
+export const FONT_WARMUP = 'if (document.fonts) for (const face of document.fonts) face.load().catch(() => {});';
 
 function attr(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));

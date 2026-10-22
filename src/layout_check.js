@@ -1,4 +1,5 @@
-import { narrationFile } from "./story_loader.js";
+import { narrationFile, readStoryEdl } from "./story_loader.js";
+import { catalogModules, resolveModule } from "../kit/core/modules.mjs";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -13,20 +14,24 @@ const PARAM_ROLES = new Set(["text", "hero", "media", "caption", "decor"]);
 
 // Geometric layout check for a storyboard.json project. Works for both renderers
 // because it reads declared rects and timing, not rendered pixels.
+// options.story / options.words: check this (unresolved) story and these
+// narration words instead of reading storyboard.json and its NARRATION.json
+// (launchclip finish passes its resolved copy).
 export async function checkLayoutProject(projectDir, options = {}, adapters = {}) {
   const project = path.resolve(projectDir);
   const storyFile = path.join(project, "storyboard.json");
-  if (!(await exists(storyFile))) throw new Error(`layout-check needs ${storyFile}; author storyboard.json first`);
-  const story = JSON.parse(await readFile(storyFile, "utf8"));
+  if (!options.story && !(await exists(storyFile))) throw new Error(`layout-check needs ${storyFile}; author storyboard.json first`);
+  const story = options.story ?? JSON.parse(await readFile(storyFile, "utf8"));
   const storyCore = adapters.storyCore ?? await loadStoryCore();
   if (typeof storyCore.validateStory === "function") {
     const validation = storyCore.validateStory(story);
     if (validation && validation.ok === false) throw new Error(`storyboard.json is invalid:\n- ${validation.errors.join("\n- ")}`);
   }
-  const narration = await readOptionalJson(narrationFile(project, story));
+  const narration = options.words ?? await readOptionalJson(narrationFile(project, story));
   const words = Array.isArray(narration) ? narration : Array.isArray(narration?.words) ? narration.words : [];
   const beats = await readOptionalJson(path.join(project, "BEATS.json"));
-  const resolved = storyCore.resolveStory(story, { words, beats });
+  const resolved = storyCore.resolveStory(story, { words, beats, edl: await readStoryEdl(project, story) });
+  const catalogue = catalogModules();
 
   const profile = options.profile == null ? null : String(options.profile);
   if (profile && !SAFE_ZONE_PROFILES[profile]) throw new Error(`Unknown --profile ${profile}; use shorts or landscape`);
@@ -75,11 +80,29 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
         ...(scene.hides_captions === true || params.hidesCaptions === true ? { hidesCaptions: true } : {})
       }];
     }
+    // Catalogue modules declare their own geometry in the resolved model.
+    if (Object.hasOwn(catalogue, scene.module)) {
+      try {
+        const model = resolveModule(scene, resolved);
+        const role = PARAM_ROLES.has(model.layout?.role) ? model.layout.role : "text";
+        return [{
+          id: scene.id, role, rect: model.layout.rect, start: Number(scene.start), end: Number(scene.end),
+          motion: { enterEnd: model.layout.motion.enterEnd, exitStart: model.layout.motion.exitStart },
+          ...(model.minTextPx != null && role !== "decor" ? { minTextPx: model.minTextPx } : {}),
+          ...(model.hidesCaptions ? { hidesCaptions: true } : {})
+        }];
+      } catch (error) {
+        specFindings.push({ rule: "module-spec", severity: "error", ids: [scene.id], at: Number(scene.start), detail: `${scene.module}: ${error.message}` });
+        return [];
+      }
+    }
     warnings.push(`scene ${scene.id} (${scene.module}) declares no geometry; skipped. Add params.rect to check it.`);
     return [];
   };
 
   const elements = elementsFromStory(resolved, { moduleLayout, profile });
+  // Footage-led: the recording fills the frame under everything (media, never a collision).
+  if (resolved.base) elements.unshift({ id: "base", role: "media", rect: { x: 0, y: 0, width: canvas.width, height: canvas.height }, start: 0, end: Number(resolved.resolved?.duration ?? resolved.format?.duration), allowOcclusion: ["*"] });
   const report = checkLayout({ canvas, elements, profile, duration: Number(resolved.resolved?.duration ?? resolved.format?.duration) || undefined });
   const findings = [...specFindings, ...report.findings].sort((a, b) => a.at - b.at);
   return {

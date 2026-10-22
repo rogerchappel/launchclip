@@ -1,5 +1,5 @@
 // Merged Remotion module registry: editorial kinds (registry-a, registry-b)
-// plus catalogue modules (../catalog/registry-a, ../catalog/registry-b).
+// plus catalogue modules (../catalog/registry-a, registry-b, registry-c).
 // Each component takes {model} (kit/core/modules.mjs resolveModule) and draws
 // at absolute canvas coordinates inside a full-canvas AbsoluteFill.
 import type React from "react";
@@ -7,12 +7,14 @@ import { COMPONENTS as EDITORIAL_A } from "./registry-a";
 import { COMPONENTS as EDITORIAL_B } from "./registry-b";
 import { COMPONENTS as CATALOG_A } from "../catalog/registry-a";
 import { COMPONENTS as CATALOG_B } from "../catalog/registry-b";
+import { COMPONENTS as CATALOG_C } from "../catalog/registry-c";
 
 export type ModuleComponent = React.FC<{ model: any }>;
 
 export const MODULE_COMPONENTS: Record<string, ModuleComponent> = {
   ...(CATALOG_A as Record<string, ModuleComponent>),
   ...(CATALOG_B as Record<string, ModuleComponent>),
+  ...(CATALOG_C as Record<string, ModuleComponent>),
   ...(EDITORIAL_A as Record<string, ModuleComponent>),
   ...(EDITORIAL_B as Record<string, ModuleComponent>)
 };

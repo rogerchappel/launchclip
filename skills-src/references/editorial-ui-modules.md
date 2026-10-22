@@ -179,6 +179,43 @@ Use explicit geometry from the inspected source and target crop. Short copy,
 row counts and dimensions have bounds; split dense content instead of squeezing
 it into an unreadable panel. The helper's validation errors explain those bounds.
 
+### Defaults and density
+
+Without `rect`, the footprint comes from the content rather than a fixed box:
+
+- **9:16, full-frame Shorts.** The card spans the safe-zone width (x 90, width
+  840, inside x 80–940). Its height is the content's natural height, and it
+  sits above the caption band (y 280–1190), centred near y 880: on the
+  centre-of-mass target and just below the lower-third line, so the lower
+  third is never empty. When content is too tall for that band the card may
+  grow down to the safe-zone bottom (y 1450); when it does not fit the
+  safe-zone width at all it falls back to the old `{x: 90, y: 960, width: 900,
+  height: 740}` footprint.
+  A short card is never shorter than 160 px.
+- **9:16 type scale.** The module lays out in a smaller layout box and renders
+  scaled into its rect (`model.density.scale`, 1–2). The resolver picks the
+  largest scale at which the content still validates and fits, preferring at
+  least 1.8 with the card centre below the lower third. At 1.8–2 titles render
+  at 50–56 px and body copy at 43–48 px, meeting the 44 px key-text rule. The
+  metric number grows to a hero size (up to 240 px); a progress number caps
+  lower (about 160 px) because the bar is that card's hero. Explicit 9:16
+  rects keep their footprint and get the same scale search, so text grows only
+  as far as the rect allows; a rect that fits nothing larger resolves exactly
+  as before.
+- **16:9, overlays on footage.** Scale stays 1 and explicit rects are
+  unchanged. The default keeps the lower-left footprint (x 80, width 680) with
+  its height taken from the content and its bottom edge on y 980.
+- **media-window** keeps scale 1. Its 9:16 default is an 840×521 window (a
+  16:9 frame under the 48 px bar) centred on the target; 16:9 keeps
+  `{x: 80, y: 480, width: 680, height: 500}`.
+
+Rect-local geometry in the model (`chrome`, cells, bars, stages) is in layout
+px; multiply by `model.density.scale` for canvas px. `model.rect` and
+`layout.rect` are always canvas px. Both renderers wrap the kind markup in one
+`.ui-density` element sized to `model.density.layout` with
+`transform: scale(model.density.scale)` from the top-left corner, omitted at
+scale 1.
+
 ## Reach illustrations and grounded metrics
 
 These kinds require the audience/trend helper update in the installed skill.
@@ -310,9 +347,9 @@ In the Remotion skill a module is a `storyboard.json` scene, not pasted fragment
    Media-window video renders as a muted `<OffthreadVideo>` inside the module
    with its supplied source offset; preserve one continuous authoritative
    narration track in the root mix.
-2. Resolve the project font through the story's `brand.fonts` (loaded with
-   `@remotion/google-fonts` or `staticFile()` plus `delayRender`) when the brand
-   requires it, rather than the module's system default.
+2. Editorial modules draw with the bundled registry stacks (Inter, JetBrains
+   Mono; `kit/core/fonts.mjs`), which `ensureFonts(story.brand)` loads from
+   local files before the first frame. Never load a font from the network.
 3. `LaunchclipStory` places each module in its own `<Sequence>` and the module
    derives every value from `useCurrentFrame()`, following
    `standalone-remotion.md`. Never add a GSAP timeline, CSS transition, or

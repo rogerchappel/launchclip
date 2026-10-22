@@ -10,9 +10,10 @@ import gsap from "gsap";
 import { compileStoryToHyperFrames, COMPOSITION_ID } from "../kit/hyperframes/story-compiler.mjs";
 import { brandModuleDefaults, contrastRatio, knownModules, placeholderModel, resolveModule } from "../kit/core/modules.mjs";
 import { layerStateAt, sceneWindows, transitionTweens, TRANSITION_TYPES } from "../kit/core/transitions.mjs";
+import { parseOutput } from "../src/renderers/command.js";
 import { getEase } from "../kit/core/motion.mjs";
 import { EDITORIAL_KINDS } from "../kit/core/editorial-core.mjs";
-import { brandFontStacks, fontFamilyName } from "../kit/core/fonts.mjs";
+import { brandFontStacks, fontFaceRule, fontFamilyName, projectFontFamilies, registryFontFaces } from "../kit/core/fonts.mjs";
 import { deriveBoundaries, resolveStory, validateStory } from "../kit/core/story.mjs";
 import { parseDeclaredSequenceBoundaries } from "../src/cinematic_evidence.js";
 import { runCli } from "../src/cli.js";
@@ -41,8 +42,18 @@ test("compiles the minimal story into a HyperFrames project that follows the run
     const html = await readFile(path.join(out, "index.html"), "utf8");
     assert.equal(html, result.html);
     assert.deepEqual(result.warnings, []);
-    assert.deepEqual(result.files, ["assets/", "index.html"]);
+    assert.deepEqual(result.files, ["assets/", "fonts/", "index.html"]);
     assert.ok((await stat(path.join(out, "assets/audio/mix.wav"))).size > 1000, "assets are copied beside index.html");
+
+    // Fonts: every project family from the bundled registry, as local files.
+    const faces = registryFontFaces(projectFontFamilies(story.brand));
+    assert.ok(faces.length >= 9);
+    for (const face of faces) {
+      assert.ok((await stat(path.join(out, "fonts", face.file))).size > 10_000, `${face.file} is copied into fonts/`);
+      assert.ok(html.includes(fontFaceRule(face, `fonts/${face.file}`)), `${face.family} ${face.style} is declared`);
+    }
+    assert.doesNotMatch(html, /fonts\.googleapis|fonts\.gstatic|<link rel="stylesheet"/, "no font is fetched over the network");
+    assert.match(html, /for \(const face of document\.fonts\) face\.load\(\)/, "every declared face starts loading before the fonts.ready wait");
 
     // One root composition, one paused timeline registered under its id.
     assert.match(html, new RegExp(`<div id="launchclip-root" data-composition-id="${COMPOSITION_ID}" data-start="0" data-duration="6" data-width="1080" data-height="1920" data-fps="30" data-launchclip-cinematic-contract="phase-2"`));
@@ -80,7 +91,7 @@ test("compiles the minimal story into a HyperFrames project that follows the run
     assert.match(html, /tl\.fromTo\(loopTl, \{ time: 0 \}, \{ time: 0,/);
 
     // Brand fonts: role stacks with fallbacks.
-    assert.match(html, /--lc-font-display: 'Anton', 'Arial Narrow'/);
+    assert.match(html, /--lc-font-display: 'Anton', 'STIX Two Math', sans-serif;/);
     assert.match(html, /--cap-font: 'Anton'/);
   } finally {
     await rm(out, { recursive: true, force: true });
@@ -92,8 +103,8 @@ test("the compiled minimal project passes hyperframes lint", async () => {
   try {
     await compileStoryToHyperFrames(await minimalStory(), { projectDir: out, sourceDir: MINIMAL });
     const { stdout } = await run(process.execPath, [HYPERFRAMES_CLI, "lint", "--json", out], { cwd: out });
-    const report = JSON.parse(stdout);
-    assert.equal(report.ok, true, stdout);
+    const report = parseOutput(stdout);
+    assert.equal(report?.ok, true, stdout);
     assert.equal(report.errorCount, 0);
     assert.equal(report.warningCount, 0, stdout);
   } finally {
@@ -227,7 +238,7 @@ test("brand fonts resolve to family names and role stacks", () => {
   assert.equal(fontFamilyName("Inter Tight"), "Inter Tight");
   const stacks = brandFontStacks({ fonts: { display: "anton", body: "space-grotesk" } });
   assert.deepEqual(stacks.families, ["Anton", "Space Grotesk"]);
-  assert.match(stacks.meta, /^ui-monospace/);
+  assert.equal(stacks.meta, "'JetBrains Mono', 'STIX Two Math', monospace");
 });
 
 test("launchclip story compile --renderer hyperframes writes the project and reports boundaries", async () => {
@@ -266,5 +277,22 @@ test("compiles a copied example without touching the source tree", async () => {
     assert.ok(result.files.includes("index.html"));
   } finally {
     await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("fonts outside the registry use frozen assets/fonts files, else warn and keep the bundled role family", async () => {
+  const source = await tempDir("launchclip-hf-frozen-font-");
+  try {
+    await cp(path.join(MINIMAL, "assets"), path.join(source, "assets"), { recursive: true });
+    const story = await minimalStory((value) => ({ ...value, brand: { ...value.brand, fonts: { display: "poppins", body: "space-grotesk" } } }));
+    const missing = await compileStoryToHyperFrames(story, { projectDir: source, sourceDir: source, write: false });
+    assert.equal(missing.warnings.filter((line) => /font "Poppins" is not in the LaunchClip font registry/.test(line)).length, 1);
+    assert.match(missing.html, /--lc-font-display: 'Poppins', 'Anton', 'STIX Two Math', sans-serif;/);
+    await cp(path.join(ROOT, "node_modules/@fontsource/anton/files/anton-latin-400-normal.woff2"), path.join(source, "assets/fonts/poppins-700.woff2"));
+    const frozen = await compileStoryToHyperFrames(story, { projectDir: source, sourceDir: source, write: false });
+    assert.ok(!frozen.warnings.some((line) => /Poppins/.test(line)), frozen.warnings.join("\n"));
+    assert.match(frozen.html, /@font-face \{ font-family: 'Poppins'; src: url\("assets\/fonts\/poppins-700\.woff2"\) format\("woff2"\); font-weight: 700;/);
+  } finally {
+    await rm(source, { recursive: true, force: true });
   }
 });
