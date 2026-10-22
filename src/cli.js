@@ -49,9 +49,9 @@ export async function runCli(argv, io = {}) {
   const moduleInvocation = command === "module" ? parseModuleInvocation(firstArg, rest) : null;
   // launchclip voice takes a project or only flags (--text "...").
   const voiceInvocation = command === "voice" ? (firstArg && !firstArg.startsWith("--") ? { project: firstArg, flagArgs: rest } : { project: null, flagArgs: firstArg ? [firstArg, ...rest] : rest }) : null;
-  // launchclip demo record|approve <path> [flags]; plain `demo <repo>` is the packet lane.
+  // launchclip demo record|approve|scene <path> [flags]; plain `demo <repo>` is the packet lane.
   const demoTarget = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
-  const demoInvocation = command === "demo" && (firstArg === "record" || firstArg === "approve") ? { action: firstArg, target: demoTarget, flagArgs: demoTarget ? rest.slice(1) : rest } : null;
+  const demoInvocation = command === "demo" && ["record", "approve", "scene"].includes(firstArg) ? { action: firstArg, target: demoTarget, flagArgs: demoTarget ? rest.slice(1) : rest } : null;
   const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch });
   const previousFetch = globalThis.fetch;
@@ -157,7 +157,7 @@ export async function runCli(argv, io = {}) {
       return;
     } else if (command === "init") {
       result = await initWorkspace(required(firstArg, "repo path"), flags);
-    } else if (command === "demo" && (firstArg === "record" || firstArg === "approve")) {
+    } else if (command === "demo" && ["record", "approve", "scene"].includes(firstArg)) {
       const { runDemoCommand } = await import("./demo/cli.js");
       result = await runDemoCommand(demoInvocation.action, demoInvocation.target, flags, { log: (line) => stderr.write(`demo: ${line}\n`), stdin });
     } else if (command === "demo") {

@@ -1,7 +1,8 @@
 // `launchclip demo record <repo>` and `launchclip demo approve <dir>`.
 import path from "node:path";
 import { createPlannerClient } from "../storyboard_planner.js";
-import { approveFlows, askYesNo, runAutopilot } from "./autopilot.js";
+import { productDemoParams } from "../../kit/core/catalog-d.mjs";
+import { approveFlows, approvedFlows, askYesNo, runAutopilot } from "./autopilot.js";
 
 const list = (value) => (typeof value === "string" ? value.split(",").map((item) => item.trim()).filter(Boolean) : []);
 
@@ -10,6 +11,17 @@ export async function runDemoCommand(action, target, flags = {}, { log = () => {
     if (!target) throw new Error("launchclip demo approve needs the recording dir (the --out of demo record)");
     const receipt = await approveFlows(target, { flows: list(flags.flows), reject: Boolean(flags.reject) });
     return { stage: "demo-approve", out: receipt.out, flows: receipt.flows.map(({ id, review }) => ({ id, review })) };
+  }
+  if (action === "scene") {
+    if (!target) throw new Error("launchclip demo scene needs the recording dir");
+    const flows = await approvedFlows(target);
+    const flow = flows.find((entry) => entry.id === flags.flow) ?? (flags.flow ? null : flows[0]);
+    if (!flow) throw new Error(flows.length ? `no approved flow "${flags.flow}" (approved: ${flows.map((entry) => entry.id).join(", ")})` : `no approved flows in ${target}; review them, then run launchclip demo approve ${target}`);
+    const sourceStart = flags["source-start"] === undefined ? 0 : Number(flags["source-start"]);
+    const duration = flags.duration === undefined ? Math.round((flow.record.duration - sourceStart) * 1000) / 1000 : Number(flags.duration);
+    if (!(sourceStart >= 0) || !(duration > 0) || sourceStart + duration > flow.record.duration + 1e-3) throw new Error(`--source-start ${sourceStart} with --duration ${duration} runs past the ${flow.record.duration} s clip`);
+    const src = flags.src ?? `assets/demo/${path.basename(flow.video)}`;
+    return { stage: "demo-scene", flow: flow.id, title: flow.title, duration, module: "product-demo", params: productDemoParams(flow.record, { src, sourceStart, duration, frame: flags.frame }) };
   }
   if (!target) throw new Error("launchclip demo record needs the app repo path");
   // A model writes the plan only when one is named; otherwise the heuristic

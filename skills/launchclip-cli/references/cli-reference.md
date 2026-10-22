@@ -1370,6 +1370,12 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip demo approve <dir> [--flows a,b] [--reject]
   ```
 
+- `demo scene`: Print product-demo scene params for an approved flow (its action log turned into scene-relative actions, callouts and the clip window).
+
+  ```text
+  launchclip demo scene <dir> [--flow <id>] [--source-start 0.5] [--duration 8] [--src assets/demo/<flow>.mp4] [--frame window|full]
+  ```
+
 - `plan`: Plan the packet video.
 
   ```text

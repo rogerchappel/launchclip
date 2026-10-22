@@ -13,6 +13,7 @@ import { resolveModule } from "../kit/core/modules.mjs";
 import { resolveStory } from "../kit/core/story.mjs";
 import { runCli } from "../src/cli.js";
 import { approveFlows, approvedFlows, runAutopilot } from "../src/demo/autopilot.js";
+import { runDemoCommand } from "../src/demo/cli.js";
 import { recorderAvailability } from "../src/demo/record.js";
 
 const FIXTURE = path.resolve(import.meta.dirname, "..", "examples", "demo-app");
@@ -84,6 +85,11 @@ test("records the demo-app fixture: clip, action log, contact sheet, review, pro
   await approveFlows(out, { flows: ["sign-in"] });
   const [approved] = await approvedFlows(out);
   assert.equal(approved.id, "sign-in");
+
+  await assert.rejects(runDemoCommand("scene", out, { flow: "analytics" }), /no approved flow "analytics"/);
+  const scene = await runDemoCommand("scene", out, { flow: "sign-in", "source-start": "0.5" });
+  assert.equal(scene.params.media.src, "assets/demo/sign-in.mp4");
+  assert.ok(scene.params.actions.some((action) => action.type === "click"));
 
   // The log drives a product-demo scene that resolves.
   const params = productDemoParams(approved.record, { src: "assets/demo/sign-in.mp4", sourceStart: 0.5, duration: Math.min(8, approved.record.duration - 0.5) });
