@@ -385,3 +385,48 @@ test('gauge-compare: emitter output is seek-safe and matches the Remotion evalua
 test('gauge-compare: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not installed'}, () => {
   assert.ok(remotionStill('gauge-compare', 10.2) > 20000);
 });
+
+// ---------------------------------------------------------------------------
+// flow-compare
+
+test('flow-compare: fixture model meets the contract; particles are a pure function of t', async () => {
+  const {model} = loadFixture('flow-compare');
+  assertModelContract(model, 'flow-compare');
+  const [top, bottom] = model.content.lanes;
+  assert.ok(top.speed > bottom.speed, 'big rate moves faster');
+  assert.ok(top.pipe.height > bottom.pipe.height, 'big rate gets the fatter pipe');
+  assert.deepEqual(model.events.map(e => e.name), ['enter', 'top-flow', 'bottom-flow']);
+  assert.equal(top.tag.text, 'FAST');
+  const {flowOffset} = await import('../kit/core/catalog-b-flow-compare.mjs');
+  const op = catalogBTimeline(model).find(entry => entry.type === 'loop' && entry.target === 'flow-top-belt');
+  for (const t of [0, top.time, top.time + 0.01, 1.7, 3.33, 4.9, 2.2, 1.1]) {
+    const a = flowOffset(top, t), b = loopValue(op, t).x;
+    assert.ok(Math.abs(a - b) < 1e-9, `offset at ${t}`);
+    assert.ok(a <= 0 && a >= -top.period);
+    assert.equal(flowOffset(top, t), a, 'same t, same offset');
+  }
+  // Repeats cover the whole scene.
+  assert.ok(top.time + top.cycle * top.repeats >= model.end);
+});
+
+test('flow-compare: strict validation', () => {
+  const resolve = MODULES['flow-compare'].resolve;
+  const params = {top: {label: 'Big gap', rate: 1}, bottom: {label: 'Small gap', rate: 0.25}};
+  assert.ok(resolve(params, ctx()));
+  assert.throws(() => resolve({...params, bottom: {label: 'Same', rate: 1}}, ctx()), /params\.bottom\.rate must differ/);
+  assert.throws(() => resolve({...params, top: {label: 'Big', rate: 0}}, ctx()), /params\.top\.rate must be between 0\.05 and 100/);
+  assert.throws(() => resolve({...params, top: {label: 'Big', rate: 1, speed: 3}}, ctx()), /params\.top\.speed is not supported/);
+  assert.throws(() => resolve({...params, top: {label: 'Big', rate: 1, value: 'much much faster'}}, ctx()), /params\.top\.value must be a string of 1–10/);
+  assert.throws(() => resolve({...params, top: {label: 'Big', rate: 1, color: '#0b0b10'}}, ctx()), /params\.top\.color .* contrast/);
+});
+
+test('flow-compare: emitter loops are seek-safe repeats that match the Remotion evaluator', () => {
+  const {model} = loadFixture('flow-compare');
+  assertEmitter(model);
+  const out = EMITTERS['flow-compare'](model);
+  assert.match(out.motion, /tl\.fromTo\("#flow-top-belt", \{"x":-320\}, \{"x":0,"duration":[\d.]+,"ease":"none","repeat":\d+,"immediateRender":false\}/);
+});
+
+test('flow-compare: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not installed'}, () => {
+  assert.ok(remotionStill('flow-compare', 3) > 20000);
+});
