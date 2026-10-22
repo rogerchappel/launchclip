@@ -11,6 +11,7 @@
     "smoke": "node ./scripts/smoke.js",
     "check": "npm test && npm run smoke",
     "eval:production": "node ./src/production_eval.js",
+    "eval:renderers": "node ./src/renderer_eval.js",
     "package:smoke": "node ./scripts/package-smoke.js",
     "release:check": "npm run check && npm run package:smoke",
     "skills:sync": "node ./scripts/sync-skills.mjs",

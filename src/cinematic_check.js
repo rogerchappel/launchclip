@@ -41,25 +41,9 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
     : await verifyProject(project, qaDir, rendererAdapter(rendererName, adapters, storyModule));
   await writeJson(path.join(qaDir, "verification.json"), verification);
 
-  const orientation = height > width ? "portrait" : width > height ? "landscape" : "square";
-  const profile = resolveProductionProfile("cinematic", { aspect: { orientation }, durationSeconds: duration });
+  const { profile, expected } = cinematicMotionExpectations({ duration, width, height });
   const motionPath = path.join(qaDir, "motion.json");
-  const motion = await (adapters.writeMotionReport ?? writeMotionReport)(video, motionPath, {
-    expected: {
-      duration_seconds: duration,
-      width,
-      height,
-      duration_tolerance_seconds: .15,
-      maximum_hold_ratio: .8,
-      minimum_bursts_per_minute: 20,
-      minimum_change_energy_p50: .35,
-      minimum_change_energy_p50_by_family: { "developing-card": .15 },
-      minimum_flow_velocity_p90: 2,
-      maximum_first_motion_seconds: .35,
-      hook_window_seconds: profile.craft.hook_window_seconds,
-      minimum_hook_events: profile.craft.minimum_hook_material_changes
-    }
-  }, adapters.motion);
+  const motion = await (adapters.writeMotionReport ?? writeMotionReport)(video, motionPath, { expected }, adapters.motion);
 
   const audioManifest = await optionalProjectFile(project, options.audioManifest ?? "AUDIO-MANIFEST.json");
   const audio = await (adapters.analyzeProductionAudio ?? analyzeProductionAudio)(video, audioManifest, {
@@ -127,6 +111,30 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
     blockers: readiness.blockers,
     repair_findings: readiness.repair_findings,
     ...(phase2Evidence ? { cinematic_contract: phase2Evidence.summary } : {})
+  };
+}
+
+// The motion gate's expectations for a rendered cinematic MP4, shared with
+// the renderer eval (src/renderer_eval.js) so both judge motion the same way.
+export function cinematicMotionExpectations({ duration, width, height }) {
+  const orientation = height > width ? "portrait" : width > height ? "landscape" : "square";
+  const profile = resolveProductionProfile("cinematic", { aspect: { orientation }, durationSeconds: duration });
+  return {
+    profile,
+    expected: {
+      duration_seconds: duration,
+      width,
+      height,
+      duration_tolerance_seconds: .15,
+      maximum_hold_ratio: .8,
+      minimum_bursts_per_minute: 20,
+      minimum_change_energy_p50: .35,
+      minimum_change_energy_p50_by_family: { "developing-card": .15 },
+      minimum_flow_velocity_p90: 2,
+      maximum_first_motion_seconds: .35,
+      hook_window_seconds: profile.craft.hook_window_seconds,
+      minimum_hook_events: profile.craft.minimum_hook_material_changes
+    }
   };
 }
 

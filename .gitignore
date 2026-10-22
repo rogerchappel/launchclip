@@ -44,3 +44,6 @@ Thumbs.db
 
 # Renderer parity reports (scripts/parity.mjs)
 qa/parity/
+
+# Renderer eval reports (npm run eval:renderers)
+qa/renderer-eval/
