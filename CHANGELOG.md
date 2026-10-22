@@ -4,6 +4,15 @@
 
 ### Added
 
+- Add partial rendering to `launchclip finish`: the render stage caches the
+  timeline in segments (scene bodies and whole transition overlaps) hashed
+  from everything that can change their pixels, and re-renders only the
+  segments an edit touches. Remotion renders them by frame range as lossless
+  segments, joins them with a stream copy and encodes once, frame-identical
+  to a fresh full render; HyperFrames caches whole renders by hash. Add
+  `--scene s3[,s4]` (force those scenes, re-run master, evidence and gates,
+  before/after stills) and `--preview-scene s3` (just that scene to
+  `renders/scene-s3.mp4`).
 - Add ElevenLabs music and beat sync to `launchclip finish`. A music provider
   registry (`src/music/`: `synth`, `elevenlabs`, `file`) picks the music from
   `--music synth|elevenlabs|none`, `audio.music` (now also

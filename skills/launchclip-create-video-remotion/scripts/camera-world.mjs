@@ -535,11 +535,14 @@ export function containerTransform(props) {
 
 /**
  * The background depth layer when ambient motion's field is absent: soft
- * brand-colour glows (primary, accent) over brand.colors.bg, one pair near
- * every plate's rest framing, so parallax reads at 0.3×. Each glow is its own
- * small element (one radial gradient with a many-stop falloff, like the
- * ambient field's blobs) rather than one huge multi-gradient layer, which
- * the two renderers rasterise with different gradient dithering.
+ * brand-colour glows (primary, accent) over brand.colors.bg on a fixed
+ * lattice in the layer's own frame (cell (i, j) always holds the same glow,
+ * with a small deterministic offset), covering everywhere the layer travels,
+ * so parallax reads at 0.3×. Glow positions never depend on the camera path:
+ * a segment that frames the same part of the layer draws the same glows.
+ * Each glow is its own small element (one radial gradient with a many-stop
+ * falloff, like the ambient field's blobs) rather than one huge
+ * multi-gradient layer, which the two renderers dither differently.
  * → {bg, glows: [{left, top, size, background}]} (px in the layer's frame,
  * whose origin is the canvas origin at home).
  */
@@ -549,25 +552,29 @@ export function backgroundLayer(plan, brand) {
   const bg = hex(colors.bg, '#000000');
   const palette = [hex(colors.primary, '#ffffff'), hex(colors.accent, hex(colors.primary, '#ffffff'))];
   const W = plan.width, H = plan.height;
-  const rests = [plan.background?.home ?? { x: 0, y: 0 }, ...(plan.background?.keys ?? []).map((key) => key.to)];
   const rgb = (value) => [1, 3, 5].map((i) => parseInt(value.slice(i, i + 2), 16));
   const falloff = [[0, 1], [15, 0.94], [30, 0.78], [45, 0.56], [60, 0.34], [75, 0.16], [88, 0.05], [100, 0]];
   const gradient = (color, alpha) => {
     const [r, g, b] = rgb(color);
     return `radial-gradient(closest-side, ${falloff.map(([stop, f]) => `rgba(${r}, ${g}, ${b}, ${round(alpha * f, 4)}) ${stop}%`).join(', ')})`;
   };
+  // Where the layer travels: its translation at rest and after every move
+  // (moves are monotone between rests up to a small overshoot, covered by the
+  // one-cell margin).
+  const keys = [plan.background?.home ?? { x: 0, y: 0 }, ...(plan.background?.keys ?? []).map((key) => key.to)];
+  const xs = keys.map((key) => -key.x), ys = keys.map((key) => -key.y);
+  const cellW = W * 0.8, cellH = H * 0.55;
+  const i0 = Math.floor((Math.min(...xs) - W) / cellW), i1 = Math.ceil((Math.max(...xs) + 2 * W) / cellW);
+  const j0 = Math.floor((Math.min(...ys) - H) / cellH), j1 = Math.ceil((Math.max(...ys) + 2 * H) / cellH);
+  const jitter = (i, j, salt) => { const v = Math.sin(i * 127.1 + j * 311.7 + salt * 74.7) * 43758.5453; return v - Math.floor(v); };
   const glows = [];
-  rests.forEach((rest, i) => {
-    const o = { x: -rest.x, y: -rest.y };
-    const flip = i % 2 === 0;
-    const spots = [
-      { x: W * (flip ? 0.22 : 0.78), y: H * (flip ? 0.24 : 0.7), size: W * 1.3, color: palette[0], alpha: 0.2 },
-      { x: W * (flip ? 0.84 : 0.18), y: H * (flip ? 0.78 : 0.3), size: W * 1.05, color: palette[1], alpha: 0.14 }
-    ];
-    for (const spot of spots) {
-      const size = Math.round(spot.size);
-      glows.push({ left: Math.round(o.x + spot.x - size / 2), top: Math.round(o.y + spot.y - size / 2), size, background: gradient(spot.color, spot.alpha) });
+  for (let j = j0; j <= j1; j += 1) {
+    for (let i = i0; i <= i1; i += 1) {
+      const accent = (i + j) % 2 !== 0;
+      const size = Math.round(W * (accent ? 1.05 : 1.3));
+      const cx = (i + 0.5 + (jitter(i, j, 1) - 0.5) * 0.5) * cellW, cy = (j + 0.5 + (jitter(i, j, 2) - 0.5) * 0.5) * cellH;
+      glows.push({ left: Math.round(cx - size / 2), top: Math.round(cy - size / 2), size, background: gradient(palette[accent ? 1 : 0], accent ? 0.13 : 0.18) });
     }
-  });
+  }
   return { bg, glows };
 }

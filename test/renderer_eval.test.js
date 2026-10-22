@@ -181,9 +181,7 @@ test("the checked-in thresholds file loads and sets the documented limits", asyn
   for (const story of GOLDEN_STORIES) {
     const gates = thresholdsFor(thresholds, story.id).gates;
     assert.equal(gates.motion, true, `${story.id} enforces the motion gate`);
-    // world-camera-9x16: parallax gradients dither differently per renderer (docs/KIT_CONTRACTS.md, "World camera").
-    const floor = story.id === "world-camera-9x16" ? 0.96 : 0.97;
-    assert.equal(thresholdsFor(thresholds, story.id).parity.min_ssim, floor, `${story.id} keeps min SSIM ${floor}`);
+    assert.equal(thresholdsFor(thresholds, story.id).parity.min_ssim, 0.97, `${story.id} keeps min SSIM 0.97`);
   }
   assert.ok(GOLDEN_STORIES.some((story) => story.id === "footage"), "the footage-led example is in the eval set");
 });

@@ -380,6 +380,91 @@ test("launchclip finish prints a summary by default", async () => {
   }
 });
 
+// fakeAdapters() plus a frame-range renderer and FFmpeg stand-ins, so the
+// render stage goes through the segment cache.
+function segmentAdapters() {
+  const adapters = fakeAdapters();
+  adapters.segmentCalls = [];
+  const touch = async (file, content) => { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, content); };
+  adapters.renderer = (name) => ({
+    name,
+    segmentEncoder: () => ({ fake: true }),
+    async renderSegments(project, segments, options) {
+      adapters.segmentCalls.push(segments.map((segment) => [segment.startFrame, segment.endFrame]));
+      for (const segment of segments) await touch(segment.output, `${segment.startFrame}-${segment.endFrame} ${options.story.scenes.map((scene) => scene.params?.title).join("|")}\n`);
+      return { segments: segments.map(() => ({ seconds: 2 })) };
+    },
+    async encodeDelivery(input, output) { await touch(output, await readFile(input, "utf8")); },
+    async render() { throw new Error("the segment path must not render whole videos"); }
+  });
+  adapters.segmentTools = {
+    async concat(files, output) { await touch(output, (await Promise.all(files.map((file) => readFile(file, "utf8")))).join("")); },
+    async encodeAudio({ output }) { await touch(output, "aac"); },
+    async mux({ video, output }) { await touch(output, await readFile(video, "utf8")); },
+    async countFrames() { return NaN; },
+    async still(video, frame, output) { await touch(output, `${frame}: ${await readFile(video, "utf8")}`); },
+    async sideBySide(left, right, output) { await touch(output, `${await readFile(left, "utf8")}|${await readFile(right, "utf8")}`); }
+  };
+  return adapters;
+}
+
+test("--scene re-renders that scene's segments, re-runs master, evidence and gates, and shows before/after stills", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-scene-"));
+  try {
+    await cp(MINIMAL, project, { recursive: true });
+    const adapters = segmentAdapters();
+    const first = await runFinish(project, { renderer: "remotion" }, adapters);
+    const render = first.stages.find((stage) => stage.name === "render");
+    assert.equal(render.details.segments.mode, "segments");
+    assert.deepEqual(render.details.segments.plan.map((entry) => entry.id), ["00-s1", "01-s1+s2", "02-s2", "03-s2+s1~loop"]);
+    assert.deepEqual([render.details.segments.reused, render.details.segments.rendered], [0, 4]);
+    assert.ok(existsSync(path.join(project, PATHS.segments, "remotion", "index.json")));
+    assert.match(formatFinishSummary(first), /4 segments: 0 reused, 4 rendered/);
+
+    // An unchanged rerun reuses the whole render stage.
+    const cached = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(cached.stages.find((stage) => stage.name === "render").status, "cached");
+
+    // An edit to s2 re-renders the three segments that show s2.
+    const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+    story.scenes[1].params.title = "Three fixes";
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story));
+    const edited = await runFinish(project, { renderer: "remotion" }, adapters);
+    const segments = edited.stages.find((stage) => stage.name === "render").details.segments;
+    assert.deepEqual([segments.reused, segments.rendered], [1, 3]);
+    assert.deepEqual(adapters.segmentCalls.at(-1), [[90, 102], [102, 179], [179, 180]]);
+    assert.ok(segments.seconds_saved > 0);
+    assert.match(formatFinishSummary(edited), /4 segments: 1 reused, 3 rendered \(~[\d.]+s saved\)/);
+
+    // --scene s1 forces s1's segments and every stage after render, even with no input change.
+    const before = { ...adapters.calls };
+    const forced = await runFinish(project, { renderer: "remotion", scenes: "s1" }, adapters);
+    assert.deepEqual(forced.stages.map((stage) => stage.status), ["skipped", "done", "cached", "skipped", "done", "done", "done", "done"]);
+    assert.deepEqual(forced.stages.slice(4).map((stage) => stage.reason), ["forced", "forced", "forced", "forced"]);
+    const forcedSegments = forced.stages.find((stage) => stage.name === "render").details.segments;
+    assert.deepEqual([forcedSegments.reused, forcedSegments.rendered, forcedSegments.forced], [1, 3, 3]);
+    assert.deepEqual(adapters.segmentCalls.at(-1), [[0, 90], [90, 102], [179, 180]]);
+    assert.equal(adapters.calls.master, before.master + 1);
+    assert.equal(adapters.calls.evidence, before.evidence + 1);
+    assert.deepEqual(forced.scenes, ["s1"]);
+    const [still] = forced.scene_stills;
+    assert.equal(still.scene, "s1");
+    assert.equal(still.before, "qa/finish/scenes/s1-before.png");
+    assert.equal(still.after, "qa/finish/scenes/s1-after.png");
+    assert.equal(still.compare, "qa/finish/scenes/s1-before-after.png");
+    assert.equal(still.seconds, 1.467, "the middle of s1's own segment");
+    assert.ok(existsSync(path.join(project, still.compare)));
+    assert.match(formatFinishSummary(forced), /scene s1 @1\.467s: qa\/finish\/scenes\/s1-before-after\.png \(before \| after\)/);
+    assert.match(formatFinishSummary(forced), /3 forced by --scene/);
+
+    await assert.rejects(runFinish(project, { scenes: "s9" }, adapters), /unknown scene "s9"; storyboard\.json has s1, s2/);
+    await assert.rejects(runFinish(project, { scenes: "s1", previewScene: "s2" }, adapters), /--scene or --preview-scene, not both/);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+
 // ---------------------------------------------------------------------------
 // Music: provider choice, ElevenLabs (stubbed), beat sync
 
@@ -456,6 +541,64 @@ test("finish defaults to ElevenLabs music with a key, aligns it to the narration
     await rm(project, { recursive: true, force: true });
   }
 });
+
+test("--preview-scene renders one scene to renders/scene-<id>.mp4 and leaves the final alone", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-preview-"));
+  try {
+    await cp(MINIMAL, project, { recursive: true });
+    const adapters = segmentAdapters();
+    const first = await runFinish(project, { renderer: "remotion" }, adapters);
+    const final = await readFile(first.final, "utf8");
+    const state = await readFile(path.join(project, PATHS.state), "utf8");
+
+    const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+    story.scenes[1].params.title = "Three fixes";
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story));
+    let out = "";
+    await runCli(["finish", project, "--preview-scene", "s2"], { stdout: { write: (text) => { out += text; } }, stderr: { write() {} }, productionAdapters: { finish: adapters } });
+    const report = JSON.parse(await readFile(path.join(project, "finish.json"), "utf8"));
+    assert.equal(report.status, "preview");
+    assert.equal(report.final, null);
+    assert.deepEqual(report.preview, { scene: "s2", output: path.join(project, "renders/scene-s2.mp4") });
+    assert.deepEqual(report.stages.map((stage) => stage.status), ["skipped", "done", "cached", "skipped", "done", "skipped", "skipped", "skipped"]);
+    assert.match(report.stages[5].reason, /--preview-scene s2: only that scene was rendered; the final is untouched/);
+    const segments = report.stages[4].details.segments;
+    assert.deepEqual(segments.frames, { start: 90, end: 180, count: 90 });
+    assert.deepEqual(segments.plan.map((entry) => entry.status), ["rendered", "rendered", "rendered"]);
+    assert.match(await readFile(path.join(project, "renders/scene-s2.mp4"), "utf8"), /^90-102 Build time\|Three fixes\n102-179/);
+    assert.equal(await readFile(first.final, "utf8"), final, "the final is untouched");
+    assert.equal(await readFile(path.join(project, PATHS.state), "utf8").then((text) => JSON.parse(text).stages.render.input_hash), JSON.parse(state).stages.render.input_hash);
+    assert.match(out, /^launchclip finish: preview/);
+    assert.match(out, /preview: .*renders\/scene-s2\.mp4/);
+    assert.match(report.next_steps.at(-1), /--scene s2 to re-render it into the final/);
+
+    // The full run that follows reuses the segments the preview rendered.
+    const full = await runFinish(project, { renderer: "remotion" }, adapters);
+    const reused = full.stages.find((stage) => stage.name === "render").details.segments;
+    assert.deepEqual([reused.reused, reused.rendered], [4, 0]);
+    assert.match(await readFile(full.final, "utf8"), /Three fixes/);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("launchclip finish --scene takes a comma-separated list", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-scenes-"));
+  try {
+    await cp(MINIMAL, project, { recursive: true });
+    const adapters = segmentAdapters();
+    await runFinish(project, { renderer: "remotion" }, adapters);
+    let out = "";
+    await runCli(["finish", project, "--scene", "s1,s2", "--json"], { stdout: { write: (text) => { out += text; } }, stderr: { write() {} }, productionAdapters: { finish: adapters } });
+    const report = JSON.parse(out);
+    assert.deepEqual(report.scenes, ["s1", "s2"]);
+    assert.deepEqual(report.scene_stills.map((still) => still.scene), ["s1", "s2"]);
+    assert.equal(report.stages.find((stage) => stage.name === "render").details.segments.forced, 4);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
 
 test("finish snaps a motion story's cuts and hits to the music grid", async () => {
   const project = await narratedProject({
