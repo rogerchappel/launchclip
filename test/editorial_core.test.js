@@ -27,8 +27,10 @@ test('golden corpus covers every kind with outputs and errors', () => {
 // portrait type scale. The hash was then re-taken once when editorial fonts
 // moved to the story's brand-font variables (var(--lc-font-*, <old stack>));
 // that capture differed from dacadc4 only in those font wrappers. Re-taken again
-// when the wrapper fallbacks became the bundled registry stacks (fonts only).
-const EXPLICIT_16X9_SHA256 = '6412f1e1e2ca59865cfa95b4834c09e8c142462cfd7525672424522860983508';
+// when the wrapper fallbacks became the bundled registry stacks (fonts only),
+// and once more when three validator error messages (code line, checklist
+// doneAt) were made to say what to change (error strings only).
+const EXPLICIT_16X9_SHA256 = 'b7959950c0508c94d6c18b134eea8f50e3ec419b883d8c8e0b88a3d7560dc681';
 const explicit16x9 = entry => entry.spec && typeof entry.spec === 'object' && !Array.isArray(entry.spec) && entry.spec.aspect === '16:9' && entry.spec.rect !== undefined;
 
 test('explicit-rect 16:9 golden outputs are unchanged by the density work', () => {

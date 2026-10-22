@@ -597,7 +597,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
         const chars = Array.from(token.text); characters += chars.length;
         return typing ? {text: token.text, type: token.type, chars} : {text: token.text, type: token.type};
       });
-      if (length > Math.floor((box.width - 48) / (codeFont * .65))) throw new Error('code line too long for rect; shorten the example or widen the module');
+      if (length > Math.floor((box.width - 48) / (codeFont * .65))) throw new Error(`code line ${i + 1} is ${length} chars; this rect (${Math.round(rect.width)} px wide) fits ${Math.floor((box.width - 48) / (codeFont * .65))} at ${codeFont} px: ${Math.ceil((48 + length * 28 * .65) * scale) <= canvas.width ? `widen the rect to ≥ ${Math.ceil((48 + length * 28 * .65) * scale)} px, or shorten the line or split it (up to 3 lines)` : `no rect at ${input.aspect} fits it, so shorten the line or split it (up to 3 lines)`}`);
       const time = start + lineOffset;
       let charTimes = null;
       if (typing) {
@@ -773,7 +773,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
       if (!['pending', 'active', 'done'].includes(row.status)) throw new Error('row.status must be pending, active or done');
       const eventTime = start + at(row.at, 'row.at');
       const doneTime = row.doneAt === undefined ? null : start + at(row.doneAt, 'row.doneAt');
-      if (doneTime !== null && (row.status !== 'active' || doneTime <= eventTime)) throw new Error('doneAt requires an active row and must follow at');
+      if (doneTime !== null && (row.status !== 'active' || doneTime <= eventTime)) throw new Error(row.status !== 'active' ? `rows[${i}].doneAt needs status "active" (got "${row.status}"): doneAt is when an active row ticks to done, so set status: "active", or drop doneAt for a row that starts done` : `rows[${i}].doneAt (${row.doneAt} s) must come after rows[${i}].at (${row.at} s): set doneAt later than at`);
       if (row.label.length > Math.floor(labelWidth / (font * .65)) * 2) throw new Error('row label too long for rect; shorten it or widen the module');
       const stateSettle = row.status !== 'pending' ? eventTime + .16 : null;
       if (stateSettle !== null) events.push({id: `${id}-row-${i}-state`, time: stateSettle});
