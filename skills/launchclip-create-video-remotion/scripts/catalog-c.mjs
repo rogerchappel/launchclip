@@ -34,6 +34,7 @@
 // captions; key text at least 44 px at 1080 (scaled by min(width, height) /
 // 1080); every text/fill pair at least 3:1 (throws otherwise); no blur.
 
+import {formatBound, withinBounds} from './bounds.mjs';
 import {springValue} from './motion.mjs';
 import {grammarEase, grammarStagger, grammarTweens} from './grammar.mjs';
 import {CATALOG_B_STYLE, contrastRatio, fitText, makeCheck, mixColor, r2, rt, textWidth} from './catalog-b-base.mjs';
@@ -125,7 +126,7 @@ export function createFootageBase(moduleId, params, ctx, {allowed, required = []
       const hit = hits.find(entry => entry.event === name);
       rel = hit ? hit.at - start : fallback;
     }
-    if (rel < min - 1e-9 || rel > max + 1e-9) check.fail(value !== undefined ? path : `${path} (default for "${name}")`, `must fall between ${r2(min)} s and ${r2(max)} s after the scene start; got ${r2(rel)} s${value === undefined ? ' — lengthen the scene or set it explicitly' : ''}`);
+    if (!withinBounds(rel, min, max)) check.fail(value !== undefined ? path : `${path} (default for "${name}")`, `must fall between ${formatBound(min)} s and ${formatBound(max)} s after the scene start; got ${r2(rel)} s${value === undefined ? ' — lengthen the scene or set it explicitly' : ''}`);
     return rt(start + rel);
   };
   const min = {key: Math.ceil(CATALOG_B_STYLE.minKeyText * unit * 100 - 1e-6) / 100, meta: Math.ceil(CATALOG_B_STYLE.minMetaText * unit * 100 - 1e-6) / 100};

@@ -34,6 +34,7 @@
 // stay visible; key text is at least 44 px at 1080 (scaled with the canvas);
 // every brand colour pair used for text or a filled accent clears 3:1 WCAG
 // contrast or resolve() throws; blur is 0 at settle.
+import {formatBound, withinBounds} from './bounds.mjs';
 import {profileGeometry} from './layout-check.mjs';
 import {fontFamilyName, fontStack, fontWidthScale} from './fonts.mjs';
 import {countUp, splitWords, tween} from './motion.mjs';
@@ -59,7 +60,7 @@ function text(value, path, max, min = 1) {
   return value.trim().replace(/\s+/g, ' ');
 }
 function number(value, path, min, max) {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) throw new Error(`${path} must be a number between ${min} and ${max}`);
+  if (typeof value !== 'number' || !Number.isFinite(value) || !withinBounds(value, min, max)) throw new Error(`${path} must be a number between ${formatBound(min)} and ${formatBound(max)}`);
   return value;
 }
 function integer(value, path, min, max) {
@@ -79,7 +80,7 @@ function optional(value, fallback, check) { return value === undefined ? fallbac
 // Scene-relative time inside [0, duration - tail].
 function sceneTime(value, path, duration, tail = 0) {
   const max = Math.max(0, duration - tail);
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > max + 1e-9) throw new Error(`${path} must be seconds from the scene start between 0 and ${round(max, 3)} (the scene is ${round(duration, 3)} s)`);
+  if (typeof value !== 'number' || !Number.isFinite(value) || !withinBounds(value, 0, max)) throw new Error(`${path} must be seconds from the scene start between 0 and ${formatBound(max)} (the scene is ${formatBound(duration)} s)`);
   return value;
 }
 

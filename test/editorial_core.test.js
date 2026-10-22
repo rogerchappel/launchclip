@@ -31,8 +31,10 @@ test('golden corpus covers every kind with outputs and errors', () => {
 // once when three validator error messages (code line, checklist doneAt) were
 // made to say what to change (error strings only), and once more when
 // checklist rows stopped showing the pending label before they turn active or
-// done (checklist entries only).
-const EXPLICIT_16X9_SHA256 = '2efd279cb4a201f51923b0c0dc41c765c81bc9bbed9343bd1e71289cb93d3003';
+// done (checklist entries only), and once when bound messages started printing
+// their bounds to 2 decimals (kit/core/bounds.mjs; two focus-flow error
+// strings, "8.389999999999999" → "8.39" and "8.149999999999999" → "8.15").
+const EXPLICIT_16X9_SHA256 = '45c528200fb88850369afee5518317015f2fc7992261c1c473e0555b803a7fd7';
 const explicit16x9 = entry => entry.spec && typeof entry.spec === 'object' && !Array.isArray(entry.spec) && entry.spec.aspect === '16:9' && entry.spec.rect !== undefined;
 
 test('explicit-rect 16:9 golden outputs are unchanged by the density work', () => {
@@ -119,7 +121,7 @@ test('editorial core imports only the font registry and the motion grammar, and 
   const canonical = readFileSync(new URL('../kit/core/editorial-core.mjs', import.meta.url), 'utf8');
   const copy = readFileSync(new URL('../skills/launchclip-create-video/scripts/editorial-core.mjs', import.meta.url), 'utf8');
   assert.equal(copy, canonical);
-  assert.deepEqual(canonical.match(/^[ \t]*import\b.*$/gm), ["import {fontStack} from './fonts.mjs';", "import {grammarDuration, grammarEase} from './grammar.mjs';"]);
+  assert.deepEqual(canonical.match(/^[ \t]*import\b.*$/gm), ["import {formatBound, withinBounds} from './bounds.mjs';", "import {fontStack} from './fonts.mjs';", "import {grammarDuration, grammarEase} from './grammar.mjs';"]);
   assert.doesNotMatch(canonical, /\bimport\(|\brequire\(/);
   assert.equal(EDITORIAL_STYLE.font.sans, "var(--lc-font-body, 'Inter', 'STIX Two Math', sans-serif)");
   assert.equal(EDITORIAL_STYLE.font.mono, "var(--lc-font-meta, 'JetBrains Mono', 'STIX Two Math', monospace)");

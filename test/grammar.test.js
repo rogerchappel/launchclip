@@ -39,8 +39,9 @@ const PRE_GRAMMAR_HTML_SHA256 = {
   "data-story-9x16": "681a299c5b5c94a40aefa28801742a8f8dff6d602199a1318498aee1c4eeb420",
   footage: "eae4b7cdc2bba79c3211741957d35c475f32ed03275e5de5c0951747311544b8"
 };
-// test/editorial_core.test.js: the explicit-rect 16:9 corpus subset.
-const EXPLICIT_16X9_SHA256 = "2efd279cb4a201f51923b0c0dc41c765c81bc9bbed9343bd1e71289cb93d3003";
+// test/editorial_core.test.js: the explicit-rect 16:9 corpus subset (re-pinned
+// with it when bound messages moved to 2-decimal bounds; error strings only).
+const EXPLICIT_16X9_SHA256 = "45c528200fb88850369afee5518317015f2fc7992261c1c473e0555b803a7fd7";
 
 async function goldenStory(id) {
   let dir = path.join(STORY, id), cleanup = async () => {};

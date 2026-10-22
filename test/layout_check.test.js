@@ -234,3 +234,34 @@ test("layout-check checks the ambient drift's largest extent, as the compilers d
   assert.deepEqual(still.drifted, []);
   assert.ok(!still.findings.some((entry) => entry.rule === "collision"), "with ambient off the rest rects do not touch");
 });
+
+test("validate and layout-check agree on float bounds: one tolerance, bounds printed to 2 decimals", async () => {
+  const { resolveModule } = await import("../kit/core/modules.mjs");
+  const { resolveStory } = await import("../kit/core/story.mjs");
+  // 1.68 − 0.45 is 1.2299999999999998 in floating point, so the last valid state time
+  // (duration − 0.45) came out as 0.7799999999999998 on one path and 0.78 on the other.
+  const story = (at) => ({
+    schema: "launchclip.story.v1", lane: "motion", format: { width: 1920, height: 1080, fps: 30, duration: 4 },
+    brand: { colors: { bg: "#0a0b10", paper: "#f3efe6", primary: "#ffa630" }, fonts: { display: "anton" } },
+    scenes: [
+      { id: "s1", module: "status-rack", start: 0.45, end: 1.68, params: { title: "Gates", rect: { x: 400, y: 200, width: 1100, height: 400 }, rack: { mode: "illustration", rows: [{ label: "Tests", states: [{ at, lights: [true, true, true] }] }] } } },
+      { id: "s2", module: "hook-title", start: 1.68, end: 4, params: { headline: "Ship it" } }
+    ],
+    ending: { loop: false }
+  });
+  for (const [at, ok] of [[0.78, true], [0.79, false]]) {
+    const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-bounds-"));
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story(at)));
+    const resolved = resolveStory(story(at), {});
+    let validateError = null;
+    try { resolveModule(resolved.scenes[0], resolved); } catch (error) { validateError = error.message; }
+    const report = await checkLayoutProject(project, { profile: "landscape" });
+    const spec = report.findings.find((entry) => entry.rule === "module-spec");
+    assert.equal(validateError === null, ok, `validate at ${at}: ${validateError}`);
+    assert.equal(spec === undefined, ok, `layout-check at ${at}: ${spec?.detail}`);
+    if (!ok) {
+      assert.match(validateError, /rack state\.at must be between 0\.28 and 0\.78$/);
+      assert.match(spec.detail, /rack state\.at must be between 0\.28 and 0\.78$/);
+    }
+  }
+});

@@ -46,6 +46,26 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   const specFindings = [];
   const moduleLayout = (scene) => {
     const params = scene.params ?? {};
+    if (EDITORIAL_KINDS.has(scene.module) && !adapters.buildEditorialModule) {
+      // The same resolver as validate and both compilers (brand defaults,
+      // grammar, durations rounded to 1e-6, shared bound tolerance), so the
+      // two commands accept and reject the same params.
+      try {
+        const model = resolveModule(scene, resolved);
+        return elementsFromEditorialLayout(model.layout, {
+          id: scene.id,
+          role: scene.module === "media-window" ? "media" : "text",
+          start: Number(scene.start),
+          end: Number(scene.end),
+          track: scene.track,
+          canvas,
+          ...(model.minTextPx != null && scene.module !== "media-window" ? { minTextPx: model.minTextPx } : {})
+        });
+      } catch (error) {
+        specFindings.push({ rule: "module-spec", severity: "error", ids: [scene.id], at: Number(scene.start), detail: `${scene.module}: ${error.message}` });
+        return [];
+      }
+    }
     if (EDITORIAL_KINDS.has(scene.module)) {
       const aspect = canvas.width > canvas.height ? "16:9" : "9:16";
       try {

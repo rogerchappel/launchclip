@@ -7,6 +7,7 @@
 // Imports only sibling kit/core files, so it bundles into Remotion and copies
 // into skills unchanged.
 
+import {formatBound, withinBounds} from './bounds.mjs';
 import {getEase} from './motion.mjs';
 import {grammarDuration, grammarEase} from './grammar.mjs';
 import {profileGeometry} from './layout-check.mjs';
@@ -202,8 +203,8 @@ export function makeCheck(prefix) {
       return value;
     },
     num(value, path, min, max) {
-      if (typeof value !== 'number' || !Number.isFinite(value)) fail(path, `must be a number between ${min} and ${max}`);
-      if (value < min || value > max) fail(path, `must be between ${min} and ${max}, got ${value}`);
+      if (typeof value !== 'number' || !Number.isFinite(value)) fail(path, `must be a number between ${formatBound(min)} and ${formatBound(max)}`);
+      if (!withinBounds(value, min, max)) fail(path, `must be between ${formatBound(min)} and ${formatBound(max)}, got ${value}`);
       return value;
     },
     int(value, path, min, max) {
@@ -383,7 +384,7 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
       const hit = hits.find(entry => entry.event === name);
       rel = hit ? hit.at - start : fallback;
     }
-    if (rel < min - 1e-9 || rel > max + 1e-9) check.fail(at !== undefined ? path : `${path} (default for "${name}")`, `must fall between ${r2(min)} s and ${r2(max)} s after the scene start; got ${r2(rel)} s${at === undefined ? ' — lengthen the scene or set it explicitly' : ''}`);
+    if (!withinBounds(rel, min, max)) check.fail(at !== undefined ? path : `${path} (default for "${name}")`, `must fall between ${formatBound(min)} s and ${formatBound(max)} s after the scene start; got ${r2(rel)} s${at === undefined ? ' — lengthen the scene or set it explicitly' : ''}`);
     return rt(start + rel);
   };
 

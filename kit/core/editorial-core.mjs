@@ -1,5 +1,6 @@
 // Editorial module core: spec → resolved model. Renderer-neutral, plain ESM;
-// imports only fonts.mjs and grammar.mjs (the motion grammar, which sets the
+// imports only bounds.mjs (the shared bound tolerance), fonts.mjs and
+// grammar.mjs (the motion grammar, which sets the
 // shell enter/exit eases and durations; editorial is the identity). The
 // HyperFrames emitter (skills/launchclip-create-video/scripts/
 // editorial-ui-modules.mjs) and the Remotion modules (kit/remotion/modules/)
@@ -145,6 +146,7 @@
  *   fill is the rail scaleX reached at that step (0..1).
  */
 
+import {formatBound, withinBounds} from './bounds.mjs';
 import {fontStack} from './fonts.mjs';
 import {grammarDuration, grammarEase} from './grammar.mjs';
 
@@ -204,7 +206,7 @@ function object(value, label, keys) {
   for (const key of Object.keys(value)) if (!keys.includes(key)) throw new Error(`${label}: unsupported ${key}`);
 }
 function number(value, label, min, max) {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) throw new Error(`${label} must be between ${min} and ${max}`);
+  if (typeof value !== 'number' || !Number.isFinite(value) || !withinBounds(value, min, max)) throw new Error(`${label} must be between ${formatBound(min)} and ${formatBound(max)}`);
   return value;
 }
 function text(value, label, max) {
