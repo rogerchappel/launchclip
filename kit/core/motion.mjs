@@ -331,3 +331,14 @@ export function motionBlurPx(velocityPxPerFrame, {max = 24, shutter = .5, thresh
   const radius = speed * shutter / 2;
   return radius < threshold ? 0 : Math.min(max, radius);
 }
+
+/**
+ * Text for a GSAP `textContent` set. When the element already holds a number,
+ * GSAP parses a numeric string and writes it back as a number, dropping
+ * trailing zeros ("70.0" becomes "70"). A leading WORD JOINER (U+2060, zero
+ * width) keeps such strings as text. Other strings are returned unchanged.
+ */
+export function gsapText(text) {
+  const value = String(text);
+  return /^[-+]?\d*\.?\d+$/.test(value.trim()) && String(Number(value)) !== value ? `⁠${value}` : value;
+}

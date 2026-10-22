@@ -174,3 +174,16 @@ test('helpers', () => {
   for (const name of ['ease', 'getEase', 'tween', 'track', 'stagger', 'countUp', 'springValue', 'splitWords', 'splitChars', 'motionBlurPx',
     'interpolateColor', 'clamp01', 'seconds', 'frames']) assert.ok(name in motion, name);
 });
+
+test("gsapText keeps numeric strings with trailing zeros as text through a real GSAP set", async () => {
+  const { gsapText } = await import("../kit/core/motion.mjs");
+  const gsap = (await import("gsap")).default;
+  assert.equal(gsapText("64.5"), "64.5");
+  assert.equal(gsapText("70.0"), "⁠70.0");
+  assert.equal(gsapText("$1,200"), "$1,200");
+  const target = { textContent: "64.5" };
+  const tl = gsap.timeline({ paused: true });
+  tl.set(target, { textContent: gsapText("70.0") }, 0);
+  tl.seek(0.5);
+  assert.equal(target.textContent.replace("⁠", ""), "70.0");
+});

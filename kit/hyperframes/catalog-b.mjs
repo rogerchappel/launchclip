@@ -13,6 +13,7 @@
 // keyframes sampled from the model; flow particles are one linear repeat per
 // belt, which GSAP evaluates as a pure function of the playhead.
 
+import {gsapText} from '../core/motion.mjs';
 import {catalogBView, catalogBTimeline} from '../core/catalog-b.mjs';
 import {UNITLESS} from '../core/catalog-b-view.mjs';
 
@@ -43,7 +44,7 @@ export function renderNode(node, rootAttrs = '') {
 
 const gsapProps = props => {
   const out = {};
-  for (const [key, value] of Object.entries(props)) out[key === 'text' ? 'textContent' : key] = value;
+  for (const [key, value] of Object.entries(props)) out[key === 'text' ? 'textContent' : key] = key === 'text' ? gsapText(value) : value;
   if ('strokeDashoffset' in out) out.autoRound = false;
   return out;
 };
