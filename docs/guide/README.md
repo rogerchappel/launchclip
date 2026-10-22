@@ -6,6 +6,7 @@
 | [Example prompts](prompts.md) | Launch videos, demos, explainers, podcast clips, matching a style |
 | [Make it look like you](styles.md) | Style packs, built-in styles, matching your previous videos, captions, motion and camera |
 | [Voice, music and sound effects](sound.md) | The free built-in audio, ElevenLabs upgrades, your own SFX library, beat sync |
+| [Demo autopilot](demo-autopilot.md) | Point it at your SaaS codebase: it starts the app, records the key flows and edits them in |
 | [Raw footage](raw-footage.md) | The base edit: silences, bad takes and filler words removed, audio cleaned up |
 | [Headless CLI](headless.md) | One command from a prompt to a finished video, with your own API keys |
 | [Finish in your editor](editors.md) | Export to Final Cut Pro, Premiere Pro, DaVinci Resolve or OpenTimelineIO |

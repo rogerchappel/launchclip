@@ -8,7 +8,10 @@ reach its step. `launchclip <command> --help` prints any command's usage.
    and audio), default the rest, and write `BRIEF.md`, `EVIDENCE.md` and
    `SOURCE.md` into the output project (`.launchclip/agent-<slug>`).
    Details: [references/workflow.md](references/workflow.md) ("Conduct the
-   compact intake", "Freeze the brief and evidence").
+   compact intake", "Freeze the brief and evidence"). Pointed at a SaaS
+   codebase? Record its key flows next with `launchclip demo record` ("Record
+   the product (demo autopilot)" in the same reference) and show them as
+   `product-demo` scenes.
 2. **Concept and story.** Five distinct concepts judged in a fresh context →
    `CONCEPTS.json`; an independently edited retention story → `STORY.json`;
    the exact narration → `SCRIPT.md`.

@@ -29,6 +29,8 @@ step comes up.
 
 <!-- include: shared/brief-evidence.md -->
 
+<!-- include: shared/demo-autopilot.md -->
+
 <!-- include: shared/media-analysis.md -->
 
 <!-- include: shared/design.md -->
