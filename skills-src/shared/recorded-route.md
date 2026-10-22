@@ -9,4 +9,4 @@ module selection and exceptions. Keep presenter placement stable across related
 graphic beats and use meaningful visual accents rather than repeated text cards.
 Preserve the recorded story; do not require a new concept tournament or rewrite
 the speech. The full treatment must prove a short integrated audiovisual
-prototype before expanding it. Apply the cinematic funnel below to new stories.
+prototype before expanding it. Apply the quick path above to new stories.

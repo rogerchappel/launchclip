@@ -51,7 +51,8 @@ const SHARED_REFERENCES = [
   'recorded-treatment-check.md',
   'recorded-video.md',
   'sfx-library.md',
-  'shorts-delivery.md'
+  'shorts-delivery.md',
+  'workflow.md'
 ];
 
 // References generated from code rather than written by hand. Each is written
@@ -180,7 +181,9 @@ export function planOutputs({ root = ROOT } = {}) {
     files.set(`${dir}/SKILL.md`, render('SKILL.md'));
     files.set(`${dir}/agents/openai.yaml`, render(`agents/${skill.renderer}/openai.yaml`));
     managedDirs.push(`${dir}/references`, `${dir}/agents`);
-    for (const reference of skill.references) files.set(`${dir}/references/${reference}`, render(`references/${reference}`));
+    // A reference that includes SKILL.md sections (workflow.md) links its
+    // siblings directly, not through references/.
+    for (const reference of skill.references) files.set(`${dir}/references/${reference}`, render(`references/${reference}`).replaceAll('](references/', ']('));
     for (const [name, content] of generated) files.set(`${dir}/references/${name}`, content);
     if (skill.sharedScripts) {
       managedDirs.push(`${dir}/scripts`);
