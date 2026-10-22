@@ -10,6 +10,7 @@ import {
   validateTemporalEvidenceManifest
 } from "./cinematic_evidence.js";
 import { assessCinematicReadiness } from "./production_readiness.js";
+import { validateConceptsReceipt, validateStoryReceipt } from "./cinematic_receipts.js";
 import { resolveProductionProfile } from "./production_profiles.js";
 import { analyzeProductionAudio, evaluateAudioQuality } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
@@ -80,6 +81,10 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
     verification = augmentVerification(verification, phase2Evidence.checks);
   }
   await writeJson(path.join(qaDir, "verification.json"), verification);
+  // The creative receipts' minimal schemas (launchclip.concepts.v1 and
+  // launchclip.story-receipt.v1): missing required fields fail the gate.
+  const conceptsCheck = concepts ? validateConceptsReceipt(concepts) : null;
+  const storyCheck = story ? validateStoryReceipt(story, { conceptsChosenId: conceptsCheck?.chosen_id ?? null, duration }) : null;
   const readinessPath = projectFile(project, options.output ?? "CINEMATIC-READINESS.json");
   const readiness = {
     ...assessCinematicReadiness({
@@ -91,7 +96,8 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
       motion,
       audio,
       critique,
-      assembly: { fallback_count: 0, fallbacks: [], provenance: "subscription-agent-authored" }
+      assembly: { fallback_count: 0, fallbacks: [], provenance: "subscription-agent-authored" },
+      receipts: { concepts: conceptsCheck, story: storyCheck }
     }),
     profile: { id: profile.id, lane: profile.lane },
     project,
@@ -113,6 +119,7 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
     gates: readiness.gates,
     blockers: readiness.blockers,
     repair_findings: readiness.repair_findings,
+    receipt_warnings: [...(conceptsCheck?.warnings ?? []).map((message) => `CONCEPTS.json: ${message}`), ...(storyCheck?.warnings ?? []).map((message) => `STORY.json: ${message}`)],
     ...(phase2Evidence ? { cinematic_contract: phase2Evidence.summary } : {})
   };
 }

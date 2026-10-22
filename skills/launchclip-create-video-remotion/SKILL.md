@@ -265,10 +265,13 @@ tournament receipts:
   constraints
 - `EVIDENCE.md`: factual claims and their source locations; label inference,
   opinion, and unverified claims explicitly
-- `CONCEPTS.json`: five distinct treatments, complete fresh-context scorecard,
-  deterministic winner, and required improvements
-- `STORY.json`: the independently edited canonical retention story and its
-  score-floor receipt
+- `CONCEPTS.json` (`launchclip.concepts.v1`): five distinct treatments,
+  complete fresh-context scorecard, deterministic winner (`chosen: true`), and
+  required improvements
+- `STORY.json` (`launchclip.story-receipt.v1`): the independently edited
+  canonical retention story (`concept_id`, `beats`, `narration.source`) and
+  its score-floor receipt; both schemas, with examples, are in
+  `references/cinematic-production.md`, and `cinematic-check` validates them
 - `SCRIPT.md`: the exact approved narration; omit only for an intentionally
   unnarrated piece
 - `NARRATION.json`: measured word/beat timings from the real take, or an
