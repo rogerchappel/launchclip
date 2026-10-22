@@ -12,6 +12,9 @@ export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
 // audio.narration.provider: voice providers `launchclip finish` can synthesise with.
 export const STORY_VOICE_PROVIDERS = ["kokoro", "elevenlabs", "supplied", "test"];
+// audio.music.provider and audio.music.sync (launchclip finish's music stage).
+export const STORY_MUSIC_PROVIDERS = ["synth", "elevenlabs", "file"];
+export const STORY_MUSIC_SYNC = ["auto", "off", "cuts", "hits"];
 
 const ASPECTS = [["9:16", 9 / 16], ["16:9", 16 / 9], ["1:1", 1], ["4:5", 4 / 5]];
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -176,12 +179,7 @@ export function validateStory(story, { modules } = {}) {
     if (audio.music !== undefined && audio.music !== null) {
       if (typeof audio.music === "string") { if (audio.music !== "synth" && audio.music !== "none") assetPath(audio.music, "audio.music", err); }
       else if (!isObject(audio.music)) err("audio.music must be an object, \"synth\", \"none\" or an assets/ path");
-      else {
-        if (!nonEmpty(audio.music.source)) err("audio.music.source must be \"synth\" or an assets/ path");
-        else if (audio.music.source !== "synth") assetPath(audio.music.source, "audio.music.source", err);
-        if (audio.music.bpm !== undefined && !(typeof audio.music.bpm === "number" && audio.music.bpm > 0 && audio.music.bpm <= 300)) err("audio.music.bpm must be a number between 1 and 300");
-        if (audio.music.key !== undefined && !nonEmpty(audio.music.key)) err("audio.music.key must be a non-empty string");
-      }
+      else validateMusic(audio.music, { err, warn });
     }
     if (audio.sfx !== undefined && audio.sfx !== null && !["auto", "none"].includes(audio.sfx) && audio.sfx !== false) err("audio.sfx must be \"auto\", \"none\" or false");
     // audio.narration: text that `launchclip finish` synthesises into audio.voice and audio.words.
@@ -383,6 +381,36 @@ export function validateStory(story, { modules } = {}) {
   if (usesWords && !(isObject(audio) && audio.words) && !narrated) warn("word anchors are used but audio.words is not set; pass narration timings when resolving");
 
   return { ok: errors.length === 0, errors, warnings };
+}
+
+// audio.music as an object: {provider?, prompt?, bpm?, key?, file?, sync?,
+// seed?, model?, volume?}; `source` ("synth" or an assets/ path) is the older
+// spelling and still accepted.
+const MUSIC_KEYS = new Set(["provider", "source", "file", "prompt", "bpm", "key", "sync", "seed", "model", "volume"]);
+
+function validateMusic(music, { err, warn }) {
+  for (const key of Object.keys(music)) if (!MUSIC_KEYS.has(key)) warn(`audio.music.${key} is not a music field and is ignored (allowed: ${[...MUSIC_KEYS].join(", ")})`);
+  if (music.provider !== undefined && !STORY_MUSIC_PROVIDERS.includes(music.provider)) err(`audio.music.provider must be one of ${STORY_MUSIC_PROVIDERS.join(", ")}`);
+  if (music.source !== undefined) {
+    if (!nonEmpty(music.source)) err("audio.music.source must be \"synth\" or an assets/ path");
+    else if (music.source !== "synth") assetPath(music.source, "audio.music.source", err);
+  }
+  if (music.file !== undefined) assetPath(music.file, "audio.music.file", err);
+  if (music.file !== undefined && nonEmpty(music.source) && music.source !== "synth") err("audio.music.file and audio.music.source name the same track; keep audio.music.file");
+  const hasFile = music.file !== undefined || (nonEmpty(music.source) && music.source !== "synth");
+  if (music.provider === "file" && !hasFile) err("audio.music.provider \"file\" needs audio.music.file (an assets/ path)");
+  if (hasFile && music.provider !== undefined && music.provider !== "file") err(`audio.music.file is only used with provider "file"; got provider "${music.provider}"`);
+  if (music.prompt !== undefined) {
+    if (!nonEmpty(music.prompt)) err("audio.music.prompt must be a non-empty string");
+    else if (music.prompt.length > 2000) err(`audio.music.prompt must be at most 2000 characters; got ${music.prompt.length}`);
+    else if (music.provider === "synth" || music.provider === "file" || music.source === "synth" || hasFile) warn("audio.music.prompt is only used by the elevenlabs provider");
+  }
+  if (music.bpm !== undefined && !(typeof music.bpm === "number" && music.bpm > 0 && music.bpm <= 300)) err("audio.music.bpm must be a number between 1 and 300");
+  if (music.key !== undefined && !nonEmpty(music.key)) err("audio.music.key must be a non-empty string");
+  if (music.sync !== undefined && !STORY_MUSIC_SYNC.includes(music.sync)) err(`audio.music.sync must be one of ${STORY_MUSIC_SYNC.join(", ")}`);
+  if (music.seed !== undefined && !(Number.isInteger(music.seed) && music.seed >= 0 && music.seed <= 4294967295)) err("audio.music.seed must be a non-negative integer");
+  if (music.model !== undefined && !nonEmpty(music.model)) err("audio.music.model must be a non-empty string such as \"music_v1\"");
+  if (music.volume !== undefined && !(typeof music.volume === "number" && music.volume >= 0 && music.volume <= 1)) err("audio.music.volume must be a number between 0 and 1");
 }
 
 // ---------------------------------------------------------------------------
