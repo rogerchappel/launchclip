@@ -73,4 +73,5 @@ export function emitCatalogB(model) {
 }
 
 export const EMITTERS = {
+  'function-chart': emitCatalogB,
 };

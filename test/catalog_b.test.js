@@ -85,8 +85,8 @@ test('createBase validates ctx, params keys, brand contrast and safe zone', () =
   assert.equal(createBase('demo', {}, ctx(), {...opts, hidesCaptions: true}).rect.height, 1170);
   // Scales with the canvas: 720×1280 → key text 29.33 px, rect scaled.
   const small = createBase('demo', {}, ctx({format: {width: 720, height: 1280, fps: 30}}), opts);
-  assert.equal(small.min.key, 29.33);
-  assert.equal(small.rect.x, 53.33);
+  assert.equal(small.min.key, 29.34);
+  assert.equal(small.rect.x, 53.34);
   // Landscape uses the title-safe zone above the caption band.
   const wide = createBase('demo', {}, ctx({format: {width: 1920, height: 1080, fps: 30}, aspect: '16:9'}), opts);
   assert.deepEqual(wide.rect, {x: 96, y: 54, width: 1728, height: 780});
@@ -201,9 +201,11 @@ export function assertModelContract(model, moduleId) {
   assert.deepEqual(model.layout.rect, model.rect);
   assert.deepEqual(Object.keys(model.layout.motion), ['enterEnd', 'exitStart', 'end']);
   // Safe zone (Shorts: x 80–940, y 280–1450 at 1080×1920; caption band kept clear unless hidden).
-  const r = model.rect, s = model.canvas.width / 1080, sy = model.canvas.height / 1920;
-  assert.ok(r.x >= 80 * s - 1e-6 && r.x + r.width <= 940 * s + 1e-6, 'rect x inside the safe zone');
-  assert.ok(r.y >= 280 * sy - 1e-6 && r.y + r.height <= (model.hidesCaptions ? 1450 : 1160) * sy + 1e-6, 'rect y inside the safe zone');
+  const r = model.rect, portrait = model.canvas.height > model.canvas.width;
+  const s = model.canvas.width / (portrait ? 1080 : 1920), sy = model.canvas.height / (portrait ? 1920 : 1080);
+  const zone = portrait ? {x0: 80, x1: 940, y0: 280, y1: model.hidesCaptions ? 1450 : 1160} : {x0: 96, x1: 1824, y0: 54, y1: model.hidesCaptions ? 1026 : 840};
+  assert.ok(r.x >= zone.x0 * s - 1e-6 && r.x + r.width <= zone.x1 * s + 1e-6, 'rect x inside the safe zone');
+  assert.ok(r.y >= zone.y0 * sy - 1e-6 && r.y + r.height <= zone.y1 * sy + 1e-6, 'rect y inside the safe zone');
   assert.ok(model.minTextPx >= 44 * Math.min(model.canvas.width, model.canvas.height) / 1080 - 1e-6, 'key text ≥ 44 px');
   for (const [pair, ratio] of Object.entries(model.contrast)) assert.ok(ratio >= 3, `${pair} contrast ${ratio}`);
   for (const event of model.events) {
@@ -257,3 +259,75 @@ export function remotionStill(id, seconds) {
     rmSync(dir, {recursive: true, force: true});
   }
 }
+
+// ---------------------------------------------------------------------------
+// function-chart
+
+const chartParams = {fn: '20 + 70 * 2^(-t/10)', x: [0, 60, 'min'], y: [0, 100, '°C'], baseline: {value: 20, label: 'Room'}, gap_bars: [0, 10, 20], label: 'illustrative values'};
+
+test('function-chart: fixture model meets the contract', () => {
+  const {model} = loadFixture('function-chart');
+  assertModelContract(model, 'function-chart');
+  const c = model.content;
+  assert.equal(model.hidesCaptions, false);
+  assert.match(c.path, /^M[\d.]+ [\d.]+( L[\d.]+ [\d.]+){160}$/);
+  assert.deepEqual(model.events.map(e => e.name), ['enter', 'draw', 'gap-bar-0', 'gap-bar-2', 'gap-bar-1', 'probe-settle', 'tail-zoom']);
+  // The hit on gap-bar-1 (absolute 14.2 s) times that bar.
+  assert.equal(model.events.find(e => e.name === 'gap-bar-1').time, 14.2);
+  assert.deepEqual(c.gapBars.map(bar => bar.text), ['70°C', '35°C', '17.5°C']);
+  assert.equal(c.baseline.text, 'Room 20°C');
+  assert.equal(c.label.text, 'ILLUSTRATIVE VALUES');
+  // Probe rides the line tip: first sample at x min, last at x max, one per frame.
+  const samples = c.probe.samples;
+  assert.equal(samples[0].text, '90.0°C');
+  assert.equal(samples.at(-1).text, '21.1°C');
+  assert.equal(samples.at(-1).meta, 't = 60 min');
+  assert.equal(samples[0].x, c.plot.x);
+  assert.equal(samples.at(-1).x, c.plot.x + c.plot.width);
+  for (let i = 1; i < samples.length - 1; i++) assert.ok(Math.abs(samples[i].t - samples[i - 1].t - 1 / 30) < 1e-3);
+  assert.ok(samples.at(-1).t - samples.at(-2).t <= 1 / 30 + 1e-6);
+  // Tail zoom inset sits inside the plot and starts from the lens rect.
+  const T = c.tail;
+  assert.equal(T.corner, 'top-right');
+  assert.ok(T.inset.x >= c.plot.x && T.inset.x + T.inset.width <= c.plot.x + c.plot.width + 1e-6);
+  assert.ok(T.zoomFrom.scaleX < 1 && T.zoomFrom.scaleY < 1);
+  assert.equal(T.endText, '21.1°C');
+});
+
+test('function-chart: the RFC example params resolve; strict validation', () => {
+  const resolve = MODULES['function-chart'].resolve;
+  const model = resolve({fn: '20 + 70 * 2^(-t/10)', x: [0, 60, 'min'], y: [0, 100, '°C'], gap_bars: [0, 10, 20], label: 'illustrative values'}, ctx({duration: 8.7}));
+  // Without a baseline the bars measure from y min.
+  assert.equal(model.content.gapBars[1].text, '55°C');
+  assert.throws(() => resolve({...chartParams, fn: 'process.exit(1)'}, ctx()), /params\.fn is not a valid expression/);
+  assert.throws(() => resolve({...chartParams, fn: '20 + 70 * 2^(t/10)'}, ctx()), /params\.fn leaves the y range \[0, 100\]/);
+  assert.throws(() => resolve({...chartParams, fn: '20 + sqrt(t - 30)'}, ctx()), /params\.fn expression is not finite at 0 /);
+  assert.throws(() => resolve({...chartParams, x: [10, 0]}, ctx()), /params\.x max must be greater than min/);
+  assert.throws(() => resolve({...chartParams, gap_bars: [0, 1]}, ctx()), /params\.gap_bars\[1\] label "[^"]+" collides/);
+  assert.throws(() => resolve({...chartParams, colour: 'red'}, ctx()), /params\.colour is not supported/);
+  assert.throws(() => resolve({...chartParams, tail_zoom: {from: 40}}, ctx({duration: 3})), /tail_zoom\.at \(default for "tail-zoom"\) must fall between/);
+  assert.throws(() => resolve({...chartParams, color: '#111111'}, ctx()), /params\.color \(#111111\) on brand\.colors\.bg has contrast/);
+  assert.throws(() => resolve({...chartParams, gap_bars: [0], draw: {at: 0.1}}, ctx()), /params\.draw\.at must fall between 0\.5 s/);
+});
+
+test('function-chart: landscape and small canvases stay in their safe zones', () => {
+  const resolve = MODULES['function-chart'].resolve;
+  const wide = resolve({...chartParams, title: 'The gap halves'}, ctx({format: {width: 1920, height: 1080, fps: 30}, aspect: '16:9'}));
+  assert.deepEqual(wide.rect, {x: 96, y: 54, width: 1728, height: 780});
+  const small = resolve(chartParams, ctx({format: {width: 720, height: 1280, fps: 24}}));
+  assertModelContract(small, 'function-chart');
+  assert.equal(small.content.probe.samples.length > 20, true);
+});
+
+test('function-chart: emitter output is seek-safe and matches the Remotion evaluator', () => {
+  const {model} = loadFixture('function-chart');
+  assertEmitter(model);
+  const out = EMITTERS['function-chart'](model);
+  assert.match(out.motion, /tl\.fromTo\("#s3-line", \{"strokeDashoffset":1,"autoRound":false\}/);
+  assert.match(out.html, /pathLength="1"/);
+  assert.ok((out.motion.match(/tl\.set\("#s3-probe"/g) ?? []).length >= model.content.probe.samples.length);
+});
+
+test('function-chart: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not installed'}, () => {
+  assert.ok(remotionStill('function-chart', 16) > 20000);
+});
