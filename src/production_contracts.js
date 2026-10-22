@@ -517,7 +517,7 @@ function normalizeShotEventIds(shot) {
   for (const [index, event] of shot.visual.events.entries()) {
     const original = String(event?.id ?? "");
     const unprefixed = original.startsWith(prefix) ? original.slice(prefix.length) : original;
-    const suffix = slugIdentifier(unprefixed) || `event-${index + 1}`;
+    const suffix = boundedEventSuffix(prefix, slugIdentifier(unprefixed) || `event-${index + 1}`);
     let candidate = `${prefix}${suffix}`;
     let collision = 2;
     while (used.has(candidate)) {
@@ -549,6 +549,16 @@ function normalizeEventTargetIds(shot) {
       return group.length >= 2 ? group : [targetId];
     }))];
   }
+}
+
+// Event IDs carry their shot ID as a prefix and share its 64-character limit, so a long suffix keeps its start plus a short hash.
+function boundedEventSuffix(prefix, suffix) {
+  const room = 64 - prefix.length;
+  if (suffix.length <= room || room < 10) return suffix;
+  let hash = 0x811c9dc5;
+  for (const character of suffix) hash = Math.imul(hash ^ character.charCodeAt(0), 0x01000193) >>> 0;
+  const head = suffix.slice(0, room - 9).replace(/[-_]+$/, "");
+  return `${head || "e"}-${hash.toString(16).padStart(8, "0")}`;
 }
 
 function slugIdentifier(value) {

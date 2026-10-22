@@ -215,6 +215,22 @@ test("bounds prefixed shot IDs during deterministic stitching", () => {
   assert.match(stitched.shots[0].id, /^[a-z0-9][a-z0-9-]{0,63}$/);
 });
 
+test("keeps stitched event IDs shot-prefixed and within 64 characters", () => {
+  const longOutline = outline();
+  longOutline.chapters[0].id = "ch03-layer-one-clear-brief";
+  const first = chapterPlan("chapter-1");
+  first.shots[0].id = "s06-brief-through-checkpoint";
+  first.shots[0].visual.events[0].id = "s06-brief-through-checkpoint-s06-comparison-resolve";
+  first.shots[0].sfx[0].event_id = first.shots[0].visual.events[0].id;
+  const stitched = stitchLongFormPlan(longOutline, [first, chapterPlan("chapter-2")]);
+  const [shot] = stitched.shots;
+  const [event] = shot.visual.events;
+  assert.ok(event.id.startsWith(`${shot.id}-`));
+  assert.ok(event.id.length <= 64);
+  assert.equal(shot.sfx[0].event_id, event.id);
+  assert.deepEqual(validateProductionPlan(stitched, validationContext(context("/tmp").intake, context("/tmp").evidence)).errors, []);
+});
+
 test("rejects chapter plans that cite evidence or resources outside their scope", async () => {
   const workspace = await tempWorkspace();
   const values = context(workspace);

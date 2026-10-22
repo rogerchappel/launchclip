@@ -9,6 +9,7 @@ import { VISUAL_NOVELTY_CONTEXT_PATH, loadVisualNoveltyContext, writeVisualFinge
 
 export const PRODUCTION_OUTLINE_VERSION = "launchclip.production-outline.v1";
 const CHAPTER_ID_PATTERN = "^[a-z0-9][a-z0-9-]{0,63}$";
+const STITCHED_SHOT_ID_LENGTH = 40;
 
 export const PRODUCTION_OUTLINE_SCHEMA = strictObject({
   schema_version: { type: "string", enum: [PRODUCTION_OUTLINE_VERSION] },
@@ -341,11 +342,11 @@ function wordsInInterval(words, start, end) {
     .join(" ");
 }
 
-function stitchedShotId(chapterId, shotId) {
+function stitchedShotId(chapterId, shotId, maxLength = 64) {
   const candidate = `${chapterId}-${shotId}`;
-  if (new RegExp(CHAPTER_ID_PATTERN).test(candidate)) return candidate;
+  if (candidate.length <= maxLength && new RegExp(CHAPTER_ID_PATTERN).test(candidate)) return candidate;
   const suffix = semanticHash({ chapterId, shotId }).slice(0, 10);
-  const maxPrefix = 63 - suffix.length;
+  const maxPrefix = maxLength - 1 - suffix.length;
   const prefix = candidate
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, "-")
@@ -356,11 +357,12 @@ function stitchedShotId(chapterId, shotId) {
 }
 
 function stitchChapterShot(chapterId, shot) {
-  const id = stitchedShotId(chapterId, shot.id);
+  // Event IDs must start with the shot ID within the same 64 characters, so shot IDs leave room for them.
+  const id = stitchedShotId(chapterId, shot.id, STITCHED_SHOT_ID_LENGTH);
   const objectIds = new Map((shot.visual?.objects ?? []).map((object) => [object.id, stitchedShotId(chapterId, object.id)]));
   const eventIds = new Map((shot.visual?.events ?? []).map((event) => {
     const suffix = String(event.id).startsWith(`${shot.id}-`) ? String(event.id).slice(String(shot.id).length + 1) : event.id;
-    return [event.id, stitchedShotId(id, suffix)];
+    return [event.id, `${id}-${suffix}`];
   }));
   const visual = shot.visual ? {
     ...shot.visual,
