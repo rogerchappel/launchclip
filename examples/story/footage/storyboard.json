@@ -38,7 +38,7 @@
       "id": "name",
       "module": "lower-third",
       "track": 1,
-      "start": 5.75,
+      "start": 5.8,
       "end": 8.9,
       "params": { "name": "Ada Park", "title": "Founder, LaunchClip" },
       "hits": [{ "at": "word:ada", "event": "name" }]
@@ -48,7 +48,7 @@
       "module": "punch-in",
       "track": 2,
       "start": 8.9,
-      "end": 10.95,
+      "end": 10.9,
       "params": { "scale": 1.1, "release": 0.5 },
       "hits": [{ "at": "word:recording", "event": "punch" }]
     },
@@ -56,8 +56,8 @@
       "id": "twelve",
       "module": "count-up",
       "insert": true,
-      "start": 11.05,
-      "end": 14.25,
+      "start": 11.0,
+      "end": 14.2,
       "in": { "type": "fade", "dur": 0.3 },
       "params": { "value": 12, "suffix": " min", "label": "from recording to finished Short", "note": "Illustrative timing", "hit": "both", "countAt": 0.3, "countDuration": 0.9 },
       "hits": [{ "at": "word:twelve", "event": "hit" }]
@@ -66,8 +66,8 @@
       "id": "captions-note",
       "module": "footage-callout",
       "track": 1,
-      "start": 14.35,
-      "end": 17.95,
+      "start": 14.4,
+      "end": 17.9,
       "params": { "text": "Straight from the transcript", "label": "Generated", "point": { "x": 0.72, "y": 0.6 }, "tone": "dark", "tilt": 2 },
       "hits": [{ "at": "word:captions", "event": "point" }]
     },
