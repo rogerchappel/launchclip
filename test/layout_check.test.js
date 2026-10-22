@@ -201,3 +201,36 @@ test("layout-check explains a missing kit/core/story.mjs", { skip: existsSync(pa
   await writeFile(path.join(project, "storyboard.json"), JSON.stringify({ format: { width: 1080, height: 1920 }, scenes: [] }));
   await assert.rejects(checkLayoutProject(project), /kit\/core\/story\.mjs/);
 });
+
+test("layout-check checks the ambient drift's largest extent, as the compilers draw it", async () => {
+  const { driftExtent, sceneDrift } = await import("../kit/core/ambient.mjs");
+  const { resolveModule } = await import("../kit/core/modules.mjs");
+  const { resolveStory } = await import("../kit/core/story.mjs");
+  const metric = { mode: "illustration", unit: "minutes", format: "number", values: [{ value: 48, at: 0.3 }] };
+  // Two overlays 12 px apart: at rest they never touch.
+  const story = (ambient) => ({
+    schema: "launchclip.story.v1", lane: "motion", title: "Drift extent",
+    format: { width: 1080, height: 1920, fps: 30, duration: 6 },
+    brand: { colors: { bg: "#06070d", primary: "#fdb022", paper: "#f2eee6" }, fonts: { display: "anton" } },
+    ...(ambient === undefined ? {} : { ambient }),
+    scenes: [
+      { id: "top", module: "metric", start: 0, end: 6, energy: 3, params: { title: "Before", rect: { x: 90, y: 300, width: 840, height: 420 }, metric } },
+      { id: "low", module: "metric", start: 0, end: 6, track: 1, energy: 3, params: { title: "After", rect: { x: 90, y: 732, width: 840, height: 420 }, metric } }
+    ]
+  });
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-layout-drift-"));
+  await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story(undefined)));
+  const drifting = await checkLayoutProject(project);
+  assert.deepEqual(drifting.drifted, ["top", "low"]);
+  assert.ok(drifting.findings.some((entry) => entry.rule === "collision" && entry.ids.includes("top") && entry.ids.includes("low")), "the pushed-in extents meet");
+  // The extent checked is exactly the drift both compilers draw.
+  const resolved = resolveStory(story(undefined));
+  const scene = resolved.scenes.find((entry) => entry.id === "top");
+  const drift = sceneDrift(resolved, scene, resolveModule(scene, resolved, { end: 6 }), { window: { start: 0, end: 6 }, geometry: profileGeometry(SHORTS) });
+  const extent = driftExtent(scene.params.rect, drift);
+  assert.ok(extent.height > 420 && extent.y >= 280, "pushed in, but inside the safe zone");
+  await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story("off")));
+  const still = await checkLayoutProject(project);
+  assert.deepEqual(still.drifted, []);
+  assert.ok(!still.findings.some((entry) => entry.rule === "collision"), "with ambient off the rest rects do not touch");
+});
