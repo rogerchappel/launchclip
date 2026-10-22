@@ -119,8 +119,11 @@ vision transforms constantly.
 3. DENSITY: something must enter, build, or transform at least every 1.5s.
    Fill scenes with word-timed items; never leave a graphic scene idle.
 4. ONE FOCAL ELEMENT per moment. If two things matter, that's two scenes.
-5. TYPOGRAPHY IS THE CAPTIONING: spoken phrases become typography scenes (or
-   word builds above a split face). There are NO subtitle captions.
+5. TYPOGRAPHY LEADS, CAPTIONS FOLLOW: spoken phrases become typography scenes (or
+   word builds above a split face). Portrait shorts also burn in word-synced
+   captions (1-3 words, current word highlighted) inside the Shorts safe zone,
+   above the bottom 22% and clear of the right-hand action rail; hide them only
+   while a typography scene already shows the same words.
 6. ACCENT IS RATIONED: one emphasised word per phrase, colored by meaning
    (mint = highlight/success, coral = warm punch, purple = brand-specific).
 7. CONTENT HONESTY: footage/screenshots/prompts must come from the provided

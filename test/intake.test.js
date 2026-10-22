@@ -154,6 +154,11 @@ test("enables an opt-in cinematic portrait profile with quality planning default
   assert.equal(intake.profile.planning.require_frame_blueprints, true);
   assert.equal(intake.profile.craft.minimum_hook_material_changes, 3);
   assert.equal(intake.profile.craft.maximum_material_change_gap_seconds, 2);
+  assert.equal(intake.profile.delivery.platform, "youtube-shorts");
+  assert.equal(intake.profile.delivery.captions.default, true);
+  assert.equal(intake.profile.delivery.safe_zone.bottom, 0.22);
+  assert.equal(intake.profile.delivery.loudness.integrated_lufs, -14);
+  assert.equal(intake.profile.delivery.loop_ending, true);
   assert.deepEqual(intake.profile.readiness.required_receipts, ["concepts", "story", "narration", "plan", "frames", "motion", "audio", "verification", "critic"]);
   assert.deepEqual(intake.model, { provider: "openai", id: "gpt-5.6", reasoning_effort: "xhigh", reasoning_mode: "standard" });
 });

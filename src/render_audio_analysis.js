@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { DEFAULT_NARRATED_MUSIC_VOLUME } from "./production_contracts.js";
+import { PLATFORM_LOUDNESS } from "./production_profiles.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -43,8 +44,15 @@ export async function writeAudioReport(videoPath, manifestPath, outputPath, opti
 export function evaluateAudioQuality(report, options = {}) {
   const findings = [];
   if (report.expected_audio && !report.stream) findings.push(finding("audio-stream", "blocking", "Rendered video has no audio stream despite a produced audio manifest."));
-  if (report.output?.true_peak_dbfs != null && report.output.true_peak_dbfs > Number(options.maximumTruePeakDbfs ?? -.1)) {
-    findings.push(finding("clipping", "major", `Rendered true peak is ${report.output.true_peak_dbfs} dBFS.`));
+  const ceiling = Number(options.maximumTruePeakDbfs ?? PLATFORM_LOUDNESS.true_peak_dbtp);
+  if (report.output?.true_peak_dbfs != null && report.output.true_peak_dbfs > ceiling) {
+    findings.push(finding("clipping", "major", `Rendered true peak is ${report.output.true_peak_dbfs} dBFS; keep it at or below ${ceiling} dBTP so platform encoding does not clip.`));
+  }
+  const target = Number(options.targetIntegratedLufs ?? PLATFORM_LOUDNESS.integrated_lufs);
+  const tolerance = Number(options.loudnessToleranceLu ?? PLATFORM_LOUDNESS.tolerance_lu);
+  const integrated = report.output?.integrated_lufs;
+  if (report.sources.voiceover && Number.isFinite(integrated) && Math.abs(integrated - target) > tolerance) {
+    findings.push(finding("loudness", "major", `Rendered program loudness is ${integrated} LUFS; master to ${target} LUFS (±${tolerance} LU) so platform normalization neither buries nor squashes the mix.`));
   }
   if (report.sources.voiceover && report.sources.music) {
     const adjustedMusic = report.sources.music.integrated_lufs + report.sources.music_gain_db;

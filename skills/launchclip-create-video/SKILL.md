@@ -28,6 +28,11 @@ Before authoring a cinematic creation, read both references completely:
   the creative funnel, timing, verification, and repair contract.
 - [references/standalone-hyperframes.md](references/standalone-hyperframes.md)
   is the self-contained runtime contract.
+- [references/shorts-delivery.md](references/shorts-delivery.md) is the
+  delivery floor for portrait videos of 60 seconds or less: default
+  word-highlight captions, the Shorts safe zone, −14 LUFS / −1 dBTP mastering,
+  a local synthesized SFX/music kit, grain and vignette texture, and loop
+  endings.
 
 ## Preserve the cost boundary
 
@@ -78,7 +83,10 @@ state them:
   "surprise me", "decide for me", or equivalent
 - aspect: `9:16` for Shorts/Reels/TikTok, `1:1` for social feeds, `16:9` for
   YouTube, presentations, embeds, or unknown destinations
-- duration: 45 seconds for a short promo or explainer
+- duration: 30 seconds for a Short, 45 seconds for other short promos or
+  explainers
+- Shorts delivery: burned-in word captions, safe zone, loop ending and
+  −14 LUFS master are on by default for portrait videos of 60 s or less
 - language: the user's language
 - output: `.launchclip/agent-<source-slug>` in the active workspace
 - audio: preserve supplied speech; ask once about music and SFX when the user
@@ -150,7 +158,9 @@ audio.
   subprocess. Generate one instrumental bed sized to the edit, leaving
   midrange space for narration and requesting a clean ending. Do not use an
   OpenAI key for subscription-mode orchestration or music.
-- **Sound effects:** support none or authorized local files. Inspect supplied
+- **Sound effects:** support none, authorized local files, or the original
+  procedural kit from `scripts/synth-audio-kit.mjs` (local FFmpeg, no samples,
+  no cost). Inspect supplied
   resources, project/style-pack audio, and the active LaunchClip checkout or
   installed package's `public/sfx` if it exists; do not assume every distribution
   includes a library. Recursively inventory `.wav`, `.mp3`, `.m4a`, `.aac`,
@@ -380,6 +390,7 @@ repaired state.
 After approval:
 
 1. Render from the CLI to a stable output path at the requested quality.
+   Master the audio with `scripts/master-loudness.mjs` (−14 LUFS, −1 dBTP).
 2. Confirm the file exists and is non-empty.
 3. Probe its duration, dimensions, video codec, and audio presence.
 4. If a final render is visually different from snapshots, repair, recheck,
