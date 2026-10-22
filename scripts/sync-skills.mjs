@@ -48,6 +48,7 @@ const SHARED_REFERENCES = [
   'editorial-ui-modules.md',
   'recorded-treatment-check.md',
   'recorded-video.md',
+  'sfx-library.md',
   'shorts-delivery.md'
 ];
 
