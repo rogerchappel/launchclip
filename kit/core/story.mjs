@@ -472,6 +472,7 @@ function validateCaptionOptions(overlay, path, err) {
   if (overlay.stroke !== undefined && overlay.stroke !== false && !(typeof overlay.stroke === "number" && overlay.stroke >= 0 && overlay.stroke <= 40)) err(`${path}.stroke must be false or a width in px (0-40)`);
   if (overlay.shadow !== undefined && overlay.shadow !== false && typeof overlay.shadow !== "string") err(`${path}.shadow must be false or a CSS text-shadow`);
   if (overlay.emphasis !== undefined && !(overlay.emphasis === "auto" || overlay.emphasis === "none" || overlay.emphasis === false || (Array.isArray(overlay.emphasis) && overlay.emphasis.every(nonEmpty)))) err(`${path}.emphasis must be "auto", "none", false or a list of words`);
+  if (overlay.hide_during_moves !== undefined && !(overlay.hide_during_moves === "auto" || typeof overlay.hide_during_moves === "boolean")) err(`${path}.hide_during_moves must be "auto" (dip out for vertical pans, push, pull and orbit), true (every camera move) or false`);
   if (overlay.keywords !== undefined && !(Array.isArray(overlay.keywords) && overlay.keywords.every(nonEmpty))) err(`${path}.keywords must be a list of words`);
   if (overlay.colors !== undefined) {
     if (!isObject(overlay.colors)) err(`${path}.colors must be an object of brand roles or hex colours`);

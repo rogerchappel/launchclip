@@ -4,7 +4,9 @@ import { catalogModules, rectFitHint, resolveModule } from "../kit/core/modules.
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { checkLayout, elementsFromEditorialLayout, elementsFromStory, profileGeometry, SAFE_ZONE_PROFILES } from "../kit/core/layout-check.mjs";
+import { checkCameraSweeps, checkLayout, elementsFromEditorialLayout, elementsFromStory, profileGeometry, SAFE_ZONE_PROFILES } from "../kit/core/layout-check.mjs";
+import { cameraPlan, captionDipWindows, sceneObjectLookup, screenPoint, worldPoint } from "../kit/core/camera-world.mjs";
+import { captionDipHidden, captionMoveHide, captionsOverlayOf, chunkWords } from "../kit/core/captions.mjs";
 import { driftExtent, sceneDrift } from "../kit/core/ambient.mjs";
 import { emptyPlates, sceneWindows } from "../kit/core/transitions.mjs";
 
@@ -125,7 +127,10 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
       }
     } catch { /* unresolvable windows are reported elsewhere */ }
   }
-  const findings = [...specFindings, ...report.findings, ...plateFindings].sort((a, b) => a.at - b.at);
+  let sweepFindings = [];
+  try { sweepFindings = cameraSweepFindings(resolved, elements, words, report.captionBand); }
+  catch (error) { warnings.push(`camera sweep check skipped: ${error.message}`); }
+  const findings = [...specFindings, ...report.findings, ...plateFindings, ...sweepFindings].sort((a, b) => a.at - b.at);
   return {
     stage: "layout-check",
     project,
@@ -138,6 +143,66 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
     warnings,
     findings
   };
+}
+
+// Camera moves: sample every frame of every world-camera move, transform each
+// visible plate element's declared rect by the camera at that frame, and
+// report crossings of the caption band while captions are on screen
+// (kit/core/layout-check.mjs checkCameraSweeps). Captions dipped out for the
+// move (captions.hide_during_moves, default "auto": vertical pans, dollies and
+// orbits) do not count.
+export function cameraSweepFindings(resolved, elements, words = [], band = null) {
+  const caption = elements.find((element) => element.role === "caption");
+  if (!caption) return [];
+  const windows = sceneWindows(resolved);
+  const plan = cameraPlan(resolved, { windows, objects: sceneObjectLookup(resolved, (scene, value) => resolveModule(scene, value)) });
+  if (!plan?.moves.length) return [];
+  const overlay = captionsOverlayOf(resolved);
+  const captionRect = caption.rect ?? band;
+  if (!captionRect) return [];
+  // Captions are on screen while a chunk is (narration words), within the
+  // overlay's window, outside its hide ranges and the move dips.
+  const chunks = words.length ? chunkWords(words).map((chunk) => [chunk.start, chunk.end]) : [[caption.start, caption.end]];
+  const holes = [...(caption.hide ?? []), ...captionDipHidden(captionDipWindows(plan, captionMoveHide(overlay)))];
+  const captionVisible = subtract(chunks.map(([a, b]) => [Math.max(a, caption.start), Math.min(b, caption.end)]).filter(([a, b]) => b > a), holes);
+  const byId = new Map(windows.scenes.map((entry) => [entry.id, entry]));
+  const plates = elements.filter((element) => {
+    const entry = byId.get(element.id);
+    return entry?.plate && plan.placements[element.id] && element.rect && ["text", "hero", "media"].includes(element.role) && !element.hidesCaptions && !overlaps(element.rect, captionRect);
+  });
+  const step = 1 / plan.fps;
+  const frames = [];
+  for (const move of plan.moves) {
+    const entry = byId.get(move.sceneId);
+    const info = { sceneId: move.sceneId, type: move.type, start: move.start, duration: move.duration, direction: entry?.transitionIn?.direction ?? null };
+    for (let f = Math.ceil(move.start * plan.fps - 1e-6); f <= Math.floor((move.start + move.duration) * plan.fps + 1e-6); f += 1) {
+      const t = f / plan.fps;
+      const rects = [];
+      for (const element of plates) {
+        const scene = byId.get(element.id);
+        if (t < Math.max(element.start, scene.start) - 1e-6 || t >= Math.max(element.end, scene.renderEnd) - 1e-6) continue;
+        const placement = plan.placements[element.id], r = element.rect;
+        const corners = [[r.x, r.y], [r.x + r.width, r.y], [r.x, r.y + r.height], [r.x + r.width, r.y + r.height]]
+          .map(([x, y]) => screenPoint(plan, worldPoint(placement, { x, y }), t));
+        const xs = corners.map((point) => point.x), ys = corners.map((point) => point.y);
+        rects.push({ id: element.id, rect: { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) } });
+      }
+      frames.push({ t, move: info, rects });
+    }
+  }
+  return checkCameraSweeps({ band: captionRect, frames, captionVisible, step });
+}
+
+function overlaps(a, b) {
+  return Math.min(a.x + a.width, b.x + b.width) > Math.max(a.x, b.x) && Math.min(a.y + a.height, b.y + b.height) > Math.max(a.y, b.y);
+}
+
+function subtract(spans, holes) {
+  let pieces = spans;
+  for (const [from, to] of holes) {
+    pieces = pieces.flatMap(([a, b]) => (to <= a || from >= b ? [[a, b]] : [[a, from], [to, b]].filter(([x, y]) => y - x > 1e-6)));
+  }
+  return pieces;
 }
 
 // → {inflate(scene, elements) → elements, drifted: scene ids}. Elements of a

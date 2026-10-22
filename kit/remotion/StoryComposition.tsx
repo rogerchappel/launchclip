@@ -33,11 +33,11 @@ import { layerStateAt, layerStyle, sceneWindows } from "../core/transitions.mjs"
 // @ts-ignore plain ESM from kit/core
 import { getEase } from "../core/motion.mjs";
 // @ts-ignore plain ESM from kit/core
-import { captionChunksFrom, captionsOverlayOf, chunkWords, narrationWords } from "../core/captions.mjs";
+import { captionChunksFrom, captionMoveHide, captionsOverlayOf, chunkWords, narrationWords } from "../core/captions.mjs";
 // @ts-ignore plain ESM from kit/core
 import { storyBase } from "../core/story.mjs";
 // @ts-ignore plain ESM from kit/core
-import { backgroundFieldTiles, backgroundLayer, blurAt, cameraPlan, containerTransform, opsStateAt, overlayOps, placementTransform, sceneObjectLookup } from "../core/camera-world.mjs";
+import { backgroundFieldTiles, backgroundLayer, blurAt, cameraPlan, captionDipWindows, containerTransform, opsStateAt, overlayOps, placementTransform, sceneObjectLookup } from "../core/camera-world.mjs";
 // @ts-ignore plain ESM from kit/core
 import { ambientField, blobBackground, blobStyle, fieldTileTransform, driftStyle, sceneAmbient, sceneDrift } from "../core/ambient.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -252,6 +252,9 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   const geometry = React.useMemo(() => profileGeometry({ width: story.format.width, height: story.format.height }), [story]);
   const fieldFor = (scene: any) => (field && sceneAmbient(story, scene).background ? field.blobs : null);
   const plan = React.useMemo(() => cameraPlan(story, { windows, objects: sceneObjectLookup(story, (scene: any, value: any) => resolveModule(scene, value)) }), [story, windows]);
+  // Camera moves that sweep panels through the band dip the captions out
+  // (captions.hide_during_moves), as the HyperFrames compiler does.
+  const dips = React.useMemo(() => captionDipWindows(plan, captionMoveHide(overlay)), [plan, overlay]);
   if (plan) {
     const world = plan.mode === "world";
     // World mode: one ambient field, in the camera's parallax depth layer.
@@ -277,7 +280,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
         </CameraWorld>
         {layers.filter((layer: any) => !layer.entry.plate).map(sceneLayer)}
         {overlay && Array.isArray(__captions) && __captions.length ? (
-          <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} />
+          <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} />
         ) : null}
         {audio ? <Audio src={staticFile(audio)} volume={mixVolume} /> : null}
       </AbsoluteFill>
@@ -299,7 +302,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
         </Sequence>
       ) : null}
       {overlay && Array.isArray(__captions) && __captions.length ? (
-        <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} />
+        <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} />
       ) : null}
       {audio ? <Audio src={staticFile(audio)} volume={mixVolume} /> : null}
     </AbsoluteFill>

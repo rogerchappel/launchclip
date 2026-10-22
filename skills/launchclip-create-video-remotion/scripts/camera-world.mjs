@@ -449,6 +449,34 @@ export function blurAt(plan, t) {
 }
 
 // ---------------------------------------------------------------------------
+// Captions during camera moves. A move that carries the plates vertically
+// (a pan, whip-pan or orbit up or down), zooms them (push, pull) or rolls
+// them (orbit) sweeps panels through the caption band mid-move, so by default
+// ("auto") the captions dip out for those moves; horizontal moves keep their
+// captions. captions.hide_during_moves: true dips for every move, false never.
+
+/** Whether a move sweeps content across the frame vertically (vertical travel, zoom or roll). */
+export function sweepingMove(move) {
+  const zoom = Math.max(move.from.zoom, move.to.zoom);
+  const vertical = Math.abs(move.to.y - move.from.y) * zoom > 1;
+  const dolly = Math.abs(Math.log(move.to.zoom / move.from.zoom)) > 0.01;
+  const roll = Math.abs(move.to.rotation - move.from.rotation) > 0.5;
+  return vertical || dolly || roll;
+}
+
+/**
+ * Windows where the captions dip out for camera moves: [{start, end}] in
+ * seconds (each move's own span). mode: "auto" (sweeping moves only, the
+ * default), true (every move) or false (none). captions.mjs turns them into
+ * the opacity dip both renderers draw (captionDipTweens / captionDipOpacity).
+ */
+export function captionDipWindows(plan, mode = 'auto') {
+  if (!plan || mode === false) return [];
+  return plan.moves.filter((move) => mode === true || sweepingMove(move))
+    .map((move) => ({ start: round(move.start, 6), end: round(move.start + move.duration, 6) }));
+}
+
+// ---------------------------------------------------------------------------
 // Renderer-neutral ops (the HyperFrames compiler turns them into GSAP; the
 // frame-pure functions above give the same values, and a test seeks GSAP
 // against them).

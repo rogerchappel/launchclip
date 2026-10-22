@@ -502,6 +502,63 @@ export function captionPlanCss(o) {
   return `${lines.join('\n')}\n`;
 }
 
+// --- captions during camera moves ---------------------------------------------
+// captions.hide_during_moves: "auto" (default: dip out for camera moves that
+// sweep panels vertically: vertical pans, dollies, orbits), true (every
+// move) or false (never). The windows come from camera-world.mjs
+// captionDipWindows; both renderers draw the same linear opacity dip on the
+// captions container: HyperFrames as the tweens below, Remotion frame-purely.
+
+export const CAPTION_DIP_RAMP = 0.12;
+export const CAPTION_MOVE_HIDE = Object.freeze(['auto', true, false]);
+
+/** captions.hide_during_moves of an overlay → "auto" | true | false. */
+export function captionMoveHide(overlay) {
+  const value = overlay?.hide_during_moves;
+  return value === true || value === false ? value : 'auto';
+}
+
+// Windows closer than two ramps merge, so the dip tweens never overlap.
+function mergeDips(windows) {
+  const merged = [];
+  for (const window of [...windows].sort((a, b) => a.start - b.start)) {
+    const last = merged.at(-1);
+    if (last && window.start - last.end < 2 * CAPTION_DIP_RAMP + 1e-6) last.end = Math.max(last.end, window.end);
+    else merged.push({ start: window.start, end: window.end });
+  }
+  return merged;
+}
+
+const dipRamp = (window) => (window.end > window.start ? CAPTION_DIP_RAMP : 0);
+
+/** Dip windows → GSAP tweens on the captions container: [{at, dur, from, to}] (linear opacity). */
+export function captionDipTweens(windows = []) {
+  const out = [];
+  for (const window of mergeDips(windows)) {
+    const ramp = r4(dipRamp(window));
+    if (!(ramp > 0)) continue;
+    // The ramps sit just outside the move, so the captions are fully out for
+    // the whole move (the camera eases overshoot up to its last frame).
+    out.push({ at: r4(Math.max(0, window.start - ramp)), dur: ramp, from: 1, to: 0 });
+    out.push({ at: r4(window.end), dur: ramp, from: 0, to: 1 });
+  }
+  return out;
+}
+
+/** Captions container opacity at t for dip windows (the same values the tweens above play). */
+export function captionDipOpacity(windows = [], t) {
+  for (const tween of captionDipTweens(windows)) {
+    if (t < tween.at) return tween.from === 1 ? 1 : 0;
+    if (t < tween.at + tween.dur) return tween.from + (tween.to - tween.from) * ((t - tween.at) / tween.dur);
+  }
+  return 1;
+}
+
+/** Spans where the dip has captions under half opacity (the layout check treats them as hidden) → [[from, to]]. */
+export function captionDipHidden(windows = []) {
+  return mergeDips(windows).map((window) => { const ramp = dipRamp(window); return [r4(window.start - ramp / 2), r4(window.end + ramp / 2)]; }).filter(([a, b]) => b > a);
+}
+
 // --- frame-pure evaluation (Remotion) and GSAP mounting (HyperFrames) -------
 
 const TRANSFORM_DEFAULTS = Object.freeze({ x: 0, y: 0, scale: 1, scaleX: 1 });

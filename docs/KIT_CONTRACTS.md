@@ -302,7 +302,7 @@ silence ratio, transients). `draftStyleFromReferences` maps them to a v2 pack
 
 The captions overlay is `{type: "captions", preset | style, src?, hide?,
 position?, max_words?, max_chars?, case?, emphasis?, keywords?, font?, size?,
-colors?, stroke?, shadow?, entrance?, exit?, offset?}`; legacy `style:
+colors?, stroke?, shadow?, entrance?, exit?, offset?, hide_during_moves?}`; legacy `style:
 "word-highlight" | "line" | "none"` still works (`line` → `minimal-line`,
 `style` may also name a preset, `preset` wins). `CAPTION_PRESETS` holds 14
 presets; `STORY_CAPTION_PRESETS` in `story.mjs` mirrors the names.
@@ -322,6 +322,23 @@ timeline to every frame against the evaluator; `scripts/parity-captions.mjs`
 compares rendered stills per preset (`test/fixtures/parity-captions/`, SSIM ≥
 0.97, `LAUNCHCLIP_PARITY=1`). The layout check moves the caption band for
 `position: top|middle` (`captionBandAt`).
+
+Captions during camera moves: `hide_during_moves` is `"auto"` (default),
+`true` or `false`. Auto dips the captions out for every world-camera move that
+sweeps the plates vertically (`sweepingMove`: vertical travel above 1 px, a
+zoom change or a roll, so vertical pans and whip-pans, push, pull and orbit);
+horizontal pans keep their captions. `true` dips for every move, `false` never.
+`captionDipWindows(plan, mode)` (camera-world.mjs) gives the move spans;
+`captionDipTweens(windows)` turns them into linear opacity ramps of
+`CAPTION_DIP_RAMP` (0.12 s) on the captions container that sit just outside
+each move (out before it starts, back after it ends; windows closer than two
+ramps merge). HyperFrames adds them as `tl.fromTo('#lc-captions', …)`;
+Remotion's `WordCaptions` applies `captionDipOpacity(windows, t)` to its
+`.lc-captions` element. layout-check samples every frame of every camera move,
+transforms each visible plate element's rect by the camera (`screenPoint`) and
+reports `camera-caption-band` when key content covers at least 5% of the
+caption band while a caption chunk is on screen and not dipped: a warning, an
+error from 0.25 s (`checkCameraSweeps`, `CAMERA_SWEEP`).
 
 ## Wave 2: module registry, compilers, parity
 
