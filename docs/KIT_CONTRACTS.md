@@ -249,6 +249,49 @@ the Shorts safe zone, key text at least 44 px at 1080 wide, contrast at least
   Custom modules register through `<LaunchclipCompositions customModules={…}/>`
   from `kit/remotion/Root.tsx`, and receive `{scene, params, brand, format, model}`.
 
+### Fonts (`kit/core/fonts.mjs`)
+
+Both renderers draw text only from bundled font files, so output does not
+depend on the render host's installed fonts or on the network.
+
+```js
+export const FONT_REGISTRY      // family → {family, slug, package, version, license, generic, faces:[{file, weight, style}]}
+export const FONT_ROLE_DEFAULTS // {display: "Anton", body: "Inter", meta: "JetBrains Mono", math: "STIX Two Text", serif: "Instrument Serif"}
+export const SYMBOL_FALLBACK    // "STIX Two Math" (unsubset: arrows, operators, ✓ …)
+export function fontStack(family, role)       // "'Space Grotesk', 'Inter', 'STIX Two Math', sans-serif"
+export function brandFontStacks(brand)        // → {display, body, meta, math, serif, families}
+export function projectFontFamilies(brand)    // role defaults + symbol fallback + brand families: what a project loads
+export function registryFontFaces(families)   // → [{family, package, file, module, weight, style, format}]
+export function frozenFontFaces(family, files)// assets/fonts/<slug>-<weight>[-italic].woff2 → faces
+export function fontFaceRule(face, url)       // one @font-face rule, font-display: block
+```
+
+- The registry families come from `@fontsource` / `@fontsource-variable`
+  packages pinned to exact versions in `package.json` (latin subset; variable
+  `wght` files where the family has one). Licences: THIRD_PARTY_NOTICES.md.
+- Stacks name only registered families before one generic family. A brand
+  family outside the registry sits in front of its role's registered family,
+  so a missing file degrades to a bundled face, never to a host font.
+- Modules take their stacks from here (`fontStack`, `brandFontStacks`); no
+  module hard-codes a system family.
+- Per family, frozen files under `assets/fonts/` win over the registry, in
+  both renderers.
+- **HyperFrames:** `compileStoryToHyperFrames` resolves each registry file
+  from `node_modules` (next to the compiler, then next to `sourceDir`), copies
+  it to `<projectDir>/fonts/<file>`, declares it with `@font-face`, and starts
+  every face loading so HyperFrames' `document.fonts.ready` wait covers them.
+  `projectFontFaces(brand, {sourceDir})` and `copyProjectFonts(copies, dir)`
+  are exported for hand-built projects (the parity verifiers). No Google
+  Fonts link and no remote `font-src`.
+- **Remotion:** `kit/remotion/fonts.ts` imports each registry woff2 through the
+  bundler (Remotion's webpack config treats fonts as `asset/resource`), so the
+  files travel inside the bundle and no `--public-dir` handling is needed.
+  Frozen files load with `staticFile("assets/fonts/<file>")`, found through
+  `getStaticFiles()`. `ensureFonts(brand)` adds every face with the FontFace
+  API inside `delayRender`, releasing the handle once `document.fonts` is
+  ready. `StoryComposition`, `ModuleReview` and the test parity entries call
+  it. `test/remotion_fonts.test.js` keeps its imports equal to the registry.
+
 ### Review compositions (registered in `kit/remotion/Root.tsx`)
 
 - `LaunchclipStory`: props are the resolved story. Dimensions come from
@@ -393,3 +436,14 @@ exactly as the CLI does and renders it with the real compilers. It uses
 `test/footage_lane.test.js` runs the fixtures when `LAUNCHCLIP_PARITY=1` is set.
 The example is `examples/story/footage/`; regenerate its recording with
 `node scripts/make-footage-example.mjs`.
+
+- The HyperFrames side compiles the one-scene story with
+  `compileStoryToHyperFrames` (lane forced to `motion`, audio, captions and
+  ending dropped); the Remotion bundle uses the fixture directory as its public
+  dir, so `assets/…` media resolve in both renderers.
+- `runStoryParity(projectDir, {times})` compares full-frame stills of a whole
+  storyboard project through both renderer adapters.
+- `npm run parity:ci` (`scripts/parity-ci.mjs`) is the cross-OS smoke the CI
+  `parity` job runs on ubuntu: five fixtures that between them draw every
+  default registry font, at the settle and mid-hold times, plus two stills of
+  `examples/story/minimal`, with one shared Remotion bundle.

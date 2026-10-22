@@ -21,6 +21,7 @@ import {fileURLToPath} from 'node:url';
 import {promisify} from 'node:util';
 import {MODULES} from '../kit/core/catalog-b.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-b.mjs';
+import {injectParityFonts} from './parity-fonts.mjs';
 
 const run = promisify(execFile);
 const require = createRequire(import.meta.url);
@@ -80,6 +81,7 @@ async function hyperframesStills(story, model, times, dir) {
   if (existsSync(path.join(FIXTURE_DIR, 'assets'))) await cp(path.join(FIXTURE_DIR, 'assets'), path.join(project, 'assets'), {recursive: true});
   await copyFile(GSAP, path.join(project, 'assets/gsap.min.js'));
   await writeFile(path.join(project, 'index.html'), hyperframesHtml(story, model));
+  await injectParityFonts(story, project);
   const frames = path.join(dir, 'hf-frames');
   await rm(frames, {recursive: true, force: true});
   // The HyperFrames player floors seek times to its frame grid, so nudge each

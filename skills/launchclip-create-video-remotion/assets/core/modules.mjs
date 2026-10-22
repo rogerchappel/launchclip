@@ -8,6 +8,7 @@
 // Canonical copy: kit/core/modules.mjs.
 
 import { EDITORIAL_KINDS, resolveEditorialModule } from './editorial-core.mjs';
+import { fontStack } from './fonts.mjs';
 import { MODULES as CATALOG_A } from './catalog-a.mjs';
 import { MODULES as CATALOG_B } from './catalog-b.mjs';
 import { MODULES as CATALOG_C } from './catalog-c.mjs';
@@ -163,7 +164,7 @@ function finishModel(model, { module, scene }) {
 // PLACEHOLDER_STYLE, so a missing module is equally visible in each.
 export const PLACEHOLDER_STYLE = Object.freeze({
   surface: '#1b1d24', foreground: '#f7f7f8', muted: '#c4c7cf', border: '#ff5a36', borderWidth: 4, radius: 24,
-  labelSize: 52, detailSize: 28, padding: 40, fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif"
+  labelSize: 52, detailSize: 28, padding: 40, fontFamily: fontStack(null, 'body')
 });
 
 export function placeholderModel(scene, story, reason = '', { end } = {}) {

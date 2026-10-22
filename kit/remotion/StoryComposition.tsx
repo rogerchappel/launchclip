@@ -13,7 +13,7 @@
 // - one root <Audio> for audio.mix (or the voice);
 // - <WordCaptions> from captions.json or chunked NARRATION words;
 // - the loop ending (the loop_to scene's first state over the final window);
-// - brand fonts through @remotion/google-fonts with fallback stacks.
+// - the bundled registry fonts (kit/remotion/fonts.ts, kit/core/fonts.mjs).
 import React from "react";
 import { AbsoluteFill, Audio, Freeze, OffthreadVideo, Sequence, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import type { CalculateMetadataFunction } from "remotion";
@@ -32,7 +32,7 @@ import { baseCameraOps, cameraStyle } from "./catalog/CatalogC";
 import { Placeholder } from "./Placeholder";
 import { WordCaptions } from "./captions/WordCaptions";
 import { SceneStartFrame } from "./clock";
-import { ensureBrandFonts, ensureModuleFonts } from "./fonts";
+import { ensureFonts } from "./fonts";
 
 export type CustomModuleProps = { scene: any; params: any; brand: any; format: any; model: any };
 export type StoryProps = Record<string, any> & {
@@ -126,8 +126,7 @@ function captionOverlay(story: any) {
 export const StoryComposition: React.FC<StoryProps> = (props) => {
   const { customModules, __captions, ...story } = props;
   const { fps } = useVideoConfig();
-  const fonts = ensureBrandFonts(story.brand);
-  ensureModuleFonts(story);
+  const fonts = ensureFonts(story.brand);
   const colors = story.brand?.colors ?? {};
   const background = colors.bg ?? "#000000";
   const windows = React.useMemo(() => sceneWindows(story), [story]);
@@ -195,8 +194,7 @@ export const calculateStoryMetadata: CalculateMetadataFunction<StoryProps> = asy
 export type ModuleReviewProps = { scene: any; story: any; customModules?: StoryProps["customModules"] };
 
 export const ModuleReview: React.FC<ModuleReviewProps> = ({ scene, story, customModules }) => {
-  ensureBrandFonts(story.brand);
-  ensureModuleFonts({ scenes: [scene] });
+  ensureFonts(story.brand);
   const element = React.useMemo(() => resolveSceneElement(scene, story, { customModules }), [scene, story, customModules]);
   // Footage-led stories review the module over the (muted) base, moved by the
   // module's own camera, like the HyperFrames sceneFilter compile.

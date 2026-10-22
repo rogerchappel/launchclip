@@ -26,8 +26,9 @@ test('golden corpus covers every kind with outputs and errors', () => {
 // default-rect fixtures were regenerated for content-derived rects and the
 // portrait type scale. The hash was then re-taken once when editorial fonts
 // moved to the story's brand-font variables (var(--lc-font-*, <old stack>));
-// that capture differed from dacadc4 only in those font wrappers.
-const EXPLICIT_16X9_SHA256 = 'aa766b3d0c6957af342c3d2fd8027e6ec8291966794f72fb5f0459b65fd92641';
+// that capture differed from dacadc4 only in those font wrappers. Re-taken again
+// when the wrapper fallbacks became the bundled registry stacks (fonts only).
+const EXPLICIT_16X9_SHA256 = '6412f1e1e2ca59865cfa95b4834c09e8c142462cfd7525672424522860983508';
 const explicit16x9 = entry => entry.spec && typeof entry.spec === 'object' && !Array.isArray(entry.spec) && entry.spec.aspect === '16:9' && entry.spec.rect !== undefined;
 
 test('explicit-rect 16:9 golden outputs are unchanged by the density work', () => {
@@ -110,11 +111,14 @@ test('resolved content carries renderer-ready values', () => {
   assert.equal(plain.content.activeColor, plain.accent);
 });
 
-test('editorial core is import-free and the skill copy matches kit/core byte for byte', () => {
+test('editorial core imports only the font registry and the skill copy matches kit/core byte for byte', () => {
   const canonical = readFileSync(new URL('../kit/core/editorial-core.mjs', import.meta.url), 'utf8');
   const copy = readFileSync(new URL('../skills/launchclip-create-video/scripts/editorial-core.mjs', import.meta.url), 'utf8');
   assert.equal(copy, canonical);
-  assert.doesNotMatch(canonical, /^\s*import\b|\bimport\(|\brequire\(/m);
+  assert.deepEqual(canonical.match(/^[ \t]*import\b.*$/gm), ["import {fontStack} from './fonts.mjs';"]);
+  assert.doesNotMatch(canonical, /\bimport\(|\brequire\(/);
+  assert.equal(EDITORIAL_STYLE.font.sans, "var(--lc-font-body, 'Inter', 'STIX Two Math', sans-serif)");
+  assert.equal(EDITORIAL_STYLE.font.mono, "var(--lc-font-meta, 'JetBrains Mono', 'STIX Two Math', monospace)");
   assert.equal(EDITORIAL_KINDS.length, 14);
   assert.equal(EDITORIAL_STYLE.space.pad, 24);
   assert.ok(Object.isFrozen(EDITORIAL_STYLE) && Object.isFrozen(EDITORIAL_SYMBOLS));

@@ -16,7 +16,8 @@
 // Canonical copy: kit/hyperframes/story-compiler.mjs. Skills ship a copy whose
 // ../core/ imports point at ./ (scripts/sync-skills.mjs).
 
-import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { copyFile, cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { deriveBoundaries, storyBase, validateStory } from './story.mjs';
@@ -24,7 +25,7 @@ import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from
 import { gsapVars, layerStateAt, sceneWindows } from './transitions.mjs';
 import { getEase } from './motion.mjs';
 import { captionCss, CAPTION_DEFAULT_COLORS, captionChunksFrom, captionRuntime, chunkWords, narrationWords } from './captions.mjs';
-import { brandFontStacks, fontSlug, googleFontModuleName, moduleFontFaces } from './fonts.mjs';
+import { brandFontStacks, fontFaceRule, fontSlug, frozenFontFaces, projectFontFamilies, registryFontFaces } from './fonts.mjs';
 import { EMITTERS as EDITORIAL_EMITTERS } from './editorial-ui-modules.mjs';
 import { EMITTERS as CATALOG_A_EMITTERS } from './hyperframes-catalog-a.mjs';
 import { EMITTERS as CATALOG_B_EMITTERS } from './hyperframes-catalog-b.mjs';
@@ -33,7 +34,7 @@ import { cameraOverlaps } from './catalog-c.mjs';
 
 export const COMPOSITION_ID = 'launchclip-story';
 export const GSAP_SRC = 'https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js';
-const CSP = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'";
+const CSP = "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'";
 const FIRST_SCENE_TRACK = 2;
 const TOGGLE_LEAD = 0.0005;
 
@@ -223,7 +224,8 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   }
 
   const fonts = brandFontStacks(story.brand);
-  const fontCss = await fontFaces([...fonts.families, ...moduleFontFaces(story).filter((face) => !fonts.families.includes(face.family))], sourceDir, warnings);
+  const fontCss = await projectFontFaces(story.brand, { sourceDir });
+  warnings.push(...fontCss.warnings);
   const capIdle = colors.paper ?? CAPTION_DEFAULT_COLORS.idle;
   const capActive = colors.primary ?? CAPTION_DEFAULT_COLORS.active;
   const html = `<!doctype html>
@@ -234,9 +236,8 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   <meta http-equiv="Content-Security-Policy" content="${CSP}">
   <title>${text(story.title ?? 'LaunchClip story')}</title>
   <script src="${GSAP_SRC}"></script>
-${fontCss.links.map((href) => `  <link rel="stylesheet" href="${attr(href)}">`).join('\n')}
   <style>
-${fontCss.css}
+${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     * { box-sizing: border-box; }
     html, body { margin: 0; width: ${W}px; height: ${H}px; overflow: hidden; background: ${bg}; }
     #launchclip-root { position: relative; width: ${W}px; height: ${H}px; overflow: hidden; --lc-font-display: ${fonts.display}; --lc-font-body: ${fonts.body}; --lc-font-meta: ${fonts.meta}; --cap-font: ${fonts.display}; --cap-idle: ${capIdle}; --cap-active: ${capActive}; font-family: var(--lc-font-body); }
@@ -248,6 +249,7 @@ ${fontCss.css}
     ${captions ? `${captionCss(format).trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}
     ${css.filter(Boolean).join('\n    ')}
   </style>
+  <script>${FONT_WARMUP}</script>
 </head>
 <body>
   <div id="launchclip-root" data-composition-id="${COMPOSITION_ID}" data-start="0" data-duration="${num(D)}" data-width="${W}" data-height="${H}" data-fps="${format.fps}" data-launchclip-cinematic-contract="phase-2" data-launchclip-story="${attr(story.schema)}">
@@ -277,6 +279,7 @@ ${motion.join('\n').split('\n').map((line) => `      ${line}`).join('\n')}
       await cp(path.join(sourceDir, 'assets'), path.join(projectDir, 'assets'), { recursive: true, force: true });
       files.push('assets/');
     }
+    if (fontCss.copies.length) { await copyProjectFonts(fontCss.copies, projectDir); files.push('fonts/'); }
     await writeFile(path.join(projectDir, 'index.html'), html);
     files.push('index.html');
   }
@@ -397,56 +400,73 @@ async function loadCaptionChunks(story, overlay, sourceDir, warnings) {
   }
 }
 
-// Brand fonts: frozen files under assets/fonts/ win (named <family-slug>*.woff2),
-// then the exact Google Fonts files @remotion/google-fonts would load (so both
-// renderers draw the same faces), then a Google Fonts stylesheet link.
-// families: names (normal style) or {family, styles} (module faces).
-async function fontFaces(families, sourceDir, warnings) {
+// Project fonts (kit/core/fonts.mjs): every family the project draws with
+// (role defaults, the symbol fallback and the brand families) as @font-face
+// rules over local files, so a render never fetches a font or reaches a host
+// system font. For each family, frozen files under <sourceDir>/assets/fonts/
+// (named <family-slug>*.woff2) win; otherwise the registry's @fontsource file
+// is copied to <projectDir>/fonts/. The Remotion kit (kit/remotion/fonts.ts)
+// makes the same choice per family, so both renderers draw the same files.
+//
+//   const {css, copies, warnings} = await projectFontFaces(story.brand, {sourceDir});
+//   await copyProjectFonts(copies, projectDir);
+export async function projectFontFaces(brand, { sourceDir, resolveFrom = [] } = {}) {
   const rules = [];
-  const links = [];
+  const copies = [];
+  const warnings = [];
   let local = [];
   if (sourceDir && existsSync(path.join(sourceDir, 'assets/fonts'))) local = await readdir(path.join(sourceDir, 'assets/fonts'));
-  for (const entry of families) {
-    const family = typeof entry === 'string' ? entry : entry.family;
-    const styles = typeof entry === 'string' ? ['normal'] : entry.styles;
-    const slug = fontSlug(family);
-    const files = local.filter((file) => /\.(woff2?|ttf|otf)$/i.test(file) && file.toLowerCase().replace(/[^a-z0-9]+/g, '-').startsWith(slug));
-    if (files.length) {
-      for (const file of files.sort()) {
-        const weight = file.match(/(?:^|[^0-9])([1-9]00)(?:[^0-9]|$)/)?.[1] ?? (/bold/i.test(file) ? '700' : '400');
-        const style = /italic/i.test(file) ? 'italic' : 'normal';
-        const format = { woff2: 'woff2', woff: 'woff', ttf: 'truetype', otf: 'opentype' }[file.split('.').pop().toLowerCase()];
-        rules.push(`    @font-face { font-family: '${family}'; src: url("assets/fonts/${attr(file)}") format("${format}"); font-weight: ${weight}; font-style: ${style}; font-display: block; }`);
-      }
+  for (const family of projectFontFamilies(brand)) {
+    const frozen = frozenFontFaces(family, local);
+    if (frozen.length) {
+      for (const face of frozen) rules.push(fontFaceRule(face, `assets/fonts/${face.file}`));
       continue;
     }
-    const info = await googleFontInfo(family);
-    if (info) {
-      for (const style of styles) {
-        for (const [weight, subsets] of Object.entries(info.fonts?.[style] ?? {})) {
-          const subset = subsets.latin ? 'latin' : Object.keys(subsets)[0];
-          if (!subset) continue;
-          const range = info.unicodeRanges?.[subset];
-          rules.push(`    @font-face { font-family: '${family}'; src: url("${subsets[subset]}") format("woff2"); font-weight: ${weight}; font-style: ${style}; font-display: block;${range ? ` unicode-range: ${range};` : ''} }`);
-        }
-      }
+    const faces = registryFontFaces([family]);
+    if (!faces.length) {
+      warnings.push(`font "${family}" is not in the LaunchClip font registry and has no files under assets/fonts/ (named ${fontSlug(family)}-<weight>.woff2); its role's bundled family is used instead`);
       continue;
     }
-    warnings.push(`font "${family}" is not frozen under assets/fonts/; loading it from Google Fonts at render time`);
-    links.push(`https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, '+')}&display=block`);
+    for (const face of faces) {
+      const file = resolveFontFile(face.module, [sourceDir, ...resolveFrom]);
+      if (!file) {
+        warnings.push(`font file ${face.module} is not installed; run npm install (the @fontsource packages pinned in package.json) so ${family} renders`);
+        continue;
+      }
+      copies.push({ from: file, to: `fonts/${face.file}` });
+      rules.push(fontFaceRule(face, `fonts/${face.file}`));
+    }
   }
-  return { css: rules.join('\n'), links };
+  return { css: rules.join('\n'), copies, warnings };
 }
 
-async function googleFontInfo(family) {
-  try {
-    const module = await import(`@remotion/google-fonts/${googleFontModuleName(family)}`);
-    const info = module.getInfo?.();
-    return info?.fontFamily === family ? info : null;
-  } catch {
-    return null;
+/** Copy resolved font files into the project (fonts/<file>). → relative paths written */
+export async function copyProjectFonts(copies, projectDir) {
+  const written = [];
+  for (const { from, to } of copies) {
+    const target = path.join(projectDir, to);
+    await mkdir(path.dirname(target), { recursive: true });
+    await copyFile(from, target);
+    written.push(to);
   }
+  return written;
 }
+
+// A registry file inside node_modules: next to this compiler first (the repo
+// or an installed launchclip), then next to the storyboard project (a skill
+// copy of this file used in a project that installed the font packages).
+function resolveFontFile(specifier, roots) {
+  const bases = [import.meta.url, ...roots.filter(Boolean).map((dir) => path.join(path.resolve(dir), 'package.json')), path.join(process.cwd(), 'package.json')];
+  for (const base of bases) {
+    try { return createRequire(base).resolve(specifier); } catch { /* try the next base */ }
+  }
+  return null;
+}
+
+// Start every declared face loading as soon as the page parses, so the
+// renderer's document.fonts.ready wait covers faces whose text is not on
+// screen yet (captions, later scenes).
+export const FONT_WARMUP = 'if (document.fonts) for (const face of document.fonts) face.load().catch(() => {});';
 
 function attr(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));

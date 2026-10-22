@@ -1,97 +1,117 @@
-// Brand fonts for the Remotion kit. brand.fonts slugs resolve through
-// kit/core/fonts.mjs (shared with the HyperFrames compiler) and load through
-// @remotion/google-fonts with the same faces the HyperFrames compiler links
-// (latin subset, every weight of the normal style).
+// Fonts for the Remotion kit, from the registry in kit/core/fonts.mjs (shared
+// with the HyperFrames compiler), so both renderers draw the same files.
 //
-// Each loader is a literal dynamic import so the bundler only includes the
-// families listed here, each as its own chunk. Add a family by adding a line.
-import { continueRender, delayRender } from "remotion";
+// - Registry families: each face's woff2 is imported from its pinned
+//   @fontsource package, so the Remotion bundler copies it into the bundle and
+//   hands back its URL. Nothing touches the public dir and nothing is fetched
+//   from the network; the same import works for Studio, `remotion render`,
+//   `remotion still` and the ModuleReview parity renders.
+// - Frozen families: files under <public-dir>/assets/fonts/ named
+//   <family-slug>-<weight>[-italic].woff2 win for their family, exactly as in
+//   the HyperFrames compiler, and load through staticFile().
+//
+// Every face loads through the FontFace API inside delayRender/continueRender,
+// and the handle is released only once document.fonts is ready, so no frame is
+// captured with a fallback face. test/remotion_fonts.test.js keeps FONT_FILES
+// in step with the registry: add a family there, then add its imports here.
+import { continueRender, delayRender, getStaticFiles, staticFile } from "remotion";
 // @ts-ignore plain ESM from kit/core
-import { brandFontStacks, googleFontModuleName, moduleFontFaces } from "../core/fonts.mjs";
+import { brandFontStacks, frozenFontFaces, projectFontFamilies, registryFontFaces } from "../core/fonts.mjs";
+import antonLatin400Normal from "@fontsource/anton/files/anton-latin-400-normal.woff2";
+import archivoBlackLatin400Normal from "@fontsource/archivo-black/files/archivo-black-latin-400-normal.woff2";
+import bricolageGrotesqueLatinWghtNormal from "@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2";
+import instrumentSerifLatin400Normal from "@fontsource/instrument-serif/files/instrument-serif-latin-400-normal.woff2";
+import instrumentSerifLatin400Italic from "@fontsource/instrument-serif/files/instrument-serif-latin-400-italic.woff2";
+import interLatinWghtNormal from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2";
+import jetbrainsMonoLatinWghtNormal from "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2";
+import spaceGroteskLatinWghtNormal from "@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-normal.woff2";
+import stixTwoMathLatin400Normal from "@fontsource/stix-two-math/files/stix-two-math-latin-400-normal.woff2";
+import stixTwoTextLatinWghtNormal from "@fontsource-variable/stix-two-text/files/stix-two-text-latin-wght-normal.woff2";
+import stixTwoTextLatinWghtItalic from "@fontsource-variable/stix-two-text/files/stix-two-text-latin-wght-italic.woff2";
+import syneLatinWghtNormal from "@fontsource-variable/syne/files/syne-latin-wght-normal.woff2";
+import unboundedLatinWghtNormal from "@fontsource-variable/unbounded/files/unbounded-latin-wght-normal.woff2";
 
-type GoogleFontModule = {
-  getInfo: () => { fontFamily: string; fonts: Record<string, Record<string, Record<string, string>>> };
-  loadFont: (style?: string, options?: { weights?: string[]; subsets?: string[] }) => { waitUntilDone: () => Promise<void> };
+/** Registry file name → URL of that file in the Remotion bundle. */
+export const FONT_FILES: Record<string, string> = {
+  "anton-latin-400-normal.woff2": antonLatin400Normal,
+  "archivo-black-latin-400-normal.woff2": archivoBlackLatin400Normal,
+  "bricolage-grotesque-latin-wght-normal.woff2": bricolageGrotesqueLatinWghtNormal,
+  "instrument-serif-latin-400-normal.woff2": instrumentSerifLatin400Normal,
+  "instrument-serif-latin-400-italic.woff2": instrumentSerifLatin400Italic,
+  "inter-latin-wght-normal.woff2": interLatinWghtNormal,
+  "jetbrains-mono-latin-wght-normal.woff2": jetbrainsMonoLatinWghtNormal,
+  "space-grotesk-latin-wght-normal.woff2": spaceGroteskLatinWghtNormal,
+  "stix-two-math-latin-400-normal.woff2": stixTwoMathLatin400Normal,
+  "stix-two-text-latin-wght-normal.woff2": stixTwoTextLatinWghtNormal,
+  "stix-two-text-latin-wght-italic.woff2": stixTwoTextLatinWghtItalic,
+  "syne-latin-wght-normal.woff2": syneLatinWghtNormal,
+  "unbounded-latin-wght-normal.woff2": unboundedLatinWghtNormal
 };
 
-const LOADERS: Record<string, () => Promise<GoogleFontModule>> = {
-  Anton: () => import("@remotion/google-fonts/Anton"),
-  Archivo: () => import("@remotion/google-fonts/Archivo"),
-  ArchivoBlack: () => import("@remotion/google-fonts/ArchivoBlack"),
-  Barlow: () => import("@remotion/google-fonts/Barlow"),
-  BarlowCondensed: () => import("@remotion/google-fonts/BarlowCondensed"),
-  BebasNeue: () => import("@remotion/google-fonts/BebasNeue"),
-  BricolageGrotesque: () => import("@remotion/google-fonts/BricolageGrotesque"),
-  DMMono: () => import("@remotion/google-fonts/DMMono"),
-  DMSans: () => import("@remotion/google-fonts/DMSans"),
-  DMSerifDisplay: () => import("@remotion/google-fonts/DMSerifDisplay"),
-  EBGaramond: () => import("@remotion/google-fonts/EBGaramond"),
-  FiraCode: () => import("@remotion/google-fonts/FiraCode"),
-  Fraunces: () => import("@remotion/google-fonts/Fraunces"),
-  IBMPlexMono: () => import("@remotion/google-fonts/IBMPlexMono"),
-  IBMPlexSans: () => import("@remotion/google-fonts/IBMPlexSans"),
-  Inter: () => import("@remotion/google-fonts/Inter"),
-  JetBrainsMono: () => import("@remotion/google-fonts/JetBrainsMono"),
-  LeagueGothic: () => import("@remotion/google-fonts/LeagueGothic"),
-  Lexend: () => import("@remotion/google-fonts/Lexend"),
-  Manrope: () => import("@remotion/google-fonts/Manrope"),
-  Montserrat: () => import("@remotion/google-fonts/Montserrat"),
-  Oswald: () => import("@remotion/google-fonts/Oswald"),
-  Outfit: () => import("@remotion/google-fonts/Outfit"),
-  PlayfairDisplay: () => import("@remotion/google-fonts/PlayfairDisplay"),
-  PlusJakartaSans: () => import("@remotion/google-fonts/PlusJakartaSans"),
-  Poppins: () => import("@remotion/google-fonts/Poppins"),
-  Roboto: () => import("@remotion/google-fonts/Roboto"),
-  RobotoMono: () => import("@remotion/google-fonts/RobotoMono"),
-  Sora: () => import("@remotion/google-fonts/Sora"),
-  SpaceGrotesk: () => import("@remotion/google-fonts/SpaceGrotesk"),
-  SpaceMono: () => import("@remotion/google-fonts/SpaceMono"),
-  Syne: () => import("@remotion/google-fonts/Syne"),
-  Unbounded: () => import("@remotion/google-fonts/Unbounded"),
-  Urbanist: () => import("@remotion/google-fonts/Urbanist"),
-  WorkSans: () => import("@remotion/google-fonts/WorkSans")
-};
+export type FontStacks = { display: string; body: string; meta: string; math: string; serif: string; families: string[] };
+type Face = { family: string; file: string; weight: string; style: string; format: string };
 
-// Font loading is resource state, not animation state: one load per family
-// per page, shared by every composition instance.
+// Font loading is resource state, not animation state: one load per face per
+// page, shared by every composition instance.
 const started = new Map<string, Promise<void>>();
+const warned = new Set<string>();
 
-export function supportedGoogleFont(family: string): boolean {
-  return Boolean(LOADERS[googleFontModuleName(family)]);
+function warnOnce(message: string) {
+  if (warned.has(message)) return;
+  warned.add(message);
+  console.warn(`[launchclip] ${message}`);
 }
 
-/** Starts loading every brand family once; rendering waits through delayRender. */
-export function ensureBrandFonts(brand: any): { display: string; body: string; meta: string; families: string[] } {
-  const stacks = brandFontStacks(brand);
-  for (const family of stacks.families as string[]) ensureFamily(family, ["normal"]);
+// Public-dir files under assets/fonts/ (the frozen fonts); empty when the
+// static file list is unavailable (the Player, or no public dir).
+function frozenFiles(): string[] {
+  try {
+    return (getStaticFiles() ?? []).map((file) => file.name).filter((name) => name.startsWith("assets/fonts/"));
+  } catch {
+    return [];
+  }
+}
+
+function loadFace(key: string, face: Face, url: string) {
+  if (started.has(key)) return;
+  const handle = delayRender(`Loading font ${face.family} ${face.weight} ${face.style}`, { timeoutInMilliseconds: 60000 });
+  const fontFace = new FontFace(face.family, `url("${url}") format("${face.format}")`, { weight: face.weight, style: face.style, display: "block" });
+  const promise = fontFace.load()
+    .then((loaded) => { document.fonts.add(loaded); return document.fonts.ready; })
+    .then(() => undefined)
+    .catch((error) => warnOnce(`font ${face.family} (${face.file}) failed to load: ${error?.message ?? error}`))
+    .finally(() => continueRender(handle));
+  started.set(key, promise);
+}
+
+/**
+ * Starts loading every project family once (kit/core/fonts.mjs
+ * projectFontFamilies: role defaults, the symbol fallback and brand.fonts)
+ * and returns the role stacks. Rendering waits through delayRender.
+ */
+export function ensureFonts(brand: any): FontStacks {
+  const stacks = brandFontStacks(brand) as FontStacks;
+  if (typeof document === "undefined" || typeof FontFace === "undefined") return stacks;
+  const local = frozenFiles();
+  for (const family of projectFontFamilies(brand) as string[]) {
+    const frozen = frozenFontFaces(family, local) as Face[];
+    if (frozen.length) {
+      for (const face of frozen) loadFace(`frozen:${face.file}`, face, staticFile(`assets/fonts/${face.file}`));
+      continue;
+    }
+    const faces = registryFontFaces([family]) as Face[];
+    if (!faces.length) {
+      warnOnce(`font "${family}" is not in the LaunchClip font registry and has no files under assets/fonts/; its role's bundled family is used instead`);
+      continue;
+    }
+    for (const face of faces) {
+      const url = FONT_FILES[face.file];
+      if (url) loadFace(`registry:${face.file}`, face, url);
+      else warnOnce(`font file ${face.file} is not imported in kit/remotion/fonts.ts`);
+    }
+  }
   return stacks;
 }
 
-/** Loads the module faces a story needs (kit/core/fonts.mjs MODULE_FONTS), e.g. archive-card's italic serif. */
-export function ensureModuleFonts(story: any): void {
-  for (const face of moduleFontFaces(story) as Array<{ family: string; styles: string[] }>) ensureFamily(face.family, face.styles);
-}
-
-function ensureFamily(family: string, styles: string[]): void {
-  for (const style of styles) {
-    const key = style === "normal" ? family : `${family}:${style}`;
-    if (started.has(key)) continue;
-    const loader = LOADERS[googleFontModuleName(family)];
-    if (!loader) {
-      started.set(key, Promise.resolve());
-      console.warn(`[launchclip] font "${family}" is not in kit/remotion/fonts.ts; using its fallback stack. Add it there, or freeze it under assets/fonts/ and load it in a custom entry.`);
-      continue;
-    }
-    const handle = delayRender(`Loading font ${key}`, { timeoutInMilliseconds: 60000 });
-    const promise = loader()
-      .then((module) => {
-        const info = module.getInfo();
-        const weights = Object.keys(info.fonts[style] ?? {});
-        const subsets = Object.keys(info.fonts[style]?.[weights[0]] ?? {});
-        return module.loadFont(style, { weights, subsets: subsets.includes("latin") ? ["latin"] : subsets.slice(0, 1) }).waitUntilDone();
-      })
-      .catch((error) => console.warn(`[launchclip] font "${key}" failed to load: ${error?.message ?? error}`))
-      .finally(() => continueRender(handle));
-    started.set(key, promise);
-  }
-}
+/** @deprecated use ensureFonts (it loads more than the brand families). */
+export const ensureBrandFonts = ensureFonts;

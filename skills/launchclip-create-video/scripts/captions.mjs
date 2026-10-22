@@ -127,7 +127,7 @@ export function captionCss(format) {
   const b = captionBandFor(format);
   const pct = (value) => `${round(value * 100)}%`;
   return `.lc-captions { position: absolute; left: ${pct(b.left)}; right: ${pct(b.right)}; top: ${pct(b.top)}; height: ${pct(b.height)}; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: ${b.zIndex}; }
-.lc-cap { position: absolute; display: flex; gap: ${b.gap}em; flex-wrap: wrap; justify-content: center; font: ${b.fontWeight} ${b.fontSize}px/${b.lineHeight} var(--cap-font, system-ui); letter-spacing: -0.01em; text-transform: uppercase; opacity: 0; }
+.lc-cap { position: absolute; display: flex; gap: ${b.gap}em; flex-wrap: wrap; justify-content: center; font: ${b.fontWeight} ${b.fontSize}px/${b.lineHeight} var(--cap-font, 'Anton', 'STIX Two Math', sans-serif); letter-spacing: -0.01em; text-transform: uppercase; opacity: 0; }
 .lc-cap-w { display: inline-block; paint-order: stroke fill; -webkit-text-stroke: ${b.stroke}px rgba(0,0,0,.92); text-shadow: 0 6px 0 rgba(0,0,0,.55), 0 12px 28px rgba(0,0,0,.45); transform-origin: 50% 70%; }
 `;
 }

@@ -73,7 +73,7 @@ function wordState(t: number, word: CaptionWord, colors: { idle: string; active:
 
 const round = (value: number, digits = 4) => Math.round(value * 10 ** digits) / 10 ** digits;
 
-export const WordCaptions: React.FC<WordCaptionsProps> = ({ chunks, hide = [], idle = CAPTION_DEFAULT_COLORS.idle, active = CAPTION_DEFAULT_COLORS.active, spoken, fontFamily = "system-ui" }) => {
+export const WordCaptions: React.FC<WordCaptionsProps> = ({ chunks, hide = [], idle = CAPTION_DEFAULT_COLORS.idle, active = CAPTION_DEFAULT_COLORS.active, spoken, fontFamily = "'Anton', 'STIX Two Math', sans-serif" }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const B = captionBandFor({ width, height });

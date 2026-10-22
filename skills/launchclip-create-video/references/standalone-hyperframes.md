@@ -241,14 +241,50 @@ plates that cover the picture while the recording keeps sounding. Resolve
 `base.edl` first: `launchclip story compile` and `resolveStory(story, {edl})`
 do it, and the compiler warns when a story still carries an unresolved `edl`.
 
+### Fonts
+
+Text renders only from bundled font files, never from Google Fonts or the
+host's installed fonts. `scripts/fonts.mjs` is the registry: Anton, Archivo
+Black, Bricolage Grotesque, Inter, Instrument Serif, JetBrains Mono, Space
+Grotesk, STIX Two Math, STIX Two Text, Syne and Unbounded, each from a pinned
+`@fontsource` package (OFL-1.1, latin subset). The compiler:
+
+- loads every role default (display Anton, body Inter, meta JetBrains Mono,
+  maths STIX Two Text, quote serif Instrument Serif), STIX Two Math as the
+  symbol fallback, and every family `brand.fonts` names;
+- copies each registry file into `<out>/fonts/` and declares it with
+  `@font-face` (`font-display: block`), then starts every face loading so the
+  render's `document.fonts.ready` wait covers text that appears later;
+- uses frozen files under `assets/fonts/` instead when they exist for a family,
+  named `<family-slug>-<weight>[-italic].woff2` (`poppins-700.woff2`), which is
+  how a brand family outside the registry is added;
+- warns and keeps the role's bundled family when a family is neither in the
+  registry nor frozen.
+
+The compiler resolves the font files from `node_modules`, next to the compiler
+first and then next to the storyboard project. Outside the LaunchClip repo,
+install the exact packages once in the project:
+
+```bash
+npm install --save-exact @fontsource/anton@5.3.0 @fontsource/archivo-black@5.3.0 \
+  @fontsource/instrument-serif@5.3.0 @fontsource/stix-two-math@5.3.0 \
+  @fontsource-variable/bricolage-grotesque@5.3.0 @fontsource-variable/inter@5.3.0 \
+  @fontsource-variable/jetbrains-mono@5.3.0 @fontsource-variable/space-grotesk@5.3.0 \
+  @fontsource-variable/stix-two-text@5.3.0 @fontsource-variable/syne@5.3.0 \
+  @fontsource-variable/unbounded@5.3.0
+```
+
+A compile warning `font file … is not installed` means that step is missing.
+
 ## Design and motion quality contract
 
 Treat `DESIGN.md`, `STORYBOARD.md`, and `QUALITY.md` as executable creative
 constraints:
 
-- Package exact font files under `assets/fonts/` and declare them with
-  `@font-face`, or use another deterministic family proven available on the
-  render host. Use three explicit roles: display, body, and metadata. A silent
+- Use the bundled registry families (see [Fonts](#fonts)), or package exact
+  font files under `assets/fonts/` and declare them with `@font-face`. Never
+  rely on a font installed on the render host. Use three explicit roles:
+  display, body, and metadata. A silent
   fallback to Arial, Helvetica, Times, or generic monospace is a failed review
   unless the design deliberately specifies it.
 - Establish hierarchy through type scale, width, weight, tracking, space, and

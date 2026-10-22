@@ -5,6 +5,7 @@
 // ModuleReview lives in kit/remotion/Root.tsx (owned by the compiler work).
 import React from "react";
 import { AbsoluteFill, Composition, registerRoot } from "remotion";
+import { ensureFonts } from "../../../kit/remotion/fonts";
 // @ts-ignore plain ESM core without type declarations
 import { MODULES } from "../../../kit/core/catalog-a.mjs";
 import { COMPONENTS } from "../../../kit/remotion/catalog/registry-a";
@@ -27,6 +28,7 @@ export function resolveScene({ scene, story }: Props) {
 }
 
 const ModuleReview: React.FC<Props> = (props) => {
+  ensureFonts(props.story?.brand);
   const model = resolveScene(props);
   const Component = COMPONENTS[model.module];
   return (

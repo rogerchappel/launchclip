@@ -347,9 +347,9 @@ In the Remotion skill a module is a `storyboard.json` scene, not pasted fragment
    Media-window video renders as a muted `<OffthreadVideo>` inside the module
    with its supplied source offset; preserve one continuous authoritative
    narration track in the root mix.
-2. Resolve the project font through the story's `brand.fonts` (loaded with
-   `@remotion/google-fonts` or `staticFile()` plus `delayRender`) when the brand
-   requires it, rather than the module's system default.
+2. Editorial modules draw with the bundled registry stacks (Inter, JetBrains
+   Mono; `kit/core/fonts.mjs`), which `ensureFonts(story.brand)` loads from
+   local files before the first frame. Never load a font from the network.
 3. `LaunchclipStory` places each module in its own `<Sequence>` and the module
    derives every value from `useCurrentFrame()`, following
    `standalone-remotion.md`. Never add a GSAP timeline, CSS transition, or
