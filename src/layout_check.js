@@ -1,6 +1,6 @@
 import { narrationFile, readStoryEdl } from "./story_loader.js";
 import { applyProjectStyle } from "./story_style.js";
-import { catalogModules, resolveModule } from "../kit/core/modules.mjs";
+import { catalogModules, rectFitHint, resolveModule } from "../kit/core/modules.mjs";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -67,7 +67,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
           canvas
         });
       } catch (error) {
-        specFindings.push({ rule: "module-spec", severity: "error", ids: [scene.id], at: Number(scene.start), detail: `${scene.module}: ${error.message}` });
+        specFindings.push({ rule: "module-spec", severity: "error", ids: [scene.id], at: Number(scene.start), detail: `${scene.module}: ${error.message}${rectFitHint(scene, resolved, error.message)}` });
         return [];
       }
     }

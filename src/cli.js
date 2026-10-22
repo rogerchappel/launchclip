@@ -16,7 +16,7 @@ import { prepareRecording, recordingOptions, writeBrollPlan } from "./recording_
 import { runStoryCommand } from "./story_cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "story", "finish", "export", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "story", "finish", "export", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -37,7 +37,8 @@ export async function runCli(argv, io = {}) {
   const skillsInvocation = command === "skills" ? parseSkillsInvocation(firstArg, rest) : null;
   const storyInvocation = command === "story" ? parseStoryInvocation(firstArg, rest) : null;
   const sfxInvocation = command === "sfx" ? parseSfxInvocation(firstArg, rest) : null;
-  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? rest);
+  const moduleInvocation = command === "module" ? parseModuleInvocation(firstArg, rest) : null;
+  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
@@ -74,6 +75,14 @@ export async function runCli(argv, io = {}) {
         audioManifest: flags["audio-manifest"],
         qaDir: flags["qa-dir"]
       }, productionAdapters.cinematicCheck);
+    } else if (command === "module") {
+      const { runModuleFit, formatModuleFit } = await import("./module_fit.js");
+      const report = await runModuleFit(moduleInvocation.name, flags);
+      if (!flags.json) {
+        stdout.write(formatModuleFit(report));
+        return;
+      }
+      result = report;
     } else if (command === "layout-check") {
       const { checkLayoutProject, formatLayoutReport } = await import("./layout_check.js");
       const report = await checkLayoutProject(required(firstArg, "story project path"), { profile: flags.profile }, productionAdapters.layoutCheck);
@@ -258,6 +267,13 @@ function parseStyleInvocation(action, rest) {
   return { action, name: hasName ? rest[0] : null, flagArgs: expanded };
 }
 
+function parseModuleInvocation(action, rest) {
+  if (action !== "fit") throw new Error("Usage: launchclip module fit <module> [--params params.json] [--aspect 16:9|9:16] [--story storyboard.json] [--brand brand.json] [--duration 4] [--json]");
+  const [name, ...flagArgs] = rest;
+  if (!name || name.startsWith("--")) throw new Error("module fit needs a module id, e.g. launchclip module fit checklist --params params.json --aspect 16:9");
+  return { name, flagArgs };
+}
+
 export function parseFlags(args) {
   const flags = {};
   for (let index = 0; index < args.length; index += 1) {
@@ -333,6 +349,7 @@ Usage:
   launchclip story plan --brief brief.md [--narration NARRATION.json] [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] [--base assets/recording.mp4] [--voice assets/audio/narration.wav] [--format 1080x1920] [--fps 30] [--duration seconds] [--brand brand.json] [--style name|path] [--max-repairs 2]
   launchclip cinematic-check <project> [--renderer hyperframes|remotion] [--video renders/draft.mp4] [--audio-manifest AUDIO-MANIFEST.json] [--expect-audio] [--critique qa/critic.json]
   launchclip layout-check <project> [--profile shorts|landscape] [--json]
+  launchclip module fit <module> [--params params.json] [--aspect 16:9|9:16] [--story storyboard.json] [--brand brand.json] [--duration 4] [--json]
   launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--voice kokoro|elevenlabs|supplied|test] [--music synth|elevenlabs|none] [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] [--scene s3[,s4] | --preview-scene s3] [--force] [--json]
   launchclip export <project> --format fcpxml|premiere|edl|otio|all [--overlays prores4444|png|none] [--out exports/] [--fps 24|25|29.97|30|60] [--name name] [--absolute] [--force] [--json]
   launchclip sfx seed [--provider elevenlabs|synth] [--variants 3] [--only whoosh,impact] [--reroll typing] [--dir .launchclip/sfx] [--force]

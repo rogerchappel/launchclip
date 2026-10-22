@@ -14,6 +14,7 @@ import { MODULES as CATALOG_B } from './catalog-b.mjs';
 import { MODULES as CATALOG_C } from './catalog-c.mjs';
 import { storyBase } from './story.mjs';
 import { isEditorialGrammar, resolveGrammar } from './grammar.mjs';
+import { profileGeometry } from './layout-check.mjs';
 
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
@@ -110,8 +111,132 @@ export function resolveModule(scene, story, { track, end } = {}) {
   try {
     return resolveModuleInner(scene, story, { track, end });
   } catch (error) {
-    throw new Error(`${where}: ${error.message}`);
+    throw new Error(`${where}: ${error.message}${rectFitHint(scene, story, error.message, { end })}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Rect fitting. Whether content fits a rect depends on its width (text wraps
+// and editorial type follows the width), so "rect too short" alone leaves the
+// author guessing. These helpers search the rect sizes that resolve.
+
+const GEOMETRY_ERROR = /rect|too short|too long|too wide|too narrow|too tall|does not fit|leaves (only|too little|no room)|needs \d+ px|room for/i;
+const FIT_STEP = 8;
+
+function fitBounds(story) {
+  const canvas = { width: Number(story?.format?.width), height: Number(story?.format?.height) };
+  if (!(canvas.width > 0 && canvas.height > 0)) return null;
+  const { safeZone } = profileGeometry(canvas);
+  return { canvas, safe: safeZone };
+}
+
+// Positions to try for a probe size: the authored position (when it still
+// fits the canvas), centred in the safe zone, then the safe zone's top-left.
+function probePositions(width, height, bounds, rect) {
+  const { canvas, safe } = bounds, out = [];
+  const add = (x, y) => {
+    x = Math.round(x); y = Math.round(y);
+    if (x < 0 || y < 0 || x + width > canvas.width || y + height > canvas.height) return;
+    if (!out.some((p) => p.x === x && p.y === y)) out.push({ x, y });
+  };
+  if (rect && Number.isFinite(rect.x) && Number.isFinite(rect.y)) add(rect.x, rect.y);
+  add(safe.x + (safe.width - width) / 2, safe.y + (safe.height - height) / 2);
+  add(Math.ceil(safe.x), Math.ceil(safe.y));
+  return out;
+}
+
+function fitsRect(scene, story, width, height, bounds, rect, end) {
+  for (const position of probePositions(width, height, bounds, rect)) {
+    const probe = { ...scene, params: { ...(scene.params ?? {}), rect: { ...position, width, height } } };
+    try { resolveModuleInner(probe, story, { end }); return true; } catch { /* next position */ }
+  }
+  return false;
+}
+
+// Smallest integer in [lo, hi] where test() holds; null when it never does.
+// A coarse scan finds the first fitting step (sizes too large fail too, so
+// the range has no monotone top end), then a 1 px scan refines it.
+function smallest(lo, hi, test) {
+  lo = Math.ceil(lo); hi = Math.floor(hi);
+  let previous = lo - 1;
+  for (let value = lo; value <= hi + FIT_STEP - 1; value += FIT_STEP) {
+    const at = Math.min(value, hi);
+    if (test(at)) {
+      for (let fine = previous + 1; fine < at; fine += 1) if (test(fine)) return fine;
+      return at;
+    }
+    previous = at;
+    if (at === hi) break;
+  }
+  return null;
+}
+
+// Largest integer in [lo, hi] where test() holds, scanning down from hi.
+function largest(lo, hi, test) {
+  lo = Math.ceil(lo); hi = Math.floor(hi);
+  let previous = hi + 1;
+  for (let value = hi; value >= lo - FIT_STEP + 1; value -= FIT_STEP) {
+    const at = Math.max(value, lo);
+    if (test(at)) {
+      for (let fine = previous - 1; fine > at; fine -= 1) if (test(fine)) return fine;
+      return at;
+    }
+    previous = at;
+    if (at === lo) break;
+  }
+  return null;
+}
+
+/**
+ * Sizes that fit a scene's content. options.width / options.height (default:
+ * params.rect's) pick the fixed dimension. → {width, height, minHeight: the
+ * least height that fits at `width` | null, widthAtHeight: the nearest width
+ * that fits at `height` ({op: '≥', value} — the least width at or above
+ * `width` — else {op: '≤', value}, the largest below it) | null}. Probes stay
+ * inside the canvas and try the safe zone, so a catalogue module's own
+ * safe-zone bound holds.
+ */
+export function moduleFit(scene, story, { width, height, end } = {}) {
+  const bounds = fitBounds(story);
+  if (!bounds) throw new Error('moduleFit needs story.format width and height');
+  const rect = scene?.params?.rect;
+  const w = Number(width ?? rect?.width), h = Number(height ?? rect?.height);
+  const out = { width: Number.isFinite(w) ? w : null, height: Number.isFinite(h) ? h : null, minHeight: null, widthAtHeight: null };
+  if (out.width !== null) out.minHeight = smallest(120, bounds.canvas.height, (value) => fitsRect(scene, story, out.width, value, bounds, rect, end));
+  if (out.height !== null) {
+    const at = (value) => fitsRect(scene, story, value, out.height, bounds, rect, end);
+    const from = out.width ?? 200;
+    const wider = smallest(from, bounds.canvas.width, at);
+    if (wider !== null) out.widthAtHeight = { op: '≥', value: wider };
+    else {
+      const narrower = largest(200, from, at);
+      if (narrower !== null) out.widthAtHeight = { op: '≤', value: narrower };
+    }
+  }
+  return out;
+}
+
+/**
+ * Suffix for a geometry error on a scene with an explicit params.rect:
+ * "; checklist needs 640 px height at width 900 (or width ≥ 1100 at this
+ * height)". Empty when the error is not about geometry or no size fits.
+ */
+export function rectFitHint(scene, story, message, { end } = {}) {
+  const rect = scene?.params?.rect;
+  if (!rect || typeof rect !== 'object' || !GEOMETRY_ERROR.test(String(message ?? ''))) return '';
+  if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height)) return '';
+  let fit;
+  try { fit = moduleFit(scene, story, { end }); } catch { return ''; }
+  const name = scene.module, W = Math.round(rect.width), H = Math.round(rect.height);
+  const width = fit.widthAtHeight && `width ${fit.widthAtHeight.op} ${fit.widthAtHeight.value}`;
+  if (fit.minHeight !== null && fit.minHeight > H) return `; ${name} needs ${fit.minHeight} px height at width ${W} (${width ? `or ${width} at this height` : `no width fits height ${H}`})`;
+  if (fit.minHeight !== null) {
+    // The size fits at some position: the error is the authored position.
+    if (!fit.widthAtHeight || fit.widthAtHeight.value === W) return '';
+    return `; ${name} needs ${width} at height ${H}`;
+  }
+  if (width) return `; ${name} fits no height at width ${W}; it needs ${width} at height ${H}`;
+  return '';
 }
 
 function resolveModuleInner(scene, story, { track, end }) {

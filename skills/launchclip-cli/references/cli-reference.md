@@ -414,6 +414,22 @@ build). Warnings: `hero-fill` (hero outside 70–90% of the safe width on
 Shorts), `lower-third-empty` (nothing below the safe-zone midpoint for over
 3 s on Shorts), and `centre-of-mass` (sustained drift from y 860 on Shorts).
 
+Whether content fits a rect depends on the rect's width (text wraps, and
+editorial type follows the width), so a `module-spec` sizing error names the
+size that fits: "checklist needs 566 px height at width 900 (or width ≤ 670 at
+this height)". To size a rect before authoring it:
+
+```bash
+launchclip module fit <module> [--params params.json] [--aspect 16:9|9:16] [--story storyboard.json] [--brand brand.json] [--duration 4] [--json]
+```
+
+`--params` is the scene's params object. Without `params.rect` it prints the
+content's natural size and the rect the module derives; with one, whether it
+fits, the minimum height at its width and the nearest width that fits its
+height. Either way it lists the minimum height at common widths.
+`--story` borrows a storyboard's brand and format; catalogue modules otherwise
+use a neutral brand.
+
 Without `--json` the command prints a one-line-per-finding summary. It checks
 declarations only; confirm contrast (3:1 minimum) and a filled lower third on
 rendered stills as well. On HyperFrames, keep running `hyperframes check` too.

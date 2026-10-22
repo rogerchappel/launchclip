@@ -182,7 +182,9 @@ Without `rect`, the footprint comes from the content rather than a fixed box:
 
 **Recommendation:** omit `rect` and let the module size itself; when the shot
 needs a specific footprint in 16:9, add `density: "fill"` so the panel's text
-fills it.
+fills it. `launchclip module fit <module> --params params.json --aspect 16:9`
+prints a spec's natural size, or for a given rect the minimum height at its
+width and the width that fits its height.
 
 Rect-local geometry in the model (`chrome`, cells, bars, stages) is in layout
 px; multiply by `model.density.scale` for canvas px. `model.rect` and
