@@ -29,6 +29,7 @@ import { validateStory } from "./story_cli.js";
 import { hasExactFile } from "./story_loader.js";
 import { hyperframesInvocation } from "./toolchain.js";
 import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
+import { normalizeLoudness } from "./voice/supplied.js";
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -198,7 +199,7 @@ export function chooseBed(story, music = {}) {
     key: typeof music?.key === "string" && music.key ? music.key : "A",
     kick_from: kickFrom,
     kick_to: Math.max(kickFrom, kickTo),
-    volume: round3(0.3 + 0.04 * energy),
+    volume: round3(0.24 + 0.04 * energy),
     energy
   };
 }
@@ -277,6 +278,7 @@ function defaultAdapters() {
     now: () => performance.now(),
     clock: () => new Date().toISOString(),
     voiceProvider: (name, options) => getVoiceProvider(name, options),
+    normalizeVoice: (input, output) => normalizeLoudness(input, output),
     renderer: (name) => getRenderer(name),
     async compileHyperFrames(resolved, options) {
       const { compileStoryToHyperFrames } = await import("../kit/hyperframes/story-compiler.mjs");
@@ -438,6 +440,15 @@ const STAGES = [
       if (!result || !Array.isArray(result.words) || !result.words.length) throw new Error(`voice provider "${request.provider}" returned no word timings`);
       const produced = path.resolve(result.file ?? outFile);
       if (produced !== outFile) await copyFile(produced, outFile);
+      // Synthesised voices arrive at their engine's level (Kokoro is about
+      // -22 LUFS), which leaves too little voice-to-music margin in the mix.
+      // Bring them to the -17 LUFS supplied voiceovers already get.
+      let loudness = null;
+      if (request.provider !== "supplied") {
+        const normalized = `${outFile}.norm.wav`;
+        loudness = await ctx.adapters.normalizeVoice(outFile, normalized);
+        await rename(normalized, outFile);
+      }
       const words = result.words.map((word) => ({ text: String(word.text), start: round3(Number(word.start)), end: round3(Number(word.end)) }));
       const duration = round3(Number(result.duration ?? words.at(-1).end));
       await writeJson(path.join(ctx.project, PATHS.words), {
@@ -452,7 +463,7 @@ const STAGES = [
       });
       const format = storyFormat(ctx.copy);
       if (Number.isFinite(format.duration) && duration > format.duration + 0.05) ctx.warnings.push(`narration runs ${duration}s, longer than format.duration (${format.duration}s); the end is cut off`);
-      const details = { provider: request.provider, voice: request.voice, speed: request.speed, duration_seconds: duration, word_count: words.length, voice_file: PATHS.voice, words_file: PATHS.words };
+      const details = { provider: request.provider, voice: request.voice, speed: request.speed, loudness, duration_seconds: duration, word_count: words.length, voice_file: PATHS.voice, words_file: PATHS.words };
       STAGES[0].restore(ctx, details);
       return details;
     },

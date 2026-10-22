@@ -183,13 +183,13 @@ test("bindCues reads cues from real catalogue module events", () => {
 
 test("chooseBed follows scene energy and musicSpec reads audio.music", () => {
   const story = (energies) => ({ resolved: { duration: 9 }, scenes: energies.map((energy, index) => ({ id: `s${index}`, start: index * 3, end: index * 3 + 3, energy })) });
-  assert.deepEqual(chooseBed(story([0, 0, 0])), { seconds: 9, bpm: 84, key: "A", kick_from: 9, kick_to: 9, volume: 0.3, energy: 0 });
+  assert.deepEqual(chooseBed(story([0, 0, 0])), { seconds: 9, bpm: 84, key: "A", kick_from: 9, kick_to: 9, volume: 0.24, energy: 0 });
   const groove = chooseBed(story([1, "build", 3]));
   assert.equal(groove.bpm, 108);
   assert.equal(groove.kick_from, 6);
   assert.equal(groove.kick_to, 9);
   assert.equal(chooseBed(story([3, 3, 3]), { bpm: 90, key: "D" }).bpm, 90);
-  assert.equal(chooseBed(story([3, 3, 3])).volume, 0.42);
+  assert.equal(chooseBed(story([3, 3, 3])).volume, 0.36);
   assert.deepEqual(musicSpec({}), { kind: "synth" });
   assert.deepEqual(musicSpec({ music: "none" }), { kind: "none" });
   assert.deepEqual(musicSpec({ music: "assets/audio/song.wav" }), { kind: "file", file: "assets/audio/song.wav" });
@@ -253,7 +253,7 @@ test("runFinish runs every stage, writes the resolved copy and report, then reus
     assert.ok(existsSync(manifest.sfx_manifest));
     const sfx = JSON.parse(await readFile(path.join(project, PATHS.sfxManifest), "utf8"));
     assert.deepEqual(sfx.cues.map((cue) => [cue.cue, cue.at_seconds, cue.shot_id]), [["tick", 1.72, "s1"], ["tick", 2.04, "s2"]]);
-    assert.equal(adapters.lastMix.musicVolume, 0.36);
+    assert.equal(adapters.lastMix.musicVolume, 0.3);
     assert.equal(adapters.lastBed.bpm, 96);
     assert.equal(adapters.lastEvidence.renderer, "remotion");
     assert.equal(adapters.lastEvidence.video, path.join(project, "renders/draft.mp4"));
