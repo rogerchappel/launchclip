@@ -75,6 +75,15 @@ test("humanised timing and acoustic, piano-like attacks still give a steady grid
   assertGrid(analyzeSamples(acoustic.samples, RATE), acoustic, { bpm: 92, label: "acoustic" });
 });
 
+test("confidence separates a pulse from noise", () => {
+  const track = clickTrack(110, 16);
+  assert.ok(analyzeSamples(track.samples, RATE).confidence > 0.9);
+  let state = 3;
+  const noise = Float32Array.from({ length: RATE * 16 }, () => ((state = (state * 16807) % 2147483647) / 2147483647 - 0.5) * 0.4);
+  const result = analyzeSamples(noise, RATE);
+  assert.ok(result.confidence < 0.3, `noise confidence ${result.confidence} (pulse strength ${result.pulse_strength})`);
+});
+
 test("analysis rejects audio that is too short", () => {
   assert.throws(() => analyzeSamples(new Float32Array(RATE), RATE), /at least 2 s/);
 });

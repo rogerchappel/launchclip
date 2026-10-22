@@ -48,7 +48,9 @@ export function analyzeSamples(samples, sampleRate, { bpmHint = null, beatsPerBa
   const duration = samples.length / sampleRate;
   if (duration < 2) throw new Error(`beat analysis needs at least 2 s of audio; got ${duration.toFixed(2)} s`);
   const { env, low, lowMid, spectra, frameRate, frameOffset } = onsetEnvelope(samples, sampleRate);
-  const smooth = gaussianSmooth(env, Math.max(1, Math.round(0.008 * frameRate)));
+  // Clipped at ten times the mean so one huge onset (the track starting from
+  // silence, a crash) cannot outvote the steady pulse when fitting the grid.
+  const smooth = gaussianSmooth(env.map((value) => Math.min(10, value)), Math.max(1, Math.round(0.008 * frameRate)));
   const coarse = estimateTempo(smooth, frameRate, bpmHint);
   const grid = onBeatNotOffbeat(fitGrid(smooth, frameRate, frameOffset, coarse.period, duration), gaussianSmooth(lowMid, Math.max(1, Math.round(0.008 * frameRate))), frameRate, frameOffset, duration);
   const beats = refineBeats(grid.beats, smooth, frameRate, frameOffset);
@@ -63,6 +65,7 @@ export function analyzeSamples(samples, sampleRate, { bpmHint = null, beatsPerBa
     downbeat_scores: scores.map(round3),
     first_beat: round3(beats[0] ?? 0),
     confidence: round3(grid.confidence),
+    pulse_strength: round3(grid.strength),
     duration: round3(duration),
     method: "spectral-flux onset envelope + autocorrelation comb + global grid fit"
   };
@@ -236,25 +239,30 @@ function fitGrid(env, frameRate, frameOffset, period0, duration) {
   };
   const search = (bpmLow, bpmHigh, bpmStep, phaseStep) => {
     let best = { period: period0, phase: 0, score: -Infinity };
+    let sum = 0, squares = 0, count = 0;
     for (let bpm = bpmLow; bpm <= bpmHigh + 1e-9; bpm += bpmStep) {
       const period = 60 / bpm;
       for (let phase = 0; phase < period; phase += phaseStep) {
         const value = score(period, phase);
+        sum += value; squares += value * value; count += 1;
         if (value > best.score) best = { period, phase, score: value };
       }
     }
-    return best;
+    const mean = sum / count;
+    return { ...best, mean, std: Math.sqrt(Math.max(1e-12, squares / count - mean * mean)) };
   };
   const step = 1 / frameRate;
   const rough = search(bpm0 * 0.96, bpm0 * 1.04, 0.1, step);
   const roughBpm = 60 / rough.period;
   const fine = search(roughBpm - 0.15, roughBpm + 0.15, 0.01, step / 4);
-  // Confidence: the fitted grid against the same period at the off-beat.
-  const offbeat = score(fine.period, (fine.phase + fine.period / 2) % fine.period);
-  const confidence = fine.score > 0 ? Math.max(0, Math.min(1, 1 - offbeat / fine.score)) : 0;
+  // Confidence: how far the best grid stands above every grid tried in the
+  // rough search (a z-score). The best of thousands of grids on noise sits
+  // about 4 standard deviations up; a clear pulse is far beyond that.
+  const strength = (fine.score - rough.mean) / rough.std;
+  const confidence = Math.max(0, Math.min(1, (strength - 4.5) / 4));
   const beats = [];
   for (let t = fine.phase; t < duration - 0.02; t += fine.period) beats.push(t);
-  return { period: fine.period, phase: fine.phase, beats, confidence };
+  return { period: fine.period, phase: fine.phase, beats, confidence, strength };
 }
 
 // The full-band envelope fits hi-hats on the off-beats as well as kicks and
@@ -316,13 +324,16 @@ function chooseDownbeatPhase(beats, period, { low, spectra, frameRate, frameOffs
     if (count) for (let k = 0; k < bands; k += 1) mean[k] /= count;
     return mean;
   };
-  const change = beats.map((t) => {
-    const centre = frameOf(t);
-    const before = meanSpectrum(centre - span * 2, centre);
-    const after = meanSpectrum(centre, centre + span * 2);
+  const distance = (before, after) => {
     let dot = 0, na = 0, nb = 0;
     for (let k = 0; k < before.length; k += 1) { dot += before[k] * after[k]; na += before[k] ** 2; nb += after[k] ** 2; }
     return na > 0 && nb > 0 ? 1 - dot / Math.sqrt(na * nb) : 0;
+  };
+  // Spectral change across the beat, over one- and two-beat windows.
+  const change = beats.map((t) => {
+    const centre = frameOf(t);
+    return distance(meanSpectrum(centre - span, centre), meanSpectrum(centre, centre + span))
+      + distance(meanSpectrum(centre - span * 2, centre), meanSpectrum(centre, centre + span * 2));
   });
   const normalise = (values) => {
     const mean = values.reduce((sum, value) => sum + value, 0) / (values.length || 1);
@@ -339,6 +350,12 @@ function chooseDownbeatPhase(beats, period, { low, spectra, frameRate, frameOffs
     counts[index % beatsPerBar] += 1;
   });
   const averaged = scores.map((score, index) => (counts[index] ? score / counts[index] : 0));
+  // Music almost always starts on the one: favour the phase of the first
+  // clearly audible beat a little, which settles near ties.
+  const sortedLow = [...lowN].sort((a, b) => a - b);
+  const typical = sortedLow[Math.floor(sortedLow.length / 2)] ?? 0;
+  const first = lowN.findIndex((value, index) => value >= Math.max(0.5 * typical, 0.2) || changeN[index] >= 1);
+  if (first >= 0) averaged[first % beatsPerBar] += 0.35;
   let phase = 0;
   for (let p = 1; p < beatsPerBar; p += 1) if (averaged[p] > averaged[phase] + 1e-9) phase = p;
   return { phase, scores: averaged };
