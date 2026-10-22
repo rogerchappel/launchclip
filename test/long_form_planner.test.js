@@ -93,6 +93,24 @@ test("gives each chapter a chapter-local clock and word timings", async () => {
   assert.equal(second.neighbors.previous.start_seconds, undefined);
 });
 
+test("keeps a supplied transcript out of chapter evidence", async () => {
+  const workspace = await tempWorkspace();
+  const { intake, evidence } = context(workspace);
+  evidence.items.push({ id: "transcript", kind: "voiceover-transcript", role: "voiceover", title: "Transcript", content: "One two three four.", provenance: "take", sha256: null, claims_allowed: false, truncated: false, metadata: [] });
+  const transcriptOutline = outline("supplied");
+  for (const chapter of transcriptOutline.chapters) chapter.evidence_ids.push("transcript");
+  const chapterInputs = [];
+  const client = { runStructured: async (request) => {
+    if (request.metadata.job_id === "creative-outline") return response(transcriptOutline);
+    chapterInputs.push(JSON.parse(request.input));
+    return response(chapterPlan(request.metadata.chapter_id, "supplied"));
+  } };
+  const words = [{ word: "One", start: 0, end: 40 }, { word: "two", start: 50, end: 90 }, { word: "three", start: 100, end: 140 }, { word: "four.", start: 150, end: 190 }];
+  await planLongFormProduction(workspace, { intake, evidence, suppliedNarration: { transcript: "One two three four.", words, duration_seconds: 200 }, options: { chapterConcurrency: 2 } }, { client });
+  assert.equal(chapterInputs.length, 2);
+  for (const input of chapterInputs) assert.deepEqual(input.evidence.map((entry) => entry.id), ["ev-1"]);
+});
+
 test("stitches an authoritative supplied transcript exactly across chapter plans", () => {
   const full = "One two three four.";
   const words = [
