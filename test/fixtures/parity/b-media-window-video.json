@@ -46,6 +46,7 @@
   },
   "sceneId": "clip",
   "threshold": {
-    "ssim": 0.95
-  }
+    "ssim": 0.93
+  },
+  "threshold_note": "hyperframes snapshot seeks <video> loosely (up to ~5 frames behind the requested time on this 2 s-GOP clip), while real HyperFrames renders land on the same source frame as Remotion (checked: both show testsrc frame 165 at 5.033 s). The remainder is Chrome upscaling the 320x180 clip differently in each renderer."
 }
