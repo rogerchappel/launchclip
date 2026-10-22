@@ -1,0 +1,355 @@
+{
+  "schema_version": "launchclip.narration.v1",
+  "source": "assets/audio/narration.wav",
+  "voice": "kokoro:af_heart",
+  "speed": 1.2,
+  "duration_seconds": 29.5,
+  "text": "Hot coffee cools fast at first, then it crawls. Why? Your mug starts at ninety degrees in a twenty degree room. That gap is seventy degrees. Newton found the cooling rate tracks the gap. Every ten minutes, the gap halves: seventy, thirty five, seventeen and a half. Big gap, fast cooling. Small gap, slow cooling. It never drops below the room. That's Newton's law of cooling. Watch it again.",
+  "words": [
+    {
+      "text": "Hot",
+      "start": 0.12,
+      "end": 0.476
+    },
+    {
+      "text": "coffee",
+      "start": 0.506,
+      "end": 1.094
+    },
+    {
+      "text": "cools",
+      "start": 1.124,
+      "end": 1.635
+    },
+    {
+      "text": "fast",
+      "start": 1.665,
+      "end": 2.098
+    },
+    {
+      "text": "at",
+      "start": 2.128,
+      "end": 2.407
+    },
+    {
+      "text": "first,",
+      "start": 2.437,
+      "end": 3.03
+    },
+    {
+      "text": "then",
+      "start": 3.21,
+      "end": 3.643
+    },
+    {
+      "text": "it",
+      "start": 3.673,
+      "end": 3.952
+    },
+    {
+      "text": "crawls.",
+      "start": 3.982,
+      "end": 4.652
+    },
+    {
+      "text": "Why?",
+      "start": 4.832,
+      "end": 5.27
+    },
+    {
+      "text": "Your",
+      "start": 5.9,
+      "end": 6.187
+    },
+    {
+      "text": "mug",
+      "start": 6.217,
+      "end": 6.451
+    },
+    {
+      "text": "starts",
+      "start": 6.481,
+      "end": 6.873
+    },
+    {
+      "text": "at",
+      "start": 6.903,
+      "end": 7.084
+    },
+    {
+      "text": "ninety",
+      "start": 7.114,
+      "end": 7.506
+    },
+    {
+      "text": "degrees",
+      "start": 7.536,
+      "end": 7.981
+    },
+    {
+      "text": "in",
+      "start": 8.011,
+      "end": 8.192
+    },
+    {
+      "text": "a",
+      "start": 8.222,
+      "end": 8.351
+    },
+    {
+      "text": "twenty",
+      "start": 8.381,
+      "end": 8.773
+    },
+    {
+      "text": "degree",
+      "start": 8.803,
+      "end": 9.195
+    },
+    {
+      "text": "room.",
+      "start": 9.225,
+      "end": 9.534
+    },
+    {
+      "text": "That",
+      "start": 9.7,
+      "end": 9.987
+    },
+    {
+      "text": "gap",
+      "start": 10.017,
+      "end": 10.251
+    },
+    {
+      "text": "is",
+      "start": 10.281,
+      "end": 10.462
+    },
+    {
+      "text": "seventy",
+      "start": 10.492,
+      "end": 10.937
+    },
+    {
+      "text": "degrees.",
+      "start": 10.967,
+      "end": 11.42
+    },
+    {
+      "text": "Newton",
+      "start": 12.05,
+      "end": 12.438
+    },
+    {
+      "text": "found",
+      "start": 12.468,
+      "end": 12.803
+    },
+    {
+      "text": "the",
+      "start": 12.833,
+      "end": 13.064
+    },
+    {
+      "text": "cooling",
+      "start": 13.094,
+      "end": 13.534
+    },
+    {
+      "text": "rate",
+      "start": 13.564,
+      "end": 13.848
+    },
+    {
+      "text": "tracks",
+      "start": 13.878,
+      "end": 14.265
+    },
+    {
+      "text": "the",
+      "start": 14.295,
+      "end": 14.526
+    },
+    {
+      "text": "gap.",
+      "start": 14.556,
+      "end": 14.828
+    },
+    {
+      "text": "Every",
+      "start": 14.974,
+      "end": 15.31
+    },
+    {
+      "text": "ten",
+      "start": 15.34,
+      "end": 15.571
+    },
+    {
+      "text": "minutes,",
+      "start": 15.601,
+      "end": 16.047
+    },
+    {
+      "text": "the",
+      "start": 16.227,
+      "end": 16.458
+    },
+    {
+      "text": "gap",
+      "start": 16.488,
+      "end": 16.719
+    },
+    {
+      "text": "halves:",
+      "start": 16.749,
+      "end": 17.144
+    },
+    {
+      "text": "seventy,",
+      "start": 17.324,
+      "end": 17.77
+    },
+    {
+      "text": "thirty",
+      "start": 17.95,
+      "end": 18.338
+    },
+    {
+      "text": "five,",
+      "start": 18.368,
+      "end": 18.673
+    },
+    {
+      "text": "seventeen",
+      "start": 18.838,
+      "end": 19.382
+    },
+    {
+      "text": "and",
+      "start": 19.412,
+      "end": 19.643
+    },
+    {
+      "text": "a",
+      "start": 19.673,
+      "end": 19.8
+    },
+    {
+      "text": "half.",
+      "start": 19.83,
+      "end": 20.136
+    },
+    {
+      "text": "Big",
+      "start": 20.75,
+      "end": 20.931
+    },
+    {
+      "text": "gap,",
+      "start": 20.961,
+      "end": 21.181
+    },
+    {
+      "text": "fast",
+      "start": 21.299,
+      "end": 21.522
+    },
+    {
+      "text": "cooling.",
+      "start": 21.552,
+      "end": 21.882
+    },
+    {
+      "text": "Small",
+      "start": 22.059,
+      "end": 22.325
+    },
+    {
+      "text": "gap,",
+      "start": 22.355,
+      "end": 22.574
+    },
+    {
+      "text": "slow",
+      "start": 22.693,
+      "end": 22.916
+    },
+    {
+      "text": "cooling.",
+      "start": 22.946,
+      "end": 23.276
+    },
+    {
+      "text": "It",
+      "start": 23.453,
+      "end": 23.592
+    },
+    {
+      "text": "never",
+      "start": 23.622,
+      "end": 23.887
+    },
+    {
+      "text": "drops",
+      "start": 23.917,
+      "end": 24.183
+    },
+    {
+      "text": "below",
+      "start": 24.213,
+      "end": 24.479
+    },
+    {
+      "text": "the",
+      "start": 24.509,
+      "end": 24.69
+    },
+    {
+      "text": "room.",
+      "start": 24.72,
+      "end": 24.967
+    },
+    {
+      "text": "That's",
+      "start": 25.55,
+      "end": 25.948
+    },
+    {
+      "text": "Newton's",
+      "start": 25.978,
+      "end": 26.499
+    },
+    {
+      "text": "law",
+      "start": 26.529,
+      "end": 26.805
+    },
+    {
+      "text": "of",
+      "start": 26.835,
+      "end": 27.05
+    },
+    {
+      "text": "cooling.",
+      "start": 27.08,
+      "end": 27.635
+    },
+    {
+      "text": "Watch",
+      "start": 27.815,
+      "end": 28.213
+    },
+    {
+      "text": "it",
+      "start": 28.243,
+      "end": 28.458
+    },
+    {
+      "text": "again.",
+      "start": 28.488,
+      "end": 28.92
+    }
+  ]
+}

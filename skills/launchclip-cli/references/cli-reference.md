@@ -16,6 +16,7 @@ the current workflow and the decisions an operating agent must not guess.
 - [Studio review](#studio-review)
 - [Final render](#final-render)
 - [Local-first OSS packet lane](#local-first-oss-packet-lane)
+- [Storyboard (story.json)](#storyboard-storyjson)
 - [Failure handling](#failure-handling)
 
 ## Runtime and credentials
@@ -468,6 +469,31 @@ launchclip review .launchclip/my-oss-tool
 Local render options include `remotion`, `hyperframes`, and `local-ffmpeg`.
 Keep product-videogen and Review Feed operations in `--dry-run` unless the user
 explicitly authorizes a supported live integration.
+
+## Storyboard (story.json)
+
+`story.json` (`launchclip.story.v1`) is the renderer-agnostic storyboard. Check
+it and resolve its time anchors before compiling or rendering:
+
+```bash
+launchclip story validate story.json [--narration NARRATION.json] [--beats BEATS.json] [--out report.json]
+launchclip story resolve story.json [--narration NARRATION.json] [--beats BEATS.json] [--out .launchclip/story.resolved.json]
+```
+
+`validate` reports every error with its path (for example `scenes[2].in.type`)
+and exits successfully with `status: "failed"` when the story is invalid; read
+the status, not the exit code. When narration or beats are available it also
+resolves the anchors and prints the derived transition boundaries. `resolve`
+fails on an invalid story or an unknown anchor, and writes the resolved copy
+(anchors replaced by seconds, scenes sorted by start, plus `resolved`) to
+`--out`. Without `--narration`, `audio.words` is read relative to the story
+file when it exists.
+
+Anchors are seconds, `word:<text>[#n]` (case-insensitive, punctuation ignored;
+`word:thirty-five` also matches "thirty" "five"; `#n` is the 1-based
+occurrence), `beat:<n>` or `downbeat:<n>` (0-based, from `BEATS.json`), each
+with an optional offset such as `word:fast+0.1`. A golden example lives in
+`examples/story/cooling.story.json`.
 
 ## Failure handling
 
