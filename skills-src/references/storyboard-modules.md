@@ -367,8 +367,8 @@ End card: big action line, optional detail, and a handle/URL pill with a pulsing
 params:
 - action: string, required, max 40 — e.g. "Follow for part two"
 - emphasis: string, max 30 — whole words of the action to colour
-- detail: string, max 60
-- handle: string, max 32 — @handle or URL, no spaces
+- detail: string, max 80 — two lines at most; shrinks to the 44 px floor, and a long URL may wrap after "/"
+- handle: string, max 64 — @handle or URL, no spaces (fits github.com/<owner>/<repo>; the pill shrinks to the 44 px floor before failing)
 - icon: string, one of "arrow" | "plus" | "loop" | "bell" | "none", default "arrow (loop when loop is true)"
 - loop: boolean, default false
 - color: string, one of "primary" | "accent", default "primary" — brand colour role for emphasis

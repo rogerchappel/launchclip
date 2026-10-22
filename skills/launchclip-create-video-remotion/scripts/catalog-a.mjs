@@ -216,11 +216,11 @@ export function textWidth(value, size, kind = 'body', tracking = 0) {
  * an array of token arrays, or null when a token alone is too wide or the
  * tokens need more lines.
  */
-function balance(tokens, maxWidth, lines, measure) {
+function balance(tokens, maxWidth, lines, measure, join = list => list.join(' ')) {
   const n = tokens.length;
   if (lines > n) return null;
-  const width = (i, j) => measure(tokens.slice(i, j).join(' '));
-  for (const token of tokens) if (measure(token) > maxWidth) return null;
+  const width = (i, j) => measure(join(tokens.slice(i, j)));
+  for (const token of tokens) if (measure(join([token])) > maxWidth) return null;
   // cost[l][j]: smallest possible widest line for tokens[0..j) in exactly l lines.
   const cost = Array.from({length: lines + 1}, () => new Array(n + 1).fill(Infinity));
   const cut = Array.from({length: lines + 1}, () => new Array(n + 1).fill(-1));
@@ -245,12 +245,12 @@ function balance(tokens, maxWidth, lines, measure) {
  * 6% penalty per extra line, so "HOT COFFEE / COOLS FAST" beats one word per
  * line at a hair larger size.
  */
-function fitLines(tokens, {kind, maxWidth, maxLines, maxSize, minSize, lineHeight, maxHeight, tracking = 0}) {
+function fitLines(tokens, {kind, maxWidth, maxLines, maxSize, minSize, lineHeight, maxHeight, tracking = 0, join}) {
   let best = null;
   for (let count = 1; count <= Math.min(maxLines, tokens.length); count++) {
     for (let size = Math.floor(maxSize); size >= minSize; size -= 2) {
       if (count * size * lineHeight > maxHeight) continue;
-      const lines = balance(tokens, maxWidth, count, value => textWidth(value, size, kind, tracking));
+      const lines = balance(tokens, maxWidth, count, value => textWidth(value, size, kind, tracking), join);
       if (!lines) continue;
       const score = size * (1 - .06 * (count - 1));
       if (!best || score > best.score + 1e-9) best = {size, lines, score};
@@ -992,6 +992,30 @@ function resolveEquationLockup(params, ctx) {
 // ---------------------------------------------------------------------------
 // cta
 
+// Handle and detail limits: long enough for a repo URL such as
+// github.com/<owner>/<repository>; the pill and the detail lines shrink to the
+// key-text floor before a long one is rejected.
+export const CTA_HANDLE_MAX = 64;
+export const CTA_DETAIL_MAX = 80;
+
+// Word tokens with long URL-like words split after "/" (and before the next
+// segment), so a URL can wrap across the two detail lines. A piece that
+// continues the previous word starts with WORD_JOINER and is joined without
+// a space.
+const WORD_JOINER = '\u2060';
+function breakableTokens(words) {
+  const out = [];
+  for (const word of words) {
+    if (word.length < 16 || !/[/]/.test(word)) { out.push(word); continue; }
+    const pieces = word.split(/(?<=\/)/).filter(Boolean);
+    pieces.forEach((piece, index) => out.push(index ? WORD_JOINER + piece : piece));
+  }
+  return out;
+}
+function joinBroken(list) {
+  return list.map((token, index) => (token.startsWith(WORD_JOINER) ? token.slice(1) : `${index ? ' ' : ''}${token}`)).join('');
+}
+
 // 24×24 stroke icons, drawn with stroke="currentColor".
 export const CTA_ICONS = Object.freeze({
   arrow: '<path d="M4 12h15"/><path d="m13 5 7 7-7 7"/>',
@@ -1005,9 +1029,9 @@ function resolveCta(params, ctx) {
   fields(params, 'params', ['action', 'emphasis', 'detail', 'handle', 'icon', 'loop', 'color', 'rect'], ['action']);
   if (d < 2) throw new Error('cta needs a scene of at least 2 s');
   const action = text(params.action, 'params.action', 40);
-  const detail = optional(params.detail, null, value => text(value, 'params.detail', 60));
+  const detail = optional(params.detail, null, value => text(value, 'params.detail', CTA_DETAIL_MAX));
   const handle = optional(params.handle, null, value => {
-    const clean = text(value, 'params.handle', 32);
+    const clean = text(value, 'params.handle', CTA_HANDLE_MAX);
     if (/\s/.test(clean)) throw new Error('params.handle must be one handle or URL without spaces');
     return clean;
   });
@@ -1023,12 +1047,36 @@ function resolveCta(params, ctx) {
   const st = stage(ctx, {captions: false});
   const k = st.k, rect = params.rect === undefined ? null : rectParam(params.rect, st, 'params.rect');
   const area = rect ?? st.zone;
-  const detailSize = Math.round(52 * k), handleSize = Math.round(50 * k), iconSize = Math.round(50 * k);
-  const pillPadY = 26 * k, pillPadX = 46 * k, pillGap = 64 * k, detailGap = 30 * k;
-  const pillWidth = handle ? textWidth(handle, handleSize, fk.meta) + pillPadX * 2 + (icon !== 'none' ? iconSize + 20 * k : 0) : 0;
-  if (pillWidth > area.width) throw new Error(`params.handle '${handle}' needs ${Math.ceil(pillWidth)} px; the pill fits ${Math.floor(area.width)} px at this size: shorten it${/^(https?:\/\/)?(www\.)?github\.com\//i.test(handle) ? ", or drop the 'github.com/' prefix" : /^https?:\/\//i.test(handle) ? ", or drop the 'https://' prefix" : ''}${icon !== 'none' ? ", or set icon: 'none'" : ''}`);
-  const detailFit = detail ? fitLines(splitWords(detail).map(word => word.text), {kind: fk.body, maxWidth: area.width * .86, maxLines: 2, maxSize: detailSize, minSize: detailSize, lineHeight: 1.25, maxHeight: detailSize * 2.6}) : null;
-  if (detail && !detailFit) throw new Error('params.detail is too long for two lines; shorten it');
+  // Handle pill: 50 px type (at 1080), shrinking in 2 px steps to the 44 px
+  // key-text floor before the handle is rejected; padding, icon and gap shrink
+  // with it. The detail line keeps 52 px when its words fit two lines, else
+  // shrinks to the floor, then lets a long URL break after "/" or ".".
+  const baseHandle = Math.round(50 * k), minKey = Math.ceil(st.minText - .01);
+  const pill = size => {
+    const r = size / baseHandle, iconPx = Math.round(50 * k * r);
+    const padX = 46 * k * r, gap = 20 * k * r;
+    return {size, iconSize: iconPx, pillPadY: 26 * k * r, pillPadX: padX, iconGap: gap, width: textWidth(handle, size, fk.meta) + padX * 2 + (icon !== 'none' ? iconPx + gap : 0)};
+  };
+  let handleFit = handle ? pill(baseHandle) : null;
+  for (let size = baseHandle - 2; handle && handleFit.width > area.width && size >= minKey; size -= 2) handleFit = pill(size);
+  if (handle && handleFit.width > area.width) throw new Error(`params.handle '${handle}' needs ${Math.ceil(handleFit.width)} px even at the ${minKey} px text floor; the pill fits ${Math.floor(area.width)} px: shorten it${/^(https?:\/\/)?(www\.)?github\.com\//i.test(handle) ? ", or drop the 'github.com/' prefix" : /^https?:\/\//i.test(handle) ? ", or drop the 'https://' prefix" : ''}${icon !== 'none' ? ", or set icon: 'none'" : ''}`);
+  const handleSize = handleFit ? handleFit.size : baseHandle, iconSize = handleFit ? handleFit.iconSize : Math.round(50 * k);
+  const pillPadY = handleFit ? handleFit.pillPadY : 26 * k, pillPadX = handleFit ? handleFit.pillPadX : 46 * k, iconGap = handleFit ? handleFit.iconGap : 20 * k;
+  const pillGap = 64 * k, detailGap = 30 * k;
+  const baseDetail = Math.round(52 * k);
+  const detailOptions = size => ({kind: fk.body, maxWidth: area.width * .86, maxLines: 2, maxSize: size, minSize: size, lineHeight: 1.25, maxHeight: size * 2.6});
+  let detailFit = null, detailSize = baseDetail;
+  if (detail) {
+    const words = splitWords(detail).map(word => word.text), broken = breakableTokens(words);
+    const attempts = [];
+    for (let size = baseDetail; size >= minKey; size -= 2) attempts.push([words, size, undefined]);
+    if (broken.length > words.length) for (let size = baseDetail; size >= minKey; size -= 2) attempts.push([broken, size, joinBroken]);
+    for (const [tokens, size, join] of attempts) {
+      const fit = fitLines(tokens, {...detailOptions(size), join});
+      if (fit) { detailFit = {lines: fit.lines.map(line => (join ?? (list => list.join(' ')))(line))}; detailSize = size; break; }
+    }
+  }
+  if (detail && !detailFit) throw new Error(`params.detail is too long for two lines even at the ${minKey} px text floor; shorten it`);
   const chrome = (detail ? detailGap + detailFit.lines.length * detailSize * 1.25 : 0) + (handle ? pillGap + handleSize * 1.2 + pillPadY * 2 : 0);
   const lineHeight = .95;
   const fit = fitLines(tokens.map(token => token.text.toUpperCase()), {kind: fk.display, maxWidth: area.width * .92, maxLines: 4, maxSize: (st.portrait ? 168 : 140) * k, minSize: 72 * k, lineHeight, maxHeight: area.height - chrome});
@@ -1087,7 +1135,7 @@ function resolveCta(params, ctx) {
     detail: {position: 'relative', marginTop: px(detailGap), fontFamily: fonts.body, fontSize: px(detailSize), lineHeight: '1.25', color: theme.muted, fontWeight: '500'},
     pill: {position: 'relative', display: 'inline-flex', marginTop: px(pillGap), transformOrigin: '50% 50%'},
     ring: {position: 'absolute', left: '0', top: '0', right: '0', bottom: '0', borderRadius: px(999), border: `${px(4 * k)} solid ${theme.emphasis}`, transformOrigin: '50% 50%'},
-    'pill-body': {position: 'relative', display: 'inline-flex', alignItems: 'center', gap: px(20 * k), padding: `${px(pillPadY)} ${px(pillPadX)}`, borderRadius: px(999), background: theme.emphasis, color: theme.ink, fontFamily: fonts.meta, fontSize: px(handleSize), lineHeight: '1.2', fontWeight: '700', whiteSpace: 'nowrap', boxShadow: `0 ${px(20 * k)} ${px(60 * k)} ${alpha(theme.emphasis, .35)}`},
+    'pill-body': {position: 'relative', display: 'inline-flex', alignItems: 'center', gap: px(iconGap), padding: `${px(pillPadY)} ${px(pillPadX)}`, borderRadius: px(999), background: theme.emphasis, color: theme.ink, fontFamily: fonts.meta, fontSize: px(handleSize), lineHeight: '1.2', fontWeight: '700', whiteSpace: 'nowrap', boxShadow: `0 ${px(20 * k)} ${px(60 * k)} ${alpha(theme.emphasis, .35)}`},
     icon: {display: 'block', width: px(iconSize), height: px(iconSize), flex: 'none', transformOrigin: '50% 50%'}
   };
   for (const line of lines) styles[`line-${line.index}`] = {display: 'block', whiteSpace: 'nowrap'};
@@ -1095,7 +1143,7 @@ function resolveCta(params, ctx) {
   if (detailFit) detailFit.lines.forEach((_, index) => { styles[`detail-line-${index}`] = {display: 'block'}; });
   return assemble({module: 'cta', ctx, base, st, rect: box, theme, contrast, fonts, hidesCaptions: true,
     motion: {enterEnd: handle ? Math.max(actionSettle, pillTime + .5) : actionSettle, enterFrom: {opacity: 0, y: round(size * .5)}, enterEase: 'expo.out', ...exit},
-    content: {action, emphasis: emphasisText, detail, detailLines: detailFit ? detailFit.lines.map(line => line.join(' ')) : [], handle, icon: handle ? icon : 'none', iconPaths: handle && icon !== 'none' ? CTA_ICONS[icon] : null, loop, size, lineHeight, lines,
+    content: {action, emphasis: emphasisText, detail, detailLines: detailFit ? detailFit.lines : [], handle, icon: handle ? icon : 'none', iconPaths: handle && icon !== 'none' ? CTA_ICONS[icon] : null, loop, size, lineHeight, lines,
       pillTime: pillTime === null ? null : T(pillTime), pulses, keyTextPx: [size, ...(detail ? [detailSize] : []), ...(handle ? [handleSize] : [])]},
     styles, anim, events});
 }
@@ -1165,7 +1213,7 @@ export const MODULES = {
     params: {
       action: {type: 'string', max: 40, required: true, description: 'e.g. "Follow for part two"'},
       emphasis: {type: 'string', max: 30, description: 'whole words of the action to colour'},
-      detail: {type: 'string', max: 60}, handle: {type: 'string', max: 32, description: '@handle or URL, no spaces'},
+      detail: {type: 'string', max: 80, description: 'two lines at most; shrinks to the 44 px floor, and a long URL may wrap after "/"'}, handle: {type: 'string', max: 64, description: '@handle or URL, no spaces (fits github.com/<owner>/<repo>; the pill shrinks to the 44 px floor before failing)'},
       icon: {type: 'string', enum: ['arrow', 'plus', 'loop', 'bell', 'none'], default: 'arrow (loop when loop is true)'},
       loop: {type: 'boolean', default: false}, color: COLOR, rect: RECT
     },

@@ -585,6 +585,33 @@ test("cta validates its params and the pill contrast", () => {
   assert.ok(resolve("cta", { action: "Follow" }, { brand: { colors: { ...BRAND.colors, ink: "#ffffff" } } }), "no pill, no ink check");
 });
 
+test("cta fits repo URLs: a 64-character handle limit, and the pill and detail shrink to the 44 px floor before failing", () => {
+  const repo = "github.com/rogerchappel/launchclip";
+  // Landscape: the full repo URL fits at the default 50 px.
+  const wide = resolve("cta", { action: "Star it on GitHub", handle: repo, detail: `Open source: ${repo}` }, { format: LANDSCAPE, aspect: "16:9" });
+  assert.equal(wide.content.handle, repo);
+  assert.equal(wide.styles["pill-body"].fontSize, "50px");
+  assert.equal(wide.styles.detail.fontSize, "52px");
+  assert.deepEqual(wide.content.detailLines, [`Open source: ${repo}`]);
+  // Portrait: the detail that failed in the blind test ("too long for two lines") now resolves
+  // at the floor or above, wrapping the URL after a slash when words alone cannot fit.
+  const tall = resolve("cta", { action: "Star it on GitHub", detail: `Open source: ${repo}`, handle: "rogerchappel/launchclip" });
+  assert.ok(tall.content.detailLines.length <= 2);
+  assert.equal(tall.content.detailLines.join(" ").replace(/\/ /g, "/"), `Open source: ${repo}`.replace(/\/ /g, "/"));
+  assert.ok(Math.min(...tall.content.keyTextPx) >= 44, `key text ${tall.content.keyTextPx}`);
+  // A handle a little too wide at 50 px shrinks instead of failing.
+  const shrunk = resolve("cta", { action: "Star it", handle: "rogerchappel/launchclip-cli", icon: "none" });
+  assert.ok(Number.parseFloat(shrunk.styles["pill-body"].fontSize) < 50 && Number.parseFloat(shrunk.styles["pill-body"].fontSize) >= 44);
+  // The default sample is untouched (50 px pill, 52 px detail).
+  const sample = resolve("cta", CTA);
+  assert.equal(sample.styles["pill-body"].fontSize, "50px");
+  assert.equal(sample.styles["pill-body"].gap, "20px");
+  assert.equal(sample.styles.detail.fontSize, "52px");
+  // Past the floor it still fails, naming the floor and the github.com/ hint.
+  assert.throws(() => resolve("cta", { action: "Star it", handle: repo }), /needs \d+ px even at the 44 px text floor.*drop the 'github\.com\/' prefix/);
+  assert.throws(() => resolve("cta", { action: "Star it", handle: `https://${"x".repeat(60)}` }), /params\.handle must be a string of 1–64 characters/);
+});
+
 test("cta parity fixture resolves", async () => {
   await checkFixture("a-cat-cta.json");
 });
