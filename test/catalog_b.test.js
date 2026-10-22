@@ -331,3 +331,57 @@ test('function-chart: emitter output is seek-safe and matches the Remotion evalu
 test('function-chart: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not installed'}, () => {
   assert.ok(remotionStill('function-chart', 16) > 20000);
 });
+
+// ---------------------------------------------------------------------------
+// gauge-compare
+
+test('gauge-compare: the golden cooling story params resolve, with an addressable gap bracket', () => {
+  const story = JSON.parse(readFileSync(join(ROOT, 'examples/story/cooling.story.json'), 'utf8'));
+  const scene = story.scenes.find(entry => entry.module === 'gauge-compare');
+  const model = resolveScene(story, scene);
+  assertModelContract(model, 'gauge-compare');
+  const c = model.content;
+  assert.deepEqual(c.scale, {min: 0, max: 100});
+  assert.deepEqual(c.gauges.map(g => [g.label, g.text, g.color]), [['Mug', '90°C', '#fdb022'], ['Room', '20°C', '#46d4ff']]);
+  assert.deepEqual(model.events.map(e => e.name), ['enter', 'left-fill', 'right-fill', 'gap-bracket']);
+  const object = model.objects['gap-bracket'];
+  assert.deepEqual(object.rect, c.bracket.rectCanvas);
+  const r = object.rect;
+  assert.ok(r.x >= model.rect.x && r.y >= model.rect.y && r.x + r.width <= model.rect.x + model.rect.width && r.y + r.height <= model.rect.y + model.rect.height);
+  assert.equal(model.events.at(-1).object, 'gap-bracket');
+  assert.equal(c.bracket.text, '70°C');
+  // Count-up samples land on the final readout.
+  for (const g of c.gauges) {
+    assert.equal(g.samples.at(-1).text, g.text);
+    assert.equal(g.initialText, '0°C');
+    assert.ok(g.fill.scaleTo > g.fill.scaleFrom);
+  }
+});
+
+test('gauge-compare: fixture hits time the fills; strict validation', () => {
+  const {model} = loadFixture('gauge-compare');
+  assertModelContract(model, 'gauge-compare');
+  assert.deepEqual(model.events.slice(1).map(e => e.time), [6.4, 7.9, 9.6]);
+  const resolve = MODULES['gauge-compare'].resolve;
+  const params = {left: {label: 'Mug', value: 90, unit: '°C'}, right: {label: 'Room', value: 20, unit: '°C'}};
+  assert.throws(() => resolve({...params, gap: {value: 60}}, ctx()), /params\.gap\.value is 60 but \|left\.value − right\.value\| is 70/);
+  assert.throws(() => resolve({...params, right: {label: 'Room', value: 20, unit: 'K'}}, ctx()), /params\.right\.unit must match params\.left\.unit/);
+  assert.throws(() => resolve({...params, gap: {object: 'Gap Bracket'}}, ctx()), /params\.gap\.object must be a lowercase object name/);
+  assert.throws(() => resolve({...params, left: {...params.left, colour: 'primary'}}, ctx()), /params\.left\.colour is not supported/);
+  assert.throws(() => resolve({...params, left: {...params.left, label: 'An extremely long gauge label'}}, ctx()), /params\.left\.label must be a string of 1–16 characters/);
+  assert.throws(() => resolve({...params, gap: {at: 0.6}}, ctx()), /params\.gap\.at must come at least 0\.35 s after both gauges/);
+  assert.throws(() => resolve({left: params.left}, ctx()), /params\.right is required/);
+  const column = resolve({...params, style: 'column', gap: false, title: 'Then vs now'}, ctx());
+  assert.equal(column.content.bracket, null);
+  assert.deepEqual(column.objects, {});
+});
+
+test('gauge-compare: emitter output is seek-safe and matches the Remotion evaluator', () => {
+  const {model} = loadFixture('gauge-compare');
+  assertEmitter(model);
+  assert.match(EMITTERS['gauge-compare'](model).html, /id="s2-gap-bracket"/);
+});
+
+test('gauge-compare: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not installed'}, () => {
+  assert.ok(remotionStill('gauge-compare', 10.2) > 20000);
+});

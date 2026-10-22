@@ -73,5 +73,6 @@ export function emitCatalogB(model) {
 }
 
 export const EMITTERS = {
+  'gauge-compare': emitCatalogB,
   'function-chart': emitCatalogB,
 };
