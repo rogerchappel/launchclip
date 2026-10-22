@@ -11,7 +11,7 @@
 // Plain ESM; imports only sibling kit/core files. Canonical copy:
 // kit/core/planning-prompt.mjs.
 
-import { STORY_SCHEMA, STORY_LANES, STORY_TRANSITIONS, STORY_CAPTION_STYLES } from './story.mjs';
+import { STORY_SCHEMA, STORY_LANES, STORY_TRANSITIONS, STORY_CAPTION_STYLES, STORY_AMBIENT_LEVELS } from './story.mjs';
 import { knownModules, catalogModules, isEditorialKind } from './modules.mjs';
 import { SAFE_ZONE_PROFILES } from './layout-check.mjs';
 
@@ -226,10 +226,21 @@ function contractLines() {
     `schema: "${STORY_SCHEMA}" (exactly). lane: one of ${STORY_LANES.join(', ')} (given; never change it).`,
     'format: {width, height, fps, duration, platform?} and brand: {colors, fonts} are given; copy them unchanged.',
     'audio: {voice?, words?, music?, sfx?}; base: null, or the recording path for footage-led.',
-    `scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: ${STORY_TRANSITIONS.join(' | ')}, dur, direction?, from_object?}, params, hits?}].`,
+    `scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: ${STORY_TRANSITIONS.join(' | ')}, dur, direction?, from_object?}, params, hits?, ambient?}].`,
     'in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus.',
     'overlays: [captions]. ending: {loop_to: "<first scene id>"} for a seamless loop (Shorts).',
+    ...ambientLines(),
     'Vary the modules: a 20–40 s piece uses at least four different modules and never the same module three times in a row.'
+  ];
+}
+
+// Ambient motion (kit/core/ambient.mjs): what the planner may set and what
+// the default already does.
+function ambientLines() {
+  return [
+    `ambient? (optional): {level: ${STORY_AMBIENT_LEVELS.join(' | ')}, background?: boolean, drift?: boolean}, or just the level. Ambient motion keeps settled frames alive between beats: a slow push-in on each settled module (kept inside the safe zone) and soft brand-colour light drifting behind the plates.`,
+    'Usually leave ambient out: the level follows each scene\'s energy (0 → subtle, 1, 2 or "build" → standard, 3 → lively), and footage-led stories get no background field and drift overlays only. Set story ambient only to change the whole piece (for example "subtle" for a calm brand film); "off" makes settled frames hold still and fails the cinematic motion gate.',
+    'A scene may set ambient to override the story: "off" for one deliberately still beat, {"drift": false} when the module\'s own motion should stand alone, or a level.'
   ];
 }
 
