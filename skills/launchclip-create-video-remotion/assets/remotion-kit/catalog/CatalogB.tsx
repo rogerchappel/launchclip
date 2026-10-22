@@ -1,12 +1,13 @@
 // Shared Remotion renderer for catalogue B modules.
 //
-// Frame-pure: the component reads only useCurrentFrame()/fps and the model.
+// Frame-pure: the component reads only the scene clock (useSceneTime) and the model.
 // The element tree is the same one the HyperFrames emitter serialises
 // (kit/core/catalog-b-view.mjs); per-frame values come from the same op list,
 // evaluated with kit/core/motion.mjs eases by frameState(). Nothing is cached
 // between frames, so any frame can render in any order.
 import React, {useMemo} from 'react';
-import {AbsoluteFill, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
+import {AbsoluteFill, staticFile} from 'remotion';
+import {useSceneTime} from '../clock';
 // @ts-ignore plain ESM core module
 import {catalogBView, catalogBTimeline} from '../../core/catalog-b.mjs';
 // @ts-ignore plain ESM core module
@@ -27,9 +28,7 @@ function renderNode(node: ViewNode | string, state: Map<string, FrameProps>, key
 }
 
 export const CatalogBModule: React.FC<{model: any}> = ({model}) => {
-  const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const t = model.start + frame / fps;
+  const t = useSceneTime(model.start);
   const view = useMemo(() => catalogBView(model) as ViewNode, [model]);
   const ops = useMemo(() => catalogBTimeline(model), [model]);
   const state = frameState(ops, t) as Map<string, FrameProps>;

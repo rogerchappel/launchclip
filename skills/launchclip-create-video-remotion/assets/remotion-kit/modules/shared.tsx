@@ -8,7 +8,8 @@
 //
 // Contract: docs/KIT_CONTRACTS.md, "Editorial core" and "Wave 2".
 import React from 'react';
-import {AbsoluteFill, useCurrentFrame, useVideoConfig} from 'remotion';
+import {AbsoluteFill} from 'remotion';
+import {useSceneTime} from '../clock';
 // @ts-ignore plain ESM core shared with HyperFrames
 import {tween} from '../../core/motion.mjs';
 // @ts-ignore plain ESM core shared with HyperFrames
@@ -21,11 +22,9 @@ export const S = EDITORIAL_STYLE;
 export const C = S.color, R = S.radius, F = S.font, G = S.glass, SH = S.shadow, A = S.accentAlpha;
 export const DEFAULT_EASE = 'power1.out';
 
-/** Absolute timeline seconds for the current frame (module sits in a Sequence from round(start*fps)). */
+/** Absolute timeline seconds for the current frame (kit/remotion/clock.tsx). */
 export function useModuleTime(model: Model): number {
-  const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  return model.start + frame / fps;
+  return useSceneTime(model.start);
 }
 
 // ---------------------------------------------------------------------------
