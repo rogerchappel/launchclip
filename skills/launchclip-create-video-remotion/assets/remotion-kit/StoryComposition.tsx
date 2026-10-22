@@ -24,7 +24,7 @@ import { layerStateAt, layerStyle, sceneWindows } from "../core/transitions.mjs"
 // @ts-ignore plain ESM from kit/core
 import { getEase } from "../core/motion.mjs";
 // @ts-ignore plain ESM from kit/core
-import { CAPTION_DEFAULT_COLORS, captionChunksFrom, chunkWords, narrationWords } from "../core/captions.mjs";
+import { captionChunksFrom, captionsOverlayOf, chunkWords, narrationWords } from "../core/captions.mjs";
 // @ts-ignore plain ESM from kit/core
 import { storyBase } from "../core/story.mjs";
 import { moduleComponent } from "./modules";
@@ -120,7 +120,7 @@ export const BaseLayer: React.FC<{ base: any; cameraOps: any[]; offset?: number;
 };
 
 function captionOverlay(story: any) {
-  return (Array.isArray(story.overlays) ? story.overlays : []).find((overlay: any) => overlay?.type === "captions" && overlay.style !== "none") ?? null;
+  return captionsOverlayOf(story);
 }
 
 export const StoryComposition: React.FC<StoryProps> = (props) => {
@@ -159,7 +159,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
         </Sequence>
       ) : null}
       {overlay && Array.isArray(__captions) && __captions.length ? (
-        <WordCaptions chunks={__captions} hide={hide} idle={colors.paper ?? CAPTION_DEFAULT_COLORS.idle} active={colors.primary ?? CAPTION_DEFAULT_COLORS.active} fontFamily={fonts.display} />
+        <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} />
       ) : null}
       {audio ? <Audio src={staticFile(audio)} volume={mixVolume} /> : null}
     </AbsoluteFill>

@@ -53,3 +53,4 @@ qa/renderer-eval/
 
 # Voice provider QA samples
 qa/voice/
+qa/style/
