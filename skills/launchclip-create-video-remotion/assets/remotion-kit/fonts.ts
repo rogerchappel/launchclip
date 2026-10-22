@@ -7,7 +7,7 @@
 // families listed here, each as its own chunk. Add a family by adding a line.
 import { continueRender, delayRender } from "remotion";
 // @ts-ignore plain ESM from kit/core
-import { brandFontStacks, googleFontModuleName } from "../core/fonts.mjs";
+import { brandFontStacks, googleFontModuleName, moduleFontFaces } from "../core/fonts.mjs";
 
 type GoogleFontModule = {
   getInfo: () => { fontFamily: string; fonts: Record<string, Record<string, Record<string, string>>> };
@@ -63,25 +63,35 @@ export function supportedGoogleFont(family: string): boolean {
 /** Starts loading every brand family once; rendering waits through delayRender. */
 export function ensureBrandFonts(brand: any): { display: string; body: string; meta: string; families: string[] } {
   const stacks = brandFontStacks(brand);
-  for (const family of stacks.families as string[]) {
-    if (started.has(family)) continue;
+  for (const family of stacks.families as string[]) ensureFamily(family, ["normal"]);
+  return stacks;
+}
+
+/** Loads the module faces a story needs (kit/core/fonts.mjs MODULE_FONTS), e.g. archive-card's italic serif. */
+export function ensureModuleFonts(story: any): void {
+  for (const face of moduleFontFaces(story) as Array<{ family: string; styles: string[] }>) ensureFamily(face.family, face.styles);
+}
+
+function ensureFamily(family: string, styles: string[]): void {
+  for (const style of styles) {
+    const key = style === "normal" ? family : `${family}:${style}`;
+    if (started.has(key)) continue;
     const loader = LOADERS[googleFontModuleName(family)];
     if (!loader) {
-      started.set(family, Promise.resolve());
+      started.set(key, Promise.resolve());
       console.warn(`[launchclip] font "${family}" is not in kit/remotion/fonts.ts; using its fallback stack. Add it there, or freeze it under assets/fonts/ and load it in a custom entry.`);
       continue;
     }
-    const handle = delayRender(`Loading brand font ${family}`, { timeoutInMilliseconds: 60000 });
+    const handle = delayRender(`Loading font ${key}`, { timeoutInMilliseconds: 60000 });
     const promise = loader()
       .then((module) => {
         const info = module.getInfo();
-        const weights = Object.keys(info.fonts.normal ?? {});
-        const subsets = Object.keys(info.fonts.normal?.[weights[0]] ?? {});
-        return module.loadFont("normal", { weights, subsets: subsets.includes("latin") ? ["latin"] : subsets.slice(0, 1) }).waitUntilDone();
+        const weights = Object.keys(info.fonts[style] ?? {});
+        const subsets = Object.keys(info.fonts[style]?.[weights[0]] ?? {});
+        return module.loadFont(style, { weights, subsets: subsets.includes("latin") ? ["latin"] : subsets.slice(0, 1) }).waitUntilDone();
       })
-      .catch((error) => console.warn(`[launchclip] font "${family}" failed to load: ${error?.message ?? error}`))
+      .catch((error) => console.warn(`[launchclip] font "${key}" failed to load: ${error?.message ?? error}`))
       .finally(() => continueRender(handle));
-    started.set(family, promise);
+    started.set(key, promise);
   }
-  return stacks;
 }

@@ -22,7 +22,7 @@ import { deriveBoundaries, validateStory } from '../core/story.mjs';
 import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from '../core/modules.mjs';
 import { gsapVars, sceneWindows } from '../core/transitions.mjs';
 import { captionCss, CAPTION_DEFAULT_COLORS, captionChunksFrom, captionRuntime, chunkWords, narrationWords } from '../core/captions.mjs';
-import { brandFontStacks, fontSlug, googleFontModuleName } from '../core/fonts.mjs';
+import { brandFontStacks, fontSlug, googleFontModuleName, moduleFontFaces } from '../core/fonts.mjs';
 import { EMITTERS as EDITORIAL_EMITTERS } from './editorial-ui-modules.mjs';
 import { EMITTERS as CATALOG_A_EMITTERS } from './catalog-a.mjs';
 import { EMITTERS as CATALOG_B_EMITTERS } from './catalog-b.mjs';
@@ -181,7 +181,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   }
 
   const fonts = brandFontStacks(story.brand);
-  const fontCss = await fontFaces(fonts.families, sourceDir, warnings);
+  const fontCss = await fontFaces([...fonts.families, ...moduleFontFaces(story).filter((face) => !fonts.families.includes(face.family))], sourceDir, warnings);
   const capIdle = colors.paper ?? CAPTION_DEFAULT_COLORS.idle;
   const capActive = colors.primary ?? CAPTION_DEFAULT_COLORS.active;
   const html = `<!doctype html>
@@ -325,12 +325,15 @@ async function loadCaptionChunks(story, overlay, sourceDir, warnings) {
 // Brand fonts: frozen files under assets/fonts/ win (named <family-slug>*.woff2),
 // then the exact Google Fonts files @remotion/google-fonts would load (so both
 // renderers draw the same faces), then a Google Fonts stylesheet link.
+// families: names (normal style) or {family, styles} (module faces).
 async function fontFaces(families, sourceDir, warnings) {
   const rules = [];
   const links = [];
   let local = [];
   if (sourceDir && existsSync(path.join(sourceDir, 'assets/fonts'))) local = await readdir(path.join(sourceDir, 'assets/fonts'));
-  for (const family of families) {
+  for (const entry of families) {
+    const family = typeof entry === 'string' ? entry : entry.family;
+    const styles = typeof entry === 'string' ? ['normal'] : entry.styles;
     const slug = fontSlug(family);
     const files = local.filter((file) => /\.(woff2?|ttf|otf)$/i.test(file) && file.toLowerCase().replace(/[^a-z0-9]+/g, '-').startsWith(slug));
     if (files.length) {
@@ -344,11 +347,13 @@ async function fontFaces(families, sourceDir, warnings) {
     }
     const info = await googleFontInfo(family);
     if (info) {
-      for (const [weight, subsets] of Object.entries(info.fonts?.normal ?? {})) {
-        const subset = subsets.latin ? 'latin' : Object.keys(subsets)[0];
-        if (!subset) continue;
-        const range = info.unicodeRanges?.[subset];
-        rules.push(`    @font-face { font-family: '${family}'; src: url("${subsets[subset]}") format("woff2"); font-weight: ${weight}; font-style: normal; font-display: block;${range ? ` unicode-range: ${range};` : ''} }`);
+      for (const style of styles) {
+        for (const [weight, subsets] of Object.entries(info.fonts?.[style] ?? {})) {
+          const subset = subsets.latin ? 'latin' : Object.keys(subsets)[0];
+          if (!subset) continue;
+          const range = info.unicodeRanges?.[subset];
+          rules.push(`    @font-face { font-family: '${family}'; src: url("${subsets[subset]}") format("woff2"); font-weight: ${weight}; font-style: ${style}; font-display: block;${range ? ` unicode-range: ${range};` : ''} }`);
+        }
       }
       continue;
     }

@@ -29,7 +29,7 @@ import { moduleComponent } from "./modules";
 import { Placeholder } from "./Placeholder";
 import { WordCaptions } from "./captions/WordCaptions";
 import { SceneStartFrame } from "./clock";
-import { ensureBrandFonts } from "./fonts";
+import { ensureBrandFonts, ensureModuleFonts } from "./fonts";
 
 export type CustomModuleProps = { scene: any; params: any; brand: any; format: any; model: any };
 export type StoryProps = Record<string, any> & {
@@ -100,6 +100,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   const { customModules, __captions, ...story } = props;
   const { fps } = useVideoConfig();
   const fonts = ensureBrandFonts(story.brand);
+  ensureModuleFonts(story);
   const colors = story.brand?.colors ?? {};
   const background = colors.bg ?? "#000000";
   const windows = React.useMemo(() => sceneWindows(story), [story]);
@@ -163,6 +164,7 @@ export type ModuleReviewProps = { scene: any; story: any; customModules?: StoryP
 
 export const ModuleReview: React.FC<ModuleReviewProps> = ({ scene, story, customModules }) => {
   ensureBrandFonts(story.brand);
+  ensureModuleFonts({ scenes: [scene] });
   const element = React.useMemo(() => resolveSceneElement(scene, story, { customModules }), [scene, story, customModules]);
   return <AbsoluteFill style={{ backgroundColor: story.brand?.colors?.bg ?? "#000000" }}>{element.render()}</AbsoluteFill>;
 };

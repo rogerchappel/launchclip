@@ -19,7 +19,8 @@ export const CATALOG_B_STYLE = Object.freeze({
   exitEase: 'power2.in',
   minKeyText: 44,
   minMetaText: 26,
-  serif: "'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif",
+  // 'EB Garamond' is loaded by both compilers for archive-card (kit/core/fonts.mjs MODULE_FONTS).
+  serif: "'EB Garamond','Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif",
   letterSpacing: Object.freeze({meta: '0.14em', display: '0.01em'})
 });
 
