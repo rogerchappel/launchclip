@@ -10,7 +10,7 @@ crosses a boundary below must match these signatures exactly.
 kit/
   core/                 plain ESM .mjs, no npm imports, no node: imports
                         unless noted; safe for browsers and Remotion bundles
-    story.mjs           story.json v1 validate, resolve anchors, derive boundaries
+    story.mjs           storyboard.json (story v1) validate, resolve anchors, derive boundaries
     motion.mjs          frame-pure easing, tracks, stagger, count-up, springs
     editorial-core.mjs  editorial module spec → resolved model (no HTML)
     layout-check.mjs    geometric safe-zone and collision checks
@@ -21,14 +21,14 @@ kit/
     captions/WordCaptions.tsx
     StoryComposition.tsx
   hyperframes/
-    story-compiler.mjs  story.json → index.html project
+    story-compiler.mjs  storyboard.json → index.html project
 ```
 
 `skills/*/scripts/` hold **copies** of `kit/core/*.mjs`, because each skill must
 work on its own. `scripts/sync-skills.mjs` regenerates those copies, and a test
 fails when they drift. The canonical copy is always `kit/core/`.
 
-## story.json v1 (`kit/core/story.mjs`)
+## storyboard.json (story v1) (`kit/core/story.mjs`)
 
 The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
 
@@ -120,7 +120,7 @@ export function getRenderer(name) // "hyperframes" | "remotion" → adapter
   previewCommand(projectDir, {port}) }           // → argv array
 ```
 
-Remotion projects are directories holding `story.json` and `assets/`. The
+Remotion projects are directories holding `storyboard.json` and `assets/`. The
 adapter writes `<project>/.launchclip/story.resolved.json` (story resolved with
 `NARRATION.json` and `BEATS.json` when present) and runs
 `npx remotion render <entry> LaunchclipStory <out> --props <resolved> --public-dir <project>`.
@@ -129,3 +129,88 @@ adapter writes `<project>/.launchclip/story.resolved.json` (story resolved with
 
 Temporal evidence names the browser-side source `browser-still`.
 `"hyperframes"` is still accepted as a legacy alias when reading.
+
+The project file is named **`storyboard.json`**. `story.json` would collide
+with the `STORY.json` creative receipt on case-insensitive filesystems. The
+schema id stays `launchclip.story.v1`.
+
+## Wave 2: module registry, compilers, parity
+
+### Story fields used by the compilers
+
+- `audio.mix`: an optional project path (`assets/audio/mix.wav`) to the premixed
+  root track. Both compilers mount exactly one root audio element from it. If
+  it is absent, the voice is mounted alone.
+- `overlays[]` captions: `{type: "captions", style, src?: "assets/captions/captions.json", hide?: [[start, end]]}`.
+  When `src` is absent, the compilers chunk `audio.words` with `chunkWords()`
+  from `word-captions.mjs`.
+- Scenes whose module sets `hidesCaptions` hide the captions while active.
+- Brand-to-module defaults: editorial `accent` defaults to `brand.colors.primary`.
+  Editorial `theme` defaults to `{surface: brand.colors.bg, foreground: brand.colors.paper, muted: <paper at 62% over bg, hex>, border: <paper at 18% over bg, hex>, accentText: brand.colors.ink}`.
+  Values set explicitly in `params` win.
+
+### Unified module registry (`kit/core/modules.mjs`, owned by the compiler agent)
+
+```js
+export function resolveModule(scene, story) // → model (see below); throws with path-prefixed message
+export function knownModules()              // → string[] (editorial kinds + catalogue ids)
+```
+
+Catalogue module files `kit/core/catalog-a.mjs` and `kit/core/catalog-b.mjs`
+each export:
+
+```js
+export const MODULES = {
+  "<id>": { describe: "one line for the planning prompt",
+            params: { /* JSON-schema-ish summary for docs */ },
+            resolve(params, ctx) /* → model; throws on invalid params */ } };
+// ctx = {id, start, duration, format:{width,height,fps,duration}, brand, aspect:"9:16"|"16:9"}
+```
+
+Every model (editorial or catalogue) includes at least:
+`{id, module, canvas, start, duration, end, rect, motion:{enterStart, enterEnd, exitStart, end, enterFrom, exitTo, enterEase, exitEase}, content, events:[{id,time,endTime?,role?}], layout:{canvas, rect, motion:{enterEnd, exitStart, end}}, hidesCaptions:boolean, theme}`.
+Catalogue models derive colours from `brand` and follow the RFC §5 hard rules:
+the Shorts safe zone, key text at least 44 px at 1080 wide, contrast at least
+3:1, and blur 0 at settle.
+
+### Emitters and components
+
+| Renderer | Editorial kinds | Catalogue A | Catalogue B |
+|---|---|---|---|
+| HyperFrames | `kit/hyperframes/editorial-ui-modules.mjs` (canonical home of the emitter; skills get copies) | `kit/hyperframes/catalog-a.mjs` | `kit/hyperframes/catalog-b.mjs` |
+| Remotion | `kit/remotion/modules/registry-a.ts` and `registry-b.ts` | `kit/remotion/catalog/registry-a.ts` | `kit/remotion/catalog/registry-b.ts` |
+
+- HyperFrames emitter files export `EMITTERS = {"<id>": (model) => ({html, css, motion, events, layout})}`.
+  `motion` is GSAP code against a host timeline `tl`, exactly as the editorial
+  emitter does.
+- Remotion registry files export `COMPONENTS: Record<string, React.FC<{model: any}>>`.
+- Components draw at absolute canvas coordinates inside a full-canvas
+  `AbsoluteFill`, and compute `t = model.start + frame / fps`. The parent places
+  them in `<Sequence from={round(start*fps)} durationInFrames=…>`, so
+  `useCurrentFrame()` is local to the sequence.
+- All motion goes through `kit/core/motion.mjs` using the model's ease names, so
+  it stays in step with GSAP.
+
+### Review compositions (registered in `kit/remotion/Root.tsx`)
+
+- `LaunchclipStory`: props are the resolved story. Dimensions come from
+  `calculateMetadata` (`format.width`, `format.height`, `resolved.fps`,
+  `resolved.frames`).
+- `ModuleReview`: props `{scene, story}`, the same input as `resolveModule`. It
+  renders that one module on `brand.colors.bg` for its duration. The canvas is
+  `story.format`. Editorial specs are wrapped as a scene by the parity harness.
+
+### Parity harness (`scripts/parity.mjs`)
+
+```
+node scripts/parity.mjs <fixture.json> [--out qa/parity/<id>] [--times enter,mid,settle,exit,events]
+```
+
+- A fixture is `{story, sceneId, threshold?: {ssim: 0.97}}`.
+- The harness renders that scene in HyperFrames (a temporary project compiled
+  by `kit/hyperframes/story-compiler.mjs`, filtered to the one scene, then
+  `hyperframes snapshot`) and in Remotion (`ModuleReview` through `remotion still`).
+- It compares the two at the sampled times with ffmpeg `ssim`, and writes
+  `report.json` plus side-by-side PNGs.
+- `test/parity.test.js` runs every fixture in `test/fixtures/parity/*.json`
+  when `LAUNCHCLIP_PARITY=1` is set, and skips otherwise because it is slow.

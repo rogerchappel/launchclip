@@ -10,7 +10,7 @@ const packageRoot = path.resolve(import.meta.dirname, "..");
 
 test("CLI lists bundled skills and resolves a selected skill path", async () => {
   const listed = await cliJson(["skills", "list"]);
-  assert.deepEqual(listed.skills.map((skill) => skill.name), ["launchclip-create-video", "launchclip-cli"]);
+  assert.deepEqual(listed.skills.map((skill) => skill.name), ["launchclip-create-video", "launchclip-create-video-remotion", "launchclip-cli"]);
   assert.deepEqual(listed.agents.map((agent) => agent.name), ["codex", "claude"]);
 
   const resolved = await cliJson(["skills", "path", "launchclip-create-video"]);
@@ -22,7 +22,7 @@ test("installs all bundled skills for Codex and is idempotent", async () => {
   try {
     const first = await installBundledSkills({ agent: "codex", home, packageRoot });
     assert.equal(first.root, path.join(home, ".agents", "skills"));
-    assert.deepEqual(first.skills.map((skill) => skill.status), ["installed", "installed"]);
+    assert.deepEqual(first.skills.map((skill) => skill.status), ["installed", "installed", "installed"]);
 
     for (const skill of first.skills) {
       assert.equal((await lstat(skill.destination)).isSymbolicLink(), true);
@@ -30,7 +30,7 @@ test("installs all bundled skills for Codex and is idempotent", async () => {
     }
 
     const second = await installBundledSkills({ agent: "codex", home, packageRoot });
-    assert.deepEqual(second.skills.map((skill) => skill.status), ["already-installed", "already-installed"]);
+    assert.deepEqual(second.skills.map((skill) => skill.status), ["already-installed", "already-installed", "already-installed"]);
   } finally {
     await rm(home, { recursive: true, force: true });
   }

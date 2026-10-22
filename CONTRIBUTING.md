@@ -17,6 +17,12 @@ npm run release:check
 - Add or update tests when packet planning, rendering, or CLI behavior changes.
 - Run `npm run release:check` before opening a PR.
 - Run `npm audit --omit=dev` when dependencies change.
+- Edit the create-video skills in `skills-src/`, then run `npm run skills:sync`.
+  `skills/launchclip-create-video/{SKILL.md,references,agents}` and all of
+  `skills/launchclip-create-video-remotion/` are generated; `npm run
+  skills:check` fails when they drift. The renderer-neutral scripts live in
+  `skills/launchclip-create-video/scripts/` and `kit/core/` is canonical for
+  its copies.
 - `npm run package:smoke` must install and execute the generated tarball, not
   merely list its contents.
 

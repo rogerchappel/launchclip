@@ -12,7 +12,9 @@
     "check": "npm test && npm run smoke",
     "eval:production": "node ./src/production_eval.js",
     "package:smoke": "node ./scripts/package-smoke.js",
-    "release:check": "npm run check && npm run package:smoke"
+    "release:check": "npm run check && npm run package:smoke",
+    "skills:sync": "node ./scripts/sync-skills.mjs",
+    "skills:check": "node ./scripts/sync-skills.mjs --check"
   },
   "keywords": [
     "oss",
@@ -21,6 +23,7 @@
     "captions",
     "cli",
     "hyperframes",
+    "remotion",
     "product-videogen",
     "agent-skills"
   ],

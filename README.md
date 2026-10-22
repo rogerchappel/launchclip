@@ -59,8 +59,8 @@ That creates the full dry-run packet, validates it for social review, and writes
 
 ## Agent Skills
 
-Launchclip ships two agent-facing skills for different cost and execution
-models:
+Launchclip ships three agent-facing skills for different cost, execution and
+renderer models:
 
 - [`launchclip-create-video`](skills/launchclip-create-video/SKILL.md) extracts
   the creative orchestration into a subscription-agent workflow. Codex, Claude,
@@ -69,6 +69,13 @@ models:
   and local cinematic readiness gate before preview approval. It does this
   without calling LaunchClip's metered model stages or requiring the
   HyperFrames plugin skill pack.
+- [`launchclip-create-video-remotion`](skills/launchclip-create-video-remotion/SKILL.md)
+  runs the same subscription-agent workflow with Remotion and React as the
+  renderer. The agent authors a `storyboard.json` of catalogue modules,
+  the bundled Remotion kit renders it with frame-pure components, and the same
+  audio, caption, evidence and `cinematic-check` gates apply. Both create-video
+  skills are generated from shared sources in `skills-src/` by
+  `npm run skills:sync`; edit the sources, not the generated files.
 - [`launchclip-cli`](skills/launchclip-cli/SKILL.md) teaches an agent to operate
   the existing CLI, including `produce`, resumable production stages, the
   local-first promotion packet lane, cost receipts, and approval gates. The
@@ -77,8 +84,8 @@ models:
   ChatGPT, Codex, or Claude OAuth login is not an API key.
 
 The repository is also a Codex plugin: [`.codex-plugin/plugin.json`](.codex-plugin/plugin.json)
-exposes both skill directories. npm and Homebrew installs carry the same skills.
-Register both bundled skills with a local subscription agent by running one of:
+exposes every skill directory. npm and Homebrew installs carry the same skills.
+Register the bundled skills with a local subscription agent by running one of:
 
 ```bash
 launchclip skills install --agent codex
@@ -87,7 +94,8 @@ launchclip skills install --agent claude
 
 Codex receives personal skill links under `$HOME/.agents/skills`; Claude Code
 receives them under `$HOME/.claude/skills`. Install only the subscription video
-workflow with `--skill launchclip-create-video`, inspect the packaged paths with
+workflow with `--skill launchclip-create-video` (or
+`--skill launchclip-create-video-remotion` for the Remotion variant), inspect the packaged paths with
 `launchclip skills list` or `launchclip skills path`, and repeat an install
 without risk: matching links report `already-installed`. If Homebrew moves the
 package and an older LaunchClip link becomes stale, rerun with `--force`; the
@@ -95,7 +103,8 @@ command replaces managed links but refuses files, directories, or unrelated
 links. Claude Code requires version 2.1.203 or newer to follow a symlinked skill.
 
 Invoke the workflow as `$launchclip-create-video` in Codex or
-`/launchclip-create-video` in Claude Code. These commands target local agent
+`/launchclip-create-video` in Claude Code, and the Remotion variant as
+`$launchclip-create-video-remotion` or `/launchclip-create-video-remotion`. These commands target local agent
 installs. Remote Claude Cowork/cloud sessions and remote agent environments do
 not read skills from the local home directory; use their account, plugin, or
 repository skill-distribution flow instead.
