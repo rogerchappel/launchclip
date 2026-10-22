@@ -55,7 +55,8 @@
  * @property {{scale:number,hero:boolean,source:'explicit'|'derived'|'legacy',layout:{width:number,height:number},natural:number}} density
  *   The kind lays out in `layout` (rect / scale, layout px) and renders scaled
  *   by `scale` from the rect's top-left corner; `natural` is the content's
- *   natural height in layout px. scale is 1 in 16:9 and for media-window.
+ *   natural height in layout px. scale is 1 for media-window and explicit
+ *   16:9 rects.
  *   chrome, cell/bar/stage/rail geometry and every kind-CSS size are layout px.
  *
  * Content shapes (all times absolute):
@@ -257,9 +258,10 @@ const hex = value => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value
 // A module lays out in a "layout box" of rect / scale and renders scaled by
 // `scale` from the rect's top-left corner, so every size in the kind CSS and
 // every rect-local geometry value is in layout px (canvas px = layout px *
-// scale). 16:9 always resolves at scale 1, byte-identical to the pre-density
-// output for explicit rects. 9:16 picks the largest scale, from DENSITY.max
-// down to 1, at which the content validates and its natural height fits.
+// scale). The largest scale, from DENSITY.max down to 1, at which the content
+// validates and its natural height fits is used for derived rects (no rect)
+// in both aspects and for explicit 9:16 rects. An explicit 16:9 rect resolves
+// at scale 1, byte-identical to the pre-density output.
 export const DENSITY = Object.freeze({
   max: 2, min: 1, step: .05,
   // RFC §5 Shorts geometry, reference 1080x1920: safe zone, the caption band
@@ -267,18 +269,64 @@ export const DENSITY = Object.freeze({
   // centre sits just below the lower-third line (safe.y + safe.height / 2) so
   // the lower third is never empty.
   portrait: Object.freeze({x: 90, width: 840, top: 280, captionTop: 1190, bottom: 1450, centre: 880, mediaHeight: 521}),
-  landscape: Object.freeze({x: 80, width: 680, top: 80, baseline: 980}),
-  // Hero numbers may grow to this layout size in 9:16: the metric number is
-  // the hero; a progress card's hero is its bar, so its number stays smaller.
+  // Landscape geometry, reference 1920x1080 (layout-check's landscape
+  // profile): title-safe x 96–1824 / y 54–1026, caption band from y 864. The
+  // default card is centred horizontally, kept inside top–captionTop (a
+  // breathing margin inside title-safe, 24 px clear of the caption band) and
+  // centred on the frame centre where it fits. widths: the card widths tried
+  // in turn (a composed centre column, then wider for dense content, then the
+  // whole safe width); minScale: the smallest scale each width accepts before
+  // the next is tried. Body copy follows the card width (about 45 px at 1000
+  // wide); maxScale caps padding and fixed-size type, so cards read big on a
+  // 1920-wide frame without crowding it. safeX/safeWidth/bottom document the
+  // title-safe zone.
+  landscape: Object.freeze({maxScale: 1.75, safeX: 96, safeWidth: 1728, top: 96, captionTop: 840, bottom: 1026, centre: 540,
+    widths: Object.freeze([1000, 1440, 1728]), minScale: Object.freeze([1.4, 1, 1]), mediaWidth: 1200}),
+  // Hero numbers may grow to this layout size when density applies: the metric
+  // number is the hero; a progress card's hero is its bar, so its number stays
+  // smaller.
   heroNumber: 120, heroProgressNumber: 88, numberCap: 64
 });
 const LEGACY_RECT = {'16:9': {x: 80, y: 480, width: 680, height: 500}, '9:16': {x: 90, y: 960, width: 900, height: 740}};
 const BASE = Object.freeze({scale: 1, hero: false});
 
-function candidates() {
+function candidates(max = DENSITY.max) {
   const list = [];
-  for (let scale = DENSITY.max; scale >= DENSITY.min - 1e-9; scale -= DENSITY.step) list.push({scale: Math.round(scale * 100) / 100, hero: true});
+  for (let scale = max; scale >= DENSITY.min - 1e-9; scale -= DENSITY.step) list.push({scale: Math.round(scale * 100) / 100, hero: true});
   return list;
+}
+
+// Largest density candidate at which the content validates and its natural
+// height fits the explicit rect; else the scale-1 resolution (or its error).
+function fillRect(options, input, rect, max) {
+  if (rect && typeof rect === 'object' && input.kind !== 'media-window') {
+    for (const candidate of candidates(max)) {
+      try {
+        const model = resolveAt(options, input, rect, candidate, 'explicit');
+        if (model.density.natural <= model.density.layout.height + .5) return model;
+      } catch { /* try a smaller scale */ }
+    }
+  }
+  return resolveAt(options, input, rect, BASE, 'explicit');
+}
+
+// Content-derived placement: for each pass, the largest candidate scale whose
+// natural height fits the band at that width; the card hugs its content and is
+// centred on `centre`, kept inside top..limit. Returns null when nothing fits.
+function derivedRect(options, input, passes, scales) {
+  for (const {x, width, top, limit, centre, maxHeight = Infinity, minScale = 0} of passes) {
+    const band = limit - top;
+    for (const candidate of scales) {
+      if (candidate.scale < minScale) break;
+      let probe;
+      try { probe = resolveAt(options, input, {x, y: top, width, height: band}, candidate, 'derived'); } catch { continue; }
+      const height = Math.max(160, Math.ceil(probe.density.natural * candidate.scale));
+      if (height > Math.min(band, maxHeight)) continue;
+      const y = Math.round(Math.min(limit - height, Math.max(top, centre - height / 2)));
+      try { return resolveAt(options, input, {x, y, width, height}, candidate, 'derived'); } catch { /* next candidate */ }
+    }
+  }
+  return null;
 }
 
 /** @returns {EditorialModel} */
@@ -287,38 +335,32 @@ export function resolveEditorialModule(input, options = {}) {
   if (!plain || !['16:9', '9:16'].includes(input.aspect) || !EDITORIAL_KINDS.includes(input.kind)) return resolveAt(options, input, input?.rect, BASE, 'explicit');
   const explicit = input.rect !== undefined;
   const portrait = input.aspect === '9:16';
-  if (explicit && !portrait) return resolveAt(options, input, input.rect, BASE, 'explicit');
   if (explicit) {
-    // Explicit 9:16 rect: keep the rect, grow the type until the content
-    // would no longer fit. The final BASE attempt is the pre-density
+    // Explicit rect: keep the rect and, in 9:16, grow the type until the
+    // content would no longer fit. The final BASE attempt is the pre-density
     // behaviour, so any spec that resolved before still resolves (or throws
     // the same error).
-    const rect = input.rect;
-    if (rect && typeof rect === 'object' && input.kind !== 'media-window') {
-      for (const candidate of candidates()) {
-        try {
-          const model = resolveAt(options, input, rect, candidate, 'explicit');
-          if (model.density.natural <= model.density.layout.height + .5) return model;
-        } catch { /* try a smaller scale */ }
-      }
-    }
-    return resolveAt(options, input, rect, BASE, 'explicit');
+    if (!portrait) return resolveAt(options, input, input.rect, BASE, 'explicit');
+    return fillRect(options, input, input.rect, portrait ? DENSITY.max : DENSITY.landscape.maxScale);
   }
   if (input.kind === 'media-window') {
-    if (!portrait) return resolveAt(options, input, LEGACY_RECT['16:9'], BASE, 'legacy');
+    if (!portrait) {
+      // 16:9 media frame (16:9 media under the 48 px bar), centred, above the
+      // caption band.
+      const L = DENSITY.landscape, width = L.mediaWidth, height = Math.round(width * 9 / 16) + 48;
+      const y = Math.round(Math.min(L.captionTop - height, Math.max(L.top, L.centre - height / 2)));
+      return resolveAt(options, input, {x: Math.round((1920 - width) / 2), y, width, height}, BASE, 'derived');
+    }
     const P = DENSITY.portrait, height = P.mediaHeight;
     return resolveAt(options, input, {x: P.x, y: Math.round(P.centre - height / 2), width: P.width, height}, BASE, 'derived');
   }
+  const scales = candidates(portrait ? DENSITY.max : DENSITY.landscape.maxScale);
   if (!portrait) {
-    // 16:9 default: the old lower-left footprint, its height taken from the
-    // content and its bottom edge kept on the old baseline (y 980).
+    // 16:9 default: a centred card inside the landscape title-safe zone,
+    // above the caption band, at the largest scale its content allows.
     const L = DENSITY.landscape;
-    try {
-      const probe = resolveAt(options, input, {x: L.x, y: L.top, width: L.width, height: L.baseline - L.top}, BASE, 'derived');
-      const height = Math.max(160, Math.ceil(probe.density.natural));
-      if (height <= L.baseline - L.top) return resolveAt(options, input, {x: L.x, y: L.baseline - height, width: L.width, height}, BASE, 'derived');
-    } catch { /* fall back to the legacy rect and its error */ }
-    return resolveAt(options, input, LEGACY_RECT['16:9'], BASE, 'legacy');
+    const passes = L.widths.map((width, i) => ({x: Math.round((1920 - width) / 2), width, top: L.top, limit: L.captionTop, centre: L.centre, minScale: L.minScale[i]}));
+    return derivedRect(options, input, passes, scales) ?? resolveAt(options, input, LEGACY_RECT['16:9'], BASE, 'legacy');
   }
   // 9:16 default: safe-zone width, the largest scale whose natural height
   // fits above the caption band (else above the safe-zone bottom), centred
@@ -327,20 +369,9 @@ export function resolveEditorialModule(input, options = {}) {
   // phone scale; then any scale above the caption band; then the whole safe
   // zone.
   const P = DENSITY.portrait, lowerThird = P.top + (P.bottom - P.top) / 2;
-  const passes = [{limit: P.captionTop, maxHeight: 2 * (P.captionTop - lowerThird - 1), minScale: 1.8}, {limit: P.captionTop}, {limit: P.bottom}];
-  for (const {limit, maxHeight = Infinity, minScale = 0} of passes) {
-    const band = limit - P.top;
-    for (const candidate of candidates()) {
-      if (candidate.scale < minScale) break;
-      let probe;
-      try { probe = resolveAt(options, input, {x: P.x, y: P.top, width: P.width, height: band}, candidate, 'derived'); } catch { continue; }
-      const height = Math.max(160, Math.ceil(probe.density.natural * candidate.scale));
-      if (height > Math.min(band, maxHeight)) continue;
-      const y = Math.round(Math.min(limit - height, Math.max(P.top, P.centre - height / 2)));
-      try { return resolveAt(options, input, {x: P.x, y, width: P.width, height}, candidate, 'derived'); } catch { /* next candidate */ }
-    }
-  }
-  return resolveAt(options, input, LEGACY_RECT['9:16'], BASE, 'legacy');
+  const column = {x: P.x, width: P.width, top: P.top, centre: P.centre};
+  const passes = [{...column, limit: P.captionTop, maxHeight: 2 * (P.captionTop - lowerThird - 1), minScale: 1.8}, {...column, limit: P.captionTop}, {...column, limit: P.bottom}];
+  return derivedRect(options, input, passes, scales) ?? resolveAt(options, input, LEGACY_RECT['9:16'], BASE, 'legacy');
 }
 
 function resolveAt(options, input, suppliedRect, density, source) {
