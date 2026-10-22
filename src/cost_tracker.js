@@ -70,6 +70,27 @@ export function estimateOpenAiUsageCost(model, usage = {}) {
   };
 }
 
+// Estimate one LLM call from its normalized usage ({input_tokens,
+// output_tokens, cached_tokens}) when the call did not pass through the
+// tracked fetch (an SDK client, or a test). OpenRouter-style ids such as
+// "openai/gpt-5.6-luna" or "anthropic/claude-opus-4-8" use the vendor's rates.
+export function estimateModelUsageCost(provider, model, usage = {}) {
+  const name = String(model ?? "unknown").replace(/^(openai|anthropic)\//, "");
+  const anthropic = provider === "anthropic" || /^claude-/.test(name);
+  const item = anthropic
+    ? anthropicLineItem({ json: { model: name } }, {
+      type: "message",
+      model: name,
+      usage: { input_tokens: usage.input_tokens, output_tokens: usage.output_tokens, cache_read_input_tokens: usage.cached_tokens ?? usage.cached_input_tokens ?? 0 }
+    })
+    : openAiLineItem({ json: { model: name } }, { status: "completed", model: name, usage });
+  return {
+    estimated_usd: item.estimated_usd,
+    complete: item.estimated_usd != null,
+    warning: item.warning ?? null
+  };
+}
+
 async function describeRequest(input, init = {}) {
   const url = String(typeof input === "string" || input instanceof URL ? input : input?.url ?? "");
   const body = init?.body;
