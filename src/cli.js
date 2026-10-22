@@ -15,7 +15,7 @@ import { prepareRecording, recordingOptions, writeBrollPlan } from "./recording_
 import { runStoryCommand } from "./story_cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "story", "finish", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "story", "finish", "export", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -35,7 +35,8 @@ export async function runCli(argv, io = {}) {
   const styleInvocation = command === "style" ? parseStyleInvocation(firstArg, rest) : null;
   const skillsInvocation = command === "skills" ? parseSkillsInvocation(firstArg, rest) : null;
   const storyInvocation = command === "story" ? parseStoryInvocation(firstArg, rest) : null;
-  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? rest);
+  const sfxInvocation = command === "sfx" ? parseSfxInvocation(firstArg, rest) : null;
+  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
@@ -60,6 +61,9 @@ export async function runCli(argv, io = {}) {
         ...productionAdapters,
         review: { input: stdin, output: stderr, ...productionAdapters.review }
       });
+    } else if (command === "sfx") {
+      const { runSfxCommand } = await import("./sfx/seed.js");
+      result = await runSfxCommand(sfxInvocation.action, sfxInvocation.name, flags, { log: (line) => stderr.write(`${line}\n`) });
     } else if (command === "story") {
       result = await runStoryCommand(storyInvocation.action, storyInvocation.file, flags, productionAdapters.story ?? {});
     } else if (command === "cinematic-check") {
@@ -86,13 +90,31 @@ export async function runCli(argv, io = {}) {
         out: flags.out,
         force: Boolean(flags.force),
         scenes: flags.scene,
-        previewScene: flags["preview-scene"]
+        previewScene: flags["preview-scene"],
+        sfxLibrary: flags["sfx-library"],
+        sfxDensity: flags["sfx-density"]
       }, productionAdapters.finish);
       stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatFinishSummary(report));
       if (report.status === "failed") {
         const failedStage = report.stages.find((stage) => stage.status === "failed");
         throw new Error(`launchclip finish failed at the ${failedStage?.name ?? "unknown"} stage: ${failedStage?.error ?? ""}`.trim());
       }
+      return;
+    } else if (command === "export") {
+      const { runExport, formatExportSummary } = await import("./nle/export.js");
+      const report = await runExport(required(firstArg, "story project path"), {
+        format: flags.format,
+        overlays: flags.overlays,
+        out: flags.out,
+        fps: flags.fps,
+        name: flags.name,
+        absolute: Boolean(flags.absolute),
+        force: Boolean(flags.force),
+        dtd: flags.dtd,
+        concurrency: flags.concurrency
+      }, { log: flags.json ? () => {} : (message) => stderr.write(`export: ${message}\n`), ...productionAdapters.export });
+      stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatExportSummary(report));
+      if (report.status === "failed") throw new Error(`launchclip export wrote ${report.export_dir} but its validation failed: ${Object.entries(report.validation).filter(([, entry]) => entry.status === "failed").map(([key]) => key).join(", ")}`);
       return;
     } else if (command === "init") {
       result = await initWorkspace(required(firstArg, "repo path"), flags);
@@ -168,6 +190,15 @@ function parseSkillsInvocation(action, rest) {
   return { action, name: hasName ? rest[0] : null, flagArgs: hasName ? rest.slice(1) : rest };
 }
 
+function parseSfxInvocation(action, rest) {
+  if (!action) throw new Error("Missing sfx action; use seed, reroll, list or audition");
+  if (!new Set(["seed", "reroll", "list", "audition"]).has(action)) throw new Error(`Unknown sfx action: ${action}`);
+  const takesName = action === "audition" || action === "reroll";
+  const hasName = takesName && rest[0] && !rest[0].startsWith("--");
+  if (action === "audition" && !hasName) throw new Error("Missing SFX family to audition, e.g. launchclip sfx audition keystroke");
+  return { action, name: hasName ? rest[0] : null, flagArgs: hasName ? rest.slice(1) : rest };
+}
+
 function parseStoryInvocation(action, rest) {
   if (!action) throw new Error("Missing story action; use validate, resolve, compile or plan");
   if (!new Set(["validate", "resolve", "compile", "plan"]).has(action)) throw new Error(`Unknown story action: ${action}`);
@@ -216,7 +247,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json") {
+    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute") {
       flags[name] = true;
       continue;
     }
@@ -280,7 +311,12 @@ Usage:
   launchclip story plan --brief brief.md [--narration NARRATION.json] [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] [--base assets/recording.mp4] [--voice assets/audio/narration.wav] [--format 1080x1920] [--fps 30] [--duration seconds] [--brand brand.json] [--max-repairs 2]
   launchclip cinematic-check <project> [--renderer hyperframes|remotion] [--video renders/draft.mp4] [--audio-manifest AUDIO-MANIFEST.json] [--expect-audio] [--critique qa/critic.json]
   launchclip layout-check <project> [--profile shorts|landscape] [--json]
-  launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--voice kokoro|elevenlabs|supplied|test] [--out renders/final.mp4] [--scene s3[,s4] | --preview-scene s3] [--force] [--json]
+  launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--voice kokoro|elevenlabs|supplied|test] [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] [--scene s3[,s4] | --preview-scene s3] [--force] [--json]
+  launchclip export <project> --format fcpxml|premiere|edl|otio|all [--overlays prores4444|png|none] [--out exports/] [--fps 24|25|29.97|30|60] [--name name] [--absolute] [--force] [--json]
+  launchclip sfx seed [--provider elevenlabs|synth] [--variants 3] [--only whoosh,impact] [--reroll typing] [--dir .launchclip/sfx] [--force]
+  launchclip sfx reroll <family> [--dir .launchclip/sfx]
+  launchclip sfx list [--dir .launchclip/sfx]
+  launchclip sfx audition <family> [--dir .launchclip/sfx] [--out audition.wav] [--gap 0.35]
   launchclip init <repo> --out <workspace>
   launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]
   launchclip plan <workspace> --format short-15 --renderer none|hyperframes [--style proof-card|ugc-split|ugc-demo-punchy|premium-product-short|data-story-benchmark] [--assets-dir path/to/assets] [--talking-head heygen --avatar-id avatar_123]
