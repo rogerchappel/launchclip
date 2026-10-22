@@ -188,13 +188,11 @@ export function validateStory(story, { modules } = {}) {
     if (!isObject(audio) || !audio.words) err("audio.words (NARRATION.json) is required for the voiceover-motion lane");
   }
 
-  // base
-  if (story.base !== undefined && story.base !== null) {
-    if (typeof story.base === "string") assetPath(story.base, "base", err);
-    else if (!isObject(story.base)) err("base must be null, an assets/ path or an object with source");
-    else assetPath(story.base.source, "base.source", err);
-  }
+  // base: the footage-led recording (see validateBase).
+  if (story.base !== undefined && story.base !== null) validateBase(story.base, { err, warn, duration, resolved: isObject(story.resolved) });
   if (story.lane === "footage-led" && (story.base === undefined || story.base === null)) err("base is required for the footage-led lane");
+  if (story.lane === "footage-led" && isObject(audio) && audio.voice) warn("audio.voice is not mounted in the footage-led lane; the base recording carries the voice (use audio.mix for a music/SFX bed)");
+  if (isObject(audio) && audio.mix_volume !== undefined && !(typeof audio.mix_volume === "number" && audio.mix_volume >= 0 && audio.mix_volume <= 1)) err("audio.mix_volume must be a number between 0 and 1");
 
   // scenes
   const scenes = Array.isArray(story.scenes) ? story.scenes : null;
@@ -240,6 +238,14 @@ export function validateStory(story, { modules } = {}) {
 
     const track = scene.track ?? 0;
     if (!Number.isInteger(track) || track < 0) err(`${path}.track must be a non-negative integer`);
+    // Footage-led: track 0 is the base and its full-frame inserts; overlays
+    // (and punch-in cameras) sit on track 1 or higher.
+    if (scene.insert !== undefined && typeof scene.insert !== "boolean") err(`${path}.insert must be true or false`);
+    else if (scene.insert === true && story.lane !== "footage-led") err(`${path}.insert is only for the footage-led lane`);
+    else if (story.lane === "footage-led" && Number.isInteger(track)) {
+      if (scene.insert === true && track !== 0) err(`${path}.insert scenes cover the base on track 0; remove track or set it to 0`);
+      if (scene.insert !== true && track === 0) err(`${path} sits on track 0, which is the base in the footage-led lane; set track to 1 or higher for an overlay, or insert: true for a full-frame insert`);
+    }
 
     if (scene.energy !== undefined && !(scene.energy === "build" || (Number.isInteger(scene.energy) && scene.energy >= 0 && scene.energy <= 3))) {
       err(`${path}.energy must be 0, 1, 2, 3 or "build"`);
@@ -370,9 +376,11 @@ export function validateStory(story, { modules } = {}) {
  * overlay start/end) replaced by seconds, scenes sorted by start, plus
  * `resolved: {duration, fps, frames}`.
  */
-export function resolveStory(story, { words = [], beats = null } = {}) {
+export function resolveStory(story, { words = [], beats = null, edl = null } = {}) {
   if (!isObject(story)) throw new Error("story must be a JSON object");
   const copy = JSON.parse(JSON.stringify(story));
+  // base.edl → base.trim from the edit-recording plan's kept segments.
+  if (isObject(copy.base) && typeof copy.base.edl === "string" && edl != null && copy.base.trim === undefined) copy.base.trim = edlTrim(edl, "base.edl");
   const context = { words, beats };
   const resolve = (value, path) => {
     try { return resolveAnchor(value, context); }
@@ -469,6 +477,110 @@ export function storyHits(story) {
     }
   }
   return hits.map((hit, index) => ({ hit, index })).sort((a, b) => a.hit.at - b.hit.at || a.index - b.index).map((entry) => entry.hit);
+}
+
+// ---------------------------------------------------------------------------
+// Footage-led base
+
+export const BASE_FITS = ["cover", "contain"];
+const BASE_KEYS = new Set(["src", "source", "start", "trim", "volume", "fit", "focus", "edl"]);
+const VIDEO_FILE = /\.(mp4|m4v|mov|webm)$/i;
+
+function validateBase(base, { err, warn, duration, resolved }) {
+  if (typeof base === "string") {
+    if (assetPath(base, "base", err) && !VIDEO_FILE.test(base)) err(`base must be a video file (.mp4, .m4v, .mov or .webm); got ${JSON.stringify(base)}`);
+    return;
+  }
+  if (!isObject(base)) { err("base must be null, an assets/ video path or an object with src"); return; }
+  for (const key of Object.keys(base)) if (!BASE_KEYS.has(key)) err(`base.${key} is not supported (allowed: src, start, trim, volume, fit, focus, edl)`);
+  if (base.src !== undefined && base.source !== undefined) err("base.src and base.source name the same file; keep base.src");
+  const src = base.src ?? base.source;
+  const srcPath = base.src !== undefined || base.source === undefined ? "base.src" : "base.source";
+  if (src === undefined) err("base.src is required (an assets/ video path)");
+  else if (assetPath(src, srcPath, err) && !VIDEO_FILE.test(src)) err(`${srcPath} must be a video file (.mp4, .m4v, .mov or .webm); got ${JSON.stringify(src)}`);
+  if (base.start !== undefined && !(typeof base.start === "number" && Number.isFinite(base.start) && base.start >= 0)) err("base.start must be a non-negative number of source seconds");
+  if (base.volume !== undefined && !(typeof base.volume === "number" && base.volume >= 0 && base.volume <= 1)) err("base.volume must be a number between 0 and 1");
+  if (base.fit !== undefined && !BASE_FITS.includes(base.fit)) err(`base.fit must be one of ${BASE_FITS.join(", ")}`);
+  if (base.focus !== undefined) {
+    if (!isObject(base.focus) || Object.keys(base.focus).some((key) => key !== "x" && key !== "y")) err("base.focus must be {x, y} with fractions between 0 and 1");
+    else for (const axis of ["x", "y"]) if (!(typeof base.focus[axis] === "number" && base.focus[axis] >= 0 && base.focus[axis] <= 1)) err(`base.focus.${axis} must be a fraction between 0 and 1`);
+  }
+  if (base.edl !== undefined) {
+    if (projectPath(base.edl, "base.edl", err) && !/\.json$/i.test(base.edl)) err(`base.edl must point at an edit-recording plan (edit-plan.json); got ${JSON.stringify(base.edl)}`);
+    if (base.trim !== undefined && !resolved) err("base.trim and base.edl both set the cuts; keep one (resolveStory fills trim from edl)");
+  }
+  if (base.trim !== undefined) {
+    if (!Array.isArray(base.trim) || !base.trim.length) err("base.trim must be a non-empty array of [in, out] source ranges");
+    else {
+      let previous = -Infinity, length = 0;
+      base.trim.forEach((range, index) => {
+        const path = `base.trim[${index}]`;
+        if (!Array.isArray(range) || range.length !== 2 || !range.every((value) => typeof value === "number" && Number.isFinite(value))) { err(`${path} must be an [in, out] pair of source seconds`); return; }
+        const [from, to] = range;
+        if (from < 0) err(`${path} in must not be negative`);
+        if (!(to > from)) err(`${path} out must be after its in`);
+        if (from < previous - EPS) err(`${path} starts before the previous range ends; ranges must be in source order without overlap`);
+        previous = to;
+        length += Math.max(0, to - from);
+      });
+      if (base.start !== undefined && base.start > 0) err("base.start applies only without base.trim; put the in-point in the first trim range");
+      if (duration !== null && length + EPS < duration) warn(`the trimmed base runs ${ms(length)}s, shorter than format.duration (${duration}s); the frames after it show the background`);
+    }
+  }
+}
+
+/** Kept source ranges of an edit-recording plan (launchclip.recording-edit.v1) as [[in, out], …]. */
+export function edlTrim(plan, label = "edl") {
+  const segments = Array.isArray(plan?.kept_segments) ? plan.kept_segments : null;
+  if (!segments || !segments.length) throw new Error(`${label}: the edit plan has no kept_segments (expected an edit-recording edit-plan.json)`);
+  if (plan.schema_version !== undefined && plan.schema_version !== "launchclip.recording-edit.v1") throw new Error(`${label}: unsupported edit plan schema ${plan.schema_version}`);
+  return segments.map((segment, index) => {
+    const from = Number(segment?.source_start_seconds), to = Number(segment?.source_end_seconds);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || !(to > from)) throw new Error(`${label}: kept_segments[${index}] needs source_start_seconds < source_end_seconds`);
+    return [ms(from), ms(to)];
+  });
+}
+
+/**
+ * The footage-led base of a resolved story, normalised for the compilers, or
+ * null. Timeline time maps to trimmed base time: trim ranges play back to back
+ * from timeline 0. Boundaries snap to the frame grid so both renderers cut on
+ * the same frame.
+ * → {src, fit, focus: {x, y}, volume, segments: [{index, start, end, duration, sourceStart}], length}
+ */
+export function storyBase(story) {
+  const raw = story?.base;
+  if (raw === undefined || raw === null) return null;
+  const base = typeof raw === "string" ? { src: raw } : raw;
+  const src = base.src ?? base.source;
+  if (typeof src !== "string") return null;
+  const format = storyFormat(story);
+  const fps = Number(story?.resolved?.fps ?? format.fps ?? 30);
+  const total = Number(story?.resolved?.duration ?? format.duration);
+  const snap = (value) => Math.round(value * fps) / fps;
+  const from0 = Number(base.start ?? 0);
+  const ranges = Array.isArray(base.trim) && base.trim.length ? base.trim : [[from0, from0 + total]];
+  const segments = [];
+  let clock = 0;
+  for (const [from, to] of ranges) {
+    if (clock >= total - EPS) break;
+    const start = snap(clock);
+    const end = Math.min(total, snap(clock + (to - from)));
+    if (end - start > EPS) segments.push({ index: segments.length, start: round6(start), end: round6(end), duration: round6(end - start), sourceStart: round6(snap(from)) });
+    clock += to - from;
+  }
+  return {
+    src,
+    fit: BASE_FITS.includes(base.fit) ? base.fit : "cover",
+    focus: { x: Number(base.focus?.x ?? 0.5), y: Number(base.focus?.y ?? 0.5) },
+    volume: typeof base.volume === "number" ? base.volume : 1,
+    segments,
+    length: segments.length ? segments[segments.length - 1].end : 0
+  };
+}
+
+function round6(value) {
+  return Math.round(value * 1e6) / 1e6;
 }
 
 /** "9:16" | "16:9" | "1:1" | "4:5" | null */
