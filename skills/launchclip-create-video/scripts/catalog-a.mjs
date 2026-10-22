@@ -585,7 +585,7 @@ function resolveKineticWords(params, ctx) {
     return {index, text: value, parts, at: sceneTime(entry.at, `${path}.at`, d, .45), emphasis: optional(entry.emphasis, false, flag => bool(flag, `${path}.emphasis`)), color: theme[role]};
   });
   beats.forEach((beat, index) => {
-    if (index && beat.at < beats[index - 1].at + minGap - 1e-9) throw new Error(`params.words[${index}].at must be at least ${minGap} s after the previous beat`);
+    if (index && beat.at < beats[index - 1].at + minGap - 1e-6) throw new Error(`params.words[${index}].at must be at least ${minGap} s after the previous beat`);
   });
   const fonts = brandFonts(ctx.brand), fk = fitKinds(ctx.brand);
   const st = stage(ctx, {captions: false});
@@ -630,9 +630,14 @@ function resolveKineticWords(params, ctx) {
     const gap = next === null ? exit.exitStart - at : next - at;
     const enter = Math.max(.18, Math.min(variant === 'rise' ? .42 : .34, gap - .12));
     const node = `beat-${index}`;
+    // A beat at or before the scene's first frame is the frame-0 hook: it is
+    // already settled on frame 0, with no enter animation (as hook-title).
+    const settled = beat.at <= 1 / base.fps + 1e-6;
     beat.time = T(at);
-    beat.settleTime = T(at + enter);
-    if (variant === 'scale') {
+    beat.settleTime = T(settled ? at : at + enter);
+    if (settled) {
+      // No enter: the node's resting style is its first-frame state.
+    } else if (variant === 'scale') {
       anim.add(node, at, enter, 'expo.out', {opacity: 0, scale: 1.5, blur: 16 * k}, {opacity: 1, scale: 1, blur: 0});
     } else {
       anim.add(node, at, .06, 'none', {opacity: 0}, {opacity: 1});
@@ -644,7 +649,7 @@ function resolveKineticWords(params, ctx) {
       anim.add(node, next - out, out, 'power2.in', props[0], props[1]);
     }
     if (layout === 'stack' && next !== null && !beat.emphasis) anim.add(`${node}-text`, next, .3, 'power2.out', {color: theme.paper}, {color: theme.muted});
-    if (beat.emphasis && layout === 'replace') anim.add(`${node}-bar`, at + .08, .36, 'expo.out', {scaleX: 0}, {scaleX: 1});
+    if (beat.emphasis && layout === 'replace' && !settled) anim.add(`${node}-bar`, at + .08, .36, 'expo.out', {scaleX: 0}, {scaleX: 1});
     events.push({id: `${base.id}-beat-${index}`, time: at, role: 'beat', cue: beat.emphasis ? 'impact' : 'pop'});
   });
   const styles = {root: rootStyle(box, layout === 'stack' ? {display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center'} : {})};
@@ -913,7 +918,7 @@ function resolveEquationLockup(params, ctx) {
   const lastLand = termModels[termModels.length - 1].time + .42;
   const highlightAt = highlight === null ? null : optional(params.highlightAt, Math.min(lastLand - s + .35, d - exitDur - .7), value => sceneTime(value, 'params.highlightAt', d, .6));
   if (lastLand > base.end - exitDur - .3 + 1e-9) throw new Error(`the terms land at ${round(lastLand - s, 3)} s, too late for a ${round(d, 3)} s scene; lower params.at or params.stagger`);
-  if (highlightAt !== null && s + highlightAt < termModels[highlight].time + .42 - 1e-9) throw new Error('params.highlightAt must come after the highlighted term has landed');
+  if (highlightAt !== null && s + highlightAt < termModels[highlight].time + .42 - 1e-6) throw new Error('params.highlightAt must come after the highlighted term has landed');
 
   const nameSize = Math.round(46 * k), noteSize = Math.round(52 * k);
   if (name && textWidth(name.toUpperCase(), nameSize, fk.body, .14) > area.width) throw new Error('params.name is too wide for one line; shorten it');

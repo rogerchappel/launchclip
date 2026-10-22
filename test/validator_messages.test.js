@@ -48,5 +48,7 @@ test("cta handle says how wide it is, what the pill fits, and to drop a github.c
 
 test("process-steps spacing names both step times and the earliest valid at", () => {
   assert.throws(() => CATALOG_B["process-steps"].resolve({ steps: [{ label: "Brief", at: 0.6 }, { label: "Storyboard", at: 0.8 }, { label: "Video", at: 2 }] }, ctx()),
-    /params\.steps\[1\]\.at must come at least 0\.35 s after the previous step \(step 1 settles at 0\.6 s, step 2 at 0\.8 s in the scene\): set it to 0\.96 or later/);
+    /params\.steps\[1\]\.at must come at least 0\.35 s after the previous step \(step 1 settles at 0\.6 s, step 2 at 0\.8 s in the scene\): set it to 0\.95 or later/);
+  // Exactly 0.35 s apart is allowed (float tolerance), so the suggested time is valid.
+  assert.ok(CATALOG_B["process-steps"].resolve({ steps: [{ label: "Brief", at: 0.6 }, { label: "Storyboard", at: 0.95 }, { label: "Video", at: 2 }] }, ctx()));
 });

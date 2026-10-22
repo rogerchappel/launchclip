@@ -18,6 +18,13 @@
 // here they only hold the outgoing plate and add the crossfades a dolly
 // needs. In world mode plates are transparent, so layered transitions (fade,
 // zoom, iris) also fade the outgoing plate out.
+//
+// Empty plates: a short gap between two plates (a gap in scene timing, plus
+// any lead-in before the next scene draws anything, sceneLeadIn) would show a
+// dead frame. When that whole span is under HOLD_GAP seconds the previous
+// plate is held on screen through it (its render window ends where the next
+// scene's content starts); longer gaps are reported by emptyPlates() and show
+// the background.
 
 import { grammarEase, resolveGrammar } from './grammar.mjs';
 
@@ -35,6 +42,27 @@ export const LAYER_IDENTITY = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1, 
 
 const EPS = 1e-6;
 const ADJACENT = 0.1;
+/** Empty spans shorter than this (seconds) are covered by holding the previous plate. */
+export const HOLD_GAP = 0.5;
+
+// Seconds after its start before a scene's module draws anything, read from
+// its params (no module resolution, so every caller of sceneWindows agrees).
+// kinetic-words draws nothing until its first beat; a beat at or before the
+// first frame is settled on frame 0 (catalog-a.mjs).
+const LEAD_IN = {
+  'kinetic-words': (params, fps) => {
+    const at = Number(params?.words?.[0]?.at);
+    return Number.isFinite(at) && at > 1 / fps + EPS ? at : 0;
+  }
+};
+
+/** Seconds from a scene's start until its module first draws content. */
+export function sceneLeadIn(scene, fps = 30) {
+  const rule = LEAD_IN[scene?.module];
+  const lead = rule ? rule(scene?.params ?? {}, fps) : 0;
+  const length = Number(scene?.end) - Number(scene?.start);
+  return Number.isFinite(lead) && lead > 0 ? Math.min(lead, Number.isFinite(length) ? length : lead) : 0;
+}
 
 /** Radius (px) of a circle centred on the canvas that covers every corner. */
 export function irisRadius(width, height) {
@@ -169,6 +197,27 @@ export function sceneWindows(story) {
     previous.renderEnd = Math.max(previous.renderEnd, Math.min(duration, entry.start + tweens.duration));
     previous.tweens.push(...tweens.out.map((tw) => ({ ...tw, at: entry.start + tw.start, role: 'out' })));
   }
+  // Hold the previous plate through a short empty span (timing gap plus the
+  // next scene's lead-in), so the cut never shows a dead frame.
+  for (let i = 1; i < plates.length; i += 1) {
+    const entry = plates[i];
+    const previous = plates.slice(0, i).filter((other) => other.end <= entry.start + EPS).reduce((best, other) => (!best || other.end > best.end + EPS ? other : best), null);
+    if (!previous) continue;
+    const lead = sceneLeadIn(entry.scene, fps), contentStart = entry.start + lead;
+    const held = Math.max(previous.renderEnd, previous.end);
+    // A transition that already carries the previous plate into this scene
+    // owns the hand-over.
+    if (held > entry.start + EPS) continue;
+    if (!(contentStart - held > EPS && contentStart - previous.end < HOLD_GAP - EPS)) continue;
+    previous.renderEnd = Math.min(duration, round(contentStart, 6));
+    // The incoming plate is opaque: on a cut, keep it transparent through its
+    // lead-in so the held plate shows, then show it as its content arrives. (A
+    // layered transition in reveals the held plate by itself.)
+    if (lead > EPS && entry.tweens.length === 0) {
+      entry.tweens.push({ prop: 'opacity', from: 0, to: 0, start: 0, duration: round(lead, 6), ease: 'none', at: entry.start, role: 'hold' },
+        { prop: 'opacity', from: 0, to: 1, start: 0, duration: 0, ease: 'none', at: round(contentStart, 6), role: 'hold' });
+    }
+  }
   for (const entry of scenes) entry.tweens.sort((a, b) => a.at - b.at);
   let loop = null;
   const ending = story?.ending;
@@ -192,6 +241,27 @@ export function sceneWindows(story) {
   }
   scenes.sort((a, b) => a.track - b.track || a.start - b.start || a.index - b.index);
   return { scenes, loop };
+}
+
+/**
+ * Spans with no plate content on screen: from where one plate's render window
+ * ends (or the story starts) to where the next plate's content starts (its
+ * start plus sceneLeadIn), when longer than one frame. → [{from, to, before,
+ * after}] (scene ids; before is null at the story start). Spans under HOLD_GAP
+ * are normally covered by the hold in sceneWindows, so these are the gaps a
+ * viewer sees as an empty plate.
+ */
+export function emptyPlates(story, windows = sceneWindows(story)) {
+  const fps = Number(story?.resolved?.fps ?? story?.format?.fps ?? 30);
+  const plates = windows.scenes.filter((entry) => entry.plate).sort((a, b) => a.start - b.start || a.index - b.index);
+  const out = [];
+  let shown = 0, before = null;
+  for (const entry of plates) {
+    const contentStart = entry.start + sceneLeadIn(entry.scene, fps);
+    if (contentStart - shown > 1 / fps + EPS) out.push({ from: round(shown, 3), to: round(contentStart, 3), before, after: entry.id });
+    if (entry.renderEnd > shown) { shown = entry.renderEnd; before = entry.id; }
+  }
+  return out;
 }
 
 function round(value, digits = 3) {

@@ -60,7 +60,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - shorts (1080x1920): key content within x 80–940, y 280–1450; caption band x 65–918, y 1190–1420; centre of mass near y 860; key text at least 44 px; keep the lower third occupied.
 - landscape (1920x1080): key content within x 96–1824, y 54–1026; caption band x 192–1728, y 864–1004; centre of mass near y 540; key text at least 32 px.
 - Catalogue modules size and place themselves inside the safe zone and fail with a param error when copy is too long; shorten copy rather than shrinking it.
-- Editorial modules without a rect size and place themselves from their content inside the safe zone and above the caption band; omit rect unless the layout needs a specific position. They need a 1080x1920 or 1920x1080 format.
+- Editorial modules without a rect size and place themselves from their content inside the safe zone and above the caption band, with type scaled to fill the panel; omit rect unless the layout needs a specific position. With a rect in 16:9, also set density: "fill", or the text stays small and a bigger rect is just more empty panel. They need a 1080x1920 or 1920x1080 format.
 
 ## Captions
 
@@ -111,7 +111,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - media: {kind: "image" | "video", src: "assets/…", sourceStart?: seconds (video only)}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -125,7 +126,8 @@ params:
 - title: string ≤ 54, required
 - rows: [{label, status: "pending" | "active" | "done", at, doneAt?}] up to 6
 - statusLabels: {pending, active, done} ≤ 14 chars each (optional, e.g. "Covered")
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -139,7 +141,8 @@ params:
 - title: string ≤ 54, required
 - steps: [{label, at}] 2–6, strictly increasing at
 - numbered: boolean (optional)
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -153,7 +156,8 @@ params:
 - title: string ≤ 54, required
 - body: string ≤ 160 (plain)
 - treatment: {icon?: "terminal" | "branch" | "users" | "rocket" | "check" | "warning", monospace?, glow?, corners?, segments?: [{text, highlight?, underlineAt?}] (replace body), at?}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -166,7 +170,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - audience: {tiles: [{label ≤ 24, emoji?, at}] 2–12, columns?: 2–4}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -179,7 +184,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - chart: {mode: "illustration" | "data", points: [{label ≤ 16, value (whole number ≥ 0), at}] 2–8 (≥ 0.5 s apart), unit ≤ 18, source (required for data)}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -192,7 +198,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - metric: {mode: "illustration" | "data", unit ≤ 18, format: "number" | "percent" | "currency", currency? (three-letter code, currency only), decimals?: 0–2, values: [{value, at}] 1–8 (≥ 0.65 s apart), source? (required for data)}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -205,7 +212,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - progress: {mode, values: [{value, at}] 1–8, max?, label? ≤ 32, source?}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -218,7 +226,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - date: {month: 1–12, day, year?, caption? ≤ 42, at?}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -231,7 +240,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - rack: {mode, source?, rows: [{label ≤ 24, states: [{at, lights: [bool, bool, bool]}]}] 1–8}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -244,7 +254,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - code: {language? ≤ 24, typing?: boolean, lines: [{tokens: [{text, type: "plain" | "keyword" | "string" | "number" | "comment" | "operator"}], at, typeDuration?}] 1–3}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -257,7 +268,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - excerpt: {mode, source?, lines: [{segments: [{text, highlight?}]}] 1–5, focus: {line, scale: 1–1.3, at}, highlightMotion?}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -270,7 +282,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - focus: {options: [string ≤ 24] 2–4, selected: index, arriveAt?, chooseAt?, progressAt?, progressDuration?, progressLabel? ≤ 32, icon?}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]
@@ -283,7 +296,8 @@ Common: title (required, ≤ 54 chars); `at` values are seconds from the scene s
 params:
 - title: string ≤ 54, required
 - growth: {mode, points: [{label, value, at}] 2–8 non-decreasing, unit? (default "reach"), source?, showValues?}
-- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160) [guided and bespoke tiers only]
+- rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
+- density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]
 - theme: {surface, foreground, muted, border, accentText?} [guided and bespoke tiers only]
 - presentation: "solid" | "glass" [guided and bespoke tiers only]

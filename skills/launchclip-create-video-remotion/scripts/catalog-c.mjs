@@ -175,7 +175,7 @@ function resolvePunchIn(params, ctx) {
   const release = p.release === undefined ? Math.min(0.5, r2(duration * 0.3)) : check.num(p.release, 'params.release', 0.3, 2);
   const punchAt = b.timeOf('punch', p.at, 'params.at', 0, {min: 0, max: duration - release - 0.25});
   const releaseAt = rt(end - release);
-  if (releaseAt - punchAt < 0.25 - 1e-9) check.fail('params.release', `leaves ${r2(releaseAt - punchAt)} s between the punch and the release; it needs 0.25 s`);
+  if (releaseAt - punchAt < 0.25 - 1e-6) check.fail('params.release', `leaves ${r2(releaseAt - punchAt)} s between the punch and the release; it needs 0.25 s`);
   const focus = {x: r2(focusIn.x * canvas.width), y: r2(focusIn.y * canvas.height)};
   const cx = canvas.width / 2, cy = canvas.height / 2;
   const sample = t => {

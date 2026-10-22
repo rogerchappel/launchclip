@@ -1,4 +1,6 @@
-// Editorial density: content-derived default rects and the 9:16 type scale
+// Editorial density: content-derived default rects (both aspects), the type
+// scale for derived rects, explicit 9:16 rects and explicit 16:9 rects with
+// density: "fill"
 // (kit/core/editorial-core.mjs, DENSITY). RFC §5 Shorts rules: key content in
 // y 280–1450 / x 80–940, centre of mass near y 860, lower third never empty,
 // key text at least 44 px.
@@ -7,6 +9,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DENSITY, resolveEditorialModule} from '../kit/core/editorial-core.mjs';
 import {buildEditorialModule} from '../kit/hyperframes/editorial-ui-modules.mjs';
+import {SAFE_ZONE_PROFILES, checkLayout, elementsFromEditorialLayout} from '../kit/core/layout-check.mjs';
 
 const base = {id: 'mod', start: 0, duration: 4};
 const SPECS = {
@@ -85,24 +88,67 @@ test('the emitter scales 9:16 content through one .ui-density wrapper', () => {
   assert.deepEqual(built.layout.rect, model.rect);
 });
 
-test('16:9 stays at scale 1: explicit rects are untouched, defaults hug content on the old baseline', () => {
+test('explicit 16:9 rects without the opt-in stay at scale 1, untouched', () => {
   const rect = {x: 80, y: 80, width: 850, height: 750};
   const explicit = resolveEditorialModule(spec('metric', {aspect: '16:9', rect}));
   assert.deepEqual(explicit.rect, rect);
   assert.equal(explicit.density.scale, 1);
+  assert.equal(explicit.density.source, 'explicit');
   assert.equal(explicit.content.numberFont, 64);
   assert.doesNotMatch(buildEditorialModule(spec('metric', {aspect: '16:9', rect})).html, /ui-density/);
+  // density: "fixed" keeps scale 1 for any rect, in either aspect.
+  assert.equal(resolveEditorialModule(spec('metric', {aspect: '9:16', rect: {x: 90, y: 380, width: 900, height: 620}, density: 'fixed'})).density.scale, 1);
+  assert.throws(() => resolveEditorialModule(spec('metric', {aspect: '16:9', rect, density: 'big'})), /density must be fill or fixed/);
+});
+
+test('explicit 16:9 rects with density: "fill" grow the type to fill the panel', () => {
+  const rect = {x: 560, y: 190, width: 800, height: 620};
+  const plain = resolveEditorialModule(spec('checklist', {aspect: '16:9', rect}));
+  const fill = resolveEditorialModule(spec('checklist', {aspect: '16:9', rect, density: 'fill'}));
+  assert.deepEqual(fill.rect, rect);
+  assert.equal(fill.density.source, 'explicit');
+  assert.ok(fill.density.scale > 1.3, `scale ${fill.density.scale}`);
+  assert.ok(fill.density.scale <= DENSITY.landscape.maxScale);
+  assert.ok(fill.density.natural <= fill.density.layout.height + .5);
+  // The filled panel is far less empty than the scale-1 one.
+  assert.ok(fill.density.natural * fill.density.scale > plain.density.natural * 1.3);
+  assert.match(buildEditorialModule(spec('checklist', {aspect: '16:9', rect, density: 'fill'})).html, /ui-density/);
+});
+
+test('16:9 default rects sit centred in the landscape title-safe zone, above the caption band, at a confident scale', () => {
+  const S = SAFE_ZONE_PROFILES.landscape;
   for (const name of Object.keys(SPECS)) {
     const model = resolveEditorialModule(spec(name, {aspect: '16:9'}));
-    assert.equal(model.density.scale, 1, name);
-    assert.equal(model.rect.x, 80, name);
-    assert.equal(model.rect.width, 680, name);
-    assert.equal(model.rect.y + model.rect.height, 980, `${name} bottom on y 980`);
-    assert.doesNotMatch(buildEditorialModule(spec(name, {aspect: '16:9'})).html, /ui-density/, name);
+    const {rect, density} = model;
+    assert.equal(density.source, 'derived', name);
+    assert.ok(rect.x >= S.safeZone.x && rect.x + rect.width <= S.safeZone.x + S.safeZone.width, `${name} x inside title-safe: ${JSON.stringify(rect)}`);
+    assert.ok(rect.y >= S.safeZone.y && rect.y + rect.height <= S.captionBand.y, `${name} above the caption band: ${JSON.stringify(rect)}`);
+    assert.ok(Math.abs(rect.x + rect.width / 2 - 960) <= 1, `${name} centred`);
+    assert.ok(Math.abs(centre(rect) - 540) <= 1080 * S.centerOfMassTolerance, `${name} centre ${centre(rect)}`);
+    assert.ok(density.scale >= 1.4, `${name} scale ${density.scale}`);
+    assert.ok(model.chrome.font * density.scale >= 40, `${name} body ${model.chrome.font * density.scale}px`);
+    assert.ok(density.natural <= density.layout.height + .5, name);
+    assert.ok(density.layout.height - Math.max(160 / density.scale, density.natural) < 1, `${name} hugs its content`);
   }
-  // The old fixed 500 px box was too short for this grid; the derived rect fits it.
+  const media = resolveEditorialModule({...base, kind: 'media-window', aspect: '16:9', title: 'Demo', media: {kind: 'image', src: 'assets/demo.png'}});
+  assert.deepEqual(media.rect, {x: 360, y: 117, width: 1200, height: 723});
+  assert.equal(media.density.scale, 1);
+});
+
+test('every 16:9 editorial default passes layout-check with captions on', () => {
+  const kinds = {...SPECS, 'media-window': {title: 'Demo', media: {kind: 'image', src: 'assets/demo.png'}}};
+  for (const [name, extra] of Object.entries(kinds)) {
+    const built = buildEditorialModule({...base, kind: name.replace('-treated', ''), ...extra, aspect: '16:9'});
+    const elements = [
+      ...elementsFromEditorialLayout(built.layout, {id: 'mod', role: name === 'media-window' ? 'media' : 'text', start: 0, end: 4}),
+      {id: 'captions', role: 'caption', rect: SAFE_ZONE_PROFILES.landscape.captionBand, start: 0, end: 4}
+    ];
+    const report = checkLayout({canvas: {width: 1920, height: 1080}, elements, profile: 'landscape'});
+    assert.deepEqual(report.findings.filter(finding => finding.severity === 'error'), [], name);
+  }
+  // A grid too tall for the old 500 px box still fits above the captions.
   const grid = resolveEditorialModule(spec('audience-grid', {aspect: '16:9', audience: {columns: 3, tiles: Array.from({length: 6}, (_, i) => ({label: `Viewer ${i}`, at: .6 + i * .3}))}}));
-  assert.ok(grid.rect.height > 500);
+  assert.ok(grid.rect.height > 500 && grid.rect.y + grid.rect.height <= 864);
 });
 
 test('explicit 9:16 rects keep their footprint and grow the type to fit it', () => {

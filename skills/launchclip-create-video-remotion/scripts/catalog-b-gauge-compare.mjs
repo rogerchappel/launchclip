@@ -56,7 +56,7 @@ function resolve(params, ctx) {
   const fillDuration = 1.0, fillEase = 'power3.out';
   let gapTime = null;
   if (gap) gapTime = b.timeOf('gap-bracket', gap.at, 'params.gap.at', Math.min(b.lastEvent - 0.4, Math.max(rightTime - start + 1.0, 0.6 + avail * 0.68)), {max: b.lastEvent - 0.4});
-  if (gap && gapTime < Math.max(leftTime, rightTime) + 0.35 - 1e-9) check.fail('params.gap.at', 'must come at least 0.35 s after both gauges start filling');
+  if (gap && gapTime < Math.max(leftTime, rightTime) + 0.35 - 1e-6) check.fail('params.gap.at', 'must come at least 0.35 s after both gauges start filling');
 
   // Geometry (rect-local)
   const titleFit = title ? fitText(check, 'params.title', title, {family: 'body', width: W, preferred: u(52), min: b.min.key, maxLines: 1}) : null;

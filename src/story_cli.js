@@ -62,6 +62,8 @@ export async function runStoryCommand(action, storyPath, flags = {}, adapters = 
         const resolved = resolveStory(story, { words: words?.list ?? [], beats, edl: await readStoryEdl(path.dirname(file), story) });
         const second = validateStory(resolved);
         errors.push(...second.errors.filter((entry) => !errors.includes(entry)));
+        // Gaps between anchored scenes are only known once times resolve.
+        for (const warning of second.warnings) if (warning.startsWith("empty plate") && !validation.warnings.includes(warning)) validation.warnings.push(warning);
         if (second.ok) {
           boundaries = deriveBoundaries(resolved);
           errors.push(...moduleParamErrors(resolved));

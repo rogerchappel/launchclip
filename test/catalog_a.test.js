@@ -370,6 +370,24 @@ test("kinetic-words stack layout keeps earlier beats and dims them", () => {
   checkEmitter(model);
 });
 
+test("kinetic-words: a beat at t <= one frame is settled on frame 0 with no enter, in every variant", () => {
+  for (const variant of ["scale", "rise"]) for (const at of [0, 1 / 30]) for (const layout of ["replace", "stack"]) {
+    const model = resolve("kinetic-words", { variant, layout, words: [{ text: "Ship it", at, emphasis: layout === "replace" }, { text: "today", at: 0.8 }] });
+    const label = `${variant}/${layout}/at ${at}`;
+    const start = model.start;
+    // No tween animates beat 0 (or its lines and bar) in before or at frame 0.
+    const enters = model.animations.filter((a) => /^beat-0(-|$)/.test(a.node) && a.start < start + 0.5);
+    assert.deepEqual(enters, [], label);
+    assert.equal(model.content.beats[0].settleTime, model.content.beats[0].time, label);
+    const props = sampleNode(model, "beat-0", start);
+    assert.ok(props.opacity === undefined || props.opacity === 1, label);
+    checkEmitter(model);
+  }
+  // A later beat still enters with its animation.
+  const later = resolve("kinetic-words", { words: [{ text: "Ship it", at: 0.1 }] });
+  assert.ok(later.animations.some((a) => a.node === "beat-0" && a.from.opacity === 0), "beat at 0.1 s still enters");
+});
+
 test("kinetic-words validates beats", () => {
   const bad = (params, pattern) => assert.throws(() => resolve("kinetic-words", params), pattern);
   bad({}, /kinetic-words: params\.words is required/);

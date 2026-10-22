@@ -28,16 +28,19 @@ const sha = (value) => createHash("sha256").update(value).digest("hex");
 // HTML). explainer-9x16 is compiled with its original s2 push (the golden now
 // pans into s2). Earlier pins, all byte-identical with grammars at the time:
 // origin/main 80d3107 (f4e7d778…), feat/ambient-motion 9d5ea0b (39db23d0…).
+// cooling, minimal and data-story-9x16 were re-pinned when checklist rows
+// stopped showing the pending label before they turn on (checklist HTML and
+// motion only; grammars still compile them byte for byte).
 const PRE_GRAMMAR_HTML_SHA256 = {
-  cooling: "6b179ce8cc04ab9ee5b12c9fc456355054df1262a0029c9bcb03383f1f495dd8",
-  minimal: "2e1609b9e600b5865ed38d87ad9f981631acbb0394ecec19cc9fb20f20bc316b",
+  cooling: "42810f2bfb1b85f1415057b16694badc863faa747f1573015a845a9eee9bb6a5",
+  minimal: "c078472ef1c59dc1144101b1c36e2084f350d9c656f6109de0e4af9ffecd3527",
   "promo-16x9": "715376840218a9be4496266c9d1f3905c8f528b8b135c81bb76ffcedb6a71f38",
   "explainer-9x16": "dfa8115335e278981ddb826b3da0764c06948b03baf716cd96430099f30e8f98",
-  "data-story-9x16": "efcb92cd22d57573bbbb9324979439b527ef41c492e37e83355b2630ac1d2f71",
+  "data-story-9x16": "681a299c5b5c94a40aefa28801742a8f8dff6d602199a1318498aee1c4eeb420",
   footage: "eae4b7cdc2bba79c3211741957d35c475f32ed03275e5de5c0951747311544b8"
 };
 // test/editorial_core.test.js: the explicit-rect 16:9 corpus subset.
-const EXPLICIT_16X9_SHA256 = "b7959950c0508c94d6c18b134eea8f50e3ec419b883d8c8e0b88a3d7560dc681";
+const EXPLICIT_16X9_SHA256 = "2efd279cb4a201f51923b0c0dc41c765c81bc9bbed9343bd1e71289cb93d3003";
 
 async function goldenStory(id) {
   let dir = path.join(STORY, id), cleanup = async () => {};

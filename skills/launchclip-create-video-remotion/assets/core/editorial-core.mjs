@@ -55,7 +55,8 @@
  * @property {{scale:number,hero:boolean,source:'explicit'|'derived'|'legacy',layout:{width:number,height:number},natural:number}} density
  *   The kind lays out in `layout` (rect / scale, layout px) and renders scaled
  *   by `scale` from the rect's top-left corner; `natural` is the content's
- *   natural height in layout px. scale is 1 in 16:9 and for media-window.
+ *   natural height in layout px. scale is 1 for media-window, for explicit
+ *   16:9 rects without density: "fill" and for density: "fixed".
  *   chrome, cell/bar/stage/rail geometry and every kind-CSS size are layout px.
  *
  * Content shapes (all times absolute):
@@ -221,7 +222,7 @@ function series(config, label, duration, enterDuration = .28, exitDuration = nul
     object(entry, `${label}.values[${i}]`, ['value', 'at']);
     number(entry.value, 'value', -1_000_000_000, 1_000_000_000);
     number(entry.at, 'at', enterDuration, duration - Math.max(.8, (exitDuration ?? 0) + .6));
-    if (entry.at <= previous || (previous >= 0 && entry.at - previous + 1e-9 < .65)) throw new Error('value times must increase with at least 0.65s between events');
+    if (entry.at <= previous || (previous >= 0 && entry.at - previous + 1e-6 < .65)) throw new Error('value times must increase with at least 0.65s between events');
     previous = entry.at;
   });
   return config.mode === 'illustration' ? 'Illustration · example values' : `Source: ${config.source}`;
@@ -257,9 +258,12 @@ const hex = value => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value
 // A module lays out in a "layout box" of rect / scale and renders scaled by
 // `scale` from the rect's top-left corner, so every size in the kind CSS and
 // every rect-local geometry value is in layout px (canvas px = layout px *
-// scale). 16:9 always resolves at scale 1, byte-identical to the pre-density
-// output for explicit rects. 9:16 picks the largest scale, from DENSITY.max
-// down to 1, at which the content validates and its natural height fits.
+// scale). The largest scale, from DENSITY.max down to 1, at which the content
+// validates and its natural height fits is used for derived rects (no rect)
+// in both aspects, for explicit 9:16 rects, and for explicit 16:9 rects that
+// opt in with density: "fill". An explicit 16:9 rect without the opt-in (or
+// any rect with density: "fixed") resolves at scale 1, byte-identical to the
+// pre-density output.
 export const DENSITY = Object.freeze({
   max: 2, min: 1, step: .05,
   // RFC §5 Shorts geometry, reference 1080x1920: safe zone, the caption band
@@ -267,58 +271,100 @@ export const DENSITY = Object.freeze({
   // centre sits just below the lower-third line (safe.y + safe.height / 2) so
   // the lower third is never empty.
   portrait: Object.freeze({x: 90, width: 840, top: 280, captionTop: 1190, bottom: 1450, centre: 880, mediaHeight: 521}),
-  landscape: Object.freeze({x: 80, width: 680, top: 80, baseline: 980}),
-  // Hero numbers may grow to this layout size in 9:16: the metric number is
-  // the hero; a progress card's hero is its bar, so its number stays smaller.
+  // Landscape geometry, reference 1920x1080 (layout-check's landscape
+  // profile): title-safe x 96–1824 / y 54–1026, caption band from y 864. The
+  // default card is centred horizontally, kept inside top–captionTop (a
+  // breathing margin inside title-safe, 24 px clear of the caption band) and
+  // centred on the frame centre where it fits. widths: the card widths tried
+  // in turn (a composed centre column, then wider for dense content, then the
+  // whole safe width); minScale: the smallest scale each width accepts before
+  // the next is tried. Body copy follows the card width (about 45 px at 1000
+  // wide); maxScale caps padding and fixed-size type, so cards read big on a
+  // 1920-wide frame without crowding it. safeX/safeWidth/bottom document the
+  // title-safe zone.
+  landscape: Object.freeze({maxScale: 1.75, safeX: 96, safeWidth: 1728, top: 96, captionTop: 840, bottom: 1026, centre: 540,
+    widths: Object.freeze([1000, 1440, 1728]), minScale: Object.freeze([1.4, 1, 1]), mediaWidth: 1200}),
+  // Hero numbers may grow to this layout size when density applies: the metric
+  // number is the hero; a progress card's hero is its bar, so its number stays
+  // smaller.
   heroNumber: 120, heroProgressNumber: 88, numberCap: 64
 });
 const LEGACY_RECT = {'16:9': {x: 80, y: 480, width: 680, height: 500}, '9:16': {x: 90, y: 960, width: 900, height: 740}};
 const BASE = Object.freeze({scale: 1, hero: false});
+const DENSITY_MODES = ['fill', 'fixed'];
 
-function candidates() {
+function candidates(max = DENSITY.max) {
   const list = [];
-  for (let scale = DENSITY.max; scale >= DENSITY.min - 1e-9; scale -= DENSITY.step) list.push({scale: Math.round(scale * 100) / 100, hero: true});
+  for (let scale = max; scale >= DENSITY.min - 1e-9; scale -= DENSITY.step) list.push({scale: Math.round(scale * 100) / 100, hero: true});
   return list;
+}
+
+// Largest density candidate at which the content validates and its natural
+// height fits the explicit rect; else the scale-1 resolution (or its error).
+function fillRect(options, input, rect, max) {
+  if (rect && typeof rect === 'object' && input.kind !== 'media-window') {
+    for (const candidate of candidates(max)) {
+      try {
+        const model = resolveAt(options, input, rect, candidate, 'explicit');
+        if (model.density.natural <= model.density.layout.height + .5) return model;
+      } catch { /* try a smaller scale */ }
+    }
+  }
+  return resolveAt(options, input, rect, BASE, 'explicit');
+}
+
+// Content-derived placement: for each pass, the largest candidate scale whose
+// natural height fits the band at that width; the card hugs its content and is
+// centred on `centre`, kept inside top..limit. Returns null when nothing fits.
+function derivedRect(options, input, passes, scales) {
+  for (const {x, width, top, limit, centre, maxHeight = Infinity, minScale = 0} of passes) {
+    const band = limit - top;
+    for (const candidate of scales) {
+      if (candidate.scale < minScale) break;
+      let probe;
+      try { probe = resolveAt(options, input, {x, y: top, width, height: band}, candidate, 'derived'); } catch { continue; }
+      const height = Math.max(160, Math.ceil(probe.density.natural * candidate.scale));
+      if (height > Math.min(band, maxHeight)) continue;
+      const y = Math.round(Math.min(limit - height, Math.max(top, centre - height / 2)));
+      try { return resolveAt(options, input, {x, y, width, height}, candidate, 'derived'); } catch { /* next candidate */ }
+    }
+  }
+  return null;
 }
 
 /** @returns {EditorialModel} */
 export function resolveEditorialModule(input, options = {}) {
   const plain = input && typeof input === 'object' && !Array.isArray(input);
-  if (!plain || !['16:9', '9:16'].includes(input.aspect) || !EDITORIAL_KINDS.includes(input.kind)) return resolveAt(options, input, input?.rect, BASE, 'explicit');
+  if (!plain || !['16:9', '9:16'].includes(input.aspect) || !EDITORIAL_KINDS.includes(input.kind) || (input.density !== undefined && !DENSITY_MODES.includes(input.density))) return resolveAt(options, input, input?.rect, BASE, 'explicit');
   const explicit = input.rect !== undefined;
   const portrait = input.aspect === '9:16';
-  if (explicit && !portrait) return resolveAt(options, input, input.rect, BASE, 'explicit');
+  const fixed = input.density === 'fixed';
   if (explicit) {
-    // Explicit 9:16 rect: keep the rect, grow the type until the content
-    // would no longer fit. The final BASE attempt is the pre-density
-    // behaviour, so any spec that resolved before still resolves (or throws
-    // the same error).
-    const rect = input.rect;
-    if (rect && typeof rect === 'object' && input.kind !== 'media-window') {
-      for (const candidate of candidates()) {
-        try {
-          const model = resolveAt(options, input, rect, candidate, 'explicit');
-          if (model.density.natural <= model.density.layout.height + .5) return model;
-        } catch { /* try a smaller scale */ }
-      }
-    }
-    return resolveAt(options, input, rect, BASE, 'explicit');
+    // Explicit rect: keep the rect and, where density applies (9:16, or 16:9
+    // with density: "fill"), grow the type until the content would no longer
+    // fit. The final BASE attempt is the pre-density behaviour, so any spec
+    // that resolved before still resolves (or throws the same error).
+    if (fixed || (!portrait && input.density !== 'fill')) return resolveAt(options, input, input.rect, BASE, 'explicit');
+    return fillRect(options, input, input.rect, portrait ? DENSITY.max : DENSITY.landscape.maxScale);
   }
   if (input.kind === 'media-window') {
-    if (!portrait) return resolveAt(options, input, LEGACY_RECT['16:9'], BASE, 'legacy');
+    if (!portrait) {
+      // 16:9 media frame (16:9 media under the 48 px bar), centred, above the
+      // caption band.
+      const L = DENSITY.landscape, width = L.mediaWidth, height = Math.round(width * 9 / 16) + 48;
+      const y = Math.round(Math.min(L.captionTop - height, Math.max(L.top, L.centre - height / 2)));
+      return resolveAt(options, input, {x: Math.round((1920 - width) / 2), y, width, height}, BASE, 'derived');
+    }
     const P = DENSITY.portrait, height = P.mediaHeight;
     return resolveAt(options, input, {x: P.x, y: Math.round(P.centre - height / 2), width: P.width, height}, BASE, 'derived');
   }
+  const scales = fixed ? [BASE] : candidates(portrait ? DENSITY.max : DENSITY.landscape.maxScale);
   if (!portrait) {
-    // 16:9 default: the old lower-left footprint, its height taken from the
-    // content and its bottom edge kept on the old baseline (y 980).
+    // 16:9 default: a centred card inside the landscape title-safe zone,
+    // above the caption band, at the largest scale its content allows.
     const L = DENSITY.landscape;
-    try {
-      const probe = resolveAt(options, input, {x: L.x, y: L.top, width: L.width, height: L.baseline - L.top}, BASE, 'derived');
-      const height = Math.max(160, Math.ceil(probe.density.natural));
-      if (height <= L.baseline - L.top) return resolveAt(options, input, {x: L.x, y: L.baseline - height, width: L.width, height}, BASE, 'derived');
-    } catch { /* fall back to the legacy rect and its error */ }
-    return resolveAt(options, input, LEGACY_RECT['16:9'], BASE, 'legacy');
+    const passes = L.widths.map((width, i) => ({x: Math.round((1920 - width) / 2), width, top: L.top, limit: L.captionTop, centre: L.centre, minScale: fixed ? 0 : L.minScale[i]}));
+    return derivedRect(options, input, passes, scales) ?? resolveAt(options, input, LEGACY_RECT['16:9'], BASE, 'legacy');
   }
   // 9:16 default: safe-zone width, the largest scale whose natural height
   // fits above the caption band (else above the safe-zone bottom), centred
@@ -327,29 +373,19 @@ export function resolveEditorialModule(input, options = {}) {
   // phone scale; then any scale above the caption band; then the whole safe
   // zone.
   const P = DENSITY.portrait, lowerThird = P.top + (P.bottom - P.top) / 2;
-  const passes = [{limit: P.captionTop, maxHeight: 2 * (P.captionTop - lowerThird - 1), minScale: 1.8}, {limit: P.captionTop}, {limit: P.bottom}];
-  for (const {limit, maxHeight = Infinity, minScale = 0} of passes) {
-    const band = limit - P.top;
-    for (const candidate of candidates()) {
-      if (candidate.scale < minScale) break;
-      let probe;
-      try { probe = resolveAt(options, input, {x: P.x, y: P.top, width: P.width, height: band}, candidate, 'derived'); } catch { continue; }
-      const height = Math.max(160, Math.ceil(probe.density.natural * candidate.scale));
-      if (height > Math.min(band, maxHeight)) continue;
-      const y = Math.round(Math.min(limit - height, Math.max(P.top, P.centre - height / 2)));
-      try { return resolveAt(options, input, {x: P.x, y, width: P.width, height}, candidate, 'derived'); } catch { /* next candidate */ }
-    }
-  }
-  return resolveAt(options, input, LEGACY_RECT['9:16'], BASE, 'legacy');
+  const column = {x: P.x, width: P.width, top: P.top, centre: P.centre};
+  const passes = [{...column, limit: P.captionTop, maxHeight: 2 * (P.captionTop - lowerThird - 1), minScale: fixed ? 0 : 1.8}, {...column, limit: P.captionTop}, {...column, limit: P.bottom}];
+  return derivedRect(options, input, passes, scales) ?? resolveAt(options, input, LEGACY_RECT['9:16'], BASE, 'legacy');
 }
 
 function resolveAt(options, input, suppliedRect, density, source) {
-  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt', 'theme', 'focus', 'growth']);
+  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'density', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt', 'theme', 'focus', 'growth']);
   if (!/^[a-z][a-z0-9-]{0,59}$/.test(input.id ?? '')) throw new Error('id must be a unique lowercase DOM-safe identifier');
   if (!EDITORIAL_KINDS.includes(input.kind)) throw new Error(`kind must be ${EDITORIAL_KINDS.join(', ')}`);
   if (input.presentation !== undefined && !['solid', 'glass'].includes(input.presentation)) throw new Error('presentation must be solid or glass');
   if (input.numbered !== undefined && (input.kind !== 'step-rail' || typeof input.numbered !== 'boolean')) throw new Error('numbered is a boolean for step-rail only');
   if (!['16:9', '9:16'].includes(input.aspect)) throw new Error('aspect must be 16:9 or 9:16');
+  if (input.density !== undefined && !DENSITY_MODES.includes(input.density)) throw new Error('density must be fill or fixed');
   const kind = input.kind, id = input.id;
   const canvas = input.aspect === '16:9' ? {width: 1920, height: 1080} : {width: 1080, height: 1920};
   const start = number(input.start, 'start', 0, 86400);
@@ -555,7 +591,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
       let previous = -1, previousLights = [false, false, false];
       const states = row.states.map((state, n) => {
         object(state, 'rack state', ['at', 'lights']); const stateOffset = at(state.at, 'rack state.at');
-        if (stateOffset <= previous || previous >= 0 && stateOffset - previous < .3 - 1e-9) throw new Error('rack state times must increase by at least 0.3s'); previous = stateOffset;
+        if (stateOffset <= previous || previous >= 0 && stateOffset - previous < .3 - 1e-6) throw new Error('rack state times must increase by at least 0.3s'); previous = stateOffset;
         if (!Array.isArray(state.lights) || state.lights.length !== 3 || state.lights.some(light => typeof light !== 'boolean')) throw new Error('rack lights must be exactly three booleans');
         const time = start + stateOffset;
         const changes = [];
@@ -583,9 +619,9 @@ function resolveAt(options, input, suppliedRect, density, source) {
       object(line, 'code line', ['tokens', 'at', 'typeDuration']); const lineOffset = at(line.at, 'code line.at');
       if (!typing && line.typeDuration !== undefined) throw new Error('line.typeDuration requires code.typing');
       const typeDuration = typing ? number(line.typeDuration ?? .6, 'line.typeDuration', .12, 2) : .24;
-      if (typing && lineOffset < typingEnd - 1e-9) throw new Error('typing lines must not overlap');
+      if (typing && lineOffset < typingEnd - 1e-6) throw new Error('typing lines must not overlap');
       typingEnd = lineOffset + typeDuration;
-      if (lineOffset <= previous || previous >= 0 && lineOffset - previous < .3 - 1e-9) throw new Error('code line times must increase by at least 0.3s'); previous = lineOffset;
+      if (lineOffset <= previous || previous >= 0 && lineOffset - previous < .3 - 1e-6) throw new Error('code line times must increase by at least 0.3s'); previous = lineOffset;
       if (!Array.isArray(line.tokens) || line.tokens.length < 1 || line.tokens.length > 24) throw new Error('code line requires 1–24 tokens');
       let length = 0, characters = 0;
       const tokens = line.tokens.map(token => {
@@ -699,7 +735,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
       if (isGrowth && i > 0 && point.value < points[i - 1].value) throw new Error('growth values must not decrease; use trend-chart for declines');
       if (point.label.length > Math.floor(columnWidth / (labelFont * .65)) * 2) throw new Error('point label too long for rect');
       const pointOffset = at(point.at, 'point.at');
-      if (pointOffset <= previous || (previous >= 0 && pointOffset - previous + 1e-9 < .5)) throw new Error('point times must increase with at least 0.5s between events');
+      if (pointOffset <= previous || (previous >= 0 && pointOffset - previous + 1e-6 < .5)) throw new Error('point times must increase with at least 0.5s between events');
       previous = pointOffset;
     });
     const maximum = Math.max(1, ...points.map(point => point.value));
@@ -792,7 +828,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
       text(step.label, 'step.label', 22);
       if (step.label.length > Math.floor(labelWidth / (Math.max(22, font - 4) * .65)) * 2) throw new Error('step label too long for rect; shorten it or widen the module');
       const stepOffset = at(step.at, 'step.at');
-      if (stepOffset <= previous || (previous >= 0 && stepOffset - previous + 1e-9 < .3)) throw new Error('step times must strictly increase with at least 0.3s between events');
+      if (stepOffset <= previous || (previous >= 0 && stepOffset - previous + 1e-6 < .3)) throw new Error('step times must strictly increase with at least 0.3s between events');
       previous = stepOffset;
       const time = start + stepOffset;
       events.push({id: `${id}-step-${i}-settle`, time: time + .3});
