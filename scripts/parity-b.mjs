@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { resolveEditorialModule } from '../kit/core/editorial-core.mjs';
 import { buildEditorialModule } from '../skills/launchclip-create-video/scripts/editorial-ui-modules.mjs';
+import { injectParityFonts } from './parity-fonts.mjs';
 
 const run = promisify(execFile);
 const require = createRequire(import.meta.url);
@@ -144,6 +145,7 @@ export async function parity(fixturePath, { out, dense = false } = {}) {
   const project = path.join(outDir, 'hf-project');
   await mkdir(project, { recursive: true });
   await writeFile(path.join(project, 'index.html'), hyperframesHtml(fixture.story, model, module));
+  await injectParityFonts(fixture.story, project);
   await copyFile(GSAP, path.join(project, 'gsap.min.js'));
   if (existsSync(path.join(publicDir, 'assets'))) await cp(path.join(publicDir, 'assets'), path.join(project, 'assets'), { recursive: true });
 

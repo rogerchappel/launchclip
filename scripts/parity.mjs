@@ -22,6 +22,7 @@ import {createRequire} from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
+import {injectParityFonts} from './parity-fonts.mjs';
 import {editorialSpecFromScene, sceneDuration} from './parity-scene.mjs';
 
 const require = createRequire(import.meta.url);
@@ -157,6 +158,7 @@ window.__timelines["main"] = tl;
 </html>
 `;
   await writeFile(path.join(projectDir, 'index.html'), html);
+  await injectParityFonts(story, projectDir);
   return {compiler: 'internal', projectDir};
 }
 

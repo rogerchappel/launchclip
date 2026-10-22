@@ -20,6 +20,7 @@ import { promisify } from "node:util";
 import { MODULES } from "../kit/core/catalog-a.mjs";
 import { EMITTERS } from "../kit/hyperframes/catalog-a.mjs";
 import { hyperframesInvocation } from "../src/toolchain.js";
+import { injectParityFonts } from "./parity-fonts.mjs";
 
 const run = promisify(execFile);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -131,6 +132,7 @@ export async function verifyFixture(file, { out } = {}) {
   await mkdir(projectDir, { recursive: true });
   await copyFile(GSAP, path.join(projectDir, "gsap.min.js"));
   await writeFile(path.join(projectDir, "index.html"), hyperframesProject(story, model));
+  await injectParityFonts(story, projectDir);
   const samples = sampleTimes(model);
   const hf = await hyperframesStills(projectDir, samples.map((s) => s.t), outDir);
   const rm_ = await remotionStills(story, scene, samples.map((s) => Math.round((s.t - model.start) * model.fps)), outDir);
