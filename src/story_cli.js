@@ -9,6 +9,8 @@ import { captureCommand, runCommand } from "./renderers/command.js";
 import { createPlannerClient, planStoryboard } from "./storyboard_planner.js";
 import { DEFAULT_BRAND } from "../kit/core/planning-prompt.mjs";
 import { readStoryEdl } from "./story_loader.js";
+import { applyProjectStyle } from "./story_style.js";
+import { resolveStyleV2 } from "./style_store.js";
 
 const UNKNOWN_MODULE = /\.module "[^"]+" is not a known module$/;
 
@@ -45,7 +47,8 @@ export async function runStoryCommand(action, storyPath, flags = {}, adapters = 
   if (action === "compile") return compileStoryCommand(storyPath, flags);
   if (action === "plan") return planStoryCommand(flags, adapters);
   const file = path.resolve(storyPath);
-  const story = await readJson(file, "story.json");
+  const styled = await applyProjectStyle(await readJson(file, "story.json"), { projectDir: path.dirname(file) });
+  const story = styled.story;
   const words = await loadWords(flags.narration, story, path.dirname(file));
   const beats = flags.beats ? await readJson(path.resolve(flags.beats), "BEATS.json") : null;
   const validation = validateStory(story);
@@ -76,7 +79,8 @@ export async function runStoryCommand(action, storyPath, flags = {}, adapters = 
       narration: words?.file ?? null,
       anchors_resolved: resolvedChecked,
       errors,
-      warnings: validation.warnings,
+      warnings: [...(styled.style?.warnings ?? []), ...validation.warnings],
+      style: styled.style ? { name: styled.style.name, source: styled.style.source, file: styled.style.file, applied: styled.style.applied } : null,
       boundaries
     };
     if (flags.out) {
@@ -115,7 +119,8 @@ export async function compileStoryCommand(target, flags = {}, { run = runCommand
   const isFile = (await stat(input).catch(() => { throw new Error(`Cannot read story project: ${input}`); })).isFile();
   const project = isFile ? path.dirname(input) : input;
   const storyFile = isFile ? input : path.join(project, "storyboard.json");
-  const story = await readJson(storyFile, "storyboard.json");
+  const styled = await applyProjectStyle(await readJson(storyFile, "storyboard.json"), { projectDir: project });
+  const story = styled.story;
   const words = await loadWords(flags.narration, story, project) ?? await loadWords(await existsFile(path.join(project, "NARRATION.json")) ? path.join(project, "NARRATION.json") : null, story, project);
   const beatsFile = flags.beats ? path.resolve(flags.beats) : path.join(project, "BEATS.json");
   const beats = flags.beats || await existsFile(beatsFile) ? await readJson(beatsFile, "BEATS.json") : null;
@@ -160,8 +165,12 @@ export async function planStoryCommand(flags = {}, adapters = {}) {
   const words = narrationFile ? await loadWords(narrationFile, null, outDir) : null;
   const lane = String(flags.lane ?? (flags.base ? "footage-led" : words ? "voiceover-motion" : "motion"));
   const format = planFormat(flags, words?.list ?? []);
-  const brand = flags.brand ? await readJson(path.resolve(String(flags.brand)), "brand.json") : DEFAULT_BRAND;
   const warnings = [];
+  // --style <name|path>: plan for a channel style pack (its preferences,
+  // avoid list and caption preset go into the prompt; the storyboard names it).
+  const style = flags.style && flags.style !== true ? await resolveStyleV2(String(flags.style), { projectDir: outDir }) : null;
+  if (style) warnings.push(...style.warnings);
+  const brand = flags.brand ? await readJson(path.resolve(String(flags.brand)), "brand.json") : style ? undefined : DEFAULT_BRAND;
   const audio = {};
   if (words) {
     const relative = path.relative(outDir, words.file).split(path.sep).join("/");
@@ -186,6 +195,7 @@ export async function planStoryCommand(flags = {}, adapters = {}) {
     client,
     audio,
     base: flags.base ? String(flags.base) : null,
+    style: style?.pack ?? null,
     ...(maxRepairs === undefined ? {} : { maxRepairs })
   });
   const reportFile = path.join(outDir, ".launchclip", "storyboard-plan.json");
@@ -196,6 +206,7 @@ export async function planStoryCommand(flags = {}, adapters = {}) {
     status: report.status,
     tier: report.tier,
     lane: report.lane,
+    style: style ? { name: style.name, source: style.source, file: style.file } : null,
     model: report.model,
     out: report.status === "passed" ? out : null,
     report: reportFile,

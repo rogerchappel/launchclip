@@ -1,4 +1,5 @@
 import { narrationFile, readStoryEdl } from "./story_loader.js";
+import { applyProjectStyle } from "./story_style.js";
 import { catalogModules, resolveModule } from "../kit/core/modules.mjs";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -23,7 +24,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   const project = path.resolve(projectDir);
   const storyFile = path.join(project, "storyboard.json");
   if (!options.story && !(await exists(storyFile))) throw new Error(`layout-check needs ${storyFile}; author storyboard.json first`);
-  const story = options.story ?? JSON.parse(await readFile(storyFile, "utf8"));
+  const story = (await applyProjectStyle(options.story ?? JSON.parse(await readFile(storyFile, "utf8")), { projectDir: project })).story;
   const storyCore = adapters.storyCore ?? await loadStoryCore();
   if (typeof storyCore.validateStory === "function") {
     const validation = storyCore.validateStory(story);

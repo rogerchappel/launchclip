@@ -26,7 +26,7 @@ import { gsapVars, layerStateAt, sceneWindows } from '../core/transitions.mjs';
 import { getEase } from '../core/motion.mjs';
 import { ambientField, blobBackground, blobStateAt, blobTweens, driftGsap, sceneAmbient, sceneDrift } from '../core/ambient.mjs';
 import { profileGeometry } from '../core/layout-check.mjs';
-import { captionCss, CAPTION_DEFAULT_COLORS, captionChunksFrom, captionRuntime, chunkWords, narrationWords } from '../core/captions.mjs';
+import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from '../core/captions.mjs';
 import { brandFontStacks, fontFaceRule, fontSlug, frozenFontFaces, projectFontFamilies, registryFontFaces } from '../core/fonts.mjs';
 import { EMITTERS as EDITORIAL_EMITTERS } from './editorial-ui-modules.mjs';
 import { EMITTERS as CATALOG_A_EMITTERS } from './catalog-a.mjs';
@@ -242,12 +242,13 @@ export async function compileStoryToHyperFrames(story, options = {}) {
 
   // Captions.
   let captions = null;
-  const overlay = isolate ? null : (story.overlays ?? []).find((entry) => entry?.type === 'captions' && entry.style !== 'none');
+  const overlay = isolate ? null : captionsOverlayOf(story);
   if (overlay) {
     const chunks = await loadCaptionChunks(story, overlay, sourceDir, warnings);
     if (chunks?.length) {
       for (const range of overlay.hide ?? []) hide.push([Number(range[0]), Number(range[1])]);
-      captions = { chunks, hide };
+      const plan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide });
+      if (plan.nodes.length) captions = { chunks, hide, plan };
     }
   }
 
@@ -277,7 +278,7 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     .lc-ambient-blob { position: absolute; left: 0; top: 0; border-radius: 50%; transform-origin: 50% 50%; }
     .lc-drift { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; }
     ${placeholderCss()}
-    ${captions ? `${captionCss(format).trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}
+    ${captions ? `${captions.plan.css.trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}
     ${css.filter(Boolean).join('\n    ')}
   </style>
   <script>${FONT_WARMUP}</script>
@@ -290,12 +291,12 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     ${hoisted.join('\n    ')}
     ${markup.join('\n    ')}
     ${captions ? '<div id="lc-captions" class="lc-captions"></div>' : ''}
-    ${captions ? `<script>\n${captionRuntime(captions.chunks)}</script>` : ''}
+    ${captions ? `<script>\n${captionPlanRuntime(captions.plan)}</script>` : ''}
     <script>
       window.__timelines = window.__timelines || {};
       const tl = gsap.timeline({ paused: true });
 ${motion.join('\n').split('\n').map((line) => `      ${line}`).join('\n')}
-      ${captions ? `window.mountCaptions(tl, document.getElementById("lc-captions"), { hide: ${JSON.stringify(captions.hide)} });` : ''}
+      ${captions ? 'window.mountCaptions(tl, document.getElementById("lc-captions"));' : ''}
       window.__timelines["${COMPOSITION_ID}"] = tl;
     </script>
   </div>
