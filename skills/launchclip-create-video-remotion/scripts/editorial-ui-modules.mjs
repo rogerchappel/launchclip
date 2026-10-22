@@ -2,12 +2,16 @@
 import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {resolveEditorialModule, EDITORIAL_SYMBOLS, EDITORIAL_STYLE} from './editorial-core.mjs';
+import {resolveEditorialModule, EDITORIAL_KINDS, EDITORIAL_SYMBOLS, EDITORIAL_STYLE} from './editorial-core.mjs';
 
 // HyperFrames emitter for the editorial modules. Validation, defaults,
 // geometry, timing, events and theme come from the renderer-neutral core
-// (./editorial-core.mjs, a copy of kit/core/editorial-core.mjs); this file only
-// turns that resolved model into HTML, CSS and paused-GSAP timeline calls.
+// (kit/core/editorial-core.mjs); this file only turns that resolved model into
+// HTML, CSS and paused-GSAP timeline calls.
+//
+// Canonical copy: kit/hyperframes/editorial-ui-modules.mjs. The create-video
+// skills ship generated copies (scripts/sync-skills.mjs) that import
+// ./editorial-core.mjs instead.
 
 const S = EDITORIAL_STYLE, C = S.color, R = S.radius, F = S.font, G = S.glass, SH = S.shadow, A = S.accentAlpha;
 const escape = value => String(value).replace(/[&<>"']/g, char => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char]));
@@ -29,7 +33,12 @@ function moduleMotion(target, model, origin) {
 // Skill-local authoring helper, not a production API. The host owns its paused
 // GSAP timeline and places these fragments directly inside its composition root.
 export function buildEditorialModule(input) {
-  const model = resolveEditorialModule(input);
+  return emitEditorialModule(resolveEditorialModule(input));
+}
+
+// Emitter for an already resolved model (resolveEditorialModule, or
+// resolveModule from kit/core/modules.mjs, which adds brand defaults).
+export function emitEditorialModule(model) {
   const {id, kind, rect, start, duration, accent, title, theme, track, content: c} = model;
   const {font, pad, statusWidth} = model.chrome;
   const selector = `#${id}`, glass = model.presentation === 'glass';
@@ -218,6 +227,9 @@ export function buildEditorialModule(input) {
   const background = kind === 'media-window' ? 'background:transparent;' : '';
   return {html: `${media}<section id="${id}" ${kind === 'media-window' ? chromeTimed : timed} style="${background}">${body}</section>`, css, motion: motion.join('\n'), events: model.events, layout: model.layout};
 }
+
+// Emitter table for the story compiler (docs/KIT_CONTRACTS.md, "Emitters").
+export const EMITTERS = Object.freeze(Object.fromEntries(EDITORIAL_KINDS.map(kind => [kind, emitEditorialModule])));
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {

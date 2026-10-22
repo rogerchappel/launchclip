@@ -230,20 +230,41 @@ overrides it and `kit/remotion/entry.tsx` otherwise; examples use the latter.
   `durationInFrames={Math.round((end - start) * fps)}`, with
   `premountFor={fps}` so media and fonts load before the scene appears. A
   module inside it computes absolute time as `t = scene.start + frame / fps`.
-- Typed boundaries through `@remotion/transitions`: `fade` → `fade()`, `push` →
-  `slide()`, `iris` → `iris()`, `whip` and `zoom` → the kit's custom
-  presentations, `cut` → no transition, and `morph` → no boundary effect, with
-  the modules handing the shared object across. A `TransitionSeries`
-  transition overlaps both neighbours and shortens the series by its length;
-  the kit compensates from absolute scene times, so story times stay
-  authoritative. Do not hand-build a `TransitionSeries` against story times
-  without the same correction.
+- Typed boundaries as frame-pure layer styles from `kit/core/transitions.mjs`,
+  the same tween table the HyperFrames compiler turns into GSAP, so both
+  renderers move the same layers by the same amounts with the same eases.
+  Every track-0 scene is an opaque plate in `brand.colors.bg`: `fade` fades the
+  incoming plate in, `push` slides both plates (`direction`, default `left`),
+  `whip` slides them on `expo.inOut` with a blur that peaks mid-move and
+  returns to zero, `zoom` scales the outgoing plate up while the incoming one
+  grows in, `iris` opens a circle onto the incoming plate, `morph` crossfades
+  while the modules hand the shared object across, and `cut` does nothing.
+  Because same-track scenes cannot overlap, the kit holds the outgoing track-0
+  scene on screen until the incoming transition settles (its module's exit
+  moves to the end of that window); scenes more than 0.1 s apart show the
+  background in between. The kit does not use `TransitionSeries`, which
+  overlaps neighbours and shortens the series, so story times stay
+  authoritative. Do not hand-build a `TransitionSeries` against story times.
 - Exactly one `<Audio src={staticFile(story.audio.mix)} />` at the root, spanning
-  the whole composition. No scene, module, or video plays its own audio.
-- Captions from `assets/captions/captions.json` through the kit's
-  `<WordCaptions>`, mounted once on the top layer for the full duration.
+  the whole composition (the voice when there is no mix). No scene, module, or
+  video plays its own audio.
+- Captions through the kit's `<WordCaptions>`, mounted once on the top layer
+  for the full duration: from the captions overlay's `src`
+  (`assets/captions/captions.json`), or chunked from `audio.words` when `src`
+  is absent. `overlays[].hide` ranges and scenes whose module sets
+  `hidesCaptions` hide them. The chunking, band, pop and per-word highlight are
+  the HyperFrames runtime's (`kit/core/captions.mjs`).
 - The loop ending, when `ending.loop_to` is set, returns to that scene's frame
-  zero state on the last frame.
+  zero state: over `ending.in.dur` with the typed transition when `ending.in`
+  is set, otherwise on the last frame.
+- Brand fonts load through `@remotion/google-fonts` (the families listed in
+  `kit/remotion/fonts.ts`) with a fallback stack per role.
+- A scene whose module is unknown, invalid, or has no component renders a
+  labelled placeholder box, never a blank frame.
+
+`launchclip story compile <project> --renderer remotion` resolves the story,
+writes `.launchclip/story.resolved.json` and proves the bundle lists
+`LaunchclipStory`.
 
 Media rules:
 
@@ -363,13 +384,21 @@ The bespoke tier (flagship models only) may add a custom module when no
 catalogue module can express a topic-specific world:
 
 - Put the TSX in `remotion/modules/<name>.tsx`, default-exporting a component
-  that receives `{scene, params, brand, format}`, where `params` is
-  `scene.params`. Set the scene's `module` to `"custom"` and
-  `params.component` to `<name>`.
-- Register it through `remotion/entry.tsx`, which renders the kit's
-  `StoryComposition` with a `customModules` map
-  (`{ "<name>": Component }`) under the same `LaunchclipStory` id and
-  metadata. Leave every kit file unmodified.
+  that receives `{scene, params, brand, format, model}`, where `params` is
+  `scene.params` and `scene.start` is absolute. Set the scene's `module` to
+  `"custom"` and `params.component` to `<name>`.
+- Register it through `remotion/entry.tsx`, which registers the kit's
+  compositions with a `customModules` map under the same `LaunchclipStory` id
+  and metadata. Leave every kit file unmodified:
+
+```tsx
+import React from "react";
+import { registerRoot } from "remotion";
+import { LaunchclipCompositions } from "../kit/remotion/Root";
+import SignalLabel from "./modules/SignalLabel";
+
+registerRoot(() => <LaunchclipCompositions customModules={{ SignalLabel }} />);
+```
 - Follow the frame-pure rule exactly, declare `params.rect` (and any other
   occupied rectangles) so `launchclip layout-check` can see the footprint, and
   obey the same safe-zone, caption-band, minimum text size, contrast, and
@@ -409,8 +438,9 @@ constraints:
   meaningful changes in layout, evidence, framing, or visual register for
   portrait, or two for landscape.
 - Keep outgoing and incoming shared-world planes alive for the full declared
-  transition duration: the outgoing scene's `end` must reach the incoming
-  scene's settle. Use one continuous position curve and a velocity-shaped blur
+  transition duration: let the outgoing scene's `end` meet the incoming
+  scene's `start` and the kit holds it until the incoming scene settles. Use
+  one continuous position curve and a velocity-shaped blur
   envelope: zero blur at departure, strongest near peak speed, and zero at
   settle.
 
@@ -622,7 +652,8 @@ output without a separate explicit request.
 | Narration plays twice | An unmuted video or a per-scene `<Audio>` | Mute every video; keep the single root mix |
 | Output ends early, or audio is cut | `format.duration` disagrees with the mix or the last scene | Make `format.duration`, the last scene's `end`, and the mix length agree, then re-resolve |
 | Scenes start progressively earlier than storyboard times | A hand-built `TransitionSeries` shortening the series | Use `StoryComposition`, or correct durations from absolute scene times |
-| Blank frame or pop inside a transition | The outgoing scene ends before the incoming one settles | Extend the outgoing `end` through the whole `in.dur` |
+| Blank frame or pop inside a transition | A gap of more than 0.1 s between the outgoing and incoming track-0 scenes, so the kit cannot hold the outgoing plate | Make the outgoing `end` meet the incoming `start`; the kit holds it through `in.dur` |
+| A "Missing module" box in a frame | The scene's module is unknown, its params are invalid (the box says why), or it has no Remotion component yet | Fix `module`/`params`, or use a catalogue module that has a component |
 | Changes in `storyboard.json` do not appear | Stale `.launchclip/story.resolved.json` | Re-run validation and the resolver before every still, preview, or render |
 | Captions drift or miss words | `captions.json` built from an old `NARRATION.json` | Regenerate captions with `word-captions.mjs` and re-resolve |
 | `Version mismatch` warning, or Studio crashes on start | Mixed Remotion package versions | Reinstall every Remotion package at exactly 4.0.536 |

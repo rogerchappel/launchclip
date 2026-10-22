@@ -168,6 +168,8 @@ export function validateStory(story, { modules } = {}) {
   if (audio !== undefined && audio !== null && !isObject(audio)) err("audio must be an object or null");
   if (isObject(audio)) {
     if (audio.voice !== undefined && audio.voice !== null) assetPath(audio.voice, "audio.voice", err);
+    // audio.mix: the premixed root track; both compilers mount exactly one root audio from it.
+    if (audio.mix !== undefined && audio.mix !== null) assetPath(audio.mix, "audio.mix", err);
     if (audio.words !== undefined && audio.words !== null) projectPath(audio.words, "audio.words", err);
     if (audio.music !== undefined && audio.music !== null) {
       if (typeof audio.music === "string") { if (audio.music !== "synth" && audio.music !== "none") assetPath(audio.music, "audio.music", err); }
@@ -308,6 +310,21 @@ export function validateStory(story, { modules } = {}) {
       if (!isObject(overlay)) { err(`${path} must be an object`); continue; }
       if (!nonEmpty(overlay.type)) err(`${path}.type must be a non-empty string`);
       if (overlay.type === "captions" && overlay.style !== undefined && !STORY_CAPTION_STYLES.includes(overlay.style)) err(`${path}.style must be one of ${STORY_CAPTION_STYLES.join(", ")}`);
+      if (overlay.type === "captions") {
+        if (overlay.src !== undefined && overlay.src !== null) assetPath(overlay.src, `${path}.src`, err);
+        if (overlay.hide !== undefined) {
+          if (!Array.isArray(overlay.hide)) err(`${path}.hide must be an array of [start, end] ranges`);
+          else for (const [h, range] of overlay.hide.entries()) {
+            const rangePath = `${path}.hide[${h}]`;
+            if (!Array.isArray(range) || range.length !== 2) { err(`${rangePath} must be a [start, end] pair`); continue; }
+            const from = anchorField(range[0], `${rangePath}[0]`);
+            const to = anchorField(range[1], `${rangePath}[1]`);
+            if (from !== null && to !== null && !(from < to)) err(`${rangePath} start must be before its end`);
+          }
+        }
+      } else {
+        for (const key of ["src", "hide"]) if (overlay[key] !== undefined) warn(`${path}.${key} is only read for captions overlays`);
+      }
       if (overlay.start !== undefined) anchorField(overlay.start, `${path}.start`);
       if (overlay.end !== undefined) anchorField(overlay.end, `${path}.end`);
     }
@@ -375,6 +392,9 @@ export function resolveStory(story, { words = [], beats = null } = {}) {
     if (!isObject(overlay)) return;
     if (overlay.start !== undefined) overlay.start = resolve(overlay.start, `overlays[${index}].start`);
     if (overlay.end !== undefined) overlay.end = resolve(overlay.end, `overlays[${index}].end`);
+    if (Array.isArray(overlay.hide)) overlay.hide = overlay.hide.map((range, h) => Array.isArray(range)
+      ? range.map((value, k) => resolve(value, `overlays[${index}].hide[${h}][${k}]`))
+      : range);
   });
   copy.scenes = scenes
     .map((scene, index) => ({ scene, index }))

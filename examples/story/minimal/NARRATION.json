@@ -1,0 +1,16 @@
+{
+  "words": [
+    { "text": "Builds", "start": 0.3, "end": 0.62 },
+    { "text": "took", "start": 0.66, "end": 0.86 },
+    { "text": "forty-eight", "start": 0.9, "end": 1.42 },
+    { "text": "minutes.", "start": 1.46, "end": 1.9 },
+    { "text": "Now", "start": 2.05, "end": 2.25 },
+    { "text": "twelve.", "start": 2.3, "end": 2.78 },
+    { "text": "Three", "start": 3.2, "end": 3.46 },
+    { "text": "changes", "start": 3.5, "end": 3.9 },
+    { "text": "did", "start": 3.94, "end": 4.1 },
+    { "text": "it.", "start": 4.14, "end": 4.4 },
+    { "text": "Watch", "start": 4.9, "end": 5.18 },
+    { "text": "again.", "start": 5.22, "end": 5.6 }
+  ]
+}

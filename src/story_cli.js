@@ -1,11 +1,29 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
-import { deriveBoundaries, resolveStory, storyFormat, storyHits, validateStory } from "./story.js";
+import { deriveBoundaries, resolveStory, storyFormat, storyHits, validateStory as validateStoryShape } from "./story.js";
+import { knownModules } from "../kit/core/modules.mjs";
+import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
+import { getRenderer } from "./renderers/index.js";
+import { remotionInvocation, COMPOSITION_ID } from "./renderers/remotion.js";
+import { captureCommand, runCommand } from "./renderers/command.js";
 
-// launchclip story <validate|resolve> <story.json> [--narration NARRATION.json] [--beats BEATS.json] [--out file]
+const UNKNOWN_MODULE = /\.module "[^"]+" is not a known module$/;
+
+// Validation against the kit's module registry. An unknown module is a
+// warning here: both compilers render it as a labelled placeholder.
+export function validateStory(story) {
+  const result = validateStoryShape(story, { modules: knownModules() });
+  const unknown = result.errors.filter((message) => UNKNOWN_MODULE.test(message));
+  const errors = result.errors.filter((message) => !UNKNOWN_MODULE.test(message));
+  return { ok: errors.length === 0, errors, warnings: [...result.warnings, ...unknown.map((message) => `${message} in this kit; it renders as a placeholder`)] };
+}
+
+// launchclip story <validate|resolve> <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out file]
+// launchclip story compile <project> --renderer hyperframes|remotion [--out dir]
 // Without --narration, audio.words is read relative to the story file when it exists.
 export async function runStoryCommand(action, storyPath, flags = {}) {
-  if (!new Set(["validate", "resolve"]).has(action)) throw new Error(`Unknown story action: ${action}; use validate or resolve`);
+  if (!new Set(["validate", "resolve", "compile"]).has(action)) throw new Error(`Unknown story action: ${action}; use validate, resolve or compile`);
+  if (action === "compile") return compileStoryCommand(storyPath, flags);
   const file = path.resolve(storyPath);
   const story = await readJson(file, "story.json");
   const words = await loadWords(flags.narration, story, path.dirname(file));
@@ -64,6 +82,47 @@ export async function runStoryCommand(action, storyPath, flags = {}) {
     hits: storyHits(resolved),
     ...(flags.out ? {} : { story_resolved: resolved })
   };
+}
+
+// launchclip story compile <project> --renderer hyperframes|remotion [--out path]
+export async function compileStoryCommand(target, flags = {}, { run = runCommand } = {}) {
+  const renderer = String(flags.renderer ?? "").toLowerCase();
+  if (!new Set(["hyperframes", "remotion"]).has(renderer)) throw new Error("story compile needs --renderer hyperframes or --renderer remotion");
+  const input = path.resolve(target);
+  const isFile = (await stat(input).catch(() => { throw new Error(`Cannot read story project: ${input}`); })).isFile();
+  const project = isFile ? path.dirname(input) : input;
+  const storyFile = isFile ? input : path.join(project, "storyboard.json");
+  const story = await readJson(storyFile, "storyboard.json");
+  const words = await loadWords(flags.narration, story, project) ?? await loadWords(await existsFile(path.join(project, "NARRATION.json")) ? path.join(project, "NARRATION.json") : null, story, project);
+  const beatsFile = flags.beats ? path.resolve(flags.beats) : path.join(project, "BEATS.json");
+  const beats = flags.beats || await existsFile(beatsFile) ? await readJson(beatsFile, "BEATS.json") : null;
+  const validation = validateStory(story);
+  if (!validation.ok) throw new Error(`storyboard.json is invalid:\n- ${validation.errors.join("\n- ")}`);
+  const resolved = resolveStory(story, { words: words?.list ?? [], beats });
+  const check = validateStory(resolved);
+  if (!check.ok) throw new Error(`resolved story is invalid:\n- ${check.errors.join("\n- ")}`);
+  const base = { stage: "story", action: "compile", renderer, story: storyFile, project, format: storyFormat(resolved), boundaries: deriveBoundaries(resolved) };
+
+  if (renderer === "hyperframes") {
+    const out = path.resolve(flags.out ?? path.join(project, "hyperframes"));
+    const result = await compileStoryToHyperFrames(resolved, { projectDir: out, sourceDir: project });
+    return { ...base, status: "compiled", out, entry: path.join(out, "index.html"), composition_id: result.compositionId, files: result.files, warnings: [...validation.warnings.filter((message) => !/is not a known module in this kit/.test(message)), ...result.warnings] };
+  }
+
+  const propsFile = path.resolve(flags.out ?? path.join(project, ".launchclip", "story.resolved.json"));
+  await writeJson(propsFile, resolved);
+  const adapter = getRenderer("remotion");
+  const entry = adapter.resolveEntry(project, { entry: flags.entry });
+  const invocation = remotionInvocation(adapter.compositionsArgs({ entry, propsFile, project }));
+  const listing = await captureCommand(run, invocation.command, invocation.args, { cwd: path.resolve(import.meta.dirname, "..") });
+  const text = typeof listing.stdout === "string" ? listing.stdout : JSON.stringify(listing.stdout ?? "");
+  const listed = listing.ok && text.split(/\s+/).includes(COMPOSITION_ID);
+  if (!listed) throw new Error(`remotion compositions did not list ${COMPOSITION_ID} (exit ${listing.exit_code}):\n${String(listing.stderr || text).trim().split("\n").slice(-12).join("\n")}`);
+  return { ...base, status: "compiled", out: propsFile, entry, composition_id: COMPOSITION_ID, compositions: text.split(/\s+/).filter(Boolean), files: [path.relative(project, propsFile)], warnings: validation.warnings };
+}
+
+async function existsFile(file) {
+  try { return (await stat(file)).isFile(); } catch { return false; }
 }
 
 async function loadWords(flag, story, storyDir) {
