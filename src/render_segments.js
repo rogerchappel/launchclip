@@ -427,11 +427,16 @@ export function defaultSegmentTools() {
       try { await ffmpeg(["-f", "concat", "-safe", "0", "-i", list, "-map", "0:v:0", "-c", "copy", "-an", output]); }
       finally { await rm(list, { force: true }); }
     },
-    // Mux the soundtrack once: offset/duration cut a window of it (previews).
-    async mux({ video, audio, output, volume = 1, offset = 0, duration }) {
+    // The soundtrack as AAC (48 kHz stereo, 320 kb/s, as Remotion encodes it),
+    // padded or cut to the timeline; cached, so a re-render only remuxes it.
+    async encodeAudio({ audio, output, volume = 1, duration }) {
+      await ffmpeg(["-i", audio, "-vn", "-af", `volume=${volume},apad`, "-t", String(duration), "-ar", "48000", "-ac", "2", "-c:a", "aac", "-b:a", "320k", output]);
+    },
+    // Mux the soundtrack (stream copy): offset/duration cut a window of it (previews).
+    async mux({ video, audio, output, offset = 0, duration }) {
       if (!audio) { await copyFile(video, output); return; }
       const input = [...(offset > 0 ? ["-ss", String(offset)] : []), "-i", audio];
-      await ffmpeg(["-i", video, ...input, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-af", `volume=${volume},apad`, "-ar", "48000", "-ac", "2", "-c:a", "aac", "-b:a", "320k", ...(duration ? ["-t", String(duration)] : ["-shortest"]), "-movflags", "+faststart", output]);
+      await ffmpeg(["-i", video, ...input, "-map", "0:v:0", "-map", "1:a:0", "-c", "copy", ...(duration ? ["-t", String(duration)] : ["-shortest"]), "-movflags", "+faststart", output]);
     },
     async countFrames(file) {
       const { stdout } = await execFileAsync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0", file]);
@@ -551,14 +556,14 @@ export async function renderWithSegments(options) {
   const first = scope[0].startFrame;
   const last = scope.at(-1).endFrame;
   const muxStarted = now();
-  const audio = await soundtrackFile({ project, story, adapter, dir, inputs, index });
-  await tools.mux({ video: encoded, audio: audio?.file ?? null, output, volume: audio?.volume ?? 1, offset: first / plan.fps, duration: options.previewScene ? (last - first) / plan.fps : undefined });
+  const audio = await soundtrackFile({ project, story, adapter, dir, inputs, tools });
+  await tools.mux({ video: encoded, audio: audio?.file ?? null, output, offset: first / plan.fps, duration: options.previewScene ? (last - first) / plan.fps : undefined });
   await rm(encoded, { force: true });
   seconds.mux = round3((now() - muxStarted) / 1000);
   const frames = await tools.countFrames(output);
   if (Number.isFinite(frames) && frames !== last - first) throw new Error(`joined render has ${frames} frames; expected ${last - first}`);
 
-  if (!options.previewScene) await pruneCache(dir, index, new Set(hashed.map((segment) => segment.hash)));
+  if (!options.previewScene) await pruneCache(dir, index, new Set([...hashed.map((segment) => segment.hash), ...(audio?.key ? [audio.key] : [])]));
   await writeIndex(dir, index);
   seconds.total = round3((now() - started) / 1000);
   const count = (status) => entries.filter((entry) => entry.status === status).length;
@@ -633,22 +638,30 @@ async function renderWhole({ project, story, renderer, quality, output, previewS
   };
 }
 
-// The soundtrack file to mux: audio.mix (or the voice) as is, or, when a
-// footage base plays its own audio, Remotion's own mix of the whole timeline
-// (cached by the hash of what it is made of).
-async function soundtrackFile({ project, story, adapter, dir, inputs }) {
+// The soundtrack to mux, encoded once and cached by the hash of what it is
+// made of: audio.mix (or the voice) at its volume or, when a footage base plays
+// its own audio, Remotion's own mix of the whole timeline.
+async function soundtrackFile({ project, story, adapter, dir, inputs, tools }) {
   const soundtrack = storySoundtrack(story);
   if (soundtrack.base) {
     if (typeof adapter.renderAudio !== "function") throw new Error("the footage base plays audio, and this renderer cannot render the soundtrack on its own");
     const key = hashValue({ audio: story.audio ?? null, base: storyBase(story), base_file: inputs.base, mix: soundtrack.src ? await fileHash(path.join(project, soundtrack.src)) : null, duration: storyFrames(story) });
     const file = path.join(dir, `audio-${key}.aac`);
     if (!existsSync(file)) await adapter.renderAudio(project, file, { story, kitHash: inputs.kit });
-    return { file, volume: 1, source: "remotion-mix" };
+    return { file, key, volume: 1, source: "remotion-mix" };
   }
   if (!soundtrack.src) return null;
-  const file = path.join(project, soundtrack.src);
-  if (!existsSync(file)) throw new Error(`soundtrack not found: ${soundtrack.src}`);
-  return { file, volume: soundtrack.volume, source: soundtrack.src };
+  const source = path.join(project, soundtrack.src);
+  const content = await fileHash(source);
+  if (!content) throw new Error(`soundtrack not found: ${soundtrack.src}`);
+  const { frames, fps } = storyFrames(story);
+  const key = hashValue({ content, volume: soundtrack.volume, frames, fps, codec: "aac-320k-48k" });
+  const file = path.join(dir, `audio-${key}.m4a`);
+  if (!existsSync(file)) {
+    await tools.encodeAudio({ audio: source, output: `${file}.partial.m4a`, volume: soundtrack.volume, duration: frames / fps });
+    await rename(`${file}.partial.m4a`, file);
+  }
+  return { file, key, volume: soundtrack.volume, source: soundtrack.src };
 }
 
 function contiguous(all, chosen) {
@@ -678,7 +691,7 @@ async function pruneCache(dir, index, current, { keep = Math.max(24, current.siz
   try { names = await readdir(dir); } catch { return; }
   const files = [];
   for (const name of names) {
-    const match = name.match(/^(?:audio-)?([0-9a-f]{64})\.(?:mp4|aac)$/);
+    const match = name.match(/^(?:audio-)?([0-9a-f]{64})\.(?:mp4|aac|m4a)$/);
     if (!match || current.has(match[1])) continue;
     const info = await stat(path.join(dir, name)).catch(() => null);
     if (info) files.push({ name, hash: match[1], mtime: info.mtimeMs });

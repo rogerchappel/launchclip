@@ -240,7 +240,8 @@ function fakeRemotion() {
 function fakeTools(log = []) {
   return {
     async concat(files, output) { log.push(["concat", files.length]); await writeFile(output, (await Promise.all(files.map((file) => readFile(file, "utf8")))).join("")); },
-    async mux({ video, audio, output, offset, duration }) { log.push(["mux", path.basename(audio ?? "none"), offset, duration]); await writeFile(output, await readFile(video, "utf8")); },
+    async encodeAudio({ audio, output, volume, duration }) { log.push(["encodeAudio", path.basename(audio), volume, duration]); await writeFile(output, "aac"); },
+    async mux({ video, audio, output, offset, duration }) { log.push(["mux", audio ? path.extname(audio) : "none", offset, duration]); await writeFile(output, await readFile(video, "utf8")); },
     async countFrames() { return NaN; },
     async still(video, frame, output) { await mkdir(path.dirname(output), { recursive: true }); await writeFile(output, `frame ${frame}`); },
     async trim(video, start, end, output) { log.push(["trim", start, end]); await writeFile(output, `trim ${start}-${end}`); }
@@ -262,11 +263,13 @@ test("renderWithSegments renders missing segments, reuses cached ones, forces --
     const joined = await readFile(options.output, "utf8");
     assert.match(joined, /^encoded\n0-132\n132-146\n/);
     assert.match(joined, /768-780\n$/);
-    assert.deepEqual(log.find((entry) => entry[0] === "mux"), ["mux", "mix.m4a", 0, undefined]);
+    assert.deepEqual(log.find((entry) => entry[0] === "encodeAudio"), ["encodeAudio", "mix.m4a", 1, 26]);
+    assert.deepEqual(log.find((entry) => entry[0] === "mux"), ["mux", ".m4a", 0, undefined]);
     assert.ok(existsSync(path.join(project, first.cache, "index.json")));
 
     const again = await renderWithSegments(options);
     assert.deepEqual([again.reused, again.rendered], [10, 0]);
+    assert.equal(log.filter((entry) => entry[0] === "encodeAudio").length, 1, "the soundtrack encode is cached");
     assert.equal(fake.calls.length, 1, "nothing rendered");
     assert.ok(again.seconds_saved >= 10);
 
@@ -286,7 +289,7 @@ test("renderWithSegments renders missing segments, reuses cached ones, forces --
     assert.deepEqual(preview.frames, { start: 486, end: 651, count: 165 });
     assert.deepEqual(preview.plan.map((entry) => entry.status), ["rendered", "rendered", "rendered"]);
     assert.equal(await readFile(path.join(project, "renders/scene-s4.mp4"), "utf8"), "encoded\n486-498\n498-636\n636-651\n");
-    assert.deepEqual(log.at(-1), ["mux", "mix.m4a", 16.2, 5.5]);
+    assert.deepEqual(log.at(-1), ["mux", ".m4a", 16.2, 5.5]);
     await assert.rejects(renderWithSegments({ ...options, previewScene: "s9" }), /scene "s9" is not on screen/);
   } finally {
     await rm(project, { recursive: true, force: true });

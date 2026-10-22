@@ -396,6 +396,7 @@ function segmentAdapters() {
   });
   adapters.segmentTools = {
     async concat(files, output) { await touch(output, (await Promise.all(files.map((file) => readFile(file, "utf8")))).join("")); },
+    async encodeAudio({ output }) { await touch(output, "aac"); },
     async mux({ video, output }) { await touch(output, await readFile(video, "utf8")); },
     async countFrames() { return NaN; },
     async still(video, frame, output) { await touch(output, `${frame}: ${await readFile(video, "utf8")}`); },
