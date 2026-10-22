@@ -11,10 +11,12 @@ the current workflow and the decisions an operating agent must not guess.
 - [Project-local style packs](#project-local-style-packs)
 - [Model-directed production](#model-directed-production)
 - [Resume and repair commands](#resume-and-repair-commands)
+- [Layout check](#layout-check)
 - [Workspace artifacts](#workspace-artifacts)
 - [Studio review](#studio-review)
 - [Final render](#final-render)
 - [Local-first OSS packet lane](#local-first-oss-packet-lane)
+- [Storyboard (story.json)](#storyboard-storyjson)
 - [Failure handling](#failure-handling)
 
 ## Runtime and credentials
@@ -341,6 +343,37 @@ without repeating intake, evidence, planning, frame generation, or audio.
 Infrastructure verification failures must be fixed in the local toolchain.
 Only use `production-repair` for scoped creative/structural findings.
 
+## Layout check
+
+For a `story.json` project (HyperFrames or Remotion), check the declared
+geometry before rendering:
+
+```bash
+launchclip layout-check <story-project> [--profile shorts|landscape] [--json]
+```
+
+The command resolves `story.json` (with `NARRATION.json` and `BEATS.json` when
+present), builds each editorial scene through `editorial-ui-modules.mjs` to get
+its rect and motion windows, and uses `scene.params.rect` (plus optional
+`params.role`, `params.minTextPx`, `params.allowOcclusion`) for other modules.
+Scenes without geometry are skipped with a note. A `captions` overlay becomes
+the delivery caption band. The profile defaults to `shorts` for portrait
+canvases and `landscape` otherwise.
+
+Errors (status `failed`): `safe-zone` (text or hero outside the safe zone at
+rest; Shorts y 280–1450, x 80–940 on 1080×1920, landscape 5% title-safe),
+`collision` (non-decor elements overlapping at rest unless `allowOcclusion`
+names the pair), `caption-band` (text or hero in the caption band while
+captions show, unless the scene sets `hides_captions`), `min-text-size` (key
+text under 44 px on Shorts), and `module-spec` (an editorial spec that does not
+build). Warnings: `hero-fill` (hero outside 70–90% of the safe width on
+Shorts), `lower-third-empty` (nothing below the safe-zone midpoint for over
+3 s on Shorts), and `centre-of-mass` (sustained drift from y 860 on Shorts).
+
+Without `--json` the command prints a one-line-per-finding summary. It checks
+declarations only; confirm contrast (3:1 minimum) and a filled lower third on
+rendered stills as well. On HyperFrames, keep running `hyperframes check` too.
+
 ## Workspace artifacts
 
 Important model-directed paths:
@@ -436,6 +469,31 @@ launchclip review .launchclip/my-oss-tool
 Local render options include `remotion`, `hyperframes`, and `local-ffmpeg`.
 Keep product-videogen and Review Feed operations in `--dry-run` unless the user
 explicitly authorizes a supported live integration.
+
+## Storyboard (story.json)
+
+`story.json` (`launchclip.story.v1`) is the renderer-agnostic storyboard. Check
+it and resolve its time anchors before compiling or rendering:
+
+```bash
+launchclip story validate story.json [--narration NARRATION.json] [--beats BEATS.json] [--out report.json]
+launchclip story resolve story.json [--narration NARRATION.json] [--beats BEATS.json] [--out .launchclip/story.resolved.json]
+```
+
+`validate` reports every error with its path (for example `scenes[2].in.type`)
+and exits successfully with `status: "failed"` when the story is invalid; read
+the status, not the exit code. When narration or beats are available it also
+resolves the anchors and prints the derived transition boundaries. `resolve`
+fails on an invalid story or an unknown anchor, and writes the resolved copy
+(anchors replaced by seconds, scenes sorted by start, plus `resolved`) to
+`--out`. Without `--narration`, `audio.words` is read relative to the story
+file when it exists.
+
+Anchors are seconds, `word:<text>[#n]` (case-insensitive, punctuation ignored;
+`word:thirty-five` also matches "thirty" "five"; `#n` is the 1-based
+occurrence), `beat:<n>` or `downbeat:<n>` (0-based, from `BEATS.json`), each
+with an optional offset such as `word:fast+0.1`. A golden example lives in
+`examples/story/cooling.story.json`.
 
 ## Failure handling
 
