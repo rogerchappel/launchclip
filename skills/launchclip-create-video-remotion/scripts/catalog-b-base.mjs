@@ -26,7 +26,9 @@ export const CATALOG_B_STYLE = Object.freeze({
 
 const ROLE_NAMES = ['primary', 'accent', 'paper'];
 // Conservative average advance per character, as a fraction of font size.
-const ADVANCE = {display: 0.56, body: 0.6, meta: 0.62, serif: 0.56};
+// Calibrated on the bundled role defaults (fonts.mjs FONT_REGISTRY advances): Anton,
+// Inter at 650, JetBrains Mono and Instrument Serif, with headroom for mixed case.
+const ADVANCE = {display: 0.56, body: 0.6, meta: 0.62, serif: 0.5};
 
 // ---------------------------------------------------------------------------
 // Safe expression parser (no eval, no Function)

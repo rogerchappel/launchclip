@@ -22,27 +22,44 @@ export const FONT_LICENSE = 'OFL-1.1';
 
 const variable = (slug, axes, styles = ['normal']) => styles.map((style) => ({ file: `${slug}-latin-wght-${style}.woff2`, weight: axes, style }));
 const fixed = (slug, weight, styles = ['normal']) => styles.map((style) => ({ file: `${slug}-latin-${weight}-${style}.woff2`, weight, style }));
-const entry = (family, pkg, generic, faces) => Object.freeze({ family, slug: pkg.split('/')[1], package: pkg, version: '5.3.0', license: FONT_LICENSE, generic, faces: Object.freeze(faces.map(Object.freeze)) });
+const entry = (family, pkg, generic, faces, [upper, lower]) => Object.freeze({ family, slug: pkg.split('/')[1], package: pkg, version: '5.3.0', license: FONT_LICENSE, generic, advance: Object.freeze({ upper, lower }), faces: Object.freeze(faces.map(Object.freeze)) });
 
 /**
- * family → {family, slug, package, version, license, generic, faces:[{file, weight, style}]}.
+ * family → {family, slug, package, version, license, generic, advance:{upper, lower}, faces:[{file, weight, style}]}.
+ * `advance` is the mean advance width (em) of the latin capitals and of the
+ * lowercase letters, measured in Chrome at weight 650 (400 for static
+ * families); the text-fit models use it to scale their role tables.
  * `weight` is a CSS font-weight descriptor: one weight for static files, a
  * "min max" range for variable (wght axis) files. `package` + `/files/` +
  * `file` is the module path of the woff2 inside node_modules.
  */
 export const FONT_REGISTRY = Object.freeze({
-  'Anton': entry('Anton', '@fontsource/anton', 'sans-serif', fixed('anton', '400')),
-  'Archivo Black': entry('Archivo Black', '@fontsource/archivo-black', 'sans-serif', fixed('archivo-black', '400')),
-  'Bricolage Grotesque': entry('Bricolage Grotesque', '@fontsource-variable/bricolage-grotesque', 'sans-serif', variable('bricolage-grotesque', '200 800')),
-  'Instrument Serif': entry('Instrument Serif', '@fontsource/instrument-serif', 'serif', fixed('instrument-serif', '400', ['normal', 'italic'])),
-  'Inter': entry('Inter', '@fontsource-variable/inter', 'sans-serif', variable('inter', '100 900')),
-  'JetBrains Mono': entry('JetBrains Mono', '@fontsource-variable/jetbrains-mono', 'monospace', variable('jetbrains-mono', '100 800')),
-  'Space Grotesk': entry('Space Grotesk', '@fontsource-variable/space-grotesk', 'sans-serif', variable('space-grotesk', '300 700')),
-  'STIX Two Math': entry('STIX Two Math', '@fontsource/stix-two-math', 'serif', fixed('stix-two-math', '400')),
-  'STIX Two Text': entry('STIX Two Text', '@fontsource-variable/stix-two-text', 'serif', variable('stix-two-text', '400 700', ['normal', 'italic'])),
-  'Syne': entry('Syne', '@fontsource-variable/syne', 'sans-serif', variable('syne', '400 800')),
-  'Unbounded': entry('Unbounded', '@fontsource-variable/unbounded', 'sans-serif', variable('unbounded', '200 900'))
+  'Anton': entry('Anton', '@fontsource/anton', 'sans-serif', fixed('anton', '400'), [0.46, 0.46]),
+  'Archivo Black': entry('Archivo Black', '@fontsource/archivo-black', 'sans-serif', fixed('archivo-black', '400'), [0.76, 0.61]),
+  'Bricolage Grotesque': entry('Bricolage Grotesque', '@fontsource-variable/bricolage-grotesque', 'sans-serif', variable('bricolage-grotesque', '200 800'), [0.64, 0.56]),
+  'Instrument Serif': entry('Instrument Serif', '@fontsource/instrument-serif', 'serif', fixed('instrument-serif', '400', ['normal', 'italic']), [0.47, 0.39]),
+  'Inter': entry('Inter', '@fontsource-variable/inter', 'sans-serif', variable('inter', '100 900'), [0.68, 0.56]),
+  'JetBrains Mono': entry('JetBrains Mono', '@fontsource-variable/jetbrains-mono', 'monospace', variable('jetbrains-mono', '100 800'), [0.6, 0.6]),
+  'Space Grotesk': entry('Space Grotesk', '@fontsource-variable/space-grotesk', 'sans-serif', variable('space-grotesk', '300 700'), [0.61, 0.56]),
+  'STIX Two Math': entry('STIX Two Math', '@fontsource/stix-two-math', 'serif', fixed('stix-two-math', '400'), [0.65, 0.47]),
+  'STIX Two Text': entry('STIX Two Text', '@fontsource-variable/stix-two-text', 'serif', variable('stix-two-text', '400 700', ['normal', 'italic']), [0.68, 0.52]),
+  'Syne': entry('Syne', '@fontsource-variable/syne', 'sans-serif', variable('syne', '400 800'), [0.76, 0.61]),
+  'Unbounded': entry('Unbounded', '@fontsource-variable/unbounded', 'sans-serif', variable('unbounded', '200 900'), [0.86, 0.73])
 });
+
+/**
+ * How much wider a family sets than its role's registry default, from the
+ * registry advances: max(1, upper and lower ratios). The text-fit models are
+ * calibrated on the role defaults and multiply by this, so a wide brand face
+ * (Unbounded, Syne) gets smaller type instead of overflowing. Families outside
+ * the registry, and narrower ones, return 1.
+ */
+export function fontWidthScale(family, role) {
+  const item = family ? FONT_REGISTRY[registeredFamily(family)] : null;
+  const base = FONT_REGISTRY[FONT_ROLE_DEFAULTS[role]];
+  if (!item || !base) return 1;
+  return Math.max(1, item.advance.upper / base.advance.upper, item.advance.lower / base.advance.lower);
+}
 
 /** The registry family each type role uses when brand.fonts does not name one. */
 export const FONT_ROLE_DEFAULTS = Object.freeze({

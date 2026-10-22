@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   FONT_REGISTRY, FONT_ROLE_DEFAULTS, SYMBOL_FALLBACK, allFontFaces, brandFontStacks, fontFaceRule, fontFamilyName,
-  fontStack, frozenFontFaces, projectFontFamilies, registeredFamily, registryFontFaces
+  fontStack, fontWidthScale, frozenFontFaces, projectFontFamilies, registeredFamily, registryFontFaces
 } from "../kit/core/fonts.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -72,6 +72,19 @@ test("a project loads the role defaults, the symbol fallback and the brand famil
   const faces = registryFontFaces(["Instrument Serif", "Poppins"]);
   assert.deepEqual(faces.map((face) => [face.file, face.style]), [["instrument-serif-latin-400-normal.woff2", "normal"], ["instrument-serif-latin-400-italic.woff2", "italic"]]);
   assert.equal(faces[0].module, "@fontsource/instrument-serif/files/instrument-serif-latin-400-normal.woff2");
+});
+
+test("width scales compare a family with its role default", () => {
+  assert.equal(fontWidthScale("Anton", "display"), 1);
+  assert.equal(fontWidthScale(null, "display"), 1);
+  assert.equal(fontWidthScale("poppins", "display"), 1, "unregistered families keep the role calibration");
+  assert.equal(fontWidthScale("Instrument Serif", "body"), 1, "narrower families never scale below 1");
+  assert.ok(fontWidthScale("unbounded", "display") > 1.8);
+  assert.ok(fontWidthScale("Syne", "body") > 1.1);
+  for (const item of Object.values(FONT_REGISTRY)) {
+    assert.ok(item.advance.upper > 0.3 && item.advance.upper < 1, item.family);
+    assert.ok(item.advance.lower > 0.3 && item.advance.lower < 1, item.family);
+  }
 });
 
 test("frozen files and @font-face rules", () => {

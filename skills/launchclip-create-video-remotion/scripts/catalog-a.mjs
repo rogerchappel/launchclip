@@ -35,7 +35,7 @@
 // every brand colour pair used for text or a filled accent clears 3:1 WCAG
 // contrast or resolve() throws; blur is 0 at settle.
 import {profileGeometry} from './layout-check.mjs';
-import {fontFamilyName, fontStack} from './fonts.mjs';
+import {fontFamilyName, fontStack, fontWidthScale} from './fonts.mjs';
 import {countUp, splitWords, tween} from './motion.mjs';
 
 export const CATALOG_A_IDS = Object.freeze(['hook-title', 'kinetic-words', 'count-up', 'equation-lockup', 'cta']);
@@ -162,27 +162,39 @@ function brandFonts(brand) {
   const stack = role => fontStack(fonts[role] ? familyName(fonts[role], `brand.fonts.${role}`) : null, role);
   return {display: stack('display'), body: stack('body'), meta: stack('meta'), math: fontStack(null, 'math')};
 }
+// Text-fit kinds for brand.fonts: the role's width table scaled by how much
+// wider the brand family sets than the role default (fontWidthScale), so a
+// wide display face such as Unbounded gets smaller type instead of overflowing.
+function fitKinds(brand) {
+  const fonts = isObject(brand?.fonts) ? brand.fonts : {};
+  const kind = role => ({kind: role, scale: fontWidthScale(typeof fonts[role] === 'string' ? fontFamilyName(fonts[role]) : null, role)});
+  return {display: kind('display'), body: kind('body'), meta: kind('meta')};
+}
 
 // ---------------------------------------------------------------------------
 // Text measurement: a conservative per-character width model in em. The
 // renderers lay text out with CSS, so this only sizes type and estimates the
 // footprint; line breaks it chooses are rendered as explicit lines.
 
-// Calibrated against Chrome with the fallback stacks below (Impact, Avenir
-// Next, SF Mono, STIX Two), then padded about 5% so a brand webfont with
-// slightly wider glyphs still fits.
+// Mean advance (em) per character class, measured in Chrome on the bundled
+// role defaults (display Anton 400, body Inter at 650, meta JetBrains Mono,
+// math STIX Two Text) and padded about 5%. A brand family wider than its role
+// default scales the table (fitKinds / fontWidthScale in fonts.mjs). Operators
+// and arrows outside the latin subset come from STIX Two Math.
 const NARROW = /[.,:;'!|iIl1()\[\]’‘"]/;
 const WIDE = /[MWmw@%&]/;
 const OPERATOR = /[=+−×÷∝≈<>≤≥≠→·]/;
 const WIDTHS = {
-  display: {upper: .5, lower: .47, narrow: .28, wide: .76, space: .22, digit: .48, op: .5},
-  body: {upper: .7, lower: .53, narrow: .3, wide: .86, space: .28, digit: .6, op: .62},
-  meta: {upper: .6, lower: .6, narrow: .6, wide: .6, space: .6, digit: .6, op: .6},
+  display: {upper: .48, lower: .48, narrow: .28, wide: .81, space: .25, digit: .5, op: .53},
+  body: {upper: .71, lower: .59, narrow: .37, wide: .96, space: .27, digit: .65, op: .72},
+  meta: {upper: .6, lower: .6, narrow: .6, wide: .6, space: .6, digit: .6, op: .7},
   math: {upper: .64, lower: .52, narrow: .36, wide: .86, space: .25, digit: .5, op: .74}
 };
 
+/** kind: 'display' | 'body' | 'meta' | 'math', or a fitKinds() entry {kind, scale}. */
 export function textWidth(value, size, kind = 'body', tracking = 0) {
-  const w = WIDTHS[kind];
+  const w = WIDTHS[typeof kind === 'string' ? kind : kind.kind];
+  const scale = typeof kind === 'string' ? 1 : kind.scale;
   let total = 0, count = 0;
   for (const ch of String(value)) {
     count++;
@@ -194,7 +206,7 @@ export function textWidth(value, size, kind = 'body', tracking = 0) {
     else if (/\p{Lu}/u.test(ch)) total += w.upper;
     else total += w.lower;
   }
-  return (total + tracking * count) * size;
+  return (total * scale + tracking * count) * size;
 }
 
 /**
@@ -459,7 +471,7 @@ function resolveHookTitle(params, ctx) {
   const {theme, contrast} = moduleTheme(ctx.brand, colorRole, 'params.color');
   for (const entry of emphasis) requireContrast(contrast, `${entry.colorRole} on bg`, theme[entry.colorRole], theme.bg);
   if (kicker) requireContrast(contrast, `ink on ${colorRole}`, theme.ink, theme.emphasis);
-  const fonts = brandFonts(ctx.brand);
+  const fonts = brandFonts(ctx.brand), fk = fitKinds(ctx.brand);
   const st = stage(ctx, {captions: false});
   const k = st.k, rect = params.rect === undefined ? null : rectParam(params.rect, st, 'params.rect');
   const width = (rect ?? st.zone).width * .94;
@@ -469,9 +481,9 @@ function resolveHookTitle(params, ctx) {
   const eyebrowSize = Math.ceil(44 * k), eyebrowGap = Math.round(30 * k), ruleGap = Math.ceil(44 * k);
   const kickerSize = Math.round(84 * k), kickerGap = Math.round(56 * k);
   const chrome = (eyebrow ? eyebrowSize * 1.2 + eyebrowGap + 6 * k + ruleGap : 0) + (kicker ? kickerGap + kickerSize * 1.36 : 0);
-  const fit = fitLines(tokens.map(token => token.text.toUpperCase()), {kind: 'display', maxWidth: width, maxLines: 5, maxSize: (st.portrait ? 176 : 150) * k, minSize: 72 * k, lineHeight, maxHeight: (rect ?? st.zone).height - chrome});
+  const fit = fitLines(tokens.map(token => token.text.toUpperCase()), {kind: fk.display, maxWidth: width, maxLines: 5, maxSize: (st.portrait ? 176 : 150) * k, minSize: 72 * k, lineHeight, maxHeight: (rect ?? st.zone).height - chrome});
   if (!fit) throw new Error('params.headline is too long to set at 72 px or more in five lines; shorten it');
-  if (eyebrow && textWidth(eyebrow.toUpperCase(), eyebrowSize, 'meta', .16) > width) throw new Error('params.eyebrow is too wide for the safe zone; shorten it');
+  if (eyebrow && textWidth(eyebrow.toUpperCase(), eyebrowSize, fk.meta, .16) > width) throw new Error('params.eyebrow is too wide for the safe zone; shorten it');
   // Rebuild the lines from tokens (balance worked on upper-cased strings).
   let cursor = 0;
   const lines = fit.lines.map(line => line.map(() => tokens[cursor++]));
@@ -570,7 +582,7 @@ function resolveKineticWords(params, ctx) {
   beats.forEach((beat, index) => {
     if (index && beat.at < beats[index - 1].at + minGap - 1e-9) throw new Error(`params.words[${index}].at must be at least ${minGap} s after the previous beat`);
   });
-  const fonts = brandFonts(ctx.brand);
+  const fonts = brandFonts(ctx.brand), fk = fitKinds(ctx.brand);
   const st = stage(ctx, {captions: false});
   const k = st.k, rect = params.rect === undefined ? null : rectParam(params.rect, st, 'params.rect');
   const area = rect ?? st.zone;
@@ -580,10 +592,10 @@ function resolveKineticWords(params, ctx) {
   let sizes, blockHeight;
   if (layout === 'replace') {
     for (const beat of beats) {
-      const fit = fitLines(beat.parts.map(part => part.toUpperCase()), {kind: 'display', maxWidth: width, maxLines: beat.parts.length, maxSize, minSize, lineHeight, maxHeight: Math.min(area.height, 760 * k)});
+      const fit = fitLines(beat.parts.map(part => part.toUpperCase()), {kind: fk.display, maxWidth: width, maxLines: beat.parts.length, maxSize, minSize, lineHeight, maxHeight: Math.min(area.height, 760 * k)});
       if (!fit) throw new Error(`params.words[${beat.index}].text is too long to set at ${Math.round(minSize)} px or more; shorten it`);
       // Prefer one line; stack the words only when one line would be small.
-      const one = fitLines([beat.parts.join(' ').toUpperCase()], {kind: 'display', maxWidth: width, maxLines: 1, maxSize, minSize, lineHeight, maxHeight: area.height});
+      const one = fitLines([beat.parts.join(' ').toUpperCase()], {kind: fk.display, maxWidth: width, maxLines: 1, maxSize, minSize, lineHeight, maxHeight: area.height});
       const chosen = one && (one.size >= 150 * k || beat.parts.length === 1 || one.size >= fit.size * .8) ? one : fit;
       beat.size = chosen.size;
       beat.lines = chosen === one ? [beat.parts.join(' ')] : chosen.lines.map(line => line.join(' '));
@@ -593,7 +605,7 @@ function resolveKineticWords(params, ctx) {
   } else {
     let size = null;
     for (let candidate = Math.floor(maxSize * .8); candidate >= minSize; candidate -= 2) {
-      const fits = beats.every(beat => textWidth(beat.text.toUpperCase(), candidate, 'display') <= width);
+      const fits = beats.every(beat => textWidth(beat.text.toUpperCase(), candidate, fk.display) <= width);
       if (fits && beats.length * candidate * 1.0 <= area.height) { size = candidate; break; }
     }
     if (!size) throw new Error(`params.words do not fit the stack layout at ${Math.round(minSize)} px or more; use fewer or shorter beats`);
@@ -678,7 +690,7 @@ function resolveCountUp(params, ctx) {
   const hit = optional(params.hit, 'underline', input => oneOf(input, 'params.hit', ['underline', 'spark', 'both', 'none']));
   const colorRole = optional(params.color, 'primary', input => input);
   const {theme, contrast} = moduleTheme(ctx.brand, colorRole, 'params.color');
-  const fonts = brandFonts(ctx.brand);
+  const fonts = brandFonts(ctx.brand), fk = fitKinds(ctx.brand);
   const st = stage(ctx, {captions: true});
   const k = st.k, rect = params.rect === undefined ? null : rectParam(params.rect, st, 'params.rect');
   const area = rect ?? st.zone;
@@ -692,15 +704,15 @@ function resolveCountUp(params, ctx) {
   const finalDigits = format(value), initialDigits = format(from);
   const widest = [finalDigits, initialDigits].sort((a, b) => b.length - a.length)[0];
   const affix = .62;
-  const widthAt = size => textWidth(widest, size, 'display') + (prefix ? textWidth(prefix, size * affix, 'display') + size * .04 : 0) + (suffix ? textWidth(suffix, size * affix, 'display') + size * .04 : 0);
+  const widthAt = size => textWidth(widest, size, fk.display) + (prefix ? textWidth(prefix, size * affix, fk.display) + size * .04 : 0) + (suffix ? textWidth(suffix, size * affix, fk.display) + size * .04 : 0);
   const maxWidth = area.width * .9;
   let numberSize = Math.floor((st.portrait ? 420 : 320) * k);
   while (numberSize > 120 * k && widthAt(numberSize) > maxWidth) numberSize -= 2;
   if (widthAt(numberSize) > maxWidth) throw new Error('params.value with its prefix and suffix is too wide; use fewer digits or a shorter suffix');
   const labelSize = Math.round(62 * k), noteSize = Math.ceil(44 * k);
-  const labelFit = fitLines(splitWords(label).map(word => word.text), {kind: 'body', maxWidth: area.width * .86, maxLines: 2, maxSize: labelSize, minSize: labelSize, lineHeight: 1.2, maxHeight: labelSize * 2.5});
+  const labelFit = fitLines(splitWords(label).map(word => word.text), {kind: fk.body, maxWidth: area.width * .86, maxLines: 2, maxSize: labelSize, minSize: labelSize, lineHeight: 1.2, maxHeight: labelSize * 2.5});
   if (!labelFit) throw new Error('params.label is too long for two lines; shorten it');
-  if (note && textWidth(note.toUpperCase(), noteSize, 'meta', .08) > area.width) throw new Error('params.note is too wide for one line; shorten it');
+  if (note && textWidth(note.toUpperCase(), noteSize, fk.meta, .08) > area.width) throw new Error('params.note is too wide for one line; shorten it');
   const numberHeight = numberSize * 1.0, labelGap = 40 * k, noteGap = 22 * k;
   const blockHeight = numberHeight + 40 * k + labelGap + labelFit.lines.length * labelSize * 1.2 + (note ? noteGap + noteSize * 1.3 : 0);
   const box = placeBlock(st, blockHeight, rect, 'count-up');
@@ -872,7 +884,7 @@ function resolveEquationLockup(params, ctx) {
   if (params.highlightAt !== undefined && highlight === null) throw new Error('params.highlightAt needs params.highlight');
   const colorRole = optional(params.color, 'primary', value => value);
   const {theme, contrast} = moduleTheme(ctx.brand, colorRole, 'params.color');
-  const fonts = brandFonts(ctx.brand);
+  const fonts = brandFonts(ctx.brand), fk = fitKinds(ctx.brand);
   const st = stage(ctx, {captions: false});
   const k = st.k, rect = params.rect === undefined ? null : rectParam(params.rect, st, 'params.rect');
   const area = rect ?? st.zone;
@@ -899,8 +911,8 @@ function resolveEquationLockup(params, ctx) {
   if (highlightAt !== null && s + highlightAt < termModels[highlight].time + .42 - 1e-9) throw new Error('params.highlightAt must come after the highlighted term has landed');
 
   const nameSize = Math.round(46 * k), noteSize = Math.round(52 * k);
-  if (name && textWidth(name.toUpperCase(), nameSize, 'body', .14) > area.width) throw new Error('params.name is too wide for one line; shorten it');
-  const noteFit = note ? fitLines(splitWords(note).map(word => word.text), {kind: 'body', maxWidth: area.width * .86, maxLines: 2, maxSize: noteSize, minSize: noteSize, lineHeight: 1.25, maxHeight: noteSize * 2.6}) : null;
+  if (name && textWidth(name.toUpperCase(), nameSize, fk.body, .14) > area.width) throw new Error('params.name is too wide for one line; shorten it');
+  const noteFit = note ? fitLines(splitWords(note).map(word => word.text), {kind: fk.body, maxWidth: area.width * .86, maxLines: 2, maxSize: noteSize, minSize: noteSize, lineHeight: 1.25, maxHeight: noteSize * 2.6}) : null;
   if (note && !noteFit) throw new Error('params.note is too long for two lines; shorten it');
   const eqPad = 46 * k, eqHeight = size * 1.5 + eqPad * 2;
   const blockHeight = (name ? nameSize * 1.25 + 30 * k : 0) + 2 * k * 2 + eqHeight + (note ? 34 * k + noteFit.lines.length * noteSize * 1.25 : 0);
@@ -997,19 +1009,19 @@ function resolveCta(params, ctx) {
   if (handle) requireContrast(contrast, `ink on ${colorRole}`, theme.ink, theme.emphasis);
   const emphasisText = optional(params.emphasis, null, value => text(value, 'params.emphasis', 30));
   const tokens = phraseTokens(action, emphasisText ? [emphasisText] : [], 'params.emphasis');
-  const fonts = brandFonts(ctx.brand);
+  const fonts = brandFonts(ctx.brand), fk = fitKinds(ctx.brand);
   const st = stage(ctx, {captions: false});
   const k = st.k, rect = params.rect === undefined ? null : rectParam(params.rect, st, 'params.rect');
   const area = rect ?? st.zone;
   const detailSize = Math.round(52 * k), handleSize = Math.round(50 * k), iconSize = Math.round(50 * k);
   const pillPadY = 26 * k, pillPadX = 46 * k, pillGap = 64 * k, detailGap = 30 * k;
-  const pillWidth = handle ? textWidth(handle, handleSize, 'meta') + pillPadX * 2 + (icon !== 'none' ? iconSize + 20 * k : 0) : 0;
+  const pillWidth = handle ? textWidth(handle, handleSize, fk.meta) + pillPadX * 2 + (icon !== 'none' ? iconSize + 20 * k : 0) : 0;
   if (pillWidth > area.width) throw new Error('params.handle is too wide for the handle pill; shorten it');
-  const detailFit = detail ? fitLines(splitWords(detail).map(word => word.text), {kind: 'body', maxWidth: area.width * .86, maxLines: 2, maxSize: detailSize, minSize: detailSize, lineHeight: 1.25, maxHeight: detailSize * 2.6}) : null;
+  const detailFit = detail ? fitLines(splitWords(detail).map(word => word.text), {kind: fk.body, maxWidth: area.width * .86, maxLines: 2, maxSize: detailSize, minSize: detailSize, lineHeight: 1.25, maxHeight: detailSize * 2.6}) : null;
   if (detail && !detailFit) throw new Error('params.detail is too long for two lines; shorten it');
   const chrome = (detail ? detailGap + detailFit.lines.length * detailSize * 1.25 : 0) + (handle ? pillGap + handleSize * 1.2 + pillPadY * 2 : 0);
   const lineHeight = .95;
-  const fit = fitLines(tokens.map(token => token.text.toUpperCase()), {kind: 'display', maxWidth: area.width * .92, maxLines: 4, maxSize: (st.portrait ? 168 : 140) * k, minSize: 72 * k, lineHeight, maxHeight: area.height - chrome});
+  const fit = fitLines(tokens.map(token => token.text.toUpperCase()), {kind: fk.display, maxWidth: area.width * .92, maxLines: 4, maxSize: (st.portrait ? 168 : 140) * k, minSize: 72 * k, lineHeight, maxHeight: area.height - chrome});
   if (!fit) throw new Error('params.action is too long to set at 72 px or more in four lines; shorten it');
   let cursor = 0;
   const words = [];

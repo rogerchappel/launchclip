@@ -578,3 +578,13 @@ test("hook-title parity fixture and the golden story's s1 resolve", async () => 
   const model = MODULES["hook-title"].resolve(s1.params, { id: "s1", start: s1.start, duration: s1.end - s1.start, format: golden.format, brand: golden.brand });
   checkContract(model, { captions: false });
 });
+
+test("text fit scales with the brand family width from the font registry", () => {
+  const params = { headline: "Hot coffee cools fast, then crawls." };
+  const anton = resolve("hook-title", params);
+  const unbounded = resolve("hook-title", params, { brand: { ...BRAND, fonts: { ...BRAND.fonts, display: "unbounded" } } });
+  assert.match(unbounded.fonts.display, /^'Unbounded', 'Anton'/);
+  assert.ok(unbounded.content.size < anton.content.size * 0.8, `Unbounded sets about 1.9x wider than Anton, so its headline is smaller (${unbounded.content.size} vs ${anton.content.size})`);
+  const poppins = resolve("hook-title", params, { brand: { ...BRAND, fonts: { ...BRAND.fonts, display: "poppins" } } });
+  assert.equal(poppins.content.size, anton.content.size, "a family outside the registry keeps the role calibration");
+});
