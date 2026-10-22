@@ -182,6 +182,48 @@ which also strengthens the HyperFrames path:
   diff against the other renderer.
 - The cross-model tiers from RFC §8 follow on top of this.
 
+### RFC phase 5 status: storyboard planner (model side)
+
+Done:
+
+- `kit/core/planning-prompt.mjs`: `planningPrompt({tier, lane, format, brand,
+  words})` builds the storyboard-authoring prompt from `knownModules()`, each
+  catalogue module's `describe`/`params`/`events`, the editorial kinds' spec
+  summaries, the RFC §5 phrase→module table (`PHRASE_MODULE_TABLE`, encoded
+  as patterns → module ids, with fallbacks for planned modules such as
+  `ui-showcase` → `media-window`), the lane and tier rules (§7), the
+  time-anchor syntax, the safe-zone and caption rules (read from
+  `layout-check.mjs`) and a validated example. A test fails if any known
+  module or editorial kind is missing, so new modules appear automatically.
+- `src/storyboard_planner.js`: `planStoryboard()` makes one model call, pins
+  the fixed inputs, places rect-less editorial modules in the safe slot, and
+  checks the storyboard (validation with the registry, tier rules, anchors,
+  `resolveModule` params, layout check). A bounded repair loop (at most two)
+  sends back the exact errors; repairs target scenes and params, never
+  thresholds. Attempts, errors, tokens and estimated cost are recorded. It
+  works with every `model_provider.js` client plus an Anthropic SDK adapter,
+  and runs keyless in tests with an injected client.
+- `launchclip story plan --brief brief.md [--narration NARRATION.json]
+  [--tier structured] [--model provider:model] [--out storyboard.json]`.
+- Both create-video skills ship `references/storyboard-modules.md`, generated
+  from the planning prompt by `scripts/sync-skills.mjs`, and their design step
+  points at it when authoring `storyboard.json`.
+
+Deferred: the cross-model eval (RFC §8: eight fixed briefs across the model
+tiers, first-attempt and post-repair pass rates, layout findings, module
+diversity, anchor coverage, cost and wall time, with frozen responses for CI)
+is not built yet. Until it is, run the planner by hand against a model once a
+key is set, for example:
+
+```bash
+export ANTHROPIC_API_KEY=…   # or OPENAI_API_KEY / OPENROUTER_API_KEY
+launchclip story plan --brief brief.md --narration NARRATION.json \
+  --tier structured --model anthropic:<model-id> --out storyboard.json
+```
+
+and read `.launchclip/storyboard-plan.json` for attempts, repairs, errors and
+cost.
+
 ## First slice (one PR)
 
 1. Phase 0 version bump, with the existing tests green.
