@@ -540,7 +540,8 @@ launchclip finish <project> --renderer hyperframes --quality draft   # renders/d
 launchclip finish <project> --renderer hyperframes --quality high    # renders/final.mp4, after approval
 ```
 
-It synthesises `audio.narration` when set (`--voice kokoro|elevenlabs|supplied`),
+It synthesises `audio.narration` when set (see "Narration" below;
+`--voice kokoro|elevenlabs|supplied|test` overrides its provider),
 validates and layout-checks the storyboard, writes captions, builds the SFX
 and music mix from the hits, module cues, scene energy and the beat-synced
 music (`--music synth|elevenlabs|none`), compiles the
@@ -555,6 +556,8 @@ has reviewed `qa/critic-sheets/`.
 has no frame range: finish renders the whole video (cached by the hash of the
 whole timeline, so an unchanged story is never rendered twice), and a preview
 is cut from that render. Partial rendering is Remotion-only for now.
+
+<!-- include: shared/narration.md -->
 
 <!-- include: shared/music-beat-sync.md -->
 

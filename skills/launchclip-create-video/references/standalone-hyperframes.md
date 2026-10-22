@@ -540,7 +540,8 @@ launchclip finish <project> --renderer hyperframes --quality draft   # renders/d
 launchclip finish <project> --renderer hyperframes --quality high    # renders/final.mp4, after approval
 ```
 
-It synthesises `audio.narration` when set (`--voice kokoro|elevenlabs|supplied`),
+It synthesises `audio.narration` when set (see "Narration" below;
+`--voice kokoro|elevenlabs|supplied|test` overrides its provider),
 validates and layout-checks the storyboard, writes captions, builds the SFX
 and music mix from the hits, module cues, scene energy and the beat-synced
 music (`--music synth|elevenlabs|none`), compiles the
@@ -555,6 +556,61 @@ has reviewed `qa/critic-sheets/`.
 has no frame range: finish renders the whole video (cached by the hash of the
 whole timeline, so an unchanged story is never rendered twice), and a preview
 is cut from that render. Partial rendering is Remotion-only for now.
+
+#### Narration: `audio.narration`, `launchclip voice`, then word anchors
+
+For a synthesised voice, write the script into `storyboard.json` and let
+`finish` produce the voice and its word timings. Do not hand-write
+`audio.voice` or `audio.words` for a synthesised take:
+
+```json
+"audio": {
+  "narration": {
+    "text": "Your launch stalled at the last step. Here is why.",
+    "provider": "kokoro",
+    "voice": "af_heart",
+    "speed": 1.2
+  }
+}
+```
+
+| field | required | default | notes |
+| --- | --- | --- | --- |
+| `text` | yes | | The whole script, at most 4000 characters. Sentences end in `.`, `!` or `?`. |
+| `provider` | no | `kokoro` | `kokoro` (local, free), `elevenlabs` (paid, needs `ELEVENLABS_API_KEY` and the user's approval), `supplied` (audio you already have in `audio.voice`), `test` (offline placeholder tone). |
+| `voice` | no | `af_heart` for Kokoro | The provider's voice id. |
+| `speed` | no | `1.2` for Kokoro, else `1` | 0.5 to 2. Speed is a generation parameter, not a time-stretch, so change it to fit a target length. |
+
+`finish` synthesises the take into `assets/audio/narration.wav` and
+`NARRATION.json` (`launchclip.narration.v1`: the text, provider, voice, speed,
+`duration_seconds` and every word's `start`/`end`), then uses it for word
+anchors, captions, ducking and beat sync. `finish --voice <provider>`
+overrides `provider` for one run. Takes are cached in `.launchclip/voice` by
+text, provider, voice and speed, so an unchanged script is never synthesised
+twice.
+
+Work in this order:
+
+1. **Write the narration text first**, in `audio.narration`, before any
+   scenes (`"scenes": []` is fine at this point).
+2. **Measure it:** `launchclip voice <project>` (or
+   `launchclip voice --text "..." --voice kokoro --speed 1.2` without a
+   project). It synthesises the take (cached), writes `NARRATION.json`, and
+   prints the duration, word count, words per minute and one row per sentence
+   with its start, end and first-word anchor. Adjust the text or `speed` and
+   rerun until the duration fits the target; never guess the length from a
+   word count.
+3. **Size the scenes to the real take:** set `format.duration` to the
+   measured duration plus a short tail (about 0.3 to 0.8 s), and give each
+   beat the span of its sentences.
+4. **Anchor scenes and hits to words, not seconds:** `"start": "word:stalled"`,
+   `"at": "word:twelve"` (`word:<text>#2` for the second occurrence). Anchors
+   survive a re-take; seconds do not.
+5. **Run `finish`.** It reuses the measured take and fails validation if an
+   anchor names a word that is not in the narration.
+
+If you change the text, rerun `launchclip voice` before moving scenes, then
+check that every anchor still resolves with `launchclip story validate`.
 
 #### Music and beat sync in `launchclip finish`
 

@@ -452,7 +452,15 @@ reference. Work in this order:
 5. Run the five-concept tournament and fresh-context selection.
 6. Write and independently edit the canonical retention story.
 7. Produce or prepare narration, measure the real take, then freeze the
-   storyboard, design system, music/edit grid, and quality targets.
+   storyboard, design system, music/edit grid, and quality targets. For a
+   synthesised voice, write the script into `audio.narration`
+   (`{text, provider?, voice?, speed?}`; defaults Kokoro, `af_heart`, speed
+   1.2) before any scenes, run `launchclip voice <project>` to synthesise it
+   (cached) and print its real duration and per-sentence timing, adjust the
+   text or `speed` until it fits, then size `format.duration` and the scenes
+   to that take and anchor scene starts and hits to words (`word:<text>`).
+   `finish` reuses the measured take. See "Narration" in the runtime
+   reference.
 8. Write `storyboard.json` from the frozen storyboard. Its typed `in` transitions
    are the declared phase-2 boundaries that `cinematic-check` reads. Render two
    independent opening candidates and two candidates for one representative

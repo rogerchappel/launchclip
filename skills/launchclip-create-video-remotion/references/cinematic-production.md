@@ -94,6 +94,14 @@ Prepare narration before final storyboard timing:
    measured duration in `NARRATION.json`.
 4. Build the final edit grid and shot boundaries from that measured performance.
 
+With the LaunchClip CLI and a synthesised voice, steps 2 and 3 are one
+command: put the exact `SCRIPT.md` copy in `storyboard.json` as
+`audio.narration.text` (scenes can still be empty), run
+`launchclip voice <project>`, and read the duration, words per minute and
+per-sentence timing it prints; it writes `NARRATION.json` and caches the take
+for `finish`. Change `audio.narration.speed` (a generation parameter, not a
+time-stretch) or the copy until the duration fits, then size the scenes.
+
 Do not time-stretch a generated or supplied performance to rescue the plan.
 Allow at most ±2% final conformance; otherwise adjust pauses, revise generated
 copy, or replan the visuals. For an intentionally unnarrated piece, record an
