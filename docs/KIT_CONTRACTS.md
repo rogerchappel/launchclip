@@ -12,6 +12,9 @@ kit/
                         unless noted; safe for browsers and Remotion bundles
     story.mjs           storyboard.json (story v1) validate, resolve anchors, derive boundaries
     motion.mjs          frame-pure easing, tracks, stagger, count-up, springs
+    grammar.mjs         motion grammars (editorial, snappy, smooth, playful, documentary)
+    transitions.mjs     typed transitions and scene render windows
+    camera-world.mjs    world layout, camera path, parallax and motion blur
     editorial-core.mjs  editorial module spec → resolved model (no HTML)
     layout-check.mjs    geometric safe-zone and collision checks
   remotion/             TSX for Remotion 4.0.536 / React 19.3
@@ -38,9 +41,13 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
   the scene and the format.
 - Scenes may set `track` (default 0) and may overlap only on different tracks.
 - `in` on a scene describes the transition **into** it:
-  `{type: "cut"|"fade"|"push"|"whip"|"zoom"|"iris"|"morph", dur, from_object?, direction?}`.
+  `{type: "cut"|"fade"|"push"|"whip"|"zoom"|"iris"|"morph"|"pan"|"pull"|"orbit"|"whip-pan", dur, from_object?, direction?}`.
   A `morph` or a `from_object` makes the boundary kind `shared-world`; anything
-  else is `ordinary`.
+  else is `ordinary`. `pan`, `pull`, `orbit`, `whip-pan` (and `push` in
+  `camera.mode` "world") move the world camera; see "World camera".
+- `motion.grammar` (a grammar name or `{base, ...overrides}`) and `camera`
+  (`{mode, layout?, spacing?, parallax?, blur?}`): see "Motion grammar" and
+  "World camera".
 - Assets are project-relative paths under `assets/`.
 - `audio.narration` = `{text, provider?, voice?, speed?}` is narration that
   `launchclip finish` synthesises into `audio.voice` and `audio.words` (text
@@ -88,6 +95,72 @@ export function motionBlurPx(velocityPxPerFrame, {max = 24}) // → blur radius,
 
 The GSAP eases (`power3.out`, …) must match `gsap.parseEase()` to within 1e-6.
 GSAP is a devDependency for that test.
+
+## Motion grammar (`kit/core/grammar.mjs`)
+
+One named feel for every entrance, exit, pop, stagger, transition and camera
+move in a story.
+
+```json
+"motion": { "grammar": "snappy" }
+"motion": { "grammar": { "base": "smooth", "ease": { "enter": "power3.out" }, "duration": { "camera": 1.4 }, "stagger": 1.5 } }
+```
+
+| Grammar | enter / exit | move / camera | emphasis | durations (enter, exit, transition, camera) | overshoot | stagger | camera style | ambient hint |
+|---|---|---|---|---|---|---|---|---|
+| `editorial` (default) | power3.out / power2.in | power3.inOut / power3.inOut | back.out(1.7) | 0.28, 0.22, 0.45, 0.8 | 0.10 | 1× | steady, whip expo.inOut | standard |
+| `snappy` | expo.out / power3.in | expo.inOut / back.inOut(1.2) | back.out(1.2) | 0.20, 0.16, 0.32, 0.55 | 0.05 | 0.75× | snap (anticipates) | standard |
+| `smooth` | power2.out / sine.in | sine.inOut / sine.inOut | power2.out | 0.50, 0.36, 0.70, 1.1 | 0 | 1.25× | glide | subtle |
+| `playful` | back.out(1.7) / back.in(1.4) | back.inOut(1.4) / back.inOut(1.6) | elastic.out(1, 0.5) | 0.42, 0.26, 0.50, 0.75 | 0.20 | 1.6× | bounce (anticipates), whip back.inOut(1.2) | lively |
+| `documentary` | power1.out / power1.in | power1.inOut / power1.inOut | power1.out | 0.60, 0.45, 0.80, 1.3 | 0 | 1.3× | drift, whip power2.inOut | subtle |
+
+Each preset also has `defaultTransition` (`{cuts, world}`, planner guidance)
+and `camera` (`{style, drift, driftPeriod, breathe, whip, anticipation}`:
+drift amplitude in px at a 1080 px short side, drift period in seconds,
+breathing-scale amplitude, the whip-pan ease). `overshoot` is the measured
+peak overshoot of the enter and emphasis eases; `stagger` multiplies every
+module's default stagger.
+
+```js
+export const GRAMMARS, GRAMMAR_NAMES, DEFAULT_GRAMMAR;   // "editorial"
+export function resolveGrammar(story)                   // → {id, base, custom, ease, duration, overshoot, stagger, defaultTransition, camera, ambient}
+export function grammarErrors(value, path)              // validation messages (story.mjs mirrors them, import-free)
+export function isEditorialGrammar(grammar)
+export function easeRole(name)                          // "enter" (.out) | "exit" (.in) | "move" (.inOut) | "emphasis" (back/elastic/bounce .out) | null (linear, steps)
+export function grammarEase(grammar, name, {props, roles = ["enter", "exit", "emphasis"]})
+export function calmEase(name)                          // the family without overshoot (back.out → power2.out)
+export function grammarDuration(grammar, role, seconds, {min, max})
+export function grammarStagger(grammar, seconds, {min, max})
+export function grammarTweens(list, grammar, options)   // remap ops / animations in place
+```
+
+Rules:
+
+- **Editorial is the identity.** Every mapping returns its input when the
+  grammar's value for that role equals editorial's, so stories without
+  `motion` (and stories with `"editorial"`) compile byte for byte as before
+  (`test/grammar.test.js` pins the pre-grammar HyperFrames hashes of every
+  golden and the editorial corpus `EXPLICIT_16X9_SHA256`).
+- `resolveModule` passes the grammar as `ctx.grammar` to catalogue modules
+  and as `resolveEditorialModule(spec, {grammar})` to editorial kinds (only
+  when it is not editorial); non-editorial models carry `model.grammar`.
+- Where it applies: the module shell enter/exit eases and durations
+  (editorial kinds, catalogue B's `createBase`, catalogue C's `finish`,
+  catalogue A's `standardExit`); element entrances and pops in catalogue A
+  (every `.out`/`.in`/back/elastic animation); pops (back/elastic) in
+  catalogue B/C timelines; default staggers (equation-lockup, logo-row,
+  archive-card words, emphasis-caption); every typed transition ease
+  (`transitionTweens(…, {grammar})`); camera moves (`grammar.ease.camera`,
+  `grammar.camera.whip`).
+- `.inOut` content mechanics (chart draws, gauge fills, focus moves) keep
+  their designed ease, because some modules derive event times from them.
+- Overshooting eases drive transforms only; opacity, blur, colour, clip
+  radii and stroke offsets get `calmEase`, so opacity never passes 1 and blur
+  never goes negative.
+- Durations scale by the grammar's ratio to editorial and are clamped
+  (editorial shell 0.2–0.36 s in, 0.16–0.28 s out; catalogue B 0.3–0.7 /
+  0.2–0.5 s). Event windows and content defaults keep the editorial bounds,
+  so a grammar never turns a valid spec invalid.
 
 ## Editorial core (`kit/core/editorial-core.mjs`)
 
@@ -315,6 +388,110 @@ node scripts/parity.mjs <fixture.json> [--out qa/parity/<id>] [--times enter,mid
   `report.json` plus side-by-side PNGs.
 - `test/parity.test.js` runs every fixture in `test/fixtures/parity/*.json`
   when `LAUNCHCLIP_PARITY=1` is set, and skips otherwise because it is slow.
+
+## World camera (`kit/core/camera-world.mjs`)
+
+```json
+"camera": { "mode": "world", "layout": "auto", "spacing": 0.12, "parallax": true, "blur": false }
+```
+
+- `mode`: `"cuts"` (default) or `"world"`. World mode is for the motion and
+  voiceover-motion lanes (validation rejects it in footage-led).
+- `layout` (`row` | `column` | `grid` | `path` | `auto`, default `auto`): the
+  direction a camera move takes when its transition names none (row: right;
+  column: down; grid: a snake over ⌈√n⌉ columns; path: right, down, right…;
+  auto: right). An explicit `in.direction` always wins.
+- `spacing` (0–1, default 0.12): the gap between neighbouring plates, as a
+  fraction of the canvas along the move.
+- `parallax` (default true in world mode): the background depth layer and
+  overlay parallax.
+- `blur` (default: whip-pans only): `true` blurs every camera move, `false`
+  none.
+
+Camera transitions (`scene.in` / `ending.in`, track-0 scenes only; footage-led
+rejects them):
+
+| Type | World placement of the incoming plate | Layers |
+|---|---|---|
+| `pan` | beside the outgoing plate in `direction` (where the camera goes) | none |
+| `whip-pan` | as pan; the grammar's whip ease; motion blur by default | none |
+| `orbit` | as pan, turned ±9° (camera rolls back to upright) | none |
+| `push` (world mode only) | centred on `from_object` (`"s3.gap-bracket"`: `model.objects[name].rect`, else the scene's content rect), scaled down by min(W/w, H/h) clamped 1.6–3.2 | incoming fades in over 15–60%, outgoing out over 30–65% |
+| `pull` | centred on the outgoing plate (or its `from_object`), scaled up 2.2× | incoming in over 0–50%, outgoing out over 30–100% |
+
+In cuts mode `push` keeps its slide meaning; `pan`, `whip-pan`, `orbit` and
+`pull` still move a camera between the two (opaque) plates, and every other
+plate stacks where the camera rests. Any non-camera transition stacks the
+incoming plate on the outgoing one; in world mode `fade`, `zoom` and `iris`
+also fade the outgoing plate out, because world plates are transparent.
+A camera `ending.in` travels home to the loop scene's placement (its
+`direction` is ignored); any other ending shows the clone where the camera
+rests.
+
+Model:
+
+- Placement `{x, y, scale, rotation}` per plate (top-left corner in world px,
+  scale, degrees); the first plate sits at the origin. Camera state
+  `{x, y, zoom, rotation}` = the world point at the canvas centre, zoom and
+  roll; at rest on a plate, `zoom = 1/scale`, `rotation = −plate rotation`, so
+  the plate fills the canvas exactly.
+- Moves run over `[scene.start, scene.start + in.dur]` from rest to rest with
+  `grammar.ease.camera` (whip-pan: `grammar.camera.whip`). Every camera ease
+  is `.inOut` with zero velocity at both ends (snappy and playful use
+  `back.inOut`, which winds up first: anticipation), so position and velocity
+  are continuous at every boundary (`test/world_camera.test.js`).
+- Drift (world mode): `x`, `y` and a breathing `scale` wave on the drift
+  container, `centre + amp·cos(2πt/period)` with an extremum at t = 0 and
+  periods that divide the story duration (so the loop seam matches), amplitude
+  `grammar.camera.drift` px at a 1080 px short side. GSAP plays it as
+  half-period `sine.inOut` tweens; no frame repeats the previous camera state.
+  It composes with ambient motion's hold drift, which lives inside each plate.
+- Parallax (`PARALLAX`): the background layer moves 0.3× the plates' screen
+  travel (never scaled), plates 1×, overlays (track ≥ 1) 1.15× relative to
+  the camera state where they settle (`overlayOps`). The layer is ambient
+  motion's background field when that is present, else soft brand glows
+  (`backgroundLayer`).
+- Motion blur: an SVG `feGaussianBlur` with separate x/y deviations on the
+  camera container, sampled once per frame from the screen velocity of the
+  canvas centre (direction) and corners (zoom), through `motionBlurPx`
+  (shutter 0.5, max 18 px): exactly 0 at rest. The filter is switched on
+  (`--lc-cam-filter`) only while a blurred move runs.
+
+```js
+export function resolveCamera(story)      // → {mode, layout, spacing, parallax, blur}
+export function cameraActive(story)       // world mode, or any camera transition
+export function worldLayout(story, windows, {objects}) // → {placements: Map, loop, order}
+export function sceneObjectLookup(story, resolveModule) // → (sceneId, name) → plate-local rect
+export function cameraPlan(story, {windows, objects})   // → plan | null (no camera: compilers emit exactly what they did before)
+export function cameraStateAt(plan, t) / containerState(plan, t) / screenPoint(plan, point, t)
+export function blurAt(plan, t)           // {x, y} deviations
+export function cameraOps(plan)           // renderer-neutral ops on "pan", "zoom", "drift", "background", "blur"
+export function overlayOps(plan, window)  // ops on "overlay"
+export function opsStateAt(ops, target, t)// frame-pure GSAP timeline semantics
+export function placementTransform(placement) / containerTransform(props) / backgroundLayer(plan, brand)
+```
+
+Renderers:
+
+- **HyperFrames**: `#lc-world-bg` (glows), then `#lc-camera` (z-index 5, the
+  blur filter) › `#lc-cam-drift` › `#lc-cam-zoom` (scale and roll about the
+  canvas centre) › `#lc-cam-pan` › the plates, each `.lc-scene` carrying its
+  placement as a static `transform` (origin 0 0). `cameraGsapLines(plan)` turns
+  the ops into `tl.fromTo(…, {immediateRender: false, force3D: false})` and
+  per-frame `tl.set` calls (blur: `attr.stdDeviation` and the filter variable),
+  so the paused timeline gives the same frame in any seek order. Overlays get a
+  `.lc-parallax` wrapper. Root media (video) stays on the root and does not
+  follow the camera (a warning says so).
+- **Remotion**: `CameraWorld` evaluates the same ops per frame with
+  `opsStateAt` and `blurAt`; `SceneLayer` takes the placement, a transparent
+  plate flag and the overlay parallax ops.
+
+Parity: cuts-mode camera moves hold SSIM ≥ 0.97 (explainer-9x16 mid-pan
+0.997). In world mode the parallax glows are soft gradients that the two
+Chrome pipelines dither differently (0.968–0.976 on otherwise identical
+frames, 0.997 after a 2 px blur), so the world golden uses 0.965
+(`eval/renderer-thresholds.json`, `test/parity_camera.test.js`). Blurred
+whip-pan frames match (≥ 0.970) when compared on the frame grid.
 
 ## Footage-led lane (RFC phase 6)
 

@@ -226,6 +226,18 @@ directory holding both `storyboard.json` and `index.html` is read as
 HyperFrames. Repair the storyboard and recompile rather than editing the
 generated `index.html`.
 
+`motion.grammar` and `camera` (see `storyboard-modules.md`, "Motion grammar
+and camera") change only the motion: the grammar's eases, durations and
+staggers reach module entrances and exits, pops and typed transitions, and a
+world camera (`camera.mode` "world", or a `pan`, `whip-pan`, `orbit` or
+`pull` transition in a cuts story) puts every track-0 plate inside one world
+container (`#lc-camera` › `#lc-cam-drift` › `#lc-cam-zoom` › `#lc-cam-pan`)
+moved by seek-safe `fromTo` tweens and per-frame `tl.set` calls, with a
+parallax `#lc-world-bg`, `.lc-parallax` wrappers on overlays and a directional
+SVG motion blur that is zero at rest. Root `<video>` media does not follow the
+camera, so keep media-window video out of world-camera stories. A story without
+either compiles exactly as before.
+
 A `footage-led` storyboard adds a `base` recording (`{src, trim | edl, volume,
 fit, focus}`; see `recorded-video.md`). The compiler mounts the base as muted
 direct-root `<video class="clip lc-base-media">` clips, one per trim segment.
@@ -303,6 +315,10 @@ constraints:
 - Reserve hard cuts for contrast. Pushes preserve direction, zooms change scale,
   morphs preserve identity, whips create an energetic discontinuity, and masks
   redirect focus. Each must have a visibly different spatial behavior.
+- Prefer the storyboard's motion grammar and world camera to hand-tuned eases:
+  `motion.grammar` keeps one easing character across the piece, and
+  `camera.mode` "world" gives camera travel with parallax depth, a slow drift
+  through holds and velocity-shaped blur from one tested implementation.
 - The first frame must already communicate an intentional state. The first
   second states the promise. The first four seconds contain at least three
   meaningful changes in layout, evidence, framing, or visual register for

@@ -12,6 +12,7 @@ file, `storyboard.json`, through the bundled `LaunchclipStory` composition.
 - [Local source preparation](#local-source-preparation)
 - [Composition contract](#composition-contract)
 - [Frame-pure rule](#frame-pure-rule)
+- [Motion grammar and world camera](#motion-grammar-and-world-camera)
 - [Modules and the custom escape hatch](#modules-and-the-custom-escape-hatch)
 - [Design and motion quality contract](#design-and-motion-quality-contract)
 - [Verification loop](#verification-loop)
@@ -407,6 +408,21 @@ export default function SignalLabel({ scene, params }) {
 }
 ```
 
+## Motion grammar and world camera
+
+`motion.grammar` (`editorial` default, `snappy`, `smooth`, `playful`,
+`documentary`) sets the eases, durations and staggers of module entrances and
+exits, pops and typed transitions; it reaches the components through the
+resolved models (`resolveModule`), so custom components should read
+`model.motion.enterEase`/`exitEase` rather than hard-coding eases. A world
+camera (`camera.mode` "world", or a `pan`, `whip-pan`, `orbit` or `pull`
+transition in a cuts story) makes `LaunchclipStory` draw the track-0 plates at
+their world placements inside `CameraWorld` (`kit/remotion/StoryComposition.tsx`),
+which evaluates `cameraPlan()` (`kit/core/camera-world.mjs`) per frame: pan,
+zoom and drift containers, the parallax background, overlay parallax and a
+directional SVG motion blur that is zero at rest. The HyperFrames compiler
+plays the same op list through GSAP, so both renderers match frame for frame.
+
 ## Modules and the custom escape hatch
 
 Build scenes from the catalogue first. A scene names a module and passes its
@@ -485,6 +501,10 @@ constraints:
 - Reserve hard cuts for contrast. Pushes preserve direction, zooms change scale,
   morphs preserve identity, whips create an energetic discontinuity, and irises
   redirect focus. Each must have a visibly different spatial behavior.
+- Prefer the storyboard's motion grammar and world camera to hand-tuned eases:
+  `motion.grammar` keeps one easing character across the piece, and
+  `camera.mode` "world" gives camera travel with parallax depth, a slow drift
+  through holds and velocity-shaped blur from one tested implementation.
 - The first frame must already communicate an intentional state. The first
   second states the promise. The first four seconds contain at least three
   meaningful changes in layout, evidence, framing, or visual register for
