@@ -26,6 +26,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - ambient? (optional): {level: off | subtle | standard | lively, background?: boolean, drift?: boolean}, or just the level. Ambient motion keeps settled frames alive between beats: a slow push-in on each settled module (kept inside the safe zone) and soft brand-colour light drifting behind the plates.
 - Usually leave ambient out: the level follows each scene's energy (0 → subtle, 1, 2 or "build" → standard, 3 → lively), and footage-led stories get no background field and drift overlays only. Set story ambient only to change the whole piece (for example "subtle" for a calm brand film); "off" makes settled frames hold still and fails the cinematic motion gate.
 - A scene may set ambient to override the story: "off" for one deliberately still beat, {"drift": false} when the module's own motion should stand alone, or a level.
+- Recorded product flows (assets/demo/<flow>.mp4 with demo/<flow>.actions.json, from launchclip demo record) play in product-demo scenes. Copy the params the asset inventory gives for each flow (media, viewport, actions, callouts) unchanged: the zooms, outlines and SFX are timed from the real action log, so never invent or move action boxes or times. Time the scene to the clip window (media.sourceStart plus the scene length must stay inside the clip); you may shorten a scene from the end, and drop actions after it.
 - Vary the modules: a 20–40 s piece uses at least four different modules and never the same module three times in a row.
 
 ## Lane rules
@@ -87,6 +88,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 | names a law or formula | equation-lockup |
 | cites history, a source or a quote | archive-card |
 | names a specific date or launch day | date-card |
+| shows the product in use: a recorded flow (assets/demo/<flow>.mp4 with <flow>.actions.json from launchclip demo record) [motion, voiceover-motion] | product-demo |
 | shows a product, site or repo (real capture) | media-window (planned module ui-showcase; use media-window) |
 | shows a command or a few lines of code | code-snippet |
 | names platforms or integrations | logo-row |
@@ -493,6 +495,18 @@ params:
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: pop, word-<i>
 
+### product-demo (keeps captions)
+A recorded product flow (launchclip demo record) in a window or full bleed, with zooms to each clicked or typed-into element, accent outlines as actions land, callout pills and click/keystroke SFX, all timed from the flow's action log.
+params:
+- media: {src: "assets/demo/<flow>.mp4", sourceStart: seconds into the clip (default 0)}
+- viewport: {width, height} of the recording in CSS px (default 1920×1080; from <flow>.actions.json)
+- actions: [{at (s from scene start), type: click|type|focus, box: {x, y, width, height} viewport px, keys?: [s], until?: s, label?}] ≤ 24 — build with productDemoParams(<flow>.actions.json)
+- callouts: [{at, text ≤ 42 chars, box (the element it points at), duration? 0.8–6 s (default 2.2)}] ≤ 4, not overlapping
+- frame: window|full (full needs the canvas aspect; default window)
+- zoom: false, or {max: 1–2.5 (default 1.8)}
+- title: string ≤ 48 (optional, for logs)
+events: click-<i>, key-<i>-<k>, zoom-<k>, callout-<i>
+
 ## Timing rules
 
 Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core/modules.mjs; `launchclip module fit <module>` prints the same rules with the window for a given `--duration`). `at` values are seconds from the scene start: the first beat no earlier than the lead-in, the last no later than the lead-out before the scene end. A faster motion grammar can shorten a catalogue B enter, which only moves its lead-in earlier.
@@ -528,6 +542,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | footage-callout | 1.5 s | 0 s | scene − 1.1 s | — |
 | lower-third | 2 s | 0 s | scene − 1.2 s | — |
 | emphasis-caption | 0.8 s | 0 s | scene − 0.45 s | at ≤ scene − 0.45 s − stagger × (words − 1) (stagger 0–0.3 s, default 0.09) |
+| product-demo | 2 s | 0 s | scene − 0.2 s | actions[].at: in order; zooms lead each action by 0.5 s, hold 1.1 s, and merge into one shot when the next action comes within 2.2 s; callouts[].at ≤ scene − 1 s; each shows 2.2 s by default and must not overlap the next |
 
 ## Example
 

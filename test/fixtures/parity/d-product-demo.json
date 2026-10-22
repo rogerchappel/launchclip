@@ -1,0 +1,133 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 11
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#5b4dff",
+        "accent": "#22c3ee",
+        "paper": "#f4efe6",
+        "ink": "#0b0d12"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "scenes": [
+      {
+        "id": "demo",
+        "module": "product-demo",
+        "start": 0.5,
+        "end": 10.5,
+        "params": {
+          "media": {
+            "src": "assets/demo-sign-in.mp4",
+            "sourceStart": 1
+          },
+          "viewport": {
+            "width": 1920,
+            "height": 1080
+          },
+          "actions": [
+            {
+              "at": 0.856,
+              "type": "type",
+              "box": {
+                "x": 781,
+                "y": 502.5,
+                "width": 358,
+                "height": 50
+              },
+              "keys": [
+                1.138,
+                1.198,
+                1.337,
+                1.422,
+                1.507,
+                1.616,
+                1.715,
+                1.844,
+                1.913,
+                2.002,
+                2.108,
+                2.206,
+                2.281,
+                2.329,
+                2.415,
+                2.476,
+                2.56,
+                2.648,
+                2.707,
+                2.813
+              ],
+              "until": 2.813,
+              "label": "Email"
+            },
+            {
+              "at": 4.527,
+              "type": "type",
+              "box": {
+                "x": 781,
+                "y": 597.5,
+                "width": 358,
+                "height": 50
+              },
+              "keys": [
+                4.796,
+                4.929,
+                5.11,
+                5.192,
+                5.338,
+                5.5,
+                5.564,
+                5.699,
+                5.787,
+                5.846,
+                5.939,
+                6.083,
+                6.157
+              ],
+              "until": 6.157,
+              "label": "Password"
+            },
+            {
+              "at": 7.971,
+              "type": "click",
+              "box": {
+                "x": 781,
+                "y": 673.5,
+                "width": 358,
+                "height": 48
+              },
+              "label": "Sign in"
+            }
+          ],
+          "callouts": [
+            {
+              "at": 8.344,
+              "text": "Straight in",
+              "box": {
+                "x": 781,
+                "y": 673.5,
+                "width": 358,
+                "height": 48
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "sceneId": "demo",
+  "threshold": {
+    "ssim": 0.97
+  }
+}

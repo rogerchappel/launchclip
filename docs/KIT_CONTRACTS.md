@@ -937,3 +937,60 @@ The example is `examples/story/footage/`; regenerate its recording with
   `parity` job runs on ubuntu: five fixtures that between them draw every
   default registry font, at the settle and mid-hold times, plus two stills of
   `examples/story/minimal`, with one shared Remotion bundle.
+
+## Product demo (demo autopilot)
+
+`launchclip demo record` (`src/demo/`) records a SaaS app's key flows in
+Chromium and writes, per flow, `demo/<flow>.mp4` and `demo/<flow>.actions.json`
+(`launchclip.demo-actions.v1`). The `product-demo` module edits a flow from that
+log, so the zooms, outlines, callouts and SFX land on what actually happened in
+the app.
+
+### Action log (`src/demo/record.js`)
+
+`{schema, flow: {id, title, goal}, video, viewport: {width, height, deviceScaleFactor}, frame, fps, duration, frames, recorded_at, actions: [...]}`.
+Each action is `{index, type: goto|click|type|wait-for|assert-visible|pause,
+selector, text, label, start, end, at?, box?, keys?, value?, chars?, url, callout}`.
+Times are seconds in the clip (the first screencast frame is 0); `at` is the
+mouse-down for a click or type, `keys` the time of each typed character, and
+`box` the target's bounding box in viewport CSS px when the action ran. A typed
+value is written as `{account: <field>}` or with secrets redacted, never as a
+password.
+
+### Catalogue D (`kit/core/catalog-d.mjs`)
+
+`product-demo` params: `media {src, sourceStart}`, `viewport`, `actions [{at,
+type, box, keys?, until?, label?}]` (≤ 24, in order), `callouts [{at, text, box,
+duration?}]` (≤ 4, not overlapping), `frame: window|full`, `zoom: false | {max}`,
+`title`. `productDemoParams(record, {src, sourceStart, duration})` builds them
+from an action log, converting to scene-relative times and dropping actions
+outside the window.
+
+- **Rect:** `window` fits the recording's aspect in the safe zone (captions may
+  sit over its bottom edge), and `full` fills the canvas, which needs the same
+  aspect.
+- **Camera:** each click or type target zooms so its box fills at most half the
+  canvas (1 to `zoom.max`, default 1.8). Zooms lead the action by 0.5 s, land on
+  it, hold 1.1 s (or until 0.4 s after the last keystroke), and zoom out over
+  0.7 s. A target within 2.2 s of the previous hold pans inside the same shot.
+  `cameraKeys` gives `{t, s, f}` keyframes, `cameraAt` eases between them (scale
+  in log space), and `cameraTransform` maps a state to `{scale, x, y}` about the
+  canvas origin. That transform is clamped per axis, so a video already covering
+  the canvas keeps covering it and a smaller one stays on screen. One sample per
+  frame becomes `set` ops on `<id>-media` (the video, whose transform-origin is
+  the canvas origin in its local space) and on `<id>-cam` (the overlay's camera
+  layer).
+- **Overlay:** `<id>-overlay` holds the camera layer, with an accent outline
+  (`<id>-hl-<i>`) around each clicked or typed-into box, and callout pills
+  (`<id>-callout-<i>`, brand primary, at least the key text size) placed below or
+  above the anchor as the camera will show it 0.45 s in. Pills are not scaled.
+- **Events:** `click-<i>` → `click`, `key-<i>-<k>` → `keystroke-soft`, `zoom-<k>`
+  → `whoosh-soft` (zooms of at least 1.3×), `callout-<i>` → `pop`. `finish` binds
+  these as module-event SFX, merging same-kind cues closer than 0.12 s.
+- **Compilers:** HyperFrames gets `{html: <video>, overlay}` from the emitter
+  (`kit/hyperframes/catalog-d.mjs`). The story compiler hoists both to the root,
+  the overlay one z-index above the video. Remotion
+  (`kit/remotion/catalog/ProductDemo.tsx`) draws an `<OffthreadVideo>` trimmed to
+  `sourceStart`, then the overlay.
+- **Parity:** `test/fixtures/parity/d-product-demo.json`, a recorded
+  `examples/demo-app` sign-in flow, held to SSIM ≥ 0.97.

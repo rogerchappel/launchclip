@@ -1,0 +1,49 @@
+{
+  "schema": "launchclip.demo-plan.v1",
+  "app": { "url": "http://localhost:4310" },
+  "viewport": { "width": 1920, "height": 1080, "deviceScaleFactor": 1 },
+  "flows": [
+    {
+      "id": "sign-in",
+      "title": "Sign in",
+      "goal": "Sign in with the demo account",
+      "steps": [
+        { "type": "goto", "path": "/login" },
+        { "type": "type", "text": "Email", "value": { "account": "email" }, "label": "Email" },
+        { "type": "type", "text": "Password", "value": { "account": "password" }, "label": "Password", "secret": true },
+        { "type": "click", "text": "Sign in", "label": "Sign in", "callout": "Your whole team, one login" },
+        { "type": "wait-for", "text": "Visitors this week" },
+        { "type": "pause", "ms": 1200 }
+      ]
+    },
+    {
+      "id": "create-project",
+      "title": "Create a project",
+      "goal": "Track a new launch in under a minute",
+      "setup": ["sign-in"],
+      "steps": [
+        { "type": "goto", "path": "/dashboard" },
+        { "type": "pause", "ms": 600 },
+        { "type": "click", "text": "New project", "selector": "header a[href='/projects/new']", "label": "New project" },
+        { "type": "type", "text": "Project name", "value": "Summer launch", "label": "Project name" },
+        { "type": "click", "text": "Upgrades", "label": "Goal: Upgrades" },
+        { "type": "click", "text": "Create project", "label": "Create project", "callout": "Tracking starts now" },
+        { "type": "wait-for", "text": "Summer launch" },
+        { "type": "pause", "ms": 1600 }
+      ]
+    },
+    {
+      "id": "analytics",
+      "title": "Analytics",
+      "goal": "See which day drove signups",
+      "setup": ["sign-in"],
+      "steps": [
+        { "type": "goto", "path": "/dashboard" },
+        { "type": "pause", "ms": 600 },
+        { "type": "click", "text": "Analytics", "label": "Analytics" },
+        { "type": "assert-visible", "text": "Sunday: 96 signups", "callout": "Your best day, at a glance" },
+        { "type": "pause", "ms": 2200 }
+      ]
+    }
+  ]
+}

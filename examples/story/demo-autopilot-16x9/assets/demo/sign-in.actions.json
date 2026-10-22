@@ -1,0 +1,160 @@
+{
+  "schema": "launchclip.demo-actions.v1",
+  "flow": {
+    "id": "sign-in",
+    "title": "Sign in",
+    "goal": "Sign in with the demo account"
+  },
+  "video": "sign-in.mp4",
+  "viewport": {
+    "width": 1920,
+    "height": 1080,
+    "deviceScaleFactor": 1
+  },
+  "frame": {
+    "width": 1920,
+    "height": 1080
+  },
+  "fps": 30,
+  "duration": 9.685,
+  "frames": 176,
+  "recorded_at": "2026-10-22T20:19:06.987Z",
+  "actions": [
+    {
+      "index": 0,
+      "type": "goto",
+      "path": "/login",
+      "label": null,
+      "url": "http://localhost:4310/login",
+      "start": 0,
+      "end": 0,
+      "box": null,
+      "callout": null
+    },
+    {
+      "index": 1,
+      "type": "type",
+      "selector": null,
+      "text": "Email",
+      "label": "Email",
+      "start": 0.791,
+      "end": 3.688,
+      "box": {
+        "x": 781,
+        "y": 502.5,
+        "width": 358,
+        "height": 50
+      },
+      "callout": null,
+      "at": 1.317,
+      "keys": [
+        1.584,
+        1.636,
+        1.723,
+        1.792,
+        1.874,
+        1.975,
+        2.071,
+        2.17,
+        2.236,
+        2.325,
+        2.433,
+        2.529,
+        2.602,
+        2.652,
+        2.734,
+        2.795,
+        2.875,
+        2.963,
+        3.022,
+        3.126
+      ],
+      "value": "{account: email}",
+      "chars": 20,
+      "url": "http://localhost:4310/login"
+    },
+    {
+      "index": 2,
+      "type": "type",
+      "selector": null,
+      "text": "Password",
+      "label": "Password",
+      "start": 3.709,
+      "end": 5.959,
+      "box": {
+        "x": 781,
+        "y": 597.5,
+        "width": 358,
+        "height": 50
+      },
+      "callout": null,
+      "at": 4.265,
+      "keys": [
+        4.522,
+        4.627,
+        4.686,
+        4.754,
+        4.829,
+        4.926,
+        4.976,
+        5.068,
+        5.148,
+        5.206,
+        5.281,
+        5.342,
+        5.398
+      ],
+      "value": "{account: password}",
+      "chars": 13,
+      "url": "http://localhost:4310/login"
+    },
+    {
+      "index": 3,
+      "type": "click",
+      "selector": null,
+      "text": "Sign in",
+      "label": "Sign in",
+      "start": 5.993,
+      "end": 7.094,
+      "box": {
+        "x": 781,
+        "y": 673.5,
+        "width": 358,
+        "height": 48
+      },
+      "callout": "Your whole team, one login",
+      "at": 6.528,
+      "url": "http://localhost:4310/dashboard"
+    },
+    {
+      "index": 4,
+      "type": "wait-for",
+      "selector": null,
+      "text": "Visitors this week",
+      "label": "Visitors this week",
+      "start": 7.094,
+      "end": 7.577,
+      "box": {
+        "x": 333,
+        "y": 166,
+        "width": 458,
+        "height": 21
+      },
+      "callout": null,
+      "at": 7.125,
+      "url": "http://localhost:4310/dashboard"
+    },
+    {
+      "index": 5,
+      "type": "pause",
+      "selector": null,
+      "text": null,
+      "label": null,
+      "start": 7.577,
+      "end": 8.782,
+      "box": null,
+      "callout": null,
+      "url": "http://localhost:4310/dashboard"
+    }
+  ]
+}

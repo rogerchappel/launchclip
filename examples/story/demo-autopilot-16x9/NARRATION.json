@@ -1,0 +1,506 @@
+{
+  "schema_version": "launchclip.narration.v1",
+  "provider": "kokoro",
+  "voice": "af_heart",
+  "speed": 0.95,
+  "text": "Launch day shouldn't mean five dashboards and a spreadsheet. Pulseboard puts every launch in one place. Sign in with your team account, and this week's visitors, live projects and conversion are already waiting. Starting a new launch takes seconds. Give it a name, pick the goal you care about, and hit create. Your new project is live at the top of the board, and tracking starts right away. Then see what's working. One click, and you know which day drove your signups. Track it. Learn from it. Launch again. Pulseboard: launch analytics for small teams. Try it free today.",
+  "sample_rate": 24000,
+  "duration_seconds": 40.4,
+  "words": [
+    {
+      "text": "Launch",
+      "start": 0.305,
+      "end": 0.612
+    },
+    {
+      "text": "day",
+      "start": 0.675,
+      "end": 0.903
+    },
+    {
+      "text": "shouldn't",
+      "start": 1.015,
+      "end": 1.146
+    },
+    {
+      "text": "mean",
+      "start": 1.175,
+      "end": 1.349
+    },
+    {
+      "text": "five",
+      "start": 1.48,
+      "end": 1.721
+    },
+    {
+      "text": "dashboards",
+      "start": 1.775,
+      "end": 2.37
+    },
+    {
+      "text": "and",
+      "start": 2.425,
+      "end": 2.49
+    },
+    {
+      "text": "a",
+      "start": 2.516,
+      "end": 2.542
+    },
+    {
+      "text": "spreadsheet.",
+      "start": 2.591,
+      "end": 3.446
+    },
+    {
+      "text": "Pulseboard",
+      "start": 4.01,
+      "end": 4.515
+    },
+    {
+      "text": "puts",
+      "start": 4.595,
+      "end": 4.759
+    },
+    {
+      "text": "every",
+      "start": 4.855,
+      "end": 5.078
+    },
+    {
+      "text": "launch",
+      "start": 5.13,
+      "end": 5.417
+    },
+    {
+      "text": "in",
+      "start": 5.465,
+      "end": 5.522
+    },
+    {
+      "text": "one",
+      "start": 5.573,
+      "end": 5.742
+    },
+    {
+      "text": "place.",
+      "start": 5.82,
+      "end": 6.415
+    },
+    {
+      "text": "Sign",
+      "start": 6.988,
+      "end": 7.307
+    },
+    {
+      "text": "in",
+      "start": 7.365,
+      "end": 7.516
+    },
+    {
+      "text": "with",
+      "start": 7.557,
+      "end": 7.659
+    },
+    {
+      "text": "your",
+      "start": 7.67,
+      "end": 7.775
+    },
+    {
+      "text": "team",
+      "start": 7.825,
+      "end": 8.039
+    },
+    {
+      "text": "account,",
+      "start": 8.087,
+      "end": 8.766
+    },
+    {
+      "text": "and",
+      "start": 8.895,
+      "end": 8.983
+    },
+    {
+      "text": "this",
+      "start": 9.019,
+      "end": 9.181
+    },
+    {
+      "text": "week's",
+      "start": 9.24,
+      "end": 9.489
+    },
+    {
+      "text": "visitors,",
+      "start": 9.585,
+      "end": 10.252
+    },
+    {
+      "text": "live",
+      "start": 10.395,
+      "end": 10.699
+    },
+    {
+      "text": "projects",
+      "start": 10.75,
+      "end": 11.254
+    },
+    {
+      "text": "and",
+      "start": 11.3,
+      "end": 11.359
+    },
+    {
+      "text": "conversion",
+      "start": 11.43,
+      "end": 12.005
+    },
+    {
+      "text": "are",
+      "start": 12.08,
+      "end": 12.18
+    },
+    {
+      "text": "already",
+      "start": 12.26,
+      "end": 12.565
+    },
+    {
+      "text": "waiting.",
+      "start": 12.63,
+      "end": 13.309
+    },
+    {
+      "text": "Starting",
+      "start": 13.82,
+      "end": 14.16
+    },
+    {
+      "text": "a",
+      "start": 14.19,
+      "end": 14.222
+    },
+    {
+      "text": "new",
+      "start": 14.274,
+      "end": 14.389
+    },
+    {
+      "text": "launch",
+      "start": 14.439,
+      "end": 14.757
+    },
+    {
+      "text": "takes",
+      "start": 14.8,
+      "end": 15.017
+    },
+    {
+      "text": "seconds.",
+      "start": 15.069,
+      "end": 15.8
+    },
+    {
+      "text": "Give",
+      "start": 16.375,
+      "end": 16.469
+    },
+    {
+      "text": "it",
+      "start": 16.505,
+      "end": 16.546
+    },
+    {
+      "text": "a",
+      "start": 16.572,
+      "end": 16.6
+    },
+    {
+      "text": "name,",
+      "start": 16.65,
+      "end": 17.174
+    },
+    {
+      "text": "pick",
+      "start": 17.35,
+      "end": 17.477
+    },
+    {
+      "text": "the",
+      "start": 17.485,
+      "end": 17.567
+    },
+    {
+      "text": "goal",
+      "start": 17.66,
+      "end": 17.796
+    },
+    {
+      "text": "you",
+      "start": 17.842,
+      "end": 17.919
+    },
+    {
+      "text": "care",
+      "start": 17.99,
+      "end": 18.164
+    },
+    {
+      "text": "about,",
+      "start": 18.199,
+      "end": 18.541
+    },
+    {
+      "text": "and",
+      "start": 18.613,
+      "end": 18.691
+    },
+    {
+      "text": "hit",
+      "start": 18.78,
+      "end": 18.901
+    },
+    {
+      "text": "create.",
+      "start": 18.94,
+      "end": 19.641
+    },
+    {
+      "text": "Your",
+      "start": 20.2,
+      "end": 20.409
+    },
+    {
+      "text": "new",
+      "start": 20.429,
+      "end": 20.644
+    },
+    {
+      "text": "project",
+      "start": 20.664,
+      "end": 21.232
+    },
+    {
+      "text": "is",
+      "start": 21.252,
+      "end": 21.408
+    },
+    {
+      "text": "live",
+      "start": 21.428,
+      "end": 21.702
+    },
+    {
+      "text": "at",
+      "start": 21.755,
+      "end": 21.879
+    },
+    {
+      "text": "the",
+      "start": 21.935,
+      "end": 22.055
+    },
+    {
+      "text": "top",
+      "start": 22.085,
+      "end": 22.349
+    },
+    {
+      "text": "of",
+      "start": 22.369,
+      "end": 22.526
+    },
+    {
+      "text": "the",
+      "start": 22.59,
+      "end": 22.702
+    },
+    {
+      "text": "board,",
+      "start": 22.722,
+      "end": 23.055
+    },
+    {
+      "text": "and",
+      "start": 23.11,
+      "end": 23.29
+    },
+    {
+      "text": "tracking",
+      "start": 23.31,
+      "end": 23.702
+    },
+    {
+      "text": "starts",
+      "start": 23.722,
+      "end": 24.172
+    },
+    {
+      "text": "right",
+      "start": 24.192,
+      "end": 24.466
+    },
+    {
+      "text": "away.",
+      "start": 24.486,
+      "end": 24.78
+    },
+    {
+      "text": "Then",
+      "start": 25.3,
+      "end": 25.522
+    },
+    {
+      "text": "see",
+      "start": 25.614,
+      "end": 25.769
+    },
+    {
+      "text": "what's",
+      "start": 25.81,
+      "end": 26.02
+    },
+    {
+      "text": "working.",
+      "start": 26.09,
+      "end": 26.782
+    },
+    {
+      "text": "One",
+      "start": 27.35,
+      "end": 27.554
+    },
+    {
+      "text": "click,",
+      "start": 27.63,
+      "end": 28.033
+    },
+    {
+      "text": "and",
+      "start": 28.15,
+      "end": 28.217
+    },
+    {
+      "text": "you",
+      "start": 28.259,
+      "end": 28.336
+    },
+    {
+      "text": "know",
+      "start": 28.371,
+      "end": 28.516
+    },
+    {
+      "text": "which",
+      "start": 28.551,
+      "end": 28.732
+    },
+    {
+      "text": "day",
+      "start": 28.83,
+      "end": 28.979
+    },
+    {
+      "text": "drove",
+      "start": 29.075,
+      "end": 29.295
+    },
+    {
+      "text": "your",
+      "start": 29.35,
+      "end": 29.403
+    },
+    {
+      "text": "signups.",
+      "start": 29.458,
+      "end": 30.228
+    },
+    {
+      "text": "Track",
+      "start": 30.825,
+      "end": 31.141
+    },
+    {
+      "text": "it.",
+      "start": 31.208,
+      "end": 31.645
+    },
+    {
+      "text": "Learn",
+      "start": 32.339,
+      "end": 32.597
+    },
+    {
+      "text": "from",
+      "start": 32.649,
+      "end": 32.799
+    },
+    {
+      "text": "it.",
+      "start": 32.859,
+      "end": 33.275
+    },
+    {
+      "text": "Launch",
+      "start": 33.963,
+      "end": 34.292
+    },
+    {
+      "text": "again.",
+      "start": 34.33,
+      "end": 34.961
+    },
+    {
+      "text": "Pulseboard:",
+      "start": 35.525,
+      "end": 36.271
+    },
+    {
+      "text": "launch",
+      "start": 36.405,
+      "end": 36.625
+    },
+    {
+      "text": "analytics",
+      "start": 36.625,
+      "end": 37.13
+    },
+    {
+      "text": "for",
+      "start": 37.21,
+      "end": 37.279
+    },
+    {
+      "text": "small",
+      "start": 37.33,
+      "end": 37.577
+    },
+    {
+      "text": "teams.",
+      "start": 37.595,
+      "end": 38.341
+    },
+    {
+      "text": "Try",
+      "start": 38.875,
+      "end": 39.143
+    },
+    {
+      "text": "it",
+      "start": 39.174,
+      "end": 39.234
+    },
+    {
+      "text": "free",
+      "start": 39.285,
+      "end": 39.438
+    },
+    {
+      "text": "today.",
+      "start": 39.515,
+      "end": 40.128
+    }
+  ]
+}
