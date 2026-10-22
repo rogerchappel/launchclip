@@ -26,7 +26,7 @@ import { getRenderer, resolveRendererName } from "./renderers/index.js";
 import { remotionInvocation } from "./renderers/remotion.js";
 import { deriveBoundaries, resolveStory, storyFormat } from "./story.js";
 import { validateStory } from "./story_cli.js";
-import { hasExactFile } from "./story_loader.js";
+import { hasExactFile, readStoryEdl } from "./story_loader.js";
 import { hyperframesInvocation } from "./toolchain.js";
 import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
 import { normalizeLoudness } from "./voice/supplied.js";
@@ -483,7 +483,9 @@ const STAGES = [
       ctx.warnings.push(...validation.warnings);
       ctx.words = await loadWords(ctx.project, ctx.copy);
       ctx.beats = await readOptionalJson(path.join(ctx.project, "BEATS.json"));
-      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats });
+      // Footage-led: base.edl (the edit-recording plan) becomes base.trim.
+      ctx.edl = await readStoryEdl(ctx.project, ctx.copy);
+      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl });
       const second = validateStory(resolved);
       if (!second.ok) throw new Error(`resolved storyboard is invalid:\n- ${second.errors.join("\n- ")}`);
       ctx.warnings.push(...second.warnings);
@@ -592,7 +594,7 @@ const STAGES = [
   {
     name: "render",
     async plan(ctx) {
-      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null });
+      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null });
       ctx.resolved = resolved;
       await writeResolvedCopy(ctx);
       const assets = {};
