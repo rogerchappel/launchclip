@@ -1,7 +1,7 @@
 // launchclip make "<prompt>" [--assets dir]: a prompt and an optional folder
 // of assets to a finished video, headless.
 //
-//   inventory → route → prepare (base edit | voiceover prep | script + voice)
+//   inventory → demo (--repo: demo autopilot) → route → prepare (base edit | voiceover prep | script + voice)
 //     → storyboard (planner + repair loop) → finish → critic → MAKE.json
 //
 // Every stage is resumable: ASSETS.json entries are reused while a file's size
@@ -26,6 +26,7 @@ import { routeLane } from "./routing.js";
 import { createMakeClient, selectMakeModel } from "./models.js";
 import { needsResize, targetWords, writeScript } from "./script.js";
 import { runHeadlessCritic } from "./critic.js";
+import { DemoReviewNeeded, demoManifestLines, stageDemo } from "./demo.js";
 
 export const MAKE_VERSION = "launchclip.make.v1";
 export const MAKE_MAX_REPAIRS = 4;
@@ -60,7 +61,8 @@ export function slugify(prompt) {
 
 /**
  * options: {assets, aspect, duration, style, model, voice, music, renderer,
- *   quality, out, replan, critic (true|false|undefined = auto), maxRepairs, cwd}
+ *   quality, out, replan, critic (true|false|undefined = auto), maxRepairs, cwd,
+ *   repo, approveDemo, redemo, start, url, allowHost, demoPlan}
  * adapters: {env, client ({client, provider, model, vision}), transcribe,
  *   inventory, voiceProvider, normalizeVoice, prepareRecording, finish
  *   (runFinish replacement or adapters for it: finishAdapters), notice, now, clock}
@@ -116,6 +118,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   const stages = [
     ["model", stageModel],
     ["inventory", stageInventory],
+    ["demo", stageDemo],
     ["route", stageRoute],
     ["prepare", stagePrepare],
     ["storyboard", stageStoryboard],
@@ -510,6 +513,7 @@ export function assetManifestLines(ctx) {
       : `a media-window scene with params.media {kind: "${item.kind}", src: "${src}"${item.kind === "video" ? ", sourceStart?" : ""}}`;
     out.push({ src, kind: item.kind, line: `${src} — ${item.kind}, ${item.role}, ${size}${item.duration ? `, ${item.duration}s` : ""}: ${item.description}. Use as ${use}.` });
   }
+  out.push(...demoManifestLines(ctx));
   for (const item of routing.logos) {
     const src = `assets/${item.path}`;
     out.push({ src, kind: "image", line: `${src} — image, logo, ${item.width ?? "?"}×${item.height ?? "?"}: ${item.description}. No catalogue module shows a single logo on its own (logo-row needs 2–6 logos); use it in a media-window only if a product shot is missing, otherwise leave it out.` });
@@ -605,6 +609,7 @@ export async function audioEnhancementFeature() {
 function nextStepFor(stage, error, ctx) {
   const project = ctx.project;
   const message = String(error?.message ?? error).split("\n")[0];
+  if (error instanceof DemoReviewNeeded) return error.message;
   switch (stage) {
     case "model": return `Set OPENAI_API_KEY or ANTHROPIC_API_KEY (shell or .env), or pass --model provider:model. (${message})`;
     case "inventory": return `Check the --assets folder and that ffmpeg/ffprobe are installed (launchclip doctor). (${message})`;
