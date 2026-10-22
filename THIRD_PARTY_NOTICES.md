@@ -24,6 +24,31 @@ Review the current terms before use:
 - <https://www.remotion.dev/license>
 - <https://www.remotion.pro/license>
 
+## Kokoro voice (optional)
+
+The default open-source voice uses `kokoro-js` 1.2.1 (Apache-2.0, by hexgrad
+and Xenova), declared as an optional dependency, so installs without it still
+work. It runs the Kokoro-82M v1.0 model (Apache-2.0, by hexgrad) through
+`@huggingface/transformers` (Apache-2.0) and `onnxruntime-node` (MIT).
+LaunchClip does not bundle the model: on first use the ONNX export
+`onnx-community/Kokoro-82M-v1.0-ONNX-timestamped` is downloaded from Hugging
+Face into `$LAUNCHCLIP_CACHE/kokoro` (default `~/.cache/launchclip/kokoro`).
+The voice style vectors ship inside the `kokoro-js` package.
+
+Phonemisation uses the `phonemizer` package (declared Apache-2.0), which is a
+WebAssembly build of eSpeak NG. Upstream eSpeak NG is licensed GPL-3.0-or-later;
+review its terms before redistributing a bundle that includes it.
+
+- <https://huggingface.co/hexgrad/Kokoro-82M>
+- <https://github.com/hexgrad/kokoro>
+- <https://github.com/espeak-ng/espeak-ng>
+
+## ElevenLabs voice (optional, opt-in)
+
+The ElevenLabs provider calls the ElevenLabs API only when
+`ELEVENLABS_API_KEY` is set. Use of that service and of its output is
+governed by the ElevenLabs terms of service.
+
 ## Other direct dependencies
 
 At the time of the 0.1.1 release candidate, HyperFrames declares Apache-2.0;

@@ -37,7 +37,7 @@ export function getVoiceProvider(name, options = {}) {
 }
 
 // A stand-in for a provider whose module loads on first use. Importing the
-// module is expected to call registerVoiceProvider(name, factory); a default
+// module, which exports create(options) or calls registerVoiceProvider(name, factory); a default
 // export factory is accepted too.
 function lazyProvider(name, options) {
   let loaded = null;
@@ -46,7 +46,9 @@ function lazyProvider(name, options) {
     const file = path.join(HERE, LAZY[name]);
     if (!existsSync(file)) throw new Error(`Voice provider "${name}" is not installed: ${path.relative(process.cwd(), file) || file} is missing. Use --voice test for an offline placeholder, or supply audio.voice and audio.words.`);
     const module = await import(pathToFileURL(file).href);
-    if (!factories.has(name) && typeof module.default === "function") factories.set(name, module.default);
+    // Provider files export create(options); a default export also works.
+    const factory = typeof module.create === "function" ? module.create : module.default;
+    if (!factories.has(name) && typeof factory === "function") factories.set(name, factory);
     if (!factories.has(name)) throw new Error(`Voice provider "${name}" is not installed: ${LAZY[name]} did not register a provider`);
     loaded = checkProvider(factories.get(name)(options), name);
     return loaded;

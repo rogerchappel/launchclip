@@ -84,5 +84,8 @@
     "@types/react": "^19.3.0",
     "gsap": "^3.14.2",
     "typescript": "^5.9.3"
+  },
+  "optionalDependencies": {
+    "kokoro-js": "1.2.1"
   }
 }
