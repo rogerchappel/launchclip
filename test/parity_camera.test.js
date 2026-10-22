@@ -8,11 +8,19 @@
 // Both hold the usual 0.97 (world-camera-9x16 measured 0.987–0.994 at these
 // times). The parallax glows are small separate gradient elements on a fixed
 // lattice: one huge multi-gradient layer, scaled with the zoom, dithered
-// differently in the two Chrome pipelines and fell to 0.956.
+// differently in the two Chrome pipelines and fell to 0.956. With ambient's
+// field present the depth layer is the field alone (tiled across the world),
+// never glows under it: the two stacked fell to 0.963 in 16:9.
+//
+// Seam check (blind-test regression): at t = 8 (settled after the first pan)
+// the old field box's edge sat at x = 717 as a 3–4 level luma step in both
+// renderers. A band of background-only rows across it must now step by less
+// than 1.5 levels per column (the real gradient is ~0.5).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {execFileSync} from 'node:child_process';
 import {runStoryParity} from '../scripts/parity.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -20,12 +28,30 @@ const enabled = process.env.LAUNCHCLIP_PARITY === '1';
 
 export const CAMERA_PARITY = Object.freeze([
   {id: 'explainer-9x16', threshold: 0.97, times: [3.2, 4.6, 4.7, 4.8, 9.5]},
-  {id: 'world-camera-9x16', threshold: 0.97, times: [1.2, 3.0, 3.1, 9.4, 12.5, 16.0, 18.0, 20.7, 22.6, 22.8, 22.9]}
+  {id: 'world-camera-9x16', threshold: 0.97, times: [1.2, 3.0, 3.1, 8.0, 9.4, 12.5, 16.0, 18.0, 20.7, 22.6, 22.8, 22.9],
+    seams: [{time: 8.0, y: 1600, x0: 600, x1: 1000}]}
 ]);
 
-for (const {id, threshold, times} of CAMERA_PARITY) {
+// Largest luma step between neighbouring columns x0…x1, averaged over 16 rows from y.
+export function columnStep(file, {y, x0, x1, rows = 16}) {
+  const width = Number(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width', '-of', 'csv=p=0', file], {encoding: 'utf8'}).trim());
+  const raw = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', file, '-vf', `crop=${width}:${rows}:0:${y}`, '-f', 'rawvideo', '-pix_fmt', 'gray', '-']);
+  const col = (x) => { let sum = 0; for (let r = 0; r < rows; r += 1) sum += raw[r * width + x]; return sum / rows; };
+  let max = 0;
+  for (let x = x0; x < x1; x += 1) max = Math.max(max, Math.abs(col(x + 1) - col(x)));
+  return max;
+}
+
+for (const {id, threshold, times, seams = []} of CAMERA_PARITY) {
   test(`parity: camera story ${id}`, {skip: enabled ? false : 'set LAUNCHCLIP_PARITY=1 to render camera parity', timeout: 900_000}, async () => {
     const report = await runStoryParity(path.join(ROOT, 'examples', 'story', id), {times, threshold, out: path.join(ROOT, 'qa', 'parity', `camera-${id}`)});
     for (const sample of report.samples) assert.ok(sample.pass, `camera story ${id} t=${sample.time}: ssim ${sample.ssim} < ${threshold} (see ${report.outDir}/${sample.sideBySide})`);
+    for (const seam of seams) {
+      const sample = report.samples.find((entry) => entry.time === seam.time);
+      for (const still of [sample.hyperframes, sample.remotion]) {
+        const step = columnStep(path.join(report.outDir, still), seam);
+        assert.ok(step < 1.5, `camera story ${id} t=${seam.time} ${still}: background steps ${step.toFixed(2)} luma levels between columns ${seam.x0}–${seam.x1} (a seam)`);
+      }
+    }
   });
 }

@@ -66,3 +66,4 @@ qa/music/
 # SFX library QA renders and auditions
 qa/sfx/
 qa/parity-footage/
+qa/seams/

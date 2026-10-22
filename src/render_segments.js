@@ -36,8 +36,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { captionChunksFrom, chunkWords, narrationWords, visibleChunks } from "../kit/core/captions.mjs";
 import { cameraOps } from "../kit/core/catalog-c.mjs";
-import { backgroundLayer, blurAt, cameraPlan, containerState, objectRectFromModel, opsStateAt, overlayOps } from "../kit/core/camera-world.mjs";
-import { ambientField } from "../kit/core/ambient.mjs";
+import { backgroundFieldTiles, backgroundLayer, blurAt, cameraPlan, containerState, objectRectFromModel, opsStateAt, overlayOps } from "../kit/core/camera-world.mjs";
+import { ambientField, blobStateAt } from "../kit/core/ambient.mjs";
 import { allFontFaces } from "../kit/core/fonts.mjs";
 import { resolveModule } from "../kit/core/modules.mjs";
 import { storyBase } from "../kit/core/story.mjs";
@@ -413,13 +413,17 @@ export function hashSegments(story, plan, inputs, { encoder = null } = {}) {
  * so a segment hashes what the camera puts on screen during its frames rather
  * than its own scenes: the container states and blur on every frame, the
  * placements of its plates, its overlays' parallax and the depth-layer glows
- * that pass through the canvas. → (segment, layers) => digest
+ * and field tiles that pass through the canvas. → (segment, layers) => digest
  */
 export function segmentCamera(story, models, fps) {
   const objects = (sceneId, name) => objectRectFromModel(models.get(sceneId), name);
   const plan = cameraPlan(story, { windows: sceneWindows(story), objects });
   if (!plan) return null;
-  const glows = plan.parallax ? backgroundLayer(plan, story.brand).glows : [];
+  // The depth layer is the tiled ambient field when there is one, else glows.
+  const field = plan.background ? ambientField(story) : null;
+  const blobs = new Map((field?.blobs ?? []).map((blob) => [blob.id, blob]));
+  const tiles = backgroundFieldTiles(plan, field);
+  const glows = plan.background && !tiles.length ? backgroundLayer(plan, story.brand).glows : [];
   const r4 = (value) => Math.round(value * 1e4) / 1e4;
   const state = (t) => {
     const c = containerState(plan, t);
@@ -428,6 +432,7 @@ export function segmentCamera(story, models, fps) {
   return (segment, layers) => {
     const frames = [];
     const seen = new Set();
+    const seenTiles = new Set();
     const overlays = layers.filter((layer) => layer.kind === "scene" && !layer.entry.plate)
       .map((layer) => ({ key: layer.key, ops: overlayOps(plan, { start: layer.entry.start, end: layer.entry.renderEnd }) }))
       .filter((entry) => entry.ops.length);
@@ -440,13 +445,19 @@ export function segmentCamera(story, models, fps) {
         const x = glow.left + bg.x, y = glow.top + bg.y, pad = glow.size * 0.1;
         if (x < plan.width + pad && x + glow.size > -pad && y < plan.height + pad && y + glow.size > -pad) seen.add(index);
       });
+      tiles.forEach((tile, index) => {
+        const blob = blobs.get(tile.blob), b = blobStateAt(blob, t);
+        const size = blob.size * b.scale, x = tile.dx + b.x + bg.x - (size - blob.size) / 2, y = tile.dy + b.y + bg.y - (size - blob.size) / 2, pad = size * 0.1;
+        if (x < plan.width + pad && x + size > -pad && y < plan.height + pad && y + size > -pad) seenTiles.add(index);
+      });
     }
     return {
       mode: plan.mode,
       frames,
       placements: layers.map((layer) => [layer.key, layer.kind === "loop" ? plan.loop : plan.placements[layer.key] ?? null]),
       overlays: overlays.map((entry) => entry.key),
-      glows: [...seen].sort((a, b) => a - b).map((index) => glows[index])
+      glows: [...seen].sort((a, b) => a - b).map((index) => glows[index]),
+      field: [...seenTiles].sort((a, b) => a - b).map((index) => tiles[index])
     };
   };
 }

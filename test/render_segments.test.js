@@ -161,6 +161,20 @@ test("the world camera path is hashed per segment: one pan direction invalidates
   assert.deepEqual(changed(before, orbit), ["s4+s5", "s5", "s5+s1~loop"]);
   const segment = hashed.find((entry) => entry.label === "s4");
   assert.ok(segment.parts.camera, "camera stories carry a camera part");
+  // The background field is part of the camera digest: parallax false keeps
+  // the field but moves it 1× with the plates, so the camera part changes
+  // from the first move on, while s1 (at home, before any move) frames the
+  // same field tiles. Turning ambient's background off swaps the field for
+  // glows, which every segment's camera part sees.
+  const cameraParts = async (mutate) => {
+    const { story: resolved, words } = await story(mutate);
+    return Object.fromEntries(hashSegments(resolved, planSegments(resolved), inputsFor(resolved, words)).map((entry) => [entry.label, entry.parts.camera]));
+  };
+  const parts = await cameraParts(), flat = await cameraParts((value) => { value.camera.parallax = false; });
+  assert.equal(flat.s1, parts.s1);
+  for (const label of ["s1+s2", "s2", "s3", "s4", "s5", "s5+s1~loop"]) assert.notEqual(flat[label], parts[label], `${label} camera part sees the 1× field`);
+  const glows = await cameraParts((value) => { value.ambient = { background: false }; });
+  for (const label of Object.keys(parts)) assert.notEqual(glows[label], parts[label], `${label} camera part sees the glows`);
   // A cuts story without camera transitions has no camera part at all.
   const cuts = await explainer((value) => { value.scenes[1].in = { type: "push", dur: 0.45, direction: "up" }; });
   const cutsPlan = planSegments(cuts.story);

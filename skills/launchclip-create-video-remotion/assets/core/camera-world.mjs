@@ -28,9 +28,13 @@
 //   fully still and the loop seam matches. Camera eases are all .inOut with
 //   zero velocity at both ends, and the drift is smooth, so the camera path
 //   is continuous in position and velocity at every boundary.
-// - Parallax (world mode, camera.parallax default true): a background depth
-//   layer moves at 0.3× the camera, plates at 1×, overlays (track ≥ 1) at
-//   1.15× relative to the camera position where they settle.
+// - Background (world mode): one depth layer behind the transparent plates,
+//   continuous across the whole world (ambient motion's field tiled with no
+//   edges, else brand glows on a lattice). With parallax (camera.parallax,
+//   default true) it moves at 0.3× the camera, plates at 1× and overlays
+//   (track ≥ 1) at 1.15× relative to the camera position where they settle;
+//   with parallax false the same layer moves at 1× with the plates and
+//   overlays do not slide.
 // - Motion blur: a directional Gaussian blur (SVG feGaussianBlur with
 //   separate x/y deviations) shaped by the screen velocity of the camera,
 //   sampled once per frame and exactly 0 at rest (RFC §5). It is on for
@@ -44,14 +48,15 @@
 import { getEase, motionBlurPx } from './motion.mjs';
 import { isCameraTransition } from './transitions.mjs';
 import { resolveGrammar } from './grammar.mjs';
-import { FIELD_PARALLAX } from './ambient.mjs';
+import { FIELD_PARALLAX, fieldTiles } from './ambient.mjs';
 
 export const CAMERA_MODES = Object.freeze(['cuts', 'world']);
 export const CAMERA_LAYOUTS = Object.freeze(['row', 'column', 'grid', 'path', 'auto']);
 // background: ambient motion's FIELD_PARALLAX, so its field and the brand
 // glows share the depth layer's 0.3× (the layer translates and rolls only;
-// it never scales, see backgroundKeys).
-export const PARALLAX = Object.freeze({ background: FIELD_PARALLAX, plate: 1, overlay: 1.15 });
+// it never scales, see backgroundKeys). flat: the depth layer's speed when
+// camera.parallax is false (it travels with the plates).
+export const PARALLAX = Object.freeze({ background: FIELD_PARALLAX, plate: 1, overlay: 1.15, flat: 1 });
 export const CAMERA_DEFAULTS = Object.freeze({ layout: 'auto', spacing: 0.12 });
 // A dolly (push/pull) scales the next plate by this much, clamped.
 export const DOLLY = Object.freeze({ min: 1.6, max: 3.2, pull: 2.2 });
@@ -255,6 +260,8 @@ export function waveSegments(axis, duration) {
  * → {mode, width, height, fps, duration, grammar, camera, placements, loop,
  *    moves: [{sceneId, type, start, duration, ease, blur, from, to}],
  *    drift: {x, y, scale} | null, parallax: {background, overlay} | null,
+ *    depth: background layer speed (world mode: 0.3 with parallax, 1 without;
+ *    cuts: null, the plates are opaque), background: backgroundKeys | null,
  *    ops: [renderer-neutral ops, see cameraOps]}
  */
 export function cameraPlan(story, { windows, objects } = {}) {
@@ -303,9 +310,12 @@ export function cameraPlan(story, { windows, objects } = {}) {
     placements: Object.fromEntries(layout.placements), loop: layout.loop, order: layout.order,
     home: restState(layout.placements.get(plates[0]?.id) ?? ORIGIN, size),
     moves, drift,
-    parallax: camera.parallax ? { background: PARALLAX.background, overlay: PARALLAX.overlay } : null
+    parallax: camera.parallax ? { background: PARALLAX.background, overlay: PARALLAX.overlay } : null,
+    // World plates are transparent, so world mode always has a background
+    // layer: parallax false only makes it travel with the plates.
+    depth: camera.mode === 'world' ? (camera.parallax ? PARALLAX.background : PARALLAX.flat) : null
   };
-  plan.background = plan.parallax ? backgroundKeys(plan) : null;
+  plan.background = plan.depth ? backgroundKeys(plan) : null;
   plan.blurSamples = blurSamples(plan);
   plan.ops = cameraOps(plan);
   return plan;
@@ -313,14 +323,14 @@ export function cameraPlan(story, { windows, objects } = {}) {
 
 /**
  * Background depth-layer states per move, in screen px: each move shifts the
- * layer by PARALLAX.background × the plates' screen travel (world travel ×
+ * layer by plan.depth (0.3 with parallax, 1 without) × the plates' screen travel (world travel ×
  * the zoom it lands at) and turns it by the same fraction of the roll. The
  * layer is never scaled: a magnified gradient rasterises differently in the
  * two renderers, and a dolly already reads through the plates.
  * → {home: {x, y, scale, rotation}, keys: [{start, duration, ease, from, to}]}
  */
 export function backgroundKeys(plan) {
-  const k = plan.parallax?.background ?? 0;
+  const k = plan.depth ?? 0;
   let at = { x: 0, y: 0, scale: 1, rotation: 0 };
   const keys = [];
   for (const move of plan.moves) {
@@ -540,6 +550,30 @@ export function containerTransform(props) {
 }
 
 /**
+ * The rect of the depth layer's own frame (origin = the canvas origin at
+ * home) that the camera can show over the story: the canvas at every rest
+ * translation of the layer, plus a margin for ease overshoot (back.inOut)
+ * and roll. → {x0, y0, x1, y1}. Ambient's fieldTiles() fills it so the field
+ * has no edge anywhere the camera goes.
+ */
+export function backgroundExtent(plan) {
+  const keys = [plan.background?.home ?? { x: 0, y: 0 }, ...(plan.background?.keys ?? []).map((key) => key.to)];
+  const xs = keys.map((key) => -key.x), ys = keys.map((key) => -key.y);
+  const margin = Math.max(plan.width, plan.height) * 0.5;
+  return { x0: round(Math.min(...xs) - margin, 3), y0: round(Math.min(...ys) - margin, 3), x1: round(Math.max(...xs) + plan.width + margin, 3), y1: round(Math.max(...ys) + plan.height + margin, 3) };
+}
+
+/**
+ * Ambient motion's field (ambientField) laid across the depth layer as one
+ * continuous backdrop: fieldTiles over backgroundExtent. Both renderers draw
+ * exactly these copies. → [{blob, dx, dy}] ([] without a depth layer or field).
+ */
+export function backgroundFieldTiles(plan, field) {
+  if (!plan?.background || !field?.blobs?.length) return [];
+  return fieldTiles(field, backgroundExtent(plan), { width: plan.width, height: plan.height });
+}
+
+/**
  * The background depth layer when ambient motion's field is absent: soft
  * brand-colour glows (primary, accent) over brand.colors.bg on a fixed
  * lattice in the layer's own frame (cell (i, j) always holds the same glow,
@@ -569,7 +603,11 @@ export function backgroundLayer(plan, brand) {
   // one-cell margin).
   const keys = [plan.background?.home ?? { x: 0, y: 0 }, ...(plan.background?.keys ?? []).map((key) => key.to)];
   const xs = keys.map((key) => -key.x), ys = keys.map((key) => -key.y);
-  const cellW = W * 0.8, cellH = H * 0.55;
+  // Glow size and column pitch follow the short side (portrait: the width,
+  // as before), so a landscape lattice is not ~2500 px gradients stacked
+  // three deep, which dithered apart in the two renderers (16:9 SSIM 0.966).
+  const S = Math.min(W, H);
+  const cellW = S * 0.8, cellH = H * 0.55;
   const i0 = Math.floor((Math.min(...xs) - W) / cellW), i1 = Math.ceil((Math.max(...xs) + 2 * W) / cellW);
   const j0 = Math.floor((Math.min(...ys) - H) / cellH), j1 = Math.ceil((Math.max(...ys) + 2 * H) / cellH);
   const jitter = (i, j, salt) => { const v = Math.sin(i * 127.1 + j * 311.7 + salt * 74.7) * 43758.5453; return v - Math.floor(v); };
@@ -577,7 +615,7 @@ export function backgroundLayer(plan, brand) {
   for (let j = j0; j <= j1; j += 1) {
     for (let i = i0; i <= i1; i += 1) {
       const accent = (i + j) % 2 !== 0;
-      const size = Math.round(W * (accent ? 1.05 : 1.3));
+      const size = Math.round(S * (accent ? 1.05 : 1.3));
       const cx = (i + 0.5 + (jitter(i, j, 1) - 0.5) * 0.5) * cellW, cy = (j + 0.5 + (jitter(i, j, 2) - 0.5) * 0.5) * cellH;
       glows.push({ left: Math.round(cx - size / 2), top: Math.round(cy - size / 2), size, background: gradient(palette[accent ? 1 : 0], accent ? 0.13 : 0.18) });
     }
