@@ -79,11 +79,11 @@ The base edit is silence, bad takes (repeats, false starts, semantic retakes),
 fillers, then voice clean-up. Clean-up runs on the QA-accepted candidate, after
 the cuts, so it never moves a join: `--enhance light` (default) applies a
 ~80Hz high-pass, 50/60Hz notches only on measured hum, afftdn denoise with a
-noise profile learned from the longest detected silence, a small ~4kHz presence
-lift, de-essing, gentle 3:1 compression, a range-limited pause expander, a
-look-ahead limiter and linear gain to -16 LUFS / -1.5 dBTP. `--enhance podcast`
-denoises harder, compresses 4:1 and levels across speakers; it trades a little
-SNR for steadier level. `--enhance off` publishes the accepted candidate as is.
+noise profile learned from the longest pause the edit removed from the original
+take, a small ~4kHz presence lift, de-essing, gentle 3:1 compression (under the
+loud syllables' peaks), a range-limited pause expander, a look-ahead limiter
+(at most 6dB) and linear gain to -16 LUFS / -1.5 dBTP. `--enhance podcast`
+denoises harder, compresses 4:1 and levels across speakers. `--enhance off` publishes the accepted candidate as is.
 The join QA is re-run on the enhanced media; a new join issue or duration change
 reverts to the unenhanced candidate and records why.
 

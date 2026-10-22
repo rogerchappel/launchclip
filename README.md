@@ -159,7 +159,7 @@ be removed reliably from word timing alone.
 
 After the cuts pass QA, `edit-recording` cleans up the voice audio. `--enhance
 light` (default) applies a high-pass, 50/60 Hz notches on measured hum, afftdn
-denoise with a profile learned from detected silence, a small presence lift,
+denoise with a profile learned from a pause the edit removed, a small presence lift,
 de-essing, gentle compression, a limiter and -16 LUFS; `--enhance podcast`
 denoises and compresses harder and levels across speakers; `--enhance off`
 skips it. The join QA re-runs on the enhanced audio and reverts to the
