@@ -118,16 +118,16 @@ test("sceneFilter compiles one scene on the background, like ModuleReview", asyn
 
 test("unknown modules render a labelled placeholder and a warning; invalid stories throw", async () => {
   const story = await minimalStory((value) => {
-    value.scenes[0].module = "kinetic-words";
+    value.scenes[0].module = "not-a-module";
     value.scenes[0].params = { rect: { x: 90, y: 380, width: 900, height: 620 } };
     value.scenes[1].params.rows[0].at = 99;
     return value;
   });
   const { html, warnings } = await compileStoryToHyperFrames(story, { sourceDir: MINIMAL, write: false });
   assert.equal(warnings.length, 2);
-  assert.match(warnings[0], /s1: .*module "kinetic-words" is not a known module; rendering a placeholder/);
+  assert.match(warnings[0], /s1: .*module "not-a-module" is not a known module; rendering a placeholder/);
   assert.match(warnings[1], /s2: .*params: row\.at/);
-  assert.match(html, /<section id="s1" class="clip lc-placeholder" data-start="0" data-duration="3\.4" data-track-index="2" data-launchclip-placeholder="kinetic-words" style="left:90px;top:380px;width:900px;height:620px"><div class="lc-placeholder-label">Missing module: kinetic-words<\/div>/);
+  assert.match(html, /<section id="s1" class="clip lc-placeholder" data-start="0" data-duration="3\.4" data-track-index="2" data-launchclip-placeholder="not-a-module" style="left:90px;top:380px;width:900px;height:620px"><div class="lc-placeholder-label">Missing module: not-a-module<\/div>/);
   assert.match(html, /data-launchclip-placeholder="checklist"/);
   assert.match(html, /\.lc-placeholder \{ position: absolute;[^}]*border: 4px dashed #ff5a36/);
 

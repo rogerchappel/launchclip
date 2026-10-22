@@ -1,0 +1,68 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Catalogue A parity: kinetic-words",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 4,
+      "platform": "youtube-shorts"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#06070d",
+        "primary": "#fdb022",
+        "accent": "#46d4ff",
+        "ink": "#06070d",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "scenes": [
+      {
+        "id": "kw",
+        "module": "kinetic-words",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "words": [
+            {
+              "text": "Big gap",
+              "at": 0.15
+            },
+            {
+              "text": "cools",
+              "at": 0.75
+            },
+            {
+              "text": "fast",
+              "at": 1.3,
+              "emphasis": true
+            },
+            {
+              "text": "small gap",
+              "at": 2.1
+            },
+            {
+              "text": "crawls",
+              "at": 2.75,
+              "emphasis": true,
+              "color": "accent"
+            }
+          ]
+        }
+      }
+    ],
+    "overlays": []
+  },
+  "sceneId": "kw",
+  "threshold": {
+    "ssim": 0.97
+  }
+}
