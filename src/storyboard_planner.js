@@ -331,6 +331,8 @@ function repairRequest({ request, previous, errors, attempt, repairs }) {
     "",
     prior,
     "",
+    "A params error names the first offending item a module found (rows[1], steps[0], left.label…); the same rule applies to every sibling item, so fix all of them in that scene, not only the one named.",
+    "",
     "Return the complete corrected storyboard as one JSON object. Fix only the scenes and params the errors name (shorten copy, change a param, retime or swap a scene's module); keep everything else. Keep lane, format, brand, audio and base exactly as given. The checks and their thresholds are fixed and cannot be relaxed.",
     ""
   ].join("\n");
