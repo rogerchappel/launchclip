@@ -51,12 +51,19 @@ export async function readProjectStory(projectDir, { storyModule } = {}) {
     if (validation && validation.ok === false) throw new Error(`storyboard.json is invalid: ${(validation.errors ?? []).join("; ")}`);
   }
   const [narration, beats] = await Promise.all([
-    readOptionalJson(path.join(project, "NARRATION.json")),
+    readOptionalJson(narrationFile(project, story)),
     readOptionalJson(path.join(project, "BEATS.json"))
   ]);
-  const words = Array.isArray(narration?.words) ? narration.words : [];
+  const words = Array.isArray(narration) ? narration : Array.isArray(narration?.words) ? narration.words : [];
   const resolved = module.resolveStory(story, { words, beats: beats ?? null });
   return { file: storyFile, story, resolved, format: module.storyFormat(resolved), module };
+}
+
+// The story's own audio.words (project-relative) when set, else NARRATION.json,
+// matching `launchclip story` so every command resolves anchors the same way.
+export function narrationFile(project, story) {
+  const declared = typeof story?.audio?.words === "string" ? path.resolve(project, story.audio.words) : null;
+  return declared && existsSync(declared) ? declared : path.join(project, "NARRATION.json");
 }
 
 async function readOptionalJson(file) {
