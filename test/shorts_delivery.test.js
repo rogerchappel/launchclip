@@ -5,7 +5,7 @@ import test from "node:test";
 import { resolveDeliveryProfile, SHORTS_SAFE_ZONE } from "../src/production_profiles.js";
 import { chunkWords, captionRuntime } from "../skills/launchclip-create-video/scripts/word-captions.mjs";
 import { SFX, bedExpressions } from "../skills/launchclip-create-video/scripts/synth-audio-kit.mjs";
-import { parseLoudnormJson } from "../skills/launchclip-create-video/scripts/master-loudness.mjs";
+import { parseEbur128Summary, parseLoudnormJson } from "../skills/launchclip-create-video/scripts/master-loudness.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const words = (text, step = 0.3) => text.split(" ").map((word, index) => ({ text: word, start: index * step, end: index * step + step * 0.8 }));
@@ -46,6 +46,7 @@ test("procedural audio kit covers the cue vocabulary with deterministic expressi
 test("parses two-pass loudnorm measurements", () => {
   const parsed = parseLoudnormJson('noise\n{\n "input_i" : "-19.2",\n "input_tp" : "-3.1",\n "target_offset" : "0.1"\n}\n');
   assert.equal(parsed.input_i, "-19.2");
+  assert.deepEqual(parseEbur128Summary("  Integrated loudness:\n    I:         -14.1 LUFS\n  True peak:\n    Peak:       -0.8 dBFS\n"), { integrated_lufs: -14.1, true_peak_dbtp: -0.8 });
 });
 
 test("subscription skill links the Shorts delivery floor", async () => {
