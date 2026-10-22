@@ -8,7 +8,8 @@
 // GSAP timeline registered on window.__timelines, every module's emitter
 // html/css/motion inside a scene layer, typed transitions between track-0
 // scenes (kit/core/transitions.mjs, shared with the Remotion kit), the phase-2
-// boundary attributes from deriveBoundaries, one root <audio> (audio.mix, or
+// boundary attributes from deriveBoundaries, the footage-led base (root
+// <video>s per trim segment, moved by punch-in cameras), one root <audio> (audio.mix, or
 // the voice), word captions (kit/core/captions.mjs), the loop ending and the
 // brand fonts. Unknown modules render a labelled placeholder and a warning.
 //
@@ -18,7 +19,7 @@
 import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { deriveBoundaries, validateStory } from '../core/story.mjs';
+import { deriveBoundaries, storyBase, validateStory } from '../core/story.mjs';
 import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from '../core/modules.mjs';
 import { gsapVars, sceneWindows } from '../core/transitions.mjs';
 import { CAPTION_CSS, CAPTION_DEFAULT_COLORS, captionChunksFrom, captionRuntime, chunkWords, narrationWords } from '../core/captions.mjs';
@@ -27,6 +28,7 @@ import { EMITTERS as EDITORIAL_EMITTERS } from './editorial-ui-modules.mjs';
 import { EMITTERS as CATALOG_A_EMITTERS } from './catalog-a.mjs';
 import { EMITTERS as CATALOG_B_EMITTERS } from './catalog-b.mjs';
 import { EMITTERS as CATALOG_C_EMITTERS, cameraGsap } from './catalog-c.mjs';
+import { cameraOverlaps } from '../core/catalog-c.mjs';
 
 export const COMPOSITION_ID = 'launchclip-story';
 export const GSAP_SRC = 'https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js';
@@ -79,13 +81,20 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   if (isolate && !layers.length) throw new Error(`sceneFilter matched no scene (scenes: ${story.scenes.map((scene) => scene.id).join(', ')})`);
   if (isolate) for (const entry of layers) { entry.tweens = []; entry.renderEnd = entry.end; }
 
-  // Tracks: 0 audio, 1 background; each scene takes a pair (root, root+1),
-  // reused once its render window has ended.
+  // Footage-led base (storyBase: frame-snapped trim segments on the timeline).
+  const base = storyBase(story);
+  if (base && sourceDir && !existsSync(path.join(sourceDir, base.src))) warnings.push(`base recording ${base.src} was not found in ${sourceDir}`);
+  if (base && story.base?.edl && !story.base?.trim) warnings.push(`base.edl ${story.base.edl} was not resolved into base.trim (pass the edit plan to resolveStory as {edl}); the base plays untrimmed`);
+
+  // Tracks: 0 audio, 1 background, then (footage-led) 2 base video and 3 base
+  // audio; each scene takes a pair (root, root+1), reused once its render
+  // window has ended.
+  const firstTrack = base ? FIRST_SCENE_TRACK + 2 : FIRST_SCENE_TRACK;
   const trackEnds = [];
   const allocate = (start, end) => {
     let slot = trackEnds.findIndex((until) => until <= start + 1e-6);
     if (slot < 0) { slot = trackEnds.length; trackEnds.push(end); } else trackEnds[slot] = end;
-    return FIRST_SCENE_TRACK + slot * 2;
+    return firstTrack + slot * 2;
   };
 
   const css = [];
@@ -125,9 +134,11 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     return { model, out };
   };
 
+  const models = [];
   for (const entry of layers) {
     const track = allocate(entry.start, entry.renderEnd);
     const { model, out } = build(entry, { track });
+    models.push(model);
     if (model.hidesCaptions) hide.push([entry.start, entry.renderEnd]);
     const id = attr(entry.scene.id);
     const outer = `lc-scene-${id}`, inner = `lc-layer-${id}`;
@@ -165,10 +176,33 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     z += 10;
   }
 
-  // Audio: exactly one root track.
-  const audioSrc = isolate ? null : story.audio?.mix ?? story.audio?.voice ?? null;
+  // Base: one muted root <video> per trim segment (HyperFrames lifts and
+  // seeks direct-root media; data-media-start is the segment's source
+  // in-point), the punch-in cameras as tl.set calls on those videos, and one
+  // root <audio> per segment for the recording's sound, which keeps playing
+  // under full-frame inserts.
+  const baseMarkup = [];
+  if (base) {
+    const fit = `object-fit:${base.fit};object-position:${num(base.focus.x * 100)}% ${num(base.focus.y * 100)}%`;
+    for (const segment of base.segments) {
+      const timing = `data-start="${num(segment.start)}" data-duration="${num(segment.duration)}" data-media-start="${num(segment.sourceStart)}"`;
+      baseMarkup.push(`<video id="lc-base-${segment.index}" class="clip lc-base-media" src="${attr(base.src)}" ${timing} data-track-index="${FIRST_SCENE_TRACK}" data-launchclip-base-segment="${segment.index}" muted playsinline style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;${fit};transform-origin:50% 50%;z-index:1"></video>`);
+      if (!isolate && base.volume > 0) baseMarkup.push(`<audio id="lc-base-audio-${segment.index}" class="clip" src="${attr(base.src)}" ${timing} data-volume="${num(base.volume)}" data-track-index="${FIRST_SCENE_TRACK + 1}"></audio>`);
+    }
+    const camera = cameraGsap(models);
+    if (camera.length) {
+      motion.push(`// base camera (${models.filter((model) => model.camera).map((model) => model.sceneId ?? model.id).join(', ')})`);
+      motion.push(...camera);
+    }
+    for (const [a, b] of cameraOverlaps(models)) warnings.push(`${b}: its camera overlaps ${a}; the later punch-in wins while both run`);
+  } else if (models.some((model) => model.camera)) warnings.push('punch-in moves the base recording, but the story has no base; it has no effect');
+
+  // Audio: exactly one root track (footage-led: the bed under the base; the
+  // recording carries the voice).
+  const audioSrc = isolate ? null : base ? story.audio?.mix ?? null : story.audio?.mix ?? story.audio?.voice ?? null;
+  const mixVolume = typeof story.audio?.mix_volume === 'number' && audioSrc === story.audio?.mix ? story.audio.mix_volume : 1;
   if (audioSrc && sourceDir && !existsSync(path.join(sourceDir, audioSrc))) warnings.push(`audio file ${audioSrc} was not found in ${sourceDir}`);
-  const audio = audioSrc ? `<audio id="lc-audio" class="clip" src="${attr(audioSrc)}" data-start="0" data-duration="${num(D)}" data-media-start="0" data-volume="1" data-track-index="0"></audio>` : '';
+  const audio = audioSrc ? `<audio id="lc-audio" class="clip" src="${attr(audioSrc)}" data-start="0" data-duration="${num(D)}" data-media-start="0" data-volume="${num(mixVolume)}" data-track-index="0"></audio>` : '';
 
   // Captions.
   let captions = null;
@@ -211,6 +245,7 @@ ${fontCss.css}
 <body>
   <div id="launchclip-root" data-composition-id="${COMPOSITION_ID}" data-start="0" data-duration="${num(D)}" data-width="${W}" data-height="${H}" data-fps="${format.fps}" data-launchclip-cinematic-contract="phase-2" data-launchclip-story="${attr(story.schema)}">
     <div id="lc-bg" class="clip" data-start="0" data-duration="${num(D)}" data-track-index="1"></div>
+    ${baseMarkup.join('\n    ')}
     ${audio}
     ${hoisted.join('\n    ')}
     ${markup.join('\n    ')}

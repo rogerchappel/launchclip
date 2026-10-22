@@ -431,7 +431,9 @@ export function deriveBoundaries(story) {
     const track = scene.track ?? 0;
     const before = ordered.filter(({ scene: other }) => other !== scene && other.start < scene.start - EPS);
     const sameTrack = before.filter(({ scene: other }) => (other.track ?? 0) === track);
-    const pool = sameTrack.length ? sameTrack : before;
+    // Footage-led: an insert cuts in from the base (from_id null) unless an
+    // earlier insert sits on track 0; overlays never hand off to an insert.
+    const pool = sameTrack.length ? sameTrack : story.lane === "footage-led" ? [] : before;
     const previous = pool.reduce((best, entry) => (!best || entry.scene.end > best.scene.end + EPS || (Math.abs(entry.scene.end - best.scene.end) <= EPS && entry.scene.start > best.scene.start)) ? entry : best, null);
     boundaries.push(boundary(scene.id, previous?.scene.id ?? null, scene.in, scene.start));
   }
