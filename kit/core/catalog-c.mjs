@@ -179,7 +179,7 @@ function resolvePunchIn(params, ctx) {
   const cx = canvas.width / 2, cy = canvas.height / 2;
   const sample = t => {
     const s = punchScale(t, {scale, punchAt, releaseAt, fps});
-    return {scale: Math.round(s * 1e5) / 1e5, x: r2((1 - s) * (focus.x - cx)), y: r2((1 - s) * (focus.y - cy))};
+    return {scale: Math.round(s * 1e5) / 1e5, x: r2((1 - s) * (focus.x - cx)) || 0, y: r2((1 - s) * (focus.y - cy)) || 0};
   };
   const samples = [];
   const first = Math.ceil(start * fps - 1e-6), last = Math.floor(end * fps + 1e-6);
