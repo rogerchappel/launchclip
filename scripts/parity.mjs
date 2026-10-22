@@ -166,7 +166,7 @@ window.__timelines["main"] = tl;
 export async function defaultCompileHyperFrames(context, {compiler = 'auto'} = {}) {
   if (compiler !== 'internal') {
     const module = await tryImport(STORY_COMPILER);
-    const compile = module && ['compileStoryProject', 'compileStoryToProject', 'writeStoryProject', 'compileProject', 'compileStory', 'default'].map(name => module[name]).find(fn => typeof fn === 'function');
+    const compile = module && ['compileStoryToHyperFrames', 'compileStoryProject', 'compileStoryToProject', 'writeStoryProject', 'compileProject', 'compileStory', 'default'].map(name => module[name]).find(fn => typeof fn === 'function');
     if (compile) {
       try {
         await mkdir(context.projectDir, {recursive: true});
