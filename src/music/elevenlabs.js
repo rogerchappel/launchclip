@@ -61,20 +61,30 @@ export function create(options = {}) {
       return buildMusicRequest(story, { model: options.model ?? env.ELEVENLABS_MUSIC_MODEL ?? DEFAULT_MUSIC_MODEL, ...params });
     },
     /**
+     * Whether generate() would be a cache hit, without sending anything.
+     * → {cached, cache_key, cache_file, length_ms, cost_usd_estimate}
+     */
+    cacheStatus(story, params = {}) {
+      const request = this.request(story, params);
+      const key = musicCacheKey(request.body, outputFormat);
+      const cacheFile = path.join(cacheDir, `${key}${extensionFor(outputFormat)}`);
+      return { cached: existsSync(cacheFile), cache_key: key, cache_file: cacheFile, length_ms: request.length_ms, cost_usd_estimate: round4(request.length_ms / 60000 * USD_PER_GENERATED_MINUTE) };
+    },
+    /**
      * Generate (or reuse) the track for a story and copy it to outFile.
+     * force: true skips the cache and generates (paid) even on a hit.
      * params: {seconds, bpm, prompt?, seed?, model?, narrated}
      * → {file, cached, cache_file, cache_key, request: {mode, body (no key), length_ms, bpm, arc}, generated_seconds, cost_usd, song_id}
      */
-    async generate(story, params = {}, { outFile, signal } = {}) {
+    async generate(story, params = {}, { outFile, signal, force = false } = {}) {
       if (!outFile) throw new Error("ElevenLabs music needs outFile");
       const request = this.request(story, params);
       const key = musicCacheKey(request.body, outputFormat);
-      const extension = outputFormat.startsWith("mp3") ? ".mp3" : outputFormat.startsWith("pcm") ? ".pcm" : outputFormat.startsWith("opus") ? ".opus" : ".bin";
-      const cacheFile = path.join(cacheDir, `${key}${extension}`);
+      const cacheFile = path.join(cacheDir, `${key}${extensionFor(outputFormat)}`);
       const metaFile = path.join(cacheDir, `${key}.json`);
       const summary = { mode: request.mode, body: request.body, length_ms: request.length_ms, bpm: request.bpm, arc: request.arc, tone: request.tone };
       await mkdir(path.dirname(outFile), { recursive: true });
-      if (existsSync(cacheFile)) {
+      if (!force && existsSync(cacheFile)) {
         await copyFile(cacheFile, outFile);
         const meta = await readFile(metaFile, "utf8").then(JSON.parse).catch(() => ({}));
         return { file: outFile, cached: true, cache_file: cacheFile, cache_key: key, request: summary, generated_seconds: 0, cost_usd: 0, song_id: meta.song_id ?? null, model: request.body.model_id };
@@ -127,6 +137,10 @@ export function create(options = {}) {
       return { file: outFile, cached: false, cache_file: cacheFile, cache_key: key, request: summary, generated_seconds: generatedSeconds, cost_usd: meta.cost_usd_estimate, song_id: meta.song_id, model: request.body.model_id };
     }
   };
+}
+
+function extensionFor(outputFormat) {
+  return outputFormat.startsWith("mp3") ? ".mp3" : outputFormat.startsWith("pcm") ? ".pcm" : outputFormat.startsWith("opus") ? ".opus" : ".bin";
 }
 
 // Response headers worth keeping (ids and usage); never request headers.

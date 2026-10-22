@@ -6,7 +6,8 @@ import path from "node:path";
 import { envSearchDirectories, loadCliEnv, loadDotEnv, parseDotEnv } from "../src/env.js";
 import { create as createElevenLabsMusic, musicCacheDir, musicCacheKey } from "../src/music/elevenlabs.js";
 import { MUSIC_PROVIDERS, getMusicProvider, parseMusicSpec, resolveMusicChoice } from "../src/music/index.js";
-import { buildMusicRequest, energyArc, normalizeHints, planSections, storyEnergySegments } from "../src/music/prompt.js";
+import { buildMusicRequest, energyArc, normalizeHints, planSections, quantisedLength, storyEnergySegments } from "../src/music/prompt.js";
+import { briefHash, lockDecision, musicBrief, readMusicLock, writeMusicLock } from "../src/music/lock.js";
 import { buildElevenLabsMusicPayload, generateMusic, resolveElevenLabsMusicModel, resolveMusicPrompt, shouldAutoGenerateMusic } from "../src/music.js";
 
 test("music prompt resolution prefers override, then script, then default", () => {
@@ -208,7 +209,9 @@ test("buildMusicRequest maps the story to an instrumental plan or prompt at the 
   const story = arcStory();
   const plan = buildMusicRequest(story, { seconds: 20, bpm: 112, seed: 7 });
   assert.equal(plan.mode, "plan");
-  assert.equal(plan.length_ms, 22000);
+  // 20 s at 112 BPM is 10 bars (2.143 s each) plus a 1-bar tail: 11 bars.
+  assert.equal(plan.bars, 11);
+  assert.equal(plan.length_ms, 23571);
   assert.equal(plan.body.model_id, "music_v1");
   assert.equal(plan.body.seed, 7);
   assert.equal(plan.body.prompt, undefined, "a plan cannot be combined with a prompt");
@@ -222,7 +225,7 @@ test("buildMusicRequest maps the story to an instrumental plan or prompt at the 
   const prompt = buildMusicRequest(story, { seconds: 20, bpm: 112, prompt: "Warm lo-fi house", seed: 7 });
   assert.equal(prompt.mode, "prompt");
   assert.equal(prompt.body.force_instrumental, true);
-  assert.equal(prompt.body.music_length_ms, 22000);
+  assert.equal(prompt.body.music_length_ms, 23571);
   assert.equal(prompt.body.seed, undefined, "seed is not allowed with a prompt");
   assert.match(prompt.body.prompt, /^Warm lo-fi house\. 112 BPM/);
   assert.match(prompt.body.prompt, /no vocals/i);
@@ -232,6 +235,56 @@ test("buildMusicRequest maps the story to an instrumental plan or prompt at the 
   assert.equal(buildMusicRequest(story, { seconds: 20, bpm: 100, model: "music_v2" }).mode, "prompt");
   // One energy section: a prompt.
   assert.equal(buildMusicRequest({ ...story, scenes: [{ id: "s1", start: 0, end: 20, energy: 2 }] }, { seconds: 20, bpm: 100 }).mode, "prompt");
+});
+
+test("the music request is bar-quantised, so small timing edits map to the same request", () => {
+  const story = arcStory();
+  const base = buildMusicRequest(story, { seconds: 20, bpm: 100, seed: 3 });
+  // 100 BPM: a bar is 2.4 s. 20 s → 9 story bars + 1 tail bar.
+  assert.deepEqual(quantisedLength(20, 100), { length_ms: 24000, bars: 10, story_bars: 9, tail_bars: 1, bar_ms: 2400 });
+  for (const section of base.sections) assert.equal(section.start_ms % 2400, 0, `section starts on a bar line: ${JSON.stringify(section)}`);
+  assert.equal(base.sections.reduce((sum, section) => sum + section.duration_ms, 0), base.length_ms);
+  // Nudge every cut by a few hundred ms and stretch the story a little: same body, same cache key.
+  const nudged = structuredClone(story);
+  nudged.scenes = nudged.scenes.map((scene) => ({ ...scene, start: scene.start === 0 ? 0 : scene.start + 0.35, end: scene.end + 0.35 }));
+  const moved = buildMusicRequest(nudged, { seconds: 20.35, bpm: 100, seed: 3 });
+  assert.deepEqual(moved.body, base.body);
+  assert.equal(musicCacheKey(moved.body), musicCacheKey(base.body));
+  // Prompt mode names bars, not seconds, so it is just as stable.
+  const promptA = buildMusicRequest(story, { seconds: 20, bpm: 100, prompt: "Warm house" });
+  const promptB = buildMusicRequest(nudged, { seconds: 20.35, bpm: 100, prompt: "Warm house" });
+  assert.equal(promptA.body.prompt, promptB.body.prompt);
+  assert.match(promptA.body.prompt, /changes at bar \d+/);
+  assert.doesNotMatch(promptA.body.prompt, /\d+\.\ds/);
+  // Crossing a bar line in length is a different request.
+  assert.notEqual(buildMusicRequest(story, { seconds: 22, bpm: 100, seed: 3 }).length_ms, base.length_ms);
+});
+
+test("the music lock is reused while the brief is unchanged and the story fits its length bucket", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-music-lock-"));
+  try {
+    const brief = musicBrief({ model: "music_v1", prompt: "Warm house", bpm: 100, hints: { prompt_hints: "analog, warm" }, narrated: true });
+    assert.equal(briefHash(brief), briefHash(musicBrief({ model: "music_v1", prompt: " Warm house ", bpm: 100.2, hints: { prompt_hints: ["analog", "warm"] }, narrated: true })));
+    assert.equal(lockDecision(null, { brief, durationMs: 20000, project }).reuse, false);
+    const source = path.join(project, "track.mp3");
+    await writeFile(source, "mp3");
+    const lock = await writeMusicLock(project, { brief, sourceFile: source, cacheKey: "abc123", bpm: 100, lengthMs: 24000, clock: () => "t" });
+    assert.equal(lock.file, ".launchclip/music/abc123.mp3");
+    assert.deepEqual(await readMusicLock(project), lock);
+    assert.deepEqual(lock.length_bucket, { min_story_ms: 4800, max_story_ms: 23000 });
+    // Same brief, different timing: reuse.
+    assert.equal(lockDecision(lock, { brief, durationMs: 21700, project }).reuse, true);
+    // A changed brief names what changed.
+    const changed = lockDecision(lock, { brief: { ...brief, bpm: 110 }, durationMs: 20000, project });
+    assert.equal(changed.reuse, false);
+    assert.deepEqual(changed.changed, ["bpm"]);
+    assert.match(changed.reason, /music brief changed \(bpm\)/);
+    // The story outgrew the track.
+    assert.match(lockDecision(lock, { brief, durationMs: 23500, project }).reason, /outgrew/);
+    assert.equal(lockDecision(lock, { brief, durationMs: 20000, project, regenerate: true }).reason, "--music-regenerate");
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
 });
 
 test("style-pack hints join the brief and clamp the tempo", () => {
@@ -281,8 +334,8 @@ test("ElevenLabs music: one request, then cache hits; no network in tests", asyn
     assert.equal(fetch.calls[0].init.headers["xi-api-key"], SECRET);
     assert.ok(fetch.calls[0].body.composition_plan);
     assert.equal(first.song_id, "song_123");
-    assert.equal(first.generated_seconds, 22);
-    assert.equal(first.cost_usd, 0.055);
+    assert.equal(first.generated_seconds, 23.571);
+    assert.equal(first.cost_usd, 0.0589);
     assert.equal(await readFile(outFile, "utf8"), "ID3fake-mp3-bytes");
     const meta = await readFile(first.cache_file.replace(/\.mp3$/, ".json"), "utf8");
     assert.ok(!meta.includes(SECRET), "the cache metadata never stores the key");
@@ -297,6 +350,12 @@ test("ElevenLabs music: one request, then cache hits; no network in tests", asyn
     // A cached track is reused even without a key.
     const keyless = createElevenLabsMusic({ env: { LAUNCHCLIP_CACHE: dir }, fetch });
     assert.equal((await keyless.generate(arcStory(), { seconds: 20, bpm: 112 }, { outFile })).cached, true);
+    // cacheStatus answers without sending; force regenerates a cached request.
+    assert.equal(provider.cacheStatus(arcStory(), { seconds: 20, bpm: 112 }).cached, true);
+    assert.equal(provider.cacheStatus(arcStory(), { seconds: 20, bpm: 90 }).cached, false);
+    const forced = await provider.generate(arcStory(), { seconds: 20, bpm: 112 }, { outFile, force: true });
+    assert.equal(forced.cached, false);
+    assert.equal(fetch.calls.length, 3);
     assert.equal(musicCacheKey({ prompt: "a", music_length_ms: 3000 }), musicCacheKey({ music_length_ms: 3000, prompt: "a" }));
     assert.notEqual(musicCacheKey({ prompt: "a", music_length_ms: 3000 }), musicCacheKey({ prompt: "a", music_length_ms: 3000, seed: 1 }));
   } finally {
