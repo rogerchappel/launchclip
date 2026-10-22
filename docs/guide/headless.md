@@ -80,7 +80,7 @@ Useful flags:
    records the voice.
 4. **Plans the storyboard** from a tested module library. LaunchClip checks it
    (layout, timing, only your real files) and sends errors back to the model
-   for up to two repairs.
+   for up to four repairs.
 5. **Finishes the video:** captions, music and sound effects, rendering,
    mastering to −14 LUFS, and quality gates.
 6. **Reviews the frames** with the model when it can see images (OpenAI), and
@@ -106,7 +106,7 @@ script, storyboard, voice, music and rendered segments are reused.
 - Every paid call is announced before it is made (`model: PAID call to …`),
   and `MAKE.json` records each call's tokens and estimated cost.
 - With `gpt-5.6-luna`, a motion video costs a few cents of model time: one
-  script pass, maybe one resize, one storyboard pass plus up to two repairs,
+  script pass, maybe one resize, one storyboard pass plus up to four repairs,
   and one critic pass over the contact sheets.
 - Kokoro voice, the synth music bed, Whisper transcription, rendering and
   mastering are local and free.

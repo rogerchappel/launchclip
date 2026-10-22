@@ -920,7 +920,7 @@ keystroke.
 launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] \
   [--style <name|path>] [--model provider:model] [--voice kokoro|elevenlabs] \
   [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] \
-  [--out <project-dir>] [--replan] [--critic | --no-critic] [--max-repairs 2] [--json]
+  [--out <project-dir>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--json]
 ```
 
 `make` is the headless equivalent of the create-video skills: one command from
@@ -935,7 +935,7 @@ deterministic tooling. The project lands in `--out` (default
 | `inventory` | Classifies every file in `--assets` (below), probes durations and dimensions, transcribes speech with local Whisper, and links the files into `assets/`. Entries are reused while a file's size and mtime match. | `ASSETS.json`, `.launchclip/make/transcripts/` |
 | `route` | Picks the lane deterministically (below). | `MAKE.json` `routing` |
 | `prepare` | footage-led: the base edit (`edit-recording`: silences, bad takes, fillers, and audio enhancement when the build's `edit-recording` has an enhancement option, detected by feature check) → `assets/base-edit.mp4`, with its edited transcript as `NARRATION.json`. voiceover-motion: the supplied-voice prep (pauses tightened, levelled, word-timed) → `assets/audio/voiceover.wav`. motion: the script pass (narration sized to the duration at about 150 words a minute), a Kokoro take (cached in `.launchclip/voice`, shared with `launchclip voice` and finish), and one resize pass when the take misses the target by more than 15%. | `SCRIPT.json`, `NARRATION.json` |
-| `storyboard` | `story plan`'s planner and repair loop (at most `--max-repairs`, default 2) with the brief, the narration, the word anchors, the style pack, and an asset manifest: the model may reference only the listed files, and any other `assets/` path is sent back as a repair error. Reused while its inputs hash the same; `--replan` forces a new one. | `storyboard.json`, `BRIEF.md`, `.launchclip/storyboard-plan.json` |
+| `storyboard` | `story plan`'s planner and repair loop (at most `--max-repairs`, default 4 here: a module reports its first param error, so each repair can surface the next one) with the brief, the narration, the word anchors, the style pack, and an asset manifest: the model may reference only the listed files, and any other `assets/` path is sent back as a repair error. Reused while its inputs hash the same; `--replan` forces a new one. | `storyboard.json`, `BRIEF.md`, `.launchclip/storyboard-plan.json` |
 | `finish` | `launchclip finish` (voice, captions, sound, render, master, evidence, gates). Music: `--music`, else a music file in the assets, else (finish's default) ElevenLabs when `ELEVENLABS_API_KEY` is set (paid, locked and cached), else the synth bed. | `renders/draft.mp4` or `renders/final.mp4`, `finish.json`, `qa/` |
 | `critic` | With a vision-capable model (OpenAI or OpenRouter routes; on by default, `--no-critic` to skip), reviews `qa/critic-sheets/` and writes `qa/critic.json` in the cinematic format, citing the temporal evidence IDs. With the Anthropic adapter (text only) or `--no-critic`, the critic gate stays `pending` with the next step. | `qa/critic.json` |
 
@@ -1389,10 +1389,10 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip finish <candidate-project> --candidate <id> [--into <project>] [--kind opening|transition] [--boundary s3] [--comparison id] [--at 0.4,1.2,2.6] [--music synth|none] [--renderer remotion|hyperframes] # cheap rendered candidate: no paid calls, receipt in <project>/qa/rendered-candidates.json
   ```
 
-- `make`:
+- `make`: Prompt plus an optional assets folder to a finished video, headless: classify the assets, route the lane deterministically, write the script and storyboard with an API model (repair loop), then finish and an optional vision critic. Writes MAKE.json with routing, costs, timings and gates.
 
   ```text
-  launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--style <name|path>] [--model provider:model] [--voice kokoro|elevenlabs] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--out <project-dir>] [--replan] [--critic | --no-critic] [--max-repairs 2] [--json] # prompt + assets to a finished video, headless (routing, script, voice, storyboard, finish, critic)
+  launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--style <name|path>] [--model provider:model] [--voice kokoro|elevenlabs] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--out <project-dir>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--json]
   ```
 
 - `voice`: Generate the narration (NARRATION.json and the voice track) for a project or a text.

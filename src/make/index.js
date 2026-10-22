@@ -28,6 +28,7 @@ import { needsResize, targetWords, writeScript } from "./script.js";
 import { runHeadlessCritic } from "./critic.js";
 
 export const MAKE_VERSION = "launchclip.make.v1";
+export const MAKE_MAX_REPAIRS = 4;
 export const MAKE_PATHS = Object.freeze({
   report: "MAKE.json",
   assets: "ASSETS.json",
@@ -369,7 +370,9 @@ async function stageStoryboard(ctx) {
     return { status: "cached", reason: "plan inputs unchanged (pass --replan for a new storyboard)" };
   }
   const allowed = new Set([...manifest.map((item) => item.src), ...(ctx.base ? [ctx.base.src] : []), ...Object.values(fixedAudio).filter((value) => String(value).startsWith("assets/"))]);
-  const maxRepairs = options.maxRepairs === undefined ? 2 : Number(options.maxRepairs);
+  // Headless runs have no one to hand a near-miss to, so make allows more
+  // repairs than story plan (each repair is one cheap call; the planner caps it at 5).
+  const maxRepairs = options.maxRepairs === undefined ? MAKE_MAX_REPAIRS : Number(options.maxRepairs);
   // Footage-led overlays must sit on track 1+, which the structured tier
   // forbids (it bans scene.track), so footage-led plans at the guided tier.
   const tier = lane === "footage-led" ? "guided" : "structured";
