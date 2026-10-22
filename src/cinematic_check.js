@@ -46,9 +46,12 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
   const motion = await (adapters.writeMotionReport ?? writeMotionReport)(video, motionPath, { expected }, adapters.motion);
 
   const audioManifest = await optionalProjectFile(project, options.audioManifest ?? "AUDIO-MANIFEST.json");
+  // The music gain the mix actually used, so this gate and finish's agree.
+  const mixSettings = await resolveMusicMix(project, audioManifest, { musicVolume: options.musicVolume ?? options["music-volume"] });
   const audio = await (adapters.analyzeProductionAudio ?? analyzeProductionAudio)(video, audioManifest, {
-    musicVolume: Number(options.musicVolume ?? .15)
+    musicVolume: mixSettings.music_volume
   }, adapters.audio);
+  audio.mix_settings = mixSettings;
   if (options.expectAudio && !audioManifest) {
     audio.expected_audio = true;
     audio.quality = evaluateAudioQuality(audio);
@@ -112,6 +115,41 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
     repair_findings: readiness.repair_findings,
     ...(phase2Evidence ? { cinematic_contract: phase2Evidence.summary } : {})
   };
+}
+
+// The music bed gain cinematic-check (and finish's audio gate) assume when
+// estimating the voice-to-music margin. The mix scales the music track by
+// this volume, so the estimate is only right with the volume that was used.
+export const DEFAULT_MUSIC_VOLUME = .15;
+
+/**
+ * The music mix a project was built with, most specific first:
+ *   1. options.musicVolume (--music-volume, or the --musicVolume alias);
+ *   2. AUDIO-MANIFEST.json music.volume (finish writes the bed volume there);
+ *   3. finish.json's sound stage bed.volume (or options.soundDetails);
+ *   4. DEFAULT_MUSIC_VOLUME (0.15) for a manual mix with none of these.
+ * -> {music_volume, source, music_file, ducking}
+ */
+export async function resolveMusicMix(project, manifestPath, options = {}) {
+  const manifest = manifestPath ? await readOptionalJson(manifestPath).catch(() => null) : null;
+  const explicit = options.musicVolume;
+  if (explicit !== undefined && explicit !== null && explicit !== "") {
+    const value = Number(explicit);
+    if (!Number.isFinite(value) || value <= 0 || value > 4) throw new Error(`--music-volume must be a number above 0 and at most 4 (the linear gain the mix applied to the music); got ${explicit}`);
+    return mixResult(value, "--music-volume", manifest);
+  }
+  const fromManifest = Number(manifest?.music?.volume);
+  if (Number.isFinite(fromManifest) && fromManifest > 0) return mixResult(fromManifest, "AUDIO-MANIFEST.json music.volume", manifest);
+  const sound = options.soundDetails !== undefined
+    ? options.soundDetails
+    : (await readOptionalJson(path.join(project, "finish.json")).catch(() => null))?.stages?.find?.((stage) => stage?.name === "sound")?.details;
+  const fromFinish = Number(sound?.bed?.volume);
+  if (Number.isFinite(fromFinish) && fromFinish > 0) return mixResult(fromFinish, options.soundDetails !== undefined ? "finish sound stage bed.volume" : "finish.json sound stage bed.volume", manifest);
+  return mixResult(DEFAULT_MUSIC_VOLUME, "default (no --music-volume, AUDIO-MANIFEST.json music.volume or finish.json)", manifest);
+}
+
+function mixResult(volume, source, manifest) {
+  return { music_volume: volume, source, music_file: manifest?.music?.path ?? null, ducking: manifest?.mix?.ducking ?? null };
 }
 
 // The motion gate's expectations for a rendered cinematic MP4, shared with

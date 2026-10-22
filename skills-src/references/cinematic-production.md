@@ -325,7 +325,13 @@ launchclip cinematic-check <project> \
 `storyboard.json` and verify the project through the Remotion adapter.
 <!-- /renderer -->
 
-Omit the two audio flags only when audio is intentionally absent. The command
+Omit the two audio flags only when audio is intentionally absent. The audio
+gate estimates the voice-to-music margin from the music gain the mix used: it
+reads `music.volume` from `AUDIO-MANIFEST.json` (which `launchclip finish`
+writes), then the sound stage's bed volume in `finish.json`, so it agrees with
+finish's own audio gate; `qa/cinematic/audio.json` records the value in
+`mix_settings`. For a hand-built mix with neither, pass the gain you mixed the
+music at with `--music-volume 0.32` (default 0.15). The command
 writes `CINEMATIC-READINESS.json` and fails closed on missing concept, story,
 narration, verification, critic, motion, audio, or authorship evidence. Require
 `status: ready`, `ok: true`, and every gate to pass before Studio preview.

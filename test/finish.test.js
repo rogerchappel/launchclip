@@ -7,6 +7,8 @@ import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { runCli } from "../src/cli.js";
+import { checkCinematicProject, resolveMusicMix } from "../src/cinematic_check.js";
+import { evaluateAudioQuality } from "../src/render_audio_analysis.js";
 import { PATHS, bindCues, buildFinishCopy, chooseBed, defaultCueFor, formatFinishSummary, kitCue, musicSpec, runFinish, stageDecision } from "../src/finish.js";
 import { createTestVoiceProvider, getVoiceProvider, listVoiceProviders, registerVoiceProvider, testVoiceTimings } from "../src/voice/index.js";
 
@@ -537,6 +539,59 @@ test("finish defaults to ElevenLabs music with a key, aligns it to the narration
     const synth = await runFinish(project, { renderer: "remotion", music: "synth" }, adapters);
     assert.equal(synth.stages.find((stage) => stage.name === "sound").details.music.provider, "synth");
     await assert.rejects(runFinish(project, { music: "lofi" }, adapters), /Unknown --music lofi/);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("finish and cinematic-check judge the same mix with the same music volume", async () => {
+  const project = await narratedProject();
+  try {
+    const adapters = fakeAdapters();
+    const seen = {};
+    adapters.audio = async (_video, manifest, options) => { seen.finish = options.musicVolume; return { quality: { ok: true, findings: [] } }; };
+    const report = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(report.status === "failed", false, JSON.stringify(report.stages.find((stage) => stage.status === "failed")));
+    const manifest = JSON.parse(await readFile(path.join(project, PATHS.audioManifest), "utf8"));
+    const bedVolume = manifest.music.volume;
+    assert.ok(bedVolume > 0.15, `finish's bed is louder than the old 0.15 assumption (${bedVolume})`);
+    assert.equal(seen.finish, bedVolume);
+
+    const checkAdapters = {
+      verifyProject: async () => ({ schema_version: "launchclip.subscription-verification.v1", status: "passed", failed: [] }),
+      writeMotionReport: async (_video, output) => { await writeFile(output, "{}"); return { quality: { ok: true, findings: [] } }; },
+      analyzeProductionAudio: async (_video, _manifest, options) => { seen.check = options.musicVolume; return { expected_audio: true, stream: {}, output: {}, sources: {}, cues: [], quality: { ok: true, findings: [] } }; }
+    };
+    const checked = await checkCinematicProject(project, { video: report.final ?? "renders/draft.mp4" }, checkAdapters);
+    assert.equal(seen.check, bedVolume, "cinematic-check reads the bed volume finish used");
+    const audioReport = JSON.parse(await readFile(checked.audio, "utf8"));
+    assert.equal(audioReport.mix_settings.source, "AUDIO-MANIFEST.json music.volume");
+    assert.equal(audioReport.mix_settings.ducking, manifest.mix.ducking);
+
+    // With the same measured sources both verdicts match; the old 0.15 would not.
+    const sources = (volume) => ({ voiceover: { integrated_lufs: -16 }, music: { integrated_lufs: -16.5 }, music_gain_db: 20 * Math.log10(volume) });
+    const verdict = (volume) => evaluateAudioQuality({ sources: sources(volume), cues: [] }).ok;
+    assert.equal(verdict(seen.check), verdict(seen.finish));
+
+    // No manifest volume: finish.json's sound stage; an explicit flag wins over both.
+    delete manifest.music.volume;
+    await writeFile(path.join(project, PATHS.audioManifest), JSON.stringify(manifest));
+    const fromFinish = await resolveMusicMix(project, path.join(project, PATHS.audioManifest));
+    assert.equal(fromFinish.music_volume, bedVolume);
+    assert.match(fromFinish.source, /finish\.json/);
+    assert.equal((await resolveMusicMix(project, null, { musicVolume: "0.4" })).music_volume, 0.4);
+    await assert.rejects(resolveMusicMix(project, null, { musicVolume: "loud" }), /--music-volume must be a number/);
+    // A manual project with nothing to read falls back to 0.15.
+    const bare = await mkdtemp(path.join(os.tmpdir(), "launchclip-mix-"));
+    assert.equal((await resolveMusicMix(bare, null)).music_volume, 0.15);
+    await rm(bare, { recursive: true, force: true });
+
+    // The CLI takes --music-volume and keeps --musicVolume as an alias.
+    for (const flag of ["--music-volume", "--musicVolume"]) {
+      seen.check = null;
+      await runCli(["cinematic-check", project, flag, "0.27"], { stdout: { write() {} }, stderr: { write() {} }, productionAdapters: { cinematicCheck: checkAdapters } });
+      assert.equal(seen.check, 0.27, flag);
+    }
   } finally {
     await rm(project, { recursive: true, force: true });
   }

@@ -22,7 +22,7 @@ import { promisify } from "node:util";
 import { chunkWords, narrationWords } from "../kit/core/captions.mjs";
 import { resolveModule } from "../kit/core/modules.mjs";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
-import { cinematicMotionExpectations } from "./cinematic_check.js";
+import { cinematicMotionExpectations, resolveMusicMix } from "./cinematic_check.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
@@ -1008,7 +1008,10 @@ async function runGates(ctx) {
 
   try {
     const manifest = existsSync(path.join(ctx.project, PATHS.audioManifest)) ? path.join(ctx.project, PATHS.audioManifest) : null;
-    const audio = await ctx.adapters.audio(ctx.out, manifest, { musicVolume: ctx.state.stages?.sound?.details?.bed?.volume ?? 0.15 });
+    // The same music volume cinematic-check resolves, so the two gates agree.
+    const mixSettings = await resolveMusicMix(ctx.project, manifest, { soundDetails: ctx.state.stages?.sound?.details ?? null });
+    const audio = await ctx.adapters.audio(ctx.out, manifest, { musicVolume: mixSettings.music_volume });
+    if (audio && typeof audio === "object") audio.mix_settings = mixSettings;
     await writeJson(path.join(ctx.project, PATHS.audio), audio);
     gates.audio = { status: audio?.quality?.ok ? "passed" : "failed", report: PATHS.audio, manifest: manifest ? PATHS.audioManifest : null, findings: (audio?.quality?.findings ?? []).slice(0, 12) };
   } catch (error) {
