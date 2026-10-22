@@ -221,7 +221,7 @@ function series(config, label, duration, enterDuration = .28, exitDuration = nul
     object(entry, `${label}.values[${i}]`, ['value', 'at']);
     number(entry.value, 'value', -1_000_000_000, 1_000_000_000);
     number(entry.at, 'at', enterDuration, duration - Math.max(.8, (exitDuration ?? 0) + .6));
-    if (entry.at <= previous || (previous >= 0 && entry.at - previous + 1e-9 < .65)) throw new Error('value times must increase with at least 0.65s between events');
+    if (entry.at <= previous || (previous >= 0 && entry.at - previous + 1e-6 < .65)) throw new Error('value times must increase with at least 0.65s between events');
     previous = entry.at;
   });
   return config.mode === 'illustration' ? 'Illustration · example values' : `Source: ${config.source}`;
@@ -555,7 +555,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
       let previous = -1, previousLights = [false, false, false];
       const states = row.states.map((state, n) => {
         object(state, 'rack state', ['at', 'lights']); const stateOffset = at(state.at, 'rack state.at');
-        if (stateOffset <= previous || previous >= 0 && stateOffset - previous < .3 - 1e-9) throw new Error('rack state times must increase by at least 0.3s'); previous = stateOffset;
+        if (stateOffset <= previous || previous >= 0 && stateOffset - previous < .3 - 1e-6) throw new Error('rack state times must increase by at least 0.3s'); previous = stateOffset;
         if (!Array.isArray(state.lights) || state.lights.length !== 3 || state.lights.some(light => typeof light !== 'boolean')) throw new Error('rack lights must be exactly three booleans');
         const time = start + stateOffset;
         const changes = [];
@@ -583,9 +583,9 @@ function resolveAt(options, input, suppliedRect, density, source) {
       object(line, 'code line', ['tokens', 'at', 'typeDuration']); const lineOffset = at(line.at, 'code line.at');
       if (!typing && line.typeDuration !== undefined) throw new Error('line.typeDuration requires code.typing');
       const typeDuration = typing ? number(line.typeDuration ?? .6, 'line.typeDuration', .12, 2) : .24;
-      if (typing && lineOffset < typingEnd - 1e-9) throw new Error('typing lines must not overlap');
+      if (typing && lineOffset < typingEnd - 1e-6) throw new Error('typing lines must not overlap');
       typingEnd = lineOffset + typeDuration;
-      if (lineOffset <= previous || previous >= 0 && lineOffset - previous < .3 - 1e-9) throw new Error('code line times must increase by at least 0.3s'); previous = lineOffset;
+      if (lineOffset <= previous || previous >= 0 && lineOffset - previous < .3 - 1e-6) throw new Error('code line times must increase by at least 0.3s'); previous = lineOffset;
       if (!Array.isArray(line.tokens) || line.tokens.length < 1 || line.tokens.length > 24) throw new Error('code line requires 1–24 tokens');
       let length = 0, characters = 0;
       const tokens = line.tokens.map(token => {
@@ -699,7 +699,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
       if (isGrowth && i > 0 && point.value < points[i - 1].value) throw new Error('growth values must not decrease; use trend-chart for declines');
       if (point.label.length > Math.floor(columnWidth / (labelFont * .65)) * 2) throw new Error('point label too long for rect');
       const pointOffset = at(point.at, 'point.at');
-      if (pointOffset <= previous || (previous >= 0 && pointOffset - previous + 1e-9 < .5)) throw new Error('point times must increase with at least 0.5s between events');
+      if (pointOffset <= previous || (previous >= 0 && pointOffset - previous + 1e-6 < .5)) throw new Error('point times must increase with at least 0.5s between events');
       previous = pointOffset;
     });
     const maximum = Math.max(1, ...points.map(point => point.value));
@@ -792,7 +792,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
       text(step.label, 'step.label', 22);
       if (step.label.length > Math.floor(labelWidth / (Math.max(22, font - 4) * .65)) * 2) throw new Error('step label too long for rect; shorten it or widen the module');
       const stepOffset = at(step.at, 'step.at');
-      if (stepOffset <= previous || (previous >= 0 && stepOffset - previous + 1e-9 < .3)) throw new Error('step times must strictly increase with at least 0.3s between events');
+      if (stepOffset <= previous || (previous >= 0 && stepOffset - previous + 1e-6 < .3)) throw new Error('step times must strictly increase with at least 0.3s between events');
       previous = stepOffset;
       const time = start + stepOffset;
       events.push({id: `${id}-step-${i}-settle`, time: time + .3});

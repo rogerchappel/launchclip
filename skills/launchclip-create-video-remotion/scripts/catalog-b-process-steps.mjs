@@ -35,7 +35,7 @@ function resolve(params, ctx) {
     const label = check.str(entry.label, `${path}.label`, 32);
     const detail = entry.detail === undefined ? null : check.str(entry.detail, `${path}.detail`, 64);
     const time = b.timeOf(`step-${i}`, entry.at, `${path}.at`, Math.min(b.lastEvent, firstDefault + spacing * i));
-    if (time <= previous + 0.35) check.fail(`${path}.at`, 'must come at least 0.35 s after the previous step');
+    if (time < previous + 0.35 - 1e-6) check.fail(`${path}.at`, 'must come at least 0.35 s after the previous step');
     previous = time;
     return {index: i, label, detail, time, number: String(i + 1)};
   });

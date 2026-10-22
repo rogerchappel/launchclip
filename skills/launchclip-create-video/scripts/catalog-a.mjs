@@ -585,7 +585,7 @@ function resolveKineticWords(params, ctx) {
     return {index, text: value, parts, at: sceneTime(entry.at, `${path}.at`, d, .45), emphasis: optional(entry.emphasis, false, flag => bool(flag, `${path}.emphasis`)), color: theme[role]};
   });
   beats.forEach((beat, index) => {
-    if (index && beat.at < beats[index - 1].at + minGap - 1e-9) throw new Error(`params.words[${index}].at must be at least ${minGap} s after the previous beat`);
+    if (index && beat.at < beats[index - 1].at + minGap - 1e-6) throw new Error(`params.words[${index}].at must be at least ${minGap} s after the previous beat`);
   });
   const fonts = brandFonts(ctx.brand), fk = fitKinds(ctx.brand);
   const st = stage(ctx, {captions: false});
@@ -913,7 +913,7 @@ function resolveEquationLockup(params, ctx) {
   const lastLand = termModels[termModels.length - 1].time + .42;
   const highlightAt = highlight === null ? null : optional(params.highlightAt, Math.min(lastLand - s + .35, d - exitDur - .7), value => sceneTime(value, 'params.highlightAt', d, .6));
   if (lastLand > base.end - exitDur - .3 + 1e-9) throw new Error(`the terms land at ${round(lastLand - s, 3)} s, too late for a ${round(d, 3)} s scene; lower params.at or params.stagger`);
-  if (highlightAt !== null && s + highlightAt < termModels[highlight].time + .42 - 1e-9) throw new Error('params.highlightAt must come after the highlighted term has landed');
+  if (highlightAt !== null && s + highlightAt < termModels[highlight].time + .42 - 1e-6) throw new Error('params.highlightAt must come after the highlighted term has landed');
 
   const nameSize = Math.round(46 * k), noteSize = Math.round(52 * k);
   if (name && textWidth(name.toUpperCase(), nameSize, fk.body, .14) > area.width) throw new Error('params.name is too wide for one line; shorten it');
