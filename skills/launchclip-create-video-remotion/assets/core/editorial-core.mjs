@@ -348,16 +348,39 @@ function candidates(max = DENSITY.max) {
 
 // Largest density candidate at which the content validates and its natural
 // height fits the explicit rect; else the scale-1 resolution (or its error).
+// With an explicit density: "fill" the search is grow-only: a candidate must
+// reach the module's default placement for that aspect (the content-derived
+// card) in type scale or in rendered text size (minTextPx), so a short rect
+// can never give smaller type than leaving the rect out. When no candidate
+// does, it throws a "rect too short" error that the module registry extends
+// with a fit hint, as a rect that fits nothing does without fill.
 function fillRect(options, input, rect, max) {
   if (rect && typeof rect === 'object' && input.kind !== 'media-window') {
+    const floor = input.density === 'fill' ? defaultDensity(options, input) : null;
+    const grows = model => floor === null || model.density.scale >= floor.scale - 1e-9 || (model.minTextPx !== null && floor.minTextPx !== null && model.minTextPx >= floor.minTextPx - .01);
     for (const candidate of candidates(max)) {
       try {
         const model = resolveAt(options, input, rect, candidate, 'explicit');
-        if (model.density.natural <= model.density.layout.height + .5) return model;
+        if (model.density.natural <= model.density.layout.height + .5 && grows(model)) return model;
       } catch { /* try a smaller scale */ }
+    }
+    if (floor !== null) {
+      const base = resolveAt(options, input, rect, BASE, 'explicit');
+      if (grows(base)) return base;
+      throw new Error(`density "fill" never shrinks type: this rect is too short to hold the ${input.kind} at its default scale ${formatBound(floor.scale)} (${formatBound(floor.minTextPx ?? 0)} px text); enlarge the rect, omit it for the default card, or drop density: "fill" to keep scale 1`);
     }
   }
   return resolveAt(options, input, rect, BASE, 'explicit');
+}
+
+// Scale and minTextPx of the module's default (content-derived) placement;
+// null when it does not resolve or falls back to the legacy footprint.
+function defaultDensity(options, input) {
+  const {rect: _rect, density: _density, ...rest} = input;
+  try {
+    const model = resolveEditorialModule(rest, options);
+    return model.density.source === 'derived' ? {scale: model.density.scale, minTextPx: model.minTextPx} : null;
+  } catch { return null; }
 }
 
 // Content-derived placement: for each pass, the largest candidate scale whose

@@ -175,7 +175,13 @@ Without `rect`, the footprint comes from the content rather than a fixed box:
   footprints stay byte-identical: text does not grow with the rect, and a
   bigger rect is just more empty panel. Add `density: "fill"` (in a storyboard,
   `params.density`) to give an explicit 16:9 rect the type-scale search, so
-  the text grows to fill it. `density: "fixed"` keeps scale 1 in either aspect.
+  the text grows to fill it. `fill` is grow-only: the rect must hold the
+  content at the default card's type scale or text size for that aspect, so a
+  short rect never gives smaller type than omitting the rect. When it cannot,
+  resolution fails with "density "fill" never shrinks type … too short" plus
+  the size that fits (`checklist needs 710 px height at width 1000`); enlarge
+  the rect, omit it, or drop `fill`. `density: "fixed"` keeps scale 1 in either
+  aspect.
 - **media-window** keeps scale 1. Its 9:16 default is an 840×521 window (a
   16:9 frame under the 48 px bar) centred on the target; its 16:9 default is a
   centred 1200×723 window (16:9 media under the bar) above the caption band.

@@ -115,6 +115,24 @@ test('explicit 16:9 rects with density: "fill" grow the type to fill the panel',
   assert.match(buildEditorialModule(spec('checklist', {aspect: '16:9', rect, density: 'fill'})).html, /ui-density/);
 });
 
+test('density: "fill" is grow-only: a short rect never gives smaller type than the default card, it errors with a fit hint', async () => {
+  const {resolveModule} = await import('../kit/core/modules.mjs');
+  const code = {language: 'shell', typing: true, lines: [{at: .3, typeDuration: .9, tokens: [{text: '$ ', type: 'comment'}, {text: 'launchclip', type: 'keyword'}, {text: ' finish', type: 'plain'}, {text: ' launch/landscape', type: 'string'}]}]};
+  const base = {id: 'code', kind: 'code-snippet', aspect: '16:9', start: 0, duration: 3, title: 'Terminal', code};
+  const derived = resolveEditorialModule(base);
+  // The blind test's 1200×260 rect: fill used to settle at scale 1.25 (35 px code) under the default card's 1.75 (38.5 px).
+  const short = {x: 360, y: 300, width: 1200, height: 260};
+  assert.throws(() => resolveEditorialModule({...base, rect: short, density: 'fill'}), /density "fill" never shrinks type: this rect is too short to hold the code-snippet at its default scale 1\.75/);
+  // Without fill the same rect stays at scale 1, as before.
+  assert.equal(resolveEditorialModule({...base, rect: short}).density.scale, 1);
+  // Through the module registry the error carries the rect fit hint.
+  const story = {format: {width: 1920, height: 1080, fps: 30, duration: 4}, scenes: []};
+  assert.throws(() => resolveModule({id: 'code', module: 'code-snippet', start: 0, end: 3, params: {title: 'Terminal', code, rect: short, density: 'fill'}}, story), /code-snippet needs \d+ px height at width 1200/);
+  // A rect big enough resolves at or above the default type.
+  const tall = resolveEditorialModule({...base, rect: {x: 360, y: 260, width: 1200, height: 420}, density: 'fill'});
+  assert.ok(tall.density.scale >= derived.density.scale || tall.minTextPx >= derived.minTextPx, `${tall.density.scale}/${tall.minTextPx} vs ${derived.density.scale}/${derived.minTextPx}`);
+});
+
 test('16:9 default rects sit centred in the landscape title-safe zone, above the caption band, at a confident scale', () => {
   const S = SAFE_ZONE_PROFILES.landscape;
   for (const name of Object.keys(SPECS)) {
