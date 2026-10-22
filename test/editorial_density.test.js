@@ -43,16 +43,23 @@ test('9:16 default rects sit in the safe zone, above the caption band, at phone 
     assert.ok(density.scale >= 1.8, `${name} scale ${density.scale}`);
     // The card is as tall as its content, not a fixed 740 px box.
     assert.ok(density.natural <= density.layout.height + .5, name);
-    assert.ok(density.layout.height - Math.max(160, density.natural) < 1, `${name} hugs its content`);
+    assert.ok(density.layout.height - Math.max(160 / density.scale, density.natural) < 1, `${name} hugs its content`);
   }
 });
 
 test('compact 9:16 cards keep their centre below the lower-third line', () => {
   const lowerThird = 280 + 1170 / 2;
-  for (const name of ['callout', 'callout-treated', 'checklist', 'step-rail', 'metric', 'date-card', 'status-rack', 'code-snippet', 'excerpt-window']) {
+  for (const name of ['callout', 'callout-treated', 'checklist', 'step-rail', 'metric', 'progress', 'date-card', 'status-rack', 'code-snippet', 'excerpt-window']) {
     const {rect} = resolveEditorialModule(spec(name, {aspect: '9:16'}));
     assert.ok(centre(rect) > lowerThird, `${name} centre ${centre(rect)} > ${lowerThird}`);
   }
+});
+
+test('a short 9:16 callout is no taller than its copy', () => {
+  const model = resolveEditorialModule({...base, kind: 'callout', aspect: '9:16', title: 'A useful idea', body: 'Keep the next step clear.'});
+  assert.equal(model.density.scale, 2);
+  assert.ok(model.rect.height < 300, `height ${model.rect.height}`);
+  assert.ok(model.density.natural <= model.density.layout.height + .5);
 });
 
 test('9:16 hero numbers are genuinely big and stay inside the card', () => {
@@ -61,6 +68,10 @@ test('9:16 hero numbers are genuinely big and stay inside the card', () => {
   assert.ok(rendered >= 200, `metric number ${rendered}px`);
   const widest = Math.max(...model.content.values.map(value => value.text.length));
   assert.ok(widest * model.content.numberFont * .68 <= model.density.layout.width - 48);
+  // A progress card's hero is its bar; the number stays large but smaller.
+  const progress = resolveEditorialModule(spec('progress', {aspect: '9:16'}));
+  assert.ok(progress.content.numberFont * progress.density.scale >= 120);
+  assert.ok(progress.content.numberFont < model.content.numberFont);
   const long = resolveEditorialModule(spec('metric', {aspect: '9:16', metric: {...SPECS.metric.metric, values: [{value: 1234567, at: .6}]}}));
   assert.ok('1,234,567'.length * long.content.numberFont * .68 <= long.density.layout.width - 48);
 });

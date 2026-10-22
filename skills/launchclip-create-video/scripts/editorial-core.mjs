@@ -257,8 +257,9 @@ export const DENSITY = Object.freeze({
   // the lower third is never empty.
   portrait: Object.freeze({x: 90, width: 840, top: 280, captionTop: 1190, bottom: 1450, centre: 880, mediaHeight: 521}),
   landscape: Object.freeze({x: 80, width: 680, top: 80, baseline: 980}),
-  // Hero numbers (metric/progress) may grow to this layout size in 9:16.
-  heroNumber: 120, numberCap: 64
+  // Hero numbers may grow to this layout size in 9:16: the metric number is
+  // the hero; a progress card's hero is its bar, so its number stays smaller.
+  heroNumber: 120, heroProgressNumber: 88, numberCap: 64
 });
 const LEGACY_RECT = {'16:9': {x: 80, y: 480, width: 680, height: 500}, '9:16': {x: 90, y: 960, width: 900, height: 740}};
 const BASE = Object.freeze({scale: 1, hero: false});
@@ -322,7 +323,7 @@ export function resolveEditorialModule(input) {
       if (candidate.scale < minScale) break;
       let probe;
       try { probe = resolveAt(input, {x: P.x, y: P.top, width: P.width, height: band}, candidate, 'derived'); } catch { continue; }
-      const height = Math.ceil(Math.max(160, probe.density.natural) * candidate.scale);
+      const height = Math.max(160, Math.ceil(probe.density.natural * candidate.scale));
       if (height > Math.min(band, maxHeight)) continue;
       const y = Math.round(Math.min(limit - height, Math.max(P.top, P.centre - height / 2)));
       try { return resolveAt(input, {x: P.x, y, width: P.width, height}, candidate, 'derived'); } catch { /* next candidate */ }
@@ -353,7 +354,8 @@ function resolveAt(input, suppliedRect, density, source) {
   // Layout box: content sizes and rect-local geometry are in layout px.
   const scale = density.scale, hero = density.hero;
   const box = scale === 1 ? {width: rect.width, height: rect.height} : {width: rect.width / scale, height: rect.height / scale};
-  if (box.width < 420 || box.height < 160) throw new Error('layout box too small for this scale');
+  // The text-fit model assumes at least the 420 px minimum width.
+  if (box.width < 420) throw new Error('layout box too narrow for this scale');
   let natural = 0;
   const title = text(input.title, 'title', 54);
   const accent = input.accent ?? '#FF6A00';
@@ -725,7 +727,7 @@ function resolveAt(input, suppliedRect, density, source) {
       formatSpec = {style: 'progress', decimals: 0, currency: null, max};
     }
     const noteLines = Math.ceil(attribution.length / Math.floor((box.width - 48) / (22 * .65)));
-    const numberFont = Math.max(36, Math.min(hero ? DENSITY.heroNumber : DENSITY.numberCap, Math.floor((box.width - 48) / (Math.max(...config.values.map(entry => format(entry.value).length)) * .68))));
+    const numberFont = Math.max(36, Math.min(hero ? (isMetric ? DENSITY.heroNumber : DENSITY.heroProgressNumber) : DENSITY.numberCap, Math.floor((box.width - 48) / (Math.max(...config.values.map(entry => format(entry.value).length)) * .68))));
     if (Math.max(...config.values.map(entry => format(entry.value).length)) * numberFont * .68 > box.width - 48) throw new Error('formatted metric too wide for rect');
     const unitText = isMetric ? config.unit : (config.label ?? 'Progress');
     const unitLines = Math.ceil(unitText.length / Math.floor((box.width - 48) / (22 * .65)));
