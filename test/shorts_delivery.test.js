@@ -32,6 +32,7 @@ test("caption runtime is seek-safe and never animates visibility", () => {
   const runtime = captionRuntime(chunkWords(words("Big gap, fast.")));
   assert.match(runtime, /window\.mountCaptions/);
   assert.doesNotMatch(runtime, /autoAlpha|visibility|Math\.random|Date\.now/);
+  assert.doesNotMatch(runtime, /color: 'var\(/, "GSAP cannot tween CSS variable colour strings");
 });
 
 test("procedural audio kit covers the cue vocabulary with deterministic expressions", () => {

@@ -47,6 +47,13 @@ export function captionRuntime(chunks) {
   window.mountCaptions = function (tl, container, opts) {
     opts = opts || {};
     var hidden = opts.hide || [];
+    // GSAP cannot tween var(--x) strings, so resolve the palette to literal
+    // colours once, synchronously, from the container's computed style.
+    var style = getComputedStyle(container);
+    function token(name, fallback) { var v = style.getPropertyValue(name).trim(); return v || fallback; }
+    var idle = opts.idle || token('--cap-idle', '#ffffff');
+    var active = opts.active || token('--cap-active', '#ffd23f');
+    var spoken = opts.spoken || token('--cap-spoken', idle);
     function isHidden(t) { for (var i = 0; i < hidden.length; i++) if (t >= hidden[i][0] && t < hidden[i][1]) return true; return false; }
     CHUNKS.forEach(function (chunk) {
       if (isHidden(chunk.start)) return;
@@ -64,8 +71,9 @@ export function captionRuntime(chunks) {
       tl.fromTo(line, { opacity: 0, y: 26, scale: 0.86 }, { opacity: 1, y: 0, scale: 1, duration: 0.16, ease: 'back.out(2.2)' }, chunk.start);
       chunk.words.forEach(function (word, i) {
         var span = line.children[i];
-        tl.fromTo(span, { color: 'var(--cap-idle)', scale: 1 }, { color: 'var(--cap-active)', scale: 1.08, duration: 0.07, ease: 'power2.out' }, word.start);
-        tl.to(span, { color: 'var(--cap-spoken)', scale: 1, duration: 0.12, ease: 'power1.out' }, Math.max(word.end, word.start + 0.08));
+        span.style.color = idle;
+        tl.fromTo(span, { color: idle, scale: 1 }, { color: active, scale: 1.08, duration: 0.06, ease: 'power2.out', immediateRender: false }, Math.max(0, word.start - 0.03));
+        tl.to(span, { color: spoken, scale: 1, duration: 0.12, ease: 'power1.out' }, Math.max(word.end, word.start + 0.08));
       });
       tl.to(line, { opacity: 0, y: -10, duration: 0.1, ease: 'power2.in' }, Math.max(chunk.start + 0.12, chunk.end - 0.1));
     });
@@ -76,7 +84,7 @@ export function captionRuntime(chunks) {
 
 export const CAPTION_CSS = `.lc-captions { position: absolute; left: 6%; right: 15%; top: 62%; height: 12%; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 50; }
 .lc-cap { position: absolute; display: flex; gap: 0.42em; flex-wrap: wrap; justify-content: center; font: 900 74px/1.05 var(--cap-font, system-ui); letter-spacing: -0.01em; text-transform: uppercase; opacity: 0; }
-.lc-cap-w { display: inline-block; color: var(--cap-idle); paint-order: stroke fill; -webkit-text-stroke: 10px rgba(0,0,0,.92); text-shadow: 0 6px 0 rgba(0,0,0,.55), 0 12px 28px rgba(0,0,0,.45); transform-origin: 50% 70%; }
+.lc-cap-w { display: inline-block; paint-order: stroke fill; -webkit-text-stroke: 10px rgba(0,0,0,.92); text-shadow: 0 6px 0 rgba(0,0,0,.55), 0 12px 28px rgba(0,0,0,.45); transform-origin: 50% 70%; }
 `;
 
 function round(value) { return Math.round(value * 1000) / 1000; }
