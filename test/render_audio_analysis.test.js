@@ -27,7 +27,15 @@ test("analyzes mixed and source audio with loudness, clipping, masking, and cue 
   assert.equal(report.output.true_peak_dbfs, 0);
   assert.equal(report.cues[0].transient_delta_db, 12);
   assert.equal(report.quality.ok, false);
-  assert.deepEqual(new Set(report.quality.findings.map((entry) => entry.category)), new Set(["clipping", "masking"]));
+  assert.deepEqual(new Set(report.quality.findings.map((entry) => entry.category)), new Set(["clipping", "masking", "loudness"]));
+});
+
+test("holds narrated programs to the platform loudness target and true-peak ceiling", () => {
+  const base = { expected_audio: true, stream: { codec_type: "audio" }, sources: { voiceover: { integrated_lufs: -16 }, music: null }, cues: [] };
+  const mastered = evaluateAudioQuality({ ...base, output: { integrated_lufs: -14.2, true_peak_dbfs: -1.3, silence_ratio: 0 } });
+  assert.equal(mastered.ok, true);
+  const quiet = evaluateAudioQuality({ ...base, output: { integrated_lufs: -21, true_peak_dbfs: -0.5, silence_ratio: 0 } });
+  assert.deepEqual(quiet.findings.map((entry) => entry.category), ["clipping", "loudness"]);
 });
 
 test("blocks a missing audio stream when the manifest expects audio", () => {
