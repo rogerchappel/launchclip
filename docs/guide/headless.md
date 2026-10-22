@@ -105,9 +105,11 @@ script, storyboard, voice, music and rendered segments are reused.
 
 - Every paid call is announced before it is made (`model: PAID call to …`),
   and `MAKE.json` records each call's tokens and estimated cost.
-- With `gpt-5.6-luna`, a motion video costs a few cents of model time: one
-  script pass, maybe one resize, one storyboard pass plus up to four repairs,
-  and one critic pass over the contact sheets.
+- With `gpt-5.6-luna`, one run costs roughly $0.05–0.15 of model time: one
+  script pass, maybe one resize, one storyboard pass plus up to four repairs
+  (about $0.015 each), and one critic pass over the contact sheets ($0.02–0.04).
+  In testing, a 45 s motion video cost about $0.12 and a 17 s footage-led
+  video about $0.08.
 - Kokoro voice, the synth music bed, Whisper transcription, rendering and
   mastering are local and free.
 - ElevenLabs voice or music is paid. A generated track is locked to the
