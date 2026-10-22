@@ -42,10 +42,13 @@ test("snap: cuts move to downbeats (or beats) within the tolerance and hits to b
   assert.deepEqual(result.changes.map((change) => [change.kind, change.scene, change.from, change.to, change.grid]), [
     ["cut", "s2", 3.9, 4, "downbeat"],
     ["cut", "s3", 7.1, 7, "beat"],
-    ["hit", "s1", 1.1, 1, "beat"],
-    ["hit", "s2", 5.2, 5, "beat"]
+    ["hit", "s1", 1.1, 1, "beat"]
   ]);
-  assert.equal(result.reverted.length, 0);
+  // s2's hit moved with its scene (+0.1 s, to 5.3); the count-up times its
+  // "hit" event from its own params, so snapping the hit would desync it.
+  assert.equal(result.story.scenes[1].hits[0].at, 5.3);
+  assert.equal(result.reverted.length, 1);
+  assert.match(result.reverted[0].reason, /module event "hit" is timed by the module's params/);
   // Shared boundaries move together, the user's object is untouched and the result validates.
   assert.equal(result.story.scenes[0].end, 4);
   assert.equal(result.story.scenes[1].start, 4);
@@ -53,6 +56,11 @@ test("snap: cuts move to downbeats (or beats) within the tolerance and hits to b
   assert.equal(story.scenes[1].start, 3.9);
   assert.ok(validateStory(resolveStory(result.story)).ok);
   assert.ok(result.changes.every((change) => Math.abs(change.delta) <= 0.25));
+  // A hit with no module event of its own (pure sound) snaps freely.
+  const free = motionStory();
+  free.scenes[1].params.countAt = 0.9;
+  free.scenes[1].hits[0].event = "whoosh-accent";
+  assert.ok(snapStory(free, grid).changes.some((change) => change.kind === "hit" && change.scene === "s2" && change.to === 5.5));
 });
 
 test("snap: a move that breaks a module's params falls back and is recorded", () => {

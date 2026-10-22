@@ -80,13 +80,13 @@ function findPayoff(scenes) {
 }
 
 /** Score of a story-time grid against moments (higher is better). */
-export function scoreMoments(moments, grid) {
+export function scoreMoments(moments, grid, { sigma = SIGMA } = {}) {
   let score = 0;
   for (const moment of moments) {
     const toDown = nearest(grid.downbeats, moment.at).distance;
     const toBeat = nearest(grid.beats, moment.at).distance;
-    const down = Math.exp(-0.5 * (toDown / SIGMA) ** 2);
-    const beat = Math.exp(-0.5 * (toBeat / SIGMA) ** 2);
+    const down = Math.exp(-0.5 * (toDown / sigma) ** 2);
+    const beat = Math.exp(-0.5 * (toBeat / sigma) ** 2);
     score += moment.weight * (moment.downbeat ? Math.max(down, 0.35 * beat) : Math.max(beat * 0.8, down));
   }
   return score;
@@ -95,10 +95,12 @@ export function scoreMoments(moments, grid) {
 /**
  * Choose the music start offset (seconds trimmed from the track) and tempo.
  * musicGrid: the track's own grid (music time); duration: story length;
- * musicLength: track length; allowTempo: try up to ±3% (atempo).
+ * musicLength: track length; allowTempo: try up to ±3% (atempo); sigma:
+ * how sharply a moment must sit on its downbeat (wider before snapping, so
+ * the grid brings as many cuts as possible within the snap tolerance).
  * → {offset, tempo, score, baseline, gain, grid (story time), tried}
  */
-export function chooseAlignment(musicGrid, moments, { duration, musicLength, allowTempo = true, maxTempo = MAX_TEMPO_CHANGE, maxOffset } = {}) {
+export function chooseAlignment(musicGrid, moments, { duration, musicLength, allowTempo = true, maxTempo = MAX_TEMPO_CHANGE, maxOffset, sigma = SIGMA } = {}) {
   const tempos = [1];
   if (allowTempo) for (let step = 1; step * 0.0025 <= maxTempo + 1e-9; step += 1) tempos.push(1 + step * 0.0025, 1 - step * 0.0025);
   const beat = Number(musicGrid.beat_seconds) || 60 / Number(musicGrid.bpm) || 0.5;
@@ -112,7 +114,7 @@ export function chooseAlignment(musicGrid, moments, { duration, musicLength, all
     const limit = Math.max(0, Math.min(maxOffset ?? bar + beat, room));
     for (let offset = 0; offset <= limit + 1e-9; offset += 0.005) {
       const grid = transformGrid(musicGrid, { offset, tempo, duration });
-      const raw = scoreMoments(moments, grid);
+      const raw = scoreMoments(moments, grid, { sigma });
       // Prefer the original tempo and smaller offsets when scores tie.
       const score = raw - 0.15 * Math.abs(tempo - 1) / maxTempo - 0.001 * offset;
       tried += 1;
@@ -122,7 +124,7 @@ export function chooseAlignment(musicGrid, moments, { duration, musicLength, all
   }
   // A tempo change must earn its keep: at least 5% better than the best at the original tempo.
   if (best && best.tempo !== 1) {
-    const plain = chooseAlignment(musicGrid, moments, { duration, musicLength, allowTempo: false, maxOffset });
+    const plain = chooseAlignment(musicGrid, moments, { duration, musicLength, allowTempo: false, maxOffset, sigma });
     if (!(best.raw > plain.score * 1.05)) return { ...plain, tried: tried + plain.tried, rejected_tempo: best.tempo };
   }
   return { offset: best.offset, tempo: best.tempo, score: round3(best.raw), baseline: round3(baseline ?? 0), gain: round3(best.raw - (baseline ?? 0)), grid: best.grid, tried };
@@ -146,7 +148,7 @@ export function snapStory(story, grid, { tolerance = SNAP_TOLERANCE, mode = "aut
   try { resolved = resolvedNow(); } catch (error) { return { story: working, changes, reverted, skipped: [{ reason: `story does not resolve: ${error.message}` }] }; }
   const duration = Number(resolved.resolved.duration);
 
-  const attempt = (label, mutate, affected) => {
+  const attempt = (label, mutate, affected, extraCheck = null) => {
     const candidate = clone(working);
     mutate(candidate);
     let problem = null;
@@ -160,6 +162,7 @@ export function snapStory(story, grid, { tolerance = SNAP_TOLERANCE, mode = "aut
         const message = checkModule(scene, again);
         if (message) { problem = message; break; }
       }
+      if (!problem && extraCheck) problem = extraCheck(again);
     } catch (error) { problem = error.message; }
     if (problem) { reverted.push({ ...label, reason: problem }); return false; }
     working = candidate;
@@ -196,17 +199,18 @@ export function snapStory(story, grid, { tolerance = SNAP_TOLERANCE, mode = "aut
         continue;
       }
       attempt({ kind: "cut", scene: scene.id, previous: before ? previous.id : null, from: at, to, delta: round3(to - at), grid: target.grid }, (candidate) => {
-        findScene(candidate, scene.id).start = to;
+        const moved = findScene(candidate, scene.id);
+        moved.start = to;
         if (before) findScene(candidate, previous.id).end = to;
-        // A numeric hit left outside its scene by the move comes along to the edge.
-        for (const id of [scene.id, previous.id]) {
-          const entry = findScene(candidate, id);
-          for (const hit of Array.isArray(entry?.hits) ? entry.hits : []) {
-            if (anchorKind(hit.at) !== "seconds") continue;
-            const value = Number(hit.at);
-            if (id === scene.id && value < to) hit.at = to;
-            if (id === previous.id && value > to) hit.at = to;
-          }
+        // The scene's visuals are timed from its start, so its second-timed
+        // hits move with it; a hit left outside a scene comes to its edge.
+        for (const hit of Array.isArray(moved.hits) ? moved.hits : []) {
+          if (anchorKind(hit.at) !== "seconds") continue;
+          hit.at = round3(Math.min(Number(moved.end) || Infinity, Math.max(to, Number(hit.at) + (to - at))));
+        }
+        const prior = findScene(candidate, previous.id);
+        for (const hit of Array.isArray(prior?.hits) ? prior.hits : []) {
+          if (anchorKind(hit.at) === "seconds" && Number(hit.at) > to) hit.at = to;
         }
       }, [scene.id, previous.id]);
     }
@@ -228,11 +232,24 @@ export function snapStory(story, grid, { tolerance = SNAP_TOLERANCE, mode = "aut
         if (to < scene.start - 1e-6 || to > scene.end + 1e-6) { skipped.push({ kind: "hit", scene: scene.id, event: hit.event, at: hit.at, reason: "the nearest beat is outside the scene" }); return; }
         attempt({ kind: "hit", scene: scene.id, event: hit.event, from: hit.at, to, delta: round3(to - hit.at), grid: nearest(grid.downbeats, to).distance < 0.002 ? "downbeat" : "beat" }, (candidate) => {
           findScene(candidate, scene.id).hits[index].at = to;
-        }, [scene.id]);
+        }, [scene.id], (again) => hitEventCheck(again, scene.id, hit.event, to));
       });
     }
   }
   return { story: working, changes, reverted, skipped };
+}
+
+// A hit that names a module event the module times from its own params (not
+// from the hit) must stay put, or its sound would leave its visual behind.
+function hitEventCheck(story, sceneId, event, to) {
+  const scene = (story.scenes ?? []).find((entry) => entry.id === sceneId);
+  if (!scene || scene.module === "custom") return null;
+  let model;
+  try { model = resolveModule(scene, story); } catch { return null; }
+  const prefix = `${model?.id ?? ""}-`;
+  const match = (Array.isArray(model?.events) ? model.events : []).find((entry) => entry.name === event || entry.id === event || entry.role === event || (String(entry.id ?? "").startsWith(prefix) && String(entry.id).slice(prefix.length) === event));
+  if (!match || !Number.isFinite(Number(match.time))) return null;
+  return Math.abs(Number(match.time) - to) > 0.03 ? `module event "${event}" is timed by the module's params (${Number(match.time).toFixed(3)}s), not by the hit; moving the hit would desync its sound` : null;
 }
 
 function defaultModuleCheck(scene, story) {

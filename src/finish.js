@@ -970,7 +970,8 @@ async function beatSync(ctx, plan, track, { duration }) {
   const momentsBefore = keyMoments(ctx.resolved, { hits: mode !== "cuts" });
   let alignment = { offset: 0, tempo: 1, score: null, baseline: null, gain: 0, tried: 0 };
   if (track.grid && strategy !== "off" && !track.exactGrid && mode !== "hits") {
-    alignment = chooseAlignment(track.grid, momentsBefore, { duration, musicLength: track.length ?? duration + 2, allowTempo: true });
+    // Before snapping, prefer grids that bring cuts within the snap tolerance.
+    alignment = chooseAlignment(track.grid, momentsBefore, { duration, musicLength: track.length ?? duration + 2, allowTempo: true, sigma: strategy === "snap" ? 0.12 : undefined });
   }
   let file = track.file;
   if (!track.exactGrid) {

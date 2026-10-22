@@ -480,7 +480,8 @@ test("finish snaps a motion story's cuts and hits to the music grid", async () =
     assert.deepEqual(sync.changes.map((change) => [change.kind, change.scene, change.from, change.to, change.grid]), [
       ["cut", "s2", 2.9, 3.125, "beat"],
       ["hit", "s1", 1.1, 1.25, "beat"],
-      ["hit", "s2", 3.9, 3.75, "beat"]
+      // s2's hit first moves with its scene (+0.225 s), then onto the beat.
+      ["hit", "s2", 4.125, 4.375, "beat"]
     ]);
     const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
     assert.equal(resolved.scenes[1].start, 3.125);
