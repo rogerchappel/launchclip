@@ -97,7 +97,8 @@ export async function runExport(projectPath, options = {}, adapterOverrides = {}
     const color = story.brand?.colors?.bg ?? "#000000";
     const plate = path.join(project, ".launchclip", "export", `plate-${color.slice(1)}-${story.format.width}x${story.format.height}-${rate.num}_${rate.den}-${story.resolved.duration}.mp4`);
     if (!existsSync(plate)) await adapters.makePlate(plate, { color, width: story.format.width, height: story.format.height, rate, duration: story.resolved.duration });
-    media.plate = { source: plate, duration: story.resolved.duration, color };
+    // makePlate writes ceil(duration × fps) frames, which covers the timeline's rounded length.
+    media.plate = { source: plate, duration: Math.ceil(story.resolved.duration * rate.num / rate.den) * rate.den / rate.num, color };
   }
 
   // ---- overlays
@@ -124,6 +125,7 @@ export async function runExport(projectPath, options = {}, adapterOverrides = {}
       }
       adapters.log(`rendering overlay ${entry.key} (${round3(entry.end - entry.start)}s, ${mode})`);
       const started = performance.now();
+      await mkdir(path.dirname(outFile), { recursive: true });
       const render = await renderer.render(entry, renderStory, outFile, { mode, concurrency: options.concurrency });
       if (render.kind === "mov") {
         const probed = await adapters.probe(outFile);
