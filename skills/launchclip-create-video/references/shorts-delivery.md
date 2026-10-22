@@ -107,7 +107,11 @@ deterministic:
   over the full runtime, behind the subject plane.
 - **Persistent HUD or frame:** one ambient object that carries continuity
   across every sequence and keeps updating (a readout, progress rail or
-  chapter marker).
+  chapter marker). Drive readouts like this from one full-duration
+  "master clock" tween whose `onUpdate` computes the value as a pure function
+  of timeline time. Several `to`/`fromTo` tweens on a shared proxy object can
+  leave a stale value when the renderer seeks backwards, so frame 0 and the
+  loop frame end up disagreeing.
 
 ## Write the ending as a loop
 
