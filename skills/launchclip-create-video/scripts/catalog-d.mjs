@@ -244,8 +244,9 @@ function resolveProductDemo(params, ctx) {
     previousAt = at;
     const type = check.oneOf(action.type, `${path}.type`, ACTION_TYPES);
     const canvasBox = mapBox(box(check, action.box, `${path}.box`, viewport), rect, viewport);
-    const keys = action.keys === undefined ? [] : check.arr(action.keys, `${path}.keys`, 0, 40).map((value, k) => rt(start + check.num(value, `${path}.keys[${k}]`, 0, duration)));
-    const until = action.until === undefined ? null : rt(start + check.num(action.until, `${path}.until`, at, duration));
+    // A scene cut short mid-typing keeps the keystrokes it shows: later ones are dropped and until is clamped.
+    const keys = action.keys === undefined ? [] : check.arr(action.keys, `${path}.keys`, 0, 40).map((value, k) => check.num(value, `${path}.keys[${k}]`, 0, 3600)).filter(value => value <= duration).map(value => rt(start + value));
+    const until = action.until === undefined ? null : rt(start + Math.min(check.num(action.until, `${path}.until`, at, 3600), duration));
     const label = action.label === undefined ? null : check.str(action.label, `${path}.label`, 40);
     const s = zoomScale(canvasBox, canvas, {max: zoomMax});
     const f = {x: r2(canvasBox.x + canvasBox.width / 2), y: r2(canvasBox.y + canvasBox.height / 2)};

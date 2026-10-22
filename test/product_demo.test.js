@@ -118,6 +118,10 @@ test('product-demo rejects remote media, unordered actions and a full frame of t
   assert.throws(attempt({actions: [scene.params.actions[2], scene.params.actions[0]]}), /must not be earlier than the previous action/);
   assert.throws(attempt({frame: 'full', viewport: {width: 1280, height: 1024}}), /"full" needs a recording with the canvas aspect/);
   assert.doesNotThrow(attempt({zoom: false}));
+  // Cut short mid-typing: keystrokes past the scene end are dropped.
+  const typing = {...scene.params.actions[0], keys: [...scene.params.actions[0].keys, 50], until: 50};
+  const cut = resolveModule({...scene, params: {...scene.params, actions: [typing]}}, resolveStory(story));
+  assert.equal(cut.events.filter(e => e.cue === 'keystroke-soft').length, scene.params.actions[0].keys.length);
   const flat = resolveModule({...scene, params: {...scene.params, zoom: false}}, resolveStory(story));
   assert.ok(flat.content.samples.every(s => s.scale === 1));
 });
