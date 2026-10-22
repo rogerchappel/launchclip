@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -9,6 +10,9 @@ import {
 } from "../src/voice/words.js";
 import * as kokoro from "../src/voice/kokoro.js";
 import * as elevenlabs from "../src/voice/elevenlabs.js";
+import * as supplied from "../src/voice/supplied.js";
+
+const hasFfmpeg = (() => { try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); return true; } catch { return false; } })();
 
 /** Silence with tone bursts at [start, end] seconds. */
 function bursts(sampleRate, duration, spans, { amplitude = 0.3, frequency = 220 } = {}) {
@@ -281,4 +285,52 @@ test("ElevenLabs surfaces HTTP errors", async (t) => {
   const directory = await tempDir(t);
   const provider = elevenlabs.create({ apiKey: "k", fetch: async () => ({ ok: false, status: 401, text: async () => "invalid key" }) });
   await assert.rejects(provider.synthesize({ text: "Hi", voice: "v", outFile: path.join(directory, "e.wav") }), /401.*invalid key/);
+});
+
+// ---------------------------------------------------------------- Supplied
+
+/** Fake ASR: one recognised word per energy burst in the prepared file. */
+function burstTranscriber(labels) {
+  return async (file) => {
+    const { samples, sampleRate } = await readWav(file);
+    const onsets = detectOnsets(samples, sampleRate);
+    return { segments: [{ words: onsets.map((start, index) => ({ word: ` ${labels[index] ?? "x"}`, start: start + 0.02, end: start + 0.4 })) }] };
+  };
+}
+
+test("supplied voiceover trims edges, tightens long pauses, normalises loudness and aligns words", { skip: hasFfmpeg ? false : "ffmpeg is not installed" }, async (t) => {
+  const directory = await tempDir(t);
+  const sampleRate = 48000;
+  // 0.8 s lead, word, 1.5 s pause (tightened), word, 0.3 s pause (kept), word, 1.0 s tail.
+  const spans = [[0.8, 1.3], [2.8, 3.3], [3.6, 4.1]];
+  const source = await writeWav(path.join(directory, "take.wav"), bursts(sampleRate, 5.1, spans, { amplitude: 0.05 }), sampleRate);
+  const provider = supplied.create({ source, transcribe: burstTranscriber(["hello", "big", "world"]) });
+  const outFile = path.join(directory, "voice.wav");
+  const result = await provider.synthesize({ text: "Hello, big world.", outFile });
+  assert.equal(result.provider, "supplied");
+  assert.equal(result.sampleRate, 48000);
+  // 0.05 air + 0.5 + 0.35 + 0.5 + 0.3 + 0.5 + 0.05 air
+  assert.ok(Math.abs(result.duration - 2.25) < 0.06, `duration ${result.duration}`);
+  assert.equal(result.prep.pauses_tightened, 1);
+  assert.ok(Math.abs(result.prep.leading_trim_seconds - 0.75) < 0.03);
+  assert.ok(Math.abs(result.prep.loudness_measured_lufs - supplied.TARGET_LUFS) < 1.5, `loudness ${result.prep.loudness_measured_lufs}`);
+  assert.deepEqual(result.words.map((word) => word.text), ["Hello,", "big", "world."]);
+  validateWords(result.words, result.duration);
+  // Onsets are snapped back from the ASR's +20 ms to the energy onset.
+  assert.ok(Math.abs(result.words[0].start - 0.05) < 0.02, `first onset ${result.words[0].start}`);
+  assert.ok(result.timing.onset_error_ms < 5);
+  assert.ok((await stat(outFile)).size > 44);
+  await assert.rejects(supplied.create({ source }).synthesize({ outFile: source }), /overwrite/);
+});
+
+test("planPauseEdit only shortens pauses longer than 0.6 s", () => {
+  const sampleRate = 16000;
+  const samples = bursts(sampleRate, 4, [[0.5, 1], [1.5, 2], [3, 3.5]]);
+  const plan = supplied.planPauseEdit(samples, sampleRate, { threshold_db: -40, silence_intervals: [{ start_seconds: 1, end_seconds: 1.5 }, { start_seconds: 2, end_seconds: 3 }] });
+  assert.equal(plan.tightened, 1);
+  assert.equal(plan.keep.length, 2);
+  assert.ok(Math.abs(plan.keep[0].end - 2.175) < 1e-9);
+  assert.ok(Math.abs(plan.keep[1].start - 2.825) < 1e-9);
+  const edited = supplied.applyPauseEdit(samples, sampleRate, plan.keep);
+  assert.ok(Math.abs(edited.length / sampleRate - (plan.keep[0].end - plan.keep[0].start + plan.keep[1].end - plan.keep[1].start)) < 1e-3);
 });
