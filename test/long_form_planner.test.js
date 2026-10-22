@@ -125,7 +125,7 @@ test("rejects a missing final CTA before caching the chapter and retries it", as
     return response(chapterPlan(request.metadata.chapter_id));
   } };
   await assert.rejects(
-    () => planLongFormProduction(workspace, { intake, evidence, options: { chapterConcurrency: 2 } }, { client }),
+    () => planLongFormProduction(workspace, { intake, evidence, options: { chapterConcurrency: 2, semanticAttempts: 1 } }, { client }),
     /requested CTA/
   );
   let store = await ProductionJobStore.open(workspace, { create: false });
@@ -138,6 +138,26 @@ test("rejects a missing final CTA before caching the chapter and retries it", as
   assert.equal(calls.get("creative-chapter:chapter-2"), 2);
   store = await ProductionJobStore.open(workspace, { create: false });
   assert.equal(store.get("creative-chapter:chapter-2").status, "succeeded");
+});
+
+test("repairs a rejected chapter by sending its validator errors back to the model", async () => {
+  const workspace = await tempWorkspace();
+  const { intake, evidence } = context(workspace);
+  const chapterTwoInputs = [];
+  const client = { runStructured: async (request) => {
+    if (request.metadata.job_id === "creative-outline") return response(outline());
+    if (request.metadata.chapter_id !== "chapter-2") return response(chapterPlan(request.metadata.chapter_id));
+    chapterTwoInputs.push(JSON.parse(request.input));
+    const value = chapterPlan("chapter-2");
+    if (chapterTwoInputs.length === 1) value.shots[0].start_seconds = 5;
+    return response(value);
+  } };
+  const result = await planLongFormProduction(workspace, { intake, evidence, options: { chapterConcurrency: 2 } }, { client });
+  assert.equal(result.status, "ready");
+  assert.equal(chapterTwoInputs.length, 2);
+  assert.equal(chapterTwoInputs[0].prior_attempt, undefined);
+  assert.equal(chapterTwoInputs[1].prior_attempt.shots[0].start_seconds, 5);
+  assert.ok(chapterTwoInputs[1].validation_errors_to_repair.includes("the first shot must start at 0"));
 });
 
 test("bounds prefixed shot IDs during deterministic stitching", () => {
