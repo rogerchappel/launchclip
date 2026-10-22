@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { knownModules } from "../kit/core/modules.mjs";
 import { DEFAULT_BRAND } from "../kit/core/planning-prompt.mjs";
-import { AnthropicPlannerClient, STORYBOARD_ENVELOPE_SCHEMA, checkStoryboard, createPlannerClient, extractStoryboard, planStoryboard } from "../src/storyboard_planner.js";
+import { AnthropicPlannerClient, STORYBOARD_ENVELOPE_SCHEMA, bareModelId, checkStoryboard, createPlannerClient, extractStoryboard, planStoryboard } from "../src/storyboard_planner.js";
 import { planStoryCommand } from "../src/story_cli.js";
 import { runCli } from "../src/cli.js";
 
@@ -233,4 +233,24 @@ test("launchclip story plan writes storyboard.json and the plan report", async (
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("the client gets the bare model id, not the provider:model@reasoning route", async () => {
+  assert.equal(bareModelId("openai:gpt-5.6-luna@medium"), "gpt-5.6-luna");
+  assert.equal(bareModelId("anthropic:claude-opus-4-8"), "claude-opus-4-8");
+  assert.equal(bareModelId("openrouter:vendor/model"), "vendor/model");
+  assert.equal(bareModelId("gpt-5.6"), "gpt-5.6");
+  assert.equal(bareModelId(null), null);
+  const client = fakeClient([envelope(goodStoryboard())]);
+  await plan(client);
+  assert.equal(client.calls[0].model, "gpt-5.6-luna");
+});
+
+test("extraCheck errors go back to the model as repairs", async () => {
+  const client = fakeClient([envelope(goodStoryboard()), envelope(goodStoryboard())]);
+  let calls = 0;
+  const report = await plan(client, { extraCheck: () => (calls++ === 0 ? ["scenes[0] references assets/missing.png, which is not in the asset manifest"] : []) });
+  assert.equal(report.status, "passed", report.errors.join("\n"));
+  assert.equal(report.repairs_used, 1);
+  assert.match(client.calls[1].input, /assets: scenes\[0\] references assets\/missing\.png/);
 });

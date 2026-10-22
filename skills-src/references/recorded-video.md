@@ -72,11 +72,38 @@ Preserve source dimensions and playback speed; do not apply the older portrait
 presenter crop/speed defaults.
 
 Outputs include `base-edit.mp4`, original transcript, edited transcript/words,
-an original-to-edited segment map, and `recording.json` provenance/cache receipt.
+an original-to-edited segment map, `audio-enhance.json` (audio clean-up) and
+`recording.json` provenance/cache receipt.
 Inspect failures and verify cuts locally without adding a take-selection gate.
 Zero-duration transcription artifacts are discarded rather than assigned fake
 timing. Transcription errors can affect cuts and graphics; check actual footage
 when correcting visible text. Never invent replacement word timestamps.
+
+### Audio clean-up
+
+The base edit is silence, bad takes (repeats, false starts, semantic retakes),
+fillers, then voice clean-up. Clean-up runs on the QA-accepted candidate, after
+the cuts, so it never moves a join: `--enhance light` (default) applies a
+~80Hz high-pass, 50/60Hz notches only on measured hum, afftdn denoise with a
+noise profile learned from the longest pause the edit removed from the original
+take, a small ~4kHz presence lift, de-essing, gentle 3:1 compression (under the
+loud syllables' peaks), a range-limited pause expander, a look-ahead limiter
+(at most 6dB) and linear gain to -16 LUFS / -1.5 dBTP. `--enhance podcast`
+denoises harder, compresses 4:1 and levels across speakers. `--enhance off` publishes the accepted candidate as is.
+The join QA is re-run on the enhanced media; a new join issue or duration change
+reverts to the unenhanced candidate and records why.
+
+`audio-enhance.json` records the chain, detections (hum, noise-profile window,
+harsh sibilance) and before/after noise floor, SNR, integrated LUFS, true peak,
+spectral tilt and sibilance. Its guard backs denoise off (half strength, then
+none) when it costs speech-band energy or flattens speech spectra beyond the
+preset's limit; read `guard.backoffs` before re-running stronger. Do not chain
+another denoiser over an enhanced base edit.
+
+`--voice-isolation elevenlabs` runs ElevenLabs Audio Isolation (paid; needs
+`ELEVENLABS_API_KEY`) before the FFmpeg chain, cached by input hash so reruns
+never pay twice. Use it only when the user asks for it or accepts the cost for a
+badly noisy take; it is never called without the flag.
 
 Identical reruns reuse verified edit artifacts and preserve capture progress.
 Changed input/settings/engine or an incomplete prior export requires a fresh

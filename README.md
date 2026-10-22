@@ -84,13 +84,17 @@ It sorts your assets, chooses the right kind of video, writes and voices the scr
 
 Every video passes automatic quality checks: nothing outside the safe zone, text big enough to read on a phone, captions that never collide with graphics, motion that never goes dead, and audio at the right level. When a check fails, LaunchClip repairs the problem and checks again, so you get a finished video rather than a list of problems. Each release lowers the number of repairs needed; the goal is right first time, every time.
 
+## What's next
+
+Coming soon: **demo autopilot.** Point LaunchClip at your codebase and it starts your app, records your product's key flows in a real browser, and edits them into your launch video, with zooms and callouts timed to every click. See the [roadmap](docs/ROADMAP.md).
+
 ## Learn more
 
 - [Getting started](docs/guide/getting-started.md): install, agents and your first video
 - [Voice, music and sound effects](docs/guide/sound.md): free built-ins and optional upgrades
 - [Raw footage](docs/guide/raw-footage.md): the base edit for podcasts and talking heads
 - [Finish in your editor](docs/guide/editors.md): export to Final Cut Pro, Premiere Pro or DaVinci Resolve
-- [All guides](docs/guide/README.md) · [Advanced reference](docs/guide/advanced.md) · [CLI reference](skills/launchclip-cli/references/cli-reference.md)
+- [Roadmap](docs/ROADMAP.md) · [All guides](docs/guide/README.md) · [Advanced reference](docs/guide/advanced.md) · [CLI reference](skills/launchclip-cli/references/cli-reference.md)
 
 ## Licence
 

@@ -44,7 +44,7 @@ export const STORYBOARD_ENVELOPE_SCHEMA = Object.freeze({
  *  valid_first_attempt, errors, warnings, layout, usage, cost, elapsed_ms, phrase_hints}
  */
 export async function planStoryboard(options = {}) {
-  const { brief, words = null, beats = null, lane = "motion", format, tier = "structured", model = null, client, audio = null, base = null, maxRepairs = DEFAULT_MAX_REPAIRS, now = () => Date.now(), style = null } = options;
+  const { brief, words = null, beats = null, lane = "motion", format, tier = "structured", model = null, client, audio = null, base = null, maxRepairs = DEFAULT_MAX_REPAIRS, now = () => Date.now(), style = null, extraCheck = null } = options;
   // style: a loaded launchclip.style.v2 pack. Its brand is the default brand,
   // the planned storyboard names it, and the checks run on the merged story.
   const brand = options.brand ?? (style?.brand ? styleBrand(style) : DEFAULT_BRAND);
@@ -76,7 +76,7 @@ export async function planStoryboard(options = {}) {
         input,
         schema: STORYBOARD_ENVELOPE_SCHEMA,
         schemaName: "launchclip_storyboard",
-        model: model ?? undefined,
+        model: bareModelId(model) ?? undefined,
         temperature: 0,
         maxOutputTokens: 16_000
       });
@@ -96,6 +96,12 @@ export async function planStoryboard(options = {}) {
       checked = checkStoryboard(pinned.storyboard, { words: wordList, beats, tier, style });
       checked.warnings = [...pinned.warnings, ...checked.warnings];
       checked.candidate = extracted.storyboard;
+      // extraCheck(storyboard) → [error strings]: caller rules (for example,
+      // `launchclip make` allows only the files in its asset manifest).
+      if (typeof extraCheck === "function" && checked.storyboard) {
+        const extra = (extraCheck(checked.storyboard) ?? []).map((entry) => `assets: ${entry}`);
+        if (extra.length) { checked.errors = [...checked.errors, ...extra]; checked.ok = false; }
+      }
     }
     attempts.push({
       attempt,
@@ -325,6 +331,8 @@ function repairRequest({ request, previous, errors, attempt, repairs }) {
     "",
     prior,
     "",
+    "A params error names the first offending item a module found (rows[1], steps[0], left.label…); the same rule applies to every sibling item, so fix all of them in that scene, not only the one named.",
+    "",
     "Return the complete corrected storyboard as one JSON object. Fix only the scenes and params the errors name (shorten copy, change a param, retime or swap a scene's module); keep everything else. Keep lane, format, brand, audio and base exactly as given. The checks and their thresholds are fixed and cannot be relaxed.",
     ""
   ].join("\n");
@@ -464,6 +472,22 @@ export class AnthropicPlannerClient {
 
 // ---------------------------------------------------------------------------
 // Helpers
+
+/**
+ * "openai:gpt-5.6-luna@medium" → "gpt-5.6-luna": the id a client sends to its
+ * API. The provider prefix and reasoning suffix belong to the route, not the
+ * request body. A bare id is returned unchanged; null stays null.
+ */
+export function bareModelId(spec) {
+  if (spec == null) return null;
+  let value = String(spec).trim();
+  if (!value) return null;
+  const at = value.lastIndexOf("@");
+  if (at > 0 && /^(none|low|medium|high|xhigh|max)$/i.test(value.slice(at + 1))) value = value.slice(0, at);
+  const separator = value.indexOf(":");
+  if (separator > 0 && /^(openai|anthropic|openrouter|ollama|local|compatible|openai-compatible)$/i.test(value.slice(0, separator))) value = value.slice(separator + 1);
+  return value;
+}
 
 function providerOf(client, model) {
   if (client?.provider) return client.provider;

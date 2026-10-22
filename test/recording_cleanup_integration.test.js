@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,writeFile} from 'node:fs/promises';
+import {copyFile,mkdtemp,readFile,writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -13,7 +13,7 @@ async function fixture(){
  const input=path.join(directory,'recording.mov');await writeFile(input,'original');
  const transcript=path.join(directory,'words.json');await writeFile(transcript,JSON.stringify({words}));
  let analyses=0,renders=0,renderedPlan;
- const adapters={probe:async()=>({format:{duration:7},streams:[{codec_type:'video'},{codec_type:'audio'}]}),analyzeRecordingAudio:async()=>{analyses++;return{source_duration_seconds:7,threshold_db:-40,silence_intervals:[{start_seconds:2.5,end_seconds:4}],waveform:[]};},transcribeRendered:async()=>({words:renderedPlan.words}),analyzeRecordingJoins:async()=>({checked:true,issues:[]}),identifyRecordingCoherence:async(plan,actual,options)=>({evidence_hash:recordingQaEvidenceHash(plan,actual,options.mediaSha256,options.sourceTranscript,options.acoustic),coverage_complete:true,findings:[],transcript_resolutions:[],acoustic_resolutions:[]}),editRecording:async(_input,output,plan)=>{renderedPlan=plan;renders++;await writeFile(output,'edited');return{duration_seconds:plan.duration_seconds};}};
+ const adapters={probe:async()=>({format:{duration:7},streams:[{codec_type:'video'},{codec_type:'audio'}]}),analyzeRecordingAudio:async()=>{analyses++;return{source_duration_seconds:7,threshold_db:-40,silence_intervals:[{start_seconds:2.5,end_seconds:4}],waveform:[]};},transcribeRendered:async()=>({words:renderedPlan.words}),analyzeRecordingJoins:async()=>({checked:true,issues:[]}),identifyRecordingCoherence:async(plan,actual,options)=>({evidence_hash:recordingQaEvidenceHash(plan,actual,options.mediaSha256,options.sourceTranscript,options.acoustic),coverage_complete:true,findings:[],transcript_resolutions:[],acoustic_resolutions:[]}),editRecording:async(_input,output,plan)=>{renderedPlan=plan;renders++;await writeFile(output,'edited');return{duration_seconds:plan.duration_seconds};},enhanceRecordingAudio:async(input,output)=>{await copyFile(input,output);return{status:'skipped',voice_isolation:{status:'not-requested'}};}};
  return{input,transcript,directory,adapters,analyses:()=>analyses,renders:()=>renders};
 }
 test('cleanup defaults combine filler removal and measured quiet with verified cache',async()=>{

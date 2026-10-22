@@ -46,7 +46,7 @@ export async function runRecordingQa(input, initialPlan, options, adapters = {})
       const renderedDuration = rendered.rendered_duration_seconds ?? rendered.duration_seconds ?? plan.duration_seconds;
       if (words.at(-1).end > renderedDuration + 0.05) throw new Error("Rendered QA transcript exceeds candidate duration");
       const actual = { text: words.map((word) => word.word).join(" "), words, duration_seconds: renderedDuration };
-      const acoustic = await inspectEveryJoin(files.media, plan, adapters);
+      const acoustic = await inspectRecordingJoins(files.media, plan, adapters);
       await writeJson(files.plan, plan);
       await writeJson(files.rendered_transcript, actual);
       await writeJson(files.acoustic, acoustic);
@@ -89,7 +89,8 @@ export async function runRecordingQa(input, initialPlan, options, adapters = {})
   return latest;
 }
 
-async function inspectEveryJoin(media, plan, adapters) {
+/** Acoustic QA of every join of a rendered edit (batched; adapters.analyzeRecordingJoins overrides). */
+export async function inspectRecordingJoins(media, plan, adapters = {}) {
   if (adapters.analyzeRecordingJoins) return adapters.analyzeRecordingJoins(media, plan);
   const count = plan.kept_segments.length - 1;
   const measurements = [];

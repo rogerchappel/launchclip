@@ -47,6 +47,8 @@ qa/parity/
 qa/parity-ci/
 qa/parity-captions/
 qa/density/
+# launchclip make proof runs (MP4s and contact sheets)
+qa/make/
 
 # Renderer eval reports (npm run eval:renderers)
 qa/renderer-eval/
@@ -69,3 +71,4 @@ qa/parity-footage/
 qa/seams/
 qa/blind/
 qa/blind2/
+qa/enhance/

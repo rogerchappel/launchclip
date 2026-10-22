@@ -9,8 +9,12 @@
 //   3. remove leading and trailing silence (keeping 50 ms of air) and tighten
 //      every interior pause longer than 0.6 s to 0.35 s, with 5 ms fades at
 //      each cut;
-//   4. normalise to about -17 LUFS integrated, -1.5 dBTP (two-pass loudnorm,
-//      linear gain), because mono voice plays about 3 LU louder as stereo;
+//   4. clean up and level the voice with the shared enhancement chain
+//      (src/audio_enhance.js, preset `light` by default: high-pass, hum
+//      notches, profile denoise, presence, de-ess, gentle compression) to
+//      about -17 LUFS integrated, -1.5 dBTP, because mono voice plays about
+//      3 LU louder as stereo; `enhance: "off"` keeps the plain two-pass
+//      loudnorm (linear gain);
 //   5. transcribe the prepared audio with the repo's local Whisper path
 //      (transcribeRecording), align the recognised words back to `text` when
 //      given, pull word boundaries off quiet audio (Whisper tends to start a
@@ -22,6 +26,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { enhanceRecordingAudio } from "../audio_enhance.js";
 import { analyzeRecordingAudio } from "../recording_audio.js";
 import { normalizeRecordingTranscript } from "../recording_edit.js";
 import {
@@ -57,7 +62,7 @@ export function create(options = {}) {
         const tightened = applyPauseEdit(audio.samples, audio.sampleRate, plan.keep);
         const tightenedFile = path.join(temporary, "tightened.wav");
         await writeWav(tightenedFile, tightened, audio.sampleRate);
-        const loudness = await normalizeLoudness(tightenedFile, outFile, run, signal);
+        const { loudness, enhancement } = await prepareLoudness(tightenedFile, outFile, { preset: options.enhance ?? "light", run, signal, enhance: options.enhanceAudio, notice: options.notice });
         const prepared = await readWav(outFile);
         const transcript = await (options.transcribe ?? defaultTranscribe)(outFile, { model: options.model ?? "base.en", language: options.language ?? "en", signal });
         const recognised = normalizeRecordingTranscript(transcript).map((word) => ({ text: word.word, start: word.start, end: word.end }));
@@ -75,7 +80,8 @@ export function create(options = {}) {
             source_duration_seconds: audio.duration,
             leading_trim_seconds: plan.leading, trailing_trim_seconds: plan.trailing,
             pauses_tightened: plan.tightened, keep_ranges: plan.keep, removed_seconds: audio.duration - tightened.length / audio.sampleRate,
-            loudness_target_lufs: TARGET_LUFS, loudness_measured_lufs: loudness.output_i, true_peak_dbtp: loudness.output_tp
+            loudness_target_lufs: TARGET_LUFS, loudness_measured_lufs: loudness.output_i, true_peak_dbtp: loudness.output_tp,
+            enhancement
           },
           timing: { method: typeof text === "string" && text.trim() ? "asr-aligned-to-text" : "asr", trimmed_to_voiced: moved, snapped_words: snappedCount, onset_error_ms: msOrNull(onsetError(words, onsets).mean_seconds) }
         };
@@ -141,6 +147,27 @@ export function applyPauseEdit(samples, sampleRate, keep) {
     offset += copy.length;
   });
   return result;
+}
+
+/**
+ * Level the tightened voiceover to TARGET_LUFS. With a preset (default
+ * light) the shared enhancement chain cleans and levels it in one pass; when
+ * the chain is off or cannot measure the take, two-pass loudnorm levels it.
+ */
+export async function prepareLoudness(input, output, { preset = "light", run = execute, signal, enhance, notice } = {}) {
+  if (preset !== "off") {
+    const report = await (enhance ?? enhanceRecordingAudio)(input, output, { preset, targetLufs: TARGET_LUFS, truePeakDbtp: TARGET_TRUE_PEAK, report: false, signal, notice }, { run });
+    const summary = { preset, status: report.status, chain: (report.chain ?? []).map((stage) => stage.stage), backoffs: report.guard?.backoffs ?? [], notes: report.notes ?? [], before: pick(report.metrics?.before), after: pick(report.metrics?.after) };
+    if (report.status === "enhanced") return { loudness: { input_i: report.metrics?.before?.integrated_lufs ?? null, output_i: report.metrics?.after?.integrated_lufs ?? null, output_tp: report.metrics?.after?.true_peak_dbtp ?? null }, enhancement: summary };
+    const loudness = await normalizeLoudness(input, output, run, signal);
+    return { loudness, enhancement: summary };
+  }
+  return { loudness: await normalizeLoudness(input, output, run, signal), enhancement: { preset: "off", status: "off" } };
+}
+function pick(metrics) {
+  if (!metrics) return null;
+  const keys = ["noise_floor_dbfs", "snr_db", "integrated_lufs", "true_peak_dbtp", "spectral_tilt_db_per_octave"];
+  return Object.fromEntries(keys.map((key) => [key, metrics[key] ?? null]));
 }
 
 /** Two-pass EBU R128 loudnorm to TARGET_LUFS with linear gain; returns measured output. */

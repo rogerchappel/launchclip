@@ -141,6 +141,17 @@ its adaptive threshold. Use `--no-audio-silence` to disable that stage, or confi
 `--audio-threshold-db` after inspecting the recording. Untranscribed fillers cannot
 be removed reliably from word timing alone.
 
+After the cuts pass QA, `edit-recording` cleans up the voice audio. `--enhance
+light` (default) applies a high-pass, 50/60 Hz notches on measured hum, afftdn
+denoise with a profile learned from a pause the edit removed, a small presence lift,
+de-essing, gentle compression, a limiter and -16 LUFS; `--enhance podcast`
+denoises and compresses harder and levels across speakers; `--enhance off`
+skips it. The join QA re-runs on the enhanced audio and reverts to the
+unenhanced edit if anything regresses. `audio-enhance.json` records the chain
+and before/after noise floor, SNR, LUFS, true peak and spectral tilt.
+`--voice-isolation elevenlabs` adds the paid ElevenLabs Audio Isolation API
+first (cached by input hash, never called without the flag).
+
 For rephrased retakes, provide agent-generated `--retake-decisions retakes.json`
 with the original word transcript, or explicitly choose an installed local
 Ollama model with `--retake-model MODEL`. Both use last take wins and preserve
