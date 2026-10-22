@@ -409,12 +409,14 @@ function resolveEmphasis(params, ctx) {
   const color = b.resolveColor(p.color, 'params.color', 'primary', stroke, 'brand.colors.bg (outline)');
   const position = p.position === undefined ? 'center' : check.oneOf(p.position, 'params.position', POSITIONS);
   const stagger = p.stagger === undefined ? 0.09 : check.num(p.stagger, 'params.stagger', 0, 0.3);
-  const fit = fitText(check, 'params.text', text, {family: 'display', width: safe.width - u(40), preferred: u(portrait ? 180 : 150), min: Math.max(b.min.key, u(96)), maxLines: 2});
+  // The word block spans 88% of the safe width (the RFC hero fill is 70–90%).
+  const blockW = r2(safe.width * 0.88);
+  const fit = fitText(check, 'params.text', text, {family: 'display', width: blockW - u(24), preferred: u(portrait ? 180 : 150), min: Math.max(b.min.key, u(96)), maxLines: 2});
   const height = r2(fit.lines * fit.size * 1.04 + u(24));
   const ref = canvas.height / (portrait ? 1920 : 1080);
   const centreY = position === 'upper' ? (portrait ? 520 : 300) * ref : position === 'lower' ? (portrait ? 1250 : 800) * ref : (portrait ? 860 : 540) * ref;
   const y = r2(Math.min(Math.max(centreY - height / 2, safe.y), safe.y + safe.height - height));
-  const rect = {x: safe.x, y, width: safe.width, height};
+  const rect = {x: r2(safe.x + (safe.width - blockW) / 2), y, width: blockW, height};
   const t0 = b.timeOf('pop', p.at, 'params.at', 0.05, {min: 0, max: Math.max(0, duration - 0.45 - stagger * (words.length - 1))});
   const exitStart = rt(Math.max(t0 + stagger * (words.length - 1) + 0.4, end - 0.25));
   const items = words.map((word, i) => ({index: i, text: word, time: rt(t0 + i * stagger)}));
