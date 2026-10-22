@@ -239,7 +239,8 @@ A rack of rows with three status lights each that change state over time.
 Common: title (required, ≤ 54 chars); `at` values are seconds from the scene start, at least 0.28 and at least 0.45 s before the scene ends.
 params:
 - title: string ≤ 54, required
-- rack: {mode, source?, rows: [{label ≤ 24, states: [{at, lights: [bool, bool, bool]}]}] 1–8}
+- rack: {mode, source?, rows: [{label ≤ 24, states: [{at, lights: [bool, bool, bool], tone?: "pending" | "active" | "pass" | "fail"}]}] 1–8}
+- palette: "status" (optional: lights mean fail, active, pass by position, and tones colour red → green; a light may be a tone name instead of true)
 - rect: {x, y, width, height} canvas px (width ≥ 420, height ≥ 160); usually omit it [guided and bespoke tiers only]
 - density: "fill" (an explicit rect's text grows to fill it; recommended with rect in 16:9) | "fixed" [guided and bespoke tiers only]
 - accent: #rrggbb [guided and bespoke tiers only]

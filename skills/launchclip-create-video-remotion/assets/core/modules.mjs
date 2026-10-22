@@ -91,6 +91,24 @@ export function brandModuleDefaults(brand) {
   return defaults;
 }
 
+// status-rack tones from brand roles: brand.colors.pass (or success) and
+// brand.colors.fail (or danger / error) seed the status palette's green and
+// red; the editorial core still checks their contrast. Only added when the
+// scene opts in to the status palette, so a plain rack is untouched.
+function statusRackDefaults(module, brand, params) {
+  if (module !== 'status-rack' || params.tones !== undefined) return {};
+  const rows = Array.isArray(params.rack?.rows) ? params.rack.rows : [];
+  const opted = params.palette === 'status' || rows.some((row) => Array.isArray(row?.states) && row.states.some((state) => state?.tone !== undefined || (Array.isArray(state?.lights) && state.lights.some((light) => typeof light === 'string'))));
+  if (!opted) return {};
+  const colors = brand && typeof brand.colors === 'object' && brand.colors ? brand.colors : {};
+  const pick = (...roles) => roles.map((role) => colors[role]).find((value) => HEX.test(value ?? ''));
+  const tones = {};
+  const pass = pick('pass', 'success'), fail = pick('fail', 'danger', 'error');
+  if (pass) tones.pass = pass;
+  if (fail) tones.fail = fail;
+  return Object.keys(tones).length ? { tones } : {};
+}
+
 function scenePath(scene, story) {
   const scenes = Array.isArray(story?.scenes) ? story.scenes : [];
   let index = scenes.indexOf(scene);
@@ -262,7 +280,7 @@ function resolveModuleInner(scene, story, { track, end }) {
     if (!canvas || canvas.width !== format.width || canvas.height !== format.height) {
       throw new Error(`module "${module}": editorial modules need a 1080x1920 (9:16) or 1920x1080 (16:9) format; got ${format.width}x${format.height}`);
     }
-    const spec = { ...brandModuleDefaults(story?.brand), ...params, id, kind: module, aspect, start, duration };
+    const spec = { ...brandModuleDefaults(story?.brand), ...statusRackDefaults(module, story?.brand, params), ...params, id, kind: module, aspect, start, duration };
     if (track !== undefined) spec.track = track;
     let model;
     try { model = styled ? resolveEditorialModule(spec, { grammar }) : resolveEditorialModule(spec); }

@@ -88,8 +88,12 @@
  *   durations:{day:0.32}}
  *
  * status-rack: {mode, source|null, note, noteLines, lightOn, lightOff,
+ *   palette?:'status', tones?:{pending, active, pass, fail},
  *   rows:[{index, label, enterTime, states:[{index, time, lights:[3 bool],
- *   changes:[{light, on, color}], settleTime|null}]}]}
+ *   colors?:[3 hex], changes:[{light, on, color}], settleTime|null}]}]}
+ *   palette/tones/colors appear only with the status palette (spec.palette
+ *   "status", spec.tones, a state tone or a tone-named light); lit lights are
+ *   then coloured by tone, and a change of colour alone is a change.
  *   settleTime is null for a state that changes nothing (no event).
  *   durations:{row:0.22 (row enter), light:0.18 (each light colour change)}
  *
@@ -257,6 +261,44 @@ function offset(direction, distance) {
 }
 const hex = value => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
 
+// Status palette (status-rack palette: "status", per-state or per-light tone).
+// pending: the muted foreground; active: the accent (brand primary); pass and
+// fail: a green and a red, taken from spec.tones (brand.colors.pass / fail via
+// the module registry) or derived, then pushed toward the foreground until each
+// lit light clears 3:1 against the surface (WCAG non-text contrast).
+export const STATUS_TONES = Object.freeze(['pending', 'active', 'pass', 'fail']);
+const STATUS_POSITIONS = Object.freeze(['fail', 'active', 'pass']);
+const STATUS_BASE = Object.freeze({pass: '#2fbf71', fail: '#f2545b'});
+const channels = value => [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16));
+const luminance = value => {
+  const [r, g, b] = channels(value).map(c => c / 255).map(c => (c <= .03928 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4));
+  return .2126 * r + .7152 * g + .0722 * b;
+};
+export function statusContrast(a, b) {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + .05) / (lo + .05);
+}
+const mix = (top, bottom, amount) => `#${channels(top).map((c, i) => Math.round(c * amount + channels(bottom)[i] * (1 - amount)).toString(16).padStart(2, '0')).join('')}`;
+function legible(colour, surface, foreground) {
+  for (let step = 0; step <= 10; step++) {
+    const candidate = step ? mix(foreground, colour, step / 10) : colour;
+    if (statusContrast(candidate, surface) >= 3) return candidate;
+  }
+  return foreground;
+}
+function statusTones(input, theme, accent) {
+  if (input.palette !== undefined && input.palette !== 'status') throw new Error('palette must be "status"');
+  if (input.tones !== undefined) {
+    object(input.tones, 'tones', STATUS_TONES);
+    for (const [key, value] of Object.entries(input.tones)) if (!hex(value)) throw new Error(`tones.${key} must be a six-digit hex color`);
+  }
+  const used = input.palette === 'status' || input.tones !== undefined || (Array.isArray(input.rack?.rows) && input.rack.rows.some(row => Array.isArray(row?.states) && row.states.some(state => state?.tone !== undefined || (Array.isArray(state?.lights) && state.lights.some(light => typeof light === 'string')))));
+  if (!used) return null;
+  const supplied = input.tones ?? {};
+  return {pending: legible(supplied.pending ?? theme.muted, theme.surface, theme.foreground), active: legible(supplied.active ?? accent, theme.surface, theme.foreground),
+    pass: legible(supplied.pass ?? STATUS_BASE.pass, theme.surface, theme.foreground), fail: legible(supplied.fail ?? STATUS_BASE.fail, theme.surface, theme.foreground)};
+}
+
 // Density (docs: skills-src/references/editorial-ui-modules.md, "Defaults").
 // A module lays out in a "layout box" of rect / scale and renders scaled by
 // `scale` from the rect's top-left corner, so every size in the kind CSS and
@@ -382,7 +424,7 @@ export function resolveEditorialModule(input, options = {}) {
 }
 
 function resolveAt(options, input, suppliedRect, density, source) {
-  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'density', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt', 'theme', 'focus', 'growth', 'label']);
+  object(input, 'module', ['id', 'kind', 'aspect', 'start', 'duration', 'rect', 'density', 'title', 'accent', 'rows', 'steps', 'media', 'body', 'track', 'statusLabels', 'audience', 'chart', 'metric', 'progress', 'presentation', 'numbered', 'motion', 'treatment', 'date', 'rack', 'code', 'excerpt', 'theme', 'focus', 'growth', 'label', 'palette', 'tones']);
   if (!/^[a-z][a-z0-9-]{0,59}$/.test(input.id ?? '')) throw new Error('id must be a unique lowercase DOM-safe identifier');
   if (!EDITORIAL_KINDS.includes(input.kind)) throw new Error(`kind must be ${EDITORIAL_KINDS.join(', ')}`);
   if (input.presentation !== undefined && !['solid', 'glass'].includes(input.presentation)) throw new Error('presentation must be solid or glass');
@@ -428,6 +470,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
   const allowed = {'media-window': ['media'], checklist: ['rows'], 'step-rail': ['steps'], callout: ['body', 'treatment'], 'audience-grid': ['audience'], 'trend-chart': ['chart'], metric: ['metric'], progress: ['progress'], 'date-card': ['date'], 'status-rack': ['rack'], 'code-snippet': ['code'], 'excerpt-window': ['excerpt'], 'focus-flow': ['focus'], 'growth-chart': ['growth']}[kind];
   for (const key of ['media', 'rows', 'steps', 'body', 'audience', 'chart', 'metric', 'progress', 'treatment', 'date', 'rack', 'code', 'excerpt', 'focus', 'growth']) if (input[key] !== undefined && !allowed.includes(key)) throw new Error(`${kind} does not accept ${key}`);
   if (input.label !== undefined && kind !== 'code-snippet') throw new Error('label is only for code-snippet');
+  for (const key of ['palette', 'tones']) if (input[key] !== undefined && kind !== 'status-rack') throw new Error(`${key} is only for status-rack`);
   const statusLabels = {pending: 'Pending', active: 'Active', done: 'Done', ...(input.statusLabels ?? {})};
   if (input.statusLabels !== undefined) {
     if (kind !== 'checklist') throw new Error('statusLabels is only for checklist');
@@ -579,6 +622,7 @@ function resolveAt(options, input, suppliedRect, density, source) {
   } else if (kind === 'status-rack') {
     object(input.rack, 'rack', ['mode', 'source', 'rows']);
     const rack = input.rack;
+    const tones = statusTones(input, theme, accent);
     if (!['illustration', 'data'].includes(rack.mode)) throw new Error('rack.mode must be illustration or data');
     if (rack.mode === 'data') text(rack.source, 'rack.source', 80);
     else if (rack.source !== undefined) throw new Error('illustration cannot claim a real data source');
@@ -592,23 +636,27 @@ function resolveAt(options, input, suppliedRect, density, source) {
       object(row, 'rack row', ['label', 'states']); text(row.label, 'rack.label', 24);
       if (row.label.length > Math.floor((box.width - 48 - 24 - 22 - 24 - 70) / (22 * .65))) throw new Error('rack label too long for rect');
       if (!Array.isArray(row.states) || row.states.length < 1 || row.states.length > 8) throw new Error('row.states must contain 1–8 states');
-      let previous = -1, previousLights = [false, false, false];
+      let previous = -1, previousLights = [false, false, false], previousColours = [lightOff, lightOff, lightOff];
       const states = row.states.map((state, n) => {
-        object(state, 'rack state', ['at', 'lights']); const stateOffset = at(state.at, 'rack state.at');
+        object(state, 'rack state', ['at', 'lights', 'tone']); const stateOffset = at(state.at, 'rack state.at');
         if (stateOffset <= previous || previous >= 0 && stateOffset - previous < .3 - 1e-6) throw new Error('rack state times must increase by at least 0.3s'); previous = stateOffset;
-        if (!Array.isArray(state.lights) || state.lights.length !== 3 || state.lights.some(light => typeof light !== 'boolean')) throw new Error('rack lights must be exactly three booleans');
+        if (!Array.isArray(state.lights) || state.lights.length !== 3 || state.lights.some(light => typeof light !== 'boolean' && !(tones && STATUS_TONES.includes(light)))) throw new Error(tones ? `rack lights must be exactly three entries, each a boolean or a tone (${STATUS_TONES.join(', ')})` : 'rack lights must be exactly three booleans');
+        if (state.tone !== undefined && !STATUS_TONES.includes(state.tone)) throw new Error(`rack state.tone must be ${STATUS_TONES.join(', ')}`);
         const time = start + stateOffset;
         const changes = [];
-        state.lights.forEach((light, j) => {if (light !== previousLights[j]) changes.push({light: j, on: light, color: light ? accent : lightOff});});
-        previousLights = [...state.lights];
+        // Lit colour: a light's own tone, else the state's tone, else (palette
+        // "status") the light's position (fail, active, pass), else the accent.
+        const colours = state.lights.map((light, j) => light === false ? lightOff : tones ? tones[typeof light === 'string' ? light : state.tone ?? STATUS_POSITIONS[j]] : accent);
+        state.lights.forEach((light, j) => {const on = light !== false; if (on !== previousLights[j] || colours[j] !== previousColours[j]) changes.push({light: j, on, color: colours[j]});});
+        previousLights = state.lights.map(light => light !== false); previousColours = colours;
         const changed = n === 0 || changes.length > 0;
         const settleTime = changed ? time + (n === 0 ? .22 : .18) : null;
         if (changed) events.push({id: `${id}-rack-${i}-state-${n}`, time: settleTime});
-        return {index: n, time, lights: [...state.lights], changes, settleTime};
+        return {index: n, time, lights: state.lights.map(light => light !== false), ...(tones ? {colors: colours} : {}), changes, settleTime};
       });
       return {index: i, label: row.label, enterTime: states[0].time, states};
     });
-    content = {mode: rack.mode, source: rack.mode === 'data' ? rack.source : null, note, noteLines, lightOn: accent, lightOff, rows, durations: {row: .22, light: .18}};
+    content = {mode: rack.mode, source: rack.mode === 'data' ? rack.source : null, note, noteLines, lightOn: accent, lightOff, ...(tones ? {palette: 'status', tones} : {}), rows, durations: {row: .22, light: .18}};
   } else if (kind === 'code-snippet') {
     object(input.code, 'code', ['language', 'lines', 'typing', 'source', 'filename']); const code = input.code;
     if (code.typing !== undefined && typeof code.typing !== 'boolean') throw new Error('code.typing must be a boolean');

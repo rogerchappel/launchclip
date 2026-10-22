@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {EDITORIAL_KINDS, EDITORIAL_STYLE, EDITORIAL_SYMBOLS, resolveEditorialModule} from '../kit/core/editorial-core.mjs';
+import {EDITORIAL_KINDS, EDITORIAL_STYLE, EDITORIAL_SYMBOLS, resolveEditorialModule, statusContrast} from '../kit/core/editorial-core.mjs';
 import {buildEditorialModule} from '../skills/launchclip-create-video/scripts/editorial-ui-modules.mjs';
 
 const corpus = JSON.parse(readFileSync(new URL('./fixtures/editorial-golden.json', import.meta.url), 'utf8'));
@@ -152,4 +152,56 @@ test('code-snippet label: "<language> · Example" by default, the real label whe
   assert.doesNotThrow(() => resolveEditorialModule({...spec({language: 'shell'}, {label: false}), rect: tight}));
   assert.throws(() => resolveEditorialModule(spec({source: 'yes'})), /code.source must be example or real/);
   assert.throws(() => resolveEditorialModule({...spec({}), kind: 'callout', code: undefined, body: 'Hi', label: 'x'}), /label is only for code-snippet/);
+});
+
+test('status-rack status palette: lights can go red → green, with contrast-checked tones; the default stays the accent', () => {
+  const rows = states => [{label: 'Tests', states}];
+  const spec = (states, extra = {}) => ({id: 'rack', kind: 'status-rack', aspect: '16:9', start: 0, duration: 4, rect: {x: 400, y: 200, width: 1100, height: 400}, title: 'Quality gates', accent: '#ffa630',
+    rack: {mode: 'illustration', rows: rows(states)}, ...extra});
+  const lights = (on) => [on, on, on];
+  // Default: lit lights are the accent and a repeated state changes nothing.
+  const plain = resolveEditorialModule(spec([{at: .4, lights: lights(true)}, {at: 1.2, lights: lights(true)}]));
+  assert.deepEqual(plain.content.rows[0].states[0].changes.map(change => change.color), ['#ffa630', '#ffa630', '#ffa630']);
+  assert.deepEqual(plain.content.rows[0].states[1].changes, []);
+  assert.equal(plain.content.palette, undefined);
+  // Tones: fail then pass recolours the lit lights; the colour change alone is a state change (with its event).
+  const toned = resolveEditorialModule(spec([{at: .4, lights: lights(true), tone: 'fail'}, {at: 1.2, lights: lights(true), tone: 'pass'}]));
+  const {tones} = toned.content;
+  assert.equal(toned.content.palette, 'status');
+  assert.deepEqual(toned.content.rows[0].states[0].changes.map(change => change.color), [tones.fail, tones.fail, tones.fail]);
+  assert.deepEqual(toned.content.rows[0].states[1].changes.map(change => change.color), [tones.pass, tones.pass, tones.pass]);
+  assert.ok(toned.events.some(event => event.id === 'rack-rack-0-state-1'));
+  assert.notEqual(tones.pass, tones.fail);
+  for (const tone of ['pending', 'active', 'pass', 'fail']) assert.ok(statusContrast(tones[tone], toned.theme.surface) >= 3, tone);
+  assert.equal(tones.active, '#ffa630');
+  // palette "status": positions mean fail, active, pass; a light may name its own tone.
+  const positional = resolveEditorialModule(spec([{at: .4, lights: [true, false, false]}, {at: 1.2, lights: [false, false, true]}], {palette: 'status'}));
+  assert.equal(positional.content.rows[0].states[0].changes[0].color, positional.content.tones.fail);
+  assert.equal(positional.content.rows[0].states[1].changes.find(change => change.light === 2).color, positional.content.tones.pass);
+  const named = resolveEditorialModule(spec([{at: .4, lights: ['fail', false, 'pending']}]));
+  assert.deepEqual(named.content.rows[0].states[0].colors, [named.content.tones.fail, named.content.lightOff, named.content.tones.pending]);
+  // Supplied tones that fail 3:1 on the light surface are darkened toward the foreground.
+  const light = resolveEditorialModule(spec([{at: .4, lights: lights(true), tone: 'pass'}], {theme: {surface: '#ffffff', foreground: '#111111', muted: '#555555', border: '#cccccc'}, tones: {pass: '#a8f0c0'}}));
+  assert.ok(statusContrast(light.content.tones.pass, '#ffffff') >= 3);
+  assert.notEqual(light.content.tones.pass, '#a8f0c0');
+  // Both renderers draw change.color: the HyperFrames timeline tweens to the pass tone.
+  assert.match(buildEditorialModule(spec([{at: .4, lights: lights(true), tone: 'fail'}, {at: 1.2, lights: lights(true), tone: 'pass'}])).motion, new RegExp(`backgroundColor:"${tones.pass}"`));
+  assert.throws(() => resolveEditorialModule(spec([{at: .4, lights: lights(true), tone: 'green'}])), /tone must be pending, active, pass, fail/);
+  assert.throws(() => resolveEditorialModule(spec([{at: .4, lights: ['ok', true, true]}])), /each a boolean or a tone/);
+  assert.throws(() => resolveEditorialModule(spec([{at: .4, lights: lights(true)}], {palette: 'rgb'})), /palette must be "status"/);
+  assert.throws(() => resolveEditorialModule({...spec([]), kind: 'callout', rack: undefined, body: 'Hi', palette: 'status'}), /palette is only for status-rack/);
+});
+
+test('status-rack status palette takes pass and fail from brand roles through the module registry', async () => {
+  const {resolveModule} = await import('../kit/core/modules.mjs');
+  const story = colors => ({format: {width: 1920, height: 1080, fps: 30, duration: 5}, brand: {colors}, scenes: []});
+  const scene = params => ({id: 'gates', module: 'status-rack', start: 0, end: 4, params: {title: 'Gates', rect: {x: 400, y: 200, width: 1100, height: 400}, rack: {mode: 'illustration', rows: [{label: 'Tests', states: [{at: .4, lights: [true, true, true], tone: 'fail'}, {at: 1.2, lights: [true, true, true], tone: 'pass'}]}]}, ...params}});
+  const brand = {bg: '#0a0b10', paper: '#f3efe6', primary: '#ffa630', success: '#22c55e', danger: '#ef4444'};
+  const model = resolveModule(scene({}), story(brand));
+  assert.equal(model.content.tones.pass, '#22c55e');
+  assert.equal(model.content.tones.fail, '#ef4444');
+  // A plain rack ignores the brand roles: no tones, accent lights.
+  const plain = resolveModule(scene({rack: {mode: 'illustration', rows: [{label: 'Tests', states: [{at: .4, lights: [true, false, false]}]}]}}), story(brand));
+  assert.equal(plain.content.tones, undefined);
+  assert.equal(plain.content.rows[0].states[0].changes[0].color, '#ffa630');
 });

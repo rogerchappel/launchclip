@@ -1,0 +1,122 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "lane": "motion",
+    "format": {
+      "width": 1920,
+      "height": 1080,
+      "fps": 30,
+      "duration": 10
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b0d12",
+        "primary": "#ff6a00",
+        "paper": "#f4efe6",
+        "ink": "#171612"
+      },
+      "fonts": {
+        "display": "system-ui",
+        "body": "system-ui"
+      }
+    },
+    "scenes": [
+      {
+        "id": "rack",
+        "module": "status-rack",
+        "start": 1,
+        "end": 9,
+        "params": {
+          "title": "Pipeline status",
+          "rect": {
+            "x": 200,
+            "y": 200,
+            "width": 900,
+            "height": 520
+          },
+          "rack": {
+            "mode": "illustration",
+            "rows": [
+              {
+                "label": "Build",
+                "states": [
+                  {
+                    "at": 0.6,
+                    "lights": [
+                      true,
+                      true,
+                      true
+                    ],
+                    "tone": "fail"
+                  },
+                  {
+                    "at": 1.6,
+                    "lights": [
+                      true,
+                      true,
+                      true
+                    ],
+                    "tone": "active"
+                  },
+                  {
+                    "at": 2.6,
+                    "lights": [
+                      true,
+                      true,
+                      true
+                    ],
+                    "tone": "pass"
+                  }
+                ]
+              },
+              {
+                "label": "Test",
+                "states": [
+                  {
+                    "at": 1,
+                    "lights": [
+                      true,
+                      false,
+                      false
+                    ]
+                  },
+                  {
+                    "at": 2.2,
+                    "lights": [
+                      false,
+                      false,
+                      true
+                    ]
+                  }
+                ]
+              },
+              {
+                "label": "Deploy",
+                "states": [
+                  {
+                    "at": 1.4,
+                    "lights": [
+                      "pending",
+                      false,
+                      false
+                    ]
+                  },
+                  {
+                    "at": 3.4,
+                    "lights": [
+                      false,
+                      "active",
+                      "pass"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "palette": "status"
+        }
+      }
+    ]
+  },
+  "sceneId": "rack"
+}

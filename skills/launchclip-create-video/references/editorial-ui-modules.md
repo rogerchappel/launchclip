@@ -452,7 +452,7 @@ cards. Omit `treatment` to retain the original callout output exactly.
 | Kind | Required content |
 | --- | --- |
 | `date-card` | `date: {month: 1..12, day: 1..31, year?, caption?, at}`; calendar-valid integers, optional caption ≤42 characters |
-| `status-rack` | `rack: {mode: "illustration" or "data", source?, rows: [{label, states: [{at, lights: [boolean, boolean, boolean]}]}]}`; 1–8 rows, 1–8 states per row |
+| `status-rack` | `rack: {mode: "illustration" or "data", source?, rows: [{label, states: [{at, lights: [boolean, boolean, boolean], tone?}]}]}`; 1–8 rows, 1–8 states per row; optional top-level `palette: "status"` and `tones: {pending?, active?, pass?, fail?}` |
 | `code-snippet` | `code: {language?, source?: "example" or "real", filename?, lines: [{at, tokens: [{text, type}]}]}`; 1–3 lines, 1–24 tokens per line; optional top-level `label` (string ≤40, or `false` to hide the label row) |
 
 The date card uses a colored month band, a large independently settling day, and
@@ -468,6 +468,19 @@ lights emits no extra sound event. Illustration mode retains a visible label;
 real data requires a source attribution. A light turning on represents the
 supplied state, not a software/security certification. Shorten labels to fit the
 chosen width; the helper rejects overfull racks.
+
+By default every lit light is the accent (brand primary), so a rack cannot show
+red turning green. Opt in to the status palette with `palette: "status"`: the
+three lights then mean fail, active and pass by position (red, primary, green).
+A state's `tone` (`pending`, `active`, `pass` or `fail`) colours all of its lit
+lights, and a light may name its own tone instead of `true`
+(`lights: [false, false, "pass"]`). So `{"at": 0.4, "lights": [true, true, true],
+"tone": "fail"}` then `{"at": 1.2, "lights": [true, true, true], "tone": "pass"}`
+turns a row from red to green; a colour change alone counts as a state change.
+Pending is the muted foreground, active the accent, and pass and fail a green and
+a red; `brand.colors.pass` (or `success`) and `brand.colors.fail` (or `danger`,
+`error`) replace the derived ones, as does an explicit `tones` object. Every tone
+is pushed toward the foreground until it clears 3:1 against the panel surface.
 
 Code token types are `plain`, `keyword`, `string`, `number`, `comment`, and
 `operator`. Explicit typed tokens receive restrained syntax colors, and each
