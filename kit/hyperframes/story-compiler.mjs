@@ -24,6 +24,8 @@ import { deriveBoundaries, storyBase, validateStory } from '../core/story.mjs';
 import { knownModules, placeholderModel, PLACEHOLDER_STYLE, resolveModule } from '../core/modules.mjs';
 import { gsapVars, layerStateAt, sceneWindows } from '../core/transitions.mjs';
 import { getEase } from '../core/motion.mjs';
+import { ambientField, blobBackground, blobStateAt, blobTweens, driftGsap, sceneAmbient, sceneDrift } from '../core/ambient.mjs';
+import { profileGeometry } from '../core/layout-check.mjs';
 import { captionCss, CAPTION_DEFAULT_COLORS, captionChunksFrom, captionRuntime, chunkWords, narrationWords } from '../core/captions.mjs';
 import { brandFontStacks, fontFaceRule, fontSlug, frozenFontFaces, projectFontFamilies, registryFontFaces } from '../core/fonts.mjs';
 import { EMITTERS as EDITORIAL_EMITTERS } from './editorial-ui-modules.mjs';
@@ -105,6 +107,20 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   const motion = [];
   const hide = [];
   const boundaries = isolate ? [] : deriveBoundaries(story);
+  // Ambient motion (kit/core/ambient.mjs): the background field inside every
+  // track-0 plate and the hold drift wrapper around each scene's content. A
+  // sceneFilter compile is a module review and, like ModuleReview, has none.
+  const field = isolate ? null : ambientField(story);
+  const geometry = profileGeometry({ width: W, height: H });
+  const fieldLayer = (key, from, to) => {
+    if (!field) return { html: '', motion: [] };
+    const html = field.blobs.map((blob) => {
+      const state = blobStateAt(blob, from);
+      return `<div id="lc-amb-${key}-${blob.id}" class="lc-ambient-blob" style="width:${num(blob.size)}px;height:${num(blob.size)}px;background:${blobBackground(blob)};transform:translate(${num(state.x)}px, ${num(state.y)}px) scale(${round(state.scale, 5)})"></div>`;
+    }).join('');
+    const lines = field.blobs.flatMap((blob) => blobTweens(blob, from, to).map((tw) => `tl.fromTo(${js(`#lc-amb-${key}-${blob.id}`)}, ${js({ [tw.prop]: tw.from, force3D: false })}, ${js({ [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false, force3D: false })}, ${num(tw.at)});`));
+    return { html: `<div class="lc-ambient-field" aria-hidden="true">${html}</div>`, motion: lines };
+  };
   const boundaryFor = new Map(boundaries.map((entry) => [entry.to_id, entry]));
   let z = 10;
 
@@ -153,11 +169,19 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       if (follow.unsupported.length) warnings.push(`${entry.scene.id}: root media does not follow the ${follow.unsupported.join(', ')} of its ${entry.transitionIn?.type ?? 'transition'} (HyperFrames keeps <video>/<audio> on the root)`);
     }
     const boundary = boundaryFor.get(entry.scene.id);
-    markup.push(`<div id="${outer}" class="lc-scene${entry.plate ? ' lc-plate' : ''}" data-launchclip-scene="${id}" data-launchclip-module="${attr(entry.scene.module)}" data-launchclip-start="${num(entry.start)}" data-launchclip-render-end="${num(entry.renderEnd)}"${boundaryAttrs(boundary)} style="z-index:${z}"><div id="${inner}" class="lc-layer">${media.html}</div></div>`);
+    const ambient = entry.plate && sceneAmbient(story, entry.scene).background ? fieldLayer(id, entry.start, entry.renderEnd) : { html: '', motion: [] };
+    const drift = isolate ? null : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry });
+    const content = drift ? `<div id="lc-drift-${id}" class="lc-drift" style="transform-origin:${num(drift.origin.x)}px ${num(drift.origin.y)}px">${media.html}</div>` : media.html;
+    markup.push(`<div id="${outer}" class="lc-scene${entry.plate ? ' lc-plate' : ''}" data-launchclip-scene="${id}" data-launchclip-module="${attr(entry.scene.module)}" data-launchclip-start="${num(entry.start)}" data-launchclip-render-end="${num(entry.renderEnd)}"${boundaryAttrs(boundary)} style="z-index:${z}"><div id="${inner}" class="lc-layer">${ambient.html}${content}</div></div>`);
     css.push(out.css ?? '');
     motion.push(`// ${entry.scene.id} (${entry.scene.module}) ${num(entry.start)}–${num(entry.renderEnd)}s`);
     motion.push(...toggle(`#${outer}`, entry.start, entry.renderEnd, D));
     motion.push(...entry.tweens.map((tw) => tweenCode(`#${inner}`, tw)));
+    motion.push(...ambient.motion);
+    if (drift) {
+      const { from, to, position } = driftGsap(drift);
+      motion.push(`tl.fromTo(${js(`#lc-drift-${id}`)}, ${js(from)}, ${js(to)}, ${num(position)});`);
+    }
     if (out.motion) motion.push(`{\n${out.motion}\n}`);
     motion.push(...mediaMotion);
     z += 10;
@@ -172,7 +196,11 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const outer = `lc-scene-${id}`, inner = `lc-layer-${id}`;
     const media = hoistMedia(out.html ?? '');
     const boundary = boundaries.find((item) => item.to_id === loop.sceneId && Math.abs(item.start_seconds - loop.start) < 1e-3);
-    markup.push(`<div id="${outer}" class="lc-scene lc-plate lc-loop" data-launchclip-scene="${id}" data-launchclip-loop-to="${attr(loop.sceneId)}" data-launchclip-start="${num(loop.start)}"${boundaryAttrs(boundary)} style="z-index:${z}"><div id="${inner}" class="lc-layer">${unclip(media.html)}</div></div>`);
+    // The clone holds the scene's first state, where its drift is identity;
+    // the field keeps moving with absolute time.
+    const ambient = sceneAmbient(story, entry.scene).background ? fieldLayer(id, loop.start, loop.end) : { html: '', motion: [] };
+    markup.push(`<div id="${outer}" class="lc-scene lc-plate lc-loop" data-launchclip-scene="${id}" data-launchclip-loop-to="${attr(loop.sceneId)}" data-launchclip-start="${num(loop.start)}"${boundaryAttrs(boundary)} style="z-index:${z}"><div id="${inner}" class="lc-layer">${ambient.html}${unclip(media.html)}</div></div>`);
+    motion.push(...ambient.motion);
     if (media.elements.length) warnings.push(`${loop.sceneId}: root media is not repeated in the loop ending`);
     css.push(out.css ?? '');
     motion.push(`// loop ending → ${loop.sceneId} at its first state, ${num(loop.start)}–${num(loop.end)}s`);
@@ -245,6 +273,9 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     .lc-scene { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; opacity: 0; isolation: isolate; overflow: hidden; pointer-events: none; }
     .lc-layer { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; }
     .lc-plate > .lc-layer { background: ${bg}; }
+    .lc-ambient-field { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; overflow: hidden; pointer-events: none; }
+    .lc-ambient-blob { position: absolute; left: 0; top: 0; border-radius: 50%; transform-origin: 50% 50%; }
+    .lc-drift { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; }
     ${placeholderCss()}
     ${captions ? `${captionCss(format).trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}
     ${css.filter(Boolean).join('\n    ')}
