@@ -5,10 +5,10 @@
 // Times sit on the 30 fps frame grid: Remotion renders whole frames, so an
 // off-grid time inside a whip-pan compares two different frames.
 //
-// Thresholds: cuts-mode camera moves hold the usual 0.97. World mode draws
-// the parallax background's soft brand glows, whose gradient dithering the
-// two Chrome pipelines rasterise differently (SSIM 0.968–0.976 on otherwise
-// identical frames; 0.997 after a 2 px blur), so world stills use 0.965.
+// Both hold the usual 0.97 (world-camera-9x16 measured 0.987–0.994 at these
+// times). The parallax glows are small separate gradient elements on a fixed
+// lattice: one huge multi-gradient layer, scaled with the zoom, dithered
+// differently in the two Chrome pipelines and fell to 0.956.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -20,7 +20,7 @@ const enabled = process.env.LAUNCHCLIP_PARITY === '1';
 
 export const CAMERA_PARITY = Object.freeze([
   {id: 'explainer-9x16', threshold: 0.97, times: [3.2, 4.6, 4.7, 4.8, 9.5]},
-  {id: 'world-camera-9x16', threshold: 0.965, times: [1.2, 3.0, 3.1, 9.4, 12.5, 16.0, 18.0, 20.7, 22.6, 22.8, 22.9]}
+  {id: 'world-camera-9x16', threshold: 0.97, times: [1.2, 3.0, 3.1, 9.4, 12.5, 16.0, 18.0, 20.7, 22.6, 22.8, 22.9]}
 ]);
 
 for (const {id, threshold, times} of CAMERA_PARITY) {

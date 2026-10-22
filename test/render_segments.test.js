@@ -56,12 +56,12 @@ test("planSegments cuts at layer changes: scene bodies and whole transition over
   assert.equal(plan.segments[0].startFrame, 0);
   assert.equal(plan.segments.at(-1).endFrame, 780);
   for (let i = 1; i < plan.segments.length; i += 1) assert.equal(plan.segments[i].startFrame, plan.segments[i - 1].endFrame);
-  // s2 pushes in over 0.45 s from 4.4 s: s1 is held until the push settles, and
-  // the whole overlap (frames 132–146) is one segment holding both scenes.
+  // The camera pans down into s2 over 0.6 s from 4.4 s: s1 is held until the
+  // pan settles, and the whole overlap (frames 132–150) is one segment holding both scenes.
   const s1 = segmentLayers(story).find((layer) => layer.key === "s1");
-  assert.deepEqual([s1.from, s1.to], [0, 146]);
-  const push = plan.segments[1];
-  assert.deepEqual([push.startFrame, push.endFrame, push.scenes], [132, 146, ["s1", "s2"]]);
+  assert.deepEqual([s1.from, s1.to], [0, 150]);
+  const pan = plan.segments[1];
+  assert.deepEqual([pan.startFrame, pan.endFrame, pan.scenes], [132, 150, ["s1", "s2"]]);
   // The fade loop ending overlaps s5 for its last 0.4 s.
   assert.deepEqual([plan.segments.at(-1).startFrame, plan.segments.at(-1).scenes], [768, ["s5", "s1"]]);
   assert.deepEqual(segmentsForScenes(plan.segments, ["s3"]).map((segment) => segment.label), ["s2+s3", "s3", "s3+s4"]);
@@ -120,6 +120,51 @@ test("a transition edit invalidates the segments of both scenes it joins", async
   // The loop ending's transition changes the last plate and the loop layer only.
   const ending = await hashes((story) => { story.ending.in = { type: "fade", dur: 0.4, direction: "left" }; });
   assert.deepEqual(changed(before, ending), ["s5+s1~loop"]);
+});
+
+test("the world camera path is hashed per segment: one pan direction invalidates the segments it moves", async () => {
+  const story = async (mutate = () => {}) => {
+    const dir = path.join(ROOT, "examples/story/world-camera-9x16");
+    const value = JSON.parse(await readFile(path.join(dir, "storyboard.json"), "utf8"));
+    mutate(value);
+    const words = narrationWords(JSON.parse(await readFile(path.join(dir, "NARRATION.json"), "utf8")));
+    return { story: resolveStory(value, { words }), words };
+  };
+  const hashOf = async (mutate) => {
+    const { story: resolved, words } = await story(mutate);
+    const plan = planSegments(resolved);
+    return Object.fromEntries(hashSegments(resolved, plan, inputsFor(resolved, words)).map((segment) => [segment.label, segment.hash]));
+  };
+  const before = await hashOf();
+  assert.deepEqual(Object.keys(before), ["s1", "s1+s2", "s2", "s2+s3", "s3", "s3+s4", "s4", "s4+s5", "s5", "s5+s1~loop"]);
+  // s3's pan goes left instead of down: the camera path changes from that move
+  // on (s3, s4 and s5 sit elsewhere, the parallax layer has travelled
+  // differently, the whip-pan home is longer). s1 and s2 never see it: the
+  // move into s2 and everything before s3's pan are unchanged.
+  const left = await hashOf((value) => { value.scenes[2].in.direction = "left"; });
+  assert.deepEqual(changed(before, left), ["s2+s3", "s3", "s3+s4", "s4", "s4+s5", "s5", "s5+s1~loop"]);
+  // Only the camera digest catches s5 and the loop ending: their scenes and
+  // transitions did not change, but the camera arrives there from elsewhere
+  // and the parallax layer has travelled differently.
+  const { story: resolved, words } = await story((value) => { value.scenes[2].in.direction = "left"; });
+  const plan = planSegments(resolved);
+  const hashed = hashSegments(resolved, plan, inputsFor(resolved, words));
+  const { story: original, words: originalWords } = await story();
+  const base = hashSegments(original, planSegments(original), inputsFor(original, originalWords));
+  for (const label of ["s5", "s5+s1~loop"]) {
+    const now = hashed.find((entry) => entry.label === label), then = base.find((entry) => entry.label === label);
+    assert.equal(now.parts.layers, then.parts.layers, `${label} layers are unchanged`);
+    assert.notEqual(now.parts.camera, then.parts.camera, `${label} camera changed`);
+  }
+  // A later move leaves earlier segments alone.
+  const orbit = await hashOf((value) => { value.scenes[4].in.direction = "left"; });
+  assert.deepEqual(changed(before, orbit), ["s4+s5", "s5", "s5+s1~loop"]);
+  const segment = hashed.find((entry) => entry.label === "s4");
+  assert.ok(segment.parts.camera, "camera stories carry a camera part");
+  // A cuts story without camera transitions has no camera part at all.
+  const cuts = await explainer((value) => { value.scenes[1].in = { type: "push", dur: 0.45, direction: "up" }; });
+  const cutsPlan = planSegments(cuts.story);
+  assert.equal(hashSegments(cuts.story, cutsPlan, inputsFor(cuts.story, cuts.words))[0].parts.camera, undefined);
 });
 
 test("captions invalidate the segments their chunks are on screen in, and a chunk crossing a join both", async () => {
@@ -261,7 +306,7 @@ test("renderWithSegments renders missing segments, reuses cached ones, forces --
     assert.deepEqual([first.segments, first.reused, first.rendered], [10, 0, 10]);
     assert.equal(fake.calls[0].length, 10);
     const joined = await readFile(options.output, "utf8");
-    assert.match(joined, /^encoded\n0-132\n132-146\n/);
+    assert.match(joined, /^encoded\n0-132\n132-150\n/);
     assert.match(joined, /768-780\n$/);
     assert.deepEqual(log.find((entry) => entry[0] === "encodeAudio"), ["encodeAudio", "mix.m4a", 1, 26]);
     assert.deepEqual(log.find((entry) => entry[0] === "mux"), ["mux", ".m4a", 0, undefined]);

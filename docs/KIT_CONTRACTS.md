@@ -486,12 +486,19 @@ Renderers:
   `opsStateAt` and `blurAt`; `SceneLayer` takes the placement, a transparent
   plate flag and the overlay parallax ops.
 
-Parity: cuts-mode camera moves hold SSIM ≥ 0.97 (explainer-9x16 mid-pan
-0.997). In world mode the parallax glows are soft gradients that the two
-Chrome pipelines dither differently (0.968–0.976 on otherwise identical
-frames, 0.997 after a 2 px blur), so the world golden uses 0.965
-(`eval/renderer-thresholds.json`, `test/parity_camera.test.js`). Blurred
-whip-pan frames match (≥ 0.970) when compared on the frame grid.
+Parity: camera stories hold the usual SSIM 0.97 (explainer-9x16 mid-pan
+0.997; world-camera-9x16 0.987–0.994 at rest, mid-pan, mid-push, orbit and on
+blurred whip-pan frames, compared on the frame grid; `test/parity_camera.test.js`).
+The depth layer's glows are small separate gradient elements on a fixed
+lattice that never scale: one huge multi-gradient layer scaled with the zoom
+dithered differently in the two Chrome pipelines (0.956).
+
+Partial re-render (`src/render_segments.js`): the camera path is derived
+across scenes, so each segment's hash has a `camera` part built from what the
+camera puts on screen during its frames (container states and blur per frame,
+its plates' placements, its overlays' parallax, the lattice glows that cross
+the canvas). Changing one scene's pan direction re-renders the segments from
+that move on, including later scenes whose own fields did not change.
 
 ## Footage-led lane (RFC phase 6)
 

@@ -14,7 +14,10 @@
 // crosses a join is in the hash of both segments), timed overlays in its
 // window, the global settings (brand, format, lane, style, camera, ambient …
 // every top-level field that is not a scene, an overlay or audio-only), the
-// footage base and its camera path, the fonts, a content hash of the kit
+// footage base and its camera path, the world camera's state on every frame of
+// the segment (kit/core/camera-world.mjs: the path is derived across scenes,
+// so editing one scene's camera transition moves the camera, the parallax
+// layer and the overlays in later segments too), the fonts, a content hash of the kit
 // sources that render, the renderer and the segment encoder. Segments are
 // cached by hash in .launchclip/finish/segments/<renderer>/<hash>.mp4.
 //
@@ -33,6 +36,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { captionChunksFrom, chunkWords, narrationWords, visibleChunks } from "../kit/core/captions.mjs";
 import { cameraOps } from "../kit/core/catalog-c.mjs";
+import { backgroundLayer, blurAt, cameraPlan, containerState, objectRectFromModel, opsStateAt, overlayOps } from "../kit/core/camera-world.mjs";
 import { allFontFaces } from "../kit/core/fonts.mjs";
 import { resolveModule } from "../kit/core/modules.mjs";
 import { storyBase } from "../kit/core/story.mjs";
@@ -364,6 +368,7 @@ function layerDigest(layer, story, byId) {
 export function hashSegments(story, plan, inputs, { encoder = null } = {}) {
   const byId = new Map((story.scenes ?? []).map((scene) => [scene.id, scene]));
   const layersByKey = new Map(plan.layers.map((layer) => [layer.key, layer]));
+  const camera = segmentCamera(story, inputs.models ?? sceneModels(story), plan.fps);
   const global = hashValue(globalSettings(story, { models: inputs.models ?? sceneModels(story), base: inputs.base ?? null }));
   const { width, height } = storyFrames(story);
   const timedOverlays = (Array.isArray(story.overlays) ? story.overlays : []).filter((entry) => entry?.type !== "captions" && hasWindow(entry));
@@ -377,7 +382,8 @@ export function hashSegments(story, plan, inputs, { encoder = null } = {}) {
       layers: hashValue(layers.map((layer) => layerDigest(layer, story, byId))),
       captions: hashValue((inputs.captions ?? []).filter((chunk) => chunk.start - CAPTION_LEAD <= last + 1e-9 && chunk.end + CAPTION_TAIL >= first - 1e-9)),
       overlays: hashValue(timedOverlays.filter((entry) => Number(entry.start ?? 0) <= last + 1e-9 && Number(entry.end ?? Infinity) >= first - 1e-9)),
-      assets: hashValue(Object.fromEntries(collectAssets(scenes).map((asset) => [asset, inputs.assets?.[asset] ?? null])))
+      assets: hashValue(Object.fromEntries(collectAssets(scenes).map((asset) => [asset, inputs.assets?.[asset] ?? null]))),
+      ...(camera ? { camera: hashValue(camera(segment, layers)) } : {})
     };
     const hash = hashValue({
       schema: SEGMENT_SCHEMA,
@@ -392,6 +398,52 @@ export function hashSegments(story, plan, inputs, { encoder = null } = {}) {
     });
     return { ...segment, hash, parts };
   });
+}
+
+/**
+ * The world camera (kit/core/camera-world.mjs) as a per-segment digest, or
+ * null when the story has no camera. The camera path is derived across scenes
+ * (every plate's placement follows from the transitions before it, the
+ * parallax layer accumulates every move, pushes read another scene's object),
+ * so a segment hashes what the camera puts on screen during its frames rather
+ * than its own scenes: the container states and blur on every frame, the
+ * placements of its plates, its overlays' parallax and the depth-layer glows
+ * that pass through the canvas. → (segment, layers) => digest
+ */
+export function segmentCamera(story, models, fps) {
+  const objects = (sceneId, name) => objectRectFromModel(models.get(sceneId), name);
+  const plan = cameraPlan(story, { windows: sceneWindows(story), objects });
+  if (!plan) return null;
+  const glows = plan.parallax ? backgroundLayer(plan, story.brand).glows : [];
+  const r4 = (value) => Math.round(value * 1e4) / 1e4;
+  const state = (t) => {
+    const c = containerState(plan, t);
+    return [c.pan.x, c.pan.y, c.zoom.scale, c.zoom.rotation, c.drift.x, c.drift.y, c.drift.scale, c.background.x, c.background.y, c.background.rotation].map(r4);
+  };
+  return (segment, layers) => {
+    const frames = [];
+    const seen = new Set();
+    const overlays = layers.filter((layer) => layer.kind === "scene" && !layer.entry.plate)
+      .map((layer) => ({ key: layer.key, ops: overlayOps(plan, { start: layer.entry.start, end: layer.entry.renderEnd }) }))
+      .filter((entry) => entry.ops.length);
+    for (let frame = segment.startFrame; frame < segment.endFrame; frame += 1) {
+      const t = frame / fps;
+      const blur = blurAt(plan, t);
+      frames.push([...state(t), r4(blur.x), r4(blur.y), ...overlays.map((entry) => { const o = opsStateAt(entry.ops, "overlay", t); return [r4(o.x ?? 0), r4(o.y ?? 0)]; })]);
+      const bg = containerState(plan, t).background;
+      glows.forEach((glow, index) => {
+        const x = glow.left + bg.x, y = glow.top + bg.y, pad = glow.size * 0.1;
+        if (x < plan.width + pad && x + glow.size > -pad && y < plan.height + pad && y + glow.size > -pad) seen.add(index);
+      });
+    }
+    return {
+      mode: plan.mode,
+      frames,
+      placements: layers.map((layer) => [layer.key, layer.kind === "loop" ? plan.loop : plan.placements[layer.key] ?? null]),
+      overlays: overlays.map((entry) => entry.key),
+      glows: [...seen].sort((a, b) => a - b).map((index) => glows[index])
+    };
+  };
 }
 
 /** Segments that show any of the given scene ids. */
