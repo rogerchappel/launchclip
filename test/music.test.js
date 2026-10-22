@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { loadCliEnv, loadDotEnv, parseDotEnv } from "../src/env.js";
+import { envSearchDirectories, loadCliEnv, loadDotEnv, parseDotEnv } from "../src/env.js";
 import { create as createElevenLabsMusic, musicCacheDir, musicCacheKey } from "../src/music/elevenlabs.js";
 import { MUSIC_PROVIDERS, getMusicProvider, parseMusicSpec, resolveMusicChoice } from "../src/music/index.js";
 import { buildMusicRequest, energyArc, normalizeHints, planSections, storyEnergySegments } from "../src/music/prompt.js";
@@ -113,6 +113,39 @@ test("loadCliEnv reads the working directory first, then a project command's dir
     // Non-project commands only read the working directory.
     const other = {};
     assert.deepEqual(loadCliEnv(["doctor"], { cwd: dir, env: other }), [path.join(dir, ".env")]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("loadCliEnv walks up from the project to the repo root without overriding", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-env-walk-"));
+  try {
+    // dir/outside/.env must never load: dir/repo holds .git (a worktree file).
+    const repo = path.join(dir, "repo");
+    const project = path.join(repo, "launch", "landscape");
+    const elsewhere = path.join(dir, "elsewhere");
+    await mkdir(project, { recursive: true });
+    await mkdir(elsewhere);
+    await writeFile(path.join(dir, ".env"), "ABOVE_REPO=leak\n");
+    await writeFile(path.join(repo, ".git"), "gitdir: /somewhere/else\n");
+    await writeFile(path.join(repo, ".env"), "ELEVENLABS_API_KEY=from-repo\nSHELL_SET=file\n");
+    await writeFile(path.join(repo, "launch", ".env"), "MIDDLE=1\n");
+    const env = { SHELL_SET: "shell" };
+    const loaded = loadCliEnv(["finish", project], { cwd: elsewhere, env });
+    assert.deepEqual(loaded, [path.join(repo, "launch", ".env"), path.join(repo, ".env")]);
+    assert.equal(env.ELEVENLABS_API_KEY, "from-repo");
+    assert.equal(env.MIDDLE, "1");
+    assert.equal(env.SHELL_SET, "shell");
+    assert.equal(env.ABOVE_REPO, undefined);
+    // Running from inside the project dir (finish .) finds the repo .env too.
+    const fromProject = {};
+    loadCliEnv(["finish", "."], { cwd: project, env: fromProject });
+    assert.equal(fromProject.ELEVENLABS_API_KEY, "from-repo");
+    // The walk is capped: 6 levels above the project at most.
+    const deep = path.join(dir, "a", "b", "c", "d", "e", "f", "g", "h");
+    assert.equal(envSearchDirectories(deep).length, 7);
+    assert.equal(envSearchDirectories(project).at(-1), repo);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

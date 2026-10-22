@@ -2,7 +2,9 @@
 //
 // At startup the CLI reads `.env` from the current working directory and,
 // for commands that take a project or workspace directory, from that
-// directory too. Variables already set (in the shell, or by an earlier file)
+// directory and then each parent up to the repository root (the first
+// directory holding `.git`, a directory or a worktree's file), at most
+// MAX_ENV_WALK levels above the project, or the filesystem root. Variables already set (in the shell, or by an earlier file)
 // always win: a .env file never overrides them. Values are never printed.
 //
 // Node 20.12+/22 ships process.loadEnvFile, which already keeps existing
@@ -70,11 +72,34 @@ export function parseDotEnv(text, { native = true } = {}) {
 }
 
 // Commands whose first argument is a project or workspace directory.
-const PROJECT_COMMANDS = new Set(["finish", "layout-check", "cinematic-check", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "produce"]);
+const PROJECT_COMMANDS = new Set(["finish", "voice", "layout-check", "cinematic-check", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "produce"]);
+
+// How many parent directories above a project the .env walk visits.
+export const MAX_ENV_WALK = 6;
+
+/**
+ * The directories whose .env a project command reads, nearest first: the
+ * project directory, then its parents until one holds `.git` (inclusive),
+ * the filesystem root, or MAX_ENV_WALK levels up.
+ */
+export function envSearchDirectories(projectDir, { maxLevels = MAX_ENV_WALK } = {}) {
+  const directories = [];
+  let current = path.resolve(projectDir);
+  for (let level = 0; level <= maxLevels; level += 1) {
+    directories.push(current);
+    if (existsSync(path.join(current, ".git"))) break;
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return directories;
+}
 
 /**
  * Load .env for one CLI invocation: the working directory first, then the
- * project directory of a project command. Returns the files that were read.
+ * project directory of a project command and its parents up to the repo root
+ * (see envSearchDirectories). Earlier files win; none overrides a variable
+ * that is already set. Returns the files that were read.
  */
 export function loadCliEnv(argv = [], { cwd = process.cwd(), env = process.env } = {}) {
   const loaded = [];
@@ -83,7 +108,9 @@ export function loadCliEnv(argv = [], { cwd = process.cwd(), env = process.env }
   if (command && firstArg && !String(firstArg).startsWith("-") && PROJECT_COMMANDS.has(command)) {
     const candidate = path.resolve(cwd, String(firstArg));
     const directory = isDirectory(candidate) ? candidate : path.dirname(candidate);
-    if (!directories.includes(directory)) directories.push(directory);
+    for (const entry of envSearchDirectories(directory)) {
+      if (!directories.includes(entry)) directories.push(entry);
+    }
   }
   for (const directory of directories) {
     if (loadDotEnv(directory, { env }) !== null) loaded.push(path.join(directory, ".env"));

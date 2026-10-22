@@ -736,8 +736,10 @@ The joined result is frame-identical to a fresh full render.
 
 `finish` picks the music: `--music synth|elevenlabs|none`, then
 `audio.music`, then ElevenLabs when `ELEVENLABS_API_KEY` is set (the CLI reads
-`.env` from the working and project directories without overriding the
-shell), else the license-free synth bed. `audio.music` takes `"synth"`,
+`.env` from the working directory, the project directory and each parent up to
+the repo root, without overriding the shell), else the license-free synth bed.
+If `finish` warns that ElevenLabs was asked for but the key is not set, it
+used the synth bed: stop and fix the key rather than shipping that mix. `audio.music` takes `"synth"`,
 `"none"`, an `assets/` path, or
 `{provider: "elevenlabs" | "synth" | "file", prompt?, bpm?, file?, sync?: "auto" | "off" | "cuts" | "hits"}`.
 
