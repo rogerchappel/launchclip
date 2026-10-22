@@ -323,3 +323,21 @@ test("renderers without frame ranges render whole videos, cached by the whole ti
     await rm(project, { recursive: true, force: true });
   }
 });
+
+test("Remotion segments are lossless; the delivery encode matches remotion render's settings", async () => {
+  const { DELIVERY, MEZZANINE, deliveryArgs, losslessArgs } = await import("../src/renderers/remotion_segments.js");
+  const encode = ["-i", "remotion", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast", "-video_track_timescale", "90000", "-crf", "18", "-vf", "copy", "-y", "out.mp4"];
+  assert.deepEqual(losslessArgs(encode).slice(10, 12), ["-qp", "0"]);
+  assert.ok(!losslessArgs(encode).includes("-crf"));
+  const stitch = ["-i", "pre.mp4", "-an", "-c:v", "copy", "-y", "out.mp4"];
+  assert.deepEqual(losslessArgs(stitch), stitch, "the stream-copy pass is left alone");
+  assert.throws(() => losslessArgs(["-c:v", "libvpx-vp9"]), /lossless segments need libx264/);
+  assert.equal(MEZZANINE.pixelFormat, "yuv420p");
+  assert.deepEqual(DELIVERY.draft, { crf: 28, x264Preset: "veryfast" });
+  const draft = deliveryArgs("in.mp4", "out.mp4", "draft");
+  assert.deepEqual(draft.slice(draft.indexOf("-c:v"), draft.indexOf("-an")), ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-video_track_timescale", "90000", "-crf", "28"]);
+  const high = deliveryArgs("in.mp4", "out.mp4", "high");
+  assert.ok(!high.includes("-preset"));
+  assert.equal(high[high.indexOf("-crf") + 1], "18");
+  assert.throws(() => deliveryArgs("a", "b", "ultra"), /unknown quality/);
+});

@@ -4,15 +4,23 @@
 // one selectComposition for all of them) with `frameRange`, video-only, as a
 // lossless H.264 mezzanine: libx264 -qp 0, yuv420p, a fresh IDR at frame 0 of
 // each file. Lossless segments join with a stream copy, and one delivery encode
-// with exactly the settings `remotion render` uses (same codec, pixel format,
-// CRF and preset, through Remotion's own bundled FFmpeg/x264) then gives the
-// same frames as a full render: the delivery encoder sees the same yuv420p
-// pictures in the same order. Encoding each segment at the delivery CRF and
-// joining those instead differs from a full render by x264 rate control at
-// every join (per-frame SSIM down to 0.99), so the mezzanine is what makes the
-// partial render frame-identical.
+// with exactly the settings `remotion render` uses (codec, pixel format, CRF
+// and preset, through Remotion's own bundled FFmpeg/x264) follows.
+//
+// Why a mezzanine: encoding each segment at the delivery CRF and joining those
+// differs from a single encode by x264 rate control at every join (per-frame
+// SSIM down to 0.99). From lossless segments the delivery encoder sees the
+// same pictures in the same order as in a full render, so whenever Chrome
+// draws the same pixels the result is bit-identical to `remotion render`.
+//
+// A given frame range always renders the same pixels, so a partial render
+// (cached segments plus re-rendered ones) is bit-identical to a fresh render
+// of every segment. Chrome can draw a few anti-aliased edge pixels (text
+// shadows, glows) one level apart depending on what the tab drew before a
+// frame, so frames right where a segment starts can differ from a single-pass
+// render by that much (mezzanine SSIM ≥ 0.9999).
 import { existsSync } from "node:fs";
-import { mkdir, readdir, rename, rm } from "node:fs/promises";
+import { mkdir, readdir, rename, rm, stat, utimes } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -72,14 +80,39 @@ async function cachedBundle({ entry, project, kitHash, bundleRoot }) {
   const key = createHash("sha256").update(JSON.stringify({ remotion: REMOTION_VERSION, entry: path.resolve(entry), project: path.resolve(project), kitHash, fonts })).digest("hex").slice(0, 24);
   const root = bundleRoot ?? path.join(os.tmpdir(), "launchclip-remotion-bundles");
   const dir = path.join(root, key);
-  if (existsSync(path.join(dir, "index.html")) && existsSync(path.join(dir, "bundle.js"))) return { serveUrl: dir, cached: true };
+  if (existsSync(path.join(dir, "index.html")) && existsSync(path.join(dir, "bundle.js"))) {
+    const now = new Date();
+    await utimes(dir, now, now).catch(() => {});
+    return { serveUrl: dir, cached: true };
+  }
   await mkdir(root, { recursive: true });
   const temporary = path.join(root, `${key}.${process.pid}.${Date.now()}`);
   const { bundle } = await import("@remotion/bundler");
   await bundle({ entryPoint: path.resolve(entry), publicDir: path.resolve(project), symlinkPublicDir: true, outDir: temporary, enableCaching: true, onProgress: () => {} });
   await rm(dir, { recursive: true, force: true });
   await rename(temporary, dir);
+  await pruneBundles(root, dir);
   return { serveUrl: dir, cached: false };
+}
+
+// A bundle is ~35 MB: keep the most recently used few, and never one used in
+// the last ten minutes (another render may be serving it).
+const KEEP_BUNDLES = 6;
+async function pruneBundles(root, current) {
+  let names;
+  try { names = await readdir(root); } catch { return; }
+  const bundles = [];
+  for (const name of names) {
+    const full = path.join(root, name);
+    if (full === current || !/^[0-9a-f]{24}$/.test(name)) continue;
+    const info = await stat(full).catch(() => null);
+    if (info?.isDirectory()) bundles.push({ full, mtime: info.mtimeMs });
+  }
+  bundles.sort((a, b) => b.mtime - a.mtime);
+  const cutoff = Date.now() - 10 * 60 * 1000;
+  for (const bundle of bundles.slice(KEEP_BUNDLES - 1)) {
+    if (bundle.mtime < cutoff) await rm(bundle.full, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 async function listFonts(project) {
