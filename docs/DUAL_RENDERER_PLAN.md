@@ -177,10 +177,42 @@ which also strengthens the HyperFrames path:
 
 ### Phase 7: Parity and quality eval
 
-- Extend `eval:production` with a renderer dimension: each fixed brief runs on
-  both paths, recording gate pass rate, critic score, render time and frame
-  diff against the other renderer.
-- The cross-model tiers from RFC §8 follow on top of this.
+- **Renderer dimension: done** (`npm run eval:renderers`, `src/renderer_eval.js`).
+  Five golden storyboards under `examples/story/` (cooling, minimal,
+  promo-16x9, explainer-9x16, data-story-9x16) cover every catalogue and
+  editorial module the stories use, phase-2 boundaries with shared-world
+  morphs, word-anchored hits, captions and a premixed audio track. For each
+  story and each renderer the eval compiles, renders the MP4 (timed), and runs
+  `story validate`, layout-check and the cinematic-check motion and audio
+  analyses on the MP4. Across the two MP4s it measures frame parity (ffmpeg
+  SSIM on frames extracted at the temporal-evidence schedule of the derived
+  boundaries, plus a per-frame SSIM scan), frame counts, loudness (LUFS, true
+  peak) and the decoded audio (stream match, offset, aligned residual). It
+  writes `qa/renderer-eval/report.json` and `report.md` (a table per story
+  and contact sheets of the worst-matching frames side by side) and exits
+  non-zero when a threshold in `eval/renderer-thresholds.json` fails.
+- Still to do: the gate pass rate and critic score per fixed brief from
+  `eval:production`, and the cross-model tiers from RFC §8 on top of this.
+
+```bash
+npm run eval:renderers                                  # all five stories, draft quality
+npm run eval:renderers -- --stories minimal,promo-16x9 --out qa/renderer-eval
+npm run eval:renderers -- --thresholds eval/renderer-thresholds.json --worst 6
+```
+
+Thresholds (`eval/renderer-thresholds.json`, overridable per story under
+`stories.<id>`): SSIM ≥ 0.97 at every scheduled frame, frame counts equal
+within one frame (between renderers and against the story), integrated
+loudness within 0.5 LU and true peak within 1 dB, matching audio streams with
+at most 25 ms offset and an aligned residual at or below -30 dB, and the
+validate, layout, compile (no placeholders) and audio gates passing. The
+motion gate runs in `"report"` mode: the golden stories hold settled editorial
+frames, so both renderers measure below the cinematic change-energy floor and
+the result is shown without failing the run.
+
+Known renderer difference: HyperFrames muxes its AAC sidecar without an edit
+list, so its audio starts 1024 samples (21.3 ms) late; the 25 ms offset limit
+allows exactly that.
 
 ## First slice (one PR)
 
