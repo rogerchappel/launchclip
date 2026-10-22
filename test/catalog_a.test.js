@@ -451,6 +451,72 @@ test("count-up parity fixture resolves", async () => {
   await checkFixture("a-cat-count-up.json");
 });
 
+// ---------------------------------------------------------------------------
+// equation-lockup
+
+const EQUATION = { name: "Newton's law of cooling", equation: "dT/dt = −k (T − T_room)", note: "cooling rate ∝ the gap", highlight: "(T − T_room)" };
+registerSample("equation-lockup", EQUATION);
+
+test("equation-lockup typesets terms, fractions and scripts without MathJax", async () => {
+  const { tokenizeMath } = await import("../kit/core/catalog-a.mjs");
+  assert.deepEqual(tokenizeMath("dT/dt"), [{ type: "frac", num: [{ type: "var", text: "dT" }], den: [{ type: "var", text: "dt" }] }]);
+  assert.deepEqual(tokenizeMath("T_room"), [{ type: "var", text: "T", sub: [{ type: "fn", text: "room" }] }]);
+  assert.deepEqual(tokenizeMath("x^2"), [{ type: "var", text: "x", sup: [{ type: "num", text: "2" }] }]);
+  assert.deepEqual(tokenizeMath("sin(θ)").map((a) => a.type), ["fn", "paren", "var", "paren"]);
+  const minus = tokenizeMath("−k");
+  assert.equal(minus[0].unary, true);
+  assert.equal(tokenizeMath("a + b")[1].unary, false);
+  const model = resolve("equation-lockup", EQUATION);
+  assert.deepEqual(model.content.terms.map((term) => term.source), ["dT/dt", "=", "−k", "(T − T_room)"]);
+  assert.equal(model.content.highlight, 3);
+  const out = EMITTERS["equation-lockup"](model);
+  assert.match(out.html, /<span class="a-frac"><span class="a-frac-num"><span class="a-var">dT<\/span><\/span><span class="a-frac-bar"><\/span>/);
+  assert.match(out.html, /<span class="a-var">T<\/span><span class="a-sub"><span class="a-fn">room<\/span><\/span>/);
+  assert.match(out.css, /#m1 \.a-var\{font-style:italic\}/);
+  assert.match(model.fonts.math, /STIX Two Text/);
+  assert.doesNotMatch(out.html + out.css, /mathjax|katex/i);
+});
+
+test("equation-lockup lands terms one by one, then boxes the highlight", () => {
+  const model = resolve("equation-lockup", EQUATION);
+  const times = model.content.terms.map((term) => term.time);
+  assert.deepEqual(times, [2.35, 2.57, 2.79, 3.01]);
+  for (const [index, time] of times.entries()) {
+    assert.equal(sampleNode(model, `term-${index}`, time - .01).opacity, 0);
+    assert.deepEqual(sampleNode(model, `term-${index}`, time + .6), { opacity: 1, y: 0, blur: 0 });
+  }
+  assert.equal(model.content.lockupTime, 3.43);
+  const ids = model.events.map((e) => e.id);
+  assert.deepEqual(ids, ["m1-term-0", "m1-term-1", "m1-term-2", "m1-term-3", "m1-lockup", "m1-highlight"]);
+  const h = model.content.highlightTime;
+  assert.equal(sampleNode(model, "term-3-box", h - .01).opacity, 0);
+  assert.equal(sampleNode(model, "term-3-text", h + .5).color, BRAND.colors.primary);
+  assert.equal(sampleNode(model, "note", model.content.lockupTime + .1).opacity, 0);
+  assert.equal(sampleNode(model, "note", model.content.lockupTime + .8).opacity, 1);
+});
+
+test("equation-lockup validates its params", () => {
+  const bad = (params, pattern) => assert.throws(() => resolve("equation-lockup", params), pattern);
+  bad({}, /equation-lockup: params needs exactly one of params\.equation or params\.terms/);
+  bad({ equation: "a = b", terms: ["a"] }, /exactly one of/);
+  bad({ terms: [] }, /params\.terms must list 1–9 term strings/);
+  bad({ equation: "a + b + c + d + e + f" }, /params\.equation must have 1–9 terms/);
+  bad({ equation: "E = mc^2", highlight: "mc" }, /params\.highlight must be a term index or one of "E", "=", "mc\^2"/);
+  bad({ equation: "E = mc^2", highlight: 3 }, /params\.highlight must be an integer between 0 and 2/);
+  bad({ equation: "E = mc^2", highlightAt: 1 }, /params\.highlightAt needs params\.highlight/);
+  bad({ equation: "E = mc^2", highlight: 2, highlightAt: .5 }, /params\.highlightAt must come after the highlighted term has landed/);
+  bad({ equation: "E = mc^2", at: 2.9, stagger: 1 }, /too late for a 4 s scene/);
+  bad({ terms: ["abcdefghijklmnopqrstuvwxyz", "abcdefghijklmnopqrstuvwxyz"] }, /too long to set at 64 px or more on one line/);
+});
+
+test("equation-lockup parity fixture and the golden story's s5 resolve", async () => {
+  await checkFixture("a-cat-equation-lockup.json");
+  const golden = JSON.parse(await readFile(path.join(ROOT, "examples", "story", "cooling.story.json"), "utf8"));
+  const s5 = golden.scenes.find((scene) => scene.id === "s5");
+  const model = MODULES["equation-lockup"].resolve(s5.params, { id: "s5", start: s5.start, duration: s5.end - s5.start, format: golden.format, brand: golden.brand });
+  checkContract(model, { captions: false });
+});
+
 test("hook-title parity fixture and the golden story's s1 resolve", async () => {
   await checkFixture("a-cat-hook-title.json");
   const golden = JSON.parse(await readFile(path.join(ROOT, "examples", "story", "cooling.story.json"), "utf8"));

@@ -61,8 +61,7 @@ function number(value, path, min, max) {
   return value;
 }
 function integer(value, path, min, max) {
-  number(value, path, min, max);
-  if (!Number.isInteger(value)) throw new Error(`${path} must be an integer between ${min} and ${max}`);
+  if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${path} must be an integer between ${min} and ${max}`);
   return value;
 }
 function bool(value, path) {
@@ -388,6 +387,9 @@ function assemble({module, ctx, base, st, rect, theme, contrast, fonts, hidesCap
   const {id, start, duration, end} = base;
   // Inherited text defaults are pinned on the root so the page around the
   // module (HyperFrames document, Remotion AbsoluteFill) cannot leak in.
+  // Flex children never shrink: when copy runs taller than the estimated
+  // footprint, empty rules and bars would otherwise collapse to 0 px.
+  for (const [node, style] of Object.entries(styles)) if (node !== 'root' && style.position !== 'absolute' && !('flexShrink' in style)) style.flexShrink = '0';
   styles.root = {...styles.root, color: theme.paper, fontFamily: fonts.body, fontSize: px(44 * st.k), lineHeight: '1.2', letterSpacing: 'normal', fontStyle: 'normal', fontWeight: '400', WebkitFontSmoothing: 'antialiased'};
   const model = {
     id, module, aspect: ctx.aspect ?? (st.portrait ? '9:16' : '16:9'), canvas: st.canvas, start, duration, end, fps: base.fps,

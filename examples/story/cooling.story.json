@@ -118,7 +118,8 @@
       "params": {
         "name": "Newton's law of cooling",
         "equation": "dT/dt = −k (T − T_room)",
-        "note": "cooling rate ∝ the gap"
+        "note": "cooling rate ∝ the gap",
+        "highlight": "(T − T_room)"
       },
       "hits": [
         { "at": "word:newton's", "event": "lockup-land", "cue": "impact" },
