@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadStoryModule, readProjectStory } from "../story_loader.js";
 import { adapterError, captureCommand, runCommand } from "./command.js";
+import { MEZZANINE, encodeRemotionDelivery, renderRemotionAudio, renderRemotionSegments } from "./remotion_segments.js";
 
 const require = createRequire(import.meta.url);
 const PACKAGE_ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -89,6 +90,25 @@ export function createRemotionRenderer(defaults = {}) {
       const result = await remotion(runner(opts), adapter.renderArgs(prepared, outFile, opts));
       if (!result.ok) throw adapterError("Remotion render", result);
       return { renderer: "remotion", output: path.resolve(outFile), format: prepared.format, props: prepared.propsFile, raw: result };
+    },
+
+    // Partial rendering (src/render_segments.js): lossless video-only segments
+    // by frame range, through one bundle and one browser.
+    // segments: [{startFrame, endFrame (exclusive), output}]; opts.story as in prepare.
+    async renderSegments(projectDir, segments, opts = {}) {
+      const prepared = await adapter.prepare(projectDir, opts);
+      return renderRemotionSegments({ entry: prepared.entry, project: prepared.project, props: prepared.props, segments, kitHash: opts.kitHash, concurrency: opts.concurrency });
+    },
+
+    segmentEncoder: () => ({ ...MEZZANINE }),
+
+    // The joined segments → the delivery encode `remotion render` would make.
+    encodeDelivery: (input, output, opts = {}) => encodeRemotionDelivery(input, output, opts),
+
+    // The whole soundtrack as Remotion mixes it (audio-only render).
+    async renderAudio(projectDir, output, opts = {}) {
+      const prepared = await adapter.prepare(projectDir, opts);
+      return renderRemotionAudio({ entry: prepared.entry, project: prepared.project, props: prepared.props, output, kitHash: opts.kitHash });
     },
 
     async still(projectDir, seconds, outFile, opts = {}) {
