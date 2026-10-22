@@ -18,6 +18,7 @@ the current workflow and the decisions an operating agent must not guess.
 - [Cinematic check](#cinematic-check)
 - [Local-first OSS packet lane](#local-first-oss-packet-lane)
 - [Storyboard (storyboard.json)](#storyboard-storyboardjson)
+- [Voice providers](#voice-providers)
 - [Failure handling](#failure-handling)
 
 ## Runtime and credentials
@@ -553,6 +554,65 @@ Anchors are resolved against `NARRATION.json` and `BEATS.json` when present.
 The JSON result lists `files`, `warnings` (placeholders for unknown modules,
 missing audio, captions skipped) and the derived `boundaries`. An invalid
 story fails the command.
+
+## Voice providers
+
+Voice providers live in `src/voice/`. Each one exposes
+`synthesize({ text, voice, speed, outFile, signal })` and returns
+`{ file, words: [{ text, start, end }], sampleRate, duration }`, with word
+times in seconds on the written file's timeline. Words are validated: they
+are ordered, have positive length and lie inside the audio.
+
+| Provider | When | Output | Word timings |
+| --- | --- | --- | --- |
+| `kokoro` (default) | always; offline on CPU | 24 kHz mono WAV | model phoneme durations, no ASR |
+| `elevenlabs` | only with `ELEVENLABS_API_KEY` | 24 kHz mono WAV | provider character alignment |
+| `supplied` | a recorded voiceover (`source`) | 48 kHz mono WAV, about −17 LUFS | local Whisper aligned to the script |
+
+**Kokoro.** Kokoro-82M (Apache-2.0) through the optional dependency
+`kokoro-js@1.2.1`. The default voice is `af_heart` at speed 1.2. On first use
+the timestamped ONNX export (about 325 MB, fp32) downloads once to
+`$LAUNCHCLIP_CACHE/kokoro`, default `~/.cache/launchclip/kokoro`. If
+`kokoro-js` is not installed, the provider says how to install it. Timing
+method: the model predicts a duration for every phoneme. Phonemes are grouped
+into words at spaces and punctuation, the groups are mapped to the script's
+words (merging groups when text normalisation expanded a token, such as
+"35"), and each onset is snapped to an RMS energy onset within 50 ms. If a
+model returns no durations, each sentence's voiced span is split in proportion
+to phoneme counts and onsets are snapped within 80 ms. Measured on the
+25.5 s cooling narration, against an RMS onset detector (mean absolute error,
+nearest onset within 150 ms):
+
+| Method | All words | Words after a pause |
+| --- | --- | --- |
+| phoneme durations, before snapping | 38 ms | 17 ms |
+| phoneme durations, snapped (shipped) | 21 ms | 6 ms |
+| proportional fallback, before snapping | 44 ms | 33 ms |
+| random times (baseline) | 55 ms | n/a |
+
+In connected speech a word often has no clean energy onset, so the detector
+is a noisy reference. Words after a pause are the reliable check. Synthesis
+ran at a real-time factor of about 0.5 on an idle Apple M4 (25.5 s of audio in
+12.7 s), after a model load of about 2 s from the cache.
+
+**ElevenLabs.** Opt-in. Without `ELEVENLABS_API_KEY` it throws before sending
+anything. It calls `/v1/text-to-speech/{voice}/with-timestamps` with
+`output_format=pcm_24000` and groups the character alignment into the
+script's words. The voice comes from `voice` or `ELEVENLABS_VOICE_ID`. Speed
+is clamped to ElevenLabs' range of 0.7 to 1.2.
+
+**Supplied voiceover.** `create({ source })` prepares a recording instead of
+synthesising one. It trims leading and trailing silence (keeping 50 ms),
+shortens pauses longer than 0.6 s to 0.35 s, and normalises to about −17 LUFS
+with a true peak of −1.5 dBTP (mono voice plays about 3 LU louder as stereo).
+It then transcribes with the local Whisper path (`base.en` by default; no
+paid transcription), aligns the recognised words back to `text`, moves word
+boundaries onto pauses that Whisper placed inside a word, and snaps onsets
+within 60 ms. The result's `prep` field records the trims, the keep ranges
+and the measured loudness. Whisper `base.en` word starts are coarse: on a test
+take built from the Kokoro sample with known word times, the mean absolute
+error was 112 ms, mostly because Whisper starts words early in connected
+speech. Filler-word and noise removal are not part of this step yet.
 
 ## Failure handling
 
