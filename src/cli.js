@@ -15,7 +15,7 @@ import { prepareRecording, recordingOptions, writeBrollPlan } from "./recording_
 import { runStoryCommand } from "./story_cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "story", "finish", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "story", "finish", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -35,7 +35,8 @@ export async function runCli(argv, io = {}) {
   const styleInvocation = command === "style" ? parseStyleInvocation(firstArg, rest) : null;
   const skillsInvocation = command === "skills" ? parseSkillsInvocation(firstArg, rest) : null;
   const storyInvocation = command === "story" ? parseStoryInvocation(firstArg, rest) : null;
-  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? rest);
+  const sfxInvocation = command === "sfx" ? parseSfxInvocation(firstArg, rest) : null;
+  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
@@ -60,6 +61,9 @@ export async function runCli(argv, io = {}) {
         ...productionAdapters,
         review: { input: stdin, output: stderr, ...productionAdapters.review }
       });
+    } else if (command === "sfx") {
+      const { runSfxCommand } = await import("./sfx/seed.js");
+      result = await runSfxCommand(sfxInvocation.action, sfxInvocation.name, flags, { log: (line) => stderr.write(`${line}\n`) });
     } else if (command === "story") {
       result = await runStoryCommand(storyInvocation.action, storyInvocation.file, flags, productionAdapters.story ?? {});
     } else if (command === "cinematic-check") {
@@ -84,7 +88,9 @@ export async function runCli(argv, io = {}) {
         quality: flags.quality,
         voice: flags.voice,
         out: flags.out,
-        force: Boolean(flags.force)
+        force: Boolean(flags.force),
+        sfxLibrary: flags["sfx-library"],
+        sfxDensity: flags["sfx-density"]
       }, productionAdapters.finish);
       stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatFinishSummary(report));
       if (report.status === "failed") {
@@ -163,6 +169,15 @@ function parseSkillsInvocation(action, rest) {
   if (!action) throw new Error("Missing skills action; use list, path, or install");
   if (!new Set(["list", "path", "install"]).has(action)) throw new Error(`Unknown skills action: ${action}`);
   const hasName = action === "path" && rest[0] && !rest[0].startsWith("--");
+  return { action, name: hasName ? rest[0] : null, flagArgs: hasName ? rest.slice(1) : rest };
+}
+
+function parseSfxInvocation(action, rest) {
+  if (!action) throw new Error("Missing sfx action; use seed, reroll, list or audition");
+  if (!new Set(["seed", "reroll", "list", "audition"]).has(action)) throw new Error(`Unknown sfx action: ${action}`);
+  const takesName = action === "audition" || action === "reroll";
+  const hasName = takesName && rest[0] && !rest[0].startsWith("--");
+  if (action === "audition" && !hasName) throw new Error("Missing SFX family to audition, e.g. launchclip sfx audition keystroke");
   return { action, name: hasName ? rest[0] : null, flagArgs: hasName ? rest.slice(1) : rest };
 }
 
@@ -278,7 +293,11 @@ Usage:
   launchclip story plan --brief brief.md [--narration NARRATION.json] [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] [--base assets/recording.mp4] [--voice assets/audio/narration.wav] [--format 1080x1920] [--fps 30] [--duration seconds] [--brand brand.json] [--max-repairs 2]
   launchclip cinematic-check <project> [--renderer hyperframes|remotion] [--video renders/draft.mp4] [--audio-manifest AUDIO-MANIFEST.json] [--expect-audio] [--critique qa/critic.json]
   launchclip layout-check <project> [--profile shorts|landscape] [--json]
-  launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--voice kokoro|elevenlabs|supplied|test] [--out renders/final.mp4] [--force] [--json]
+  launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--voice kokoro|elevenlabs|supplied|test] [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] [--force] [--json]
+  launchclip sfx seed [--provider elevenlabs|synth] [--variants 3] [--only whoosh,impact] [--reroll typing] [--dir .launchclip/sfx] [--force]
+  launchclip sfx reroll <family> [--dir .launchclip/sfx]
+  launchclip sfx list [--dir .launchclip/sfx]
+  launchclip sfx audition <family> [--dir .launchclip/sfx] [--out audition.wav] [--gap 0.35]
   launchclip init <repo> --out <workspace>
   launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]
   launchclip plan <workspace> --format short-15 --renderer none|hyperframes [--style proof-card|ugc-split|ugc-demo-punchy|premium-product-short|data-story-benchmark] [--assets-dir path/to/assets] [--talking-head heygen --avatar-id avatar_123]

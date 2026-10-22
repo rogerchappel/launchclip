@@ -1,0 +1,76 @@
+{
+  "schema_version": "launchclip.sfx-prompts.v1",
+  "notes": "Checked-in ElevenLabs prompt set for `launchclip sfx seed`. Each family: prompt, duration_seconds (the API minimum is 0.5), prompt_influence (0-1; higher follows the prompt more literally), variants (generations per family) and optional keep (files kept; a harvest family may keep several clean single hits from one generation). Post-processing trims every clip to its family's length, so short sounds are requested at the 0.5 s minimum.",
+  "model_id": "eleven_text_to_sound_v2",
+  "output_format": "mp3_44100_128",
+  "families": {
+    "whoosh": {
+      "prompt": "single soft cinematic whoosh, short air swish passing quickly left to right, clean, no reverb tail, no music",
+      "duration_seconds": 1,
+      "prompt_influence": 0.6,
+      "variants": 2
+    },
+    "impact": {
+      "prompt": "single deep cinematic impact hit, punchy low body thump with a crisp click transient, short natural tail, one hit only, no music",
+      "duration_seconds": 1.5,
+      "prompt_influence": 0.6,
+      "variants": 2
+    },
+    "riser": {
+      "prompt": "short cinematic tension riser, rising pitch and brightening noise building to a sudden stop at its loudest point, no impact at the end, no music",
+      "duration_seconds": 2,
+      "prompt_influence": 0.55,
+      "variants": 2
+    },
+    "tick": {
+      "prompt": "single soft user interface tick, tiny dry wooden click, close mic, one tick only",
+      "duration_seconds": 0.5,
+      "prompt_influence": 0.75,
+      "variants": 2
+    },
+    "pop": {
+      "prompt": "single soft bubbly user interface pop, clean and dry, close mic, one pop only",
+      "duration_seconds": 0.5,
+      "prompt_influence": 0.75,
+      "variants": 2
+    },
+    "shimmer": {
+      "prompt": "short bright magical shimmer, glassy bell sparkle that resolves gently, clean, no music, no voice",
+      "duration_seconds": 2,
+      "prompt_influence": 0.55,
+      "variants": 2
+    },
+    "subdrop": {
+      "prompt": "deep sub bass drop, smooth low boom sweeping down in pitch, cinematic, clean, no music",
+      "duration_seconds": 2,
+      "prompt_influence": 0.6,
+      "variants": 2
+    },
+    "click": {
+      "prompt": "single crisp modern user interface button click, dry, close mic, one click only",
+      "duration_seconds": 0.5,
+      "prompt_influence": 0.75,
+      "variants": 2
+    },
+    "keystroke": {
+      "prompt": "single mechanical keyboard key press, cherry blue switch, close mic, dry, one keystroke only",
+      "duration_seconds": 0.5,
+      "prompt_influence": 0.8,
+      "variants": 4,
+      "keep": 8,
+      "harvest": true
+    },
+    "keystroke-space": {
+      "prompt": "single mechanical keyboard space bar press, heavy stabilised spacebar thock, close mic, dry, one press only",
+      "duration_seconds": 0.5,
+      "prompt_influence": 0.8,
+      "variants": 2
+    },
+    "keystroke-enter": {
+      "prompt": "single mechanical keyboard enter key press, firm heavy keystroke, close mic, dry, one press only",
+      "duration_seconds": 0.5,
+      "prompt_influence": 0.8,
+      "variants": 2
+    }
+  }
+}
