@@ -226,7 +226,14 @@ export function validateStylePack(pack, { modules } = {}) {
       else if (!isObject(grammar) || !nonEmpty(grammar.base)) err('motion.grammar must be a name or {base, ...overrides}');
     }
   }
-  if (pack.camera !== undefined && !isObject(pack.camera)) err('camera must be an object');
+  if (pack.camera !== undefined) {
+    // story.camera (kit/core/camera-world.mjs): the storyboard validator rejects other modes and layouts.
+    if (!isObject(pack.camera)) err('camera must be an object');
+    else {
+      if (pack.camera.mode !== undefined && !['cuts', 'world'].includes(pack.camera.mode)) err('camera.mode must be cuts or world');
+      if (pack.camera.layout !== undefined && !['row', 'column', 'grid', 'path', 'auto'].includes(pack.camera.layout)) err('camera.layout must be one of row, column, grid, path, auto');
+    }
+  }
   if (pack.ambient !== undefined) {
     if (!isObject(pack.ambient)) err('ambient must be an object');
     else if (pack.ambient.level !== undefined && !STYLE_AMBIENT_LEVELS.includes(pack.ambient.level)) err(`ambient.level must be one of ${STYLE_AMBIENT_LEVELS.join(', ')}`);

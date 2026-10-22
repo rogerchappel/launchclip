@@ -22,7 +22,7 @@ const pack = (overrides = {}) => ({
   name: "channel",
   brand: { colors: { bg: "#101010", paper: "#fafafa", ink: "#101010", primary: "#ffcc00", accent: "#33ccff" }, fonts: { display: "anton", body: "inter", meta: "jetbrains-mono" } },
   motion: { grammar: "snappy" },
-  camera: { mode: "punchy" },
+  camera: { mode: "world", layout: "row" },
   ambient: { level: "lively" },
   captions: { preset: "outline-heavy", position: "auto" },
   sound: { sfx_density: "low", music: { bpm_range: [120, 130] } },
@@ -55,7 +55,7 @@ test("applyStyle: explicit story values win, the pack fills gaps and reports wha
   assert.equal(merged.brand.fonts.display, "syne");
   assert.equal(merged.brand.fonts.body, "inter");
   assert.equal(merged.motion.grammar, "smooth", "story grammar wins");
-  assert.deepEqual(merged.camera, { mode: "punchy" });
+  assert.deepEqual(merged.camera, { mode: "world", layout: "row" });
   assert.deepEqual(merged.ambient, { level: "lively" });
   assert.equal(merged.overlays[0].style, "word-highlight");
   assert.equal(merged.overlays[0].preset, undefined, "an explicit legacy style is not replaced by the pack preset");
