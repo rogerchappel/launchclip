@@ -62,6 +62,8 @@ export const USAGE = Object.freeze([
   ["sfx audition", "sfx audition <family> [--dir .launchclip/sfx] [--out audition.wav] [--gap 0.35]"],
   ["init", "init <repo> --out <workspace>"],
   ["demo", "demo <repo> --out <workspace> --demo-cmd \"npm run smoke\" --capture terminal [--demo-media path/to/screenshot.png]"],
+  ["demo record", "demo record <repo> [--out assets/demo] [--plan DEMO-PLAN.json] [--start \"npm run dev\"] [--url http://localhost:3000] [--seed \"npm run seed\" | --no-seed] [--no-start] [--approve] [--allow-host staging.example.com] [--flows a,b] [--plan-only] [--prompt \"...\"] [--model provider:model] [--viewport 4k] [--headed]"],
+  ["demo approve", "demo approve <dir> [--flows a,b] [--reject]"],
   ["plan", "plan <workspace> --format short-15 --renderer none|hyperframes [--style proof-card|ugc-split|ugc-demo-punchy|premium-product-short|data-story-benchmark] [--assets-dir path/to/assets] [--talking-head heygen --avatar-id avatar_123]"],
   ["captions", "captions <workspace> --platforms x,linkedin,tiktok,bluesky"],
   ["render", "render <workspace> --provider product-videogen --dry-run"],
@@ -143,7 +145,9 @@ export const SUMMARIES = Object.freeze({
   "sfx list": "List the SFX libraries, what each family resolves to, and the families missing compared with the prompt set.",
   "sfx audition": "Write one audition file with every variant of a family.",
   init: "Initialise a packet workspace for a repository.",
-  demo: "Capture a demo for the packet workspace.",
+  demo: "Capture a demo for the packet workspace, or record a SaaS app's product flows (demo record) and approve them for use (demo approve).",
+  "demo record": "Demo autopilot: detect how the repo runs, seed it, start it, plan 2–4 flows (DEMO-PLAN.json) and record each in Chromium with an action log, then write contact sheets and REVIEW.md. Asks before running the seed and start commands unless --approve; local or staging URLs only unless --allow-host.",
+  "demo approve": "Approve (or --reject) recorded demo flows after reviewing their contact sheets; only approved flows are used in a video.",
   plan: "Plan the packet video.",
   captions: "Write social captions for the packet.",
   render: "Render the packet video.",
@@ -159,7 +163,7 @@ export const SUMMARIES = Object.freeze({
   direct: "Direct a talking-head or TTS video from a creative prompt."
 });
 
-export const USAGE_GROUPS = Object.freeze(["skills", "style", "story", "sfx", "module"]);
+export const USAGE_GROUPS = Object.freeze(["skills", "style", "story", "sfx", "module", "demo"]);
 const GROUPS = new Set(USAGE_GROUPS);
 const COMMENT_COLUMN = 52;
 
@@ -181,8 +185,10 @@ export function usageNames() {
 export function usageRows(command, action = null) {
   const name = action && GROUPS.has(command) ? `${command} ${action}` : command;
   const exact = USAGE.filter(([row]) => row === name);
-  if (exact.length) return exact;
-  return USAGE.filter(([row]) => row.startsWith(`${command} `));
+  const actions = USAGE.filter(([row]) => row.startsWith(`${command} `));
+  // A group with its own bare row (demo) lists that row and its actions.
+  if (exact.length) return GROUPS.has(command) && !action ? [...exact, ...actions] : exact;
+  return actions;
 }
 
 /** The top-level `launchclip --help` text. */

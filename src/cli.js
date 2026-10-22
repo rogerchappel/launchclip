@@ -49,7 +49,10 @@ export async function runCli(argv, io = {}) {
   const moduleInvocation = command === "module" ? parseModuleInvocation(firstArg, rest) : null;
   // launchclip voice takes a project or only flags (--text "...").
   const voiceInvocation = command === "voice" ? (firstArg && !firstArg.startsWith("--") ? { project: firstArg, flagArgs: rest } : { project: null, flagArgs: firstArg ? [firstArg, ...rest] : rest }) : null;
-  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? rest);
+  // launchclip demo record|approve <path> [flags]; plain `demo <repo>` is the packet lane.
+  const demoTarget = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
+  const demoInvocation = command === "demo" && (firstArg === "record" || firstArg === "approve") ? { action: firstArg, target: demoTarget, flagArgs: demoTarget ? rest.slice(1) : rest } : null;
+  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
@@ -154,6 +157,9 @@ export async function runCli(argv, io = {}) {
       return;
     } else if (command === "init") {
       result = await initWorkspace(required(firstArg, "repo path"), flags);
+    } else if (command === "demo" && (firstArg === "record" || firstArg === "approve")) {
+      const { runDemoCommand } = await import("./demo/cli.js");
+      result = await runDemoCommand(demoInvocation.action, demoInvocation.target, flags, { log: (line) => stderr.write(`demo: ${line}\n`), stdin });
     } else if (command === "demo") {
       result = await runDemo(required(firstArg, "repo path"), flags);
     } else if (command === "plan") {
@@ -307,7 +313,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "music-regenerate" || name === "missing") {
+    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject") {
       flags[name] = true;
       continue;
     }

@@ -1352,10 +1352,22 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip init <repo> --out <workspace>
   ```
 
-- `demo`: Capture a demo for the packet workspace.
+- `demo`: Capture a demo for the packet workspace, or record a SaaS app's product flows (demo record) and approve them for use (demo approve).
 
   ```text
   launchclip demo <repo> --out <workspace> --demo-cmd "npm run smoke" --capture terminal [--demo-media path/to/screenshot.png]
+  ```
+
+- `demo record`: Demo autopilot: detect how the repo runs, seed it, start it, plan 2–4 flows (DEMO-PLAN.json) and record each in Chromium with an action log, then write contact sheets and REVIEW.md. Asks before running the seed and start commands unless --approve; local or staging URLs only unless --allow-host.
+
+  ```text
+  launchclip demo record <repo> [--out assets/demo] [--plan DEMO-PLAN.json] [--start "npm run dev"] [--url http://localhost:3000] [--seed "npm run seed" | --no-seed] [--no-start] [--approve] [--allow-host staging.example.com] [--flows a,b] [--plan-only] [--prompt "..."] [--model provider:model] [--viewport 4k] [--headed]
+  ```
+
+- `demo approve`: Approve (or --reject) recorded demo flows after reviewing their contact sheets; only approved flows are used in a video.
+
+  ```text
+  launchclip demo approve <dir> [--flows a,b] [--reject]
   ```
 
 - `plan`: Plan the packet video.
