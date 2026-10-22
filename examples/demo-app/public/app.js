@@ -75,7 +75,7 @@ function analytics() {
 
 async function render() {
   const path = location.pathname;
-  const signedIn = sessionStorage.getItem("pulseboard-user");
+  const signedIn = localStorage.getItem("pulseboard-user");
   if (path === "/login" || (!signedIn && path === "/")) {
     shell.hidden = true;
     auth.hidden = false;
@@ -104,7 +104,7 @@ document.getElementById("login-form").addEventListener("submit", async (event) =
     return;
   }
   const user = await response.json();
-  sessionStorage.setItem("pulseboard-user", user.name);
+  localStorage.setItem("pulseboard-user", user.name);
   document.getElementById("team").textContent = user.team;
   go("/dashboard");
 });

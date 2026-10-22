@@ -2,7 +2,10 @@
 // flows to record.
 //
 //   {schema: "launchclip.demo-plan.v1", app: {url}, viewport: {width, height, deviceScaleFactor},
-//    flows: [{id, title, goal?, steps: [Step]}]}
+//    flows: [{id, title, goal?, setup?: [flowId], steps: [Step]}]}
+//
+// `setup` names flows (usually sign-in) that run first, off camera and at full
+// speed, in the same clean browser profile, so a flow can start signed in.
 //
 // Step types (each may add `label`, the on-screen name used in logs and
 // callouts, and `callout`, a short caption shown when that step lands):
@@ -58,6 +61,10 @@ export function validateDemoPlan(plan) {
     else if (ids.has(flow.id)) errors.push(`${where}.id "${flow.id}" is used twice`);
     ids.add(flow?.id);
     if (typeof flow?.title !== "string" || !flow.title.trim() || flow.title.length > 60) errors.push(`${where}.title must be 1–60 characters`);
+    if (flow?.setup !== undefined) {
+      const known = plan.flows.map((entry) => entry?.id);
+      if (!Array.isArray(flow.setup) || flow.setup.some((id) => !known.includes(id) || id === flow.id)) errors.push(`${where}.setup must list other flow ids from this plan`);
+    }
     if (!Array.isArray(flow?.steps) || !flow.steps.length) { errors.push(`${where}.steps must be a non-empty array`); return; }
     if (flow.steps.length > 30) errors.push(`${where} has ${flow.steps.length} steps; keep a flow to 30 or fewer`);
     if (flow.steps[0]?.type !== "goto") errors.push(`${where}.steps[0] must be a goto, so each flow starts from a known page`);
@@ -179,11 +186,11 @@ export function heuristicPlan({ url, routes = [], nav = [], accounts = [], maxFl
     const name = link?.label ?? titleCase(page.path.split("/").filter(Boolean).at(-1) ?? "Home");
     const id = page.path.split("/").filter(Boolean).join("-").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 40) || "home";
     if (flows.some((flow) => flow.id === id)) continue;
-    const steps = [{ type: "goto", path: "/" }, { type: "pause", ms: 800 }];
+    const steps = [{ type: "goto", path: flows[0]?.id === "sign-in" ? "/dashboard" : "/" }, { type: "pause", ms: 800 }];
     if (link) steps.push({ type: "click", text: link.label, label: link.label, callout: name.slice(0, 42) });
     else steps.push({ type: "goto", path: page.path, label: name });
     steps.push({ type: "pause", ms: 2000 });
-    flows.push({ id: /^[a-z]/.test(id) ? id : `page-${id}`.slice(0, 40), title: name.slice(0, 60), goal: `Show ${name}`, steps });
+    flows.push({ id: /^[a-z]/.test(id) ? id : `page-${id}`.slice(0, 40), title: name.slice(0, 60), goal: `Show ${name}`, ...(flows[0]?.id === "sign-in" ? { setup: ["sign-in"] } : {}), steps });
   }
   if (!flows.length) flows.push({ id: "home", title: "Home", goal: "Show the home page", steps: [{ type: "goto", path: "/" }, { type: "pause", ms: 3000 }] });
   return { schema: DEMO_PLAN_SCHEMA, app: { url }, viewport: { ...viewport }, flows };
@@ -193,7 +200,8 @@ export function heuristicPlan({ url, routes = [], nav = [], accounts = [], maxFl
 export function demoPlanInstructions() {
   return [
     "You plan product demo recordings for a SaaS launch video. Return one JSON object, a DEMO-PLAN.json, and nothing else.",
-    `Schema: {"schema": "${DEMO_PLAN_SCHEMA}", "app": {"url": string}, "viewport": {"width": 1920, "height": 1080, "deviceScaleFactor": 1}, "flows": [{"id": "kebab-case", "title": "≤ 60 chars", "goal": string, "steps": [Step]}]}`,
+    `Schema: {"schema": "${DEMO_PLAN_SCHEMA}", "app": {"url": string}, "viewport": {"width": 1920, "height": 1080, "deviceScaleFactor": 1}, "flows": [{"id": "kebab-case", "title": "≤ 60 chars", "goal": string, "setup"?: ["sign-in"], "steps": [Step]}]}`,
+    "Each flow is recorded in a fresh, signed-out browser. A flow that needs a signed-in user lists the sign-in flow's id in setup; setup flows run first, off camera.",
     "Step types: goto {path: \"/x\"}; click {selector? | text?}; type {selector? | text? (the field's label or placeholder), value: string | {account: \"email\"|\"password\"|\"username\"}}; wait-for {selector? | text?, timeout? ms}; assert-visible {selector? | text?}; pause {ms ≤ 10000}. Any step may add label (short on-screen name) and callout (≤ 42 chars, shown as the step lands).",
     "Plan 2–4 flows that sell the product for the prompt, e.g. sign up → create a project → see the result. Each flow starts with a goto, has 4–15 steps and lasts 8–20 seconds when played at human pace.",
     "Use only routes, links, button text and field labels that appear in the code context you are given; prefer visible text over CSS selectors. Stay on the app's own origin.",
