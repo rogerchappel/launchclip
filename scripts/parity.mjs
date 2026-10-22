@@ -73,12 +73,14 @@ export async function sceneStory(story, sceneId) {
   }
   const scene = resolved.scenes?.find(item => item.id === sceneId);
   if (!scene) throw new Error(`scene ${sceneId} not found in the fixture story`);
-  // One module on the background: no captions, audio or ending, so the lane's
+  // One module on the background: no captions, audio or loop, so the lane's
   // audio requirements (voiceover-motion needs audio.words) no longer apply.
   // Ambient motion is off: ModuleReview draws the bare module, and story
   // parity (runStoryParity) covers the ambient field and drift.
-  const filtered = {...structuredClone(resolved), lane: 'motion', ambient: 'off', scenes: [structuredClone(scene)], overlays: []};
-  delete filtered.ending;
+  // ending.final "exit": the reviewed scene plays its own exit (and the
+  // samples cover it) even when it is the story's last scene, rather than
+  // holding settled past the end as a non-looping story's last scene does.
+  const filtered = {...structuredClone(resolved), lane: 'motion', ambient: 'off', scenes: [structuredClone(scene)], overlays: [], ending: {final: 'exit'}};
   delete filtered.audio;
   return {story: filtered, scene: filtered.scenes[0]};
 }
