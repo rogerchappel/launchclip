@@ -16,14 +16,16 @@ const GOLDEN = [
   { id: "cooling", story: path.join(STORY, "cooling.story.json"), narration: path.join(STORY, "cooling.NARRATION.json") },
   { id: "minimal", dir: path.join(STORY, "minimal") },
   { id: "promo-16x9", dir: path.join(STORY, "promo-16x9") },
-  { id: "explainer-9x16", dir: path.join(STORY, "explainer-9x16") }
+  { id: "explainer-9x16", dir: path.join(STORY, "explainer-9x16") },
+  { id: "data-story-9x16", dir: path.join(STORY, "data-story-9x16") }
 ];
 
 // Full-catalogue goldens: each covers its modules, phase 2 with a shared-world
 // morph, hits on real narration words, captions and a small committed mix.
 const CATALOGUE = [
   { id: "promo-16x9", aspect: [1920, 1080], modules: ["hook-title", "logo-row", "process-steps", "count-up", "media-window", "cta"] },
-  { id: "explainer-9x16", aspect: [1080, 1920], modules: ["kinetic-words", "function-chart", "flow-compare", "archive-card", "equation-lockup"] }
+  { id: "explainer-9x16", aspect: [1080, 1920], modules: ["kinetic-words", "function-chart", "flow-compare", "archive-card", "equation-lockup"] },
+  { id: "data-story-9x16", aspect: [1080, 1920], modules: ["trend-chart", "growth-chart", "checklist", "step-rail", "code-snippet", "excerpt-window", "focus-flow"] }
 ];
 
 async function projectFor(entry) {
