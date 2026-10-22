@@ -42,6 +42,13 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
   A `morph` or a `from_object` makes the boundary kind `shared-world`; anything
   else is `ordinary`.
 - Assets are project-relative paths under `assets/`.
+- `audio.narration` = `{text, provider?, voice?, speed?}` is narration that
+  `launchclip finish` synthesises into `audio.voice` and `audio.words` (text
+  1–4000 characters; provider `kokoro`, `elevenlabs`, `supplied` or `test`;
+  speed 0.5–2). While it is set, the voiceover-motion lane does not require
+  `audio.voice`/`audio.words` yet, and word anchors are checked after synthesis.
+  Finish writes the filled fields to a resolved copy in `.launchclip/finish/`,
+  never back into `storyboard.json`.
 
 Exports:
 
