@@ -35,6 +35,7 @@
 // every brand colour pair used for text or a filled accent clears 3:1 WCAG
 // contrast or resolve() throws; blur is 0 at settle.
 import {profileGeometry} from './layout-check.mjs';
+import {fontFamilyName, fontStack} from './fonts.mjs';
 import {countUp, splitWords, tween} from './motion.mjs';
 
 export const CATALOG_A_IDS = Object.freeze(['hook-title', 'kinetic-words', 'count-up', 'equation-lockup', 'cta']);
@@ -147,28 +148,19 @@ function moduleTheme(brand, colorRole, path) {
 }
 
 // ---------------------------------------------------------------------------
-// Fonts. Brand font ids ("anton", "space-grotesk") become CSS family names in
-// front of a fallback stack with similar metrics, identical in both renderers.
-
-const KNOWN_FAMILIES = {'jetbrains-mono': 'JetBrains Mono', 'ibm-plex-sans': 'IBM Plex Sans', 'ibm-plex-mono': 'IBM Plex Mono', 'dm-sans': 'DM Sans', 'dm-mono': 'DM Mono'};
-const FALLBACK = {
-  display: "Impact,Haettenschweiler,'Arial Narrow Bold','Avenir Next Condensed',sans-serif",
-  body: "'Avenir Next','Helvetica Neue',Helvetica,Arial,sans-serif",
-  meta: "'SF Mono',Menlo,Consolas,'Liberation Mono',monospace"
-};
-const MATH_STACK = "'STIX Two Text',STIXGeneral,'Cambria Math','Latin Modern Roman','Times New Roman',serif";
+// Fonts. Brand font ids ("anton", "space-grotesk") resolve through the
+// bundled font registry (fonts.mjs) into stacks that name only bundled
+// families, identical in both renderers. Missing roles use the registry's
+// role defaults (Anton, Inter, JetBrains Mono; STIX Two Text for maths).
 
 function familyName(value, path) {
   if (typeof value !== 'string' || !/^[A-Za-z0-9 _-]{1,48}$/.test(value)) throw new Error(`${path} must be a font family name of letters, digits, spaces or dashes`);
-  const key = value.trim().toLowerCase();
-  if (KNOWN_FAMILIES[key]) return KNOWN_FAMILIES[key];
-  if (/[A-Z ]/.test(value)) return value.trim();
-  return key.split(/[-_]/).filter(Boolean).map(part => part[0].toUpperCase() + part.slice(1)).join(' ');
+  return fontFamilyName(value);
 }
 function brandFonts(brand) {
   const fonts = isObject(brand?.fonts) ? brand.fonts : {};
-  const stack = role => (fonts[role] ? `'${familyName(fonts[role], `brand.fonts.${role}`)}',${FALLBACK[role]}` : FALLBACK[role]);
-  return {display: stack('display'), body: stack('body'), meta: stack('meta'), math: MATH_STACK};
+  const stack = role => fontStack(fonts[role] ? familyName(fonts[role], `brand.fonts.${role}`) : null, role);
+  return {display: stack('display'), body: stack('body'), meta: stack('meta'), math: fontStack(null, 'math')};
 }
 
 // ---------------------------------------------------------------------------

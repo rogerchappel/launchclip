@@ -88,11 +88,14 @@ test('resolved content carries renderer-ready values', () => {
   assert.equal(plain.content.activeColor, plain.accent);
 });
 
-test('editorial core is import-free and the skill copy matches kit/core byte for byte', () => {
+test('editorial core imports only the font registry and the skill copy matches kit/core byte for byte', () => {
   const canonical = readFileSync(new URL('../kit/core/editorial-core.mjs', import.meta.url), 'utf8');
   const copy = readFileSync(new URL('../skills/launchclip-create-video/scripts/editorial-core.mjs', import.meta.url), 'utf8');
   assert.equal(copy, canonical);
-  assert.doesNotMatch(canonical, /^\s*import\b|\bimport\(|\brequire\(/m);
+  assert.deepEqual(canonical.match(/^[ \t]*import\b.*$/gm), ["import {fontStack} from './fonts.mjs';"]);
+  assert.doesNotMatch(canonical, /\bimport\(|\brequire\(/);
+  assert.equal(EDITORIAL_STYLE.font.sans, "'Inter', 'STIX Two Math', sans-serif");
+  assert.equal(EDITORIAL_STYLE.font.mono, "'JetBrains Mono', 'STIX Two Math', monospace");
   assert.equal(EDITORIAL_KINDS.length, 14);
   assert.equal(EDITORIAL_STYLE.space.pad, 24);
   assert.ok(Object.isFrozen(EDITORIAL_STYLE) && Object.isFrozen(EDITORIAL_SYMBOLS));

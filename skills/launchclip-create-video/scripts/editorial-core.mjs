@@ -1,5 +1,5 @@
-// Editorial module core: spec → resolved model. Renderer-neutral, plain ESM,
-// no imports. The HyperFrames emitter (skills/launchclip-create-video/scripts/
+// Editorial module core: spec → resolved model. Renderer-neutral, plain ESM;
+// imports only fonts.mjs. The HyperFrames emitter (skills/launchclip-create-video/scripts/
 // editorial-ui-modules.mjs) and the Remotion modules (kit/remotion/modules/)
 // both draw from this model, so validation, defaults, geometry, timing, events
 // and theme live here only. Contract: docs/KIT_CONTRACTS.md, "Editorial core".
@@ -130,6 +130,8 @@
  *   fill is the rail scaleX reached at that step (0..1).
  */
 
+import {fontStack} from './fonts.mjs';
+
 export const EDITORIAL_KINDS = ['media-window', 'checklist', 'step-rail', 'callout', 'audience-grid', 'trend-chart', 'metric', 'progress', 'date-card', 'status-rack', 'code-snippet', 'excerpt-window', 'focus-flow', 'growth-chart'];
 
 // Small symbolic glyphs authored locally; no brand marks or arbitrary SVG input.
@@ -148,9 +150,10 @@ export const EDITORIAL_SYMBOLS = Object.freeze({
 // appended to the accent or theme colors, as in CSS #RRGGBBAA.
 export const EDITORIAL_STYLE = Object.freeze({
   font: Object.freeze({
-    sans: "system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
-    mono: 'ui-monospace,monospace',
-    display: 'system-ui,sans-serif'
+    // Bundled registry stacks (fonts.mjs): Inter and JetBrains Mono.
+    sans: fontStack(null, 'body'),
+    mono: fontStack(null, 'meta'),
+    display: fontStack(null, 'body')
   }),
   size: Object.freeze({small: 22, lineHeight: 1.25, titleLineHeight: 1.15, day: 112, avatar: 52, count: 48, growthCount: 56, stepNumber: 24}),
   space: Object.freeze({pad: 24, bar: 48, inset: 18, gap: 16, rowGap: 18}),
