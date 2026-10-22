@@ -686,8 +686,12 @@ export function driftStateAt(drift, t) / driftStyle(drift, t) / driftGsap(drift)
   at 0.3× and overlays at 1.15×. `false` keeps the same background, moving
   1× with the plates, and turns overlay parallax off (world plates are
   transparent, so there is always a background behind them).
-- `blur` (default: whip-pans only): `true` blurs every camera move, `false`
-  none.
+- `blur` (default: the grammar's): whip-pans always blur at full strength;
+  pans, pushes, pulls and orbits blur at the grammar's `camera.moveBlur`
+  (snappy and playful 0.5: half the shutter and half the 18 px cap, so a fast
+  move reads as motion rather than a jump; editorial, smooth and documentary
+  0). `true` blurs every move at full strength, `false` none. The blur is
+  exactly 0 at rest either way (sub-threshold speeds round to 0).
 
 Camera transitions (`scene.in` / `ending.in`, track-0 scenes only; footage-led
 rejects them):

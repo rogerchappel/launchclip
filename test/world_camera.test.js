@@ -111,9 +111,12 @@ test("at rest the camera frames each plate exactly; moves use the grammar's came
     const corner = screenPoint({ ...plan, drift: null }, worldPoint(placement, { x: W, y: H }), t);
     assert.ok(Math.abs(corner.x - W) < 1e-3 && Math.abs(corner.y - H) < 1e-3, `${id} corner ${corner.x},${corner.y}`);
   }
-  // Only whip-pans blur by default.
-  assert.deepEqual(plan.moves.map((move) => move.blur), [false, false, false, false, true]);
-  assert.equal(planFor(worldStory({ camera: { mode: "world", blur: true } })).moves.every((move) => move.blur), true);
+  // By default whip-pans blur fully and, in playful (and snappy), every other
+  // move blurs at the grammar's moderate moveBlur; editorial keeps them sharp.
+  assert.deepEqual(plan.moves.map((move) => move.blur), [0.5, 0.5, 0.5, 0.5, 1]);
+  assert.deepEqual(planFor(worldStory({ grammar: "editorial" })).moves.map((move) => move.blur), [0, 0, 0, 0, 1]);
+  assert.equal(planFor(worldStory({ camera: { mode: "world", blur: true } })).moves.every((move) => move.blur === 1), true);
+  assert.equal(planFor(worldStory({ camera: { mode: "world", blur: false } })).moves.every((move) => move.blur === 0), true);
 });
 
 test("the camera path is continuous in position and velocity at every move boundary, and never fully still", () => {
@@ -206,9 +209,22 @@ test("motion blur is velocity-shaped and exactly zero at rest", () => {
   const mid = (move) => blurAt(plan, Math.round((move.start + move.duration / 2) * plan.fps) / plan.fps);
   assert.ok(mid(horizontal).x > 1 && mid(horizontal).y < mid(horizontal).x * 0.2, JSON.stringify(mid(horizontal)));
   assert.ok(mid(vertical).y > 1 && mid(vertical).x < mid(vertical).y * 0.2, JSON.stringify(mid(vertical)));
-  // Default: whip-pans only.
-  const defaults = planFor(worldStory());
+  // Editorial default: whip-pans only.
+  const defaults = planFor(worldStory({ grammar: "editorial" }));
   assert.ok(defaults.blurSamples.length > 0 && defaults.blurSamples.every((sample) => sample.t >= defaults.moves.at(-1).start));
+  // Playful default: a moderate blur on the pans (half the shutter, half the
+  // cap), still exactly zero at rest, and the whip-pan at full strength.
+  const playful = planFor(worldStory());
+  const at = (p, move) => blurAt(p, Math.round((move.start + move.duration / 2) * p.fps) / p.fps);
+  assert.ok(at(playful, playful.moves[0]).x > 1, JSON.stringify(at(playful, playful.moves[0])));
+  assert.ok(Math.abs(at(playful, playful.moves[0]).x - at(plan, horizontal).x / 2) < 0.6, `${at(playful, playful.moves[0]).x} vs ${at(plan, horizontal).x}`);
+  assert.ok(Math.max(...playful.blurSamples.map((s) => Math.max(s.x, s.y))) <= 18);
+  for (let f = 0; f <= playful.duration * playful.fps; f += 1) {
+    const t = f / playful.fps;
+    const moving = playful.moves.some((move) => t > move.start && t <= move.start + move.duration + 1 / playful.fps + 1e-6);
+    if (!moving) assert.deepEqual(blurAt(playful, t), { x: 0, y: 0 }, `playful blur at rest at ${t}`);
+  }
+
 });
 
 test("camera transitions keep their layers still and dollies crossfade; world mode fades layered reveals out", () => {
