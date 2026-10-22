@@ -37,6 +37,9 @@ function fakeAdapters({ renderError } = {}) {
   const touch = async (file, content = "x") => { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, content); };
   const adapters = {
     calls,
+    // No ELEVENLABS_API_KEY: the music stays on the offline synth bed.
+    env: {},
+    notice() {},
     renderer: (name) => ({
       name,
       async render(project, out, options) {
@@ -377,6 +380,148 @@ test("launchclip finish prints a summary by default", async () => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Music: provider choice, ElevenLabs (stubbed), beat sync
+
+// A stub ElevenLabs provider and beat analysis: a 120 BPM track whose first
+// downbeat sits 0.3 s in, so finish must trim the start to line it up.
+function musicAdapters(base = fakeAdapters(), { env = { ELEVENLABS_API_KEY: "sk_test_never_sent" } } = {}) {
+  const notices = [];
+  const music = { requests: 0, generated: 0, prepared: [] };
+  const grid = { bpm: 120, beat_seconds: 0.5, beats: [], downbeats: [], confidence: 0.9, duration: 8.5, method: "stub" };
+  for (let t = 0.3; t < 8.5; t += 0.5) grid.beats.push(Math.round(t * 1000) / 1000);
+  grid.downbeats = grid.beats.filter((_, index) => index % 4 === 0);
+  let cached = false;
+  Object.assign(base, {
+    env,
+    notice: (line) => notices.push(line),
+    musicProvider: () => ({
+      name: "elevenlabs",
+      cacheDir: "/cache/elevenlabs/music",
+      request(story, params) { music.requests += 1; music.lastParams = params; return { mode: "plan", body: { composition_plan: { sections: [] }, model_id: "music_v1" }, bpm: params.bpm, length_ms: 8000 }; },
+      async generate(story, params, { outFile }) {
+        await mkdir(path.dirname(outFile), { recursive: true });
+        await writeFile(outFile, "mp3");
+        const wasCached = cached;
+        if (!cached) music.generated += 1;
+        cached = true;
+        return { file: outFile, cached: wasCached, cache_file: "/cache/elevenlabs/music/abc.mp3", request: { mode: "plan", bpm: params.bpm, length_ms: 8000 }, generated_seconds: wasCached ? 0 : 8, cost_usd: wasCached ? 0 : 0.02, model: "music_v1", song_id: "song_1" };
+      }
+    }),
+    async analyzeBeats() { return grid; },
+    async prepareMusic(input, output, options) { music.prepared.push(options); await mkdir(path.dirname(output), { recursive: true }); await writeFile(output, `prepared ${options.offset} ${options.tempo}`); return { output }; }
+  });
+  return { adapters: base, notices, music };
+}
+
+test("finish defaults to ElevenLabs music with a key, aligns it to the narration and caches it", async () => {
+  const project = await narratedProject();
+  try {
+    const { adapters, notices, music } = musicAdapters();
+    const report = await runFinish(project, { renderer: "remotion" }, adapters);
+    const sound = report.stages.find((stage) => stage.name === "sound");
+    assert.equal(sound.status, "done", sound.error);
+    assert.equal(sound.details.music.provider, "elevenlabs");
+    assert.ok(notices.some((line) => /paid/.test(line) && /\/cache\/elevenlabs\/music/.test(line)), notices.join("\n"));
+    assert.ok(!notices.join("\n").includes("sk_test_never_sent"));
+    const sync = JSON.parse(await readFile(path.join(project, PATHS.beatSync), "utf8"));
+    assert.equal(sync.schema_version, "launchclip.beat-sync.v1");
+    assert.equal(sync.strategy, "align", "narrated: the music moves, the story does not");
+    assert.equal(sync.changes.length, 0);
+    assert.ok(sync.alignment.offset > 0, JSON.stringify(sync.alignment));
+    assert.equal(sync.music.analysed_bpm, 120);
+    assert.ok(sync.summary.key_moments_on_downbeat >= 1, JSON.stringify(sync.moments));
+    const beats = JSON.parse(await readFile(path.join(project, "BEATS.json"), "utf8"));
+    assert.equal(beats.schema_version, "launchclip.beats.v1");
+    assert.equal(beats.generated_by, "launchclip finish");
+    assert.equal(beats.alignment.offset, sync.alignment.offset);
+    assert.equal(music.prepared[0].offset, sync.alignment.offset);
+    assert.equal(adapters.lastMix.music, path.join(project, PATHS.musicPrepared));
+    const manifest = JSON.parse(await readFile(path.join(project, PATHS.audioManifest), "utf8"));
+    assert.equal(manifest.music.provider, "elevenlabs");
+    assert.equal(manifest.music.generation.endpoint, "POST /v1/music");
+    assert.match(manifest.license, /ElevenLabs/);
+    // The story copy keeps the narration timing.
+    const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
+    assert.equal(resolved.scenes[1].start, 3);
+
+    const again = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(again.stages.find((stage) => stage.name === "sound").status, "cached");
+    assert.equal(music.generated, 1, "the track is generated once");
+    // --music synth overrides the default without touching the cache.
+    const synth = await runFinish(project, { renderer: "remotion", music: "synth" }, adapters);
+    assert.equal(synth.stages.find((stage) => stage.name === "sound").details.music.provider, "synth");
+    await assert.rejects(runFinish(project, { music: "lofi" }, adapters), /Unknown --music lofi/);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("finish snaps a motion story's cuts and hits to the music grid", async () => {
+  const project = await narratedProject({
+    mutate: (story) => {
+      delete story.audio.narration;
+      story.overlays = [];
+      story.scenes[0].hits = [{ at: 1.1, event: "settle", cue: "tick" }];
+      story.scenes[1].hits = [{ at: 3.9, event: "rows-start" }];
+      story.scenes[0].end = 2.9;
+      story.scenes[1].start = 2.9;
+    }
+  });
+  try {
+    const { adapters } = musicAdapters(fakeAdapters(), { env: {} });
+    const report = await runFinish(project, { renderer: "remotion" }, adapters);
+    const sound = report.stages.find((stage) => stage.name === "sound");
+    assert.equal(sound.status, "done", sound.error);
+    assert.equal(sound.details.music.provider, "synth");
+    const sync = JSON.parse(await readFile(path.join(project, PATHS.beatSync), "utf8"));
+    assert.equal(sync.strategy, "snap");
+    // Synth bed at 96 BPM: beats every 0.625 s, downbeats every 2.5 s.
+    assert.deepEqual(sync.changes.map((change) => [change.kind, change.scene, change.from, change.to, change.grid]), [
+      ["cut", "s2", 2.9, 3.125, "beat"],
+      ["hit", "s1", 1.1, 1.25, "beat"],
+      ["hit", "s2", 3.9, 3.75, "beat"]
+    ]);
+    const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
+    assert.equal(resolved.scenes[1].start, 3.125);
+    assert.equal(resolved.scenes[0].end, 3.125);
+    // The user's storyboard is untouched and the SFX follow the moved hit.
+    assert.equal(JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8")).scenes[1].start, 2.9);
+    const sfx = JSON.parse(await readFile(path.join(project, PATHS.sfxManifest), "utf8"));
+    assert.ok(sfx.cues.some((cue) => cue.at_seconds === 1.25), JSON.stringify(sfx.cues));
+    // Cached rerun re-applies the snapped timing to the copy.
+    const again = await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(again.stages.find((stage) => stage.name === "sound").status, "cached");
+    assert.equal(JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8")).scenes[1].start, 3.125);
+    assert.equal(again.stages.find((stage) => stage.name === "render").status, "cached");
+    // sync: off leaves the story alone.
+    const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+    story.audio.music = { provider: "synth", sync: "off" };
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story));
+    await runFinish(project, { renderer: "remotion" }, adapters);
+    assert.equal(JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8")).scenes[1].start, 2.9);
+    // --music none: no music, no beat sync.
+    const none = await runFinish(project, { renderer: "remotion", music: "none" }, adapters);
+    assert.equal(none.stages.find((stage) => stage.name === "sound").details.music, null);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("--music elevenlabs without a key fails before anything is sent", async () => {
+  const project = await narratedProject();
+  try {
+    const { adapters, music } = musicAdapters(fakeAdapters(), { env: {} });
+    const report = await runFinish(project, { music: "elevenlabs" }, adapters);
+    const sound = report.stages.find((stage) => stage.name === "sound");
+    assert.equal(sound.status, "failed");
+    assert.match(sound.error, /--music elevenlabs needs ELEVENLABS_API_KEY/);
+    assert.equal(music.generated, 0);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
 async function chromeAvailable() {
   try {
     await execFileAsync("ffmpeg", ["-version"]);
@@ -394,7 +539,7 @@ test("end to end: examples/story/minimal with the test voice through remotion", 
   const project = await narratedProject();
   try {
     const started = performance.now();
-    const report = await runFinish(project, { renderer: "remotion", voice: "test" });
+    const report = await runFinish(project, { renderer: "remotion", voice: "test" }, { env: {} });
     const seconds = (performance.now() - started) / 1000;
     t.diagnostic(`finish took ${seconds.toFixed(1)}s: ${report.stages.map((stage) => `${stage.name} ${stage.seconds}s`).join(", ")}`);
     assert.notEqual(report.status, "failed", JSON.stringify(report.stages.filter((stage) => stage.error)));
