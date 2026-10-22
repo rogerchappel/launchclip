@@ -86,6 +86,20 @@ Useful flags:
 6. **Reviews the frames** with the model when it can see images (OpenAI), and
    writes `qa/critic.json`.
 
+## Record your product with `--repo`
+
+Point `make` at your app's codebase and it records the product demo first, with [demo autopilot](demo-autopilot.md):
+
+```bash
+launchclip make "A 45-second launch video for Pulseboard" --repo ~/code/pulseboard
+```
+
+Before the script, make starts your app, seeds it, plans 2–4 flows with the same model, records each one into `<project>/assets/demo`, and stops the app. The approved flows reach the script and the storyboard as product-demo clips, each with its params built from its action log, so the zooms, outlines and sound effects land on what really happened in your app.
+
+- **It asks first.** In a terminal, make lists the seed and start commands and waits for a yes, then lists the recorded flows' contact sheets and asks before using them. With no terminal (CI, a script), pass `--approve-demo` to agree to both up front. Without it, make stops after recording, with the review as its next step. Run `launchclip demo approve <project>/assets/demo` and re-run make, which reuses the recording.
+- **Same guardrails as `demo record`:** local or staging URLs only (`--allow-host <host>` to opt in), seed data or `LAUNCHCLIP_DEMO_*` test accounts only, and secrets redacted.
+- `--demo-plan DEMO-PLAN.json` records your own plan instead of a planned one. `--start` and `--url` override detection, and `--redemo` records again.
+
 ## Where the output lands
 
 ```

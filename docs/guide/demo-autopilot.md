@@ -54,6 +54,10 @@ A plan is a short list of steps per flow:
 
 Steps are `goto`, `click`, `type`, `wait-for`, `assert-visible` and `pause`; target elements by their visible text (a button, link, label or placeholder) or a CSS `selector`. `setup` replays another flow off camera first, so a flow can start signed in.
 
+## Headless: `launchclip make --repo`
+
+`launchclip make "<prompt>" --repo ~/code/acme` runs autopilot as its first step and edits the approved flows into the video it makes. See the [headless guide](headless.md#record-your-product-with---repo).
+
 ## Guardrails
 
 - **Local or staging only.** It records `localhost`, private network addresses, `*.test` / `*.localhost` hosts, and hosts named like staging, dev, qa or preview. Anything that looks like production is refused unless you pass `--allow-host <host>`.

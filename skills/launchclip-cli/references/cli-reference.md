@@ -1389,10 +1389,11 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip finish <candidate-project> --candidate <id> [--into <project>] [--kind opening|transition] [--boundary s3] [--comparison id] [--at 0.4,1.2,2.6] [--music synth|none] [--renderer remotion|hyperframes] # cheap rendered candidate: no paid calls, receipt in <project>/qa/rendered-candidates.json
   ```
 
-- `make`: Prompt plus an optional assets folder to a finished video, headless: classify the assets, route the lane deterministically, write the script and storyboard with an API model (repair loop), then finish and an optional vision critic. Writes MAKE.json with routing, costs, timings and gates.
+- `make`: Prompt plus an optional assets folder to a finished video, headless: classify the assets, route the lane deterministically, write the script and storyboard with an API model (repair loop), then finish and an optional vision critic. Writes MAKE.json with routing, costs, timings and gates. --repo runs demo autopilot first: it records the app's key flows into assets/demo and edits the approved ones in as product-demo scenes.
 
   ```text
   launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--style <name|path>] [--model provider:model] [--voice kokoro|elevenlabs] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--out <project-dir>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--json]
+  launchclip make "<prompt>" --repo <app-repo> [--approve-demo] [--demo-plan DEMO-PLAN.json] [--start "npm run dev"] [--url http://localhost:3000] [--allow-host <host>] [--redemo]
   ```
 
 - `voice`: Generate the narration (NARRATION.json and the voice track) for a project or a text.
