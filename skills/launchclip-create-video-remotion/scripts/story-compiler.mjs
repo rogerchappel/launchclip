@@ -33,6 +33,7 @@ import { EMITTERS as EDITORIAL_EMITTERS } from './editorial-ui-modules.mjs';
 import { EMITTERS as CATALOG_A_EMITTERS } from './hyperframes-catalog-a.mjs';
 import { EMITTERS as CATALOG_B_EMITTERS } from './hyperframes-catalog-b.mjs';
 import { EMITTERS as CATALOG_C_EMITTERS, cameraGsap } from './hyperframes-catalog-c.mjs';
+import { EMITTERS as CATALOG_D_EMITTERS } from './hyperframes-catalog-d.mjs';
 import { cameraOverlaps } from './catalog-c.mjs';
 
 export const COMPOSITION_ID = 'launchclip-story';
@@ -43,7 +44,7 @@ const TOGGLE_LEAD = 0.0005;
 
 /** Every HyperFrames emitter, keyed by module id. */
 export function hyperframesEmitters() {
-  return { ...CATALOG_A_EMITTERS, ...CATALOG_B_EMITTERS, ...CATALOG_C_EMITTERS, ...EDITORIAL_EMITTERS };
+  return { ...CATALOG_A_EMITTERS, ...CATALOG_B_EMITTERS, ...CATALOG_C_EMITTERS, ...CATALOG_D_EMITTERS, ...EDITORIAL_EMITTERS };
 }
 
 /**
@@ -190,6 +191,12 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const outer = `lc-scene-${id}`, inner = `lc-layer-${id}`;
     const media = hoistMedia(out.html ?? '');
     for (const element of media.elements) hoisted.push(withZIndex(element, z + 5));
+    // An emitter's `overlay` annotates its root media (product-demo), so it is
+    // hoisted too, one z-index above the video.
+    if (out.overlay) {
+      media.elements.push(out.overlay);
+      hoisted.push(withZIndex(out.overlay, z + 6));
+    }
     const mediaMotion = [];
     for (const element of media.elements) {
       const follow = mediaLayerTweens(element, entry.tweens);

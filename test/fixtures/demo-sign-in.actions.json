@@ -1,0 +1,142 @@
+{
+  "schema": "launchclip.demo-actions.v1",
+  "flow": {
+    "id": "sign-in",
+    "title": "Sign in",
+    "goal": "Sign in with the demo account"
+  },
+  "video": "sign-in.mp4",
+  "viewport": {
+    "width": 1920,
+    "height": 1080,
+    "deviceScaleFactor": 1
+  },
+  "frame": {
+    "width": 1920,
+    "height": 1080
+  },
+  "fps": 30,
+  "duration": 12.008,
+  "frames": 137,
+  "recorded_at": "2026-10-22T20:00:12.578Z",
+  "actions": [
+    {
+      "index": 0,
+      "type": "goto",
+      "path": "/login",
+      "label": null,
+      "url": "http://localhost:4310/login",
+      "start": 0,
+      "end": 0,
+      "box": null,
+      "callout": null
+    },
+    {
+      "index": 1,
+      "type": "type",
+      "selector": null,
+      "text": "Email",
+      "label": "Email",
+      "start": 0.853,
+      "end": 4.444,
+      "box": {
+        "x": 781,
+        "y": 502.5,
+        "width": 358,
+        "height": 50
+      },
+      "callout": null,
+      "at": 1.856,
+      "keys": [
+        2.138,
+        2.198,
+        2.337,
+        2.422,
+        2.507,
+        2.616,
+        2.715,
+        2.844,
+        2.913,
+        3.002,
+        3.108,
+        3.206,
+        3.281,
+        3.329,
+        3.415,
+        3.476,
+        3.56,
+        3.648,
+        3.707,
+        3.813
+      ],
+      "value": "{account: email}",
+      "chars": 20,
+      "url": "http://localhost:4310/login"
+    },
+    {
+      "index": 2,
+      "type": "type",
+      "selector": null,
+      "text": "Password",
+      "label": "Password",
+      "start": 4.477,
+      "end": 7.734,
+      "box": {
+        "x": 781,
+        "y": 597.5,
+        "width": 358,
+        "height": 50
+      },
+      "callout": null,
+      "at": 5.527,
+      "keys": [
+        5.796,
+        5.929,
+        6.11,
+        6.192,
+        6.338,
+        6.5,
+        6.564,
+        6.699,
+        6.787,
+        6.846,
+        6.939,
+        7.083,
+        7.157
+      ],
+      "value": "{account: password}",
+      "chars": 13,
+      "url": "http://localhost:4310/login"
+    },
+    {
+      "index": 3,
+      "type": "click",
+      "selector": null,
+      "text": "Sign in",
+      "label": "Sign in",
+      "start": 7.804,
+      "end": 9.594,
+      "box": {
+        "x": 781,
+        "y": 673.5,
+        "width": 358,
+        "height": 48
+      },
+      "callout": "Straight in",
+      "at": 8.971,
+      "url": "http://localhost:4310/dashboard"
+    },
+    {
+      "index": 4,
+      "type": "pause",
+      "selector": null,
+      "text": null,
+      "label": null,
+      "start": 9.594,
+      "end": 11.105,
+      "box": null,
+      "callout": null,
+      "url": "http://localhost:4310/dashboard"
+    }
+  ]
+}
