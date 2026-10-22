@@ -1,7 +1,7 @@
 // Typed scene transitions and scene render windows, shared by the HyperFrames
 // compiler (as GSAP fromTo calls) and the Remotion StoryComposition (evaluated
 // per frame through motion.mjs), so both renderers move the same layers by
-// the same amounts with the same eases. Plain ESM with no imports.
+// the same amounts with the same eases. Plain ESM; imports only grammar.mjs.
 // Canonical copy: kit/core/transitions.mjs.
 //
 // Model: every track-0 scene is an opaque plate (brand background). A scene's
@@ -10,8 +10,25 @@
 // render window is extended, because the validator forbids same-track
 // overlap), and receives the matching "out" tweens. Scenes on higher tracks
 // are transparent overlays and only receive "in" tweens.
+//
+// Motion grammar (kit/core/grammar.mjs): the tween eases follow the story's
+// grammar; editorial keeps every ease below exactly.
+// Camera transitions (pan, pull, orbit, whip-pan, and push when camera.mode
+// is "world") move the camera, not the layers (kit/core/camera-world.mjs):
+// here they only hold the outgoing plate and add the crossfades a dolly
+// needs. In world mode plates are transparent, so layered transitions (fade,
+// zoom, iris) also fade the outgoing plate out.
 
-export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph']);
+import { grammarEase, resolveGrammar } from './grammar.mjs';
+
+export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan']);
+export const CAMERA_TRANSITION_TYPES = Object.freeze(['pan', 'pull', 'orbit', 'whip-pan']);
+
+/** Whether a transition moves the world camera (push only in world mode). */
+export function isCameraTransition(transition, mode = 'cuts') {
+  const type = transition?.type;
+  return CAMERA_TRANSITION_TYPES.includes(type) || (type === 'push' && mode === 'world');
+}
 
 /** Identity state of a scene layer. iris: null = no clip. */
 export const LAYER_IDENTITY = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1, blur: 0, iris: null });
@@ -30,20 +47,32 @@ export function irisRadius(width, height) {
  * Tween = {prop: "opacity"|"x"|"y"|"scale"|"blur"|"iris", from, to, start, duration, ease}
  * where start is seconds relative to the transition start.
  */
-export function transitionTweens(transition, { width, height }) {
+export function transitionTweens(transition, { width, height, grammar = null, mode = 'cuts' }) {
   const type = transition?.type ?? 'cut';
   const d = Number(transition?.dur ?? 0);
   const direction = transition?.direction ?? 'left';
   if (!TRANSITION_TYPES.includes(type)) throw new Error(`unknown transition type ${JSON.stringify(type)}`);
-  const t = (prop, from, to, ease, start = 0, duration = d) => ({ prop, from, to, start, duration, ease });
+  const roles = ['enter', 'exit', 'emphasis', 'move'];
+  const t = (prop, from, to, ease, start = 0, duration = d) => ({ prop, from, to, start, duration, ease: grammarEase(grammar, ease, { props: [prop], roles }) });
   if (type === 'cut' || !(d > 0)) return { type: 'cut', duration: 0, in: [], out: [] };
+  if (isCameraTransition(transition, mode)) {
+    // The camera travels (camera-world.mjs). A dolly lands on a scene drawn
+    // inside (push) or around (pull) the outgoing one, so the two plates
+    // crossfade while the camera moves.
+    if (type === 'push') return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', 0, d * 0.55)], out: [t('opacity', 1, 0, 'power1.inOut', d * 0.45, d * 0.55)] };
+    if (type === 'pull') return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', 0, d * 0.5)], out: [t('opacity', 1, 0, 'power1.inOut', d * 0.3, d * 0.7)] };
+    return { type, duration: d, camera: true, in: [], out: [] };
+  }
+  // World mode: plates are transparent, so a layered reveal also fades the
+  // outgoing plate (cuts mode covers it with the incoming opaque plate).
+  const fadeOut = mode === 'world' ? [t('opacity', 1, 0, 'power1.inOut')] : [];
   const axis = direction === 'up' || direction === 'down' ? 'y' : 'x';
   const span = axis === 'x' ? width : height;
   // "left" = the content travels left: the incoming plate enters from the right.
   const sign = direction === 'left' || direction === 'up' ? -1 : 1;
   switch (type) {
     case 'fade':
-      return { type, duration: d, in: [t('opacity', 0, 1, 'power1.inOut')], out: [] };
+      return { type, duration: d, in: [t('opacity', 0, 1, 'power1.inOut')], out: fadeOut };
     case 'morph':
       // Crossfade; the module pair hands the named shared object across.
       return { type, duration: d, in: [t('opacity', 0, 1, 'power2.inOut')], out: [t('opacity', 1, 0, 'power2.inOut')] };
@@ -55,9 +84,9 @@ export function transitionTweens(transition, { width, height }) {
       return { type, duration: d, in: [t(axis, -sign * span, 0, 'expo.inOut'), ...blurs], out: [t(axis, 0, sign * span, 'expo.inOut'), ...blurs] };
     }
     case 'zoom':
-      return { type, duration: d, in: [t('scale', 0.6, 1, 'power3.out'), t('opacity', 0, 1, 'power2.out', 0, d * 0.6)], out: [t('scale', 1, 1.5, 'power3.in')] };
+      return { type, duration: d, in: [t('scale', 0.6, 1, 'power3.out'), t('opacity', 0, 1, 'power2.out', 0, d * 0.6)], out: [t('scale', 1, 1.5, 'power3.in'), ...fadeOut] };
     case 'iris':
-      return { type, duration: d, in: [t('iris', 0, irisRadius(width, height), 'power2.inOut')], out: [] };
+      return { type, duration: d, in: [t('iris', 0, irisRadius(width, height), 'power2.inOut')], out: fadeOut };
     default:
       return { type: 'cut', duration: 0, in: [], out: [] };
   }
@@ -113,6 +142,9 @@ export function sceneWindows(story) {
   const width = format.width, height = format.height;
   const duration = Number(story?.resolved?.duration ?? format.duration);
   const fps = Number(story?.resolved?.fps ?? format.fps ?? 30);
+  const grammar = resolveGrammar(story);
+  const mode = story?.camera?.mode === 'world' ? 'world' : 'cuts';
+  const options = { width, height, grammar, mode };
   const scenes = (Array.isArray(story?.scenes) ? story.scenes : []).map((scene, index) => {
     if (typeof scene?.start !== 'number' || typeof scene?.end !== 'number') throw new Error(`sceneWindows needs a resolved story; scenes[${index}] has unresolved start/end`);
     const track = Number.isInteger(scene.track) ? scene.track : 0;
@@ -122,8 +154,9 @@ export function sceneWindows(story) {
   for (const entry of scenes) {
     const transition = entry.scene.in;
     if (!transition || typeof transition !== 'object') continue;
-    const tweens = transitionTweens(transition, { width, height });
+    const tweens = transitionTweens(transition, options);
     entry.transitionIn = { type: tweens.type, dur: tweens.duration, direction: transition.direction ?? null, from_object: transition.from_object ?? null };
+    if (tweens.camera) entry.transitionIn.camera = true;
     entry.tweens.push(...tweens.in.map((tw) => ({ ...tw, at: entry.start + tw.start, role: 'in' })));
     if (!entry.plate || tweens.type === 'cut') continue;
     // Only an adjacent plate (gap of at most ADJACENT seconds) is carried
@@ -140,10 +173,11 @@ export function sceneWindows(story) {
   if (ending && typeof ending === 'object' && typeof ending.loop_to === 'string' && scenes.some((entry) => entry.id === ending.loop_to)) {
     const target = scenes.find((entry) => entry.id === ending.loop_to);
     if (ending.in && typeof ending.in === 'object') {
-      const tweens = transitionTweens(ending.in, { width, height });
+      const tweens = transitionTweens(ending.in, options);
       const start = round(duration - tweens.duration, 6);
       loop = { sceneId: target.id, scene: target.scene, start, end: duration, transitionIn: { type: tweens.type, dur: tweens.duration, direction: ending.in.direction ?? null, from_object: ending.in.from_object ?? null },
         tweens: tweens.in.map((tw) => ({ ...tw, at: start + tw.start, role: 'in' })) };
+      if (tweens.camera) loop.transitionIn.camera = true;
       const last = plates.reduce((best, entry) => (!best || entry.end >= best.end ? entry : best), null);
       if (last && tweens.type !== 'cut') {
         last.tweens.push(...tweens.out.map((tw) => ({ ...tw, at: start + tw.start, role: 'out' })));

@@ -1,6 +1,7 @@
 // Editorial module core: spec → resolved model. Renderer-neutral, plain ESM;
 // imports only fonts.mjs and grammar.mjs (the motion grammar, which sets the
-// shell enter/exit eases and durations; editorial is the identity). The HyperFrames emitter (skills/launchclip-create-video/scripts/
+// shell enter/exit eases and durations; editorial is the identity). The
+// HyperFrames emitter (skills/launchclip-create-video/scripts/
 // editorial-ui-modules.mjs) and the Remotion modules (kit/remotion/modules/)
 // both draw from this model, so validation, defaults, geometry, timing, events
 // and theme live here only. Contract: docs/KIT_CONTRACTS.md, "Editorial core".

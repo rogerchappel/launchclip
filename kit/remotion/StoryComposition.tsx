@@ -13,6 +13,11 @@
 // - one root <Audio> for audio.mix (or the voice);
 // - <WordCaptions> from captions.json or chunked NARRATION words;
 // - the loop ending (the loop_to scene's first state over the final window);
+// - the world camera (kit/core/camera-world.mjs): in world mode, or when a
+//   cuts story uses a camera transition, plates sit at their world placements
+//   inside pan / zoom / drift containers evaluated per frame from the same op
+//   list the HyperFrames compiler turns into GSAP, with the parallax
+//   background, overlay parallax and the velocity-shaped motion blur;
 // - the bundled registry fonts (kit/remotion/fonts.ts, kit/core/fonts.mjs).
 import React from "react";
 import { AbsoluteFill, Audio, Freeze, OffthreadVideo, Sequence, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
@@ -27,6 +32,8 @@ import { getEase } from "../core/motion.mjs";
 import { CAPTION_DEFAULT_COLORS, captionChunksFrom, chunkWords, narrationWords } from "../core/captions.mjs";
 // @ts-ignore plain ESM from kit/core
 import { storyBase } from "../core/story.mjs";
+// @ts-ignore plain ESM from kit/core
+import { backgroundLayer, blurAt, cameraPlan, containerTransform, opsStateAt, overlayOps, placementTransform, sceneObjectLookup } from "../core/camera-world.mjs";
 import { moduleComponent } from "./modules";
 import { baseCameraOps, cameraStyle } from "./catalog/CatalogC";
 import { Placeholder } from "./Placeholder";
@@ -82,16 +89,63 @@ export function resolveSceneElement(scene: any, story: any, { end, customModules
 
 // startFrame: the enclosing Sequence's from; tweens carry absolute times, so the
 // layer samples them at the absolute composition time (kit/remotion/clock.tsx).
-const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean; children: React.ReactNode }> = ({ startFrame, tweens, plate, background, freeze, children }) => {
+// World camera: placement = the plate's world transform; transparent = a
+// world-mode plate (the parallax background shows through); parallax = the
+// overlay's parallax ops (camera-world.mjs overlayOps).
+type CameraProps = { placement?: any; transparent?: boolean; parallax?: any[] };
+const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean; children: React.ReactNode } & CameraProps> = ({ startFrame, tweens, plate, background, freeze, placement, transparent, parallax, children }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const style = layerStyle(layerStateAt((startFrame + frame) / fps, tweens, getEase));
-  return (
-    <AbsoluteFill style={{ overflow: "hidden", isolation: "isolate" }}>
-      <AbsoluteFill style={{ ...style, transformOrigin: "50% 50%", ...(plate ? { backgroundColor: background } : {}) }}>
-        {freeze ? <Freeze frame={0}>{children}</Freeze> : children}
-      </AbsoluteFill>
+  const t = (startFrame + frame) / fps;
+  const style = layerStyle(layerStateAt(t, tweens, getEase));
+  const layer = (
+    <AbsoluteFill style={{ ...style, transformOrigin: "50% 50%", ...(plate && !transparent ? { backgroundColor: background } : {}) }}>
+      {freeze ? <Freeze frame={0}>{children}</Freeze> : children}
     </AbsoluteFill>
+  );
+  return (
+    <AbsoluteFill style={{ overflow: "hidden", isolation: "isolate", ...(placement ? { transformOrigin: "0 0", transform: placementTransform(placement) } : {}) }}>
+      {parallax?.length ? <AbsoluteFill style={{ transform: containerTransform(opsStateAt(parallax, "overlay", t)) }}>{layer}</AbsoluteFill> : layer}
+    </AbsoluteFill>
+  );
+};
+
+// The world camera containers (kit/core/camera-world.mjs), evaluated per
+// frame from the plan's ops exactly as GSAP plays them in HyperFrames:
+// parallax background, then the blur-filtered camera with drift, zoom (about
+// the canvas centre) and pan around the plates.
+export const CameraWorld: React.FC<{ plan: any; brand: any; children: React.ReactNode }> = ({ plan, brand, children }) => {
+  const frame = useCurrentFrame();
+  const { fps, width, height } = useVideoConfig();
+  const t = frame / fps;
+  const layer = React.useMemo(() => (plan.parallax ? backgroundLayer(plan, brand) : null), [plan, brand]);
+  const blur = plan.blurSamples.length ? blurAt(plan, t) : { x: 0, y: 0 };
+  const blurring = blur.x > 0 || blur.y > 0;
+  const box: React.CSSProperties = { position: "absolute", left: 0, top: 0, width, height, transformOrigin: "50% 50%" };
+  return (
+    <>
+      {layer ? (
+        <div style={{ ...box, pointerEvents: "none", transform: containerTransform(opsStateAt(plan.ops, "background", t)) }} aria-hidden>
+          <div style={{ position: "absolute", left: layer.left, top: layer.top, width: layer.width, height: layer.height, background: layer.background }} />
+        </div>
+      ) : null}
+      {plan.blurSamples.length ? (
+        <svg width={0} height={0} style={{ position: "absolute", left: 0, top: 0 }} aria-hidden>
+          <defs>
+            <filter id="lc-cam-blur" x="-5%" y="-5%" width="110%" height="110%" colorInterpolationFilters="sRGB">
+              <feGaussianBlur in="SourceGraphic" stdDeviation={`${blur.x} ${blur.y}`} />
+            </filter>
+          </defs>
+        </svg>
+      ) : null}
+      <div style={{ ...box, overflow: "hidden", zIndex: 5, ...(blurring ? { filter: "url(#lc-cam-blur)" } : {}) }}>
+        <div style={{ ...box, transform: containerTransform(opsStateAt(plan.ops, "drift", t)) }}>
+          <div style={{ ...box, transform: containerTransform(opsStateAt(plan.ops, "zoom", t)) }}>
+            <div style={{ ...box, transform: containerTransform(opsStateAt(plan.ops, "pan", t)) }}>{children}</div>
+          </div>
+        </div>
+      </div>
+    </>
   );
 };
 
@@ -143,6 +197,36 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   const audio = base ? story.audio?.mix ?? null : story.audio?.mix ?? story.audio?.voice ?? null;
   const mixVolume = typeof story.audio?.mix_volume === "number" && audio === story.audio?.mix ? story.audio.mix_volume : 1;
   const frames = (seconds: number) => Math.round(seconds * fps);
+  const plan = React.useMemo(() => cameraPlan(story, { windows, objects: sceneObjectLookup(story, (scene: any, value: any) => resolveModule(scene, value)) }), [story, windows]);
+  if (plan) {
+    const world = plan.mode === "world";
+    const sceneLayer = ({ entry, render }: any) => (
+      <Sequence key={entry.id} name={`${entry.id} · ${entry.scene.module}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps}>
+        <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background}
+          placement={entry.plate ? plan.placements[entry.id] : undefined} transparent={world && entry.plate}
+          parallax={entry.plate ? undefined : overlayOps(plan, { start: entry.start, end: entry.renderEnd })}>
+          <SceneStartFrame.Provider value={frames(entry.start)}>{render()}</SceneStartFrame.Provider>
+        </SceneLayer>
+      </Sequence>
+    );
+    return (
+      <AbsoluteFill style={{ backgroundColor: background, fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
+        <CameraWorld plan={plan} brand={story.brand}>
+          {layers.filter((layer: any) => layer.entry.plate).map(sceneLayer)}
+          {loop ? (
+            <Sequence key="loop" name={`loop → ${loop.sceneId}`} from={frames(loop.start)} durationInFrames={Math.max(1, frames(loop.end) - frames(loop.start))} premountFor={fps}>
+              <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate background={background} freeze placement={plan.loop ?? undefined} transparent={world}>{loop.render()}</SceneLayer>
+            </Sequence>
+          ) : null}
+        </CameraWorld>
+        {layers.filter((layer: any) => !layer.entry.plate).map(sceneLayer)}
+        {overlay && Array.isArray(__captions) && __captions.length ? (
+          <WordCaptions chunks={__captions} hide={hide} idle={colors.paper ?? CAPTION_DEFAULT_COLORS.idle} active={colors.primary ?? CAPTION_DEFAULT_COLORS.active} fontFamily={fonts.display} />
+        ) : null}
+        {audio ? <Audio src={staticFile(audio)} volume={mixVolume} /> : null}
+      </AbsoluteFill>
+    );
+  }
   return (
     <AbsoluteFill style={{ backgroundColor: background, fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
       {base ? <BaseLayer base={base} cameraOps={cameraOps} /> : null}

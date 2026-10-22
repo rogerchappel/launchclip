@@ -53,3 +53,6 @@ qa/renderer-eval/
 
 # Voice provider QA samples
 qa/voice/
+
+# World camera QA (contact sheets, mid-move stills, finish runs)
+qa/camera/
