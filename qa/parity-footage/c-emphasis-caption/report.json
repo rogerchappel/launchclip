@@ -1,0 +1,46 @@
+{
+  "fixture": "test/fixtures/parity-footage/c-emphasis-caption.json",
+  "label": "emphasis-caption (try-it)",
+  "mode": "module",
+  "threshold": 0.97,
+  "pass": true,
+  "min": 0.986745,
+  "warnings": [],
+  "rows": [
+    {
+      "label": "enter-mid",
+      "t": 18.4,
+      "ssim": 0.986745,
+      "pass": true,
+      "side": "/Users/roger/Developer/my-opensource/launchclip/qa/parity-footage/c-emphasis-caption/side-enter-mid.png"
+    },
+    {
+      "label": "pop+0.4",
+      "t": 18.6,
+      "ssim": 0.987133,
+      "pass": true,
+      "side": "/Users/roger/Developer/my-opensource/launchclip/qa/parity-footage/c-emphasis-caption/side-pop+0.4.png"
+    },
+    {
+      "label": "word-1+0.4",
+      "t": 18.7,
+      "ssim": 0.987174,
+      "pass": true,
+      "side": "/Users/roger/Developer/my-opensource/launchclip/qa/parity-footage/c-emphasis-caption/side-word-1+0.4.png"
+    },
+    {
+      "label": "settle",
+      "t": 19.2,
+      "ssim": 0.987252,
+      "pass": true,
+      "side": "/Users/roger/Developer/my-opensource/launchclip/qa/parity-footage/c-emphasis-caption/side-settle.png"
+    },
+    {
+      "label": "exit-mid",
+      "t": 19.866666666666667,
+      "ssim": 0.986825,
+      "pass": true,
+      "side": "/Users/roger/Developer/my-opensource/launchclip/qa/parity-footage/c-emphasis-caption/side-exit-mid.png"
+    }
+  ]
+}

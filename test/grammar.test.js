@@ -23,18 +23,18 @@ const STORY = path.join(ROOT, "examples", "story");
 const sha = (value) => createHash("sha256").update(value).digest("hex");
 
 // sha256 of compileStoryToHyperFrames(...).html for each golden story, taken
-// before motion grammars existed: on feat/ambient-motion (9d5ea0b, origin/main
-// plus ambient motion, which changes every golden's HTML; the origin/main
-// 80d3107 hashes were f4e7d778…, 18a9a026…, 61f55488…, 7826c5d0…, 02ec0fc1…,
-// b1efd64e…). explainer-9x16 is
-// compiled with its original s2 push (the golden now pans into s2).
+// before motion grammars existed: on feat/cinematic-v2 (b5775b2: origin/main
+// plus ambient motion and style pack v2 captions, which change every golden's
+// HTML). explainer-9x16 is compiled with its original s2 push (the golden now
+// pans into s2). Earlier pins, all byte-identical with grammars at the time:
+// origin/main 80d3107 (f4e7d778…), feat/ambient-motion 9d5ea0b (39db23d0…).
 const PRE_GRAMMAR_HTML_SHA256 = {
-  cooling: "39db23d0e50e83b4ac5441bbd6cc2089cd48ffac579f55586f452b3a1415260f",
-  minimal: "e7224c12eb937eeadd7275237cef0cd4947c3d736c618c02d17498c331d496df",
-  "promo-16x9": "5a5110b25e6dd8dc38f2ee0fcb53459f09d03043aebbe7622ce22d1f7f4e9a37",
-  "explainer-9x16": "88f0b3f6de60a1139366f03fdc40209a13efa450c70667b7a4845293378319d1",
-  "data-story-9x16": "7eeffadc27b7ce6308d16cfd3e8d90866dfa36b516e7c14594aa8acbbf2a15f8",
-  footage: "88e88f48199fe33d09bb8485837c5f16e0c7f24179c8a32b7a2c19d65fa87631"
+  cooling: "6b179ce8cc04ab9ee5b12c9fc456355054df1262a0029c9bcb03383f1f495dd8",
+  minimal: "2e1609b9e600b5865ed38d87ad9f981631acbb0394ecec19cc9fb20f20bc316b",
+  "promo-16x9": "715376840218a9be4496266c9d1f3905c8f528b8b135c81bb76ffcedb6a71f38",
+  "explainer-9x16": "dfa8115335e278981ddb826b3da0764c06948b03baf716cd96430099f30e8f98",
+  "data-story-9x16": "efcb92cd22d57573bbbb9324979439b527ef41c492e37e83355b2630ac1d2f71",
+  footage: "eae4b7cdc2bba79c3211741957d35c475f32ed03275e5de5c0951747311544b8"
 };
 // test/editorial_core.test.js: the explicit-rect 16:9 corpus subset.
 const EXPLICIT_16X9_SHA256 = "6412f1e1e2ca59865cfa95b4834c09e8c142462cfd7525672424522860983508";

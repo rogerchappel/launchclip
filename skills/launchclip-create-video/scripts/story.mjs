@@ -18,6 +18,10 @@ export const STORY_CAMERA_LAYOUTS = ["row", "column", "grid", "path", "auto"];
 export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "documentary"];
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
+// Caption presets (kit/core/captions.mjs CAPTION_PRESETS; kept in step by test/caption_presets.test.js).
+export const STORY_CAPTION_PRESETS = ["word-highlight", "karaoke-fill", "pop-word", "bounce", "typewriter", "box-highlight", "underline-sweep", "kinetic-stack", "minimal-line", "glow", "outline-heavy", "split-color", "lower-band", "bubble"];
+const CAPTION_OPTION_ENUMS = { position: ["bottom", "middle", "top", "auto"], case: ["as-is", "upper", "title"], font: ["display", "body", "meta"], entrance: ["pop", "fade", "slide-up", "slide-left", "scale", "none"], exit: ["fade-up", "fade", "slide-down", "shrink", "none"] };
+const CAPTION_COLOR_KEYS = ["idle", "active", "spoken", "accent", "box", "boxText", "plate", "band", "bandEdge", "chip"];
 // audio.narration.provider: voice providers `launchclip finish` can synthesise with.
 export const STORY_VOICE_PROVIDERS = ["kokoro", "elevenlabs", "supplied", "test"];
 // audio.music.provider and audio.music.sync (launchclip finish's music stage).
@@ -35,7 +39,9 @@ const WORD_ANCHOR = new RegExp(`^word:([^#\\s]+?)(?:#(\\d+))?${OFFSET}$`);
 const BEAT_ANCHOR = new RegExp(`^(beat|downbeat):(\\d+)${OFFSET}$`);
 const NUMERIC = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/;
 const EPS = 1e-6;
-const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "motion", "camera", "ambient"]);
+// style: a style pack (src/story_style.js merges it before validation);
+// motion, camera, ambient, layout: style-driven settings, carried through as data.
+const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -151,6 +157,14 @@ export function validateStory(story, { modules } = {}) {
   if (story.cinematic_contract !== undefined && story.cinematic_contract !== "phase-2") err('cinematic_contract must be "phase-2" when set');
   for (const key of Object.keys(story)) if (!TOP_LEVEL.has(key)) warn(`${key} is not a story.json v1 field and is ignored`);
 
+  if (story.style !== undefined && story.style !== null) {
+    const style = story.style;
+    if (isObject(style)) {
+      if (!nonEmpty(style.name)) err("style.name must name a style pack or a path to its style.json");
+      for (const key of ["intro", "outro"]) if (style[key] !== undefined && typeof style[key] !== "boolean") err(`style.${key} must be true or false`);
+    } else if (!nonEmpty(style)) err("style must be a style pack name, a path to a style.json, or {name, intro?, outro?}");
+  }
+
   if (!STORY_LANES.includes(story.lane)) err(`lane must be one of ${STORY_LANES.join(", ")}`);
 
   // format
@@ -215,7 +229,7 @@ export function validateStory(story, { modules } = {}) {
 
   // motion.grammar and camera (kit/core/grammar.mjs, kit/core/camera-world.mjs).
   validateMotion(story.motion, err);
-  const camera = validateCamera(story.camera, { err, lane: story.lane });
+  const camera = validateCamera(story.camera, { err, warn, lane: story.lane });
 
   // ambient: the ambient-motion control (kit/core/ambient.mjs).
   validateAmbient(story.ambient, "ambient", err);
@@ -350,7 +364,8 @@ export function validateStory(story, { modules } = {}) {
       const path = `overlays[${index}]`;
       if (!isObject(overlay)) { err(`${path} must be an object`); continue; }
       if (!nonEmpty(overlay.type)) err(`${path}.type must be a non-empty string`);
-      if (overlay.type === "captions" && overlay.style !== undefined && !STORY_CAPTION_STYLES.includes(overlay.style)) err(`${path}.style must be one of ${STORY_CAPTION_STYLES.join(", ")}`);
+      if (overlay.type === "captions" && overlay.style !== undefined && !STORY_CAPTION_STYLES.includes(overlay.style) && !STORY_CAPTION_PRESETS.includes(overlay.style)) err(`${path}.style must be one of ${STORY_CAPTION_STYLES.join(", ")} or a caption preset (${STORY_CAPTION_PRESETS.join(", ")})`);
+      if (overlay.type === "captions") validateCaptionOptions(overlay, path, err);
       if (overlay.type === "captions") {
         if (overlay.src !== undefined && overlay.src !== null) assetPath(overlay.src, `${path}.src`, err);
         if (overlay.hide !== undefined) {
@@ -432,6 +447,25 @@ function validateMusic(music, { err, warn }) {
   if (music.seed !== undefined && !(Number.isInteger(music.seed) && music.seed >= 0 && music.seed <= 4294967295)) err("audio.music.seed must be a non-negative integer");
   if (music.model !== undefined && !nonEmpty(music.model)) err("audio.music.model must be a non-empty string such as \"music_v1\"");
   if (music.volume !== undefined && !(typeof music.volume === "number" && music.volume >= 0 && music.volume <= 1)) err("audio.music.volume must be a number between 0 and 1");
+}
+
+function validateCaptionOptions(overlay, path, err) {
+  if (overlay.preset !== undefined && overlay.preset !== "none" && !STORY_CAPTION_PRESETS.includes(overlay.preset)) err(`${path}.preset must be one of ${STORY_CAPTION_PRESETS.join(", ")} (or "none")`);
+  for (const [key, values] of Object.entries(CAPTION_OPTION_ENUMS)) if (overlay[key] !== undefined && !values.includes(overlay[key])) err(`${path}.${key} must be one of ${values.join(", ")}`);
+  for (const key of ["max_words", "max_chars"]) if (overlay[key] !== undefined && !(Number.isInteger(overlay[key]) && overlay[key] >= 1 && overlay[key] <= 40)) err(`${path}.${key} must be an integer between 1 and 40`);
+  if (overlay.size !== undefined && !(typeof overlay.size === "number" && overlay.size >= 0.4 && overlay.size <= 2.5)) err(`${path}.size must be a scale between 0.4 and 2.5`);
+  if (overlay.offset !== undefined && !(typeof overlay.offset === "number" && Math.abs(overlay.offset) <= 0.5)) err(`${path}.offset must be seconds between -0.5 and 0.5`);
+  if (overlay.stroke !== undefined && overlay.stroke !== false && !(typeof overlay.stroke === "number" && overlay.stroke >= 0 && overlay.stroke <= 40)) err(`${path}.stroke must be false or a width in px (0-40)`);
+  if (overlay.shadow !== undefined && overlay.shadow !== false && typeof overlay.shadow !== "string") err(`${path}.shadow must be false or a CSS text-shadow`);
+  if (overlay.emphasis !== undefined && !(overlay.emphasis === "auto" || overlay.emphasis === "none" || overlay.emphasis === false || (Array.isArray(overlay.emphasis) && overlay.emphasis.every(nonEmpty)))) err(`${path}.emphasis must be "auto", "none", false or a list of words`);
+  if (overlay.keywords !== undefined && !(Array.isArray(overlay.keywords) && overlay.keywords.every(nonEmpty))) err(`${path}.keywords must be a list of words`);
+  if (overlay.colors !== undefined) {
+    if (!isObject(overlay.colors)) err(`${path}.colors must be an object of brand roles or hex colours`);
+    else for (const [key, value] of Object.entries(overlay.colors)) {
+      if (!CAPTION_COLOR_KEYS.includes(key)) err(`${path}.colors.${key} is not a caption colour (${CAPTION_COLOR_KEYS.join(", ")})`);
+      else if (!nonEmpty(value) || (value.startsWith("#") && !/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(value))) err(`${path}.colors.${key} must be a brand colour role or a hex colour`);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -591,7 +625,7 @@ function validateMotion(motion, err) {
 }
 
 // → the effective camera mode ("cuts" | "world") for the transition rules.
-function validateCamera(camera, { err, lane }) {
+function validateCamera(camera, { err, warn, lane }) {
   if (camera === undefined || camera === null) return "cuts";
   if (!isObject(camera)) { err("camera must be an object {mode, layout?, spacing?, parallax?, blur?}"); return "cuts"; }
   for (const key of Object.keys(camera)) if (!["mode", "layout", "spacing", "parallax", "blur"].includes(key)) err(`camera.${key} is not supported (allowed: mode, layout, spacing, parallax, blur)`);
@@ -600,7 +634,8 @@ function validateCamera(camera, { err, lane }) {
   if (camera.layout !== undefined && !STORY_CAMERA_LAYOUTS.includes(camera.layout)) err(`camera.layout must be one of ${STORY_CAMERA_LAYOUTS.join(", ")}`);
   if (camera.spacing !== undefined && !(typeof camera.spacing === "number" && camera.spacing >= 0 && camera.spacing <= 1)) err("camera.spacing must be a number between 0 and 1 (the gap between scenes, as a fraction of the canvas)");
   for (const key of ["parallax", "blur"]) if (camera[key] !== undefined && typeof camera[key] !== "boolean") err(`camera.${key} must be true or false`);
-  if (mode === "world" && lane === "footage-led") err("camera.mode \"world\" is for the motion and voiceover-motion lanes; footage-led stories keep cuts and punch-ins");
+  // A style pack may carry a world camera into any lane; footage-led ignores it.
+  if (mode === "world" && lane === "footage-led") { warn("camera.mode \"world\" is ignored in the footage-led lane, which keeps cuts and punch-ins"); return "cuts"; }
   return mode === "world" ? "world" : "cuts";
 }
 

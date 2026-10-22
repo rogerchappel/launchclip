@@ -44,10 +44,14 @@
 import { getEase, motionBlurPx } from './motion.mjs';
 import { isCameraTransition } from './transitions.mjs';
 import { resolveGrammar } from './grammar.mjs';
+import { FIELD_PARALLAX } from './ambient.mjs';
 
 export const CAMERA_MODES = Object.freeze(['cuts', 'world']);
 export const CAMERA_LAYOUTS = Object.freeze(['row', 'column', 'grid', 'path', 'auto']);
-export const PARALLAX = Object.freeze({ background: 0.3, plate: 1, overlay: 1.15 });
+// background: ambient motion's FIELD_PARALLAX, so its field and the brand
+// glows share the depth layer's 0.3× (the layer translates and rolls only;
+// it never scales, see backgroundKeys).
+export const PARALLAX = Object.freeze({ background: FIELD_PARALLAX, plate: 1, overlay: 1.15 });
 export const CAMERA_DEFAULTS = Object.freeze({ layout: 'auto', spacing: 0.12 });
 // A dolly (push/pull) scales the next plate by this much, clamped.
 export const DOLLY = Object.freeze({ min: 1.6, max: 3.2, pull: 2.2 });
@@ -65,7 +69,9 @@ const rad = (deg) => (deg * Math.PI) / 180;
 /** story.camera with defaults → {mode, layout, spacing, parallax, blur} (blur null = whip-pans only). */
 export function resolveCamera(story) {
   const own = isObject(story?.camera) ? story.camera : {};
-  const mode = own.mode === 'world' ? 'world' : 'cuts';
+  // Footage-led stories keep cuts and punch-ins, even when a style pack
+  // carries a world camera (validateStory warns).
+  const mode = own.mode === 'world' && story?.lane !== 'footage-led' ? 'world' : 'cuts';
   return {
     mode,
     layout: CAMERA_LAYOUTS.includes(own.layout) ? own.layout : CAMERA_DEFAULTS.layout,

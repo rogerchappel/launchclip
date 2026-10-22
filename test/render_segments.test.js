@@ -201,7 +201,6 @@ test("timed overlays touch their window; global settings, kit, fonts and rendere
   for (const mutate of [
     (story) => { story.audio.mix = "assets/audio/other.wav"; },
     (story) => { story.audio.mix_volume = 0.5; },
-    (story) => { story.title = "Another title"; },
     (story) => { story.notes = "x"; }
   ]) assert.deepEqual(changed(before, await hashes(mutate)), []);
   assert.deepEqual(changed(before, await hashes(null, { kit: "kit-2" })), SEGMENT_LABELS);
@@ -388,4 +387,16 @@ test("Remotion segments are lossless; the delivery encode matches remotion rende
   assert.ok(!high.includes("-preset"));
   assert.equal(high[high.indexOf("-crf") + 1], "18");
   assert.throws(() => deliveryArgs("a", "b", "ultra"), /unknown quality/);
+});
+
+test("ambient: a scene override touches only that scene's segments; the field's seed and level touch every segment", async () => {
+  const before = await hashes();
+  // Per-scene drift lives on the scene layer.
+  const drift = await hashes((story) => { story.scenes[2].ambient = { drift: false }; });
+  assert.deepEqual(changed(before, drift), ["s2+s3", "s3", "s3+s4"]);
+  // The background field is seeded from the title and defaults its level from
+  // the dominant scene energy, so both reach every plate.
+  assert.deepEqual(changed(before, await hashes((story) => { story.title = "Another title"; })), SEGMENT_LABELS);
+  assert.deepEqual(changed(before, await hashes((story) => { for (const scene of story.scenes) scene.energy = 3; })), SEGMENT_LABELS);
+  assert.deepEqual(changed(before, await hashes((story) => { story.ambient = "lively"; })), SEGMENT_LABELS);
 });

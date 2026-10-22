@@ -107,11 +107,67 @@ If the source itself is missing, ask for it before proceeding. Otherwise keep
 working after the compact intake; do not turn each creative choice into another
 approval round.
 
-## Reuse a project-local style pack
+## Style packs: keep a channel consistent
 
-Treat `.launchclip/styles/<name>` as the default home for a user's reusable
-channel or series identity. When the user names a style, resolve an explicit
-directory first, then that project-local path. If a pack exists:
+A style pack is a channel's reusable identity. Every video of a series should
+name the same pack instead of improvising its look from scratch.
+
+### Storyboard videos (style pack v2)
+
+A v2 pack is `.launchclip/styles/<name>/style.json`
+(`"schema": "launchclip.style.v2"`). It holds the palette (`brand.colors`:
+`bg`, `paper` = text on bg, `ink` = text on primary and cards, `primary`,
+`accent`) and bundled fonts (`brand.fonts`: display, body, meta), the motion
+grammar, camera and ambient level, the caption preset and its options, the SFX
+density and music hints, preferred and avoided modules with per-module param
+defaults, layout rules, and an optional intro, outro and loop.
+
+- Select it in `storyboard.json` with `"style": "<name>"` (or a path to a
+  `style.json`). Names resolve in the project's `.launchclip/styles`, then
+  `~/.launchclip/styles`, then the built-in starters: `editorial-dark`,
+  `bold-creator`, `minimal-tech`, `warm-documentary`, `neon-explainer`.
+- Leave `brand` out of the storyboard and write captions as
+  `{"type": "captions"}`, so the pack decides them. Anything you do write
+  explicitly wins over the pack, so only write a value when this video needs an
+  exception.
+- Add the channel intro or outro with
+  `"style": {"name": "<name>", "intro": true, "outro": true}`; never author
+  them as scenes. An intro is skipped (with a warning) on a story with a timed
+  voice, because LaunchClip does not shift audio.
+- Prefer the pack's `modules.prefer` and avoid `modules.avoid` when choosing
+  modules. `launchclip story plan --style <name>` puts these rules, the caption
+  preset and the grammar in the planner prompt.
+- Check the merged result with `launchclip story validate storyboard.json`; its
+  `style.applied` list shows every value the pack filled.
+
+Captions come from presets shared by both renderers: `word-highlight`,
+`karaoke-fill`, `pop-word`, `bounce`, `typewriter`, `box-highlight`,
+`underline-sweep`, `kinetic-stack`, `minimal-line`, `glow`, `outline-heavy`,
+`split-color`, `lower-band`, `bubble`. Options (position, max words, case,
+emphasis words, font role, size, brand-role colours, stroke, shadow, entrance,
+exit, timing offset) go on the overlay or in the pack's `captions`.
+
+## Mimic a reference
+
+To match earlier videos (the user's own, or a reference they are allowed to
+study), draft a pack from them instead of eyeballing:
+
+```bash
+launchclip style create my-channel --from-reference ep1.mp4 ep2.mp4 [--from-images thumb.png] [--font-hint "Bebas Neue, Inter"]
+```
+
+It measures palette, pacing, motion energy, approximate caption placement and
+highlight colour, loudness and SFX density locally, and suggests the nearest
+bundled font families. It writes `style.json` and `reference-report.md`, with a
+confidence for every value. Read the report, fix low-confidence values by hand
+(fonts and accent colours are the usual ones), then render with the pack and run
+`launchclip style check <project> --against my-channel` to measure drift.
+Reference media and fonts are never copied into the pack.
+
+## HyperFrames projects (v1 packs)
+
+Older packs hold `frame.md`, an optional caption skin, fonts, audio notes and
+assets. When the user names one of these:
 
 - Read `style.json` and the complete `frame.md` before designing.
 - Inspect any caption skin, fonts, audio notes, and assets named by the pack.
@@ -122,11 +178,12 @@ directory first, then that project-local path. If a pack exists:
   the project-specific `DESIGN.md`; keep scene composition driven by this
   video's content rather than cloning the previous edit.
 
+`launchclip style upgrade <name>` converts a v1 pack to v2 (the v1 files stay).
 If no pack exists, treat the requested words as creative direction and design
-an original system for the video. Do not substitute a built-in branded preset.
-After an approved video, create a reusable pack only when the user asks, using
-`launchclip style create <name> --from <output-project>`. This local management
-command makes no model calls. Never overwrite an existing pack without explicit
+an original system for the video. After an approved video, create a reusable
+pack only when the user asks (`launchclip style create <name> --from
+<output-project>`, or `--from-reference` for a rendered video). These local
+commands make no model calls. Never overwrite an existing pack without explicit
 `--force` approval.
 
 ## Promote a downloaded HeyGen avatar

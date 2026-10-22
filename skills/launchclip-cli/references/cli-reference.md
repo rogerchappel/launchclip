@@ -152,6 +152,40 @@ free-form style-family behavior. This keeps old commands compatible. Commit
 `.launchclip/styles/**` when the channel identity should travel with the
 project; other `.launchclip` workspaces remain generated output.
 
+### Style pack v2 (storyboards)
+
+A v2 pack is `.launchclip/styles/<name>/style.json` with
+`"schema": "launchclip.style.v2"`: palette and bundled fonts, motion grammar,
+camera, ambient level, caption preset and options, SFX density and music hints,
+preferred/avoided modules and per-module param defaults, layout rules, an
+optional intro/outro and loop. A storyboard selects it with
+`"style": "<name>"`, `"style": "./path/style.json"` or
+`"style": {"name": "<name>", "intro": true, "outro": true}`. Names resolve in
+`<project>/.launchclip/styles`, then `~/.launchclip/styles` (or
+`$LAUNCHCLIP_HOME/styles`), then the built-in starters: `editorial-dark`,
+`bold-creator`, `minimal-tech`, `warm-documentary`, `neon-explainer`. The pack
+is merged before validation in every command that reads a storyboard (story
+validate/resolve/compile, layout-check, finish, both renderer adapters,
+cinematic-check and the renderer eval); explicit storyboard values always win.
+
+```bash
+launchclip style list                       # project packs and built-in starters
+launchclip style show bold-creator          # the resolved v2 pack
+launchclip style upgrade ai-news            # v1 (frame.md) → style.json v2, keeps style.v1.json
+launchclip style create my-channel --from-reference old-1.mp4 old-2.mp4 [--from-images thumb.png] [--font-hint "Bebas Neue, Inter"] [--force]
+launchclip style check <project> --against my-channel [--video renders/final.mp4] [--out qa/style-check.json]
+```
+
+`style create --from-reference` measures the references locally (no model
+calls): palette by k-means with contrast-checked roles, pacing from cuts and
+structural scene boundaries, activity for the ambient level, approximate caption
+position/size/highlight, loudness and transients for sound, and the nearest
+bundled font families. It writes `style.json` and `reference-report.md` (each
+value with a confidence). Reference media is never copied into the pack. `style
+check` measures a render the same way and reports drift (palette distance,
+median shot, cut rate, activity, loudness) against the pack's
+`reference_stats`, or against its palette and grammar when it has none.
+
 ## Model-directed production
 
 Model policies:
@@ -549,6 +583,20 @@ launchclip story compile <project> --renderer remotion
 `<project>` is the directory holding `storyboard.json` (or the file itself).
 Anchors are resolved against `NARRATION.json` and `BEATS.json` when present.
 
+Captions are one overlay: `{"type": "captions", "preset": "<name>", ...options}`
+(or the legacy `"style": "word-highlight" | "line" | "none"`; `line` draws the
+`minimal-line` preset). Presets: `word-highlight` (default), `karaoke-fill`,
+`pop-word`, `bounce`, `typewriter`, `box-highlight`, `underline-sweep`,
+`kinetic-stack`, `minimal-line`, `glow`, `outline-heavy`, `split-color`,
+`lower-band`, `bubble`. Options: `position` (bottom|middle|top|auto),
+`max_words`, `max_chars`, `case` (as-is|upper|title), `emphasis` ("auto", "none"
+or a word list) and `keywords`, `font` (display|body|meta), `size` (scale),
+`colors` (brand roles or hex: idle, active, spoken, accent, box, boxText, plate,
+band, bandEdge, chip), `stroke`, `shadow`, `entrance`
+(pop|fade|slide-up|slide-left|scale|none), `exit`
+(fade-up|fade|slide-down|shrink|none) and `offset` (seconds). Both renderers
+draw the same plan.
+
 - `--renderer hyperframes` writes a complete HyperFrames project (default
   `<project>/hyperframes/`): `index.html` with one paused GSAP timeline, every
   scene's module, typed transitions, the phase-2 boundary attributes, one root
@@ -572,7 +620,7 @@ launchclip story plan --brief brief.md [--narration NARRATION.json] \
   [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] \
   [--base assets/recording.mp4] [--voice assets/audio/narration.wav] \
   [--format 1080x1920|shorts|landscape|square] [--fps 30] [--duration seconds] \
-  [--brand brand.json] [--max-repairs 2]
+  [--brand brand.json] [--style name|path] [--max-repairs 2]
 ```
 
 One model call authors `storyboard.json` from the brief, with the planning
@@ -594,6 +642,10 @@ Repairs target scenes and params; the checks never relax.
   modules.
 - `--duration` defaults to the last narration word plus 0.6 s, or 30 s.
   `--brand` is a JSON file with `colors` and `fonts`.
+- `--style <name|path>` plans for a style pack: the prompt carries its
+  preferred and avoided modules, caption preset, grammar and sound density, the
+  pack's brand becomes the fixed brand (unless `--brand` is given), the
+  storyboard names the pack, and the checks run on the merged story.
 - `--model` is `provider:model[@reasoning]`: `anthropic:<model-id>`
   (`ANTHROPIC_API_KEY`), `openai:<model>` (`OPENAI_API_KEY`),
   `openrouter:<vendor>/<model>` (`OPENROUTER_API_KEY`), `ollama:<model>`

@@ -32,6 +32,7 @@ import { remotionInvocation } from "./renderers/remotion.js";
 import { deriveBoundaries, resolveStory, storyFormat } from "./story.js";
 import { validateStory } from "./story_cli.js";
 import { hasExactFile, readStoryEdl } from "./story_loader.js";
+import { applyProjectStyle } from "./story_style.js";
 import { hyperframesInvocation } from "./toolchain.js";
 import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
 import { normalizeLoudness, parseLoudnormJson } from "./voice/supplied.js";
@@ -273,7 +274,10 @@ export function chooseBed(story, music = {}) {
     total += length;
   }
   const energy = total > 0 ? round3(weighted / total) : 1;
-  const tempo = energy < 1 ? 84 : energy < 2 ? 96 : energy < 2.5 ? 108 : 116;
+  let tempo = energy < 1 ? 84 : energy < 2 ? 96 : energy < 2.5 ? 108 : 116;
+  // A style's music bpm_range bounds the energy-derived tempo.
+  const range = Array.isArray(music?.bpm_range) && music.bpm_range.length === 2 ? music.bpm_range.map(Number) : null;
+  if (range && range.every(Number.isFinite)) tempo = Math.round(Math.min(range[1], Math.max(range[0], tempo)));
   const loud = pool.filter((scene) => scene.energy === "build" || energyValue(scene.energy) >= 2);
   const starts = loud.map((scene) => (scene.energy === "build" ? Number(scene.end) : Number(scene.start)));
   const kickFrom = loud.length ? round3(Math.min(...starts)) : duration;
@@ -362,7 +366,7 @@ export function buildFinishCopy(story, { voice, words, captions, mix } = {}) {
 }
 
 function captionsOverlay(story) {
-  return (Array.isArray(story?.overlays) ? story.overlays : []).find((overlay) => overlay?.type === "captions" && overlay.style !== "none") ?? null;
+  return (Array.isArray(story?.overlays) ? story.overlays : []).find((overlay) => overlay?.type === "captions" && overlay.style !== "none" && overlay.preset !== "none") ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -434,7 +438,9 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
   const project = path.resolve(projectPath);
   const storyFile = path.join(project, "storyboard.json");
   if (!hasExactFile(project, "storyboard.json")) throw new Error(`launchclip finish needs ${storyFile}; author storyboard.json first`);
-  const story = await readJson(storyFile, "storyboard.json");
+  // The style pack is merged into the working copy; storyboard.json stays as written.
+  const styled = await applyProjectStyle(await readJson(storyFile, "storyboard.json"), { projectDir: project });
+  const story = styled.story;
   const quality = String(options.quality ?? "draft").toLowerCase();
   if (!["draft", "high"].includes(quality)) throw new Error(`--quality must be draft or high; got ${options.quality}`);
   if (options.voice != null && !listVoiceProviders().includes(String(options.voice).toLowerCase())) throw new Error(`Unknown --voice ${options.voice}. Available providers: ${listVoiceProviders().join(", ")}`);
@@ -457,7 +463,8 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
     out,
     raw: path.join(project, ".launchclip", "finish", `render-${quality}.mp4`),
     state: await readState(project),
-    warnings: [],
+    warnings: [...(styled.style?.warnings ?? [])],
+    style: styled.style,
     words: null,
     resolved: null,
     gates: null
@@ -657,25 +664,26 @@ const STAGES = [
       const sfxOn = !(audio.sfx === "none" || audio.sfx === false);
       const choice = resolveMusicChoice(audio, { flag: ctx.options.music, env: ctx.adapters.env ?? process.env });
       const music = musicPlanSpec(choice);
-      const density = String(ctx.options.sfxDensity ?? "normal").toLowerCase();
+      // --sfx-density wins over the style pack's sound.sfx_density (audio.sfx_density).
+      const density = String(ctx.options.sfxDensity ?? audio.sfx_density ?? "normal").toLowerCase();
       if (!SFX_DENSITIES.includes(density)) throw new Error(`--sfx-density must be one of ${SFX_DENSITIES.join(", ")}; got ${ctx.options.sfxDensity}`);
       const storyId = String(ctx.story.id ?? ctx.story.title ?? path.basename(ctx.project));
       const models = sceneModels(ctx.resolved);
       const bound = sfxOn ? bindCues(ctx.resolved, { models }) : { cues: [], warnings: [] };
       bound.cues = applyDensity(bound.cues, density, storyId);
       const typing = sfxOn ? typingSchedule(collectTyping(ctx.resolved, { models }), { seed: storyId, ...densityTyping(density) }) : [];
-      const libraries = sfxOn ? await resolveLibraries({ project: ctx.project, library: ctx.options.sfxLibrary, home: ctx.options.sfxHome }) : [];
+      const libraries = sfxOn ? await resolveLibraries({ project: ctx.project, library: ctx.options.sfxLibrary ?? (audio.sfx_library ? path.resolve(ctx.project, audio.sfx_library) : undefined), home: ctx.options.sfxHome }) : [];
       const voice = audio.voice && existsSync(path.join(ctx.project, audio.voice)) ? audio.voice : null;
       if (!bound.cues.length && !typing.length && music.kind === "none") return { skip: voice ? "no SFX or music: the voice is mounted directly" : "no voice, SFX or music to mix" };
       if (music.kind === "file" && !existsSync(path.join(ctx.project, music.file))) throw new Error(`audio.music file not found: ${music.file}`);
-      const bed = music.kind === "none" ? null : { ...chooseBed(ctx.resolved, music), ...(music.kind === "file" ? { file: music.file } : {}), ...(Number(music.volume) >= 0 && music.volume !== undefined ? { volume: Number(music.volume) } : {}) };
+      const bed = music.kind === "none" ? null : { ...chooseBed(ctx.resolved, { ...music, bpm_range: audio.music_hints?.bpm_range }), ...(music.kind === "file" ? { file: music.file } : {}), ...(Number(music.volume) >= 0 && music.volume !== undefined ? { volume: Number(music.volume) } : {}) };
       // ElevenLabs: the request (no network) names the cached track, so a new
       // prompt, length, model or seed reruns the stage and nothing else does.
       let request = null;
       let provider = null;
       if (music.kind === "elevenlabs") {
         provider = await ctx.adapters.musicProvider("elevenlabs", { env: ctx.adapters.env ?? process.env, model: music.model });
-        const built = provider.request(ctx.resolved, musicParams(music, bed, Boolean(voice), ctx.options.musicHints));
+        const built = provider.request(ctx.resolved, musicParams(music, bed, Boolean(voice), ctx.options.musicHints ?? audio.music_hints));
         request = { mode: built.mode, body: built.body, bpm: built.bpm };
         bed.bpm = built.bpm;
       }
@@ -1039,6 +1047,7 @@ function buildReport(ctx, stages, { seconds, failed }) {
     resolved_copy: PATHS.copy,
     renderer: ctx.rendererName,
     quality: ctx.quality,
+    style: ctx.style ? { name: ctx.style.name, source: ctx.style.source, file: ctx.style.file, applied: ctx.style.applied.length } : null,
     voice: ctx.state.stages?.voice?.details?.provider && stages.find((stage) => stage.name === "voice")?.status !== "skipped" ? ctx.state.stages.voice.details.provider : null,
     final: !failed && !ctx.preview && existsSync(ctx.out) ? ctx.out : null,
     output: ctx.out,

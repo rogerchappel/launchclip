@@ -253,7 +253,7 @@ export function elementsFromStory(resolvedStory, { moduleLayout, profile, captio
   const duration = Number(resolvedStory.resolved?.duration ?? format.duration ?? Math.max(0, ...elements.map((element) => element.end)));
   const overlays = Array.isArray(resolvedStory.overlays) ? resolvedStory.overlays : [];
   overlays.filter((overlay) => overlay?.type === "captions").forEach((overlay, index) => {
-    const band = overlay.rect ?? captionBand ?? profileGeometry(canvas, profile).captionBand;
+    const band = overlay.rect ?? captionBandAt(captionBand ?? profileGeometry(canvas, profile).captionBand, canvas, overlay.position);
     const hide = [
       ...(Array.isArray(overlay.hide) ? overlay.hide : []),
       ...resolvedStory.scenes.filter((scene) => scene.hides_captions === true).map((scene) => [Number(scene.start), Number(scene.end)])
@@ -268,6 +268,17 @@ export function elementsFromStory(resolvedStory, { moduleLayout, profile, captio
     });
   });
   return elements;
+}
+
+// Caption position (captions overlay `position`): the band moves up to the
+// top or the middle of the frame; kept in step with captionBandTop() in
+// kit/core/captions.mjs (test/caption_presets.test.js).
+export const CAPTION_POSITION_TOP = Object.freeze({ portrait: 0.13, landscape: 0.08 });
+export function captionBandAt(band, canvas, position) {
+  if (!band || (position !== "top" && position !== "middle")) return band;
+  const landscape = canvas.width > canvas.height;
+  const y = position === "top" ? canvas.height * (landscape ? CAPTION_POSITION_TOP.landscape : CAPTION_POSITION_TOP.portrait) : canvas.height / 2 - band.height / 2;
+  return { ...band, y };
 }
 
 function normalizeElement(element, index) {

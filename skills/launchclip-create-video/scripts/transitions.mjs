@@ -145,7 +145,7 @@ export function sceneWindows(story) {
   const duration = Number(story?.resolved?.duration ?? format.duration);
   const fps = Number(story?.resolved?.fps ?? format.fps ?? 30);
   const grammar = resolveGrammar(story);
-  const mode = story?.camera?.mode === 'world' ? 'world' : 'cuts';
+  const mode = story?.camera?.mode === 'world' && story?.lane !== 'footage-led' ? 'world' : 'cuts';
   const options = { width, height, grammar, mode };
   const scenes = (Array.isArray(story?.scenes) ? story.scenes : []).map((scene, index) => {
     if (typeof scene?.start !== 'number' || typeof scene?.end !== 'number') throw new Error(`sceneWindows needs a resolved story; scenes[${index}] has unresolved start/end`);

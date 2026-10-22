@@ -49,6 +49,9 @@ test("story validation accepts motion.grammar, camera and the camera transitions
   assert.match(bad((s) => { s.motion = { grammar: { base: "snappy", ease: { enter: "wobble.out" } } }; return s; }), /motion\.grammar\.ease\.enter/);
   assert.match(bad((s) => { s.scenes[5].in = { type: "pan", dur: 0.4 }; return s; }), /overlays \(track ≥ 1\) cannot use it/);
   assert.deepEqual(validateStory(worldStory({ grammar: { base: "smooth", stagger: 1.4, ease: { camera: "power2.inOut" } } })).errors, []);
+  // A style pack may carry a world camera into the footage-led lane: it is
+  // ignored there (cuts and punch-ins), with a warning.
+  assert.equal(resolveCamera({ lane: "footage-led", camera: { mode: "world" } }).mode, "cuts");
 });
 
 test("resolveCamera defaults and cameraActive", () => {

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1080, height=1920">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Footage-led example: one recording, edited and dressed</title>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <style>
+    @font-face { font-family: 'Anton'; src: url("fonts/anton-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+    @font-face { font-family: 'Inter'; src: url("fonts/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: block; }
+    @font-face { font-family: 'JetBrains Mono'; src: url("fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: block; }
+    @font-face { font-family: 'STIX Two Text'; src: url("fonts/stix-two-text-latin-wght-normal.woff2") format("woff2"); font-weight: 400 700; font-style: normal; font-display: block; }
+    @font-face { font-family: 'STIX Two Text'; src: url("fonts/stix-two-text-latin-wght-italic.woff2") format("woff2"); font-weight: 400 700; font-style: italic; font-display: block; }
+    @font-face { font-family: 'Instrument Serif'; src: url("fonts/instrument-serif-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+    @font-face { font-family: 'Instrument Serif'; src: url("fonts/instrument-serif-latin-400-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: block; }
+    @font-face { font-family: 'STIX Two Math'; src: url("fonts/stix-two-math-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+    @font-face { font-family: 'Space Grotesk'; src: url("fonts/space-grotesk-latin-wght-normal.woff2") format("woff2"); font-weight: 300 700; font-style: normal; font-display: block; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: #06070d; }
+    #launchclip-root { position: relative; width: 1080px; height: 1920px; overflow: hidden; --lc-font-display: 'Anton', 'STIX Two Math', sans-serif; --lc-font-body: 'Space Grotesk', 'Inter', 'STIX Two Math', sans-serif; --lc-font-meta: 'JetBrains Mono', 'STIX Two Math', monospace; --cap-font: 'Anton', 'STIX Two Math', sans-serif; --cap-idle: #f2eee6; --cap-active: #fdb022; font-family: var(--lc-font-body); }
+    #lc-bg { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; background: #06070d; }
+    .lc-scene { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; opacity: 0; isolation: isolate; overflow: hidden; pointer-events: none; }
+    .lc-layer { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; transform-origin: 50% 50%; }
+    .lc-plate > .lc-layer { background: #06070d; }
+    .lc-placeholder { position: absolute; display: flex; flex-direction: column; justify-content: center; gap: 16px; padding: 40px; overflow: hidden; background: #1b1d24; color: #f7f7f8; border: 4px dashed #ff5a36; border-radius: 24px; font-family: 'Inter', 'STIX Two Math', sans-serif; }
+    .lc-placeholder-label { font-size: 52px; font-weight: 800; line-height: 1.1; overflow-wrap: anywhere; }
+    .lc-placeholder-detail { font-size: 28px; line-height: 1.3; color: #c4c7cf; overflow-wrap: anywhere; }
+    
+    #try-it{pointer-events:none}#try-it svg{display:block}
+  </style>
+  <script>if (document.fonts) for (const face of document.fonts) face.load().catch(() => {});</script>
+</head>
+<body>
+  <div id="launchclip-root" data-composition-id="launchclip-story" data-start="0" data-duration="20" data-width="1080" data-height="1920" data-fps="30" data-launchclip-cinematic-contract="phase-2" data-launchclip-story="launchclip.story.v1">
+    <div id="lc-bg" class="clip" data-start="0" data-duration="20" data-track-index="1"></div>
+    <video id="lc-base-0" class="clip lc-base-media" src="assets/recording.mp4" data-start="0" data-duration="8" data-media-start="0" data-track-index="2" data-launchclip-base-segment="0" muted playsinline style="position:absolute;left:0;top:0;width:1080px;height:1920px;object-fit:cover;object-position:50% 36%;transform-origin:50% 50%;z-index:1"></video>
+    <video id="lc-base-1" class="clip lc-base-media" src="assets/recording.mp4" data-start="8" data-duration="12" data-media-start="10" data-track-index="2" data-launchclip-base-segment="1" muted playsinline style="position:absolute;left:0;top:0;width:1080px;height:1920px;object-fit:cover;object-position:50% 36%;transform-origin:50% 50%;z-index:1"></video>
+    <div id="lc-scene-try-it" class="lc-scene" data-launchclip-scene="try-it" data-launchclip-module="emphasis-caption" data-launchclip-start="18.1" data-launchclip-render-end="20" style="z-index:10"><div id="lc-layer-try-it" class="lc-layer"><div id="try-it" class="clip lc-catalog-c" data-start="18.1" data-duration="1.9" data-track-index="4" data-module="emphasis-caption" style="position:absolute;left:0px;top:0px;width:1080px;height:1920px;box-sizing:border-box;opacity:1;transform:translate(0px, 0px);transform-origin:510px 860px"><div id="try-it-words" style="position:absolute;left:131.6px;top:754.4px;width:756.8px;height:211.2px;display:flex;flex-wrap:wrap;justify-content:center;align-content:center;text-align:center;font-family:&#39;Anton&#39;,Impact,&#39;Arial Narrow Bold&#39;,&#39;Arial Black&#39;,sans-serif;font-weight:400;font-size:180px;line-height:1.04;color:#fdb022;-webkit-text-stroke:10px #06070d;paint-order:stroke fill;text-shadow:0 10px 28px #000000a6"><span id="try-it-w-0" style="display:inline-block;margin:0 21.599999999999998px;opacity:0;transform:translate(0px, 30px) scale(0.3, 0.3);transform-origin:50% 70%">Try</span><span id="try-it-w-1" style="display:inline-block;margin:0 21.599999999999998px;opacity:0;transform:translate(0px, 30px) scale(0.3, 0.3);transform-origin:50% 70%">it</span></div></div></div></div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      // try-it (emphasis-caption) 18.1–20s
+      tl.fromTo("#lc-scene-try-it", { opacity: 0 }, { opacity: 1, duration: 0, immediateRender: false }, 18.0995);
+      {
+      tl.set("#try-it", {"opacity":1,"x":0,"y":0,"scaleX":1,"scaleY":1}, 18.1);
+      tl.fromTo("#try-it", {"opacity":1,"x":0,"y":0,"scaleX":1,"scaleY":1}, {"opacity":0,"x":0,"y":0,"scaleX":1.08,"scaleY":1.08,"duration":0.25,"ease":"power2.in","immediateRender":false}, 19.75);
+      tl.set("#try-it", {"opacity":0}, 20);
+      tl.set("#try-it-w-0", {"opacity":0,"x":0,"y":30,"scaleX":0.3,"scaleY":0.3}, 18.1);
+      tl.fromTo("#try-it-w-0", {"opacity":0}, {"opacity":1,"duration":0.12,"ease":"none","immediateRender":false}, 18.2);
+      tl.fromTo("#try-it-w-0", {"y":30,"scaleX":0.3,"scaleY":0.3}, {"y":0,"scaleX":1,"scaleY":1,"duration":0.38,"ease":"back.out(2.2)","immediateRender":false}, 18.2);
+      tl.set("#try-it-w-1", {"opacity":0,"x":0,"y":30,"scaleX":0.3,"scaleY":0.3}, 18.1);
+      tl.fromTo("#try-it-w-1", {"opacity":0}, {"opacity":1,"duration":0.12,"ease":"none","immediateRender":false}, 18.29);
+      tl.fromTo("#try-it-w-1", {"y":30,"scaleX":0.3,"scaleY":0.3}, {"y":0,"scaleX":1,"scaleY":1,"duration":0.38,"ease":"back.out(2.2)","immediateRender":false}, 18.29);
+      }
+      
+      window.__timelines["launchclip-story"] = tl;
+    </script>
+  </div>
+</body>
+</html>

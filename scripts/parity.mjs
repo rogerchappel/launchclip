@@ -268,7 +268,7 @@ export async function compareStills(a, b) {
   return {ssim, psnr};
 }
 
-async function sideBySide(a, b, sideFile, diffFile) {
+export async function sideBySide(a, b, sideFile, diffFile) {
   await must('ffmpeg hstack', 'ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', a, '-i', b, '-filter_complex', '[0:v]format=rgb24[a];[1:v]format=rgb24[b];[a][b]hstack=inputs=2', '-frames:v', '1', sideFile]);
   await must('ffmpeg difference', 'ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', a, '-i', b, '-filter_complex', '[0:v]format=gbrp[a];[1:v]format=gbrp[b];[a][b]blend=all_mode=difference,lutrgb=r=val*4:g=val*4:b=val*4', '-frames:v', '1', diffFile]);
 }

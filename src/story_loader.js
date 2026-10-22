@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { applyProjectStyle } from "./story_style.js";
 
 // kit/core/story.mjs is the canonical storyboard.json implementation (see
 // docs/KIT_CONTRACTS.md). It is loaded lazily so the HyperFrames path keeps
@@ -45,7 +46,9 @@ export async function readProjectStory(projectDir, { storyModule } = {}) {
   const storyFile = path.join(project, "storyboard.json");
   if (!projectHasStory(project)) return null;
   const module = await loadStoryModule(storyModule);
-  const story = JSON.parse(await readFile(storyFile, "utf8"));
+  // A "style" pack is merged first (src/story_style.js), so every reader sees the same story.
+  const styled = await applyProjectStyle(JSON.parse(await readFile(storyFile, "utf8")), { projectDir: project });
+  const story = styled.story;
   if (typeof module.validateStory === "function") {
     const validation = module.validateStory(story);
     if (validation && validation.ok === false) throw new Error(`storyboard.json is invalid: ${(validation.errors ?? []).join("; ")}`);
@@ -57,7 +60,7 @@ export async function readProjectStory(projectDir, { storyModule } = {}) {
   const words = Array.isArray(narration) ? narration : Array.isArray(narration?.words) ? narration.words : [];
   const edl = await readStoryEdl(project, story);
   const resolved = module.resolveStory(story, { words, beats: beats ?? null, edl });
-  return { file: storyFile, story, resolved, format: module.storyFormat(resolved), module };
+  return { file: storyFile, story, resolved, format: module.storyFormat(resolved), module, style: styled.style };
 }
 
 // Footage-led: the edit-recording plan named by base.edl (project-relative),

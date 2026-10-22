@@ -80,8 +80,9 @@ test("compiles the minimal story into a HyperFrames project that follows the run
     assert.deepEqual(result.boundaries, deriveBoundaries(story));
 
     // Captions chunked from NARRATION.json words, mounted on the root timeline.
-    assert.match(html, /var CHUNKS = \[\{"id":"cap-001","start":0\.3/);
-    assert.match(html, /window\.mountCaptions\(tl, document\.getElementById\("lc-captions"\), \{ hide: \[\] \}\);/);
+    assert.match(html, /var NODES = \[\{"tag":"div","id":"cap-001","cls":"lc-cap"/);
+    assert.match(html, /var TWEENS = \[\{"id":"cap-001","at":0\.3,/);
+    assert.match(html, /window\.mountCaptions\(tl, document\.getElementById\("lc-captions"\)\);/);
     assert.match(html, /--cap-active: #fdb022/);
     assert.match(html, /\.lc-captions \{ position: absolute; left: 6%; right: 15%; top: 62%/);
 

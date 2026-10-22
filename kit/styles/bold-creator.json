@@ -1,0 +1,65 @@
+{
+  "schema": "launchclip.style.v2",
+  "name": "bold-creator",
+  "description": "Creator-channel energy: black and white with hot yellow and pink, condensed caps, thick outlined captions, fast cuts and dense SFX.",
+  "brand": {
+    "colors": {
+      "bg": "#0b0b0b",
+      "paper": "#ffffff",
+      "ink": "#0b0b0b",
+      "primary": "#ffe14d",
+      "accent": "#ff3d7f"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "archivo-black",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "grammar": "snappy"
+  },
+  "camera": {
+    "mode": "cuts"
+  },
+  "ambient": {
+    "level": "lively"
+  },
+  "captions": {
+    "preset": "outline-heavy",
+    "position": "auto"
+  },
+  "sound": {
+    "sfx_density": "high",
+    "music": {
+      "prompt_hints": [
+        "driving trap drums",
+        "808 bass",
+        "big drops on reveals"
+      ],
+      "bpm_range": [
+        124,
+        145
+      ],
+      "energy_curve": "hook-then-sustain"
+    }
+  },
+  "modules": {
+    "prefer": [
+      "hook-title",
+      "kinetic-words",
+      "count-up",
+      "cta",
+      "emphasis-caption"
+    ],
+    "avoid": [
+      "excerpt-window",
+      "archive-card"
+    ],
+    "params": {}
+  },
+  "layout": {
+    "title_case": false
+  },
+  "loop": true
+}
