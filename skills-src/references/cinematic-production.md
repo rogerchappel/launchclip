@@ -150,7 +150,7 @@ duration. Missing required fields fail the `story` gate; the rest warn.
   "beats": [
     { "role": "hook", "spoken": "Shipping is the easy part. The launch video is what stalls you.", "visual_noun": "release checklist with 'Launch video' stalled" },
     { "role": "promise", "spoken": "So describe the video, and get the video.", "visual_noun": "code panel typing launchclip finish" },
-    { "role": "proof", "spoken": "Two renderers draw the same storyboard, frame for frame.", "visual_noun": "0.98 SSIM count-up" },
+    { "role": "proof", "spoken": "Two renderers draw the same storyboard, matched on every sampled frame.", "visual_noun": "SSIM ≥ 0.97 count-up (the parity floor eval:renderers enforces)" },
     { "role": "rehook", "spoken": "So what can it draw?", "visual_noun": "kinetic question" },
     { "role": "escalation", "spoken": "Charts, counters, checklists, code.", "visual_noun": "module names" },
     { "role": "payoff", "spoken": "Brief, storyboard, finish, video.", "visual_noun": "four-node process diagram" },

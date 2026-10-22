@@ -784,10 +784,11 @@ Renderers:
   `opsStateAt` and `blurAt`, and draws the same tiles with `WorldField`; `SceneLayer` takes the placement, a transparent
   plate flag and the overlay parallax ops.
 
-Parity: camera stories hold the usual SSIM 0.97 (explainer-9x16 mid-pan
-0.997; world-camera-9x16 0.991–0.997 at rest, mid-pan, mid-push, orbit, on
-blurred whip-pan frames and home again, and the same story in 16:9
-0.991–0.997, compared on the frame grid; `test/parity_camera.test.js`, which
+Parity: camera stories hold the usual SSIM 0.97 floor (explainer-9x16 mid-pan
+0.997; world-camera-9x16 0.990–0.996 at rest, on the playful grammar's
+motion-blurred mid-pan frames, with the captions dipped through the pan down,
+mid-push, orbit, on blurred whip-pan frames and home again, and the same story
+in 16:9 0.991–0.997, compared on the frame grid; `test/parity_camera.test.js`, which
 also checks the rendered background has no column step across the former
 seam). `test/world_field.test.js` samples the composited field along rows
 through the former seam from both renderers' math.
