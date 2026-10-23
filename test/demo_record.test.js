@@ -4,10 +4,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { cursorPath, encodeFrames, findChromium, loadPlaywright, locate, recorderAvailability, seededRandom, typingDelays } from "../src/demo/record.js";
+import { cursorPath, encodeFrames, findChromium, fixtureResponse, loadPlaywright, locate, prepareContext, recorderAvailability, seededRandom, typingDelays } from "../src/demo/record.js";
 
 const hasFfmpeg = spawnSync("ffmpeg", ["-version"]).status === 0;
 const available = await recorderAvailability();
@@ -101,4 +102,75 @@ test("locate skips hidden duplicates that responsive layouts render first", need
   assert.equal(await locate(page, { type: "click", text: "Save" }).getAttribute("id"), "desktop");
   assert.equal(await locate(page, { type: "click", selector: "button" }).getAttribute("id"), "desktop");
   assert.equal(await locate(page, { type: "type", text: "Name" }).getAttribute("id"), "d");
+});
+
+test("fixtureResponse turns a fixture's answer into a fulfilled response", () => {
+  assert.deepEqual(fixtureResponse({ json: { ok: true } }), { status: 200, contentType: "application/json", headers: {}, body: "{\"ok\":true}" });
+  assert.deepEqual(fixtureResponse({ status: 201, body: { id: 1 } }), { status: 201, contentType: "application/json", headers: {}, body: "{\"id\":1}" });
+  assert.deepEqual(fixtureResponse({ body: "<p>hi</p>", contentType: "text/html" }, { cors: "http://127.0.0.1:4173" }),
+    { status: 200, contentType: "text/html", headers: { "access-control-allow-origin": "http://127.0.0.1:4173", "access-control-allow-credentials": "true" }, body: "<p>hi</p>" });
+  assert.deepEqual(fixtureResponse({ status: 204 }), { status: 204, contentType: "text/plain", headers: {}, body: "" });
+});
+
+async function serve(t, handler) {
+  const server = createServer(handler);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  return server.address().port;
+}
+
+test("prepareContext answers from fixtures, then the HAR, and blocks other origins", needsBrowser, async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-fixtures-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const app = await serve(t, (req, res) => res.end(req.url === "/" ? "<!doctype html><title>app</title>" : `app ${req.url}`));
+  const allowed = await serve(t, (req, res) => { res.setHeader("access-control-allow-origin", "*"); res.end("allowed"); });
+  const recorded = createServer((req, res) => { res.setHeader("access-control-allow-origin", "*"); res.end(`recorded ${req.url}`); });
+  await new Promise((resolve) => recorded.listen(0, "127.0.0.1", resolve));
+  const harOrigin = `http://127.0.0.1:${recorded.address().port}`;
+  await writeFile(path.join(dir, "fixtures.mjs"), `let calls = 0;
+export function route({ url, method, body }) {
+  if (url.pathname === "/api/echo") return { status: 201, json: { method, body, calls: ++calls } };
+  if (url.pathname === "/api/boom") throw new Error("no lot 7");
+}`);
+  const browser = await available.chromium.launch({ executablePath: available.executablePath, headless: true });
+  t.after(() => browser.close());
+  // Record a HAR from a server that is then shut down: the replay must not need it.
+  const recording = await browser.newContext({ recordHar: { path: path.join(dir, "api.har"), urlFilter: `${harOrigin}/**` } });
+  const page0 = await recording.newPage();
+  await page0.goto(`${harOrigin}/catalogue`);
+  await recording.close();
+  await new Promise((resolve) => recorded.close(resolve));
+
+  const logs = [];
+  const run = async () => {
+    const context = await browser.newContext();
+    await prepareContext(context, { app: { fixtures: "fixtures.mjs", har: "api.har", allowOrigins: [`http://127.0.0.1:${allowed}`] }, url: `http://127.0.0.1:${app}`, planDir: dir, log: (line) => logs.push(line) });
+    const page = await context.newPage();
+    await page.goto(`http://127.0.0.1:${app}/`);
+    const fetchText = (target, init) => page.evaluate(async ([target, init]) => { try { const r = await fetch(target, init); return `${r.status} ${await r.text()}`; } catch (error) { return `failed ${error.message}`; } }, [target, init]);
+    const results = {
+      // localhost is another origin than 127.0.0.1: a cross-origin API, preflighted.
+      echo: await fetchText(`http://localhost:${app}/api/echo`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ lot: 103 }) }),
+      fallthrough: await fetchText("/api/other"),
+      boom: await fetchText("/api/boom"),
+      har: await fetchText(`${harOrigin}/catalogue`),
+      allowed: await fetchText(`http://127.0.0.1:${allowed}/`),
+      blocked: await fetchText(`http://localhost:${allowed}/`),
+      cursor: await page.evaluate(() => Boolean(document.getElementById("__lc_cursor")))
+    };
+    await context.close();
+    return results;
+  };
+  const first = await run();
+  assert.equal(first.echo, "201 {\"method\":\"POST\",\"body\":{\"lot\":103},\"calls\":1}");
+  assert.equal(first.fallthrough, "200 app /api/other");
+  assert.match(first.boom, /^500 .*no lot 7/);
+  assert.equal(first.har, "200 recorded /catalogue");
+  assert.equal(first.allowed, "200 allowed");
+  assert.match(first.blocked, /^failed/);
+  assert.equal(first.cursor, true);
+  assert.match(logs.join("\n"), new RegExp(`blocked requests to http://localhost:${allowed}`));
+  assert.match(logs.join("\n"), /fixtures: GET \/api\/boom threw no lot 7/);
+  // Each context loads the fixtures afresh: module state starts over per flow.
+  assert.match((await run()).echo, /"calls":1/);
 });

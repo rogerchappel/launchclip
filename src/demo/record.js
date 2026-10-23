@@ -30,6 +30,7 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { assertSafeUrl, redactWith } from "./guardrails.js";
 import { DEFAULT_VIEWPORT, validateDemoPlan } from "./plan.js";
 
@@ -160,11 +161,71 @@ export const CURSOR_SCRIPT = `(() => {
 })();`;
 
 /**
- * Get a context ready to record: the synthetic cursor in every page. Call it
- * on a context you create yourself before passing it to recordFlow.
+ * Get a context ready to record: the synthetic cursor in every page, and the
+ * plan's network setup (`app`, relative paths resolved from `planDir`). Call
+ * it on a context you create yourself before passing it to recordFlow.
  */
-export async function prepareContext(context) {
+export async function prepareContext(context, { app = {}, url = app.url, planDir = process.cwd(), log = () => {} } = {}) {
   await context.addInitScript(CURSOR_SCRIPT);
+  if (url) await routeNetwork(context, app, { origin: new URL(url).origin, planDir, log });
+}
+
+let fixtureLoads = 0;
+
+/** Import a fixtures module afresh (its own state per flow). → its route function. */
+export async function loadFixtures(file) {
+  const href = `${pathToFileURL(path.resolve(file)).href}?launchclip=${++fixtureLoads}`;
+  const module = await import(href);
+  const route = module.route ?? module.default?.route ?? module.default;
+  if (typeof route !== "function") throw new Error(`${file} must export route({request, url, method, body})`);
+  return route;
+}
+
+/** A fixture's answer → route.fulfill options. */
+export function fixtureResponse(result, { cors = null } = {}) {
+  const json = Object.hasOwn(result, "json");
+  const raw = result.body;
+  const body = json ? JSON.stringify(result.json) : typeof raw === "string" || Buffer.isBuffer(raw) ? raw : raw === undefined ? "" : JSON.stringify(raw);
+  const contentType = result.contentType ?? (json || (raw !== undefined && typeof raw !== "string" && !Buffer.isBuffer(raw)) ? "application/json" : "text/plain");
+  const headers = { ...(cors ? { "access-control-allow-origin": cors, "access-control-allow-credentials": "true" } : {}), ...(result.headers ?? {}) };
+  return { status: result.status ?? 200, contentType, headers, body };
+}
+
+// Handlers run last-registered first and route.fallback() hands a request to
+// the one registered before, so the order is fixtures → HAR → origin guard.
+async function routeNetwork(context, app, { origin, planDir, log }) {
+  const fixtures = app.fixtures ? await loadFixtures(path.resolve(planDir, app.fixtures)) : null;
+  const har = app.har ? path.resolve(planDir, app.har) : null;
+  if (app.blockOffOrigin ?? Boolean(fixtures || har)) {
+    const allowed = new Set([origin, ...(app.allowOrigins ?? [])]);
+    const blocked = new Set();
+    await context.route("**/*", (route) => {
+      const target = new URL(route.request().url()).origin;
+      if (allowed.has(target)) return route.continue();
+      if (!blocked.has(target)) { blocked.add(target); log(`blocked requests to ${target} (not the app; add it to app.allowOrigins to let it through)`); }
+      return route.abort("blockedbyclient");
+    });
+  }
+  if (har) {
+    if (!existsSync(har)) throw new Error(`app.har ${har} does not exist`);
+    await context.routeFromHAR(har, { notFound: "fallback" });
+  }
+  if (fixtures) {
+    await context.route("**/*", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      let body = null;
+      try { body = request.postDataJSON(); } catch { body = request.postData(); }
+      try {
+        const result = await fixtures({ request, url, method: request.method(), body });
+        if (result === undefined || result === null) return route.fallback();
+        return route.fulfill(fixtureResponse(result, { cors: url.origin === origin ? null : origin }));
+      } catch (error) {
+        log(`fixtures: ${request.method()} ${url.pathname} threw ${error.message}`);
+        return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: `fixture error: ${error.message}` }) });
+      }
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -383,9 +444,10 @@ export async function recordFlow(context, flow, { url, out, viewport, account = 
 
 /**
  * Record every flow of a validated plan into `out`. → {flows: [...], executablePath}.
+ * `planDir` is where the plan's relative paths (app.fixtures, app.har) start.
  * Throws when the plan has errors or the recorder is unavailable.
  */
-export async function recordPlan(plan, { out, url = plan.app?.url, repo = null, headed = false, account = null, fps = 30, allowHosts = [], only = null, log = () => {} } = {}) {
+export async function recordPlan(plan, { out, url = plan.app?.url, repo = null, planDir = process.cwd(), headed = false, account = null, fps = 30, allowHosts = [], only = null, log = () => {} } = {}) {
   const check = validateDemoPlan(plan);
   if (check.errors.length) throw new Error(`DEMO-PLAN.json has errors:\n- ${check.errors.join("\n- ")}`);
   assertSafeUrl(url, { allowHosts });
@@ -401,7 +463,7 @@ export async function recordPlan(plan, { out, url = plan.app?.url, repo = null, 
       // A fresh context per flow: a clean profile, the same starting state.
       const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height }, deviceScaleFactor: viewport.deviceScaleFactor, locale: "en-US", timezoneId: "UTC", colorScheme: "light", acceptDownloads: false, serviceWorkers: "block" });
       try {
-        await prepareContext(context);
+        await prepareContext(context, { app: plan.app ?? {}, url, planDir, log });
         log(`recording ${flow.id} (${flow.steps.length} steps)`);
         const setup = (flow.setup ?? []).map((id) => plan.flows.find((entry) => entry.id === id));
         results.push(await recordFlow(context, flow, { url, out, viewport, account, fps, allowHosts, setup, log }));

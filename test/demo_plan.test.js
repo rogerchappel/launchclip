@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 import { findTestAccounts } from "../src/demo/app.js";
-import { DEMO_PLAN_SCHEMA, discoverRoutes, fileRoute, heuristicPlan, planDemo, validateDemoPlan } from "../src/demo/plan.js";
+import { DEMO_PLAN_SCHEMA, discoverRoutes, fileRoute, heuristicPlan, planDemo, rebasePlanPaths, validateDemoPlan } from "../src/demo/plan.js";
 
 const FIXTURE = path.resolve(import.meta.dirname, "..", "examples", "demo-app");
 const plan = (flows, extra = {}) => ({ schema: DEMO_PLAN_SCHEMA, app: { url: "http://localhost:4310" }, flows, ...extra });
@@ -25,6 +25,29 @@ test("validateDemoPlan accepts a good plan and names each problem", () => {
     assert.ok(errors.some((error) => pattern.test(error)), `${pattern} in ${errors.join(" | ")}`);
   }
   assert.match(validateDemoPlan(plan([flow("one", [{ type: "goto", path: "/" }])])).warnings.join(" "), /1 flow\(s\).*never clicks/);
+});
+
+test("validateDemoPlan checks app.fixtures, app.har and the off-origin allowlist", () => {
+  const steps = [{ type: "goto", path: "/" }, { type: "click", text: "Go" }];
+  const withApp = (app) => validateDemoPlan(plan([flow("one", steps), flow("two", steps)], { app: { url: "http://localhost:4310", ...app } })).errors;
+  assert.deepEqual(withApp({ fixtures: "demo/fixtures.mjs", blockOffOrigin: true, allowOrigins: ["https://fonts.googleapis.com", "https://fonts.gstatic.com"] }), []);
+  assert.deepEqual(withApp({ har: "demo/api.har" }), []);
+  assert.deepEqual(withApp({ har: "demo/api.zip", fixtures: "fixtures.js", blockOffOrigin: false }), []);
+  const errors = withApp({ fixtures: "https://cdn.example.com/fixtures.mjs", har: "api.json", blockOffOrigin: "yes", allowOrigins: ["https://fonts.gstatic.com/", "fonts.googleapis.com", "ftp://files.test"], extra: 1 });
+  for (const pattern of [/app\.fixtures must be a local path to an ES module/, /app\.har must be a local path to a \.har or \.zip file/, /app\.blockOffOrigin must be true or false/, /"https:\/\/fonts\.gstatic\.com\/" must be an origin/, /"fonts\.googleapis\.com" must be an origin/, /"ftp:\/\/files\.test" must be an origin/, /app has unknown key "extra"/]) {
+    assert.ok(errors.some((error) => pattern.test(error)), `${pattern} in ${errors.join(" | ")}`);
+  }
+  assert.match(withApp({ fixtures: "./fixtures.ts" }).join(" "), /app\.fixtures/);
+  assert.match(withApp({ allowOrigins: "https://fonts.gstatic.com" }).join(" "), /must be an array/);
+});
+
+test("rebasePlanPaths keeps fixtures and the HAR pointing at the same files from a copy", () => {
+  const original = plan([], { app: { url: "http://localhost:4310", fixtures: "fixtures.mjs", har: "../recordings/api.har" } });
+  const copy = rebasePlanPaths(original, "/repo/demo", "/repo/assets/demo");
+  assert.deepEqual(copy.app, { url: "http://localhost:4310", fixtures: "../../demo/fixtures.mjs", har: "../../recordings/api.har" });
+  assert.equal(original.app.fixtures, "fixtures.mjs", "the original is untouched");
+  assert.deepEqual(rebasePlanPaths(plan([]), "/a", "/b").app, { url: "http://localhost:4310" });
+  assert.equal(rebasePlanPaths({ flows: [] }, "/a", "/b").app, undefined);
 });
 
 test("fileRoute maps file-based routing to paths", () => {
@@ -53,11 +76,12 @@ test("discoverRoutes and heuristicPlan on the demo-app fixture", async () => {
 
 test("planDemo asks the model, repairs once, and falls back to the heuristic", async () => {
   const replies = [];
-  const client = { runStructured: async (options) => { replies.push(options.input); return replies.length === 1 ? { text: JSON.stringify(plan([flow("x", [{ type: "click", text: "Go" }])])) } : { text: `\`\`\`json\n${JSON.stringify(plan([flow("create", [{ type: "goto", path: "/projects/new" }, { type: "click", text: "Create project" }]), flow("tour", [{ type: "goto", path: "/analytics" }, { type: "click", text: "Dashboard" }])]))}\n\`\`\`` }; } };
+  const client = { runStructured: async (options) => { replies.push(options.input); return replies.length === 1 ? { text: JSON.stringify(plan([flow("x", [{ type: "click", text: "Go" }])])) } : { text: `\`\`\`json\n${JSON.stringify(plan([flow("create", [{ type: "goto", path: "/projects/new" }, { type: "click", text: "Create project" }]), flow("tour", [{ type: "goto", path: "/analytics" }, { type: "click", text: "Dashboard" }])], { app: { url: "http://localhost:4310", fixtures: "../../evil.mjs" } }))}\n\`\`\`` }; } };
   const result = await planDemo({ prompt: "Launch Pulseboard", repo: FIXTURE, url: "http://localhost:4310", client });
   assert.equal(result.source, "model");
   assert.deepEqual(result.plan.flows.map((entry) => entry.id), ["create", "tour"]);
   assert.equal(result.plan.viewport.width, 1920);
+  assert.deepEqual(result.plan.app, { url: "http://localhost:4310" }, "a model never names fixtures, which are code that runs");
   assert.match(replies[0], /"\/projects\/new"/);
   assert.doesNotMatch(replies[0], /demo-pass-123/, "account values never reach the model");
   assert.match(replies[1], /must be a goto/);

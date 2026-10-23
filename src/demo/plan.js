@@ -1,8 +1,14 @@
 // Demo autopilot, step 3: DEMO-PLAN.json, the declarative list of product
 // flows to record.
 //
-//   {schema: "launchclip.demo-plan.v1", app: {url}, viewport: {width, height, deviceScaleFactor},
-//    flows: [{id, title, goal?, setup?: [flowId], steps: [Step]}]}
+//   {schema: "launchclip.demo-plan.v1", app: {url, fixtures?, har?, blockOffOrigin?, allowOrigins?},
+//    viewport: {width, height, deviceScaleFactor}, flows: [{id, title, goal?, setup?: [flowId], steps: [Step]}]}
+//
+// For an app with no seed data, `app.fixtures` (an ES module exporting
+// route({request, url, method, body})) or `app.har` (a recorded HAR) answers
+// its network requests; both paths are relative to the plan file. With either,
+// requests to other origins are aborted (blockOffOrigin, default on) except
+// `allowOrigins`, so a recording never reaches analytics or a real API.
 //
 // `setup` names flows (usually sign-in) that run first, off camera and at full
 // speed, in the same clean browser profile, so a flow can start signed in.
@@ -31,6 +37,41 @@ export const DEFAULT_VIEWPORT = Object.freeze({ width: 1920, height: 1080, devic
 const FLOW_ID = /^[a-z][a-z0-9-]{0,39}$/;
 const STEP_KEYS = { goto: ["path", "url"], click: ["selector", "text"], type: ["selector", "text", "value", "secret"], "wait-for": ["selector", "text", "timeout"], "assert-visible": ["selector", "text"], pause: ["ms"] };
 const COMMON_KEYS = ["type", "label", "callout", "zoom"];
+const APP_KEYS = ["url", "fixtures", "har", "blockOffOrigin", "allowOrigins"];
+// Plan keys that name files, resolved relative to the plan file.
+const APP_FILES = ["fixtures", "har"];
+
+function validateApp(app, errors) {
+  if (app === undefined) return;
+  if (!app || typeof app !== "object" || Array.isArray(app)) { errors.push("app must be an object"); return; }
+  for (const key of Object.keys(app)) if (!APP_KEYS.includes(key)) errors.push(`app has unknown key "${key}"`);
+  const file = (key, pattern, kind) => {
+    if (app[key] === undefined) return;
+    if (typeof app[key] !== "string" || !pattern.test(app[key]) || /^[a-z][a-z0-9+.-]*:/i.test(app[key])) errors.push(`app.${key} must be a local path to ${kind}, relative to the plan file`);
+  };
+  file("fixtures", /\.m?js$/, "an ES module (.js or .mjs)");
+  file("har", /\.(har|zip)$/, "a .har or .zip file");
+  if (app.blockOffOrigin !== undefined && typeof app.blockOffOrigin !== "boolean") errors.push("app.blockOffOrigin must be true or false");
+  if (app.allowOrigins !== undefined) {
+    if (!Array.isArray(app.allowOrigins)) errors.push("app.allowOrigins must be an array of origins");
+    else for (const origin of app.allowOrigins) {
+      let parsed = null;
+      try { parsed = new URL(origin); } catch { /* reported below */ }
+      if (!parsed || !/^https?:$/.test(parsed.protocol) || parsed.origin !== origin) errors.push(`app.allowOrigins entry ${JSON.stringify(origin)} must be an origin like "https://fonts.gstatic.com" (no path or trailing slash)`);
+    }
+  }
+}
+
+/**
+ * The plan with its file paths (app.fixtures, app.har) rewritten from
+ * `fromDir` to `toDir`, for a copy of the plan saved somewhere else.
+ */
+export function rebasePlanPaths(plan, fromDir, toDir) {
+  if (!plan.app) return plan;
+  const app = { ...plan.app };
+  for (const key of APP_FILES) if (typeof app[key] === "string") app[key] = path.relative(toDir, path.resolve(fromDir, app[key])).split(path.sep).join("/");
+  return { ...plan, app };
+}
 
 /**
  * Validate a demo plan. → {errors: [string], warnings: [string]}. Errors block
@@ -41,6 +82,7 @@ export function validateDemoPlan(plan) {
   const errors = [], warnings = [];
   if (!plan || typeof plan !== "object" || Array.isArray(plan)) return { errors: ["the plan must be a JSON object"], warnings };
   if (plan.schema !== DEMO_PLAN_SCHEMA) errors.push(`schema must be "${DEMO_PLAN_SCHEMA}"`);
+  validateApp(plan.app, errors);
   let origin = null;
   if (plan.app?.url !== undefined) {
     try { origin = new URL(plan.app.url).origin; } catch { errors.push(`app.url "${plan.app.url}" is not a URL`); }
@@ -243,7 +285,8 @@ export async function planDemo({ prompt = "", repo, url, client = null, accounts
     // extractStoryboard parses any one JSON object out of a model reply.
     const parsed = extractStoryboard(result);
     if (!parsed.ok) { last = { errors: [parsed.error] }; input = `${input}\n\nYour last reply was not JSON (${parsed.error}). Return only the JSON object.`; continue; }
-    const plan = { ...parsed.storyboard, schema: DEMO_PLAN_SCHEMA, app: { ...(parsed.storyboard.app ?? {}), url }, viewport: { ...DEFAULT_VIEWPORT, ...(parsed.storyboard.viewport ?? {}) } };
+    // Only the user's own plan file may name fixtures or a HAR: a fixtures module is code that runs.
+    const plan = { ...parsed.storyboard, schema: DEMO_PLAN_SCHEMA, app: { url }, viewport: { ...DEFAULT_VIEWPORT, ...(parsed.storyboard.viewport ?? {}) } };
     const check = validateDemoPlan(plan);
     if (!check.errors.length) return { plan, source: "model", ...check, usage: result.usage ?? null };
     last = check;
