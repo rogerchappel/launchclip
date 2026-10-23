@@ -4,6 +4,16 @@
 
 ### Added
 
+- A `brand-lockup` module for title and end cards built from the brand's
+  artwork: a logo `mark` image beside or above a `wordmark` image (its
+  `ratio` sets the width), with an optional `eyebrow` and `headline`.
+  - `variant: "end"` stacks them over a `badge` image (such as an app-store
+    badge) and a `url` pill.
+  - `tint` / `markTint` recolour a dark wordmark or mark to paper (or any
+    brand role or hex) on dark backgrounds.
+  - A soft `glow` blooms behind the mark and keeps widening, and the mark
+    lands at 0 s, so the opening passes the motion gate's hook rule.
+  - It hides captions.
 - A `cinematic` motion grammar (`"motion": {"grammar": "cinematic"}`).
   Every entrance, transition and camera move eases slow → fast → slow into
   its resting state (`power2.inOut`, enter 0.7 s, camera 1.3 s, no

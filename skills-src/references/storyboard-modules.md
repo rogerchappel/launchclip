@@ -100,6 +100,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 | quotes a passage from a doc, README or article | excerpt-window |
 | speaks to several audiences or groups | audience-grid |
 | picks one option from several | focus-flow |
+| names the brand on a title or end card, with its logo and wordmark images (and an app-store badge or URL on the end card) | brand-lockup |
 | calls to action, or the loop ending | cta |
 | footage-led emphasis on a word [footage-led] | punch-in |
 | footage-led claim sticker or label pointing at something on screen [footage-led] | footage-callout |
@@ -455,6 +456,24 @@ params:
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: logo-<i>
 
+### brand-lockup (hides captions)
+Title or end card built from the brand's own artwork: the logo mark beside or above the wordmark image, an optional eyebrow and headline; the end variant stacks them over a badge image (e.g. an app-store badge) and a URL pill. Hides captions.
+params:
+- variant: title|end (default title)
+- layout: row|stack (mark beside or above the wordmark; default row for title, stack for end)
+- mark: "assets/…" square logo image (.svg|.png|.jpg|.webp), or {src, ratio}
+- wordmark: "assets/…" wide wordmark image, or {src, ratio: width ÷ height (default 4)}; mark or wordmark is required
+- tint: none|paper|ink|primary|accent|#rrggbb — recolour the wordmark, e.g. paper for a dark wordmark on a dark background (default none)
+- markTint: the same for the mark (default none)
+- eyebrow: string ≤ 40, small caps above the lockup (optional)
+- headline: string ≤ 80, two lines at most, below the lockup (optional)
+- badge: end only: "assets/…" badge image, or {src, ratio (default 3, an app-store badge)}
+- url: end only: URL or handle ≤ 64, no spaces, in a pill
+- glow: primary|accent|false — the soft light that blooms behind the mark and keeps widening (default primary)
+- at: first beat (seconds from scene start (optional; else a matching hit, else a default); default 0.15 s)
+- stagger: seconds between beats (default 0.35, scaled by the grammar)
+events: mark, wordmark, eyebrow, headline, badge, url
+
 ### punch-in (keeps captions)
 Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay).
 params:
@@ -539,6 +558,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | process-steps | 2 s | 0.5 s | scene − 0.65 s | steps[].at: ≥ 0.35 s apart |
 | archive-card | 2 s | 0.5 s | scene − 0.65 s | stamp.at defaults to 0.35 s after the quote finishes revealing |
 | logo-row | 2 s | 0.5 s | scene − 0.65 s | logos pop in order; with no at, the first pops at 0.65 s and the rest follow by stagger (default 0.14 s) |
+| brand-lockup | 2 s | 0.5 s | scene − 0.65 s | elements land in this order: mark, wordmark, eyebrow, headline, badge, url, stagger apart (default 0.35 s), the first at 0 s; a hit on one moves the defaults after it |
 | punch-in | 0.8 s | 0 s | — | at ≤ scene − release − 0.25 s (release 0.3–2 s, default min(0.5, 0.3 × scene)) |
 | footage-callout | 1.5 s | 0 s | scene − 1.1 s | — |
 | lower-third | 2 s | 0 s | scene − 1.2 s | — |

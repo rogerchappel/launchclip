@@ -1081,3 +1081,55 @@ element; any other callout 0.25 s before its step's end.
   `sourceStart`, then the overlay.
 - **Parity:** `test/fixtures/parity/d-product-demo.json`, a recorded
   `examples/demo-app` sign-in flow, held to SSIM ≥ 0.97.
+
+## Brand lockup (catalogue B, `kit/core/catalog-b-brand-lockup.mjs`)
+
+`brand-lockup` builds title and end cards from the brand's own artwork instead
+of set type. It hides captions, like `hook-title` and `cta`.
+
+```json
+{ "module": "brand-lockup", "params": {
+  "mark": "assets/brand/mark.png",
+  "wordmark": { "src": "assets/brand/wordmark.png", "ratio": 7.56 },
+  "tint": "paper", "eyebrow": "Launch analytics", "headline": "Launch analytics for small teams" } }
+{ "module": "brand-lockup", "params": { "variant": "end",
+  "mark": "assets/brand/mark.png", "wordmark": { "src": "assets/brand/wordmark.png", "ratio": 7.56 }, "tint": "paper",
+  "badge": "assets/brand/store-badge.svg", "url": "pulseboard.example" } }
+```
+
+- **Variants:**
+  - `variant: "title"` (default) puts the mark beside the wordmark (`layout:
+    "row"`, the wordmark at 62% of the mark's height) or above it (`"stack"`).
+    It takes an optional `eyebrow` (small caps above) and `headline` (display
+    type, at most two lines, below).
+  - `variant: "end"` stacks the mark over the wordmark, then an optional
+    `headline`, a `badge` image (`{src, ratio}`, ratio 3 by default, the shape
+    of an app-store badge) and a `url` pill in `brand.colors.primary`.
+    `badge` and `url` are end-only.
+- **Images:** `mark` (square) and `wordmark` (wide) are `assets/` images; one
+  of them is required.
+  - Images aren't read at resolve time, so a wordmark's width comes from
+    `ratio` (width ÷ height, default 4). `object-fit: contain` keeps a wrong
+    ratio from distorting it.
+  - The lockup shrinks to 86% of the frame width (62% on the end card) and
+    fails with a param error when the mark would drop below 72 px.
+- **Tint:** `tint` (wordmark) and `markTint` (mark) recolour every opaque
+  pixel and keep its alpha. They take `paper`, `ink`, `primary`, `accent` or a
+  `#rrggbb`, so a dark wordmark reads on a dark background. Both renderers draw
+  the tint as an SVG `feColorMatrix` filter in the view tree.
+- **Motion:** the mark lands first, at 0 s (`at` moves it), and it is the
+  hook. The wordmark, eyebrow, headline, badge and URL follow, `stagger` apart
+  (0.35 s, scaled by the grammar).
+  - A hit on one beat (`hits: [{event: "badge", at: "word:download"}]`) moves
+    the default beats after it.
+  - Each element fades and rises over 0.6 s, the mark scaling up from 0.6,
+    on the grammar's enter ease.
+  - The wordmark slides out from behind its left edge.
+  - `glow` (`primary` by default, `accent`, or `false`) is a soft light that
+    blooms behind the lockup with the mark. It then keeps widening linearly
+    until the scene ends, so the card never holds still. With the bloom, the
+    opening clears the motion gate's hook rule (first motion by 0.35 s).
+  - The URL pill gets one ring pulse once it lands.
+- **Events:** `mark`, `wordmark`, `eyebrow`, `headline`, `badge`, `url`.
+- **Compilers:** the catalogue B emitter and `CatalogBModule`
+  (`kit/remotion/catalog/BrandLockup.tsx`) draw the same tree and ops.

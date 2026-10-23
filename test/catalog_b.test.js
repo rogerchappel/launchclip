@@ -553,8 +553,67 @@ test('logo-row: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not 
   assert.ok(remotionStill('logo-row', 2) > 20000);
 });
 
+// ---------------------------------------------------------------------------
+// brand-lockup
+
+const landscape = (overrides = {}) => ctx({format: {width: 1920, height: 1080, fps: 30}, aspect: '16:9', start: 0, duration: 4.5, ...overrides});
+const lockup = {mark: 'assets/brand/mark.png', wordmark: {src: 'assets/brand/wordmark.png', ratio: 7.5}};
+
+test('brand-lockup: a title card lands the mark first, then the wordmark, eyebrow and headline, and hides captions', () => {
+  const model = MODULES['brand-lockup'].resolve({...lockup, tint: 'paper', eyebrow: 'Launch analytics', headline: 'Launch analytics for small teams'}, landscape());
+  assertModelContract(model, 'brand-lockup');
+  assert.equal(model.hidesCaptions, true);
+  const {mark, wordmark} = model.content;
+  assert.deepEqual(model.content.beats.map(beat => beat.key), ['mark', 'wordmark', 'eyebrow', 'headline']);
+  assert.deepEqual(model.content.beats.map(beat => beat.time), [0, 0.35, 0.7, 1.05]);
+  // The light bloom sits behind the lockup, centred on it.
+  assert.equal(model.content.glow.color, brand.colors.primary);
+  assert.ok(Math.abs(model.content.glow.y + model.content.glow.size / 2 - (mark.y + mark.height / 2)) < 0.02);
+  assert.equal(MODULES['brand-lockup'].resolve({...lockup, glow: false}, landscape()).content.glow, undefined);
+  // Row lockup: the mark beside the wordmark, both centred, the wordmark 62% of the mark's height.
+  assert.ok(Math.abs(mark.y + mark.height / 2 - (wordmark.y + wordmark.height / 2)) < 0.02);
+  assert.ok(Math.abs(wordmark.height / mark.height - 0.62) < 0.01);
+  assert.ok(Math.abs(mark.x + (wordmark.x + wordmark.width - mark.x) / 2 - model.rect.width / 2) < 0.02, 'the lockup is centred');
+  // The tint is a colour matrix to the paper colour, applied to the wordmark only.
+  assert.deepEqual(model.content.filters, [{id: 'scene-tint', values: '0 0 0 0 0.949 0 0 0 0 0.9333 0 0 0 0 0.902 0 0 0 1 0'}]);
+  const html = EMITTERS['brand-lockup'](model).html;
+  assert.match(html, /<filter id="scene-tint" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="[^"]+"><\/feColorMatrix><\/filter>/);
+  assert.match(html, /<img id="scene-wordmark"[^>]* style="[^"]*filter:url\(#scene-tint\)/);
+  assert.doesNotMatch(html.match(/<img id="scene-mark"[^>]*>/)[0], /filter/);
+  assertEmitter(model);
+  // The mark lands at once: the hook's first motion.
+  assert.ok(model.events.filter(event => event.time < 2).length >= 3);
+});
+
+test('brand-lockup: the end card stacks the lockup over a badge and a URL pill; a hit moves the beats after it', () => {
+  const model = MODULES['brand-lockup'].resolve({...lockup, variant: 'end', tint: '#ffffff', badge: 'assets/brand/store-badge.svg', url: 'pulseboard.example'},
+    landscape({start: 20, duration: 6, hits: [{event: 'badge', at: 21.6}]}));
+  assertModelContract(model, 'brand-lockup');
+  const {mark, wordmark, badge, url} = model.content;
+  assert.equal(model.content.layout, 'stack');
+  assert.ok(mark.y + mark.height < wordmark.y && wordmark.y + wordmark.height < badge.y && badge.y + badge.height < url.y, 'mark, wordmark, badge, URL from top to bottom');
+  assert.equal(badge.width / badge.height, 3, 'an app-store badge ratio by default');
+  assert.deepEqual(model.content.beats.map(beat => [beat.key, beat.time]), [['mark', 20], ['wordmark', 20.35], ['badge', 21.6], ['url', 21.95]]);
+  assert.ok(model.contrast['url/primary'] >= 3);
+  assertEmitter(model);
+});
+
+test('brand-lockup: validation names the param', () => {
+  const resolve = (params, extra) => MODULES['brand-lockup'].resolve(params, landscape(extra));
+  assert.throws(() => resolve({eyebrow: 'x'}), /params\.mark or params\.wordmark is required/);
+  assert.throws(() => resolve({...lockup, badge: 'assets/brand/badge.svg'}), /params\.badge is for the end variant/);
+  assert.throws(() => resolve({...lockup, variant: 'end', url: 'pulse board.example'}), /params\.url must not contain spaces/);
+  assert.throws(() => resolve({...lockup, tint: 'white'}), /params\.tint must be none, paper, ink, primary, accent or a six-digit hex colour/);
+  assert.throws(() => resolve({mark: 'https://cdn.example.com/m.png'}), /params\.mark must be a project-local assets\/ path/);
+  assert.throws(() => resolve({...lockup, wordmark: {src: 'assets/w.png', ratio: 20}}), /params\.wordmark\.ratio must be between 0\.2 and 12/);
+  assert.throws(() => resolve({...lockup, headline: 'A headline that keeps going far past what two lines of display type can ever hold on one card'}), /params\.headline/);
+  // A mark alone, or a wordmark alone, is a lockup too.
+  assert.equal(resolve({mark: 'assets/m.png'}).content.wordmark, undefined);
+  assert.equal(resolve({wordmark: 'assets/w.png'}).content.mark, undefined);
+});
+
 test('catalogue B: every module is registered in all three registries', async () => {
-  const ids = ['function-chart', 'gauge-compare', 'flow-compare', 'process-steps', 'archive-card', 'logo-row'];
+  const ids = ['function-chart', 'gauge-compare', 'flow-compare', 'process-steps', 'archive-card', 'logo-row', 'brand-lockup'];
   assert.deepEqual(Object.keys(MODULES).sort(), [...ids].sort());
   assert.deepEqual(Object.keys(EMITTERS).sort(), [...ids].sort());
   const registry = readFileSync(join(ROOT, 'kit/remotion/catalog/registry-b.ts'), 'utf8');
