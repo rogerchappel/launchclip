@@ -26,13 +26,13 @@
 // video) and <flow>.poster.png.
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { assertSafeUrl, redactWith } from "./guardrails.js";
-import { DEFAULT_VIEWPORT, validateDemoPlan } from "./plan.js";
+import { DEFAULT_VIEWPORT, sessionProblems, validateDemoPlan } from "./plan.js";
 
 export const ACTION_LOG_SCHEMA = "launchclip.demo-actions.v1";
 
@@ -161,13 +161,65 @@ export const CURSOR_SCRIPT = `(() => {
 })();`;
 
 /**
- * Get a context ready to record: the synthetic cursor in every page, and the
- * plan's network setup (`app`, relative paths resolved from `planDir`). Call
- * it on a context you create yourself before passing it to recordFlow.
+ * Get a context ready to record: the synthetic cursor in every page, the
+ * plan's network setup and its signed-in session (`app`, relative paths
+ * resolved from `planDir`). Call it on a context you create yourself before
+ * passing it to recordFlow, with the returned `secrets` (the session values,
+ * masked in the action log). → {secrets: [string]}
  */
-export async function prepareContext(context, { app = {}, url = app.url, planDir = process.cwd(), log = () => {} } = {}) {
+export async function prepareContext(context, { app = {}, url = app.url, planDir = process.cwd(), allowHosts = [], log = () => {} } = {}) {
   await context.addInitScript(CURSOR_SCRIPT);
-  if (url) await routeNetwork(context, app, { origin: new URL(url).origin, planDir, log });
+  if (!url) return { secrets: [] };
+  await routeNetwork(context, app, { origin: new URL(url).origin, planDir, log });
+  return applySession(context, app.session, { url, planDir, allowHosts });
+}
+
+/**
+ * A plan's app.session as a storage state, {cookies, origins: [{origin,
+ * localStorage: [{name, value}]}]}: read from its storageState file, or built
+ * from inline localStorage (for the app's origin) and cookies (for the app's
+ * URL unless they name a domain or url). Throws when a value looks like a
+ * real secret.
+ */
+export async function sessionState(session, { url, planDir = process.cwd() } = {}) {
+  if (!session) return { cookies: [], origins: [] };
+  if (session.storageState) {
+    const file = path.resolve(planDir, session.storageState);
+    let state;
+    try { state = JSON.parse(await readFile(file, "utf8")); } catch (error) { throw new Error(`app.session.storageState ${file} is not a readable storage state: ${error.message}`); }
+    const cookies = state.cookies ?? [], origins = state.origins ?? [];
+    const problems = origins.flatMap((entry) => sessionProblems({ localStorage: Object.fromEntries((entry.localStorage ?? []).map(({ name, value }) => [name, value])) }, url, `${session.storageState} (${entry.origin})`));
+    problems.push(...sessionProblems({ cookies }, url, session.storageState));
+    if (problems.length) throw new Error(`the session is not test-only:\n- ${problems.join("\n- ")}`);
+    return { cookies, origins };
+  }
+  const problems = sessionProblems(session, url);
+  if (problems.length) throw new Error(`the session is not test-only:\n- ${problems.join("\n- ")}`);
+  const localStorage = Object.entries(session.localStorage ?? {}).map(([name, value]) => ({ name, value }));
+  return {
+    cookies: (session.cookies ?? []).map((cookie) => (cookie.url || cookie.domain ? { path: "/", ...cookie } : { ...cookie, url })),
+    origins: localStorage.length ? [{ origin: new URL(url).origin, localStorage }] : []
+  };
+}
+
+// Cookies go in before the first page; localStorage is written by an init
+// script before the app's own scripts run, once per key (a flow that changes
+// a value keeps the change).
+async function applySession(context, session, { url, planDir, allowHosts }) {
+  const { cookies, origins } = await sessionState(session, { url, planDir });
+  for (const cookie of cookies) {
+    const host = cookie.url ?? `http://${String(cookie.domain).replace(/^\./, "")}`;
+    if (new URL(host).hostname !== new URL(url).hostname) assertSafeUrl(host, { allowHosts });
+  }
+  if (cookies.length) await context.addCookies(cookies);
+  if (origins.length) {
+    await context.addInitScript((entries) => {
+      const entry = entries.find((item) => item.origin === location.origin);
+      if (!entry) return;
+      try { for (const { name, value } of entry.localStorage) if (localStorage.getItem(name) === null) localStorage.setItem(name, value); } catch { /* storage blocked */ }
+    }, origins);
+  }
+  return { secrets: [...cookies.map((cookie) => cookie.value), ...origins.flatMap((entry) => entry.localStorage.map((item) => item.value))] };
 }
 
 let fixtureLoads = 0;
@@ -323,21 +375,27 @@ async function runQuick(page, steps, { resolveUrl, account }) {
   await page.waitForTimeout(400);
 }
 
+// Redact string fields only, so a short masked value never corrupts numbers or JSON.
+const redactStrings = (value, masks) => typeof value === "string" ? redactWith(value, masks)
+  : Array.isArray(value) ? value.map((item) => redactStrings(item, masks))
+  : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactStrings(item, masks)])) : value;
+
 const r1 = (value) => Math.round(value * 10) / 10;
 const r3 = (value) => Math.round(value * 1000) / 1000;
 const boxOf = (box) => (box ? { x: r1(box.x), y: r1(box.y), width: r1(box.width), height: r1(box.height) } : null);
 
 /**
  * Record one flow on a fresh page of `context`. → {video, log, poster}.
- * `accounts` supplies {email, password, username} for {account: …} values.
+ * `account` supplies {email, password, username} for {account: …} values;
+ * it and `secrets` (prepareContext's session values) are masked in the log.
  */
-export async function recordFlow(context, flow, { url, out, viewport, account = null, fps = 30, allowHosts = [], setup = [], log: say = () => {} } = {}) {
+export async function recordFlow(context, flow, { url, out, viewport, account = null, secrets = [], fps = 30, allowHosts = [], setup = [], log: say = () => {} } = {}) {
   const random = seededRandom(flow.id);
   const page = await context.newPage();
   const scale = viewport.deviceScaleFactor ?? 1;
   const frameSize = { width: Math.round(viewport.width * scale), height: Math.round(viewport.height * scale) };
   const workDir = await mkdtemp(path.join(os.tmpdir(), `launchclip-demo-${flow.id}-`));
-  const masks = account ? Object.values(account).filter((value) => typeof value === "string") : [];
+  const masks = [...(account ? Object.values(account) : []), ...secrets].filter((value) => typeof value === "string");
   const actions = [];
   let cursor = { x: viewport.width / 2, y: viewport.height / 2 };
   const resolveUrl = (target) => {
@@ -431,7 +489,7 @@ export async function recordFlow(context, flow, { url, out, viewport, account = 
       duration,
       frames: cast.frames.length,
       recorded_at: new Date(t0 * 1000).toISOString(),
-      actions: actions.map((action) => JSON.parse(redactWith(JSON.stringify(action), masks)))
+      actions: actions.map((action) => redactStrings(action, masks))
     };
     const logPath = path.join(out, `${flow.id}.actions.json`);
     await writeFile(logPath, `${JSON.stringify(record, null, 2)}\n`);
@@ -463,10 +521,10 @@ export async function recordPlan(plan, { out, url = plan.app?.url, repo = null, 
       // A fresh context per flow: a clean profile, the same starting state.
       const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height }, deviceScaleFactor: viewport.deviceScaleFactor, locale: "en-US", timezoneId: "UTC", colorScheme: "light", acceptDownloads: false, serviceWorkers: "block" });
       try {
-        await prepareContext(context, { app: plan.app ?? {}, url, planDir, log });
+        const { secrets } = await prepareContext(context, { app: plan.app ?? {}, url, planDir, allowHosts, log });
         log(`recording ${flow.id} (${flow.steps.length} steps)`);
         const setup = (flow.setup ?? []).map((id) => plan.flows.find((entry) => entry.id === id));
-        results.push(await recordFlow(context, flow, { url, out, viewport, account, fps, allowHosts, setup, log }));
+        results.push(await recordFlow(context, flow, { url, out, viewport, account, secrets, fps, allowHosts, setup, log }));
       } finally {
         await context.close().catch(() => {});
       }

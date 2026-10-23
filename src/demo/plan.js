@@ -1,7 +1,7 @@
 // Demo autopilot, step 3: DEMO-PLAN.json, the declarative list of product
 // flows to record.
 //
-//   {schema: "launchclip.demo-plan.v1", app: {url, fixtures?, har?, blockOffOrigin?, allowOrigins?},
+//   {schema: "launchclip.demo-plan.v1", app: {url, fixtures?, har?, blockOffOrigin?, allowOrigins?, session?},
 //    viewport: {width, height, deviceScaleFactor}, flows: [{id, title, goal?, setup?: [flowId], steps: [Step]}]}
 //
 // For an app with no seed data, `app.fixtures` (an ES module exporting
@@ -9,6 +9,12 @@
 // its network requests; both paths are relative to the plan file. With either,
 // requests to other origins are aborted (blockOffOrigin, default on) except
 // `allowOrigins`, so a recording never reaches analytics or a real API.
+//
+// For an app that signs in through SSO, where nobody can type a password,
+// `app.session` starts every flow signed in: {storageState: "state.json"} (a
+// Playwright storage state, relative to the plan file) or {localStorage:
+// {key: value}, cookies: [{name, value, domain?, path?}]}. Its values must be
+// test values (sessionValueProblem in guardrails.js) and never reach the logs.
 //
 // `setup` names flows (usually sign-in) that run first, off camera and at full
 // speed, in the same clean browser profile, so a flow can start signed in.
@@ -29,7 +35,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { extractStoryboard } from "../storyboard_planner.js";
-import { typeStepProblem } from "./guardrails.js";
+import { classifyHost, sessionValueProblem, typeStepProblem } from "./guardrails.js";
 
 export const DEMO_PLAN_SCHEMA = "launchclip.demo-plan.v1";
 export const STEP_TYPES = Object.freeze(["goto", "click", "type", "wait-for", "assert-visible", "pause"]);
@@ -37,7 +43,9 @@ export const DEFAULT_VIEWPORT = Object.freeze({ width: 1920, height: 1080, devic
 const FLOW_ID = /^[a-z][a-z0-9-]{0,39}$/;
 const STEP_KEYS = { goto: ["path", "url"], click: ["selector", "text"], type: ["selector", "text", "value", "secret"], "wait-for": ["selector", "text", "timeout"], "assert-visible": ["selector", "text"], pause: ["ms"] };
 const COMMON_KEYS = ["type", "label", "callout", "zoom"];
-const APP_KEYS = ["url", "fixtures", "har", "blockOffOrigin", "allowOrigins"];
+const APP_KEYS = ["url", "fixtures", "har", "blockOffOrigin", "allowOrigins", "session"];
+const SESSION_KEYS = ["storageState", "localStorage", "cookies"];
+const COOKIE_KEYS = ["name", "value", "url", "domain", "path", "expires", "httpOnly", "secure", "sameSite"];
 // Plan keys that name files, resolved relative to the plan file.
 const APP_FILES = ["fixtures", "har"];
 
@@ -60,16 +68,63 @@ function validateApp(app, errors) {
       if (!parsed || !/^https?:$/.test(parsed.protocol) || parsed.origin !== origin) errors.push(`app.allowOrigins entry ${JSON.stringify(origin)} must be an origin like "https://fonts.gstatic.com" (no path or trailing slash)`);
     }
   }
+  if (app.session !== undefined) validateSession(app.session, app.url, errors);
 }
 
 /**
- * The plan with its file paths (app.fixtures, app.har) rewritten from
+ * Problems with a signed-in session ({localStorage, cookies}, the shape of
+ * app.session or of a Playwright storage state's entries): values that look
+ * like real secrets, and cookies for hosts other than local or staging ones
+ * (or the app's own). → [string]
+ */
+export function sessionProblems({ localStorage = {}, cookies = [] } = {}, appUrl = null, where = "app.session") {
+  const errors = [];
+  let appHost = null;
+  try { appHost = new URL(appUrl).hostname; } catch { /* no app URL */ }
+  for (const [key, value] of Object.entries(localStorage)) {
+    if (typeof value !== "string") { errors.push(`${where}.localStorage.${key} must be a string (JSON.stringify an object)`); continue; }
+    const problem = sessionValueProblem(value);
+    if (problem) errors.push(`${where}.localStorage.${key} ${problem}`);
+  }
+  cookies.forEach((cookie, i) => {
+    const at = `${where}.cookies[${i}]`;
+    if (!cookie || typeof cookie !== "object" || typeof cookie.name !== "string" || typeof cookie.value !== "string") { errors.push(`${at} needs a string name and value`); return; }
+    const problem = sessionValueProblem(cookie.value);
+    if (problem) errors.push(`${at} (${cookie.name}) ${problem}`);
+    let host = null;
+    try { host = cookie.url ? new URL(cookie.url).hostname : cookie.domain ? String(cookie.domain).replace(/^\./, "") : null; } catch { errors.push(`${at}.url is not a URL`); }
+    if (host && host !== appHost && classifyHost(`http://${host}`) === "production") errors.push(`${at} is for ${host}, which looks like a production host; session cookies are for the app's local or staging host`);
+  });
+  return errors;
+}
+
+function validateSession(session, appUrl, errors) {
+  if (!session || typeof session !== "object" || Array.isArray(session)) { errors.push("app.session must be an object"); return; }
+  for (const key of Object.keys(session)) if (!SESSION_KEYS.includes(key)) errors.push(`app.session has unknown key "${key}"`);
+  if (session.storageState !== undefined) {
+    if (typeof session.storageState !== "string" || !/\.json$/.test(session.storageState) || /^[a-z][a-z0-9+.-]*:/i.test(session.storageState)) errors.push("app.session.storageState must be a local path to a Playwright storage state .json, relative to the plan file");
+    if (session.localStorage !== undefined || session.cookies !== undefined) errors.push("app.session takes storageState or localStorage/cookies, not both");
+    return;
+  }
+  if (session.localStorage === undefined && session.cookies === undefined) { errors.push("app.session needs storageState, localStorage or cookies"); return; }
+  if (session.localStorage !== undefined && (!session.localStorage || typeof session.localStorage !== "object" || Array.isArray(session.localStorage))) { errors.push("app.session.localStorage must be an object of key: string value"); return; }
+  if (session.cookies !== undefined && !Array.isArray(session.cookies)) { errors.push("app.session.cookies must be an array"); return; }
+  for (const [i, cookie] of (session.cookies ?? []).entries()) {
+    for (const key of Object.keys(cookie ?? {})) if (!COOKIE_KEYS.includes(key)) errors.push(`app.session.cookies[${i}] has unknown key "${key}"`);
+  }
+  errors.push(...sessionProblems(session, appUrl));
+}
+
+/**
+ * The plan with its file paths (app.fixtures, app.har, app.session.storageState) rewritten from
  * `fromDir` to `toDir`, for a copy of the plan saved somewhere else.
  */
 export function rebasePlanPaths(plan, fromDir, toDir) {
   if (!plan.app) return plan;
   const app = { ...plan.app };
-  for (const key of APP_FILES) if (typeof app[key] === "string") app[key] = path.relative(toDir, path.resolve(fromDir, app[key])).split(path.sep).join("/");
+  const rebase = (file) => path.relative(toDir, path.resolve(fromDir, file)).split(path.sep).join("/");
+  for (const key of APP_FILES) if (typeof app[key] === "string") app[key] = rebase(app[key]);
+  if (typeof app.session?.storageState === "string") app.session = { ...app.session, storageState: rebase(app.session.storageState) };
   return { ...plan, app };
 }
 

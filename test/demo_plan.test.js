@@ -41,10 +41,26 @@ test("validateDemoPlan checks app.fixtures, app.har and the off-origin allowlist
   assert.match(withApp({ allowOrigins: "https://fonts.gstatic.com" }).join(" "), /must be an array/);
 });
 
+test("validateDemoPlan checks app.session: one form, test values only, local cookies", () => {
+  const steps = [{ type: "goto", path: "/" }, { type: "click", text: "Go" }];
+  const withSession = (session) => validateDemoPlan(plan([flow("one", steps), flow("two", steps)], { app: { url: "http://127.0.0.1:4173", session } })).errors;
+  assert.deepEqual(withSession({ storageState: "demo/state.json" }), []);
+  assert.deepEqual(withSession({ localStorage: { auth_token: "demo.eyJleHAiOjE4OTM0NTYwMDB9.signature", currentTeamId: "team-1" }, cookies: [{ name: "session", value: "demo-session" }, { name: "sso", value: "fake", domain: ".acme.test", path: "/", httpOnly: true }] }), []);
+  assert.deepEqual(withSession({ cookies: [{ name: "s", value: "demo", url: "https://staging.acme.com" }] }), []);
+  const real = withSession({ localStorage: { token: "sk_live_abcdef1234567890", user: { id: 1 } }, cookies: [{ name: "wos-session", value: "Fe26.2**Zx9Ky8Lw7Mv6Nu5Ot4Ps3Qr2aB1cD0eF9gH8iJ7kL6mN5oP4qR3sT2uV1wX0yZ**9" }, { name: "s", value: "demo", domain: ".acme.com" }, { name: "x", value: "demo", secret: true }, { value: "demo" }] });
+  for (const pattern of [/localStorage\.token looks like a real API key/, /localStorage\.user must be a string/, /cookies\[0\] \(wos-session\) looks like a real session token/, /cookies\[1\] is for acme\.com, which looks like a production host/, /cookies\[2\] has unknown key "secret"/, /cookies\[3\] needs a string name and value/]) {
+    assert.ok(real.some((error) => pattern.test(error)), `${pattern} in ${real.join(" | ")}`);
+  }
+  assert.match(withSession({ storageState: "state.json", localStorage: {} }).join(" "), /not both/);
+  assert.match(withSession({ storageState: "https://x.test/state.json" }).join(" "), /local path to a Playwright storage state/);
+  assert.match(withSession({}).join(" "), /needs storageState, localStorage or cookies/);
+  assert.match(withSession({ localStorage: [], token: "x" }).join(" "), /unknown key "token"/);
+});
+
 test("rebasePlanPaths keeps fixtures and the HAR pointing at the same files from a copy", () => {
-  const original = plan([], { app: { url: "http://localhost:4310", fixtures: "fixtures.mjs", har: "../recordings/api.har" } });
+  const original = plan([], { app: { url: "http://localhost:4310", fixtures: "fixtures.mjs", har: "../recordings/api.har", session: { storageState: "state.json" } } });
   const copy = rebasePlanPaths(original, "/repo/demo", "/repo/assets/demo");
-  assert.deepEqual(copy.app, { url: "http://localhost:4310", fixtures: "../../demo/fixtures.mjs", har: "../../recordings/api.har" });
+  assert.deepEqual(copy.app, { url: "http://localhost:4310", fixtures: "../../demo/fixtures.mjs", har: "../../recordings/api.har", session: { storageState: "../../demo/state.json" } });
   assert.equal(original.app.fixtures, "fixtures.mjs", "the original is untouched");
   assert.deepEqual(rebasePlanPaths(plan([]), "/a", "/b").app, { url: "http://localhost:4310" });
   assert.equal(rebasePlanPaths({ flows: [] }, "/a", "/b").app, undefined);

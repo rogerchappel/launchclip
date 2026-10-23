@@ -8,7 +8,7 @@ import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { cursorPath, encodeFrames, findChromium, fixtureResponse, loadPlaywright, locate, prepareContext, recorderAvailability, seededRandom, typingDelays } from "../src/demo/record.js";
+import { cursorPath, encodeFrames, findChromium, fixtureResponse, loadPlaywright, locate, prepareContext, sessionState, recorderAvailability, seededRandom, typingDelays } from "../src/demo/record.js";
 
 const hasFfmpeg = spawnSync("ffmpeg", ["-version"]).status === 0;
 const available = await recorderAvailability();
@@ -173,4 +173,40 @@ export function route({ url, method, body }) {
   assert.match(logs.join("\n"), /fixtures: GET \/api\/boom threw no lot 7/);
   // Each context loads the fixtures afresh: module state starts over per flow.
   assert.match((await run()).echo, /"calls":1/);
+});
+
+test("sessionState builds a storage state from inline values or a file, and refuses real secrets", async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-session-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const url = "http://127.0.0.1:4173";
+  assert.deepEqual(await sessionState({ localStorage: { auth_token: "demo-token" }, cookies: [{ name: "s", value: "demo" }, { name: "t", value: "fake", domain: ".acme.test" }] }, { url }), {
+    cookies: [{ name: "s", value: "demo", url }, { path: "/", name: "t", value: "fake", domain: ".acme.test" }],
+    origins: [{ origin: url, localStorage: [{ name: "auth_token", value: "demo-token" }] }]
+  });
+  const state = { cookies: [{ name: "s", value: "demo", domain: "127.0.0.1", path: "/", expires: -1, httpOnly: false, secure: false, sameSite: "Lax" }], origins: [{ origin: url, localStorage: [{ name: "token", value: "demo-token" }] }] };
+  await writeFile(path.join(dir, "state.json"), JSON.stringify(state));
+  assert.deepEqual(await sessionState({ storageState: "state.json" }, { url, planDir: dir }), state);
+  state.origins[0].localStorage[0].value = "sk_live_abcdef1234567890";
+  await writeFile(path.join(dir, "real.json"), JSON.stringify(state));
+  await assert.rejects(sessionState({ storageState: "real.json" }, { url, planDir: dir }), /not test-only:\n- real\.json \(http:\/\/127\.0\.0\.1:4173\)\.localStorage\.token looks like a real API key/);
+  await assert.rejects(sessionState({ storageState: "missing.json" }, { url, planDir: dir }), /not a readable storage state/);
+  assert.deepEqual(await sessionState(undefined, { url }), { cookies: [], origins: [] });
+});
+
+test("prepareContext starts the page signed in from app.session", needsBrowser, async (t) => {
+  const port = await serve(t, (req, res) => res.end(`<!doctype html><script>window.seen = { token: localStorage.getItem("auth_token"), team: localStorage.getItem("team"), cookie: document.cookie }; localStorage.setItem("team", "team-2");</script>`));
+  const url = `http://127.0.0.1:${port}`;
+  const browser = await available.chromium.launch({ executablePath: available.executablePath, headless: true });
+  t.after(() => browser.close());
+  const context = await browser.newContext();
+  const { secrets } = await prepareContext(context, { app: { session: { localStorage: { auth_token: "demo.token.signature", team: "team-1" }, cookies: [{ name: "sso", value: "demo-sso" }] } }, url });
+  assert.deepEqual(secrets, ["demo-sso", "demo.token.signature", "team-1"]);
+  const page = await context.newPage();
+  await page.goto(url);
+  // Written before the app's scripts run.
+  assert.deepEqual(await page.evaluate(() => window.seen), { token: "demo.token.signature", team: "team-1", cookie: "sso=demo-sso" });
+  await page.reload();
+  assert.equal((await page.evaluate(() => window.seen)).team, "team-2", "a value the app changes stays changed");
+  const other = await browser.newContext();
+  await assert.rejects(prepareContext(other, { app: { session: { cookies: [{ name: "s", value: "demo", url: "https://app.acme.com" }] } }, url }), /production host/);
 });
