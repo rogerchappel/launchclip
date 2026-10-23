@@ -51,7 +51,7 @@ export async function runCli(argv, io = {}) {
   const voiceInvocation = command === "voice" ? (firstArg && !firstArg.startsWith("--") ? { project: firstArg, flagArgs: rest } : { project: null, flagArgs: firstArg ? [firstArg, ...rest] : rest }) : null;
   // launchclip demo record|approve|scene <path> [flags]; plain `demo <repo>` is the packet lane.
   const demoTarget = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
-  const demoInvocation = command === "demo" && ["record", "approve", "scene"].includes(firstArg) ? { action: firstArg, target: demoTarget, flagArgs: demoTarget ? rest.slice(1) : rest } : null;
+  const demoInvocation = command === "demo" && ["record", "approve", "scene", "doctor", "shots"].includes(firstArg) ? { action: firstArg, target: demoTarget, flagArgs: demoTarget ? rest.slice(1) : rest } : null;
   const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch });
   const previousFetch = globalThis.fetch;
@@ -188,7 +188,14 @@ export async function runCli(argv, io = {}) {
       return;
     } else if (command === "init") {
       result = await initWorkspace(required(firstArg, "repo path"), flags);
-    } else if (command === "demo" && ["record", "approve", "scene"].includes(firstArg)) {
+    } else if (command === "demo" && firstArg === "doctor") {
+      const { runDoctor, formatDoctor } = await import("./demo/doctor.js");
+      const { askYesNo } = await import("./demo/autopilot.js");
+      const report = await runDoctor(demoInvocation.target, flags, { log: (line) => stderr.write(`demo doctor: ${line}\n`), ask: (question) => askYesNo(question, { input: stdin }) });
+      stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatDoctor(report));
+      if (!report.ok) throw new Error(`launchclip demo doctor: ${report.summary.fail} check(s) failed`);
+      return;
+    } else if (command === "demo" && ["record", "approve", "scene", "shots"].includes(firstArg)) {
       const { runDemoCommand } = await import("./demo/cli.js");
       result = await runDemoCommand(demoInvocation.action, demoInvocation.target, flags, { log: (line) => stderr.write(`demo: ${line}\n`), stdin });
     } else if (command === "demo") {
