@@ -1450,6 +1450,18 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip demo record <repo> [--out assets/demo] [--plan DEMO-PLAN.json] [--start "npm run dev"] [--url http://localhost:3000] [--seed "npm run seed" | --no-seed] [--no-start] [--approve] [--allow-host staging.example.com] [--flows a,b] [--plan-only] [--prompt "..."] [--model provider:model] [--viewport 4k] [--headed]
   ```
 
+- `demo doctor`: Check a demo recipe before recording. Without --plan it surveys the repo (start and seed commands, test accounts, auth, e2e mocks and sign-ins, MSW, API contracts, env vars, first-run flags, docs placeholders) and recommends a setup rung, running nothing. With --plan it starts the app (asks first, like record), then runs each flow at full speed with off-origin requests blocked: every step must resolve to a visible element, nothing may cover the page or sign it out, and API requests must be answered. Each check reports a fix; --json for agents; exit 1 on any failure.
+
+  ```text
+  launchclip demo doctor <repo> [--plan demo/DEMO-PLAN.json] [--json] [--url http://localhost:3000] [--start "npm run dev"] [--seed "npm run seed" | --no-seed] [--no-start] [--approve] [--flows a,b] [--out .launchclip/doctor] [--step-timeout 5000] [--allow-host staging.example.com] [--headed]
+  ```
+
+- `demo shots`: List the video and screenshot placeholders in docs ({/* video: … */}, <!-- video: … -->, shot-list tables); --draft writes or extends a DEMO-PLAN.json with one flow per video for the agent to fill in.
+
+  ```text
+  launchclip demo shots <docs-dir-or-file> [--draft demo/DEMO-PLAN.json] [--url http://localhost:3000]
+  ```
+
 - `demo approve`: Approve (or --reject) recorded demo flows after reviewing their contact sheets; only approved flows are used in a video.
 
   ```text

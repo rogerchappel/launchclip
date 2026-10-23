@@ -46,6 +46,7 @@ const RENDERERS = ['hyperframes', 'remotion'];
 
 const SHARED_REFERENCES = [
   'cinematic-production.md',
+  'demo-setup.md',
   'editorial-ui-modules.md',
   'finishing-in-an-nle.md',
   'recorded-treatment-check.md',

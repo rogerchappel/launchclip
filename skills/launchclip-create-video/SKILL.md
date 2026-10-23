@@ -128,6 +128,10 @@ Read a reference when its step comes up, not all at once.
   word-highlight captions, the Shorts safe zone, −14 LUFS / −1 dBTP mastering,
   a local synthesized SFX/music kit, grain and vignette texture, and loop
   endings.
+- [references/demo-setup.md](references/demo-setup.md): writing a SaaS
+  repo's demo recipe with `launchclip demo doctor`. It covers the setup ladder
+  (a plan only, a test session, or fixtures reused from e2e mocks), what to
+  show the person, the check loop and flows drafted from docs placeholders.
 - [references/sfx-library.md](references/sfx-library.md),
   [references/editorial-ui-modules.md](references/editorial-ui-modules.md),
   [references/recorded-video.md](references/recorded-video.md),
