@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="120" viewBox="0 0 360 120">
+  <!-- A generic store badge for the sample (not any real store's artwork). -->
+  <rect x="2" y="2" width="356" height="116" rx="24" fill="#05060d" stroke="#a6a6b8" stroke-width="3"/>
+  <g fill="none" stroke="#f4f2ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="34" y="26" width="44" height="68" rx="10"/>
+    <path d="M50 82h12"/>
+  </g>
+  <text x="104" y="54" fill="#f4f2ff" font-family="Inter, Helvetica, Arial, sans-serif" font-size="22" font-weight="500">Download on the</text>
+  <text x="102" y="92" fill="#f4f2ff" font-family="Inter, Helvetica, Arial, sans-serif" font-size="40" font-weight="700">Sample Store</text>
+</svg>
