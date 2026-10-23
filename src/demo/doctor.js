@@ -238,6 +238,13 @@ async function pageTargets(page) {
     for (const el of document.querySelectorAll("input[placeholder], textarea[placeholder]")) if (visible(el)) add("placeholder", el.getAttribute("placeholder"));
     for (const el of document.querySelectorAll("[aria-label]")) if (visible(el)) add("aria-label", el.getAttribute("aria-label"));
     for (const el of document.querySelectorAll("h1, h2, h3, [role=heading]")) if (visible(el)) add("heading", el.innerText);
+    // Short visible text in leaf elements: table cells, list items, badges.
+    for (const el of document.body ? document.body.querySelectorAll("*") : []) {
+      if (out.length >= 400) break;
+      if (el.children.length || ["SCRIPT", "STYLE", "NOSCRIPT"].includes(el.tagName) || !visible(el)) continue;
+      const value = el.innerText?.trim();
+      if (value && value.length <= 60) add("text", value);
+    }
     return out.slice(0, 400);
   });
 }
@@ -297,7 +304,8 @@ export async function checkRecipe(repoPath, flags = {}, { log = () => {}, ask = 
   const checks = [];
   const add = (id, status, message, extra = {}) => { const check = { id, status, message, ...extra }; checks.push(check); return check; };
   const flowsReport = [];
-  const report = () => finish({ repo, planFile, checks, flows: flowsReport, url, flags });
+  let start = null;
+  const report = () => finish({ repo, planFile, checks, flows: flowsReport, url, flags, start });
 
   // 1. The plan.
   const { plan, planDir, errors, warnings } = await loadPlan(planFile);
@@ -319,7 +327,7 @@ export async function checkRecipe(repoPath, flags = {}, { log = () => {}, ask = 
   }
 
   // 3. Consent for anything that runs code from the repo.
-  const start = flags["no-start"] ? null : (typeof flags.start === "string" ? flags.start : preview.start);
+  start = flags["no-start"] ? null : (typeof flags.start === "string" ? flags.start : preview.start);
   const seed = flags["no-seed"] ? null : (typeof flags.seed === "string" ? flags.seed : preview.seed);
   const items = [seed && ["seed", seed], start && ["start", start], fixturesConsent(plan, planDir)].filter(Boolean);
   await askConsent(items, { repo, url, approve: Boolean(flags.approve), ask, log, tool: "demo doctor" });
@@ -612,19 +620,19 @@ function networkChecks(flow, ledger, { app, origin, add }) {
 }
 
 // The record command that repeats this doctor run's setup.
-function recordCommand(repo, planFile, url, flags) {
+function recordCommand(repo, planFile, url, flags, start) {
   const quote = (text) => `"${String(text).replace(/"/g, '\\"')}"`;
   return [
     "launchclip demo record", rel(repo), "--plan", rel(planFile),
     url && `--url ${url}`,
-    flags["no-start"] ? "--no-start" : typeof flags.start === "string" && `--start ${quote(flags.start)}`,
+    flags["no-start"] ? "--no-start" : start && `--start ${quote(start)}`,
     flags["no-seed"] ? "--no-seed" : typeof flags.seed === "string" && `--seed ${quote(flags.seed)}`,
     ...list(flags["allow-host"]).map((host) => `--allow-host ${host}`),
     "--approve"
   ].filter(Boolean).join(" ");
 }
 
-function finish({ repo, planFile, checks, flows, url, flags = {} }) {
+function finish({ repo, planFile, checks, flows, url, flags = {}, start = null }) {
   const summary = { pass: 0, warn: 0, fail: 0, skip: 0 };
   for (const check of checks) summary[check.status] += 1;
   const ok = summary.fail === 0;
@@ -640,7 +648,7 @@ function finish({ repo, planFile, checks, flows, url, flags = {} }) {
     flows: flows.map((flow) => ({ ...flow, ledger: flow.ledger.filter((entry) => API_TYPES.has(entry.type) || entry.how === "blocked" || entry.how === "failed" || entry.how === "fixture").slice(0, 200) })),
     summary,
     next: ok
-      ? recordCommand(repo, planFile, url, flags)
+      ? recordCommand(repo, planFile, url, flags, start)
       : `fix the ${summary.fail} failing check(s) (each has a fix), then run launchclip demo doctor ${rel(repo)} --plan ${rel(planFile)} again`
   };
 }
