@@ -31,7 +31,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { assertSafeUrl, redactWith } from "./guardrails.js";
+import { assertSafeUrl, harProblems, redactWith } from "./guardrails.js";
 import { DEFAULT_VIEWPORT, sessionProblems, validateDemoPlan } from "./plan.js";
 
 export const ACTION_LOG_SCHEMA = "launchclip.demo-actions.v1";
@@ -166,11 +166,15 @@ export const CURSOR_SCRIPT = `(() => {
  * resolved from `planDir`). Call it on a context you create yourself before
  * passing it to recordFlow, with the returned `secrets` (the session values,
  * masked in the action log). → {secrets: [string]}
+ *
+ * `blockOffOrigin` overrides the plan's setting (demo doctor always blocks),
+ * and `onRoute(request, how, detail)` hears how each routed request was
+ * handled: "fixture", "fixture-error", "allowed" or "blocked".
  */
-export async function prepareContext(context, { app = {}, url = app.url, planDir = process.cwd(), allowHosts = [], log = () => {} } = {}) {
+export async function prepareContext(context, { app = {}, url = app.url, planDir = process.cwd(), allowHosts = [], blockOffOrigin, onRoute = () => {}, log = () => {} } = {}) {
   await context.addInitScript(CURSOR_SCRIPT);
   if (!url) return { secrets: [] };
-  await routeNetwork(context, app, { origin: new URL(url).origin, planDir, log });
+  await routeNetwork(context, app, { origin: new URL(url).origin, planDir, blockOffOrigin, onRoute, log });
   return applySession(context, app.session, { url, planDir, allowHosts });
 }
 
@@ -246,21 +250,41 @@ export function fixtureResponse(result, { cors = null } = {}) {
 
 // Handlers run last-registered first and route.fallback() hands a request to
 // the one registered before, so the order is fixtures → HAR → origin guard.
-async function routeNetwork(context, app, { origin, planDir, log }) {
+/** Whether a plan's recordings block off-origin requests (on by default with fixtures or a HAR). */
+export const blocksOffOrigin = (app = {}) => app.blockOffOrigin ?? Boolean(app.fixtures || app.har);
+
+/**
+ * Read a plan's HAR and refuse it when it still holds credentials or real
+ * people's addresses (harProblems). A zipped HAR can't be scanned and is
+ * passed through. → the parsed HAR, or null for a .zip
+ */
+export async function readScrubbedHar(file) {
+  if (!existsSync(file)) throw new Error(`app.har ${file} does not exist`);
+  if (/\.zip$/i.test(file)) return null;
+  let har;
+  try { har = JSON.parse(await readFile(file, "utf8")); } catch (error) { throw new Error(`app.har ${file} is not a readable HAR: ${error.message}`); }
+  if (!Array.isArray(har?.log?.entries)) throw new Error(`app.har ${file} has no log.entries; is it a HAR?`);
+  const problems = harProblems(har);
+  if (problems.length) throw new Error(`app.har ${file} is not scrubbed:\n- ${problems.slice(0, 10).map((problem) => `entry ${problem.entry} (${problem.url}): ${problem.problem}`).join("\n- ")}${problems.length > 10 ? `\n- …and ${problems.length - 10} more` : ""}`);
+  return har;
+}
+
+async function routeNetwork(context, app, { origin, planDir, blockOffOrigin, onRoute = () => {}, log }) {
   const fixtures = app.fixtures ? await loadFixtures(path.resolve(planDir, app.fixtures)) : null;
   const har = app.har ? path.resolve(planDir, app.har) : null;
-  if (app.blockOffOrigin ?? Boolean(fixtures || har)) {
+  if (blockOffOrigin ?? blocksOffOrigin(app)) {
     const allowed = new Set([origin, ...(app.allowOrigins ?? [])]);
     const blocked = new Set();
     await context.route("**/*", (route) => {
       const target = new URL(route.request().url()).origin;
-      if (allowed.has(target)) return route.continue();
+      if (allowed.has(target)) { onRoute(route.request(), "allowed"); return route.continue(); }
       if (!blocked.has(target)) { blocked.add(target); log(`blocked requests to ${target} (not the app; add it to app.allowOrigins to let it through)`); }
+      onRoute(route.request(), "blocked");
       return route.abort("blockedbyclient");
     });
   }
   if (har) {
-    if (!existsSync(har)) throw new Error(`app.har ${har} does not exist`);
+    await readScrubbedHar(har);
     await context.routeFromHAR(har, { notFound: "fallback" });
   }
   if (fixtures) {
@@ -272,9 +296,11 @@ async function routeNetwork(context, app, { origin, planDir, log }) {
       try {
         const result = await fixtures({ request, url, method: request.method(), body });
         if (result === undefined || result === null) return route.fallback();
+        onRoute(request, "fixture");
         return route.fulfill(fixtureResponse(result, { cors: url.origin === origin ? null : origin }));
       } catch (error) {
         log(`fixtures: ${request.method()} ${url.pathname} threw ${error.message}`);
+        onRoute(request, "fixture-error", error);
         return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: `fixture error: ${error.message}` }) });
       }
     });
@@ -346,15 +372,19 @@ export async function encodeFrames(frames, endTime, out, { fps = 30, width, heig
 // ---------------------------------------------------------------------------
 // Steps
 
+/** Every element a step's selector or text matches, hidden ones included. */
+export function matches(page, step) {
+  if (step.selector) return page.locator(step.selector);
+  const text = step.text;
+  if (step.type === "type") return page.getByLabel(text, { exact: true }).or(page.getByPlaceholder(text, { exact: true }));
+  if (step.type === "click") return page.getByRole("button", { name: text, exact: true }).or(page.getByRole("link", { name: text, exact: true })).or(page.getByText(text, { exact: true }));
+  return page.getByText(text, { exact: false });
+}
+
 // The first visible match: responsive apps often render a hidden duplicate
 // (a mobile menu, a collapsed sidebar) ahead of the one on screen.
 export function locate(page, step) {
-  const first = (locator) => locator.filter({ visible: true }).first();
-  if (step.selector) return first(page.locator(step.selector));
-  const text = step.text;
-  if (step.type === "type") return first(page.getByLabel(text, { exact: true }).or(page.getByPlaceholder(text, { exact: true })));
-  if (step.type === "click") return first(page.getByRole("button", { name: text, exact: true }).or(page.getByRole("link", { name: text, exact: true })).or(page.getByText(text, { exact: true })));
-  return first(page.getByText(text, { exact: false }));
+  return matches(page, step).filter({ visible: true }).first();
 }
 
 /** Run steps off camera at full speed (setup flows such as sign-in). */

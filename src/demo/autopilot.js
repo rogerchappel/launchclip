@@ -36,6 +36,25 @@ export async function askYesNo(question, { input = process.stdin, output = proce
 }
 
 /**
+ * Ask before anything runs code from the repo: the seed and start commands,
+ * and the plan's fixtures module (code the recorder imports). `items` is
+ * [[kind, what]]; --approve (`approve`) skips the question. Throws when the
+ * person says no. `tool` names the command in the messages.
+ */
+export async function askConsent(items, { repo, url, approve = false, ask = askYesNo, log = () => {}, tool = "demo autopilot" } = {}) {
+  if (!items.length || approve) return;
+  log(`${tool} will run these in ${repo}:\n${items.map(([kind, what]) => `  ${kind.padEnd(5)} ${redactSecrets(what)}`).join("\n")}\nand ${tool === "demo autopilot" ? "record" : "check"} ${url}`);
+  if (!(await ask("Run them?"))) {
+    throw new Error(`not approved: ${tool} runs ${items.map(([, what]) => `\`${redactSecrets(what)}\``).join(" and ")} in the repo, which can have side effects. Re-run with --approve once you are happy with them, or pass --no-seed, or --no-start with --url for an app that is already running`);
+  }
+}
+
+/** The fixtures module a plan imports, as a consent item, or null. */
+export function fixturesConsent(plan, planDir) {
+  return plan?.app?.fixtures ? ["code", `${path.resolve(planDir, plan.app.fixtures)} (the plan's fixtures module)`] : null;
+}
+
+/**
  * The commands autopilot would run and the URL it would record, without
  * running anything. → {repo, start, url, seed, accounts: [{email, source}], plan, notes}
  */
@@ -110,25 +129,21 @@ export async function runAutopilot(repoPath, flags = {}, { log = () => {}, ask =
   assertSafeUrl(url, { allowHosts });
 
   // Plan first when it is given: a bad plan should fail before anything runs.
-  let planSource = "file", plan = null, planWarnings = [];
+  let planSource = "file", plan = null, planWarnings = [], fixtures = null;
   if (typeof flags.plan === "string") {
     plan = JSON.parse(await readFile(path.resolve(flags.plan), "utf8"));
     const check = validateDemoPlan(plan);
     if (check.errors.length) throw new Error(`${flags.plan} has errors:\n- ${check.errors.join("\n- ")}`);
     planWarnings = check.warnings;
+    fixtures = fixturesConsent(plan, path.dirname(path.resolve(flags.plan)));
     // The copy saved in `out` points at the same fixtures and HAR as the original.
     plan = rebasePlanPaths(plan, path.dirname(path.resolve(flags.plan)), out);
   }
 
   // --plan-only plans from the code alone: nothing runs.
   const planOnly = Boolean(flags["plan-only"]);
-  const sideEffects = planOnly ? [] : [seed && ["seed", seed], start && ["start", start]].filter(Boolean);
-  if (sideEffects.length && !flags.approve) {
-    log(`demo autopilot will run these commands in ${repo}:\n${sideEffects.map(([kind, command]) => `  ${kind.padEnd(5)} ${redactSecrets(command)}`).join("\n")}\nand record ${url}`);
-    if (!(await ask("Run them?"))) {
-      throw new Error(`not approved: demo autopilot runs ${sideEffects.map(([, command]) => `\`${redactSecrets(command)}\``).join(" and ")} in the repo, which can have side effects. Re-run with --approve once you are happy with them, or pass --no-seed, or --no-start with --url for an app that is already running`);
-    }
-  }
+  const sideEffects = planOnly ? [] : [seed && ["seed", seed], start && ["start", start], fixtures].filter(Boolean);
+  await askConsent(sideEffects, { repo, url, approve: Boolean(flags.approve), ask, log });
 
   const accounts = await findTestAccounts(repo);
   const account = accounts[0] ? { email: accounts[0].email, password: accounts[0].password, username: accounts[0].email.split("@")[0] } : null;

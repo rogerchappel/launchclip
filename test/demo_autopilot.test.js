@@ -42,6 +42,15 @@ test("autopilot asks before running the seed and start commands, and refuses wit
   await assert.rejects(runAutopilot(app, { out, url: "https://app.pulseboard.com", approve: true }), /production host/);
 });
 
+test("consent names the plan's fixtures module, even with no seed or start command", async (t) => {
+  const { dir, app, out } = await workspace();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const asked = [];
+  const plan = path.join(app, "demo", "DEMO-PLAN.json");
+  await assert.rejects(runAutopilot(app, { out, plan, "no-seed": true, "no-start": true, url: "http://127.0.0.1:9" }, { log: (line) => asked.push(line), ask: async () => false }), /not approved: demo autopilot runs `.*fixtures\.mjs \(the plan's fixtures module\)`/);
+  assert.match(asked.join("\n"), /code  .*demo[/\\]fixtures\.mjs/);
+});
+
 test("--plan-only writes DEMO-PLAN.json from the code and runs nothing", async (t) => {
   const { dir, app, out } = await workspace();
   t.after(() => rm(dir, { recursive: true, force: true }));

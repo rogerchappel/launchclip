@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { composePorts, detectApp, findTestAccounts, parseEnvFile, readmeHints, scriptPort, startApp } from "../src/demo/app.js";
-import { assertSafeUrl, classifyHost, redactSecrets, redactWith, sessionValueProblem, typeStepProblem } from "../src/demo/guardrails.js";
+import { assertSafeUrl, classifyHost, redactSecrets, redactWith, sessionValueProblem, typeStepProblem, harProblems } from "../src/demo/guardrails.js";
 
 async function repo(files) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-demo-app-"));
@@ -136,4 +136,24 @@ test("startApp refuses a production URL and reports an app that never gets healt
   await assert.rejects(startApp({ command: "true", cwd: os.tmpdir(), url: "https://app.acme.com" }), /production host/);
   const port = await freePort();
   await assert.rejects(startApp({ command: "echo starting; exit 3", cwd: os.tmpdir(), url: `http://127.0.0.1:${port}`, timeout: 5000 }), /exited before it became healthy[\s\S]*starting/);
+});
+
+test("harProblems refuses a HAR that still holds credentials or real people's addresses", () => {
+  const entry = (request, response = {}) => ({ request: { url: "http://localhost:3000/api/me", headers: [], cookies: [], ...request }, response: { headers: [], cookies: [], content: { text: "{}" }, ...response } });
+  const clean = { log: { entries: [entry({}, { content: { text: JSON.stringify({ name: "Avery Demo", email: "avery@example.com", team: "demo@pulseboard.test" }) } })] } };
+  assert.deepEqual(harProblems(clean), []);
+  const dirty = { log: { entries: [
+    entry({ headers: [{ name: "Authorization", value: "Bearer 1234567890abcdef" }] }),
+    entry({ url: "http://localhost:3000/api/me?api_key=live1234" }, { headers: [{ name: "set-cookie", value: "sid=x" }] }),
+    entry({}, { content: { text: JSON.stringify({ email: "jane.smith@acme.co" }) } }),
+    entry({ cookies: [{ name: "sid", value: "x" }] })
+  ] } };
+  const problems = harProblems(dirty).map((problem) => `${problem.entry}: ${problem.problem}`);
+  assert.deepEqual(problems, [
+    "0: request header Authorization; remove it",
+    "1: response header set-cookie; remove it",
+    "1: URL holds a token, key or password; replace it with a fake value",
+    "2: response body holds email addresses (jane.smith@acme.co); replace them with @example.com ones",
+    "3: request cookies (sid); remove them"
+  ]);
 });

@@ -128,3 +128,39 @@ export function typeStepProblem(step) {
   if (redactSecrets(step.value) !== step.value) return "the typed value looks like a secret";
   return null;
 }
+
+// Headers a captured HAR carries that are always real credentials.
+const CREDENTIAL_HEADERS = new Set(["authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key", "x-auth-token", "x-csrf-token", "x-xsrf-token"]);
+const EMAIL = /[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)/g;
+const TEST_DOMAIN = /(^|\.)(example\.(com|org|net)|test|example|invalid|localhost)$/i;
+
+/**
+ * Problems that keep a HAR from being committed as demo data: credential
+ * headers and cookies, token- or key-like values in URLs and bodies, and
+ * email addresses outside example and .test domains (a capture from staging
+ * holds real people). → [{entry, url, problem}]
+ */
+export function harProblems(har) {
+  const out = [];
+  (har?.log?.entries ?? []).forEach((entry, index) => {
+    const url = String(entry?.request?.url ?? "?").slice(0, 120);
+    const add = (problem) => out.push({ entry: index, url, problem });
+    for (const [side, message] of [["request", entry?.request], ["response", entry?.response]]) {
+      for (const header of message?.headers ?? []) if (CREDENTIAL_HEADERS.has(String(header.name).toLowerCase())) add(`${side} header ${header.name}; remove it`);
+      if ((message?.cookies ?? []).length) add(`${side} cookies (${message.cookies.map((cookie) => cookie.name).join(", ")}); remove them`);
+    }
+    const texts = [
+      ["URL", entry?.request?.url],
+      ["request body", entry?.request?.postData?.text],
+      ["response body", entry?.response?.content?.encoding === "base64" ? null : entry?.response?.content?.text]
+    ];
+    for (const [where, raw] of texts) {
+      if (typeof raw !== "string" || !raw) continue;
+      const text = raw.slice(0, 200_000);
+      if (redactSecrets(text) !== text || sessionValueProblem(text)) add(`${where} holds a token, key or password; replace it with a fake value`);
+      const real = [...new Set([...text.matchAll(EMAIL)].filter((match) => !TEST_DOMAIN.test(match[1])).map((match) => match[0]))];
+      if (real.length) add(`${where} holds email addresses (${real.slice(0, 3).join(", ")}${real.length > 3 ? "…" : ""}); replace them with @example.com ones`);
+    }
+  });
+  return out;
+}
