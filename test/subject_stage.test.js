@@ -124,3 +124,18 @@ test("ensureModel refuses a download that fails verification", async (t) => {
   assert.equal((await modelStatus("mediapipe-selfie", { dir })).installed, false);
   await assert.rejects(ensureModel("mediapipe-selfie", { dir, download: false }), /launchclip subject setup --model mediapipe-selfie/);
 });
+
+test("launchclip subject probe says how to install a missing model", needsFfmpeg, async (t) => {
+  const dir = await tempDir(t);
+  const clip = await presenterClip(dir);
+  const { runCli } = await import("../src/cli.js");
+  const previous = process.env.LAUNCHCLIP_HOME;
+  process.env.LAUNCHCLIP_HOME = path.join(dir, "home");
+  t.after(() => {
+    if (previous === undefined) delete process.env.LAUNCHCLIP_HOME;
+    else process.env.LAUNCHCLIP_HOME = previous;
+  });
+  const sink = { write() {} };
+  await assert.rejects(runCli(["subject", "probe", clip, "--no-download", "--cache", path.join(dir, "cache")], { stdout: sink, stderr: sink }), /launchclip subject setup --model modnet/);
+  await assert.rejects(runCli(["subject", "matte", clip], { stdout: sink, stderr: sink }), /--range must be/);
+});
