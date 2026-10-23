@@ -211,12 +211,15 @@ export async function encodeFrames(frames, endTime, out, { fps = 30, width, heig
 // ---------------------------------------------------------------------------
 // Steps
 
-function locate(page, step) {
-  if (step.selector) return page.locator(step.selector).first();
+// The first visible match: responsive apps often render a hidden duplicate
+// (a mobile menu, a collapsed sidebar) ahead of the one on screen.
+export function locate(page, step) {
+  const first = (locator) => locator.filter({ visible: true }).first();
+  if (step.selector) return first(page.locator(step.selector));
   const text = step.text;
-  if (step.type === "type") return page.getByLabel(text, { exact: true }).or(page.getByPlaceholder(text, { exact: true })).first();
-  if (step.type === "click") return page.getByRole("button", { name: text, exact: true }).or(page.getByRole("link", { name: text, exact: true })).or(page.getByText(text, { exact: true })).first();
-  return page.getByText(text, { exact: false }).first();
+  if (step.type === "type") return first(page.getByLabel(text, { exact: true }).or(page.getByPlaceholder(text, { exact: true })));
+  if (step.type === "click") return first(page.getByRole("button", { name: text, exact: true }).or(page.getByRole("link", { name: text, exact: true })).or(page.getByText(text, { exact: true })));
+  return first(page.getByText(text, { exact: false }));
 }
 
 /** Run steps off camera at full speed (setup flows such as sign-in). */

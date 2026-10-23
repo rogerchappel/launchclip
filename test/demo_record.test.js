@@ -7,9 +7,19 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { cursorPath, encodeFrames, findChromium, seededRandom, typingDelays } from "../src/demo/record.js";
+import { cursorPath, encodeFrames, findChromium, locate, recorderAvailability, seededRandom, typingDelays } from "../src/demo/record.js";
 
 const hasFfmpeg = spawnSync("ffmpeg", ["-version"]).status === 0;
+const available = await recorderAvailability();
+const needsBrowser = { skip: !available.ok && `recorder unavailable: ${available.reasons.join("; ")}`, timeout: 60000 };
+
+async function withPage(t, html) {
+  const browser = await available.chromium.launch({ executablePath: available.executablePath, headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage();
+  await page.setContent(html);
+  return page;
+}
 
 test("seededRandom is deterministic per seed", () => {
   const a = seededRandom("create"), b = seededRandom("create"), c = seededRandom("tour");
@@ -70,4 +80,12 @@ test("encodeFrames holds each frame until the next timestamp", { skip: !hasFfmpe
   const green = pixel(30), blue = pixel(50);
   assert.ok(green[1] > 180 && green[0] < 80, `frame 30 ${[...green]}`);
   assert.ok(blue[2] > 180 && blue[0] < 80, `frame 50 ${[...blue]}`);
+});
+
+test("locate skips hidden duplicates that responsive layouts render first", needsBrowser, async (t) => {
+  const page = await withPage(t, `<nav style="display:none"><button id="mobile">Save</button><input id="m" placeholder="Name"></nav>
+    <main><button id="desktop">Save</button><input id="d" placeholder="Name"></main>`);
+  assert.equal(await locate(page, { type: "click", text: "Save" }).getAttribute("id"), "desktop");
+  assert.equal(await locate(page, { type: "click", selector: "button" }).getAttribute("id"), "desktop");
+  assert.equal(await locate(page, { type: "type", text: "Name" }).getAttribute("id"), "d");
 });
