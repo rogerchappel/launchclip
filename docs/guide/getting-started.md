@@ -6,7 +6,7 @@
 - **FFmpeg:** on a Mac, `brew install ffmpeg`; on Ubuntu, `sudo apt install ffmpeg`; on Windows, [ffmpeg.org](https://ffmpeg.org/download.html)
 - **An AI coding agent you already use:** Claude Code or Codex (Codex works on a ChatGPT plan). Or skip the agent and use your own API keys with the [headless CLI](headless.md).
 
-Everything else (the renderer's browser, the offline voice model, fonts) downloads automatically the first time it's needed.
+Everything else (the renderer's browser, the offline voice model, fonts) downloads automatically the first time it's needed. That makes the very first video slower, roughly 10–15 minutes on a typical connection; after that, videos start straight away.
 
 ## Install
 
