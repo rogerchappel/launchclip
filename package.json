@@ -1,7 +1,7 @@
 {
   "name": "launchclip",
-  "version": "0.1.1",
-  "description": "Create reviewable launch videos and OSS promotion packets from local product evidence.",
+  "version": "0.2.0",
+  "description": "Describe your video, drop in your stuff, get the finished video: launch videos, product demos and edits from one prompt, with your AI agent or headless.",
   "type": "module",
   "bin": {
     "launchclip": "bin/launchclip.js"
@@ -20,15 +20,19 @@
     "skills:check": "node ./scripts/sync-skills.mjs --check"
   },
   "keywords": [
-    "oss",
-    "promotion",
     "video",
+    "launch-video",
+    "product-demo",
+    "saas",
+    "motion-graphics",
     "captions",
-    "cli",
-    "hyperframes",
+    "video-editing",
     "remotion",
-    "product-videogen",
-    "agent-skills"
+    "hyperframes",
+    "agent-skills",
+    "claude-code",
+    "codex",
+    "cli"
   ],
   "author": "Roger Chappel",
   "license": "MIT",
