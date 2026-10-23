@@ -471,9 +471,10 @@ params:
 - badge: end only: "assets/…" badge image, or {src, ratio (default 3, an app-store badge)}
 - url: end only: URL or handle ≤ 64, no spaces, in a pill
 - glow: primary|accent|false — the soft light that blooms behind the mark and keeps widening (default primary)
+- shine: true|false — soft light: a sweep across the card as the mark lands, and a glint across the mark and wordmark once they have (default true)
 - at: first beat (seconds from scene start (optional; else a matching hit, else a default); default 0.15 s)
 - stagger: seconds between beats (default 0.35, scaled by the grammar)
-events: mark, wordmark, eyebrow, headline, badge, url
+events: mark, wordmark, eyebrow, headline, badge, url, shine
 
 ### punch-in (keeps captions)
 Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay).

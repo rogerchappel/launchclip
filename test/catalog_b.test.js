@@ -598,6 +598,34 @@ test('brand-lockup: the end card stacks the lockup over a badge and a URL pill; 
   assertEmitter(model);
 });
 
+test('brand-lockup: an opener with no headline still has two hook beats: a light sweep at once, then a glint', () => {
+  // The shape of a cinematic opener: mark, wordmark (tinted), eyebrow and glow, the wordmark on a hit, no headline.
+  const cinematic = {id: 'cinematic', ease: {enter: 'power2.inOut', exit: 'power2.in', move: 'power2.inOut', camera: 'power2.inOut', emphasis: 'power2.inOut'},
+    duration: {enter: 0.7, exit: 0.45, transition: 0.9, camera: 1.3}, stagger: 1.4};
+  const model = MODULES['brand-lockup'].resolve({...lockup, tint: 'paper', eyebrow: 'Launch analytics', glow: 'primary', at: 0, stagger: 0.25},
+    landscape({duration: 3.4, hits: [{event: 'wordmark', at: 0.25}], grammar: cinematic}));
+  assertModelContract(model, 'brand-lockup');
+  assert.equal(model.content.headline, undefined);
+  const [sweep, glint] = model.content.sweeps;
+  // The sweep starts with the mark and crosses the whole card; the glint crosses the lockup once the wordmark has landed.
+  assert.equal(sweep.key, 'sweep');
+  assert.equal(sweep.time, 0);
+  assert.ok(sweep.x + sweep.width <= 0 && sweep.x + sweep.width + sweep.travel >= model.rect.width, 'the sweep travels from off the left to off the right');
+  assert.equal(glint.key, 'shine');
+  const wordmarkLands = model.content.beats.find(beat => beat.key === 'wordmark').time + model.content.land * 1.3;
+  assert.ok(glint.time > wordmarkLands && glint.time + glint.duration <= model.motion.exitStart, `glint at ${glint.time}`);
+  assert.ok(glint.time - sweep.time >= 1, 'two distinct beats, apart');
+  assert.deepEqual(model.events.filter(event => event.name === 'shine').map(event => event.time), [glint.time]);
+  // Light, not colour: the bands are paper over the frame, screened, faded at both ends.
+  const html = EMITTERS['brand-lockup'](model).html;
+  assert.match(html, /id="scene-sweep"[^>]*mix-blend-mode:screen/);
+  assert.ok(html.lastIndexOf('id="scene-shine"') > html.indexOf('id="scene-wordmark"'), 'the glint is drawn above the wordmark');
+  assertEmitter(model);
+  // shine: false, or a scene too short for the glint, drops them.
+  assert.deepEqual(MODULES['brand-lockup'].resolve({...lockup, shine: false}, landscape()).content.sweeps, []);
+  assert.deepEqual(MODULES['brand-lockup'].resolve({...lockup}, landscape({duration: 2})).content.sweeps.map(s => s.key), ['sweep']);
+});
+
 test('brand-lockup: validation names the param', () => {
   const resolve = (params, extra) => MODULES['brand-lockup'].resolve(params, landscape(extra));
   assert.throws(() => resolve({eyebrow: 'x'}), /params\.mark or params\.wordmark is required/);

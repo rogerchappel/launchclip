@@ -25,7 +25,7 @@ const TINT_ROLES = ['paper', 'ink', 'primary', 'accent'];
 const HEX6 = /^#[0-9a-fA-F]{6}$/;
 
 // Beat defaults (seconds from the scene start) and how long each element takes to land.
-export const BRAND_LOCKUP_TIMING = Object.freeze({mark: 0, stagger: 0.35, land: 0.6, bloom: 0.75});
+export const BRAND_LOCKUP_TIMING = Object.freeze({mark: 0, stagger: 0.35, land: 0.6, bloom: 0.75, sweep: 0.9, shine: 0.8, shineGap: 0.2});
 const T = BRAND_LOCKUP_TIMING;
 
 // ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@ function tintMatrix(hex) {
 }
 
 function resolve(params, ctx) {
-  const b = createBase('brand-lockup', params, ctx, {allowed: ['variant', 'layout', 'mark', 'wordmark', 'tint', 'markTint', 'eyebrow', 'headline', 'badge', 'url', 'glow', 'at', 'stagger'], hidesCaptions: true});
+  const b = createBase('brand-lockup', params, ctx, {allowed: ['variant', 'layout', 'mark', 'wordmark', 'tint', 'markTint', 'eyebrow', 'headline', 'badge', 'url', 'glow', 'shine', 'at', 'stagger'], hidesCaptions: true});
   const {check, u, rect, id, start, colors, theme} = b;
   const p = b.params;
   const variant = p.variant === undefined ? 'title' : check.oneOf(p.variant, 'params.variant', VARIANTS);
@@ -68,6 +68,7 @@ function resolve(params, ctx) {
   const url = p.url === undefined ? null : check.str(p.url, 'params.url', 64);
   if (url && /\s/.test(url)) check.fail('params.url', 'must not contain spaces');
   const glow = p.glow === undefined ? 'primary' : p.glow === false ? null : check.oneOf(p.glow, 'params.glow', ['primary', 'accent']);
+  const shine = p.shine === undefined ? true : check.bool(p.shine, 'params.shine');
   const stagger = p.stagger === undefined ? grammarStagger(ctx.grammar, T.stagger, {min: 0.15, max: 0.9}) : check.num(p.stagger, 'params.stagger', 0.1, 1);
 
   const W = rect.width, H = rect.height;
@@ -162,7 +163,30 @@ function resolve(params, ctx) {
     b.events.push({id: `${id}-${key}`, name: key, time, endTime: rt(time + T.land), role: key === 'mark' || key === 'url' ? 'emphasis' : 'beat', cue: key === 'mark' ? 'whoosh-soft' : key === 'url' ? 'pop' : undefined});
     return {key, time};
   });
+  // Shine: two soft bands of paper-coloured light. A sweep crosses the whole
+  // card as the first beat lands, so the opening moves at once whatever the
+  // brand colours (the motion gate's hook wants motion by 0.35 s, and a
+  // slow → fast → slow entrance alone starts too gently). A glint then
+  // crosses the mark and wordmark once they have landed: a second distinct
+  // beat for an opener with no headline.
+  content.sweeps = [];
+  const lockupBeats = content.beats.filter(beat => beat.key === 'mark' || beat.key === 'wordmark');
+  if (shine && lockupBeats.length) {
+    const exitAt = b.end - b.motion.exitDuration;
+    const sweepW = u(360), sweepH = r2(H + u(240));
+    if (first + T.sweep <= exitAt) content.sweeps.push({key: 'sweep', time: first, x: r2(-sweepW * 1.5), y: r2(-u(120)), width: sweepW, height: sweepH, travel: r2(W + sweepW * 3), alpha: '40', duration: T.sweep});
+    const parts = [content.mark, content.wordmark].filter(Boolean);
+    const left = Math.min(...parts.map(part => part.x)), right = Math.max(...parts.map(part => part.x + part.width));
+    const top = Math.min(...parts.map(part => part.y)), bottom = Math.max(...parts.map(part => part.y + part.height));
+    const time = rt(Math.max(...lockupBeats.map(beat => beat.time)) + T.land * 1.3 + T.shineGap);
+    if (time + T.shine <= exitAt) {
+      const width = u(220), height = r2(bottom - top + u(200));
+      content.sweeps.push({key: 'shine', time, x: r2(left - width), y: r2((top + bottom) / 2 - height / 2), width, height, travel: r2(right - left + width * 2), alpha: '73', duration: T.shine});
+      b.events.push({id: `${id}-shine`, name: 'shine', time, endTime: rt(time + T.shine), role: 'beat'});
+    }
+  }
   for (const event of b.events) if (event.cue === undefined) delete event.cue;
+  content.light = colors.paper;
   content.land = T.land;
   content.bloom = T.bloom;
   content.rise = r2(u(28));
@@ -207,6 +231,12 @@ function view(model) {
       fontSize: U.size, lineHeight: `${U.height}px`, textAlign: 'center', whiteSpace: 'nowrap', opacity: 0, transformOrigin: '50% 50%', boxShadow: `0 ${14 * model.unit}px ${40 * model.unit}px #00000066`}), [U.text]));
     kids.push(el('div', `${id}-url-ring`, abs(U.x, U.y, U.width, U.height, {boxSizing: 'border-box', borderRadius: U.radius, border: `${3 * model.unit}px solid ${U.fill}`, opacity: 0, transformOrigin: '50% 50%'})));
   }
+  // Bands of light above everything, faded at both ends so they read as light, not as a card.
+  const fade = 'linear-gradient(0deg, transparent, #000 28%, #000 72%, transparent)';
+  for (const S of c.sweeps) {
+    kids.push(el('div', `${id}-${S.key}`, abs(S.x, S.y, S.width, S.height, {background: `linear-gradient(90deg, ${c.light}00, ${c.light}${S.alpha} 50%, ${c.light}00)`,
+      WebkitMaskImage: fade, maskImage: fade, mixBlendMode: 'screen', opacity: 0, transformOrigin: '50% 50%', pointerEvents: 'none'})));
+  }
   return kids;
 }
 
@@ -223,6 +253,13 @@ function timeline(model, ops) {
     tw(ops, g, at, c.bloom, c.enterEase, {scaleX: 0.55, scaleY: 0.55}, {scaleX: 1, scaleY: 1});
     // Then it keeps widening, linearly, until the scene ends.
     if (end - at - c.bloom > 0.05) tw(ops, g, rt(at + c.bloom), rt(end - at - c.bloom), 'none', {scaleX: 1, scaleY: 1}, {scaleX: 1.18, scaleY: 1.18});
+  }
+  for (const S of c.sweeps) {
+    const s = `${id}-${S.key}`;
+    set(ops, s, start, {opacity: 0, x: 0, y: 0, rotation: 16, scaleX: 1, scaleY: 1});
+    tw(ops, s, S.time, S.duration, c.enterEase, {x: 0}, {x: S.travel});
+    tw(ops, s, S.time, S.duration * 0.25, c.fadeEase, {opacity: 0}, {opacity: 1});
+    tw(ops, s, rt(S.time + S.duration * 0.65), S.duration * 0.35, 'power2.in', {opacity: 1}, {opacity: 0});
   }
   for (const {key, time} of c.beats) {
     if (key === 'wordmark') {
@@ -265,10 +302,11 @@ export const brandLockup = {
     badge: 'end only: "assets/…" badge image, or {src, ratio (default 3, an app-store badge)}',
     url: 'end only: URL or handle ≤ 64, no spaces, in a pill',
     glow: 'primary|accent|false — the soft light that blooms behind the mark and keeps widening (default primary)',
+    shine: 'true|false — soft light: a sweep across the card as the mark lands, and a glint across the mark and wordmark once they have (default true)',
     at: `first beat (${at}; default 0.15 s)`,
     stagger: 'seconds between beats (default 0.35, scaled by the grammar)'
   },
-  events: ['mark', 'wordmark', 'eyebrow', 'headline', 'badge', 'url'],
+  events: ['mark', 'wordmark', 'eyebrow', 'headline', 'badge', 'url', 'shine'],
   timing: timingRules({rules: [`elements land in this order: mark, wordmark, eyebrow, headline, badge, url, stagger apart (default ${T.stagger} s), the first at ${T.mark} s; a hit on one moves the defaults after it`]}),
   resolve,
   view,

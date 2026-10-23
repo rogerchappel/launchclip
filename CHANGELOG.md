@@ -18,8 +18,10 @@
     badge) and a `url` pill.
   - `tint` / `markTint` recolour a dark wordmark or mark to paper (or any
     brand role or hex) on dark backgrounds.
-  - A soft `glow` blooms behind the mark and keeps widening, and the mark
-    lands at 0 s, so the opening passes the motion gate's hook rule.
+  - A soft `glow` blooms behind the mark and keeps widening. `shine` sweeps
+    light across the card as the mark lands at 0 s, then glints across the
+    lockup once it has landed. An opener passes the motion gate's hook rule
+    even with no headline and a dark brand colour.
   - It hides captions.
 - A `cinematic` motion grammar (`"motion": {"grammar": "cinematic"}`).
   Every entrance, transition and camera move eases slow → fast → slow into

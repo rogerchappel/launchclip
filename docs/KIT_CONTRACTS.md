@@ -1127,10 +1127,22 @@ of set type. It hides captions, like `hook-title` and `cta`.
   - The wordmark slides out from behind its left edge.
   - `glow` (`primary` by default, `accent`, or `false`) is a soft light that
     blooms behind the lockup with the mark. It then keeps widening linearly
-    until the scene ends, so the card never holds still. With the bloom, the
-    opening clears the motion gate's hook rule (first motion by 0.35 s).
+    until the scene ends, so the card never holds still.
+  - `shine` (default `true`) is two soft bands of paper-coloured light,
+    screened over the card and faded at both ends:
+    - a sweep crosses the whole card as the first beat lands;
+    - a glint crosses the mark and wordmark once they have landed (when the
+      scene is long enough).
+
+    The sweep makes the opening move at once whatever the brand colours. A
+    slow → fast → slow entrance and a soft glow alone stay under the motion
+    gate's burst threshold for the first 0.35 s, more so with a dark primary.
+    The glint is a second distinct hook event, so an opener with no headline
+    passes the hook rule. Measured: a 3.4 s cinematic opener (mark, tinted
+    wordmark on a 0.25 s hit, eyebrow, no headline, primary `#1f4a3a`) gives
+    bursts at 0.20 s and 1.47 s, and every gate passes.
   - The URL pill gets one ring pulse once it lands.
-- **Events:** `mark`, `wordmark`, `eyebrow`, `headline`, `badge`, `url`.
+- **Events:** `mark`, `wordmark`, `eyebrow`, `headline`, `badge`, `url`, `shine`.
 - **Compilers:** the catalogue B emitter and `CatalogBModule`
   (`kit/remotion/catalog/BrandLockup.tsx`) draw the same tree and ops.
 
