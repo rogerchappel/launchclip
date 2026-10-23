@@ -971,7 +971,7 @@ checked by `validateDemoPlan(plan)` → `{errors, warnings}`. `app`:
   plan file) or `{localStorage: {key: "value"}, cookies: [{name, value, url? |
   domain?, path?, expires?, httpOnly?, secure?, sameSite?}]}` (localStorage for
   the app's origin, written once per key before the app's scripts run; cookies
-  for the app's URL unless they name a domain or url). Every value must pass
+  for the app's host unless they name a url or domain; a cookie takes url, or domain and path, not both). Every value must pass
   `sessionValueProblem` (`src/demo/guardrails.js`): no API keys
   (`sk-…`, `sk_live_…`, `ghp_…`, `xox…`, `AKIA…`), no bearer tokens, no signed
   JWTs (an unsigned JWT, `alg: "none"` or a fake signature, is fine), and no

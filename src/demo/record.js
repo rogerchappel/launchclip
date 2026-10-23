@@ -197,7 +197,8 @@ export async function sessionState(session, { url, planDir = process.cwd() } = {
   if (problems.length) throw new Error(`the session is not test-only:\n- ${problems.join("\n- ")}`);
   const localStorage = Object.entries(session.localStorage ?? {}).map(([name, value]) => ({ name, value }));
   return {
-    cookies: (session.cookies ?? []).map((cookie) => (cookie.url || cookie.domain ? { path: "/", ...cookie } : { ...cookie, url })),
+    // Playwright takes a cookie's url, or its domain and path, not both.
+    cookies: (session.cookies ?? []).map((cookie) => (cookie.url ? cookie : cookie.domain || cookie.path ? { domain: new URL(url).hostname, path: "/", ...cookie } : { ...cookie, url })),
     origins: localStorage.length ? [{ origin: new URL(url).origin, localStorage }] : []
   };
 }

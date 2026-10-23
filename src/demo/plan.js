@@ -111,6 +111,7 @@ function validateSession(session, appUrl, errors) {
   if (session.cookies !== undefined && !Array.isArray(session.cookies)) { errors.push("app.session.cookies must be an array"); return; }
   for (const [i, cookie] of (session.cookies ?? []).entries()) {
     for (const key of Object.keys(cookie ?? {})) if (!COOKIE_KEYS.includes(key)) errors.push(`app.session.cookies[${i}] has unknown key "${key}"`);
+    if (cookie?.url !== undefined && (cookie.domain !== undefined || cookie.path !== undefined)) errors.push(`app.session.cookies[${i}] takes url, or domain and path, not both`);
   }
   errors.push(...sessionProblems(session, appUrl));
 }

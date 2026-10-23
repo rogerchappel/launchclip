@@ -52,6 +52,7 @@ test("validateDemoPlan checks app.session: one form, test values only, local coo
     assert.ok(real.some((error) => pattern.test(error)), `${pattern} in ${real.join(" | ")}`);
   }
   assert.match(withSession({ storageState: "state.json", localStorage: {} }).join(" "), /not both/);
+  assert.match(withSession({ cookies: [{ name: "s", value: "demo", url: "http://127.0.0.1:4173", path: "/" }] }).join(" "), /takes url, or domain and path, not both/);
   assert.match(withSession({ storageState: "https://x.test/state.json" }).join(" "), /local path to a Playwright storage state/);
   assert.match(withSession({}).join(" "), /needs storageState, localStorage or cookies/);
   assert.match(withSession({ localStorage: [], token: "x" }).join(" "), /unknown key "token"/);

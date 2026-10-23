@@ -179,8 +179,8 @@ test("sessionState builds a storage state from inline values or a file, and refu
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-session-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const url = "http://127.0.0.1:4173";
-  assert.deepEqual(await sessionState({ localStorage: { auth_token: "demo-token" }, cookies: [{ name: "s", value: "demo" }, { name: "t", value: "fake", domain: ".acme.test" }] }, { url }), {
-    cookies: [{ name: "s", value: "demo", url }, { path: "/", name: "t", value: "fake", domain: ".acme.test" }],
+  assert.deepEqual(await sessionState({ localStorage: { auth_token: "demo-token" }, cookies: [{ name: "s", value: "demo" }, { name: "t", value: "fake", domain: ".acme.test" }, { name: "u", value: "demo", path: "/app" }] }, { url }), {
+    cookies: [{ name: "s", value: "demo", url }, { domain: ".acme.test", path: "/", name: "t", value: "fake" }, { domain: "127.0.0.1", path: "/app", name: "u", value: "demo" }],
     origins: [{ origin: url, localStorage: [{ name: "auth_token", value: "demo-token" }] }]
   });
   const state = { cookies: [{ name: "s", value: "demo", domain: "127.0.0.1", path: "/", expires: -1, httpOnly: false, secure: false, sameSite: "Lax" }], origins: [{ origin: url, localStorage: [{ name: "token", value: "demo-token" }] }] };
