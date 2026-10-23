@@ -514,7 +514,7 @@ const DEFINITIONS = [
 
 const TIMING_D = {
   'product-demo': {minDuration: T.minDuration, leadIn: 0, leadOut: T.leadOut, gaps: [],
-    rules: [`actions[].at: in order; zooms lead each action by ${T.zoomLead} s, hold ${T.hold} s, and merge into one shot when the next action comes within ${T.merge} s`, `callouts[].at ≤ scene − 1 s; each shows ${T.callout} s by default and must not overlap the next`]}
+    rules: [`actions[].at: in order; zooms start ${T.zoomLead} s before each action and settle ${T.settle} s before it, hold ${T.hold} s (${T.navLeave} s after a click that navigates), and pan to the next action unless the gap is over ${T.merge} s`, `callouts[].at ≤ scene − 1 s; each shows ${T.callout} s by default, must not overlap the next, and ends when its action navigates or the camera leaves it`]}
 };
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: TIMING_D[def.id], resolve: resolveProductDemo}]));

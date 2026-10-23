@@ -500,8 +500,8 @@ A recorded product flow (launchclip demo record) in a window or full bleed, with
 params:
 - media: {src: "assets/demo/<flow>.mp4", sourceStart: seconds into the clip (default 0)}
 - viewport: {width, height} of the recording in CSS px (default 1920×1080; from <flow>.actions.json)
-- actions: [{at (s from scene start), type: click|type|focus, box: {x, y, width, height} viewport px, keys?: [s], until?: s, label?}] ≤ 24 — build with productDemoParams(<flow>.actions.json)
-- callouts: [{at, text ≤ 42 chars, box (the element it points at), duration? 0.8–6 s (default 2.2)}] ≤ 4, not overlapping
+- actions: [{at (s from scene start), type: click|type|focus, box: {x, y, width, height} viewport px, keys?: [s], until?: s, label?, navigates?: true when it changes the page}] ≤ 24 — build with productDemoParams(<flow>.actions.json)
+- callouts: [{at, text ≤ 42 chars, box (the element it points at), duration? 0.8–6 s (default 2.2)}] ≤ 4, not overlapping; one on an action's box ends when that action navigates or the camera leaves it
 - frame: window|full (full needs the canvas aspect; default window)
 - zoom: false, or {max: 1–2.5 (default 1.8)}
 - title: string ≤ 48 (optional, for logs)
@@ -542,7 +542,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | footage-callout | 1.5 s | 0 s | scene − 1.1 s | — |
 | lower-third | 2 s | 0 s | scene − 1.2 s | — |
 | emphasis-caption | 0.8 s | 0 s | scene − 0.45 s | at ≤ scene − 0.45 s − stagger × (words − 1) (stagger 0–0.3 s, default 0.09) |
-| product-demo | 2 s | 0 s | scene − 0.2 s | actions[].at: in order; zooms lead each action by 0.5 s, hold 1.1 s, and merge into one shot when the next action comes within 2.2 s; callouts[].at ≤ scene − 1 s; each shows 2.2 s by default and must not overlap the next |
+| product-demo | 2 s | 0 s | scene − 0.2 s | actions[].at: in order; zooms start 1.2 s before each action and settle 0.4 s before it, hold 1.1 s (0.3 s after a click that navigates), and pan to the next action unless the gap is over 2.2 s; callouts[].at ≤ scene − 1 s; each shows 2.2 s by default, must not overlap the next, and ends when its action navigates or the camera leaves it |
 
 ## Example
 

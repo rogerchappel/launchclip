@@ -1004,30 +1004,45 @@ field.
 ### Catalogue D (`kit/core/catalog-d.mjs`)
 
 `product-demo` params: `media {src, sourceStart}`, `viewport`, `actions [{at,
-type, box, keys?, until?, label?}]` (≤ 24, in order), `callouts [{at, text, box,
-duration?}]` (≤ 4, not overlapping), `frame: window|full`, `zoom: false | {max}`,
-`title`. `productDemoParams(record, {src, sourceStart, duration})` builds them
-from an action log, converting to scene-relative times and dropping actions
-outside the window.
+type, box, keys?, until?, label?, navigates?}]` (≤ 24, in order), `callouts
+[{at, text, box, duration?}]` (≤ 4, not overlapping), `frame: window|full`,
+`zoom: false | {max}`, `title`. `productDemoParams(record, {src, sourceStart,
+duration})` builds them from an action log, converting to scene-relative times
+and dropping actions outside the window. A click or typing whose `url` in the
+log differs from the one before it gets `navigates: true`. A click's or
+typing's callout starts 0.6 s before the action, as the cursor reaches the
+element; any other callout 0.25 s before its step's end.
 
 - **Rect:** `window` fits the recording's aspect in the safe zone (captions may
   sit over its bottom edge), and `full` fills the canvas, which needs the same
   aspect.
 - **Camera:** each click or type target zooms so its box fills at most half the
-  canvas (1 to `zoom.max`, default 1.8). Zooms lead the action by 0.5 s, land on
-  it, hold 1.1 s (or until 0.4 s after the last keystroke), and zoom out over
-  0.7 s. A target within 2.2 s of the previous hold pans inside the same shot.
-  `cameraKeys` gives `{t, s, f}` keyframes, `cameraAt` eases between them (scale
-  in log space), and `cameraTransform` maps a state to `{scale, x, y}` about the
-  canvas origin. That transform is clamped per axis, so a video already covering
-  the canvas keeps covering it and a smaller one stays on screen. One sample per
-  frame becomes `set` ops on `<id>-media` (the video, whose transform-origin is
-  the canvas origin in its local space) and on `<id>-cam` (the overlay's camera
+  canvas (1 to `zoom.max`, default 1.8). A zoom starts 1.2 s before the action
+  and settles 0.4 s before it, so the click lands on a still frame. The camera
+  holds 1.1 s (or until 0.4 s after the last keystroke; 0.3 s after a click
+  that navigates), then moves straight to the next target in 0.6–1.1 s by
+  on-screen distance, pulling back partway when the targets are far apart (all
+  the way out after a navigation). After a gap of over 2.2 s (or, after a
+  navigation, room for both) it zooms out over 0.9 s and back in instead. No
+  move is shorter than 0.45 s: actions closer than 0.8 s share one shot that
+  frames them all (wide when they are spread out), and a squeezed move may land
+  up to 0.15 s after its action. `cameraKeys` gives `{t, s, f, dip?}`
+  keyframes, `cameraAt` eases between them (easeInOutSine; scale in log space,
+  pulled back to `dip` halfway; given `{rect, canvas}`, the focus travels inside
+  the range the clamp allows, so moves never stop dead at an edge), and
+  `cameraTransform` maps a state to `{scale, x, y}` about the canvas origin.
+  That transform is clamped per axis, so a video already covering the canvas
+  keeps covering it and a smaller one stays on screen. One sample per frame
+  becomes `set` ops on `<id>-media` (the video, whose transform-origin is the
+  canvas origin in its local space) and on `<id>-cam` (the overlay's camera
   layer).
 - **Overlay:** `<id>-overlay` holds the camera layer, with an accent outline
-  (`<id>-hl-<i>`) around each clicked or typed-into box, and callout pills
-  (`<id>-callout-<i>`, brand primary, at least the key text size) placed below or
-  above the anchor as the camera will show it 0.45 s in. Pills are not scaled.
+  (`<id>-hl-<i>`) around each clicked or typed-into box (gone 0.3 s after a
+  click that navigates), and callout pills (`<id>-callout-<i>`, brand primary,
+  at least the key text size) placed below or above the anchor as the camera
+  shows it at its action (or 0.45 s in). A callout on an action's box, from
+  0.3 s before to 1.5 s after the callout, ends when that action navigates or
+  the camera leaves the element. Pills are not scaled.
 - **Events:** `click-<i>` → `click`, `key-<i>-<k>` → `keystroke-soft`, `zoom-<k>`
   → `whoosh-soft` (zooms of at least 1.3×), `callout-<i>` → `pop`. `finish` binds
   these as module-event SFX, merging same-kind cues closer than 0.12 s.
