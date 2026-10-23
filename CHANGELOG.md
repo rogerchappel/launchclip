@@ -4,6 +4,33 @@
 
 ### Added
 
+- `launchclip demo doctor <repo>` checks a demo recipe before recording.
+  - **Without `--plan` (survey):** it reads the repo and recommends the
+    cheapest setup rung (a plan, a test session, or fixtures). It reports what
+    to reuse: the e2e `webServer`, `page.route` mocks and `addInitScript`
+    sign-ins, MSW handlers, OpenAPI specs and HARs. It also reports the
+    API-URL and analytics env vars, first-run flags and docs placeholders.
+  - **With `--plan` (check):** it starts the app with consent and plays every
+    flow at full speed with off-origin requests blocked. It reports each check
+    with a fix:
+    - steps that don't reach a visible element, with the closest texts and a
+      screenshot;
+    - ambiguous matches and covering overlays;
+    - signed-out landings, telling a missing session apart from one the
+      server rejected;
+    - unanswered API requests, fixture errors and page errors;
+    - requests a recording would let leave the app.
+
+    It keeps a per-flow network ledger. `--json` prints the report for agents,
+    and the exit code is 1 on any failure.
+- `launchclip demo shots <docs>` lists `{/* video: … */}`, `<!-- video: … -->`
+  and shot-list placeholders. `--draft` writes one flow per video into a
+  `DEMO-PLAN.json`.
+- The create-video skills gain a `demo-setup` reference. It teaches the setup
+  ladder, what to show the person before anything runs, and the doctor loop.
+- `examples/sso-app` is an SSO app with no seed data whose demo recipe reuses
+  its e2e mocks and sign-in.
+
 - Demo autopilot records apps with no seed data and apps that sign in through
   SSO. A `DEMO-PLAN.json` can name `app.fixtures` (an ES module whose
   `route({request, url, method, body})` answers the app's requests) or
@@ -67,6 +94,10 @@
 
 ### Changed
 
+- `demo record` names the plan's fixtures module when it asks before running
+  anything, even with `--no-seed --no-start`.
+- A HAR that still holds credential headers, cookies, token-like values or
+  real email addresses is refused.
 - Gate rendered narration at −14 LUFS ±1.5 LU and a −1 dBTP true-peak ceiling
   so platform normalization and re-encoding neither bury nor clip the mix.
 - Portrait shorts in the metered director lane now burn in word-synced captions
