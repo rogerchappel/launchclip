@@ -4,6 +4,14 @@
 
 ### Added
 
+- Cap API spending at $50 per command by default. Once a command's tracked
+  OpenAI, Anthropic and ElevenLabs spending reaches the limit, no new paid
+  call starts (calls already running still finish, so the total can pass the
+  limit by what they cost) and the command fails with
+  `LAUNCHCLIP_COST_LIMIT` and its cost tally. Set the limit with
+  `--max-cost-usd <amount>` or `LAUNCHCLIP_MAX_COST_USD`, or pass `none` to
+  remove it. The limit applies per run, so a resumed production starts a new
+  budget.
 - Add partial rendering to `launchclip finish`: the render stage caches the
   timeline in segments (scene bodies and whole transition overlaps) hashed
   from everything that can change their pixels, and re-renders only the
