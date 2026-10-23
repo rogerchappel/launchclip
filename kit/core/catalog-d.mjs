@@ -96,6 +96,7 @@ export function cameraTransform({s, f}, rect, canvas) {
   return {scale: Math.round(s * 1e5) / 1e5, x: r2(x) || 0, y: r2(y) || 0};
 }
 
+const sameBox = (a, b) => Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1 && Math.abs(a.width - b.width) < 1 && Math.abs(a.height - b.height) < 1;
 const same = (a, b) => Math.abs(a.s - b.s) < 1e-6 && Math.abs(a.f.x - b.f.x) < 1e-6 && Math.abs(a.f.y - b.f.y) < 1e-6;
 
 /**
@@ -286,7 +287,10 @@ export function productDemoParams(record, {src, sourceStart = 0, duration, frame
       actions.push(entry);
     }
     if (action.callout && action.box && callouts.length < 4) {
-      const cAt = Math.min(rel(action.end ?? action.at ?? action.start) - 0.25, window - 1.2);
+      // A click's or typing's callout shows as the cursor reaches the element;
+      // anything else's once it has appeared.
+      const lead = ACTION_TYPES.includes(action.type) ? Math.max(0, at - T.calloutLead) : rel(action.end ?? action.at ?? action.start) - 0.25;
+      const cAt = Math.min(lead, window - 1.2);
       if (cAt >= 0) callouts.push({at: Math.round(cAt * 1000) / 1000, text: String(action.callout).slice(0, 42), box: action.box});
     }
   }
@@ -385,13 +389,21 @@ function resolveProductDemo(params, ctx) {
       const text = check.str(callout.text, `${path}.text`, 42);
       const anchor = mapBox(box(check, callout.box, `${path}.box`, viewport), rect, viewport);
       const wanted = callout.duration === undefined ? T.callout : check.num(callout.duration, `${path}.duration`, 0.8, 6);
-      const until = rt(Math.min(at + wanted, end - T.leadOut));
-      if (until - at < 0.8) check.fail(`${path}.at`, `leaves ${r2(until - at)} s on screen before the scene ends; it needs 0.8 s`);
+      if (Math.min(at + wanted, end - T.leadOut) - at < 0.8) check.fail(`${path}.at`, `leaves ${r2(Math.min(at + wanted, end - T.leadOut) - at)} s on screen before the scene ends; it needs 0.8 s`);
+      // The action it points at: the first one on the same element from just
+      // before the callout to 1.5 s after it. The callout leaves with that
+      // element: when the click navigates, or when the camera moves off it.
+      const owner = actions.find(action => action.at >= at - 0.3 && action.at <= at + 1.5 && sameBox(action.box, anchor));
+      let until = Math.min(at + wanted, end - T.leadOut);
+      if (owner?.navigates) until = Math.min(until, owner.at + T.navLeave);
+      const leaves = owner && cameraLeaves(keys, owner, owner.at - T.zoomLead);
+      if (leaves !== null && leaves !== undefined && leaves > at) until = Math.min(until, leaves + 0.1);
+      until = rt(Math.max(until, Math.min(at + 0.5, end - T.leadOut)));
       const fit = fitText(check, `${path}.text`, text, {family: 'body', width: safe.width - u(80), preferred: Math.max(b.min.key, u(46)), min: b.min.key, maxLines: 1});
       const padX = u(30), padY = u(18);
       const width = r2(textWidth(text, fit.size, 'body') + padX * 2), height = r2(fit.size * 1.2 + padY * 2);
-      // Where the anchor will be once the camera settles (0.45 s in).
-      const cam = camAt(Math.min(at + 0.45, until));
+      // Where the anchor will be once the camera settles on it (0.45 s in, or the action's moment).
+      const cam = camAt(owner ? Math.min(Math.max(owner.at, at), until) : Math.min(at + 0.45, until));
       const tl = throughCamera(anchor, cam), br = throughCamera({x: anchor.x + anchor.width, y: anchor.y + anchor.height}, cam);
       const seen = {x: tl.x, y: tl.y, width: br.x - tl.x, height: br.y - tl.y};
       const gap = u(28);
@@ -478,7 +490,9 @@ export function productDemoTimeline(model) {
     const target = `${id}-callout-${callout.index}`;
     set(ops, target, start, {opacity: 0, y: model.unit * 18, scaleX: 0.9, scaleY: 0.9});
     tw(ops, target, callout.at, 0.4, 'back.out(1.7)', {opacity: 0, y: model.unit * 18, scaleX: 0.9, scaleY: 0.9}, {opacity: 1, y: 0, scaleX: 1, scaleY: 1});
-    tw(ops, target, rt(callout.until - 0.25), 0.25, 'power2.in', {opacity: 1, y: 0, scaleX: 1, scaleY: 1}, {opacity: 0, y: 0, scaleX: 0.96, scaleY: 0.96});
+    // A short callout (cut at a navigation) fades once it has popped in.
+    const fadeAt = rt(Math.max(callout.at + 0.4, callout.until - 0.25));
+    tw(ops, target, fadeAt, Math.max(0.1, rt(callout.until - fadeAt)), 'power2.in', {opacity: 1, y: 0, scaleX: 1, scaleY: 1}, {opacity: 0, y: 0, scaleX: 0.96, scaleY: 0.96});
   }
   if (model.grammar) grammarTweens(ops, model.grammar, {roles: ['emphasis']});
   return ops;
@@ -490,7 +504,7 @@ const DEFINITIONS = [
       media: '{src: "assets/demo/<flow>.mp4", sourceStart: seconds into the clip (default 0)}',
       viewport: '{width, height} of the recording in CSS px (default 1920×1080; from <flow>.actions.json)',
       actions: '[{at (s from scene start), type: click|type|focus, box: {x, y, width, height} viewport px, keys?: [s], until?: s, label?, navigates?: true when it changes the page}] ≤ 24 — build with productDemoParams(<flow>.actions.json)',
-      callouts: '[{at, text ≤ 42 chars, box (the element it points at), duration? 0.8–6 s (default 2.2)}] ≤ 4, not overlapping',
+      callouts: '[{at, text ≤ 42 chars, box (the element it points at), duration? 0.8–6 s (default 2.2)}] ≤ 4, not overlapping; one on an action\'s box ends when that action navigates or the camera leaves it',
       frame: 'window|full (full needs the canvas aspect; default window)',
       zoom: 'false, or {max: 1–2.5 (default 1.8)}',
       title: 'string ≤ 48 (optional, for logs)'

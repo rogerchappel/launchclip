@@ -146,6 +146,60 @@ test('productDemoParams turns an action log into scene-relative params', async (
   assert.ok(!JSON.stringify(record).includes('demo-pass-123'), 'the password never reaches the action log');
 });
 
+// The ClutchCut "Create an API key" flow: "API Keys" in the Settings sidebar
+// opens another page, then the name field on it is typed into.
+const NAVIGATING_LOG = {
+  schema: 'launchclip.demo-actions.v1', video: 'api-keys.mp4', viewport: {width: 1920, height: 1080}, duration: 8,
+  actions: [
+    {index: 0, type: 'goto', path: '/settings', url: 'http://localhost:3000/settings', start: 0, end: 0, box: null, callout: null},
+    {index: 1, type: 'click', text: 'API Keys', label: 'API Keys', start: 2.2, at: 2.81, end: 3.42, url: 'http://localhost:3000/settings/api-keys',
+      box: {x: 24, y: 857, width: 200, height: 40}, callout: 'Settings → API Keys'},
+    {index: 2, type: 'type', text: 'Key name', label: 'Key name', start: 3.6, at: 4.65, end: 5.9, url: 'http://localhost:3000/settings/api-keys',
+      box: {x: 700, y: 235, width: 520, height: 44}, keys: [4.9, 5.0, 5.1, 5.2], callout: null}
+  ]
+};
+
+test('a navigating click: its callout leads the click and leaves with the page, its outline too', () => {
+  const T = PRODUCT_DEMO_TIMING;
+  const params = productDemoParams(NAVIGATING_LOG, {src: 'assets/demo/api-keys.mp4', duration: 8});
+  const [click, typing] = params.actions;
+  assert.equal(click.navigates, true, 'the URL changed across the click');
+  assert.equal(typing.navigates, undefined, 'typing stayed on the page');
+  // The callout shows as the cursor reaches "API Keys", before the click.
+  const [callout] = params.callouts;
+  assert.ok(callout.at <= click.at - 0.3 && callout.at >= click.at - 1, JSON.stringify(callout));
+
+  const story = {schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1920, height: 1080, fps: 30, duration: 8},
+    brand: {colors: {bg: '#0b0d12', primary: '#5b4dff', accent: '#22c3ee', paper: '#f4efe6', ink: '#0b0d12'}, fonts: {display: 'system-ui', body: 'system-ui'}},
+    scenes: [{id: 'keys', module: 'product-demo', start: 0, end: 8, params}]};
+  const resolved = resolveStory(story);
+  assert.deepEqual(validateStory(story, {modules: knownModules()}).errors, []);
+  const model = resolveModule(resolved.scenes[0], resolved);
+  const pill = model.content.callouts[0];
+  // Gone by the time the next page has replaced Settings, and before the camera heads for the name field.
+  assert.ok(pill.until <= click.at + T.navLeave + 1e-6, `callout until ${pill.until}`);
+  const toField = model.content.keys.find(key => key.t > click.at && key.f.y < 540);
+  assert.ok(toField && pill.until < toField.t);
+  // While it shows, the element it points at stays where it was placed (the camera has settled on it).
+  const anchor = mapBox(callout.box, model.content.rect, params.viewport);
+  const seenAt = t => {
+    const cam = cameraTransform(cameraAt(model.content.keys, t, {rect: model.content.rect, canvas}), model.content.rect, canvas);
+    return throughCamera({x: anchor.x + anchor.width / 2, y: anchor.y + anchor.height / 2}, cam);
+  };
+  const placed = seenAt(click.at);
+  for (let t = pill.at + 0.4; t <= pill.until; t += 1 / 30) {
+    const seen = seenAt(t);
+    assert.ok(Math.hypot(seen.x - placed.x, seen.y - placed.y) < 24, `t=${t.toFixed(2)}: the anchor drifted to ${JSON.stringify(seen)} from ${JSON.stringify(placed)}`);
+  }
+  assert.ok(pill.box.y > placed.y || pill.box.y + pill.box.height < placed.y, 'the pill sits beside the element, not on it');
+  // The outline on "API Keys" is gone with the page; the camera leaves soon after the click.
+  const ops = productDemoTimeline(model);
+  const outline = ops.filter(op => op.target === 'keys-hl-0' && op.type !== 'set').at(-1);
+  assert.ok(outline.start + outline.duration <= click.at + T.navLeave + 1e-6, JSON.stringify(outline));
+  const hold = model.content.keys.find(key => key.t >= click.at - 1e-6);
+  assert.ok(hold.t <= click.at + T.navLeave + 1e-6, `the camera holds on the old page until ${hold.t}`);
+});
+
 test('the product-demo model: rect, camera samples, events and the shared view', async () => {
   const {story} = await fixture();
   const resolved = resolveStory(story);
