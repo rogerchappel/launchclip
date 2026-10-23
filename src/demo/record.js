@@ -1,6 +1,7 @@
 // Demo autopilot, step 4: record each DEMO-PLAN.json flow in a real browser.
 //
-// Playwright (optional dependency, Apache-2.0) drives Chromium in a fresh
+// Playwright (optional dependency, Apache-2.0, or the one the recorded app's
+// repo installs when LaunchClip's is missing) drives Chromium in a fresh
 // context (a clean profile: no cookies, extensions or history) at the plan's
 // viewport (1920×1080 by default, deviceScaleFactor 2 for 4K). It uses an
 // already installed Chromium and never downloads one: LAUNCHCLIP_CHROMIUM,
@@ -25,11 +26,13 @@
 // video) and <flow>.poster.png.
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { assertSafeUrl, redactWith } from "./guardrails.js";
-import { DEFAULT_VIEWPORT, validateDemoPlan } from "./plan.js";
+import { DEFAULT_VIEWPORT, sessionProblems, validateDemoPlan } from "./plan.js";
 
 export const ACTION_LOG_SCHEMA = "launchclip.demo-actions.v1";
 
@@ -47,16 +50,26 @@ export async function findChromium({ env = process.env, playwrightPath = null } 
   return system.find((file) => existsSync(file)) ?? null;
 }
 
-/** Playwright's chromium, or null when the optional dependency is missing. */
-export async function loadPlaywright() {
-  try { return (await import("playwright")).chromium; } catch { return null; }
+/**
+ * Playwright's chromium, or null when it is missing: LaunchClip's optional
+ * dependency first, then a playwright, @playwright/test or playwright-core
+ * that the recorded app's repo (`repo`) already installs.
+ */
+export async function loadPlaywright({ repo = null, own = () => import("playwright") } = {}) {
+  try { return (await own()).chromium; } catch { /* not installed with LaunchClip */ }
+  if (!repo) return null;
+  const require = createRequire(path.join(path.resolve(repo), "package.json"));
+  for (const name of ["playwright", "@playwright/test", "playwright-core"]) {
+    try { return require(name).chromium ?? null; } catch { /* try the next */ }
+  }
+  return null;
 }
 
 /** What recording needs and whether it is here: {ok, chromium, executablePath, ffmpeg, reasons}. */
-export async function recorderAvailability({ env = process.env } = {}) {
+export async function recorderAvailability({ env = process.env, repo = null } = {}) {
   const reasons = [];
-  const chromium = await loadPlaywright();
-  if (!chromium) reasons.push("the optional dependency playwright is not installed (npm install playwright)");
+  const chromium = await loadPlaywright({ repo });
+  if (!chromium) reasons.push(`the optional dependency playwright is not installed (npm install playwright)${repo ? `, and ${repo} does not install one either` : ""}`);
   let pinned = null;
   try { pinned = chromium?.executablePath() ?? null; } catch { pinned = null; }
   const executablePath = chromium ? await findChromium({ env, playwrightPath: pinned }) : null;
@@ -125,7 +138,8 @@ export function typingDelays(text, random = Math.random) {
 }
 
 // Synthetic cursor and click ripple, drawn in every document of the context.
-const CURSOR_SCRIPT = `(() => {
+// Exported for callers that build their own context; prepareContext adds it.
+export const CURSOR_SCRIPT = `(() => {
   if (window.__lcCursor) return;
   window.__lcCursor = true;
   const pos = (() => { try { return JSON.parse(sessionStorage.getItem('__lc_cursor') || 'null'); } catch { return null; } })() || { x: innerWidth / 2, y: innerHeight / 2 };
@@ -145,6 +159,127 @@ const CURSOR_SCRIPT = `(() => {
   };
   if (document.documentElement) mount(); else addEventListener('DOMContentLoaded', mount);
 })();`;
+
+/**
+ * Get a context ready to record: the synthetic cursor in every page, the
+ * plan's network setup and its signed-in session (`app`, relative paths
+ * resolved from `planDir`). Call it on a context you create yourself before
+ * passing it to recordFlow, with the returned `secrets` (the session values,
+ * masked in the action log). → {secrets: [string]}
+ */
+export async function prepareContext(context, { app = {}, url = app.url, planDir = process.cwd(), allowHosts = [], log = () => {} } = {}) {
+  await context.addInitScript(CURSOR_SCRIPT);
+  if (!url) return { secrets: [] };
+  await routeNetwork(context, app, { origin: new URL(url).origin, planDir, log });
+  return applySession(context, app.session, { url, planDir, allowHosts });
+}
+
+/**
+ * A plan's app.session as a storage state, {cookies, origins: [{origin,
+ * localStorage: [{name, value}]}]}: read from its storageState file, or built
+ * from inline localStorage (for the app's origin) and cookies (for the app's
+ * URL unless they name a domain or url). Throws when a value looks like a
+ * real secret.
+ */
+export async function sessionState(session, { url, planDir = process.cwd() } = {}) {
+  if (!session) return { cookies: [], origins: [] };
+  if (session.storageState) {
+    const file = path.resolve(planDir, session.storageState);
+    let state;
+    try { state = JSON.parse(await readFile(file, "utf8")); } catch (error) { throw new Error(`app.session.storageState ${file} is not a readable storage state: ${error.message}`); }
+    const cookies = state.cookies ?? [], origins = state.origins ?? [];
+    const problems = origins.flatMap((entry) => sessionProblems({ localStorage: Object.fromEntries((entry.localStorage ?? []).map(({ name, value }) => [name, value])) }, url, `${session.storageState} (${entry.origin})`));
+    problems.push(...sessionProblems({ cookies }, url, session.storageState));
+    if (problems.length) throw new Error(`the session is not test-only:\n- ${problems.join("\n- ")}`);
+    return { cookies, origins };
+  }
+  const problems = sessionProblems(session, url);
+  if (problems.length) throw new Error(`the session is not test-only:\n- ${problems.join("\n- ")}`);
+  const localStorage = Object.entries(session.localStorage ?? {}).map(([name, value]) => ({ name, value }));
+  return {
+    // Playwright takes a cookie's url, or its domain and path, not both.
+    cookies: (session.cookies ?? []).map((cookie) => (cookie.url ? cookie : cookie.domain || cookie.path ? { domain: new URL(url).hostname, path: "/", ...cookie } : { ...cookie, url })),
+    origins: localStorage.length ? [{ origin: new URL(url).origin, localStorage }] : []
+  };
+}
+
+// Cookies go in before the first page; localStorage is written by an init
+// script before the app's own scripts run, once per key (a flow that changes
+// a value keeps the change).
+async function applySession(context, session, { url, planDir, allowHosts }) {
+  const { cookies, origins } = await sessionState(session, { url, planDir });
+  for (const cookie of cookies) {
+    const host = cookie.url ?? `http://${String(cookie.domain).replace(/^\./, "")}`;
+    if (new URL(host).hostname !== new URL(url).hostname) assertSafeUrl(host, { allowHosts });
+  }
+  if (cookies.length) await context.addCookies(cookies);
+  if (origins.length) {
+    await context.addInitScript((entries) => {
+      const entry = entries.find((item) => item.origin === location.origin);
+      if (!entry) return;
+      try { for (const { name, value } of entry.localStorage) if (localStorage.getItem(name) === null) localStorage.setItem(name, value); } catch { /* storage blocked */ }
+    }, origins);
+  }
+  return { secrets: [...cookies.map((cookie) => cookie.value), ...origins.flatMap((entry) => entry.localStorage.map((item) => item.value))] };
+}
+
+let fixtureLoads = 0;
+
+/** Import a fixtures module afresh (its own state per flow). → its route function. */
+export async function loadFixtures(file) {
+  const href = `${pathToFileURL(path.resolve(file)).href}?launchclip=${++fixtureLoads}`;
+  const module = await import(href);
+  const route = module.route ?? module.default?.route ?? module.default;
+  if (typeof route !== "function") throw new Error(`${file} must export route({request, url, method, body})`);
+  return route;
+}
+
+/** A fixture's answer → route.fulfill options. */
+export function fixtureResponse(result, { cors = null } = {}) {
+  const json = Object.hasOwn(result, "json");
+  const raw = result.body;
+  const body = json ? JSON.stringify(result.json) : typeof raw === "string" || Buffer.isBuffer(raw) ? raw : raw === undefined ? "" : JSON.stringify(raw);
+  const contentType = result.contentType ?? (json || (raw !== undefined && typeof raw !== "string" && !Buffer.isBuffer(raw)) ? "application/json" : "text/plain");
+  const headers = { ...(cors ? { "access-control-allow-origin": cors, "access-control-allow-credentials": "true" } : {}), ...(result.headers ?? {}) };
+  return { status: result.status ?? 200, contentType, headers, body };
+}
+
+// Handlers run last-registered first and route.fallback() hands a request to
+// the one registered before, so the order is fixtures → HAR → origin guard.
+async function routeNetwork(context, app, { origin, planDir, log }) {
+  const fixtures = app.fixtures ? await loadFixtures(path.resolve(planDir, app.fixtures)) : null;
+  const har = app.har ? path.resolve(planDir, app.har) : null;
+  if (app.blockOffOrigin ?? Boolean(fixtures || har)) {
+    const allowed = new Set([origin, ...(app.allowOrigins ?? [])]);
+    const blocked = new Set();
+    await context.route("**/*", (route) => {
+      const target = new URL(route.request().url()).origin;
+      if (allowed.has(target)) return route.continue();
+      if (!blocked.has(target)) { blocked.add(target); log(`blocked requests to ${target} (not the app; add it to app.allowOrigins to let it through)`); }
+      return route.abort("blockedbyclient");
+    });
+  }
+  if (har) {
+    if (!existsSync(har)) throw new Error(`app.har ${har} does not exist`);
+    await context.routeFromHAR(har, { notFound: "fallback" });
+  }
+  if (fixtures) {
+    await context.route("**/*", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      let body = null;
+      try { body = request.postDataJSON(); } catch { body = request.postData(); }
+      try {
+        const result = await fixtures({ request, url, method: request.method(), body });
+        if (result === undefined || result === null) return route.fallback();
+        return route.fulfill(fixtureResponse(result, { cors: url.origin === origin ? null : origin }));
+      } catch (error) {
+        log(`fixtures: ${request.method()} ${url.pathname} threw ${error.message}`);
+        return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: `fixture error: ${error.message}` }) });
+      }
+    });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Screencast → constant-frame-rate MP4
@@ -211,12 +346,15 @@ export async function encodeFrames(frames, endTime, out, { fps = 30, width, heig
 // ---------------------------------------------------------------------------
 // Steps
 
-function locate(page, step) {
-  if (step.selector) return page.locator(step.selector).first();
+// The first visible match: responsive apps often render a hidden duplicate
+// (a mobile menu, a collapsed sidebar) ahead of the one on screen.
+export function locate(page, step) {
+  const first = (locator) => locator.filter({ visible: true }).first();
+  if (step.selector) return first(page.locator(step.selector));
   const text = step.text;
-  if (step.type === "type") return page.getByLabel(text, { exact: true }).or(page.getByPlaceholder(text, { exact: true })).first();
-  if (step.type === "click") return page.getByRole("button", { name: text, exact: true }).or(page.getByRole("link", { name: text, exact: true })).or(page.getByText(text, { exact: true })).first();
-  return page.getByText(text, { exact: false }).first();
+  if (step.type === "type") return first(page.getByLabel(text, { exact: true }).or(page.getByPlaceholder(text, { exact: true })));
+  if (step.type === "click") return first(page.getByRole("button", { name: text, exact: true }).or(page.getByRole("link", { name: text, exact: true })).or(page.getByText(text, { exact: true })));
+  return first(page.getByText(text, { exact: false }));
 }
 
 /** Run steps off camera at full speed (setup flows such as sign-in). */
@@ -238,21 +376,27 @@ async function runQuick(page, steps, { resolveUrl, account }) {
   await page.waitForTimeout(400);
 }
 
+// Redact string fields only, so a short masked value never corrupts numbers or JSON.
+const redactStrings = (value, masks) => typeof value === "string" ? redactWith(value, masks)
+  : Array.isArray(value) ? value.map((item) => redactStrings(item, masks))
+  : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactStrings(item, masks)])) : value;
+
 const r1 = (value) => Math.round(value * 10) / 10;
 const r3 = (value) => Math.round(value * 1000) / 1000;
 const boxOf = (box) => (box ? { x: r1(box.x), y: r1(box.y), width: r1(box.width), height: r1(box.height) } : null);
 
 /**
  * Record one flow on a fresh page of `context`. → {video, log, poster}.
- * `accounts` supplies {email, password, username} for {account: …} values.
+ * `account` supplies {email, password, username} for {account: …} values;
+ * it and `secrets` (prepareContext's session values) are masked in the log.
  */
-export async function recordFlow(context, flow, { url, out, viewport, account = null, fps = 30, allowHosts = [], setup = [], log: say = () => {} } = {}) {
+export async function recordFlow(context, flow, { url, out, viewport, account = null, secrets = [], fps = 30, allowHosts = [], setup = [], log: say = () => {} } = {}) {
   const random = seededRandom(flow.id);
   const page = await context.newPage();
   const scale = viewport.deviceScaleFactor ?? 1;
   const frameSize = { width: Math.round(viewport.width * scale), height: Math.round(viewport.height * scale) };
   const workDir = await mkdtemp(path.join(os.tmpdir(), `launchclip-demo-${flow.id}-`));
-  const masks = account ? Object.values(account).filter((value) => typeof value === "string") : [];
+  const masks = [...(account ? Object.values(account) : []), ...secrets].filter((value) => typeof value === "string");
   const actions = [];
   let cursor = { x: viewport.width / 2, y: viewport.height / 2 };
   const resolveUrl = (target) => {
@@ -346,7 +490,7 @@ export async function recordFlow(context, flow, { url, out, viewport, account = 
       duration,
       frames: cast.frames.length,
       recorded_at: new Date(t0 * 1000).toISOString(),
-      actions: actions.map((action) => JSON.parse(redactWith(JSON.stringify(action), masks)))
+      actions: actions.map((action) => redactStrings(action, masks))
     };
     const logPath = path.join(out, `${flow.id}.actions.json`);
     await writeFile(logPath, `${JSON.stringify(record, null, 2)}\n`);
@@ -359,13 +503,14 @@ export async function recordFlow(context, flow, { url, out, viewport, account = 
 
 /**
  * Record every flow of a validated plan into `out`. → {flows: [...], executablePath}.
+ * `planDir` is where the plan's relative paths (app.fixtures, app.har) start.
  * Throws when the plan has errors or the recorder is unavailable.
  */
-export async function recordPlan(plan, { out, url = plan.app?.url, headed = false, account = null, fps = 30, allowHosts = [], only = null, log = () => {} } = {}) {
+export async function recordPlan(plan, { out, url = plan.app?.url, repo = null, planDir = process.cwd(), headed = false, account = null, fps = 30, allowHosts = [], only = null, log = () => {} } = {}) {
   const check = validateDemoPlan(plan);
   if (check.errors.length) throw new Error(`DEMO-PLAN.json has errors:\n- ${check.errors.join("\n- ")}`);
   assertSafeUrl(url, { allowHosts });
-  const available = await recorderAvailability();
+  const available = await recorderAvailability({ repo });
   if (!available.ok) throw new Error(`cannot record: ${available.reasons.join("; ")}`);
   await mkdir(out, { recursive: true });
   const viewport = { ...DEFAULT_VIEWPORT, ...(plan.viewport ?? {}) };
@@ -376,11 +521,11 @@ export async function recordPlan(plan, { out, url = plan.app?.url, headed = fals
       if (only && !only.includes(flow.id)) continue;
       // A fresh context per flow: a clean profile, the same starting state.
       const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height }, deviceScaleFactor: viewport.deviceScaleFactor, locale: "en-US", timezoneId: "UTC", colorScheme: "light", acceptDownloads: false, serviceWorkers: "block" });
-      await context.addInitScript(CURSOR_SCRIPT);
       try {
+        const { secrets } = await prepareContext(context, { app: plan.app ?? {}, url, planDir, allowHosts, log });
         log(`recording ${flow.id} (${flow.steps.length} steps)`);
         const setup = (flow.setup ?? []).map((id) => plan.flows.find((entry) => entry.id === id));
-        results.push(await recordFlow(context, flow, { url, out, viewport, account, fps, allowHosts, setup, log }));
+        results.push(await recordFlow(context, flow, { url, out, viewport, account, secrets, fps, allowHosts, setup, log }));
       } finally {
         await context.close().catch(() => {});
       }

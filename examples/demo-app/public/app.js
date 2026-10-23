@@ -76,7 +76,7 @@ function analytics() {
 async function render() {
   const path = location.pathname;
   const signedIn = localStorage.getItem("pulseboard-user");
-  if (path === "/login" || (!signedIn && path === "/")) {
+  if (path === "/login" || !signedIn) {
     shell.hidden = true;
     auth.hidden = false;
     return;

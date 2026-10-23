@@ -20,7 +20,7 @@ import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { detectApp, findTestAccounts, runCommand, startApp } from "./app.js";
 import { assertSafeUrl, redactSecrets } from "./guardrails.js";
-import { DEFAULT_VIEWPORT, planDemo, validateDemoPlan } from "./plan.js";
+import { DEFAULT_VIEWPORT, planDemo, rebasePlanPaths, validateDemoPlan } from "./plan.js";
 import { recordPlan } from "./record.js";
 
 export const DEMO_RECEIPT_SCHEMA = "launchclip.demo-record.v1";
@@ -116,6 +116,8 @@ export async function runAutopilot(repoPath, flags = {}, { log = () => {}, ask =
     const check = validateDemoPlan(plan);
     if (check.errors.length) throw new Error(`${flags.plan} has errors:\n- ${check.errors.join("\n- ")}`);
     planWarnings = check.warnings;
+    // The copy saved in `out` points at the same fixtures and HAR as the original.
+    plan = rebasePlanPaths(plan, path.dirname(path.resolve(flags.plan)), out);
   }
 
   // --plan-only plans from the code alone: nothing runs.
@@ -155,7 +157,7 @@ export async function runAutopilot(repoPath, flags = {}, { log = () => {}, ask =
     for (const warning of planWarnings) log(`plan: ${warning}`);
     if (planOnly) return { schema: DEMO_RECEIPT_SCHEMA, out, plan: planPath, plan_source: planSource, flows: [], recorded: false };
 
-    const recorded = await recordPlan(plan, { out, url, headed: Boolean(flags.headed), account, allowHosts, only: list(flags.flows).length ? list(flags.flows) : null, log });
+    const recorded = await recordPlan(plan, { out, url, repo, planDir: out, headed: Boolean(flags.headed), account, allowHosts, only: list(flags.flows).length ? list(flags.flows) : null, log });
     const flows = [];
     for (const flow of recorded.flows) {
       const sheet = await contactSheet(flow, path.join(out, `${flow.id}.sheet.png`));

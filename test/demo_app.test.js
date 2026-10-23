@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { composePorts, detectApp, findTestAccounts, parseEnvFile, readmeHints, scriptPort, startApp } from "../src/demo/app.js";
-import { assertSafeUrl, classifyHost, redactSecrets, redactWith, typeStepProblem } from "../src/demo/guardrails.js";
+import { assertSafeUrl, classifyHost, redactSecrets, redactWith, sessionValueProblem, typeStepProblem } from "../src/demo/guardrails.js";
 
 async function repo(files) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-demo-app-"));
@@ -109,6 +109,18 @@ async function freePort() {
     const server = createServer().listen(0, "127.0.0.1", () => { const { port } = server.address(); server.close(() => resolve(port)); });
   });
 }
+
+test("guardrails: session values must be test values", () => {
+  const b64 = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  for (const fine of ["Demo Buyer", "team-1", JSON.stringify({ id: "demo-user", email: "demo@example.com" }), "7d9f2c1e-3b4a-4c5d-8e6f-0a1b2c3d4e5f",
+    `demo.${b64({ exp: 1893456000 })}.signature`, `${b64({ alg: "none" })}.${b64({ sub: "demo-user" })}.`, `${b64({ alg: "HS256" })}.${b64({ sub: "demo-user" })}.signature`,
+    "demo-session-8f3a9c0d1e2b4a5f6c7d8e9f0a1b2c3dZx9Ky8Lw7Mv6Nu5Ot4"]) assert.equal(sessionValueProblem(fine), null, fine);
+  assert.match(sessionValueProblem("sk_live_abcdef1234567890"), /real API key/);
+  assert.match(sessionValueProblem(JSON.stringify({ key: "ghp_abcdefghijklmnop1234" })), /real API key/);
+  assert.match(sessionValueProblem(`${b64({ alg: "RS256", typ: "JWT" })}.${b64({ sub: "user_01H" })}.${"Q2xhdWRlIGlzIG5vdCBhIHJlYWwgc2lnbmF0dXJl".repeat(2)}`), /signed JWT \(alg RS256\)/);
+  assert.match(sessionValueProblem("Fe26.2**Zx9Ky8Lw7Mv6Nu5Ot4Ps3Qr2aB1cD0eF9gH8iJ7kL6mN5oP4qR3sT2uV1wX0yZ**9"), /real session token/);
+  assert.match(sessionValueProblem("Bearer abcdefghijklmnopqrstuvwx"), /bearer token/);
+});
 
 test("startApp runs the command, waits for health and stops the process group", async () => {
   const port = await freePort();

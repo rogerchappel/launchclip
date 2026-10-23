@@ -14,3 +14,9 @@ Record it with LaunchClip:
 ```bash
 launchclip demo record examples/demo-app --out .launchclip/pulseboard/assets/demo --approve
 ```
+
+`demo/` shows how to record an app that has no seed data and signs in through SSO: `demo/DEMO-PLAN.json` answers the API from `demo/fixtures.mjs` and starts each flow signed in from a test session, so neither the seed script nor the sign-in page is needed:
+
+```bash
+launchclip demo record examples/demo-app --plan examples/demo-app/demo/DEMO-PLAN.json --no-seed --approve
+```

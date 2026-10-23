@@ -2,7 +2,7 @@
 // a real recording of examples/demo-app (skipped when Playwright or a
 // Chromium is not available; it never downloads one).
 import assert from "node:assert/strict";
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { createServer } from "node:net";
 import os from "node:os";
@@ -97,4 +97,39 @@ test("records the demo-app fixture: clip, action log, contact sheet, review, pro
   const model = resolveModule(story.scenes[0], story);
   assert.ok(model.events.some((event) => event.cue === "click"));
   assert.ok(model.content.samples.some((sample) => sample.scale > 1.5));
+});
+
+test("records an app with no seed and no sign-in: plan fixtures answer the API, the session signs in", { skip: !available.ok && `recorder unavailable: ${available.reasons.join("; ")}`, timeout: 180000 }, async (t) => {
+  const { dir, app, out } = await workspace();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const port = await freePort();
+  // The bundled example plan, plus a session value that also shows on screen.
+  const plan = JSON.parse(await readFile(path.join(app, "demo", "DEMO-PLAN.json"), "utf8"));
+  plan.app.session.localStorage["pulseboard-team"] = "Lighthouse Labs";
+  plan.flows[0].steps.splice(1, 0, { type: "assert-visible", text: "Lighthouse Labs" });
+  await writeFile(path.join(app, "demo", "DEMO-PLAN.json"), JSON.stringify(plan));
+  const logs = [];
+  // Without the session the dashboard is a sign-in form.
+  const signedOut = structuredClone(plan);
+  delete signedOut.app.session;
+  await writeFile(path.join(app, "demo", "SIGNED-OUT.json"), JSON.stringify(signedOut));
+  await assert.rejects(runAutopilot(app, { out: path.join(dir, "signed-out"), approve: true, "no-seed": true, plan: path.join(app, "demo", "SIGNED-OUT.json"), flows: "dashboard", start: `node server.js --port ${port}`, url: `http://127.0.0.1:${port}` }), /Timeout|waiting for/i);
+  const receipt = await runAutopilot(app, { out, approve: true, "no-seed": true, plan: path.join(app, "demo", "DEMO-PLAN.json"), start: `node server.js --port ${port}`, url: `http://127.0.0.1:${port}` }, { log: (line) => logs.push(line) });
+  assert.deepEqual(receipt.flows.map((flow) => flow.id), ["dashboard", "create-project"]);
+  assert.deepEqual(receipt.commands.map((entry) => entry.kind), ["start"]);
+  for (const flow of receipt.flows) for (const file of [flow.video, flow.log, flow.poster]) assert.ok(existsSync(path.join(out, file)), file);
+  // Signed in without a sign-in flow, and the fixture projects were on screen.
+  const dashboard = JSON.parse(await readFile(path.join(out, "dashboard.actions.json"), "utf8"));
+  assert.ok(dashboard.actions.find((action) => action.type === "wait-for").at > 0);
+  assert.match(dashboard.actions.at(-1).url, /\/analytics$/);
+  // The fixture answered the POST: the app server never stored the project.
+  assert.ok(!existsSync(path.join(app, "data", "db.json")));
+  const created = JSON.parse(await readFile(path.join(out, "create-project.actions.json"), "utf8"));
+  assert.equal(created.actions.find((action) => action.type === "type").value, "Autumn launch");
+  // Session values are masked in the log, even where a step names them.
+  assert.ok(!JSON.stringify(dashboard).includes("Lighthouse Labs"));
+  assert.match(dashboard.actions.find((action) => action.type === "assert-visible").text, /^•+$/);
+  // The saved copy of the plan still finds the fixtures.
+  const saved = JSON.parse(await readFile(path.join(out, "DEMO-PLAN.json"), "utf8"));
+  assert.ok(existsSync(path.resolve(out, saved.app.fixtures)), saved.app.fixtures);
 });
