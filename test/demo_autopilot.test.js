@@ -135,10 +135,16 @@ test("records an app with no seed and no sign-in: plan fixtures answer the API, 
   assert.ok(!existsSync(path.join(app, "data", "db.json")));
   const created = JSON.parse(await readFile(path.join(out, "create-project.actions.json"), "utf8"));
   assert.equal(created.actions.find((action) => action.type === "type").value, "Autumn launch");
+  // Upload steps log as clicks on the control, with the file they chose.
+  const uploads = created.actions.filter((action) => action.step === "upload");
+  assert.deepEqual(uploads.map((action) => [action.type, action.file, action.via]), [["click", "autumn-cover.png", "chooser"], ["click", "autumn-brief.pdf", "chooser"]]);
+  for (const action of uploads) assert.ok(action.box && action.at > action.start, JSON.stringify(action));
   // Session values are masked in the log, even where a step names them.
   assert.ok(!JSON.stringify(dashboard).includes("Lighthouse Labs"));
   assert.match(dashboard.actions.find((action) => action.type === "assert-visible").text, /^•+$/);
   // The saved copy of the plan still finds the fixtures.
   const saved = JSON.parse(await readFile(path.join(out, "DEMO-PLAN.json"), "utf8"));
   assert.ok(existsSync(path.resolve(out, saved.app.fixtures)), saved.app.fixtures);
+  const savedUpload = saved.flows[1].steps.find((step) => step.type === "upload");
+  assert.ok(existsSync(path.resolve(out, savedUpload.file)), savedUpload.file);
 });

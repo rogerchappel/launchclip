@@ -30,6 +30,8 @@
         { "type": "goto", "path": "/projects/new" },
         { "type": "type", "text": "Project name", "value": "Autumn launch", "label": "Project name" },
         { "type": "click", "text": "Activation", "label": "Activation" },
+        { "type": "upload", "text": "Add a cover image", "file": "sample-files/autumn-cover.png", "label": "Cover image", "callout": "Drop in a cover" },
+        { "type": "upload", "selector": "#brief", "file": "sample-files/autumn-brief.pdf", "label": "Attach a brief" },
         { "type": "click", "text": "Create project", "label": "Create project", "callout": "Live in one click" },
         { "type": "wait-for", "text": "Autumn launch" },
         { "type": "pause", "ms": 1800 }

@@ -21,6 +21,12 @@
 // cursor and click ripple are drawn in the page (the OS cursor never shows in
 // a screencast).
 //
+// An upload step clicks its control like a click step, so the cursor and the
+// ripple show it, and answers the file chooser that opens (Playwright's
+// filechooser event) with the plan's sample file. A selector that names a
+// hidden input[type=file] clicks its visible <label>, or sets the file
+// directly when nothing on screen opens it.
+//
 // Output per flow: <flow>.mp4, <flow>.actions.json (every action with type,
 // selector/text, bounding box in viewport CSS px, start/end seconds in the
 // video) and <flow>.poster.png.
@@ -32,7 +38,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { assertSafeUrl, harProblems, redactWith } from "./guardrails.js";
-import { DEFAULT_VIEWPORT, sessionProblems, validateDemoPlan } from "./plan.js";
+import { DEFAULT_VIEWPORT, sessionProblems, uploadFileProblems, uploadPath, validateDemoPlan } from "./plan.js";
 
 export const ACTION_LOG_SCHEMA = "launchclip.demo-actions.v1";
 
@@ -378,6 +384,7 @@ export function matches(page, step) {
   const text = step.text;
   if (step.type === "type") return page.getByLabel(text, { exact: true }).or(page.getByPlaceholder(text, { exact: true }));
   if (step.type === "click") return page.getByRole("button", { name: text, exact: true }).or(page.getByRole("link", { name: text, exact: true })).or(page.getByText(text, { exact: true }));
+  if (step.type === "upload") return page.getByRole("button", { name: text, exact: true }).or(page.getByLabel(text, { exact: true })).or(page.getByText(text, { exact: true }));
   return page.getByText(text, { exact: false });
 }
 
@@ -387,12 +394,53 @@ export function locate(page, step) {
   return matches(page, step).filter({ visible: true }).first();
 }
 
+/**
+ * What an upload step clicks: {target} (a visible control, or the visible
+ * <label> of a hidden file input) or {input} (a hidden file input nothing on
+ * screen opens, set directly).
+ */
+export async function uploadTarget(page, step, { timeout = 10000 } = {}) {
+  const all = matches(page, step);
+  const visible = all.filter({ visible: true }).first();
+  await all.first().waitFor({ state: "attached", timeout });
+  if (await visible.count()) return { target: visible };
+  const first = all.first();
+  if (await first.evaluate((el) => el instanceof HTMLInputElement && el.type === "file")) {
+    const id = await first.getAttribute("id");
+    const wrapping = first.locator("xpath=ancestor::label[1]");
+    const label = (id ? page.locator(`label[for="${id.replace(/["\\]/g, "\\$&")}"]`).or(wrapping) : wrapping).filter({ visible: true }).first();
+    return (await label.count()) ? { target: label } : { input: first };
+  }
+  await visible.waitFor({ state: "visible", timeout });
+  return { target: visible };
+}
+
+/**
+ * Press `target` with `press()` and answer the file chooser it opens with
+ * `file`. A control that opens no chooser (a drop zone with its own handler)
+ * falls back to the page's only input[type=file]. → "chooser" | "input"
+ */
+export async function chooseFile(page, file, press, { timeout = 5000 } = {}) {
+  const chooser = page.waitForEvent("filechooser", { timeout }).catch(() => null);
+  await press();
+  const opened = await chooser;
+  if (opened) { await opened.setFiles(file); return "chooser"; }
+  const inputs = page.locator("input[type=file]");
+  if (await inputs.count() !== 1) throw new Error(`clicking it opened no file chooser, and the page has ${await inputs.count()} file inputs; point the step's selector at the input[type=file]`);
+  await inputs.setInputFiles(file);
+  return "input";
+}
+
 /** Run steps off camera at full speed (setup flows such as sign-in). */
-async function runQuick(page, steps, { resolveUrl, account }) {
+async function runQuick(page, steps, { resolveUrl, account, planDir }) {
   for (const step of steps) {
     if (step.type === "goto") await page.goto(resolveUrl(step.path ?? step.url), { waitUntil: "load" });
     else if (step.type === "pause") continue;
-    else {
+    else if (step.type === "upload") {
+      const { target, input } = await uploadTarget(page, step, { timeout: step.timeout ?? 10000 });
+      if (input) await input.setInputFiles(uploadPath(step, planDir));
+      else await chooseFile(page, uploadPath(step, planDir), () => target.click());
+    } else {
       const target = locate(page, step);
       await target.waitFor({ state: "visible", timeout: step.timeout ?? 10000 });
       if (step.type === "click") { await target.click(); await page.waitForLoadState("load").catch(() => {}); }
@@ -420,7 +468,7 @@ const boxOf = (box) => (box ? { x: r1(box.x), y: r1(box.y), width: r1(box.width)
  * `account` supplies {email, password, username} for {account: …} values;
  * it and `secrets` (prepareContext's session values) are masked in the log.
  */
-export async function recordFlow(context, flow, { url, out, viewport, account = null, secrets = [], fps = 30, allowHosts = [], setup = [], log: say = () => {} } = {}) {
+export async function recordFlow(context, flow, { url, out, viewport, account = null, secrets = [], fps = 30, allowHosts = [], setup = [], planDir = process.cwd(), log: say = () => {} } = {}) {
   const random = seededRandom(flow.id);
   const page = await context.newPage();
   const scale = viewport.deviceScaleFactor ?? 1;
@@ -435,7 +483,7 @@ export async function recordFlow(context, flow, { url, out, viewport, account = 
     return href;
   };
   try {
-    for (const before of setup) await runQuick(page, before.steps, { resolveUrl, account });
+    for (const before of setup) await runQuick(page, before.steps, { resolveUrl, account, planDir });
     // Open the first page before the clip starts, so it never shows a blank tab.
     const first = flow.steps[0];
     await page.goto(resolveUrl(first.path ?? first.url), { waitUntil: "load" });
@@ -464,6 +512,32 @@ export async function recordFlow(context, flow, { url, out, viewport, account = 
         entry.path = step.path ?? step.url;
       } else if (step.type === "pause") {
         await page.waitForTimeout(step.ms);
+      } else if (step.type === "upload") {
+        // Logged as a click, so the edit treats it like one (zoom, ripple, sound).
+        const file = uploadPath(step, planDir);
+        Object.assign(entry, { type: "click", step: "upload", file: path.basename(file), label: step.label ?? step.text ?? "Upload" });
+        const { target, input } = await uploadTarget(page, step, { timeout: step.timeout ?? 10000 });
+        if (input) {
+          entry.at = now();
+          await input.setInputFiles(file);
+          entry.via = "input";
+        } else {
+          await target.scrollIntoViewIfNeeded().catch(() => {});
+          const box = await target.boundingBox();
+          entry.box = boxOf(box);
+          const point = { x: box.x + box.width / 2 + (random() - 0.5) * Math.min(12, box.width / 4), y: box.y + box.height / 2 + (random() - 0.5) * Math.min(6, box.height / 4) };
+          entry.start = now();
+          await moveTo(point);
+          await page.waitForTimeout(90 + random() * 80);
+          entry.via = await chooseFile(page, file, async () => {
+            entry.at = now();
+            await page.mouse.down();
+            await page.waitForTimeout(70 + random() * 40);
+            await page.mouse.up();
+          });
+        }
+        // Give the app time to read the file and show it (a thumbnail, a progress bar).
+        await page.waitForTimeout(600);
       } else {
         const target = locate(page, step);
         await target.waitFor({ state: "visible", timeout: step.timeout ?? 10000 });
@@ -497,7 +571,7 @@ export async function recordFlow(context, flow, { url, out, viewport, account = 
         if (step.type === "wait-for" || step.type === "assert-visible") entry.at = now();
       }
       // Let the page react (navigation, a toast, a chart) before the next step.
-      if (step.type === "click") await page.waitForLoadState("load").catch(() => {});
+      if (step.type === "click" || step.type === "upload") await page.waitForLoadState("load").catch(() => {});
       await page.waitForTimeout(step.type === "pause" ? 0 : 450);
       entry.end = now();
       entry.url = page.url();
@@ -533,11 +607,14 @@ export async function recordFlow(context, flow, { url, out, viewport, account = 
 
 /**
  * Record every flow of a validated plan into `out`. → {flows: [...], executablePath}.
- * `planDir` is where the plan's relative paths (app.fixtures, app.har) start.
+ * `planDir` is where the plan's relative paths (app.fixtures, app.har, upload
+ * files) start; upload files must lead inside `uploadRoot` (the folder of the
+ * plan the user wrote, when `plan` is a copy saved elsewhere).
  * Throws when the plan has errors or the recorder is unavailable.
  */
-export async function recordPlan(plan, { out, url = plan.app?.url, repo = null, planDir = process.cwd(), headed = false, account = null, fps = 30, allowHosts = [], only = null, log = () => {} } = {}) {
+export async function recordPlan(plan, { out, url = plan.app?.url, repo = null, planDir = process.cwd(), uploadRoot = planDir, headed = false, account = null, fps = 30, allowHosts = [], only = null, log = () => {} } = {}) {
   const check = validateDemoPlan(plan);
+  check.errors.push(...await uploadFileProblems(plan, planDir, { root: uploadRoot }));
   if (check.errors.length) throw new Error(`DEMO-PLAN.json has errors:\n- ${check.errors.join("\n- ")}`);
   assertSafeUrl(url, { allowHosts });
   const available = await recorderAvailability({ repo });
@@ -555,7 +632,7 @@ export async function recordPlan(plan, { out, url = plan.app?.url, repo = null, 
         const { secrets } = await prepareContext(context, { app: plan.app ?? {}, url, planDir, allowHosts, log });
         log(`recording ${flow.id} (${flow.steps.length} steps)`);
         const setup = (flow.setup ?? []).map((id) => plan.flows.find((entry) => entry.id === id));
-        results.push(await recordFlow(context, flow, { url, out, viewport, account, secrets, fps, allowHosts, setup, log }));
+        results.push(await recordFlow(context, flow, { url, out, viewport, account, secrets, fps, allowHosts, setup, planDir, log }));
       } finally {
         await context.close().catch(() => {});
       }

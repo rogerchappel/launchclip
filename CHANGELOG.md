@@ -4,6 +4,12 @@
 
 ### Added
 
+- Demo plans gain an `upload` step: `{type: "upload", text | selector, file}`.
+  The recorder clicks the control (a button, a drop zone, a label, or an
+  `input[type=file]` itself) and answers the file chooser with a sample file
+  from the plan's folder. It's logged as a click, so the product-demo edit
+  zooms to it like any other click. `demo doctor` checks the files exist and
+  stay inside the plan's folder, and plays the step.
 - `launchclip demo doctor <repo>` checks a demo recipe before recording.
   - **Without `--plan` (survey):** it reads the repo and recommends the
     cheapest setup rung (a plan, a test session, or fixtures). It reports what
