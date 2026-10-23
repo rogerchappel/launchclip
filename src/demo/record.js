@@ -137,7 +137,8 @@ export function typingDelays(text, random = Math.random) {
 }
 
 // Synthetic cursor and click ripple, drawn in every document of the context.
-const CURSOR_SCRIPT = `(() => {
+// Exported for callers that build their own context; prepareContext adds it.
+export const CURSOR_SCRIPT = `(() => {
   if (window.__lcCursor) return;
   window.__lcCursor = true;
   const pos = (() => { try { return JSON.parse(sessionStorage.getItem('__lc_cursor') || 'null'); } catch { return null; } })() || { x: innerWidth / 2, y: innerHeight / 2 };
@@ -157,6 +158,14 @@ const CURSOR_SCRIPT = `(() => {
   };
   if (document.documentElement) mount(); else addEventListener('DOMContentLoaded', mount);
 })();`;
+
+/**
+ * Get a context ready to record: the synthetic cursor in every page. Call it
+ * on a context you create yourself before passing it to recordFlow.
+ */
+export async function prepareContext(context) {
+  await context.addInitScript(CURSOR_SCRIPT);
+}
 
 // ---------------------------------------------------------------------------
 // Screencast → constant-frame-rate MP4
@@ -391,8 +400,8 @@ export async function recordPlan(plan, { out, url = plan.app?.url, repo = null, 
       if (only && !only.includes(flow.id)) continue;
       // A fresh context per flow: a clean profile, the same starting state.
       const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height }, deviceScaleFactor: viewport.deviceScaleFactor, locale: "en-US", timezoneId: "UTC", colorScheme: "light", acceptDownloads: false, serviceWorkers: "block" });
-      await context.addInitScript(CURSOR_SCRIPT);
       try {
+        await prepareContext(context);
         log(`recording ${flow.id} (${flow.steps.length} steps)`);
         const setup = (flow.setup ?? []).map((id) => plan.flows.find((entry) => entry.id === id));
         results.push(await recordFlow(context, flow, { url, out, viewport, account, fps, allowHosts, setup, log }));
