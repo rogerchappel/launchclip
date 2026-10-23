@@ -16,6 +16,9 @@
 // {key: value}, cookies: [{name, value, domain?, path?}]}. Its values must be
 // test values (sessionValueProblem in guardrails.js) and never reach the logs.
 //
+// A flow drafted from a docs placeholder (`launchclip demo shots`) keeps
+// `shot: {id, file, line}`, which the recorder ignores.
+//
 // `setup` names flows (usually sign-in) that run first, off camera and at full
 // speed, in the same clean browser profile, so a flow can start signed in.
 //
