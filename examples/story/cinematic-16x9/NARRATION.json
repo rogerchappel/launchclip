@@ -1,0 +1,356 @@
+{
+  "schema_version": "launchclip.narration.v1",
+  "provider": "kokoro",
+  "voice": "af_heart",
+  "speed": 0.95,
+  "text": "Pulseboard. Launch analytics for small teams. Every launch starts with a blank page and a deadline. Pulseboard gives it a plan. Connect your sources, set a goal, and invite the team. Start a project, add a cover and a brief, and it's live in seconds. Every visit and every signup, in one calm view. Conversion is up thirty one percent this month. Pulseboard. Download it on the App Store.",
+  "sample_rate": 24000,
+  "duration_seconds": 28.725,
+  "words": [
+    {
+      "text": "Pulseboard.",
+      "start": 0.345,
+      "end": 1.308
+    },
+    {
+      "text": "Launch",
+      "start": 1.9,
+      "end": 2.16
+    },
+    {
+      "text": "analytics",
+      "start": 2.209,
+      "end": 2.688
+    },
+    {
+      "text": "for",
+      "start": 2.76,
+      "end": 2.837
+    },
+    {
+      "text": "small",
+      "start": 2.935,
+      "end": 3.137
+    },
+    {
+      "text": "teams.",
+      "start": 3.165,
+      "end": 3.891
+    },
+    {
+      "text": "Every",
+      "start": 4.455,
+      "end": 4.691
+    },
+    {
+      "text": "launch",
+      "start": 4.742,
+      "end": 5.027
+    },
+    {
+      "text": "starts",
+      "start": 5.08,
+      "end": 5.38
+    },
+    {
+      "text": "with",
+      "start": 5.445,
+      "end": 5.49
+    },
+    {
+      "text": "a",
+      "start": 5.515,
+      "end": 5.541
+    },
+    {
+      "text": "blank",
+      "start": 5.615,
+      "end": 5.845
+    },
+    {
+      "text": "page",
+      "start": 5.895,
+      "end": 6.434
+    },
+    {
+      "text": "and",
+      "start": 6.5,
+      "end": 6.6
+    },
+    {
+      "text": "a",
+      "start": 6.625,
+      "end": 6.652
+    },
+    {
+      "text": "deadline.",
+      "start": 6.705,
+      "end": 7.505
+    },
+    {
+      "text": "Pulseboard",
+      "start": 8.03,
+      "end": 8.576
+    },
+    {
+      "text": "gives",
+      "start": 8.65,
+      "end": 8.796
+    },
+    {
+      "text": "it",
+      "start": 8.84,
+      "end": 8.875
+    },
+    {
+      "text": "a",
+      "start": 8.901,
+      "end": 8.929
+    },
+    {
+      "text": "plan.",
+      "start": 9.005,
+      "end": 9.655
+    },
+    {
+      "text": "Connect",
+      "start": 10.2,
+      "end": 10.528
+    },
+    {
+      "text": "your",
+      "start": 10.59,
+      "end": 10.647
+    },
+    {
+      "text": "sources,",
+      "start": 10.699,
+      "end": 11.345
+    },
+    {
+      "text": "set",
+      "start": 11.445,
+      "end": 11.608
+    },
+    {
+      "text": "a",
+      "start": 11.634,
+      "end": 11.659
+    },
+    {
+      "text": "goal,",
+      "start": 11.704,
+      "end": 12.008
+    },
+    {
+      "text": "and",
+      "start": 12.08,
+      "end": 12.164
+    },
+    {
+      "text": "invite",
+      "start": 12.191,
+      "end": 12.539
+    },
+    {
+      "text": "the",
+      "start": 12.571,
+      "end": 12.623
+    },
+    {
+      "text": "team.",
+      "start": 12.7,
+      "end": 13.297
+    },
+    {
+      "text": "Start",
+      "start": 13.82,
+      "end": 14.043
+    },
+    {
+      "text": "a",
+      "start": 14.068,
+      "end": 14.094
+    },
+    {
+      "text": "project,",
+      "start": 14.185,
+      "end": 14.804
+    },
+    {
+      "text": "add",
+      "start": 14.955,
+      "end": 15.064
+    },
+    {
+      "text": "a",
+      "start": 15.089,
+      "end": 15.117
+    },
+    {
+      "text": "cover",
+      "start": 15.2,
+      "end": 15.481
+    },
+    {
+      "text": "and",
+      "start": 15.533,
+      "end": 15.61
+    },
+    {
+      "text": "a",
+      "start": 15.635,
+      "end": 15.661
+    },
+    {
+      "text": "brief,",
+      "start": 15.74,
+      "end": 16.221
+    },
+    {
+      "text": "and",
+      "start": 16.35,
+      "end": 16.428
+    },
+    {
+      "text": "it's",
+      "start": 16.457,
+      "end": 16.595
+    },
+    {
+      "text": "live",
+      "start": 16.65,
+      "end": 16.818
+    },
+    {
+      "text": "in",
+      "start": 16.85,
+      "end": 16.948
+    },
+    {
+      "text": "seconds.",
+      "start": 17.003,
+      "end": 17.753
+    },
+    {
+      "text": "Every",
+      "start": 18.305,
+      "end": 18.546
+    },
+    {
+      "text": "visit",
+      "start": 18.597,
+      "end": 18.94
+    },
+    {
+      "text": "and",
+      "start": 18.965,
+      "end": 19.075
+    },
+    {
+      "text": "every",
+      "start": 19.155,
+      "end": 19.368
+    },
+    {
+      "text": "signup,",
+      "start": 19.41,
+      "end": 19.985
+    },
+    {
+      "text": "in",
+      "start": 20.125,
+      "end": 20.22
+    },
+    {
+      "text": "one",
+      "start": 20.271,
+      "end": 20.463
+    },
+    {
+      "text": "calm",
+      "start": 20.545,
+      "end": 20.788
+    },
+    {
+      "text": "view.",
+      "start": 20.865,
+      "end": 21.37
+    },
+    {
+      "text": "Conversion",
+      "start": 21.935,
+      "end": 22.544
+    },
+    {
+      "text": "is",
+      "start": 22.65,
+      "end": 22.695
+    },
+    {
+      "text": "up",
+      "start": 22.775,
+      "end": 22.886
+    },
+    {
+      "text": "thirty",
+      "start": 22.977,
+      "end": 23.256
+    },
+    {
+      "text": "one",
+      "start": 23.307,
+      "end": 23.483
+    },
+    {
+      "text": "percent",
+      "start": 23.534,
+      "end": 23.852
+    },
+    {
+      "text": "this",
+      "start": 23.93,
+      "end": 24.026
+    },
+    {
+      "text": "month.",
+      "start": 24.09,
+      "end": 24.613
+    },
+    {
+      "text": "Pulseboard.",
+      "start": 25.22,
+      "end": 26.183
+    },
+    {
+      "text": "Download",
+      "start": 26.8,
+      "end": 27.317
+    },
+    {
+      "text": "it",
+      "start": 27.355,
+      "end": 27.502
+    },
+    {
+      "text": "on",
+      "start": 27.522,
+      "end": 27.687
+    },
+    {
+      "text": "the",
+      "start": 27.707,
+      "end": 27.872
+    },
+    {
+      "text": "App",
+      "start": 27.892,
+      "end": 28.056
+    },
+    {
+      "text": "Store.",
+      "start": 28.076,
+      "end": 28.446
+    }
+  ]
+}

@@ -4,6 +4,38 @@
 
 ### Added
 
+- A `photo-scene` module: one full-bleed `assets/` photo or video with a slow
+  Ken Burns move (`push-in`, `pull-out` or a pan; `zoom` and `focus` set
+  it).
+  - The move is linear over the whole scene and keeps the canvas covered on
+    every frame; the photo bleeds past the edges for a world camera's drift.
+  - It takes an optional `scrim` and 1–3 short kinetic text `lines`. It keeps
+    captions, so the lines sit above the caption band.
+- A `brand-lockup` module for title and end cards built from the brand's
+  artwork: a logo `mark` image beside or above a `wordmark` image (its
+  `ratio` sets the width), with an optional `eyebrow` and `headline`.
+  - `variant: "end"` stacks them over a `badge` image (such as an app-store
+    badge) and a `url` pill.
+  - `tint` / `markTint` recolour a dark wordmark or mark to paper (or any
+    brand role or hex) on dark backgrounds.
+  - A soft `glow` blooms behind the mark and keeps widening. `shine` sweeps
+    light across the card as the mark lands at 0 s, then glints across the
+    lockup once it has landed. An opener passes the motion gate's hook rule
+    even with no headline and a dark brand colour.
+  - It hides captions.
+- A `cinematic` motion grammar (`"motion": {"grammar": "cinematic"}`).
+  Every entrance, transition and camera move eases slow → fast → slow into
+  its resting state (`power2.inOut`, enter 0.7 s, camera 1.3 s, no
+  overshoot), and settled scenes keep moving:
+  - editorial panels take the full 0.7 s to arrive (the other grammars cap
+    them at 0.36 s);
+  - every scene defaults to the `lively` hold drift;
+  - `product-demo` lays a 4% push-in over its zooms, so a recorded clip never
+    holds still between actions, and its fades follow the grammar;
+  - the world camera drifts and breathes more.
+
+  Art directions that say "cinematic", "filmic" or "Ken Burns" now suggest
+  it, instead of `smooth` or `documentary`.
 - `launchclip demo doctor <repo>` checks a demo recipe before recording.
   - **Without `--plan` (survey):** it reads the repo and recommends the
     cheapest setup rung (a plan, a test session, or fixtures). It reports what

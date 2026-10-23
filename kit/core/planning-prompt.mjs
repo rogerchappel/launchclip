@@ -75,6 +75,8 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'excerpt-window', when: 'quotes a passage from a doc, README or article', patterns: ['\\b(readme|docs?|documentation|article|the paper)\\b'] },
   { module: 'audience-grid', when: 'speaks to several audiences or groups', patterns: ['\\bfor (developers|designers|teams|everyone|students)\\b', '\\bwhether you\\b'] },
   { module: 'focus-flow', when: 'picks one option from several', patterns: ['\\b(choose|pick|instead of|which one|options?)\\b'] },
+  { module: 'photo-scene', lanes: ['motion', 'voiceover-motion'], when: 'sets a scene or mood with a real photo or clip (assets/… image or video, full bleed)', patterns: ['\\b(picture|imagine|out (in|on) the|on location|at the|scene|landscape|outdoors?|in the field)\\b'] },
+  { module: 'brand-lockup', when: 'names the brand on a title or end card, with its logo and wordmark images (and an app-store badge or URL on the end card)', patterns: ['\\b(introducing|meet|presenting)\\b', '\\b(app store|google play|download (it|now|today))\\b'] },
   { module: 'cta', when: 'calls to action, or the loop ending', patterns: ['\\b(follow|subscribe|try it|get started|star|download|sign up|learn more|link in bio)\\b'] },
   { module: 'punch-in', fallback: 'kinetic-words', lanes: ['footage-led'], when: 'footage-led emphasis on a word', patterns: ['\\b(this|exactly|really|huge)\\b', '!\\s*$'] },
   { module: 'footage-callout', fallback: 'callout', lanes: ['footage-led'], when: 'footage-led claim sticker or label pointing at something on screen', patterns: ['\\b(note|remember|important|tip|warning|look at|see this|right here)\\b'] },
@@ -122,7 +124,8 @@ export const ART_DIRECTION_GRAMMARS = Object.freeze([
   { grammar: 'playful', patterns: ['\\bplayful\\b', '\\bfun\\b', '\\bbouncy\\b', '\\bquirky\\b', '\\bkids?\\b', '\\bcartoon', '\\bwhimsical\\b', '\\bcheeky\\b', '\\bfriendly\\b'] },
   { grammar: 'snappy', patterns: ['\\bsnappy\\b', '\\bpunchy\\b', '\\benergetic\\b', '\\bhype\\b', '\\bbold\\b', '\\bfast[- ]paced\\b', '\\bkinetic\\b', '\\bhigh[- ]energy\\b', '\\bsporty\\b', '\\blaunch\\b'] },
   { grammar: 'documentary', patterns: ['\\bdocumentary\\b', '\\bserious\\b', '\\bsober\\b', '\\brestrained\\b', '\\bhistorical\\b', '\\barchival\\b', '\\binvestigative\\b', '\\bjournalis', '\\bnews\\b', '\\bsolemn\\b'] },
-  { grammar: 'smooth', patterns: ['\\bsmooth\\b', '\\bcalm\\b', '\\belegant\\b', '\\bpremium\\b', '\\bluxur', '\\bsoft\\b', '\\bdreamy\\b', '\\bwellness\\b', '\\bflowing\\b', '\\bcinematic\\b', '\\bminimal'] }
+  { grammar: 'cinematic', patterns: ['\\bcinematic\\b', '\\bfilmic\\b', '\\bken burns\\b', '\\btrailer\\b', '\\bslow[- ]fast[- ]slow\\b'] },
+  { grammar: 'smooth', patterns: ['\\bsmooth\\b', '\\bcalm\\b', '\\belegant\\b', '\\bpremium\\b', '\\bluxur', '\\bsoft\\b', '\\bdreamy\\b', '\\bwellness\\b', '\\bflowing\\b', '\\bminimal'] }
 ]);
 const WORLD_WORDS = ['\\bjourney\\b', '\\bexplore', '\\bmap\\b', '\\bworld\\b', '\\bcontinuous\\b', '\\bone[- ]take\\b', '\\bpans?\\b', '\\bcamera\\b', '\\bfly[- ]?through\\b', '\\btravel'];
 const CUT_WORDS = ['\\bhard cuts?\\b', '\\bjump cuts?\\b', '\\bno camera\\b', '\\bstatic\\b'];
@@ -131,7 +134,7 @@ const CUT_WORDS = ['\\bhard cuts?\\b', '\\bjump cuts?\\b', '\\bno camera\\b', '\
  * Motion grammar and camera mode for an art direction (free text: the brief
  * or style notes) and lane. Footage-led stories always keep cuts and
  * punch-ins; the motion and voiceover lanes get the world camera when the
- * direction asks for travel, or when its grammar is playful, snappy or smooth
+ * direction asks for travel, or when its grammar is playful, snappy, smooth or cinematic
  * (editorial and documentary keep cuts unless asked).
  * → {grammar, camera: {mode, layout?}, reason}
  */
@@ -143,7 +146,7 @@ export function suggestMotion({ artDirection = '', lane } = {}) {
   if (lane === 'footage-led') return { grammar, camera: { mode: 'cuts' }, reason: 'footage-led keeps cuts and punch-ins' };
   if (match(CUT_WORDS)) return { grammar, camera: { mode: 'cuts' }, reason: 'the direction asks for cuts' };
   if (match(WORLD_WORDS)) return { grammar, camera: { mode: 'world', layout: 'auto' }, reason: 'the direction asks for camera travel' };
-  if (['playful', 'snappy', 'smooth'].includes(grammar)) return { grammar, camera: { mode: 'world', layout: 'auto' }, reason: `${grammar} motion travels between scenes` };
+  if (['playful', 'snappy', 'smooth', 'cinematic'].includes(grammar)) return { grammar, camera: { mode: 'world', layout: 'auto' }, reason: `${grammar} motion travels between scenes` };
   return { grammar, camera: { mode: 'cuts' }, reason: `${grammar} motion cuts between scenes` };
 }
 
@@ -156,7 +159,7 @@ function motionLines({ lane, artDirection } = {}) {
     'Choose by meaning and art direction: pan for continuation along a path, push to go deeper into a detail, pull to reveal the bigger picture, orbit for a change of angle on the same subject, whip-pan for energy or a time jump, cut/fade when the story jumps. Give camera moves 0.6–1.2 s (whip-pan 0.3–0.5 s) and keep scenes at least 2 s longer than their move.',
     'Captions and camera moves: a vertical pan or whip-pan (up/down), push, pull or orbit carries panels through the caption band mid-move, so the captions dip out for those moves by default (captions overlay hide_during_moves: "auto"; true dips for every move, false never). Horizontal pans keep their captions. layout-check samples every frame of every camera move and flags key content crossing visible captions (camera-caption-band). When a line must stay captioned through the move, pan left or right.',
     'In world mode, an ending {"loop_to": "s1", "in": {"type": "whip-pan", "dur": 0.4}} travels home for a seamless loop.',
-    'Lanes: footage-led keeps camera.mode "cuts" and uses punch-in for emphasis (no camera transitions). The motion and voiceover-motion lanes may use the world camera; use it when the direction asks for travel or the grammar is playful, snappy or smooth.'
+    'Lanes: footage-led keeps camera.mode "cuts" and uses punch-in for emphasis (no camera transitions). The motion and voiceover-motion lanes may use the world camera; use it when the direction asks for travel or the grammar is playful, snappy, smooth or cinematic.'
   ];
   if (artDirection) {
     const suggestion = suggestMotion({ artDirection, lane });
@@ -298,7 +301,7 @@ function contractLines() {
 function ambientLines() {
   return [
     `ambient? (optional): {level: ${STORY_AMBIENT_LEVELS.join(' | ')}, background?: boolean, drift?: boolean}, or just the level. Ambient motion keeps settled frames alive between beats: a slow push-in on each settled module (kept inside the safe zone) and soft brand-colour light drifting behind the plates.`,
-    'Usually leave ambient out: the level follows each scene\'s energy (0 → subtle, 1, 2 or "build" → standard, 3 → lively), and footage-led stories get no background field and drift overlays only. Set story ambient only to change the whole piece (for example "subtle" for a calm brand film); "off" makes settled frames hold still and fails the cinematic motion gate.',
+    'Usually leave ambient out: the level follows each scene\'s energy (0 → subtle, 1, 2 or "build" → standard, 3 → lively; every scene is lively under the cinematic grammar), and footage-led stories get no background field and drift overlays only. Set story ambient only to change the whole piece (for example "subtle" for a calm brand film); "off" makes settled frames hold still and fails the cinematic motion gate.',
     'A scene may set ambient to override the story: "off" for one deliberately still beat, {"drift": false} when the module\'s own motion should stand alone, or a level.'
   ];
 }

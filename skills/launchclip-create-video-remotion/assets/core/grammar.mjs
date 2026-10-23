@@ -28,7 +28,7 @@
 
 import { getEase } from './motion.mjs';
 
-export const GRAMMAR_NAMES = Object.freeze(['editorial', 'snappy', 'smooth', 'playful', 'documentary']);
+export const GRAMMAR_NAMES = Object.freeze(['editorial', 'snappy', 'smooth', 'playful', 'documentary', 'cinematic']);
 export const DEFAULT_GRAMMAR = 'editorial';
 export const EASE_ROLES = Object.freeze(['enter', 'exit', 'move', 'camera', 'emphasis']);
 export const DURATION_ROLES = Object.freeze(['enter', 'exit', 'transition', 'camera']);
@@ -49,6 +49,14 @@ const freezeDeep = (value) => {
 // grammars read as motion instead of a jump (0 at rest, always).
 // ambient: the ambient level this grammar suits (a hint for the planner and
 // for ambient motion's story default).
+// panelEnter: the longest an editorial panel's shell may take to arrive (s);
+// the grammar's enter duration scales the shell up to this (0.36 s, the
+// motion-spec default, for every grammar but cinematic).
+// hold: what a settled scene does while it rests, or null (the defaults:
+// ambient level from scene energy, no push on root media). {level: the
+// ambient level a scene gets when neither it nor the story sets one,
+// mediaPush: the slow push-in (fraction of scale over the scene) a recorded
+// product-demo video gets on top of its own zooms, so its rest frames move}.
 export const GRAMMARS = freezeDeep({
   editorial: {
     id: 'editorial', describe: 'Clean product-editorial motion: power3 entrances, quick power2 exits, no overshoot on entrances. The default.',
@@ -94,8 +102,21 @@ export const GRAMMARS = freezeDeep({
     defaultTransition: { cuts: { type: 'fade', dur: 0.8 }, world: { type: 'pan', dur: 1.3 } },
     camera: { style: 'drift', drift: 8, driftPeriod: 16, breathe: 0.004, whip: 'power2.inOut', anticipation: false, moveBlur: 0 },
     ambient: 'subtle'
+  },
+  cinematic: {
+    id: 'cinematic', describe: 'Film-like: every entrance and move eases slow → fast → slow into its resting state (power2.inOut), long durations, no overshoot, and settled scenes never stop moving (a slow push-in on every scene, recorded clips included, and a livelier camera drift).',
+    ease: { enter: 'power2.inOut', exit: 'power2.in', move: 'power2.inOut', camera: 'power2.inOut', emphasis: 'power2.inOut' },
+    duration: { enter: 0.7, exit: 0.45, transition: 0.9, camera: 1.3 },
+    overshoot: 0, stagger: 1.4,
+    defaultTransition: { cuts: { type: 'fade', dur: 0.9 }, world: { type: 'pan', dur: 1.3 } },
+    camera: { style: 'glide', drift: 14, driftPeriod: 12, breathe: 0.008, whip: 'power3.inOut', anticipation: false, moveBlur: 0.25 },
+    ambient: 'lively',
+    panelEnter: 0.8,
+    hold: { level: 'lively', mediaPush: 0.04 }
   }
 });
+
+const PANEL_ENTER = 0.36;
 
 const EDITORIAL = GRAMMARS.editorial;
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -146,7 +167,7 @@ export function grammarErrors(value, path = 'motion.grammar') {
  * The story's motion grammar: story.motion.grammar as a preset name, or
  * {base, ...overrides} merged over the base preset (editorial by default).
  * → a plain grammar object {id, base, custom, describe, ease, duration,
- * overshoot, stagger, defaultTransition, camera, ambient}. Throws on an
+ * overshoot, stagger, defaultTransition, camera, ambient, panelEnter, hold}. Throws on an
  * invalid grammar (validateStory reports the same problems first).
  */
 export function resolveGrammar(story) {
@@ -165,7 +186,9 @@ export function resolveGrammar(story) {
     stagger: own.stagger ?? preset.stagger,
     defaultTransition: { cuts: { ...preset.defaultTransition.cuts }, world: { ...preset.defaultTransition.world }, ...(own.defaultTransition ?? {}) },
     camera: { ...preset.camera, ...(own.camera ?? {}) },
-    ambient: own.ambient ?? preset.ambient
+    ambient: own.ambient ?? preset.ambient,
+    panelEnter: preset.panelEnter ?? PANEL_ENTER,
+    hold: preset.hold ? { ...preset.hold } : null
   };
 }
 

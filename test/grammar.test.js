@@ -17,6 +17,7 @@ import { sceneWindows, transitionTweens } from "../kit/core/transitions.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 import { readProjectStory } from "../src/story_loader.js";
 import { suggestMotion, planningPrompt } from "../kit/core/planning-prompt.mjs";
+import { sceneAmbient } from "../kit/core/ambient.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const STORY = path.join(ROOT, "examples", "story");
@@ -120,6 +121,20 @@ test("every grammar's eases are GSAP eases that motion.mjs reproduces, with the 
   assert.ok(GRAMMARS.playful.stagger > 1);
   assert.match(GRAMMARS.documentary.ease.move, /^power1/);
   for (const name of ["snappy", "playful"]) assert.match(GRAMMARS[name].ease.camera, /^back\.inOut/, `${name} camera anticipates`);
+  // Cinematic: every arrival is slow → fast → slow (an .inOut with zero speed at both ends).
+  for (const role of ["enter", "move", "camera", "emphasis"]) {
+    const fn = getEase(GRAMMARS.cinematic.ease[role]), h = 1e-3;
+    assert.match(GRAMMARS.cinematic.ease[role], /\.inOut$/, `cinematic ${role}`);
+    assert.ok(fn(h) / h < 0.05 && (1 - fn(1 - h)) / h < 0.05, `cinematic ${role} starts and lands at rest`);
+  }
+  assert.ok(GRAMMARS.cinematic.duration.enter > GRAMMARS.smooth.duration.enter && GRAMMARS.cinematic.duration.camera > GRAMMARS.smooth.duration.camera);
+  assert.equal(GRAMMARS.cinematic.overshoot, 0);
+  assert.deepEqual(resolveGrammar({ motion: { grammar: "cinematic" } }).hold, { level: "lively", mediaPush: 0.04 });
+  assert.equal(resolveGrammar({ motion: { grammar: { base: "cinematic", stagger: 1 } } }).panelEnter, 0.8, "overrides keep the base's panel and hold settings");
+  for (const name of ["editorial", "snappy", "smooth", "playful", "documentary"]) {
+    assert.equal(resolveGrammar({ motion: { grammar: name } }).panelEnter, 0.36, name);
+    assert.equal(resolveGrammar({ motion: { grammar: name } }).hold, null, name);
+  }
 });
 
 test("resolveGrammar reads names and {base, ...overrides}; validation names the bad field", () => {
@@ -187,6 +202,9 @@ test("grammars reach module enter/exit, pops, staggers and transitions", async (
     const tweens = (grammar) => sceneWindows(withGrammar(grammar)).scenes.find((entry) => entry.id === "s2").tweens.filter((tw) => tw.role === "in");
     assert.deepEqual(tweens("editorial").map((tw) => tw.ease), ["power3.inOut"]);
     assert.deepEqual(tweens("smooth").map((tw) => tw.ease), ["sine.inOut"]);
+    assert.deepEqual(tweens("cinematic").map((tw) => tw.ease), ["power2.inOut"]);
+    assert.equal(chart("cinematic").motion.enterEase, "power2.inOut");
+    assert.equal(chart("cinematic").motion.enterDuration, 0.7);
     assert.deepEqual(transitionTweens({ type: "fade", dur: 0.4 }, { width: 1080, height: 1920, grammar: resolveGrammar({ motion: { grammar: "playful" } }) }).in.map((tw) => tw.ease), ["power2.inOut"], "a fade never overshoots");
     // Every grammar resolves every golden scene (no new param errors).
     for (const id of ["cooling", "minimal", "promo-16x9", "data-story-9x16", "footage"]) {
@@ -203,6 +221,20 @@ test("grammars reach module enter/exit, pops, staggers and transitions", async (
   } finally {
     await cleanup();
   }
+});
+
+test("cinematic panels arrive slowly with an ease-in-out, and its scenes drift at the lively level", () => {
+  const spec = { id: "panel", kind: "checklist", aspect: "16:9", start: 2, duration: 5, title: "Plan", rows: [{ label: "Connect", status: "done", at: 1.2 }] };
+  const shell = (name) => resolveEditorialModule(spec, { grammar: resolveGrammar({ motion: { grammar: name } }) }).motion;
+  assert.equal(shell("smooth").enterDuration, 0.36, "other grammars keep the 0.36 s cap");
+  assert.ok(Math.abs(shell("cinematic").enterDuration - 0.7) < 1e-9);
+  assert.equal(shell("cinematic").enterEase, "power2.inOut");
+  // The grammar's hold level is the default; the story and the scene still win.
+  const scene = { id: "s1", module: "checklist", start: 0, end: 4, energy: 0 };
+  assert.equal(sceneAmbient({ motion: { grammar: "cinematic" }, scenes: [scene] }, scene).level, "lively");
+  assert.equal(sceneAmbient({ motion: { grammar: "smooth" }, scenes: [scene] }, scene).level, "subtle");
+  assert.equal(sceneAmbient({ motion: { grammar: "cinematic" }, ambient: "subtle", scenes: [scene] }, scene).level, "subtle");
+  assert.equal(sceneAmbient({ motion: { grammar: "cinematic" }, scenes: [scene] }, { ...scene, ambient: "off" }).level, "off");
 });
 
 function withGrammarOf(story, grammar) {

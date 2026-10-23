@@ -14,7 +14,7 @@ kit/
     style.mjs           style pack v2: validate, applyStyle, palette roles, v1 upgrade
     captions.mjs        word chunking, caption presets (plan, frame-pure evaluator, GSAP runtime)
     motion.mjs          frame-pure easing, tracks, stagger, count-up, springs
-    grammar.mjs         motion grammars (editorial, snappy, smooth, playful, documentary)
+    grammar.mjs         motion grammars (editorial, snappy, smooth, playful, documentary, cinematic)
     transitions.mjs     typed transitions and scene render windows
     camera-world.mjs    world layout, camera path, parallax and motion blur
     ambient.mjs         frame-pure ambient motion: background field, hold drift
@@ -119,6 +119,7 @@ move in a story.
 | `smooth` | power2.out / sine.in | sine.inOut / sine.inOut | power2.out | 0.50, 0.36, 0.70, 1.1 | 0 | 1.25× | glide | subtle |
 | `playful` | back.out(1.7) / back.in(1.4) | back.inOut(1.4) / back.inOut(1.6) | elastic.out(1, 0.5) | 0.42, 0.26, 0.50, 0.75 | 0.20 | 1.6× | bounce (anticipates), whip back.inOut(1.2) | lively |
 | `documentary` | power1.out / power1.in | power1.inOut / power1.inOut | power1.out | 0.60, 0.45, 0.80, 1.3 | 0 | 1.3× | drift, whip power2.inOut | subtle |
+| `cinematic` | power2.inOut / power2.in | power2.inOut / power2.inOut | power2.inOut | 0.70, 0.45, 0.90, 1.3 | 0 | 1.4× | glide (drift 14 px, 12 s, breathe 0.8%), whip power3.inOut, move blur 0.25 | lively |
 
 Each preset also has `defaultTransition` (`{cuts, world}`, planner guidance)
 and `camera` (`{style, drift, driftPeriod, breathe, whip, anticipation}`:
@@ -127,9 +128,33 @@ breathing-scale amplitude, the whip-pan ease). `overshoot` is the measured
 peak overshoot of the enter and emphasis eases; `stagger` multiplies every
 module's default stagger.
 
+Two preset settings are not overridable, and `{base: "cinematic", …}`
+inherits them:
+
+- `panelEnter`: the longest an editorial panel's shell may take to arrive.
+  It's 0.36 s for every grammar but cinematic (0.8 s), so cinematic panels
+  take the grammar's full 0.7 s.
+- `hold`: what a settled scene does while it rests. It's `null` for every
+  grammar but cinematic, which has `{level: "lively", mediaPush: 0.04}`:
+  - `level` is the ambient level a scene gets when neither the scene nor the
+    story sets one, instead of the energy default.
+  - `mediaPush` is a linear push-in about the canvas centre (4% over the
+    scene) that `product-demo` lays over its zooms. The recorded clip then
+    moves on every frame. A scene with ambient `{"drift": false}` keeps the
+    clip as recorded.
+
+Cinematic exists because the other grammars arrive on `.out` curves, which
+start at full speed. Measured on a 16:9 voiceover story with `smooth` and the
+world camera:
+- camera pans were already slow → fast → slow (`sine.inOut`);
+- editorial panels arrived in at most 0.36 s on `power2.out`;
+- the rest drift moved under 0.1 px a frame;
+- the recorded `product-demo` clip held fully still on 17% of its rest
+  frames.
+
 ```js
 export const GRAMMARS, GRAMMAR_NAMES, DEFAULT_GRAMMAR;   // "editorial"
-export function resolveGrammar(story)                   // → {id, base, custom, ease, duration, overshoot, stagger, defaultTransition, camera, ambient}
+export function resolveGrammar(story)                   // → {id, base, custom, ease, duration, overshoot, stagger, defaultTransition, camera, ambient, panelEnter, hold}
 export function grammarErrors(value, path)              // validation messages (story.mjs mirrors them, import-free)
 export function isEditorialGrammar(grammar)
 export function easeRole(name)                          // "enter" (.out) | "exit" (.in) | "move" (.inOut) | "emphasis" (back/elastic/bounce .out) | null (linear, steps)
@@ -523,7 +548,7 @@ Once a module's enter animation settles, nothing on a plate moves until the
 next event, so between beats a story reads as a slideshow and fails the
 cinematic motion gate (median frame-change energy, flow velocity p90). The
 ambient layer keeps settled frames alive. It is plain ESM that imports only
-`./motion.mjs`, and every value is a pure function of absolute time and the
+`./motion.mjs` and `./grammar.mjs`, and every value is a pure function of absolute time and the
 story. The HyperFrames compiler turns it into GSAP; `StoryComposition`
 evaluates the same functions per frame.
 
@@ -536,8 +561,10 @@ evaluates the same functions per frame.
 ```
 
 - Precedence: `scene.ambient` ← `story.ambient` ← defaults.
-- The default level follows the scene's `energy`: 0 → `subtle`; 1, 2 and
-  `"build"` → `standard`; 3 → `lively`. A missing energy → `standard`.
+- The default level is the motion grammar's `hold.level` when it has one
+  (`cinematic`: `lively`). Otherwise it follows the scene's `energy`: 0 →
+  `subtle`; 1, 2 and `"build"` → `standard`; 3 → `lively`. A missing energy
+  → `standard`.
 - `background` defaults to true, except in the `footage-led` lane, where the
   base already moves. There the field is off and only overlays drift (track
   ≥ 1, not `insert` plates), unless a scene sets `drift: true` explicitly.
@@ -1054,3 +1081,119 @@ element; any other callout 0.25 s before its step's end.
   `sourceStart`, then the overlay.
 - **Parity:** `test/fixtures/parity/d-product-demo.json`, a recorded
   `examples/demo-app` sign-in flow, held to SSIM ≥ 0.97.
+
+## Brand lockup (catalogue B, `kit/core/catalog-b-brand-lockup.mjs`)
+
+`brand-lockup` builds title and end cards from the brand's own artwork instead
+of set type. It hides captions, like `hook-title` and `cta`.
+
+```json
+{ "module": "brand-lockup", "params": {
+  "mark": "assets/brand/mark.png",
+  "wordmark": { "src": "assets/brand/wordmark.png", "ratio": 7.56 },
+  "tint": "paper", "eyebrow": "Launch analytics", "headline": "Launch analytics for small teams" } }
+{ "module": "brand-lockup", "params": { "variant": "end",
+  "mark": "assets/brand/mark.png", "wordmark": { "src": "assets/brand/wordmark.png", "ratio": 7.56 }, "tint": "paper",
+  "badge": "assets/brand/store-badge.svg", "url": "pulseboard.example" } }
+```
+
+- **Variants:**
+  - `variant: "title"` (default) puts the mark beside the wordmark (`layout:
+    "row"`, the wordmark at 62% of the mark's height) or above it (`"stack"`).
+    It takes an optional `eyebrow` (small caps above) and `headline` (display
+    type, at most two lines, below).
+  - `variant: "end"` stacks the mark over the wordmark, then an optional
+    `headline`, a `badge` image (`{src, ratio}`, ratio 3 by default, the shape
+    of an app-store badge) and a `url` pill in `brand.colors.primary`.
+    `badge` and `url` are end-only.
+- **Images:** `mark` (square) and `wordmark` (wide) are `assets/` images; one
+  of them is required.
+  - Images aren't read at resolve time, so a wordmark's width comes from
+    `ratio` (width ÷ height, default 4). `object-fit: contain` keeps a wrong
+    ratio from distorting it.
+  - The lockup shrinks to 86% of the frame width (62% on the end card) and
+    fails with a param error when the mark would drop below 72 px.
+- **Tint:** `tint` (wordmark) and `markTint` (mark) recolour every opaque
+  pixel and keep its alpha. They take `paper`, `ink`, `primary`, `accent` or a
+  `#rrggbb`, so a dark wordmark reads on a dark background. Both renderers draw
+  the tint as an SVG `feColorMatrix` filter in the view tree.
+- **Motion:** the mark lands first, at 0 s (`at` moves it), and it is the
+  hook. The wordmark, eyebrow, headline, badge and URL follow, `stagger` apart
+  (0.35 s, scaled by the grammar).
+  - A hit on one beat (`hits: [{event: "badge", at: "word:download"}]`) moves
+    the default beats after it.
+  - Each element fades and rises over 0.6 s, the mark scaling up from 0.6,
+    on the grammar's enter ease.
+  - The wordmark slides out from behind its left edge.
+  - `glow` (`primary` by default, `accent`, or `false`) is a soft light that
+    blooms behind the lockup with the mark. It then keeps widening linearly
+    until the scene ends, so the card never holds still.
+  - `shine` (default `true`) is two soft bands of paper-coloured light,
+    screened over the card and faded at both ends:
+    - a sweep crosses the whole card as the first beat lands;
+    - a glint crosses the mark and wordmark once they have landed (when the
+      scene is long enough).
+
+    The sweep makes the opening move at once whatever the brand colours. A
+    slow → fast → slow entrance and a soft glow alone stay under the motion
+    gate's burst threshold for the first 0.35 s, more so with a dark primary.
+    The glint is a second distinct hook event, so an opener with no headline
+    passes the hook rule. Measured: a 3.4 s cinematic opener (mark, tinted
+    wordmark on a 0.25 s hit, eyebrow, no headline, primary `#1f4a3a`) gives
+    bursts at 0.20 s and 1.47 s, and every gate passes.
+  - The URL pill gets one ring pulse once it lands.
+- **Events:** `mark`, `wordmark`, `eyebrow`, `headline`, `badge`, `url`, `shine`.
+- **Compilers:** the catalogue B emitter and `CatalogBModule`
+  (`kit/remotion/catalog/BrandLockup.tsx`) draw the same tree and ops.
+
+## Photo scene (catalogue D, `kit/core/catalog-d-photo-scene.mjs`)
+
+`photo-scene` fills the frame with one photo or video clip from `assets/` and
+moves it slowly (Ken Burns), with an optional scrim and 1–3 short kinetic text
+lines. It keeps captions: the lines sit in the lower safe zone, above the
+caption band.
+
+```json
+{ "module": "photo-scene", "params": {
+  "media": "assets/photos/dawn-ridge.jpg", "move": "push-in", "zoom": 0.1, "focus": { "x": 0.63, "y": 0.5 },
+  "lines": [{ "text": "Every launch starts" }, { "text": "with a deadline", "emphasis": true }] } }
+```
+
+- **`media`:** an `assets/` image (`.jpg`, `.png`, `.webp`, `.svg`) or video
+  (`.mp4`, `.webm`, `.mov`), or `{src, kind?, sourceStart?}`. It is drawn with
+  `object-fit: cover`. The photo and scrim bleed 64 px (at 1080) past every
+  canvas edge, so a world camera's drift never shows their edge.
+- **`move`:** `push-in` (default), `pull-out`, `pan-left`, `pan-right`,
+  `pan-up` or `pan-down`, linear over the whole scene. The frame never settles
+  still and the canvas stays covered on every frame:
+  - a push or pull scales between 1 and `1 + zoom` (default 0.08, range
+    0.02–0.25) about the `focus` point (fractions, 0.15–0.85, default the
+    centre);
+  - a pan travels at scale `1 + zoom`, within 90% of the overscan on that
+    side.
+
+  `kenBurnsAt(move, p, {zoom, focus, canvas})` is the pure function behind it.
+  One sample per frame becomes a set op on the photo, as with `product-demo`'s
+  camera.
+- **`lines`:** `[{text ≤ 40, at?, emphasis?}]` or strings, one line each. The
+  first line is set larger (96 px preferred, then 72). They rise and fade in
+  at `at`, by default 0.35 s and then 0.45 s apart (the gap scales with the
+  grammar's stagger), on the grammar's enter ease. `emphasis` colours a line
+  `brand.colors.primary`. `align` is `left` (default) or `center`.
+- **`scrim`:** a `brand.colors.bg` gradient: `bottom` (the default with lines),
+  `left`, `full` (the default when centred) or `none` (the default without
+  lines; an error with lines).
+- **Ambient:** the module moves on its own, so its `layout.drift` is false and
+  the ambient hold drift (`driftEligible`) leaves it alone.
+- **Layout:** `role: "text"` with the text block's rect, or `decor` without
+  lines.
+- **Events:** `enter`, `line-<i>`.
+- **Compilers:**
+  - For an image, HyperFrames gets one clip that holds the photo and its
+    overlay in the scene layer, so it travels with a world camera.
+  - A video is root media. The emitter returns `{html: <video>, overlay}`,
+    and the story compiler hoists both, the overlay one z-index above, as for
+    `product-demo`. Root media stays put under a world camera.
+  - Remotion (`kit/remotion/catalog/PhotoScene.tsx`) draws an `<Img>` or an
+    `<OffthreadVideo>` trimmed to `sourceStart`, then the overlay, from the
+    same tree and ops.

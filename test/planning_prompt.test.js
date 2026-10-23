@@ -99,7 +99,7 @@ test("the prompt carries lane rules, anchors, safe zone, captions, fixed inputs 
   assert.match(prompt, /Coffee@0\.1 cools@0\.45/);
   // Ambient motion: the planner knows the control, the default and the per-scene override.
   assert.match(prompt, /ambient\? \(optional\): \{level: off \| subtle \| standard \| lively, background\?: boolean, drift\?: boolean\}/);
-  assert.match(prompt, /the level follows each scene's energy \(0 → subtle, 1, 2 or "build" → standard, 3 → lively\)/);
+  assert.match(prompt, /the level follows each scene's energy \(0 → subtle, 1, 2 or "build" → standard, 3 → lively; every scene is lively under the cinematic grammar\)/);
   assert.match(prompt, /footage-led stories get no background field and drift overlays only/);
   assert.match(prompt, /A scene may set ambient to override the story/);
   assert.match(prompt, /params, hits\?, ambient\?\}/);

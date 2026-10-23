@@ -1,5 +1,5 @@
 // HyperFrames emitters for catalogue B (function-chart, gauge-compare,
-// flow-compare, process-steps, archive-card, logo-row).
+// flow-compare, process-steps, archive-card, logo-row, brand-lockup).
 //
 // The model comes from kit/core/catalog-b.mjs. The static markup comes from
 // the shared view tree (kit/core/catalog-b-view.mjs), so the DOM matches the
@@ -80,4 +80,5 @@ export const EMITTERS = {
   'flow-compare': emitCatalogB,
   'gauge-compare': emitCatalogB,
   'function-chart': emitCatalogB,
+  'brand-lockup': emitCatalogB,
 };
