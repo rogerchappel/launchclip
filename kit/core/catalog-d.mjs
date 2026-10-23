@@ -260,14 +260,18 @@ export const throughCamera = (point, cam) => ({x: point.x * cam.scale + cam.x, y
 /**
  * A demo/<flow>.actions.json record → product-demo params for a scene that
  * shows the clip from `sourceStart` for `duration` seconds. Actions outside
- * the window are dropped; times become scene-relative.
+ * the window are dropped; times become scene-relative. A click or typing
+ * that leaves the page on another URL than before it is marked navigates.
  */
 export function productDemoParams(record, {src, sourceStart = 0, duration, frame, zoom, title} = {}) {
   const window = duration ?? record.duration - sourceStart;
   const rel = t => Math.round((t - sourceStart) * 1000) / 1000;
   const actions = [];
   const callouts = [];
+  let url = null;
   for (const action of record.actions ?? []) {
+    const before = url;
+    url = action.url ?? url;
     const at = rel(action.at ?? action.start);
     if (!ACTION_TYPES.includes(action.type) && !(action.callout && action.box)) continue;
     if (at < 0 || at > window - T.leadOut) continue;
@@ -278,6 +282,7 @@ export function productDemoParams(record, {src, sourceStart = 0, duration, frame
         entry.until = entry.keys.at(-1) ?? at;
       }
       if (action.label) entry.label = String(action.label).slice(0, 40);
+      if (before && action.url && action.url !== before) entry.navigates = true;
       actions.push(entry);
     }
     if (action.callout && action.box && callouts.length < 4) {
@@ -345,7 +350,7 @@ function resolveProductDemo(params, ctx) {
   let previousAt = -Infinity;
   const actions = p.actions.map((action, index) => {
     const path = `params.actions[${index}]`;
-    check.obj(action, path, ['at', 'type', 'box', 'keys', 'until', 'label']);
+    check.obj(action, path, ['at', 'type', 'box', 'keys', 'until', 'label', 'navigates']);
     const at = check.num(action.at, `${path}.at`, 0, duration - T.leadOut);
     if (at < previousAt) check.fail(`${path}.at`, 'must not be earlier than the previous action');
     previousAt = at;
@@ -355,9 +360,10 @@ function resolveProductDemo(params, ctx) {
     const keys = action.keys === undefined ? [] : check.arr(action.keys, `${path}.keys`, 0, 40).map((value, k) => check.num(value, `${path}.keys[${k}]`, 0, 3600)).filter(value => value <= duration).map(value => rt(start + value));
     const until = action.until === undefined ? null : rt(start + Math.min(check.num(action.until, `${path}.until`, at, 3600), duration));
     const label = action.label === undefined ? null : check.str(action.label, `${path}.label`, 40);
+    const navigates = action.navigates === undefined ? false : check.bool(action.navigates, `${path}.navigates`);
     const s = zoomScale(canvasBox, canvas, {max: zoomMax});
     const f = {x: r2(canvasBox.x + canvasBox.width / 2), y: r2(canvasBox.y + canvasBox.height / 2)};
-    return {index, type, at: rt(start + at), until, keys, label, box: canvasBox, s, f};
+    return {index, type, at: rt(start + at), until, keys, label, navigates, box: canvasBox, s, f};
   });
 
   const keys = cameraKeys(zoomMax > 1 ? actions.filter(action => action.s > 1.02) : [], {start, end, centre, canvas});
@@ -411,7 +417,7 @@ function resolveProductDemo(params, ctx) {
   b.model.camera = null;
   const content = {media, viewport, frame, title, rect, radius, shadow: frame === 'full' ? 'none' : `0 ${u(30)}px ${u(80)}px #00000080`,
     accent: colors.accent, stroke: r2(Math.max(3, 4 * unit)), pad: u(10),
-    actions: actions.map(({index, type, at, until, label, box: canvasBox, s}) => ({index, type, at, until, label, box: canvasBox, s})),
+    actions: actions.map(({index, type, at, until, label, navigates, box: canvasBox, s}) => ({index, type, at, until, label, navigates, box: canvasBox, s})),
     keys, samples, callouts};
   return b.finish(content, {rect, role: 'media', minTextPx: callouts.length ? Math.min(...callouts.map(c => c.size)) : null,
     motion: {enterEnd: rt(start + T.fade), exitStart: rt(end - T.fade), enterFrom: {opacity: 0}, exitTo: {opacity: 0}}});
@@ -461,10 +467,12 @@ export function productDemoTimeline(model) {
   }
   for (const action of c.actions.filter(entry => entry.type !== 'focus')) {
     const target = `${id}-hl-${action.index}`;
-    const out = rt(Math.min(end - 0.05, Math.max(action.at + 0.9, (action.until ?? action.at) + 0.3)));
+    // After a navigation the outline goes with the page it was drawn on.
+    const out = rt(Math.min(end - 0.05, action.navigates ? action.at + T.navLeave - 0.15 : Math.max(action.at + 0.9, (action.until ?? action.at) + 0.3)));
+    const fade = action.navigates ? 0.15 : 0.35;
     set(ops, target, start, {opacity: 0, scaleX: 1.12, scaleY: 1.12});
-    tw(ops, target, action.at, 0.28, 'power3.out', {opacity: 0, scaleX: 1.12, scaleY: 1.12}, {opacity: 1, scaleX: 1, scaleY: 1});
-    tw(ops, target, out, Math.max(0.04, Math.min(0.35, end - out)), 'power2.in', {opacity: 1, scaleX: 1, scaleY: 1}, {opacity: 0, scaleX: 1, scaleY: 1});
+    tw(ops, target, action.at, Math.max(0.04, Math.min(0.28, out - action.at)), 'power3.out', {opacity: 0, scaleX: 1.12, scaleY: 1.12}, {opacity: 1, scaleX: 1, scaleY: 1});
+    tw(ops, target, out, Math.max(0.04, Math.min(fade, end - out)), 'power2.in', {opacity: 1, scaleX: 1, scaleY: 1}, {opacity: 0, scaleX: 1, scaleY: 1});
   }
   for (const callout of c.callouts) {
     const target = `${id}-callout-${callout.index}`;
@@ -481,7 +489,7 @@ const DEFINITIONS = [
     params: {
       media: '{src: "assets/demo/<flow>.mp4", sourceStart: seconds into the clip (default 0)}',
       viewport: '{width, height} of the recording in CSS px (default 1920×1080; from <flow>.actions.json)',
-      actions: '[{at (s from scene start), type: click|type|focus, box: {x, y, width, height} viewport px, keys?: [s], until?: s, label?}] ≤ 24 — build with productDemoParams(<flow>.actions.json)',
+      actions: '[{at (s from scene start), type: click|type|focus, box: {x, y, width, height} viewport px, keys?: [s], until?: s, label?, navigates?: true when it changes the page}] ≤ 24 — build with productDemoParams(<flow>.actions.json)',
       callouts: '[{at, text ≤ 42 chars, box (the element it points at), duration? 0.8–6 s (default 2.2)}] ≤ 4, not overlapping',
       frame: 'window|full (full needs the canvas aspect; default window)',
       zoom: 'false, or {max: 1–2.5 (default 1.8)}',
