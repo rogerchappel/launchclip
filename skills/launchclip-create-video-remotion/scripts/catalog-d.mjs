@@ -21,14 +21,17 @@
 // eases between them (log-space scale, easeInOutSine, the focus kept inside
 // the clamp), and cameraTransform() turns a state into {scale, x, y} for a
 // transform about the canvas origin, clamped so the zoomed video never pulls
-// away from the canvas edge it already covers. One sample per frame becomes a tl.set-style op on both the
+// away from the canvas edge it already covers. A grammar with
+// hold.mediaPush (cinematic) lays a slow push-in about the canvas centre over
+// the whole scene (pushTransform), so the clip never holds still between
+// actions. One sample per frame becomes a tl.set-style op on both the
 // video and the overlay's camera layer, so seeking is safe and both renderers
 // read the same numbers.
 
 import {contrastRatio, fitText, r2, rt, textWidth} from './catalog-b-base.mjs';
 import {abs, el, sampleTime, set, tw} from './catalog-b-view.mjs';
 import {createFootageBase} from './catalog-c.mjs';
-import {grammarTweens} from './grammar.mjs';
+import {grammarDuration, grammarTweens} from './grammar.mjs';
 
 export const PRODUCT_DEMO_TIMING = Object.freeze({
   minDuration: 2,
@@ -241,13 +244,27 @@ export function cameraLeaves(keys, state, t) {
   return null;
 }
 
-/** One camera sample per frame from start to end: [{t, scale, x, y}]. */
-export function cameraSamples(keys, {start, end, fps, rect, canvas}) {
+/**
+ * A camera transform pushed in about the canvas centre by k (≥ 1): the rest
+ * push a grammar with hold.mediaPush (cinematic) lays over the zooms, so the
+ * clip keeps moving while nothing on screen does.
+ */
+export function pushTransform(cam, k, canvas) {
+  if (!(k > 1)) return cam;
+  const cx = canvas.width / 2, cy = canvas.height / 2;
+  return {scale: Math.round(cam.scale * k * 1e5) / 1e5, x: r2(k * cam.x + (1 - k) * cx) || 0, y: r2(k * cam.y + (1 - k) * cy) || 0};
+}
+
+/** The rest push factor at absolute time t: 1 → 1 + push, linear over [start, end]. */
+export const pushAt = (push, t, start, end) => (push > 0 && end > start ? 1 + push * Math.min(1, Math.max(0, (t - start) / (end - start))) : 1);
+
+/** One camera sample per frame from start to end: [{t, scale, x, y}] (push: the rest push, 0 = none). */
+export function cameraSamples(keys, {start, end, fps, rect, canvas, push = 0}) {
   const out = [];
   const first = Math.ceil(start * fps - 1e-6), last = Math.floor(end * fps + 1e-6);
   for (let frame = first; frame <= last; frame++) {
     const t = frame / fps;
-    out.push({t: rt(t), ...cameraTransform(cameraAt(keys, t, {rect, canvas}), rect, canvas)});
+    out.push({t: rt(t), ...pushTransform(cameraTransform(cameraAt(keys, t, {rect, canvas}), rect, canvas), pushAt(push, t, start, end), canvas)});
   }
   return out;
 }
@@ -371,8 +388,10 @@ function resolveProductDemo(params, ctx) {
   });
 
   const keys = cameraKeys(zoomMax > 1 ? actions.filter(action => action.s > 1.02) : [], {start, end, centre, canvas});
-  const samples = cameraSamples(keys, {start, end, fps, rect, canvas});
-  const camAt = t => cameraTransform(cameraAt(keys, t, {rect, canvas}), rect, canvas);
+  // A grammar that keeps rest frames moving (cinematic hold.mediaPush) pushes the clip in slowly over the scene.
+  const push = ctx?.ambient?.drift === false ? 0 : Number(ctx?.grammar?.hold?.mediaPush) || 0;
+  const samples = cameraSamples(keys, {start, end, fps, rect, canvas, push});
+  const camAt = t => pushTransform(cameraTransform(cameraAt(keys, t, {rect, canvas}), rect, canvas), pushAt(push, t, start, end), canvas);
 
   // Callouts: pills beside their anchor as seen through the camera.
   const callouts = [];
@@ -430,9 +449,11 @@ function resolveProductDemo(params, ctx) {
   const content = {media, viewport, frame, title, rect, radius, shadow: frame === 'full' ? 'none' : `0 ${u(30)}px ${u(80)}px #00000080`,
     accent: colors.accent, stroke: r2(Math.max(3, 4 * unit)), pad: u(10),
     actions: actions.map(({index, type, at, until, label, navigates, box: canvasBox, s}) => ({index, type, at, until, label, navigates, box: canvasBox, s})),
-    keys, samples, callouts};
+    keys, samples, callouts, ...(push ? {push} : {})};
+  // The clip fades in and out over T.fade, scaled by the grammar (cinematic: 0.75 s, on its ease-in-out).
+  const fadeIn = grammarDuration(ctx?.grammar, 'enter', T.fade, {min: 0.2, max: 0.8}), fadeOut = grammarDuration(ctx?.grammar, 'exit', T.fade, {min: 0.2, max: 0.8});
   return b.finish(content, {rect, role: 'media', minTextPx: callouts.length ? Math.min(...callouts.map(c => c.size)) : null,
-    motion: {enterEnd: rt(start + T.fade), exitStart: rt(end - T.fade), enterFrom: {opacity: 0}, exitTo: {opacity: 0}}});
+    motion: {enterEnd: rt(start + fadeIn), exitStart: rt(end - fadeOut), enterFrom: {opacity: 0}, exitTo: {opacity: 0}, enterEase: 'power2.out', exitEase: 'power2.in'}});
 }
 
 // ---------------------------------------------------------------------------
@@ -465,8 +486,8 @@ export function productDemoTimeline(model) {
   const ops = [];
   for (const target of [`${id}-media`, `${id}-overlay`]) {
     set(ops, target, start, {opacity: 0});
-    tw(ops, target, start, m.enterDuration, 'power2.out', {opacity: 0}, {opacity: 1});
-    tw(ops, target, m.exitStart, m.exitDuration, 'power2.in', {opacity: 1}, {opacity: 0});
+    tw(ops, target, start, m.enterDuration, m.enterEase, {opacity: 0}, {opacity: 1});
+    tw(ops, target, m.exitStart, m.exitDuration, m.exitEase, {opacity: 1}, {opacity: 0});
     set(ops, target, end, {opacity: 0});
   }
   let previous = null;

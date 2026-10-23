@@ -17,7 +17,7 @@ export const STORY_CAMERA_TRANSITIONS = ["pan", "pull", "orbit", "whip-pan"];
 export const STORY_CAMERA_MODES = ["cuts", "world"];
 export const STORY_CAMERA_LAYOUTS = ["row", "column", "grid", "path", "auto"];
 // story.motion.grammar presets (kit/core/grammar.mjs GRAMMAR_NAMES).
-export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "documentary"];
+export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "documentary", "cinematic"];
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
 // Caption presets (kit/core/captions.mjs CAPTION_PRESETS; kept in step by test/caption_presets.test.js).

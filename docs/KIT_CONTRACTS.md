@@ -14,7 +14,7 @@ kit/
     style.mjs           style pack v2: validate, applyStyle, palette roles, v1 upgrade
     captions.mjs        word chunking, caption presets (plan, frame-pure evaluator, GSAP runtime)
     motion.mjs          frame-pure easing, tracks, stagger, count-up, springs
-    grammar.mjs         motion grammars (editorial, snappy, smooth, playful, documentary)
+    grammar.mjs         motion grammars (editorial, snappy, smooth, playful, documentary, cinematic)
     transitions.mjs     typed transitions and scene render windows
     camera-world.mjs    world layout, camera path, parallax and motion blur
     ambient.mjs         frame-pure ambient motion: background field, hold drift
@@ -119,6 +119,7 @@ move in a story.
 | `smooth` | power2.out / sine.in | sine.inOut / sine.inOut | power2.out | 0.50, 0.36, 0.70, 1.1 | 0 | 1.25× | glide | subtle |
 | `playful` | back.out(1.7) / back.in(1.4) | back.inOut(1.4) / back.inOut(1.6) | elastic.out(1, 0.5) | 0.42, 0.26, 0.50, 0.75 | 0.20 | 1.6× | bounce (anticipates), whip back.inOut(1.2) | lively |
 | `documentary` | power1.out / power1.in | power1.inOut / power1.inOut | power1.out | 0.60, 0.45, 0.80, 1.3 | 0 | 1.3× | drift, whip power2.inOut | subtle |
+| `cinematic` | power2.inOut / power2.in | power2.inOut / power2.inOut | power2.inOut | 0.70, 0.45, 0.90, 1.3 | 0 | 1.4× | glide (drift 14 px, 12 s, breathe 0.8%), whip power3.inOut, move blur 0.25 | lively |
 
 Each preset also has `defaultTransition` (`{cuts, world}`, planner guidance)
 and `camera` (`{style, drift, driftPeriod, breathe, whip, anticipation}`:
@@ -127,9 +128,33 @@ breathing-scale amplitude, the whip-pan ease). `overshoot` is the measured
 peak overshoot of the enter and emphasis eases; `stagger` multiplies every
 module's default stagger.
 
+Two preset settings are not overridable, and `{base: "cinematic", …}`
+inherits them:
+
+- `panelEnter`: the longest an editorial panel's shell may take to arrive.
+  It's 0.36 s for every grammar but cinematic (0.8 s), so cinematic panels
+  take the grammar's full 0.7 s.
+- `hold`: what a settled scene does while it rests. It's `null` for every
+  grammar but cinematic, which has `{level: "lively", mediaPush: 0.04}`:
+  - `level` is the ambient level a scene gets when neither the scene nor the
+    story sets one, instead of the energy default.
+  - `mediaPush` is a linear push-in about the canvas centre (4% over the
+    scene) that `product-demo` lays over its zooms. The recorded clip then
+    moves on every frame. A scene with ambient `{"drift": false}` keeps the
+    clip as recorded.
+
+Cinematic exists because the other grammars arrive on `.out` curves, which
+start at full speed. Measured on a 16:9 voiceover story with `smooth` and the
+world camera:
+- camera pans were already slow → fast → slow (`sine.inOut`);
+- editorial panels arrived in at most 0.36 s on `power2.out`;
+- the rest drift moved under 0.1 px a frame;
+- the recorded `product-demo` clip held fully still on 17% of its rest
+  frames.
+
 ```js
 export const GRAMMARS, GRAMMAR_NAMES, DEFAULT_GRAMMAR;   // "editorial"
-export function resolveGrammar(story)                   // → {id, base, custom, ease, duration, overshoot, stagger, defaultTransition, camera, ambient}
+export function resolveGrammar(story)                   // → {id, base, custom, ease, duration, overshoot, stagger, defaultTransition, camera, ambient, panelEnter, hold}
 export function grammarErrors(value, path)              // validation messages (story.mjs mirrors them, import-free)
 export function isEditorialGrammar(grammar)
 export function easeRole(name)                          // "enter" (.out) | "exit" (.in) | "move" (.inOut) | "emphasis" (back/elastic/bounce .out) | null (linear, steps)
@@ -523,7 +548,7 @@ Once a module's enter animation settles, nothing on a plate moves until the
 next event, so between beats a story reads as a slideshow and fails the
 cinematic motion gate (median frame-change energy, flow velocity p90). The
 ambient layer keeps settled frames alive. It is plain ESM that imports only
-`./motion.mjs`, and every value is a pure function of absolute time and the
+`./motion.mjs` and `./grammar.mjs`, and every value is a pure function of absolute time and the
 story. The HyperFrames compiler turns it into GSAP; `StoryComposition`
 evaluates the same functions per frame.
 
@@ -536,8 +561,10 @@ evaluates the same functions per frame.
 ```
 
 - Precedence: `scene.ambient` ← `story.ambient` ← defaults.
-- The default level follows the scene's `energy`: 0 → `subtle`; 1, 2 and
-  `"build"` → `standard`; 3 → `lively`. A missing energy → `standard`.
+- The default level is the motion grammar's `hold.level` when it has one
+  (`cinematic`: `lively`). Otherwise it follows the scene's `energy`: 0 →
+  `subtle`; 1, 2 and `"build"` → `standard`; 3 → `lively`. A missing energy
+  → `standard`.
 - `background` defaults to true, except in the `footage-led` lane, where the
   base already moves. There the field is off and only overlays drift (track
   ≥ 1, not `insert` plates), unless a scene sets `drift: true` explicitly.

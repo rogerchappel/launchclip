@@ -4,6 +4,19 @@
 
 ### Added
 
+- A `cinematic` motion grammar (`"motion": {"grammar": "cinematic"}`).
+  Every entrance, transition and camera move eases slow → fast → slow into
+  its resting state (`power2.inOut`, enter 0.7 s, camera 1.3 s, no
+  overshoot), and settled scenes keep moving:
+  - editorial panels take the full 0.7 s to arrive (the other grammars cap
+    them at 0.36 s);
+  - every scene defaults to the `lively` hold drift;
+  - `product-demo` lays a 4% push-in over its zooms, so a recorded clip never
+    holds still between actions, and its fades follow the grammar;
+  - the world camera drifts and breathes more.
+
+  Art directions that say "cinematic", "filmic" or "Ken Burns" now suggest
+  it, instead of `smooth` or `documentary`.
 - `launchclip demo doctor <repo>` checks a demo recipe before recording.
   - **Without `--plan` (survey):** it reads the repo and recommends the
     cheapest setup rung (a plan, a test session, or fixtures). It reports what
