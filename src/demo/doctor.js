@@ -61,8 +61,8 @@ const AUTH_PROVIDERS = [
 ];
 const SSO_REDIRECT = /\b(?:api\.workos\.com|[a-z0-9-]+\.auth0\.com|clerk\.[a-z0-9.-]+|[a-z0-9-]+\.okta\.com|login\.microsoftonline\.com|accounts\.google\.com\/o\/oauth2)|\/oauth2?\/authorize\b|\/sso\/authorize\b/i;
 const API_ENV = /(^|_)(API|BACKEND|SERVER|GRAPHQL)(_BASE)?_(URL|ORIGIN|HOST|ENDPOINT)$/;
-const ANALYTICS_ENV = /POSTHOG|SENTRY|SEGMENT|MIXPANEL|AMPLITUDE|(^|_)GA_|GTAG|(^|_)GTM|DATADOG|INTERCOM|HOTJAR|(^|_)HEAP|LOGROCKET|FULLSTORY|PLAUSIBLE|BUGSNAG|ROLLBAR|HONEYBADGER|CRISP|HUBSPOT/;
-const FIRST_RUN = /["'`]([A-Za-z_][A-Za-z0-9_-]*?(?:tour|onboarding|wizard|walkthrough|welcome|getting[_-]?started)[A-Za-z0-9_-]*?(?:completed|complete|dismissed|seen|done|shown|finished|skipped))["'`]/gi;
+const ANALYTICS_ENV = /ANALYTICS|POSTHOG|SENTRY|SEGMENT|MIXPANEL|AMPLITUDE|(^|_)GA_|GTAG|(^|_)GTM|DATADOG|INTERCOM|HOTJAR|(^|_)HEAP|LOGROCKET|FULLSTORY|PLAUSIBLE|BUGSNAG|ROLLBAR|HONEYBADGER|CRISP|HUBSPOT/;
+const FIRST_RUN = /\b([A-Za-z0-9_-]*?(?:tour|onboarding|wizard|walkthrough|welcome|getting[_-]?started)[A-Za-z0-9_-]*?(?:completed|complete|dismissed|seen|done|shown|finished|skipped))\b/gi;
 
 async function readText(file, limit = 400_000) {
   try {
