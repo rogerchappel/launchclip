@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { PACKAGE_ROOT } from "./runtime_paths.js";
 import { hyperframesToolInfo } from "./toolchain.js";
+import { DEFAULT_SUBJECT_MODEL, modelStatus, onnxRuntimeAvailable } from "./subject/models.js";
 
 const require = createRequire(import.meta.url);
 const execFileAsync = promisify(execFile);
@@ -39,6 +40,7 @@ export async function diagnoseInstallation(options = {}) {
   const ffprobe = await commandAvailable("ffprobe");
   const ytDlp = await commandAvailable("yt-dlp");
   const whisper = await commandAvailable("whisper");
+  const subject = await (options.subjectStatus ?? subjectStatus)(env);
   const rasterizer = await firstAvailable(["magick", "convert", "sips"], commandAvailable);
   const nodeSupported = nodeMajor >= MINIMUM_NODE_MAJOR;
   const coreReady = nodeSupported && missingPackageFiles.length === 0;
@@ -73,6 +75,7 @@ export async function diagnoseInstallation(options = {}) {
       ffprobe: { available: ffprobe, required_for_rendering: true },
       rasterizer: { available: Boolean(rasterizer), command: rasterizer, required_for_rendering: false },
       whisper: { available: whisper, required_for_rendering: false },
+      subject,
       yt_dlp: { available: ytDlp, required_for_rendering: false }
     },
     credentials: {
@@ -96,6 +99,22 @@ export async function diagnoseInstallation(options = {}) {
       }
     },
     issues
+  };
+}
+
+// The person cut-out (subject stage): onnxruntime-node and the default model.
+// Never downloads; `launchclip subject setup` does that.
+async function subjectStatus(env) {
+  const runtime = await onnxRuntimeAvailable();
+  const model = await modelStatus(DEFAULT_SUBJECT_MODEL, { env });
+  return {
+    available: runtime && model.installed,
+    required_for_rendering: false,
+    runtime,
+    model: model.id,
+    model_installed: model.installed,
+    model_path: model.path,
+    ...(runtime && model.installed ? {} : { hint: runtime ? "run: launchclip subject setup (or let the first subject probe download it)" : "onnxruntime-node did not load; reinstall LaunchClip" })
   };
 }
 
