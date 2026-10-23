@@ -1134,7 +1134,9 @@ of set type. It hides captions, like `hook-title` and `cta`.
     - a glint crosses the mark and wordmark once they have landed (when the
       scene is long enough).
 
-    The sweep makes the opening move at once whatever the brand colours. A
+    The sweep travels at a steady speed and fades up within 0.15 s: it is
+    light passing, not an entrance. The glint eases like the entrances. The
+    sweep makes the opening move at once whatever the brand colours. A
     slow → fast → slow entrance and a soft glow alone stay under the motion
     gate's burst threshold for the first 0.35 s, more so with a dark primary.
     The glint is a second distinct hook event, so an opener with no headline
@@ -1150,14 +1152,20 @@ of set type. It hides captions, like `hook-title` and `cta`.
     card (under 1.5:1) is a param error.
   - The text turns to the first of ink, bg or `#111111` with 4.5:1 contrast
     on the card.
-  - The bloom is faint, and the light bands are the brand primary, drawn
-    behind the artwork. The glint is taller, so it still reads around the
-    artwork.
+  - The bloom is faint. The light bands are drawn behind the artwork, and
+    the glint is taller, so it still reads around the artwork.
+  - The bands' colour is the first of primary, accent and ink that differs
+    from the card by at least 90 luma (else the most different).
+  - Their strength is set for a fixed luma step on the card (sweep 42,
+    glint 60), so a pale primary on white still moves the opening.
   - Instead of the ambient hold drift, which would move the card's edges,
     the whole lockup pushes in 3.5% over the scene, linearly.
 
-  Measured: a white-card opener with no headline and no hits bursts at
-  0.27 s and 1.53 s on its own, and every gate passes.
+  Measured: a white-card opener with no headline and no hits, on a pale gold
+  primary, bursts at 0.10 s and 1.50 s on its own, and every gate passes. A
+  unit test models the sweep's frame-difference energy from its ops. It
+  requires the energy to pass 1.7 by 0.3 s on dark and light cards, for
+  light, pale and dark primaries.
 - **Sound:** one cue by default, `sfx` (`"whoosh-soft"`) on the first beat.
   - `sfx: false` silences it, and another cue name replaces it.
   - When any hit on the scene carries its own `cue`, the lockup drops its

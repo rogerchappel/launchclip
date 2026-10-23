@@ -660,6 +660,30 @@ test('brand-lockup: one sound by default, none when the story brings its own, an
   assert.deepEqual(cues(MODULES['brand-lockup'].resolve({...lockup}, landscape({hits: [{event: 'wordmark', at: 0.25, cue: 'whoosh-soft'}]}))), [], 'the story\'s cue replaces the lockup\'s');
 });
 
+test('brand-lockup gate proxy: the opening sweep moves the frame past the hook threshold by 0.3 s, dark or light card, any primary', () => {
+  // The motion gate's hook rule wants a frame-difference burst (mean |Δluma| per frame, burst thresholds measured at
+  // 1.1–1.7 on cinematic stories) by 0.35 s. A soft band of luma step A moving Δx px a frame changes about
+  // 2·A·Δx·h px of luma, whatever its softness, so its energy is 2·A·Δx·h / (W·H).
+  const cinematic = {id: 'cinematic', ease: {enter: 'power2.inOut', exit: 'power2.in', move: 'power2.inOut', camera: 'power2.inOut', emphasis: 'power2.inOut'},
+    duration: {enter: 0.7, exit: 0.45, transition: 0.9, camera: 1.3}, stagger: 1.4};
+  const luma = hex => { const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)); return 0.299 * r + 0.587 * g + 0.114 * b; };
+  for (const primary of ['#7c70ff', '#e3c26b', '#1f4a3a']) {
+    for (const card of [null, '#ffffff', 'paper']) {
+      const colours = {...brand.colors, bg: '#1c5744', ink: '#1c5744', primary};
+      const params = {...lockup, eyebrow: 'Launch analytics', glow: 'primary', at: 0, stagger: 0.25, ...(card ? {background: card} : {tint: 'paper'})};
+      const model = MODULES['brand-lockup'].resolve(params, landscape({duration: 3.4, grammar: cinematic, brand: {...brand, colors: colours}}));
+      const sweep = model.content.sweeps.find(S => S.key === 'sweep');
+      const under = card ? (card === 'paper' ? colours.paper : card) : colours.bg;
+      const step = Number.parseInt(sweep.alpha, 16) / 255 * Math.abs(luma(model.content.light) - luma(under));
+      const ops = catalogBTimeline(model);
+      const at = t => frameState(ops, t).get('scene-sweep') ?? {};
+      const energy = t => { const a = at(t), z = at(t + 1 / 30); return 2 * step * Math.min(1, z.opacity ?? 0) * Math.abs((z.x ?? 0) - (a.x ?? 0)) * Math.min(sweep.height, 1080) / (1920 * 1080); };
+      const first = [0.1, 0.15, 0.2, 0.25, 0.3].find(t => energy(t) > 1.7);
+      assert.ok(first !== undefined, `${primary} on ${card ?? 'the story bg'}: sweep energy ${[0.1, 0.2, 0.3].map(t => energy(t).toFixed(2))} never clears 1.7 by 0.3 s`);
+    }
+  }
+});
+
 test('brand-lockup: validation names the param', () => {
   const resolve = (params, extra) => MODULES['brand-lockup'].resolve(params, landscape(extra));
   assert.throws(() => resolve({eyebrow: 'x'}), /params\.mark or params\.wordmark is required/);

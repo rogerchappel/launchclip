@@ -23,6 +23,13 @@ const VARIANTS = ['title', 'end'];
 const LAYOUTS = ['row', 'stack'];
 const TINT_ROLES = ['paper', 'ink', 'primary', 'accent'];
 const HEX6 = /^#[0-9a-fA-F]{6}$/;
+// The luma step (0–255) each light band makes on a light card at full opacity.
+const SWEEP_LUMA = Object.freeze({sweep: 42, shine: 60});
+// Rec. 601 luma difference of two #rrggbb colours (what a frame-difference metric sees).
+const lumaGap = (a, z) => {
+  const luma = hex => { const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)); return 0.299 * r + 0.587 * g + 0.114 * b; };
+  return Math.abs(luma(a) - luma(z));
+};
 
 // Beat defaults (seconds from the scene start) and how long each element takes to land.
 export const BRAND_LOCKUP_TIMING = Object.freeze({mark: 0, stagger: 0.35, land: 0.6, bloom: 0.75, sweep: 0.9, shine: 0.8, shineGap: 0.2});
@@ -206,12 +213,18 @@ function resolve(params, ctx) {
     }
   }
 
-  // On a light card the light is the brand colour, laid over the card.
-  content.light = backdrop ? colors.primary : colors.paper;
+  // On a light card the light is a brand colour laid over the card: the first
+  // of primary, accent and ink that differs from it clearly, at the strength
+  // that moves the card by a set luma step (SWEEP_LUMA). A pale primary on
+  // white still gives the opening visible motion at once.
+  const lightOnCard = backdrop ? ([colors.primary, colors.accent, colors.ink].find(colour => lumaGap(colour, backdrop) >= 90)
+    ?? [colors.primary, colors.accent, colors.ink].sort((a, z) => lumaGap(z, backdrop) - lumaGap(a, backdrop))[0]) : null;
+  content.light = backdrop ? lightOnCard : colors.paper;
   content.lightBlend = backdrop ? 'normal' : 'screen';
   // On a light card the bands sit behind the artwork, so the glint is taller and stronger to read around it.
   if (backdrop) for (const sweep of content.sweeps) {
-    sweep.alpha = sweep.key === 'sweep' ? '2e' : '59';
+    const alpha = Math.min(0.6, Math.max(0.1, SWEEP_LUMA[sweep.key] / Math.max(1, lumaGap(lightOnCard, backdrop))));
+    sweep.alpha = Math.round(alpha * 255).toString(16).padStart(2, '0');
     if (sweep.key === 'shine') { const grow = Math.min(H, sweep.height * 2) - sweep.height; sweep.y = r2(sweep.y - grow / 2); sweep.height = r2(sweep.height + grow); }
   }
   if (content.glow && backdrop) content.glow.soft = true;
@@ -305,8 +318,12 @@ function timeline(model, ops) {
   for (const S of c.sweeps) {
     const s = `${id}-${S.key}`;
     set(ops, s, start, {opacity: 0, x: 0, y: 0, rotation: 16, scaleX: 1, scaleY: 1});
-    tw(ops, s, S.time, S.duration, c.enterEase, {x: 0}, {x: S.travel});
-    tw(ops, s, S.time, S.duration * 0.25, c.fadeEase, {opacity: 0}, {opacity: 1});
+    // The opening sweep is light passing, not an entrance into rest: it travels
+    // at a steady speed and is up within 0.15 s, so the first frames already move.
+    // The glint eases across the lockup like the entrances.
+    const opening = S.key === 'sweep';
+    tw(ops, s, S.time, S.duration, opening ? 'none' : c.enterEase, {x: 0}, {x: S.travel});
+    tw(ops, s, S.time, opening ? 0.15 : S.duration * 0.25, opening ? 'power1.out' : c.fadeEase, {opacity: 0}, {opacity: 1});
     tw(ops, s, rt(S.time + S.duration * 0.65), S.duration * 0.35, 'power2.in', {opacity: 1}, {opacity: 0});
   }
   for (const {key, time} of c.beats) {
