@@ -1019,7 +1019,7 @@ element; any other callout 0.25 s before its step's end.
 - **Camera:** each click or type target zooms so its box fills at most half the
   canvas (1 to `zoom.max`, default 1.8). A zoom starts 1.2 s before the action
   and settles 0.4 s before it, so the click lands on a still frame. The camera
-  holds 1.1 s (or until 0.4 s after the last keystroke; 0.3 s after a click
+  holds 1.1 s (or until 0.4 s after the last keystroke; 0.2 s after a click
   that navigates), then moves straight to the next target in 0.6–1.1 s by
   on-screen distance, pulling back partway when the targets are far apart (all
   the way out after a navigation). After a gap of over 2.2 s (or, after a
@@ -1037,12 +1037,13 @@ element; any other callout 0.25 s before its step's end.
   canvas origin in its local space) and on `<id>-cam` (the overlay's camera
   layer).
 - **Overlay:** `<id>-overlay` holds the camera layer, with an accent outline
-  (`<id>-hl-<i>`) around each clicked or typed-into box (gone 0.3 s after a
-  click that navigates), and callout pills (`<id>-callout-<i>`, brand primary,
-  at least the key text size) placed below or above the anchor as the camera
-  shows it at its action (or 0.45 s in). A callout on an action's box, from
-  0.3 s before to 1.5 s after the callout, ends when that action navigates or
-  the camera leaves the element. Pills are not scaled.
+  (`<id>-hl-<i>`) around each clicked or typed-into box (for a click that
+  navigates, from 0.3 s before the click to 0.2 s after it), and callout pills
+  (`<id>-callout-<i>`, brand primary, at least the key text size) placed below
+  or above the anchor as the camera shows it at its action (or 0.45 s in). A
+  callout on an action's box, from 0.3 s before to 1.5 s after the callout,
+  ends when that action navigates or the camera leaves the element. Pills are
+  not scaled.
 - **Events:** `click-<i>` → `click`, `key-<i>-<k>` → `keystroke-soft`, `zoom-<k>`
   → `whoosh-soft` (zooms of at least 1.3×), `callout-<i>` → `pop`. `finish` binds
   these as module-event SFX, merging same-kind cues closer than 0.12 s.

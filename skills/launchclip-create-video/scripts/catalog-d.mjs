@@ -50,7 +50,7 @@ export const PRODUCT_DEMO_TIMING = Object.freeze({
   merge: 2.2,
   // After a click that changes the page, the camera, outline and callout
   // leave this soon: what they framed is gone.
-  navLeave: 0.3,
+  navLeave: 0.2,
   callout: 2.2,
   // A click's callout shows this long before the click.
   calloutLead: 0.6,
@@ -479,11 +479,13 @@ export function productDemoTimeline(model) {
   }
   for (const action of c.actions.filter(entry => entry.type !== 'focus')) {
     const target = `${id}-hl-${action.index}`;
-    // After a navigation the outline goes with the page it was drawn on.
-    const out = rt(Math.min(end - 0.05, action.navigates ? action.at + T.navLeave - 0.15 : Math.max(action.at + 0.9, (action.until ?? action.at) + 0.3)));
-    const fade = action.navigates ? 0.15 : 0.35;
+    // A click that navigates: the outline shows as the cursor settles and
+    // goes with the page it was drawn on.
+    const inAt = rt(Math.max(start, action.navigates ? action.at - 0.3 : action.at));
+    const fade = action.navigates ? 0.12 : 0.35;
+    const out = rt(Math.min(end - 0.05, action.navigates ? action.at + T.navLeave - fade : Math.max(action.at + 0.9, (action.until ?? action.at) + 0.3)));
     set(ops, target, start, {opacity: 0, scaleX: 1.12, scaleY: 1.12});
-    tw(ops, target, action.at, Math.max(0.04, Math.min(0.28, out - action.at)), 'power3.out', {opacity: 0, scaleX: 1.12, scaleY: 1.12}, {opacity: 1, scaleX: 1, scaleY: 1});
+    tw(ops, target, inAt, Math.max(0.04, Math.min(0.28, out - inAt)), 'power3.out', {opacity: 0, scaleX: 1.12, scaleY: 1.12}, {opacity: 1, scaleX: 1, scaleY: 1});
     tw(ops, target, out, Math.max(0.04, Math.min(fade, end - out)), 'power2.in', {opacity: 1, scaleX: 1, scaleY: 1}, {opacity: 0, scaleX: 1, scaleY: 1});
   }
   for (const callout of c.callouts) {
