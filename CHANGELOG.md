@@ -4,6 +4,17 @@
 
 ### Added
 
+- Demo autopilot records apps with no seed data and apps that sign in through
+  SSO. A `DEMO-PLAN.json` can name `app.fixtures` (an ES module whose
+  `route({request, url, method, body})` answers the app's requests) or
+  `app.har` (a recorded HAR), and with either, requests to other origins are
+  blocked except `app.allowOrigins`. `app.session` starts every flow signed in
+  from a Playwright storage state or from localStorage values and cookies;
+  validation refuses values that look like real credentials, and they are
+  masked in the action logs. `prepareContext` and `CURSOR_SCRIPT` are exported
+  for scripts that build their own browser context, recording falls back to
+  the Playwright the app's repo installs, and steps target the first visible
+  match. See `examples/demo-app/demo`.
 - Add partial rendering to `launchclip finish`: the render stage caches the
   timeline in segments (scene bodies and whole transition overlaps) hashed
   from everything that can change their pixels, and re-renders only the

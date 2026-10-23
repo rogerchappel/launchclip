@@ -946,6 +946,49 @@ Chromium and writes, per flow, `demo/<flow>.mp4` and `demo/<flow>.actions.json`
 log, so the zooms, outlines, callouts and SFX land on what actually happened in
 the app.
 
+### Demo plan (`src/demo/plan.js`)
+
+`DEMO-PLAN.json` (`launchclip.demo-plan.v1`): `{schema, app, viewport: {width,
+height, deviceScaleFactor}, flows: [{id, title, goal?, setup?, steps}]}`,
+checked by `validateDemoPlan(plan)` → `{errors, warnings}`. `app`:
+
+- `url`: the app's URL (local or staging; `--url` overrides it).
+- `fixtures`: path to an ES module, relative to the plan file, exporting
+  `route({request, url, method, body})` → `{status?, json? | body?,
+  contentType?, headers?}` to fulfill the request, or `undefined` to let it
+  through. `url` is a `URL`, `body` the parsed JSON body (else the raw text).
+  The module is imported afresh for each flow. Cross-origin answers get CORS
+  headers for the app's origin.
+- `har`: path to a `.har` or `.zip`, relative to the plan file, replayed with
+  `context.routeFromHAR`. A request the HAR lacks falls through to the origin
+  guard, so with blocking on it is aborted unless it is for the app or an
+  allowed origin.
+- `blockOffOrigin` (default `true` when `fixtures` or `har` is set):
+  requests to origins other than the app's are aborted, except
+  `allowOrigins: ["https://fonts.gstatic.com", …]` (exact origins).
+- `session`: a signed-in session applied before the first page, either
+  `{storageState: "state.json"}` (a Playwright storage state, relative to the
+  plan file) or `{localStorage: {key: "value"}, cookies: [{name, value, url? |
+  domain?, path?, expires?, httpOnly?, secure?, sameSite?}]}` (localStorage for
+  the app's origin, written once per key before the app's scripts run; cookies
+  for the app's URL unless they name a domain or url). Every value must pass
+  `sessionValueProblem` (`src/demo/guardrails.js`): no API keys
+  (`sk-…`, `sk_live_…`, `ghp_…`, `xox…`, `AKIA…`), no bearer tokens, no signed
+  JWTs (an unsigned JWT, `alg: "none"` or a fake signature, is fine), and no
+  random string of 40+ characters unless the value says test, demo, fake,
+  mock, example, fixture, dummy, sample or not-real. Cookies must be for the
+  app's host or a local or staging host. A storage state file is checked the
+  same way when the recording starts. Session values are masked in the
+  action log.
+
+Order of the network handlers: fixtures, then the HAR, then the origin guard.
+Only a plan file the user writes can name `fixtures`, `har` or `session`: a
+model-planned `app` keeps only `url`. `rebasePlanPaths(plan, fromDir, toDir)`
+rewrites the paths for the copy of the plan saved next to the clips.
+`prepareContext(context, {app, url, planDir, allowHosts, log})` →
+`{secrets}` applies the cursor (`CURSOR_SCRIPT`), the network handlers and the
+session to a context the caller created; pass `secrets` to `recordFlow`.
+
 ### Action log (`src/demo/record.js`)
 
 `{schema, flow: {id, title, goal}, video, viewport: {width, height, deviceScaleFactor}, frame, fps, duration, frames, recorded_at, actions: [...]}`.
@@ -955,7 +998,8 @@ Times are seconds in the clip (the first screencast frame is 0); `at` is the
 mouse-down for a click or type, `keys` the time of each typed character, and
 `box` the target's bounding box in viewport CSS px when the action ran. A typed
 value is written as `{account: <field>}` or with secrets redacted, never as a
-password.
+password. Account values and session values are masked (`•`) in every string
+field.
 
 ### Catalogue D (`kit/core/catalog-d.mjs`)
 
