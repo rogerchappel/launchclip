@@ -51,17 +51,19 @@ test('cameraKeys: lead, hold, pan within a shot, zoom out, and a separate shot a
   ];
   const keys = cameraKeys(targets, {start: 0, end: 12, centre});
   const T = PRODUCT_DEMO_TIMING;
+  const pan = keys[4].t - keys[3].t;
   assert.deepEqual(keys.map(k => [k.t, Math.round(k.s * 100) / 100]), [
-    [0, 1], [2 - T.zoomLead, 1], [2, 1.8],
-    [3.5 - T.pan, 1.8], [3.5, 1.6],
+    [0, 1], [2 - T.zoomLead, 1], [2 - T.settle, 1.8],
+    [3.5 - T.settle - pan, 1.8], [3.5 - T.settle, 1.6],
     [3.5 + T.hold, 1.6], [3.5 + T.hold + T.zoomOut, 1],
-    [9 - T.zoomLead, 1], [9, 1.8],
+    [9 - T.zoomLead, 1], [9 - T.settle, 1.8],
     [9.8 + 0.4, 1.8], [9.8 + 0.4 + T.zoomOut, 1]
   ].map(([t, s]) => [Math.round(t * 1e4) / 1e4, s]));
-  // The zoom lands on the action (the lead is shorter than a full zoom-in).
-  assert.ok(T.zoomLead <= T.zoomIn);
+  // The zoom settles before the action, and a nearby pan takes pan..panMax.
+  assert.ok(near(T.zoomLead, T.zoomIn + T.settle, 1e-9));
+  assert.ok(pan >= T.pan && pan <= T.panMax, String(pan));
   // Eased in log space: halfway through the zoom in, the scale is the geometric mean.
-  const mid = cameraAt(keys, 2 - T.zoomLead / 2);
+  const mid = cameraAt(keys, 2 - T.zoomLead + T.zoomIn / 2);
   assert.ok(near(mid.s, Math.sqrt(1.8), 1e-6));
   assert.deepEqual(cameraAt(keys, 12), {s: 1, f: centre});
   // A zoom that cannot land before the scene ends is skipped.
@@ -69,6 +71,63 @@ test('cameraKeys: lead, hold, pan within a shot, zoom out, and a separate shot a
   // A shot near the end zooms out by the end.
   const late = cameraKeys([{at: 10.5, s: 1.8, f: centre}], {start: 0, end: 12, centre});
   assert.equal(late.at(-1).t, 12);
+});
+
+// Fastest on-screen motion of the camera, per frame at 30 fps: the largest
+// move of the canvas centre and the video corners, and the largest zoom step.
+function cameraSpeed(keys, rect) {
+  let px = 0, zoom = 0, previous = null;
+  for (let frame = 0; frame <= 12 * 30; frame++) {
+    const cam = cameraTransform(cameraAt(keys, frame / 30, {rect, canvas}), rect, canvas);
+    const points = [centre, {x: rect.x, y: rect.y}, {x: rect.x + rect.width, y: rect.y + rect.height}].map(p => throughCamera(p, cam));
+    if (previous) {
+      px = Math.max(px, ...points.map((p, k) => Math.hypot(p.x - previous.points[k].x, p.y - previous.points[k].y)));
+      zoom = Math.max(zoom, Math.abs(Math.log(cam.scale / previous.cam.scale)));
+    }
+    previous = {cam, points};
+  }
+  return {px, zoom};
+}
+
+test('cameraKeys never snaps: moves take at least minMove, close or far actions alike', () => {
+  const T = PRODUCT_DEMO_TIMING;
+  const rect = {x: 96, y: 54, width: 1728, height: 972};
+  const at = (x, y) => ({x, y});
+  const logs = {
+    // Clicks a third of a second apart across the screen: one wide shot, no whip pans.
+    burst: [{at: 2, s: 1.8, f: at(200, 150)}, {at: 2.3, s: 1.8, f: at(1700, 950)}, {at: 2.6, s: 1.8, f: at(300, 900)}],
+    // Two clicks 1 s apart, far apart on the same page.
+    hop: [{at: 2, s: 1.8, f: at(200, 150)}, {at: 3, s: 1.8, f: at(1700, 950)}],
+    // A corner target that hits the clamp mid-zoom.
+    corner: [{at: 1, s: 1.8, f: at(110, 1010)}, {at: 2.4, s: 1.8, f: at(1800, 60)}],
+    // A navigating click followed by a field on the next page (the ClutchCut API key flow).
+    navigate: [{at: 2.81, navigates: true, s: 1.8, f: at(160, 850)}, {at: 4.65, s: 1.8, f: at(880, 260)}]
+  };
+  for (const [name, targets] of Object.entries(logs)) {
+    const keys = cameraKeys(targets, {start: 0, end: 12, centre, canvas});
+    for (let k = 1; k < keys.length; k++) {
+      if (!near(keys[k].s, keys[k - 1].s, 1e-6) || !near(keys[k].f.x, keys[k - 1].f.x, 1e-6) || !near(keys[k].f.y, keys[k - 1].f.y, 1e-6)) assert.ok(keys[k].t - keys[k - 1].t >= T.minMove - 1e-6, `${name}: a ${keys[k].t - keys[k - 1].t} s move at ${keys[k].t}`);
+    }
+    const {px, zoom} = cameraSpeed(keys, rect);
+    assert.ok(px < 150, `${name}: ${px.toFixed(1)} px in one frame`);
+    assert.ok(zoom < 0.06, `${name}: a ${(zoom * 100).toFixed(1)}% zoom step in one frame`);
+  }
+  // The burst is framed together (wide here: it spans the screen) rather than chased.
+  assert.ok(cameraKeys(logs.burst, {start: 0, end: 12, centre, canvas}).every(k => k.s === 1));
+  // A far hop pulls back halfway instead of whipping across at full zoom.
+  const hop = cameraKeys(logs.hop, {start: 0, end: 12, centre, canvas});
+  assert.ok(hop.some(k => k.dip && k.dip < 1.8));
+});
+
+test('cameraAt with a view keeps the focus inside the clamp, so a zoom to a corner glides', () => {
+  const rect = {x: 96, y: 54, width: 1728, height: 972};
+  const keys = cameraKeys([{at: 2, s: 1.8, f: {x: 110, y: 1010}}], {start: 0, end: 6, centre, canvas});
+  for (let t = 0; t <= 6; t += 1 / 30) {
+    const state = cameraAt(keys, t, {rect, canvas});
+    const free = {scale: state.s, x: canvas.width / 2 - state.s * state.f.x, y: canvas.height / 2 - state.s * state.f.y};
+    const clamped = cameraTransform(state, rect, canvas);
+    assert.ok(near(free.x, clamped.x, 0.02) && near(free.y, clamped.y, 0.02), `t=${t}: ${JSON.stringify({free, clamped})}`);
+  }
 });
 
 const fixture = async () => JSON.parse(await readFile(path.join(ROOT, 'test/fixtures/parity/d-product-demo.json'), 'utf8'));

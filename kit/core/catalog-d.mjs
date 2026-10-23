@@ -18,10 +18,10 @@
 //
 // Camera. Zooms are pure functions of time: cameraKeys() turns the actions
 // into keyframes {t, s, f} (scale and the canvas point to centre), cameraAt()
-// eases between them (log-space scale, easeInOutCubic), and cameraTransform()
-// turns a state into {scale, x, y} for a transform about the canvas origin,
-// clamped so the zoomed video never pulls away from the canvas edge it
-// already covers. One sample per frame becomes a tl.set-style op on both the
+// eases between them (log-space scale, easeInOutSine, the focus kept inside
+// the clamp), and cameraTransform() turns a state into {scale, x, y} for a
+// transform about the canvas origin, clamped so the zoomed video never pulls
+// away from the canvas edge it already covers. One sample per frame becomes a tl.set-style op on both the
 // video and the overlay's camera layer, so seeking is safe and both renderers
 // read the same numbers.
 
@@ -33,13 +33,27 @@ import {grammarTweens} from './grammar.mjs';
 export const PRODUCT_DEMO_TIMING = Object.freeze({
   minDuration: 2,
   leadOut: 0.2,
-  zoomLead: 0.5,
-  zoomIn: 0.6,
-  pan: 0.55,
+  // The camera starts zoomLead before an action and settles `settle` before
+  // it, so the click lands on a still frame.
+  zoomLead: 1.2,
+  zoomIn: 0.8,
+  settle: 0.4,
+  // A move between targets takes pan..panMax s by its on-screen distance.
+  pan: 0.6,
+  panMax: 1.1,
+  // No camera move is shorter than this, however close the actions are, and
+  // actions closer than `cluster` share one shot that frames them all.
+  minMove: 0.45,
+  cluster: 0.8,
   hold: 1.1,
-  zoomOut: 0.7,
+  zoomOut: 0.9,
   merge: 2.2,
+  // After a click that changes the page, the camera, outline and callout
+  // leave this soon: what they framed is gone.
+  navLeave: 0.3,
   callout: 2.2,
+  // A click's callout shows this long before the click.
+  calloutLead: 0.6,
   fade: 0.3
 });
 const T = PRODUCT_DEMO_TIMING;
@@ -47,7 +61,9 @@ const ACTION_TYPES = ['click', 'type', 'focus'];
 const FRAMES = ['window', 'full'];
 const ZOOM_FILL = 0.5;
 
-const ease = p => (p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2);
+// easeInOutSine: still at both ends, and at most 1.6× the average speed
+// (easeInOutCubic peaks at 3×, which reads as a lurch mid-zoom).
+const ease = p => (1 - Math.cos(Math.PI * p)) / 2;
 
 // ---------------------------------------------------------------------------
 // Zoom math (pure; unit-tested in test/product_demo.test.js)
@@ -80,57 +96,148 @@ export function cameraTransform({s, f}, rect, canvas) {
   return {scale: Math.round(s * 1e5) / 1e5, x: r2(x) || 0, y: r2(y) || 0};
 }
 
+const same = (a, b) => Math.abs(a.s - b.s) < 1e-6 && Math.abs(a.f.x - b.f.x) < 1e-6 && Math.abs(a.f.y - b.f.y) < 1e-6;
+
 /**
- * Keyframes for a list of zoom targets [{at, until, s, f}] (absolute seconds,
- * sorted): {t, s, f} with identity {s: 1, f: centre} outside the shots.
- * Targets closer than T.merge after the previous hold pan within one shot;
- * every shot zooms out by `end` (compressed when the scene ends first).
+ * A move from target a to b: its length (longer for a longer on-screen
+ * travel) and, when the two are far apart at their zoom, the scale to pull
+ * back to halfway, so the move reads as a dolly rather than a whip pan.
  */
-export function cameraKeys(targets, {start, end, centre}) {
-  const keys = [{t: start, s: 1, f: {...centre}}];
-  const shots = [];
+function moveBetween(a, b, canvas) {
+  const span = Math.max(Math.abs(b.f.x - a.f.x) / canvas.width, Math.abs(b.f.y - a.f.y) / canvas.height);
+  const d = T.pan + (T.panMax - T.pan) * Math.min(1, span * Math.max(a.s, b.s));
+  // Pull back at most 60% of the way to 1 (in log scale): deeper reads as a zoom-out and back.
+  const low = Math.min(a.s, b.s), dip = Math.max(low ** 0.4, Math.min(low, 0.7 / Math.max(span, 1e-6)));
+  return {d, dip: dip < low - 0.02 ? Math.round(dip * 1e4) / 1e4 : null};
+}
+
+/**
+ * Targets closer than T.cluster to the previous one merge into one target
+ * that frames them all: the first one's time, the last one's until and
+ * navigation, the centre of their foci and a scale no closer than any of
+ * them, pulled back so their foci stay in the middle 60% of the canvas.
+ */
+function clusterTargets(targets, canvas) {
+  const groups = [];
   for (const target of targets) {
-    const last = shots.at(-1);
-    const holdEnd = Math.max(target.at + T.hold, (target.until ?? target.at) + 0.4);
-    if (last && target.at - last.holdEnd < T.merge) { last.targets.push(target); last.holdEnd = holdEnd; }
-    else shots.push({targets: [target], holdEnd});
+    const group = groups.at(-1);
+    if (group && target.at - group.at(-1).at < T.cluster) group.push(target);
+    else groups.push([target]);
   }
-  for (const shot of shots) {
-    const first = shot.targets[0];
-    const inStart = Math.max(keys.at(-1).t, start, first.at - T.zoomLead);
-    const arrive = Math.min(first.at, inStart + T.zoomIn);
-    if (arrive - inStart < 0.15 || arrive >= end - 0.3) continue;
-    keys.push({t: rt(inStart), s: 1, f: {...centre}});
-    keys.push({t: rt(arrive), s: first.s, f: {...first.f}});
-    let previous = first;
-    for (const target of shot.targets.slice(1)) {
-      const panEnd = Math.min(target.at, end - 0.4);
-      const panStart = Math.max(keys.at(-1).t, panEnd - T.pan);
-      if (panEnd - panStart < 0.1) continue;
-      keys.push({t: rt(panStart), s: previous.s, f: {...previous.f}});
-      keys.push({t: rt(panEnd), s: target.s, f: {...target.f}});
-      previous = target;
+  return groups.map(group => {
+    if (group.length === 1) return group[0];
+    const xs = group.map(t => t.f.x), ys = group.map(t => t.f.y), last = group.at(-1);
+    const dx = Math.max(...xs) - Math.min(...xs), dy = Math.max(...ys) - Math.min(...ys);
+    const s = Math.max(1, Math.min(...group.map(t => t.s), (0.6 * canvas.width) / Math.max(dx, 1), (0.6 * canvas.height) / Math.max(dy, 1)));
+    return {at: group[0].at, until: Math.max(...group.map(t => t.until ?? t.at)), navigates: Boolean(last.navigates), s: Math.round(s * 1e4) / 1e4,
+      f: {x: r2((Math.max(...xs) + Math.min(...xs)) / 2), y: r2((Math.max(...ys) + Math.min(...ys)) / 2)}};
+  });
+}
+
+/**
+ * Keyframes for a list of zoom targets [{at, until?, navigates?, s, f}]
+ * (absolute seconds, sorted): {t, s, f, dip?} with identity {s: 1, f: centre}
+ * outside the shots; `dip` on a key pulls the move into it back to that
+ * scale halfway. Each zoom starts T.zoomLead before its action and settles
+ * T.settle before it. The camera stays on a target for T.hold (through any
+ * typing), or T.navLeave after a click that navigates, then moves straight to
+ * the next target, unless the gap is long (T.merge, or room to zoom out and
+ * back in after a navigation): then it zooms out and back in. Close actions
+ * squeeze moves, never below T.minMove, so a move may land just after its
+ * action. Every shot zooms out by `end` when there is room (otherwise it
+ * holds and the scene's fade covers it).
+ */
+export function cameraKeys(targets, {start, end, centre, canvas = {width: centre.x * 2, height: centre.y * 2}}) {
+  const wide = {s: 1, f: centre};
+  const keys = [{t: start, s: 1, f: {...centre}}];
+  const key = (t, state, dip) => keys.push({t: rt(t), s: state.s, f: {...state.f}, ...(dip ? {dip} : {})});
+  const leaveOf = target => (target.navigates ? target.at + T.navLeave : Math.max(target.at + T.hold, (target.until ?? target.at) + 0.4));
+  let shot = null;
+  const zoomOut = from => {
+    const outStart = Math.max(keys.at(-1).t, Math.min(from, end - T.zoomOut));
+    if (end - outStart < T.minMove) return;
+    if (outStart > keys.at(-1).t) key(outStart, shot);
+    key(Math.min(end, outStart + T.zoomOut), wide);
+    shot = null;
+  };
+  for (const target of clusterTargets(targets, canvas)) {
+    const arrive = target.at - T.settle;
+    if (target.at > end - 0.3) break;
+    if (target.s <= 1.02) {
+      // A cluster too spread out to zoom into: be wide by the time it starts.
+      if (shot) zoomOut(Math.max(shot.at + 0.1, Math.min(leaveOf(shot), arrive - T.zoomOut)));
+      continue;
     }
-    const outEnd = Math.min(end, shot.holdEnd + T.zoomOut);
-    const outStart = Math.max(keys.at(-1).t, Math.min(shot.holdEnd, outEnd - 0.35));
-    keys.push({t: rt(outStart), s: previous.s, f: {...previous.f}});
-    keys.push({t: rt(outEnd), s: 1, f: {...centre}});
+    if (shot && arrive - leaveOf(shot) >= (shot.navigates ? T.zoomOut + T.zoomIn + 0.2 : T.merge)) zoomOut(leaveOf(shot));
+    if (shot) {
+      const {d, dip} = moveBetween(shot, target, canvas);
+      // After a navigation the move fills the gap (up to panMax + 0.3 s) and pulls all the way out.
+      const length = shot.navigates ? Math.min(T.panMax + 0.3, Math.max(d, arrive - leaveOf(shot))) : d;
+      const moveStart = Math.max(keys.at(-1).t, shot.at + 0.1, arrive - length);
+      // Rather than whip across, a tight move may land just after its action.
+      const moveEnd = Math.max(arrive, moveStart + T.minMove, Math.min(moveStart + length, target.at + 0.15));
+      if (moveEnd > end - 0.3) break;
+      // A squeezed move pulls back less, so it never whips the scale.
+      const pull = shot.navigates ? 1 : dip;
+      const low = Math.min(shot.s, target.s), squeeze = Math.min(1, (moveEnd - moveStart) / Math.max(d, length));
+      if (moveStart > keys.at(-1).t) key(moveStart, shot);
+      key(moveEnd, target, pull && Math.round(low * (pull / low) ** squeeze * 1e4) / 1e4);
+    } else {
+      const inStart = Math.max(keys.at(-1).t, target.at - T.zoomLead);
+      const inEnd = Math.max(arrive, inStart + T.minMove);
+      if (inEnd > end - 0.3) break;
+      if (inStart > keys.at(-1).t) key(inStart, wide);
+      key(inEnd, target);
+    }
+    shot = target;
   }
+  if (shot) zoomOut(leaveOf(shot));
   return keys;
 }
 
-/** Camera state at absolute time t: {s, f}, eased between keyframes. */
-export function cameraAt(keys, t) {
+// The focus range on one axis that cameraTransform leaves unclamped at scale s.
+function focusRange(s, pos, size, full) {
+  const a = -s * pos, b = full - s * (pos + size);
+  return [(full / 2 - Math.max(a, b)) / s, (full / 2 - Math.min(a, b)) / s];
+}
+const toUnit = (s, value, pos, size, full) => {
+  const [lo, hi] = focusRange(s, pos, size, full);
+  return hi - lo < 1e-6 ? 0.5 : Math.min(1, Math.max(0, (value - lo) / (hi - lo)));
+};
+const fromUnit = (s, unit, pos, size, full) => {
+  const [lo, hi] = focusRange(s, pos, size, full);
+  return lo + unit * (hi - lo);
+};
+
+/**
+ * Camera state at absolute time t: {s, f}, eased between keyframes
+ * (easeInOutSine; scale in log space, dipping when the key asks). With
+ * `view` ({rect, canvas}) the focus travels inside the range cameraTransform
+ * allows at each scale, so a move never stops dead against the clamp.
+ */
+export function cameraAt(keys, t, view) {
   if (t <= keys[0].t) return {s: keys[0].s, f: {...keys[0].f}};
   for (let i = 1; i < keys.length; i++) {
     const a = keys[i - 1], b = keys[i];
     if (t > b.t) continue;
     const span = b.t - a.t;
     const p = span <= 0 ? 1 : ease((t - a.t) / span);
-    return {s: Math.exp(Math.log(a.s) * (1 - p) + Math.log(b.s) * p), f: {x: a.f.x + (b.f.x - a.f.x) * p, y: a.f.y + (b.f.y - a.f.y) * p}};
+    let logS = Math.log(a.s) * (1 - p) + Math.log(b.s) * p;
+    if (b.dip) logS -= Math.max(0, (Math.log(a.s) + Math.log(b.s)) / 2 - Math.log(b.dip)) * Math.sin(Math.PI * p);
+    const s = Math.max(1, Math.exp(logS));
+    if (!view) return {s, f: {x: a.f.x + (b.f.x - a.f.x) * p, y: a.f.y + (b.f.y - a.f.y) * p}};
+    const {rect, canvas} = view;
+    const axis = (k, pos, size, full) => fromUnit(s, toUnit(a.s, a.f[k], pos, size, full) * (1 - p) + toUnit(b.s, b.f[k], pos, size, full) * p, pos, size, full);
+    return {s, f: {x: axis('x', rect.x, rect.width, canvas.width), y: axis('y', rect.y, rect.height, canvas.height)}};
   }
   const last = keys.at(-1);
   return {s: last.s, f: {...last.f}};
+}
+
+/** When the camera starts to leave `state` at or after t (null when it never does). */
+export function cameraLeaves(keys, state, t) {
+  for (let i = 0; i + 1 < keys.length; i++) if (keys[i].t >= t - 1e-6 && same(keys[i], state) && !same(keys[i + 1], state)) return keys[i].t;
+  return null;
 }
 
 /** One camera sample per frame from start to end: [{t, scale, x, y}]. */
@@ -139,7 +246,7 @@ export function cameraSamples(keys, {start, end, fps, rect, canvas}) {
   const first = Math.ceil(start * fps - 1e-6), last = Math.floor(end * fps + 1e-6);
   for (let frame = first; frame <= last; frame++) {
     const t = frame / fps;
-    out.push({t: rt(t), ...cameraTransform(cameraAt(keys, t), rect, canvas)});
+    out.push({t: rt(t), ...cameraTransform(cameraAt(keys, t, {rect, canvas}), rect, canvas)});
   }
   return out;
 }
@@ -253,9 +360,9 @@ function resolveProductDemo(params, ctx) {
     return {index, type, at: rt(start + at), until, keys, label, box: canvasBox, s, f};
   });
 
-  const keys = cameraKeys(zoomMax > 1 ? actions.filter(action => action.s > 1.02) : [], {start, end, centre});
+  const keys = cameraKeys(zoomMax > 1 ? actions.filter(action => action.s > 1.02) : [], {start, end, centre, canvas});
   const samples = cameraSamples(keys, {start, end, fps, rect, canvas});
-  const camAt = t => cameraTransform(cameraAt(keys, t), rect, canvas);
+  const camAt = t => cameraTransform(cameraAt(keys, t, {rect, canvas}), rect, canvas);
 
   // Callouts: pills beside their anchor as seen through the camera.
   const callouts = [];
@@ -296,7 +403,7 @@ function resolveProductDemo(params, ctx) {
     if (action.type === 'click') b.events.push({id: `${b.id}-click-${action.index}`, name: `click-${action.index}`, time: action.at, endTime: rt(action.at + 0.12), role: 'action', cue: 'click'});
     action.keys.forEach((time, k) => b.events.push({id: `${b.id}-key-${action.index}-${k}`, name: `key-${action.index}-${k}`, time, endTime: rt(time + 0.08), role: 'beat', cue: 'keystroke-soft'}));
   }
-  for (let k = 1; k + 1 < keys.length; k++) {
+  for (let k = 0; k + 1 < keys.length; k++) {
     if (keys[k].s === 1 && keys[k + 1].s >= 1.3) b.events.push({id: `${b.id}-zoom-${k}`, name: `zoom-${k}`, time: keys[k].t, endTime: keys[k + 1].t, role: 'move', cue: 'whoosh-soft'});
   }
   for (const callout of callouts) b.events.push({id: `${b.id}-callout-${callout.index}`, name: `callout-${callout.index}`, time: callout.at, endTime: rt(callout.at + 0.4), role: 'emphasis', cue: 'pop'});
