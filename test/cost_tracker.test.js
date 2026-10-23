@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createCostTracker, estimateOpenAiUsageCost } from "../src/cost_tracker.js";
+import { createCostTracker, DEFAULT_MAX_COST_USD, estimateOpenAiUsageCost, parseCostLimit } from "../src/cost_tracker.js";
 
 test("prices normalized OpenAI usage for an in-process circuit breaker", () => {
   const estimate = estimateOpenAiUsageCost("gpt-5.6-sol", {
@@ -109,6 +109,34 @@ test("ignores non-AI fetches", async () => {
   const tracker = createCostTracker({ fetch: async () => jsonResponse({ ok: true }) });
   await tracker.fetch("https://example.com/data");
   assert.deepEqual(tracker.summary().line_items, []);
+});
+
+test("refuses a new paid call once spending reaches the limit but still polls running work", async () => {
+  const sent = [];
+  const tracker = createCostTracker({
+    limitUsd: .0005,
+    fetch: async (url, init) => {
+      sent.push(init?.method ?? "GET");
+      return jsonResponse({ id: `resp_${sent.length}`, status: "completed", model: "gpt-5.6-sol", usage: { input_tokens: 100, output_tokens: 20 } });
+    }
+  });
+  const post = () => tracker.fetch("https://api.openai.com/v1/responses", { method: "POST", body: JSON.stringify({ model: "gpt-5.6-sol" }) });
+
+  await post();
+  await assert.rejects(post, (error) => error.code === "LAUNCHCLIP_COST_LIMIT" && /\$0\.00 limit/.test(error.message));
+  await tracker.fetch("https://api.openai.com/v1/responses/resp_running", { method: "GET" });
+  await tracker.fetch("https://example.com/asset.png", { method: "POST" });
+
+  assert.deepEqual(sent, ["POST", "GET", "POST"]);
+  assert.equal(tracker.limitError().code, "LAUNCHCLIP_COST_LIMIT");
+});
+
+test("defaults the spending limit to $50 and accepts none to remove it", () => {
+  assert.equal(parseCostLimit(undefined), DEFAULT_MAX_COST_USD);
+  assert.equal(DEFAULT_MAX_COST_USD, 50);
+  assert.equal(parseCostLimit("15"), 15);
+  assert.equal(parseCostLimit("none"), null);
+  assert.throws(() => parseCostLimit("0"), /positive dollar amount/);
 });
 
 function jsonResponse(value, headers = {}) {

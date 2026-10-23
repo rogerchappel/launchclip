@@ -94,6 +94,24 @@ test("retries transient API failures and honors Retry-After", async () => {
   assert.deepEqual(delays, [2000]);
 });
 
+test("does not retry a call refused by the spending limit", async () => {
+  let calls = 0;
+  const client = new OpenAIResponsesClient({
+    apiKey: "test-key",
+    fetch: async () => {
+      calls += 1;
+      throw Object.assign(new Error("limit reached"), { code: "LAUNCHCLIP_COST_LIMIT" });
+    },
+    sleep: async () => {},
+    maxRetries: 3
+  });
+  await assert.rejects(
+    () => client.submitStructured({ input: "x", schema: SCHEMA, schemaName: "answer", background: false }),
+    (error) => error.code === "LAUNCHCLIP_COST_LIMIT"
+  );
+  assert.equal(calls, 1);
+});
+
 test("resumes a persisted background response without submitting a duplicate", async () => {
   const requests = [];
   const client = new OpenAIResponsesClient({

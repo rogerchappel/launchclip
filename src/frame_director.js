@@ -7,7 +7,7 @@ import { FRAME_CANDIDATE_VERIFICATION_VERSION, verifyFrameCandidate } from "./fr
 import { describeJobOutput, ProductionJobStore, semanticHash } from "./job_store.js";
 import { ensureTimelineRegistration, hasTimelineRegistration } from "./hyperframes_timeline.js";
 import { createStructuredClient, modelRouteKey, parseModelRoutes } from "./model_provider.js";
-import { estimateOpenAiUsageCost } from "./cost_tracker.js";
+import { estimateOpenAiUsageCost, isCostLimitError } from "./cost_tracker.js";
 import { buildAuthoringSequences, buildFrameSequenceInput, FRAME_SEQUENCE_INSTRUCTIONS, FRAME_SEQUENCE_SCHEMA, FRAME_SEQUENCE_VERSION, validateFrameSequence } from "./frame_sequence.js";
 import { FRAME_BUNDLE_SCHEMA, FRAME_BUNDLE_VERSION, PRODUCTION_PATHS, isValidShotId, validateFrameBundle } from "./production_contracts.js";
 
@@ -272,6 +272,7 @@ async function resolveFrameSequence({ workspace, intake, plan, sequence, narrati
           if (resumeResponseId && routeIndex === 0 && client.supportsResume !== false) result = await client.resumeStructured(resumeResponseId, request);
           else result = await client.runStructured(request);
         } catch (error) {
+          if (isCostLimitError(error)) throw error;
           resumeResponseId = null;
           generationErrors.push(`Sequence attempt ${attempt} via ${route.provider}:${route.model} failed: ${error.message}`);
           if (routeAttempt < attemptsForRoute) continue;
@@ -491,6 +492,7 @@ async function directOneFrame({ workspace, intake, evidence, plan, shot, index, 
               }
             } else result = await client.runStructured(request);
           } catch (error) {
+            if (isCostLimitError(error)) throw error;
             resumeResponseId = null;
             const message = `Generation attempt ${totalAttempt} via ${route.provider}:${route.model} failed: ${error.message}`;
             errors.push(message);
@@ -711,6 +713,7 @@ async function resolveFrameBlueprint({ workspace, intake, evidence, plan, shot, 
       try {
         result = await client.runStructured(request);
       } catch (error) {
+        if (isCostLimitError(error)) throw error;
         generationErrors.push(`Blueprint attempt ${routeAttempt} via ${route.provider}:${route.model} failed: ${error.message}`);
         if (routeAttempt < attemptsForRoute) continue;
         break;
