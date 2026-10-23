@@ -7,10 +7,12 @@ import { subjectModel } from "./models.js";
 /**
  * → {model, inputSize(width, height), segment(rgb, width, height) → Promise<Uint8Array>, release()}
  * modelFile: the verified .onnx path (ensureModel). smooth: 0–0.9 blends each
- * mask with the previous one to damp flicker (0 = off).
+ * mask with the previous one to damp flicker (0 = off). shortEdge overrides
+ * the inference size of models that keep the aspect (faster, softer edges).
  */
-export async function createSegmenter(modelId, modelFile, { smooth = 0, threads } = {}) {
-  const model = subjectModel(modelId);
+export async function createSegmenter(modelId, modelFile, { smooth = 0, threads, shortEdge } = {}) {
+  const base = subjectModel(modelId);
+  const model = shortEdge && base.input.size.shortEdge ? { ...base, input: { ...base.input, size: { ...base.input.size, shortEdge: Number(shortEdge) } } } : base;
   const ort = await loadRuntime();
   const session = await ort.InferenceSession.create(modelFile, {
     executionProviders: ["cpu"],
