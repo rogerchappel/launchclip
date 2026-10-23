@@ -1,0 +1,40 @@
+{
+  "schema": "launchclip.demo-plan.v1",
+  "app": {
+    "url": "http://localhost:4320",
+    "fixtures": "fixtures.mjs",
+    "session": {
+      "localStorage": { "auth_token": "demo.eyJzdWIiOiJkZW1vLXVzZXIiLCJleHAiOjE4OTM0NTYwMDB9.signature", "orderdesk-team": "team-demo" }
+    }
+  },
+  "viewport": { "width": 1920, "height": 1080, "deviceScaleFactor": 1 },
+  "flows": [
+    {
+      "id": "ship-an-order",
+      "title": "Ship an order",
+      "goal": "Open an order from the list and mark it shipped",
+      "steps": [
+        { "type": "goto", "path": "/#orders" },
+        { "type": "wait-for", "text": "Harbor & Pine" },
+        { "type": "pause", "ms": 1000 },
+        { "type": "click", "text": "Harbor & Pine", "label": "Order 1042", "callout": "Every order, one click away" },
+        { "type": "click", "selector": "[role=dialog] button:has-text(\"Mark as shipped\")", "label": "Mark as shipped", "callout": "Shipped" },
+        { "type": "wait-for", "text": "Fieldnote Studio" },
+        { "type": "pause", "ms": 1500 }
+      ]
+    },
+    {
+      "id": "shipped-orders",
+      "title": "See what shipped",
+      "goal": "Filter the list to shipped orders",
+      "steps": [
+        { "type": "goto", "path": "/#orders" },
+        { "type": "wait-for", "text": "Harbor & Pine" },
+        { "type": "pause", "ms": 800 },
+        { "type": "click", "selector": "[role=tab]:has-text(\"Shipped\")", "label": "Shipped", "callout": "Filter by status" },
+        { "type": "wait-for", "text": "Northwind Ceramics" },
+        { "type": "pause", "ms": 1500 }
+      ]
+    }
+  ]
+}

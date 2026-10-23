@@ -181,6 +181,57 @@ SSO app with no seed data (it recorded on the first try):
 The skill also says which `demo/` files to commit, and gives a one-line
 `demo record` command for the README or CI.
 
+## Security
+
+Every setup rung keeps three things true, however the app signs people in:
+nothing real is reached, nothing real is stored, and nothing runs without the
+person agreeing.
+
+- **Only local and staging hosts.** A production URL is refused unless the
+  person passes `--allow-host`, and doctor reports it as a failure.
+- **No real credentials in the recipe.** A plan can't hold a literal password,
+  and session values that look like real secrets are refused (the guardrails
+  from #159). That means a session copied out of a real browser can't be
+  committed.
+- **Fake sessions only meet fake data.** In rungs 2 and 3, fixtures answer the
+  API, so a made-up token never reaches a real backend.
+- **Nothing leaves the app's origin during doctor**, whatever the plan says.
+
+This design adds three protections:
+
+1. **Fixtures are code, so they're covered by consent.** A fixtures module runs
+   on the person's machine. The consent prompt for `record` and `doctor` now
+   names it, along with the seed and start commands, even with
+   `--no-start --no-seed`. `--approve` covers all three. Recording someone
+   else's repo is as risky as running its dev server, and the prompt says so.
+2. **HARs are scrubbed.** The `files.har` check fails on:
+   - `Authorization`, `Cookie` or `Set-Cookie` headers;
+   - query or body values that look like tokens or keys (the same patterns as
+     the session guardrail);
+   - email addresses outside `example.com`, `example.org` and `*.test`.
+
+   The fix it reports names the entries to scrub. A HAR from staging can also
+   hold copies of real customer data that would end up in the video. For that
+   reason the skill puts fixtures before HARs, and the contact-sheet review
+   stays mandatory.
+3. **Apps that check the session on the server.** A fake token works when the
+   app only decodes it in the browser, or when fixtures answer the API. It
+   doesn't work when the local backend verifies it, as NextAuth or Clerk do on
+   the server. For that case the skill teaches, in this order:
+   1. Reuse the repo's own e2e sign-in: a test user, the provider's testing
+      tokens, or a dev credentials provider.
+   2. Otherwise, use a `setup` flow that signs in to a local test account on
+      each recording, with credentials from `LAUNCHCLIP_DEMO_*` or the seed
+      data, never from the plan.
+   3. Only as a last resort, add a dev-only sign-in shortcut. It's gated by an
+      env var and off by default, and the person sees it as a diff before it's
+      written. The skill never adds a shortcut that could ship to production.
+
+   Doctor's `flow.<id>.signin` check tells two cases apart. When the session
+   was sent but the server redirected to sign-in or answered 401, it reports
+   "the server rejected the session" and points to options 1 and 2. When there
+   was no session at all, it reports "add app.session".
+
 ## Examples and tests
 
 - `examples/demo-app` already covers rung 1 (its seed script) and rungs 2–3

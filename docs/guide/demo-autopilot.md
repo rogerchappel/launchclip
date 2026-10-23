@@ -6,7 +6,19 @@ Point LaunchClip at your SaaS codebase and it records the product demo itself: n
 
 > "Make a 45-second launch video for the app in `~/code/acme`. Show signing in, creating a project and the analytics page."
 
-Your agent reads the repo, plans the flows (`DEMO-PLAN.json`) and shows you the plan and the commands it will run before running anything. Once you agree, it records each flow, shows you a contact sheet of every flow, and uses only the ones you approve.
+Your agent reads the repo and plans the flows (`DEMO-PLAN.json`). Before it runs anything, it shows you the plan and the commands it will run. Once you agree, it records each flow, shows you a contact sheet for every flow, and uses only the ones you approve.
+
+If your app is harder to record, your agent works out the setup for you. That covers apps that sign in with SSO, have no seed data, or load their data from another service:
+
+1. It surveys the repo with `launchclip demo doctor`.
+2. It picks the cheapest setup that works:
+   - a plan alone, when there's a seed script and a password login;
+   - a test session, for SSO;
+   - fixtures, when there's no data. It reuses your e2e tests' mocks and sign-in before writing anything new.
+3. It writes a small `demo/` folder in your repo and shows it to you.
+4. It runs `demo doctor` until every check passes, then records.
+
+You commit `demo/`, and from then on anyone (or CI) can record the same flows with one command, no agent needed. See [Check a recipe](#check-a-recipe-demo-doctor).
 
 ## From the command line
 
@@ -56,7 +68,7 @@ Steps are `goto`, `click`, `type`, `wait-for`, `assert-visible` and `pause`; tar
 
 ## Apps with no seed data or SSO sign-in
 
-Some apps can't be seeded locally: their data comes from an outside API, or the interesting state (an upcoming sale, a full inbox) doesn't exist right now. And apps that sign in through SSO (WorkOS, Auth0, Okta…) have no password field for autopilot to fill. Give the plan two things instead, kept in a `demo/` folder in your repo:
+Some apps can't be seeded locally: their data comes from an outside API, or the interesting state (a full inbox, orders waiting to ship) doesn't exist right now. And apps that sign in through SSO (WorkOS, Auth0, Okta…) have no password field for autopilot to fill. Give the plan two things instead, kept in a `demo/` folder in your repo:
 
 - **Fixtures** answer the app's network requests with made-up data, so the recording never needs a database or a real API.
 - **A ready session** starts every flow signed in, so there's no sign-in to record.
@@ -67,22 +79,24 @@ demo/
   fixtures.mjs
 ```
 
+This is [`examples/sso-app/demo`](../../examples/sso-app/demo), trimmed. Orderdesk is a made-up app whose API lives on another origin that never runs:
+
 ```json
 {
   "schema": "launchclip.demo-plan.v1",
   "app": {
-    "url": "http://127.0.0.1:4173",
+    "url": "http://localhost:4320",
     "fixtures": "fixtures.mjs",
-    "allowOrigins": ["https://fonts.googleapis.com", "https://fonts.gstatic.com"],
     "session": {
-      "localStorage": { "auth_token": "demo.eyJleHAiOjE4OTM0NTYwMDB9.signature", "currentTeamId": "team-1" }
+      "localStorage": { "auth_token": "demo.eyJzdWIiOiJkZW1vLXVzZXIiLCJleHAiOjE4OTM0NTYwMDB9.signature" }
     }
   },
   "flows": [
-    { "id": "mark-inspected", "title": "Mark lots as inspected", "steps": [
-      { "type": "goto", "path": "/sales" },
-      { "type": "wait-for", "selector": "[aria-label='Mark lot 103 inspected']" },
-      { "type": "click", "selector": "[aria-label='Mark lot 103 inspected']", "callout": "Mark inspected" },
+    { "id": "ship-an-order", "title": "Ship an order", "steps": [
+      { "type": "goto", "path": "/#orders" },
+      { "type": "wait-for", "text": "Harbor & Pine" },
+      { "type": "click", "text": "Harbor & Pine", "callout": "Every order, one click away" },
+      { "type": "click", "selector": "[role=dialog] button:has-text(\"Mark as shipped\")", "callout": "Shipped" },
       { "type": "pause", "ms": 1500 }
     ] }
   ]
@@ -91,28 +105,26 @@ demo/
 
 ```js
 // demo/fixtures.mjs: made-up data only.
-const inspected = new Set();
-const ok = (data) => ({ json: { success: true, data } });
+const API = "http://localhost:4321/api";
+const shipped = new Set();
 
 export function route({ url, method }) {
-  if (!url.href.startsWith("http://localhost:3000/api/v1/")) return undefined; // let it through
-  if (url.pathname.endsWith("/users/profile")) return ok({ user: { id: "demo-user", full_name: "Demo Buyer" } });
-  const lot = url.pathname.match(/\/lots\/(\d+)\/inspection$/);
-  if (lot) {
-    if (method === "PUT") inspected.add(Number(lot[1])); else inspected.delete(Number(lot[1]));
-    return ok({ lot_number: Number(lot[1]) });
-  }
-  return ok([]);
+  if (!url.href.startsWith(`${API}/`)) return undefined; // let it through
+  if (url.pathname === "/api/me") return { json: { name: "Avery Demo", onboarding_completed: true } };
+  const ship = url.pathname.match(/\/orders\/(\d+)\/ship$/);
+  if (ship && method === "PUT") { shipped.add(Number(ship[1])); return { json: { id: Number(ship[1]), status: "shipped" } }; }
+  // …the orders list, filtered by ?status= the way the real API does
+  return { status: 404, json: { error: `no fixture for ${method} ${url.pathname}` } };
 }
 ```
 
 Then record it as usual:
 
 ```bash
-launchclip demo record ~/code/acme --plan ~/code/acme/demo/DEMO-PLAN.json --approve
+launchclip demo record examples/sso-app --plan examples/sso-app/demo/DEMO-PLAN.json --approve
 ```
 
-**Fixtures.** `app.fixtures` is a module, relative to the plan file, that exports `route({ request, url, method, body })`. Return `{ status?, json }` (or `{ status?, body, contentType? }`) to answer a request, or `undefined` to let it through to your app. `url` is a `URL` and `body` is the parsed JSON body. Each flow gets a fresh copy of the module, so state such as `inspected` above starts over. If you'd rather replay real traffic you've captured, `app.har` takes a `.har` file instead (or as well: fixtures answer first, then the HAR).
+**Fixtures.** `app.fixtures` is a module, relative to the plan file, that exports `route({ request, url, method, body })`. Return `{ status?, json }` (or `{ status?, body, contentType? }`) to answer a request, or `undefined` to let it through to your app. `url` is a `URL` and `body` is the parsed JSON body. Each flow gets a fresh copy of the module, so state such as `shipped` above starts over. If you'd rather replay real traffic you've captured, `app.har` takes a `.har` file instead (or as well: fixtures answer first, then the HAR). A HAR must be **scrubbed** before it's used. LaunchClip refuses one that still has `Authorization`, `Cookie` or `Set-Cookie` headers, token- or key-like values, or email addresses outside `example.com` and `.test`. A capture from staging can also hold copies of real customers, so prefer fixtures.
 
 **Nothing else is reached.** With fixtures or a HAR, requests to any other origin than your app's are blocked, so no analytics, error tracker or real API is touched during a recording. Allow what the page needs to look right, such as web fonts, with `app.allowOrigins`. Turn blocking off with `"blockOffOrigin": false`.
 
@@ -132,6 +144,63 @@ Session values never appear in the action logs; they're masked like test-account
 ```bash
 launchclip demo record examples/demo-app --plan examples/demo-app/demo/DEMO-PLAN.json --no-seed --approve
 ```
+
+## Check a recipe: `demo doctor`
+
+`demo doctor` tells you, or your agent, what a repo needs and what's wrong with a recipe, before anything is recorded.
+
+```bash
+launchclip demo doctor ~/code/acme
+```
+
+Without `--plan`, it only reads files. It lists:
+
+- how the app starts and seeds, including your Playwright config's `webServer`;
+- test accounts;
+- auth providers;
+- e2e `page.route` mocks and `addInitScript` sign-ins;
+- MSW handlers, OpenAPI specs and HARs;
+- the env vars for your API URL and analytics;
+- first-run flags such as `onboarding_completed`;
+- video placeholders in your docs.
+
+Then it recommends a setup **rung**:
+
+| Rung | When | What the recipe needs |
+| --- | --- | --- |
+| 1 | A seed script and a password login | `DEMO-PLAN.json` only |
+| 2 | SSO sign-in | plus `app.session` |
+| 3 | No seed data, or an external API | plus `app.fixtures` (or a scrubbed `app.har`) |
+
+Production is never a rung.
+
+```bash
+launchclip demo doctor ~/code/acme --plan ~/code/acme/demo/DEMO-PLAN.json --approve
+```
+
+With `--plan`, it starts your app (asking first, like `record`) and plays every flow at full speed with no camera. Each check passes, warns or fails, and each one that doesn't pass comes with a fix:
+
+- **Steps.** Every step's selector or text must reach a visible element. When one doesn't, doctor lists the closest texts on the page and saves a screenshot. A step that matches several visible elements gets a warning.
+- **Sign-in.** A flow mustn't start on a sign-in page or an SSO redirect. Doctor tells "add a session" apart from "the server rejected the session".
+- **Overlays.** A dialog, tour or onboarding screen covering the first frame is reported with its text.
+- **Network.** Doctor keeps a ledger of every request and how it was answered (fixture, HAR, app, or blocked). API calls that got errors are flagged, and so is anything a recording would have let out to another origin. While doctor runs, other origins are always blocked.
+- **Files.** The fixtures module loads, the HAR is scrubbed, and the session holds test values only.
+
+`--json` prints the report for agents (`launchclip.demo-doctor.v1`), and the exit code is 1 when anything fails. When everything passes, `next` is the exact `demo record` command to run. [`examples/sso-app`](../../examples/sso-app) is a worked example: an SSO app with no seed data whose recipe reuses its e2e test's mocks and sign-in.
+
+## Flows from your docs
+
+If your help docs already mark where videos go, `demo shots` drafts a flow for each one. It reads these placeholders:
+
+- `{/* video: open an order and mark it shipped */}` or `{/* VIDEO: V09 — … */}` in MDX;
+- `<!-- video: … -->` in Markdown;
+- shot-list tables with an id column and a description column.
+
+```bash
+launchclip demo shots docs/ --draft demo/DEMO-PLAN.json
+```
+
+Each video becomes a flow, with its description as the goal and a `shot` link back to the placeholder. Your agent then writes the steps and takes the plan through `demo doctor`. Running it again adds only new placeholders.
 
 ## Recording from your own script
 
@@ -155,7 +224,8 @@ await recordFlow(context, plan.flows[0], { url, out: "assets/demo", viewport: { 
 - **Local or staging only.** It records `localhost`, private network addresses, `*.test` / `*.localhost` hosts, and hosts named like staging, dev, qa or preview. Anything that looks like production is refused unless you pass `--allow-host <host>`.
 - **No real passwords.** Sign-in fields take `{"account": "password"}`, filled from your seed files or `LAUNCHCLIP_DEMO_EMAIL` / `LAUNCHCLIP_DEMO_PASSWORD`. The plan can't contain a literal password, and typed account values never reach the logs.
 - **Test sessions only.** A plan's `app.session` can't hold API keys, signed JWTs, long random tokens or production cookies, and its values never reach the logs.
-- **Fixtures stay local.** Fixtures are a module in your repo that runs on your machine; a plan written by a model can't name fixtures, a HAR or a session. With fixtures or a HAR, requests to other origins are blocked.
+- **Fixtures stay local, and you approve them.** Fixtures are a module in your repo that runs on your machine. `record` and `doctor` name the module when they ask before running anything, even with `--no-seed --no-start`. A plan written by a model can't name fixtures, a HAR or a session. With fixtures or a HAR, requests to other origins are blocked, and `doctor` always blocks them.
+- **Scrubbed HARs only.** A HAR with credential headers, cookies, tokens or real email addresses is refused.
 - **Secrets are redacted** from command output and action logs.
 - **Nothing is used until you approve it.**
 

@@ -16,6 +16,9 @@
 // {key: value}, cookies: [{name, value, domain?, path?}]}. Its values must be
 // test values (sessionValueProblem in guardrails.js) and never reach the logs.
 //
+// A flow drafted from a docs placeholder (`launchclip demo shots`) keeps
+// `shot: {id, file, line}`, which the recorder ignores.
+//
 // `setup` names flows (usually sign-in) that run first, off camera and at full
 // speed, in the same clean browser profile, so a flow can start signed in.
 //
@@ -52,7 +55,7 @@ const APP_FILES = ["fixtures", "har"];
 function validateApp(app, errors) {
   if (app === undefined) return;
   if (!app || typeof app !== "object" || Array.isArray(app)) { errors.push("app must be an object"); return; }
-  for (const key of Object.keys(app)) if (!APP_KEYS.includes(key)) errors.push(`app has unknown key "${key}"`);
+  for (const key of Object.keys(app)) if (!APP_KEYS.includes(key)) errors.push(`app has unknown key "${key}" (app takes ${APP_KEYS.join(", ")}${/^(start|seed|command|port)$/.test(key) ? `; pass the ${key === "seed" ? "seed command as --seed" : "start command as --start"} on the command line` : ""})`);
   const file = (key, pattern, kind) => {
     if (app[key] === undefined) return;
     if (typeof app[key] !== "string" || !pattern.test(app[key]) || /^[a-z][a-z0-9+.-]*:/i.test(app[key])) errors.push(`app.${key} must be a local path to ${kind}, relative to the plan file`);
