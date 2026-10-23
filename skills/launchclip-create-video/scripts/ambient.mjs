@@ -326,12 +326,13 @@ function intersects(a, b) {
 /**
  * Whether a scene's content may drift: its ambient drift is on, it resolved to
  * a real module (not a placeholder), and its content is not full-frame decor
- * (a punch-in camera) or a root <video> (media-window video: HyperFrames lifts
+ * (a punch-in camera), a module that moves on its own (layout.drift false:
+ * photo-scene's Ken Burns) or a root <video> (media-window video: HyperFrames lifts
  * the video out of the scene layer, so it would not follow the wrapper).
  */
 export function driftEligible(story, scene, model) {
   if (!model || model.placeholder || !sceneAmbient(story, scene).drift) return false;
-  if (model.camera || model.layout?.role === 'decor') return false;
+  if (model.camera || model.layout?.role === 'decor' || model.layout?.drift === false) return false;
   if (scene?.module === 'media-window' && scene?.params?.media?.kind === 'video') return false;
   return validRect(model.layout?.rect ?? model.rect);
 }

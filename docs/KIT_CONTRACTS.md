@@ -1133,3 +1133,55 @@ of set type. It hides captions, like `hook-title` and `cta`.
 - **Events:** `mark`, `wordmark`, `eyebrow`, `headline`, `badge`, `url`.
 - **Compilers:** the catalogue B emitter and `CatalogBModule`
   (`kit/remotion/catalog/BrandLockup.tsx`) draw the same tree and ops.
+
+## Photo scene (catalogue D, `kit/core/catalog-d-photo-scene.mjs`)
+
+`photo-scene` fills the frame with one photo or video clip from `assets/` and
+moves it slowly (Ken Burns), with an optional scrim and 1–3 short kinetic text
+lines. It keeps captions: the lines sit in the lower safe zone, above the
+caption band.
+
+```json
+{ "module": "photo-scene", "params": {
+  "media": "assets/photos/dawn-ridge.jpg", "move": "push-in", "zoom": 0.1, "focus": { "x": 0.63, "y": 0.5 },
+  "lines": [{ "text": "Every launch starts" }, { "text": "with a deadline", "emphasis": true }] } }
+```
+
+- **`media`:** an `assets/` image (`.jpg`, `.png`, `.webp`, `.svg`) or video
+  (`.mp4`, `.webm`, `.mov`), or `{src, kind?, sourceStart?}`. It is drawn with
+  `object-fit: cover`. The photo and scrim bleed 64 px (at 1080) past every
+  canvas edge, so a world camera's drift never shows their edge.
+- **`move`:** `push-in` (default), `pull-out`, `pan-left`, `pan-right`,
+  `pan-up` or `pan-down`, linear over the whole scene. The frame never settles
+  still and the canvas stays covered on every frame:
+  - a push or pull scales between 1 and `1 + zoom` (default 0.08, range
+    0.02–0.25) about the `focus` point (fractions, 0.15–0.85, default the
+    centre);
+  - a pan travels at scale `1 + zoom`, within 90% of the overscan on that
+    side.
+
+  `kenBurnsAt(move, p, {zoom, focus, canvas})` is the pure function behind it.
+  One sample per frame becomes a set op on the photo, as with `product-demo`'s
+  camera.
+- **`lines`:** `[{text ≤ 40, at?, emphasis?}]` or strings, one line each. The
+  first line is set larger (96 px preferred, then 72). They rise and fade in
+  at `at`, by default 0.35 s and then 0.45 s apart (the gap scales with the
+  grammar's stagger), on the grammar's enter ease. `emphasis` colours a line
+  `brand.colors.primary`. `align` is `left` (default) or `center`.
+- **`scrim`:** a `brand.colors.bg` gradient: `bottom` (the default with lines),
+  `left`, `full` (the default when centred) or `none` (the default without
+  lines; an error with lines).
+- **Ambient:** the module moves on its own, so its `layout.drift` is false and
+  the ambient hold drift (`driftEligible`) leaves it alone.
+- **Layout:** `role: "text"` with the text block's rect, or `decor` without
+  lines.
+- **Events:** `enter`, `line-<i>`.
+- **Compilers:**
+  - For an image, HyperFrames gets one clip that holds the photo and its
+    overlay in the scene layer, so it travels with a world camera.
+  - A video is root media. The emitter returns `{html: <video>, overlay}`,
+    and the story compiler hoists both, the overlay one z-index above, as for
+    `product-demo`. Root media stays put under a world camera.
+  - Remotion (`kit/remotion/catalog/PhotoScene.tsx`) draws an `<Img>` or an
+    `<OffthreadVideo>` trimmed to `sourceStart`, then the overlay, from the
+    same tree and ops.

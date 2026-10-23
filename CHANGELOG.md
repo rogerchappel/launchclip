@@ -4,6 +4,13 @@
 
 ### Added
 
+- A `photo-scene` module: one full-bleed `assets/` photo or video with a slow
+  Ken Burns move (`push-in`, `pull-out` or a pan; `zoom` and `focus` set
+  it).
+  - The move is linear over the whole scene and keeps the canvas covered on
+    every frame; the photo bleeds past the edges for a world camera's drift.
+  - It takes an optional `scrim` and 1–3 short kinetic text `lines`. It keeps
+    captions, so the lines sit above the caption band.
 - A `brand-lockup` module for title and end cards built from the brand's
   artwork: a logo `mark` image beside or above a `wordmark` image (its
   `ratio` sets the width), with an optional `eyebrow` and `headline`.

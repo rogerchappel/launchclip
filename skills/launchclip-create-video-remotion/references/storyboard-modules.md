@@ -100,6 +100,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 | quotes a passage from a doc, README or article | excerpt-window |
 | speaks to several audiences or groups | audience-grid |
 | picks one option from several | focus-flow |
+| sets a scene or mood with a real photo or clip (assets/… image or video, full bleed) [motion, voiceover-motion] | photo-scene |
 | names the brand on a title or end card, with its logo and wordmark images (and an app-store badge or URL on the end card) | brand-lockup |
 | calls to action, or the loop ending | cta |
 | footage-led emphasis on a word [footage-led] | punch-in |
@@ -527,6 +528,19 @@ params:
 - title: string ≤ 48 (optional, for logs)
 events: click-<i>, key-<i>-<k>, zoom-<k>, callout-<i>
 
+### photo-scene (keeps captions)
+One full-bleed photo or video from assets/ with a slow Ken Burns move (push, pull or pan), an optional scrim and 1–3 short kinetic text lines above the caption band. Keeps captions.
+params:
+- media: "assets/…" image (.jpg|.png|.webp|.svg) or video (.mp4|.webm|.mov), or {src, kind?, sourceStart? (video)}
+- move: push-in|pull-out|pan-left|pan-right|pan-up|pan-down (default push-in); linear over the whole scene
+- zoom: 0.02–0.25, how far the move scales (default 0.08: 1 → 1.08)
+- focus: {x, y} 0.15–0.85 fractions of the frame the push centres on (default {x: 0.5, y: 0.5})
+- scrim: none|bottom|left|full (default bottom with lines, full when centred, none without lines)
+- lines: [{text ≤ 40, at?, emphasis?: true colours it primary}] 1–3 (or strings), rising in stagger apart; at most one line each
+- align: left|center (default left)
+- title: string ≤ 60, the photo's alt text (optional)
+events: enter, line-<i>
+
 ## Timing rules
 
 Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core/modules.mjs; `launchclip module fit <module>` prints the same rules with the window for a given `--duration`). `at` values are seconds from the scene start: the first beat no earlier than the lead-in, the last no later than the lead-out before the scene end. A faster motion grammar can shorten a catalogue B enter, which only moves its lead-in earlier.
@@ -564,6 +578,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | lower-third | 2 s | 0 s | scene − 1.2 s | — |
 | emphasis-caption | 0.8 s | 0 s | scene − 0.45 s | at ≤ scene − 0.45 s − stagger × (words − 1) (stagger 0–0.3 s, default 0.09) |
 | product-demo | 2 s | 0 s | scene − 0.2 s | actions[].at: in order; zooms start 1.2 s before each action and settle 0.4 s before it, hold 1.1 s (0.2 s after a click that navigates), and pan to the next action unless the gap is over 2.2 s; callouts[].at ≤ scene − 1 s; each shows 2.2 s by default, must not overlap the next, and ends when its action navigates or the camera leaves it |
+| photo-scene | 2 s | 0 s | scene − 0.8 s | lines[].at in order (default 0.35 s, then 0.45 s apart, scaled by the grammar); the last at least 0.8 s before the scene ends |
 
 ## Example
 
