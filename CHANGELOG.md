@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-10-23
+
+### Highlights
+
+- **One prompt to a finished video.** Through your AI agent with the
+  create-video skills (Claude Code, or Codex on a ChatGPT plan), or headless
+  with `launchclip make "<prompt>" --assets ./assets`. LaunchClip picks the
+  kind of video from your inputs: a motion-graphics explainer, a
+  voiceover-led piece, or an edit over your footage.
+- **No API keys needed.** The voice (offline Kokoro), music, sound effects and
+  rendering are built in and local. ElevenLabs, OpenAI and Anthropic keys are
+  optional upgrades.
+- **Demo autopilot.** Point it at your SaaS codebase: it starts the app,
+  records the key flows in a real browser on safe demo data, and edits them in
+  with zooms and callouts timed to every action (`launchclip demo …`).
+- **Raw-footage base edit with audio clean-up.** Silences, bad takes and
+  filler words are removed, and the voice is denoised, de-hummed, de-essed and
+  levelled (`edit-recording --enhance`).
+- **Looks like you.** Style packs v2, five starter styles, styles drafted from
+  your previous videos, 14 caption presets, motion grammars, a world camera
+  and ambient motion.
+- **Two matched renderers** (HyperFrames and Remotion) from one
+  `storyboard.json`, checked by parity tests and `npm run eval:renderers`.
+- **Self-checking.** Layout, motion, audio and evidence gates, a critic step,
+  and `finish --scene` partial re-renders when you ask for changes.
+- **Finish in your editor.** Export to FCPXML, Premiere XML, EDL or OTIO.
+
+The detailed list follows.
+
 ### Added
 
 - `launchclip demo doctor <repo>` checks a demo recipe before recording.
