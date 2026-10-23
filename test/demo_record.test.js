@@ -3,11 +3,11 @@
 // test/demo_autopilot.test.js and skips when no Chromium is available.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { cursorPath, encodeFrames, findChromium, locate, recorderAvailability, seededRandom, typingDelays } from "../src/demo/record.js";
+import { cursorPath, encodeFrames, findChromium, loadPlaywright, locate, recorderAvailability, seededRandom, typingDelays } from "../src/demo/record.js";
 
 const hasFfmpeg = spawnSync("ffmpeg", ["-version"]).status === 0;
 const available = await recorderAvailability();
@@ -59,6 +59,19 @@ test("findChromium prefers LAUNCHCLIP_CHROMIUM and never invents a path", async 
   assert.equal(await findChromium({ env: { LAUNCHCLIP_CHROMIUM: fake } }), fake);
   const found = await findChromium({ env: { PLAYWRIGHT_BROWSERS_PATH: dir } });
   assert.ok(found === null || typeof found === "string");
+});
+
+test("loadPlaywright falls back to the Playwright the recorded app's repo installs", async (t) => {
+  const repo = await mkdtemp(path.join(os.tmpdir(), "launchclip-repo-"));
+  t.after(() => rm(repo, { recursive: true, force: true }));
+  const missing = () => Promise.reject(new Error("Cannot find package 'playwright'"));
+  assert.equal(await loadPlaywright({ repo, own: missing }), null);
+  const pkg = path.join(repo, "node_modules", "@playwright", "test");
+  await mkdir(pkg, { recursive: true });
+  await writeFile(path.join(pkg, "package.json"), JSON.stringify({ name: "@playwright/test", main: "index.js" }));
+  await writeFile(path.join(pkg, "index.js"), "exports.chromium = { name: 'repo chromium' };");
+  assert.deepEqual(await loadPlaywright({ repo, own: missing }), { name: "repo chromium" });
+  assert.equal(await loadPlaywright({ own: missing }), null, "no repo, no fallback");
 });
 
 test("encodeFrames holds each frame until the next timestamp", { skip: !hasFfmpeg && "ffmpeg is not on PATH" }, async (t) => {

@@ -1,6 +1,7 @@
 // Demo autopilot, step 4: record each DEMO-PLAN.json flow in a real browser.
 //
-// Playwright (optional dependency, Apache-2.0) drives Chromium in a fresh
+// Playwright (optional dependency, Apache-2.0, or the one the recorded app's
+// repo installs when LaunchClip's is missing) drives Chromium in a fresh
 // context (a clean profile: no cookies, extensions or history) at the plan's
 // viewport (1920×1080 by default, deviceScaleFactor 2 for 4K). It uses an
 // already installed Chromium and never downloads one: LAUNCHCLIP_CHROMIUM,
@@ -26,6 +27,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { assertSafeUrl, redactWith } from "./guardrails.js";
@@ -47,16 +49,26 @@ export async function findChromium({ env = process.env, playwrightPath = null } 
   return system.find((file) => existsSync(file)) ?? null;
 }
 
-/** Playwright's chromium, or null when the optional dependency is missing. */
-export async function loadPlaywright() {
-  try { return (await import("playwright")).chromium; } catch { return null; }
+/**
+ * Playwright's chromium, or null when it is missing: LaunchClip's optional
+ * dependency first, then a playwright, @playwright/test or playwright-core
+ * that the recorded app's repo (`repo`) already installs.
+ */
+export async function loadPlaywright({ repo = null, own = () => import("playwright") } = {}) {
+  try { return (await own()).chromium; } catch { /* not installed with LaunchClip */ }
+  if (!repo) return null;
+  const require = createRequire(path.join(path.resolve(repo), "package.json"));
+  for (const name of ["playwright", "@playwright/test", "playwright-core"]) {
+    try { return require(name).chromium ?? null; } catch { /* try the next */ }
+  }
+  return null;
 }
 
 /** What recording needs and whether it is here: {ok, chromium, executablePath, ffmpeg, reasons}. */
-export async function recorderAvailability({ env = process.env } = {}) {
+export async function recorderAvailability({ env = process.env, repo = null } = {}) {
   const reasons = [];
-  const chromium = await loadPlaywright();
-  if (!chromium) reasons.push("the optional dependency playwright is not installed (npm install playwright)");
+  const chromium = await loadPlaywright({ repo });
+  if (!chromium) reasons.push(`the optional dependency playwright is not installed (npm install playwright)${repo ? `, and ${repo} does not install one either` : ""}`);
   let pinned = null;
   try { pinned = chromium?.executablePath() ?? null; } catch { pinned = null; }
   const executablePath = chromium ? await findChromium({ env, playwrightPath: pinned }) : null;
@@ -364,11 +376,11 @@ export async function recordFlow(context, flow, { url, out, viewport, account = 
  * Record every flow of a validated plan into `out`. → {flows: [...], executablePath}.
  * Throws when the plan has errors or the recorder is unavailable.
  */
-export async function recordPlan(plan, { out, url = plan.app?.url, headed = false, account = null, fps = 30, allowHosts = [], only = null, log = () => {} } = {}) {
+export async function recordPlan(plan, { out, url = plan.app?.url, repo = null, headed = false, account = null, fps = 30, allowHosts = [], only = null, log = () => {} } = {}) {
   const check = validateDemoPlan(plan);
   if (check.errors.length) throw new Error(`DEMO-PLAN.json has errors:\n- ${check.errors.join("\n- ")}`);
   assertSafeUrl(url, { allowHosts });
-  const available = await recorderAvailability();
+  const available = await recorderAvailability({ repo });
   if (!available.ok) throw new Error(`cannot record: ${available.reasons.join("; ")}`);
   await mkdir(out, { recursive: true });
   const viewport = { ...DEFAULT_VIEWPORT, ...(plan.viewport ?? {}) };

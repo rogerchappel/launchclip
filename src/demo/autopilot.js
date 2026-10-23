@@ -155,7 +155,7 @@ export async function runAutopilot(repoPath, flags = {}, { log = () => {}, ask =
     for (const warning of planWarnings) log(`plan: ${warning}`);
     if (planOnly) return { schema: DEMO_RECEIPT_SCHEMA, out, plan: planPath, plan_source: planSource, flows: [], recorded: false };
 
-    const recorded = await recordPlan(plan, { out, url, headed: Boolean(flags.headed), account, allowHosts, only: list(flags.flows).length ? list(flags.flows) : null, log });
+    const recorded = await recordPlan(plan, { out, url, repo, headed: Boolean(flags.headed), account, allowHosts, only: list(flags.flows).length ? list(flags.flows) : null, log });
     const flows = [];
     for (const flow of recorded.flows) {
       const sheet = await contactSheet(flow, path.join(out, `${flow.id}.sheet.png`));
