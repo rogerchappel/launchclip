@@ -45,6 +45,72 @@ test("plans long-form productions as resumable outline and parallel chapter jobs
   assert.deepEqual(store.get("creative-plan").depends_on, ["creative-chapter:chapter-1", "creative-chapter:chapter-2"]);
 });
 
+test("routes the presenter take to every chapter and checks the presenter mix on the whole video", async () => {
+  const workspace = await tempWorkspace();
+  const { intake, evidence } = context(workspace);
+  intake.resources.push({ id: "presenter", role: "presenter", type: "video", location: "/tmp/presenter.mp4", sha256: "presenter" });
+  const chapterInputs = [];
+  const client = { runStructured: async (request) => {
+    if (request.metadata.job_id === "creative-outline") return response(outline());
+    chapterInputs.push(JSON.parse(request.input));
+    const value = chapterPlan(request.metadata.chapter_id);
+    if (request.metadata.chapter_id === "chapter-1") {
+      value.shots[0].presenter = { mode: "companion", visible: true, placement: "top-left", size: "small", treatment: "rounded" };
+      value.shots[0].resource_ids = ["screen", "presenter"];
+    }
+    return response(value);
+  } };
+  const result = await planLongFormProduction(workspace, { intake, evidence, options: { chapterConcurrency: 2 } }, { client });
+  assert.equal(result.status, "ready");
+  for (const input of chapterInputs) {
+    assert.ok(input.resources.some((entry) => entry.id === "presenter"));
+    assert.ok(input.chapter.resource_ids.includes("presenter"));
+  }
+});
+
+test("gives each chapter a chapter-local clock and word timings", async () => {
+  const workspace = await tempWorkspace();
+  const { intake, evidence } = context(workspace);
+  const transcript = "One two three four.";
+  const words = [
+    { word: "One", start: 0, end: 40 },
+    { word: "two", start: 50, end: 90 },
+    { word: "three", start: 100, end: 140 },
+    { word: "four.", start: 150, end: 190 }
+  ];
+  const chapterInputs = new Map();
+  const client = { runStructured: async (request) => {
+    if (request.metadata.job_id === "creative-outline") return response(outline("supplied"));
+    chapterInputs.set(request.metadata.chapter_id, JSON.parse(request.input));
+    return response(chapterPlan(request.metadata.chapter_id, "supplied"));
+  } };
+  await planLongFormProduction(workspace, { intake, evidence, suppliedNarration: { transcript, words, duration_seconds: 200 }, options: { chapterConcurrency: 2 } }, { client });
+  const second = chapterInputs.get("chapter-2");
+  assert.equal(second.chapter.start_seconds, 0);
+  assert.equal(second.chapter.end_seconds, 100);
+  assert.equal(second.chapter.video_offset_seconds, 100);
+  assert.deepEqual(second.supplied_narration.chapter_words.map((word) => [word.start, word.end]), [[0, 40], [50, 90]]);
+  assert.equal(second.neighbors.previous.start_seconds, undefined);
+});
+
+test("keeps a supplied transcript out of chapter evidence", async () => {
+  const workspace = await tempWorkspace();
+  const { intake, evidence } = context(workspace);
+  evidence.items.push({ id: "transcript", kind: "voiceover-transcript", role: "voiceover", title: "Transcript", content: "One two three four.", provenance: "take", sha256: null, claims_allowed: false, truncated: false, metadata: [] });
+  const transcriptOutline = outline("supplied");
+  for (const chapter of transcriptOutline.chapters) chapter.evidence_ids.push("transcript");
+  const chapterInputs = [];
+  const client = { runStructured: async (request) => {
+    if (request.metadata.job_id === "creative-outline") return response(transcriptOutline);
+    chapterInputs.push(JSON.parse(request.input));
+    return response(chapterPlan(request.metadata.chapter_id, "supplied"));
+  } };
+  const words = [{ word: "One", start: 0, end: 40 }, { word: "two", start: 50, end: 90 }, { word: "three", start: 100, end: 140 }, { word: "four.", start: 150, end: 190 }];
+  await planLongFormProduction(workspace, { intake, evidence, suppliedNarration: { transcript: "One two three four.", words, duration_seconds: 200 }, options: { chapterConcurrency: 2 } }, { client });
+  assert.equal(chapterInputs.length, 2);
+  for (const input of chapterInputs) assert.deepEqual(input.evidence.map((entry) => entry.id), ["ev-1"]);
+});
+
 test("stitches an authoritative supplied transcript exactly across chapter plans", () => {
   const full = "One two three four.";
   const words = [
@@ -102,7 +168,7 @@ test("rejects a missing final CTA before caching the chapter and retries it", as
     return response(chapterPlan(request.metadata.chapter_id));
   } };
   await assert.rejects(
-    () => planLongFormProduction(workspace, { intake, evidence, options: { chapterConcurrency: 2 } }, { client }),
+    () => planLongFormProduction(workspace, { intake, evidence, options: { chapterConcurrency: 2, semanticAttempts: 1 } }, { client }),
     /requested CTA/
   );
   let store = await ProductionJobStore.open(workspace, { create: false });
@@ -117,6 +183,26 @@ test("rejects a missing final CTA before caching the chapter and retries it", as
   assert.equal(store.get("creative-chapter:chapter-2").status, "succeeded");
 });
 
+test("repairs a rejected chapter by sending its validator errors back to the model", async () => {
+  const workspace = await tempWorkspace();
+  const { intake, evidence } = context(workspace);
+  const chapterTwoInputs = [];
+  const client = { runStructured: async (request) => {
+    if (request.metadata.job_id === "creative-outline") return response(outline());
+    if (request.metadata.chapter_id !== "chapter-2") return response(chapterPlan(request.metadata.chapter_id));
+    chapterTwoInputs.push(JSON.parse(request.input));
+    const value = chapterPlan("chapter-2");
+    if (chapterTwoInputs.length === 1) value.shots[0].start_seconds = 5;
+    return response(value);
+  } };
+  const result = await planLongFormProduction(workspace, { intake, evidence, options: { chapterConcurrency: 2 } }, { client });
+  assert.equal(result.status, "ready");
+  assert.equal(chapterTwoInputs.length, 2);
+  assert.equal(chapterTwoInputs[0].prior_attempt, undefined);
+  assert.equal(chapterTwoInputs[1].prior_attempt.shots[0].start_seconds, 5);
+  assert.ok(chapterTwoInputs[1].validation_errors_to_repair.includes("the first shot must start at 0"));
+});
+
 test("bounds prefixed shot IDs during deterministic stitching", () => {
   const longChapterId = `c-${"a".repeat(61)}`;
   const longShotId = `s-${"b".repeat(61)}`;
@@ -127,6 +213,22 @@ test("bounds prefixed shot IDs during deterministic stitching", () => {
   const stitched = stitchLongFormPlan(longOutline, [first, chapterPlan("chapter-2")]);
   assert.ok(stitched.shots[0].id.length <= 64);
   assert.match(stitched.shots[0].id, /^[a-z0-9][a-z0-9-]{0,63}$/);
+});
+
+test("keeps stitched event IDs shot-prefixed and within 64 characters", () => {
+  const longOutline = outline();
+  longOutline.chapters[0].id = "ch03-layer-one-clear-brief";
+  const first = chapterPlan("chapter-1");
+  first.shots[0].id = "s06-brief-through-checkpoint";
+  first.shots[0].visual.events[0].id = "s06-brief-through-checkpoint-s06-comparison-resolve";
+  first.shots[0].sfx[0].event_id = first.shots[0].visual.events[0].id;
+  const stitched = stitchLongFormPlan(longOutline, [first, chapterPlan("chapter-2")]);
+  const [shot] = stitched.shots;
+  const [event] = shot.visual.events;
+  assert.ok(event.id.startsWith(`${shot.id}-`));
+  assert.ok(event.id.length <= 64);
+  assert.equal(shot.sfx[0].event_id, event.id);
+  assert.deepEqual(validateProductionPlan(stitched, validationContext(context("/tmp").intake, context("/tmp").evidence)).errors, []);
 });
 
 test("rejects chapter plans that cite evidence or resources outside their scope", async () => {

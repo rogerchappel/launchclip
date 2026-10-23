@@ -389,9 +389,12 @@ export function validateProductionPlan(plan, context = {}) {
     }
     cursor = end;
   }
-  if (presenterIds.size && !visiblePresenterShots) errors.push("at least one shot must show the supplied presenter");
-  if (presenterIds.size && duration > 20 && plan.shots.length > 2 && !voiceoverOnlyShots) errors.push("presenter-led videos longer than 20 seconds require at least one presenter.mode voiceover shot");
-  if (presenterIds.size && duration > 20 && presenterModes.size < 2) errors.push("presenter-led videos longer than 20 seconds must use at least two presenter visual modes");
+  // A long-form chapter is part of a video, so the whole-video presenter mix is checked once after stitching.
+  if (context.presenterMixScope !== "chapter") {
+    if (presenterIds.size && !visiblePresenterShots) errors.push("at least one shot must show the supplied presenter");
+    if (presenterIds.size && duration > 20 && plan.shots.length > 2 && !voiceoverOnlyShots) errors.push("presenter-led videos longer than 20 seconds require at least one presenter.mode voiceover shot");
+    if (presenterIds.size && duration > 20 && presenterModes.size < 2) errors.push("presenter-led videos longer than 20 seconds must use at least two presenter visual modes");
+  }
   if (Number.isFinite(duration) && Math.abs(cursor - duration) > 0.05) errors.push(`shots must cover the full duration (expected ${duration}, got ${cursor})`);
   for (const [index, claim] of (plan.claims ?? []).entries()) {
     if (claim?.confidence !== "creative" && !claim?.evidence_ids?.length) errors.push(`claims[${index}] requires evidence_ids unless confidence is creative`);
@@ -514,7 +517,7 @@ function normalizeShotEventIds(shot) {
   for (const [index, event] of shot.visual.events.entries()) {
     const original = String(event?.id ?? "");
     const unprefixed = original.startsWith(prefix) ? original.slice(prefix.length) : original;
-    const suffix = slugIdentifier(unprefixed) || `event-${index + 1}`;
+    const suffix = boundedEventSuffix(prefix, slugIdentifier(unprefixed) || `event-${index + 1}`);
     let candidate = `${prefix}${suffix}`;
     let collision = 2;
     while (used.has(candidate)) {
@@ -546,6 +549,16 @@ function normalizeEventTargetIds(shot) {
       return group.length >= 2 ? group : [targetId];
     }))];
   }
+}
+
+// Event IDs carry their shot ID as a prefix and share its 64-character limit, so a long suffix keeps its start plus a short hash.
+function boundedEventSuffix(prefix, suffix) {
+  const room = 64 - prefix.length;
+  if (suffix.length <= room || room < 10) return suffix;
+  let hash = 0x811c9dc5;
+  for (const character of suffix) hash = Math.imul(hash ^ character.charCodeAt(0), 0x01000193) >>> 0;
+  const head = suffix.slice(0, room - 9).replace(/[-_]+$/, "");
+  return `${head || "e"}-${hash.toString(16).padStart(8, "0")}`;
 }
 
 function slugIdentifier(value) {
