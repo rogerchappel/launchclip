@@ -13,6 +13,87 @@ demo/
   state.json       # only when the session is a Playwright storage state
 ```
 
+## The plan format
+
+```json
+{
+  "schema": "launchclip.demo-plan.v1",
+  "app": {
+    "url": "http://localhost:4320",
+    "fixtures": "fixtures.mjs",
+    "session": { "localStorage": { "auth_token": "demo.<base64url {\"exp\":1893456000}>.signature" } },
+    "allowOrigins": ["https://fonts.gstatic.com"]
+  },
+  "viewport": { "width": 1920, "height": 1080, "deviceScaleFactor": 1 },
+  "flows": [
+    { "id": "ship-an-order", "title": "Ship an order", "goal": "Open an order and mark it shipped", "steps": [
+      { "type": "goto", "path": "/#orders" },
+      { "type": "wait-for", "text": "Harbor & Pine" },
+      { "type": "pause", "ms": 1000 },
+      { "type": "click", "text": "Harbor & Pine", "label": "Order 1042", "callout": "Every order, one click away" },
+      { "type": "click", "selector": "[role=dialog] button:has-text(\"Mark as shipped\")" },
+      { "type": "pause", "ms": 1500 }
+    ] }
+  ]
+}
+```
+
+- **`app` keys:**
+  - `url`;
+  - `fixtures`, a module path relative to the plan file;
+  - `har`, relative to the plan file;
+  - `blockOffOrigin`, on by default with fixtures or a HAR;
+  - `allowOrigins`, as bare origins with no trailing slash;
+  - `session`.
+
+  Nothing else is allowed. The start and seed commands are CLI flags
+  (`--start`, `--seed`, `--no-seed`), not plan keys.
+- **`app.session` shapes:**
+  - `{ "storageState": "state.json" }`, a Playwright storage state file
+    relative to the plan;
+  - `{ "localStorage": { key: "string" }, "cookies": [{ "name", "value", "domain"?, "path"? }] }`.
+- **Flows:**
+  - `id`: lowercase letters, digits and hyphens;
+  - `title`: 60 characters or fewer;
+  - `goal`: optional;
+  - `setup`: optional, a list of flow ids that run first, off camera;
+  - `steps`: up to 30, and the first must be a `goto`.
+- **Step types:**
+  - `goto {path}`;
+  - `click {text | selector}`;
+  - `type {text | selector, value}`, where `value` is a string or
+    `{"account": "email" | "password" | "username"}`;
+  - `wait-for {text | selector, timeout?}`;
+  - `assert-visible {text | selector}`;
+  - `pause {ms}`, at most 10000.
+
+  Any step may add `label`, its on-screen name, and `callout`, a caption of
+  42 characters or fewer.
+- **Targets:**
+  - `text` on a click matches a button or link name, or exact visible text;
+  - `text` on a type matches the field's label or placeholder;
+  - `text` on wait-for or assert-visible matches any visible text containing
+    it;
+  - `selector` is a Playwright selector (CSS, plus `:has-text()` and
+    `>>`).
+
+  Only visible elements match.
+- **Callouts in the raw clip:** they aren't drawn on the recorded clip itself.
+  They're drawn when the flow is edited into a video (`demo scene` →
+  `product-demo`), so don't expect to see them on a contact sheet.
+
+`fixtures.mjs` exports `route({ request, url, method, body })`:
+
+- `url` is a `URL` object for the full absolute request URL. Use `url.origin`,
+  `url.pathname` and `url.searchParams`.
+- `body` is the parsed JSON body, or the raw text.
+- Return `{ status?, json }`, or `{ status?, body, contentType?, headers? }`,
+  to answer.
+- Return `undefined` to let the request through: to the app's own server, or
+  to the off-origin guard, which blocks it.
+- Requests to another origin, such as an API on a different port, get CORS
+  headers automatically.
+
 ## 1. Survey, then pick the cheapest rung
 
 ```bash
@@ -126,7 +207,9 @@ launchclip demo doctor <repo> --plan <repo>/demo/DEMO-PLAN.json --approve --json
   [--start "<command>" --url http://localhost:<port>] [--no-seed]
 ```
 
-Doctor starts the app, then runs every flow at full speed with no camera.
+`--json` prints the report on stdout only; progress and errors go to stderr,
+so read stdout alone when you parse it. Doctor starts the app, then runs every
+flow at full speed with no camera.
 Requests that leave the app's origin are always blocked while it runs. Each
 check has `id`, `status` (`pass` | `warn` | `fail` | `skip`), `message`, and
 `fix` and `evidence` when it didn't pass. Act on each `fix`:
@@ -162,7 +245,9 @@ person the failing checks and the screenshot.
 
 ## 4. Record and review
 
-Doctor's `next` is the exact record command. Run it with `--out
+Doctor's `next` is the exact record command. It repeats the `--url`,
+`--start` and `--no-seed` you gave doctor, which `record` needs again, because
+`--url` overrides `app.url` without changing the plan. Run it with `--out
 <project>/assets/demo`, then open every `<flow>.sheet.png` contact sheet with
 the person. Approve only what they accept: `launchclip demo approve
 <project>/assets/demo [--flows a,b]`.
