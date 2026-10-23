@@ -27,8 +27,8 @@ import path from "node:path";
 import { askConsent, askYesNo, autopilotPreview, fixturesConsent } from "./autopilot.js";
 import { detectApp, findTestAccounts, runCommand, startApp, waitForHealthy } from "./app.js";
 import { assertSafeUrl, classifyHost, redactSecrets, redactWith } from "./guardrails.js";
-import { DEFAULT_VIEWPORT, validateDemoPlan } from "./plan.js";
-import { blocksOffOrigin, loadFixtures, locate, matches, prepareContext, readScrubbedHar, recorderAvailability, sessionState } from "./record.js";
+import { DEFAULT_VIEWPORT, uploadFileProblems, uploadPath, validateDemoPlan } from "./plan.js";
+import { blocksOffOrigin, chooseFile, loadFixtures, locate, matches, prepareContext, readScrubbedHar, recorderAvailability, sessionState, uploadTarget } from "./record.js";
 import { findShots } from "./shots.js";
 
 export const DOCTOR_SCHEMA = "launchclip.demo-doctor.v1";
@@ -286,7 +286,9 @@ const short = (url) => {
 async function loadPlan(file) {
   let plan;
   try { plan = JSON.parse(await readFile(file, "utf8")); } catch (error) { return { plan: null, planDir: path.dirname(file), errors: [`${file} is not readable JSON: ${error.message}`], warnings: [] }; }
-  return { plan, planDir: path.dirname(file), ...validateDemoPlan(plan) };
+  const { errors, warnings } = validateDemoPlan(plan);
+  errors.push(...await uploadFileProblems(plan, path.dirname(file)));
+  return { plan, planDir: path.dirname(file), errors, warnings };
 }
 
 /**
@@ -451,7 +453,7 @@ async function checkFlow(browser, flow, { plan, planDir, url, out, viewport, acc
     for (const id of flow.setup ?? []) {
       const setup = plan.flows.find((entry) => entry.id === id);
       for (const [index, step] of setup.steps.entries()) {
-        const { problem } = await runStep(page, step, { resolveUrl, account, stepTimeout, settle });
+        const { problem } = await runStep(page, step, { resolveUrl, account, stepTimeout, settle, planDir });
         if (problem) {
           result.ok = false;
           add(`flow.${flow.id}.setup.${id}.step.${index}`, "fail", `setup flow ${id}, step ${index} (${step.type}${step.label ? ` "${step.label}"` : ""}): ${problem}`, { flow: flow.id, step: index, fix: `run doctor on ${id} by itself (--flows ${id}) and fix it first` });
@@ -461,7 +463,7 @@ async function checkFlow(browser, flow, { plan, planDir, url, out, viewport, acc
     }
 
     for (const [index, step] of flow.steps.entries()) {
-      const { problem, visible } = await runStep(page, step, { resolveUrl, account, stepTimeout, settle });
+      const { problem, visible } = await runStep(page, step, { resolveUrl, account, stepTimeout, settle, planDir });
       if (!problem) {
         result.reached = index + 1;
         if (index === 0) {
@@ -502,11 +504,21 @@ async function checkFlow(browser, flow, { plan, planDir, url, out, viewport, acc
  * Run one step. → {problem: null | string, visible}: `visible` is how many
  * visible elements matched just before the step acted.
  */
-async function runStep(page, step, { resolveUrl, account, stepTimeout, settle }) {
+async function runStep(page, step, { resolveUrl, account, stepTimeout, settle, planDir }) {
   const done = (problem = null, visible = 0) => ({ problem, visible });
   try {
     if (step.type === "goto") { await page.goto(resolveUrl(step.path ?? step.url), { waitUntil: "load", timeout: 30000 }); await settle(); return done(); }
     if (step.type === "pause") return done();
+    if (step.type === "upload") {
+      const timeout = step.timeout ?? stepTimeout;
+      let found;
+      try { found = await uploadTarget(page, step, { timeout }); }
+      catch { return done(`no visible upload control or file input matched within ${timeout} ms`); }
+      if (found.input) await found.input.setInputFiles(uploadPath(step, planDir));
+      else await chooseFile(page, uploadPath(step, planDir), () => found.target.click({ timeout }));
+      await settle();
+      return done(null, 1);
+    }
     const target = locate(page, step);
     const timeout = step.type === "wait-for" ? (step.timeout ?? 10000) : (step.timeout ?? stepTimeout);
     try { await target.waitFor({ state: "visible", timeout }); }

@@ -65,6 +65,14 @@ demo/
     `{"account": "email" | "password" | "username"}`;
   - `wait-for {text | selector, timeout?}`;
   - `assert-visible {text | selector}`;
+  - `upload {text | selector, file, timeout?}`, where `file` is a sample file
+    relative to the plan, inside its folder (keep them in `demo/`, such as
+    `demo/sample-files/cover.png`). It clicks the control, so the cursor and
+    ripple show it, and answers the file chooser that opens with `file`.
+    `text` matches a button name, a field label or exact visible text; a
+    `selector` may name a hidden `input[type=file]`, and then its visible
+    `<label>` is clicked, or the file is set directly when nothing on screen
+    opens it. It's logged as a `click` with `step: "upload"` and `file`;
   - `pause {ms}`, at most 10000.
 
   Any step may add `label`, its on-screen name, and `callout`, a caption of

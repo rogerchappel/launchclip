@@ -45,8 +45,27 @@ function newProject() {
       <input id="project-name" name="name" placeholder="e.g. Summer launch" autocomplete="off">
       <label>Goal</label>
       <div class="goals">${["Signups", "Upgrades", "Activation"].map((goal, i) => `<button type="button" class="goal${i === 0 ? " selected" : ""}" data-goal="${goal}">${goal}</button>`).join("")}</div>
+      <label>Cover image</label>
+      <div class="cover" id="cover"><button type="button" class="ghost" id="cover-pick">Add a cover image</button><input type="file" id="cover-file" accept="image/*" hidden></div>
+      <label class="attach" for="brief">Attach a brief <span class="muted" id="brief-name">PDF, up to 10 MB</span></label>
+      <input type="file" id="brief" accept="application/pdf" hidden>
       <button type="submit" class="primary">Create project</button>
     </form>`;
+  // A button that opens a hidden file input, and a label for another: the two
+  // shapes of upload control a demo plan's upload step handles.
+  const coverFile = document.getElementById("cover-file");
+  document.getElementById("cover-pick").addEventListener("click", () => coverFile.click());
+  coverFile.addEventListener("change", () => {
+    const file = coverFile.files[0];
+    if (!file) return;
+    document.getElementById("cover").innerHTML = `<img alt="${esc(file.name)}" src="${URL.createObjectURL(file)}"><span>${esc(file.name)}</span>`;
+  });
+  const brief = document.getElementById("brief");
+  brief.addEventListener("change", () => {
+    if (!brief.files[0]) return;
+    document.getElementById("brief-name").textContent = `${brief.files[0].name} · ${Math.max(1, Math.round(brief.files[0].size / 1024))} KB`;
+    notify("Brief attached");
+  });
   let goal = "Signups";
   main.querySelectorAll("[data-goal]").forEach((button) => button.addEventListener("click", () => {
     goal = button.dataset.goal;

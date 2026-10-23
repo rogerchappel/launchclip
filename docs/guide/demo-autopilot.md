@@ -64,7 +64,9 @@ A plan is a short list of steps per flow:
 }
 ```
 
-Steps are `goto`, `click`, `type`, `wait-for`, `assert-visible` and `pause`; target elements by their visible text (a button, link, label or placeholder) or a CSS `selector`. Only visible elements match, so a hidden duplicate in a responsive layout (a collapsed mobile menu) is skipped. `setup` replays another flow off camera first, so a flow can start signed in.
+Steps are `goto`, `click`, `type`, `wait-for`, `assert-visible`, `upload` and `pause`; target elements by their visible text (a button, link, label or placeholder) or a CSS `selector`. Only visible elements match, so a hidden duplicate in a responsive layout (a collapsed mobile menu) is skipped. `setup` replays another flow off camera first, so a flow can start signed in.
+
+An `upload` step puts a real file into the app: `{"type": "upload", "text": "Add a cover image", "file": "sample-files/cover.png"}`. It moves the cursor to the control and clicks it, so the click shows in the video, then answers the file chooser with `file`. The file path is relative to the plan file and must stay inside its folder (symlinks are followed when that's checked). The `selector` can also point straight at an `input[type=file]`: when the input is hidden, the recorder clicks its visible `<label>`, or sets the file without a click when nothing on screen opens it. Keep sample files made up and small, such as a stock photo or a one-page PDF.
 
 ## Apps with no seed data or SSO sign-in
 
