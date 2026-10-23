@@ -72,3 +72,6 @@ qa/seams/
 qa/blind/
 qa/blind2/
 qa/enhance/
+
+# npm pack output
+*.tgz
