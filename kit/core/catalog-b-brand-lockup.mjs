@@ -14,7 +14,7 @@
 // feColorMatrix filter, so a dark wordmark reads on a dark background. Hides
 // captions, like hook-title and cta.
 
-import {createBase, fitText, r2, rt, textWidth, timingRules} from './catalog-b-base.mjs';
+import {contrastRatio, createBase, fitText, r2, rt, textWidth, timingRules} from './catalog-b-base.mjs';
 import {abs, el, set, text, tw} from './catalog-b-view.mjs';
 import {grammarEase, grammarStagger} from './grammar.mjs';
 
@@ -51,7 +51,7 @@ function tintMatrix(hex) {
 }
 
 function resolve(params, ctx) {
-  const b = createBase('brand-lockup', params, ctx, {allowed: ['variant', 'layout', 'mark', 'wordmark', 'tint', 'markTint', 'eyebrow', 'headline', 'badge', 'url', 'glow', 'shine', 'at', 'stagger'], hidesCaptions: true});
+  const b = createBase('brand-lockup', params, ctx, {allowed: ['variant', 'layout', 'mark', 'wordmark', 'tint', 'markTint', 'eyebrow', 'headline', 'badge', 'url', 'glow', 'shine', 'background', 'sfx', 'at', 'stagger'], hidesCaptions: true});
   const {check, u, rect, id, start, colors, theme} = b;
   const p = b.params;
   const variant = p.variant === undefined ? 'title' : check.oneOf(p.variant, 'params.variant', VARIANTS);
@@ -67,6 +67,18 @@ function resolve(params, ctx) {
   const badge = p.badge === undefined ? null : image(check, p.badge, 'params.badge', {ratio: 3});
   const url = p.url === undefined ? null : check.str(p.url, 'params.url', 64);
   if (url && /\s/.test(url)) check.fail('params.url', 'must not contain spaces');
+  // A light card: the scene behind the lockup is one solid colour (paper or a
+  // hex), the artwork keeps its own colours and the text turns to ink.
+  let backdrop = null;
+  if (p.background !== undefined) {
+    backdrop = p.background === 'paper' ? colors.paper : typeof p.background === 'string' && HEX6.test(p.background) ? p.background.toLowerCase() : check.fail('params.background', 'must be paper or a six-digit hex colour');
+    if (tint && contrastRatio(tint, backdrop) < 1.5) check.fail('params.tint', `would draw the wordmark in ${tint} on the ${backdrop} background, where it vanishes; drop the tint so it keeps its own colours`);
+    if (markTint && contrastRatio(markTint, backdrop) < 1.5) check.fail('params.markTint', `would draw the mark in ${markTint} on the ${backdrop} background, where it vanishes`);
+  }
+  // One sound by default: a soft whoosh as the mark lands. The story's own
+  // cue on a hit replaces it, so the opener never doubles up.
+  const ownCue = p.sfx === undefined ? 'whoosh-soft' : p.sfx === false ? null : check.str(p.sfx, 'params.sfx', 40);
+  const storyCue = (ctx.hits ?? []).some(hit => hit && typeof hit.cue === 'string');
   const glow = p.glow === undefined ? 'primary' : p.glow === false ? null : check.oneOf(p.glow, 'params.glow', ['primary', 'accent']);
   const shine = p.shine === undefined ? true : check.bool(p.shine, 'params.shine');
   const stagger = p.stagger === undefined ? grammarStagger(ctx.grammar, T.stagger, {min: 0.15, max: 0.9}) : check.num(p.stagger, 'params.stagger', 0.1, 1);
@@ -111,7 +123,13 @@ function resolve(params, ctx) {
 
   // Geometry, rect-local.
   const centreX = W / 2;
-  const content = {variant, layout, tint, markTint, filters: [], ink: theme.foreground, muted: theme.muted};
+  const onCard = colour => (backdrop ? contrastRatio(colour, backdrop) : Infinity);
+  let ink = theme.foreground;
+  if (backdrop) {
+    ink = [colors.ink, colors.bg, '#111111'].find(colour => onCard(colour) >= 4.5) ?? check.fail('params.background', `leaves no brand colour with 4.5:1 contrast for the text on ${backdrop}`);
+    b.requireContrast('text/background', ink, backdrop, `text (${ink}) on params.background`);
+  }
+  const content = {variant, layout, tint, markTint, filters: [], ink, muted: theme.muted, backdrop: backdrop ? {color: backdrop, bleed: u(96)} : null};
   if (tint) content.filters.push({id: `${id}-tint`, values: tintMatrix(tint)});
   if (markTint) content.filters.push({id: `${id}-mark-tint`, values: tintMatrix(markTint)});
   if (layout === 'row') {
@@ -128,7 +146,7 @@ function resolve(params, ctx) {
       content.wordmark = {src: wordmark.src, x: r2(centreX - ww / 2), y: top.wordmark, width: ww, height: wordH, slide: r2(ww * 0.5)};
     }
   }
-  if (eyebrowFit) content.eyebrow = {text: eyebrow.toUpperCase(), size: eyebrowFit.size, y: top.eyebrow, color: b.resolveColor('accent', 'eyebrow colour', 'accent')};
+  if (eyebrowFit) content.eyebrow = {text: eyebrow.toUpperCase(), size: eyebrowFit.size, y: top.eyebrow, color: backdrop ? [colors.accent, colors.primary, ink].find(colour => onCard(colour) >= 3) : b.resolveColor('accent', 'eyebrow colour', 'accent')};
   if (headlineFit) content.headline = {text: headline, size: headlineFit.size, lines: headlineFit.lines, y: top.headline, width: r2(W * 0.9), x: r2(W * 0.05)};
   if (badge) {
     const bw = r2(badgeH * badge.ratio);
@@ -160,7 +178,9 @@ function resolve(params, ctx) {
   content.beats = order.map((key, i) => {
     const time = i === 0 ? first : b.timeOf(key, undefined, `params (${key})`, Math.max(first + i * stagger, previous + stagger) - start, bounds);
     previous = time;
-    b.events.push({id: `${id}-${key}`, name: key, time, endTime: rt(time + T.land), role: key === 'mark' || key === 'url' ? 'emphasis' : 'beat', cue: key === 'mark' ? 'whoosh-soft' : key === 'url' ? 'pop' : undefined});
+    // silent: a timing-only hit on this beat adds no default sound (finish bindCues).
+    const cue = i === 0 && ownCue && !storyCue ? ownCue : undefined;
+    b.events.push({id: `${id}-${key}`, name: key, time, endTime: rt(time + T.land), role: key === 'mark' || key === 'url' ? 'emphasis' : 'beat', ...(cue ? {cue} : {silent: true})});
     return {key, time};
   });
   // Shine: two soft bands of paper-coloured light. A sweep crosses the whole
@@ -182,11 +202,21 @@ function resolve(params, ctx) {
     if (time + T.shine <= exitAt) {
       const width = u(220), height = r2(bottom - top + u(200));
       content.sweeps.push({key: 'shine', time, x: r2(left - width), y: r2((top + bottom) / 2 - height / 2), width, height, travel: r2(right - left + width * 2), alpha: '73', duration: T.shine});
-      b.events.push({id: `${id}-shine`, name: 'shine', time, endTime: rt(time + T.shine), role: 'beat'});
+      b.events.push({id: `${id}-shine`, name: 'shine', time, endTime: rt(time + T.shine), role: 'beat', silent: true});
     }
   }
-  for (const event of b.events) if (event.cue === undefined) delete event.cue;
-  content.light = colors.paper;
+
+  // On a light card the light is the brand colour, laid over the card.
+  content.light = backdrop ? colors.primary : colors.paper;
+  content.lightBlend = backdrop ? 'normal' : 'screen';
+  // On a light card the bands sit behind the artwork, so the glint is taller and stronger to read around it.
+  if (backdrop) for (const sweep of content.sweeps) {
+    sweep.alpha = sweep.key === 'sweep' ? '2e' : '59';
+    if (sweep.key === 'shine') { const grow = Math.min(H, sweep.height * 2) - sweep.height; sweep.y = r2(sweep.y - grow / 2); sweep.height = r2(sweep.height + grow); }
+  }
+  if (content.glow && backdrop) content.glow.soft = true;
+  // The card moves as one: a slow push-in of the whole lockup (the hold drift would move the card's edges).
+  if (backdrop) content.push = {scale: 1.035, origin: {x: r2(W / 2), y: r2(H / 2)}};
   content.land = T.land;
   content.bloom = T.bloom;
   content.rise = r2(u(28));
@@ -194,7 +224,12 @@ function resolve(params, ctx) {
   content.fadeEase = grammarEase(ctx.grammar, 'power2.out', {props: ['opacity']});
   const texts = [eyebrowFit?.size, headlineFit?.size, urlFit?.size].filter(Boolean);
   b.model.motion.enterFrom = {opacity: 1, x: 0, y: 0, scale: 1};
-  return b.finish(content, {minTextPx: texts.length ? Math.min(...texts) : b.min.key});
+  const model = b.finish(content, {minTextPx: texts.length ? Math.min(...texts) : b.min.key});
+  if (backdrop) {
+    model.layout.drift = false;
+    model.layout.bleed = content.backdrop.bleed;
+  }
+  return model;
 }
 
 // ---------------------------------------------------------------------------
@@ -204,13 +239,14 @@ function view(model) {
   const {id, fonts} = model;
   const c = model.content;
   const kids = [];
+  const backdrop = c.backdrop ? el('div', `${id}-backdrop`, abs(-model.rect.x - c.backdrop.bleed, -model.rect.y - c.backdrop.bleed, model.canvas.width + 2 * c.backdrop.bleed, model.canvas.height + 2 * c.backdrop.bleed, {background: c.backdrop.color})) : null;
   if (c.filters.length) {
     kids.push(el('svg', null, {position: 'absolute', left: 0, top: 0, width: 0, height: 0, overflow: 'hidden'}, c.filters.map(filter =>
       el('filter', filter.id, null, [el('feColorMatrix', null, null, [], {type: 'matrix', values: filter.values})], {colorInterpolationFilters: 'sRGB'})), {width: 0, height: 0, 'aria-hidden': 'true'}));
   }
   if (c.glow) {
     const G = c.glow;
-    kids.push(el('div', `${id}-glow`, abs(G.x, G.y, G.size, G.size, {borderRadius: '50%', background: `radial-gradient(closest-side, ${G.color}b3, ${G.color}47 42%, ${G.color}00 74%)`, opacity: 0, transformOrigin: '50% 50%', pointerEvents: 'none'})));
+    kids.push(el('div', `${id}-glow`, abs(G.x, G.y, G.size, G.size, {borderRadius: '50%', background: G.soft ? `radial-gradient(closest-side, ${G.color}38, ${G.color}14 42%, ${G.color}00 74%)` : `radial-gradient(closest-side, ${G.color}b3, ${G.color}47 42%, ${G.color}00 74%)`, opacity: 0, transformOrigin: '50% 50%', pointerEvents: 'none'})));
   }
   const imageNode = (key, box, filterId) => el('img', `${id}-${key}`, abs(box.x, box.y, box.width, box.height, {objectFit: 'contain', opacity: 0,
     transformOrigin: '50% 50%', ...(filterId ? {filter: `url(#${filterId})`} : {})}), [], {src: box.src, alt: ''});
@@ -235,9 +271,17 @@ function view(model) {
   const fade = 'linear-gradient(0deg, transparent, #000 28%, #000 72%, transparent)';
   for (const S of c.sweeps) {
     kids.push(el('div', `${id}-${S.key}`, abs(S.x, S.y, S.width, S.height, {background: `linear-gradient(90deg, ${c.light}00, ${c.light}${S.alpha} 50%, ${c.light}00)`,
-      WebkitMaskImage: fade, maskImage: fade, mixBlendMode: 'screen', opacity: 0, transformOrigin: '50% 50%', pointerEvents: 'none'})));
+      WebkitMaskImage: fade, maskImage: fade, mixBlendMode: c.lightBlend, opacity: 0, transformOrigin: '50% 50%', pointerEvents: 'none'})));
   }
-  return kids;
+  if (!backdrop) return kids;
+  // A light card: the backdrop first, then everything else in one group that
+  // pushes in slowly. The light passes behind the artwork here: over dark
+  // type on a light card it would read as a smudge.
+  const defs = kids.filter(kid => kid.tag === 'svg');
+  const bands = new Set(c.sweeps.map(S => `${id}-${S.key}`));
+  const rest = kids.filter(kid => kid.tag !== 'svg' && !bands.has(kid.id)), light = kids.filter(kid => bands.has(kid.id));
+  const glowAt = rest.findIndex(kid => kid.id === `${id}-glow`) + 1;
+  return [backdrop, ...defs, el('div', `${id}-group`, abs(0, 0, model.rect.width, model.rect.height, {transformOrigin: `${c.push.origin.x}px ${c.push.origin.y}px`}), [...rest.slice(0, glowAt), ...light, ...rest.slice(glowAt)])];
 }
 
 // ---------------------------------------------------------------------------
@@ -246,6 +290,10 @@ function view(model) {
 function timeline(model, ops) {
   const {id, start, end} = model;
   const c = model.content, rise = c.rise;
+  if (c.push) {
+    set(ops, `${id}-group`, start, {x: 0, y: 0, scaleX: 1, scaleY: 1});
+    tw(ops, `${id}-group`, start, rt(end - start), 'none', {scaleX: 1, scaleY: 1}, {scaleX: c.push.scale, scaleY: c.push.scale});
+  }
   if (c.glow) {
     const at = c.beats[0].time, g = `${id}-glow`;
     set(ops, g, start, {opacity: 0, x: 0, y: 0, scaleX: 0.55, scaleY: 0.55});
@@ -303,6 +351,8 @@ export const brandLockup = {
     url: 'end only: URL or handle ≤ 64, no spaces, in a pill',
     glow: 'primary|accent|false — the soft light that blooms behind the mark and keeps widening (default primary)',
     shine: 'true|false — soft light: a sweep across the card as the mark lands, and a glint across the mark and wordmark once they have (default true)',
+    background: 'paper|#rrggbb — a light card: the whole scene in one colour, the artwork in its own colours (no tint), text in ink, a slow push-in instead of the hold drift (default none: the story background)',
+    sfx: 'the one sound as the mark lands, a cue name (default "whoosh-soft"), or false; a hit with its own cue on this scene replaces it',
     at: `first beat (${at}; default 0.15 s)`,
     stagger: 'seconds between beats (default 0.35, scaled by the grammar)'
   },

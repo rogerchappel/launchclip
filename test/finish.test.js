@@ -186,6 +186,26 @@ test("bindCues reads cues from real catalogue module events", () => {
   assert.ok(cues.some((cue) => cue.source === "module-event" && cue.cue === "whoosh"), JSON.stringify(cues));
 });
 
+test("bindCues: a brand-lockup opener makes one sound, and a timing-only hit on its beats adds none", () => {
+  const story = (hits, params = {}) => ({
+    schema: "launchclip.story.v1",
+    format: { width: 1920, height: 1080, fps: 30, duration: 6 },
+    resolved: { duration: 6, fps: 30, frames: 180 },
+    brand: { colors: { bg: "#10132a", primary: "#7c70ff", accent: "#22c3ee", ink: "#10132a", paper: "#f4f2ff" }, fonts: { display: "space-grotesk" } },
+    scenes: [{ id: "s1", module: "brand-lockup", start: 0, end: 3.4, hits,
+      params: { mark: "assets/brand/mark.png", wordmark: { src: "assets/brand/wordmark.png", ratio: 7.5 }, tint: "paper", eyebrow: "Launch analytics", at: 0, stagger: 0.25, ...params } }]
+  });
+  const near = (cues) => cues.filter((cue) => cue.at < 1).map((cue) => [cue.cue, cue.at, cue.source]);
+  // The lockup alone (mark, wordmark, shine): one soft whoosh as the mark lands.
+  assert.deepEqual(near(bindCues(story([])).cues), [["whoosh", 0, "module-event"]]);
+  // A hit that only times the wordmark adds no sound of its own (no default pop).
+  assert.deepEqual(near(bindCues(story([{ at: 0.25, event: "wordmark" }])).cues), [["whoosh", 0, "module-event"]]);
+  // The story's own cue replaces the lockup's, so the two never double up.
+  assert.deepEqual(near(bindCues(story([{ at: 0.25, event: "wordmark", cue: "whoosh-soft" }])).cues), [["whoosh", 0.25, "hit"]]);
+  // A light card makes the same single sound.
+  assert.deepEqual(near(bindCues(story([], { tint: undefined, background: "#ffffff" })).cues), [["whoosh", 0, "module-event"]]);
+});
+
 test("chooseBed follows scene energy and musicSpec reads audio.music", () => {
   const story = (energies) => ({ resolved: { duration: 9 }, scenes: energies.map((energy, index) => ({ id: `s${index}`, start: index * 3, end: index * 3 + 3, energy })) });
   assert.deepEqual(chooseBed(story([0, 0, 0])), { seconds: 9, bpm: 84, key: "A", kick_from: 9, kick_to: 9, volume: 0.24, energy: 0 });

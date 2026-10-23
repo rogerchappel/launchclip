@@ -135,8 +135,9 @@ export const WorldField: React.FC<{ blobs: any[]; tiles: any[]; t: number }> = (
 // overlay's parallax ops (camera-world.mjs overlayOps). Ambient: field = the
 // background blobs (plates only, not in world mode); drift = the hold-drift
 // wrapper.
-type CameraProps = { placement?: any; transparent?: boolean; parallax?: any[] };
-const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean; field?: any[] | null; drift?: any; children: React.ReactNode } & CameraProps> = ({ startFrame, tweens, plate, background, freeze, field, drift, placement, transparent, parallax, children }) => {
+// bleed = a full-bleed module (photo-scene) on a world plate: the plate does not clip it.
+type CameraProps = { placement?: any; transparent?: boolean; parallax?: any[]; bleed?: boolean };
+const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean; field?: any[] | null; drift?: any; children: React.ReactNode } & CameraProps> = ({ startFrame, tweens, plate, background, freeze, field, drift, placement, transparent, parallax, bleed, children }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = (startFrame + frame) / fps;
@@ -149,7 +150,7 @@ const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; 
     </AbsoluteFill>
   );
   return (
-    <AbsoluteFill style={{ overflow: "hidden", isolation: "isolate", ...(placement ? { transformOrigin: "0 0", transform: placementTransform(placement) } : {}) }}>
+    <AbsoluteFill style={{ overflow: bleed ? "visible" : "hidden", isolation: "isolate", ...(placement ? { transformOrigin: "0 0", transform: placementTransform(placement) } : {}) }}>
       {parallax?.length ? <AbsoluteFill style={{ transform: containerTransform(opsStateAt(parallax, "overlay", t)) }}>{layer}</AbsoluteFill> : layer}
     </AbsoluteFill>
   );
@@ -262,7 +263,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
       <Sequence key={entry.id} name={`${entry.id} · ${entry.scene.module}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps}>
         <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background}
           field={entry.plate && !world ? fieldFor(entry.scene) : null} drift={sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })}
-          placement={entry.plate ? plan.placements[entry.id] : undefined} transparent={world && entry.plate}
+          placement={entry.plate ? plan.placements[entry.id] : undefined} transparent={world && entry.plate} bleed={world && entry.plate && Boolean(model?.layout?.bleed)}
           parallax={entry.plate ? undefined : overlayOps(plan, { start: entry.start, end: entry.renderEnd })}>
           <SceneStartFrame.Provider value={frames(entry.start)}>{render()}</SceneStartFrame.Provider>
         </SceneLayer>

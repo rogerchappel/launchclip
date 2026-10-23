@@ -139,7 +139,8 @@ function modelEventFor(model, event) {
 
 /**
  * Bind one SFX cue to every resolved hit (hit.cue, else the cue of the module
- * event it names, else a default from its event name) and to every module
+ * event it names, else a default from its event name, unless that event is
+ * `silent`, which takes a hit for timing only) and to every module
  * event that carries a `cue`, plus a whoosh under push/whip/zoom transitions.
  * Risers end on their moment. Cues of the same kind closer than 0.12 s merge
  * (hits win). Returns {cues: [{cue, at, volume, shot, intent, source, event}], warnings}.
@@ -157,7 +158,9 @@ export function bindCues(story, { models } = {}) {
     for (const hit of Array.isArray(scene.hits) ? scene.hits : []) {
       if (typeof hit?.at !== "number") throw new Error(`bindCues needs a resolved story; ${scene.id} has an unresolved hit`);
       const event = model ? modelEventFor(model, hit.event) : null;
-      const name = hit.cue ?? event?.cue ?? defaultCueFor(hit.event);
+      // A module event marked silent (brand-lockup's beats) takes a hit for timing only: no default sound.
+      const name = hit.cue ?? event?.cue ?? (event?.silent ? null : defaultCueFor(hit.event));
+      if (!name) continue;
       raw.push({ name, at: hit.at, end: event?.endTime, source: "hit", shot: scene.id, event: hit.event, explicit: hit.cue !== undefined });
     }
     for (const event of Array.isArray(model?.events) ? model.events : []) {

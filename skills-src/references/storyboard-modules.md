@@ -472,6 +472,8 @@ params:
 - url: end only: URL or handle ≤ 64, no spaces, in a pill
 - glow: primary|accent|false — the soft light that blooms behind the mark and keeps widening (default primary)
 - shine: true|false — soft light: a sweep across the card as the mark lands, and a glint across the mark and wordmark once they have (default true)
+- background: paper|#rrggbb — a light card: the whole scene in one colour, the artwork in its own colours (no tint), text in ink, a slow push-in instead of the hold drift (default none: the story background)
+- sfx: the one sound as the mark lands, a cue name (default "whoosh-soft"), or false; a hit with its own cue on this scene replaces it
 - at: first beat (seconds from scene start (optional; else a matching hit, else a default); default 0.15 s)
 - stagger: seconds between beats (default 0.35, scaled by the grammar)
 events: mark, wordmark, eyebrow, headline, badge, url, shine

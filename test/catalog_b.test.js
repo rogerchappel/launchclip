@@ -626,6 +626,40 @@ test('brand-lockup: an opener with no headline still has two hook beats: a light
   assert.deepEqual(MODULES['brand-lockup'].resolve({...lockup}, landscape({duration: 2})).content.sweeps.map(s => s.key), ['sweep']);
 });
 
+test('brand-lockup: a light card fills the scene, keeps the artwork\'s colours and still has two hook beats', () => {
+  const model = MODULES['brand-lockup'].resolve({...lockup, eyebrow: 'Launch analytics', background: '#ffffff'}, landscape({duration: 4.5}));
+  assertModelContract(model, 'brand-lockup');
+  const c = model.content;
+  assert.deepEqual(c.backdrop, {color: '#ffffff', bleed: 96});
+  assert.deepEqual(c.filters, [], 'no tint: the mark and wordmark keep their own colours');
+  assert.ok(contrastRatio(c.ink, '#ffffff') >= 4.5 && contrastRatio(c.eyebrow.color, '#ffffff') >= 3);
+  // The card itself does not drift (its edges would show); the lockup pushes in slowly as one group instead.
+  assert.equal(model.layout.drift, false);
+  assert.equal(model.layout.bleed, 96);
+  const [backdrop, group] = catalogBView(model).children;
+  assert.equal(backdrop.id, 'scene-backdrop');
+  assert.deepEqual([backdrop.style.left, backdrop.style.top, backdrop.style.width, backdrop.style.height], [-96 - model.rect.x, -96 - model.rect.y, 1920 + 192, 1080 + 192]);
+  assert.equal(group.id, 'scene-group');
+  const order = group.children.map(kid => kid.id);
+  assert.ok(order.indexOf('scene-shine') >= 0 && order.indexOf('scene-shine') < order.indexOf('scene-mark'), 'the light passes behind the artwork on a light card');
+  assert.deepEqual(c.sweeps.map(s => s.key), ['sweep', 'shine']);
+  assertEmitter(model);
+  assert.throws(() => MODULES['brand-lockup'].resolve({...lockup, tint: 'paper', background: 'paper'}, landscape()), /params\.tint would draw the wordmark in .* where it vanishes/);
+  assert.throws(() => MODULES['brand-lockup'].resolve({...lockup, background: 'white'}, landscape()), /params\.background must be paper or a six-digit hex colour/);
+});
+
+test('brand-lockup: one sound by default, none when the story brings its own, and beats that take hits silently', () => {
+  const cues = model => model.events.filter(event => event.cue).map(event => [event.name, event.cue]);
+  const title = MODULES['brand-lockup'].resolve({...lockup, eyebrow: 'Launch analytics'}, landscape());
+  assert.deepEqual(cues(title), [['mark', 'whoosh-soft']]);
+  assert.ok(title.events.filter(event => !event.cue).every(event => event.silent || event.name === 'enter'));
+  const end = MODULES['brand-lockup'].resolve({...lockup, variant: 'end', badge: 'assets/b.svg', url: 'example.com'}, landscape({duration: 6}));
+  assert.deepEqual(cues(end), [['mark', 'whoosh-soft']], 'the end card too: no second pop on the URL');
+  assert.deepEqual(cues(MODULES['brand-lockup'].resolve({...lockup, sfx: false}, landscape())), []);
+  assert.deepEqual(cues(MODULES['brand-lockup'].resolve({...lockup, sfx: 'pop'}, landscape())), [['mark', 'pop']]);
+  assert.deepEqual(cues(MODULES['brand-lockup'].resolve({...lockup}, landscape({hits: [{event: 'wordmark', at: 0.25, cue: 'whoosh-soft'}]}))), [], 'the story\'s cue replaces the lockup\'s');
+});
+
 test('brand-lockup: validation names the param', () => {
   const resolve = (params, extra) => MODULES['brand-lockup'].resolve(params, landscape(extra));
   assert.throws(() => resolve({eyebrow: 'x'}), /params\.mark or params\.wordmark is required/);

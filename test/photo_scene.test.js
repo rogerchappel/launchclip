@@ -11,6 +11,10 @@ import {sceneDrift} from '../kit/core/ambient.mjs';
 import {profileGeometry} from '../kit/core/layout-check.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-d.mjs';
 import {assertMatchesFrameState} from './catalog_b.test.js';
+import {cameraPlan} from '../kit/core/camera-world.mjs';
+import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
+import {resolveStory} from '../kit/core/story.mjs';
+import {sceneWindows} from '../kit/core/transitions.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const brand = {colors: {bg: '#10132a', primary: '#7c70ff', accent: '#22c3ee', ink: '#10132a', paper: '#f4f2ff'}, fonts: {display: 'space-grotesk', body: 'inter', meta: 'jetbrains-mono'}};
@@ -103,4 +107,29 @@ test('photo-scene is registered in both renderers and the planner', () => {
   assert.equal(typeof MODULES['photo-scene'].resolve, 'function');
   assert.match(readFileSync(path.join(ROOT, 'kit/remotion/catalog/registry-d.ts'), 'utf8'), /'photo-scene': PhotoScene/);
   assert.match(readFileSync(path.join(ROOT, 'skills/launchclip-create-video/references/storyboard-modules.md'), 'utf8'), /### photo-scene \(keeps captions\)/);
+});
+
+test('under the world camera the photo bleeds past its plate by more than the camera ever moves at rest', async () => {
+  // The case from review: a 3:2 photo, push-in toward the top right, scrim left, cinematic and the world camera.
+  const photo = {id: 's2', module: 'photo-scene', start: 3, end: 9, in: {type: 'pan', dur: 1.2, direction: 'right'},
+    params: {media: 'assets/photos/yard.png', move: 'push-in', zoom: 0.08, focus: {x: 0.8, y: 0.25}, scrim: 'left', align: 'left', lines: ['A short line']}};
+  const before = {id: 's1', module: 'checklist', start: 0, end: 3, params: {title: 'Plan', rows: [{label: 'One', status: 'done', at: 1}]}};
+  const after = {id: 's3', module: 'checklist', start: 9, end: 12, in: {type: 'pan', dur: 1.2, direction: 'right'}, params: {title: 'Next', rows: [{label: 'Two', status: 'done', at: 1}]}};
+  const st = resolveStory({...story(photo, {scenes: [before, photo, after], motion: {grammar: 'cinematic'}, camera: {mode: 'world'}, ambient: 'lively', lane: 'motion', overlays: []}), format: {width: 1920, height: 1080, fps: 30, duration: 12}});
+  const model = resolveModule(st.scenes[1], st);
+  // The camera's rest motion: drift on x and y, and the breathing zoom out (scale down to 1 − 2·breathe about the centre).
+  const plan = cameraPlan(st, {windows: sceneWindows(st)});
+  const {x, y, scale} = plan.drift;
+  const reach = {x: Math.abs(x.amp) + (1 - (scale.centre - Math.abs(scale.amp))) * 960, y: Math.abs(y.amp) + (1 - (scale.centre - Math.abs(scale.amp))) * 540};
+  assert.ok(model.layout.bleed > reach.x && model.layout.bleed > reach.y, `bleed ${model.layout.bleed} px vs the camera's reach ${JSON.stringify(reach)}`);
+  // A 3:2 photo is drawn object-fit: cover over the canvas plus the bleed on every side.
+  const view = photoSceneView(model);
+  assert.equal(view.media.style.objectFit, 'cover');
+  assert.deepEqual([view.media.style.left, view.media.style.top, view.media.style.width, view.media.style.height], [-model.layout.bleed, -model.layout.bleed, 1920 + 2 * model.layout.bleed, 1080 + 2 * model.layout.bleed]);
+  // The world plate lets it show (plates clip to the canvas), and only this one.
+  const {html} = await compileStoryToHyperFrames(st, {projectDir: ROOT, write: false});
+  assert.match(html, /\.lc-scene\.lc-bleed \{ overflow: visible; \}/, 'the rule is only emitted when a plate bleeds');
+  assert.match(html, /id="lc-scene-s2" class="lc-scene lc-plate lc-world-plate lc-bleed"/);
+  assert.doesNotMatch(html, /id="lc-scene-s1" class="[^"]*lc-bleed/);
+  assert.match(readFileSync(path.join(ROOT, 'kit/remotion/StoryComposition.tsx'), 'utf8'), /bleed=\{world && entry\.plate && Boolean\(model\?\.layout\?\.bleed\)\}/);
 });

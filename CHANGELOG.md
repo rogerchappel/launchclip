@@ -11,6 +11,8 @@
     every frame; the photo bleeds past the edges for a world camera's drift.
   - It takes an optional `scrim` and 1–3 short kinetic text `lines`. It keeps
     captions, so the lines sit above the caption band.
+  - Under the world camera its plate no longer clips to the canvas
+    (`layout.bleed`), so the camera's drift never shows an edge.
 - A `brand-lockup` module for title and end cards built from the brand's
   artwork: a logo `mark` image beside or above a `wordmark` image (its
   `ratio` sets the width), with an optional `eyebrow` and `headline`.
@@ -22,6 +24,10 @@
     light across the card as the mark lands at 0 s, then glints across the
     lockup once it has landed. An opener passes the motion gate's hook rule
     even with no headline and a dark brand colour.
+  - `background: "paper" | "#rrggbb"` makes a light card. The artwork keeps
+    its colours, the text turns to ink, and the lockup pushes in slowly.
+  - One sound by default (`sfx`, a soft whoosh as the mark lands). A hit
+    with its own cue replaces it, and other beats take hits silently.
   - It hides captions.
 - A `cinematic` motion grammar (`"motion": {"grammar": "cinematic"}`).
   Every entrance, transition and camera move eases slow → fast → slow into

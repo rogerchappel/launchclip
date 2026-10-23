@@ -1142,6 +1142,29 @@ of set type. It hides captions, like `hook-title` and `cta`.
     wordmark on a 0.25 s hit, eyebrow, no headline, primary `#1f4a3a`) gives
     bursts at 0.20 s and 1.47 s, and every gate passes.
   - The URL pill gets one ring pulse once it lands.
+- **Light card:** `background: "paper" | "#rrggbb"` fills the whole scene
+  with one colour.
+  - The backdrop bleeds 96 px past the canvas, with `layout.bleed`, as
+    above.
+  - The artwork keeps its own colours. A `tint` that would vanish on the
+    card (under 1.5:1) is a param error.
+  - The text turns to the first of ink, bg or `#111111` with 4.5:1 contrast
+    on the card.
+  - The bloom is faint, and the light bands are the brand primary, drawn
+    behind the artwork. The glint is taller, so it still reads around the
+    artwork.
+  - Instead of the ambient hold drift, which would move the card's edges,
+    the whole lockup pushes in 3.5% over the scene, linearly.
+
+  Measured: a white-card opener with no headline and no hits bursts at
+  0.27 s and 1.53 s on its own, and every gate passes.
+- **Sound:** one cue by default, `sfx` (`"whoosh-soft"`) on the first beat.
+  - `sfx: false` silences it, and another cue name replaces it.
+  - When any hit on the scene carries its own `cue`, the lockup drops its
+    own, so an opener never doubles up.
+  - Every other event is `silent: true`. `finish`'s `bindCues` gives a
+    cue-less hit on a silent event no default sound, so the hit only times
+    the beat.
 - **Events:** `mark`, `wordmark`, `eyebrow`, `headline`, `badge`, `url`, `shine`.
 - **Compilers:** the catalogue B emitter and `CatalogBModule`
   (`kit/remotion/catalog/BrandLockup.tsx`) draw the same tree and ops.
@@ -1161,8 +1184,15 @@ caption band.
 
 - **`media`:** an `assets/` image (`.jpg`, `.png`, `.webp`, `.svg`) or video
   (`.mp4`, `.webm`, `.mov`), or `{src, kind?, sourceStart?}`. It is drawn with
-  `object-fit: cover`. The photo and scrim bleed 64 px (at 1080) past every
-  canvas edge, so a world camera's drift never shows their edge.
+  `object-fit: cover`, so a 3:2 photo fills a 16:9 frame.
+- **Bleed:** the photo and scrim bleed past every canvas edge by
+  `layout.bleed`: at least 64 px (at 1080), or the grammar camera's drift ×
+  1.5 + its breathing zoom-out + 16 px when that is more (cinematic: 68 px).
+  Scene plates clip to the canvas. Under a world camera, a plate whose model
+  has `layout.bleed` doesn't clip: HyperFrames adds `lc-bleed` (`overflow:
+  visible`), and Remotion's `SceneLayer` gets `bleed`. So the camera's drift
+  and breathing never show the plate's edge, and the photo stays full screen
+  for the whole scene.
 - **`move`:** `push-in` (default), `pull-out`, `pan-left`, `pan-right`,
   `pan-up` or `pan-down`, linear over the whole scene. The frame never settles
   still and the canvas stays covered on every frame:

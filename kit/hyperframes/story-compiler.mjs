@@ -206,7 +206,10 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const boundary = boundaryFor.get(entry.scene.id);
     const inWorld = Boolean(plan && entry.plate);
     const worldMode = plan?.mode === 'world';
-    const worldClass = inWorld && worldMode ? ' lc-world-plate' : '';
+    // A full-bleed module (photo-scene) draws past the canvas; its world plate must not clip it.
+    const bleeds = inWorld && worldMode && Boolean(model.layout?.bleed);
+    const worldClass = inWorld && worldMode ? ` lc-world-plate${bleeds ? ' lc-bleed' : ''}` : '';
+    if (bleeds && !css.includes(BLEED_CSS)) css.push(BLEED_CSS);
     if (inWorld && media.elements.length) warnings.push(`${entry.scene.id}: root media stays on the root and does not follow the world camera`);
     // Ambient field: inside every plate, except in world mode, where the one
     // field is the camera's depth layer (#lc-world-bg) instead, tiled across the world.
@@ -469,6 +472,8 @@ function boundaryAttrs(boundary) {
 
 // HyperFrames only seeks media that is a direct child of the root, so
 // <video>/<audio> leave the scene layer.
+const BLEED_CSS = '.lc-scene.lc-bleed { overflow: visible; }';
+
 function hoistMedia(html) {
   const elements = [];
   const rest = html.replace(/<(video|audio)\b[^>]*>(?:[\s\S]*?<\/\1>)?/gi, (match) => { elements.push(match); return ''; });

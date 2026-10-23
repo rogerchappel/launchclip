@@ -120,8 +120,13 @@ function resolvePhotoScene(params, ctx) {
   b.events.push({id: `${b.id}-enter`, name: 'enter', time: rt(start + fadeIn), role: 'enter'});
 
   const block = lines.length ? {x: r2(x), y: r2(top), width: r2(width), height: r2(blockH)} : {x: 0, y: 0, width: canvas.width, height: canvas.height};
-  // The photo and scrim bleed past the canvas, so a world camera's drift and breathing never show their edge.
-  const content = {media, move, zoom, focus, scrim, align, title, lines, samples, bleed: u(64),
+  // The photo and scrim bleed past the canvas, so a world camera's drift and
+  // breathing never show their edge: at least 64 px (at 1080), more for a
+  // grammar whose camera drifts or breathes further. layout.bleed tells the
+  // compilers to let a world plate show it (plates clip to the canvas).
+  const cam = ctx.grammar?.camera ?? {};
+  const bleed = r2(Math.max(u(64), (Number(cam.drift) || 0) * b.unit * 1.5 + (Number(cam.breathe) || 0) * 2 * Math.max(canvas.width, canvas.height) / 2 + u(16)));
+  const content = {media, move, zoom, focus, scrim, align, title, lines, samples, bleed,
     origin: {x: r2(focus.x * canvas.width), y: r2(focus.y * canvas.height)},
     scrimColor: colors.bg, rise: u(36), lineLand: T.lineLand,
     lineEase: grammarEase(ctx.grammar, 'power3.out', {props: ['y']}), fadeEase: grammarEase(ctx.grammar, 'power2.out', {props: ['opacity']})};
@@ -129,6 +134,7 @@ function resolvePhotoScene(params, ctx) {
     motion: {enterEnd: rt(start + fadeIn), exitStart: rt(end - fadeOut), enterFrom: {opacity: 0}, exitTo: {opacity: 0}, enterEase: 'power2.out', exitEase: 'power2.in'}});
   // Its own Ken Burns move is the rest motion: hold drift would expose the photo's edges.
   model.layout.drift = false;
+  model.layout.bleed = content.bleed;
   return model;
 }
 
