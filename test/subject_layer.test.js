@@ -142,6 +142,17 @@ test('subjectContext reports the presenter at a time, from the covering matte', 
   assert.equal(later.available, false);
   assert.equal(later.placement, 'default');
   assert.equal(subjectContext(story({src: 'assets/recording.mp4', subject: 'off'}), 1), null);
+  assert.equal(at.outlineAt(1), null, 'no outline filed');
+});
+
+test('subjectOutlineAt maps the nearest traced frame onto the canvas', async () => {
+  const {subjectOutlineAt} = await import('../kit/core/subject-layer.mjs');
+  const summary = {source: {width: 1080, height: 1920}, framing: 'medium', head: {x: 0.5, y: 0.25, w: 0.2, h: 0.1}};
+  const outline = {frames: [{t: 0, points: [[0.5, 0.1], null]}, {t: 0.1, points: [[0.6, 0.2], [0, 1]]}]};
+  const resolved = story({src: 'assets/recording.mp4', subject: {mattes: [{src: 'assets/subject/a.webm', in: 0, out: 4, summary, outline}]}});
+  assert.deepEqual(subjectOutlineAt(resolved, 0.02), [[540, 192], null]);
+  assert.deepEqual(subjectOutlineAt(resolved, 0.09), [[648, 384], [0, 1920]]);
+  assert.equal(subjectOutlineAt(resolved, 6), null, 'outside the matte');
 });
 
 test('subjectStyle: a sticker outline and shadow on the cut-out for the scene window', async () => {

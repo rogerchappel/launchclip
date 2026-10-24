@@ -113,6 +113,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 | names the one idea or the brand in a premium or tech piece: one glass word on the wall behind their head [footage-led] (needs the subject) | glass-word |
 | lists many things or shows social proof ("all these tools", "people keep telling me"), with real items in the assets or brief: cards circle them [footage-led] (needs the subject) | orbit-cards |
 | "everyone is talking about it", press, reviews or a launch buzz, with real quotes and sources in the brief: proof pins to the wall behind them [footage-led] (needs the subject) | proof-wall |
+| a warm, personal creator line about the presenter or what they made ("I built this", "my favourite part", "love this") [footage-led] (needs the subject) | doodle-outline |
 | calls out a number or claim in a playful, handmade beat ("100%", "3X", "$0", "free") [footage-led] (needs the subject) | scrapbook |
 | says "all you need to do is", "three steps" or runs through a process: rows tick as each is said, beside the presenter (no rect: it places itself above their head or on their chest) [footage-led] | checklist |
 | gives a growth result ("doubled", "took off in week three"): a line kicks up behind their head [footage-led] (needs the subject) | growth-line |
@@ -686,6 +687,14 @@ params:
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: slap, letter-<i>
 
+### doodle-outline (keeps captions, needs the subject)
+Footage-led, playful: a hand-drawn marker line traces round the presenter just outside their silhouette and boils on threes, with up to four doodles (heart, star, crown, spark, arrow, bulb) drawing themselves beside their head. For a warm, creator-style beat on a personal line ("I built this", "my favourite part"). Without a traced outline only the doodles draw.
+params:
+- doodles: [{icon: heart | star | crown | spark | arrow | bulb, side?: left | right | top, at?}] 0–4 (default a spark and a heart)
+- color: white (default) | primary | accent
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: trace, doodle-<i>
+
 ## Timing rules
 
 Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core/modules.mjs; `launchclip module fit <module>` prints the same rules with the window for a given `--duration`). `at` values are seconds from the scene start: the first beat no earlier than the lead-in, the last no later than the lead-out before the scene end. A faster motion grammar can shorten a catalogue B enter, which only moves its lead-in earlier.
@@ -737,6 +746,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | orbit-cards | 2 s | 0 s | scene − 1.2 s | — |
 | proof-wall | 2 s | 0 s | scene − 1.2 s | at ≤ scene − 1.2 s − every × items |
 | scrapbook | 2 s | 0 s | scene − 1.4 s | — |
+| doodle-outline | 1.5 s | 0 s | scene − 0.9 s | — |
 
 ## Example
 

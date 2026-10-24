@@ -14,6 +14,8 @@
 //                 with a hero)
 //   scrapbook     paper and boiling scribbles replace the room, the presenter
 //                 becomes a sticker, ransom-note letters land above them (split)
+//   doodle-outline  a boiling marker line traced round the presenter, with
+//                 doodles beside their head (front)
 //
 // Same conventions and view shape as catalogue E ({front, behind, media,
 // overlay}; one op list; absolute times).
@@ -484,19 +486,177 @@ function scrapbookTimeline(model, ops) {
 }
 
 // ---------------------------------------------------------------------------
+// doodle-outline (front): a marker line traced round the presenter, a little
+// outside their silhouette and redrawn on threes so it boils, with hand-drawn
+// doodles beside them. The line follows the matte's traced outline
+// (contours.json, every third frame); without one only the doodles draw.
+
+const DOODLE_ICONS = ['heart', 'star', 'crown', 'spark', 'arrow', 'bulb'];
+
+// Each icon as polylines in a unit box ([-1, 1] both ways).
+function doodleLines(icon) {
+  const ring = (n, fn) => Array.from({length: n + 1}, (_, i) => fn((i / n) * Math.PI * 2));
+  if (icon === 'heart') return [ring(28, a => [Math.sin(a) ** 3, -(13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a)) / 17])];
+  if (icon === 'star') return [Array.from({length: 11}, (_, i) => { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 0.42 : 1; return [Math.cos(a) * r, Math.sin(a) * r]; })];
+  if (icon === 'crown') return [[[-1, 0.6], [-1, -0.45], [-0.5, 0.05], [0, -0.75], [0.5, 0.05], [1, -0.45], [1, 0.6], [-1, 0.6]]];
+  if (icon === 'spark') return [[[0, -1], [0, -0.35]], [[0, 0.35], [0, 1]], [[-1, 0], [-0.35, 0]], [[0.35, 0], [1, 0]], [[-0.62, -0.62], [-0.3, -0.3]], [[0.3, 0.3], [0.62, 0.62]]];
+  // Arrows point left (towards a presenter on their left); the view mirrors them.
+  if (icon === 'arrow') return [[[1, -0.7], [0.5, -0.1], [-0.1, 0.25], [-0.9, 0.35]], [[-0.45, -0.05], [-0.9, 0.35], [-0.5, 0.75]]];
+  return [ring(20, a => [Math.cos(a) * 0.62, -0.25 + Math.sin(a) * 0.62]), [[-0.3, 0.45], [-0.25, 0.75], [0.25, 0.75], [0.3, 0.45]], [[-0.2, 0.95], [0.2, 0.95]]];
+}
+
+const polyline = points => points.map(([x, y], i) => `${i ? 'L' : 'M'}${r2(x)} ${r2(y)}`).join(' ');
+
+// A smooth path through each run of points between frame-edge breaks.
+function outlinePath(points, pad, wobble, seed) {
+  const seen = points.filter(Boolean);
+  if (seen.length < 3) return null;
+  const cx = seen.reduce((sum, p) => sum + p[0], 0) / seen.length;
+  const cy = seen.reduce((sum, p) => sum + p[1], 0) / seen.length;
+  // Out along the edge's normal (from the neighbours), leaning a little away
+  // from the centre so a concave neck doesn't fold the line.
+  const n = points.length;
+  const pushed = points.map((p, i) => {
+    if (!p) return null;
+    const prev = points[(i - 1 + n) % n] ?? p, next = points[(i + 1) % n] ?? p;
+    const rx = p[0] - cx, ry = p[1] - cy, rl = Math.hypot(rx, ry) || 1;
+    let nx = next[1] - prev[1], ny = prev[0] - next[0];
+    const nl = Math.hypot(nx, ny);
+    if (nl < 1e-6) { nx = rx / rl; ny = ry / rl; } else { nx /= nl; ny /= nl; if (nx * rx + ny * ry < 0) { nx = -nx; ny = -ny; } }
+    nx += 0.35 * rx / rl; ny += 0.35 * ry / rl;
+    const ml = Math.hypot(nx, ny) || 1;
+    const out = pad + jitter(seed, i) * wobble;
+    return [p[0] + nx / ml * out, p[1] + ny / ml * out];
+  });
+  // Start after a break so no run wraps round the end of the list.
+  const gap = pushed.indexOf(null);
+  const order = gap < 0 ? [...pushed, pushed[0]] : [...pushed.slice(gap + 1), ...pushed.slice(0, gap + 1)];
+  const runs = [];
+  let run = [];
+  for (const p of order) {
+    if (p) run.push(p);
+    else { if (run.length >= 3) runs.push(run); run = []; }
+  }
+  if (run.length >= 3) runs.push(run);
+  if (!runs.length) return null;
+  return runs.map(pts => {
+    let d = `M${r2(pts[0][0])} ${r2(pts[0][1])}`;
+    for (let i = 1; i < pts.length - 1; i++) d += ` Q${r2(pts[i][0])} ${r2(pts[i][1])} ${r2((pts[i][0] + pts[i + 1][0]) / 2)} ${r2((pts[i][1] + pts[i + 1][1]) / 2)}`;
+    return `${d} L${r2(pts.at(-1)[0])} ${r2(pts.at(-1)[1])}`;
+  }).join(' ');
+}
+
+function resolveDoodleOutline(params, ctx) {
+  const b = createFootageBase('doodle-outline', params, ctx, {allowed: ['doodles', 'color', 'at'], required: [], minDuration: CATALOG_F_TIMING['doodle-outline'].minDuration});
+  const {check, u, canvas, safe, colors, start, end, duration, fps, portrait} = b;
+  const p = b.params;
+  const doodles = (p.doodles === undefined ? [{icon: 'spark', side: 'right'}, {icon: 'heart', side: 'left'}] : check.arr(p.doodles, 'params.doodles', 0, 4)).map((doodle, i) => {
+    const path = `params.doodles[${i}]`;
+    check.obj(doodle, path, ['icon', 'side', 'at'], ['icon']);
+    return {icon: check.oneOf(doodle.icon, `${path}.icon`, DOODLE_ICONS), side: doodle.side === undefined ? (i % 2 ? 'left' : 'right') : check.oneOf(doodle.side, `${path}.side`, ['left', 'right', 'top']),
+      at: doodle.at === undefined ? null : check.num(doodle.at, `${path}.at`, 0, duration - 0.5)};
+  });
+  const color = p.color === undefined ? 'white' : check.oneOf(p.color, 'params.color', ['white', 'primary', 'accent']);
+  const ink = color === 'white' ? '#ffffff' : colors[color];
+  const t0 = b.timeOf('trace', p.at, 'params.at', 0.1, {min: 0, max: duration - CATALOG_F_TIMING['doodle-outline'].leadOut});
+  const head = headRect(ctx, canvas, portrait);
+  const drawFor = 0.6;
+  const exitStart = rt(end - 0.3);
+  // One outline per three frames; each is shown until the next. A frame that
+  // starts while the line is drawing on keeps that much of it.
+  const frames = [];
+  const slots = [];
+  for (let f = Math.ceil(start * fps - 1e-6); f <= Math.floor(end * fps + 1e-6); f += 3) slots.push(rt(f / fps));
+  slots.forEach((t, i) => {
+    const until = slots[i + 1] ?? end;
+    if (until <= t0 + 1e-6) return;
+    const points = ctx.subject?.outlineAt?.(t);
+    const d = points ? outlinePath(points.map(pt => pt && [Math.min(canvas.width, Math.max(0, pt[0])), Math.min(canvas.height, Math.max(0, pt[1]))]), u(18), u(5), 41 + (i % 3) * 7) : null;
+    if (!d) return;
+    const from = Math.max(t, t0);
+    const q = Math.min(1, (from - t0) / drawFor);
+    frames.push({index: frames.length, time: rt(from), until: rt(until), d, draw: r2(1 - (1 - (1 - q) ** 2))});
+  });
+  // Doodles beside the head; several on one side stack downwards.
+  const size = r2(u(portrait ? 150 : 120));
+  const perSide = {left: 0, right: 0, top: 0};
+  const placed = doodles.map((doodle, i) => {
+    const k = perSide[doodle.side]++;
+    const cx = doodle.side === 'top' ? head.x + head.width / 2 + (k ? (k % 2 ? 1 : -1) * size * 1.3 * Math.ceil(k / 2) : 0) : doodle.side === 'right' ? head.x + head.width + size * 0.85 : head.x - size * 0.85;
+    const cy = doodle.side === 'top' ? head.y - size * 0.85 : head.y + head.height * 0.25 + k * size * 1.3;
+    const x = r2(Math.min(Math.max(cx, safe.x + size / 2), safe.x + safe.width - size / 2));
+    const y = r2(Math.min(Math.max(cy, safe.y + size / 2), safe.y + safe.height - size / 2));
+    const time = rt(doodle.at !== null ? start + doodle.at : Math.min(t0 + 0.35 + i * 0.25, end - 0.5));
+    return {index: i, icon: doodle.icon, side: doodle.side, x, y, time, tilt: r2(jitter(23, i) * 12), mirror: doodle.side === 'left' && doodle.icon === 'arrow', down: doodle.side === 'top' && doodle.icon === 'arrow'};
+  });
+  if (!frames.length && !placed.length) check.fail('params.doodles', 'needs at least one doodle when the presenter has no traced outline');
+  b.events.push({id: `${b.id}-trace`, name: 'trace', time: t0, endTime: rt(t0 + drawFor), role: 'emphasis', cue: 'swoosh'});
+  placed.forEach(doodle => b.events.push({id: `${b.id}-doodle-${doodle.index}`, name: `doodle-${doodle.index}`, time: doodle.time, endTime: rt(doodle.time + 0.4), role: 'beat', cue: 'pop-soft'}));
+  b.model.layer = 'front';
+  b.model.framesFace = true;
+  const boil = [];
+  for (const t of slots) if (t < end - 1e-6) boil.push(t);
+  const content = {frames, doodles: placed, size, ink, stroke: r2(u(9)), t0, exitStart, boil, variants: [0, 1, 2], traced: frames.length > 0};
+  return b.finish(content, {rect: {x: 0, y: 0, width: canvas.width, height: canvas.height}, role: 'decor', minTextPx: null,
+    motion: {enterEnd: rt(t0 + drawFor), exitStart, exitTo: {opacity: 0}}});
+}
+
+function doodleOutlineView(model) {
+  const {id, canvas} = model;
+  const c = model.content;
+  const W = canvas.width, H = canvas.height;
+  const line = {stroke: c.ink, strokeWidth: c.stroke, strokeLinecap: 'round', strokeLinejoin: 'round', fill: 'none', pathLength: 1};
+  const outline = c.frames.map(frame => el('path', `${id}-line-${frame.index}`, {opacity: 0, strokeDasharray: 1, strokeDashoffset: frame.draw}, [], {d: frame.d, ...line}));
+  const doodles = c.variants.map(v => el('svg', `${id}-boil-${v}`, {position: 'absolute', left: 0, top: 0, overflow: 'visible', opacity: v === 0 ? 1 : 0},
+    c.doodles.map(doodle => {
+      const half = c.size / 2;
+      const lines = doodleLines(doodle.icon).map(points => points.map(([x, y], k) => {
+        let px = doodle.mirror ? -x : x, py = y;
+        if (doodle.down) [px, py] = [-py, -px];
+        return [doodle.x + (px + jitter(v * 13 + doodle.index, k) * 0.05) * half, doodle.y + (py + jitter(v * 13 + doodle.index + 50, k) * 0.05) * half];
+      }));
+      return el('path', `${id}-doodle-${doodle.index}-${v}`, {strokeDasharray: 1, strokeDashoffset: 1, transformOrigin: `${doodle.x}px ${doodle.y}px`, transform: `rotate(${doodle.tilt}deg)`}, [], {d: lines.map(polyline).join(' '), ...line, strokeWidth: r2(c.stroke * 0.8)});
+    }),
+    {width: W, height: H, viewBox: `0 0 ${W} ${H}`, fill: 'none'}));
+  const traced = el('svg', null, {position: 'absolute', left: 0, top: 0, overflow: 'visible', filter: `drop-shadow(0 ${r2(model.unit * 3)}px ${r2(model.unit * 6)}px #00000066)`}, outline, {width: W, height: H, viewBox: `0 0 ${W} ${H}`, fill: 'none'});
+  return {front: el('div', `${id}-marks`, abs(0, 0, W, H), [traced, ...doodles])};
+}
+
+function doodleOutlineTimeline(model, ops) {
+  const {id, start} = model;
+  const c = model.content;
+  set(ops, `${id}-marks`, start, {opacity: 1});
+  for (const frame of c.frames) {
+    set(ops, `${id}-line-${frame.index}`, start, {opacity: 0});
+    set(ops, `${id}-line-${frame.index}`, frame.time, {opacity: 1});
+    if (frame.until < model.end - 1e-6) set(ops, `${id}-line-${frame.index}`, frame.until, {opacity: 0});
+  }
+  // Doodles boil on threes like the line: the variants take turns.
+  c.boil.forEach((t, i) => c.variants.forEach(v => set(ops, `${id}-boil-${v}`, t, {opacity: i % c.variants.length === v ? 1 : 0})));
+  for (const doodle of c.doodles) for (const v of c.variants) {
+    const target = `${id}-doodle-${doodle.index}-${v}`;
+    set(ops, target, start, {strokeDashoffset: 1});
+    tw(ops, target, doodle.time, 0.4, 'power2.out', {strokeDashoffset: 1}, {strokeDashoffset: 0});
+  }
+  tw(ops, `${id}-marks`, c.exitStart, 0.3, 'power1.in', {opacity: 1}, {opacity: 0});
+}
+
+// ---------------------------------------------------------------------------
 // Registry
 
 export const CATALOG_F_TIMING = Object.freeze({
   'glass-word': Object.freeze({minDuration: 1.8, leadOut: 1.1}),
   'orbit-cards': Object.freeze({minDuration: 2, leadOut: 1.2}),
   'proof-wall': Object.freeze({minDuration: 2, leadOut: 1.2}),
-  scrapbook: Object.freeze({minDuration: 2, leadOut: 1.4})
+  scrapbook: Object.freeze({minDuration: 2, leadOut: 1.4}),
+  'doodle-outline': Object.freeze({minDuration: 1.5, leadOut: 0.9})
 });
 const TIMING_F = {
   'glass-word': {minDuration: 1.8, leadIn: 0, leadOut: 1.1, gaps: [], rules: []},
   'orbit-cards': {minDuration: 2, leadIn: 0, leadOut: 1.2, gaps: [], rules: []},
   'proof-wall': {minDuration: 2, leadIn: 0, leadOut: 1.2, gaps: [], rules: ['at ≤ scene − 1.2 s − every × items']},
-  scrapbook: {minDuration: 2, leadIn: 0, leadOut: 1.4, gaps: [], rules: []}
+  scrapbook: {minDuration: 2, leadIn: 0, leadOut: 1.4, gaps: [], rules: []},
+  'doodle-outline': {minDuration: 1.5, leadIn: 0, leadOut: 0.9, gaps: [], rules: []}
 };
 
 const DEFINITIONS = [
@@ -515,7 +675,11 @@ const DEFINITIONS = [
   {id: 'scrapbook', describe: 'Footage-led, playful: paper and boiling crayon scribbles replace the room, the presenter slaps in as a paper sticker with a white border, and ransom-note letters land above their head with a marker ring and an optional line under them. For a number or claim ("100%", "3X", "$0", "FREE") in a handmade, creator-diary beat.',
     params: {word: 'one word, number or claim ≤ 8 chars', sub: 'a short line under it ≤ 20 (optional)', at},
     events: ['slap', 'letter-<i>'], needs: ['subject'], layer: 'split', aspects: ['9:16', '16:9'], mood: ['playful'],
-    resolve: resolveScrapbook, view: scrapbookView, timeline: scrapbookTimeline}
+    resolve: resolveScrapbook, view: scrapbookView, timeline: scrapbookTimeline},
+  {id: 'doodle-outline', describe: 'Footage-led, playful: a hand-drawn marker line traces round the presenter just outside their silhouette and boils on threes, with up to four doodles (heart, star, crown, spark, arrow, bulb) drawing themselves beside their head. For a warm, creator-style beat on a personal line ("I built this", "my favourite part"). Without a traced outline only the doodles draw.',
+    params: {doodles: '[{icon: heart | star | crown | spark | arrow | bulb, side?: left | right | top, at?}] 0–4 (default a spark and a heart)', color: 'white (default) | primary | accent', at},
+    events: ['trace', 'doodle-<i>'], needs: ['subject'], layer: 'front', aspects: ['9:16', '16:9'], mood: ['playful'],
+    resolve: resolveDoodleOutline, view: doodleOutlineView, timeline: doodleOutlineTimeline}
 ];
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: TIMING_F[def.id], resolve: def.resolve,

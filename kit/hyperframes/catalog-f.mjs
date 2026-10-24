@@ -14,4 +14,5 @@ export const EMITTERS = {
   'orbit-cards': emitCatalogF,
   'proof-wall': emitCatalogF,
   'scrapbook': emitCatalogF,
+  'doodle-outline': emitCatalogF,
 };

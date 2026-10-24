@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { validateSubjectInfo, validateSubjectProbe } from "../kit/core/subject.mjs";
+import { validateSubjectContours, validateSubjectInfo, validateSubjectProbe } from "../kit/core/subject.mjs";
 import { matteSize, parseRange, rangeDirName, runSubjectMatte, runSubjectProbe } from "../src/subject/stage.js";
 import { inputSize, resizeAlpha } from "../src/subject/segment.js";
 import { modelStatus, subjectModel } from "../src/subject/models.js";
@@ -85,6 +85,12 @@ test("matte writes an alpha WebM and one subject frame per source frame", needsF
   assert.equal(info.plate, "plate.jpg");
   assert.ok((await stat(result.plate)).size > 0);
   assert.ok(info.plate_seen > 0.4 && info.plate_seen < 0.7, `plate_seen ${info.plate_seen}`);
+  // The outline: one traced silhouette per matte frame.
+  assert.equal(info.contours, "contours.json");
+  const contours = JSON.parse(await readFile(result.contours, "utf8"));
+  assert.deepEqual(validateSubjectContours(contours).errors, []);
+  assert.equal(contours.frames.length, 10);
+  assert.ok(contours.frames[0].points.filter(Boolean).length > 60, "most rays find the figure's edge");
   const cached = await runSubjectMatte(clip, { in: 1, out: 2 }, { cacheDir: path.join(dir, "cache"), segmenter: brightnessSegmenter() });
   assert.equal(cached.cached, true);
 });

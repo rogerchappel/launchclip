@@ -532,6 +532,7 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
     for (const matte of copy.base.subject.mattes) {
       const entry = subject.find((item) => item.src === matte?.src);
       if (entry?.summary && matte && matte.summary === undefined) matte.summary = entry.summary;
+      if (entry?.outline && matte && matte.outline === undefined) matte.outline = entry.outline;
     }
   }
   // base.edl → base.trim from the edit-recording plan's kept segments.
@@ -727,7 +728,7 @@ export const BASE_FITS = ["cover", "contain"];
 const BASE_KEYS = new Set(["src", "source", "start", "trim", "volume", "fit", "focus", "edl", "subject"]);
 export const SCENE_LAYERS = ["front", "behind", "split"];
 export const SUBJECT_MODES = ["auto", "off"];
-const MATTE_KEYS = new Set(["src", "in", "out", "info", "plate", "summary"]);
+const MATTE_KEYS = new Set(["src", "in", "out", "info", "plate", "contours", "summary", "outline"]);
 const VIDEO_FILE = /\.(mp4|m4v|mov|webm)$/i;
 
 function validateBase(base, { err, warn, duration, resolved }) {
@@ -800,7 +801,8 @@ function validateSubject(subject, err) {
   subject.mattes.forEach((matte, index) => {
     const path = `base.subject.mattes[${index}]`;
     if (!isObject(matte)) { err(`${path} must be {src, in, out, info?}`); return; }
-    for (const key of Object.keys(matte)) if (!MATTE_KEYS.has(key)) err(`${path}.${key} is not supported (allowed: src, in, out, info, plate)`);
+    for (const key of Object.keys(matte)) if (!MATTE_KEYS.has(key)) err(`${path}.${key} is not supported (allowed: src, in, out, info, plate, contours)`);
+    if (matte.contours !== undefined && assetPath(matte.contours, `${path}.contours`, err) && !/\.json$/i.test(matte.contours)) err(`${path}.contours must be the range's contours .json`);
     if (matte.plate !== undefined && assetPath(matte.plate, `${path}.plate`, err) && !/\.(jpe?g|png|webp)$/i.test(matte.plate)) err(`${path}.plate must be the range's plate image (.jpg, .png or .webp)`);
     if (matte.summary !== undefined && !isObject(matte.summary)) err(`${path}.summary must be an object (resolveStory fills it from info)`);
     if (assetPath(matte.src, `${path}.src`, err) && !/\.webm$/i.test(matte.src)) err(`${path}.src must be an alpha .webm (launchclip subject matte writes one)`);
@@ -853,7 +855,7 @@ export function storyBase(story) {
     fit: BASE_FITS.includes(base.fit) ? base.fit : "cover",
     focus: { x: Number(base.focus?.x ?? 0.5), y: Number(base.focus?.y ?? 0.5) },
     volume: typeof base.volume === "number" ? base.volume : 1,
-    subject: { mode: subjectMode(base), mattes: subjectMode(base) === "mattes" ? base.subject.mattes.map((matte) => ({ src: matte.src, in: Number(matte.in), out: Number(matte.out), ...(matte.info ? { info: matte.info } : {}), ...(matte.plate ? { plate: matte.plate } : {}), ...(isObject(matte.summary) ? { summary: matte.summary } : {}) })) : [] },
+    subject: { mode: subjectMode(base), mattes: subjectMode(base) === "mattes" ? base.subject.mattes.map((matte) => ({ src: matte.src, in: Number(matte.in), out: Number(matte.out), ...(matte.info ? { info: matte.info } : {}), ...(matte.plate ? { plate: matte.plate } : {}), ...(isObject(matte.summary) ? { summary: matte.summary } : {}), ...(isObject(matte.outline) ? { outline: matte.outline } : {}) })) : [] },
     segments,
     length: segments.length ? segments[segments.length - 1].end : 0
   };

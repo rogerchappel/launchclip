@@ -43,7 +43,7 @@ export async function runSubjectCommand(action, media, flags = {}, { log = () =>
   }
   const range = parseRange(flags.range);
   let last = 0;
-  const { info, dir, matte, plate, subject, cached, seconds } = await runSubjectMatte(src, range, {
+  const { info, dir, matte, plate, contours, subject, cached, seconds } = await runSubjectMatte(src, range, {
     ...common,
     onFrame: (count) => {
       if (count - last >= 30) {
@@ -52,7 +52,7 @@ export async function runSubjectCommand(action, media, flags = {}, { log = () =>
       }
     }
   });
-  const filed = flags.project ? await fileProjectMatte(String(flags.project), src, { info, matte, plate }) : null;
+  const filed = flags.project ? await fileProjectMatte(String(flags.project), src, { info, matte, plate, contours }) : null;
   const { frames, ...summary } = info;
   return { stage: "subject", action, media: src, dir, matte, subject, cached, seconds, frames: frames.length, ...(filed ? { filed } : {}), ...summary };
 }

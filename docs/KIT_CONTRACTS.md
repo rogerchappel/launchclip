@@ -1042,6 +1042,17 @@ clash). Stories without a measured subject are unchanged.
 average of every pixel the matte calls room (alpha < 8), with what the
 presenter always covered filled by a push-pull pyramid (`src/subject/plate.js`).
 Mattes may name it as `plate`; filed mattes carry it.
+
+### Outline
+
+It also writes `contours.json` (`launchclip.subject-contours.v1`): per matte
+frame, `points` from 120 rays cast from the centre of the silhouette's upper
+60%, each the last inside pixel as `[x, y]` fractions of the frame, or null
+where the ray reaches the frame edge (the outline breaks there). Mattes may
+name it as `contours`; `readStorySubject` loads every third frame as the
+matte's `outline`, and `subjectContext(story, t).outlineAt(t)` (or
+`subjectOutlineAt`) maps the nearest frame onto the canvas. It ignores camera
+moves.
 - `framesFace`: the module frames the face on purpose; layout-check's face
   rule skips it.
 - `subjectStyle`: `{outline? (0–24 px), color? (#rrggbb), shadow?}` for the
@@ -1143,6 +1154,7 @@ packs can prefer or avoid it.
 | `glass-word` | behind | yes | `word` ≤ 10, `tint` clear/primary/accent, `turn` −35–35°, `sweep`, `at` | `reveal`, `sweep` | Centred on the head. Static CSS perspective on a wrapper; the face is near-clear with bright rims (nothing glows behind the glyphs, since a clear face shows it); the sweep is a clipped band moving one way while its text copy moves the other |
 | `proof-wall` | behind (split with a hero) | yes | `items` 3–8 `{text? ≤ 70 + source, image?, source?}` (real; quotes need a source), `hero` `{text ≤ 48, highlight, source}`, `every` 0.05–0.4 s, `at` | `pin`, `hero` | Cards on a jittered grid behind the head; the hero lands in front on the chest; its highlighter is a span round the word (z-index −1 in the card's stacking context), so each renderer's text layout places it |
 | `scrapbook` | split | yes | `word` ≤ 8 (one word, number or claim), `sub` ≤ 20, `at` | `slap`, `letter-<i>` | Paper and scribbles behind (three jittered variants take turns every third frame); `subjectStyle` outline and shadow; `subjectCamera` slaps to 1.12 and settles at 0.82; letters on alternating chips above where the head settles, with a marker ring |
+| `doodle-outline` | front | yes | `doodles` 0–4 `{icon heart/star/crown/spark/arrow/bulb, side left/right/top, at}` (default a spark and a heart), `color` white/primary/accent, `at` | `trace`, `doodle-<i>` | One path per third frame from the outline, pushed out along the edge normal with seeded wobble, shown until the next; frames during the draw-on keep a static dash offset (stepped draw). Doodles beside the head boil on threes (three variants). `framesFace`. No outline: only the doodles |
 | `orbit-cards` | split | yes | `items` 3–6 `{image?, text? ≤ 40}` (real, supplied), `speed` 8–60 °/s, `at` | `orbit` | A tilted ring round the chest, kept above the caption band; each card is drawn in both parts and per-frame sets show it only in the part for its side of the ring (near cards larger) |
 
 

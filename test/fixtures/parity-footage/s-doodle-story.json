@@ -1,0 +1,6 @@
+{
+  "project": "examples/story/subject-doodle",
+  "mode": "story",
+  "times": [0.6, 1.2, 2.0, 3.4, 4.0, 5.0],
+  "threshold": { "ssim": 0.97 }
+}

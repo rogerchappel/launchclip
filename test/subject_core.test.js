@@ -129,3 +129,15 @@ test("validateSubjectInfo checks the range, matte and frame order", () => {
   assert.ok(errors.some((error) => error.startsWith("matte must be")));
   assert.ok(errors.some((error) => error === "frames[1].t must increase"));
 });
+
+test('maskOutline traces the silhouette and breaks where it meets the frame edge', async () => {
+  const {maskOutline, validateSubjectContours, CONTOURS_SCHEMA} = await import('../kit/core/subject.mjs');
+  const outline = maskOutline(presenter(), W, H, {rays: 72});
+  assert.equal(outline.length, 72);
+  const up = outline[54]; // straight up (270°)
+  assert.ok(up && Math.abs(up[1] - 64 / H) < 0.02, `the top of the head (${up})`);
+  assert.ok(outline.some((point) => point === null), 'rays into the bottom edge leave gaps');
+  assert.equal(maskOutline(new Uint8Array(W * H), W, H), null);
+  assert.deepEqual(validateSubjectContours({schema: CONTOURS_SCHEMA, range: {in: 0, out: 1}, frames: [{t: 0, points: outline}]}).errors, []);
+  assert.equal(validateSubjectContours({schema: CONTOURS_SCHEMA, range: {in: 0, out: 1}, frames: [{t: 0, points: [[2, 0]]}]}).ok, false);
+});

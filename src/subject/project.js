@@ -4,7 +4,7 @@
 // cached matte and its subject.json to <dir>/assets/subject/<in>-<out>.{webm,json}
 // and records it in assets/subject/mattes.json:
 //   {schema: "launchclip.subject-mattes.v1",
-//    mattes: [{base: "assets/recording.mp4", src, in, out, info, plate?}]}
+//    mattes: [{base: "assets/recording.mp4", src, in, out, info, plate?, contours?}]}
 // Every reader of a story (readProjectStory, story commands, layout-check,
 // finish) passes the entries for its base to resolveStory as `subject`.
 
@@ -15,6 +15,7 @@ import { rangeDirName } from "./stage.js";
 
 export const MATTES_SCHEMA = "launchclip.subject-mattes.v1";
 export const MATTES_MANIFEST = "assets/subject/mattes.json";
+const OUTLINE_STEP = 3;
 
 /**
  * The mattes resolveStory needs for this story's base: for "auto", the ones
@@ -30,13 +31,21 @@ export async function readStorySubject(project, story) {
   const src = typeof base === "string" ? base : base.src ?? base.source;
   const entries = mode === "mattes"
     ? base.subject.mattes.map((matte) => ({ ...matte }))
-    : (await readManifest(project)).mattes.filter((entry) => entry.base === src).map(({ src: file, in: from, out, info, plate }) => ({ src: file, in: from, out, ...(info ? { info } : {}), ...(plate ? { plate } : {}) }));
+    : (await readManifest(project)).mattes.filter((entry) => entry.base === src).map(({ src: file, in: from, out, info, plate, contours }) => ({ src: file, in: from, out, ...(info ? { info } : {}), ...(plate ? { plate } : {}), ...(contours ? { contours } : {}) }));
   for (const entry of entries) {
-    if (!entry.info || entry.summary) continue;
-    try {
-      const info = JSON.parse(await readFile(path.join(path.resolve(project), entry.info), "utf8"));
-      entry.summary = { source: { width: info.source.width, height: info.source.height }, framing: info.framing, head: info.head, body: info.body, headroom: info.headroom };
-    } catch { /* a missing info file only costs the summary; layout-check reports it */ }
+    if (entry.info && !entry.summary) {
+      try {
+        const info = JSON.parse(await readFile(path.join(path.resolve(project), entry.info), "utf8"));
+        entry.summary = { source: { width: info.source.width, height: info.source.height }, framing: info.framing, head: info.head, body: info.body, headroom: info.headroom };
+      } catch { /* a missing info file only costs the summary; layout-check reports it */ }
+    }
+    // The outline every third frame (doodle-outline boils on threes).
+    if (entry.contours && !entry.outline) {
+      try {
+        const file = JSON.parse(await readFile(path.join(path.resolve(project), entry.contours), "utf8"));
+        entry.outline = { frames: file.frames.filter((_, index) => index % OUTLINE_STEP === 0) };
+      } catch { /* no outline: doodle-outline draws only its doodles */ }
+    }
   }
   return entries.length ? entries : null;
 }
@@ -57,8 +66,10 @@ export async function fileProjectMatte(project, video, result) {
   await copyFile(result.matte, path.join(root, src));
   const plate = result.plate && result.info.plate ? `assets/subject/${name}.plate.jpg` : null;
   if (plate) await copyFile(result.plate, path.join(root, plate));
-  await writeFile(path.join(root, info), `${JSON.stringify({ ...result.info, matte: `${name}.webm`, ...(plate ? { plate: `${name}.plate.jpg` } : {}) })}\n`);
-  const entry = { base, src, in: result.info.range.in, out: result.info.range.out, info, ...(plate ? { plate } : {}) };
+  const contours = result.contours && result.info.contours ? `assets/subject/${name}.contours.json` : null;
+  if (contours) await copyFile(result.contours, path.join(root, contours));
+  await writeFile(path.join(root, info), `${JSON.stringify({ ...result.info, matte: `${name}.webm`, ...(plate ? { plate: `${name}.plate.jpg` } : {}), ...(contours ? { contours: `${name}.contours.json` } : {}) })}\n`);
+  const entry = { base, src, in: result.info.range.in, out: result.info.range.out, info, ...(plate ? { plate } : {}), ...(contours ? { contours } : {}) };
   const manifest = await readManifest(root);
   const kept = manifest.mattes.filter((other) => other.base !== base || other.out <= entry.in || other.in >= entry.out);
   const mattes = [...kept, entry].sort((a, b) => a.base.localeCompare(b.base) || a.in - b.in);

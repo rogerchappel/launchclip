@@ -11,6 +11,7 @@
 //   assets/subject/0.000-6.000.json       launchclip.subject.v1 for the range,
 //                                         measured from that alpha
 //   assets/subject/0.000-6.000.plate.jpg  the room alone (the exact plate)
+//   assets/subject/0.000-6.000.contours.json  the traced outline per frame
 //
 // --product also writes stand-in product media for catalogue E:
 //   assets/app.png          a 1280x800 app screenshot (sidebar, cards, chart)
@@ -25,7 +26,7 @@ import {createHash} from 'node:crypto';
 import {mkdir, readFile, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {SUBJECT_SCHEMA, maskStats, summarizeSamples, validateSubjectInfo} from '../kit/core/subject.mjs';
+import {CONTOURS_SCHEMA, SUBJECT_SCHEMA, maskOutline, maskStats, summarizeSamples, validateSubjectContours, validateSubjectInfo} from '../kit/core/subject.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const args = process.argv.slice(2);
@@ -80,6 +81,7 @@ const matteFile = path.join(out, `assets/subject/${RANGE}.webm`);
 const recording = encoder(recordingFile, 'rgb24', ['-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-g', '30', '-an']);
 const matte = encoder(matteFile, 'rgba', ['-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-b:v', '0', '-crf', '24', '-auto-alt-ref', '0', '-row-mt', '1', '-an']);
 const frames = [];
+const outlines = [];
 for (let index = 0; index < FRAMES; index += 1) {
   const rgb = Buffer.alloc(W * H * 3);
   const rgba = Buffer.alloc(W * H * 4);
@@ -100,7 +102,9 @@ for (let index = 0; index < FRAMES; index += 1) {
   }
   await recording.write(rgb);
   await matte.write(rgba);
-  frames.push({t: Math.round((index / FPS) * 1e4) / 1e4, ...maskStats(small, STATS_W, STATS_H)});
+  const t = Math.round((index / FPS) * 1e4) / 1e4;
+  frames.push({t, ...maskStats(small, STATS_W, STATS_H)});
+  outlines.push({t, points: maskOutline(small, STATS_W, STATS_H)});
 }
 await recording.close();
 await matte.close();
@@ -113,12 +117,15 @@ const [plateCode] = await once(plateWriter, 'close');
 if (plateCode !== 0) throw new Error('ffmpeg failed writing the plate');
 
 const sha256 = createHash('sha256').update(await readFile(recordingFile)).digest('hex');
-const info = {schema: SUBJECT_SCHEMA, source: {sha256, width: W, height: H, fps: FPS, duration: DURATION}, model: 'synthetic', range: {in: 0, out: DURATION}, matte: `${RANGE}.webm`, matte_size: {width: W, height: H}, plate: `${RANGE}.plate.jpg`, plate_size: {width: W, height: H}, plate_seen: 1, ...summarizeSamples(frames), frames};
+const info = {schema: SUBJECT_SCHEMA, source: {sha256, width: W, height: H, fps: FPS, duration: DURATION}, model: 'synthetic', range: {in: 0, out: DURATION}, matte: `${RANGE}.webm`, matte_size: {width: W, height: H}, plate: `${RANGE}.plate.jpg`, plate_size: {width: W, height: H}, plate_seen: 1, contours: `${RANGE}.contours.json`, ...summarizeSamples(frames), frames};
 const {ok, errors} = validateSubjectInfo(info);
 if (!ok) throw new Error(`subject.json failed its schema: ${errors.join('; ')}`);
 await writeFile(path.join(out, `assets/subject/${RANGE}.json`), `${JSON.stringify(info)}\n`);
+const contours = {schema: CONTOURS_SCHEMA, range: {in: 0, out: DURATION}, frames: outlines};
+if (!validateSubjectContours(contours).ok) throw new Error(`contours.json failed its schema: ${validateSubjectContours(contours).errors.join('; ')}`);
+await writeFile(path.join(out, `assets/subject/${RANGE}.contours.json`), `${JSON.stringify(contours)}\n`);
 if (args.includes('--product')) await writeProductMedia();
-console.log(`wrote ${path.relative(ROOT, out)}: recording.mp4, subject/${RANGE}.{webm,json,plate.jpg}${args.includes('--product') ? ', app.png, demo/flow.mp4' : ''} (${info.framing}, head ${JSON.stringify(info.head)})`);
+console.log(`wrote ${path.relative(ROOT, out)}: recording.mp4, subject/${RANGE}.{webm,json,plate.jpg,contours.json}${args.includes('--product') ? ', app.png, demo/flow.mp4' : ''} (${info.framing}, head ${JSON.stringify(info.head)})`);
 
 // Stand-in product media: flat UI shapes, no text, deterministic.
 async function writeProductMedia() {

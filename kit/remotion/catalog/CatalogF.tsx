@@ -19,3 +19,4 @@ export const GlassWord = typed('glass-word');
 export const OrbitCards = typed('orbit-cards');
 export const ProofWall = typed('proof-wall');
 export const Scrapbook = typed('scrapbook');
+export const DoodleOutline = typed('doodle-outline');
