@@ -31,6 +31,7 @@ When there's one person in the shot, LaunchClip can cut you out of the backgroun
 - **Masthead:** your product's name, huge, behind your head, like a magazine cover.
 - **Dolly zoom:** the room pushes in behind you while you stay still, for the "and that's when it hit me" moment.
 - **Punch-in steps and blur:** zoom in, further in and back out on the words you stress, with a few frames of zoom blur.
+- **Your product around you:** your app UI over the top of the frame with your head in front of it, a phone beside you playing your screen recording, your brand colours or a product shot replacing the room, the video springing into a feed window you break out of, or pulling back into an app window while the steps tick off. They use the screenshots and recordings in your assets, never invented ones.
 
 `launchclip make` checks your framing first and only uses these when the cut-out works (one person, enough room around you). Add `--no-subject` to turn them off. The first run downloads two small cut-out models (about 26 MB in total); `launchclip subject setup` fetches them up front, and `launchclip doctor` shows whether they're ready.
 

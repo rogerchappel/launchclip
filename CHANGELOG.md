@@ -37,6 +37,19 @@
   - The planner sees the presenter's framing and offers these only when the
     cut-out works; both create-video skills get a generated
     `subject-effects.md`.
+- Five product moments around the presenter, which the art director picks
+  from what you say:
+  - `app-stage`: your product UI slides over the top of the frame and your
+    head rises over its edge.
+  - `phone-stage`: a phone beside you plays your screen recording or a
+    demo-autopilot flow while the room pans away.
+  - `backdrop-swap`: the room gives way to your brand colours or a product
+    shot, and you glide down in front of it.
+  - `feed-frame`: the video springs into a feed window and you break out
+    over its edges (counts only when you give them).
+  - `pull-back`: the video shrinks into an app window while real steps tick
+    off and a counter reaches 100%.
+- layout-check's face rule follows punch-ins and pans.
 - `launchclip make` uses them on footage: it checks the presenter's
   framing after the base edit, plans with it, and cuts out only the stretches
   its subject effects cover. A missing model or a failed cut-out is a

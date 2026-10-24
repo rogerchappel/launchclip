@@ -1078,6 +1078,40 @@ a `subject-face` error. Behind scenes, captions, decor (punch-in) and
 exact matte. `test/fixtures/parity-footage/s-subject-behind.json` (module)
 and `s-subject-story.json` (story) hold it to SSIM ≥ 0.97.
 
+## Catalogue E (`kit/core/catalog-e.mjs`)
+
+Product moments around the presenter
+([SUBJECT_EFFECTS_RFC.md](SUBJECT_EFFECTS_RFC.md) §6.1). Emitters live in
+`kit/hyperframes/catalog-e.mjs`, components in
+`kit/remotion/catalog/CatalogE.tsx` and `registry-e.ts`. Catalogue C's
+conventions apply (`createFootageBase`, `at` from the scene start, hits).
+
+| Module | Layer | Needs the subject | Params | Events | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `feed-frame` | split | yes | `handle`, `caption` ≤ 60, `counts` (supplied strings only), `follow`, `scale` 0.55–0.85, `release`, `at` | `frame`, `chrome`, `release` | Framed base; the hole crops at eye level so the presenter breaks out; `hidesCaptions`, `framesFace`; 9:16 |
+| `pull-back` | front | no | `steps` 1–4 (required), `title`, `label`, `scale` 0.3–0.75 (default: fits the steps), `release`, `at` | `pull`, `step-<i>`, `done` | Framed base; steps tick with a filled check, the counter reaches 100% (per-frame text sets); `hidesCaptions`, `framesFace` |
+| `backdrop-swap` | behind | yes | `backdrop` media (default a brand gradient), `title`, `scale` 0.6–0.95, `release`, `at` | `swap`, `release` | `subjectCamera` shrinks the presenter about the canvas centre and keeps the frame's bottom edge |
+| `app-stage` | behind | yes | `media` (required), `title`, `at` | `stage` | The window runs from the safe top to 70% down the head (at least 45% of the safe zone); needs 320 px above the head |
+| `phone-stage` | front | no | `media` (required), `side` auto/left/right, `pan`, `at` | `phone` | A base camera (scale 1.2) pans the room away from the phone; the phone floats |
+
+- **View.** `catalogEView(model)` → `{front, behind, media, overlay}`. The
+  emitter's main html is the module's own layer (behind for a behind module,
+  else front). A video `media` is appended for the compiler to hoist, with
+  `overlay` hoisted one z-index above it; an image stays in the scene layer.
+  A split module returns its behind tree as `out.behind`; its Remotion
+  component draws the part `model.part` names.
+- **Media follows its container.** `mirror()` copies a container's ops onto
+  its media and overlay pieces, which share its transform origin in canvas
+  coordinates, so a hoisted `<video>` moves with its panel or phone.
+- **Framed base.** `framedCamera` springs the base into a window (scale below
+  1, toward the window's centre). The hole is a box in the base's own
+  coordinates with a huge `box-shadow`, set to the same transform on every
+  camera sample (`sampleTime`), so it matches the base exactly in both
+  renderers; it fades in over 0.3 s and out over the release.
+- `media` params are `{src: assets/ image or video, sourceStart?, fit?}`.
+- **Face rule.** The head box follows the base camera (`cameraOps`) at
+  every frame, so pans, punch-ins and framed windows move it.
+
 ## Product demo (demo autopilot)
 
 `launchclip demo record` (`src/demo/`) records a SaaS app's key flows in
