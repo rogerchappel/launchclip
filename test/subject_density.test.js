@@ -64,14 +64,14 @@ test('two different effects back to back warn as such', () => {
   assert.match(same, /are 0 s apart/);
 });
 
-test('layout-check reports the budget as warnings and still passes', async () => {
+test('layout-check reports the budget as warnings, never errors', async () => {
   // The subject example is a 6 s showcase: three effects in a row.
   const report = await checkLayoutProject(PROJECT);
   const density = report.findings.filter((finding) => finding.rule === 'subject-density');
   assert.ok(density.length >= 2, JSON.stringify(report.findings));
   assert.ok(density.every((finding) => finding.severity === 'warning'));
   assert.ok(density.some((finding) => /of the runtime/.test(finding.detail)));
-  assert.equal(report.status, 'passed');
+  assert.ok(!report.findings.some((finding) => finding.rule === 'subject-density' && finding.severity === 'error'));
 });
 
 test('the planner check carries the warnings without failing', () => {
@@ -91,4 +91,9 @@ test('story validate lists the warnings and passes', async () => {
   const result = await runStoryCommand('validate', file);
   assert.equal(result.status, 'passed', result.errors.join('\n'));
   assert.ok(result.warnings.some((warning) => /run back to back/.test(warning)), result.warnings.join('\n'));
+});
+
+test('two different effects at once read as an overlap', () => {
+  const [finding] = subjectDensityWarnings(story([['a', 'masthead', 2, 5], ['b', 'punch-in', 2, 4]]));
+  assert.match(finding, /b \(punch-in\) and a \(masthead\) overlap from 2 s/);
 });

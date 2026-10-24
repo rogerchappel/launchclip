@@ -214,7 +214,8 @@ export function subjectDensityFindings(story) {
     const before = effects[i - 1], after = effects[i];
     const gap = after.start - before.end;
     if (gap <= frame + 1e-6 && before.module !== after.module) {
-      findings.push({ ids: [before.id, after.id], at: round3(after.start), detail: `subject effects ${before.id} (${before.module}) and ${after.id} (${after.module}) run back to back at ${round3(after.start)} s; two different presenter effects in a row read as noise. Put ${SUBJECT_DENSITY.gap} s of plain recording between them, or keep one` });
+      const when = gap < -frame ? `overlap from ${round3(after.start)} s` : `run back to back at ${round3(after.start)} s`;
+      findings.push({ ids: [before.id, after.id], at: round3(after.start), detail: `subject effects ${before.id} (${before.module}) and ${after.id} (${after.module}) ${when}; two different presenter effects in a row read as noise. Put ${SUBJECT_DENSITY.gap} s of plain recording between them, or keep one` });
     } else if (gap < SUBJECT_DENSITY.gap - 1e-6) {
       findings.push({ ids: [before.id, after.id], at: round3(before.end), detail: `subject effects ${before.id} (${before.module}) and ${after.id} (${after.module}) are ${round3(Math.max(0, gap))} s apart (from ${round3(before.end)} s to ${round3(after.start)} s); keep presenter effects at least ${SUBJECT_DENSITY.gap} s apart` });
     }
