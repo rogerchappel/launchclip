@@ -12,6 +12,7 @@
 
 export const SUBJECT_PROBE_SCHEMA = "launchclip.subject-probe.v1";
 export const SUBJECT_SCHEMA = "launchclip.subject.v1";
+export const CONTOURS_SCHEMA = "launchclip.subject-contours.v1";
 
 export const PEOPLE = Object.freeze(["none", "one", "several"]);
 export const FRAMINGS = Object.freeze(["close-up", "medium", "wide"]);
@@ -51,6 +52,52 @@ export function maskStats(alpha, width, height, { threshold = MASK_THRESHOLD } =
   const body = gridBox(largest, grid);
   const head = headBox(alpha, width, height, threshold, body);
   return { coverage: round(coverage), people, body, head };
+}
+
+/**
+ * The presenter's outline: rays from the silhouette's centre (of its upper
+ * part, so arms and the frame edge do not drag it down), each keeping its
+ * last inside pixel. → [[x, y] fractions, or null where the ray reached the
+ * frame edge (the outline breaks there)], or null with no person.
+ */
+export function maskOutline(alpha, width, height, { rays = 120, threshold = MASK_THRESHOLD } = {}) {
+  let sx = 0, sy = 0, n = 0, minY = height, maxY = 0;
+  for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) if (alpha[y * width + x] >= threshold) { if (y < minY) minY = y; if (y > maxY) maxY = y; }
+  if (minY > maxY) return null;
+  const upper = minY + (maxY - minY) * 0.6;
+  for (let y = minY; y <= upper; y += 1) for (let x = 0; x < width; x += 1) if (alpha[y * width + x] >= threshold) { sx += x; sy += y; n += 1; }
+  if (!n) return null;
+  const cx = sx / n, cy = sy / n;
+  const reach = Math.hypot(width, height);
+  const points = [];
+  for (let i = 0; i < rays; i += 1) {
+    const a = (i / rays) * Math.PI * 2;
+    const dx = Math.cos(a), dy = Math.sin(a);
+    let last = null, edge = false;
+    for (let r = 0; r < reach; r += 1) {
+      const x = Math.round(cx + dx * r), y = Math.round(cy + dy * r);
+      if (x < 0 || y < 0 || x >= width || y >= height) break;
+      if (alpha[y * width + x] >= threshold) {
+        last = [x, y];
+        if (x === 0 || y === 0 || x === width - 1 || y === height - 1) edge = true;
+      }
+    }
+    points.push(!last || edge ? null : [round((last[0] + 0.5) / width), round((last[1] + 0.5) / height)]);
+  }
+  return points;
+}
+
+/** → {ok, errors} for a contours file (launchclip.subject-contours.v1). */
+export function validateSubjectContours(value) {
+  const errors = [];
+  if (!isObject(value)) return { ok: false, errors: ["contours must be an object"] };
+  if (value.schema !== CONTOURS_SCHEMA) errors.push(`schema must be "${CONTOURS_SCHEMA}"`);
+  if (!isObject(value.range) || !finite(value.range.in) || !finite(value.range.out)) errors.push("range must be {in, out}");
+  if (!Array.isArray(value.frames)) errors.push("frames must be a list");
+  else value.frames.forEach((frame, i) => {
+    if (!isObject(frame) || !finite(frame.t) || !(frame.points === null || (Array.isArray(frame.points) && frame.points.every((point) => point === null || (Array.isArray(point) && point.length === 2 && point.every(fraction)))))) errors.push(`frames[${i}] must be {t, points: [[x, y] fractions or null] or null}`);
+  });
+  return { ok: errors.length === 0, errors };
 }
 
 /**
@@ -140,6 +187,7 @@ export function validateSubjectInfo(info) {
   const range = info.range;
   if (!isObject(range) || !finite(range.in) || !finite(range.out) || range.in < 0 || range.out <= range.in) errors.push("range must be {in, out} source seconds with out > in");
   if (!nonEmpty(info.matte)) errors.push("matte must be the matte video's file name");
+  if (info.contours !== undefined && !nonEmpty(info.contours)) errors.push("contours must be the contours file's name");
   if (info.plate !== undefined && !nonEmpty(info.plate)) errors.push("plate must be the plate image's file name");
   if (info.plate_size !== undefined && !(isObject(info.plate_size) && finite(info.plate_size.width) && info.plate_size.width > 0 && finite(info.plate_size.height) && info.plate_size.height > 0)) errors.push("plate_size must be {width, height} in pixels");
   if (info.plate_seen !== undefined && !fraction(info.plate_seen)) errors.push("plate_seen must be between 0 and 1");

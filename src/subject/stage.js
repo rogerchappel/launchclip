@@ -3,12 +3,12 @@
 //
 // Cache layout, keyed by the source's sha256 and the model:
 //   <cache>/<sha256-12>-<model>/probe.json
-//   <cache>/<sha256-12>-<model>/ranges/<in>-<out>/{matte.webm, subject.json}
+//   <cache>/<sha256-12>-<model>/ranges/<in>-<out>/{matte.webm, plate.jpg, contours.json, subject.json}
 // <cache> defaults to .launchclip/subject in the working directory.
 
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { SUBJECT_PROBE_SCHEMA, SUBJECT_SCHEMA, maskStats, summarizeSamples, validateSubjectInfo, validateSubjectProbe } from "../../kit/core/subject.mjs";
+import { CONTOURS_SCHEMA, SUBJECT_PROBE_SCHEMA, SUBJECT_SCHEMA, maskOutline, maskStats, summarizeSamples, validateSubjectContours, validateSubjectInfo, validateSubjectProbe } from "../../kit/core/subject.mjs";
 import { probeMedia } from "../media_trim.js";
 import { openMatteWriter, readFrames, withAlpha, writeImage } from "./frames.js";
 import { createPlateAccumulator } from "./plate.js";
@@ -96,10 +96,11 @@ export async function runSubjectMatte(src, range, options = {}) {
   const matte = path.join(dir, "matte.webm");
   const subject = path.join(dir, "subject.json");
   const plate = path.join(dir, "plate.jpg");
+  const contours = path.join(dir, "contours.json");
   if (!options.force) {
     const cached = await readValid(subject, validateSubjectInfo);
-    // Ranges matted before plates existed are redone once.
-    if (cached?.plate) return { info: cached, dir, matte, plate, subject, cached: true, seconds: 0 };
+    // Ranges matted before plates or contours existed are redone once.
+    if (cached?.plate && cached?.contours) return { info: cached, dir, matte, plate, contours, subject, cached: true, seconds: 0 };
   }
   await mkdir(dir, { recursive: true });
   const began = Date.now();
@@ -110,6 +111,7 @@ export async function runSubjectMatte(src, range, options = {}) {
   const partial = path.join(dir, "matte.partial.webm");
   const writer = openMatteWriter(partial, { width, height, fps, ffmpeg: options.ffmpeg });
   const frames = [];
+  const outlines = [];
   const room = createPlateAccumulator(width, height);
   try {
     let index = 0;
@@ -117,7 +119,10 @@ export async function runSubjectMatte(src, range, options = {}) {
       const alpha = await segmenter.segment(frame, width, height);
       await writer.write(withAlpha(frame, alpha));
       room.add(frame, alpha);
-      frames.push({ t: round(checked.in + index / fps, 4), ...maskStats(downscale(alpha, width, height, stats), stats.width, stats.height) });
+      const small = downscale(alpha, width, height, stats);
+      const t = round(checked.in + index / fps, 4);
+      frames.push({ t, ...maskStats(small, stats.width, stats.height) });
+      outlines.push({ t, points: maskOutline(small, stats.width, stats.height) });
       index += 1;
       options.onFrame?.(index);
     }
@@ -134,9 +139,10 @@ export async function runSubjectMatte(src, range, options = {}) {
   const still = room.finish();
   await writeImage(plate, still.rgb, { width: still.width, height: still.height, ffmpeg: options.ffmpeg });
   const info = { schema: SUBJECT_SCHEMA, source, model: modelId, range: checked, matte: "matte.webm", matte_size: { width, height },
-    plate: "plate.jpg", plate_size: { width: still.width, height: still.height }, plate_seen: still.seen, ...summarizeSamples(frames), frames };
+    plate: "plate.jpg", plate_size: { width: still.width, height: still.height }, plate_seen: still.seen, contours: "contours.json", ...summarizeSamples(frames), frames };
+  await writeChecked(contours, { schema: CONTOURS_SCHEMA, range: checked, frames: outlines }, validateSubjectContours);
   await writeChecked(subject, info, validateSubjectInfo);
-  return { info, dir, matte, plate, subject, cached: false, seconds: round((Date.now() - began) / 1000, 2) };
+  return { info, dir, matte, plate, contours, subject, cached: false, seconds: round((Date.now() - began) / 1000, 2) };
 }
 
 /** Parse "4-10.5" or "4:10.5" into {in, out}. */

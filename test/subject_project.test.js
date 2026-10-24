@@ -46,6 +46,17 @@ test('fileProjectMatte files the matte and readStorySubject finds it for auto', 
   assert.deepEqual(manifest.mattes.map((matte) => [matte.in, matte.out]), [[1, 4]]);
 });
 
+test('fileProjectMatte files the contours and readStorySubject loads the outline on threes', async (t) => {
+  const {dir, story, result} = await autoProject(t);
+  const contours = path.join(dir, 'contours.json');
+  const frames = Array.from({length: 7}, (_, i) => ({t: i / 30, points: [[0.5, 0.2], null]}));
+  await writeFile(contours, JSON.stringify({schema: 'launchclip.subject-contours.v1', range: {in: 0, out: 6}, frames}));
+  const entry = await fileProjectMatte(dir, path.join(dir, 'assets/recording.mp4'), {...result, info: {...result.info, contours: 'contours.json'}, contours});
+  assert.equal(entry.contours, 'assets/subject/0.000-6.000.contours.json');
+  const [found] = await readStorySubject(dir, story);
+  assert.deepEqual(found.outline.frames.map((frame) => frame.t), [0, 3 / 30, 6 / 30]);
+});
+
 test('fileProjectMatte refuses a video outside the project assets', async (t) => {
   const {dir, result} = await autoProject(t);
   await assert.rejects(fileProjectMatte(dir, '/tmp/elsewhere.mp4', result), /--project needs the video inside/);
