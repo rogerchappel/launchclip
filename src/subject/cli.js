@@ -2,6 +2,7 @@
 
 import path from "node:path";
 import { DEFAULT_PROBE_MODEL, DEFAULT_SUBJECT_MODEL, ensurePipeline, subjectModel, subjectPipeline } from "./models.js";
+import { fileProjectMatte } from "./project.js";
 import { parseRange, runSubjectMatte, runSubjectProbe } from "./stage.js";
 
 export const SUBJECT_ACTIONS = Object.freeze(["setup", "probe", "matte"]);
@@ -21,7 +22,8 @@ export async function runSubjectCommand(action, media, flags = {}, { log = () =>
   const pipeline = subjectPipeline(model);
   const common = {
     model,
-    cacheDir: flags.cache ? path.resolve(String(flags.cache)) : undefined,
+    // With --project, the cache lives in the project (its .launchclip/subject).
+    cacheDir: flags.cache ? path.resolve(String(flags.cache)) : flags.project ? path.resolve(String(flags.project), ".launchclip", "subject") : undefined,
     force: Boolean(flags.force),
     download: !flags["no-download"],
     smooth: flags.smooth === undefined ? 0 : boundedNumber(flags.smooth, 0, 0.9, "--smooth"),
@@ -50,8 +52,9 @@ export async function runSubjectCommand(action, media, flags = {}, { log = () =>
       }
     }
   });
+  const filed = flags.project ? await fileProjectMatte(String(flags.project), src, { info, matte }) : null;
   const { frames, ...summary } = info;
-  return { stage: "subject", action, media: src, dir, matte, subject, cached, seconds, frames: frames.length, ...summary };
+  return { stage: "subject", action, media: src, dir, matte, subject, cached, seconds, frames: frames.length, ...(filed ? { filed } : {}), ...summary };
 }
 
 export function formatSubjectReport(report) {
@@ -63,6 +66,7 @@ export function formatSubjectReport(report) {
   if (report.head) lines.push(`  head: x ${report.head.x}, y ${report.head.y}, ${report.head.w}×${report.head.h}   headroom: ${pct(report.headroom)}`);
   lines.push(report.usable ? "  usable: yes" : `  usable: no — ${report.reasons.join("; ")}`);
   if (report.action === "matte") lines.push(`  ${report.frames} frames${report.cached ? "" : ` in ${report.seconds} s`} → ${report.matte}`);
+  if (report.filed) lines.push(`  filed for ${report.filed.base} as ${report.filed.src} (base.subject "auto" picks it up)`);
   lines.push(`  ${where}`);
   return `${lines.join("\n")}\n`;
 }

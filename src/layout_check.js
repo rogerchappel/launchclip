@@ -1,4 +1,5 @@
 import { narrationFile, readStoryEdl } from "./story_loader.js";
+import { readStorySubject } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
 import { catalogModules, rectFitHint, resolveModule } from "../kit/core/modules.mjs";
 import { readFile, stat } from "node:fs/promises";
@@ -38,7 +39,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   const words = Array.isArray(narration) ? narration : Array.isArray(narration?.words) ? narration.words : [];
   // options.beats: a grid the caller already holds (finish, before BEATS.json is written).
   const beats = options.beats ?? await readOptionalJson(path.join(project, "BEATS.json"));
-  const resolved = storyCore.resolveStory(story, { words, beats, edl: await readStoryEdl(project, story) });
+  const resolved = storyCore.resolveStory(story, { words, beats, edl: await readStoryEdl(project, story), subject: await readStorySubject(project, story) });
   const catalogue = catalogModules();
 
   const profile = options.profile == null ? null : String(options.profile);
