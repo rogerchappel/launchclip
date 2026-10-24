@@ -3,7 +3,7 @@ import {gsapText} from '../core/motion.mjs';
 import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {resolveEditorialModule, EDITORIAL_KINDS, EDITORIAL_SYMBOLS, EDITORIAL_STYLE} from '../core/editorial-core.mjs';
+import {resolveEditorialModule, EDITORIAL_KINDS, EDITORIAL_SYMBOLS, EDITORIAL_STYLE, TYPE_IN} from '../core/editorial-core.mjs';
 
 // HyperFrames emitter for the editorial modules. Validation, defaults,
 // geometry, timing, events and theme come from the renderer-neutral core
@@ -196,7 +196,13 @@ export function emitEditorialModule(model) {
       for (const row of c.rows) {
         const i = row.index;
         // Tick path reused from shipped public/icons/check.svg.
-        body += `<div id="${id}-row-${i}" class="ui-row" style="height:${c.rowHeight}px"><span class="ui-check"><svg viewBox="${c.check.viewBox}" aria-hidden="true"><path d="${c.check.path}" fill="none" stroke="${accent}" stroke-width="${c.check.strokeWidth}" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="ui-label">${escape(row.label)}</span><span class="ui-status"><span id="${id}-status-${i}-pending"${row.status === 'pending' ? '' : ' style="opacity:0"'}>${escape(labels.pending)}</span><span id="${id}-status-${i}-active" style="opacity:0;position:absolute;right:0">${escape(labels.active)}</span><span id="${id}-status-${i}-done" style="opacity:0;position:absolute;right:0">${escape(labels.done)}</span></span></div>`;
+        body += `<div id="${id}-row-${i}" class="ui-row" style="height:${c.rowHeight}px"><span class="ui-check"><svg viewBox="${c.check.viewBox}" aria-hidden="true"><path d="${c.check.path}" fill="none" stroke="${accent}" stroke-width="${c.check.strokeWidth}" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span${c.typeIn ? ` id="${id}-label-${i}"` : ''} class="ui-label">${escape(row.label)}</span><span class="ui-status"><span id="${id}-status-${i}-pending"${row.status === 'pending' ? '' : ' style="opacity:0"'}>${escape(labels.pending)}</span><span id="${id}-status-${i}-active" style="opacity:0;position:absolute;right:0">${escape(labels.active)}</span><span id="${id}-status-${i}-done" style="opacity:0;position:absolute;right:0">${escape(labels.done)}</span></span></div>`;
+        // Footage mode: the row fades in on its at word while its label types
+        // in, one text set per letter (finite timeline states, seek-safe).
+        if (c.typeIn) {
+          motion.push(`tl.set(${js(`#${id}-row-${i}`)}, {opacity:0}, ${start});`, `tl.to(${js(`#${id}-row-${i}`)}, {opacity:1,duration:${TYPE_IN.fade}}, ${row.time});`, `tl.set(${js(`#${id}-label-${i}`)}, {textContent:''}, ${start});`);
+          for (const frame of row.typed) motion.push(`tl.set(${js(`#${id}-label-${i}`)}, {textContent:${js(gsapText(frame.text))}}, ${frame.time});`);
+        }
         // A row that turns active or done at its time shows no status label
         // before it: the pending label would read as a state it never has.
         if (row.status !== 'pending') motion.push(`tl.to(${js(`#${id}-status-${i}-${row.status}`)}, {opacity:1,duration:0.16}, ${row.time});`);

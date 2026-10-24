@@ -7,7 +7,7 @@
 //
 // Canonical copy: kit/core/modules.mjs.
 
-import { EDITORIAL_KINDS, editorialTimingRules, resolveEditorialModule } from './editorial-core.mjs';
+import { EDITORIAL_KINDS, checklistTypeIn, editorialTimingRules, resolveEditorialModule } from './editorial-core.mjs';
 import { fontStack } from './fonts.mjs';
 import { MODULES as CATALOG_A } from './catalog-a.mjs';
 import { MODULES as CATALOG_B } from './catalog-b.mjs';
@@ -426,6 +426,8 @@ function resolveModuleInner(scene, story, { track, end }) {
     const placement = module === 'checklist' && params.rect === undefined && story?.lane === 'footage-led' ? footageChecklistRect(model, subjectContext(story, start), format) : null;
     if (placement?.rect) model = resolveSpec({ ...spec, rect: placement.rect });
     if (placement) model.subjectPlacement = placement.where;
+    // Footage checklist rows type in on their at word (RFC §6.2).
+    if (module === 'checklist' && story?.lane === 'footage-led') model = checklistTypeIn(model, { fps: Number(format.fps) || 30 });
     return finishModel(model, { module, scene });
   }
 

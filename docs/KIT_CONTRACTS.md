@@ -1027,6 +1027,19 @@ minimums. `model.subjectPlacement` is `"above-head"`, `"chest"`, or `"none"`
 (no room: the derived rect stays, and layout-check's face rule reports any
 clash). Stories without a measured subject are unchanged.
 
+Every checklist in the footage-led lane also types in
+(`checklistTypeIn`, `kit/core/editorial-core.mjs`): each row fades in over
+`TYPE_IN.fade` s on its `at` time while its label types in letter by letter,
+then ticks on `doneAt` as before. The letters take `TYPE_IN.perChar` s each,
+at most `TYPE_IN.window` s in all, and finish `TYPE_IN.beforeDone` s before a
+`doneAt` tick. Each row gets `typed: [{time, text}]` (the first letter at the
+row's time, the rest on the frame grid) and `typeEnd`, the content gets
+`typeIn: true`, and a `<id>-row-<i>-typing-start` event (with `endTime`)
+cues the typing track. The emitter writes one `tl.set` of `textContent` per
+letter on `#<id>-label-<i>`; `Checklist.tsx` steps through the same sets
+(`stepped`). `test/fixtures/parity-footage/s-data-checklist-type.json` holds
+frames mid-typing to SSIM ≥ 0.97.
+
 ### What modules know (`subjectContext`)
 
 `resolveModule` passes `ctx.subject = subjectContext(story, scene.start)`:

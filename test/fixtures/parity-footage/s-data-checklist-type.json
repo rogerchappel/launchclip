@@ -1,0 +1,6 @@
+{
+  "project": "examples/story/subject-data",
+  "sceneId": "steps",
+  "times": [3.6, 3.7, 3.833333, 4.1, 4.233333, 4.366667, 4.566667, 5.1],
+  "threshold": { "ssim": 0.97 }
+}
