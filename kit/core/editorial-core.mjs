@@ -448,6 +448,36 @@ function derivedRect(options, input, passes, scales) {
 }
 
 /** @returns {EditorialModel} */
+// Footage checklist type-in (docs/SUBJECT_EFFECTS_RFC.md §6.2): in the
+// footage-led lane each row fades in on its `at` word and its label types in
+// letter by letter, then ticks on doneAt as before. The typing takes
+// TYPE_IN.perChar a letter, at most TYPE_IN.window, and finishes
+// TYPE_IN.beforeDone before a doneAt tick. Each letter lands on the frame
+// grid, so both renderers show the same text on every frame.
+export const TYPE_IN = Object.freeze({perChar: 0.04, window: 0.6, beforeDone: 0.1, fade: 0.16});
+
+/**
+ * A resolved checklist model with type-in rows: each row gains `typed`
+ * ([{time, text}] text sets, the first at the row's time) and `typeEnd`, the
+ * content gains `typeIn: true`, and a `<id>-row-<i>-typing-start` event
+ * (with endTime) per row cues the typing track. Returns a new model.
+ */
+export function checklistTypeIn(model, {fps = 30} = {}) {
+  if (!Array.isArray(model?.content?.rows)) return model;
+  const grid = value => Math.round(Math.ceil(value * fps - 1e-6) / fps * 1e6) / 1e6;
+  const events = [...(model.events ?? [])];
+  const rows = model.content.rows.map(row => {
+    const letters = [...row.label];
+    let window = Math.min(TYPE_IN.window, letters.length * TYPE_IN.perChar);
+    if (row.doneTime !== null) window = Math.max(0, Math.min(window, row.doneTime - row.time - TYPE_IN.beforeDone));
+    const typed = letters.map((_, k) => ({time: k ? Math.max(grid(row.time), grid(row.time + (k / letters.length) * window)) : row.time, text: letters.slice(0, k + 1).join('')}));
+    const typeEnd = typed.at(-1).time;
+    events.push({id: `${model.id}-row-${row.index}-typing-start`, time: row.time, endTime: Math.max(typeEnd, row.time + 1 / fps)});
+    return {...row, typed, typeEnd};
+  });
+  return {...model, content: {...model.content, typeIn: true, rows}, events};
+}
+
 export function resolveEditorialModule(input, options = {}) {
   const plain = input && typeof input === 'object' && !Array.isArray(input);
   if (!plain || !['16:9', '9:16'].includes(input.aspect) || !EDITORIAL_KINDS.includes(input.kind) || (input.density !== undefined && !DENSITY_MODES.includes(input.density))) return resolveAt(options, input, input?.rect, BASE, 'explicit');
