@@ -1361,7 +1361,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 - `story plan`: Plan a storyboard.json from a brief with a model.
 
   ```text
-  launchclip story plan --brief brief.md [--narration NARRATION.json] [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] [--base assets/recording.mp4] [--voice assets/audio/narration.wav] [--format 1080x1920] [--fps 30] [--duration seconds] [--brand brand.json] [--style name|path] [--max-repairs 2]
+  launchclip story plan --brief brief.md [--narration NARRATION.json] [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] [--base assets/recording.mp4] [--voice assets/audio/narration.wav] [--format 1080x1920] [--fps 30] [--duration seconds] [--brand brand.json] [--style name|path] [--no-subject] [--max-repairs 2]
   ```
 
 - `cinematic-check`: Check a finished project against the cinematic gates and receipts.

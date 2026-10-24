@@ -48,7 +48,7 @@ export const USAGE = Object.freeze([
   ["story validate", "story validate <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out report.json]"],
   ["story resolve", "story resolve <storyboard.json> [--narration NARRATION.json] [--beats BEATS.json] [--out story.resolved.json]"],
   ["story compile", "story compile <project> --renderer hyperframes|remotion [--out dir]"],
-  ["story plan", "story plan --brief brief.md [--narration NARRATION.json] [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] [--base assets/recording.mp4] [--voice assets/audio/narration.wav] [--format 1080x1920] [--fps 30] [--duration seconds] [--brand brand.json] [--style name|path] [--max-repairs 2]"],
+  ["story plan", "story plan --brief brief.md [--narration NARRATION.json] [--tier structured|guided|bespoke] [--model provider:model] [--out storyboard.json] [--base assets/recording.mp4] [--voice assets/audio/narration.wav] [--format 1080x1920] [--fps 30] [--duration seconds] [--brand brand.json] [--style name|path] [--no-subject] [--max-repairs 2]"],
   ["cinematic-check", "cinematic-check <project> [--renderer hyperframes|remotion] [--video renders/draft.mp4] [--audio-manifest AUDIO-MANIFEST.json] [--music-volume 0.32] [--expect-audio] [--critique qa/critic.json]"],
   ["layout-check", "layout-check <project> [--profile shorts|landscape] [--json]"],
   ["module fit", "module fit <module> [--params params.json] [--aspect 16:9|9:16] [--story storyboard.json] [--brand brand.json] [--duration 4] [--json]"],
