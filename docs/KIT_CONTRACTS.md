@@ -965,6 +965,96 @@ The example is `examples/story/footage/`; regenerate its recording with
   default registry font, at the settle and mid-hold times, plus two stills of
   `examples/story/minimal`, with one shared Remotion bundle.
 
+## Subject layer (`kit/core/subject-layer.mjs`)
+
+Depth against the cut-out presenter in the footage-led lane
+([SUBJECT_EFFECTS_RFC.md](SUBJECT_EFFECTS_RFC.md) §5). The mattes come from
+the subject stage (`launchclip subject matte`, `src/subject/`).
+
+### Story fields (`kit/core/story.mjs`)
+
+```json
+"base": { "src": "assets/recording.mp4",
+          "subject": { "mattes": [{ "src": "assets/subject/0.000-6.000.webm", "in": 0, "out": 6, "info": "assets/subject/0.000-6.000.json" }] } }
+```
+
+- `base.subject` is `"auto"` (the default), `"off"`, or `{mattes}`: alpha
+  `.webm` files under `assets/` for source ranges `[in, out]` of the base, in
+  source order without overlap. `info` is the range's `subject.json`
+  (`launchclip.subject.v1`), which layout-check needs.
+- `"auto"` takes the mattes filed for this base in
+  `assets/subject/mattes.json` (`launchclip.subject-mattes.v1`, written by
+  `launchclip subject matte --project <dir>`). Every story reader passes them
+  to `resolveStory(story, {subject})`, which writes them into the resolved
+  copy as `{mattes}`; an explicit list or `"off"` is never replaced.
+- `scenes[i].layer` is `front` (default), `behind` or `split`. A non-front
+  layer needs the footage-led lane, is invalid on an insert, and needs a
+  subject (`base.subject` not `"off"`).
+- `storyBase()` adds `subject: {mode: "auto"|"off"|"mattes", mattes}`.
+
+### Model fields
+
+Modules may set, all optional (`subjectModelErrors()`; `resolveModule`
+rejects bad values):
+
+- `layer`: the module's default layer (a scene's `layer` wins).
+- `parts`: `{behind, front}` for split modules. HyperFrames emitters return the
+  behind half as `out.behind = {html, css?, motion?}` beside their usual
+  (front) output; Remotion components are rendered twice with `model.part`
+  set to `"behind"` or `"front"`. A `split` scene whose model has no parts
+  renders in front, with a warning.
+- `subjectCamera`: `{samples: [{t, scale, x, y}]}`, one per frame like
+  `model.camera`, moving the subject only.
+- `room`: `{hide?, dim? (0–1), blur? (px, ≤ 40)}` for the scene window,
+  applied to the base videos only.
+- `framesFace`: the module frames the face on purpose; layout-check's face
+  rule skips it.
+
+### Compositing
+
+Bottom to top: base (room treatment, base cameras), behind scenes and split
+behind parts, the subject, every other scene and split front parts, captions.
+
+- `needsSubject(scene, model)`: a non-front layer, a `subjectCamera` or a
+  `room`. The subject is mounted only while such a scene runs
+  (`subjectWindows`), so a story with no such scene compiles byte for byte as
+  without `base.subject`.
+- `subjectSegments(story, windows)`: each base segment ∩ each matte's range ∩
+  each window, frame-snapped: `{index, src, start, end, duration, mediaStart}`
+  (`mediaStart` is seconds into the matte file).
+- `subjectCameraOps(models)`: ops on `SUBJECT_CAMERA`. The subject follows the
+  base cameras; while a `subjectCamera` runs, its samples replace them.
+- `roomChanges(models)` / `roomStateAt(models, t)`: `{opacity, filter}`, the
+  later-starting room winning an overlap.
+
+**HyperFrames.** With a subject, the base audio stays on track 3, the matte
+clips take track 4 (`<video class="clip lc-subject-media">`, same fit and
+focus as the base) and scenes start at track 5. Behind scenes stack from
+z-index 10; the subject sits at `10 × (scenes + 1)`, front scenes above it.
+The subject camera is `tl.set(".lc-subject-media", …)`; room changes are
+`tl.set(".lc-base-media", {opacity, filter}, t)`. A `sceneFilter` compile keeps
+the subject for the filtered scenes.
+
+**Remotion.** `StoryComposition` renders `BaseLayer` (with `rooms`), the
+behind scenes, `SubjectLayer` (`<OffthreadVideo transparent>` per clip in a
+wrapper moved by `subjectCameraAt`), then the front scenes. `ModuleReview`
+draws a behind module under its matte.
+
+### Face rule (`checkSubjectFace`, `src/layout_check.js`)
+
+With `{mattes}` that carry `info`, `headLocator(story, infos)` maps each
+frame's head box through the base's trims, fit and focus onto the canvas. A
+front-layer element covering at least 25% of the head for more than 0.3 s is
+a `subject-face` error. Behind scenes, captions, decor (punch-in) and
+`framesFace` modules are exempt.
+
+### Parity
+
+`examples/story/subject` (regenerate with
+`node scripts/make-subject-example.mjs`) is a synthetic presenter with an
+exact matte. `test/fixtures/parity-footage/s-subject-behind.json` (module)
+and `s-subject-story.json` (story) hold it to SSIM ≥ 0.97.
+
 ## Product demo (demo autopilot)
 
 `launchclip demo record` (`src/demo/`) records a SaaS app's key flows in

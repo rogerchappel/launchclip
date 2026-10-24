@@ -14,6 +14,17 @@
     setup`) into `~/.launchclip/models`, checked by sha256.
   - Mattes use MODNet's edges with holes filled from MediaPipe; the probe
     uses MediaPipe alone. `launchclip doctor` reports both.
+- Scenes can sit behind the presenter in footage-led stories: `layer:
+  "behind"` draws a scene under the cut-out subject, so their head covers it
+  (both renderers, held to renderer parity).
+  - `launchclip subject matte --project <dir>` files a matte in the project;
+    `base.subject` (default `"auto"`) picks it up, or lists `mattes`
+    explicitly, or turns the subject `"off"`.
+  - Modules can also move the subject on its own (`subjectCamera`), hide,
+    dim or blur the room around it (`room`), or draw on both sides of it
+    (`split`). The first modules that use these arrive with the effects.
+  - layout-check fails a front scene that covers the presenter's face for
+    more than 0.3 s.
 - A `photo-scene` module: one full-bleed `assets/` photo or video with a slow
   Ken Burns move (`push-in`, `pull-out` or a pan; `zoom` and `focus` set
   it).
