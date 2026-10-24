@@ -14,7 +14,7 @@ LaunchClip's goal: **a SaaS founder points it at their product and gets a launch
 - Change it by chatting; only the changed scenes re-render
 - Export to Final Cut Pro, Premiere Pro, DaVinci Resolve or OpenTimelineIO
 - **Demo autopilot:** point it at your SaaS codebase and it starts the app, records the key flows on safe demo data, and edits them in with zooms and callouts timed to every action ([guide](guide/demo-autopilot.md))
-- **Subject-aware effects:** in a talking-head recording, graphics can sit behind you (your product name behind your head, your app on the wall behind you, a dolly zoom), chosen by the art director like any other module ([RFC](SUBJECT_EFFECTS_RFC.md))
+- **Subject-aware effects:** in a talking-head recording, graphics can sit behind you (your product name behind your head, your app on the wall behind you, a dolly zoom), chosen by the art director like any other module, or put on a clip yourself with `launchclip fx` ([guide](guide/effects.md))
 - Published on npm
 
 ## Next

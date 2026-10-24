@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- `launchclip fx <video> <module>` puts one effect on a clip: it cuts you out
+  for that stretch when the effect needs it, renders the whole clip, and
+  leaves an ordinary project you can keep editing. A new guide, [Effects
+  around you on camera](docs/guide/effects.md), covers every effect and how
+  LaunchClip picks them.
+
 ## 0.2.0 - 2026-10-23
 
 ### Highlights
