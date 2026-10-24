@@ -4,6 +4,7 @@
 // (content.typeIn) each row fades in on its time and its label steps through
 // the same text sets the emitter's tl.set calls make.
 import React from 'react';
+// @ts-ignore plain ESM core module
 import {TYPE_IN} from '../../core/editorial-core.mjs';
 import {A, C, ModuleShell, TRANSPARENT, chain, stepped, useModuleTime, type ModuleProps, type Model, type Segment} from './shared';
 
