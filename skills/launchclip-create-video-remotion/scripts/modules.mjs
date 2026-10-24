@@ -17,6 +17,7 @@ import { storyBase } from './story.mjs';
 import { isEditorialGrammar, resolveGrammar } from './grammar.mjs';
 import { profileGeometry } from './layout-check.mjs';
 import { sceneAmbient } from './ambient.mjs';
+import { subjectModelErrors } from './subject-layer.mjs';
 
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
@@ -151,7 +152,11 @@ export function resolveModule(scene, story, { track, end } = {}) {
   const where = scenePath(scene, story);
   const finalEnd = endingEnd(scene, story, end);
   try {
-    return resolveModuleInner(scene, story, { track, end: finalEnd });
+    const model = resolveModuleInner(scene, story, { track, end: finalEnd });
+    // Subject fields (layer parts, subjectCamera, room): kit/core/subject-layer.mjs.
+    const problems = subjectModelErrors(model);
+    if (problems.length) throw new Error(problems.join('; '));
+    return model;
   } catch (error) {
     throw new Error(`${where}: ${error.message}${rectFitHint(scene, story, error.message, { end: finalEnd })}`);
   }

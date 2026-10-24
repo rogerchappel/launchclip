@@ -1397,7 +1397,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 - `subject matte`: Cut the person out of one source range: a cached alpha WebM and per-frame head and body boxes.
 
   ```text
-  launchclip subject matte <video> --range <in>-<out> [--model modnet-fused] [--smooth 0-0.9] [--cache .launchclip/subject] [--force] [--no-download] [--json] # alpha matte.webm + subject.json for one source range
+  launchclip subject matte <video> --range <in>-<out> [--project <story-project>] [--model modnet-fused] [--smooth 0-0.9] [--cache .launchclip/subject] [--force] [--no-download] [--json] # alpha matte.webm + subject.json for one source range
   ```
 
 - `finish`: Storyboard to mastered video in one command: voice, music, SFX, render, master and gates. --candidate renders a draft candidate with no paid calls (synth or no music, a cached or free voice, else the test voice; no evidence or gates) and records it in the rendered-candidate receipt.

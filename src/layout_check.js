@@ -1,4 +1,5 @@
 import { narrationFile, readStoryEdl } from "./story_loader.js";
+import { readStorySubject } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
 import { catalogModules, rectFitHint, resolveModule } from "../kit/core/modules.mjs";
 import { readFile, stat } from "node:fs/promises";
@@ -9,6 +10,8 @@ import { cameraPlan, captionDipWindows, sceneObjectLookup, screenPoint, worldPoi
 import { captionDipHidden, captionMoveHide, captionsOverlayOf, chunkWords } from "../kit/core/captions.mjs";
 import { driftExtent, sceneDrift } from "../kit/core/ambient.mjs";
 import { emptyPlates, sceneWindows } from "../kit/core/transitions.mjs";
+import { storyBase } from "../kit/core/story.mjs";
+import { checkSubjectFace, headLocator, sceneLayerOf } from "../kit/core/subject-layer.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const STORY_MODULE = path.join(ROOT, "kit/core/story.mjs");
@@ -36,7 +39,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   const words = Array.isArray(narration) ? narration : Array.isArray(narration?.words) ? narration.words : [];
   // options.beats: a grid the caller already holds (finish, before BEATS.json is written).
   const beats = options.beats ?? await readOptionalJson(path.join(project, "BEATS.json"));
-  const resolved = storyCore.resolveStory(story, { words, beats, edl: await readStoryEdl(project, story) });
+  const resolved = storyCore.resolveStory(story, { words, beats, edl: await readStoryEdl(project, story), subject: await readStorySubject(project, story) });
   const catalogue = catalogModules();
 
   const profile = options.profile == null ? null : String(options.profile);
@@ -152,7 +155,10 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   let sweepFindings = [];
   try { sweepFindings = cameraSweepFindings(resolved, elements, words, report.captionBand); }
   catch (error) { warnings.push(`camera sweep check skipped: ${error.message}`); }
-  const findings = [...specFindings, ...report.findings, ...plateFindings, ...sweepFindings].sort((a, b) => a.at - b.at);
+  let faceFindings = [];
+  try { faceFindings = await subjectFaceFindings(project, resolved, elements, warnings); }
+  catch (error) { warnings.push(`subject face check skipped: ${error.message}`); }
+  const findings = [...specFindings, ...report.findings, ...plateFindings, ...sweepFindings, ...faceFindings].sort((a, b) => a.at - b.at);
   return {
     stage: "layout-check",
     project,
@@ -213,6 +219,36 @@ export function cameraSweepFindings(resolved, elements, words = [], band = null)
     }
   }
   return checkCameraSweeps({ band: captionRect, frames, captionVisible, step });
+}
+
+// The face rule (docs/SUBJECT_EFFECTS_RFC.md §9): with base.subject mattes,
+// a front-layer element may not cover the presenter's head for more than
+// 0.3 s. The head comes from each matte's subject.json (base.subject.mattes
+// [].info), mapped through the base's trims, fit and focus. Behind-layer
+// scenes, captions, decor (punch-in) and modules that set model.framesFace
+// are exempt.
+export async function subjectFaceFindings(projectDir, resolved, elements, warnings = []) {
+  const base = storyBase(resolved);
+  if (!base || base.subject.mode !== "mattes") return [];
+  const infos = [];
+  for (const matte of base.subject.mattes) {
+    if (!matte.info) {
+      warnings.push(`${matte.src} has no info (its subject.json); the face rule skips its range`);
+      infos.push(null);
+      continue;
+    }
+    infos.push(JSON.parse(await readFile(path.join(projectDir, matte.info), "utf8")));
+  }
+  const depth = new Map(resolved.scenes.map((scene) => {
+    let model = null;
+    try { model = resolveModule(scene, resolved); } catch { /* reported as module-spec */ }
+    return [scene.id, { layer: sceneLayerOf(scene, model).layer, framesFace: Boolean(model?.framesFace) }];
+  }));
+  const candidates = elements
+    .filter((element) => element.id !== "base" && element.rect && element.role !== "caption" && element.role !== "decor")
+    .map((element) => ({ ...element, layer: depth.get(element.id)?.layer ?? "front", framesFace: depth.get(element.id)?.framesFace ?? false }));
+  const fps = Number(resolved.resolved?.fps ?? resolved.format?.fps ?? 30);
+  return checkSubjectFace({ elements: candidates, headAt: headLocator(resolved, infos), step: 1 / fps });
 }
 
 function overlaps(a, b) {

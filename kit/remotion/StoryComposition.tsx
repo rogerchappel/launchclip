@@ -42,6 +42,10 @@ import { backgroundFieldTiles, backgroundLayer, blurAt, cameraPlan, captionDipWi
 import { ambientField, blobBackground, blobStyle, fieldTileTransform, driftStyle, sceneAmbient, sceneDrift } from "../core/ambient.mjs";
 // @ts-ignore plain ESM from kit/core
 import { profileGeometry } from "../core/layout-check.mjs";
+// @ts-ignore plain ESM from kit/core
+import { needsSubject, roomStateAt, sceneLayerOf, subjectCameraAt, subjectCameraOps, subjectSegments, subjectWindows } from "../core/subject-layer.mjs";
+// @ts-ignore plain ESM from kit/core
+import { propsToStyle } from "../core/catalog-b-view.mjs";
 import { moduleComponent } from "./modules";
 import { baseCameraOps, cameraStyle } from "./catalog/CatalogC";
 import { Placeholder } from "./Placeholder";
@@ -65,7 +69,9 @@ class ModuleBoundary extends React.Component<{ fallback: (error: Error) => React
   render() { return this.state.error ? this.props.fallback(this.state.error) : this.props.children; }
 }
 
-type Resolved = { model: any; render: () => React.ReactNode };
+// part: "behind" | "front" for split modules (kit/core/subject-layer.mjs); the
+// component reads it as model.part.
+type Resolved = { model: any; render: (part?: "behind" | "front") => React.ReactNode };
 
 /** Scene → model + renderer, falling back to the labelled placeholder. */
 export function resolveSceneElement(scene: any, story: any, { end, customModules }: { end?: number; customModules?: StoryProps["customModules"] } = {}): Resolved {
@@ -87,9 +93,9 @@ export function resolveSceneElement(scene: any, story: any, { end, customModules
   if (!Component) return placeholder(`no Remotion component for module "${model.module}"`);
   return {
     model,
-    render: () => (
+    render: (part) => (
       <ModuleBoundary fallback={(error) => <Placeholder model={placeholderModel(scene, story, error.message, { end })} />}>
-        <Component model={model} />
+        <Component model={part ? { ...model, part } : model} />
       </ModuleBoundary>
     )
   };
@@ -204,14 +210,16 @@ export const CameraWorld: React.FC<{ plan: any; brand: any; field?: any | null; 
 // own Sequence (trimBefore = the segment's source in-point), under a wrapper
 // that the punch-in cameras transform. `offset` (seconds) shifts the base for
 // ModuleReview, whose frame 0 is the scene start. Muted there.
-export const BaseLayer: React.FC<{ base: any; cameraOps: any[]; offset?: number; muted?: boolean }> = ({ base, cameraOps, offset = 0, muted = false }) => {
+// rooms: models whose room hides, dims or blurs the recording (subject layer).
+export const BaseLayer: React.FC<{ base: any; cameraOps: any[]; offset?: number; muted?: boolean; rooms?: any[] }> = ({ base, cameraOps, offset = 0, muted = false, rooms = [] }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const t = offset + frame / fps;
   const style: React.CSSProperties = { position: "absolute", left: 0, top: 0, width, height, objectFit: base.fit, objectPosition: `${base.focus.x * 100}% ${base.focus.y * 100}%` };
   const shift = Math.round(offset * fps);
+  const room = rooms.length ? roomStateAt(rooms, t) : null;
   return (
-    <AbsoluteFill style={{ transformOrigin: "50% 50%", ...cameraStyle(cameraOps, t) }}>
+    <AbsoluteFill style={{ transformOrigin: "50% 50%", ...cameraStyle(cameraOps, t), ...(room ? { opacity: room.opacity, filter: room.filter } : {}) }}>
       {base.segments.map((segment: any) => {
         const from = Math.round(segment.start * fps), to = Math.round(segment.end * fps);
         return (
@@ -223,6 +231,43 @@ export const BaseLayer: React.FC<{ base: any; cameraOps: any[]; offset?: number;
     </AbsoluteFill>
   );
 };
+
+// The cut-out subject: matte clips (alpha WebM) over the base, placed exactly
+// like it and moved by the merged subject camera (kit/core/subject-layer.mjs).
+export const SubjectLayer: React.FC<{ base: any; clips: any[]; ops: any[]; offset?: number }> = ({ base, clips, ops, offset = 0 }) => {
+  const frame = useCurrentFrame();
+  const { fps, width, height } = useVideoConfig();
+  const t = offset + frame / fps;
+  const style: React.CSSProperties = { position: "absolute", left: 0, top: 0, width, height, objectFit: base.fit, objectPosition: `${base.focus.x * 100}% ${base.focus.y * 100}%` };
+  const shift = Math.round(offset * fps);
+  return (
+    <AbsoluteFill style={{ transformOrigin: "50% 50%", ...(ops.length ? (propsToStyle(subjectCameraAt(ops, t)) as React.CSSProperties) : {}) }}>
+      {clips.map((clip: any) => {
+        const from = Math.round(clip.start * fps), to = Math.round(clip.end * fps);
+        return (
+          <Sequence key={clip.index} name={`subject ${clip.index}`} from={from - shift} durationInFrames={Math.max(1, to - from)} layout="none">
+            <OffthreadVideo src={staticFile(clip.src)} trimBefore={Math.round(clip.mediaStart * fps)} transparent muted style={style} />
+          </Sequence>
+        );
+      })}
+    </AbsoluteFill>
+  );
+};
+
+/** Subject layer inputs for resolved layers: {needed, depth(layer), clips, ops, rooms}. */
+function subjectPlan(story: any, base: any, layers: any[]) {
+  const needed = Boolean(base) && layers.some((layer: any) => needsSubject(layer.entry.scene, layer.model));
+  if (!needed) return { needed, depth: () => "front", clips: [], ops: [], rooms: [] };
+  const models = layers.map((layer: any) => layer.model);
+  const clips = subjectSegments(story, subjectWindows(layers.map((layer: any) => ({ scene: layer.entry.scene, model: layer.model, start: layer.entry.start, end: layer.entry.renderEnd }))));
+  return {
+    needed,
+    depth: (layer: any) => sceneLayerOf(layer.entry.scene, layer.model).layer as string,
+    clips,
+    ops: clips.length ? subjectCameraOps(models) : [],
+    rooms: models.filter((model: any) => model?.room)
+  };
+}
 
 function captionOverlay(story: any) {
   return captionsOverlayOf(story);
@@ -255,6 +300,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   // Camera moves that sweep panels through the band dip the captions out
   // (captions.hide_during_moves), as the HyperFrames compiler does.
   const dips = React.useMemo(() => captionDipWindows(plan, captionMoveHide(overlay)), [plan, overlay]);
+  const subject = React.useMemo(() => subjectPlan(story, base, layers), [story, base, layers]);
   if (plan) {
     const world = plan.mode === "world";
     // World mode: one ambient field, in the camera's parallax depth layer.
@@ -286,16 +332,21 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
       </AbsoluteFill>
     );
   }
+  // One scene, or one part of a split scene. A split scene's behind part has
+  // no hold drift, as in the HyperFrames compiler.
+  const sceneElement = ({ entry, render, model }: any, part?: "behind" | "front") => (
+    <Sequence key={part === "behind" ? `${entry.id}-behind` : entry.id} name={`${entry.id} · ${entry.scene.module}${part === "behind" ? " (behind)" : ""}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps}>
+      <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background} field={entry.plate ? fieldFor(entry.scene) : null} drift={part === "behind" ? undefined : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })}>
+        <SceneStartFrame.Provider value={frames(entry.start)}>{render(part)}</SceneStartFrame.Provider>
+      </SceneLayer>
+    </Sequence>
+  );
   return (
     <AbsoluteFill style={{ backgroundColor: background, fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
-      {base ? <BaseLayer base={base} cameraOps={cameraOps} /> : null}
-      {layers.map(({ entry, render, model }: any) => (
-        <Sequence key={entry.id} name={`${entry.id} · ${entry.scene.module}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps}>
-          <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background} field={entry.plate ? fieldFor(entry.scene) : null} drift={sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })}>
-            <SceneStartFrame.Provider value={frames(entry.start)}>{render()}</SceneStartFrame.Provider>
-          </SceneLayer>
-        </Sequence>
-      ))}
+      {base ? <BaseLayer base={base} cameraOps={cameraOps} rooms={subject.rooms} /> : null}
+      {subject.needed ? layers.filter((layer: any) => subject.depth(layer) !== "front").map((layer: any) => sceneElement(layer, subject.depth(layer) === "split" ? "behind" : undefined)) : null}
+      {subject.clips.length ? <SubjectLayer base={base} clips={subject.clips} ops={subject.ops} /> : null}
+      {layers.filter((layer: any) => subject.depth(layer) !== "behind").map((layer: any) => sceneElement(layer, subject.depth(layer) === "split" ? "front" : undefined))}
       {loop ? (
         <Sequence key="loop" name={`loop → ${loop.sceneId}`} from={frames(loop.start)} durationInFrames={Math.max(1, frames(loop.end) - frames(loop.start))} premountFor={fps}>
           <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate background={background} freeze field={fieldFor(loop.scene)}>{loop.render()}</SceneLayer>
@@ -343,10 +394,17 @@ export const ModuleReview: React.FC<ModuleReviewProps> = ({ scene, story, custom
   // module's own camera, like the HyperFrames sceneFilter compile.
   const base = React.useMemo(() => storyBase(story), [story]);
   const cameraOps = React.useMemo(() => baseCameraOps([element.model]), [element]);
+  // A module behind the subject is reviewed under its matte, like the
+  // HyperFrames sceneFilter compile.
+  const subject = React.useMemo(() => subjectPlan(story, base, [{ entry: { scene, start: Number(scene.start), renderEnd: Number(scene.end) }, model: element.model }]), [story, base, scene, element]);
+  const depth = subject.needed ? subject.depth({ entry: { scene }, model: element.model }) : "front";
+  const offset = Number(scene.start);
   return (
     <AbsoluteFill style={{ backgroundColor: story.brand?.colors?.bg ?? "#000000" }}>
-      {base ? <BaseLayer base={base} cameraOps={cameraOps} offset={Number(scene.start)} muted /> : null}
-      {scene.insert && base ? <AbsoluteFill style={{ backgroundColor: story.brand?.colors?.bg ?? "#000000" }}>{element.render()}</AbsoluteFill> : element.render()}
+      {base ? <BaseLayer base={base} cameraOps={cameraOps} offset={offset} muted rooms={subject.rooms} /> : null}
+      {depth !== "front" ? element.render(depth === "split" ? "behind" : undefined) : null}
+      {subject.clips.length ? <SubjectLayer base={base} clips={subject.clips} ops={subject.ops} offset={offset} /> : null}
+      {depth === "behind" ? null : scene.insert && base ? <AbsoluteFill style={{ backgroundColor: story.brand?.colors?.bg ?? "#000000" }}>{element.render()}</AbsoluteFill> : element.render(depth === "split" ? "front" : undefined)}
     </AbsoluteFill>
   );
 };
