@@ -22,7 +22,7 @@ import { promisify } from "node:util";
 import { chunkWords, narrationWords } from "../kit/core/captions.mjs";
 import { resolveModule } from "../kit/core/modules.mjs";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
-import { cinematicMotionExpectations, resolveMusicMix } from "./cinematic_check.js";
+import { applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
@@ -635,6 +635,20 @@ const STAGES = [
       ctx.edl = await readStoryEdl(ctx.project, ctx.copy);
       // base.subject "auto": the mattes filed in assets/subject/mattes.json.
       ctx.subject = await readStorySubject(ctx.project, ctx.copy);
+      // The subject gate: a matte range whose cut-out is unstable or
+      // collapses is not used; its scenes fall back (cinematic_check.js).
+      ctx.subjectGate = await subjectMatteGate(ctx.project, ctx.subject);
+      if (ctx.subjectGate.status === "failed") {
+        const failed = ctx.subjectGate.ranges.filter((range) => !range.ok);
+        const kept = ctx.subject.filter((matte) => !failed.some((range) => range.src === matte.src));
+        for (const range of failed) ctx.warnings.push(`subject gate: the matte for ${range.in}–${range.out} s is not used (${range.reasons.join("; ")})`);
+        const withAll = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject });
+        const fallback = applySubjectFallback(ctx.copy, withAll, { failed, kept });
+        ctx.copy = fallback.story;
+        ctx.subject = kept.length ? kept : null;
+        ctx.subjectGate = { ...ctx.subjectGate, status: "fallback", changes: fallback.changes };
+        ctx.warnings.push(...subjectFallbackLines(fallback.changes).map((line) => `subject gate: ${line}`));
+      }
       const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject });
       const second = validateStory(resolved);
       if (!second.ok) throw new Error(`resolved storyboard is invalid:\n- ${second.errors.join("\n- ")}`);
@@ -646,7 +660,7 @@ const STAGES = [
       ctx.layout = { status: layout.status, profile: layout.profile, errors: layout.errors, elements: layout.elements, warnings: layout.warnings, findings: layout.findings };
       ctx.warnings.push(...layout.warnings.map((message) => `layout: ${message}`));
       await writeResolvedCopy(ctx);
-      const details = { scenes: resolved.scenes.length, boundaries: ctx.boundaries.length, words: ctx.words?.length ?? 0, layout: { status: layout.status, profile: layout.profile, errors: layout.errors, warnings: layout.findings.filter((finding) => finding.severity !== "error").length } };
+      const details = { scenes: resolved.scenes.length, boundaries: ctx.boundaries.length, words: ctx.words?.length ?? 0, subject: ctx.subjectGate, layout: { status: layout.status, profile: layout.profile, errors: layout.errors, warnings: layout.findings.filter((finding) => finding.severity !== "error").length } };
       if (layout.status === "failed") {
         const lines = layout.findings.filter((finding) => finding.severity === "error").slice(0, 8).map((finding) => `${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail ?? ""}`.trim());
         const error = new Error(`layout check failed (${layout.errors} error${layout.errors === 1 ? "" : "s"}):\n- ${lines.join("\n- ")}`);
@@ -1016,6 +1030,10 @@ async function runGates(ctx) {
   gates.layout = ctx.layout
     ? { status: ctx.layout.status === "failed" ? "failed" : "passed", profile: ctx.layout.profile, errors: ctx.layout.errors, findings: ctx.layout.findings.slice(0, 20) }
     : { status: "skipped", reason: "layout check did not run" };
+  // The subject gate never fails the render: a failing matte range has
+  // already fallen back (status "fallback", with the scene changes).
+  const subjectGate = ctx.subjectGate ?? ctx.state.stages?.validate?.details?.subject;
+  if (subjectGate && subjectGate.status !== "skipped") gates.subject = subjectGate;
 
   const master = ctx.state.stages?.master?.details;
   gates.loudness = !master

@@ -16,6 +16,10 @@ import { analyzeProductionAudio, evaluateAudioQuality } from "./render_audio_ana
 import { writeMotionReport } from "./render_motion_analysis.js";
 import { getRenderer, resolveRendererName } from "./renderers/index.js";
 import { hasExactFile, readProjectStory } from "./story_loader.js";
+import { readStorySubject } from "./subject/project.js";
+import { catalogModules, resolveModule } from "../kit/core/modules.mjs";
+import { storyBase } from "../kit/core/story.mjs";
+import { needsSubject } from "../kit/core/subject-layer.mjs";
 
 // adapters (all optional, for tests and embedding):
 //   verifyProject(project, qaDir, options) replaces the renderer check entirely;
@@ -74,6 +78,9 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
     readOptionalJson(projectFile(project, options.narration ?? "NARRATION.json")),
     readOptionalJson(projectFile(project, options.critique ?? "qa/critic.json"))
   ]);
+  // The subject gate: matte quality per range. It reports; finish is what
+  // drops a failing range's scenes to their fallback before rendering.
+  const subjectGate = storyboard ? await subjectMatteGate(project, await readStorySubject(project, storyboard.story)) : { status: "skipped", reason: "no storyboard", ranges: [] };
   const contractMarker = storyboard ? readStoryCinematicContractMarker(storyboard.story) : readCinematicContractMarker(html);
   let phase2Evidence = null;
   if (contractMarker) {
@@ -117,11 +124,132 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
     audio: audioPath,
     readiness: readinessPath,
     gates: readiness.gates,
+    subject: subjectGate,
     blockers: readiness.blockers,
     repair_findings: readiness.repair_findings,
     receipt_warnings: [...(conceptsCheck?.warnings ?? []).map((message) => `CONCEPTS.json: ${message}`), ...(storyCheck?.warnings ?? []).map((message) => `STORY.json: ${message}`)],
     ...(phase2Evidence ? { cinematic_contract: phase2Evidence.summary } : {})
   };
+}
+
+// ---------------------------------------------------------------------------
+// Subject gate (docs/SUBJECT_EFFECTS_RFC.md §9): a matte range is only used
+// when its cut-out holds steady. A range fails when its subject.json says it
+// is unusable, when coverage varies too much across the range (stability, as
+// the subject stage measures it), or when any frame collapses (coverage near
+// 0, or under a third of the range's median) or jumps (a frame-to-frame
+// change over 30% of the median). finish drops a failing range's scenes to
+// their front-layer fallback (applySubjectFallback) instead of shipping a
+// broken cut-out.
+export const MATTE_GATE = Object.freeze({ stability: 0.7, collapse: 0.33, collapseFloor: 0.01, jump: 0.3, jumpFloor: 0.03 });
+
+/**
+ * One range's matte quality from its subject.json (launchclip.subject.v1).
+ * → {ok, reasons: [string], stability, median, collapsed: [t], jumps: [t]}
+ */
+export function matteQuality(info, limits = MATTE_GATE) {
+  const frames = (Array.isArray(info?.frames) ? info.frames : []).filter((frame) => Number.isFinite(frame?.coverage) && Number.isFinite(frame?.t));
+  if (!frames.length) return { ok: false, reasons: ["the matte has no measured frames"], stability: 0, median: 0, collapsed: [], jumps: [] };
+  const values = frames.map((frame) => frame.coverage);
+  const sorted = [...values].sort((a, b) => a - b);
+  const median = sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const deviation = Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length);
+  const stability = mean > 0 ? Math.min(1, Math.max(0, 1 - deviation / mean)) : 0;
+  const floor = Math.max(limits.collapseFloor, median * limits.collapse);
+  const step = Math.max(limits.jumpFloor, median * limits.jump);
+  const collapsed = frames.filter((frame) => frame.coverage < floor).map((frame) => round3(frame.t));
+  const jumps = [];
+  for (let i = 1; i < frames.length; i += 1) if (Math.abs(frames[i].coverage - frames[i - 1].coverage) > step) jumps.push(round3(frames[i].t));
+  const reasons = [];
+  if (info?.usable === false) reasons.push(`the subject stage marked it unusable (${(info.reasons ?? []).join("; ") || "no reason given"})`);
+  if (stability < limits.stability) reasons.push(`coverage is unstable across the range (stability ${round3(stability)}, needs ${limits.stability})`);
+  if (collapsed.length) reasons.push(`the matte collapses in ${collapsed.length} frame${collapsed.length === 1 ? "" : "s"} (coverage under ${round3(floor)}, first at ${collapsed[0]} s)`);
+  if (jumps.length) reasons.push(`coverage jumps by more than ${round3(step)} between frames ${jumps.length} time${jumps.length === 1 ? "" : "s"} (first at ${jumps[0]} s)`);
+  return { ok: reasons.length === 0, reasons, stability: round3(stability), median: round3(median), collapsed, jumps };
+}
+
+/**
+ * The subject gate for a project's mattes (readStorySubject's entries).
+ * → {status: "passed" | "failed" | "skipped", reason?, ranges: [{src, in,
+ * out, ok, reasons, stability}]}. A range without info cannot be measured
+ * and is reported as skipped, never failed.
+ */
+export async function subjectMatteGate(project, mattes) {
+  if (!Array.isArray(mattes) || !mattes.length) return { status: "skipped", reason: "the story uses no mattes", ranges: [] };
+  const ranges = [];
+  for (const matte of mattes) {
+    if (!matte.info) { ranges.push({ src: matte.src, in: matte.in, out: matte.out, ok: true, skipped: true, reasons: ["no subject.json to measure"] }); continue; }
+    let info;
+    try { info = JSON.parse(await readFile(path.join(project, matte.info), "utf8")); }
+    catch (error) { ranges.push({ src: matte.src, in: matte.in, out: matte.out, ok: false, reasons: [`${matte.info} cannot be read (${error.message})`] }); continue; }
+    const quality = matteQuality(info);
+    ranges.push({ src: matte.src, in: matte.in, out: matte.out, ok: quality.ok, reasons: quality.reasons, stability: quality.stability });
+  }
+  return { status: ranges.every((range) => range.ok) ? "passed" : "failed", ranges };
+}
+
+/**
+ * The fallback for failing matte ranges. story: the unresolved story (not
+ * changed); resolved: the same story resolved with every matte; failed:
+ * [{in, out, src}] source ranges; kept: the mattes that passed.
+ * Every scene whose window overlaps a failing range's footage:
+ * - a module that needs the subject (it is built round the cut-out, its room
+ *   plate or its outline) is skipped: the recording shows there instead;
+ * - any other scene on the behind or split layer renders in front;
+ * - any other scene whose model still moves, restyles or hides around the
+ *   subject (subjectCamera, subjectStyle, room) is skipped.
+ * base.subject becomes the explicit list of kept mattes.
+ * → {story, changes: [{id, module, action: "front" | "skipped", range}]}
+ */
+export function applySubjectFallback(story, resolved, { failed = [], kept = [] } = {}) {
+  const copy = JSON.parse(JSON.stringify(story));
+  const changes = [];
+  if (!failed.length || !copy.base || typeof copy.base !== "object") return { story: copy, changes };
+  const base = storyBase(resolved);
+  // Timeline windows that show each failing range's footage.
+  const windows = [];
+  for (const range of failed) {
+    for (const segment of base?.segments ?? []) {
+      const from = Math.max(range.in, segment.sourceStart), to = Math.min(range.out, segment.sourceStart + segment.duration);
+      if (to > from) windows.push({ range, start: segment.start + (from - segment.sourceStart), end: segment.start + (to - segment.sourceStart) });
+    }
+  }
+  const catalogue = catalogModules();
+  const byId = new Map(resolved.scenes.map((scene) => [scene.id, scene]));
+  const skipped = new Set();
+  for (const scene of copy.scenes ?? []) {
+    const timed = byId.get(scene.id);
+    if (!timed) continue;
+    const hit = windows.find((window) => Number(timed.start) < window.end - 1e-6 && Number(timed.end) > window.start + 1e-6);
+    if (!hit) continue;
+    let model = null;
+    try { model = resolveModule(timed, resolved); } catch { /* unresolvable scenes are reported by validation */ }
+    const layered = (scene.layer ?? model?.layer ?? "front") !== "front";
+    if (!layered && !needsSubject(timed, model)) continue;
+    const range = `${hit.range.in}–${hit.range.out} s`;
+    if (catalogue[scene.module]?.needs?.includes("subject") || model?.subjectCamera || model?.subjectStyle || model?.room) {
+      skipped.add(scene.id);
+      changes.push({ id: scene.id, module: scene.module, action: "skipped", range });
+    } else {
+      scene.layer = "front";
+      changes.push({ id: scene.id, module: scene.module, action: "front", range });
+    }
+  }
+  copy.scenes = (copy.scenes ?? []).filter((scene) => !skipped.has(scene.id));
+  copy.base.subject = { mattes: kept.map(({ src, in: from, out, info, plate, contours }) => ({ src, in: from, out, ...(info ? { info } : {}), ...(plate ? { plate } : {}), ...(contours ? { contours } : {}) })) };
+  return { story: copy, changes };
+}
+
+/** One line per fallback change, for warnings. */
+export function subjectFallbackLines(changes) {
+  return changes.map((change) => change.action === "skipped"
+    ? `${change.id} (${change.module}) is skipped: the presenter matte for ${change.range} failed the subject gate, and the module needs the cut-out`
+    : `${change.id} (${change.module}) renders in front: the presenter matte for ${change.range} failed the subject gate`);
+}
+
+function round3(value) {
+  return Math.round(value * 1000) / 1000;
 }
 
 // The music bed gain cinematic-check (and finish's audio gate) assume when

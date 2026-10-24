@@ -1157,6 +1157,36 @@ more headroom). Today only `masthead` names its glyphs. In a portrait Short a
 masthead needs about 20% headroom (more with a kicker), which the planner
 prompt states.
 
+### Matte quality gate (`src/cinematic_check.js`)
+
+`matteQuality(info)` measures one range's `subject.json`. The range fails when
+the subject stage marked it unusable, when its coverage is unstable across the
+range (1 − the coefficient of variation under 0.7, as the stage measures it),
+when any frame collapses (coverage under a third of the range's median, or
+under 0.01), or when coverage jumps between two frames by more than 30% of the
+median (at least 0.03). `MATTE_GATE` holds the limits. `subjectMatteGate(project,
+mattes)` reports `{status: "passed" | "failed" | "skipped", ranges}`; a range
+without `info` cannot be measured and passes as `skipped: true`.
+
+`finish` runs the gate in its validate stage, before anything resolves. A
+failing range is not used, and `applySubjectFallback` changes finish's copy
+(never `storyboard.json`) for every scene whose window shows that range's
+footage:
+
+- a module that needs the subject (`needs: ["subject"]`: it is built round the
+  cut-out, its room plate or its outline) is **skipped**, and the recording
+  shows there instead;
+- any other scene on the `behind` or `split` layer renders **in front**;
+- any other scene whose model still sets `subjectCamera`, `subjectStyle` or
+  `room` is skipped.
+
+`base.subject` becomes the explicit list of the ranges that passed, so
+layout-check and both compilers never mount the failing matte. Each change is
+a `subject gate:` warning, and the finish report's `gates.subject` is
+`{status: "fallback", ranges, changes: [{id, module, action, range}]}`; it
+never fails the render. `cinematic-check` reports the same gate as `subject`
+in its result.
+
 ### Density budget (`subjectDensityFindings`, `kit/core/modules.mjs`)
 
 Presenter effects land when they are rare (RFC §7.5). A subject effect is a
