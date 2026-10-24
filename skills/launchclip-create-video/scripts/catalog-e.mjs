@@ -39,7 +39,7 @@ const MEDIA_PATH = /^assets\/[a-zA-Z0-9_./ -]+$/;
 const VIDEO_FILE = /\.(mp4|webm|mov|m4v)$/i;
 const IMAGE_FILE = /\.(png|jpe?g|webp|gif|svg)$/i;
 
-function media(check, value, path, {required = true} = {}) {
+export function media(check, value, path, {required = true} = {}) {
   if (value === undefined && !required) return null;
   check.obj(value, path, ['src', 'sourceStart', 'fit'], ['src']);
   const src = value.src;
@@ -52,7 +52,7 @@ function media(check, value, path, {required = true} = {}) {
 }
 
 // Spring progress 0 → 1 at `start`, back to 0 from `release` (the punch-in springs).
-function springIn(t, {start, release, fps}) {
+export function springIn(t, {start, release, fps}) {
   if (t < start - 1e-9) return 0;
   const pin = springValue(t, {start, fps, ...PUNCH_SPRING.in});
   const pout = t < release - 1e-9 ? 0 : springValue(t, {start: release, fps, ...PUNCH_SPRING.out});
@@ -60,7 +60,7 @@ function springIn(t, {start, release, fps}) {
 }
 
 // One sample per frame over the scene, identity on the last.
-function frameSamples(b, fn) {
+export function frameSamples(b, fn) {
   const samples = [];
   for (let f = Math.ceil(b.start * b.fps - 1e-6); f <= Math.floor(b.end * b.fps + 1e-6); f++) samples.push({t: rt(f / b.fps), ...fn(f / b.fps)});
   if (!samples.length || samples.at(-1).t < b.end - 1e-6) samples.push({t: b.end, scale: 1, x: 0, y: 0});
@@ -106,11 +106,11 @@ function holeOps(ops, id, samples, {start, fadeIn, release, releaseDuration}) {
 }
 
 // Mirror a container's transform ops onto its hoisted media.
-function mirror(ops, from, to) {
+export function mirror(ops, from, to) {
   for (const op of [...ops]) if (op.target === from) ops.push({...op, target: to, props: op.props ? {...op.props} : undefined, from: op.from ? {...op.from} : undefined, to: op.to ? {...op.to} : undefined});
 }
 
-function mediaNode(id, rect, m, {origin, radius = 0}) {
+export function mediaNode(id, rect, m, {origin, radius = 0}) {
   const style = abs(rect.x, rect.y, rect.width, rect.height, {objectFit: m.fit, borderRadius: radius, background: '#000000', opacity: 0,
     transformOrigin: `${r2(origin.x - rect.x)}px ${r2(origin.y - rect.y)}px`});
   return m.kind === 'video' ? el('video', `${id}-media`, style, [], {src: m.src, muted: '', playsinline: ''}) : el('img', `${id}-media`, style, [], {src: m.src, alt: ''});
