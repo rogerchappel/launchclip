@@ -15,6 +15,7 @@ import {
   phraseRowModule,
   planningPrompt,
   storyboardModulesReference,
+  subjectEffectsReference,
   suggestModuleMoods,
   suggestModules
 } from "../kit/core/planning-prompt.mjs";
@@ -163,5 +164,16 @@ test("the skill reference is generated from the same registry and is in sync", a
   assert.equal(await readFile(path.join(root, "skills-src/references/storyboard-modules.md"), "utf8"), reference);
   for (const skill of ["launchclip-create-video", "launchclip-create-video-remotion"]) {
     assert.equal(await readFile(path.join(root, "skills", skill, "references/storyboard-modules.md"), "utf8"), reference);
+  }
+});
+
+test("subject-effects.md is generated from the registry and shipped in both skills", async () => {
+  const reference = subjectEffectsReference();
+  assert.match(reference, /^# Subject effects/);
+  assert.match(reference, /\| masthead \| behind \|/);
+  assert.match(reference, /\| dolly-zoom \| behind \|/);
+  assert.match(reference, /^### punch-in \(/m, "punch-in steps and blur are documented alongside");
+  for (const skill of ["launchclip-create-video", "launchclip-create-video-remotion"]) {
+    assert.equal(await readFile(path.join(root, "skills", skill, "references", "subject-effects.md"), "utf8"), reference);
   }
 });

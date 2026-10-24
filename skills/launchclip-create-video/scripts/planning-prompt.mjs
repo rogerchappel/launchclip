@@ -535,3 +535,52 @@ export function storyboardModulesReference() {
   ];
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
 }
+
+/**
+ * Markdown reference for subject-aware effects in the create-video skills
+ * (skills-src/references/subject-effects.md, generated). Built from the same
+ * registry, phrase table and presenter rules as the planner prompt.
+ */
+export function subjectEffectsReference() {
+  const catalogue = moduleCatalogue();
+  const subjectModules = catalogue.filter((module) => module.needs?.includes('subject'));
+  const punchIn = catalogue.filter((module) => module.id === 'punch-in');
+  const rows = subjectModules.map((module) => {
+    const uses = PHRASE_MODULE_TABLE.filter((row) => row.module === module.id).map((row) => row.when).join('; ') || '—';
+    return `| ${module.id} | ${module.layer ?? 'front'} | ${(module.aspects ?? ['9:16', '16:9']).join(', ')} | ${(module.mood ?? []).join(', ') || '—'} | ${uses.replace(/\|/g, '\\|')} |`;
+  });
+  const ready = { usable: true, reasons: [], framing: 'medium', headroom: 0.2 };
+  const lines = [
+    '# Subject effects',
+    '',
+    '<!-- Generated from kit/core/planning-prompt.mjs by scripts/sync-skills.mjs. Do not edit by hand; run `npm run skills:sync`. -->',
+    '',
+    'Effects that use the presenter cut out of a footage-led recording: graphics that sit behind them, a room that moves while they hold still. They need one person in frame and a local matte; everything else in a footage-led story still works without one. Design: `docs/SUBJECT_EFFECTS_RFC.md` in the LaunchClip repo.',
+    '',
+    ...section('Getting the subject', [
+      '1. Probe the recording before planning: `launchclip subject probe assets/recording.mp4 --json`. Read `usable` (and `reasons` when it is false), `framing` (close-up, medium or wide) and `headroom`. Plan subject effects only when `usable` is true.',
+      '2. Plan the storyboard. Subject effects are timed on the edited timeline like every other scene.',
+      '3. Matte the source range each subject scene covers, padded by about 0.5 s: `launchclip subject matte assets/recording.mp4 --range <in>-<out> --project .`. The matte, its framing data and the room plate are filed under `assets/subject/`, and `base.subject` (default `"auto"`) picks them up. With `base.trim` or `base.edl`, map timeline seconds back to source seconds first.',
+      '4. `launchclip story validate`, `launchclip layout-check` and `launchclip finish` read the filed mattes. `launchclip make` runs all of this for you.',
+      '',
+      'The models download on first use (`launchclip subject setup` fetches them up front; `launchclip doctor` reports them). Mattes take about 0.2 s a frame at 1080×1920 on an Apple-silicon Mac, so matte only the ranges you use.'
+    ]),
+    ...section('Layers', [
+      '- `scene.layer: "behind"`: the scene draws behind the presenter, so their head and body cover it. masthead and dolly-zoom are behind by default.',
+      '- No layer (front): the scene draws over the presenter, as every footage-led overlay always has.',
+      '- `"split"`: for modules that draw on both sides of the presenter (none yet).',
+      '- `base.subject: "off"` turns the subject off; `{"mattes": [...]}` lists mattes explicitly (`src`, `in`, `out`, `info`, `plate`).',
+      '',
+      'Both renderers stack the base recording, behind scenes, the cut-out presenter, front scenes, then captions. A punch-in moves (and blurs) the presenter and the room together.'
+    ]),
+    ...section('Rules', subjectLines(ready).slice(1).map((line) => `- ${line}`)),
+    ...section('Modules', [
+      '| Module | Layer | Aspects | Moods | Use when the presenter… |',
+      '| --- | --- | --- | --- | --- |',
+      ...rows,
+      '',
+      ...moduleLines('guided', [...subjectModules, ...punchIn])
+    ])
+  ];
+  return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
+}
