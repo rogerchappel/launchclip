@@ -1382,6 +1382,24 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip module fit <module> [--params params.json] [--aspect 16:9|9:16] [--story storyboard.json] [--brand brand.json] [--duration 4] [--json]
   ```
 
+- `subject setup`: Download and verify the local person segmentation models the subject stage uses.
+
+  ```text
+  launchclip subject setup [--model modnet-fused|modnet|mediapipe-selfie|u2net-human] # download and verify the segmentation models
+  ```
+
+- `subject probe`: Sample a recording and report whether one person can be cut out, and how they are framed.
+
+  ```text
+  launchclip subject probe <video> [--model mediapipe-selfie] [--cache .launchclip/subject] [--force] [--no-download] [--json] # framing summary: people, head, headroom, usable
+  ```
+
+- `subject matte`: Cut the person out of one source range: a cached alpha WebM and per-frame head and body boxes.
+
+  ```text
+  launchclip subject matte <video> --range <in>-<out> [--model modnet-fused] [--smooth 0-0.9] [--cache .launchclip/subject] [--force] [--no-download] [--json] # alpha matte.webm + subject.json for one source range
+  ```
+
 - `finish`: Storyboard to mastered video in one command: voice, music, SFX, render, master and gates. --candidate renders a draft candidate with no paid calls (synth or no music, a cached or free voice, else the test voice; no evidence or gates) and records it in the rendered-candidate receipt.
 
   ```text

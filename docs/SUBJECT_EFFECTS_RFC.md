@@ -88,15 +88,18 @@ works. LaunchClip is MIT. So:
 ### 4.1 Outputs
 
 A cache directory per source recording, keyed by the source file's sha256 and
-the model id:
+the model id. The probe and the matte use different models (4.2), so they sit
+in different entries:
 
 ```
-.launchclip/subject/<sha256-12>-<model>/
+.launchclip/subject/<sha256-12>-mediapipe-selfie/
   probe.json        cheap framing summary (sampled frames)
+.launchclip/subject/<sha256-12>-modnet-fused/
   ranges/<in>-<out>/
-    matte.webm      the source range with alpha (person opaque, room clear), VP9
+    matte.webm      the source range with alpha (person opaque, room clear), VP9,
+                    short edge capped at 1920 px
     subject.json    per-frame boxes and a range summary
-    contours.json   optional: the outline as polygons per frame
+    contours.json   optional, later (doodle-outline): the outline as polygons
 ```
 
 `probe.json` (`launchclip.subject-probe.v1`), from about one frame per second:
@@ -111,9 +114,14 @@ the model id:
 ```
 
 `subject.json` (`launchclip.subject.v1`) has the same summary for the range
-plus `frames: [{t, head, body, coverage}]`, one entry per frame, in source
-seconds and canvas fractions. Times are **source** time, so a `base.trim` maps
-onto it exactly as it maps onto the recording.
+plus `range`, `matte`, `matte_size` and `frames: [{t, head, body, coverage}]`,
+one entry per frame, in source seconds and **source-frame** fractions (the
+compilers map them through `base.fit` and `base.focus` onto the canvas). Times
+are **source** time, so a `base.trim` maps onto it exactly as it maps onto the
+recording.
+
+`framing` counts head heights of frame below the chin, so it reads the same in
+9:16 and 16:9: under 1.5 is a close-up, over 4 is wide, medium between.
 
 `usable` is false (with `reasons`) when there is no person, several people,
 too little coverage, or an unstable matte (high frame-to-frame change in
@@ -121,26 +129,53 @@ coverage). The planner then gets no subject modules for that recording.
 
 ### 4.2 Model and runtime
 
-The model is chosen by a short bake-off before phase 1 merges, on the existing
-footage fixtures plus three new ones (close-up, wide with a busy room, dark
-room). Criteria: licence (Apache-2.0, MIT or BSD only), edge quality on hair
-and hands, temporal stability, and speed on a 4-core CPU.
+Settled by the phase 1 bake-off (2026-10-24, `scripts/subject-bakeoff.mjs`).
 
-Candidates, licences to be confirmed before the bake-off:
+**Runtime.** Node, not Python: every candidate runs through
+`onnxruntime-node`, which HyperFrames already installs for its own
+`remove-background`. LaunchClip declares it as an optional dependency (like
+`kokoro-js`), `launchclip doctor` reports it, and nothing else is needed.
+Models download on first use into `~/.launchclip/models`, pinned by sha256.
 
-- MediaPipe selfie segmentation (listed as Apache-2.0);
-- MODNet (listed as Apache-2.0);
-- whatever HyperFrames' `remove-background` command uses, if its terms suit.
+**Candidates**, all Apache-2.0: MODNet (portrait matting), MediaPipe selfie
+segmentation, and U²-Net human segmentation (the model behind HyperFrames'
+`remove-background`).
 
-The runtime follows the Whisper precedent: an optional local tool, detected by
-`launchclip doctor`, never required for rendering, with a clear install hint.
-Subject modules are simply unavailable without it. Python with ONNX Runtime is
-the likely shape; the bake-off may change that.
+**Footage.** Seven 6 s clips of real talking-head recordings: five 9:16 crops
+at 1080×1920 (busy room, pale green backdrop, dim wide shot with arms on a
+desk, raised hands, a microphone covering the mouth under red light) and two
+16:9 at 1920×1080. The clips and comparison sheets stay local; they show a
+real person and are never committed.
+
+**Results** (Apple-silicon Mac, CPU, per 1080×1920 frame; flicker is the mean
+frame-to-frame alpha change, so compare within a clip):
+
+| Model | ms/frame | Flicker, raised hands | Flicker, mic | What the sheets show |
+|---|---|---|---|---|
+| MODNet (512 short edge) | 320–330 | 1.58% | 1.02% | Crisp hair and beard edges; excludes desk lamps; punches holes in low-contrast lower torsos |
+| MODNet (384) | 195 | 0.70% | 0.80% | Same edges, fewer holes |
+| MediaPipe selfie | 13 | 0.27% | 0.76% | Whole body every frame, keeps the mic; loose edges, picks up lamps and shoulder haze |
+| U²-Net human | 1,320–1,370 | — | 0.69% | No better than MODNet at four times the cost; ruled out |
+| **`modnet-fused`** | **210–220** | **0.20%** | **0.62%** | MODNet's edges, MediaPipe's body, no lamp |
+
+A chroma-key reference was tried on the green-backdrop clip and abandoned: the
+backdrop is pale mint and the clothes are close to it, so the key ate the
+person. `--key` stays in the script for real green screens.
+
+**Decision.**
+
+- **Matte: `modnet-fused`.** MODNet at a 384 px short edge gives the edges.
+  MediaPipe's mask, eroded by 3 of its pixels and limited to MODNet's body box,
+  fills MODNet's holes; the result is the per-pixel maximum. About 0.2 s a
+  frame at 1080×1920 and 0.66 s at 3414×1920 (a 4K source).
+- **Probe: MediaPipe alone.** It only needs presence and framing; 60 s of 4K
+  footage probes in about 5 s.
+- `--model` selects any single model or pipeline, for comparison.
 
 ### 4.3 When it runs
 
-The full matte costs about one second per nine frames on an Apple-silicon Mac,
-so it does not run on the whole recording up front:
+The full matte costs about 0.2 s a frame at 1080×1920 on an Apple-silicon Mac
+(4.2), so it does not run on the whole recording up front:
 
 1. **Probe** (seconds) runs in footage-led preparation, before planning, so the
    art director knows the framing and whether subject modules are allowed.
@@ -429,8 +464,9 @@ Phases 3 to 6 can split per module, one PR each, once phase 2 is in.
 
 ## 11. Open questions
 
-1. **Model choice.** Which segmentation model wins the bake-off, and does it
-   need Python, or can it run in Node through ONNX Runtime?
+1. ~~**Model choice.**~~ Settled in 4.2: `modnet-fused` in Node. Open: a GPU
+   (CoreML) execution provider for long recordings, and a temporal model if
+   flicker shows at the matte edge in renders.
 2. **Alpha video in both renderers.** VP9 alpha WebM plays in headless Chromium
    and in Remotion's `OffthreadVideo` with `transparent`; parity at the matte
    edge needs measuring. A PNG-sequence fallback is the backup.
