@@ -127,3 +127,19 @@ test('checkSubjectFace flags front elements over the face for more than 0.3 s', 
   assert.equal(findings[0].rule, 'subject-face');
   assert.match(findings[0].detail, /covers the presenter's face for 1 s from 1 s/);
 });
+
+test('subjectContext reports the presenter at a time, from the covering matte', async () => {
+  const {subjectContext} = await import('../kit/core/subject-layer.mjs');
+  const summary = {source: {width: 1080, height: 1920}, framing: 'medium', head: {x: 0.5, y: 0.25, w: 0.2, h: 0.1}, body: {x: 0.5, y: 0.65, w: 0.6, h: 0.7}, headroom: 0.2};
+  const resolved = story({src: 'assets/recording.mp4', subject: {mattes: [{src: 'assets/subject/a.webm', in: 0, out: 4, plate: 'assets/subject/a.plate.jpg', summary}]}});
+  const at = subjectContext(resolved, 1);
+  assert.equal(at.available, true);
+  assert.equal(at.framing, 'medium');
+  assert.equal(at.placement, 'measured');
+  assert.deepEqual(at.head, {x: 432, y: 384, width: 216, height: 192});
+  assert.deepEqual(at.plate, {src: 'assets/subject/a.plate.jpg', fit: 'cover', focus: {x: 0.5, y: 0.5}});
+  const later = subjectContext(resolved, 6);
+  assert.equal(later.available, false);
+  assert.equal(later.placement, 'default');
+  assert.equal(subjectContext(story({src: 'assets/recording.mp4', subject: 'off'}), 1), null);
+});

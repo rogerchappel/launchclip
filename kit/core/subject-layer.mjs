@@ -170,6 +170,35 @@ export function subjectModelErrors(model) {
   return errors;
 }
 
+/**
+ * What a module knows about the presenter at timeline t (resolveModule's
+ * ctx.subject), or null when the story has no base or the subject is off.
+ * → {available, framing, head, body, headroom, plate, placement}
+ *   available  a matte covers t (the subject layer can be mounted)
+ *   head, body canvas rects (px) from the covering matte's summary, else null
+ *   plate      {src, fit, focus}: the range's room plate, drawn like the base
+ *   placement  "measured" with a summary head, else "default"
+ */
+export function subjectContext(story, t) {
+  const base = storyBase(story);
+  if (!base || base.subject.mode === "off") return null;
+  const canvas = { width: Number(story.format?.width), height: Number(story.format?.height) };
+  const source = sourceTimeAt(base, t);
+  const matte = source === null ? null : base.subject.mattes.find((entry) => source >= entry.in - EPS && source <= entry.out + EPS) ?? null;
+  const summary = matte?.summary;
+  const toCanvas = (box) => (box && summary?.source ? sourceBoxToCanvas(box, base, summary.source, canvas) : null);
+  const head = toCanvas(summary?.head);
+  return {
+    available: Boolean(matte),
+    framing: summary?.framing ?? null,
+    head,
+    body: toCanvas(summary?.body),
+    headroom: summary?.headroom ?? null,
+    plate: matte?.plate ? { src: matte.plate, fit: base.fit, focus: { ...base.focus } } : null,
+    placement: head ? "measured" : "default"
+  };
+}
+
 // ---------------------------------------------------------------------------
 // The subject on the canvas (layout-check's face rule)
 
