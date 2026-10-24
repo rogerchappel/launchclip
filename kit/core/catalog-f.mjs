@@ -594,6 +594,8 @@ function resolveDoodleOutline(params, ctx) {
   placed.forEach(doodle => b.events.push({id: `${b.id}-doodle-${doodle.index}`, name: `doodle-${doodle.index}`, time: doodle.time, endTime: rt(doodle.time + 0.4), role: 'beat', cue: 'pop-soft'}));
   b.model.layer = 'front';
   b.model.framesFace = true;
+  // Drawn in front, but it traces the presenter: their range still gets matted.
+  b.model.usesOutline = true;
   const boil = [];
   for (const t of slots) if (t < end - 1e-6) boil.push(t);
   const content = {frames, doodles: placed, size, ink, stroke: r2(u(9)), t0, exitStart, boil, variants: [0, 1, 2], traced: frames.length > 0};

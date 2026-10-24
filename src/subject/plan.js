@@ -1,7 +1,7 @@
 // Which source ranges of the base a planned storyboard needs matted: every
-// scene that needs the subject (a behind or split layer, a subjectCamera or
-// a room), its window mapped back through the base's trims to source
-// seconds, padded and merged. `launchclip make` mattes exactly these.
+// scene that needs the subject (a behind or split layer, a subjectCamera,
+// a room, or a traced outline), its window mapped back through the base's
+// trims to source seconds, padded and merged. `launchclip make` mattes exactly these.
 
 import { resolveModule } from "../../kit/core/modules.mjs";
 import { storyBase } from "../../kit/core/story.mjs";
@@ -16,7 +16,7 @@ export function plannedSubjectWindows(resolved) {
     try { model = resolveModule(scene, resolved); } catch { /* a scene that does not resolve is reported by validate */ }
     return { scene, model, start: Number(scene.start), end: Number(scene.end) };
   });
-  return subjectWindows(entries.filter((entry) => needsSubject(entry.scene, entry.model)));
+  return subjectWindows(entries, { include: (entry) => needsSubject(entry.scene, entry.model) || Boolean(entry.model?.usesOutline) });
 }
 
 /**
