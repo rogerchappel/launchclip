@@ -18,7 +18,7 @@
 // below, or a fake in tests), so the planner runs keyless in tests.
 
 import { STORY_LANES, resolveStory, validateStory } from "../kit/core/story.mjs";
-import { isEditorialKind, knownModules, formatAspect, resolveModule } from "../kit/core/modules.mjs";
+import { isEditorialKind, knownModules, formatAspect, resolveModule, subjectDensityWarnings } from "../kit/core/modules.mjs";
 import { checkLayout, elementsFromEditorialLayout, elementsFromStory } from "../kit/core/layout-check.mjs";
 import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, planningPrompt, suggestModules } from "../kit/core/planning-prompt.mjs";
 import { applyStyle } from "../kit/core/style.mjs";
@@ -188,6 +188,7 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   }
   const second = validateStory(resolved, { modules: knownModules() });
   errors.push(...second.errors.filter((entry) => !validation.errors.includes(entry)).map((entry) => `validation: ${entry} (after resolving anchors)`));
+  if (second.ok) warnings.push(...subjectDensityWarnings(resolved));
 
   const models = new Map();
   for (const scene of resolved.scenes) {

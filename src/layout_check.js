@@ -1,7 +1,7 @@
 import { narrationFile, readStoryEdl } from "./story_loader.js";
 import { readStorySubject } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
-import { catalogModules, rectFitHint, resolveModule } from "../kit/core/modules.mjs";
+import { catalogModules, rectFitHint, resolveModule, subjectDensityFindings } from "../kit/core/modules.mjs";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -155,10 +155,12 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   let sweepFindings = [];
   try { sweepFindings = cameraSweepFindings(resolved, elements, words, report.captionBand); }
   catch (error) { warnings.push(`camera sweep check skipped: ${error.message}`); }
+  // Subject-effect density (RFC §7.5): a warning, never an error.
+  const densityFindings = subjectDensityFindings(resolved).map((finding) => ({ rule: "subject-density", severity: "warning", ...finding }));
   let faceFindings = [];
   try { faceFindings = await subjectFaceFindings(project, resolved, elements, warnings); }
   catch (error) { warnings.push(`subject face check skipped: ${error.message}`); }
-  const findings = [...specFindings, ...report.findings, ...plateFindings, ...sweepFindings, ...faceFindings].sort((a, b) => a.at - b.at);
+  const findings = [...specFindings, ...report.findings, ...plateFindings, ...sweepFindings, ...faceFindings, ...densityFindings].sort((a, b) => a.at - b.at);
   return {
     stage: "layout-check",
     project,

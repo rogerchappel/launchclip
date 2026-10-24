@@ -1098,6 +1098,20 @@ front-layer element covering at least 25% of the head for more than 0.3 s is
 a `subject-face` error. Behind scenes, captions, decor (punch-in) and
 `framesFace` modules are exempt.
 
+### Density budget (`subjectDensityFindings`, `kit/core/modules.mjs`)
+
+Presenter effects land when they are rare (RFC §7.5). A subject effect is a
+scene on the `behind` or `split` layer, a module whose definition `needs` the
+subject, or `punch-in`, `zoom-through` or `pull-back` (`isSubjectEffect`). In
+a resolved footage-led story they warn, never fail, when together they cover
+more than 35% of the runtime (overlaps count once), when two sit closer than
+3 s apart, or when two different ones run back to back (within a frame).
+`story validate` and `story resolve` list the warnings, `checkStoryboard`
+(the planner) carries them, and layout-check reports them as
+`subject-density` warnings. `SUBJECT_DENSITY` holds the limits. This sits
+beside the footage-led lane's "dress 10–40% of the runtime" guidance, and the
+planner prompt's presenter section states the same budget.
+
 ### Parity
 
 `examples/story/subject` (regenerate with
