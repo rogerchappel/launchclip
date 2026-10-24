@@ -499,7 +499,7 @@ const DEFAULT_HEAD = {portrait: {x: 0.4, y: 0.26, w: 0.2, h: 0.12}, landscape: {
 const MASTHEAD_BASELINE = 0.35;
 const CAP = 0.72;
 
-function headRect(ctx, canvas, portrait) {
+export function headRect(ctx, canvas, portrait) {
   if (ctx.subject?.head) return {...ctx.subject.head, measured: true};
   const d = DEFAULT_HEAD[portrait ? 'portrait' : 'landscape'];
   return {x: d.x * canvas.width, y: d.y * canvas.height, width: d.w * canvas.width, height: d.h * canvas.height, measured: false};

@@ -35,6 +35,9 @@ Both renderers stack the base recording, behind scenes, the cut-out presenter, f
 | --- | --- | --- | --- | --- |
 | masthead | behind | 9:16, 16:9 | bold, editorial, premium, launch | names the product or the one idea the video is about ("meet X", "this is X", "it's called X"): one word behind the presenter's head |
 | dolly-zoom | behind | 9:16, 16:9 | cinematic, dramatic, premium | lands a realisation, reveal or turn ("that's when", "it hit me", "everything changed"): the room moves, the presenter holds |
+| feed-frame | split | 9:16 | bold, launch, playful | — |
+| backdrop-swap | behind | 9:16, 16:9 | launch, premium, bold | — |
+| app-stage | behind | 9:16, 16:9 | launch, editorial | — |
 
 ### masthead (keeps captions, behind the presenter, needs the subject)
 Footage-led, behind the presenter: one huge word (a product name or the one idea) rises in letter by letter at the top of the frame, and the presenter's head covers its lower part like a magazine cover. Needs headroom: medium or wide shots.
@@ -55,6 +58,36 @@ params:
 - release: push: seconds to ease back before the scene end (0.3–1, default 0.5)
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: move, release
+
+### feed-frame (hides captions, needs the subject)
+Footage-led: the recording springs into a portrait feed window on a dark backdrop and the presenter breaks out over its top and sides, with generic feed chrome (icons, the user's handle, a caption, a progress bar). For "this exact video", posting or going viral. Counts appear only when given. Hides captions.
+params:
+- handle: @handle ≤ 24 (optional; shows the avatar row)
+- caption: one line ≤ 60 (optional)
+- counts: {likes?, comments?, shares?} strings ≤ 8 the user supplied (optional; never invent them)
+- follow: boolean (default true with a handle)
+- scale: window size 0.55–0.85 of the frame
+- release: seconds to spring back (0.3–1)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: frame, chrome, release
+
+### backdrop-swap (keeps captions, behind the presenter, needs the subject)
+Footage-led, behind the presenter: the room dissolves into a backdrop (brand gradient, or a supplied product screenshot or video) and the presenter glides down in front of it; an optional title sits above their head. For the turn from the problem to the product.
+params:
+- backdrop: {src: assets/ image or video (a demo-autopilot flow: assets/demo/<flow>.mp4), sourceStart?: seconds (video), fit?: cover|contain} (default: a brand gradient)
+- title: ≤ 32 (optional)
+- scale: presenter size 0.6–0.95 (default 0.78)
+- release: seconds to glide back (0.3–1)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: swap, release
+
+### app-stage (keeps captions, behind the presenter, needs the subject)
+Footage-led, behind the presenter: the product UI (a screenshot or recording) slides down to fill the top of the frame and the presenter's head rises over its bottom edge. Needs headroom; for showing the app while talking about it.
+params:
+- media: {src: assets/ image or video (a demo-autopilot flow: assets/demo/<flow>.mp4), sourceStart?: seconds (video), fit?: cover|contain} (required)
+- title: app or page title ≤ 32 (optional)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: stage
 
 ### punch-in (keeps captions)
 Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay). Steps punch in, further in or back out on successive words; blur adds a few frames of zoom blur on each move.
