@@ -1,0 +1,6 @@
+{
+  "project": "examples/story/zoom-through",
+  "sceneId": "through",
+  "times": [7.6, 7.8, 7.9333333, 7.9666667, 8.0333333, 8.2, 8.5],
+  "threshold": { "ssim": 0.97 }
+}
