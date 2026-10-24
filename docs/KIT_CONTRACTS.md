@@ -903,7 +903,7 @@ full-canvas root. `layout.rect` is the occupied box.
 | `footage-callout` | `text` ≤ 42, `label` ≤ 24, `point {x,y}` 0.04–0.96, `side` auto/above/below/left/right, `tone` primary/paper/dark, `tilt` −6–6°, `at` | `point` (tick), `sticker` (pop) | The sticker sits inside the safe zone, above the caption band, and never covers the point. The leader line runs from the point to the rotated sticker edge. ≥ 1.5 s |
 | `lower-third` | `name` ≤ 32, `title` ≤ 48, `align` left/center, `tone` dark/primary, `at` | `name` (whoosh), `title` | Bottom edge on the caption-band gap; ≥ 2 s |
 | `emphasis-caption` | `text` 1–3 words ≤ 24, `color` (≥ 3:1 on the bg outline), `position` center/upper/lower, `stagger`, `at` | `pop` (impact), `word-<i>` | `hidesCaptions`; 88% of the safe width; ≥ 0.8 s |
-| `masthead` | `word` one word ≤ 12 (uppercased), `kicker` ≤ 32, `color` (paper default), `stagger` 0–0.12, `at` | `title` (whoosh) | Layer `behind`, needs the subject. Baseline at 35% down `ctx.subject.head` (or a default medium head), letters up to 90% of the safe width, shrunk into the headroom; fails below 150 px. `content.covered` is the share of cap height the head covers; ≥ 1.5 s |
+| `masthead` | `word` one word ≤ 12 (uppercased), `kicker` ≤ 32, `color` (paper default), `stagger` 0–0.12, `baseline` 0–0.35, `at` | `title` (whoosh) | Layer `behind`, needs the subject. Baseline `baseline` × the height of `ctx.subject.head` (or a default medium head) down the head; by default as deep as 0.35 while the head covers at most 30% of the cap height, never shrinking the letters below 150 px to get there. Letters up to 90% of the safe width, shrunk into the headroom; fails below 150 px, and fails when a measured head hides most of the word (more than half its letters under 60% visible, e.g. a short word inside the head's column on a close-up), so a re-resolve against the real framing refuses it early. `content.covered` is the share of cap height the head covers, `content.baseline` the depth used; `MODULES.masthead.glyphs(model)` gives the key glyph boxes; ≥ 1.5 s |
 | `dolly-zoom` | `direction` push/pull, `scale` 1.12–1.6 (1.3), `move` 1–2.5 s, `release` 0.3–1 s (push), `at` | `move` (riser), `release` | Layer `behind`, needs the subject. Scales the matte's room plate (`ctx.subject.plate`) about the head centre; `subjectCamera` holds the presenter at identity. Fails on a close-up; without a plate it draws nothing; ≥ 1.8 s |
 
 `callout` stays the editorial text card, so the anchored sticker is
@@ -1139,6 +1139,23 @@ frame's head box through the base's trims, fit and focus onto the canvas. A
 front-layer element covering at least 25% of the head for more than 0.3 s is
 a `subject-face` error. Behind scenes, captions, decor (punch-in) and
 `framesFace` modules are exempt.
+
+### Behind-text visibility (`checkBehindText`, `src/layout_check.js`)
+
+A behind-layer scene whose module names its key glyphs (`MODULES[id].glyphs(model)`
+→ `[{index, char, x, y, width, height}]`, laid out by `glyphBoxes` in
+`kit/core/catalog-b-base.mjs` with the same advance model as `textWidth`, so
+nothing is rendered) must keep at least 60% of each glyph clear of the
+presenter at its settle time (`layout.motion.enterEnd`) and mid-hold, on the
+frame grid. The presenter is each frame's head and body box from the matte's
+`subject.json`, mapped like the face rule (`subjectLocator`, then
+`subjectCameraOps`), and modelled by `subjectCoverShare` (`kit/core/subject.mjs`) as the ellipse
+inside the head box joined to the body box below the chin. A glyph under 60%
+is a `subject-text` error naming the worst glyph and time, with the module's
+repair (masthead: lower `params.baseline`, drop the kicker, or a shot with
+more headroom). Today only `masthead` names its glyphs. In a portrait Short a
+masthead needs about 20% headroom (more with a kicker), which the planner
+prompt states.
 
 ### Density budget (`subjectDensityFindings`, `kit/core/modules.mjs`)
 

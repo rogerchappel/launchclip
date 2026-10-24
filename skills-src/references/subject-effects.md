@@ -27,6 +27,7 @@ Both renderers stack the base recording, behind scenes, the cut-out presenter, f
 - scene.layer: "behind" draws a scene behind the presenter, so their head and body cover it (a word or chart behind them); omit it (front) for everything else. masthead and dolly-zoom are always behind.
 - Density budget: use at most one or two subject effects in a 30–60 s piece (behind or split scenes, the modules that need the subject, and punch-in, zoom-through and pull-back), at least 3 s apart, never two different ones back to back, and together under 35% of the runtime. Validation warns past any of these.
 - masthead and app-stage need headroom; dolly-zoom needs a medium or wide shot.
+- A masthead keeps 60% of every letter clear of the head, or layout-check fails it: in a portrait Short that takes about 20% headroom (more with a kicker).
 - app-stage, phone-stage and a backdrop-swap backdrop show real product media from the asset inventory (screenshots, screen recordings, demo flows); never invent a screenshot. feed-frame shows counts only when the brief gives them.
 - A checklist without a rect places itself beside the presenter (above the head, else on the chest) at a legible size; keep it to two or three short rows on a close shot.
 - Never put a front scene over the presenter's face for more than 0.3 s; layout-check fails it.
@@ -56,6 +57,7 @@ params:
 - kicker: small line above it ≤ 32 (optional)
 - color: paper (default)|primary|accent or #hex (≥ 3:1 on brand bg)
 - stagger: seconds between letters (0–0.12, default 0.05)
+- baseline: how far down the head the letters stand, as a share of its height (0–0.35; default as deep as keeps 70% of the letters clear). Lower raises them and shrinks them into the headroom
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: title
 

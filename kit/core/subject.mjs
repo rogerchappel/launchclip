@@ -149,6 +149,30 @@ export function summarizeSamples(samples) {
   };
 }
 
+/**
+ * The share of a rect the presenter covers, given their head and body boxes
+ * on the canvas. The silhouette is modelled as the ellipse inside the head
+ * box joined to the body box below the head (above the chin the body box only
+ * holds the head and the air beside it), sampled on a 16 × 16 grid.
+ */
+export function subjectCoverShare(rect, { head = null, body = null } = {}) {
+  if (!rect || !(rect.width > 0) || !(rect.height > 0) || (!head && !body)) return 0;
+  const chin = head ? head.y + head.height : -Infinity;
+  const inside = (x, y) => {
+    if (head && head.width > 0 && head.height > 0) {
+      const dx = (x - (head.x + head.width / 2)) / (head.width / 2), dy = (y - (head.y + head.height / 2)) / (head.height / 2);
+      if (dx * dx + dy * dy <= 1) return true;
+    }
+    return Boolean(body) && y >= chin && x >= body.x && x <= body.x + body.width && y >= body.y && y <= body.y + body.height;
+  };
+  const n = 16;
+  let covered = 0;
+  for (let i = 0; i < n; i += 1) {
+    for (let j = 0; j < n; j += 1) if (inside(rect.x + ((i + 0.5) / n) * rect.width, rect.y + ((j + 0.5) / n) * rect.height)) covered += 1;
+  }
+  return covered / (n * n);
+}
+
 /** The frame entry nearest to source time t in a range file (binary search). */
 export function subjectAt(info, t) {
   const frames = info?.frames ?? [];

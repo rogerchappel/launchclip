@@ -45,6 +45,9 @@ test("subject modules: offered with a usable subject, explained when not", () =>
   const ready = planningPrompt({ lane: "footage-led", format: portrait, subject });
   assert.match(ready, /## Presenter \(subject\)/);
   assert.match(ready, /medium framing, 20% headroom/);
+  assert.match(ready, /A masthead keeps 60% of every letter clear of the head[^\n]*about 20% headroom \(more with a kicker\)\./);
+  const tight = planningPrompt({ lane: "footage-led", format: portrait, subject: { ...subject, headroom: 0.15 } });
+  assert.match(tight, /this recording has 15%: use another module/);
   assert.match(ready, /^### masthead \(keeps captions, behind the presenter, needs the subject\)/m);
   assert.match(ready, /\| names the product or the one idea .*\| masthead \|/);
   const none = planningPrompt({ lane: "footage-led", format: portrait, subject: { usable: false, reasons: ["more than one person is in frame"] } });

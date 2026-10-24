@@ -28,7 +28,9 @@
 import { CAMERA_IDENTITY, cameraSampleProps } from "./catalog-c.mjs";
 import { frameState, sampleTime } from "./catalog-b-view.mjs";
 import { storyBase } from "./story.mjs";
-import { subjectAt } from "./subject.mjs";
+import { subjectAt, subjectCoverShare } from "./subject.mjs";
+
+export { subjectCoverShare };
 
 export const SUBJECT_CAMERA = "lc-subject-camera";
 export const ROOM = "lc-room";
@@ -296,6 +298,15 @@ export function sourceBoxToCanvas(box, base, source, canvas) {
  * are skipped).
  */
 export function headLocator(story, infos) {
+  const locate = subjectLocator(story, infos);
+  return (t) => locate(t)?.head ?? null;
+}
+
+/**
+ * → (t) => {head, body} canvas rects (either may be null) at timeline t, or
+ * null where no matte covers it. Same mapping as headLocator.
+ */
+export function subjectLocator(story, infos) {
   const base = storyBase(story);
   if (!base) return () => null;
   const canvas = { width: Number(story.format.width), height: Number(story.format.height) };
@@ -304,8 +315,38 @@ export function headLocator(story, infos) {
     if (source === null) return null;
     const info = (infos ?? []).find((entry) => entry && source >= entry.range.in - EPS && source <= entry.range.out + EPS);
     const frame = info ? subjectAt(info, source) : null;
-    return frame?.head ? sourceBoxToCanvas(frame.head, base, info.source, canvas) : null;
+    if (!frame) return null;
+    const map = (box) => (box ? sourceBoxToCanvas(box, base, info.source, canvas) : null);
+    return { head: map(frame.head), body: map(frame.body) };
   };
+}
+
+/**
+ * Behind-layer text must stay readable (RFC §9): at each of an element's
+ * `times`, every key glyph keeps at least `minVisible` of its area clear of
+ * the presenter. texts: [{id, module, glyphs: [{index, char, x, y, width,
+ * height}], times: [t], hint?}]; subjectAt(t) → {head, body} | null.
+ * → [{rule: "subject-text", severity: "error", ids, at, detail}], one per
+ * element (its worst glyph).
+ */
+export function checkBehindText({ texts = [], subjectAt: locate, minVisible = 0.6 } = {}) {
+  const findings = [];
+  for (const text of texts) {
+    let worst = null;
+    for (const t of text.times ?? []) {
+      const boxes = locate(t);
+      if (!boxes) continue;
+      for (const glyph of text.glyphs ?? []) {
+        const visible = 1 - subjectCoverShare(glyph, boxes);
+        if (visible < minVisible - EPS && (!worst || visible < worst.visible)) worst = { glyph, visible, t };
+      }
+    }
+    if (!worst) continue;
+    const word = (text.glyphs ?? []).map((glyph) => glyph.char).join("");
+    findings.push({ rule: "subject-text", severity: "error", ids: [text.id], at: round6(worst.t),
+      detail: `${text.id} (${text.module}): the presenter covers ${Math.round((1 - worst.visible) * 100)}% of "${worst.glyph.char}" in "${word}" at ${round6(worst.t)} s; behind-layer letters need ${Math.round(minVisible * 100)}% of each glyph visible.${text.hint ? ` ${text.hint}` : ""}` });
+  }
+  return findings;
 }
 
 /**

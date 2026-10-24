@@ -552,6 +552,7 @@ params:
 - kicker: small line above it ≤ 32 (optional)
 - color: paper (default)|primary|accent or #hex (≥ 3:1 on brand bg)
 - stagger: seconds between letters (0–0.12, default 0.05)
+- baseline: how far down the head the letters stand, as a share of its height (0–0.35; default as deep as keeps 70% of the letters clear). Lower raises them and shrinks them into the headroom
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: title
 

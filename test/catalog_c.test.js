@@ -302,8 +302,15 @@ test('masthead: one big word whose baseline sits on the head, behind the subject
   assert.equal(model.content.word, 'FOCUS');
   assert.equal(model.content.placement, 'measured');
   const baseline = model.rect.y + model.content.kickerH + model.content.lineH;
-  assert.ok(Math.abs(baseline - (600 + 360 * 0.35)) < 1, `baseline ${baseline}`);
-  assert.ok(model.content.covered > 0.2 && model.content.covered < 0.8, `the head covers part of the letters (${model.content.covered})`);
+  // By default the baseline rises until the head covers at most 30% of the cap height.
+  assert.ok(baseline > 600 && baseline <= 600 + 360 * 0.35 + 1e-6, `baseline ${baseline}`);
+  assert.ok(model.content.covered > 0.2 && model.content.covered <= 0.3 + 0.01, `the head covers part of the letters (${model.content.covered})`);
+  assert.equal(model.content.baseline, Math.round(((baseline - 600) / 360) * 100) / 100);
+  // params.baseline places it exactly: 0.35 is the deepest.
+  const deep = resolve('masthead', {word: 'focus', kicker: 'issue 01', baseline: 0.35}, head(400, 600, 280, 360));
+  assert.ok(Math.abs(deep.rect.y + deep.content.kickerH + deep.content.lineH - (600 + 360 * 0.35)) < 1);
+  assert.ok(deep.content.covered > model.content.covered);
+  assert.throws(() => resolve('masthead', {word: 'focus', baseline: 0.5}, head(400, 600, 280, 360)), /params\.baseline/);
   assert.ok(model.rect.y >= model.safe.y - 1e-6, 'inside the safe zone');
   assert.deepEqual(model.events.map((event) => event.name), ['title']);
   assert.equal(model.content.letters.length, 5);
@@ -316,6 +323,20 @@ test('masthead: shrinks into the headroom, and refuses a head with none', () => 
   assert.throws(() => resolve('masthead', {word: 'scale'}, head(400, 200, 280, 360)), /needs headroom/);
   assert.throws(() => resolve('masthead', {word: 'two words'}), /must be one word/);
   assert.equal(resolve('masthead', {word: 'edit'}).content.placement, 'default', 'without a matte summary it uses the default head');
+});
+
+test('masthead: key glyphs from the text metrics, centred on the word and standing on its baseline', () => {
+  const model = resolve('masthead', {word: 'focus'}, head(400, 600, 280, 360));
+  const glyphs = MODULES.masthead.glyphs(model);
+  assert.deepEqual(glyphs.map((glyph) => glyph.char), ['F', 'O', 'C', 'U', 'S']);
+  const c = model.content, R = model.rect;
+  const left = glyphs[0].x, right = glyphs.at(-1).x + glyphs.at(-1).width;
+  assert.ok(Math.abs((left + right) / 2 - (R.x + R.width / 2)) < 1e-6, 'centred in the rect');
+  assert.ok(Math.abs(glyphs[1].x - glyphs[0].x - c.size * 0.57) < 1e-6, 'one advance apart');
+  for (const glyph of glyphs) {
+    assert.ok(Math.abs(glyph.height - c.size * 0.72) < 1e-6, 'cap height');
+    assert.ok(Math.abs(glyph.y + glyph.height - (R.y + c.kickerH + c.lineH - c.size * 0.05)) < 1e-6, 'on the baseline');
+  }
 });
 
 test('dolly-zoom: scales the room plate, holds the subject still, needs room', () => {
@@ -368,4 +389,22 @@ test('zoom-through: no cut in the edit means a fake cut mid-scene; strict valida
   // Focus defaults to the presenter's face when the subject is known.
   const faced = resolve('zoom-through', {}, {subject: {head: {x: 400, y: 500, width: 280, height: 300}}});
   assert.deepEqual(faced.camera.focus, {x: 540, y: 710});
+});
+
+// A real 16:9 close-up (headroom 0.0987): a short word sits inside the head's
+// column, so the head hides most of it. resolve refuses it; a word that
+// reaches past the head resolves, and layout-check's 60% rule judges each letter.
+test('masthead: refuses a word the measured head mostly hides', async () => {
+  const {checkBehindText, subjectCoverShare} = await import('../kit/core/subject-layer.mjs');
+  const W = 1920, H = 1080, h = {x: 0.5037, y: 0.3421, w: 0.2185, h: 0.4868};
+  const box = {x: (h.x - h.w / 2) * W, y: (h.y - h.h / 2) * H, width: h.w * W, height: h.h * H};
+  const wide = {format: {width: W, height: H, fps: 30, duration: 10}, aspect: '16:9', subject: {available: true, framing: 'close-up', head: box, placement: 'measured'}};
+  assert.throws(() => resolve('masthead', {word: 'ai'}, wide), /params\.word is mostly hidden behind the presenter's head: 2 of 2 letters keep under 60% visible .*Raise or shrink it: set params\.baseline lower/);
+  const long = resolve('masthead', {word: 'launchclip'}, wide);
+  const glyphs = MODULES.masthead.glyphs(long);
+  assert.ok(glyphs.some((glyph) => 1 - subjectCoverShare(glyph, {head: box}) < 0.6), 'its middle letters still fail the 60% rule');
+  const [finding] = checkBehindText({texts: [{id: 's', module: 'masthead', glyphs, times: [1]}], subjectAt: () => ({head: box, body: null})});
+  assert.equal(finding.rule, 'subject-text');
+  // Without a measured head there is nothing to judge against.
+  assert.doesNotThrow(() => resolve('masthead', {word: 'ai'}));
 });
