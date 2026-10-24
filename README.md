@@ -93,6 +93,7 @@ Point LaunchClip at your SaaS codebase and it records your product demo for you:
 - [Getting started](docs/guide/getting-started.md): install, agents and your first video
 - [Voice, music and sound effects](docs/guide/sound.md): free built-ins and optional upgrades
 - [Raw footage](docs/guide/raw-footage.md): the base edit for podcasts and talking heads
+- [Effects around you on camera](docs/guide/effects.md): your product name behind your head, your app around you, one effect on a clip with `launchclip fx`
 - [Finish in your editor](docs/guide/editors.md): export to Final Cut Pro, Premiere Pro or DaVinci Resolve
 - [Roadmap](docs/ROADMAP.md) · [All guides](docs/guide/README.md) · [Advanced reference](docs/guide/advanced.md) · [CLI reference](skills/launchclip-cli/references/cli-reference.md)
 
