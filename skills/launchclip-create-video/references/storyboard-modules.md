@@ -110,6 +110,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 | turns from the problem to the product ("so we built", "that's why", "enter"): the room gives way to a brand backdrop [footage-led] (needs the subject) | backdrop-swap |
 | talks about posting, going viral or "this exact video": the frame becomes a feed window they break out of [footage-led] (needs the subject) | feed-frame |
 | reveals how the video or result was made, or a process finishing ("made with", "it transcribes, cuts…"): the frame pulls back into an app window while real steps tick [footage-led] | pull-back |
+| turns on a contrast or jumps between takes ("but", "or you can", "instead"): rush into the cut, burst out of the next take [footage-led] | zoom-through |
 | footage-led emphasis on a word (steps for a build of emphasised words; blur for energy) [footage-led] | punch-in |
 | footage-led claim sticker or label pointing at something on screen [footage-led] | footage-callout |
 | introduces the speaker or a guest by name and title [footage-led] | lower-third |
@@ -494,6 +495,17 @@ params:
 - blur: true (14 px at 1080) or 2–30 px: velocity-shaped zoom blur, 0 once settled (default off)
 events: punch, step-<i>, release
 
+### zoom-through (keeps captions)
+Footage-led: hides a cut in the recording. The frame rushes toward the presenter with zoom blur into the cut and bursts back out of the next take, for "but wait", a contrast or a jump between takes. A camera on the base; defaults to the edit's cut nearest the scene's middle.
+params:
+- at: the cut, seconds from scene start (default: the nearest cut in the edit, else the middle)
+- scale: 1.6–3.5 (default 2.6)
+- rush: seconds into the cut (0.15–0.6, default 0.3)
+- burst: seconds out of it (0.2–0.8, default 0.4)
+- focus: {x, y} canvas fractions (default the presenter's face)
+- blur: true (default, 24 px at 1080), false, or 2–40 px
+events: rush, cut
+
 ### footage-callout (keeps captions)
 Footage-led: a claim sticker anchored to a point on the footage by a leader line, placed inside the safe zone.
 params:
@@ -654,6 +666,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | logo-row | 2 s | 0.5 s | scene − 0.65 s | logos pop in order; with no at, the first pops at 0.65 s and the rest follow by stagger (default 0.14 s) |
 | brand-lockup | 2 s | 0.5 s | scene − 0.65 s | elements land in this order: mark, wordmark, eyebrow, headline, badge, url, stagger apart (default 0.35 s), the first at 0 s; a hit on one moves the defaults after it |
 | punch-in | 0.8 s | 0 s | — | at (and every steps[i].at) ≤ scene − release − 0.25 s (release 0.3–2 s, default min(0.5, 0.3 × scene)); steps at least 0.3 s apart |
+| zoom-through | 0.8 s | — | — | the cut (at) needs rush before it and burst after it inside the scene (rush 0.15–0.6 s, default 0.3; burst 0.2–0.8 s, default 0.4) |
 | footage-callout | 1.5 s | 0 s | scene − 1.1 s | — |
 | lower-third | 2 s | 0 s | scene − 1.2 s | — |
 | emphasis-caption | 0.8 s | 0 s | scene − 0.45 s | at ≤ scene − 0.45 s − stagger × (words − 1) (stagger 0–0.3 s, default 0.09) |

@@ -303,7 +303,7 @@ than a new id.
 | `punch-in` (extends) | Optional `blur` (a 4–6 frame radial blur that settles to 0) and a chain of steps (`[{at, scale}]`) so it can step in, further in and back out on emphasised words. |
 | `checklist` (extends) | A footage-led mode: subject-aware placement (above the head when there is headroom, else over the chest), rows that type in on their `at` word and tick on `doneAt`, captions moved clear. |
 | `growth-line` (new, beside `growth-chart`) | Behind layer: a line chart draws across the top of the frame behind the head and kicks up at the take-off point with a labelled pill. Same `mode: illustration | data` and `source` rules as `growth-chart`. |
-| `zoom-through` (new transition type) | `in: {type: "zoom-through"}` between two base segments or two recordings: rush toward the subject with radial blur, cut, burst out of the next shot. Lives in `transitions.mjs`, so the boundary evidence and cinematic checks see it. |
+| `zoom-through` (new camera module) | Rush toward the subject with zoom blur into a cut, burst out of the next take. Built (phase 5) as a catalogue C camera module rather than a transition type: the cuts it hides are base trim boundaries inside the edited recording, which are not scenes, so a scene `in` transition cannot attach to them. It snaps to the edit's nearest cut and works without one as a fake cut. |
 | `dolly-zoom` (new) | The room scales (push or pull) over one eased 1–2.5 s beat while the subject camera holds the person still. Needs a visible room, so it requires `framing` medium or wide. |
 
 ### 6.3 Style-gated: available, rarely chosen
