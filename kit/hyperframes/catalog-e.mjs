@@ -35,4 +35,5 @@ export const EMITTERS = {
   'backdrop-swap': emitCatalogE,
   'app-stage': emitCatalogE,
   'phone-stage': emitCatalogE,
+  'growth-line': emitCatalogE,
 };
