@@ -48,6 +48,7 @@ const typed = (id: string): React.FC<{model: any}> => {
 };
 
 export const PunchIn = typed('punch-in');
+export const ZoomThrough = typed('zoom-through');
 export const FootageCallout = typed('footage-callout');
 export const LowerThird = typed('lower-third');
 export const EmphasisCaption = typed('emphasis-caption');

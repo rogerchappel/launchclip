@@ -11,7 +11,7 @@ import {EMITTERS, cameraGsap} from '../kit/hyperframes/catalog-c.mjs';
 import {knownModules, resolveModule} from '../kit/core/modules.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const IDS = ['punch-in', 'footage-callout', 'lower-third', 'emphasis-caption', 'masthead', 'dolly-zoom'];
+const IDS = ['punch-in', 'zoom-through', 'footage-callout', 'lower-third', 'emphasis-caption', 'masthead', 'dolly-zoom'];
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
 const format = {width: 1080, height: 1920, fps: 30, duration: 30};
 const ctx = (overrides = {}) => ({id: 'scene', start: 2, duration: 3, format, brand, aspect: '9:16', ...overrides});
@@ -19,6 +19,7 @@ const resolve = (id, params, overrides) => ({...MODULES[id].resolve(params, ctx(
 
 const PARAMS = {
   'punch-in': {scale: 1.15, at: 0.4},
+  'zoom-through': {},
   'footage-callout': {text: 'Recorded in one take', label: 'Raw footage', point: {x: 0.56, y: 0.45}},
   'lower-third': {name: 'Ada Park', title: 'Founder, LaunchClip'},
   'emphasis-caption': {text: 'Try it'},
@@ -232,7 +233,7 @@ test('emphasis-caption: hides captions, pops words on a stagger, outlined for co
 
 test('landscape canvases keep catalogue C boxes in the title-safe zone', () => {
   const wide = {format: {width: 1920, height: 1080, fps: 30}, aspect: '16:9'};
-  for (const id of IDS.filter(id => id !== 'punch-in' && id !== 'dolly-zoom')) {
+  for (const id of IDS.filter(id => !['punch-in', 'zoom-through', 'dolly-zoom'].includes(id))) {
     const model = resolve(id, id === 'footage-callout' ? {text: 'Here', point: {x: 0.6, y: 0.5}} : PARAMS[id], wide);
     const r = model.rect;
     assert.ok(r.x >= 96 - 1e-6 && r.x + r.width <= 1824 + 1e-6 && r.y >= 54 - 1e-6, `${id} ${JSON.stringify(r)}`);
@@ -337,4 +338,34 @@ test('dolly-zoom: scales the room plate, holds the subject still, needs room', (
   const bare = resolve('dolly-zoom', {});
   assert.equal(bare.content.plate, null);
   assert.deepEqual(catalogCView(bare).children, []);
+});
+
+test('zoom-through: rushes into the edit\'s cut and bursts out of the next take', () => {
+  // The base cuts at timeline 3.0 (between two trim segments).
+  const base = {focus: {x: 0.5, y: 0.4}, segments: [{index: 0, start: 0, end: 3, duration: 3, sourceStart: 0}, {index: 1, start: 3, end: 10, duration: 7, sourceStart: 5}]};
+  const model = resolve('zoom-through', {}, {base, start: 2.4, duration: 1.4});
+  const {samples, cut, onCut, scale} = model.camera;
+  assert.equal(cut, 3);
+  assert.equal(onCut, true);
+  const at = (t) => samples.reduce((best, s) => (Math.abs(s.t - t) < Math.abs(best.t - t) ? s : best));
+  assert.equal(at(2.6).scale, 1, 'untouched before the rush');
+  assert.ok(at(2.97).scale > 2, 'nearly at full scale just before the cut');
+  assert.ok(Math.abs(at(3).scale - scale) < 1e-6, 'the cut lands at full scale');
+  assert.equal(at(3.5).scale, 1, 'back to framing after the burst');
+  assert.ok(at(2.97).blur > 5 && at(3.03).blur > 5, 'blurred either side of the cut');
+  assert.equal(at(3.5).blur, 0);
+  assert.deepEqual(samples.at(-1), {t: 3.8, scale: 1, x: 0, y: 0, blur: 0});
+  assert.deepEqual(model.events.map((event) => event.name), ['rush', 'cut']);
+});
+
+test('zoom-through: no cut in the edit means a fake cut mid-scene; strict validation', () => {
+  const model = resolve('zoom-through', {blur: false}, {duration: 2});
+  assert.equal(model.camera.cut, 3);
+  assert.equal(model.camera.onCut, false);
+  assert.ok(model.camera.samples.every((s) => s.blur === undefined));
+  assert.throws(() => resolve('zoom-through', {at: 0.1}), /params\.at/);
+  assert.throws(() => resolve('zoom-through', {scale: 5}), /params\.scale/);
+  // Focus defaults to the presenter's face when the subject is known.
+  const faced = resolve('zoom-through', {}, {subject: {head: {x: 400, y: 500, width: 280, height: 300}}});
+  assert.deepEqual(faced.camera.focus, {x: 540, y: 710});
 });

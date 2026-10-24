@@ -35,6 +35,7 @@ export function cameraGsap(models, selector = '.lc-base-media', options = {}) {
 
 export const EMITTERS = {
   'punch-in': emitCatalogC,
+  'zoom-through': emitCatalogC,
   'footage-callout': emitCatalogC,
   'lower-third': emitCatalogC,
   'emphasis-caption': emitCatalogC,

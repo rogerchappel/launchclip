@@ -1,0 +1,289 @@
+{
+  "schema_version": "launchclip.recording-edit.v1",
+  "source_duration_seconds": 22,
+  "duration_seconds": 20,
+  "kept_segments": [
+    {
+      "source_start_seconds": 0,
+      "source_end_seconds": 8,
+      "start_seconds": 0,
+      "end_seconds": 8
+    },
+    {
+      "source_start_seconds": 10,
+      "source_end_seconds": 22,
+      "start_seconds": 8,
+      "end_seconds": 20
+    }
+  ],
+  "removed_segments": [
+    {
+      "source_start_seconds": 8,
+      "source_end_seconds": 10,
+      "reason": "false-start"
+    }
+  ],
+  "words": [
+    {
+      "word": "Most",
+      "start": 0.3,
+      "end": 0.55
+    },
+    {
+      "word": "launch",
+      "start": 0.6,
+      "end": 0.92
+    },
+    {
+      "word": "videos",
+      "start": 0.96,
+      "end": 1.38
+    },
+    {
+      "word": "bury",
+      "start": 1.44,
+      "end": 1.74
+    },
+    {
+      "word": "the",
+      "start": 1.78,
+      "end": 1.88
+    },
+    {
+      "word": "demo.",
+      "start": 1.92,
+      "end": 2.45
+    },
+    {
+      "word": "This",
+      "start": 2.9,
+      "end": 3.1
+    },
+    {
+      "word": "one",
+      "start": 3.14,
+      "end": 3.36
+    },
+    {
+      "word": "starts",
+      "start": 3.4,
+      "end": 3.78
+    },
+    {
+      "word": "with",
+      "start": 3.82,
+      "end": 3.98
+    },
+    {
+      "word": "the",
+      "start": 4,
+      "end": 4.1
+    },
+    {
+      "word": "person",
+      "start": 4.14,
+      "end": 4.56
+    },
+    {
+      "word": "who",
+      "start": 4.6,
+      "end": 4.76
+    },
+    {
+      "word": "built",
+      "start": 4.8,
+      "end": 5.08
+    },
+    {
+      "word": "it.",
+      "start": 5.12,
+      "end": 5.4
+    },
+    {
+      "word": "I'm",
+      "start": 5.9,
+      "end": 6.12
+    },
+    {
+      "word": "Ada",
+      "start": 6.16,
+      "end": 6.46
+    },
+    {
+      "word": "Park,",
+      "start": 6.5,
+      "end": 6.9
+    },
+    {
+      "word": "and",
+      "start": 7,
+      "end": 7.14
+    },
+    {
+      "word": "I",
+      "start": 7.18,
+      "end": 7.24
+    },
+    {
+      "word": "make",
+      "start": 7.26,
+      "end": 7.38
+    },
+    {
+      "word": "LaunchClip.",
+      "start": 7.4,
+      "end": 7.92
+    },
+    {
+      "word": "It",
+      "start": 8.3,
+      "end": 8.42
+    },
+    {
+      "word": "turns",
+      "start": 8.46,
+      "end": 8.76
+    },
+    {
+      "word": "one",
+      "start": 8.8,
+      "end": 9
+    },
+    {
+      "word": "recording",
+      "start": 9.04,
+      "end": 9.6
+    },
+    {
+      "word": "into",
+      "start": 9.64,
+      "end": 9.84
+    },
+    {
+      "word": "a",
+      "start": 9.88,
+      "end": 9.94
+    },
+    {
+      "word": "finished",
+      "start": 9.98,
+      "end": 10.36
+    },
+    {
+      "word": "Short.",
+      "start": 10.4,
+      "end": 10.86
+    },
+    {
+      "word": "Edits",
+      "start": 11.2,
+      "end": 11.6
+    },
+    {
+      "word": "take",
+      "start": 11.64,
+      "end": 11.86
+    },
+    {
+      "word": "twelve",
+      "start": 11.9,
+      "end": 12.3
+    },
+    {
+      "word": "minutes,",
+      "start": 12.34,
+      "end": 12.84
+    },
+    {
+      "word": "not",
+      "start": 12.98,
+      "end": 13.18
+    },
+    {
+      "word": "two",
+      "start": 13.22,
+      "end": 13.46
+    },
+    {
+      "word": "days.",
+      "start": 13.5,
+      "end": 13.98
+    },
+    {
+      "word": "Captions,",
+      "start": 14.4,
+      "end": 14.98
+    },
+    {
+      "word": "punch-ins",
+      "start": 15.04,
+      "end": 15.6
+    },
+    {
+      "word": "and",
+      "start": 15.64,
+      "end": 15.8
+    },
+    {
+      "word": "callouts",
+      "start": 15.84,
+      "end": 16.34
+    },
+    {
+      "word": "come",
+      "start": 16.38,
+      "end": 16.56
+    },
+    {
+      "word": "straight",
+      "start": 16.6,
+      "end": 16.94
+    },
+    {
+      "word": "from",
+      "start": 16.98,
+      "end": 17.14
+    },
+    {
+      "word": "the",
+      "start": 17.18,
+      "end": 17.26
+    },
+    {
+      "word": "words.",
+      "start": 17.3,
+      "end": 17.8
+    },
+    {
+      "word": "Try",
+      "start": 18.2,
+      "end": 18.46
+    },
+    {
+      "word": "it",
+      "start": 18.5,
+      "end": 18.62
+    },
+    {
+      "word": "on",
+      "start": 18.66,
+      "end": 18.78
+    },
+    {
+      "word": "your",
+      "start": 18.82,
+      "end": 18.98
+    },
+    {
+      "word": "next",
+      "start": 19.02,
+      "end": 19.3
+    },
+    {
+      "word": "launch.",
+      "start": 19.34,
+      "end": 19.86
+    }
+  ],
+  "text": "Most launch videos bury the demo. This one starts with the person who built it. I'm Ada Park, and I make LaunchClip. It turns one recording into a finished Short. Edits take twelve minutes, not two days. Captions, punch-ins and callouts come straight from the words. Try it on your next launch."
+}
