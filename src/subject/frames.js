@@ -77,3 +77,16 @@ export function withAlpha(rgb, alpha) {
   }
   return out;
 }
+
+/** Write one RGB24 image (e.g. plate.jpg) through ffmpeg. */
+export async function writeImage(out, rgb, { width, height, ffmpeg = "ffmpeg" }) {
+  const child = spawn(ffmpeg, ["-hide_banner", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", `${width}x${height}`, "-i", "pipe:0", "-frames:v", "1", "-q:v", "3", out], { stdio: ["pipe", "ignore", "pipe"] });
+  let stderr = "";
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  const exited = once(child, "close");
+  child.stdin.end(rgb);
+  const [code] = await exited;
+  if (code !== 0) throw new Error(`ffmpeg could not write ${out}: ${stderr.trim() || `exit ${code}`}`);
+}

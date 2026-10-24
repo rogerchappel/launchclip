@@ -25,6 +25,18 @@
     (`split`). The first modules that use these arrive with the effects.
   - layout-check fails a front scene that covers the presenter's face for
     more than 0.3 s.
+- The first subject effects, which the art director picks when the
+  presenter can be cut out:
+  - `masthead`: one huge word (a product name, the one idea) rises in
+    behind the presenter's head, like a magazine cover.
+  - `dolly-zoom`: the room pushes in or falls away while the presenter holds
+    still. Matting a range now also builds a plate of the room without the
+    presenter, which the dolly zooms.
+  - `punch-in` gains `steps` (in, further in, back out on successive words)
+    and `blur` (a few frames of zoom blur on each move).
+  - The planner sees the presenter's framing and offers these only when the
+    cut-out works; both create-video skills get a generated
+    `subject-effects.md`.
 - A `photo-scene` module: one full-bleed `assets/` photo or video with a slow
   Ken Burns move (`push-in`, `pull-out` or a pan; `zoom` and `focus` set
   it).

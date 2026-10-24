@@ -898,10 +898,12 @@ full-canvas root. `layout.rect` is the occupied box.
 
 | Module | Params | Events (cue) | Notes |
 |---|---|---|---|
-| `punch-in` | `scale` 1.06–1.25 (1.12), `at`, `focus {x,y}` (base.focus, else 0.5/0.42), `release` 0.3–2 s | `punch` (whoosh), `release` | Camera only; layout role `decor`; ≥ 0.8 s |
+| `punch-in` | `scale` 1.06–1.25 (1.12), `at`, `focus {x,y}` (base.focus, else 0.5/0.42), `release` 0.3–2 s; or `steps [{at, scale}]` 1–4 (scale 1–1.35, the first ≥ 1.06, ≥ 0.3 s apart) instead of `at`/`scale`; `blur` true (14 px at 1080) or 2–30 px | `punch` (whoosh), `step-<i>` (whoosh, or whoosh-soft stepping out), `release` | Camera only; layout role `decor`; ≥ 0.8 s. Blur is velocity-shaped (`motionBlurPx` of the frame edge's speed), 0 once settled; samples carry `blur` |
 | `footage-callout` | `text` ≤ 42, `label` ≤ 24, `point {x,y}` 0.04–0.96, `side` auto/above/below/left/right, `tone` primary/paper/dark, `tilt` −6–6°, `at` | `point` (tick), `sticker` (pop) | The sticker sits inside the safe zone, above the caption band, and never covers the point. The leader line runs from the point to the rotated sticker edge. ≥ 1.5 s |
 | `lower-third` | `name` ≤ 32, `title` ≤ 48, `align` left/center, `tone` dark/primary, `at` | `name` (whoosh), `title` | Bottom edge on the caption-band gap; ≥ 2 s |
 | `emphasis-caption` | `text` 1–3 words ≤ 24, `color` (≥ 3:1 on the bg outline), `position` center/upper/lower, `stagger`, `at` | `pop` (impact), `word-<i>` | `hidesCaptions`; 88% of the safe width; ≥ 0.8 s |
+| `masthead` | `word` one word ≤ 12 (uppercased), `kicker` ≤ 32, `color` (paper default), `stagger` 0–0.12, `at` | `title` (whoosh) | Layer `behind`, needs the subject. Baseline at 35% down `ctx.subject.head` (or a default medium head), letters up to 90% of the safe width, shrunk into the headroom; fails below 150 px. `content.covered` is the share of cap height the head covers; ≥ 1.5 s |
+| `dolly-zoom` | `direction` push/pull, `scale` 1.12–1.6 (1.3), `move` 1–2.5 s, `release` 0.3–1 s (push), `at` | `move` (riser), `release` | Layer `behind`, needs the subject. Scales the matte's room plate (`ctx.subject.plate`) about the head centre; `subjectCamera` holds the presenter at identity. Fails on a close-up; without a plate it draws nothing; ≥ 1.8 s |
 
 `callout` stays the editorial text card, so the anchored sticker is
 `footage-callout`.
@@ -921,9 +923,10 @@ With `s ≥ 1`, the scaled frame always covers the canvas. The spring
 (`PUNCH_SPRING`) is integrated per frame by `springValue`, so every sample is a
 pure function of time.
 
-`cameraOps(models)` merges every camera into one op list on `BASE_CAMERA`:
-identity at 0, then one `set` per sample at `t − SAMPLE_LEAD`, applied in start
-order. When cameras overlap, the later one wins, and `cameraOverlaps()` makes
+`cameraOps(models, {roomFilterAt?})` merges every camera into one op list on
+`BASE_CAMERA`: identity at 0, then one `set` per sample at `t − SAMPLE_LEAD`,
+applied in start order. A sample with `blur` also sets `filter` (`blur(px)`,
+prefixed by `roomFilterAt(t)` so a room treatment survives it, or `none`). When cameras overlap, the later one wins, and `cameraOverlaps()` makes
 the compiler warn.
 
 ### Compilers
@@ -1007,6 +1010,26 @@ rejects bad values):
   `model.camera`, moving the subject only.
 - `room`: `{hide?, dim? (0–1), blur? (px, ≤ 40)}` for the scene window,
   applied to the base videos only.
+- Catalogue definitions may declare `needs: ["subject"]`, `layer`, `aspects`
+  and `mood`; `moduleCatalogue()` carries them, `planningPrompt({subject})`
+  lists subject modules only for a footage-led story with a usable probe,
+  and `suggestModuleMoods(artDirection)` favours modules by mood.
+
+### What modules know (`subjectContext`)
+
+`resolveModule` passes `ctx.subject = subjectContext(story, scene.start)`:
+`{available, framing, head, body, headroom, plate, placement}`. `head` and
+`body` are canvas rects mapped from the covering matte's `summary` (filled by
+`resolveStory(story, {subject})` from each matte's `info`; the loader's
+`readStorySubject` reads them); `plate` is `{src, fit, focus}`; `placement` is
+`"measured"` with a summary head, else `"default"`.
+
+### Room plate
+
+`launchclip subject matte` also writes `plate.jpg` (short edge ≤ 1080): the
+average of every pixel the matte calls room (alpha < 8), with what the
+presenter always covered filled by a push-pull pyramid (`src/subject/plate.js`).
+Mattes may name it as `plate`; filed mattes carry it.
 - `framesFace`: the module frames the face on purpose; layout-check's face
   rule skips it.
 

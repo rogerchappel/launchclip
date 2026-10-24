@@ -30,9 +30,16 @@ test('fileProjectMatte files the matte and readStorySubject finds it for auto', 
   assert.equal(await readStorySubject(dir, story), null, 'nothing filed yet');
   const entry = await fileProjectMatte(dir, path.join(dir, 'assets/recording.mp4'), result);
   assert.deepEqual(entry, {base: 'assets/recording.mp4', src: 'assets/subject/0.000-6.000.webm', in: 0, out: 6, info: 'assets/subject/0.000-6.000.json'});
-  assert.deepEqual(await readStorySubject(dir, story), [{src: entry.src, in: 0, out: 6, info: entry.info}]);
+  const [found] = await readStorySubject(dir, story);
+  const {summary, ...rest} = found;
+  assert.deepEqual(rest, {src: entry.src, in: 0, out: 6, info: entry.info});
+  assert.equal(summary.framing, 'medium');
+  assert.deepEqual(summary.source, {width: 720, height: 1280});
   assert.equal(await readStorySubject(dir, {...story, base: {...story.base, subject: 'off'}}), null);
   assert.equal(await readStorySubject(dir, {...story, base: {...story.base, src: 'assets/other.mp4'}}), null);
+  // Explicit mattes get their summaries too.
+  const explicit = await readStorySubject(dir, {...story, base: {...story.base, subject: {mattes: [{src: entry.src, in: 0, out: 6, info: entry.info}]}}});
+  assert.equal(explicit[0].summary.framing, 'medium');
   // Re-filing an overlapping range replaces the old entry.
   await fileProjectMatte(dir, path.join(dir, 'assets/recording.mp4'), {...result, info: {...result.info, range: {in: 1, out: 4}}});
   const manifest = JSON.parse(await readFile(path.join(dir, MATTES_MANIFEST), 'utf8'));

@@ -20,7 +20,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - format: {width, height, fps, duration, platform?} and brand: {colors, fonts} are given; copy them unchanged.
 - audio: {voice?, words?, music?, sfx?}; base: null, or the recording path for footage-led.
 - audio.music: omit it (finish picks ElevenLabs when a key is set, else the synth bed), or "synth", "none", an assets/ path, or {provider: "elevenlabs" | "synth" | "file", prompt?, bpm?, file?, sync?: "auto" | "off" | "cuts" | "hits"}. The music follows scene energy, so set energy honestly: calm intro, "build" before the payoff, 3 on the payoff. A prompt describes style only (no vocals is added for you).
-- scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: cut | fade | push | whip | zoom | iris | morph | pan | pull | orbit | whip-pan, dur, direction?, from_object?}, params, hits?, ambient?}].
+- scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: cut | fade | push | whip | zoom | iris | morph | pan | pull | orbit | whip-pan, dur, direction?, from_object?}, params, hits?, ambient?, layer? (footage-led: "behind" draws it behind the presenter)}].
 - in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus; camera moves (pan, whip-pan, orbit, pull, world push) are under "Motion grammar and camera".
 - overlays: [captions]. ending: {loop_to: "<first scene id>"} for a seamless loop (Shorts). For no loop, set ending {loop: false} (or loop_to: null, or omit ending without a looping style pack); the last scene then holds settled to the final frame (ending.final "hold", the default), or use final "fade" to fade it fully to the background by the final frame, or "exit" to play its own exit. ending accepts only loop_to, in, loop and final.
 - ambient? (optional): {level: off | subtle | standard | lively, background?: boolean, drift?: boolean}, or just the level. Ambient motion keeps settled frames alive between beats: a slow push-in on each settled module (kept inside the safe zone) and soft brand-colour light drifting behind the plates.
@@ -103,7 +103,9 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 | sets a scene or mood with a real photo or clip (assets/… image or video, full bleed) [motion, voiceover-motion] | photo-scene |
 | names the brand on a title or end card, with its logo and wordmark images (and an app-store badge or URL on the end card) | brand-lockup |
 | calls to action, or the loop ending | cta |
-| footage-led emphasis on a word [footage-led] | punch-in |
+| names the product or the one idea the video is about ("meet X", "this is X", "it's called X"): one word behind the presenter's head [footage-led] (needs the subject) | masthead |
+| lands a realisation, reveal or turn ("that's when", "it hit me", "everything changed"): the room moves, the presenter holds [footage-led] (needs the subject) | dolly-zoom |
+| footage-led emphasis on a word (steps for a build of emphasised words; blur for energy) [footage-led] | punch-in |
 | footage-led claim sticker or label pointing at something on screen [footage-led] | footage-callout |
 | introduces the speaker or a guest by name and title [footage-led] | lower-third |
 | one to three spoken words that deserve a big on-screen pop [footage-led] | emphasis-caption |
@@ -477,13 +479,15 @@ params:
 events: mark, wordmark, eyebrow, headline, badge, url, shine
 
 ### punch-in (keeps captions)
-Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay).
+Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay). Steps punch in, further in or back out on successive words; blur adds a few frames of zoom blur on each move.
 params:
 - scale: 1.06–1.25 (default 1.12)
 - at: seconds from scene start (optional; else a matching hit, else a default)
 - focus: {x, y} canvas fractions (default base.focus, else {0.5, 0.42})
 - release: seconds before the scene end when the zoom springs back (0.3–2, default min(0.5, 30% of the scene))
-events: punch, release
+- steps: [{at, scale}] 1–4, instead of at/scale: each springs to its scale (1–1.35; the first ≥ 1.06), at least 0.3 s apart
+- blur: true (14 px at 1080) or 2–30 px: velocity-shaped zoom blur, 0 once settled (default off)
+events: punch, step-<i>, release
 
 ### footage-callout (keeps captions)
 Footage-led: a claim sticker anchored to a point on the footage by a leader line, placed inside the safe zone.
@@ -516,6 +520,26 @@ params:
 - stagger: seconds between words (default 0.09)
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: pop, word-<i>
+
+### masthead (keeps captions, behind the presenter, needs the subject)
+Footage-led, behind the presenter: one huge word (a product name or the one idea) rises in letter by letter at the top of the frame, and the presenter's head covers its lower part like a magazine cover. Needs headroom: medium or wide shots.
+params:
+- word: one word ≤ 12 chars (uppercased)
+- kicker: small line above it ≤ 32 (optional)
+- color: paper (default)|primary|accent or #hex (≥ 3:1 on brand bg)
+- stagger: seconds between letters (0–0.12, default 0.05)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: title
+
+### dolly-zoom (keeps captions, behind the presenter, needs the subject)
+Footage-led, behind the presenter: the room pushes in (or falls away) over one eased beat while the presenter holds still, a dolly zoom for a realisation or a turn. Needs a medium or wide shot and the matte's room plate.
+params:
+- direction: push (default) | pull (starts on a cut, the room falls away)
+- scale: 1.12–1.6 (default 1.3)
+- move: seconds the zoom takes (1–2.5)
+- release: push: seconds to ease back before the scene end (0.3–1, default 0.5)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: move, release
 
 ### product-demo (keeps captions)
 A recorded product flow (launchclip demo record) in a window or full bleed, with zooms to each clicked or typed-into element, accent outlines as actions land, callout pills and click/keystroke SFX, all timed from the flow's action log.
@@ -574,10 +598,12 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | archive-card | 2 s | 0.5 s | scene − 0.65 s | stamp.at defaults to 0.35 s after the quote finishes revealing |
 | logo-row | 2 s | 0.5 s | scene − 0.65 s | logos pop in order; with no at, the first pops at 0.65 s and the rest follow by stagger (default 0.14 s) |
 | brand-lockup | 2 s | 0.5 s | scene − 0.65 s | elements land in this order: mark, wordmark, eyebrow, headline, badge, url, stagger apart (default 0.35 s), the first at 0 s; a hit on one moves the defaults after it |
-| punch-in | 0.8 s | 0 s | — | at ≤ scene − release − 0.25 s (release 0.3–2 s, default min(0.5, 0.3 × scene)) |
+| punch-in | 0.8 s | 0 s | — | at (and every steps[i].at) ≤ scene − release − 0.25 s (release 0.3–2 s, default min(0.5, 0.3 × scene)); steps at least 0.3 s apart |
 | footage-callout | 1.5 s | 0 s | scene − 1.1 s | — |
 | lower-third | 2 s | 0 s | scene − 1.2 s | — |
 | emphasis-caption | 0.8 s | 0 s | scene − 0.45 s | at ≤ scene − 0.45 s − stagger × (words − 1) (stagger 0–0.3 s, default 0.09) |
+| masthead | 1.5 s | 0 s | scene − 0.9 s | at ≤ scene − 0.9 s − stagger × (letters − 1) (stagger 0–0.12 s, default 0.05) |
+| dolly-zoom | 1.8 s | 0 s | — | at ≤ scene − move − release − 0.2 s (move 1–2.5 s, default min(1.6, 0.6 × scene); release 0.3–1 s, push only) |
 | product-demo | 2 s | 0 s | scene − 0.2 s | actions[].at: in order; zooms start 1.2 s before each action and settle 0.4 s before it, hold 1.1 s (0.2 s after a click that navigates), and pan to the next action unless the gap is over 2.2 s; callouts[].at ≤ scene − 1 s; each shows 2.2 s by default, must not overlap the next, and ends when its action navigates or the camera leaves it |
 | photo-scene | 2 s | 0 s | scene − 0.8 s | lines[].at in order (default 0.35 s, then 0.45 s apart, scaled by the grammar); the last at least 0.8 s before the scene ends |
 

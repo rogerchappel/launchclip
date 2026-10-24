@@ -22,7 +22,7 @@
 //
 // Canonical copy: kit/core/subject-layer.mjs.
 
-import { CAMERA_IDENTITY } from "./catalog-c.mjs";
+import { CAMERA_IDENTITY, cameraSampleProps } from "./catalog-c.mjs";
 import { frameState, sampleTime } from "./catalog-b-view.mjs";
 import { storyBase } from "./story.mjs";
 import { subjectAt } from "./subject.mjs";
@@ -106,7 +106,7 @@ export function subjectCameraOps(models) {
   if (!own.length && !base.length) return [];
   const covered = (t) => own.some((model) => t >= model.start - EPS && t <= model.end + EPS);
   const ops = [{ type: "set", target: SUBJECT_CAMERA, time: 0, props: { ...CAMERA_IDENTITY } }];
-  const sampleOp = (sample) => ({ type: "set", target: SUBJECT_CAMERA, time: Math.max(0, sampleTime(sample.t)), props: { x: sample.x, y: sample.y, scaleX: sample.scale, scaleY: sample.scale } });
+  const sampleOp = (sample) => ({ type: "set", target: SUBJECT_CAMERA, time: Math.max(0, sampleTime(sample.t)), props: cameraSampleProps(sample) });
   for (const model of base) for (const sample of model.camera.samples) if (!covered(sample.t)) ops.push(sampleOp(sample));
   for (const model of own) for (const sample of model.subjectCamera.samples) ops.push(sampleOp(sample));
   // frameState applies same-time ops in list order; sort by time so a base
@@ -168,6 +168,35 @@ export function subjectModelErrors(model) {
   }
   if (model?.parts !== undefined && (model.parts === null || typeof model.parts !== "object" || !model.parts.behind || !model.parts.front)) errors.push("parts must be {behind, front}");
   return errors;
+}
+
+/**
+ * What a module knows about the presenter at timeline t (resolveModule's
+ * ctx.subject), or null when the story has no base or the subject is off.
+ * → {available, framing, head, body, headroom, plate, placement}
+ *   available  a matte covers t (the subject layer can be mounted)
+ *   head, body canvas rects (px) from the covering matte's summary, else null
+ *   plate      {src, fit, focus}: the range's room plate, drawn like the base
+ *   placement  "measured" with a summary head, else "default"
+ */
+export function subjectContext(story, t) {
+  const base = storyBase(story);
+  if (!base || base.subject.mode === "off") return null;
+  const canvas = { width: Number(story.format?.width), height: Number(story.format?.height) };
+  const source = sourceTimeAt(base, t);
+  const matte = source === null ? null : base.subject.mattes.find((entry) => source >= entry.in - EPS && source <= entry.out + EPS) ?? null;
+  const summary = matte?.summary;
+  const toCanvas = (box) => (box && summary?.source ? sourceBoxToCanvas(box, base, summary.source, canvas) : null);
+  const head = toCanvas(summary?.head);
+  return {
+    available: Boolean(matte),
+    framing: summary?.framing ?? null,
+    head,
+    body: toCanvas(summary?.body),
+    headroom: summary?.headroom ?? null,
+    plate: matte?.plate ? { src: matte.plate, fit: base.fit, focus: { ...base.focus } } : null,
+    placement: head ? "measured" : "default"
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -15,6 +15,8 @@ import {
   phraseRowModule,
   planningPrompt,
   storyboardModulesReference,
+  subjectEffectsReference,
+  suggestModuleMoods,
   suggestModules
 } from "../kit/core/planning-prompt.mjs";
 
@@ -24,10 +26,41 @@ const portrait = { width: 1080, height: 1920, fps: 30, duration: 30, platform: "
 test("every known module appears in the prompt for every tier", () => {
   const modules = knownModules();
   assert.ok(modules.length >= 25, `expected the full registry, got ${modules.length}`);
+  const needsSubject = new Set(moduleCatalogue().filter((module) => module.needs?.includes("subject")).map((module) => module.id));
+  assert.deepEqual([...needsSubject].sort(), ["dolly-zoom", "masthead"]);
+  const subject = { usable: true, reasons: [], framing: "medium", headroom: 0.2, head: { x: 0.5, y: 0.3, w: 0.2, h: 0.15 } };
   for (const tier of PLANNER_TIERS) {
     const prompt = planningPrompt({ tier, lane: "motion", format: portrait });
-    for (const id of modules) assert.match(prompt, new RegExp(`^### ${id} \\(`, "m"), `${tier} prompt is missing ${id}`);
+    for (const id of modules) {
+      if (needsSubject.has(id)) assert.doesNotMatch(prompt, new RegExp(`^### ${id} \\(`, "m"), `${tier} motion prompt offers ${id}`);
+      else assert.match(prompt, new RegExp(`^### ${id} \\(`, "m"), `${tier} prompt is missing ${id}`);
+    }
+    const footage = planningPrompt({ tier, lane: "footage-led", format: portrait, subject });
+    for (const id of modules) assert.match(footage, new RegExp(`^### ${id} \\(`, "m"), `${tier} footage prompt with a subject is missing ${id}`);
   }
+});
+
+test("subject modules: offered with a usable subject, explained when not", () => {
+  const subject = { usable: true, reasons: [], framing: "medium", headroom: 0.2, head: { x: 0.5, y: 0.3, w: 0.2, h: 0.15 } };
+  const ready = planningPrompt({ lane: "footage-led", format: portrait, subject });
+  assert.match(ready, /## Presenter \(subject\)/);
+  assert.match(ready, /medium framing, 20% headroom/);
+  assert.match(ready, /^### masthead \(keeps captions, behind the presenter, needs the subject\)/m);
+  assert.match(ready, /\| names the product or the one idea .*\| masthead \|/);
+  const none = planningPrompt({ lane: "footage-led", format: portrait, subject: { usable: false, reasons: ["more than one person is in frame"] } });
+  assert.match(none, /No subject modules: more than one person is in frame/);
+  assert.doesNotMatch(none, /^### masthead/m);
+  assert.doesNotMatch(none, /\| masthead \|/);
+  assert.ok(!suggestModules("Meet LaunchClip.", { lane: "footage-led" }).some((hint) => hint.modules.includes("masthead")));
+  assert.ok(suggestModules("Meet LaunchClip.", { lane: "footage-led", subject: true })[0].modules.includes("masthead"));
+  assert.ok(suggestModules("And that's when it hit me.", { lane: "footage-led", subject: true })[0].modules.includes("dolly-zoom"));
+});
+
+test("the art direction favours modules by mood", () => {
+  const subject = { usable: true, reasons: [], framing: "wide", headroom: 0.3 };
+  assert.deepEqual(suggestModuleMoods("A cinematic, premium launch film").map((entry) => entry.id).sort(), ["dolly-zoom", "masthead"]);
+  assert.match(planningPrompt({ lane: "footage-led", format: portrait, subject, artDirection: "bold launch" }), /Favoured by the art direction[\s\S]*masthead \(bold, launch\)/);
+  assert.doesNotMatch(planningPrompt({ lane: "motion", format: portrait, artDirection: "bold launch" }), /masthead \(bold/);
 });
 
 test("the catalogue is read from the registry, not a hand-kept list", () => {
@@ -102,7 +135,7 @@ test("the prompt carries lane rules, anchors, safe zone, captions, fixed inputs 
   assert.match(prompt, /the level follows each scene's energy \(0 → subtle, 1, 2 or "build" → standard, 3 → lively; every scene is lively under the cinematic grammar\)/);
   assert.match(prompt, /footage-led stories get no background field and drift overlays only/);
   assert.match(prompt, /A scene may set ambient to override the story/);
-  assert.match(prompt, /params, hits\?, ambient\?\}/);
+  assert.match(prompt, /params, hits\?, ambient\?, layer\? \(footage-led/);
   const landscape = planningPrompt({ tier: "guided", lane: "footage-led", format: { width: 1920, height: 1080, fps: 30, duration: 60 } });
   assert.match(landscape, /landscape \(1920x1080\)/);
   assert.match(landscape, /footage-led: base/);
@@ -131,5 +164,16 @@ test("the skill reference is generated from the same registry and is in sync", a
   assert.equal(await readFile(path.join(root, "skills-src/references/storyboard-modules.md"), "utf8"), reference);
   for (const skill of ["launchclip-create-video", "launchclip-create-video-remotion"]) {
     assert.equal(await readFile(path.join(root, "skills", skill, "references/storyboard-modules.md"), "utf8"), reference);
+  }
+});
+
+test("subject-effects.md is generated from the registry and shipped in both skills", async () => {
+  const reference = subjectEffectsReference();
+  assert.match(reference, /^# Subject effects/);
+  assert.match(reference, /\| masthead \| behind \|/);
+  assert.match(reference, /\| dolly-zoom \| behind \|/);
+  assert.match(reference, /^### punch-in \(/m, "punch-in steps and blur are documented alongside");
+  for (const skill of ["launchclip-create-video", "launchclip-create-video-remotion"]) {
+    assert.equal(await readFile(path.join(root, "skills", skill, "references", "subject-effects.md"), "utf8"), reference);
   }
 });

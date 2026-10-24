@@ -81,6 +81,10 @@ test("matte writes an alpha WebM and one subject frame per source frame", needsF
   const info = JSON.parse(await readFile(result.subject, "utf8"));
   assert.equal(info.matte, "matte.webm");
   assert.deepEqual(info.matte_size, { width: 180, height: 320 });
+  // The plate is the room without the presenter: black where the white figure stood.
+  assert.equal(info.plate, "plate.jpg");
+  assert.ok((await stat(result.plate)).size > 0);
+  assert.ok(info.plate_seen > 0.4 && info.plate_seen < 0.7, `plate_seen ${info.plate_seen}`);
   const cached = await runSubjectMatte(clip, { in: 1, out: 2 }, { cacheDir: path.join(dir, "cache"), segmenter: brightnessSegmenter() });
   assert.equal(cached.cached, true);
 });
@@ -148,4 +152,17 @@ test("launchclip subject probe says how to install a missing model", needsFfmpeg
   const sink = { write() {} };
   await assert.rejects(runCli(["subject", "probe", clip, "--no-download", "--cache", path.join(dir, "cache")], { stdout: sink, stderr: sink }), /launchclip subject setup --model mediapipe-selfie/);
   await assert.rejects(runCli(["subject", "matte", clip], { stdout: sink, stderr: sink }), /--range must be/);
+});
+
+test("fillHoles fills a hole from its surroundings", async () => {
+  const { fillHoles } = await import("../src/subject/plate.js");
+  const width = 8, height = 8;
+  const color = new Float32Array(width * height * 3).fill(200);
+  const weight = new Float32Array(width * height).fill(1);
+  for (let y = 2; y < 6; y += 1) for (let x = 2; x < 6; x += 1) { weight[y * width + x] = 0; color.fill(0, (y * width + x) * 3, (y * width + x) * 3 + 3); }
+  const out = fillHoles(color, weight, width, height);
+  assert.ok(Math.abs(out[(4 * width + 4) * 3] - 200) < 1, `centre ${out[(4 * width + 4) * 3]}`);
+  assert.equal(out[0], 200, "known pixels keep their colour");
+  const empty = fillHoles(new Float32Array(12), new Float32Array(4), 2, 2);
+  assert.equal(empty[0], 128, "no known pixel anywhere → mid-grey");
 });

@@ -5,6 +5,8 @@
 //   footage-callout   claim sticker anchored to a point on the footage by a leader line
 //   lower-third       name and title bar above the caption band
 //   emphasis-caption  big word-pop over the footage; hides the captions
+//   masthead          one huge word behind the presenter's head (layer behind)
+//   dolly-zoom        the room plate pushes in behind a still presenter
 //
 // (`callout` is already an editorial kind, a text card, so the anchored
 // sticker is `footage-callout`.)
@@ -35,7 +37,7 @@
 // 1080); every text/fill pair at least 3:1 (throws otherwise); no blur.
 
 import {formatBound, withinBounds} from './bounds.mjs';
-import {springValue} from './motion.mjs';
+import {motionBlurPx, springValue} from './motion.mjs';
 import {grammarEase, grammarStagger, grammarTweens} from './grammar.mjs';
 import {CATALOG_B_STYLE, contrastRatio, fitText, makeCheck, mixColor, r2, rt, textWidth} from './catalog-b-base.mjs';
 import {abs, el, sampleTime, set, svgRoot, transformString, tw} from './catalog-b-view.mjs';
@@ -159,40 +161,78 @@ const fraction = (check, value, path, low = 0, high = 1) => {
 // ---------------------------------------------------------------------------
 // punch-in: a spring zoom on the base toward a focus point
 
-function punchScale(t, {scale, punchAt, releaseAt, fps}) {
-  if (t < punchAt - 1e-9) return 1;
-  const pin = springValue(t, {start: punchAt, fps, ...PUNCH_SPRING.in});
+// Each step springs from the previous scale to its own (in: a zoom-in step,
+// out: a zoom-out step); the release springs whatever is left back to 1.
+function punchScale(t, {steps, releaseAt, fps}) {
+  let s = 1, previous = 1;
+  for (const step of steps) {
+    if (t < step.at - 1e-9) break;
+    const spring = step.scale >= previous ? PUNCH_SPRING.in : PUNCH_SPRING.out;
+    s += (step.scale - previous) * springValue(t, {start: step.at, fps, ...spring});
+    previous = step.scale;
+  }
   const pout = t < releaseAt - 1e-9 ? 0 : springValue(t, {start: releaseAt, fps, ...PUNCH_SPRING.out});
-  return Math.max(1, 1 + (scale - 1) * pin * (1 - pout));
+  return Math.max(1, 1 + (s - 1) * (1 - pout));
+}
+
+// Velocity-shaped zoom blur (motion.mjs motionBlurPx): the speed of the frame
+// edge, so a step or release blurs for a few frames and settles to 0.
+function punchBlur(s, previous, {half, max}) {
+  return r2(motionBlurPx(Math.abs(s - previous) * half, {max, shutter: 0.5}));
 }
 
 function resolvePunchIn(params, ctx) {
-  const b = createFootageBase('punch-in', params, ctx, {allowed: ['scale', 'at', 'focus', 'release'], minDuration: CATALOG_C_TIMING['punch-in'].minDuration});
+  const b = createFootageBase('punch-in', params, ctx, {allowed: ['scale', 'at', 'focus', 'release', 'steps', 'blur'], minDuration: CATALOG_C_TIMING['punch-in'].minDuration});
   const {check, canvas, fps, start, end, duration} = b;
   const p = b.params;
-  const scale = p.scale === undefined ? 1.12 : check.num(p.scale, 'params.scale', 1.06, 1.25);
   const baseFocus = ctx.base?.focus && Number.isFinite(ctx.base.focus.x) && Number.isFinite(ctx.base.focus.y) ? ctx.base.focus : {x: 0.5, y: 0.42};
   const focusIn = p.focus === undefined ? baseFocus : fraction(check, p.focus, 'params.focus');
   const release = p.release === undefined ? Math.min(0.5, r2(duration * 0.3)) : check.num(p.release, 'params.release', 0.3, 2);
-  const punchAt = b.timeOf('punch', p.at, 'params.at', 0, {min: 0, max: duration - release - CATALOG_C_TIMING['punch-in'].releaseHold});
+  const latest = duration - release - CATALOG_C_TIMING['punch-in'].releaseHold;
+  let steps;
+  if (p.steps !== undefined) {
+    if (p.at !== undefined || p.scale !== undefined) check.fail('params.steps', 'replaces at and scale; set either steps or at/scale');
+    if (!Array.isArray(p.steps) || p.steps.length < 1 || p.steps.length > 4) check.fail('params.steps', 'must be 1–4 steps [{at, scale}]');
+    steps = p.steps.map((step, i) => {
+      check.obj(step, `params.steps[${i}]`, ['at', 'scale'], ['at', 'scale']);
+      return {at: b.timeOf(`step-${i}`, step.at, `params.steps[${i}].at`, 0, {min: 0, max: latest}), scale: check.num(step.scale, `params.steps[${i}].scale`, 1, 1.35)};
+    });
+    steps.forEach((step, i) => {
+      if (i && step.at - steps[i - 1].at < CATALOG_C_TIMING['punch-in'].stepGap - 1e-6) check.fail(`params.steps[${i}].at`, `must be at least ${CATALOG_C_TIMING['punch-in'].stepGap} s after the step before it`);
+      if (i && Math.abs(step.scale - steps[i - 1].scale) < 0.03) check.fail(`params.steps[${i}].scale`, 'must differ from the step before it by at least 0.03');
+    });
+    if (steps[0].scale < 1.06) check.fail('params.steps[0].scale', 'must zoom in (1.06 or more)');
+  } else {
+    const scale = p.scale === undefined ? 1.12 : check.num(p.scale, 'params.scale', 1.06, 1.25);
+    steps = [{at: b.timeOf('punch', p.at, 'params.at', 0, {min: 0, max: latest}), scale}];
+  }
+  const blurMax = p.blur === undefined || p.blur === false ? 0 : p.blur === true ? b.u(14) : check.num(p.blur, 'params.blur', 2, 30);
+  const punchAt = steps[0].at;
+  const scale = Math.max(...steps.map(step => step.scale));
   const releaseAt = rt(end - release);
-  if (releaseAt - punchAt < 0.25 - 1e-6) check.fail('params.release', `leaves ${r2(releaseAt - punchAt)} s between the punch and the release; it needs 0.25 s`);
+  if (releaseAt - steps.at(-1).at < 0.25 - 1e-6) check.fail('params.release', `leaves ${r2(releaseAt - steps.at(-1).at)} s between the last step and the release; it needs 0.25 s`);
   const focus = {x: r2(focusIn.x * canvas.width), y: r2(focusIn.y * canvas.height)};
   const cx = canvas.width / 2, cy = canvas.height / 2;
+  const half = Math.hypot(canvas.width, canvas.height) / 2;
+  const at = t => punchScale(t, {steps, releaseAt, fps});
   const sample = t => {
-    const s = punchScale(t, {scale, punchAt, releaseAt, fps});
-    return {scale: Math.round(s * 1e5) / 1e5, x: r2((1 - s) * (focus.x - cx)) || 0, y: r2((1 - s) * (focus.y - cy)) || 0};
+    const s = at(t);
+    const out = {scale: Math.round(s * 1e5) / 1e5, x: r2((1 - s) * (focus.x - cx)) || 0, y: r2((1 - s) * (focus.y - cy)) || 0};
+    if (blurMax) out.blur = punchBlur(s, at(t - 1 / fps), {half, max: blurMax});
+    return out;
   };
   const samples = [];
   const first = Math.ceil(start * fps - 1e-6), last = Math.floor(end * fps + 1e-6);
   for (let f = first; f <= last; f++) samples.push({t: rt(f / fps), ...sample(f / fps)});
   // The camera always lands back on identity at the scene end.
-  if (!samples.length || samples.at(-1).t < end - 1e-6) samples.push({t: end, scale: 1, x: 0, y: 0});
-  else Object.assign(samples.at(-1), {scale: 1, x: 0, y: 0});
+  const identity = {scale: 1, x: 0, y: 0, ...(blurMax ? {blur: 0} : {})};
+  if (!samples.length || samples.at(-1).t < end - 1e-6) samples.push({t: end, ...identity});
+  else Object.assign(samples.at(-1), identity);
   b.events.push({id: `${b.id}-punch`, name: 'punch', time: punchAt, endTime: rt(Math.min(releaseAt, punchAt + 0.45)), role: 'emphasis', cue: 'whoosh'});
+  steps.slice(1).forEach((step, i) => b.events.push({id: `${b.id}-step-${i + 1}`, name: `step-${i + 1}`, time: step.at, endTime: rt(Math.min(releaseAt, step.at + 0.45)), role: 'emphasis', cue: step.scale > steps[i].scale ? 'whoosh' : 'whoosh-soft'}));
   b.events.push({id: `${b.id}-release`, name: 'release', time: releaseAt, endTime: end, role: 'release'});
-  b.model.camera = {target: 'base', focus, scale, punchAt, releaseAt, samples};
-  return b.finish({scale, focus, focusFraction: {x: focusIn.x, y: focusIn.y}, punchAt, releaseAt, release}, {
+  b.model.camera = {target: 'base', focus, scale, punchAt, releaseAt, samples, ...(p.steps !== undefined ? {steps} : {}), ...(blurMax ? {blur: blurMax} : {})};
+  return b.finish({scale, focus, focusFraction: {x: focusIn.x, y: focusIn.y}, punchAt, releaseAt, release, ...(p.steps !== undefined ? {steps} : {}), ...(blurMax ? {blur: blurMax} : {})}, {
     rect: {x: 0, y: 0, width: canvas.width, height: canvas.height}, role: 'decor', minTextPx: null,
     motion: {enterEnd: Math.min(releaseAt, punchAt + 0.45), exitStart: releaseAt, exitTo: {opacity: 1}}
   });
@@ -449,27 +489,164 @@ function emphasisTimeline(model, ops) {
 }
 
 // ---------------------------------------------------------------------------
+// masthead: one huge word behind the presenter, like a magazine cover
+// (layer "behind": the head covers the lower part of the letters)
+
+// Where a head sits when the matte has no summary yet (canvas fractions).
+const DEFAULT_HEAD = {portrait: {x: 0.4, y: 0.26, w: 0.2, h: 0.12}, landscape: {x: 0.44, y: 0.18, w: 0.12, h: 0.24}};
+// The letters' baseline sits this far down the head, so the head covers
+// their lower part; Anton-like display faces have caps about 0.72 em tall.
+const MASTHEAD_BASELINE = 0.35;
+const CAP = 0.72;
+
+function headRect(ctx, canvas, portrait) {
+  if (ctx.subject?.head) return {...ctx.subject.head, measured: true};
+  const d = DEFAULT_HEAD[portrait ? 'portrait' : 'landscape'];
+  return {x: d.x * canvas.width, y: d.y * canvas.height, width: d.w * canvas.width, height: d.h * canvas.height, measured: false};
+}
+
+function resolveMasthead(params, ctx) {
+  const b = createFootageBase('masthead', params, ctx, {allowed: ['word', 'kicker', 'color', 'at', 'stagger'], required: ['word'], minDuration: CATALOG_C_TIMING.masthead.minDuration});
+  const {check, u, safe, colors, canvas, portrait, end, duration} = b;
+  const p = b.params;
+  const word = check.str(p.word, 'params.word', 12).toUpperCase();
+  if (/\s/.test(word)) check.fail('params.word', 'must be one word');
+  const kicker = p.kicker === undefined ? null : check.str(p.kicker, 'params.kicker', 32).toUpperCase();
+  const color = b.resolveColor(p.color, 'params.color', 'paper', colors.bg, 'brand.colors.bg (shadow)');
+  const stagger = p.stagger === undefined ? grammarStagger(ctx.grammar, 0.05, {max: 0.12}) : check.num(p.stagger, 'params.stagger', 0, 0.12);
+  const head = headRect(ctx, canvas, portrait);
+  // Size: the word spans up to 90% of the safe width, then shrinks if the
+  // headroom cannot hold it with the baseline on the head.
+  const blockW = r2(safe.width * 0.9);
+  const fit = fitText(check, 'params.word', word, {family: 'display', width: blockW, preferred: u(portrait ? 420 : 300), min: u(150), maxLines: 1});
+  const kickerSize = r2(Math.max(b.min.meta, u(30)));
+  const kickerH = kicker ? r2(kickerSize * 1.3 + u(12)) : 0;
+  const baseline = head.y + head.height * MASTHEAD_BASELINE;
+  const room = baseline - safe.y - kickerH;
+  const size = r2(Math.min(fit.size, room / 0.9));
+  if (size < u(150) - 1e-6) check.fail('params.word', `needs headroom: with the presenter's head at ${Math.round(head.y)} px there is room for ${Math.max(0, Math.round(room))} px of letters above it, and a masthead needs ${Math.round(u(150) * 0.9)} px. Use it on a medium or wide shot, or pick another module`);
+  const lineH = r2(size * 0.9);
+  const top = r2(Math.max(safe.y + kickerH, baseline - lineH));
+  const rect = {x: r2(safe.x + (safe.width - blockW) / 2), y: r2(top - kickerH), width: blockW, height: r2(lineH + kickerH)};
+  // How much of the letters' cap height the head covers in its column.
+  const capTop = top + lineH - size * CAP - size * 0.05;
+  const covered = r2(Math.max(0, Math.min(1, (top + lineH - Math.max(capTop, head.y)) / (size * CAP))));
+  const t0 = b.timeOf('title', p.at, 'params.at', 0.05, {min: 0, max: Math.max(0, duration - CATALOG_C_TIMING.masthead.leadOut - stagger * (word.length - 1))});
+  const letters = [...word].map((char, i) => ({index: i, char, time: rt(t0 + i * stagger)}));
+  const settle = rt(letters.at(-1).time + 0.5);
+  b.events.push({id: `${b.id}-title`, name: 'title', time: t0, endTime: settle, role: 'title', cue: 'whoosh'});
+  b.model.layer = 'behind';
+  const exitStart = rt(Math.max(settle, end - 0.35));
+  const content = {word, kicker, color, size, lineH, kickerSize, kickerH, letters, stagger, rise: r2(size * 0.32), covered, placement: head.measured ? 'measured' : 'default',
+    head: {x: r2(head.x), y: r2(head.y), width: r2(head.width), height: r2(head.height)}, shadow: `0 ${u(8)}px ${u(30)}px #00000080`};
+  return b.finish(content, {rect, role: 'hero', minTextPx: size,
+    motion: {enterEnd: settle, exitStart, exitTo: {opacity: 0, y: -u(30)}, origin: {x: r2(rect.x + rect.width / 2), y: r2(rect.y + rect.height / 2)}}});
+}
+
+function mastheadView(model) {
+  const {id, fonts} = model;
+  const c = model.content, R = model.rect;
+  const kids = [];
+  if (c.kicker) kids.push(el('div', `${id}-kicker`, abs(R.x, R.y, R.width, c.kickerH, {textAlign: 'center', whiteSpace: 'nowrap', fontFamily: fonts.meta, fontSize: c.kickerSize, lineHeight: '1.3', letterSpacing: '0.24em', fontWeight: 600, color: c.color, textShadow: c.shadow, opacity: 0}), [c.kicker]));
+  const letters = c.letters.map(letter => el('span', `${id}-l-${letter.index}`, {display: 'inline-block', opacity: 0, transform: transformString({y: c.rise})}, [letter.char]));
+  kids.push(el('div', `${id}-word`, abs(R.x, R.y + c.kickerH, R.width, c.lineH, {display: 'flex', justifyContent: 'center', alignItems: 'flex-end', whiteSpace: 'nowrap',
+    fontFamily: fonts.display, fontWeight: 400, fontSize: c.size, lineHeight: '0.9', letterSpacing: '0.01em', color: c.color, textShadow: c.shadow}), letters));
+  return kids;
+}
+
+function mastheadTimeline(model, ops) {
+  const {id, start} = model;
+  const c = model.content;
+  if (c.kicker) {
+    set(ops, `${id}-kicker`, start, {opacity: 0});
+    tw(ops, `${id}-kicker`, c.letters.at(-1).time, 0.4, 'power2.out', {opacity: 0}, {opacity: 1});
+  }
+  for (const letter of c.letters) {
+    const target = `${id}-l-${letter.index}`;
+    set(ops, target, start, {opacity: 0, y: c.rise});
+    tw(ops, target, letter.time, 0.3, 'power1.out', {opacity: 0}, {opacity: 1});
+    tw(ops, target, letter.time, 0.5, 'power3.out', {y: c.rise}, {y: 0});
+  }
+}
+
+// ---------------------------------------------------------------------------
+// dolly-zoom: the room pushes in or falls away while the presenter holds
+// still. It scales the matte's room plate (the room without the presenter)
+// behind the subject, so the presenter's own outline never shows around the
+// cut-out, and holds the subject at identity with a subjectCamera.
+
+function resolveDollyZoom(params, ctx) {
+  const b = createFootageBase('dolly-zoom', params, ctx, {allowed: ['direction', 'scale', 'at', 'move', 'release'], minDuration: CATALOG_C_TIMING['dolly-zoom'].minDuration});
+  const {check, canvas, fps, start, end, duration} = b;
+  const p = b.params;
+  const direction = p.direction === undefined ? 'push' : check.oneOf(p.direction, 'params.direction', ['push', 'pull']);
+  const scale = p.scale === undefined ? 1.3 : check.num(p.scale, 'params.scale', 1.12, 1.6);
+  const move = p.move === undefined ? Math.min(1.6, r2(duration * 0.6)) : check.num(p.move, 'params.move', 1, 2.5);
+  const release = direction === 'pull' ? 0 : p.release === undefined ? 0.5 : check.num(p.release, 'params.release', 0.3, 1);
+  if (direction === 'pull' && p.release !== undefined) check.fail('params.release', 'applies to a push only; a pull ends on the recording\'s own framing');
+  const moveAt = b.timeOf('move', p.at, 'params.at', 0, {min: 0, max: duration - move - release - CATALOG_C_TIMING['dolly-zoom'].hold});
+  if (ctx.subject?.framing === 'close-up') check.fail('params', 'needs room around the presenter (framing medium or wide); this stretch of the recording is a close-up. Use punch-in instead');
+  const head = headRect(ctx, canvas, canvas.height > canvas.width);
+  const origin = {x: r2(head.x + head.width / 2), y: r2(head.y + head.height / 2)};
+  const plate = ctx.subject?.plate ?? null;
+  const releaseAt = rt(end - release);
+  const from = direction === 'push' ? 1 : scale, to = direction === 'push' ? scale : 1;
+  // The subject holds still: identity on every frame of the scene.
+  const samples = [];
+  for (let f = Math.ceil(start * fps - 1e-6); f <= Math.floor(end * fps + 1e-6); f++) samples.push({t: rt(f / fps), scale: 1, x: 0, y: 0});
+  b.model.layer = 'behind';
+  b.model.subjectCamera = {samples};
+  b.events.push({id: `${b.id}-move`, name: 'move', time: moveAt, endTime: rt(moveAt + move), role: 'emphasis', cue: 'riser'});
+  if (release) b.events.push({id: `${b.id}-release`, name: 'release', time: releaseAt, endTime: end, role: 'release'});
+  const content = {direction, scale, from, to, move, moveAt, release, releaseAt, origin, plate, ease: 'power2.inOut'};
+  return b.finish(content, {rect: {x: 0, y: 0, width: canvas.width, height: canvas.height}, role: 'decor', minTextPx: null,
+    motion: {enterEnd: rt(moveAt + move), exitStart: release ? releaseAt : end, exitTo: {opacity: 1}}});
+}
+
+function dollyZoomView(model) {
+  const {id} = model;
+  const c = model.content, W = model.canvas.width, H = model.canvas.height;
+  if (!c.plate) return [];
+  const img = el('img', `${id}-plate`, abs(0, 0, W, H, {objectFit: c.plate.fit, objectPosition: `${c.plate.focus.x * 100}% ${c.plate.focus.y * 100}%`}), [], {src: c.plate.src, alt: ''});
+  return [el('div', `${id}-room`, abs(0, 0, W, H, {overflow: 'hidden', transformOrigin: `${c.origin.x}px ${c.origin.y}px`, transform: transformString({scaleX: c.from, scaleY: c.from})}), [img])];
+}
+
+function dollyZoomTimeline(model, ops) {
+  const {id, start} = model;
+  const c = model.content;
+  if (!c.plate) return;
+  set(ops, `${id}-room`, start, {scaleX: c.from, scaleY: c.from});
+  tw(ops, `${id}-room`, c.moveAt, c.move, c.ease, {scaleX: c.from, scaleY: c.from}, {scaleX: c.to, scaleY: c.to});
+  if (c.release) tw(ops, `${id}-room`, c.releaseAt, c.release, 'power2.inOut', {scaleX: c.to, scaleY: c.to}, {scaleX: 1, scaleY: 1});
+}
+
+// ---------------------------------------------------------------------------
 // Registry, root, camera
 
 // Timing constants per module (seconds, scene-relative), the single source for
 // the checks above and each MODULES entry's `timing` table.
 export const CATALOG_C_TIMING = Object.freeze({
-  'punch-in': Object.freeze({minDuration: 0.8, releaseHold: 0.25}),
+  'punch-in': Object.freeze({minDuration: 0.8, releaseHold: 0.25, stepGap: 0.3}),
   'footage-callout': Object.freeze({minDuration: 1.5, leadOut: 1.1}),
   'lower-third': Object.freeze({minDuration: 2, leadOut: 1.2}),
-  'emphasis-caption': Object.freeze({minDuration: 0.8, leadOut: 0.45})
+  'emphasis-caption': Object.freeze({minDuration: 0.8, leadOut: 0.45}),
+  masthead: Object.freeze({minDuration: 1.5, leadOut: 0.9}),
+  'dolly-zoom': Object.freeze({minDuration: 1.8, hold: 0.2})
 });
 const TIMING_C = {
-  'punch-in': {minDuration: CATALOG_C_TIMING['punch-in'].minDuration, leadIn: 0, leadOut: null, gaps: [], rules: [`at ≤ scene − release − ${CATALOG_C_TIMING['punch-in'].releaseHold} s (release 0.3–2 s, default min(0.5, 0.3 × scene))`]},
+  'punch-in': {minDuration: CATALOG_C_TIMING['punch-in'].minDuration, leadIn: 0, leadOut: null, gaps: [], rules: [`at (and every steps[i].at) ≤ scene − release − ${CATALOG_C_TIMING['punch-in'].releaseHold} s (release 0.3–2 s, default min(0.5, 0.3 × scene))`, `steps at least ${CATALOG_C_TIMING['punch-in'].stepGap} s apart`]},
   'footage-callout': {minDuration: CATALOG_C_TIMING['footage-callout'].minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING['footage-callout'].leadOut, gaps: [], rules: []},
   'lower-third': {minDuration: CATALOG_C_TIMING['lower-third'].minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING['lower-third'].leadOut, gaps: [], rules: []},
-  'emphasis-caption': {minDuration: CATALOG_C_TIMING['emphasis-caption'].minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING['emphasis-caption'].leadOut, gaps: [], rules: [`at ≤ scene − ${CATALOG_C_TIMING['emphasis-caption'].leadOut} s − stagger × (words − 1) (stagger 0–0.3 s, default 0.09)`]}
+  'emphasis-caption': {minDuration: CATALOG_C_TIMING['emphasis-caption'].minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING['emphasis-caption'].leadOut, gaps: [], rules: [`at ≤ scene − ${CATALOG_C_TIMING['emphasis-caption'].leadOut} s − stagger × (words − 1) (stagger 0–0.3 s, default 0.09)`]},
+  masthead: {minDuration: CATALOG_C_TIMING.masthead.minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING.masthead.leadOut, gaps: [], rules: [`at ≤ scene − ${CATALOG_C_TIMING.masthead.leadOut} s − stagger × (letters − 1) (stagger 0–0.12 s, default 0.05)`]},
+  'dolly-zoom': {minDuration: CATALOG_C_TIMING['dolly-zoom'].minDuration, leadIn: 0, leadOut: null, gaps: [], rules: [`at ≤ scene − move − release − ${CATALOG_C_TIMING['dolly-zoom'].hold} s (move 1–2.5 s, default min(1.6, 0.6 × scene); release 0.3–1 s, push only)`]}
 };
 
 const DEFINITIONS = [
-  {id: 'punch-in', describe: 'Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay).',
-    params: {scale: '1.06–1.25 (default 1.12)', at, focus: '{x, y} canvas fractions (default base.focus, else {0.5, 0.42})', release: 'seconds before the scene end when the zoom springs back (0.3–2, default min(0.5, 30% of the scene))'},
-    events: ['punch', 'release'], resolve: resolvePunchIn, view: punchInView, timeline: punchInTimeline},
+  {id: 'punch-in', describe: 'Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay). Steps punch in, further in or back out on successive words; blur adds a few frames of zoom blur on each move.',
+    params: {scale: '1.06–1.25 (default 1.12)', at, focus: '{x, y} canvas fractions (default base.focus, else {0.5, 0.42})', release: 'seconds before the scene end when the zoom springs back (0.3–2, default min(0.5, 30% of the scene))',
+      steps: '[{at, scale}] 1–4, instead of at/scale: each springs to its scale (1–1.35; the first ≥ 1.06), at least 0.3 s apart', blur: 'true (14 px at 1080) or 2–30 px: velocity-shaped zoom blur, 0 once settled (default off)'},
+    events: ['punch', 'step-<i>', 'release'], resolve: resolvePunchIn, view: punchInView, timeline: punchInTimeline},
   {id: 'footage-callout', describe: 'Footage-led: a claim sticker anchored to a point on the footage by a leader line, placed inside the safe zone.',
     params: {text: 'claim ≤ 42 chars, up to 2 lines', label: 'kicker ≤ 24 (optional)', point: '{x, y} canvas fractions 0.04–0.96 (the anchored spot)', side: 'auto|above|below|left|right', tone: 'primary|paper|dark', tilt: 'degrees −6–6 (default −2)', at},
     events: ['point', 'sticker'], resolve: resolveCallout, view: calloutView, timeline: calloutTimeline},
@@ -478,10 +655,19 @@ const DEFINITIONS = [
     events: ['name', 'title'], resolve: resolveLowerThird, view: lowerThirdView, timeline: lowerThirdTimeline},
   {id: 'emphasis-caption', describe: 'Footage-led: one to three big words that pop over the footage; hides the captions while on screen.',
     params: {text: '1–3 words, ≤ 24 chars', color: 'primary|accent|paper or #hex (≥ 3:1 on the bg outline)', position: 'center|upper|lower', stagger: 'seconds between words (default 0.09)', at},
-    events: ['pop', 'word-<i>'], resolve: resolveEmphasis, view: emphasisView, timeline: emphasisTimeline}
+    events: ['pop', 'word-<i>'], resolve: resolveEmphasis, view: emphasisView, timeline: emphasisTimeline},
+  {id: 'masthead', describe: 'Footage-led, behind the presenter: one huge word (a product name or the one idea) rises in letter by letter at the top of the frame, and the presenter\'s head covers its lower part like a magazine cover. Needs headroom: medium or wide shots.',
+    params: {word: 'one word ≤ 12 chars (uppercased)', kicker: 'small line above it ≤ 32 (optional)', color: 'paper (default)|primary|accent or #hex (≥ 3:1 on brand bg)', stagger: 'seconds between letters (0–0.12, default 0.05)', at},
+    events: ['title'], needs: ['subject'], layer: 'behind', aspects: ['9:16', '16:9'], mood: ['bold', 'editorial', 'premium', 'launch'],
+    resolve: resolveMasthead, view: mastheadView, timeline: mastheadTimeline},
+  {id: 'dolly-zoom', describe: 'Footage-led, behind the presenter: the room pushes in (or falls away) over one eased beat while the presenter holds still, a dolly zoom for a realisation or a turn. Needs a medium or wide shot and the matte\'s room plate.',
+    params: {direction: 'push (default) | pull (starts on a cut, the room falls away)', scale: '1.12–1.6 (default 1.3)', move: 'seconds the zoom takes (1–2.5)', release: 'push: seconds to ease back before the scene end (0.3–1, default 0.5)', at},
+    events: ['move', 'release'], needs: ['subject'], layer: 'behind', aspects: ['9:16', '16:9'], mood: ['cinematic', 'dramatic', 'premium'],
+    resolve: resolveDollyZoom, view: dollyZoomView, timeline: dollyZoomTimeline}
 ];
 
-export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: TIMING_C[def.id], resolve: def.resolve}]));
+export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: TIMING_C[def.id], resolve: def.resolve,
+  ...(def.needs ? {needs: def.needs} : {}), ...(def.layer ? {layer: def.layer} : {}), ...(def.aspects ? {aspects: def.aspects} : {}), ...(def.mood ? {mood: def.mood} : {})}]));
 const BY_ID = Object.fromEntries(DEFINITIONS.map(def => [def.id, def]));
 
 function definition(model) {
@@ -521,14 +707,27 @@ export function catalogCTimeline(model) {
  * one tl.set-style op per camera sample (at t - SAMPLE_LEAD), cameras applied
  * in start order. Both compilers apply it to the base layer.
  */
-export function cameraOps(models, {target = BASE_CAMERA} = {}) {
+// roomFilterAt(t): the base's room filter at t ("none" when untreated; the
+// subject layer's room treatments). A blurred sample sets the whole filter,
+// so it carries the room's filter too, and the room is not lost.
+export function cameraOps(models, {target = BASE_CAMERA, roomFilterAt = null} = {}) {
   const cameras = (models ?? []).filter(model => model?.camera && Array.isArray(model.camera.samples)).sort((a, b) => a.start - b.start);
   if (!cameras.length) return [];
   const ops = [{type: 'set', target, time: 0, props: {...CAMERA_IDENTITY}}];
   for (const model of cameras) {
-    for (const s of model.camera.samples) ops.push({type: 'set', target, time: Math.max(0, sampleTime(s.t)), props: {x: s.x, y: s.y, scaleX: s.scale, scaleY: s.scale}});
+    for (const s of model.camera.samples) ops.push({type: 'set', target, time: Math.max(0, sampleTime(s.t)), props: cameraSampleProps(s, roomFilterAt ? roomFilterAt(s.t) : 'none')});
   }
   return ops;
+}
+
+/** A camera sample as set props: transform, plus a CSS filter when the sample carries zoom blur. */
+export function cameraSampleProps(s, roomFilter = 'none') {
+  const props = {x: s.x, y: s.y, scaleX: s.scale, scaleY: s.scale};
+  if (s.blur !== undefined) {
+    const parts = [roomFilter && roomFilter !== 'none' ? roomFilter : null, s.blur > 0 ? `blur(${s.blur}px)` : null].filter(Boolean);
+    props.filter = parts.length ? parts.join(' ') : 'none';
+  }
+  return props;
 }
 
 /** Camera windows that overlap in time ([[idA, idB], …]); the later camera wins while both run. */

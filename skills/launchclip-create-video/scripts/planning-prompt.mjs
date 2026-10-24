@@ -78,7 +78,9 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'photo-scene', lanes: ['motion', 'voiceover-motion'], when: 'sets a scene or mood with a real photo or clip (assets/… image or video, full bleed)', patterns: ['\\b(picture|imagine|out (in|on) the|on location|at the|scene|landscape|outdoors?|in the field)\\b'] },
   { module: 'brand-lockup', when: 'names the brand on a title or end card, with its logo and wordmark images (and an app-store badge or URL on the end card)', patterns: ['\\b(introducing|meet|presenting)\\b', '\\b(app store|google play|download (it|now|today))\\b'] },
   { module: 'cta', when: 'calls to action, or the loop ending', patterns: ['\\b(follow|subscribe|try it|get started|star|download|sign up|learn more|link in bio)\\b'] },
-  { module: 'punch-in', fallback: 'kinetic-words', lanes: ['footage-led'], when: 'footage-led emphasis on a word', patterns: ['\\b(this|exactly|really|huge)\\b', '!\\s*$'] },
+  { module: 'masthead', lanes: ['footage-led'], needs: ['subject'], when: 'names the product or the one idea the video is about ("meet X", "this is X", "it\'s called X"): one word behind the presenter\'s head', patterns: ['\\b(meet|introducing|it\'s called|called|this is)\\b'] },
+  { module: 'dolly-zoom', lanes: ['footage-led'], needs: ['subject'], when: 'lands a realisation, reveal or turn ("that\'s when", "it hit me", "everything changed"): the room moves, the presenter holds', patterns: ['\\b(that\'s when|it hit me|realis|realiz|everything changed|turns out|the moment)'] },
+  { module: 'punch-in', fallback: 'kinetic-words', lanes: ['footage-led'], when: 'footage-led emphasis on a word (steps for a build of emphasised words; blur for energy)', patterns: ['\\b(this|exactly|really|huge)\\b', '!\\s*$'] },
   { module: 'footage-callout', fallback: 'callout', lanes: ['footage-led'], when: 'footage-led claim sticker or label pointing at something on screen', patterns: ['\\b(note|remember|important|tip|warning|look at|see this|right here)\\b'] },
   { module: 'lower-third', lanes: ['footage-led'], when: 'introduces the speaker or a guest by name and title', patterns: ['\\b(my name is|founder|co-founder|ceo|cto|engineer at|host of|joining me)\\b'] },
   { module: 'emphasis-caption', lanes: ['footage-led'], when: 'one to three spoken words that deserve a big on-screen pop', patterns: ['\\b(never|always|free|instantly|zero|ten times|10x)\\b'] },
@@ -95,9 +97,11 @@ export function phraseRowModule(row, modules = knownModules()) {
 /**
  * Phrase hints: for each sentence of `text`, the registry modules whose
  * phrase patterns match (at most `limit` per sentence, table order).
+ * subject: true when a usable presenter cut-out is available; rows that need
+ * it (masthead, dolly-zoom) are skipped otherwise.
  * Returns [{sentence, modules: [id…]}] for sentences with at least one match.
  */
-export function suggestModules(text, { lane, limit = 3 } = {}) {
+export function suggestModules(text, { lane, limit = 3, subject = false } = {}) {
   const modules = knownModules();
   const sentences = String(text ?? '').replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).map((entry) => entry.trim()).filter(Boolean);
   const hints = [];
@@ -105,6 +109,7 @@ export function suggestModules(text, { lane, limit = 3 } = {}) {
     const matched = [];
     for (const row of PHRASE_MODULE_TABLE) {
       if (row.lanes && lane && !row.lanes.includes(lane)) continue;
+      if (row.needs?.includes('subject') && !subject) continue;
       const id = phraseRowModule(row, modules);
       if (!id || matched.includes(id)) continue;
       if (row.patterns.some((source) => new RegExp(source, 'i').test(sentence))) matched.push(id);
@@ -127,6 +132,25 @@ export const ART_DIRECTION_GRAMMARS = Object.freeze([
   { grammar: 'cinematic', patterns: ['\\bcinematic\\b', '\\bfilmic\\b', '\\bken burns\\b', '\\btrailer\\b', '\\bslow[- ]fast[- ]slow\\b'] },
   { grammar: 'smooth', patterns: ['\\bsmooth\\b', '\\bcalm\\b', '\\belegant\\b', '\\bpremium\\b', '\\bluxur', '\\bsoft\\b', '\\bdreamy\\b', '\\bwellness\\b', '\\bflowing\\b', '\\bminimal'] }
 ]);
+// Art-direction words → module moods (catalogue `mood` tags): a module whose
+// mood matches is listed first under "Favoured by the art direction".
+export const MOOD_WORDS = Object.freeze({
+  bold: ['\\bbold\\b', '\\bpunchy\\b', '\\bhype\\b', '\\bloud\\b'],
+  editorial: ['\\beditorial\\b', '\\bmagazine\\b', '\\bjournal'],
+  premium: ['\\bpremium\\b', '\\bluxur', '\\belegant\\b', '\\bpolished\\b'],
+  launch: ['\\blaunch', '\\bannounc', '\\breveal'],
+  cinematic: ['\\bcinematic\\b', '\\bfilmic\\b', '\\bmovie\\b'],
+  dramatic: ['\\bdramatic\\b', '\\bintense\\b', '\\bsuspense'],
+  playful: ['\\bplayful\\b', '\\bfun\\b', '\\bquirky\\b', '\\bcartoon']
+});
+
+/** Modules whose mood tags the art direction names: [{id, moods: [tag…]}]. */
+export function suggestModuleMoods(artDirection = '', modules = moduleCatalogue()) {
+  const text = String(artDirection ?? '');
+  const named = Object.entries(MOOD_WORDS).filter(([, patterns]) => patterns.some((source) => new RegExp(source, 'i').test(text))).map(([tag]) => tag);
+  return modules.map((module) => ({ id: module.id, moods: (module.mood ?? []).filter((tag) => named.includes(tag)) })).filter((entry) => entry.moods.length);
+}
+
 const WORLD_WORDS = ['\\bjourney\\b', '\\bexplore', '\\bmap\\b', '\\bworld\\b', '\\bcontinuous\\b', '\\bone[- ]take\\b', '\\bpans?\\b', '\\bcamera\\b', '\\bfly[- ]?through\\b', '\\btravel'];
 const CUT_WORDS = ['\\bhard cuts?\\b', '\\bjump cuts?\\b', '\\bno camera\\b', '\\bstatic\\b'];
 
@@ -191,7 +215,7 @@ function paramText(spec) {
 
 /**
  * Every known module with its prompt-facing description:
- * [{id, family: "catalogue" | "editorial", describe, params: [{name, text, tuning}], events, hidesCaptions}].
+ * [{id, family: "catalogue" | "editorial", describe, params: [{name, text, tuning}], events, hidesCaptions, needs?, layer?, aspects?, mood?}].
  */
 export function moduleCatalogue() {
   const catalog = catalogModules();
@@ -218,7 +242,11 @@ export function moduleCatalogue() {
       describe: String(definition.describe ?? id),
       params: Object.entries(definition.params ?? {}).map(([name, spec]) => ({ name, text: paramText(spec), tuning: TUNING_PARAMS.includes(name) })),
       events: Array.isArray(definition.events) ? [...definition.events] : [],
-      hidesCaptions: hidesCaptionsFrom(definition.describe)
+      hidesCaptions: hidesCaptionsFrom(definition.describe),
+      ...(definition.needs ? { needs: [...definition.needs] } : {}),
+      ...(definition.layer ? { layer: definition.layer } : {}),
+      ...(definition.aspects ? { aspects: [...definition.aspects] } : {}),
+      ...(definition.mood ? { mood: [...definition.mood] } : {})
     };
   });
 }
@@ -287,7 +315,7 @@ function contractLines() {
     'format: {width, height, fps, duration, platform?} and brand: {colors, fonts} are given; copy them unchanged.',
     'audio: {voice?, words?, music?, sfx?}; base: null, or the recording path for footage-led.',
     'audio.music: omit it (finish picks ElevenLabs when a key is set, else the synth bed), or "synth", "none", an assets/ path, or {provider: "elevenlabs" | "synth" | "file", prompt?, bpm?, file?, sync?: "auto" | "off" | "cuts" | "hits"}. The music follows scene energy, so set energy honestly: calm intro, "build" before the payoff, 3 on the payoff. A prompt describes style only (no vocals is added for you).',
-    `scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: ${STORY_TRANSITIONS.join(' | ')}, dur, direction?, from_object?}, params, hits?, ambient?}].`,
+    `scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: ${STORY_TRANSITIONS.join(' | ')}, dur, direction?, from_object?}, params, hits?, ambient?, layer? (footage-led: "behind" draws it behind the presenter)}].`,
     'in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus; camera moves (pan, whip-pan, orbit, pull, world push) are under "Motion grammar and camera".',
     'overlays: [captions]. ending: {loop_to: "<first scene id>"} for a seamless loop (Shorts). For no loop, set ending {loop: false} (or loop_to: null, or omit ending without a looping style pack); the last scene then holds settled to the final frame (ending.final "hold", the default), or use final "fade" to fade it fully to the background by the final frame, or "exit" to play its own exit. ending accepts only loop_to, in, loop and final.',
     ...ambientLines(),
@@ -311,6 +339,8 @@ function moduleLines(tier, modules = moduleCatalogue()) {
   for (const module of modules) {
     const params = module.params.filter((param) => tier !== 'structured' || !param.tuning);
     const flags = [module.family === 'editorial' ? 'editorial panel, keeps captions' : module.hidesCaptions ? 'hides captions' : 'keeps captions'];
+    if (module.layer === 'behind') flags.push('behind the presenter');
+    if (module.needs?.includes('subject')) flags.push('needs the subject');
     lines.push(`### ${module.id} (${flags.join(', ')})`);
     lines.push(module.describe);
     if (module.family === 'editorial') lines.push(`Common: ${EDITORIAL_COMMON}.`);
@@ -323,15 +353,39 @@ function moduleLines(tier, modules = moduleCatalogue()) {
   return lines;
 }
 
-function phraseLines() {
+// subject: undefined lists every row, marking the ones that need the
+// subject; false drops them; true lists them unmarked.
+function phraseLines({ subject } = {}) {
   const modules = knownModules();
   return PHRASE_MODULE_TABLE.map((row) => {
+    const needs = row.needs?.includes('subject');
+    if (needs && subject === false) return null;
     const target = phraseRowModule(row, modules);
     if (!target) return null;
     const planned = target !== row.module ? ` (planned module ${row.module}; use ${target})` : '';
     const lanes = row.lanes ? ` [${row.lanes.join(', ')}]` : '';
-    return `| ${row.when}${lanes} | ${target}${planned} |`;
+    const marker = needs && subject === undefined ? ' (needs the subject)' : '';
+    return `| ${row.when}${lanes}${marker} | ${target}${planned} |`;
   }).filter(Boolean);
+}
+
+/**
+ * Prompt lines about the presenter for the footage-led lane. subject: the
+ * probe summary ({usable, reasons, framing, headroom, head}) or null when
+ * there is no cut-out (no runtime, no person, or several people).
+ */
+export function subjectLines(subject) {
+  if (!subject?.usable) {
+    const why = subject?.reasons?.length ? subject.reasons.join('; ') : 'the presenter cut-out is not available';
+    return [`No subject modules: ${why}. Every scene stays in front (no layer, no masthead or dolly-zoom).`];
+  }
+  return [
+    `The presenter can be cut out: ${subject.framing ?? 'unknown'} framing${typeof subject.headroom === 'number' ? `, ${Math.round(subject.headroom * 100)}% headroom above the head` : ''}${subject.head ? `, head centred at x ${subject.head.x}, y ${subject.head.y} of the frame` : ''}.`,
+    'scene.layer: "behind" draws a scene behind the presenter, so their head and body cover it (a word or chart behind them); omit it (front) for everything else. masthead and dolly-zoom are always behind.',
+    'Use at most one or two subject effects in a 30–60 s piece, at least 3 s apart, never two different ones back to back, and together under a third of the runtime.',
+    `masthead needs headroom${subject.framing === 'close-up' ? ' (this recording is a close-up: avoid masthead and dolly-zoom)' : ''}; dolly-zoom needs a medium or wide shot.`,
+    'Never put a front scene over the presenter\'s face for more than 0.3 s; layout-check fails it.'
+  ];
 }
 
 /** A compact valid storyboard for the given format and brand (motion lane, structured tier). */
@@ -372,6 +426,12 @@ function wordLines(words) {
   return [`${entries.length} words, as text@start seconds. Anchor to these words only.`, body];
 }
 
+function moodSection(artDirection, modules) {
+  const favoured = suggestModuleMoods(artDirection, modules);
+  if (!favoured.length) return [];
+  return section('Favoured by the art direction', [`Where the script allows, reach for: ${favoured.map((entry) => `${entry.id} (${entry.moods.join(', ')})`).join(', ')}.`]);
+}
+
 function section(title, lines) {
   return [`## ${title}`, '', ...lines, ''];
 }
@@ -382,9 +442,12 @@ function section(title, lines) {
  * fixed inputs (copied into the prompt); words: optional measured narration
  * (NARRATION.json words) for word anchors.
  */
-export function planningPrompt({ tier = 'structured', lane, format, brand, words, style, artDirection } = {}) {
+export function planningPrompt({ tier = 'structured', lane, format, brand, words, style, artDirection, subject } = {}) {
   if (!PLANNER_TIERS.includes(tier)) throw new Error(`tier must be one of ${PLANNER_TIERS.join(', ')}`);
   if (lane !== undefined && !STORY_LANES.includes(lane)) throw new Error(`lane must be one of ${STORY_LANES.join(', ')}`);
+  // Subject modules are offered only to a footage-led story whose presenter can be cut out.
+  const subjectReady = lane === 'footage-led' && Boolean(subject?.usable);
+  const available = moduleCatalogue().filter((module) => !module.needs?.includes('subject') || subjectReady);
   const lines = [
     `You author storyboard.json (${STORY_SCHEMA}) for LaunchClip, a renderer-neutral short-video contract. Tested modules draw every frame; you choose modules, write their copy and params, and time them. Model tier: ${tier}.`,
     'Return exactly one JSON object: the complete storyboard. No prose, no Markdown fences.',
@@ -402,8 +465,10 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...section('Time anchors', anchorLines().map((line) => `- ${line}`)),
     ...section('Safe zone', safeZoneLines(format).map((line) => `- ${line}`)),
     ...section('Captions', captionLines().map((line) => `- ${line}`)),
-    ...section('Phrase → module', ['Pick the module from what the line says:', '', '| The script… | Module |', '| --- | --- |', ...phraseLines()]),
-    ...section('Modules', moduleLines(tier)),
+    ...(lane === 'footage-led' ? section('Presenter (subject)', subjectLines(subject).map((line) => `- ${line}`)) : []),
+    ...section('Phrase → module', ['Pick the module from what the line says:', '', '| The script… | Module |', '| --- | --- |', ...phraseLines({ subject: lane === 'footage-led' ? Boolean(subject?.usable) : false })]),
+    ...moodSection(artDirection, available),
+    ...section('Modules', moduleLines(tier, available)),
     ...section('Example (motion lane, structured tier)', [JSON.stringify(exampleStoryboard({ format, brand }))])
   ];
   const narration = wordLines(words);
@@ -469,4 +534,53 @@ export function storyboardModulesReference() {
     ...section('Example', ['```json', JSON.stringify(exampleStoryboard(), null, 2), '```'])
   ];
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
+}
+
+/**
+ * Markdown reference for subject-aware effects in the create-video skills
+ * (skills-src/references/subject-effects.md, generated). Built from the same
+ * registry, phrase table and presenter rules as the planner prompt.
+ */
+export function subjectEffectsReference() {
+  const catalogue = moduleCatalogue();
+  const subjectModules = catalogue.filter((module) => module.needs?.includes('subject'));
+  const punchIn = catalogue.filter((module) => module.id === 'punch-in');
+  const rows = subjectModules.map((module) => {
+    const uses = PHRASE_MODULE_TABLE.filter((row) => row.module === module.id).map((row) => row.when).join('; ') || '—';
+    return `| ${module.id} | ${module.layer ?? 'front'} | ${(module.aspects ?? ['9:16', '16:9']).join(', ')} | ${(module.mood ?? []).join(', ') || '—'} | ${uses.replace(/\|/g, '\\|')} |`;
+  });
+  const ready = { usable: true, reasons: [], framing: 'medium', headroom: 0.2 };
+  const lines = [
+    '# Subject effects',
+    '',
+    '<!-- Generated from kit/core/planning-prompt.mjs by scripts/sync-skills.mjs. Do not edit by hand; run `npm run skills:sync`. -->',
+    '',
+    'Effects that use the presenter cut out of a footage-led recording: graphics that sit behind them, a room that moves while they hold still. They need one person in frame and a local matte; everything else in a footage-led story still works without one. Design: `docs/SUBJECT_EFFECTS_RFC.md` in the LaunchClip repo.',
+    '',
+    ...section('Getting the subject', [
+      '1. Probe the recording before planning: `launchclip subject probe assets/recording.mp4 --json`. Read `usable` (and `reasons` when it is false), `framing` (close-up, medium or wide) and `headroom`. Plan subject effects only when `usable` is true.',
+      '2. Plan the storyboard. Subject effects are timed on the edited timeline like every other scene.',
+      '3. Matte the source range each subject scene covers, padded by about 0.5 s: `launchclip subject matte assets/recording.mp4 --range <in>-<out> --project .`. The matte, its framing data and the room plate are filed under `assets/subject/`, and `base.subject` (default `"auto"`) picks them up. With `base.trim` or `base.edl`, map timeline seconds back to source seconds first.',
+      '4. `launchclip story validate`, `launchclip layout-check` and `launchclip finish` read the filed mattes. `launchclip make` runs all of this for you.',
+      '',
+      'The models download on first use (`launchclip subject setup` fetches them up front; `launchclip doctor` reports them). Mattes take about 0.2 s a frame at 1080×1920 on an Apple-silicon Mac, so matte only the ranges you use.'
+    ]),
+    ...section('Layers', [
+      '- `scene.layer: "behind"`: the scene draws behind the presenter, so their head and body cover it. masthead and dolly-zoom are behind by default.',
+      '- No layer (front): the scene draws over the presenter, as every footage-led overlay always has.',
+      '- `"split"`: for modules that draw on both sides of the presenter (none yet).',
+      '- `base.subject: "off"` turns the subject off; `{"mattes": [...]}` lists mattes explicitly (`src`, `in`, `out`, `info`, `plate`).',
+      '',
+      'Both renderers stack the base recording, behind scenes, the cut-out presenter, front scenes, then captions. A punch-in moves (and blurs) the presenter and the room together.'
+    ]),
+    ...section('Rules', subjectLines(ready).slice(1).map((line) => `- ${line}`)),
+    ...section('Modules', [
+      '| Module | Layer | Aspects | Moods | Use when the presenter… |',
+      '| --- | --- | --- | --- | --- |',
+      ...rows,
+      '',
+      ...moduleLines('guided', [...subjectModules, ...punchIn])
+    ])
+  ];
+  return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
 }
