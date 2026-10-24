@@ -6,7 +6,7 @@ import { preprocessPresenter } from "./presenter_preprocess.js";
 import { writeIntake } from "./intake.js";
 import { runProductionStage } from "./production_cli.js";
 import { isProductionReviewWorkspace } from "./production_review.js";
-import { createCostTracker } from "./cost_tracker.js";
+import { createCostTracker, parseCostLimit } from "./cost_tracker.js";
 import { diagnoseInstallation, VERSION } from "./doctor.js";
 import { createStylePack, listBuiltinStyles, listStylePacks, projectStyleRoot, resolveStylePack, resolveStyleV2, upgradeStylePack } from "./style_store.js";
 import { checkStyleCommand, createStyleFromReferences } from "./style_commands.js";
@@ -55,7 +55,7 @@ export async function runCli(argv, io = {}) {
   const demoTarget = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const demoInvocation = command === "demo" && ["record", "approve", "scene", "doctor", "shots"].includes(firstArg) ? { action: firstArg, target: demoTarget, flagArgs: demoTarget ? rest.slice(1) : rest } : null;
   const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
-  const tracker = createCostTracker({ fetch: baseFetch });
+  const tracker = createCostTracker({ fetch: baseFetch, limitUsd: parseCostLimit(flags["max-cost-usd"] ?? process.env.LAUNCHCLIP_MAX_COST_USD) });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
   try {
@@ -138,6 +138,7 @@ export async function runCli(argv, io = {}) {
         boundary: flags.boundary,
         at: flags.at
       }, productionAdapters.finish);
+      throwIfCostLimited(tracker);
       stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatFinishSummary(report));
       if (report.status === "failed") {
         const failedStage = report.stages.find((stage) => stage.status === "failed");
@@ -170,6 +171,7 @@ export async function runCli(argv, io = {}) {
         demoPlan: flags["demo-plan"],
         ...(flags["no-subject"] ? { subject: false } : {})
       }, { notice: (line) => stderr.write(`${line}\n`), ...productionAdapters.make });
+      throwIfCostLimited(tracker);
       // The tracked HTTP costs (actual usage, cache pricing included) join make's own estimates.
       report.api_costs = tracker.summary();
       await (await import("node:fs/promises")).writeFile((await import("node:path")).join(report.project, "MAKE.json"), `${JSON.stringify(report, null, 2)}\n`);
@@ -247,17 +249,24 @@ export async function runCli(argv, io = {}) {
     } else if (command === "preprocess-presenter") {
       result = await preprocessPresenter(required(firstArg, "presenter media path"), flags);
     }
+    throwIfCostLimited(tracker);
     const output = result && typeof result === "object" && !Array.isArray(result)
       ? { ...result, costs: tracker.summary() }
       : { result, costs: tracker.summary() };
     stdout.write(`${JSON.stringify(output, null, 2)}\n`);
   } catch (error) {
-    const failure = error instanceof Error ? error : new Error(String(error));
+    // A wrapped or downstream failure after the spending limit tripped is reported as the limit.
+    const failure = tracker.limitError() ?? (error instanceof Error ? error : new Error(String(error)));
     failure.costs = tracker.summary();
     throw failure;
   } finally {
     if (globalThis.fetch === tracker.fetch) globalThis.fetch = previousFetch;
   }
+}
+
+function throwIfCostLimited(tracker) {
+  const error = tracker.limitError();
+  if (error) throw error;
 }
 
 async function runSkillsCommand(action, name, flags, options) {

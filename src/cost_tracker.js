@@ -18,15 +18,24 @@ const ANTHROPIC_RATES = [
   { pattern: /^claude-opus-4-8(?:-|$)/, input: 5, cacheWrite5m: 6.25, cacheWrite1h: 10, cached: .5, output: 25 }
 ];
 
+export const DEFAULT_MAX_COST_USD = 50;
+
 export function createCostTracker(options = {}) {
   const originalFetch = options.fetch ?? globalThis.fetch;
   if (typeof originalFetch !== "function") throw new Error("Cost tracking requires fetch");
+  const limitUsd = options.limitUsd ?? null;
+  let limitError = null;
   const items = [];
   const seen = new Set();
   let anonymousId = 0;
 
   async function trackedFetch(input, init) {
     const request = await describeRequest(input, init);
+    // Only a POST to a paid provider starts new work; polling a background response must still finish it.
+    if (limitUsd != null && requestMethod(input, init) === "POST" && providerForUrl(request.url) !== "unknown") {
+      const spent = summarize(items).total_usd;
+      if (spent >= limitUsd) throw (limitError = costLimitError(spent, limitUsd));
+    }
     const response = await originalFetch(input, init);
     if (!response?.ok) return response;
     try {
@@ -53,6 +62,8 @@ export function createCostTracker(options = {}) {
   return {
     fetch: trackedFetch,
     summary: () => summarize(items),
+    // A caller may have caught the refusal and carried on (a fallback, a skipped critic), so the CLI checks here too.
+    limitError: () => limitError,
     lineItems: () => structuredClone(items)
   };
 }
@@ -89,6 +100,29 @@ export function estimateModelUsageCost(provider, model, usage = {}) {
     complete: item.estimated_usd != null,
     warning: item.warning ?? null
   };
+}
+
+// A runaway guard for one command: in-flight calls still finish, so the total can pass the limit by what they cost.
+function costLimitError(spent, limit) {
+  const error = new Error(`API spending reached the $${limit.toFixed(2)} limit for this command ($${spent.toFixed(2)} so far), so no new paid call was started. Raise it with --max-cost-usd <amount> or LAUNCHCLIP_MAX_COST_USD, or pass none to remove it.`);
+  error.code = "LAUNCHCLIP_COST_LIMIT";
+  return error;
+}
+
+function requestMethod(input, init = {}) {
+  return String(init?.method ?? (typeof input === "object" && !(input instanceof URL) ? input?.method : null) ?? "GET").toUpperCase();
+}
+
+export function isCostLimitError(error) {
+  return error?.code === "LAUNCHCLIP_COST_LIMIT";
+}
+
+export function parseCostLimit(value) {
+  if (value == null || value === "") return DEFAULT_MAX_COST_USD;
+  if (String(value).trim().toLowerCase() === "none") return null;
+  const limit = Number(value);
+  if (!Number.isFinite(limit) || limit <= 0) throw new Error(`Expected a positive dollar amount or none for --max-cost-usd, received ${value}`);
+  return limit;
 }
 
 async function describeRequest(input, init = {}) {

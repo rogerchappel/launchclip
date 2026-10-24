@@ -1,3 +1,5 @@
+import { isCostLimitError } from "./cost_tracker.js";
+
 export class OpenAIResponsesClient {
   constructor(options = {}) {
     this.apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
@@ -60,6 +62,7 @@ export class OpenAIResponsesClient {
           }
         });
       } catch (error) {
+        if (isCostLimitError(error)) throw error;
         if (attempt >= this.maxRetries) throw new Error(`OpenAI request failed: ${sanitize(String(error?.message ?? error))}`);
         await this.sleep(retryDelayMs(null, attempt));
         continue;

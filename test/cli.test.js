@@ -202,3 +202,23 @@ test("routes review to the interactive production flow for production workspaces
   });
   assert.equal(JSON.parse(output.join("")).stage, "production-review");
 });
+
+test("reports the spending limit even when a stage swallowed the refusal and carried on", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "launchclip-cli-cost-limit-"));
+  await mkdir(path.join(workspace, "production"));
+  await writeFile(path.join(workspace, "production", "intake.json"), "{}\n");
+  const paidResponse = () => new Response(JSON.stringify({ id: "resp_paid", status: "completed", model: "gpt-5.6-sol", usage: { input_tokens: 1_000, output_tokens: 1_000 } }), { headers: { "content-type": "application/json" } });
+  await assert.rejects(
+    () => runCli(["review", workspace, "--no-open", "--max-cost-usd", "0.01"], {
+      stdout: { write: () => {} },
+      fetch: async () => paidResponse(),
+      productionAdapters: { runProductionReview: async () => {
+        const post = () => globalThis.fetch("https://api.openai.com/v1/responses", { method: "POST", body: "{}" });
+        await post();
+        await post().catch(() => null);
+        return { stage: "production-review", status: "awaiting-approval" };
+      } }
+    }),
+    (error) => error.code === "LAUNCHCLIP_COST_LIMIT" && error.costs.calls === 1
+  );
+});

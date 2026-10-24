@@ -119,6 +119,10 @@ script, storyboard, voice, music and rendered segments are reused.
 
 - Every paid call is announced before it is made (`model: PAID call to …`),
   and `MAKE.json` records each call's tokens and estimated cost.
+- Each command stops starting paid calls once it has spent $50. Change the
+  limit with `--max-cost-usd <amount>` or `LAUNCHCLIP_MAX_COST_USD`, or pass
+  `none` to remove it. Calls already running finish, and a rerun starts a new
+  $50 budget.
 - With `gpt-5.6-luna`, one run costs roughly $0.05–0.15 of model time: one
   script pass, maybe one resize, one storyboard pass plus up to four repairs
   (about $0.015 each), and one critic pass over the contact sheets ($0.02–0.04).
