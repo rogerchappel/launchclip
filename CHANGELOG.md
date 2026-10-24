@@ -4,6 +4,16 @@
 
 ### Added
 
+- The subject stage, the first step towards subject-aware effects
+  ([RFC](docs/SUBJECT_EFFECTS_RFC.md)): `launchclip subject probe` reports
+  whether one person can be cut out of a recording and how they are framed,
+  and `launchclip subject matte --range` writes a cached alpha WebM of the
+  person plus per-frame head and body boxes.
+  - Runs locally in Node through the optional `onnxruntime-node`. The
+    Apache-2.0 models download on first use (or with `launchclip subject
+    setup`) into `~/.launchclip/models`, checked by sha256.
+  - Mattes use MODNet's edges with holes filled from MediaPipe; the probe
+    uses MediaPipe alone. `launchclip doctor` reports both.
 - A `photo-scene` module: one full-bleed `assets/` photo or video with a slow
   Ken Burns move (`push-in`, `pull-out` or a pan; `zoom` and `focus` set
   it).
