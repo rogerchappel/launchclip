@@ -351,9 +351,17 @@ function resolveModuleInner(scene, story, { track, end }) {
     }
     const spec = { ...brandModuleDefaults(story?.brand), ...statusRackDefaults(module, story?.brand, params), ...params, id, kind: module, aspect, start, duration };
     if (track !== undefined) spec.track = track;
-    let model;
-    try { model = styled ? resolveEditorialModule(spec, { grammar }) : resolveEditorialModule(spec); }
-    catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
+    const resolveSpec = (value) => {
+      try { return styled ? resolveEditorialModule(value, { grammar }) : resolveEditorialModule(value); }
+      catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
+    };
+    let model = resolveSpec(spec);
+    // Footage checklist: with a measured presenter and no rect, the card sits
+    // above their head when there is headroom, else over their chest, clear
+    // of the face and the caption band (docs/SUBJECT_EFFECTS_RFC.md §6.2).
+    const placement = module === 'checklist' && params.rect === undefined && story?.lane === 'footage-led' ? footageChecklistRect(model, subjectContext(story, start), format) : null;
+    if (placement?.rect) model = resolveSpec({ ...spec, rect: placement.rect });
+    if (placement) model.subjectPlacement = placement.where;
     return finishModel(model, { module, scene });
   }
 
@@ -369,6 +377,38 @@ function resolveModuleInner(scene, story, { track, end }) {
   // Catalogue B/C timelines remap their pop eases from model.grammar.
   if (styled) finished.grammar = grammar;
   return finished;
+}
+
+// Where a footage-led checklist card goes beside the measured head:
+// → {rect, where: "above-head" | "chest"}, or {where: "none"} when neither
+// has room (the derived rect stays; layout-check's face rule then says so).
+// The card keeps its derived layout and shrinks until it fits, but never
+// below the scale where its text meets the profile's minimum sizes.
+function footageChecklistRect(model, subject, format) {
+  if (!model?.rect || !subject?.head || subject.placement !== 'measured') return null;
+  const canvas = { width: format.width, height: format.height };
+  const geometry = profileGeometry(canvas);
+  const { safeZone, captionBand } = geometry;
+  const unit = Math.min(canvas.width, canvas.height) / 1080;
+  const gap = 16 * unit;
+  const layout = model.density?.layout ?? { width: model.rect.width, height: model.rect.height };
+  const most = model.density?.scale ?? 1;
+  // Text scales with the card: the least scale keeps body and secondary text legal.
+  const bodyFloor = geometry.minBodyTextPx ?? geometry.minTextPx;
+  const least = Math.max(1,
+    model.minTextPx ? most * bodyFloor / model.minTextPx : 1,
+    model.minSecondaryTextPx ? most * geometry.minSecondaryTextPx / model.minSecondaryTextPx : 1);
+  const head = subject.head;
+  const fit = (top, bottom, where) => {
+    const scale = Math.min(most, (bottom - top) / layout.height, safeZone.width / layout.width);
+    if (!(scale >= least - 1e-6)) return null;
+    const width = round(layout.width * scale), height = round(layout.height * scale);
+    const x = round(safeZone.x + (safeZone.width - width) / 2);
+    return { rect: { x, y: round(where === 'above-head' ? bottom - height : top), width, height }, where };
+  };
+  return fit(safeZone.y, head.y - gap, 'above-head')
+    ?? fit(head.y + head.height + gap, Math.min(safeZone.y + safeZone.height, captionBand.y - gap), 'chest')
+    ?? { where: 'none' };
 }
 
 function finishModel(model, { module, scene }) {

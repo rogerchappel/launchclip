@@ -1,6 +1,6 @@
 {
   "schema": "launchclip.story.v1",
-  "title": "Subject data example: a growth line behind the presenter",
+  "title": "Subject data example: a growth line behind the presenter and a checklist beside them",
   "lane": "footage-led",
   "format": { "width": 1080, "height": 1920, "fps": 30, "duration": 6, "platform": "youtube-shorts" },
   "brand": {
@@ -25,6 +25,20 @@
       "params": {
         "points": [{ "value": 2, "label": "M" }, { "value": 3, "label": "T" }, { "value": 2.5, "label": "W" }, { "value": 3.2, "label": "T" }, { "value": 3, "label": "F" }, { "value": 9, "label": "S" }, { "value": 14, "label": "S" }],
         "pill": "Scale"
+      }
+    },
+    {
+      "id": "steps",
+      "module": "checklist",
+      "track": 1,
+      "start": 3.3,
+      "end": 6,
+      "params": {
+        "title": "All you need to do",
+        "rows": [
+          { "label": "Drop in your clip", "status": "active", "at": 0.3, "doneAt": 0.9 },
+          { "label": "Ship the video", "status": "active", "at": 1.0, "doneAt": 1.6 }
+        ]
       }
     }
   ]

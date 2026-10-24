@@ -28,6 +28,7 @@ Both renderers stack the base recording, behind scenes, the cut-out presenter, f
 - Use at most one or two subject effects in a 30–60 s piece, at least 3 s apart, never two different ones back to back, and together under a third of the runtime.
 - masthead and app-stage need headroom; dolly-zoom needs a medium or wide shot.
 - app-stage, phone-stage and a backdrop-swap backdrop show real product media from the asset inventory (screenshots, screen recordings, demo flows); never invent a screenshot. feed-frame shows counts only when the brief gives them.
+- A checklist without a rect places itself beside the presenter (above the head, else on the chest) at a legible size; keep it to two or three short rows on a close shot.
 - Never put a front scene over the presenter's face for more than 0.3 s; layout-check fails it.
 
 ## Modules

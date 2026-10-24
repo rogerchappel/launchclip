@@ -1,0 +1,6 @@
+{
+  "project": "examples/story/subject-data",
+  "mode": "story",
+  "times": [1.0, 2.2, 3.9, 5.5],
+  "threshold": { "ssim": 0.97 }
+}

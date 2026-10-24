@@ -85,6 +85,7 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'backdrop-swap', lanes: ['footage-led'], needs: ['subject'], when: 'turns from the problem to the product ("so we built", "that\'s why", "enter"): the room gives way to a brand backdrop', patterns: ['\\b(so (we|i) built|that\'s why|enter|instead)\\b'] },
   { module: 'feed-frame', lanes: ['footage-led'], needs: ['subject'], when: 'talks about posting, going viral or "this exact video": the frame becomes a feed window they break out of', patterns: ['\\b(post(ed|ing)?|viral|this (exact )?video|my feed|reels?|tiktok|shorts)\\b'] },
   { module: 'pull-back', lanes: ['footage-led'], when: 'reveals how the video or result was made, or a process finishing ("made with", "it transcribes, cuts…"): the frame pulls back into an app window while real steps tick', patterns: ['\\b(made (with|by)|behind the scenes|render(ed|ing)?|it (transcribes|cuts|edits))\\b'] },
+  { module: 'checklist', lanes: ['footage-led'], when: 'says "all you need to do is", "three steps" or runs through a process: rows tick as each is said, beside the presenter (no rect: it places itself above their head or on their chest)', patterns: ['\\ball you (need|have) to do\\b', '\\b(three|four|two|3|4) (steps|things)\\b', '\\bstep (one|1)\\b'] },
   { module: 'growth-line', lanes: ['footage-led'], needs: ['subject'], when: 'gives a growth result ("doubled", "took off in week three"): a line kicks up behind their head', patterns: ['\\b(doubled|tripled|took off|grew|growth|skyrocket\\w*|10x)\\b'] },
   { module: 'zoom-through', lanes: ['footage-led'], when: 'turns on a contrast or jumps between takes ("but", "or you can", "instead"): rush into the cut, burst out of the next take', patterns: ['^(but|or|instead|now)\\b', '\\bbut wait\\b', '\\bor you can\\b'] },
   { module: 'punch-in', fallback: 'kinetic-words', lanes: ['footage-led'], when: 'footage-led emphasis on a word (steps for a build of emphasised words; blur for energy)', patterns: ['\\b(this|exactly|really|huge)\\b', '!\\s*$'] },
@@ -392,6 +393,7 @@ export function subjectLines(subject) {
     'Use at most one or two subject effects in a 30–60 s piece, at least 3 s apart, never two different ones back to back, and together under a third of the runtime.',
     `masthead and app-stage need headroom${subject.framing === 'close-up' ? ' (this recording is a close-up: avoid masthead, app-stage and dolly-zoom)' : ''}; dolly-zoom needs a medium or wide shot.`,
     'app-stage, phone-stage and a backdrop-swap backdrop show real product media from the asset inventory (screenshots, screen recordings, demo flows); never invent a screenshot. feed-frame shows counts only when the brief gives them.',
+    'A checklist without a rect places itself beside the presenter (above the head, else on the chest) at a legible size; keep it to two or three short rows on a close shot.',
     'Never put a front scene over the presenter\'s face for more than 0.3 s; layout-check fails it.'
   ];
 }
