@@ -519,6 +519,26 @@ params:
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: pop, word-<i>
 
+### masthead (keeps captions)
+Footage-led, behind the presenter: one huge word (a product name or the one idea) rises in letter by letter at the top of the frame, and the presenter's head covers its lower part like a magazine cover. Needs headroom: medium or wide shots.
+params:
+- word: one word ≤ 12 chars (uppercased)
+- kicker: small line above it ≤ 32 (optional)
+- color: paper (default)|primary|accent or #hex (≥ 3:1 on brand bg)
+- stagger: seconds between letters (0–0.12, default 0.05)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: title
+
+### dolly-zoom (keeps captions)
+Footage-led, behind the presenter: the room pushes in (or falls away) over one eased beat while the presenter holds still, a dolly zoom for a realisation or a turn. Needs a medium or wide shot and the matte's room plate.
+params:
+- direction: push (default) | pull (starts on a cut, the room falls away)
+- scale: 1.12–1.6 (default 1.3)
+- move: seconds the zoom takes (1–2.5)
+- release: push: seconds to ease back before the scene end (0.3–1, default 0.5)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: move, release
+
 ### product-demo (keeps captions)
 A recorded product flow (launchclip demo record) in a window or full bleed, with zooms to each clicked or typed-into element, accent outlines as actions land, callout pills and click/keystroke SFX, all timed from the flow's action log.
 params:
@@ -580,6 +600,8 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | footage-callout | 1.5 s | 0 s | scene − 1.1 s | — |
 | lower-third | 2 s | 0 s | scene − 1.2 s | — |
 | emphasis-caption | 0.8 s | 0 s | scene − 0.45 s | at ≤ scene − 0.45 s − stagger × (words − 1) (stagger 0–0.3 s, default 0.09) |
+| masthead | 1.5 s | 0 s | scene − 0.9 s | at ≤ scene − 0.9 s − stagger × (letters − 1) (stagger 0–0.12 s, default 0.05) |
+| dolly-zoom | 1.8 s | 0 s | — | at ≤ scene − move − release − 0.2 s (move 1–2.5 s, default min(1.6, 0.6 × scene); release 0.3–1 s, push only) |
 | product-demo | 2 s | 0 s | scene − 0.2 s | actions[].at: in order; zooms start 1.2 s before each action and settle 0.4 s before it, hold 1.1 s (0.2 s after a click that navigates), and pan to the next action unless the gap is over 2.2 s; callouts[].at ≤ scene − 1 s; each shows 2.2 s by default, must not overlap the next, and ends when its action navigates or the camera leaves it |
 | photo-scene | 2 s | 0 s | scene − 0.8 s | lines[].at in order (default 0.35 s, then 0.45 s apart, scaled by the grammar); the last at least 0.8 s before the scene ends |
 

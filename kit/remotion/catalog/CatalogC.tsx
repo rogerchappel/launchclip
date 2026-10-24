@@ -51,6 +51,8 @@ export const PunchIn = typed('punch-in');
 export const FootageCallout = typed('footage-callout');
 export const LowerThird = typed('lower-third');
 export const EmphasisCaption = typed('emphasis-caption');
+export const Masthead = typed('masthead');
+export const DollyZoom = typed('dolly-zoom');
 
 /** Camera op list for a set of resolved models (memoise it per story). */
 export function baseCameraOps(models: any[], options: { roomFilterAt?: (t: number) => string } = {}): any[] {

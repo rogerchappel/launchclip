@@ -5,6 +5,8 @@
 //   footage-callout   claim sticker anchored to a point on the footage by a leader line
 //   lower-third       name and title bar above the caption band
 //   emphasis-caption  big word-pop over the footage; hides the captions
+//   masthead          one huge word behind the presenter's head (layer behind)
+//   dolly-zoom        the room plate pushes in behind a still presenter
 //
 // (`callout` is already an editorial kind, a text card, so the anchored
 // sticker is `footage-callout`.)
@@ -487,6 +489,138 @@ function emphasisTimeline(model, ops) {
 }
 
 // ---------------------------------------------------------------------------
+// masthead: one huge word behind the presenter, like a magazine cover
+// (layer "behind": the head covers the lower part of the letters)
+
+// Where a head sits when the matte has no summary yet (canvas fractions).
+const DEFAULT_HEAD = {portrait: {x: 0.4, y: 0.26, w: 0.2, h: 0.12}, landscape: {x: 0.44, y: 0.18, w: 0.12, h: 0.24}};
+// The letters' baseline sits this far down the head, so the head covers
+// their lower part; Anton-like display faces have caps about 0.72 em tall.
+const MASTHEAD_BASELINE = 0.35;
+const CAP = 0.72;
+
+function headRect(ctx, canvas, portrait) {
+  if (ctx.subject?.head) return {...ctx.subject.head, measured: true};
+  const d = DEFAULT_HEAD[portrait ? 'portrait' : 'landscape'];
+  return {x: d.x * canvas.width, y: d.y * canvas.height, width: d.w * canvas.width, height: d.h * canvas.height, measured: false};
+}
+
+function resolveMasthead(params, ctx) {
+  const b = createFootageBase('masthead', params, ctx, {allowed: ['word', 'kicker', 'color', 'at', 'stagger'], required: ['word'], minDuration: CATALOG_C_TIMING.masthead.minDuration});
+  const {check, u, safe, colors, canvas, portrait, end, duration} = b;
+  const p = b.params;
+  const word = check.str(p.word, 'params.word', 12).toUpperCase();
+  if (/\s/.test(word)) check.fail('params.word', 'must be one word');
+  const kicker = p.kicker === undefined ? null : check.str(p.kicker, 'params.kicker', 32).toUpperCase();
+  const color = b.resolveColor(p.color, 'params.color', 'paper', colors.bg, 'brand.colors.bg (shadow)');
+  const stagger = p.stagger === undefined ? grammarStagger(ctx.grammar, 0.05, {max: 0.12}) : check.num(p.stagger, 'params.stagger', 0, 0.12);
+  const head = headRect(ctx, canvas, portrait);
+  // Size: the word spans up to 90% of the safe width, then shrinks if the
+  // headroom cannot hold it with the baseline on the head.
+  const blockW = r2(safe.width * 0.9);
+  const fit = fitText(check, 'params.word', word, {family: 'display', width: blockW, preferred: u(portrait ? 420 : 300), min: u(150), maxLines: 1});
+  const kickerSize = r2(Math.max(b.min.meta, u(30)));
+  const kickerH = kicker ? r2(kickerSize * 1.3 + u(12)) : 0;
+  const baseline = head.y + head.height * MASTHEAD_BASELINE;
+  const room = baseline - safe.y - kickerH;
+  const size = r2(Math.min(fit.size, room / 0.9));
+  if (size < u(150) - 1e-6) check.fail('params.word', `needs headroom: with the presenter's head at ${Math.round(head.y)} px there is room for ${Math.max(0, Math.round(room))} px of letters above it, and a masthead needs ${Math.round(u(150) * 0.9)} px. Use it on a medium or wide shot, or pick another module`);
+  const lineH = r2(size * 0.9);
+  const top = r2(Math.max(safe.y + kickerH, baseline - lineH));
+  const rect = {x: r2(safe.x + (safe.width - blockW) / 2), y: r2(top - kickerH), width: blockW, height: r2(lineH + kickerH)};
+  // How much of the letters' cap height the head covers in its column.
+  const capTop = top + lineH - size * CAP - size * 0.05;
+  const covered = r2(Math.max(0, Math.min(1, (top + lineH - Math.max(capTop, head.y)) / (size * CAP))));
+  const t0 = b.timeOf('title', p.at, 'params.at', 0.05, {min: 0, max: Math.max(0, duration - CATALOG_C_TIMING.masthead.leadOut - stagger * (word.length - 1))});
+  const letters = [...word].map((char, i) => ({index: i, char, time: rt(t0 + i * stagger)}));
+  const settle = rt(letters.at(-1).time + 0.5);
+  b.events.push({id: `${b.id}-title`, name: 'title', time: t0, endTime: settle, role: 'title', cue: 'whoosh'});
+  b.model.layer = 'behind';
+  const exitStart = rt(Math.max(settle, end - 0.35));
+  const content = {word, kicker, color, size, lineH, kickerSize, kickerH, letters, stagger, rise: r2(size * 0.32), covered, placement: head.measured ? 'measured' : 'default',
+    head: {x: r2(head.x), y: r2(head.y), width: r2(head.width), height: r2(head.height)}, shadow: `0 ${u(8)}px ${u(30)}px #00000080`};
+  return b.finish(content, {rect, role: 'hero', minTextPx: size,
+    motion: {enterEnd: settle, exitStart, exitTo: {opacity: 0, y: -u(30)}, origin: {x: r2(rect.x + rect.width / 2), y: r2(rect.y + rect.height / 2)}}});
+}
+
+function mastheadView(model) {
+  const {id, fonts} = model;
+  const c = model.content, R = model.rect;
+  const kids = [];
+  if (c.kicker) kids.push(el('div', `${id}-kicker`, abs(R.x, R.y, R.width, c.kickerH, {textAlign: 'center', whiteSpace: 'nowrap', fontFamily: fonts.meta, fontSize: c.kickerSize, lineHeight: '1.3', letterSpacing: '0.24em', fontWeight: 600, color: c.color, textShadow: c.shadow, opacity: 0}), [c.kicker]));
+  const letters = c.letters.map(letter => el('span', `${id}-l-${letter.index}`, {display: 'inline-block', opacity: 0, transform: transformString({y: c.rise})}, [letter.char]));
+  kids.push(el('div', `${id}-word`, abs(R.x, R.y + c.kickerH, R.width, c.lineH, {display: 'flex', justifyContent: 'center', alignItems: 'flex-end', whiteSpace: 'nowrap',
+    fontFamily: fonts.display, fontWeight: 400, fontSize: c.size, lineHeight: '0.9', letterSpacing: '0.01em', color: c.color, textShadow: c.shadow}), letters));
+  return kids;
+}
+
+function mastheadTimeline(model, ops) {
+  const {id, start} = model;
+  const c = model.content;
+  if (c.kicker) {
+    set(ops, `${id}-kicker`, start, {opacity: 0});
+    tw(ops, `${id}-kicker`, c.letters.at(-1).time, 0.4, 'power2.out', {opacity: 0}, {opacity: 1});
+  }
+  for (const letter of c.letters) {
+    const target = `${id}-l-${letter.index}`;
+    set(ops, target, start, {opacity: 0, y: c.rise});
+    tw(ops, target, letter.time, 0.3, 'power1.out', {opacity: 0}, {opacity: 1});
+    tw(ops, target, letter.time, 0.5, 'power3.out', {y: c.rise}, {y: 0});
+  }
+}
+
+// ---------------------------------------------------------------------------
+// dolly-zoom: the room pushes in or falls away while the presenter holds
+// still. It scales the matte's room plate (the room without the presenter)
+// behind the subject, so the presenter's own outline never shows around the
+// cut-out, and holds the subject at identity with a subjectCamera.
+
+function resolveDollyZoom(params, ctx) {
+  const b = createFootageBase('dolly-zoom', params, ctx, {allowed: ['direction', 'scale', 'at', 'move', 'release'], minDuration: CATALOG_C_TIMING['dolly-zoom'].minDuration});
+  const {check, canvas, fps, start, end, duration} = b;
+  const p = b.params;
+  const direction = p.direction === undefined ? 'push' : check.oneOf(p.direction, 'params.direction', ['push', 'pull']);
+  const scale = p.scale === undefined ? 1.3 : check.num(p.scale, 'params.scale', 1.12, 1.6);
+  const move = p.move === undefined ? Math.min(1.6, r2(duration * 0.6)) : check.num(p.move, 'params.move', 1, 2.5);
+  const release = direction === 'pull' ? 0 : p.release === undefined ? 0.5 : check.num(p.release, 'params.release', 0.3, 1);
+  if (direction === 'pull' && p.release !== undefined) check.fail('params.release', 'applies to a push only; a pull ends on the recording\'s own framing');
+  const moveAt = b.timeOf('move', p.at, 'params.at', 0, {min: 0, max: duration - move - release - CATALOG_C_TIMING['dolly-zoom'].hold});
+  if (ctx.subject?.framing === 'close-up') check.fail('params', 'needs room around the presenter (framing medium or wide); this stretch of the recording is a close-up. Use punch-in instead');
+  const head = headRect(ctx, canvas, canvas.height > canvas.width);
+  const origin = {x: r2(head.x + head.width / 2), y: r2(head.y + head.height / 2)};
+  const plate = ctx.subject?.plate ?? null;
+  const releaseAt = rt(end - release);
+  const from = direction === 'push' ? 1 : scale, to = direction === 'push' ? scale : 1;
+  // The subject holds still: identity on every frame of the scene.
+  const samples = [];
+  for (let f = Math.ceil(start * fps - 1e-6); f <= Math.floor(end * fps + 1e-6); f++) samples.push({t: rt(f / fps), scale: 1, x: 0, y: 0});
+  b.model.layer = 'behind';
+  b.model.subjectCamera = {samples};
+  b.events.push({id: `${b.id}-move`, name: 'move', time: moveAt, endTime: rt(moveAt + move), role: 'emphasis', cue: 'riser'});
+  if (release) b.events.push({id: `${b.id}-release`, name: 'release', time: releaseAt, endTime: end, role: 'release'});
+  const content = {direction, scale, from, to, move, moveAt, release, releaseAt, origin, plate, ease: 'power2.inOut'};
+  return b.finish(content, {rect: {x: 0, y: 0, width: canvas.width, height: canvas.height}, role: 'decor', minTextPx: null,
+    motion: {enterEnd: rt(moveAt + move), exitStart: release ? releaseAt : end, exitTo: {opacity: 1}}});
+}
+
+function dollyZoomView(model) {
+  const {id} = model;
+  const c = model.content, W = model.canvas.width, H = model.canvas.height;
+  if (!c.plate) return [];
+  const img = el('img', `${id}-plate`, abs(0, 0, W, H, {objectFit: c.plate.fit, objectPosition: `${c.plate.focus.x * 100}% ${c.plate.focus.y * 100}%`}), [], {src: c.plate.src, alt: ''});
+  return [el('div', `${id}-room`, abs(0, 0, W, H, {overflow: 'hidden', transformOrigin: `${c.origin.x}px ${c.origin.y}px`, transform: transformString({scaleX: c.from, scaleY: c.from})}), [img])];
+}
+
+function dollyZoomTimeline(model, ops) {
+  const {id, start} = model;
+  const c = model.content;
+  if (!c.plate) return;
+  set(ops, `${id}-room`, start, {scaleX: c.from, scaleY: c.from});
+  tw(ops, `${id}-room`, c.moveAt, c.move, c.ease, {scaleX: c.from, scaleY: c.from}, {scaleX: c.to, scaleY: c.to});
+  if (c.release) tw(ops, `${id}-room`, c.releaseAt, c.release, 'power2.inOut', {scaleX: c.to, scaleY: c.to}, {scaleX: 1, scaleY: 1});
+}
+
+// ---------------------------------------------------------------------------
 // Registry, root, camera
 
 // Timing constants per module (seconds, scene-relative), the single source for
@@ -495,13 +629,17 @@ export const CATALOG_C_TIMING = Object.freeze({
   'punch-in': Object.freeze({minDuration: 0.8, releaseHold: 0.25, stepGap: 0.3}),
   'footage-callout': Object.freeze({minDuration: 1.5, leadOut: 1.1}),
   'lower-third': Object.freeze({minDuration: 2, leadOut: 1.2}),
-  'emphasis-caption': Object.freeze({minDuration: 0.8, leadOut: 0.45})
+  'emphasis-caption': Object.freeze({minDuration: 0.8, leadOut: 0.45}),
+  masthead: Object.freeze({minDuration: 1.5, leadOut: 0.9}),
+  'dolly-zoom': Object.freeze({minDuration: 1.8, hold: 0.2})
 });
 const TIMING_C = {
   'punch-in': {minDuration: CATALOG_C_TIMING['punch-in'].minDuration, leadIn: 0, leadOut: null, gaps: [], rules: [`at (and every steps[i].at) ≤ scene − release − ${CATALOG_C_TIMING['punch-in'].releaseHold} s (release 0.3–2 s, default min(0.5, 0.3 × scene))`, `steps at least ${CATALOG_C_TIMING['punch-in'].stepGap} s apart`]},
   'footage-callout': {minDuration: CATALOG_C_TIMING['footage-callout'].minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING['footage-callout'].leadOut, gaps: [], rules: []},
   'lower-third': {minDuration: CATALOG_C_TIMING['lower-third'].minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING['lower-third'].leadOut, gaps: [], rules: []},
-  'emphasis-caption': {minDuration: CATALOG_C_TIMING['emphasis-caption'].minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING['emphasis-caption'].leadOut, gaps: [], rules: [`at ≤ scene − ${CATALOG_C_TIMING['emphasis-caption'].leadOut} s − stagger × (words − 1) (stagger 0–0.3 s, default 0.09)`]}
+  'emphasis-caption': {minDuration: CATALOG_C_TIMING['emphasis-caption'].minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING['emphasis-caption'].leadOut, gaps: [], rules: [`at ≤ scene − ${CATALOG_C_TIMING['emphasis-caption'].leadOut} s − stagger × (words − 1) (stagger 0–0.3 s, default 0.09)`]},
+  masthead: {minDuration: CATALOG_C_TIMING.masthead.minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING.masthead.leadOut, gaps: [], rules: [`at ≤ scene − ${CATALOG_C_TIMING.masthead.leadOut} s − stagger × (letters − 1) (stagger 0–0.12 s, default 0.05)`]},
+  'dolly-zoom': {minDuration: CATALOG_C_TIMING['dolly-zoom'].minDuration, leadIn: 0, leadOut: null, gaps: [], rules: [`at ≤ scene − move − release − ${CATALOG_C_TIMING['dolly-zoom'].hold} s (move 1–2.5 s, default min(1.6, 0.6 × scene); release 0.3–1 s, push only)`]}
 };
 
 const DEFINITIONS = [
@@ -517,10 +655,19 @@ const DEFINITIONS = [
     events: ['name', 'title'], resolve: resolveLowerThird, view: lowerThirdView, timeline: lowerThirdTimeline},
   {id: 'emphasis-caption', describe: 'Footage-led: one to three big words that pop over the footage; hides the captions while on screen.',
     params: {text: '1–3 words, ≤ 24 chars', color: 'primary|accent|paper or #hex (≥ 3:1 on the bg outline)', position: 'center|upper|lower', stagger: 'seconds between words (default 0.09)', at},
-    events: ['pop', 'word-<i>'], resolve: resolveEmphasis, view: emphasisView, timeline: emphasisTimeline}
+    events: ['pop', 'word-<i>'], resolve: resolveEmphasis, view: emphasisView, timeline: emphasisTimeline},
+  {id: 'masthead', describe: 'Footage-led, behind the presenter: one huge word (a product name or the one idea) rises in letter by letter at the top of the frame, and the presenter\'s head covers its lower part like a magazine cover. Needs headroom: medium or wide shots.',
+    params: {word: 'one word ≤ 12 chars (uppercased)', kicker: 'small line above it ≤ 32 (optional)', color: 'paper (default)|primary|accent or #hex (≥ 3:1 on brand bg)', stagger: 'seconds between letters (0–0.12, default 0.05)', at},
+    events: ['title'], needs: ['subject'], layer: 'behind', aspects: ['9:16', '16:9'], mood: ['bold', 'editorial', 'premium', 'launch'],
+    resolve: resolveMasthead, view: mastheadView, timeline: mastheadTimeline},
+  {id: 'dolly-zoom', describe: 'Footage-led, behind the presenter: the room pushes in (or falls away) over one eased beat while the presenter holds still, a dolly zoom for a realisation or a turn. Needs a medium or wide shot and the matte\'s room plate.',
+    params: {direction: 'push (default) | pull (starts on a cut, the room falls away)', scale: '1.12–1.6 (default 1.3)', move: 'seconds the zoom takes (1–2.5)', release: 'push: seconds to ease back before the scene end (0.3–1, default 0.5)', at},
+    events: ['move', 'release'], needs: ['subject'], layer: 'behind', aspects: ['9:16', '16:9'], mood: ['cinematic', 'dramatic', 'premium'],
+    resolve: resolveDollyZoom, view: dollyZoomView, timeline: dollyZoomTimeline}
 ];
 
-export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: TIMING_C[def.id], resolve: def.resolve}]));
+export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: TIMING_C[def.id], resolve: def.resolve,
+  ...(def.needs ? {needs: def.needs} : {}), ...(def.layer ? {layer: def.layer} : {}), ...(def.aspects ? {aspects: def.aspects} : {}), ...(def.mood ? {mood: def.mood} : {})}]));
 const BY_ID = Object.fromEntries(DEFINITIONS.map(def => [def.id, def]));
 
 function definition(model) {

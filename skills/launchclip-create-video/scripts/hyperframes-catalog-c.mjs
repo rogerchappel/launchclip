@@ -38,4 +38,6 @@ export const EMITTERS = {
   'footage-callout': emitCatalogC,
   'lower-third': emitCatalogC,
   'emphasis-caption': emitCatalogC,
+  'masthead': emitCatalogC,
+  'dolly-zoom': emitCatalogC,
 };
