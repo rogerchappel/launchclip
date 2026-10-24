@@ -19,6 +19,9 @@
 //   subjectCamera  {samples: [{t, scale, x, y}]} one per frame, like
 //                  model.camera, applied to the subject only
 //   room           {hide?: true, dim?: 0–1, blur?: px} for the scene window
+//   subjectStyle   {outline?: px, color?: #hex, shadow?: boolean}: a sticker
+//                  outline (stacked drop-shadows on the matte's alpha) and a
+//                  soft drop shadow on the cut-out, for the scene window
 //
 // Canonical copy: kit/core/subject-layer.mjs.
 
@@ -45,7 +48,7 @@ export function sceneLayerOf(scene, model) {
 
 /** True when a scene's model needs the cut-out subject. */
 export function needsSubject(scene, model) {
-  return sceneLayerOf(scene, model).layer !== "front" || Boolean(model?.subjectCamera) || Boolean(model?.room);
+  return sceneLayerOf(scene, model).layer !== "front" || Boolean(model?.subjectCamera) || Boolean(model?.room) || Boolean(model?.subjectStyle);
 }
 
 /**
@@ -99,14 +102,14 @@ export function subjectSegments(story, windows) {
  * follows the base cameras so a punch-in moves person and room together;
  * while a model's subjectCamera runs, its samples replace the base ones.
  */
-export function subjectCameraOps(models) {
+export function subjectCameraOps(models, { subjectFilterAt = null } = {}) {
   const list = (models ?? []).filter(Boolean);
   const own = list.filter((model) => Array.isArray(model.subjectCamera?.samples)).sort((a, b) => a.start - b.start);
   const base = list.filter((model) => Array.isArray(model.camera?.samples)).sort((a, b) => a.start - b.start);
   if (!own.length && !base.length) return [];
   const covered = (t) => own.some((model) => t >= model.start - EPS && t <= model.end + EPS);
   const ops = [{ type: "set", target: SUBJECT_CAMERA, time: 0, props: { ...CAMERA_IDENTITY } }];
-  const sampleOp = (sample) => ({ type: "set", target: SUBJECT_CAMERA, time: Math.max(0, sampleTime(sample.t)), props: cameraSampleProps(sample) });
+  const sampleOp = (sample) => ({ type: "set", target: SUBJECT_CAMERA, time: Math.max(0, sampleTime(sample.t)), props: cameraSampleProps(sample, subjectFilterAt ? subjectFilterAt(sample.t) : "none") });
   for (const model of base) for (const sample of model.camera.samples) if (!covered(sample.t)) ops.push(sampleOp(sample));
   for (const model of own) for (const sample of model.subjectCamera.samples) ops.push(sampleOp(sample));
   // frameState applies same-time ops in list order; sort by time so a base
@@ -150,6 +153,37 @@ export function roomStateAt(models, t) {
   return { opacity: room.hide ? 0 : 1, filter: filters.length ? filters.join(" ") : "none" };
 }
 
+/** The cut-out's style at timeline t: a CSS filter ("none" when unstyled). */
+export function subjectFilterAt(models, t) {
+  const active = (models ?? []).filter((model) => model?.subjectStyle && t >= model.start - EPS && t < model.end - EPS).sort((a, b) => a.start - b.start);
+  const style = active[active.length - 1]?.subjectStyle;
+  if (!style) return "none";
+  const parts = [];
+  const outline = Number(style.outline ?? 0);
+  if (outline > 0) {
+    const color = style.color ?? "#ffffff";
+    // Eight offsets round the alpha edge make a solid outline.
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]]) parts.push(`drop-shadow(${round6(dx * outline)}px ${round6(dy * outline)}px 0 ${color})`);
+  }
+  if (style.shadow) parts.push(`drop-shadow(0px ${round6(Math.max(6, outline))}px ${round6(Math.max(12, outline * 2))}px rgba(0, 0, 0, 0.45))`);
+  return parts.length ? parts.join(" ") : "none";
+}
+
+/** Subject style changes, in time order: [{time, filter}]. */
+export function subjectFilterChanges(models) {
+  const styled = (models ?? []).filter((model) => model?.subjectStyle);
+  if (!styled.length) return [];
+  const times = [...new Set(styled.flatMap((model) => [model.start, model.end]))].sort((a, b) => a - b);
+  const changes = [];
+  let previous = null;
+  for (const time of times) {
+    const filter = subjectFilterAt(styled, time);
+    if (filter !== previous) changes.push({ time, filter });
+    previous = filter;
+  }
+  return changes;
+}
+
 /** Problems with a model's subject fields, as messages (empty when valid). */
 export function subjectModelErrors(model) {
   const errors = [];
@@ -164,6 +198,15 @@ export function subjectModelErrors(model) {
       if (room.hide !== undefined && typeof room.hide !== "boolean") errors.push("room.hide must be true or false");
       if (room.dim !== undefined && !(typeof room.dim === "number" && room.dim >= 0 && room.dim <= 1)) errors.push("room.dim must be between 0 and 1");
       if (room.blur !== undefined && !(typeof room.blur === "number" && room.blur >= 0 && room.blur <= 40)) errors.push("room.blur must be between 0 and 40 px");
+    }
+  }
+  if (model?.subjectStyle !== undefined) {
+    const style = model.subjectStyle;
+    if (style === null || typeof style !== "object" || Object.keys(style).some((key) => !["outline", "color", "shadow"].includes(key))) errors.push("subjectStyle must be {outline?, color?, shadow?}");
+    else {
+      if (style.outline !== undefined && !(typeof style.outline === "number" && style.outline >= 0 && style.outline <= 24)) errors.push("subjectStyle.outline must be between 0 and 24 px");
+      if (style.color !== undefined && !/^#[0-9a-fA-F]{6}$/.test(String(style.color))) errors.push("subjectStyle.color must be a #rrggbb colour");
+      if (style.shadow !== undefined && typeof style.shadow !== "boolean") errors.push("subjectStyle.shadow must be true or false");
     }
   }
   if (model?.parts !== undefined && (model.parts === null || typeof model.parts !== "object" || !model.parts.behind || !model.parts.front)) errors.push("parts must be {behind, front}");

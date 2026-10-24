@@ -37,7 +37,7 @@ import { EMITTERS as CATALOG_D_EMITTERS } from './hyperframes-catalog-d.mjs';
 import { EMITTERS as CATALOG_E_EMITTERS } from './hyperframes-catalog-e.mjs';
 import { EMITTERS as CATALOG_F_EMITTERS } from './hyperframes-catalog-f.mjs';
 import { cameraOverlaps } from './catalog-c.mjs';
-import { needsSubject, roomChanges, roomStateAt, sceneLayerOf, SUBJECT_CAMERA, subjectCameraOps, subjectSegments, subjectWindows } from './subject-layer.mjs';
+import { needsSubject, roomChanges, roomStateAt, sceneLayerOf, SUBJECT_CAMERA, subjectCameraOps, subjectFilterAt, subjectFilterChanges, subjectSegments, subjectWindows } from './subject-layer.mjs';
 
 export const COMPOSITION_ID = 'launchclip-story';
 export const GSAP_SRC = 'https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js';
@@ -322,10 +322,15 @@ export async function compileStoryToHyperFrames(story, options = {}) {
         baseMarkup.push(`<video id="lc-subject-${clip.index}" class="clip lc-subject-media" src="${attr(clip.src)}" data-start="${num(clip.start)}" data-duration="${num(clip.duration)}" data-media-start="${num(clip.mediaStart)}" data-track-index="${SUBJECT_TRACK}" data-launchclip-subject-segment="${clip.index}" muted playsinline style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;${fit};transform-origin:50% 50%;z-index:${subjectZ}"></video>`);
         if (sourceDir && !existsSync(path.join(sourceDir, clip.src))) warnings.push(`subject matte ${clip.src} was not found in ${sourceDir}`);
       }
-      const subjectOps = subjectCameraOps(models);
+      const subjectOps = subjectCameraOps(models, { subjectFilterAt: (t) => subjectFilterAt(models, t) });
       if (clips.length && subjectOps.length) {
         motion.push('// subject camera (follows the base cameras; subjectCamera takes over while it runs)');
         motion.push(...opsToGsap(subjectOps).map((line) => line.replace(JSON.stringify(`#${SUBJECT_CAMERA}`), JSON.stringify('.lc-subject-media'))));
+      }
+      const styles = subjectFilterChanges(models);
+      if (clips.length && styles.length) {
+        motion.push('// subject style (sticker outline, shadow)');
+        motion.push(...styles.map((change) => `tl.set('.lc-subject-media', ${js({ filter: change.filter })}, ${num(change.time)});`));
       }
       const room = roomChanges(models);
       if (room.length) {
