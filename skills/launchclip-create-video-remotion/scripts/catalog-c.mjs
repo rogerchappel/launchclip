@@ -2,6 +2,7 @@
 // callout). Contract: docs/KIT_CONTRACTS.md ("Footage-led lane").
 //
 //   punch-in          word-timed zoom on the base recording (a camera, not an overlay)
+//   zoom-through      rush into a cut and burst out of the next take (a camera)
 //   footage-callout   claim sticker anchored to a point on the footage by a leader line
 //   lower-third       name and title bar above the caption band
 //   emphasis-caption  big word-pop over the footage; hides the captions
@@ -235,6 +236,69 @@ function resolvePunchIn(params, ctx) {
   return b.finish({scale, focus, focusFraction: {x: focusIn.x, y: focusIn.y}, punchAt, releaseAt, release, ...(p.steps !== undefined ? {steps} : {}), ...(blurMax ? {blur: blurMax} : {})}, {
     rect: {x: 0, y: 0, width: canvas.width, height: canvas.height}, role: 'decor', minTextPx: null,
     motion: {enterEnd: Math.min(releaseAt, punchAt + 0.45), exitStart: releaseAt, exitTo: {opacity: 1}}
+  });
+}
+
+// ---------------------------------------------------------------------------
+// zoom-through: hide a cut in the recording. The base rushes toward the
+// presenter with zoom blur over the last frames before the cut, and bursts
+// back out of the next take after it. A camera on the base, like punch-in;
+// the cut is a base trim boundary (default: the one nearest the scene's middle).
+
+export function baseCuts(base) {
+  const segments = base?.segments ?? [];
+  return segments.slice(0, -1).map(segment => segment.end);
+}
+
+function resolveZoomThrough(params, ctx) {
+  const b = createFootageBase('zoom-through', params, ctx, {allowed: ['at', 'scale', 'rush', 'burst', 'focus', 'blur'], minDuration: CATALOG_C_TIMING['zoom-through'].minDuration});
+  const {check, canvas, fps, start, end, duration, portrait} = b;
+  const p = b.params;
+  const scale = p.scale === undefined ? 2.6 : check.num(p.scale, 'params.scale', 1.6, 3.5);
+  const rush = p.rush === undefined ? 0.3 : check.num(p.rush, 'params.rush', 0.15, 0.6);
+  const burst = p.burst === undefined ? 0.4 : check.num(p.burst, 'params.burst', 0.2, 0.8);
+  const blurMax = p.blur === false ? 0 : p.blur === undefined || p.blur === true ? b.u(24) : check.num(p.blur, 'params.blur', 2, 40);
+  // The cut: params.at, a hit named "cut", else the base cut nearest the
+  // middle of the scene, else the middle itself (one take: a fake cut).
+  const cuts = baseCuts(ctx.base).filter(t => t - rush >= start - 1e-6 && t + burst <= end + 1e-6);
+  const middle = start + duration / 2;
+  const nearest = cuts.length ? cuts.reduce((best, t) => (Math.abs(t - middle) < Math.abs(best - middle) ? t : best)) - start : duration / 2;
+  const cutAt = b.timeOf('cut', p.at, 'params.at', r2(nearest), {min: rush, max: duration - burst});
+  const head = ctx.subject?.head ?? null;
+  const focusIn = p.focus !== undefined ? fraction(check, p.focus, 'params.focus')
+    : head ? {x: (head.x + head.width / 2) / canvas.width, y: (head.y + head.height * 0.7) / canvas.height}
+    : ctx.base?.focus ?? {x: 0.5, y: portrait ? 0.45 : 0.5};
+  const focus = {x: r2(focusIn.x * canvas.width), y: r2(focusIn.y * canvas.height)};
+  const cx = canvas.width / 2, cy = canvas.height / 2;
+  const half = Math.hypot(canvas.width, canvas.height) / 2;
+  const rushAt = rt(cutAt - rush), doneAt = rt(cutAt + burst);
+  // Accelerate in (power3.in) to the cut, decelerate out (power3.out) after it.
+  const at = t => {
+    if (t < rushAt - 1e-9 || t >= doneAt - 1e-9) return 1;
+    if (t < cutAt - 1e-9) return 1 + (scale - 1) * ((t - rushAt) / rush) ** 3;
+    return scale - (scale - 1) * (1 - (1 - (t - cutAt) / burst) ** 3);
+  };
+  const samples = [];
+  for (let f = Math.ceil(start * fps - 1e-6); f <= Math.floor(end * fps + 1e-6); f++) {
+    const t = f / fps;
+    const s = at(t);
+    const sample = {t: rt(t), scale: Math.round(s * 1e5) / 1e5, x: r2((1 - s) * (focus.x - cx)) || 0, y: r2((1 - s) * (focus.y - cy)) || 0};
+    if (blurMax) {
+      // Blur from the frame edge's speed; across the cut, the speed either side.
+      const prev = t - 1 / fps < cutAt - 1e-9 && t >= cutAt - 1e-9 ? at(t + 1 / fps) : at(t - 1 / fps);
+      sample.blur = punchBlur(s, prev, {half, max: blurMax});
+    }
+    samples.push(sample);
+  }
+  const identity = {scale: 1, x: 0, y: 0, ...(blurMax ? {blur: 0} : {})};
+  if (!samples.length || samples.at(-1).t < end - 1e-6) samples.push({t: end, ...identity});
+  else Object.assign(samples.at(-1), identity);
+  b.events.push({id: `${b.id}-rush`, name: 'rush', time: rushAt, endTime: cutAt, role: 'transition', cue: 'whoosh'});
+  b.events.push({id: `${b.id}-cut`, name: 'cut', time: cutAt, endTime: doneAt, role: 'emphasis', cue: 'impact'});
+  b.model.camera = {target: 'base', focus, scale, punchAt: rushAt, releaseAt: doneAt, samples, cut: cutAt, onCut: cuts.some(t => Math.abs(t - cutAt) < 1e-3), ...(blurMax ? {blur: blurMax} : {})};
+  return b.finish({scale, focus, cutAt, rushAt, doneAt, rush, burst, onCut: b.model.camera.onCut}, {
+    rect: {x: 0, y: 0, width: canvas.width, height: canvas.height}, role: 'decor', minTextPx: null,
+    motion: {enterStart: rushAt, enterEnd: cutAt, exitStart: cutAt, exitTo: {opacity: 1}}
   });
 }
 
@@ -627,6 +691,7 @@ function dollyZoomTimeline(model, ops) {
 // the checks above and each MODULES entry's `timing` table.
 export const CATALOG_C_TIMING = Object.freeze({
   'punch-in': Object.freeze({minDuration: 0.8, releaseHold: 0.25, stepGap: 0.3}),
+  'zoom-through': Object.freeze({minDuration: 0.8}),
   'footage-callout': Object.freeze({minDuration: 1.5, leadOut: 1.1}),
   'lower-third': Object.freeze({minDuration: 2, leadOut: 1.2}),
   'emphasis-caption': Object.freeze({minDuration: 0.8, leadOut: 0.45}),
@@ -635,6 +700,7 @@ export const CATALOG_C_TIMING = Object.freeze({
 });
 const TIMING_C = {
   'punch-in': {minDuration: CATALOG_C_TIMING['punch-in'].minDuration, leadIn: 0, leadOut: null, gaps: [], rules: [`at (and every steps[i].at) ≤ scene − release − ${CATALOG_C_TIMING['punch-in'].releaseHold} s (release 0.3–2 s, default min(0.5, 0.3 × scene))`, `steps at least ${CATALOG_C_TIMING['punch-in'].stepGap} s apart`]},
+  'zoom-through': {minDuration: CATALOG_C_TIMING['zoom-through'].minDuration, leadIn: null, leadOut: null, gaps: [], rules: ['the cut (at) needs rush before it and burst after it inside the scene (rush 0.15–0.6 s, default 0.3; burst 0.2–0.8 s, default 0.4)']},
   'footage-callout': {minDuration: CATALOG_C_TIMING['footage-callout'].minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING['footage-callout'].leadOut, gaps: [], rules: []},
   'lower-third': {minDuration: CATALOG_C_TIMING['lower-third'].minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING['lower-third'].leadOut, gaps: [], rules: []},
   'emphasis-caption': {minDuration: CATALOG_C_TIMING['emphasis-caption'].minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING['emphasis-caption'].leadOut, gaps: [], rules: [`at ≤ scene − ${CATALOG_C_TIMING['emphasis-caption'].leadOut} s − stagger × (words − 1) (stagger 0–0.3 s, default 0.09)`]},
@@ -647,6 +713,9 @@ const DEFINITIONS = [
     params: {scale: '1.06–1.25 (default 1.12)', at, focus: '{x, y} canvas fractions (default base.focus, else {0.5, 0.42})', release: 'seconds before the scene end when the zoom springs back (0.3–2, default min(0.5, 30% of the scene))',
       steps: '[{at, scale}] 1–4, instead of at/scale: each springs to its scale (1–1.35; the first ≥ 1.06), at least 0.3 s apart', blur: 'true (14 px at 1080) or 2–30 px: velocity-shaped zoom blur, 0 once settled (default off)'},
     events: ['punch', 'step-<i>', 'release'], resolve: resolvePunchIn, view: punchInView, timeline: punchInTimeline},
+  {id: 'zoom-through', describe: 'Footage-led: hides a cut in the recording. The frame rushes toward the presenter with zoom blur into the cut and bursts back out of the next take, for "but wait", a contrast or a jump between takes. A camera on the base; defaults to the edit\'s cut nearest the scene\'s middle.',
+    params: {at: 'the cut, seconds from scene start (default: the nearest cut in the edit, else the middle)', scale: '1.6–3.5 (default 2.6)', rush: 'seconds into the cut (0.15–0.6, default 0.3)', burst: 'seconds out of it (0.2–0.8, default 0.4)', focus: '{x, y} canvas fractions (default the presenter\'s face)', blur: 'true (default, 24 px at 1080), false, or 2–40 px'},
+    events: ['rush', 'cut'], resolve: resolveZoomThrough, view: punchInView, timeline: punchInTimeline},
   {id: 'footage-callout', describe: 'Footage-led: a claim sticker anchored to a point on the footage by a leader line, placed inside the safe zone.',
     params: {text: 'claim ≤ 42 chars, up to 2 lines', label: 'kicker ≤ 24 (optional)', point: '{x, y} canvas fractions 0.04–0.96 (the anchored spot)', side: 'auto|above|below|left|right', tone: 'primary|paper|dark', tilt: 'degrees −6–6 (default −2)', at},
     events: ['point', 'sticker'], resolve: resolveCallout, view: calloutView, timeline: calloutTimeline},
