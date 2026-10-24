@@ -14,6 +14,7 @@ import { MODULES as CATALOG_B } from './catalog-b.mjs';
 import { MODULES as CATALOG_C } from './catalog-c.mjs';
 import { MODULES as CATALOG_D } from './catalog-d.mjs';
 import { MODULES as CATALOG_E } from './catalog-e.mjs';
+import { MODULES as CATALOG_F } from './catalog-f.mjs';
 import { storyBase } from './story.mjs';
 import { isEditorialGrammar, resolveGrammar } from './grammar.mjs';
 import { profileGeometry } from './layout-check.mjs';
@@ -23,10 +24,10 @@ import { subjectContext, subjectModelErrors } from './subject-layer.mjs';
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
 
-/** Every catalogue module definition, keyed by id (catalogue A, then B, C, D and E). */
+/** Every catalogue module definition, keyed by id (catalogue A, then B, C, D, E and F). */
 export function catalogModules() {
   const merged = {};
-  for (const [label, table] of [['catalog-a', CATALOG_A], ['catalog-b', CATALOG_B], ['catalog-c', CATALOG_C], ['catalog-d', CATALOG_D], ['catalog-e', CATALOG_E]]) {
+  for (const [label, table] of [['catalog-a', CATALOG_A], ['catalog-b', CATALOG_B], ['catalog-c', CATALOG_C], ['catalog-d', CATALOG_D], ['catalog-e', CATALOG_E], ['catalog-f', CATALOG_F]]) {
     for (const [id, definition] of Object.entries(table ?? {})) {
       if (EDITORIAL_KINDS.includes(id)) throw new Error(`${label} module "${id}" collides with an editorial kind`);
       if (merged[id]) throw new Error(`${label} module "${id}" is defined twice`);
