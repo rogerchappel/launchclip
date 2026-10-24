@@ -43,6 +43,8 @@ Both renderers stack the base recording, behind scenes, the cut-out presenter, f
 | app-stage | behind | yes | 9:16, 16:9 | launch, editorial | shows or describes the product on screen ("here's the dashboard", "this is the app"), with a screenshot or recording in the assets: the UI fills the top, their head over its edge |
 | phone-stage | front | no | 9:16, 16:9 | launch, playful | shows the product on a phone or a mobile flow, with a recording or screenshot in the assets (a demo-autopilot flow fits) |
 | growth-line | behind | yes | 9:16, 16:9 | bold, launch, editorial | gives a growth result ("doubled", "took off in week three"): a line kicks up behind their head |
+| glass-word | behind | yes | 9:16, 16:9 | premium, cinematic | names the one idea or the brand in a premium or tech piece: one glass word on the wall behind their head |
+| orbit-cards | split | yes | 9:16, 16:9 | bold, playful | lists many things or shows social proof ("all these tools", "people keep telling me"), with real items in the assets or brief: cards circle them |
 
 ### masthead (keeps captions, behind the presenter, needs the subject)
 Footage-led, behind the presenter: one huge word (a product name or the one idea) rises in letter by letter at the top of the frame, and the presenter's head covers its lower part like a magazine cover. Needs headroom: medium or wide shots.
@@ -125,6 +127,24 @@ params:
 - draw: seconds the line takes (0.8–3)
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: draw, takeoff, pill
+
+### glass-word (keeps captions, behind the presenter, needs the subject)
+Footage-led, behind the presenter: one big word of extruded clear glass stands on the wall at head height, turned in perspective, and a light sweeps across it; the head covers the middle letters. For naming the one idea or a brand in a premium, tech look.
+params:
+- word: one word ≤ 10 (uppercased)
+- tint: clear (default) | primary | accent
+- turn: degrees the word turns away (−35–35, default −18)
+- sweep: boolean (default true)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: reveal, sweep
+
+### orbit-cards (keeps captions, needs the subject)
+Footage-led, around the presenter: 3–6 real items (screenshots, posts, logos, quotes the user supplied) on cards whip in and circle the presenter's chest, passing behind them on the far side and in front on the near. For social proof or "all these tools". Never invent items.
+params:
+- items: [{image?: assets/ image, text?: ≤ 40}] 3–6, each real
+- speed: degrees per second (8–60, default 26)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: orbit
 
 ### punch-in (keeps captions)
 Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay). Steps punch in, further in or back out on successive words; blur adds a few frames of zoom blur on each move.

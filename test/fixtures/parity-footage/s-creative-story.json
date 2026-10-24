@@ -1,0 +1,6 @@
+{
+  "project": "examples/story/subject-creative",
+  "mode": "story",
+  "times": [1.0, 2.2, 3.8, 5.4],
+  "threshold": { "ssim": 0.97 }
+}

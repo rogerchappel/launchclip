@@ -32,12 +32,17 @@ function renderNode(node: ViewNode | string, state: Map<string, FrameProps>, key
     ...(node.tag === 'img' ? [] : children.map((child, index) => renderNode(child, state, index))));
 }
 
-export const CatalogEModule: React.FC<{model: any}> = ({model}) => {
+type PartsView = {front: ViewNode | null; behind: ViewNode | null; media: ViewNode | null; overlay: ViewNode | null};
+
+export const CatalogEModule: React.FC<{model: any}> = ({model}) => <PartsModule model={model} viewOf={catalogEView} timelineOf={catalogETimeline} />;
+
+/** The shared renderer for {front, behind, media, overlay} views (catalogues E and F). */
+export const PartsModule: React.FC<{model: any; viewOf: (model: any) => any; timelineOf: (model: any) => any[]}> = ({model, viewOf, timelineOf}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const t = model.start + frame / fps;
-  const view = useMemo(() => catalogEView(model) as {front: ViewNode | null; behind: ViewNode | null; media: ViewNode | null; overlay: ViewNode | null}, [model]);
-  const ops = useMemo(() => catalogETimeline(model), [model]);
+  const view = useMemo(() => viewOf(model) as PartsView, [model, viewOf]);
+  const ops = useMemo(() => timelineOf(model), [model, timelineOf]);
   const state = frameState(ops, t) as Map<string, FrameProps>;
   if (model.layer === 'split') {
     const tree = model.part === 'behind' ? view.behind : view.front;

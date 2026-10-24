@@ -13,10 +13,14 @@ import {opsToGsap, renderNode} from './catalog-b.mjs';
 
 /** {html, overlay?, behind?, css, motion, events, layout}. */
 export function emitCatalogE(model) {
-  const view = catalogEView(model);
+  return emitParts(model, catalogEView(model), catalogETimeline(model));
+}
+
+/** The shared emitter for {front, behind, media, overlay} views (catalogues E and F). */
+export function emitParts(model, view, ops) {
   const timed = (track, extra = '') => `class="clip" data-start="${model.start}" data-duration="${model.duration}" data-track-index="${track}" data-module="${model.module}"${extra}`;
   const main = model.layer === 'behind' ? view.behind : view.front;
-  const out = {css: `#${model.id}-overlay{pointer-events:none}`, motion: opsToGsap(catalogETimeline(model)).join('\n'), events: model.events.map(event => ({...event})), layout: {...model.layout}};
+  const out = {css: `#${model.id}-overlay{pointer-events:none}`, motion: opsToGsap(ops).join('\n'), events: model.events.map(event => ({...event})), layout: {...model.layout}};
   let html = renderNode(main, timed(model.track));
   if (view.media?.tag === 'video') {
     html += renderNode(view.media, timed(model.track, ` data-media-start="${model.content.media?.sourceStart ?? model.content.backdrop?.sourceStart ?? 0}"`));

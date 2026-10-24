@@ -35,6 +35,7 @@ import { EMITTERS as CATALOG_B_EMITTERS, opsToGsap } from './catalog-b.mjs';
 import { EMITTERS as CATALOG_C_EMITTERS, cameraGsap } from './catalog-c.mjs';
 import { EMITTERS as CATALOG_D_EMITTERS } from './catalog-d.mjs';
 import { EMITTERS as CATALOG_E_EMITTERS } from './catalog-e.mjs';
+import { EMITTERS as CATALOG_F_EMITTERS } from './catalog-f.mjs';
 import { cameraOverlaps } from '../core/catalog-c.mjs';
 import { needsSubject, roomChanges, roomStateAt, sceneLayerOf, SUBJECT_CAMERA, subjectCameraOps, subjectSegments, subjectWindows } from '../core/subject-layer.mjs';
 
@@ -46,7 +47,7 @@ const TOGGLE_LEAD = 0.0005;
 
 /** Every HyperFrames emitter, keyed by module id. */
 export function hyperframesEmitters() {
-  return { ...CATALOG_A_EMITTERS, ...CATALOG_B_EMITTERS, ...CATALOG_C_EMITTERS, ...CATALOG_D_EMITTERS, ...CATALOG_E_EMITTERS, ...EDITORIAL_EMITTERS };
+  return { ...CATALOG_A_EMITTERS, ...CATALOG_B_EMITTERS, ...CATALOG_C_EMITTERS, ...CATALOG_D_EMITTERS, ...CATALOG_E_EMITTERS, ...CATALOG_F_EMITTERS, ...EDITORIAL_EMITTERS };
 }
 
 /**
