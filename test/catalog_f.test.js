@@ -14,7 +14,7 @@ const ctx = (overrides = {}) => ({id: 'scene', start: 1, duration: 4, format: {w
 const resolve = (id, params, overrides) => ({...MODULES[id].resolve(params, ctx(overrides)), module: id});
 const ITEMS = [{text: 'Saved me ten hours a week'}, {image: 'assets/app.png'}, {text: 'Shipped in a day'}, {text: 'The edit I wanted'}];
 
-const IDS = ['glass-word', 'orbit-cards', 'proof-wall', 'scrapbook'];
+const IDS = ['glass-word', 'orbit-cards', 'proof-wall', 'scrapbook', 'doodle-outline'];
 
 test('catalogue F is registered in the module registry, HyperFrames and Remotion', () => {
   for (const id of IDS) assert.ok(knownModules().includes(id), id);
@@ -96,4 +96,27 @@ test('scrapbook: paper boils on threes, the presenter is a sticker, letters land
   const settledHeadTop = 960 + (560 - 960) * 0.82 + 960 * 0.18;
   assert.ok(model.rect.y + model.rect.height <= settledHeadTop, 'the letters sit above where the head ends up');
   assert.throws(() => resolve('scrapbook', {word: 'a b'}), /must be one word/);
+});
+
+test('doodle-outline: the traced line boils on threes outside the silhouette, doodles draw beside the head', () => {
+  // A round presenter of radius 200 centred at (540, 900) that sways right 30 px a second.
+  const outlineAt = (t) => Array.from({length: 120}, (_, i) => [540 + 30 * t + Math.cos(i / 120 * Math.PI * 2) * 200, 900 + Math.sin(i / 120 * Math.PI * 2) * 200]);
+  const model = resolve('doodle-outline', {doodles: [{icon: 'arrow', side: 'left'}, {icon: 'crown', side: 'top'}]}, {subject: {...subject, outlineAt}});
+  assert.equal(model.layer, 'front');
+  assert.equal(model.framesFace, true);
+  const {frames, doodles} = model.content;
+  assert.ok(frames.every((frame, i) => i === 0 || Math.abs(frame.time - frames[i - 1].until) < 1e-6), 'each frame hands over to the next');
+  assert.ok(frames.at(-1).draw === 0 && frames[0].draw > 0, 'the line draws on, then stays whole');
+  const first = frames[0].d.match(/^M([\d.]+) ([\d.]+)/).slice(1).map(Number);
+  assert.ok(Math.hypot(first[0] - 540 - 30 * 1.1, first[1] - 900) > 205, 'pushed outside the silhouette');
+  const ops = catalogFTimeline(model);
+  const lit = (t) => frames.filter((frame) => frameState(ops, t).get(`scene-line-${frame.index}`).opacity === 1).length;
+  assert.equal(lit(2), 1, 'one outline at a time');
+  assert.equal(frameState(ops, 2).get('scene-doodle-0-0').strokeDashoffset, 0, 'drawn by then');
+  assert.ok(doodles[0].x < subject.head.x && doodles[1].y < subject.head.y);
+  assert.equal(catalogFView(model).behind, null);
+  // No outline: only the doodles.
+  assert.equal(resolve('doodle-outline', {}).content.traced, false);
+  assert.throws(() => resolve('doodle-outline', {doodles: []}), /needs at least one doodle/);
+  assert.throws(() => resolve('doodle-outline', {doodles: [{icon: 'rocket'}]}), /must be one of/);
 });
