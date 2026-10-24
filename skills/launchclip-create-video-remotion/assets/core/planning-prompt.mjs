@@ -80,6 +80,11 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'cta', when: 'calls to action, or the loop ending', patterns: ['\\b(follow|subscribe|try it|get started|star|download|sign up|learn more|link in bio)\\b'] },
   { module: 'masthead', lanes: ['footage-led'], needs: ['subject'], when: 'names the product or the one idea the video is about ("meet X", "this is X", "it\'s called X"): one word behind the presenter\'s head', patterns: ['\\b(meet|introducing|it\'s called|called|this is)\\b'] },
   { module: 'dolly-zoom', lanes: ['footage-led'], needs: ['subject'], when: 'lands a realisation, reveal or turn ("that\'s when", "it hit me", "everything changed"): the room moves, the presenter holds', patterns: ['\\b(that\'s when|it hit me|realis|realiz|everything changed|turns out|the moment)'] },
+  { module: 'app-stage', lanes: ['footage-led'], needs: ['subject'], when: 'shows or describes the product on screen ("here\'s the dashboard", "this is the app"), with a screenshot or recording in the assets: the UI fills the top, their head over its edge', patterns: ['\\b(dashboard|the app|here\'s (the|our)|on screen|interface)\\b'] },
+  { module: 'phone-stage', lanes: ['footage-led'], when: 'shows the product on a phone or a mobile flow, with a recording or screenshot in the assets (a demo-autopilot flow fits)', patterns: ['\\b(phone|mobile|ios|android|app store|on the go)\\b'] },
+  { module: 'backdrop-swap', lanes: ['footage-led'], needs: ['subject'], when: 'turns from the problem to the product ("so we built", "that\'s why", "enter"): the room gives way to a brand backdrop', patterns: ['\\b(so (we|i) built|that\'s why|enter|instead)\\b'] },
+  { module: 'feed-frame', lanes: ['footage-led'], needs: ['subject'], when: 'talks about posting, going viral or "this exact video": the frame becomes a feed window they break out of', patterns: ['\\b(post(ed|ing)?|viral|this (exact )?video|my feed|reels?|tiktok|shorts)\\b'] },
+  { module: 'pull-back', lanes: ['footage-led'], when: 'reveals how the video or result was made, or a process finishing ("made with", "it transcribes, cuts…"): the frame pulls back into an app window while real steps tick', patterns: ['\\b(made (with|by)|behind the scenes|render(ed|ing)?|it (transcribes|cuts|edits))\\b'] },
   { module: 'punch-in', fallback: 'kinetic-words', lanes: ['footage-led'], when: 'footage-led emphasis on a word (steps for a build of emphasised words; blur for energy)', patterns: ['\\b(this|exactly|really|huge)\\b', '!\\s*$'] },
   { module: 'footage-callout', fallback: 'callout', lanes: ['footage-led'], when: 'footage-led claim sticker or label pointing at something on screen', patterns: ['\\b(note|remember|important|tip|warning|look at|see this|right here)\\b'] },
   { module: 'lower-third', lanes: ['footage-led'], when: 'introduces the speaker or a guest by name and title', patterns: ['\\b(my name is|founder|co-founder|ceo|cto|engineer at|host of|joining me)\\b'] },
@@ -383,7 +388,8 @@ export function subjectLines(subject) {
     `The presenter can be cut out: ${subject.framing ?? 'unknown'} framing${typeof subject.headroom === 'number' ? `, ${Math.round(subject.headroom * 100)}% headroom above the head` : ''}${subject.head ? `, head centred at x ${subject.head.x}, y ${subject.head.y} of the frame` : ''}.`,
     'scene.layer: "behind" draws a scene behind the presenter, so their head and body cover it (a word or chart behind them); omit it (front) for everything else. masthead and dolly-zoom are always behind.',
     'Use at most one or two subject effects in a 30–60 s piece, at least 3 s apart, never two different ones back to back, and together under a third of the runtime.',
-    `masthead needs headroom${subject.framing === 'close-up' ? ' (this recording is a close-up: avoid masthead and dolly-zoom)' : ''}; dolly-zoom needs a medium or wide shot.`,
+    `masthead and app-stage need headroom${subject.framing === 'close-up' ? ' (this recording is a close-up: avoid masthead, app-stage and dolly-zoom)' : ''}; dolly-zoom needs a medium or wide shot.`,
+    'app-stage, phone-stage and a backdrop-swap backdrop show real product media from the asset inventory (screenshots, screen recordings, demo flows); never invent a screenshot. feed-frame shows counts only when the brief gives them.',
     'Never put a front scene over the presenter\'s face for more than 0.3 s; layout-check fails it.'
   ];
 }
@@ -543,11 +549,12 @@ export function storyboardModulesReference() {
  */
 export function subjectEffectsReference() {
   const catalogue = moduleCatalogue();
-  const subjectModules = catalogue.filter((module) => module.needs?.includes('subject'));
+  const AROUND = ['pull-back', 'phone-stage'];
+  const subjectModules = catalogue.filter((module) => module.needs?.includes('subject') || AROUND.includes(module.id));
   const punchIn = catalogue.filter((module) => module.id === 'punch-in');
   const rows = subjectModules.map((module) => {
     const uses = PHRASE_MODULE_TABLE.filter((row) => row.module === module.id).map((row) => row.when).join('; ') || '—';
-    return `| ${module.id} | ${module.layer ?? 'front'} | ${(module.aspects ?? ['9:16', '16:9']).join(', ')} | ${(module.mood ?? []).join(', ') || '—'} | ${uses.replace(/\|/g, '\\|')} |`;
+    return `| ${module.id} | ${module.layer ?? 'front'} | ${module.needs?.includes('subject') ? 'yes' : 'no'} | ${(module.aspects ?? ['9:16', '16:9']).join(', ')} | ${(module.mood ?? []).join(', ') || '—'} | ${uses.replace(/\|/g, '\\|')} |`;
   });
   const ready = { usable: true, reasons: [], framing: 'medium', headroom: 0.2 };
   const lines = [
@@ -568,15 +575,15 @@ export function subjectEffectsReference() {
     ...section('Layers', [
       '- `scene.layer: "behind"`: the scene draws behind the presenter, so their head and body cover it. masthead and dolly-zoom are behind by default.',
       '- No layer (front): the scene draws over the presenter, as every footage-led overlay always has.',
-      '- `"split"`: for modules that draw on both sides of the presenter (none yet).',
+      '- `"split"`: modules that draw on both sides of the presenter (feed-frame: its backdrop behind them, its feed chrome in front).',
       '- `base.subject: "off"` turns the subject off; `{"mattes": [...]}` lists mattes explicitly (`src`, `in`, `out`, `info`, `plate`).',
       '',
       'Both renderers stack the base recording, behind scenes, the cut-out presenter, front scenes, then captions. A punch-in moves (and blurs) the presenter and the room together.'
     ]),
     ...section('Rules', subjectLines(ready).slice(1).map((line) => `- ${line}`)),
     ...section('Modules', [
-      '| Module | Layer | Aspects | Moods | Use when the presenter… |',
-      '| --- | --- | --- | --- | --- |',
+      '| Module | Layer | Needs the matte | Aspects | Moods | Use when the presenter… |',
+      '| --- | --- | --- | --- | --- | --- |',
       ...rows,
       '',
       ...moduleLines('guided', [...subjectModules, ...punchIn])
