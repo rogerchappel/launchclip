@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { deriveBoundaries, resolveStory, storyFormat, storyHits, validateStory as validateStoryShape } from "./story.js";
-import { knownModules, resolveModule } from "../kit/core/modules.mjs";
+import { knownModules, resolveModule, subjectDensityWarnings } from "../kit/core/modules.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 import { getRenderer } from "./renderers/index.js";
 import { remotionInvocation, COMPOSITION_ID } from "./renderers/remotion.js";
@@ -68,6 +68,7 @@ export async function runStoryCommand(action, storyPath, flags = {}, adapters = 
         if (second.ok) {
           boundaries = deriveBoundaries(resolved);
           errors.push(...moduleParamErrors(resolved));
+          for (const warning of subjectDensityWarnings(resolved)) if (!validation.warnings.includes(warning)) validation.warnings.push(warning);
         }
         resolvedChecked = true;
       } catch (error) {
@@ -107,7 +108,7 @@ export async function runStoryCommand(action, storyPath, flags = {}, adapters = 
     out: flags.out ? path.resolve(flags.out) : null,
     format: storyFormat(resolved),
     resolved: resolved.resolved,
-    warnings: validation.warnings,
+    warnings: [...validation.warnings, ...subjectDensityWarnings(resolved)],
     boundaries: deriveBoundaries(resolved),
     hits: storyHits(resolved),
     ...(flags.out ? {} : { story_resolved: resolved })

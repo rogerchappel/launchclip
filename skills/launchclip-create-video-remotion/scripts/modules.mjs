@@ -165,6 +165,69 @@ export function resolveModule(scene, story, { track, end } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Subject-effect density (docs/SUBJECT_EFFECTS_RFC.md §7.5). Effects on the
+// presenter land when they are rare, so a footage-led story warns (never
+// fails) when they crowd: together over SUBJECT_DENSITY.share of the runtime,
+// two closer than SUBJECT_DENSITY.gap seconds, or two different ones back to
+// back. A subject effect is a module that needs the subject, a scene drawn
+// behind the presenter, or one of the camera moves on the presenter.
+export const SUBJECT_DENSITY = Object.freeze({ share: 0.35, gap: 3, cameras: Object.freeze(['punch-in', 'zoom-through', 'pull-back']) });
+
+/** True when a scene is a subject effect for the density budget. */
+export function isSubjectEffect(scene) {
+  if (!scene || typeof scene !== 'object' || scene.insert === true) return false;
+  if (scene.layer === 'behind' || scene.layer === 'split') return true;
+  if (SUBJECT_DENSITY.cameras.includes(scene.module)) return true;
+  return Boolean(catalogModules()[scene.module]?.needs?.includes('subject'));
+}
+
+/** Density warnings for a resolved footage-led story, as strings. */
+export function subjectDensityWarnings(story) {
+  return subjectDensityFindings(story).map((finding) => finding.detail);
+}
+
+/**
+ * Density findings for a resolved footage-led story (numeric scene times):
+ * [{ids, at, detail}]. Stories outside the lane, or with no subject effects,
+ * get none.
+ */
+export function subjectDensityFindings(story) {
+  if (!storyBase(story)) return [];
+  const fps = Number(story?.resolved?.fps ?? story?.format?.fps ?? 30);
+  const frame = 1 / (Number.isFinite(fps) && fps > 0 ? fps : 30);
+  const effects = (Array.isArray(story.scenes) ? story.scenes : [])
+    .filter((scene) => isSubjectEffect(scene) && Number.isFinite(Number(scene.start)) && Number.isFinite(Number(scene.end)))
+    .map((scene) => ({ id: scene.id, module: scene.module, start: Number(scene.start), end: Number(scene.end) }))
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+  if (!effects.length) return [];
+  const findings = [];
+  const duration = Number(story?.resolved?.duration ?? story?.format?.duration);
+  let covered = 0, reach = -Infinity;
+  for (const effect of effects) {
+    covered += Math.max(0, effect.end - Math.max(effect.start, reach));
+    reach = Math.max(reach, effect.end);
+  }
+  if (Number.isFinite(duration) && duration > 0 && covered / duration > SUBJECT_DENSITY.share + 1e-9) {
+    findings.push({ ids: effects.map((effect) => effect.id), at: round3(effects[0].start), detail: `subject effects cover ${Math.round((covered / duration) * 100)}% of the runtime (${round3(covered)} of ${round3(duration)} s; ${effects.map((effect) => effect.id).join(', ')}); keep them under ${Math.round(SUBJECT_DENSITY.share * 100)}% so each one lands. Drop or shorten some` });
+  }
+  for (let i = 1; i < effects.length; i += 1) {
+    const before = effects[i - 1], after = effects[i];
+    const gap = after.start - before.end;
+    if (gap <= frame + 1e-6 && before.module !== after.module) {
+      const when = gap < -frame ? `overlap from ${round3(after.start)} s` : `run back to back at ${round3(after.start)} s`;
+      findings.push({ ids: [before.id, after.id], at: round3(after.start), detail: `subject effects ${before.id} (${before.module}) and ${after.id} (${after.module}) ${when}; two different presenter effects in a row read as noise. Put ${SUBJECT_DENSITY.gap} s of plain recording between them, or keep one` });
+    } else if (gap < SUBJECT_DENSITY.gap - 1e-6) {
+      findings.push({ ids: [before.id, after.id], at: round3(before.end), detail: `subject effects ${before.id} (${before.module}) and ${after.id} (${after.module}) are ${round3(Math.max(0, gap))} s apart (from ${round3(before.end)} s to ${round3(after.start)} s); keep presenter effects at least ${SUBJECT_DENSITY.gap} s apart` });
+    }
+  }
+  return findings;
+}
+
+function round3(value) {
+  return Math.round(value * 1000) / 1000;
+}
+
+// ---------------------------------------------------------------------------
 // The last scene of a story that does not loop. ending.final (story.mjs):
 //   "hold" (default) → the module resolves with its end FINAL_HOLD_TAIL past
 //     the story end, so its exit falls after the last frame and the final

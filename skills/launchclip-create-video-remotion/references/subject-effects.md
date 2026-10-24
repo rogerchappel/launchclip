@@ -25,7 +25,7 @@ Both renderers stack the base recording, behind scenes, the cut-out presenter, f
 ## Rules
 
 - scene.layer: "behind" draws a scene behind the presenter, so their head and body cover it (a word or chart behind them); omit it (front) for everything else. masthead and dolly-zoom are always behind.
-- Use at most one or two subject effects in a 30–60 s piece, at least 3 s apart, never two different ones back to back, and together under a third of the runtime.
+- Density budget: use at most one or two subject effects in a 30–60 s piece (behind or split scenes, the modules that need the subject, and punch-in, zoom-through and pull-back), at least 3 s apart, never two different ones back to back, and together under 35% of the runtime. Validation warns past any of these.
 - masthead and app-stage need headroom; dolly-zoom needs a medium or wide shot.
 - app-stage, phone-stage and a backdrop-swap backdrop show real product media from the asset inventory (screenshots, screen recordings, demo flows); never invent a screenshot. feed-frame shows counts only when the brief gives them.
 - A checklist without a rect places itself beside the presenter (above the head, else on the chest) at a legible size; keep it to two or three short rows on a close shot.
