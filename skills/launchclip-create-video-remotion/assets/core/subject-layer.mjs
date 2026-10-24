@@ -221,6 +221,9 @@ export function subjectModelErrors(model) {
  *   head, body canvas rects (px) from the covering matte's summary, else null
  *   plate      {src, fit, focus}: the range's room plate, drawn like the base
  *   placement  "measured" with a summary head, else "default"
+ *   outlineAt  (t) => the traced silhouette at timeline t: canvas points
+ *              [[x, y] px | null] (null where it meets the frame edge), or
+ *              null without an outline. It ignores camera moves.
  */
 export function subjectContext(story, t) {
   const base = storyBase(story);
@@ -238,8 +241,29 @@ export function subjectContext(story, t) {
     body: toCanvas(summary?.body),
     headroom: summary?.headroom ?? null,
     plate: matte?.plate ? { src: matte.plate, fit: base.fit, focus: { ...base.focus } } : null,
-    placement: head ? "measured" : "default"
+    placement: head ? "measured" : "default",
+    outlineAt: (at) => subjectOutlineAt(story, at)
   };
+}
+
+/** The covering matte's nearest outline frame at timeline t, on the canvas. */
+export function subjectOutlineAt(story, t) {
+  const base = storyBase(story);
+  if (!base || base.subject.mode === "off") return null;
+  const source = sourceTimeAt(base, t);
+  const matte = source === null ? null : base.subject.mattes.find((entry) => source >= entry.in - EPS && source <= entry.out + EPS) ?? null;
+  const frames = matte?.outline?.frames;
+  const size = matte?.summary?.source;
+  if (!Array.isArray(frames) || !frames.length || !size) return null;
+  let nearest = frames[0];
+  for (const frame of frames) if (Math.abs(frame.t - source) < Math.abs(nearest.t - source)) nearest = frame;
+  if (!Array.isArray(nearest.points)) return null;
+  const canvas = { width: Number(story.format?.width), height: Number(story.format?.height) };
+  return nearest.points.map((point) => {
+    if (!point) return null;
+    const box = sourceBoxToCanvas({ x: point[0], y: point[1], w: 0, h: 0 }, base, size, canvas);
+    return [box.x, box.y];
+  });
 }
 
 // ---------------------------------------------------------------------------
