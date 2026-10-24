@@ -31,10 +31,11 @@ import { CAPTION_DEFAULT_COLORS, captionChunksFrom, captionDipTweens, captionMov
 import { brandFontStacks, fontFaceRule, fontSlug, frozenFontFaces, projectFontFamilies, registryFontFaces } from '../core/fonts.mjs';
 import { EMITTERS as EDITORIAL_EMITTERS } from './editorial-ui-modules.mjs';
 import { EMITTERS as CATALOG_A_EMITTERS } from './catalog-a.mjs';
-import { EMITTERS as CATALOG_B_EMITTERS } from './catalog-b.mjs';
+import { EMITTERS as CATALOG_B_EMITTERS, opsToGsap } from './catalog-b.mjs';
 import { EMITTERS as CATALOG_C_EMITTERS, cameraGsap } from './catalog-c.mjs';
 import { EMITTERS as CATALOG_D_EMITTERS } from './catalog-d.mjs';
 import { cameraOverlaps } from '../core/catalog-c.mjs';
+import { needsSubject, roomChanges, sceneLayerOf, SUBJECT_CAMERA, subjectCameraOps, subjectSegments, subjectWindows } from '../core/subject-layer.mjs';
 
 export const COMPOSITION_ID = 'launchclip-story';
 export const GSAP_SRC = 'https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js';
@@ -92,10 +93,19 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   if (base && sourceDir && !existsSync(path.join(sourceDir, base.src))) warnings.push(`base recording ${base.src} was not found in ${sourceDir}`);
   if (base && story.base?.edl && !story.base?.trim) warnings.push(`base.edl ${story.base.edl} was not resolved into base.trim (pass the edit plan to resolveStory as {edl}); the base plays untrimmed`);
 
-  // Tracks: 0 audio, 1 background, then (footage-led) 2 base video and 3 base
-  // audio; each scene takes a pair (root, root+1), reused once its render
-  // window has ended.
-  const firstTrack = base ? FIRST_SCENE_TRACK + 2 : FIRST_SCENE_TRACK;
+  // Subject layer (kit/core/subject-layer.mjs): mounted only when a scene
+  // sits behind the cut-out presenter, moves it or treats the room, so other
+  // stories compile byte for byte as before.
+  const subjectNeeded = Boolean(base) && layers.some((entry) => {
+    try { return needsSubject(entry.scene, resolveModule(entry.scene, story, { end: entry.renderEnd })); }
+    catch { return entry.scene.layer === 'behind' || entry.scene.layer === 'split'; }
+  });
+
+  // Tracks: 0 audio, 1 background, then (footage-led) 2 base video, 3 base
+  // audio and (with a subject) 4 the subject mattes; each scene takes a pair
+  // (root, root+1), reused once its render window has ended.
+  const SUBJECT_TRACK = FIRST_SCENE_TRACK + 2;
+  const firstTrack = base ? FIRST_SCENE_TRACK + (subjectNeeded ? 3 : 2) : FIRST_SCENE_TRACK;
   const trackEnds = [];
   const allocate = (start, end) => {
     let slot = trackEnds.findIndex((until) => until <= start + 1e-6);
@@ -142,6 +152,12 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   };
   const boundaryFor = new Map(boundaries.map((entry) => [entry.to_id, entry]));
   let z = 10;
+  // With a subject, behind scenes stack from 10 under the matte layer and
+  // every other scene from above it.
+  let zBehind = 10;
+  const subjectZ = 10 + 10 * (layers.length + 1);
+  if (subjectNeeded) z = subjectZ + 10;
+  const sceneLayers = [];
   // World camera (kit/core/camera-world.mjs): world mode, or a camera
   // transition in a cuts story. Plates then live inside one world container
   // (#lc-cam-pan in #lc-cam-zoom in #lc-cam-drift in #lc-camera) that the
@@ -186,16 +202,20 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const track = allocate(entry.start, entry.renderEnd);
     const { model, out } = build(entry, { track });
     models.push(model);
+    const depth = subjectNeeded ? sceneLayerOf(entry.scene, model) : { layer: 'front' };
+    if (depth.reason) warnings.push(`${entry.scene.id}: ${depth.reason}`);
+    sceneLayers.push(depth.layer);
+    const sceneZ = depth.layer === 'behind' ? zBehind : z;
     if (model.hidesCaptions) hide.push([entry.start, entry.renderEnd]);
     const id = attr(entry.scene.id);
     const outer = `lc-scene-${id}`, inner = `lc-layer-${id}`;
     const media = hoistMedia(out.html ?? '');
-    for (const element of media.elements) hoisted.push(withZIndex(element, z + 5));
+    for (const element of media.elements) hoisted.push(withZIndex(element, sceneZ + 5));
     // An emitter's `overlay` annotates its root media (product-demo), so it is
     // hoisted too, one z-index above the video.
     if (out.overlay) {
       media.elements.push(out.overlay);
-      hoisted.push(withZIndex(out.overlay, z + 6));
+      hoisted.push(withZIndex(out.overlay, sceneZ + 6));
     }
     const mediaMotion = [];
     for (const element of media.elements) {
@@ -217,7 +237,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const parallax = plan && !entry.plate ? overlayOps(plan, { start: entry.start, end: entry.renderEnd }) : [];
     const layer = `<div id="${inner}" class="lc-layer">${ambient.html}${content}</div>`;
     const body = parallax.length ? `<div id="lc-par-${id}" class="lc-parallax">${layer}</div>` : layer;
-    (inWorld ? world : markup).push(`<div id="${outer}" class="lc-scene${entry.plate ? ' lc-plate' : ''}${worldClass}" data-launchclip-scene="${id}" data-launchclip-module="${attr(entry.scene.module)}" data-launchclip-start="${num(entry.start)}" data-launchclip-render-end="${num(entry.renderEnd)}"${boundaryAttrs(boundary)} style="z-index:${z}${inWorld ? plateStyle(entry.id, plan.placements[entry.id]) : ''}">${body}</div>`);
+    (inWorld ? world : markup).push(`<div id="${outer}" class="lc-scene${entry.plate ? ' lc-plate' : ''}${worldClass}" data-launchclip-scene="${id}" data-launchclip-module="${attr(entry.scene.module)}" data-launchclip-start="${num(entry.start)}" data-launchclip-render-end="${num(entry.renderEnd)}"${boundaryAttrs(boundary)} style="z-index:${sceneZ}${inWorld ? plateStyle(entry.id, plan.placements[entry.id]) : ''}">${body}</div>`);
     css.push(out.css ?? '');
     motion.push(`// ${entry.scene.id} (${entry.scene.module}) ${num(entry.start)}–${num(entry.renderEnd)}s`);
     motion.push(...toggle(`#${outer}`, entry.start, entry.renderEnd, D));
@@ -230,7 +250,19 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     }
     if (out.motion) motion.push(`{\n${out.motion}\n}`);
     motion.push(...mediaMotion);
-    z += 10;
+    // Split modules: their behind part is a second layer under the subject,
+    // shown and moved with the scene.
+    if (depth.layer === 'split' && out.behind?.html) {
+      const behindOuter = `lc-scene-${id}-behind`, behindInner = `lc-layer-${id}-behind`;
+      markup.push(`<div id="${behindOuter}" class="lc-scene" data-launchclip-scene="${id}" data-launchclip-part="behind" style="z-index:${zBehind}"><div id="${behindInner}" class="lc-layer">${out.behind.html}</div></div>`);
+      css.push(out.behind.css ?? '');
+      motion.push(...toggle(`#${behindOuter}`, entry.start, entry.renderEnd, D));
+      motion.push(...entry.tweens.map((tw) => tweenCode(`#${behindInner}`, tw)));
+      if (out.behind.motion) motion.push(`{\n${out.behind.motion}\n}`);
+      zBehind += 10;
+    }
+    if (depth.layer === 'behind') zBehind += 10;
+    else z += 10;
   }
 
   // Loop ending: the loop_to scene's first state, held over the final window.
@@ -277,6 +309,28 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       baseMarkup.push(`<video id="lc-base-${segment.index}" class="clip lc-base-media" src="${attr(base.src)}" ${timing} data-track-index="${FIRST_SCENE_TRACK}" data-launchclip-base-segment="${segment.index}" muted playsinline style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;${fit};transform-origin:50% 50%;z-index:1"></video>`);
       if (!isolate && base.volume > 0) baseMarkup.push(`<audio id="lc-base-audio-${segment.index}" class="clip" src="${attr(base.src)}" ${timing} data-volume="${num(base.volume)}" data-track-index="${FIRST_SCENE_TRACK + 1}"></audio>`);
     }
+    // Subject: the matte clips over the base, under every front scene, moved
+    // with the base cameras unless a subjectCamera runs; room treatments
+    // (hide, dim, blur) touch the base videos only.
+    if (subjectNeeded) {
+      const entries = layers.map((entry, index) => ({ scene: entry.scene, model: models[index], start: entry.start, end: entry.renderEnd }));
+      const clips = subjectSegments(story, subjectWindows(entries));
+      if (!clips.length) warnings.push(`${entries.filter((entry) => needsSubject(entry.scene, entry.model)).map((entry) => entry.scene.id).join(', ')}: these scenes need the cut-out subject, but base.subject has no matte for their time (run: launchclip subject matte <recording> --range <in>-<out> --project <dir>)`);
+      for (const clip of clips) {
+        baseMarkup.push(`<video id="lc-subject-${clip.index}" class="clip lc-subject-media" src="${attr(clip.src)}" data-start="${num(clip.start)}" data-duration="${num(clip.duration)}" data-media-start="${num(clip.mediaStart)}" data-track-index="${SUBJECT_TRACK}" data-launchclip-subject-segment="${clip.index}" muted playsinline style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;${fit};transform-origin:50% 50%;z-index:${subjectZ}"></video>`);
+        if (sourceDir && !existsSync(path.join(sourceDir, clip.src))) warnings.push(`subject matte ${clip.src} was not found in ${sourceDir}`);
+      }
+      const subjectOps = subjectCameraOps(models);
+      if (clips.length && subjectOps.length) {
+        motion.push('// subject camera (follows the base cameras; subjectCamera takes over while it runs)');
+        motion.push(...opsToGsap(subjectOps).map((line) => line.replace(JSON.stringify(`#${SUBJECT_CAMERA}`), JSON.stringify('.lc-subject-media'))));
+      }
+      const room = roomChanges(models);
+      if (room.length) {
+        motion.push('// room treatment (base videos only)');
+        motion.push(...room.map((change) => `tl.set('.lc-base-media', ${js(change.state)}, ${num(change.time)});`));
+      }
+    }
     const camera = cameraGsap(models);
     if (camera.length) {
       motion.push(`// base camera (${models.filter((model) => model.camera).map((model) => model.sceneId ?? model.id).join(', ')})`);
@@ -284,6 +338,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     }
     for (const [a, b] of cameraOverlaps(models)) warnings.push(`${b}: its camera overlaps ${a}; the later punch-in wins while both run`);
   } else if (models.some((model) => model.camera)) warnings.push('punch-in moves the base recording, but the story has no base; it has no effect');
+  if (!base && models.some((model) => model.room || model.subjectCamera)) warnings.push('a scene moves the subject or treats the room, but the story has no base recording; it has no effect');
 
   // Audio: exactly one root track (footage-led: the bed under the base; the
   // recording carries the voice).
