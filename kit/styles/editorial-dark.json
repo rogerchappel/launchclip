@@ -50,10 +50,16 @@
       "function-chart",
       "excerpt-window",
       "equation-lockup",
-      "date-card"
+      "date-card",
+      "masthead",
+      "phone-stage",
+      "backdrop-swap"
     ],
     "avoid": [
-      "logo-row"
+      "logo-row",
+      "orbit-cards",
+      "scrapbook",
+      "doodle-outline"
     ],
     "params": {
       "checklist": {
