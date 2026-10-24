@@ -590,7 +590,7 @@ function resolveDoodleOutline(params, ctx) {
     return {index: i, icon: doodle.icon, side: doodle.side, x, y, time, tilt: r2(jitter(23, i) * 12), mirror: doodle.side === 'left' && doodle.icon === 'arrow', down: doodle.side === 'top' && doodle.icon === 'arrow'};
   });
   if (!frames.length && !placed.length) check.fail('params.doodles', 'needs at least one doodle when the presenter has no traced outline');
-  b.events.push({id: `${b.id}-trace`, name: 'trace', time: t0, endTime: rt(t0 + drawFor), role: 'emphasis', cue: 'swoosh'});
+  b.events.push({id: `${b.id}-trace`, name: 'trace', time: t0, endTime: rt(t0 + drawFor), role: 'emphasis', cue: 'whoosh'});
   placed.forEach(doodle => b.events.push({id: `${b.id}-doodle-${doodle.index}`, name: `doodle-${doodle.index}`, time: doodle.time, endTime: rt(doodle.time + 0.4), role: 'beat', cue: 'pop-soft'}));
   b.model.layer = 'front';
   b.model.framesFace = true;
