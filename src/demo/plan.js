@@ -29,22 +29,26 @@
 //   {type: "type", selector?, text?, value: "literal" | {account: "email"|"password"|"username"}}
 //   {type: "wait-for", selector?, text?, timeout?: ms}
 //   {type: "assert-visible", selector?, text?}
+//   {type: "upload", selector?, text?, file: "assets/photo.jpg", timeout?: ms}
+//                                                  clicks the control (a button, a drop zone, or an
+//                                                  input[type=file] itself) and answers the file chooser
+//                                                  with `file`, relative to the plan file and inside its folder
 //   {type: "pause", ms}
 //
 // The planner is the active agent in the skill path (it writes the file and
 // the user edits or approves it), or a model client in `launchclip make`
 // (planDemo with a client from src/storyboard_planner.js). Without a model,
 // heuristicPlan() builds a plain tour from the routes and nav links it finds.
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { extractStoryboard } from "../storyboard_planner.js";
 import { classifyHost, sessionValueProblem, typeStepProblem } from "./guardrails.js";
 
 export const DEMO_PLAN_SCHEMA = "launchclip.demo-plan.v1";
-export const STEP_TYPES = Object.freeze(["goto", "click", "type", "wait-for", "assert-visible", "pause"]);
+export const STEP_TYPES = Object.freeze(["goto", "click", "type", "wait-for", "assert-visible", "upload", "pause"]);
 export const DEFAULT_VIEWPORT = Object.freeze({ width: 1920, height: 1080, deviceScaleFactor: 1 });
 const FLOW_ID = /^[a-z][a-z0-9-]{0,39}$/;
-const STEP_KEYS = { goto: ["path", "url"], click: ["selector", "text"], type: ["selector", "text", "value", "secret"], "wait-for": ["selector", "text", "timeout"], "assert-visible": ["selector", "text"], pause: ["ms"] };
+const STEP_KEYS = { goto: ["path", "url"], click: ["selector", "text"], type: ["selector", "text", "value", "secret"], "wait-for": ["selector", "text", "timeout"], "assert-visible": ["selector", "text"], upload: ["selector", "text", "file", "timeout"], pause: ["ms"] };
 const COMMON_KEYS = ["type", "label", "callout", "zoom"];
 const APP_KEYS = ["url", "fixtures", "har", "blockOffOrigin", "allowOrigins", "session"];
 const SESSION_KEYS = ["storageState", "localStorage", "cookies"];
@@ -120,17 +124,54 @@ function validateSession(session, appUrl, errors) {
 }
 
 /**
- * The plan with its file paths (app.fixtures, app.har, app.session.storageState) rewritten from
+ * The plan with its file paths (app.fixtures, app.har, app.session.storageState, upload files) rewritten from
  * `fromDir` to `toDir`, for a copy of the plan saved somewhere else.
  */
 export function rebasePlanPaths(plan, fromDir, toDir) {
-  if (!plan.app) return plan;
-  const app = { ...plan.app };
   const rebase = (file) => path.relative(toDir, path.resolve(fromDir, file)).split(path.sep).join("/");
+  const flows = Array.isArray(plan.flows) ? plan.flows.map((flow) => (Array.isArray(flow?.steps) && flow.steps.some((step) => step?.type === "upload" && typeof step.file === "string")
+    ? { ...flow, steps: flow.steps.map((step) => (step?.type === "upload" && typeof step.file === "string" ? { ...step, file: rebase(step.file) } : step)) }
+    : flow)) : plan.flows;
+  if (!plan.app) return { ...plan, flows };
+  const app = { ...plan.app };
   for (const key of APP_FILES) if (typeof app[key] === "string") app[key] = rebase(app[key]);
   if (typeof app.session?.storageState === "string") app.session = { ...app.session, storageState: rebase(app.session.storageState) };
-  return { ...plan, app };
+  return { ...plan, app, flows };
 }
+
+// An upload's file is a relative path. Whether it stays inside the plan's
+// folder is checked on disk (uploadFileProblems), since a copy of the plan
+// saved elsewhere (rebasePlanPaths) reaches it through "..".
+function uploadPathProblem(file) {
+  if (typeof file !== "string" || !file.trim()) return "must be a path to a sample file, relative to the plan file";
+  if (/^[a-z][a-z0-9+.-]*:/i.test(file) || path.isAbsolute(file) || /^[\\/]/.test(file)) return `must be relative to the plan file (got ${JSON.stringify(file)})`;
+  return null;
+}
+
+/**
+ * Problems with the plan's upload files on disk: each, resolved from
+ * `planDir`, must exist, be a file, and lead (symlinks followed) inside
+ * `root`, the folder of the plan file the user wrote (planDir unless the plan
+ * is a rebased copy). → [string]
+ */
+export async function uploadFileProblems(plan, planDir, { root = planDir } = {}) {
+  const errors = [];
+  const base = await realpath(path.resolve(root)).catch(() => path.resolve(root));
+  for (const [f, flow] of (plan?.flows ?? []).entries()) {
+    for (const [s, step] of (flow?.steps ?? []).entries()) {
+      if (step?.type !== "upload" || uploadPathProblem(step.file)) continue;
+      const at = `flows[${f}].steps[${s}].file`;
+      const real = await realpath(path.resolve(planDir, step.file)).catch(() => null);
+      if (!real) { errors.push(`${at} ${JSON.stringify(step.file)} does not exist next to the plan file`); continue; }
+      if (path.relative(base, real).startsWith("..") || path.isAbsolute(path.relative(base, real))) { errors.push(`${at} ${JSON.stringify(step.file)} leads outside the plan's folder`); continue; }
+      if (!(await stat(real)).isFile()) errors.push(`${at} ${JSON.stringify(step.file)} is not a file`);
+    }
+  }
+  return errors;
+}
+
+/** Absolute path of an upload step's file, from the plan's folder. */
+export const uploadPath = (step, root) => path.resolve(root, step.file);
 
 /**
  * Validate a demo plan. → {errors: [string], warnings: [string]}. Errors block
@@ -175,7 +216,11 @@ export function validateDemoPlan(plan) {
       if (!STEP_TYPES.includes(step?.type)) { errors.push(`${at}.type must be one of ${STEP_TYPES.join(", ")}`); return; }
       for (const key of Object.keys(step)) if (![...COMMON_KEYS, ...STEP_KEYS[step.type]].includes(key)) errors.push(`${at} (${step.type}) has unknown key "${key}"`);
       if (step.callout !== undefined && (typeof step.callout !== "string" || step.callout.length > 42)) errors.push(`${at}.callout must be a string of at most 42 characters`);
-      if (["click", "type", "wait-for", "assert-visible"].includes(step.type) && !step.selector && !step.text) errors.push(`${at} needs a selector or text`);
+      if (["click", "type", "wait-for", "assert-visible", "upload"].includes(step.type) && !step.selector && !step.text) errors.push(`${at} needs a selector or text`);
+      if (step.type === "upload") {
+        const problem = uploadPathProblem(step.file);
+        if (problem) errors.push(`${at}.file ${problem}`);
+      }
       if (step.type === "goto") {
         const target = step.path ?? step.url;
         if (typeof target !== "string") errors.push(`${at} needs a path`);
@@ -187,7 +232,7 @@ export function validateDemoPlan(plan) {
         if (problem) errors.push(`${at}: ${problem}`);
       }
       if (step.type === "pause" && !(Number.isFinite(step.ms) && step.ms >= 0 && step.ms <= 10000)) errors.push(`${at}.ms must be 0–10000`);
-      if (step.type === "wait-for" && step.timeout !== undefined && !(Number.isFinite(step.timeout) && step.timeout > 0 && step.timeout <= 60000)) errors.push(`${at}.timeout must be 1–60000 ms`);
+      if ((step.type === "wait-for" || step.type === "upload") && step.timeout !== undefined && !(Number.isFinite(step.timeout) && step.timeout > 0 && step.timeout <= 60000)) errors.push(`${at}.timeout must be 1–60000 ms`);
     });
   });
   return { errors, warnings };
@@ -303,7 +348,7 @@ export function demoPlanInstructions() {
     "You plan product demo recordings for a SaaS launch video. Return one JSON object, a DEMO-PLAN.json, and nothing else.",
     `Schema: {"schema": "${DEMO_PLAN_SCHEMA}", "app": {"url": string}, "viewport": {"width": 1920, "height": 1080, "deviceScaleFactor": 1}, "flows": [{"id": "kebab-case", "title": "≤ 60 chars", "goal": string, "setup"?: ["sign-in"], "steps": [Step]}]}`,
     "Each flow is recorded in a fresh, signed-out browser. A flow that needs a signed-in user lists the sign-in flow's id in setup; setup flows run first, off camera.",
-    "Step types: goto {path: \"/x\"}; click {selector? | text?}; type {selector? | text? (the field's label or placeholder), value: string | {account: \"email\"|\"password\"|\"username\"}}; wait-for {selector? | text?, timeout? ms}; assert-visible {selector? | text?}; pause {ms ≤ 10000}. Any step may add label (short on-screen name) and callout (≤ 42 chars, shown as the step lands).",
+    "Step types: goto {path: \"/x\"}; click {selector? | text?}; type {selector? | text? (the field's label or placeholder), value: string | {account: \"email\"|\"password\"|\"username\"}}; wait-for {selector? | text?, timeout? ms}; assert-visible {selector? | text?}; upload {selector? | text? (the upload button, drop zone or file input), file: a path from sample_files, relative to the plan file}; pause {ms ≤ 10000}. Any step may add label (short on-screen name) and callout (≤ 42 chars, shown as the step lands).",
     "Plan 2–4 flows that sell the product for the prompt, e.g. sign up → create a project → see the result. Each flow starts with a goto, has 4–15 steps and lasts 8–20 seconds when played at human pace.",
     "Use only routes, links, button text and field labels that appear in the code context you are given; prefer visible text over CSS selectors. Stay on the app's own origin.",
     "Never put a password, API key or token in a step. Sign-in fields take {account: \"email\"} and {account: \"password\"}; the recorder fills them from the project's seed data. Use realistic but obviously fictional sample data (project names, notes)."
@@ -311,13 +356,14 @@ export function demoPlanInstructions() {
 }
 
 /** Compact code context for the planner: routes, nav links, accounts available (never their values). */
-export function planContext({ prompt, url, routes, nav, accounts, files = [] }) {
+export function planContext({ prompt, url, routes, nav, accounts, files = [], samples = [] }) {
   return JSON.stringify({
     prompt,
     app_url: url,
     routes: routes.slice(0, 60).map((entry) => entry.path),
     nav: nav.slice(0, 60).map((entry) => ({ path: entry.path, label: entry.label })),
     test_account: accounts.length ? "available ({account: \"email\"} and {account: \"password\"})" : "none (do not plan a sign-in)",
+    sample_files: samples.length ? samples.slice(0, 20) : "none (do not plan an upload)",
     page_snippets: files.slice(0, 12)
   }, null, 2);
 }

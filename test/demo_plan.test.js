@@ -1,10 +1,12 @@
 // Demo autopilot plans (src/demo/plan.js): validation, route discovery on the
 // examples/demo-app fixture, the heuristic plan and the model planner loop.
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { findTestAccounts } from "../src/demo/app.js";
-import { DEMO_PLAN_SCHEMA, discoverRoutes, fileRoute, heuristicPlan, planDemo, rebasePlanPaths, validateDemoPlan } from "../src/demo/plan.js";
+import { DEMO_PLAN_SCHEMA, discoverRoutes, fileRoute, heuristicPlan, planDemo, rebasePlanPaths, uploadFileProblems, validateDemoPlan } from "../src/demo/plan.js";
 
 const FIXTURE = path.resolve(import.meta.dirname, "..", "examples", "demo-app");
 const plan = (flows, extra = {}) => ({ schema: DEMO_PLAN_SCHEMA, app: { url: "http://localhost:4310" }, flows, ...extra });
@@ -106,4 +108,38 @@ test("planDemo asks the model, repairs once, and falls back to the heuristic", a
   assert.equal(broken.source, "heuristic");
   const none = await planDemo({ repo: FIXTURE, url: "http://localhost:4310" });
   assert.equal(none.source, "heuristic");
+});
+
+test("validateDemoPlan checks upload steps: a target and a relative file", () => {
+  const upload = (step) => plan([flow("attach", [{ type: "goto", path: "/new" }, { type: "upload", ...step }])]);
+  assert.deepEqual(validateDemoPlan(upload({ text: "Add a cover image", file: "sample-files/cover.png", label: "Cover", callout: "Drop in a cover", timeout: 4000 })).errors, []);
+  assert.deepEqual(validateDemoPlan(upload({ selector: "input[type=file]", file: "brief.pdf" })).errors, []);
+  assert.match(validateDemoPlan(upload({ file: "a.png" })).errors.join("\n"), /steps\[1\] needs a selector or text/);
+  assert.match(validateDemoPlan(upload({ text: "Upload" })).errors.join("\n"), /steps\[1\]\.file must be a path to a sample file/);
+  for (const file of ["/etc/hosts", "https://example.com/a.png", "file:///tmp/a.png"]) assert.match(validateDemoPlan(upload({ text: "Upload", file })).errors.join("\n"), /must be relative to the plan file/, file);
+  assert.match(validateDemoPlan(upload({ text: "Upload", file: "a.png", value: "x" })).errors.join("\n"), /unknown key "value"/);
+  assert.match(validateDemoPlan(upload({ text: "Upload", file: "a.png", timeout: 0 })).errors.join("\n"), /timeout must be 1–60000/);
+});
+
+test("uploadFileProblems keeps upload files inside the plan's folder, even from a rebased copy", async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-upload-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const demo = path.join(dir, "demo");
+  await mkdir(path.join(demo, "files"), { recursive: true });
+  await writeFile(path.join(demo, "files", "cover.png"), "png");
+  await writeFile(path.join(dir, "secret.txt"), "not for the demo");
+  await symlink(path.join(dir, "secret.txt"), path.join(demo, "files", "linked.txt"));
+  const upload = (file) => plan([flow("attach", [{ type: "goto", path: "/new" }, { type: "upload", text: "Upload", file }])]);
+  assert.deepEqual(await uploadFileProblems(upload("files/cover.png"), demo), []);
+  assert.match((await uploadFileProblems(upload("files/missing.png"), demo)).join(), /does not exist/);
+  assert.match((await uploadFileProblems(upload("../secret.txt"), demo)).join(), /leads outside the plan's folder/);
+  assert.match((await uploadFileProblems(upload("files/linked.txt"), demo)).join(), /leads outside the plan's folder/);
+  assert.match((await uploadFileProblems(upload("files"), demo)).join(), /is not a file/);
+  // A copy saved elsewhere reaches the same file through "..", and stays inside the original folder.
+  const out = path.join(dir, "out");
+  const copy = rebasePlanPaths(upload("files/cover.png"), demo, out);
+  assert.equal(copy.flows[0].steps[1].file, "../demo/files/cover.png");
+  assert.deepEqual(validateDemoPlan(copy).errors, []);
+  assert.deepEqual(await uploadFileProblems(copy, out, { root: demo }), []);
+  assert.match((await uploadFileProblems(copy, out)).join(), /leads outside/);
 });

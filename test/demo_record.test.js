@@ -8,7 +8,7 @@ import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { cursorPath, encodeFrames, findChromium, fixtureResponse, loadPlaywright, locate, prepareContext, sessionState, recorderAvailability, seededRandom, typingDelays } from "../src/demo/record.js";
+import { chooseFile, cursorPath, encodeFrames, findChromium, fixtureResponse, loadPlaywright, locate, prepareContext, sessionState, recorderAvailability, seededRandom, typingDelays, uploadTarget } from "../src/demo/record.js";
 
 const hasFfmpeg = spawnSync("ffmpeg", ["-version"]).status === 0;
 const available = await recorderAvailability();
@@ -209,4 +209,36 @@ test("prepareContext starts the page signed in from app.session", needsBrowser, 
   assert.equal((await page.evaluate(() => window.seen)).team, "team-2", "a value the app changes stays changed");
   const other = await browser.newContext();
   await assert.rejects(prepareContext(other, { app: { session: { cookies: [{ name: "s", value: "demo", url: "https://app.acme.com" }] } }, url }), /production host/);
+});
+
+test("uploadTarget and chooseFile answer the file chooser behind a button, a label or a bare input", needsBrowser, async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-upload-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = path.join(dir, "cover.png");
+  await writeFile(file, "png bytes");
+  const page = await withPage(t, `<button id="pick">Add a cover image</button><input type="file" id="cover" hidden>
+    <label for="brief" id="brief-label">Attach a brief</label><input type="file" id="brief" hidden>
+    <input type="file" id="bare" hidden>
+    <div id="zone">Drop files here</div><input type="file" id="zone-input" hidden>
+    <script>
+      document.getElementById("pick").onclick = () => document.getElementById("cover").click();
+      for (const input of document.querySelectorAll("input")) input.onchange = () => { window.got = { ...window.got, [input.id]: input.files[0].name }; };
+    </script>`);
+  // A visible button that opens a hidden input.
+  const button = await uploadTarget(page, { type: "upload", text: "Add a cover image" });
+  assert.equal(await button.target.getAttribute("id"), "pick");
+  assert.equal(await chooseFile(page, file, () => button.target.click()), "chooser");
+  // A selector naming a hidden input clicks its visible label.
+  const labelled = await uploadTarget(page, { type: "upload", selector: "#brief" });
+  assert.equal(await labelled.target.getAttribute("id"), "brief-label");
+  assert.equal(await chooseFile(page, file, () => labelled.target.click()), "chooser");
+  // A hidden input with nothing on screen to open it is set directly.
+  const bare = await uploadTarget(page, { type: "upload", selector: "#bare" });
+  assert.ok(bare.input && !bare.target);
+  await bare.input.setInputFiles(file);
+  assert.deepEqual(await page.evaluate(() => window.got), { cover: "cover.png", brief: "cover.png", bare: "cover.png" });
+  // A control that opens no chooser names the problem when the page has several inputs.
+  const zone = await uploadTarget(page, { type: "upload", text: "Drop files here" });
+  await assert.rejects(chooseFile(page, file, () => zone.target.click(), { timeout: 500 }), /opened no file chooser, and the page has 4 file inputs/);
+  await assert.rejects(uploadTarget(page, { type: "upload", text: "Nowhere" }, { timeout: 300 }), /Timeout/);
 });

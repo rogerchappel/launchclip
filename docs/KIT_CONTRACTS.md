@@ -1168,6 +1168,10 @@ session to a context the caller created; pass `secrets` to `recordFlow`.
 `{schema, flow: {id, title, goal}, video, viewport: {width, height, deviceScaleFactor}, frame, fps, duration, frames, recorded_at, actions: [...]}`.
 Each action is `{index, type: goto|click|type|wait-for|assert-visible|pause,
 selector, text, label, start, end, at?, box?, keys?, value?, chars?, url, callout}`.
+An `upload` step is logged as a `click` with `step: "upload"`, `file` (the
+file's base name) and `via` (`chooser` when the click opened the file chooser,
+`input` when the file was set on the input directly, with no click and a null
+`box`).
 Times are seconds in the clip (the first screencast frame is 0); `at` is the
 mouse-down for a click or type, `keys` the time of each typed character, and
 `box` the target's bounding box in viewport CSS px when the action ran. A typed

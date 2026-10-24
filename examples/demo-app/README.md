@@ -20,3 +20,5 @@ launchclip demo record examples/demo-app --out .launchclip/pulseboard/assets/dem
 ```bash
 launchclip demo record examples/demo-app --plan examples/demo-app/demo/DEMO-PLAN.json --no-seed --approve
 ```
+
+The `create-project` flow also uploads a cover image and a PDF brief from `demo/sample-files/` with `upload` steps: one clicks a button that opens a hidden file input, the other points its selector at a hidden `input[type=file]`, and the recorder clicks that input's label.
