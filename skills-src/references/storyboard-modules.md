@@ -112,6 +112,8 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 | reveals how the video or result was made, or a process finishing ("made with", "it transcribes, cuts…"): the frame pulls back into an app window while real steps tick [footage-led] | pull-back |
 | names the one idea or the brand in a premium or tech piece: one glass word on the wall behind their head [footage-led] (needs the subject) | glass-word |
 | lists many things or shows social proof ("all these tools", "people keep telling me"), with real items in the assets or brief: cards circle them [footage-led] (needs the subject) | orbit-cards |
+| "everyone is talking about it", press, reviews or a launch buzz, with real quotes and sources in the brief: proof pins to the wall behind them [footage-led] (needs the subject) | proof-wall |
+| calls out a number or claim in a playful, handmade beat ("100%", "3X", "$0", "free") [footage-led] (needs the subject) | scrapbook |
 | says "all you need to do is", "three steps" or runs through a process: rows tick as each is said, beside the presenter (no rect: it places itself above their head or on their chest) [footage-led] | checklist |
 | gives a growth result ("doubled", "took off in week three"): a line kicks up behind their head [footage-led] (needs the subject) | growth-line |
 | turns on a contrast or jumps between takes ("but", "or you can", "instead"): rush into the cut, burst out of the next take [footage-led] | zoom-through |
@@ -667,6 +669,23 @@ params:
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: orbit
 
+### proof-wall (keeps captions, needs the subject)
+Footage-led, around the presenter: real proof pins itself to the wall behind them a card every few frames (quotes and headlines with their source, screenshots), then an optional hero card lands in front, on their chest, with a highlighter swipe on its key word. For "everyone is talking about it" or press and reviews. Never invent items.
+params:
+- items: [{text? ≤ 70 with source ≤ 32, image?: assets/ image, source?}] 3–8, each real
+- hero: {text ≤ 48, highlight (a part of text), source} (optional)
+- every: seconds between cards (0.05–0.4, default 0.1)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: pin, hero
+
+### scrapbook (keeps captions, needs the subject)
+Footage-led, playful: paper and boiling crayon scribbles replace the room, the presenter slaps in as a paper sticker with a white border, and ransom-note letters land above their head with a marker ring and an optional line under them. For a number or claim ("100%", "3X", "$0", "FREE") in a handmade, creator-diary beat.
+params:
+- word: one word, number or claim ≤ 8 chars
+- sub: a short line under it ≤ 20 (optional)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: slap, letter-<i>
+
 ## Timing rules
 
 Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core/modules.mjs; `launchclip module fit <module>` prints the same rules with the window for a given `--duration`). `at` values are seconds from the scene start: the first beat no earlier than the lead-in, the last no later than the lead-out before the scene end. A faster motion grammar can shorten a catalogue B enter, which only moves its lead-in earlier.
@@ -716,6 +735,8 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | growth-line | 2 s | 0 s | — | at ≤ scene − draw − 0.6 s (draw 0.8–3 s, default min(1.6, 0.45 × scene)) |
 | glass-word | 1.8 s | 0 s | scene − 1.1 s | — |
 | orbit-cards | 2 s | 0 s | scene − 1.2 s | — |
+| proof-wall | 2 s | 0 s | scene − 1.2 s | at ≤ scene − 1.2 s − every × items |
+| scrapbook | 2 s | 0 s | scene − 1.4 s | — |
 
 ## Example
 

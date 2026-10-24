@@ -11,9 +11,7 @@ import { captionDipHidden, captionMoveHide, captionsOverlayOf, chunkWords } from
 import { driftExtent, sceneDrift } from "../kit/core/ambient.mjs";
 import { emptyPlates, sceneWindows } from "../kit/core/transitions.mjs";
 import { storyBase } from "../kit/core/story.mjs";
-import { checkSubjectFace, headLocator, sceneLayerOf } from "../kit/core/subject-layer.mjs";
-import { BASE_CAMERA, cameraOps } from "../kit/core/catalog-c.mjs";
-import { frameState } from "../kit/core/catalog-b-view.mjs";
+import { checkSubjectFace, headLocator, sceneLayerOf, subjectCameraAt, subjectCameraOps } from "../kit/core/subject-layer.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const STORY_MODULE = path.join(ROOT, "kit/core/story.mjs");
@@ -248,13 +246,14 @@ export async function subjectFaceFindings(projectDir, resolved, elements, warnin
     if (model) models.push(model);
     return [scene.id, { layer: sceneLayerOf(scene, model).layer, framesFace: Boolean(model?.framesFace) }];
   }));
-  // The head moves with the base cameras (punch-ins, pans, framed windows).
-  const ops = cameraOps(models);
+  // The head moves with the subject's camera: the base cameras (punch-ins,
+  // pans, framed windows), or a module's own subjectCamera while it runs.
+  const ops = subjectCameraOps(models);
   const located = headLocator(resolved, infos);
   const canvas = { width: Number(resolved.format?.width), height: Number(resolved.format?.height) };
   const headAt = (t) => {
     const head = located(t);
-    const cam = head && ops.length ? frameState(ops, t).get(BASE_CAMERA) : null;
+    const cam = head && ops.length ? subjectCameraAt(ops, t) : null;
     if (!head || !cam) return head;
     const cx = canvas.width / 2, cy = canvas.height / 2, s = cam.scaleX ?? 1;
     return { x: cx + (head.x - cx) * s + (cam.x ?? 0), y: cy + (head.y - cy) * s + (cam.y ?? 0), width: head.width * s, height: head.height * s };

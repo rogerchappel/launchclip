@@ -24,6 +24,25 @@
       "start": 3.2,
       "end": 6.4,
       "params": { "items": [{ "text": "Saved me ten hours a week" }, { "image": "assets/app.png" }, { "text": "Shipped our launch in a day" }, { "text": "The edit I always wanted" }] }
-    }
+    },
+    {
+      "id": "proof",
+      "module": "proof-wall",
+      "track": 1,
+      "start": 6.6,
+      "end": 9.2,
+      "params": {
+        "items": [
+          { "text": "The launch video tool I wanted", "source": "Product Hunt" },
+          { "text": "Shipped our launch in a day", "source": "@ada" },
+          { "image": "assets/app.png", "source": "Dashboard" },
+          { "text": "Ten hours saved every week", "source": "Ledgerly" },
+          { "text": "Finally, edits that look designed", "source": "Indie Hackers" },
+          { "text": "It found every bad take", "source": "@sam" }
+        ],
+        "hero": { "text": "Everyone is talking about it", "highlight": "talking", "source": "Launch notes" }
+      }
+    },
+    { "id": "scrap", "module": "scrapbook", "track": 1, "start": 9.4, "end": 12, "params": { "word": "3X", "sub": "faster edits" } }
   ]
 }

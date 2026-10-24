@@ -43,7 +43,7 @@ import { ambientField, blobBackground, blobStyle, fieldTileTransform, driftStyle
 // @ts-ignore plain ESM from kit/core
 import { profileGeometry } from "../core/layout-check.mjs";
 // @ts-ignore plain ESM from kit/core
-import { needsSubject, roomStateAt, sceneLayerOf, subjectCameraAt, subjectCameraOps, subjectSegments, subjectWindows } from "../core/subject-layer.mjs";
+import { needsSubject, roomStateAt, sceneLayerOf, subjectCameraAt, subjectCameraOps, subjectFilterAt, subjectSegments, subjectWindows } from "../core/subject-layer.mjs";
 // @ts-ignore plain ESM from kit/core
 import { propsToStyle } from "../core/catalog-b-view.mjs";
 import { moduleComponent } from "./modules";
@@ -236,14 +236,14 @@ export const BaseLayer: React.FC<{ base: any; cameraOps: any[]; offset?: number;
 
 // The cut-out subject: matte clips (alpha WebM) over the base, placed exactly
 // like it and moved by the merged subject camera (kit/core/subject-layer.mjs).
-export const SubjectLayer: React.FC<{ base: any; clips: any[]; ops: any[]; offset?: number }> = ({ base, clips, ops, offset = 0 }) => {
+export const SubjectLayer: React.FC<{ base: any; clips: any[]; ops: any[]; offset?: number; styles?: any[] }> = ({ base, clips, ops, offset = 0, styles = [] }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const t = offset + frame / fps;
   const style: React.CSSProperties = { position: "absolute", left: 0, top: 0, width, height, objectFit: base.fit, objectPosition: `${base.focus.x * 100}% ${base.focus.y * 100}%` };
   const shift = Math.round(offset * fps);
   return (
-    <AbsoluteFill style={{ transformOrigin: "50% 50%", ...(ops.length ? subjectStyle(subjectCameraAt(ops, t)) : {}) }}>
+    <AbsoluteFill style={{ transformOrigin: "50% 50%", ...subjectLayerStyle(ops, styles, t) }}>
       {clips.map((clip: any) => {
         const from = Math.round(clip.start * fps), to = Math.round(clip.end * fps);
         return (
@@ -256,22 +256,30 @@ export const SubjectLayer: React.FC<{ base: any; clips: any[]; ops: any[]; offse
   );
 };
 
-function subjectStyle(props: any): React.CSSProperties {
-  return { ...(propsToStyle(props) as React.CSSProperties), ...(props.filter !== undefined ? { filter: props.filter } : {}) };
+// The cut-out's camera transform, and its filter: a blurred camera sample
+// already carries the style's filter; otherwise the style alone.
+function subjectLayerStyle(ops: any[], styles: any[], t: number): React.CSSProperties {
+  const props = ops.length ? subjectCameraAt(ops, t) : null;
+  const style: React.CSSProperties = props ? { ...(propsToStyle(props) as React.CSSProperties) } : {};
+  const filter = props?.filter ?? (styles.length ? subjectFilterAt(styles, t) : undefined);
+  if (filter !== undefined && filter !== "none") style.filter = filter;
+  else if (props?.filter === "none") style.filter = "none";
+  return style;
 }
 
 /** Subject layer inputs for resolved layers: {needed, depth(layer), clips, ops, rooms}. */
 function subjectPlan(story: any, base: any, layers: any[]) {
   const needed = Boolean(base) && layers.some((layer: any) => needsSubject(layer.entry.scene, layer.model));
-  if (!needed) return { needed, depth: () => "front", clips: [], ops: [], rooms: [] };
+  if (!needed) return { needed, depth: () => "front", clips: [], ops: [], rooms: [], styles: [] };
   const models = layers.map((layer: any) => layer.model);
   const clips = subjectSegments(story, subjectWindows(layers.map((layer: any) => ({ scene: layer.entry.scene, model: layer.model, start: layer.entry.start, end: layer.entry.renderEnd }))));
   return {
     needed,
     depth: (layer: any) => sceneLayerOf(layer.entry.scene, layer.model).layer as string,
     clips,
-    ops: clips.length ? subjectCameraOps(models) : [],
-    rooms: models.filter((model: any) => model?.room)
+    ops: clips.length ? subjectCameraOps(models, { subjectFilterAt: (t: number) => subjectFilterAt(models, t) }) : [],
+    rooms: models.filter((model: any) => model?.room),
+    styles: models.filter((model: any) => model?.subjectStyle)
   };
 }
 
@@ -354,7 +362,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
     <AbsoluteFill style={{ backgroundColor: background, fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
       {base ? <BaseLayer base={base} cameraOps={cameraOps} rooms={subject.rooms} /> : null}
       {subject.needed ? layers.filter((layer: any) => subject.depth(layer) !== "front").map((layer: any) => sceneElement(layer, subject.depth(layer) === "split" ? "behind" : undefined)) : null}
-      {subject.clips.length ? <SubjectLayer base={base} clips={subject.clips} ops={subject.ops} /> : null}
+      {subject.clips.length ? <SubjectLayer base={base} clips={subject.clips} ops={subject.ops} styles={subject.styles} /> : null}
       {layers.filter((layer: any) => subject.depth(layer) !== "behind").map((layer: any) => sceneElement(layer, subject.depth(layer) === "split" ? "front" : undefined))}
       {loop ? (
         <Sequence key="loop" name={`loop → ${loop.sceneId}`} from={frames(loop.start)} durationInFrames={Math.max(1, frames(loop.end) - frames(loop.start))} premountFor={fps}>
@@ -412,7 +420,7 @@ export const ModuleReview: React.FC<ModuleReviewProps> = ({ scene, story, custom
     <AbsoluteFill style={{ backgroundColor: story.brand?.colors?.bg ?? "#000000" }}>
       {base ? <BaseLayer base={base} cameraOps={cameraOps} offset={offset} muted rooms={subject.rooms} /> : null}
       {depth !== "front" ? element.render(depth === "split" ? "behind" : undefined) : null}
-      {subject.clips.length ? <SubjectLayer base={base} clips={subject.clips} ops={subject.ops} offset={offset} /> : null}
+      {subject.clips.length ? <SubjectLayer base={base} clips={subject.clips} ops={subject.ops} offset={offset} styles={subject.styles} /> : null}
       {depth === "behind" ? null : scene.insert && base ? <AbsoluteFill style={{ backgroundColor: story.brand?.colors?.bg ?? "#000000" }}>{element.render()}</AbsoluteFill> : element.render(depth === "split" ? "front" : undefined)}
     </AbsoluteFill>
   );

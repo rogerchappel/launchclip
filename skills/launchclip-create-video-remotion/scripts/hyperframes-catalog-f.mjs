@@ -12,4 +12,6 @@ export function emitCatalogF(model) {
 export const EMITTERS = {
   'glass-word': emitCatalogF,
   'orbit-cards': emitCatalogF,
+  'proof-wall': emitCatalogF,
+  'scrapbook': emitCatalogF,
 };

@@ -143,3 +143,20 @@ test('subjectContext reports the presenter at a time, from the covering matte', 
   assert.equal(later.placement, 'default');
   assert.equal(subjectContext(story({src: 'assets/recording.mp4', subject: 'off'}), 1), null);
 });
+
+test('subjectStyle: a sticker outline and shadow on the cut-out for the scene window', async () => {
+  const {subjectFilterAt, subjectFilterChanges, subjectCameraOps, subjectCameraAt, needsSubject: needs} = await import('../kit/core/subject-layer.mjs');
+  const sticker = {start: 1, end: 3, subjectStyle: {outline: 10, color: '#ffffff', shadow: true}};
+  assert.equal(subjectFilterAt([sticker], 0.5), 'none');
+  const filter = subjectFilterAt([sticker], 2);
+  assert.equal((filter.match(/drop-shadow\([^)]*#ffffff\)/g) ?? []).length, 8, 'eight offsets make the outline');
+  assert.match(filter, /rgba\(0, 0, 0, 0\.45\)\)$/);
+  assert.deepEqual(subjectFilterChanges([sticker]).map((change) => [change.time, change.filter === 'none']), [[1, false], [3, true]]);
+  assert.equal(needs({}, sticker), true);
+  // A blurred camera sample carries the style with it.
+  const punch = {start: 1, end: 2, camera: {samples: [{t: 1.5, scale: 1.1, x: 0, y: 0, blur: 4}]}};
+  const ops = subjectCameraOps([punch, sticker], {subjectFilterAt: (t) => subjectFilterAt([sticker], t)});
+  assert.match(subjectCameraAt(ops, 1.6).filter, /^drop-shadow.* blur\(4px\)$/);
+  assert.match(subjectModelErrors({subjectStyle: {outline: 40}}).join(), /outline must be between 0 and 24/);
+  assert.match(subjectModelErrors({subjectStyle: {color: 'white'}}).join(), /#rrggbb/);
+});
