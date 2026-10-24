@@ -185,6 +185,8 @@ function resolveFeedFrame(params, ctx) {
   b.events.push({id: `${b.id}-chrome`, name: 'chrome', time: chromeAt, endTime: rt(chromeAt + 0.4), role: 'detail', cue: 'pop-soft'});
   b.events.push({id: `${b.id}-release`, name: 'release', time: releaseAt, endTime: end, role: 'release'});
   b.model.camera = {target: 'base', scale, punchAt: springAt, releaseAt, samples, frame: true};
+  // The window frames the face on purpose; the face rule skips it.
+  b.model.framesFace = true;
   b.model.layer = 'split';
   b.model.parts = {behind: ['hole'], front: ['chrome']};
   const content = {handle: handle ? (handle.startsWith('@') ? handle : `@${handle}`) : null, caption, counts, follow, scale, release, springAt, settleAt, chromeAt, releaseAt, crop, window: win,
@@ -283,6 +285,7 @@ function resolvePullBack(params, ctx) {
   steps.forEach((_, i) => b.events.push({id: `${b.id}-step-${i}`, name: `step-${i}`, time: stepTimes[i], endTime: rt(stepTimes[i] + 0.3), role: 'beat', cue: 'tick'}));
   b.events.push({id: `${b.id}-done`, name: 'done', time: doneAt, endTime: rt(doneAt + 0.3), role: 'payoff', cue: 'success'});
   b.model.camera = {target: 'base', scale, punchAt: springAt, releaseAt, samples, frame: true};
+  b.model.framesFace = true;
   const crop = {x: 0, y: 0, width: canvas.width, height: canvas.height};
   const content = {title, steps, label, scale, release, springAt, settleAt, doneAt, releaseAt, stepTimes, crop, window: target, panel: {...panel, height: panelH}, bar,
     backdrop: colors.bg, frameColor: theme.border, radius: r2(u(22) / scale), stepSize, rowH, progressH, pctSize, panelInk, muted, ok, samples};
@@ -306,6 +309,11 @@ function pullBackView(model) {
     el('div', `${id}-check-${i}`, {width: c.stepSize, height: c.stepSize, borderRadius: '50%', boxSizing: 'border-box', border: `${3 * u}px solid ${c.muted}`, background: 'transparent', flex: 'none'}),
     el('div', null, {whiteSpace: 'nowrap', fontFamily: fonts.body, fontWeight: 600, fontSize: c.stepSize, color: c.panelInk}, [step])
   ]));
+  // A filled check pops over each circle as its step completes.
+  const ticks = c.steps.map((_, i) => el('div', `${id}-tick-${i}`, abs(P.x, P.y + i * c.rowH + (c.rowH - c.stepSize) / 2, c.stepSize, c.stepSize, {borderRadius: '50%', background: c.ok, opacity: 0,
+    transformOrigin: '50% 50%', transform: transformString({scaleX: 0.5, scaleY: 0.5})}), [
+    el('svg', null, {position: 'absolute', left: 0, top: 0, overflow: 'visible'}, [el('path', null, null, [], {d: 'M6.5 12.5l3.5 3.5 7.5-8', stroke: c.backdrop, strokeWidth: 2.6, strokeLinecap: 'round', strokeLinejoin: 'round', fill: 'none'})], {width: c.stepSize, height: c.stepSize, viewBox: '0 0 24 24'})
+  ]));
   const barY = P.y + c.steps.length * c.rowH + 24 * u;
   const meter = [
     el('div', `${id}-track`, abs(P.x, barY, P.width, c.progressH, {borderRadius: c.progressH, background: mixColor(c.panelInk, c.backdrop, 0.16)})),
@@ -313,7 +321,7 @@ function pullBackView(model) {
     el('div', `${id}-label`, abs(P.x, barY + c.progressH + 16 * u, undefined, undefined, {whiteSpace: 'nowrap', fontFamily: fonts.meta, fontSize: Math.max(c.stepSize * 0.7, 26 * u), color: c.muted, letterSpacing: '0.08em'}), [c.label.toUpperCase()]),
     el('div', `${id}-pct`, abs(P.x + P.width - c.pctSize * 3, barY + c.progressH + 6 * u, c.pctSize * 3, undefined, {textAlign: 'right', whiteSpace: 'nowrap', fontFamily: fonts.display, fontSize: c.pctSize, lineHeight: '1.1', color: c.panelInk}), ['0%'])
   ];
-  const front = el('div', `${id}-front`, abs(0, 0, canvas.width, canvas.height, {overflow: 'hidden'}), [...kids, el('div', `${id}-chrome`, abs(0, 0, canvas.width, canvas.height, {opacity: 0}), [...chrome, ...rows, ...meter])]);
+  const front = el('div', `${id}-front`, abs(0, 0, canvas.width, canvas.height, {overflow: 'hidden'}), [...kids, el('div', `${id}-chrome`, abs(0, 0, canvas.width, canvas.height, {opacity: 0}), [...chrome, ...rows, ...ticks, ...meter])]);
   return {front};
 }
 
@@ -327,6 +335,9 @@ function pullBackTimeline(model, ops) {
   c.stepTimes.forEach((time, i) => {
     set(ops, `${id}-row-${i}`, start, {opacity: 0.45});
     tw(ops, `${id}-row-${i}`, time, 0.25, 'power2.out', {opacity: 0.45}, {opacity: 1});
+    set(ops, `${id}-tick-${i}`, start, {opacity: 0, scaleX: 0.5, scaleY: 0.5});
+    tw(ops, `${id}-tick-${i}`, time, 0.12, 'none', {opacity: 0}, {opacity: 1});
+    tw(ops, `${id}-tick-${i}`, time, 0.35, 'back.out(2)', {scaleX: 0.5, scaleY: 0.5}, {scaleX: 1, scaleY: 1});
   });
   set(ops, `${id}-fill`, start, {scaleX: 0});
   tw(ops, `${id}-fill`, c.settleAt, rt(c.doneAt - c.settleAt), 'power1.inOut', {scaleX: 0}, {scaleX: 1});
@@ -431,11 +442,14 @@ function resolveAppStage(params, ctx) {
   const head = headRect(ctx, canvas, portrait);
   const bar = r2(u(52));
   // The window spans the safe width from the top of the safe zone to 70% of
-  // the way down the head, so the head covers its lower edge.
+  // the way down the head (or, with little headroom, 45% of the safe zone:
+  // it sits behind the presenter, so their head and shoulders cover its
+  // lower part either way).
   const top = safe.y;
-  const bottom = r2(head.y + head.height * 0.7);
+  const bottom = r2(Math.min(safe.y + safe.height, Math.max(head.y + head.height * 0.7, safe.y + safe.height * 0.45)));
   const height = r2(bottom - top);
-  if (height < u(420) - 1e-6) check.fail('params', `needs headroom: the presenter's head at ${Math.round(head.y)} px leaves ${Math.max(0, Math.round(height))} px for the app window, and it needs ${Math.round(u(420))} px. Use it on a medium or wide shot, or use phone-stage`);
+  const reach = head.y + head.height * 0.7 - top;
+  if (reach < u(320) - 1e-6) check.fail('params', `needs headroom: the presenter's head at ${Math.round(head.y)} px leaves ${Math.max(0, Math.round(reach))} px of app window above it, and it needs ${Math.round(u(320))} px. Use it on a medium or wide shot, or use phone-stage`);
   const win = {x: safe.x, y: top, width: safe.width, height};
   const screen = {x: win.x, y: r2(win.y + bar), width: win.width, height: r2(win.height - bar)};
   const settleAt = rt(t0 + 0.6);

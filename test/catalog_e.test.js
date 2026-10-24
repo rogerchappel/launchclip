@@ -107,7 +107,10 @@ test('app-stage: the UI fills the top and the head covers its bottom edge', () =
   const win = model.content.window;
   assert.equal(win.y, model.safe.y);
   assert.ok(Math.abs(win.y + win.height - (560 + 300 * 0.7)) < 1);
-  assert.throws(() => resolve('app-stage', PARAMS['app-stage'], {subject: {...subject, head: {x: 420, y: 320, width: 240, height: 300}}}), /needs headroom/);
+  // Little headroom: the window keeps a minimum depth behind the presenter.
+  const tight = resolve('app-stage', PARAMS['app-stage'], {subject: {...subject, head: {x: 420, y: 420, width: 240, height: 300}}});
+  assert.ok(tight.content.window.height >= tight.safe.height * 0.45 - 1);
+  assert.throws(() => resolve('app-stage', PARAMS['app-stage'], {subject: {...subject, head: {x: 420, y: 200, width: 240, height: 120}}}), /needs headroom/);
 });
 
 test('phone-stage: beside the head, the media moves with the phone, the room pans away', () => {
