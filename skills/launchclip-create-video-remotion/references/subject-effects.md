@@ -47,6 +47,7 @@ Both renderers stack the base recording, behind scenes, the cut-out presenter, f
 | orbit-cards | split | yes | 9:16, 16:9 | bold, playful | lists many things or shows social proof ("all these tools", "people keep telling me"), with real items in the assets or brief: cards circle them |
 | proof-wall | split | yes | 9:16, 16:9 | bold, editorial, launch | "everyone is talking about it", press, reviews or a launch buzz, with real quotes and sources in the brief: proof pins to the wall behind them |
 | scrapbook | split | yes | 9:16, 16:9 | playful | calls out a number or claim in a playful, handmade beat ("100%", "3X", "$0", "free") |
+| doodle-outline | front | yes | 9:16, 16:9 | playful | a warm, personal creator line about the presenter or what they made ("I built this", "my favourite part", "love this") |
 
 ### masthead (keeps captions, behind the presenter, needs the subject)
 Footage-led, behind the presenter: one huge word (a product name or the one idea) rises in letter by letter at the top of the frame, and the presenter's head covers its lower part like a magazine cover. Needs headroom: medium or wide shots.
@@ -164,6 +165,14 @@ params:
 - sub: a short line under it ≤ 20 (optional)
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: slap, letter-<i>
+
+### doodle-outline (keeps captions, needs the subject)
+Footage-led, playful: a hand-drawn marker line traces round the presenter just outside their silhouette and boils on threes, with up to four doodles (heart, star, crown, spark, arrow, bulb) drawing themselves beside their head. For a warm, creator-style beat on a personal line ("I built this", "my favourite part"). Without a traced outline only the doodles draw.
+params:
+- doodles: [{icon: heart | star | crown | spark | arrow | bulb, side?: left | right | top, at?}] 0–4 (default a spark and a heart)
+- color: white (default) | primary | accent
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: trace, doodle-<i>
 
 ### punch-in (keeps captions)
 Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay). Steps punch in, further in or back out on successive words; blur adds a few frames of zoom blur on each move.

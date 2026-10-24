@@ -99,7 +99,8 @@ in different entries:
     matte.webm      the source range with alpha (person opaque, room clear), VP9,
                     short edge capped at 1920 px
     subject.json    per-frame boxes and a range summary
-    contours.json   optional, later (doodle-outline): the outline as polygons
+    contours.json   per-frame outline for doodle-outline: rays from the
+                    silhouette's centre, null where they reach the frame edge
 ```
 
 `probe.json` (`launchclip.subject-probe.v1`), from about one frame per second:
