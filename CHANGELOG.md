@@ -88,6 +88,10 @@ The detailed list follows.
   `doodle-outline` (a boiling marker line traced round you, with doodles
   drawing on beside your head). `launchclip subject matte` now traces your
   outline per frame (`contours.json`) for it.
+- The starter styles choose among the presenter effects: `bold-creator`
+  reaches for the playful set, `minimal-tech` and `editorial-dark` prefer
+  `masthead`, `phone-stage` and `backdrop-swap` and avoid the playful set,
+  and `warm-documentary` keeps to punch-ins and `growth-line`.
 - Checklists in footage place themselves beside you (above your head, or on
   your chest when there's no headroom), at a size that stays readable.
 - `growth-line`: a line chart draws behind your head and kicks up into a
