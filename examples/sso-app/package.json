@@ -1,0 +1,11 @@
+{
+  "name": "orderdesk-sso-example",
+  "private": true,
+  "version": "0.0.0",
+  "description": "A fictional SaaS front end with SSO sign-in and no seed data, for LaunchClip demo doctor tests and examples.",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js --port 4320",
+    "test:e2e": "playwright test"
+  }
+}

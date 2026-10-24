@@ -513,7 +513,8 @@ function resolveAt(options, input, suppliedRect, density, source) {
   // windows and content defaults keep the editorial durations, so a grammar
   // never makes a valid spec invalid.
   const grammar = options.grammar ?? null;
-  const shellEnter = movement ? enterDuration : grammarDuration(grammar, 'enter', enterDuration, {min: .2, max: .36});
+  // A grammar may let the shell arrive more slowly than the spec range (cinematic: up to 0.8 s).
+  const shellEnter = movement ? enterDuration : grammarDuration(grammar, 'enter', enterDuration, {min: .2, max: grammar?.panelEnter ?? .36});
   const shellExit = movement ? exitDuration : grammarDuration(grammar, 'exit', exitDuration, {min: .16, max: .28});
   const rect = suppliedRect ?? LEGACY_RECT[input.aspect];
   object(rect, 'rect', ['x', 'y', 'width', 'height']);

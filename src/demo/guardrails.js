@@ -8,8 +8,11 @@
 // - Typing: a password field only takes a value from a test account (seed
 //   file or LAUNCHCLIP_DEMO_* env), referenced as {account: "password"}; the
 //   plan never carries a literal password.
-// - Logs: secret-looking strings are redacted, and typed account values are
-//   masked.
+// - Sessions: a plan's ready signed-in session (app.session, for SSO apps)
+//   holds test values only: no live API keys, no signed JWTs, no long random
+//   tokens that don't say they are test data.
+// - Logs: secret-looking strings are redacted, and typed account values and
+//   session values are masked.
 
 const STAGING_LABEL = /^(staging|stage|stg|dev|develop|development|test|testing|qa|uat|sandbox|preview|demo|local)$/;
 const LOCAL_SUFFIX = /\.(localhost|test|local|internal|lan)$/;
@@ -44,12 +47,15 @@ export function assertSafeUrl(url, { allowHosts = [] } = {}) {
   return kind;
 }
 
+const API_KEYS = [
+  /\b(sk-[A-Za-z0-9_-]{12,})\b/g,
+  /\b(sk_(?:live|test)_[A-Za-z0-9]{8,})\b/g,
+  /\b(gh[pousr]_[A-Za-z0-9_]{12,})\b/g,
+  /\b(xox[abpr]-[A-Za-z0-9-]{10,})\b/g,
+  /\b(AKIA[0-9A-Z]{16})\b/g
+];
 const SECRET_PATTERNS = [
-  [/\b(sk-[A-Za-z0-9_-]{12,})\b/g, "[REDACTED_SECRET]"],
-  [/\b(sk_(?:live|test)_[A-Za-z0-9]{8,})\b/g, "[REDACTED_SECRET]"],
-  [/\b(gh[pousr]_[A-Za-z0-9_]{12,})\b/g, "[REDACTED_SECRET]"],
-  [/\b(xox[abpr]-[A-Za-z0-9-]{10,})\b/g, "[REDACTED_SECRET]"],
-  [/\b(AKIA[0-9A-Z]{16})\b/g, "[REDACTED_SECRET]"],
+  ...API_KEYS.map((pattern) => [pattern, "[REDACTED_SECRET]"]),
   [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, "[REDACTED_JWT]"],
   [/\b(Bearer\s+)[A-Za-z0-9._~+/=-]{12,}/gi, "$1[REDACTED_SECRET]"],
   [/\b((?:api[_-]?key|token|secret|password|passwd|pwd|auth)\s*["']?\s*[:=]\s*["']?)([^\s'"`,}]+)/gi, "$1[REDACTED_SECRET]"],
@@ -70,6 +76,39 @@ export function redactWith(text, masks = []) {
   return out;
 }
 
+const TEST_MARKER = /test|demo|fake|mock|example|fixture|dummy|sample|placeholder|not-?real/i;
+
+function base64Json(segment) {
+  try { return JSON.parse(Buffer.from(segment, "base64url").toString("utf8")); } catch { return null; }
+}
+
+function entropy(text) {
+  const counts = new Map();
+  for (const char of text) counts.set(char, (counts.get(char) ?? 0) + 1);
+  return [...counts.values()].reduce((sum, n) => sum - (n / text.length) * Math.log2(n / text.length), 0);
+}
+
+/**
+ * Check one value of a plan's signed-in session (a localStorage value or a
+ * cookie). It must be a test value: not an API key, not a signed JWT (an
+ * unsigned one, alg "none" or a fake signature, is fine), and not a long
+ * random token unless the value says it is test data (test, demo, fake…).
+ * → null when fine, else the reason.
+ */
+export function sessionValueProblem(value) {
+  const text = String(value ?? "");
+  for (const pattern of API_KEYS) if (new RegExp(pattern.source, pattern.flags).test(text)) return "looks like a real API key";
+  if (/\bBearer\s+[A-Za-z0-9._~+/=-]{12,}/i.test(text) && !TEST_MARKER.test(text)) return "looks like a real bearer token";
+  for (const [, header, signature] of text.matchAll(/\b([A-Za-z0-9_-]{8,})\.[A-Za-z0-9_-]{8,}\.([A-Za-z0-9_-]+)/g)) {
+    const alg = base64Json(header)?.alg;
+    if (alg && alg !== "none" && signature.length >= 16) return `is a signed JWT (alg ${alg}); use an unsigned test token (alg "none", or a fake signature such as "signature")`;
+  }
+  if (!TEST_MARKER.test(text)) {
+    for (const [run] of text.matchAll(/[A-Za-z0-9+/=_-]{40,}/g)) if (entropy(run) > 4) return "looks like a real session token (a long random string); use an obviously fake value, or one that says test, demo or fake";
+  }
+  return null;
+}
+
 /**
  * Check one `type` step: a literal value must not look like a secret, and a
  * password field (selector or label mentions password, or the step sets
@@ -88,4 +127,40 @@ export function typeStepProblem(step) {
   if (passwordField) return "never type a literal into a password field; use {account: \"password\"} (from the seed data or LAUNCHCLIP_DEMO_PASSWORD)";
   if (redactSecrets(step.value) !== step.value) return "the typed value looks like a secret";
   return null;
+}
+
+// Headers a captured HAR carries that are always real credentials.
+const CREDENTIAL_HEADERS = new Set(["authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key", "x-auth-token", "x-csrf-token", "x-xsrf-token"]);
+const EMAIL = /[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)/g;
+const TEST_DOMAIN = /(^|\.)(example\.(com|org|net)|test|example|invalid|localhost)$/i;
+
+/**
+ * Problems that keep a HAR from being committed as demo data: credential
+ * headers and cookies, token- or key-like values in URLs and bodies, and
+ * email addresses outside example and .test domains (a capture from staging
+ * holds real people). → [{entry, url, problem}]
+ */
+export function harProblems(har) {
+  const out = [];
+  (har?.log?.entries ?? []).forEach((entry, index) => {
+    const url = String(entry?.request?.url ?? "?").slice(0, 120);
+    const add = (problem) => out.push({ entry: index, url, problem });
+    for (const [side, message] of [["request", entry?.request], ["response", entry?.response]]) {
+      for (const header of message?.headers ?? []) if (CREDENTIAL_HEADERS.has(String(header.name).toLowerCase())) add(`${side} header ${header.name}; remove it`);
+      if ((message?.cookies ?? []).length) add(`${side} cookies (${message.cookies.map((cookie) => cookie.name).join(", ")}); remove them`);
+    }
+    const texts = [
+      ["URL", entry?.request?.url],
+      ["request body", entry?.request?.postData?.text],
+      ["response body", entry?.response?.content?.encoding === "base64" ? null : entry?.response?.content?.text]
+    ];
+    for (const [where, raw] of texts) {
+      if (typeof raw !== "string" || !raw) continue;
+      const text = raw.slice(0, 200_000);
+      if (redactSecrets(text) !== text || sessionValueProblem(text)) add(`${where} holds a token, key or password; replace it with a fake value`);
+      const real = [...new Set([...text.matchAll(EMAIL)].filter((match) => !TEST_DOMAIN.test(match[1])).map((match) => match[0]))];
+      if (real.length) add(`${where} holds email addresses (${real.slice(0, 3).join(", ")}${real.length > 3 ? "…" : ""}); replace them with @example.com ones`);
+    }
+  });
+  return out;
 }

@@ -18,7 +18,7 @@ export const STYLE_SCHEMA = 'launchclip.style.v2';
 export const STYLE_V1_SCHEMA = 'launchclip.style-pack.v1';
 export const STYLE_SFX_DENSITIES = Object.freeze(['low', 'normal', 'high']);
 export const STYLE_AMBIENT_LEVELS = Object.freeze(['off', 'subtle', 'standard', 'lively']);
-export const STYLE_GRAMMARS = Object.freeze(['editorial', 'snappy', 'smooth', 'playful', 'documentary']);
+export const STYLE_GRAMMARS = Object.freeze(['editorial', 'snappy', 'smooth', 'playful', 'documentary', 'cinematic']);
 export const STYLE_COLOR_ROLES = Object.freeze(['bg', 'paper', 'ink', 'primary', 'accent']);
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
@@ -490,7 +490,7 @@ export function upgradeV1Pack({ name, specification = '', audio = '', captionSki
   if (meta) fonts.meta = slugOf(meta);
   notes.push(Object.keys(fonts).length ? `fonts: ${Object.entries(fonts).map(([role, slug]) => `${role} → ${slug}`).join(', ')} (nearest bundled families)` : 'fonts: none recognised; role defaults apply');
   const motionWords = text.toLowerCase();
-  const grammar = /snappy|punchy|fast cuts|energetic/.test(motionWords) ? 'snappy' : /smooth|calm|gentle|slow/.test(motionWords) ? 'smooth' : /playful|bouncy|fun/.test(motionWords) ? 'playful' : /documentary|archival|cinematic/.test(motionWords) ? 'documentary' : 'editorial';
+  const grammar = /snappy|punchy|fast cuts|energetic/.test(motionWords) ? 'snappy' : /smooth|calm|gentle|slow/.test(motionWords) ? 'smooth' : /playful|bouncy|fun/.test(motionWords) ? 'playful' : /cinematic|filmic|ken burns/.test(motionWords) ? 'cinematic' : /documentary|archival/.test(motionWords) ? 'documentary' : 'editorial';
   const pack = {
     schema: STYLE_SCHEMA,
     name,
@@ -515,7 +515,7 @@ export function stylePromptLines(pack) {
   if (pack.modules?.avoid?.length) lines.push(`Avoid these modules: ${pack.modules.avoid.join(', ')}.`);
   if (pack.captions?.preset) lines.push(`Captions use the ${pack.captions.preset} preset: write {"type": "captions"} without a style or preset.`);
   const grammar = typeof pack.motion?.grammar === 'string' ? pack.motion.grammar : pack.motion?.grammar?.base;
-  if (grammar) lines.push(`Motion grammar: ${grammar}${grammar === 'snappy' ? ' (short scenes, fast push/whip transitions)' : grammar === 'smooth' || grammar === 'documentary' ? ' (longer holds, fades and slow pushes)' : ''}.`);
+  if (grammar) lines.push(`Motion grammar: ${grammar}${grammar === 'snappy' ? ' (short scenes, fast push/whip transitions)' : grammar === 'smooth' || grammar === 'documentary' || grammar === 'cinematic' ? ' (longer holds, fades and slow pushes)' : ''}.`);
   if (pack.ambient?.level) lines.push(`Ambient motion level: ${pack.ambient.level}.`);
   if (pack.sound?.sfx_density) lines.push(`SFX density: ${pack.sound.sfx_density}${pack.sound.sfx_density === 'low' ? ' (cue only the biggest hits)' : pack.sound.sfx_density === 'high' ? ' (cue most hits)' : ''}.`);
   if (pack.layout?.title_case) lines.push('Write headlines and titles in Title Case.');

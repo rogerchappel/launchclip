@@ -61,6 +61,7 @@ Save it as `.launchclip/styles/<name>/style.json` in your project (or `~/.launch
   - `smooth`: long, gentle glides.
   - `playful`: springy and bouncy.
   - `documentary`: slow and restrained.
+  - `cinematic`: film-like. Every entrance and camera move eases slow → fast → slow into place, and resting scenes keep a slow push-in, so no frame is ever fully still.
 - **Camera (`camera.mode`):**
   - `cuts`: classic scene changes.
   - `world`: scenes laid out on one canvas, and the camera pans, pushes, orbits and whip-pans between them, with depth and motion blur.

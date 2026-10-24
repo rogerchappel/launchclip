@@ -134,7 +134,8 @@ test('Remotion kit: BaseLayer per segment with trimBefore, camera from the share
   assert.match(source, /<OffthreadVideo src=\{staticFile\(base\.src\)\} trimBefore=\{Math\.round\(segment\.sourceStart \* fps\)\}/);
   assert.match(source, /cameraStyle\(cameraOps, t\)/);
   assert.match(source, /const audio = base \? story\.audio\?\.mix \?\? null/);
-  assert.match(source, /offset=\{Number\(scene\.start\)\} muted/);
+  assert.match(source, /const offset = Number\(scene\.start\);/);
+  assert.match(source, /<BaseLayer base=\{base\} cameraOps=\{cameraOps\} offset=\{offset\} muted/);
 });
 
 test('the footage example validates, resolves its edl and layout-checks clean', async () => {

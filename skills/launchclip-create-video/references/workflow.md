@@ -278,6 +278,17 @@ When the user points at a SaaS codebase and the video should show the product
 in use, record the flows with demo autopilot before writing the storyboard.
 Skip this step when they supplied their own screen recordings.
 
+When the app signs in through SSO, has no seed data, or loads its data from an
+external API, the plain flow below won't record it. Follow
+[references/demo-setup.md](demo-setup.md) instead. In short:
+
+1. Run `launchclip demo doctor <repo> --json` to get the recommended rung.
+2. Write the `demo/` recipe, reusing the repo's e2e mocks and sign-in.
+3. Show the person the commands and the recipe.
+4. Run `launchclip demo doctor <repo> --plan demo/DEMO-PLAN.json --approve
+   --json` until it's clean.
+5. Record, then review the contact sheets.
+
 1. **See how it runs.** `launchclip demo record <repo> --plan-only --out
    <project>/assets/demo` reads the repo (package scripts, README,
    docker-compose, Procfile, `.env.example`) and the code's routes and nav
@@ -292,6 +303,9 @@ Skip this step when they supplied their own screen recordings.
    `{"account": "email"}` / `{"account": "password"}`: the recorder fills them
    from the repo's seed data or `LAUNCHCLIP_DEMO_EMAIL` /
    `LAUNCHCLIP_DEMO_PASSWORD`. Never write a password, key or token in the plan.
+   Check the plan before recording: `launchclip demo doctor <repo> --plan
+   <project>/assets/demo/DEMO-PLAN.json --approve --json` runs every step and
+   reports each problem with a fix.
 3. **Ask before running anything.** Show the user the plan and the commands
    autopilot will run: the seed script (`npm run seed`, `prisma db seed`…)
    and the start command, plus the URL it will record. Run
@@ -421,7 +435,10 @@ for a quieter treatment:
   product editorial), `snappy` (punchy, energetic launches: expo-out, short,
   slight overshoot), `smooth` (calm, premium, elegant: sine/power2, long, no
   overshoot), `playful` (fun, friendly, for kids: back/elastic, springy, bigger
-  staggers) or `documentary` (serious, archival, news: slow power1). One
+  staggers), `documentary` (serious, archival, news: slow power1) or
+  `cinematic` (film-like: every entrance and move eases slow → fast → slow
+  into its resting state, and settled scenes keep a slow push-in, recorded
+  product clips included, so no frame is ever fully still). One
   grammar keeps every entrance, exit, pop, stagger, transition and camera move
   in the same voice; override single roles with `{base, ease, duration,
   stagger}` only when the brief asks for it.

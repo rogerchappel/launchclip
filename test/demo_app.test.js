@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { composePorts, detectApp, findTestAccounts, parseEnvFile, readmeHints, scriptPort, startApp } from "../src/demo/app.js";
-import { assertSafeUrl, classifyHost, redactSecrets, redactWith, typeStepProblem } from "../src/demo/guardrails.js";
+import { assertSafeUrl, classifyHost, redactSecrets, redactWith, sessionValueProblem, typeStepProblem, harProblems } from "../src/demo/guardrails.js";
 
 async function repo(files) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-demo-app-"));
@@ -110,6 +110,18 @@ async function freePort() {
   });
 }
 
+test("guardrails: session values must be test values", () => {
+  const b64 = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  for (const fine of ["Demo Buyer", "team-1", JSON.stringify({ id: "demo-user", email: "demo@example.com" }), "7d9f2c1e-3b4a-4c5d-8e6f-0a1b2c3d4e5f",
+    `demo.${b64({ exp: 1893456000 })}.signature`, `${b64({ alg: "none" })}.${b64({ sub: "demo-user" })}.`, `${b64({ alg: "HS256" })}.${b64({ sub: "demo-user" })}.signature`,
+    "demo-session-8f3a9c0d1e2b4a5f6c7d8e9f0a1b2c3dZx9Ky8Lw7Mv6Nu5Ot4"]) assert.equal(sessionValueProblem(fine), null, fine);
+  assert.match(sessionValueProblem("sk_live_abcdef1234567890"), /real API key/);
+  assert.match(sessionValueProblem(JSON.stringify({ key: "ghp_abcdefghijklmnop1234" })), /real API key/);
+  assert.match(sessionValueProblem(`${b64({ alg: "RS256", typ: "JWT" })}.${b64({ sub: "user_01H" })}.${"Q2xhdWRlIGlzIG5vdCBhIHJlYWwgc2lnbmF0dXJl".repeat(2)}`), /signed JWT \(alg RS256\)/);
+  assert.match(sessionValueProblem("Fe26.2**Zx9Ky8Lw7Mv6Nu5Ot4Ps3Qr2aB1cD0eF9gH8iJ7kL6mN5oP4qR3sT2uV1wX0yZ**9"), /real session token/);
+  assert.match(sessionValueProblem("Bearer abcdefghijklmnopqrstuvwx"), /bearer token/);
+});
+
 test("startApp runs the command, waits for health and stops the process group", async () => {
   const port = await freePort();
   const script = `require('http').createServer((q,s)=>s.end('ok')).listen(${port},'127.0.0.1',()=>console.log('ready token=abcdef123'))`;
@@ -124,4 +136,24 @@ test("startApp refuses a production URL and reports an app that never gets healt
   await assert.rejects(startApp({ command: "true", cwd: os.tmpdir(), url: "https://app.acme.com" }), /production host/);
   const port = await freePort();
   await assert.rejects(startApp({ command: "echo starting; exit 3", cwd: os.tmpdir(), url: `http://127.0.0.1:${port}`, timeout: 5000 }), /exited before it became healthy[\s\S]*starting/);
+});
+
+test("harProblems refuses a HAR that still holds credentials or real people's addresses", () => {
+  const entry = (request, response = {}) => ({ request: { url: "http://localhost:3000/api/me", headers: [], cookies: [], ...request }, response: { headers: [], cookies: [], content: { text: "{}" }, ...response } });
+  const clean = { log: { entries: [entry({}, { content: { text: JSON.stringify({ name: "Avery Demo", email: "avery@example.com", team: "demo@pulseboard.test" }) } })] } };
+  assert.deepEqual(harProblems(clean), []);
+  const dirty = { log: { entries: [
+    entry({ headers: [{ name: "Authorization", value: "Bearer 1234567890abcdef" }] }),
+    entry({ url: "http://localhost:3000/api/me?api_key=live1234" }, { headers: [{ name: "set-cookie", value: "sid=x" }] }),
+    entry({}, { content: { text: JSON.stringify({ email: "jane.smith@acme.co" }) } }),
+    entry({ cookies: [{ name: "sid", value: "x" }] })
+  ] } };
+  const problems = harProblems(dirty).map((problem) => `${problem.entry}: ${problem.problem}`);
+  assert.deepEqual(problems, [
+    "0: request header Authorization; remove it",
+    "1: response header set-cookie; remove it",
+    "1: URL holds a token, key or password; replace it with a fake value",
+    "2: response body holds email addresses (jane.smith@acme.co); replace them with @example.com ones",
+    "3: request cookies (sid); remove them"
+  ]);
 });

@@ -43,6 +43,21 @@ review its terms before redistributing a bundle that includes it.
 - <https://github.com/hexgrad/kokoro>
 - <https://github.com/espeak-ng/espeak-ng>
 
+## Person cut-out models (optional, subject stage)
+
+`launchclip subject` cuts the presenter out of a recording with a person
+segmentation model run through `onnxruntime-node` 1.27.0 (MIT, by Microsoft),
+declared as an optional dependency. LaunchClip does not bundle any model: the
+chosen one is downloaded on first use (or by `launchclip subject setup`) into
+`$LAUNCHCLIP_HOME/models` (default `~/.launchclip/models`) and checked against
+a pinned sha256. Every supported model is Apache-2.0:
+
+| Model id | Model | Upstream | ONNX export downloaded |
+|---|---|---|---|
+| `modnet` | MODNet portrait matting (ZHKKKe) | <https://github.com/ZHKKKe/MODNet> | `Xenova/modnet` on Hugging Face |
+| `mediapipe-selfie` | MediaPipe selfie segmentation (Google) | <https://github.com/google-ai-edge/mediapipe> | `onnx-community/mediapipe_selfie_segmentation` on Hugging Face |
+| `u2net-human` | U²-Net human segmentation (Xuebin Qin et al.) | <https://github.com/xuebinqin/U-2-Net> | `u2net_human_seg.onnx` from the `danielgatis/rembg` releases (MIT) |
+
 ## Playwright (optional, demo autopilot)
 
 Demo autopilot (`launchclip demo record`) drives Chromium with `playwright`

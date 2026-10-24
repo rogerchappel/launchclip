@@ -6,6 +6,7 @@ import {ProcessSteps} from './ProcessSteps';
 import {FlowCompare} from './FlowCompare';
 import {GaugeCompare} from './GaugeCompare';
 import {FunctionChart} from './FunctionChart';
+import {BrandLockup} from './BrandLockup';
 
 export const COMPONENTS: Record<string, React.FC<{model: any}>> = {
   'logo-row': LogoRow,
@@ -14,4 +15,5 @@ export const COMPONENTS: Record<string, React.FC<{model: any}>> = {
   'flow-compare': FlowCompare,
   'gauge-compare': GaugeCompare,
   'function-chart': FunctionChart,
+  'brand-lockup': BrandLockup,
 };

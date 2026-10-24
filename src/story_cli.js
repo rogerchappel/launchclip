@@ -9,6 +9,7 @@ import { captureCommand, runCommand } from "./renderers/command.js";
 import { createPlannerClient, planStoryboard } from "./storyboard_planner.js";
 import { DEFAULT_BRAND } from "../kit/core/planning-prompt.mjs";
 import { readStoryEdl } from "./story_loader.js";
+import { readStorySubject } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
 import { resolveStyleV2 } from "./style_store.js";
 
@@ -59,7 +60,7 @@ export async function runStoryCommand(action, storyPath, flags = {}, adapters = 
     let resolvedChecked = false;
     if (validation.ok && (words || beats || !usesAnchors(story))) {
       try {
-        const resolved = resolveStory(story, { words: words?.list ?? [], beats, edl: await readStoryEdl(path.dirname(file), story) });
+        const resolved = resolveStory(story, { words: words?.list ?? [], beats, edl: await readStoryEdl(path.dirname(file), story), subject: await readStorySubject(path.dirname(file), story) });
         const second = validateStory(resolved);
         errors.push(...second.errors.filter((entry) => !errors.includes(entry)));
         // Gaps between anchored scenes are only known once times resolve.
@@ -93,7 +94,7 @@ export async function runStoryCommand(action, storyPath, flags = {}, adapters = 
   }
 
   if (!validation.ok) throw new Error(`story.json is invalid:\n- ${validation.errors.join("\n- ")}`);
-  const resolved = resolveStory(story, { words: words?.list ?? [], beats, edl: await readStoryEdl(path.dirname(file), story) });
+  const resolved = resolveStory(story, { words: words?.list ?? [], beats, edl: await readStoryEdl(path.dirname(file), story), subject: await readStorySubject(path.dirname(file), story) });
   const check = validateStory(resolved);
   if (!check.ok) throw new Error(`resolved story is invalid:\n- ${check.errors.join("\n- ")}`);
   if (flags.out) await writeJson(flags.out, resolved);
@@ -128,7 +129,7 @@ export async function compileStoryCommand(target, flags = {}, { run = runCommand
   const beats = flags.beats || await existsFile(beatsFile) ? await readJson(beatsFile, "BEATS.json") : null;
   const validation = validateStory(story);
   if (!validation.ok) throw new Error(`storyboard.json is invalid:\n- ${validation.errors.join("\n- ")}`);
-  const resolved = resolveStory(story, { words: words?.list ?? [], beats, edl: await readStoryEdl(project, story) });
+  const resolved = resolveStory(story, { words: words?.list ?? [], beats, edl: await readStoryEdl(project, story), subject: await readStorySubject(project, story) });
   const check = validateStory(resolved);
   if (!check.ok) throw new Error(`resolved story is invalid:\n- ${check.errors.join("\n- ")}`);
   const base = { stage: "story", action: "compile", renderer, story: storyFile, project, format: storyFormat(resolved), boundaries: deriveBoundaries(resolved) };

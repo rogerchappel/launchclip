@@ -1,8 +1,10 @@
-// `launchclip demo record <repo>` and `launchclip demo approve <dir>`.
+// `launchclip demo record <repo>`, `launchclip demo approve <dir>`,
+// `launchclip demo scene <dir>` and `launchclip demo shots <docs>`.
 import path from "node:path";
 import { createPlannerClient } from "../storyboard_planner.js";
 import { productDemoParams } from "../../kit/core/catalog-d.mjs";
 import { approveFlows, approvedFlows, askYesNo, runAutopilot } from "./autopilot.js";
+import { runShots } from "./shots.js";
 
 const list = (value) => (typeof value === "string" ? value.split(",").map((item) => item.trim()).filter(Boolean) : []);
 
@@ -12,6 +14,7 @@ export async function runDemoCommand(action, target, flags = {}, { log = () => {
     const receipt = await approveFlows(target, { flows: list(flags.flows), reject: Boolean(flags.reject) });
     return { stage: "demo-approve", out: receipt.out, flows: receipt.flows.map(({ id, review }) => ({ id, review })) };
   }
+  if (action === "shots") return runShots(target, flags);
   if (action === "scene") {
     if (!target) throw new Error("launchclip demo scene needs the recording dir");
     const flows = await approvedFlows(target);

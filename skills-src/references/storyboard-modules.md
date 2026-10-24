@@ -20,11 +20,11 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - format: {width, height, fps, duration, platform?} and brand: {colors, fonts} are given; copy them unchanged.
 - audio: {voice?, words?, music?, sfx?}; base: null, or the recording path for footage-led.
 - audio.music: omit it (finish picks ElevenLabs when a key is set, else the synth bed), or "synth", "none", an assets/ path, or {provider: "elevenlabs" | "synth" | "file", prompt?, bpm?, file?, sync?: "auto" | "off" | "cuts" | "hits"}. The music follows scene energy, so set energy honestly: calm intro, "build" before the payoff, 3 on the payoff. A prompt describes style only (no vocals is added for you).
-- scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: cut | fade | push | whip | zoom | iris | morph | pan | pull | orbit | whip-pan, dur, direction?, from_object?}, params, hits?, ambient?}].
+- scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: cut | fade | push | whip | zoom | iris | morph | pan | pull | orbit | whip-pan, dur, direction?, from_object?}, params, hits?, ambient?, layer? (footage-led: "behind" draws it behind the presenter)}].
 - in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus; camera moves (pan, whip-pan, orbit, pull, world push) are under "Motion grammar and camera".
 - overlays: [captions]. ending: {loop_to: "<first scene id>"} for a seamless loop (Shorts). For no loop, set ending {loop: false} (or loop_to: null, or omit ending without a looping style pack); the last scene then holds settled to the final frame (ending.final "hold", the default), or use final "fade" to fade it fully to the background by the final frame, or "exit" to play its own exit. ending accepts only loop_to, in, loop and final.
 - ambient? (optional): {level: off | subtle | standard | lively, background?: boolean, drift?: boolean}, or just the level. Ambient motion keeps settled frames alive between beats: a slow push-in on each settled module (kept inside the safe zone) and soft brand-colour light drifting behind the plates.
-- Usually leave ambient out: the level follows each scene's energy (0 → subtle, 1, 2 or "build" → standard, 3 → lively), and footage-led stories get no background field and drift overlays only. Set story ambient only to change the whole piece (for example "subtle" for a calm brand film); "off" makes settled frames hold still and fails the cinematic motion gate.
+- Usually leave ambient out: the level follows each scene's energy (0 → subtle, 1, 2 or "build" → standard, 3 → lively; every scene is lively under the cinematic grammar), and footage-led stories get no background field and drift overlays only. Set story ambient only to change the whole piece (for example "subtle" for a calm brand film); "off" makes settled frames hold still and fails the cinematic motion gate.
 - A scene may set ambient to override the story: "off" for one deliberately still beat, {"drift": false} when the module's own motion should stand alone, or a level.
 - Recorded product flows (assets/demo/<flow>.mp4 with demo/<flow>.actions.json, from launchclip demo record) play in product-demo scenes. Copy the params the asset inventory gives for each flow (media, viewport, actions, callouts) unchanged: the zooms, outlines and SFX are timed from the real action log, so never invent or move action boxes or times. Time the scene to the clip window (media.sourceStart plus the scene length must stay inside the clip); you may shorten a scene from the end, and drop actions after it.
 - Vary the modules: a 20–40 s piece uses at least four different modules and never the same module three times in a row.
@@ -37,18 +37,19 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 
 ## Motion grammar and camera
 
-- motion? {grammar}: one feel for every entrance, exit, pop, stagger, transition and camera move. grammar is one of editorial, snappy, smooth, playful, documentary, or {base, ...overrides} (ease: {enter, exit, move, camera, emphasis}, duration: {enter, exit, transition, camera}, stagger multiplier). Omit it for editorial, the default.
+- motion? {grammar}: one feel for every entrance, exit, pop, stagger, transition and camera move. grammar is one of editorial, snappy, smooth, playful, documentary, cinematic, or {base, ...overrides} (ease: {enter, exit, move, camera, emphasis}, duration: {enter, exit, transition, camera}, stagger multiplier). Omit it for editorial, the default.
 - editorial: Clean product-editorial motion: power3 entrances, quick power2 exits, no overshoot on entrances. The default. Camera ease power3.inOut, camera moves about 0.8 s, transitions about 0.45 s.
 - snappy: Fast and punchy: expo-out entrances, short durations, a slight overshoot on pops, whips and anticipating camera moves. Camera ease back.inOut(1.2), camera moves about 0.55 s, transitions about 0.32 s.
 - smooth: Calm and fluid: sine and power2 curves, long durations, no overshoot anywhere. Camera ease sine.inOut, camera moves about 1.1 s, transitions about 0.7 s.
 - playful: Springy and bouncy: back-out entrances, elastic pops, bigger staggers and a camera that winds up and overshoots. Camera ease back.inOut(1.6), camera moves about 0.75 s, transitions about 0.5 s.
 - documentary: Slow and restrained: power1 curves, long holds and gentle moves, nothing that calls attention to itself. Camera ease power1.inOut, camera moves about 1.3 s, transitions about 0.8 s.
+- cinematic: Film-like: every entrance and move eases slow → fast → slow into its resting state (power2.inOut), long durations, no overshoot, and settled scenes never stop moving (a slow push-in on every scene, recorded clips included, and a livelier camera drift). Camera ease power2.inOut, camera moves about 1.3 s, transitions about 0.9 s.
 - camera? {mode: "cuts" | "world", layout?: row | column | grid | path | auto, spacing?: 0–1, parallax?: boolean, blur?: boolean}. "cuts" (default): scenes replace each other. "world": every track-0 scene sits in one world and the camera travels to it, with a slow drift (never fully still), a parallax background (0.3×) and overlays at 1.15×. Motion blur: whip-pans always; pans, pushes, pulls and orbits get a moderate blur in snappy and playful; blur true blurs every move fully, false none.
 - Camera transitions (scene.in or ending.in, track-0 scenes only): pan {direction: where the next scene sits, e.g. "right"}, whip-pan (fast, motion-blurred), orbit (pan with a slight turn), pull (dolly out to a wider scene) and, in world mode only, push (dolly into a named object: in.from_object "s3.gap-bracket", else the scene content). In cuts mode push keeps its slide meaning, and pan/whip-pan/orbit/pull still move a camera between the two scenes.
 - Choose by meaning and art direction: pan for continuation along a path, push to go deeper into a detail, pull to reveal the bigger picture, orbit for a change of angle on the same subject, whip-pan for energy or a time jump, cut/fade when the story jumps. Give camera moves 0.6–1.2 s (whip-pan 0.3–0.5 s) and keep scenes at least 2 s longer than their move.
 - Captions and camera moves: a vertical pan or whip-pan (up/down), push, pull or orbit carries panels through the caption band mid-move, so the captions dip out for those moves by default (captions overlay hide_during_moves: "auto"; true dips for every move, false never). Horizontal pans keep their captions. layout-check samples every frame of every camera move and flags key content crossing visible captions (camera-caption-band). When a line must stay captioned through the move, pan left or right.
 - In world mode, an ending {"loop_to": "s1", "in": {"type": "whip-pan", "dur": 0.4}} travels home for a seamless loop.
-- Lanes: footage-led keeps camera.mode "cuts" and uses punch-in for emphasis (no camera transitions). The motion and voiceover-motion lanes may use the world camera; use it when the direction asks for travel or the grammar is playful, snappy or smooth.
+- Lanes: footage-led keeps camera.mode "cuts" and uses punch-in for emphasis (no camera transitions). The motion and voiceover-motion lanes may use the world camera; use it when the direction asks for travel or the grammar is playful, snappy, smooth or cinematic.
 
 ## Time anchors
 
@@ -99,8 +100,17 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 | quotes a passage from a doc, README or article | excerpt-window |
 | speaks to several audiences or groups | audience-grid |
 | picks one option from several | focus-flow |
+| sets a scene or mood with a real photo or clip (assets/… image or video, full bleed) [motion, voiceover-motion] | photo-scene |
+| names the brand on a title or end card, with its logo and wordmark images (and an app-store badge or URL on the end card) | brand-lockup |
 | calls to action, or the loop ending | cta |
-| footage-led emphasis on a word [footage-led] | punch-in |
+| names the product or the one idea the video is about ("meet X", "this is X", "it's called X"): one word behind the presenter's head [footage-led] (needs the subject) | masthead |
+| lands a realisation, reveal or turn ("that's when", "it hit me", "everything changed"): the room moves, the presenter holds [footage-led] (needs the subject) | dolly-zoom |
+| shows or describes the product on screen ("here's the dashboard", "this is the app"), with a screenshot or recording in the assets: the UI fills the top, their head over its edge [footage-led] (needs the subject) | app-stage |
+| shows the product on a phone or a mobile flow, with a recording or screenshot in the assets (a demo-autopilot flow fits) [footage-led] | phone-stage |
+| turns from the problem to the product ("so we built", "that's why", "enter"): the room gives way to a brand backdrop [footage-led] (needs the subject) | backdrop-swap |
+| talks about posting, going viral or "this exact video": the frame becomes a feed window they break out of [footage-led] (needs the subject) | feed-frame |
+| reveals how the video or result was made, or a process finishing ("made with", "it transcribes, cuts…"): the frame pulls back into an app window while real steps tick [footage-led] | pull-back |
+| footage-led emphasis on a word (steps for a build of emphasised words; blur for energy) [footage-led] | punch-in |
 | footage-led claim sticker or label pointing at something on screen [footage-led] | footage-callout |
 | introduces the speaker or a guest by name and title [footage-led] | lower-third |
 | one to three spoken words that deserve a big on-screen pop [footage-led] | emphasis-caption |
@@ -454,14 +464,35 @@ params:
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: logo-<i>
 
+### brand-lockup (hides captions)
+Title or end card built from the brand's own artwork: the logo mark beside or above the wordmark image, an optional eyebrow and headline; the end variant stacks them over a badge image (e.g. an app-store badge) and a URL pill. Hides captions.
+params:
+- variant: title|end (default title)
+- layout: row|stack (mark beside or above the wordmark; default row for title, stack for end)
+- mark: "assets/…" square logo image (.svg|.png|.jpg|.webp), or {src, ratio}
+- wordmark: "assets/…" wide wordmark image, or {src, ratio: width ÷ height (default 4)}; mark or wordmark is required
+- tint: none|paper|ink|primary|accent|#rrggbb — recolour the wordmark, e.g. paper for a dark wordmark on a dark background (default none)
+- markTint: the same for the mark (default none)
+- eyebrow: string ≤ 40, small caps above the lockup (optional)
+- headline: string ≤ 80, two lines at most, below the lockup (optional)
+- badge: end only: "assets/…" badge image, or {src, ratio (default 3, an app-store badge)}
+- url: end only: URL or handle ≤ 64, no spaces, in a pill
+- glow: primary|accent|false — the soft light that blooms behind the mark and keeps widening (default primary)
+- shine: true|false — soft light: a sweep across the card as the mark lands, and a glint across the mark and wordmark once they have (default true)
+- at: first beat (seconds from scene start (optional; else a matching hit, else a default); default 0.15 s)
+- stagger: seconds between beats (default 0.35, scaled by the grammar)
+events: mark, wordmark, eyebrow, headline, badge, url, shine
+
 ### punch-in (keeps captions)
-Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay).
+Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay). Steps punch in, further in or back out on successive words; blur adds a few frames of zoom blur on each move.
 params:
 - scale: 1.06–1.25 (default 1.12)
 - at: seconds from scene start (optional; else a matching hit, else a default)
 - focus: {x, y} canvas fractions (default base.focus, else {0.5, 0.42})
 - release: seconds before the scene end when the zoom springs back (0.3–2, default min(0.5, 30% of the scene))
-events: punch, release
+- steps: [{at, scale}] 1–4, instead of at/scale: each springs to its scale (1–1.35; the first ≥ 1.06), at least 0.3 s apart
+- blur: true (14 px at 1080) or 2–30 px: velocity-shaped zoom blur, 0 once settled (default off)
+events: punch, step-<i>, release
 
 ### footage-callout (keeps captions)
 Footage-led: a claim sticker anchored to a point on the footage by a leader line, placed inside the safe zone.
@@ -495,17 +526,100 @@ params:
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: pop, word-<i>
 
+### masthead (keeps captions, behind the presenter, needs the subject)
+Footage-led, behind the presenter: one huge word (a product name or the one idea) rises in letter by letter at the top of the frame, and the presenter's head covers its lower part like a magazine cover. Needs headroom: medium or wide shots.
+params:
+- word: one word ≤ 12 chars (uppercased)
+- kicker: small line above it ≤ 32 (optional)
+- color: paper (default)|primary|accent or #hex (≥ 3:1 on brand bg)
+- stagger: seconds between letters (0–0.12, default 0.05)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: title
+
+### dolly-zoom (keeps captions, behind the presenter, needs the subject)
+Footage-led, behind the presenter: the room pushes in (or falls away) over one eased beat while the presenter holds still, a dolly zoom for a realisation or a turn. Needs a medium or wide shot and the matte's room plate.
+params:
+- direction: push (default) | pull (starts on a cut, the room falls away)
+- scale: 1.12–1.6 (default 1.3)
+- move: seconds the zoom takes (1–2.5)
+- release: push: seconds to ease back before the scene end (0.3–1, default 0.5)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: move, release
+
 ### product-demo (keeps captions)
 A recorded product flow (launchclip demo record) in a window or full bleed, with zooms to each clicked or typed-into element, accent outlines as actions land, callout pills and click/keystroke SFX, all timed from the flow's action log.
 params:
 - media: {src: "assets/demo/<flow>.mp4", sourceStart: seconds into the clip (default 0)}
 - viewport: {width, height} of the recording in CSS px (default 1920×1080; from <flow>.actions.json)
-- actions: [{at (s from scene start), type: click|type|focus, box: {x, y, width, height} viewport px, keys?: [s], until?: s, label?}] ≤ 24 — build with productDemoParams(<flow>.actions.json)
-- callouts: [{at, text ≤ 42 chars, box (the element it points at), duration? 0.8–6 s (default 2.2)}] ≤ 4, not overlapping
+- actions: [{at (s from scene start), type: click|type|focus, box: {x, y, width, height} viewport px, keys?: [s], until?: s, label?, navigates?: true when it changes the page}] ≤ 24 — build with productDemoParams(<flow>.actions.json)
+- callouts: [{at, text ≤ 42 chars, box (the element it points at), duration? 0.8–6 s (default 2.2)}] ≤ 4, not overlapping; one on an action's box ends when that action navigates or the camera leaves it
 - frame: window|full (full needs the canvas aspect; default window)
 - zoom: false, or {max: 1–2.5 (default 1.8)}
 - title: string ≤ 48 (optional, for logs)
 events: click-<i>, key-<i>-<k>, zoom-<k>, callout-<i>
+
+### photo-scene (keeps captions)
+One full-bleed photo or video from assets/ with a slow Ken Burns move (push, pull or pan), an optional scrim and 1–3 short kinetic text lines above the caption band. Keeps captions.
+params:
+- media: "assets/…" image (.jpg|.png|.webp|.svg) or video (.mp4|.webm|.mov), or {src, kind?, sourceStart? (video)}
+- move: push-in|pull-out|pan-left|pan-right|pan-up|pan-down (default push-in); linear over the whole scene
+- zoom: 0.02–0.25, how far the move scales (default 0.08: 1 → 1.08)
+- focus: {x, y} 0.15–0.85 fractions of the frame the push centres on (default {x: 0.5, y: 0.5})
+- scrim: none|bottom|left|full (default bottom with lines, full when centred, none without lines)
+- lines: [{text ≤ 40, at?, emphasis?: true colours it primary}] 1–3 (or strings), rising in stagger apart; at most one line each
+- align: left|center (default left)
+- title: string ≤ 60, the photo's alt text (optional)
+events: enter, line-<i>
+
+### feed-frame (hides captions, needs the subject)
+Footage-led: the recording springs into a portrait feed window on a dark backdrop and the presenter breaks out over its top and sides, with generic feed chrome (icons, the user's handle, a caption, a progress bar). For "this exact video", posting or going viral. Counts appear only when given. Hides captions.
+params:
+- handle: @handle ≤ 24 (optional; shows the avatar row)
+- caption: one line ≤ 60 (optional)
+- counts: {likes?, comments?, shares?} strings ≤ 8 the user supplied (optional; never invent them)
+- follow: boolean (default true with a handle)
+- scale: window size 0.55–0.85 of the frame
+- release: seconds to spring back (0.3–1)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: frame, chrome, release
+
+### pull-back (hides captions)
+Footage-led: the recording shrinks into an app window while real steps tick off beside it and a progress bar counts to 100%. For "and this video was made by…", a process finishing, or a product reveal. Hides captions.
+params:
+- steps: 1–4 real steps ≤ 28 chars each (required)
+- title: window title ≤ 32 (e.g. a file or product name)
+- label: progress label ≤ 20 (default "Rendering")
+- scale: window size 0.4–0.75
+- release: seconds to spring back (0.3–1.2)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: pull, step-<i>, done
+
+### backdrop-swap (keeps captions, behind the presenter, needs the subject)
+Footage-led, behind the presenter: the room dissolves into a backdrop (brand gradient, or a supplied product screenshot or video) and the presenter glides down in front of it; an optional title sits above their head. For the turn from the problem to the product.
+params:
+- backdrop: {src: assets/ image or video (a demo-autopilot flow: assets/demo/<flow>.mp4), sourceStart?: seconds (video), fit?: cover|contain} (default: a brand gradient)
+- title: ≤ 32 (optional)
+- scale: presenter size 0.6–0.95 (default 0.78)
+- release: seconds to glide back (0.3–1)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: swap, release
+
+### app-stage (keeps captions, behind the presenter, needs the subject)
+Footage-led, behind the presenter: the product UI (a screenshot or recording) slides down to fill the top of the frame and the presenter's head rises over its bottom edge. Needs headroom; for showing the app while talking about it.
+params:
+- media: {src: assets/ image or video (a demo-autopilot flow: assets/demo/<flow>.mp4), sourceStart?: seconds (video), fit?: cover|contain} (required)
+- title: app or page title ≤ 32 (optional)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: stage
+
+### phone-stage (keeps captions)
+Footage-led: a phone springs in beside the presenter's head and plays a real screen recording or screenshot (a demo-autopilot flow fits), floating gently while the room pans away from it. For showing the app on a phone while explaining it.
+params:
+- media: {src: assets/ image or video (a demo-autopilot flow: assets/demo/<flow>.mp4), sourceStart?: seconds (video), fit?: cover|contain} (required)
+- side: auto|left|right (default: the side with more room)
+- pan: boolean: pan the room away (default true)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: phone
 
 ## Timing rules
 
@@ -538,11 +652,20 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | process-steps | 2 s | 0.5 s | scene − 0.65 s | steps[].at: ≥ 0.35 s apart |
 | archive-card | 2 s | 0.5 s | scene − 0.65 s | stamp.at defaults to 0.35 s after the quote finishes revealing |
 | logo-row | 2 s | 0.5 s | scene − 0.65 s | logos pop in order; with no at, the first pops at 0.65 s and the rest follow by stagger (default 0.14 s) |
-| punch-in | 0.8 s | 0 s | — | at ≤ scene − release − 0.25 s (release 0.3–2 s, default min(0.5, 0.3 × scene)) |
+| brand-lockup | 2 s | 0.5 s | scene − 0.65 s | elements land in this order: mark, wordmark, eyebrow, headline, badge, url, stagger apart (default 0.35 s), the first at 0 s; a hit on one moves the defaults after it |
+| punch-in | 0.8 s | 0 s | — | at (and every steps[i].at) ≤ scene − release − 0.25 s (release 0.3–2 s, default min(0.5, 0.3 × scene)); steps at least 0.3 s apart |
 | footage-callout | 1.5 s | 0 s | scene − 1.1 s | — |
 | lower-third | 2 s | 0 s | scene − 1.2 s | — |
 | emphasis-caption | 0.8 s | 0 s | scene − 0.45 s | at ≤ scene − 0.45 s − stagger × (words − 1) (stagger 0–0.3 s, default 0.09) |
-| product-demo | 2 s | 0 s | scene − 0.2 s | actions[].at: in order; zooms lead each action by 0.5 s, hold 1.1 s, and merge into one shot when the next action comes within 2.2 s; callouts[].at ≤ scene − 1 s; each shows 2.2 s by default and must not overlap the next |
+| masthead | 1.5 s | 0 s | scene − 0.9 s | at ≤ scene − 0.9 s − stagger × (letters − 1) (stagger 0–0.12 s, default 0.05) |
+| dolly-zoom | 1.8 s | 0 s | — | at ≤ scene − move − release − 0.2 s (move 1–2.5 s, default min(1.6, 0.6 × scene); release 0.3–1 s, push only) |
+| product-demo | 2 s | 0 s | scene − 0.2 s | actions[].at: in order; zooms start 1.2 s before each action and settle 0.4 s before it, hold 1.1 s (0.2 s after a click that navigates), and pan to the next action unless the gap is over 2.2 s; callouts[].at ≤ scene − 1 s; each shows 2.2 s by default, must not overlap the next, and ends when its action navigates or the camera leaves it |
+| photo-scene | 2 s | 0 s | scene − 0.8 s | lines[].at in order (default 0.35 s, then 0.45 s apart, scaled by the grammar); the last at least 0.8 s before the scene ends |
+| feed-frame | 2 s | 0 s | — | at ≤ scene − release − 1 s (release 0.3–1 s, default 0.5) |
+| pull-back | 3 s | 0 s | — | at ≤ scene − release − 1.6 s (release 0.3–1.2 s, default 0.6); at least 0.3 s per step |
+| backdrop-swap | 2 s | 0 s | — | at ≤ scene − release − 0.8 s (release 0.3–1 s, default 0.5) |
+| app-stage | 2 s | 0 s | scene − 1.2 s | — |
+| phone-stage | 2 s | 0 s | scene − 1.2 s | — |
 
 ## Example
 

@@ -1,0 +1,39 @@
+{
+  "schema": "launchclip.demo-plan.v1",
+  "app": {
+    "url": "http://localhost:4310",
+    "fixtures": "fixtures.mjs",
+    "session": {
+      "localStorage": { "pulseboard-user": "Avery Demo" },
+      "cookies": [{ "name": "pulseboard_session", "value": "demo-session-not-real" }]
+    }
+  },
+  "viewport": { "width": 1920, "height": 1080, "deviceScaleFactor": 1 },
+  "flows": [
+    {
+      "id": "dashboard",
+      "title": "Every launch, one place",
+      "goal": "Show the dashboard, then the analytics page",
+      "steps": [
+        { "type": "goto", "path": "/dashboard" },
+        { "type": "wait-for", "text": "Orbit beta" },
+        { "type": "pause", "ms": 1200 },
+        { "type": "click", "text": "Analytics", "label": "Analytics", "callout": "Signups per day" },
+        { "type": "pause", "ms": 1800 }
+      ]
+    },
+    {
+      "id": "create-project",
+      "title": "Create a project",
+      "goal": "Create a project and see it on the dashboard",
+      "steps": [
+        { "type": "goto", "path": "/projects/new" },
+        { "type": "type", "text": "Project name", "value": "Autumn launch", "label": "Project name" },
+        { "type": "click", "text": "Activation", "label": "Activation" },
+        { "type": "click", "text": "Create project", "label": "Create project", "callout": "Live in one click" },
+        { "type": "wait-for", "text": "Autumn launch" },
+        { "type": "pause", "ms": 1800 }
+      ]
+    }
+  ]
+}

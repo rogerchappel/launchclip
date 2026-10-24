@@ -37,7 +37,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { storyboardModulesReference } from '../kit/core/planning-prompt.mjs';
+import { storyboardModulesReference, subjectEffectsReference } from '../kit/core/planning-prompt.mjs';
 import { usageMarkdown } from '../src/cli_usage.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -46,6 +46,7 @@ const RENDERERS = ['hyperframes', 'remotion'];
 
 const SHARED_REFERENCES = [
   'cinematic-production.md',
+  'demo-setup.md',
   'editorial-ui-modules.md',
   'finishing-in-an-nle.md',
   'recorded-treatment-check.md',
@@ -60,7 +61,8 @@ const SHARED_REFERENCES = [
 // skills; --check fails when either copy drifts from the generator. The
 // generator always reads this checkout's kit/core registry.
 export const GENERATED_REFERENCES = {
-  'storyboard-modules.md': storyboardModulesReference
+  'storyboard-modules.md': storyboardModulesReference,
+  'subject-effects.md': subjectEffectsReference
 };
 
 // Renderer-neutral scripts, maintained in the HyperFrames skill.
