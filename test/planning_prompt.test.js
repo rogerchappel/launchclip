@@ -27,7 +27,7 @@ test("every known module appears in the prompt for every tier", () => {
   const modules = knownModules();
   assert.ok(modules.length >= 25, `expected the full registry, got ${modules.length}`);
   const needsSubject = new Set(moduleCatalogue().filter((module) => module.needs?.includes("subject")).map((module) => module.id));
-  assert.deepEqual([...needsSubject].sort(), ["dolly-zoom", "masthead"]);
+  assert.deepEqual([...needsSubject].sort(), ["app-stage", "backdrop-swap", "dolly-zoom", "feed-frame", "masthead"]);
   const subject = { usable: true, reasons: [], framing: "medium", headroom: 0.2, head: { x: 0.5, y: 0.3, w: 0.2, h: 0.15 } };
   for (const tier of PLANNER_TIERS) {
     const prompt = planningPrompt({ tier, lane: "motion", format: portrait });
@@ -58,7 +58,9 @@ test("subject modules: offered with a usable subject, explained when not", () =>
 
 test("the art direction favours modules by mood", () => {
   const subject = { usable: true, reasons: [], framing: "wide", headroom: 0.3 };
-  assert.deepEqual(suggestModuleMoods("A cinematic, premium launch film").map((entry) => entry.id).sort(), ["dolly-zoom", "masthead"]);
+  const favoured = suggestModuleMoods("A cinematic, premium launch film").map((entry) => entry.id);
+  for (const id of ["dolly-zoom", "masthead", "backdrop-swap", "pull-back"]) assert.ok(favoured.includes(id), `${id} in ${favoured}`);
+  assert.ok(!favoured.includes("checklist"), "modules without moods are not favoured");
   assert.match(planningPrompt({ lane: "footage-led", format: portrait, subject, artDirection: "bold launch" }), /Favoured by the art direction[\s\S]*masthead \(bold, launch\)/);
   assert.doesNotMatch(planningPrompt({ lane: "motion", format: portrait, artDirection: "bold launch" }), /masthead \(bold/);
 });

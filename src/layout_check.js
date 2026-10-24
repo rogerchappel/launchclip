@@ -12,6 +12,8 @@ import { driftExtent, sceneDrift } from "../kit/core/ambient.mjs";
 import { emptyPlates, sceneWindows } from "../kit/core/transitions.mjs";
 import { storyBase } from "../kit/core/story.mjs";
 import { checkSubjectFace, headLocator, sceneLayerOf } from "../kit/core/subject-layer.mjs";
+import { BASE_CAMERA, cameraOps } from "../kit/core/catalog-c.mjs";
+import { frameState } from "../kit/core/catalog-b-view.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const STORY_MODULE = path.join(ROOT, "kit/core/story.mjs");
@@ -239,16 +241,29 @@ export async function subjectFaceFindings(projectDir, resolved, elements, warnin
     }
     infos.push(JSON.parse(await readFile(path.join(projectDir, matte.info), "utf8")));
   }
+  const models = [];
   const depth = new Map(resolved.scenes.map((scene) => {
     let model = null;
     try { model = resolveModule(scene, resolved); } catch { /* reported as module-spec */ }
+    if (model) models.push(model);
     return [scene.id, { layer: sceneLayerOf(scene, model).layer, framesFace: Boolean(model?.framesFace) }];
   }));
+  // The head moves with the base cameras (punch-ins, pans, framed windows).
+  const ops = cameraOps(models);
+  const located = headLocator(resolved, infos);
+  const canvas = { width: Number(resolved.format?.width), height: Number(resolved.format?.height) };
+  const headAt = (t) => {
+    const head = located(t);
+    const cam = head && ops.length ? frameState(ops, t).get(BASE_CAMERA) : null;
+    if (!head || !cam) return head;
+    const cx = canvas.width / 2, cy = canvas.height / 2, s = cam.scaleX ?? 1;
+    return { x: cx + (head.x - cx) * s + (cam.x ?? 0), y: cy + (head.y - cy) * s + (cam.y ?? 0), width: head.width * s, height: head.height * s };
+  };
   const candidates = elements
     .filter((element) => element.id !== "base" && element.rect && element.role !== "caption" && element.role !== "decor")
     .map((element) => ({ ...element, layer: depth.get(element.id)?.layer ?? "front", framesFace: depth.get(element.id)?.framesFace ?? false }));
   const fps = Number(resolved.resolved?.fps ?? resolved.format?.fps ?? 30);
-  return checkSubjectFace({ elements: candidates, headAt: headLocator(resolved, infos), step: 1 / fps });
+  return checkSubjectFace({ elements: candidates, headAt, step: 1 / fps });
 }
 
 function overlaps(a, b) {

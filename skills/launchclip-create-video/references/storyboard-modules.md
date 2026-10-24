@@ -566,6 +566,56 @@ params:
 - title: string ≤ 60, the photo's alt text (optional)
 events: enter, line-<i>
 
+### feed-frame (hides captions, needs the subject)
+Footage-led: the recording springs into a portrait feed window on a dark backdrop and the presenter breaks out over its top and sides, with generic feed chrome (icons, the user's handle, a caption, a progress bar). For "this exact video", posting or going viral. Counts appear only when given. Hides captions.
+params:
+- handle: @handle ≤ 24 (optional; shows the avatar row)
+- caption: one line ≤ 60 (optional)
+- counts: {likes?, comments?, shares?} strings ≤ 8 the user supplied (optional; never invent them)
+- follow: boolean (default true with a handle)
+- scale: window size 0.55–0.85 of the frame
+- release: seconds to spring back (0.3–1)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: frame, chrome, release
+
+### pull-back (hides captions)
+Footage-led: the recording shrinks into an app window while real steps tick off beside it and a progress bar counts to 100%. For "and this video was made by…", a process finishing, or a product reveal. Hides captions.
+params:
+- steps: 1–4 real steps ≤ 28 chars each (required)
+- title: window title ≤ 32 (e.g. a file or product name)
+- label: progress label ≤ 20 (default "Rendering")
+- scale: window size 0.4–0.75
+- release: seconds to spring back (0.3–1.2)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: pull, step-<i>, done
+
+### backdrop-swap (keeps captions, behind the presenter, needs the subject)
+Footage-led, behind the presenter: the room dissolves into a backdrop (brand gradient, or a supplied product screenshot or video) and the presenter glides down in front of it; an optional title sits above their head. For the turn from the problem to the product.
+params:
+- backdrop: {src: assets/ image or video (a demo-autopilot flow: assets/demo/<flow>.mp4), sourceStart?: seconds (video), fit?: cover|contain} (default: a brand gradient)
+- title: ≤ 32 (optional)
+- scale: presenter size 0.6–0.95 (default 0.78)
+- release: seconds to glide back (0.3–1)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: swap, release
+
+### app-stage (keeps captions, behind the presenter, needs the subject)
+Footage-led, behind the presenter: the product UI (a screenshot or recording) slides down to fill the top of the frame and the presenter's head rises over its bottom edge. Needs headroom; for showing the app while talking about it.
+params:
+- media: {src: assets/ image or video (a demo-autopilot flow: assets/demo/<flow>.mp4), sourceStart?: seconds (video), fit?: cover|contain} (required)
+- title: app or page title ≤ 32 (optional)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: stage
+
+### phone-stage (keeps captions)
+Footage-led: a phone springs in beside the presenter's head and plays a real screen recording or screenshot (a demo-autopilot flow fits), floating gently while the room pans away from it. For showing the app on a phone while explaining it.
+params:
+- media: {src: assets/ image or video (a demo-autopilot flow: assets/demo/<flow>.mp4), sourceStart?: seconds (video), fit?: cover|contain} (required)
+- side: auto|left|right (default: the side with more room)
+- pan: boolean: pan the room away (default true)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: phone
+
 ## Timing rules
 
 Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core/modules.mjs; `launchclip module fit <module>` prints the same rules with the window for a given `--duration`). `at` values are seconds from the scene start: the first beat no earlier than the lead-in, the last no later than the lead-out before the scene end. A faster motion grammar can shorten a catalogue B enter, which only moves its lead-in earlier.
@@ -606,6 +656,11 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | dolly-zoom | 1.8 s | 0 s | — | at ≤ scene − move − release − 0.2 s (move 1–2.5 s, default min(1.6, 0.6 × scene); release 0.3–1 s, push only) |
 | product-demo | 2 s | 0 s | scene − 0.2 s | actions[].at: in order; zooms start 1.2 s before each action and settle 0.4 s before it, hold 1.1 s (0.2 s after a click that navigates), and pan to the next action unless the gap is over 2.2 s; callouts[].at ≤ scene − 1 s; each shows 2.2 s by default, must not overlap the next, and ends when its action navigates or the camera leaves it |
 | photo-scene | 2 s | 0 s | scene − 0.8 s | lines[].at in order (default 0.35 s, then 0.45 s apart, scaled by the grammar); the last at least 0.8 s before the scene ends |
+| feed-frame | 2 s | 0 s | — | at ≤ scene − release − 1 s (release 0.3–1 s, default 0.5) |
+| pull-back | 3 s | 0 s | — | at ≤ scene − release − 1.6 s (release 0.3–1.2 s, default 0.6); at least 0.3 s per step |
+| backdrop-swap | 2 s | 0 s | — | at ≤ scene − release − 0.8 s (release 0.3–1 s, default 0.5) |
+| app-stage | 2 s | 0 s | scene − 1.2 s | — |
+| phone-stage | 2 s | 0 s | scene − 1.2 s | — |
 
 ## Example
 
