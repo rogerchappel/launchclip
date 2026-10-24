@@ -1,7 +1,7 @@
 // SceneOverlay: one scene of the resolved story on a transparent background,
 // for `launchclip export` (editable NLE timelines, src/nle/).
 //
-// Props: {story, sceneId, loop?, plate?}. Frame 0 is the scene start; the
+// Props: {story, sceneId, loop?, plate?, part?}. Frame 0 is the scene start; the
 // clip runs over the scene's render window (kit/core/transitions.mjs
 // sceneWindows: an outgoing track-0 scene stays until the incoming transition
 // settles), with the same transition tweens and the same absolute scene clock
@@ -10,6 +10,8 @@
 //   loop:  the loop ending (ending.loop_to's first state, frozen, over the final window)
 //   plate: paint brand.colors.bg behind the scene, as LaunchclipStory does for
 //          track-0 scenes (export passes it for track 0 and the loop)
+//   part:  "behind" | "front": one part of a split scene (model.part), so the
+//          export can put the behind part under the subject track
 // Render with an alpha codec: --codec prores --prores-profile 4444
 // --pixel-format yuva444p10le --image-format png, or --sequence --image-format png.
 import React from "react";
@@ -24,7 +26,7 @@ import type { StoryProps } from "./StoryComposition";
 import { SceneStartFrame } from "./clock";
 import { ensureFonts } from "./fonts";
 
-export type SceneOverlayProps = { story: any; sceneId: string; loop?: boolean; plate?: boolean; customModules?: StoryProps["customModules"] };
+export type SceneOverlayProps = { story: any; sceneId: string; loop?: boolean; plate?: boolean; part?: "behind" | "front"; customModules?: StoryProps["customModules"] };
 
 type OverlayWindow = { scene: any; start: number; end: number; tweens: any[]; loop: boolean };
 
@@ -40,7 +42,7 @@ export function sceneOverlayWindow(story: any, sceneId: string, loop = false): O
   return { scene: entry.scene, start: entry.start, end: entry.renderEnd, tweens: entry.tweens, loop: false };
 }
 
-export const SceneOverlay: React.FC<SceneOverlayProps> = ({ story, sceneId, loop = false, plate = false, customModules }) => {
+export const SceneOverlay: React.FC<SceneOverlayProps> = ({ story, sceneId, loop = false, plate = false, part, customModules }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const fonts = ensureFonts(story.brand);
@@ -50,7 +52,7 @@ export const SceneOverlay: React.FC<SceneOverlayProps> = ({ story, sceneId, loop
   const style = layerStyle(layerStateAt((startFrame + frame) / fps, span.tweens, getEase));
   const content = span.loop
     ? <Freeze frame={0}>{element.render()}</Freeze>
-    : <SceneStartFrame.Provider value={startFrame}>{element.render()}</SceneStartFrame.Provider>;
+    : <SceneStartFrame.Provider value={startFrame}>{element.render(part)}</SceneStartFrame.Provider>;
   return (
     <AbsoluteFill style={{ fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
       <AbsoluteFill style={{ overflow: "hidden", isolation: "isolate" }}>

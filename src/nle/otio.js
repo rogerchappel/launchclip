@@ -35,7 +35,7 @@ export function writeOtio(timeline, options = {}) {
   };
   const item = (clip, track) => {
     const asset = assets.get(clip.asset);
-    const metadata = { launchclip: compact({ kind: clip.kind, scene: clip.sceneId, module: clip.module, cue: clip.cue, volume: clip.volume, alpha: clip.alpha, role: track.role, linked: clip.linked ? true : undefined }) };
+    const metadata = { launchclip: compact({ kind: clip.kind, scene: clip.sceneId, module: clip.module, part: clip.part, cue: clip.cue, volume: clip.volume, alpha: clip.alpha, role: track.role, linked: clip.linked ? true : undefined }) };
     return {
       OTIO_SCHEMA: "Clip.2",
       metadata,
@@ -57,7 +57,7 @@ export function writeOtio(timeline, options = {}) {
       children.push(item(clip, track));
       cursor = clip.start + clip.duration;
     }
-    return { OTIO_SCHEMA: "Track.1", metadata: { launchclip: compact({ id: track.id, role: track.role }) }, name: `${track.id} ${track.name}`, source_range: null, effects: [], markers: [], enabled: track.enabled !== false, children, kind: track.kind === "audio" ? "Audio" : "Video" };
+    return { OTIO_SCHEMA: "Track.1", metadata: { launchclip: compact({ id: track.id, role: track.role, layer: track.layer }) }, name: `${track.id} ${track.name}`, source_range: null, effects: [], markers: [], enabled: track.enabled !== false, children, kind: track.kind === "audio" ? "Audio" : "Video" };
   };
   const colors = { scene: "BLUE", hit: "YELLOW", camera: "PURPLE" };
   const doc = {
