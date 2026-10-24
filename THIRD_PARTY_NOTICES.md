@@ -139,7 +139,7 @@ A compiled HyperFrames project carries copies of the font files it uses in
 
 ## Other direct dependencies
 
-At the time of the 0.1.1 release candidate, HyperFrames declares Apache-2.0;
+At the time of the 0.2.0 release, HyperFrames declares Apache-2.0;
 React, React DOM, Three.js, React Three Fiber, and the Anthropic SDK declare
 MIT. Each installed package contains the authoritative licence information for
 its version. Transitive dependencies may use additional licences.

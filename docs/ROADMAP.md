@@ -13,31 +13,12 @@ LaunchClip's goal: **a SaaS founder points it at their product and gets a launch
 - Self-checking and self-repair before you see the video
 - Change it by chatting; only the changed scenes re-render
 - Export to Final Cut Pro, Premiere Pro, DaVinci Resolve or OpenTimelineIO
+- **Demo autopilot:** point it at your SaaS codebase and it starts the app, records the key flows on safe demo data, and edits them in with zooms and callouts timed to every action ([guide](guide/demo-autopilot.md))
+- **Subject-aware effects:** in a talking-head recording, graphics can sit behind you (your product name behind your head, your app on the wall behind you, a dolly zoom), chosen by the art director like any other module ([RFC](SUBJECT_EFFECTS_RFC.md))
 - Published on npm
 
 ## Next
 
-### Demo autopilot: it records your product for you
-
-Point LaunchClip at your codebase and it records your product demo itself. No screen recording, no cleaning up your browser, no retakes.
-
-1. **Start your app:** read the repo (package scripts, README, docker-compose, `.env.example`), start the dev server locally, and wait until it's healthy.
-2. **Prepare a clean demo state:** run your seed script or fixtures, so the recording shows realistic sample data, never your real customers or credentials.
-3. **Plan the journeys:** from your prompt and the code (routes, pages, key components), pick the 2–4 flows that sell the product, e.g. *sign up → create a project → see the result*.
-4. **Record them:** drive a real browser with scripted, human-paced interactions in a clean, consistent window, at 1080p or 4K, with smooth cursor movement and natural typing. Each flow becomes its own clip.
-5. **Keep a timeline of every action:** each click, keystroke, page change and result is time-stamped. LaunchClip uses those times to zoom in on the click, add a callout as a feature appears, and land a sound effect on each action. The edit is timed to what actually happens in your app.
-6. **Edit it in:** the clips flow into the video as product-demo scenes alongside the motion graphics and voiceover, in your style.
-
-Guardrails:
-- Runs on your machine against your local or staging app.
-- Asks before running anything with side effects.
-- Never types real passwords: it uses your seed data or test accounts only.
-- Redacts anything that looks like a secret.
-- Every recorded flow is shown to you before it's used.
-
-### Also next
-
-- **Subject-aware effects:** graphics that sit behind you in a talking-head recording (your product name behind your head, your app filling the wall behind you, a dolly zoom), chosen by the art director like any other module. Design: [SUBJECT_EFFECTS_RFC.md](SUBJECT_EFFECTS_RFC.md).
 - **Smarter asset understanding:** recognise what's in your screenshots and recordings (a pricing page, a dashboard, an onboarding flow) and place them where the story needs them.
 - **Built-in critic by default:** a vision model reviews the video the way a human editor would, as part of `launchclip make`.
 - **Faster first run:** smaller downloads and pre-warmed rendering, so the first video arrives sooner.

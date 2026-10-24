@@ -84,9 +84,9 @@ It sorts your assets, chooses the right kind of video, writes and voices the scr
 
 Every video passes automatic quality checks: nothing outside the safe zone, text big enough to read on a phone, captions that never collide with graphics, motion that never goes dead, and audio at the right level. When a check fails, LaunchClip repairs the problem and checks again, so you get a finished video rather than a list of problems. Each release lowers the number of repairs needed; the goal is right first time, every time.
 
-## What's next
+## Demo autopilot
 
-Coming soon: **demo autopilot.** Point LaunchClip at your codebase and it starts your app, records your product's key flows in a real browser, and edits them into your launch video, with zooms and callouts timed to every click. See the [roadmap](docs/ROADMAP.md).
+Point LaunchClip at your SaaS codebase and it records your product demo for you: it starts your app, uses safe demo data, records the key flows in a real browser, and edits them in with zooms and callouts timed to every click. Ask your agent for *"a launch video with a demo of my app"*, or see [Demo autopilot](docs/guide/demo-autopilot.md).
 
 ## Learn more
 
