@@ -9,7 +9,7 @@ import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { validateSubjectInfo, validateSubjectProbe } from "../kit/core/subject.mjs";
-import { parseRange, rangeDirName, runSubjectMatte, runSubjectProbe } from "../src/subject/stage.js";
+import { matteSize, parseRange, rangeDirName, runSubjectMatte, runSubjectProbe } from "../src/subject/stage.js";
 import { inputSize, resizeAlpha } from "../src/subject/segment.js";
 import { modelStatus, subjectModel } from "../src/subject/models.js";
 
@@ -57,7 +57,7 @@ test("probe samples the clip, finds one person and caches the result", needsFfmp
   assert.equal(first.probe.source.width, 180);
   assert.equal(first.probe.samples.length, 3);
   assert.ok(Math.abs(first.probe.head.x - 0.5) < 0.03, `head x ${first.probe.head.x}`);
-  assert.match(first.path, /[0-9a-f]{12}-modnet[/\\]probe\.json$/);
+  assert.match(first.path, /[0-9a-f]{12}-mediapipe-selfie[/\\]probe\.json$/);
 
   const again = await runSubjectProbe(clip, { cacheDir: path.join(dir, "cache"), segmenter });
   assert.equal(again.cached, true);
@@ -80,6 +80,7 @@ test("matte writes an alpha WebM and one subject frame per source frame", needsF
   assert.equal(stream.tags?.alpha_mode ?? stream.tags?.ALPHA_MODE, "1");
   const info = JSON.parse(await readFile(result.subject, "utf8"));
   assert.equal(info.matte, "matte.webm");
+  assert.deepEqual(info.matte_size, { width: 180, height: 320 });
   const cached = await runSubjectMatte(clip, { in: 1, out: 2 }, { cacheDir: path.join(dir, "cache"), segmenter: brightnessSegmenter() });
   assert.equal(cached.cached, true);
 });
@@ -88,6 +89,12 @@ test("matte rejects a range outside the clip", needsFfmpeg, async (t) => {
   const dir = await tempDir(t);
   const clip = await presenterClip(dir);
   await assert.rejects(runSubjectMatte(clip, { in: 2, out: 1 }, { cacheDir: dir, segmenter: brightnessSegmenter() }), /0 ≤ in < out/);
+});
+
+test("matteSize caps the short edge at 1920 and keeps the aspect", () => {
+  assert.deepEqual(matteSize({ width: 3840, height: 2160 }), { width: 3414, height: 1920 });
+  assert.deepEqual(matteSize({ width: 2160, height: 3840 }), { width: 1920, height: 3414 });
+  assert.deepEqual(matteSize({ width: 1080, height: 1920 }), { width: 1080, height: 1920 });
 });
 
 test("parseRange and rangeDirName", () => {
@@ -113,7 +120,10 @@ test("resizeAlpha scales a float mask to bytes", () => {
 
 test("modelStatus reports a missing model without the network", async (t) => {
   const dir = await tempDir(t);
-  assert.deepEqual(await modelStatus("modnet", { dir }), { id: "modnet", path: path.join(dir, "modnet.onnx"), installed: false });
+  assert.deepEqual(await modelStatus("modnet", { dir }), { id: "modnet", installed: false, models: [{ id: "modnet", path: path.join(dir, "modnet.onnx"), installed: false }] });
+  const fused = await modelStatus("modnet-fused", { dir });
+  assert.deepEqual(fused.models.map((model) => model.id), ["modnet", "mediapipe-selfie"]);
+  assert.equal(fused.installed, false);
 });
 
 test("ensureModel refuses a download that fails verification", async (t) => {
@@ -136,6 +146,6 @@ test("launchclip subject probe says how to install a missing model", needsFfmpeg
     else process.env.LAUNCHCLIP_HOME = previous;
   });
   const sink = { write() {} };
-  await assert.rejects(runCli(["subject", "probe", clip, "--no-download", "--cache", path.join(dir, "cache")], { stdout: sink, stderr: sink }), /launchclip subject setup --model modnet/);
+  await assert.rejects(runCli(["subject", "probe", clip, "--no-download", "--cache", path.join(dir, "cache")], { stdout: sink, stderr: sink }), /launchclip subject setup --model mediapipe-selfie/);
   await assert.rejects(runCli(["subject", "matte", clip], { stdout: sink, stderr: sink }), /--range must be/);
 });

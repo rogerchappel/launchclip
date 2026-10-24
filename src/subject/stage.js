@@ -11,14 +11,17 @@ import path from "node:path";
 import { SUBJECT_PROBE_SCHEMA, SUBJECT_SCHEMA, maskStats, summarizeSamples, validateSubjectInfo, validateSubjectProbe } from "../../kit/core/subject.mjs";
 import { probeMedia } from "../media_trim.js";
 import { openMatteWriter, readFrames, withAlpha } from "./frames.js";
-import { DEFAULT_SUBJECT_MODEL, ensureModel, sha256File, subjectModel } from "./models.js";
-import { createSegmenter } from "./segment.js";
+import { DEFAULT_PROBE_MODEL, DEFAULT_SUBJECT_MODEL, sha256File, subjectPipeline } from "./models.js";
+import { createSubjectSegmenter } from "./segment.js";
 
 // Probe: about one frame a second, at most this many, decoded this wide.
 const PROBE_MAX_SAMPLES = 60;
 const PROBE_WIDTH = 360;
 // Mask statistics for matte frames are measured on a mask this wide.
 const STATS_WIDTH = 270;
+// Mattes are written with at most this short edge: the largest canvas is
+// 1080×1920, and a 9:16 crop of a landscape source needs its full height.
+const MATTE_MAX_SHORT_EDGE = 1920;
 
 export function defaultCacheDir(cwd = process.cwd()) {
   return path.join(cwd, ".launchclip", "subject");
@@ -50,8 +53,8 @@ export function rangeDirName(range) {
  * options: {model, cacheDir, force, download, smooth, log, segmenter (tests)}
  */
 export async function runSubjectProbe(src, options = {}) {
-  const modelId = options.model ?? DEFAULT_SUBJECT_MODEL;
-  subjectModel(modelId);
+  const modelId = options.model ?? DEFAULT_PROBE_MODEL;
+  subjectPipeline(modelId);
   const source = options.source ?? await describeSource(src);
   const entry = subjectCacheEntry(source, modelId, options.cacheDir ?? defaultCacheDir());
   const file = path.join(entry, "probe.json");
@@ -61,7 +64,7 @@ export async function runSubjectProbe(src, options = {}) {
   }
   const rate = Math.min(1, PROBE_MAX_SAMPLES / source.duration);
   const size = evenSize(PROBE_WIDTH, source);
-  const segmenter = options.segmenter ?? await createSegmenter(modelId, await ensureModel(modelId, options), options);
+  const segmenter = options.segmenter ?? await createSubjectSegmenter(modelId, options);
   const samples = [];
   try {
     let index = 0;
@@ -84,7 +87,7 @@ export async function runSubjectProbe(src, options = {}) {
  */
 export async function runSubjectMatte(src, range, options = {}) {
   const modelId = options.model ?? DEFAULT_SUBJECT_MODEL;
-  subjectModel(modelId);
+  subjectPipeline(modelId);
   const source = options.source ?? await describeSource(src);
   const checked = checkRange(range, source);
   const dir = path.join(subjectCacheEntry(source, modelId, options.cacheDir ?? defaultCacheDir()), "ranges", rangeDirName(checked));
@@ -96,9 +99,10 @@ export async function runSubjectMatte(src, range, options = {}) {
   }
   await mkdir(dir, { recursive: true });
   const began = Date.now();
-  const { width, height, fps } = source;
+  const { fps } = source;
+  const { width, height } = matteSize(source);
   const stats = evenSize(Math.min(STATS_WIDTH, width), source);
-  const segmenter = options.segmenter ?? await createSegmenter(modelId, await ensureModel(modelId, options), options);
+  const segmenter = options.segmenter ?? await createSubjectSegmenter(modelId, options);
   const partial = path.join(dir, "matte.partial.webm");
   const writer = openMatteWriter(partial, { width, height, fps, ffmpeg: options.ffmpeg });
   const frames = [];
@@ -121,7 +125,7 @@ export async function runSubjectMatte(src, range, options = {}) {
   }
   if (!frames.length) throw new Error(`No frames decoded from ${src} between ${checked.in} and ${checked.out} s`);
   await rename(partial, matte);
-  const info = { schema: SUBJECT_SCHEMA, source, model: modelId, range: checked, matte: "matte.webm", ...summarizeSamples(frames), frames };
+  const info = { schema: SUBJECT_SCHEMA, source, model: modelId, range: checked, matte: "matte.webm", matte_size: { width, height }, ...summarizeSamples(frames), frames };
   await writeChecked(subject, info, validateSubjectInfo);
   return { info, dir, matte, subject, cached: false, seconds: round((Date.now() - began) / 1000, 2) };
 }
@@ -138,6 +142,11 @@ function checkRange(range, source) {
   const end = Math.min(Number(range?.out), source.duration);
   if (!(start >= 0) || !(end > start)) throw new Error(`range must be {in, out} with 0 ≤ in < out ≤ ${source.duration} s (got ${JSON.stringify(range)})`);
   return { in: round(start, 3), out: round(end, 3) };
+}
+
+export function matteSize(source) {
+  const scale = Math.min(1, MATTE_MAX_SHORT_EDGE / Math.min(source.width, source.height));
+  return evenSize(source.width * scale, source);
 }
 
 function evenSize(targetWidth, source) {

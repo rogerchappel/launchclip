@@ -113,7 +113,7 @@ async function subjectStatus(env) {
     runtime,
     model: model.id,
     model_installed: model.installed,
-    model_path: model.path,
+    model_paths: model.models.map((entry) => entry.path),
     ...(runtime && model.installed ? {} : { hint: runtime ? "run: launchclip subject setup (or let the first subject probe download it)" : "onnxruntime-node did not load; reinstall LaunchClip" })
   };
 }

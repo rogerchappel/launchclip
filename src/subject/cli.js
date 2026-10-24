@@ -1,7 +1,7 @@
 // launchclip subject setup | probe <media> | matte <media> --range <in>-<out>
 
 import path from "node:path";
-import { DEFAULT_SUBJECT_MODEL, ensureModel, subjectModel } from "./models.js";
+import { DEFAULT_PROBE_MODEL, DEFAULT_SUBJECT_MODEL, ensurePipeline, subjectModel, subjectPipeline } from "./models.js";
 import { parseRange, runSubjectMatte, runSubjectProbe } from "./stage.js";
 
 export const SUBJECT_ACTIONS = Object.freeze(["setup", "probe", "matte"]);
@@ -17,8 +17,8 @@ export function parseSubjectInvocation(action, rest) {
 
 /** → a JSON-ready report; `log` gets progress lines (stderr). */
 export async function runSubjectCommand(action, media, flags = {}, { log = () => {}, fetchImpl } = {}) {
-  const model = String(flags.model ?? DEFAULT_SUBJECT_MODEL);
-  subjectModel(model);
+  const model = String(flags.model ?? (action === "probe" ? DEFAULT_PROBE_MODEL : DEFAULT_SUBJECT_MODEL));
+  const pipeline = subjectPipeline(model);
   const common = {
     model,
     cacheDir: flags.cache ? path.resolve(String(flags.cache)) : undefined,
@@ -29,8 +29,9 @@ export async function runSubjectCommand(action, media, flags = {}, { log = () =>
     ...(fetchImpl ? { fetchImpl } : {})
   };
   if (action === "setup") {
-    const file = await ensureModel(model, common);
-    return { stage: "subject", action, model, path: file, licence: subjectModel(model).licence, installed: true };
+    // The default pipeline covers the probe model too.
+    const files = await ensurePipeline(model, common);
+    return { stage: "subject", action, model, models: pipeline.models.map((id) => ({ id, path: files[id], licence: subjectModel(id).licence })), installed: true };
   }
   const src = path.resolve(media);
   if (action === "probe") {
@@ -54,7 +55,7 @@ export async function runSubjectCommand(action, media, flags = {}, { log = () =>
 }
 
 export function formatSubjectReport(report) {
-  if (report.action === "setup") return `Model ${report.model} (${report.licence}) is installed at ${report.path}\n`;
+  if (report.action === "setup") return `${report.model} is installed:\n${report.models.map((model) => `  ${model.id} (${model.licence}) ${model.path}`).join("\n")}\n`;
   const lines = [];
   const where = report.action === "probe" ? report.path : report.subject;
   lines.push(`${report.action === "probe" ? "Probe" : "Matte"} ${report.cached ? "(cached) " : ""}for ${report.media}`);

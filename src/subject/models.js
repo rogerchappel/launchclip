@@ -58,12 +58,31 @@ export const SUBJECT_MODELS = Object.freeze({
   })
 });
 
-export const DEFAULT_SUBJECT_MODEL = "modnet";
+// Pipelines combine models. modnet-fused takes MODNet's edges at a 384 px
+// short edge and fills the holes MODNet punches in low-contrast clothing from
+// MediaPipe's eroded mask, bounded to MODNet's body box (segment.js
+// fuseSegmenters). It won the 2026-10-24 bake-off (RFC §4.2).
+export const SUBJECT_PIPELINES = Object.freeze({
+  "modnet-fused": Object.freeze({ id: "modnet-fused", name: "MODNet edges with MediaPipe fill", primary: "modnet", shortEdge: 384, fill: "mediapipe-selfie" })
+});
 
-export function subjectModel(id = DEFAULT_SUBJECT_MODEL) {
+// Mattes use the pipeline; the probe only needs presence and framing, so it
+// uses the fast MediaPipe model alone (about 13 ms a frame).
+export const DEFAULT_SUBJECT_MODEL = "modnet-fused";
+export const DEFAULT_PROBE_MODEL = "mediapipe-selfie";
+
+export function subjectModel(id = "modnet") {
   const model = SUBJECT_MODELS[id];
   if (!model) throw new Error(`Unknown subject model "${id}". Known models: ${Object.keys(SUBJECT_MODELS).join(", ")}`);
   return model;
+}
+
+/** A pipeline or a single model as a pipeline: {id, primary, shortEdge?, fill?, models: [model ids]}. */
+export function subjectPipeline(id = DEFAULT_SUBJECT_MODEL) {
+  const pipeline = SUBJECT_PIPELINES[id];
+  if (pipeline) return { ...pipeline, models: [pipeline.primary, ...(pipeline.fill ? [pipeline.fill] : [])] };
+  if (SUBJECT_MODELS[id]) return { id, primary: id, models: [id] };
+  throw new Error(`Unknown subject model "${id}". Known models: ${[...Object.keys(SUBJECT_PIPELINES), ...Object.keys(SUBJECT_MODELS)].join(", ")}`);
 }
 
 /** ~/.launchclip/models, or $LAUNCHCLIP_HOME/models. */
@@ -75,22 +94,32 @@ export function modelPath(id, options = {}) {
   return path.join(options.dir ?? modelsDir(options), subjectModel(id).file);
 }
 
-/** → {id, path, installed} without touching the network. */
+/** → {id, installed, models: [{id, path, installed}]} without touching the network. */
 export async function modelStatus(id = DEFAULT_SUBJECT_MODEL, options = {}) {
-  const file = modelPath(id, options);
-  try {
-    const info = await stat(file);
-    return { id, path: file, installed: info.size === subjectModel(id).bytes };
-  } catch {
-    return { id, path: file, installed: false };
+  const models = [];
+  for (const modelId of subjectPipeline(id).models) {
+    const file = modelPath(modelId, options);
+    let installed = false;
+    try {
+      installed = (await stat(file)).size === subjectModel(modelId).bytes;
+    } catch {}
+    models.push({ id: modelId, path: file, installed });
   }
+  return { id, installed: models.every((model) => model.installed), models };
+}
+
+/** Every model a pipeline needs, downloaded and verified. → {modelId: path} */
+export async function ensurePipeline(id = DEFAULT_SUBJECT_MODEL, options = {}) {
+  const files = {};
+  for (const modelId of subjectPipeline(id).models) files[modelId] = await ensureModel(modelId, options);
+  return files;
 }
 
 /**
  * The model's local path, downloading and verifying it when missing.
  * download: false makes a missing model an error instead.
  */
-export async function ensureModel(id = DEFAULT_SUBJECT_MODEL, { download = true, fetchImpl = fetch, log = () => {}, ...options } = {}) {
+export async function ensureModel(id, { download = true, fetchImpl = fetch, log = () => {}, ...options } = {}) {
   const model = subjectModel(id);
   const file = modelPath(id, options);
   if ((await modelStatus(id, options)).installed && (await sha256File(file)) === model.sha256) return file;

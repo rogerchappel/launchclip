@@ -2,7 +2,8 @@
 // comes back at the same size as 0–255 values. Inference runs at the model's
 // own resolution and the mask is scaled back with bilinear filtering.
 
-import { subjectModel } from "./models.js";
+import { maskStats } from "../../kit/core/subject.mjs";
+import { ensurePipeline, subjectModel, subjectPipeline } from "./models.js";
 
 /**
  * → {model, inputSize(width, height), segment(rgb, width, height) → Promise<Uint8Array>, release()}
@@ -20,10 +21,15 @@ export async function createSegmenter(modelId, modelFile, { smooth = 0, threads,
     ...(threads ? { intraOpNumThreads: threads } : {})
   });
   let previous = null;
-  return {
+  const segmenter = {
     model,
     inputSize: (width, height) => inputSize(model.input.size, width, height),
     async segment(rgb, width, height) {
+      const { alpha, width: sw, height: sh } = await segmenter.segmentSmall(rgb, width, height);
+      return resizeAlpha(alpha, sw, sh, width, height);
+    },
+    // The mask at the model's own resolution: {alpha: Float32Array 0–1, width, height}.
+    async segmentSmall(rgb, width, height) {
       const size = inputSize(model.input.size, width, height);
       const tensor = new ort.Tensor("float32", toTensor(rgb, width, height, size, model.input), [1, 3, size.height, size.width]);
       const outputs = await session.run({ [model.input.name]: tensor });
@@ -35,12 +41,103 @@ export async function createSegmenter(modelId, modelFile, { smooth = 0, threads,
         small = blended;
       }
       previous = small;
-      return resizeAlpha(small, size.width, size.height, width, height);
+      return { alpha: small, width: size.width, height: size.height };
     },
     async release() {
       await session.release?.();
     }
   };
+  return segmenter;
+}
+
+/**
+ * Edges from `primary`, body from `filler`: the filler's mask is eroded by
+ * `erode` of its own pixels, so only its confident interior survives, and
+ * the result is the per-pixel maximum of the two. This fills the holes a
+ * matting model can punch in low-contrast clothing without taking on the
+ * filler's looser edges. The filler only counts inside the primary's body
+ * box (padded by `pad` of the frame), so its stray blobs elsewhere (a lamp,
+ * a chair) never enter the matte. Same interface as createSegmenter.
+ */
+export function fuseSegmenters(primary, filler, { erode = 3, pad = 0.02 } = {}) {
+  return {
+    model: primary.model,
+    filler: filler.model,
+    inputSize: primary.inputSize,
+    async segment(rgb, width, height) {
+      const edges = await primary.segment(rgb, width, height);
+      const body = await filler.segmentSmall(rgb, width, height);
+      const box = maskStats(sampleMask(edges, width, height, 180), 180, Math.max(2, Math.round((180 * height) / width))).body;
+      if (!box) return edges;
+      const interior = resizeAlpha(erodeAlpha(body.alpha, body.width, body.height, erode), body.width, body.height, width, height);
+      const x0 = Math.max(0, Math.floor((box.x - box.w / 2 - pad) * width));
+      const x1 = Math.min(width, Math.ceil((box.x + box.w / 2 + pad) * width));
+      const y0 = Math.max(0, Math.floor((box.y - box.h / 2 - pad) * height));
+      const y1 = Math.min(height, Math.ceil((box.y + box.h / 2 + pad) * height));
+      for (let y = y0; y < y1; y += 1) {
+        for (let x = x0; x < x1; x += 1) {
+          const i = y * width + x;
+          if (interior[i] > edges[i]) edges[i] = interior[i];
+        }
+      }
+      return edges;
+    },
+    async release() {
+      await primary.release();
+      await filler.release();
+    }
+  };
+}
+
+// Nearest-neighbour copy of a byte mask at `targetWidth` wide.
+function sampleMask(alpha, width, height, targetWidth) {
+  const targetHeight = Math.max(2, Math.round((targetWidth * height) / width));
+  const out = new Uint8Array(targetWidth * targetHeight);
+  for (let y = 0; y < targetHeight; y += 1) {
+    const sy = Math.min(height - 1, Math.floor(((y + 0.5) * height) / targetHeight));
+    for (let x = 0; x < targetWidth; x += 1) out[y * targetWidth + x] = alpha[sy * width + Math.min(width - 1, Math.floor(((x + 0.5) * width) / targetWidth))];
+  }
+  return out;
+}
+
+// Separable min filter (square kernel of radius r) on a float mask.
+export function erodeAlpha(alpha, width, height, radius) {
+  if (radius <= 0) return alpha;
+  const horizontal = new Float32Array(alpha.length);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      let min = 1;
+      for (let dx = -radius; dx <= radius; dx += 1) {
+        const value = alpha[y * width + Math.min(width - 1, Math.max(0, x + dx))];
+        if (value < min) min = value;
+      }
+      horizontal[y * width + x] = min;
+    }
+  }
+  const out = new Float32Array(alpha.length);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      let min = 1;
+      for (let dy = -radius; dy <= radius; dy += 1) {
+        const value = horizontal[Math.min(height - 1, Math.max(0, y + dy)) * width + x];
+        if (value < min) min = value;
+      }
+      out[y * width + x] = min;
+    }
+  }
+  return out;
+}
+
+/**
+ * The segmenter for a pipeline or model id, fetching its models as needed.
+ * options: ensureModel options plus {smooth, threads, shortEdge}.
+ */
+export async function createSubjectSegmenter(id, options = {}) {
+  const pipeline = subjectPipeline(id);
+  const files = await ensurePipeline(id, options);
+  const primary = await createSegmenter(pipeline.primary, files[pipeline.primary], { ...options, shortEdge: options.shortEdge ?? pipeline.shortEdge });
+  if (!pipeline.fill) return primary;
+  return fuseSegmenters(primary, await createSegmenter(pipeline.fill, files[pipeline.fill], { threads: options.threads }));
 }
 
 async function loadRuntime() {

@@ -22,7 +22,7 @@ import path from "node:path";
 import { maskStats, summarizeSamples } from "../kit/core/subject.mjs";
 import { readFrames } from "../src/subject/frames.js";
 import { ensureModel, subjectModel } from "../src/subject/models.js";
-import { createSegmenter } from "../src/subject/segment.js";
+import { createSegmenter, fuseSegmenters } from "../src/subject/segment.js";
 import { describeSource } from "../src/subject/stage.js";
 
 const args = parseArgs(process.argv.slice(2));
@@ -43,9 +43,10 @@ for (const clip of clips) {
   const sheet = { source: [], columns: [] };
   sheet.source = await sheetFrames(clip, source, null);
   for (const variant of variants) {
-    const label = `${variant.id}${variant.shortEdge ? `:${variant.shortEdge}` : ""}${variant.smooth ? `@${variant.smooth}` : ""}`;
-    const file = await ensureModel(variant.id, { ...(args["models-dir"] ? { dir: path.resolve(args["models-dir"]) } : {}), log: (line) => console.error(line) });
-    const segmenter = await createSegmenter(variant.id, file, { smooth: variant.smooth, shortEdge: variant.shortEdge });
+    const label = `${variant.id}${variant.shortEdge ? `:${variant.shortEdge}` : ""}${variant.fill ? `+${variant.fill}` : ""}${variant.smooth ? `@${variant.smooth}` : ""}`;
+    const modelOptions = { ...(args["models-dir"] ? { dir: path.resolve(args["models-dir"]) } : {}), log: (line) => console.error(line) };
+    const primary = await createSegmenter(variant.id, await ensureModel(variant.id, modelOptions), { smooth: variant.smooth, shortEdge: variant.shortEdge });
+    const segmenter = variant.fill ? fuseSegmenters(primary, await createSegmenter(variant.fill, await ensureModel(variant.fill, modelOptions))) : primary;
     const statsSize = { width: 270, height: Math.round((270 * source.height) / source.width / 2) * 2 };
     const samples = [];
     let previous = null;
@@ -235,11 +236,13 @@ function sheetHeight(source) {
   return Math.round((SHEET_WIDTH * source.height) / source.width / 2) * 2;
 }
 
-// "modnet", "modnet@0.3" (smoothing) or "modnet:384@0.3" (inference short edge).
+// "modnet", "modnet@0.3" (smoothing), "modnet:384" (inference short edge) and
+// "modnet:384+mediapipe-selfie" (holes filled from a second model), combinable.
 function parseVariant(value) {
   const [head, smooth] = String(value).split("@");
-  const [id, shortEdge] = head.split(":");
-  return { id, smooth: Number(smooth ?? 0), ...(shortEdge ? { shortEdge: Number(shortEdge) } : {}) };
+  const [main, fill] = head.split("+");
+  const [id, shortEdge] = main.split(":");
+  return { id, smooth: Number(smooth ?? 0), ...(shortEdge ? { shortEdge: Number(shortEdge) } : {}), ...(fill ? { fill } : {}) };
 }
 
 function parseArgs(argv) {
