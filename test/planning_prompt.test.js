@@ -179,3 +179,18 @@ test("subject-effects.md is generated from the registry and shipped in both skil
     assert.equal(await readFile(path.join(root, "skills", skill, "references", "subject-effects.md"), "utf8"), reference);
   }
 });
+
+test("product moments around the presenter have phrase rows", () => {
+  const first = (text) => suggestModules(text, { lane: "footage-led", subject: true })[0]?.modules ?? [];
+  assert.ok(first("Here's the dashboard.").includes("app-stage"));
+  assert.ok(first("On my phone it just works.").includes("phone-stage"));
+  assert.ok(first("So we built Ledgerly.").includes("backdrop-swap"));
+  assert.ok(first("This exact video went viral.").includes("feed-frame"));
+  assert.ok(first("It transcribes, cuts and renders.").includes("pull-back"));
+  // Without the cut-out, only the moments that do not need it are offered.
+  const bare = suggestModules("This exact video went viral. On my phone it just works.", { lane: "footage-led" }).flatMap((hint) => hint.modules);
+  assert.ok(!bare.includes("feed-frame"));
+  assert.ok(bare.includes("phone-stage"));
+  assert.match(subjectEffectsReference(), /\| feed-frame \| split \| yes \|/);
+  assert.match(subjectEffectsReference(), /\| phone-stage \| front \| no \|/);
+});

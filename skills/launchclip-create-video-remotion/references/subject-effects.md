@@ -17,7 +17,7 @@ The models download on first use (`launchclip subject setup` fetches them up fro
 
 - `scene.layer: "behind"`: the scene draws behind the presenter, so their head and body cover it. masthead and dolly-zoom are behind by default.
 - No layer (front): the scene draws over the presenter, as every footage-led overlay always has.
-- `"split"`: for modules that draw on both sides of the presenter (none yet).
+- `"split"`: modules that draw on both sides of the presenter (feed-frame: its backdrop behind them, its feed chrome in front).
 - `base.subject: "off"` turns the subject off; `{"mattes": [...]}` lists mattes explicitly (`src`, `in`, `out`, `info`, `plate`).
 
 Both renderers stack the base recording, behind scenes, the cut-out presenter, front scenes, then captions. A punch-in moves (and blurs) the presenter and the room together.
@@ -26,18 +26,21 @@ Both renderers stack the base recording, behind scenes, the cut-out presenter, f
 
 - scene.layer: "behind" draws a scene behind the presenter, so their head and body cover it (a word or chart behind them); omit it (front) for everything else. masthead and dolly-zoom are always behind.
 - Use at most one or two subject effects in a 30–60 s piece, at least 3 s apart, never two different ones back to back, and together under a third of the runtime.
-- masthead needs headroom; dolly-zoom needs a medium or wide shot.
+- masthead and app-stage need headroom; dolly-zoom needs a medium or wide shot.
+- app-stage, phone-stage and a backdrop-swap backdrop show real product media from the asset inventory (screenshots, screen recordings, demo flows); never invent a screenshot. feed-frame shows counts only when the brief gives them.
 - Never put a front scene over the presenter's face for more than 0.3 s; layout-check fails it.
 
 ## Modules
 
-| Module | Layer | Aspects | Moods | Use when the presenter… |
-| --- | --- | --- | --- | --- |
-| masthead | behind | 9:16, 16:9 | bold, editorial, premium, launch | names the product or the one idea the video is about ("meet X", "this is X", "it's called X"): one word behind the presenter's head |
-| dolly-zoom | behind | 9:16, 16:9 | cinematic, dramatic, premium | lands a realisation, reveal or turn ("that's when", "it hit me", "everything changed"): the room moves, the presenter holds |
-| feed-frame | split | 9:16 | bold, launch, playful | — |
-| backdrop-swap | behind | 9:16, 16:9 | launch, premium, bold | — |
-| app-stage | behind | 9:16, 16:9 | launch, editorial | — |
+| Module | Layer | Needs the matte | Aspects | Moods | Use when the presenter… |
+| --- | --- | --- | --- | --- | --- |
+| masthead | behind | yes | 9:16, 16:9 | bold, editorial, premium, launch | names the product or the one idea the video is about ("meet X", "this is X", "it's called X"): one word behind the presenter's head |
+| dolly-zoom | behind | yes | 9:16, 16:9 | cinematic, dramatic, premium | lands a realisation, reveal or turn ("that's when", "it hit me", "everything changed"): the room moves, the presenter holds |
+| feed-frame | split | yes | 9:16 | bold, launch, playful | talks about posting, going viral or "this exact video": the frame becomes a feed window they break out of |
+| pull-back | front | no | 9:16, 16:9 | launch, editorial | reveals how the video or result was made, or a process finishing ("made with", "it transcribes, cuts…"): the frame pulls back into an app window while real steps tick |
+| backdrop-swap | behind | yes | 9:16, 16:9 | launch, premium, bold | turns from the problem to the product ("so we built", "that's why", "enter"): the room gives way to a brand backdrop |
+| app-stage | behind | yes | 9:16, 16:9 | launch, editorial | shows or describes the product on screen ("here's the dashboard", "this is the app"), with a screenshot or recording in the assets: the UI fills the top, their head over its edge |
+| phone-stage | front | no | 9:16, 16:9 | launch, playful | shows the product on a phone or a mobile flow, with a recording or screenshot in the assets (a demo-autopilot flow fits) |
 
 ### masthead (keeps captions, behind the presenter, needs the subject)
 Footage-led, behind the presenter: one huge word (a product name or the one idea) rises in letter by letter at the top of the frame, and the presenter's head covers its lower part like a magazine cover. Needs headroom: medium or wide shots.
@@ -71,6 +74,17 @@ params:
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: frame, chrome, release
 
+### pull-back (hides captions)
+Footage-led: the recording shrinks into an app window while real steps tick off beside it and a progress bar counts to 100%. For "and this video was made by…", a process finishing, or a product reveal. Hides captions.
+params:
+- steps: 1–4 real steps ≤ 28 chars each (required)
+- title: window title ≤ 32 (e.g. a file or product name)
+- label: progress label ≤ 20 (default "Rendering")
+- scale: window size 0.4–0.75
+- release: seconds to spring back (0.3–1.2)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: pull, step-<i>, done
+
 ### backdrop-swap (keeps captions, behind the presenter, needs the subject)
 Footage-led, behind the presenter: the room dissolves into a backdrop (brand gradient, or a supplied product screenshot or video) and the presenter glides down in front of it; an optional title sits above their head. For the turn from the problem to the product.
 params:
@@ -88,6 +102,15 @@ params:
 - title: app or page title ≤ 32 (optional)
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: stage
+
+### phone-stage (keeps captions)
+Footage-led: a phone springs in beside the presenter's head and plays a real screen recording or screenshot (a demo-autopilot flow fits), floating gently while the room pans away from it. For showing the app on a phone while explaining it.
+params:
+- media: {src: assets/ image or video (a demo-autopilot flow: assets/demo/<flow>.mp4), sourceStart?: seconds (video), fit?: cover|contain} (required)
+- side: auto|left|right (default: the side with more room)
+- pan: boolean: pan the room away (default true)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: phone
 
 ### punch-in (keeps captions)
 Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay). Steps punch in, further in or back out on successive words; blur adds a few frames of zoom blur on each move.

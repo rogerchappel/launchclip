@@ -105,6 +105,11 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 | calls to action, or the loop ending | cta |
 | names the product or the one idea the video is about ("meet X", "this is X", "it's called X"): one word behind the presenter's head [footage-led] (needs the subject) | masthead |
 | lands a realisation, reveal or turn ("that's when", "it hit me", "everything changed"): the room moves, the presenter holds [footage-led] (needs the subject) | dolly-zoom |
+| shows or describes the product on screen ("here's the dashboard", "this is the app"), with a screenshot or recording in the assets: the UI fills the top, their head over its edge [footage-led] (needs the subject) | app-stage |
+| shows the product on a phone or a mobile flow, with a recording or screenshot in the assets (a demo-autopilot flow fits) [footage-led] | phone-stage |
+| turns from the problem to the product ("so we built", "that's why", "enter"): the room gives way to a brand backdrop [footage-led] (needs the subject) | backdrop-swap |
+| talks about posting, going viral or "this exact video": the frame becomes a feed window they break out of [footage-led] (needs the subject) | feed-frame |
+| reveals how the video or result was made, or a process finishing ("made with", "it transcribes, cuts…"): the frame pulls back into an app window while real steps tick [footage-led] | pull-back |
 | footage-led emphasis on a word (steps for a build of emphasised words; blur for energy) [footage-led] | punch-in |
 | footage-led claim sticker or label pointing at something on screen [footage-led] | footage-callout |
 | introduces the speaker or a guest by name and title [footage-led] | lower-third |
