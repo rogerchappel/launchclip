@@ -22,7 +22,7 @@
 //
 // Canonical copy: kit/core/subject-layer.mjs.
 
-import { CAMERA_IDENTITY } from "./catalog-c.mjs";
+import { CAMERA_IDENTITY, cameraSampleProps } from "./catalog-c.mjs";
 import { frameState, sampleTime } from "./catalog-b-view.mjs";
 import { storyBase } from "./story.mjs";
 import { subjectAt } from "./subject.mjs";
@@ -106,7 +106,7 @@ export function subjectCameraOps(models) {
   if (!own.length && !base.length) return [];
   const covered = (t) => own.some((model) => t >= model.start - EPS && t <= model.end + EPS);
   const ops = [{ type: "set", target: SUBJECT_CAMERA, time: 0, props: { ...CAMERA_IDENTITY } }];
-  const sampleOp = (sample) => ({ type: "set", target: SUBJECT_CAMERA, time: Math.max(0, sampleTime(sample.t)), props: { x: sample.x, y: sample.y, scaleX: sample.scale, scaleY: sample.scale } });
+  const sampleOp = (sample) => ({ type: "set", target: SUBJECT_CAMERA, time: Math.max(0, sampleTime(sample.t)), props: cameraSampleProps(sample) });
   for (const model of base) for (const sample of model.camera.samples) if (!covered(sample.t)) ops.push(sampleOp(sample));
   for (const model of own) for (const sample of model.subjectCamera.samples) ops.push(sampleOp(sample));
   // frameState applies same-time ops in list order; sort by time so a base

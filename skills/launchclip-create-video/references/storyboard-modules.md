@@ -477,13 +477,15 @@ params:
 events: mark, wordmark, eyebrow, headline, badge, url, shine
 
 ### punch-in (keeps captions)
-Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay).
+Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay). Steps punch in, further in or back out on successive words; blur adds a few frames of zoom blur on each move.
 params:
 - scale: 1.06–1.25 (default 1.12)
 - at: seconds from scene start (optional; else a matching hit, else a default)
 - focus: {x, y} canvas fractions (default base.focus, else {0.5, 0.42})
 - release: seconds before the scene end when the zoom springs back (0.3–2, default min(0.5, 30% of the scene))
-events: punch, release
+- steps: [{at, scale}] 1–4, instead of at/scale: each springs to its scale (1–1.35; the first ≥ 1.06), at least 0.3 s apart
+- blur: true (14 px at 1080) or 2–30 px: velocity-shaped zoom blur, 0 once settled (default off)
+events: punch, step-<i>, release
 
 ### footage-callout (keeps captions)
 Footage-led: a claim sticker anchored to a point on the footage by a leader line, placed inside the safe zone.
@@ -574,7 +576,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | archive-card | 2 s | 0.5 s | scene − 0.65 s | stamp.at defaults to 0.35 s after the quote finishes revealing |
 | logo-row | 2 s | 0.5 s | scene − 0.65 s | logos pop in order; with no at, the first pops at 0.65 s and the rest follow by stagger (default 0.14 s) |
 | brand-lockup | 2 s | 0.5 s | scene − 0.65 s | elements land in this order: mark, wordmark, eyebrow, headline, badge, url, stagger apart (default 0.35 s), the first at 0 s; a hit on one moves the defaults after it |
-| punch-in | 0.8 s | 0 s | — | at ≤ scene − release − 0.25 s (release 0.3–2 s, default min(0.5, 0.3 × scene)) |
+| punch-in | 0.8 s | 0 s | — | at (and every steps[i].at) ≤ scene − release − 0.25 s (release 0.3–2 s, default min(0.5, 0.3 × scene)); steps at least 0.3 s apart |
 | footage-callout | 1.5 s | 0 s | scene − 1.1 s | — |
 | lower-third | 2 s | 0 s | scene − 1.2 s | — |
 | emphasis-caption | 0.8 s | 0 s | scene − 0.45 s | at ≤ scene − 0.45 s − stagger × (words − 1) (stagger 0–0.3 s, default 0.09) |

@@ -245,3 +245,48 @@ test('resolveModule passes the story base to punch-in and catalogue C models car
   assert.equal(model.sceneId, 'p');
   assert.equal(model.track, 6);
 });
+
+test('punch-in steps: punch in, further in and back out on successive words', () => {
+  const model = resolve('punch-in', {steps: [{at: 0.2, scale: 1.12}, {at: 1.0, scale: 1.3}, {at: 1.8, scale: 1.06}], release: 0.4}, {duration: 3});
+  const {samples, steps} = model.camera;
+  const scaleAt = (t) => samples.reduce((best, s) => (Math.abs(s.t - t) < Math.abs(best.t - t) ? s : best)).scale;
+  assert.deepEqual(steps.map((step) => step.at), [2.2, 3, 3.8]);
+  assert.ok(Math.abs(scaleAt(2.9) - 1.12) < 0.01, `first step settles at 1.12 (${scaleAt(2.9)})`);
+  assert.ok(Math.abs(scaleAt(3.7) - 1.3) < 0.01, `second step settles at 1.3 (${scaleAt(3.7)})`);
+  assert.ok(Math.abs(scaleAt(4.5) - 1.06) < 0.01, `third step settles at 1.06 (${scaleAt(4.5)})`);
+  assert.deepEqual(samples.at(-1), {t: 5, scale: 1, x: 0, y: 0});
+  assert.deepEqual(model.events.map((event) => event.name), ['punch', 'step-1', 'step-2', 'release']);
+  assert.equal(model.events.find((event) => event.name === 'step-2').cue, 'whoosh-soft', 'a zoom-out step gets the soft whoosh');
+  assert.equal(model.camera.scale, 1.3);
+});
+
+test('punch-in steps: strict validation', () => {
+  const r = (params) => () => resolve('punch-in', params, {duration: 3});
+  assert.throws(r({steps: [{at: 0.2, scale: 1.1}], at: 0.2}), /replaces at and scale/);
+  assert.throws(r({steps: []}), /1–4 steps/);
+  assert.throws(r({steps: [{at: 0.2, scale: 1.1}, {at: 0.3, scale: 1.2}]}), /at least 0\.3 s after/);
+  assert.throws(r({steps: [{at: 0.2, scale: 1.1}, {at: 0.8, scale: 1.11}]}), /differ from the step before it/);
+  assert.throws(r({steps: [{at: 0.2, scale: 1.02}]}), /must zoom in/);
+  assert.throws(r({steps: [{at: 0.2, scale: 1.5}]}), /params\.steps\[0\]\.scale/);
+});
+
+test('punch-in blur: velocity-shaped, zero once settled and at the end', () => {
+  const model = resolve('punch-in', {scale: 1.2, at: 0.5, blur: true});
+  const {samples} = model.camera;
+  const moving = samples.filter((s) => s.t > 2.5 && s.t < 2.6);
+  assert.ok(moving.some((s) => s.blur > 1), `blur while the zoom moves (${moving.map((s) => s.blur)})`);
+  assert.ok(samples.every((s) => s.blur <= 14 + 1e-9), 'capped at 14 px at 1080');
+  const settled = samples.filter((s) => s.t > 3.5 && s.t < 4.4);
+  assert.ok(settled.every((s) => s.blur === 0), 'no blur once settled');
+  assert.equal(samples.at(-1).blur, 0);
+  const ops = cameraOps([model]);
+  assert.ok(ops.some((op) => /^blur\(/.test(op.props.filter ?? '')));
+  assert.equal(ops.at(-1).props.filter, 'none');
+  // A room filter rides along in every blurred sample.
+  const withRoom = cameraOps([model], {roomFilterAt: () => 'brightness(0.6)'});
+  assert.ok(withRoom.some((op) => /^brightness\(0\.6\) blur\(/.test(op.props.filter ?? '')));
+  assert.equal(withRoom.at(-1).props.filter, 'brightness(0.6)');
+  // Without blur, samples carry no filter at all.
+  assert.ok(resolve('punch-in', {scale: 1.2, at: 0.5}).camera.samples.every((s) => s.blur === undefined));
+  assert.ok(cameraGsap([model]).some((line) => /filter/.test(line)));
+});

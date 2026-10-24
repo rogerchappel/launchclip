@@ -35,7 +35,7 @@ import { EMITTERS as CATALOG_B_EMITTERS, opsToGsap } from './catalog-b.mjs';
 import { EMITTERS as CATALOG_C_EMITTERS, cameraGsap } from './catalog-c.mjs';
 import { EMITTERS as CATALOG_D_EMITTERS } from './catalog-d.mjs';
 import { cameraOverlaps } from '../core/catalog-c.mjs';
-import { needsSubject, roomChanges, sceneLayerOf, SUBJECT_CAMERA, subjectCameraOps, subjectSegments, subjectWindows } from '../core/subject-layer.mjs';
+import { needsSubject, roomChanges, roomStateAt, sceneLayerOf, SUBJECT_CAMERA, subjectCameraOps, subjectSegments, subjectWindows } from '../core/subject-layer.mjs';
 
 export const COMPOSITION_ID = 'launchclip-story';
 export const GSAP_SRC = 'https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js';
@@ -331,7 +331,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
         motion.push(...room.map((change) => `tl.set('.lc-base-media', ${js(change.state)}, ${num(change.time)});`));
       }
     }
-    const camera = cameraGsap(models);
+    const camera = cameraGsap(models, '.lc-base-media', { roomFilterAt: (t) => roomStateAt(models, t).filter });
     if (camera.length) {
       motion.push(`// base camera (${models.filter((model) => model.camera).map((model) => model.sceneId ?? model.id).join(', ')})`);
       motion.push(...camera);

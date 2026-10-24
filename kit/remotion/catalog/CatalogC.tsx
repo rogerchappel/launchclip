@@ -53,13 +53,14 @@ export const LowerThird = typed('lower-third');
 export const EmphasisCaption = typed('emphasis-caption');
 
 /** Camera op list for a set of resolved models (memoise it per story). */
-export function baseCameraOps(models: any[]): any[] {
-  return cameraOps(models);
+export function baseCameraOps(models: any[], options: { roomFilterAt?: (t: number) => string } = {}): any[] {
+  return cameraOps(models, options);
 }
 
 /** Base-layer style at absolute time t for a camera op list. */
 export function cameraStyle(ops: any[], t: number): React.CSSProperties {
   if (!ops.length) return {};
   const props = (frameState(ops, t) as Map<string, FrameProps>).get(BASE_CAMERA);
-  return props ? (propsToStyle(props) as React.CSSProperties) : {};
+  // Zoom blur (punch-in blur) rides along as a CSS filter.
+  return props ? ({ ...propsToStyle(props), ...(props.filter !== undefined ? { filter: props.filter } : {}) } as React.CSSProperties) : {};
 }

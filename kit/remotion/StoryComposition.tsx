@@ -218,8 +218,10 @@ export const BaseLayer: React.FC<{ base: any; cameraOps: any[]; offset?: number;
   const style: React.CSSProperties = { position: "absolute", left: 0, top: 0, width, height, objectFit: base.fit, objectPosition: `${base.focus.x * 100}% ${base.focus.y * 100}%` };
   const shift = Math.round(offset * fps);
   const room = rooms.length ? roomStateAt(rooms, t) : null;
+  const camera = cameraStyle(cameraOps, t);
+  // A blurred camera sample already carries the room's filter.
   return (
-    <AbsoluteFill style={{ transformOrigin: "50% 50%", ...cameraStyle(cameraOps, t), ...(room ? { opacity: room.opacity, filter: room.filter } : {}) }}>
+    <AbsoluteFill style={{ transformOrigin: "50% 50%", ...camera, ...(room ? { opacity: room.opacity, filter: camera.filter ?? room.filter } : {}) }}>
       {base.segments.map((segment: any) => {
         const from = Math.round(segment.start * fps), to = Math.round(segment.end * fps);
         return (
@@ -241,7 +243,7 @@ export const SubjectLayer: React.FC<{ base: any; clips: any[]; ops: any[]; offse
   const style: React.CSSProperties = { position: "absolute", left: 0, top: 0, width, height, objectFit: base.fit, objectPosition: `${base.focus.x * 100}% ${base.focus.y * 100}%` };
   const shift = Math.round(offset * fps);
   return (
-    <AbsoluteFill style={{ transformOrigin: "50% 50%", ...(ops.length ? (propsToStyle(subjectCameraAt(ops, t)) as React.CSSProperties) : {}) }}>
+    <AbsoluteFill style={{ transformOrigin: "50% 50%", ...(ops.length ? subjectStyle(subjectCameraAt(ops, t)) : {}) }}>
       {clips.map((clip: any) => {
         const from = Math.round(clip.start * fps), to = Math.round(clip.end * fps);
         return (
@@ -253,6 +255,10 @@ export const SubjectLayer: React.FC<{ base: any; clips: any[]; ops: any[]; offse
     </AbsoluteFill>
   );
 };
+
+function subjectStyle(props: any): React.CSSProperties {
+  return { ...(propsToStyle(props) as React.CSSProperties), ...(props.filter !== undefined ? { filter: props.filter } : {}) };
+}
 
 /** Subject layer inputs for resolved layers: {needed, depth(layer), clips, ops, rooms}. */
 function subjectPlan(story: any, base: any, layers: any[]) {
@@ -288,7 +294,10 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
     ...layers.filter((layer: any) => layer.model?.hidesCaptions).map((layer: any) => [layer.entry.start, layer.entry.renderEnd] as [number, number])
   ];
   const base = React.useMemo(() => storyBase(story), [story]);
-  const cameraOps = React.useMemo(() => baseCameraOps(layers.map((layer: any) => layer.model)), [layers]);
+  const cameraOps = React.useMemo(() => {
+    const models = layers.map((layer: any) => layer.model);
+    return baseCameraOps(models, { roomFilterAt: (t: number) => roomStateAt(models, t).filter });
+  }, [layers]);
   // Footage-led: the recording carries the voice; audio.mix is the bed.
   const audio = base ? story.audio?.mix ?? null : story.audio?.mix ?? story.audio?.voice ?? null;
   const mixVolume = typeof story.audio?.mix_volume === "number" && audio === story.audio?.mix ? story.audio.mix_volume : 1;

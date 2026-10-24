@@ -35,7 +35,7 @@
 // 1080); every text/fill pair at least 3:1 (throws otherwise); no blur.
 
 import {formatBound, withinBounds} from './bounds.mjs';
-import {springValue} from './motion.mjs';
+import {motionBlurPx, springValue} from './motion.mjs';
 import {grammarEase, grammarStagger, grammarTweens} from './grammar.mjs';
 import {CATALOG_B_STYLE, contrastRatio, fitText, makeCheck, mixColor, r2, rt, textWidth} from './catalog-b-base.mjs';
 import {abs, el, sampleTime, set, svgRoot, transformString, tw} from './catalog-b-view.mjs';
@@ -159,40 +159,78 @@ const fraction = (check, value, path, low = 0, high = 1) => {
 // ---------------------------------------------------------------------------
 // punch-in: a spring zoom on the base toward a focus point
 
-function punchScale(t, {scale, punchAt, releaseAt, fps}) {
-  if (t < punchAt - 1e-9) return 1;
-  const pin = springValue(t, {start: punchAt, fps, ...PUNCH_SPRING.in});
+// Each step springs from the previous scale to its own (in: a zoom-in step,
+// out: a zoom-out step); the release springs whatever is left back to 1.
+function punchScale(t, {steps, releaseAt, fps}) {
+  let s = 1, previous = 1;
+  for (const step of steps) {
+    if (t < step.at - 1e-9) break;
+    const spring = step.scale >= previous ? PUNCH_SPRING.in : PUNCH_SPRING.out;
+    s += (step.scale - previous) * springValue(t, {start: step.at, fps, ...spring});
+    previous = step.scale;
+  }
   const pout = t < releaseAt - 1e-9 ? 0 : springValue(t, {start: releaseAt, fps, ...PUNCH_SPRING.out});
-  return Math.max(1, 1 + (scale - 1) * pin * (1 - pout));
+  return Math.max(1, 1 + (s - 1) * (1 - pout));
+}
+
+// Velocity-shaped zoom blur (motion.mjs motionBlurPx): the speed of the frame
+// edge, so a step or release blurs for a few frames and settles to 0.
+function punchBlur(s, previous, {half, max}) {
+  return r2(motionBlurPx(Math.abs(s - previous) * half, {max, shutter: 0.5}));
 }
 
 function resolvePunchIn(params, ctx) {
-  const b = createFootageBase('punch-in', params, ctx, {allowed: ['scale', 'at', 'focus', 'release'], minDuration: CATALOG_C_TIMING['punch-in'].minDuration});
+  const b = createFootageBase('punch-in', params, ctx, {allowed: ['scale', 'at', 'focus', 'release', 'steps', 'blur'], minDuration: CATALOG_C_TIMING['punch-in'].minDuration});
   const {check, canvas, fps, start, end, duration} = b;
   const p = b.params;
-  const scale = p.scale === undefined ? 1.12 : check.num(p.scale, 'params.scale', 1.06, 1.25);
   const baseFocus = ctx.base?.focus && Number.isFinite(ctx.base.focus.x) && Number.isFinite(ctx.base.focus.y) ? ctx.base.focus : {x: 0.5, y: 0.42};
   const focusIn = p.focus === undefined ? baseFocus : fraction(check, p.focus, 'params.focus');
   const release = p.release === undefined ? Math.min(0.5, r2(duration * 0.3)) : check.num(p.release, 'params.release', 0.3, 2);
-  const punchAt = b.timeOf('punch', p.at, 'params.at', 0, {min: 0, max: duration - release - CATALOG_C_TIMING['punch-in'].releaseHold});
+  const latest = duration - release - CATALOG_C_TIMING['punch-in'].releaseHold;
+  let steps;
+  if (p.steps !== undefined) {
+    if (p.at !== undefined || p.scale !== undefined) check.fail('params.steps', 'replaces at and scale; set either steps or at/scale');
+    if (!Array.isArray(p.steps) || p.steps.length < 1 || p.steps.length > 4) check.fail('params.steps', 'must be 1–4 steps [{at, scale}]');
+    steps = p.steps.map((step, i) => {
+      check.obj(step, `params.steps[${i}]`, ['at', 'scale'], ['at', 'scale']);
+      return {at: b.timeOf(`step-${i}`, step.at, `params.steps[${i}].at`, 0, {min: 0, max: latest}), scale: check.num(step.scale, `params.steps[${i}].scale`, 1, 1.35)};
+    });
+    steps.forEach((step, i) => {
+      if (i && step.at - steps[i - 1].at < CATALOG_C_TIMING['punch-in'].stepGap - 1e-6) check.fail(`params.steps[${i}].at`, `must be at least ${CATALOG_C_TIMING['punch-in'].stepGap} s after the step before it`);
+      if (i && Math.abs(step.scale - steps[i - 1].scale) < 0.03) check.fail(`params.steps[${i}].scale`, 'must differ from the step before it by at least 0.03');
+    });
+    if (steps[0].scale < 1.06) check.fail('params.steps[0].scale', 'must zoom in (1.06 or more)');
+  } else {
+    const scale = p.scale === undefined ? 1.12 : check.num(p.scale, 'params.scale', 1.06, 1.25);
+    steps = [{at: b.timeOf('punch', p.at, 'params.at', 0, {min: 0, max: latest}), scale}];
+  }
+  const blurMax = p.blur === undefined || p.blur === false ? 0 : p.blur === true ? b.u(14) : check.num(p.blur, 'params.blur', 2, 30);
+  const punchAt = steps[0].at;
+  const scale = Math.max(...steps.map(step => step.scale));
   const releaseAt = rt(end - release);
-  if (releaseAt - punchAt < 0.25 - 1e-6) check.fail('params.release', `leaves ${r2(releaseAt - punchAt)} s between the punch and the release; it needs 0.25 s`);
+  if (releaseAt - steps.at(-1).at < 0.25 - 1e-6) check.fail('params.release', `leaves ${r2(releaseAt - steps.at(-1).at)} s between the last step and the release; it needs 0.25 s`);
   const focus = {x: r2(focusIn.x * canvas.width), y: r2(focusIn.y * canvas.height)};
   const cx = canvas.width / 2, cy = canvas.height / 2;
+  const half = Math.hypot(canvas.width, canvas.height) / 2;
+  const at = t => punchScale(t, {steps, releaseAt, fps});
   const sample = t => {
-    const s = punchScale(t, {scale, punchAt, releaseAt, fps});
-    return {scale: Math.round(s * 1e5) / 1e5, x: r2((1 - s) * (focus.x - cx)) || 0, y: r2((1 - s) * (focus.y - cy)) || 0};
+    const s = at(t);
+    const out = {scale: Math.round(s * 1e5) / 1e5, x: r2((1 - s) * (focus.x - cx)) || 0, y: r2((1 - s) * (focus.y - cy)) || 0};
+    if (blurMax) out.blur = punchBlur(s, at(t - 1 / fps), {half, max: blurMax});
+    return out;
   };
   const samples = [];
   const first = Math.ceil(start * fps - 1e-6), last = Math.floor(end * fps + 1e-6);
   for (let f = first; f <= last; f++) samples.push({t: rt(f / fps), ...sample(f / fps)});
   // The camera always lands back on identity at the scene end.
-  if (!samples.length || samples.at(-1).t < end - 1e-6) samples.push({t: end, scale: 1, x: 0, y: 0});
-  else Object.assign(samples.at(-1), {scale: 1, x: 0, y: 0});
+  const identity = {scale: 1, x: 0, y: 0, ...(blurMax ? {blur: 0} : {})};
+  if (!samples.length || samples.at(-1).t < end - 1e-6) samples.push({t: end, ...identity});
+  else Object.assign(samples.at(-1), identity);
   b.events.push({id: `${b.id}-punch`, name: 'punch', time: punchAt, endTime: rt(Math.min(releaseAt, punchAt + 0.45)), role: 'emphasis', cue: 'whoosh'});
+  steps.slice(1).forEach((step, i) => b.events.push({id: `${b.id}-step-${i + 1}`, name: `step-${i + 1}`, time: step.at, endTime: rt(Math.min(releaseAt, step.at + 0.45)), role: 'emphasis', cue: step.scale > steps[i].scale ? 'whoosh' : 'whoosh-soft'}));
   b.events.push({id: `${b.id}-release`, name: 'release', time: releaseAt, endTime: end, role: 'release'});
-  b.model.camera = {target: 'base', focus, scale, punchAt, releaseAt, samples};
-  return b.finish({scale, focus, focusFraction: {x: focusIn.x, y: focusIn.y}, punchAt, releaseAt, release}, {
+  b.model.camera = {target: 'base', focus, scale, punchAt, releaseAt, samples, ...(p.steps !== undefined ? {steps} : {}), ...(blurMax ? {blur: blurMax} : {})};
+  return b.finish({scale, focus, focusFraction: {x: focusIn.x, y: focusIn.y}, punchAt, releaseAt, release, ...(p.steps !== undefined ? {steps} : {}), ...(blurMax ? {blur: blurMax} : {})}, {
     rect: {x: 0, y: 0, width: canvas.width, height: canvas.height}, role: 'decor', minTextPx: null,
     motion: {enterEnd: Math.min(releaseAt, punchAt + 0.45), exitStart: releaseAt, exitTo: {opacity: 1}}
   });
@@ -454,22 +492,23 @@ function emphasisTimeline(model, ops) {
 // Timing constants per module (seconds, scene-relative), the single source for
 // the checks above and each MODULES entry's `timing` table.
 export const CATALOG_C_TIMING = Object.freeze({
-  'punch-in': Object.freeze({minDuration: 0.8, releaseHold: 0.25}),
+  'punch-in': Object.freeze({minDuration: 0.8, releaseHold: 0.25, stepGap: 0.3}),
   'footage-callout': Object.freeze({minDuration: 1.5, leadOut: 1.1}),
   'lower-third': Object.freeze({minDuration: 2, leadOut: 1.2}),
   'emphasis-caption': Object.freeze({minDuration: 0.8, leadOut: 0.45})
 });
 const TIMING_C = {
-  'punch-in': {minDuration: CATALOG_C_TIMING['punch-in'].minDuration, leadIn: 0, leadOut: null, gaps: [], rules: [`at ≤ scene − release − ${CATALOG_C_TIMING['punch-in'].releaseHold} s (release 0.3–2 s, default min(0.5, 0.3 × scene))`]},
+  'punch-in': {minDuration: CATALOG_C_TIMING['punch-in'].minDuration, leadIn: 0, leadOut: null, gaps: [], rules: [`at (and every steps[i].at) ≤ scene − release − ${CATALOG_C_TIMING['punch-in'].releaseHold} s (release 0.3–2 s, default min(0.5, 0.3 × scene))`, `steps at least ${CATALOG_C_TIMING['punch-in'].stepGap} s apart`]},
   'footage-callout': {minDuration: CATALOG_C_TIMING['footage-callout'].minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING['footage-callout'].leadOut, gaps: [], rules: []},
   'lower-third': {minDuration: CATALOG_C_TIMING['lower-third'].minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING['lower-third'].leadOut, gaps: [], rules: []},
   'emphasis-caption': {minDuration: CATALOG_C_TIMING['emphasis-caption'].minDuration, leadIn: 0, leadOut: CATALOG_C_TIMING['emphasis-caption'].leadOut, gaps: [], rules: [`at ≤ scene − ${CATALOG_C_TIMING['emphasis-caption'].leadOut} s − stagger × (words − 1) (stagger 0–0.3 s, default 0.09)`]}
 };
 
 const DEFINITIONS = [
-  {id: 'punch-in', describe: 'Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay).',
-    params: {scale: '1.06–1.25 (default 1.12)', at, focus: '{x, y} canvas fractions (default base.focus, else {0.5, 0.42})', release: 'seconds before the scene end when the zoom springs back (0.3–2, default min(0.5, 30% of the scene))'},
-    events: ['punch', 'release'], resolve: resolvePunchIn, view: punchInView, timeline: punchInTimeline},
+  {id: 'punch-in', describe: 'Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay). Steps punch in, further in or back out on successive words; blur adds a few frames of zoom blur on each move.',
+    params: {scale: '1.06–1.25 (default 1.12)', at, focus: '{x, y} canvas fractions (default base.focus, else {0.5, 0.42})', release: 'seconds before the scene end when the zoom springs back (0.3–2, default min(0.5, 30% of the scene))',
+      steps: '[{at, scale}] 1–4, instead of at/scale: each springs to its scale (1–1.35; the first ≥ 1.06), at least 0.3 s apart', blur: 'true (14 px at 1080) or 2–30 px: velocity-shaped zoom blur, 0 once settled (default off)'},
+    events: ['punch', 'step-<i>', 'release'], resolve: resolvePunchIn, view: punchInView, timeline: punchInTimeline},
   {id: 'footage-callout', describe: 'Footage-led: a claim sticker anchored to a point on the footage by a leader line, placed inside the safe zone.',
     params: {text: 'claim ≤ 42 chars, up to 2 lines', label: 'kicker ≤ 24 (optional)', point: '{x, y} canvas fractions 0.04–0.96 (the anchored spot)', side: 'auto|above|below|left|right', tone: 'primary|paper|dark', tilt: 'degrees −6–6 (default −2)', at},
     events: ['point', 'sticker'], resolve: resolveCallout, view: calloutView, timeline: calloutTimeline},
@@ -521,14 +560,27 @@ export function catalogCTimeline(model) {
  * one tl.set-style op per camera sample (at t - SAMPLE_LEAD), cameras applied
  * in start order. Both compilers apply it to the base layer.
  */
-export function cameraOps(models, {target = BASE_CAMERA} = {}) {
+// roomFilterAt(t): the base's room filter at t ("none" when untreated; the
+// subject layer's room treatments). A blurred sample sets the whole filter,
+// so it carries the room's filter too, and the room is not lost.
+export function cameraOps(models, {target = BASE_CAMERA, roomFilterAt = null} = {}) {
   const cameras = (models ?? []).filter(model => model?.camera && Array.isArray(model.camera.samples)).sort((a, b) => a.start - b.start);
   if (!cameras.length) return [];
   const ops = [{type: 'set', target, time: 0, props: {...CAMERA_IDENTITY}}];
   for (const model of cameras) {
-    for (const s of model.camera.samples) ops.push({type: 'set', target, time: Math.max(0, sampleTime(s.t)), props: {x: s.x, y: s.y, scaleX: s.scale, scaleY: s.scale}});
+    for (const s of model.camera.samples) ops.push({type: 'set', target, time: Math.max(0, sampleTime(s.t)), props: cameraSampleProps(s, roomFilterAt ? roomFilterAt(s.t) : 'none')});
   }
   return ops;
+}
+
+/** A camera sample as set props: transform, plus a CSS filter when the sample carries zoom blur. */
+export function cameraSampleProps(s, roomFilter = 'none') {
+  const props = {x: s.x, y: s.y, scaleX: s.scale, scaleY: s.scale};
+  if (s.blur !== undefined) {
+    const parts = [roomFilter && roomFilter !== 'none' ? roomFilter : null, s.blur > 0 ? `blur(${s.blur}px)` : null].filter(Boolean);
+    props.filter = parts.length ? parts.join(' ') : 'none';
+  }
+  return props;
 }
 
 /** Camera windows that overlap in time ([[idA, idB], …]); the later camera wins while both run. */
