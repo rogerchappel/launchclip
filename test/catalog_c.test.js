@@ -302,8 +302,15 @@ test('masthead: one big word whose baseline sits on the head, behind the subject
   assert.equal(model.content.word, 'FOCUS');
   assert.equal(model.content.placement, 'measured');
   const baseline = model.rect.y + model.content.kickerH + model.content.lineH;
-  assert.ok(Math.abs(baseline - (600 + 360 * 0.35)) < 1, `baseline ${baseline}`);
-  assert.ok(model.content.covered > 0.2 && model.content.covered < 0.8, `the head covers part of the letters (${model.content.covered})`);
+  // By default the baseline rises until the head covers at most 30% of the cap height.
+  assert.ok(baseline > 600 && baseline <= 600 + 360 * 0.35 + 1e-6, `baseline ${baseline}`);
+  assert.ok(model.content.covered > 0.2 && model.content.covered <= 0.3 + 0.01, `the head covers part of the letters (${model.content.covered})`);
+  assert.equal(model.content.baseline, Math.round(((baseline - 600) / 360) * 100) / 100);
+  // params.baseline places it exactly: 0.35 is the deepest.
+  const deep = resolve('masthead', {word: 'focus', kicker: 'issue 01', baseline: 0.35}, head(400, 600, 280, 360));
+  assert.ok(Math.abs(deep.rect.y + deep.content.kickerH + deep.content.lineH - (600 + 360 * 0.35)) < 1);
+  assert.ok(deep.content.covered > model.content.covered);
+  assert.throws(() => resolve('masthead', {word: 'focus', baseline: 0.5}, head(400, 600, 280, 360)), /params\.baseline/);
   assert.ok(model.rect.y >= model.safe.y - 1e-6, 'inside the safe zone');
   assert.deepEqual(model.events.map((event) => event.name), ['title']);
   assert.equal(model.content.letters.length, 5);
@@ -316,6 +323,20 @@ test('masthead: shrinks into the headroom, and refuses a head with none', () => 
   assert.throws(() => resolve('masthead', {word: 'scale'}, head(400, 200, 280, 360)), /needs headroom/);
   assert.throws(() => resolve('masthead', {word: 'two words'}), /must be one word/);
   assert.equal(resolve('masthead', {word: 'edit'}).content.placement, 'default', 'without a matte summary it uses the default head');
+});
+
+test('masthead: key glyphs from the text metrics, centred on the word and standing on its baseline', () => {
+  const model = resolve('masthead', {word: 'focus'}, head(400, 600, 280, 360));
+  const glyphs = MODULES.masthead.glyphs(model);
+  assert.deepEqual(glyphs.map((glyph) => glyph.char), ['F', 'O', 'C', 'U', 'S']);
+  const c = model.content, R = model.rect;
+  const left = glyphs[0].x, right = glyphs.at(-1).x + glyphs.at(-1).width;
+  assert.ok(Math.abs((left + right) / 2 - (R.x + R.width / 2)) < 1e-6, 'centred in the rect');
+  assert.ok(Math.abs(glyphs[1].x - glyphs[0].x - c.size * 0.57) < 1e-6, 'one advance apart');
+  for (const glyph of glyphs) {
+    assert.ok(Math.abs(glyph.height - c.size * 0.72) < 1e-6, 'cap height');
+    assert.ok(Math.abs(glyph.y + glyph.height - (R.y + c.kickerH + c.lineH - c.size * 0.05)) < 1e-6, 'on the baseline');
+  }
 });
 
 test('dolly-zoom: scales the room plate, holds the subject still, needs room', () => {

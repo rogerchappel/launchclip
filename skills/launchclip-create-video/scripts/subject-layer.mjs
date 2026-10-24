@@ -296,6 +296,15 @@ export function sourceBoxToCanvas(box, base, source, canvas) {
  * are skipped).
  */
 export function headLocator(story, infos) {
+  const locate = subjectLocator(story, infos);
+  return (t) => locate(t)?.head ?? null;
+}
+
+/**
+ * → (t) => {head, body} canvas rects (either may be null) at timeline t, or
+ * null where no matte covers it. Same mapping as headLocator.
+ */
+export function subjectLocator(story, infos) {
   const base = storyBase(story);
   if (!base) return () => null;
   const canvas = { width: Number(story.format.width), height: Number(story.format.height) };
@@ -304,8 +313,62 @@ export function headLocator(story, infos) {
     if (source === null) return null;
     const info = (infos ?? []).find((entry) => entry && source >= entry.range.in - EPS && source <= entry.range.out + EPS);
     const frame = info ? subjectAt(info, source) : null;
-    return frame?.head ? sourceBoxToCanvas(frame.head, base, info.source, canvas) : null;
+    if (!frame) return null;
+    const map = (box) => (box ? sourceBoxToCanvas(box, base, info.source, canvas) : null);
+    return { head: map(frame.head), body: map(frame.body) };
   };
+}
+
+/**
+ * The share of a rect the presenter covers, given their head and body boxes
+ * on the canvas. The silhouette is modelled as the ellipse inside the head
+ * box joined to the body box below the head (above the chin the body box only
+ * holds the head and the air beside it), sampled on a 16 × 16 grid.
+ */
+export function subjectCoverShare(rect, { head = null, body = null } = {}) {
+  if (!rect || !(rect.width > 0) || !(rect.height > 0) || (!head && !body)) return 0;
+  const chin = head ? head.y + head.height : -Infinity;
+  const inside = (x, y) => {
+    if (head && head.width > 0 && head.height > 0) {
+      const dx = (x - (head.x + head.width / 2)) / (head.width / 2), dy = (y - (head.y + head.height / 2)) / (head.height / 2);
+      if (dx * dx + dy * dy <= 1) return true;
+    }
+    return Boolean(body) && y >= chin && x >= body.x && x <= body.x + body.width && y >= body.y && y <= body.y + body.height;
+  };
+  const n = 16;
+  let covered = 0;
+  for (let i = 0; i < n; i += 1) {
+    for (let j = 0; j < n; j += 1) if (inside(rect.x + ((i + 0.5) / n) * rect.width, rect.y + ((j + 0.5) / n) * rect.height)) covered += 1;
+  }
+  return covered / (n * n);
+}
+
+/**
+ * Behind-layer text must stay readable (RFC §9): at each of an element's
+ * `times`, every key glyph keeps at least `minVisible` of its area clear of
+ * the presenter. texts: [{id, module, glyphs: [{index, char, x, y, width,
+ * height}], times: [t], hint?}]; subjectAt(t) → {head, body} | null.
+ * → [{rule: "subject-text", severity: "error", ids, at, detail}], one per
+ * element (its worst glyph).
+ */
+export function checkBehindText({ texts = [], subjectAt: locate, minVisible = 0.6 } = {}) {
+  const findings = [];
+  for (const text of texts) {
+    let worst = null;
+    for (const t of text.times ?? []) {
+      const boxes = locate(t);
+      if (!boxes) continue;
+      for (const glyph of text.glyphs ?? []) {
+        const visible = 1 - subjectCoverShare(glyph, boxes);
+        if (visible < minVisible - EPS && (!worst || visible < worst.visible)) worst = { glyph, visible, t };
+      }
+    }
+    if (!worst) continue;
+    const word = (text.glyphs ?? []).map((glyph) => glyph.char).join("");
+    findings.push({ rule: "subject-text", severity: "error", ids: [text.id], at: round6(worst.t),
+      detail: `${text.id} (${text.module}): the presenter covers ${Math.round((1 - worst.visible) * 100)}% of "${worst.glyph.char}" in "${word}" at ${round6(worst.t)} s; behind-layer letters need ${Math.round(minVisible * 100)}% of each glyph visible.${text.hint ? ` ${text.hint}` : ""}` });
+  }
+  return findings;
 }
 
 /**

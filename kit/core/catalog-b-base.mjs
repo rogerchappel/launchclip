@@ -247,6 +247,15 @@ export function makeCheck(prefix) {
 export function textWidth(text, size, family, letterSpacingEm = 0) {
   return [...String(text)].length * size * (ADVANCE[family] + letterSpacingEm);
 }
+// Each character's box on one line of text under the same advance model:
+// advance wide and capHeight em tall, standing on `baseline`, from `x` (the
+// line's left edge). Spaces take their advance but get no box. The layout
+// check measures how much of each glyph the presenter covers from these.
+export function glyphBoxes(text, {x, baseline, size, family, letterSpacingEm = 0, capHeight = 0.72}) {
+  const advance = size * (ADVANCE[family] + letterSpacingEm);
+  const height = size * capHeight;
+  return [...String(text)].map((char, index) => ({index, char, x: x + index * advance, y: baseline - height, width: advance, height})).filter(glyph => /\S/.test(glyph.char));
+}
 // Greedy word wrap with the conservative advance model → line count.
 function lineCount(text, size, family, width) {
   const words = String(text).split(/\s+/).filter(Boolean);

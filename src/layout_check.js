@@ -11,7 +11,7 @@ import { captionDipHidden, captionMoveHide, captionsOverlayOf, chunkWords } from
 import { driftExtent, sceneDrift } from "../kit/core/ambient.mjs";
 import { emptyPlates, sceneWindows } from "../kit/core/transitions.mjs";
 import { storyBase } from "../kit/core/story.mjs";
-import { checkSubjectFace, headLocator, sceneLayerOf, subjectCameraAt, subjectCameraOps } from "../kit/core/subject-layer.mjs";
+import { checkBehindText, checkSubjectFace, sceneLayerOf, subjectCameraAt, subjectCameraOps, subjectLocator } from "../kit/core/subject-layer.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const STORY_MODULE = path.join(ROOT, "kit/core/story.mjs");
@@ -160,7 +160,10 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   let faceFindings = [];
   try { faceFindings = await subjectFaceFindings(project, resolved, elements, warnings); }
   catch (error) { warnings.push(`subject face check skipped: ${error.message}`); }
-  const findings = [...specFindings, ...report.findings, ...plateFindings, ...sweepFindings, ...faceFindings, ...densityFindings].sort((a, b) => a.at - b.at);
+  let textFindings = [];
+  try { textFindings = await subjectTextFindings(project, resolved); }
+  catch (error) { warnings.push(`behind-text check skipped: ${error.message}`); }
+  const findings = [...specFindings, ...report.findings, ...plateFindings, ...sweepFindings, ...faceFindings, ...textFindings, ...densityFindings].sort((a, b) => a.at - b.at);
   return {
     stage: "layout-check",
     project,
@@ -223,48 +226,86 @@ export function cameraSweepFindings(resolved, elements, words = [], band = null)
   return checkCameraSweeps({ band: captionRect, frames, captionVisible, step });
 }
 
-// The face rule (docs/SUBJECT_EFFECTS_RFC.md §9): with base.subject mattes,
-// a front-layer element may not cover the presenter's head for more than
-// 0.3 s. The head comes from each matte's subject.json (base.subject.mattes
-// [].info), mapped through the base's trims, fit and focus. Behind-layer
-// scenes, captions, decor (punch-in) and modules that set model.framesFace
-// are exempt.
-export async function subjectFaceFindings(projectDir, resolved, elements, warnings = []) {
+// The presenter on the canvas for the subject rules: each matte's
+// subject.json (base.subject.mattes[].info), mapped through the base's trims,
+// fit and focus, then moved by the subject's camera: the base cameras
+// (punch-ins, pans, framed windows), or a module's own subjectCamera while it
+// runs. → {at(t) → {head, body} | null, models: Map(scene id → model)}, or
+// null without mattes. Ranges without info are skipped with a warning.
+async function subjectView(projectDir, resolved, warnings = []) {
   const base = storyBase(resolved);
-  if (!base || base.subject.mode !== "mattes") return [];
+  if (!base || base.subject.mode !== "mattes") return null;
   const infos = [];
   for (const matte of base.subject.mattes) {
     if (!matte.info) {
-      warnings.push(`${matte.src} has no info (its subject.json); the face rule skips its range`);
+      warnings.push(`${matte.src} has no info (its subject.json); the subject checks skip its range`);
       infos.push(null);
       continue;
     }
     infos.push(JSON.parse(await readFile(path.join(projectDir, matte.info), "utf8")));
   }
-  const models = [];
+  const models = new Map();
+  for (const scene of resolved.scenes) {
+    try { models.set(scene.id, resolveModule(scene, resolved)); } catch { /* reported as module-spec */ }
+  }
+  const ops = subjectCameraOps([...models.values()]);
+  const located = subjectLocator(resolved, infos);
+  const canvas = { width: Number(resolved.format?.width), height: Number(resolved.format?.height) };
+  const at = (t) => {
+    const boxes = located(t);
+    const cam = boxes && ops.length ? subjectCameraAt(ops, t) : null;
+    if (!boxes || !cam) return boxes;
+    const cx = canvas.width / 2, cy = canvas.height / 2, s = cam.scaleX ?? 1;
+    const move = (box) => (box ? { x: cx + (box.x - cx) * s + (cam.x ?? 0), y: cy + (box.y - cy) * s + (cam.y ?? 0), width: box.width * s, height: box.height * s } : null);
+    return { head: move(boxes.head), body: move(boxes.body) };
+  };
+  return { at, models };
+}
+
+// The face rule (docs/SUBJECT_EFFECTS_RFC.md §9): with base.subject mattes,
+// a front-layer element may not cover the presenter's head for more than
+// 0.3 s. Behind-layer scenes, captions, decor (punch-in) and modules that set
+// model.framesFace are exempt.
+export async function subjectFaceFindings(projectDir, resolved, elements, warnings = []) {
+  const view = await subjectView(projectDir, resolved, warnings);
+  if (!view) return [];
   const depth = new Map(resolved.scenes.map((scene) => {
-    let model = null;
-    try { model = resolveModule(scene, resolved); } catch { /* reported as module-spec */ }
-    if (model) models.push(model);
+    const model = view.models.get(scene.id) ?? null;
     return [scene.id, { layer: sceneLayerOf(scene, model).layer, framesFace: Boolean(model?.framesFace) }];
   }));
-  // The head moves with the subject's camera: the base cameras (punch-ins,
-  // pans, framed windows), or a module's own subjectCamera while it runs.
-  const ops = subjectCameraOps(models);
-  const located = headLocator(resolved, infos);
-  const canvas = { width: Number(resolved.format?.width), height: Number(resolved.format?.height) };
-  const headAt = (t) => {
-    const head = located(t);
-    const cam = head && ops.length ? subjectCameraAt(ops, t) : null;
-    if (!head || !cam) return head;
-    const cx = canvas.width / 2, cy = canvas.height / 2, s = cam.scaleX ?? 1;
-    return { x: cx + (head.x - cx) * s + (cam.x ?? 0), y: cy + (head.y - cy) * s + (cam.y ?? 0), width: head.width * s, height: head.height * s };
-  };
+  const headAt = (t) => view.at(t)?.head ?? null;
   const candidates = elements
     .filter((element) => element.id !== "base" && element.rect && element.role !== "caption" && element.role !== "decor")
     .map((element) => ({ ...element, layer: depth.get(element.id)?.layer ?? "front", framesFace: depth.get(element.id)?.framesFace ?? false }));
   const fps = Number(resolved.resolved?.fps ?? resolved.format?.fps ?? 30);
   return checkSubjectFace({ elements: candidates, headAt, step: 1 / fps });
+}
+
+// Repairs for a behind-layer word the presenter covers, by module.
+const BEHIND_TEXT_HINTS = {
+  masthead: (model) => `Raise or shrink it: set params.baseline lower (now ${model.content.baseline}; 0 stands the letters on the head and shrinks them into the headroom)${model.content.kicker ? ", drop the kicker to give the letters room" : ""}, or use it where the head sits lower (a medium or wide shot)`
+};
+
+// Behind-text visibility (docs/SUBJECT_EFFECTS_RFC.md §9): a behind-layer
+// module whose definition names its key glyphs (MODULES[id].glyphs, from the
+// shared text metrics, not a render) keeps at least 60% of each glyph clear
+// of the presenter's head and body at its settle and mid-hold times.
+export async function subjectTextFindings(projectDir, resolved, warnings = []) {
+  const view = await subjectView(projectDir, resolved, warnings);
+  if (!view) return [];
+  const catalogue = catalogModules();
+  const fps = Number(resolved.resolved?.fps ?? resolved.format?.fps ?? 30);
+  const frame = (t) => Math.round(t * fps) / fps;
+  const texts = [];
+  for (const scene of resolved.scenes) {
+    const model = view.models.get(scene.id);
+    const glyphs = catalogue[scene.module]?.glyphs;
+    if (!model || !glyphs || sceneLayerOf(scene, model).layer !== "behind") continue;
+    const settle = Number(model.layout?.motion?.enterEnd ?? scene.start);
+    const exit = Number(model.layout?.motion?.exitStart ?? scene.end);
+    texts.push({ id: scene.id, module: scene.module, glyphs: glyphs(model), times: [...new Set([frame(settle), frame((settle + Math.max(settle, exit)) / 2)])], hint: BEHIND_TEXT_HINTS[scene.module]?.(model) });
+  }
+  return checkBehindText({ texts, subjectAt: view.at });
 }
 
 function overlaps(a, b) {

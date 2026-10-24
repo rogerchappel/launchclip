@@ -40,7 +40,7 @@
 import {formatBound, withinBounds} from './bounds.mjs';
 import {motionBlurPx, springValue} from './motion.mjs';
 import {grammarEase, grammarStagger, grammarTweens} from './grammar.mjs';
-import {CATALOG_B_STYLE, contrastRatio, fitText, makeCheck, mixColor, r2, rt, textWidth} from './catalog-b-base.mjs';
+import {CATALOG_B_STYLE, contrastRatio, fitText, glyphBoxes, makeCheck, mixColor, r2, rt, textWidth} from './catalog-b-base.mjs';
 import {abs, el, sampleTime, set, svgRoot, transformString, tw} from './catalog-b-view.mjs';
 import {profileGeometry} from './layout-check.mjs';
 
@@ -558,10 +558,17 @@ function emphasisTimeline(model, ops) {
 
 // Where a head sits when the matte has no summary yet (canvas fractions).
 const DEFAULT_HEAD = {portrait: {x: 0.4, y: 0.26, w: 0.2, h: 0.12}, landscape: {x: 0.44, y: 0.18, w: 0.12, h: 0.24}};
-// The letters' baseline sits this far down the head, so the head covers
+// The letters' baseline sits up to this far down the head, so the head covers
 // their lower part; Anton-like display faces have caps about 0.72 em tall.
+// By default the baseline rises until the head box covers at most
+// MASTHEAD_COVER of the cap height, which leaves layout-check's behind-text
+// rule (60% of each glyph visible) a margin for the head's motion.
 const MASTHEAD_BASELINE = 0.35;
+const MASTHEAD_COVER = 0.3;
 const CAP = 0.72;
+// The ink sits this far above the bottom of the 0.9 line box.
+const MASTHEAD_DESCENT = 0.05;
+const MASTHEAD_SPACING = 0.01;
 
 export function headRect(ctx, canvas, portrait) {
   if (ctx.subject?.head) return {...ctx.subject.head, measured: true};
@@ -570,7 +577,7 @@ export function headRect(ctx, canvas, portrait) {
 }
 
 function resolveMasthead(params, ctx) {
-  const b = createFootageBase('masthead', params, ctx, {allowed: ['word', 'kicker', 'color', 'at', 'stagger'], required: ['word'], minDuration: CATALOG_C_TIMING.masthead.minDuration});
+  const b = createFootageBase('masthead', params, ctx, {allowed: ['word', 'kicker', 'color', 'at', 'stagger', 'baseline'], required: ['word'], minDuration: CATALOG_C_TIMING.masthead.minDuration});
   const {check, u, safe, colors, canvas, portrait, end, duration} = b;
   const p = b.params;
   const word = check.str(p.word, 'params.word', 12).toUpperCase();
@@ -585,7 +592,23 @@ function resolveMasthead(params, ctx) {
   const fit = fitText(check, 'params.word', word, {family: 'display', width: blockW, preferred: u(portrait ? 420 : 300), min: u(150), maxLines: 1});
   const kickerSize = r2(Math.max(b.min.meta, u(30)));
   const kickerH = kicker ? r2(kickerSize * 1.3 + u(12)) : 0;
-  const baseline = head.y + head.height * MASTHEAD_BASELINE;
+  // The baseline's depth into the head: params.baseline (a share of the head
+  // height), else as deep as MASTHEAD_BASELINE while the head covers at most
+  // MASTHEAD_COVER of the cap height. A shallower baseline also shrinks the
+  // letters into the headroom, so this settles in a few steps, and it never
+  // rises past the depth where the letters reach their minimum size (with
+  // too little headroom layout-check's behind-text rule reports the rest).
+  const sizeAt = (depth) => Math.min(fit.size, (head.y + depth - safe.y - kickerH) / 0.9);
+  let depth = p.baseline === undefined ? head.height * MASTHEAD_BASELINE : check.num(p.baseline, 'params.baseline', 0, MASTHEAD_BASELINE) * head.height;
+  if (p.baseline === undefined) {
+    const floor = safe.y + kickerH + u(150) * 0.9 - head.y;
+    for (let i = 0; i < 32; i += 1) {
+      const limit = Math.max(0, floor, sizeAt(depth) * CAP * MASTHEAD_COVER);
+      if (depth <= limit + 1e-6) break;
+      depth = limit;
+    }
+  }
+  const baseline = head.y + depth;
   const room = baseline - safe.y - kickerH;
   const size = r2(Math.min(fit.size, room / 0.9));
   if (size < u(150) - 1e-6) check.fail('params.word', `needs headroom: with the presenter's head at ${Math.round(head.y)} px there is room for ${Math.max(0, Math.round(room))} px of letters above it, and a masthead needs ${Math.round(u(150) * 0.9)} px. Use it on a medium or wide shot, or pick another module`);
@@ -593,7 +616,7 @@ function resolveMasthead(params, ctx) {
   const top = r2(Math.max(safe.y + kickerH, baseline - lineH));
   const rect = {x: r2(safe.x + (safe.width - blockW) / 2), y: r2(top - kickerH), width: blockW, height: r2(lineH + kickerH)};
   // How much of the letters' cap height the head covers in its column.
-  const capTop = top + lineH - size * CAP - size * 0.05;
+  const capTop = top + lineH - size * CAP - size * MASTHEAD_DESCENT;
   const covered = r2(Math.max(0, Math.min(1, (top + lineH - Math.max(capTop, head.y)) / (size * CAP))));
   const t0 = b.timeOf('title', p.at, 'params.at', 0.05, {min: 0, max: Math.max(0, duration - CATALOG_C_TIMING.masthead.leadOut - stagger * (word.length - 1))});
   const letters = [...word].map((char, i) => ({index: i, char, time: rt(t0 + i * stagger)}));
@@ -601,7 +624,7 @@ function resolveMasthead(params, ctx) {
   b.events.push({id: `${b.id}-title`, name: 'title', time: t0, endTime: settle, role: 'title', cue: 'whoosh'});
   b.model.layer = 'behind';
   const exitStart = rt(Math.max(settle, end - 0.35));
-  const content = {word, kicker, color, size, lineH, kickerSize, kickerH, letters, stagger, rise: r2(size * 0.32), covered, placement: head.measured ? 'measured' : 'default',
+  const content = {word, kicker, color, size, lineH, kickerSize, kickerH, letters, stagger, rise: r2(size * 0.32), covered, baseline: r2(depth / head.height), placement: head.measured ? 'measured' : 'default',
     head: {x: r2(head.x), y: r2(head.y), width: r2(head.width), height: r2(head.height)}, shadow: `0 ${u(8)}px ${u(30)}px #00000080`};
   return b.finish(content, {rect, role: 'hero', minTextPx: size,
     motion: {enterEnd: settle, exitStart, exitTo: {opacity: 0, y: -u(30)}, origin: {x: r2(rect.x + rect.width / 2), y: r2(rect.y + rect.height / 2)}}});
@@ -614,8 +637,19 @@ function mastheadView(model) {
   if (c.kicker) kids.push(el('div', `${id}-kicker`, abs(R.x, R.y, R.width, c.kickerH, {textAlign: 'center', whiteSpace: 'nowrap', fontFamily: fonts.meta, fontSize: c.kickerSize, lineHeight: '1.3', letterSpacing: '0.24em', fontWeight: 600, color: c.color, textShadow: c.shadow, opacity: 0}), [c.kicker]));
   const letters = c.letters.map(letter => el('span', `${id}-l-${letter.index}`, {display: 'inline-block', opacity: 0, transform: transformString({y: c.rise})}, [letter.char]));
   kids.push(el('div', `${id}-word`, abs(R.x, R.y + c.kickerH, R.width, c.lineH, {display: 'flex', justifyContent: 'center', alignItems: 'flex-end', whiteSpace: 'nowrap',
-    fontFamily: fonts.display, fontWeight: 400, fontSize: c.size, lineHeight: '0.9', letterSpacing: '0.01em', color: c.color, textShadow: c.shadow}), letters));
+    fontFamily: fonts.display, fontWeight: 400, fontSize: c.size, lineHeight: '0.9', letterSpacing: `${MASTHEAD_SPACING}em`, color: c.color, textShadow: c.shadow}), letters));
   return kids;
+}
+
+/**
+ * The masthead's key glyphs on the canvas, settled (letters risen), from the
+ * advance model: [{index, char, x, y, width, height}]. Layout-check measures
+ * how much of each one the presenter covers.
+ */
+export function mastheadGlyphs(model) {
+  const c = model.content, R = model.rect;
+  const width = textWidth(c.word, c.size, 'display', MASTHEAD_SPACING);
+  return glyphBoxes(c.word, {x: R.x + (R.width - width) / 2, baseline: R.y + c.kickerH + c.lineH - c.size * MASTHEAD_DESCENT, size: c.size, family: 'display', letterSpacingEm: MASTHEAD_SPACING, capHeight: CAP});
 }
 
 function mastheadTimeline(model, ops) {
@@ -726,9 +760,9 @@ const DEFINITIONS = [
     params: {text: '1–3 words, ≤ 24 chars', color: 'primary|accent|paper or #hex (≥ 3:1 on the bg outline)', position: 'center|upper|lower', stagger: 'seconds between words (default 0.09)', at},
     events: ['pop', 'word-<i>'], resolve: resolveEmphasis, view: emphasisView, timeline: emphasisTimeline},
   {id: 'masthead', describe: 'Footage-led, behind the presenter: one huge word (a product name or the one idea) rises in letter by letter at the top of the frame, and the presenter\'s head covers its lower part like a magazine cover. Needs headroom: medium or wide shots.',
-    params: {word: 'one word ≤ 12 chars (uppercased)', kicker: 'small line above it ≤ 32 (optional)', color: 'paper (default)|primary|accent or #hex (≥ 3:1 on brand bg)', stagger: 'seconds between letters (0–0.12, default 0.05)', at},
+    params: {word: 'one word ≤ 12 chars (uppercased)', kicker: 'small line above it ≤ 32 (optional)', color: 'paper (default)|primary|accent or #hex (≥ 3:1 on brand bg)', stagger: 'seconds between letters (0–0.12, default 0.05)', baseline: 'how far down the head the letters stand, as a share of its height (0–0.35; default as deep as keeps 70% of the letters clear). Lower raises them and shrinks them into the headroom', at},
     events: ['title'], needs: ['subject'], layer: 'behind', aspects: ['9:16', '16:9'], mood: ['bold', 'editorial', 'premium', 'launch'],
-    resolve: resolveMasthead, view: mastheadView, timeline: mastheadTimeline},
+    resolve: resolveMasthead, view: mastheadView, timeline: mastheadTimeline, glyphs: mastheadGlyphs},
   {id: 'dolly-zoom', describe: 'Footage-led, behind the presenter: the room pushes in (or falls away) over one eased beat while the presenter holds still, a dolly zoom for a realisation or a turn. Needs a medium or wide shot and the matte\'s room plate.',
     params: {direction: 'push (default) | pull (starts on a cut, the room falls away)', scale: '1.12–1.6 (default 1.3)', move: 'seconds the zoom takes (1–2.5)', release: 'push: seconds to ease back before the scene end (0.3–1, default 0.5)', at},
     events: ['move', 'release'], needs: ['subject'], layer: 'behind', aspects: ['9:16', '16:9'], mood: ['cinematic', 'dramatic', 'premium'],
@@ -736,7 +770,7 @@ const DEFINITIONS = [
 ];
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: TIMING_C[def.id], resolve: def.resolve,
-  ...(def.needs ? {needs: def.needs} : {}), ...(def.layer ? {layer: def.layer} : {}), ...(def.aspects ? {aspects: def.aspects} : {}), ...(def.mood ? {mood: def.mood} : {})}]));
+  ...(def.needs ? {needs: def.needs} : {}), ...(def.layer ? {layer: def.layer} : {}), ...(def.aspects ? {aspects: def.aspects} : {}), ...(def.mood ? {mood: def.mood} : {}), ...(def.glyphs ? {glyphs: def.glyphs} : {})}]));
 const BY_ID = Object.fromEntries(DEFINITIONS.map(def => [def.id, def]));
 
 function definition(model) {

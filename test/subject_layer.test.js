@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {resolveStory} from '../kit/core/story.mjs';
 import {
-  checkSubjectFace, headLocator, needsSubject, roomChanges, roomStateAt, sceneLayerOf, sourceBoxToCanvas, sourceTimeAt,
+  checkBehindText, checkSubjectFace, headLocator, subjectCoverShare, subjectLocator, needsSubject, roomChanges, roomStateAt, sceneLayerOf, sourceBoxToCanvas, sourceTimeAt,
   subjectCameraAt, subjectCameraOps, subjectModelErrors, subjectSegments, subjectWindows
 } from '../kit/core/subject-layer.mjs';
 import {storyBase} from '../kit/core/story.mjs';
@@ -110,6 +110,9 @@ test('headLocator maps timeline time through trims and the matte frames', () => 
   const headAt = headLocator(resolved, [info]);
   assert.deepEqual(headAt(6), {x: 540, y: 288, width: 216, height: 192});
   assert.equal(headAt(1), null, 'no matte covers source 1 s');
+  const withBody = {...info, frames: info.frames.map((frame) => ({...frame, body: {x: 0.5, y: 0.6, w: 0.5, h: 0.8}}))};
+  assert.deepEqual(subjectLocator(resolved, [withBody])(6), {head: {x: 540, y: 288, width: 216, height: 192}, body: {x: 270, y: 384, width: 540, height: 1536}});
+  assert.equal(subjectLocator(resolved, [withBody])(1), null);
 });
 
 test('checkSubjectFace flags front elements over the face for more than 0.3 s', () => {
@@ -170,4 +173,33 @@ test('subjectStyle: a sticker outline and shadow on the cut-out for the scene wi
   assert.match(subjectCameraAt(ops, 1.6).filter, /^drop-shadow.* blur\(4px\)$/);
   assert.match(subjectModelErrors({subjectStyle: {outline: 40}}).join(), /outline must be between 0 and 24/);
   assert.match(subjectModelErrors({subjectStyle: {color: 'white'}}).join(), /#rrggbb/);
+});
+
+test('subjectCoverShare: the head is an ellipse, the body counts only below the chin', () => {
+  const head = {x: 100, y: 100, width: 100, height: 100};
+  const body = {x: 0, y: 100, width: 300, height: 400};
+  assert.equal(subjectCoverShare({x: 400, y: 0, width: 50, height: 50}, {head, body}), 0);
+  // The head box's corner is outside the ellipse.
+  assert.equal(subjectCoverShare({x: 100, y: 100, width: 12, height: 12}, {head}), 0);
+  const inscribed = subjectCoverShare(head, {head});
+  assert.ok(Math.abs(inscribed - Math.PI / 4) < 0.03, `${inscribed}`);
+  // Beside the head, above the chin: the body box does not count.
+  assert.equal(subjectCoverShare({x: 10, y: 120, width: 40, height: 40}, {head, body}), 0);
+  assert.equal(subjectCoverShare({x: 10, y: 220, width: 40, height: 40}, {head, body}), 1);
+  assert.equal(subjectCoverShare({x: 0, y: 0, width: 10, height: 10}, {}), 0);
+});
+
+test('checkBehindText: the worst glyph under 60% visible, once per element', () => {
+  const head = {x: 100, y: 100, width: 100, height: 100};
+  const glyph = (index, x, y) => ({index, char: 'AB'[index], x, y, width: 40, height: 40});
+  const texts = [
+    {id: 'clear', module: 'masthead', glyphs: [glyph(0, 300, 0), glyph(1, 340, 0)], times: [1]},
+    {id: 'hidden', module: 'masthead', glyphs: [glyph(0, 0, 0), glyph(1, 130, 130)], times: [1, 2], hint: 'Raise it.'}
+  ];
+  const findings = checkBehindText({texts, subjectAt: (t) => (t === 2 ? {head, body: null} : {head: {...head, y: 300}, body: null})});
+  assert.equal(findings.length, 1);
+  assert.deepEqual(findings[0].ids, ['hidden']);
+  assert.equal(findings[0].at, 2);
+  assert.match(findings[0].detail, /covers 100% of "B" in "AB" at 2 s; behind-layer letters need 60% of each glyph visible\. Raise it\./);
+  assert.deepEqual(checkBehindText({texts, subjectAt: () => null}), [], 'no matte, no finding');
 });
