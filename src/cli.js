@@ -18,7 +18,7 @@ import { commandHelp, helpText, USAGE_GROUPS, wantsHelp } from "./cli_usage.js";
 import { parseSubjectInvocation } from "./subject/cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "make", "voice", "export", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "make", "fx", "voice", "export", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -49,12 +49,14 @@ export async function runCli(argv, io = {}) {
   const sfxInvocation = command === "sfx" ? parseSfxInvocation(firstArg, rest) : null;
   const moduleInvocation = command === "module" ? parseModuleInvocation(firstArg, rest) : null;
   const subjectInvocation = command === "subject" ? parseSubjectInvocation(firstArg, rest) : null;
+  // launchclip fx <video> <module> [flags]
+  const fxInvocation = command === "fx" ? { video: firstArg && !firstArg.startsWith("--") ? firstArg : null, module: rest[0] && !rest[0].startsWith("--") ? rest[0] : null, flagArgs: rest[0] && !rest[0].startsWith("--") ? rest.slice(1) : rest } : null;
   // launchclip voice takes a project or only flags (--text "...").
   const voiceInvocation = command === "voice" ? (firstArg && !firstArg.startsWith("--") ? { project: firstArg, flagArgs: rest } : { project: null, flagArgs: firstArg ? [firstArg, ...rest] : rest }) : null;
   // launchclip demo record|approve|scene <path> [flags]; plain `demo <repo>` is the packet lane.
   const demoTarget = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const demoInvocation = command === "demo" && ["record", "approve", "scene", "doctor", "shots"].includes(firstArg) ? { action: firstArg, target: demoTarget, flagArgs: demoTarget ? rest.slice(1) : rest } : null;
-  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
+  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch, limitUsd: parseCostLimit(flags["max-cost-usd"] ?? process.env.LAUNCHCLIP_MAX_COST_USD) });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
@@ -145,6 +147,22 @@ export async function runCli(argv, io = {}) {
         throw new Error(`launchclip finish failed at the ${failedStage?.name ?? "unknown"} stage: ${failedStage?.error ?? ""}`.trim());
       }
       return;
+    } else if (command === "fx") {
+      const { runFx, formatFxReport, parseFxTime, readFxParams } = await import("./fx.js");
+      const report = await runFx(fxInvocation.video, fxInvocation.module, {
+        at: parseFxTime(flags.at, "--at"),
+        until: parseFxTime(flags.until, "--until"),
+        for: flags.for === undefined ? undefined : Number(flags.for),
+        params: await readFxParams(flags.params),
+        layer: flags.layer, captions: flags.captions, style: flags.style,
+        renderer: flags.renderer, quality: flags.quality, music: flags.music, out: flags.out,
+        download: !flags["no-download"]
+      }, { log: (line) => stderr.write(`${line}\n`), ...productionAdapters.fx });
+      if (!flags.json) {
+        stdout.write(formatFxReport(report));
+        return;
+      }
+      result = report;
     } else if (command === "make") {
       const { runMake, formatMakeSummary } = await import("./make/index.js");
       if (!firstArg || firstArg.startsWith("--")) throw new Error("launchclip make needs a prompt: launchclip make \"A 30-second launch video for ...\" [--assets ./assets]");

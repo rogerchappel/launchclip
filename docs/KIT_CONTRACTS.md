@@ -1055,6 +1055,8 @@ matte's `outline`, and `subjectContext(story, t).outlineAt(t)` (or
 moves.
 - `framesFace`: the module frames the face on purpose; layout-check's face
   rule skips it.
+- `usesOutline`: the module draws in front but traces the presenter's
+  outline, so `make` and `fx` still matte its range (`plannedSubjectRanges`).
 - `subjectStyle`: `{outline? (0–24 px), color? (#rrggbb), shadow?}` for the
   scene window: eight zero-blur drop-shadows round the matte's alpha make a
   solid outline, plus an optional soft shadow (`subjectFilterAt`,

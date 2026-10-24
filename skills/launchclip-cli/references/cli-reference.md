@@ -1414,6 +1414,12 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip make "<prompt>" --repo <app-repo> [--approve-demo] [--demo-plan DEMO-PLAN.json] [--start "npm run dev"] [--url http://localhost:3000] [--allow-host <host>] [--redemo]
   ```
 
+- `fx`: Put one module on a clip: a one-scene footage-led story around the whole clip, the presenter cut out when the module needs them, then finish. The project it writes (<video>.fx/ by default) is an ordinary story project you can keep editing.
+
+  ```text
+  launchclip fx <video> <module> [--at <seconds|word:text>] [--until <seconds|word:text> | --for <seconds>] [--params '{...}'|params.json] [--layer front|behind|split] [--captions <style>] [--style <name|path>] [--renderer remotion|hyperframes] [--quality draft|high] [--music none|synth] [--out <project-dir>] [--no-download] [--json]
+  ```
+
 - `voice`: Generate the narration (NARRATION.json and the voice track) for a project or a text.
 
   ```text

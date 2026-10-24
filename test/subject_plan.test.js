@@ -32,3 +32,8 @@ test('ranges map back through base.trim', () => {
 test('a storyboard without subject scenes needs no matte', () => {
   assert.deepEqual(plannedSubjectRanges(story({src: 'assets/base-edit.mp4'}, scenes.filter((scene) => ['name', 'push'].includes(scene.id)))), []);
 });
+
+test('a front module that traces the presenter (doodle-outline) still gets its range matted', () => {
+  const doodle = [{id: 'doodle', module: 'doodle-outline', track: 1, start: 5, end: 7}];
+  assert.deepEqual(plannedSubjectWindows(story({src: 'assets/base-edit.mp4'}, doodle)), [[5, 7]]);
+});

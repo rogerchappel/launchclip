@@ -54,10 +54,11 @@ export function needsSubject(scene, model) {
 /**
  * Timeline windows (merged, sorted) during which the subject layer is shown.
  * entries: [{scene, model, start, end}] (end: the render window's end).
+ * include: which entries count (default: those that need the subject).
  */
-export function subjectWindows(entries) {
+export function subjectWindows(entries, { include = (entry) => needsSubject(entry.scene, entry.model) } = {}) {
   const spans = (entries ?? [])
-    .filter((entry) => needsSubject(entry.scene, entry.model))
+    .filter(include)
     .map((entry) => [Number(entry.start), Number(entry.end)])
     .sort((a, b) => a[0] - b[0]);
   const merged = [];
