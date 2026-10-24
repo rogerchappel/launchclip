@@ -10,7 +10,12 @@
 //   V2…     overlay clips with alpha, one per scene, packed into lanes per
 //           story track (track 0 first, on its brand plate as rendered); a
 //           scene that transitions in sits above the scene it overlaps, as in
-//           the render, so a run of transitions climbs one lane per boundary
+//           the render, so a run of transitions climbs one lane per boundary.
+//           With the subject layer (kit/core/subject-layer.mjs) they split
+//           round a subject track, as the render stacks them: behind scenes
+//           and split behind parts, then the presenter cut-out (matte clips
+//           where the base shows their source ranges), then every other
+//           scene and split front parts
 //   top     the finished render: a disabled reference track, or the one
 //           enabled picture clip with --overlays none
 //   A1      the voice (narration, or the recording's own audio, linked to V1)
@@ -26,6 +31,7 @@
 // renders overlays, then passes their descriptions in `media`.
 import { resolveModule } from "../../kit/core/modules.mjs";
 import { storyBase, storyHits } from "../../kit/core/story.mjs";
+import { needsSubject, sceneLayerOf, subjectSegments, subjectWindows } from "../../kit/core/subject-layer.mjs";
 import { sceneWindows } from "../../kit/core/transitions.mjs";
 import { framesToSeconds, framesToTimecode, parseRate, secondsToFrames } from "./time.js";
 
@@ -43,6 +49,14 @@ export const AUDIO_ROLES = ["dialogue", "music", "effects"];
  * scene, so a transparent track-0 clip would composite differently. Their
  * alpha still carries the transition (a push or fade reveals what is below).
  * → {clips: [{key, sceneId, module, track, start, end, plate, loop}], cameras: [{sceneId, module, start, end, camera}]}
+ *
+ * With the subject layer (kit/core/subject-layer.mjs), a behind scene's clip
+ * carries layer "behind", and a split scene becomes two clips, `<id>-behind`
+ * (layer "behind", part "behind") and `<id>-front` (part "front"). The plan
+ * then also holds subject: {windows, scenes: [{sceneId, module, layer, start,
+ * end, animated, reason?}]}: the windows the presenter cut-out is shown in,
+ * and per layered scene the subject fields a static NLE stack cannot carry.
+ * Stories without such scenes get no subject key and unchanged clips.
  */
 export function overlayPlan(story, { models } = {}) {
   const modelFor = typeof models === "function" ? models : (scene) => {
@@ -52,20 +66,46 @@ export function overlayPlan(story, { models } = {}) {
   const windows = sceneWindows(story);
   const clips = [];
   const cameras = [];
+  const layered = [];
   for (const entry of windows.scenes) {
     const scene = entry.scene;
     const model = modelFor(scene);
+    const { layer, reason } = sceneLayerOf(scene, model);
+    if (needsSubject(scene, model) || reason) layered.push({ scene, model, start: entry.start, end: entry.renderEnd, layer, reason });
     if (model?.camera) {
       cameras.push({ sceneId: scene.id, module: scene.module, start: entry.start, end: entry.end, camera: model.camera });
       continue;
     }
-    clips.push({ key: scene.id, sceneId: scene.id, module: scene.module, track: entry.track, start: entry.start, end: entry.renderEnd, plate: entry.track === 0, loop: false, hidesCaptions: Boolean(model?.hidesCaptions) });
+    const clip = { key: scene.id, sceneId: scene.id, module: scene.module, track: entry.track, start: entry.start, end: entry.renderEnd, plate: entry.track === 0, loop: false, hidesCaptions: Boolean(model?.hidesCaptions) };
+    // A split scene renders twice: its behind part under the subject, its front part above it.
+    if (layer === "split") clips.push({ ...clip, key: `${scene.id}-behind`, layer: "behind", part: "behind" }, { ...clip, key: `${scene.id}-front`, part: "front" });
+    else clips.push(layer === "behind" ? { ...clip, layer } : clip);
   }
   if (windows.loop) {
     clips.push({ key: `${windows.loop.sceneId}-loop`, sceneId: windows.loop.sceneId, module: windows.loop.scene.module, track: 0, start: windows.loop.start, end: windows.loop.end, plate: true, loop: true, hidesCaptions: false });
   }
-  return { clips, cameras };
+  if (!layered.length) return { clips, cameras };
+  return {
+    clips,
+    cameras,
+    subject: {
+      windows: subjectWindows(layered),
+      scenes: layered.map(({ scene, model, start, end, layer, reason }) => ({
+        sceneId: scene.id, module: scene.module, layer, start, end,
+        // What a static NLE stack cannot carry: these need keyframes or effects.
+        animated: SUBJECT_ANIMATION.filter((field) => model?.[field]),
+        ...(reason ? { reason } : {})
+      }))
+    }
+  };
 }
+
+const SUBJECT_ANIMATION = ["subjectCamera", "room", "subjectStyle"];
+const SUBJECT_ANIMATION_NOTES = {
+  subjectCamera: "moves the presenter on its own (subjectCamera)",
+  room: "hides, dims or blurs the room (room)",
+  subjectStyle: "outlines or shadows the presenter (subjectStyle)"
+};
 
 /**
  * Build the timeline model.
@@ -81,6 +121,8 @@ export function overlayPlan(story, { models } = {}) {
  *   captions: [{start, end, text}]
  *   render:   {source, duration, width, height}
  *   overlays: {[key]: {source, kind: "mov"|"png-sequence", frames, pattern, firstFrame}}
+ *   subject:  {mattes: {[matte src]: {source, kind, frames, width, height, pattern, firstFrame}}}
+ *             (alpha copies of base.subject.mattes an NLE can read)
  * options: {name, rate (default story fps), overlays: prores4444|png|none, models, plan}
  */
 export function buildTimeline(story, media = {}, options = {}) {
@@ -138,18 +180,19 @@ export function buildTimeline(story, media = {}, options = {}) {
 
   // ---- V2…: overlays
   const plan = options.plan ?? overlayPlan(story, { models: options.models });
-  if (mode !== "none") {
+  const videoId = () => `V${tracks.filter((t) => t.kind === "video").length + 1}`;
+  const overlayTracks = (group, labelFor) => {
     const byTrack = new Map();
-    for (const entry of plan.clips) {
+    for (const entry of group) {
       if (!byTrack.has(entry.track)) byTrack.set(entry.track, []);
       byTrack.get(entry.track).push(entry);
     }
     for (const storyTrack of [...byTrack.keys()].sort((a, b) => a - b)) {
       const entries = byTrack.get(storyTrack).map((entry) => ({ entry, start: f(entry.start), end: Math.min(duration, f(entry.end)) })).filter((item) => item.end > item.start);
       const lanes = packLanes(entries, { stack: true });
-      const label = storyTrack === 0 ? (base ? "Inserts" : "Scenes") : `Overlays ${storyTrack}`;
+      const label = labelFor(storyTrack);
       lanes.forEach((lane, index) => {
-        const track = addTrack({ id: `V${tracks.filter((t) => t.kind === "video").length + 1}`, kind: "video", name: lanes.length > 1 ? `${label} ${index + 1}` : label, role: "video", storyTrack });
+        const track = addTrack({ id: videoId(), kind: "video", name: lanes.length > 1 ? `${label} ${index + 1}` : label, role: "video", storyTrack, ...(entries[0].entry.layer ? { layer: entries[0].entry.layer } : {}) });
         for (const { entry, start, end } of lane) {
           const rendered = media.overlays?.[entry.key];
           if (!rendered?.source) { warnings.push(`overlay ${entry.key} has no render; it is missing from ${track.id}`); continue; }
@@ -160,9 +203,58 @@ export function buildTimeline(story, media = {}, options = {}) {
             source: rendered.source, duration: rendered.frames ?? end - start, hasVideo: true, hasAudio: false, width, height,
             alpha: true, role: "overlay", pattern: rendered.pattern, firstFrame: rendered.firstFrame
           });
-          track.clips.push(clip({ name: entry.loop ? `${entry.sceneId} (loop)` : `${entry.sceneId} · ${entry.module}`, asset: asset.id, start, duration: Math.min(end - start, asset.duration), kind: "overlay", sceneId: entry.sceneId, module: entry.module, alpha: true, plate: entry.plate }));
+          const name = entry.loop ? `${entry.sceneId} (loop)` : `${entry.sceneId} · ${entry.module}${entry.part ? ` (${entry.part})` : ""}`;
+          track.clips.push(clip({ name, asset: asset.id, start, duration: Math.min(end - start, asset.duration), kind: "overlay", sceneId: entry.sceneId, module: entry.module, alpha: true, plate: entry.plate, ...(entry.part ? { part: entry.part } : {}) }));
         }
       });
+    }
+  };
+  if (mode !== "none") {
+    // With the subject layer the stack is the render's: behind scenes and
+    // split behind parts, the presenter cut-out, then everything in front.
+    const behind = plan.clips.filter((entry) => entry.layer === "behind");
+    overlayTracks(behind, (storyTrack) => `Behind subject ${storyTrack}`);
+    if (plan.subject) subjectTrack();
+    overlayTracks(plan.clips.filter((entry) => entry.layer !== "behind"), (storyTrack) => (storyTrack === 0 ? (base ? "Inserts" : "Scenes") : `Overlays ${storyTrack}`));
+  }
+  if (plan.subject) subjectWarnings();
+
+  // The presenter cut-out: one clip per base segment ∩ matte range ∩ subject
+  // window, on the matte's export copy, with the base's in point mapped into
+  // the matte file (its frame 0 is the matte's `in`).
+  function subjectTrack() {
+    const segments = base && baseAsset ? subjectSegments(story, plan.subject.windows) : [];
+    if (!segments.length) {
+      if (plan.subject.windows.length) warnings.push(base?.subject?.mode === "mattes" ? "no subject matte covers the layered scenes; behind overlays sit straight on the base, with no presenter cut-out above them" : "the story has no subject mattes (run launchclip subject matte); behind overlays sit straight on the base, with no presenter cut-out above them");
+      return;
+    }
+    const track = addTrack({ id: videoId(), kind: "video", name: "Subject (presenter cut-out)", role: "video", layer: "subject" });
+    for (const segment of segments) {
+      const matte = media.subject?.mattes?.[segment.src];
+      if (!matte?.source) { warnings.push(`subject matte ${segment.src} has no export copy; ${track.id} misses ${round3(segment.start)}–${round3(segment.end)}s`); continue; }
+      const sequence = matte.kind === "png-sequence";
+      const stem = baseStem(segment.src);
+      const asset = addAsset({
+        kind: sequence ? "image-sequence" : "video", name: `subject ${stem}`,
+        path: sequence ? `media/subject/${stem}` : `media/subject/${stem}.mov`,
+        source: matte.source, duration: matte.frames, hasVideo: true, hasAudio: false,
+        width: matte.width ?? baseAsset.width, height: matte.height ?? baseAsset.height,
+        alpha: true, role: "subject", pattern: matte.pattern, firstFrame: matte.firstFrame
+      });
+      const start = f(segment.start);
+      const offset = f(segment.mediaStart);
+      const length = Math.min(Math.min(duration, f(segment.end)) - start, asset.duration - offset);
+      if (length <= 0) continue;
+      track.clips.push(clip({ name: `subject ${segment.index + 1}`, asset: asset.id, start, duration: length, in: offset, kind: "subject", alpha: true }));
+    }
+  }
+
+  function subjectWarnings() {
+    for (const scene of plan.subject.scenes) {
+      if (scene.reason) warnings.push(`scene ${scene.sceneId}: ${scene.reason}`);
+      if (!scene.animated.length || mode === "none") continue;
+      const what = scene.animated.map((field) => SUBJECT_ANIMATION_NOTES[field]).join(", ");
+      warnings.push(`scene ${scene.sceneId} (${scene.module}) ${what}; the export keeps its static layering only (${round3(scene.start)}–${round3(scene.end)}s), so re-create it in the editor or use the finished render`);
     }
   }
 
