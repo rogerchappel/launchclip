@@ -37,6 +37,10 @@
   - The planner sees the presenter's framing and offers these only when the
     cut-out works; both create-video skills get a generated
     `subject-effects.md`.
+- `launchclip make` uses them on footage: it checks the presenter's
+  framing after the base edit, plans with it, and cuts out only the stretches
+  its subject effects cover. A missing model or a failed cut-out is a
+  warning, never a failed video; `--no-subject` turns it off.
 - A `photo-scene` module: one full-bleed `assets/` photo or video with a slow
   Ken Burns move (`push-in`, `pull-out` or a pan; `zoom` and `focus` set
   it).

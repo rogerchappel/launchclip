@@ -44,7 +44,7 @@ export const STORYBOARD_ENVELOPE_SCHEMA = Object.freeze({
  *  valid_first_attempt, errors, warnings, layout, usage, cost, elapsed_ms, phrase_hints}
  */
 export async function planStoryboard(options = {}) {
-  const { brief, words = null, beats = null, lane = "motion", format, tier = "structured", model = null, client, audio = null, base = null, maxRepairs = DEFAULT_MAX_REPAIRS, now = () => Date.now(), style = null, extraCheck = null } = options;
+  const { brief, words = null, beats = null, lane = "motion", format, tier = "structured", model = null, client, audio = null, base = null, maxRepairs = DEFAULT_MAX_REPAIRS, now = () => Date.now(), style = null, extraCheck = null, subject = null } = options;
   // style: a loaded launchclip.style.v2 pack. Its brand is the default brand,
   // the planned storyboard names it, and the checks run on the merged story.
   const brand = options.brand ?? (style?.brand ? styleBrand(style) : DEFAULT_BRAND);
@@ -57,8 +57,10 @@ export async function planStoryboard(options = {}) {
   const wordList = Array.isArray(words) ? words : Array.isArray(words?.words) ? words.words : [];
   const fixed = fixedInputs({ lane, format, brand, audio, base });
   if (style?.name) fixed.style = style.name;
-  const instructions = planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief });
-  const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane });
+  // subject: the presenter probe summary ({usable, reasons, framing, headroom,
+  // head}); subject modules are offered only when it is usable.
+  const instructions = planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style, artDirection: brief, subject });
+  const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });
   const request = planRequest({ brief, fixed, hints });
   const started = now();
   const attempts = [];
