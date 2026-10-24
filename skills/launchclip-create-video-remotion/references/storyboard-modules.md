@@ -110,6 +110,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 | turns from the problem to the product ("so we built", "that's why", "enter"): the room gives way to a brand backdrop [footage-led] (needs the subject) | backdrop-swap |
 | talks about posting, going viral or "this exact video": the frame becomes a feed window they break out of [footage-led] (needs the subject) | feed-frame |
 | reveals how the video or result was made, or a process finishing ("made with", "it transcribes, cuts…"): the frame pulls back into an app window while real steps tick [footage-led] | pull-back |
+| gives a growth result ("doubled", "took off in week three"): a line kicks up behind their head [footage-led] (needs the subject) | growth-line |
 | turns on a contrast or jumps between takes ("but", "or you can", "instead"): rush into the cut, burst out of the next take [footage-led] | zoom-through |
 | footage-led emphasis on a word (steps for a build of emphasised words; blur for energy) [footage-led] | punch-in |
 | footage-led claim sticker or label pointing at something on screen [footage-led] | footage-callout |
@@ -633,6 +634,18 @@ params:
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: phone
 
+### growth-line (keeps captions, behind the presenter, needs the subject)
+Footage-led, behind the presenter: a line chart draws itself across the top of the frame behind their head and kicks up at the take-off point into a glowing spike with a labelled pill. For growth results ("doubled", "took off in week three"). Illustration by default; real figures need a source.
+params:
+- points: [{value, label? ≤ 6}] 3–10 (the shape; labels sit along the top)
+- mode: illustration (default) | data (needs source)
+- source: ≤ 48, required for data
+- takeoff: index of the point the spike starts from (default: before the biggest rise)
+- pill: label ≤ 16 above the end, e.g. "Scale" (optional)
+- draw: seconds the line takes (0.8–3)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: draw, takeoff, pill
+
 ## Timing rules
 
 Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core/modules.mjs; `launchclip module fit <module>` prints the same rules with the window for a given `--duration`). `at` values are seconds from the scene start: the first beat no earlier than the lead-in, the last no later than the lead-out before the scene end. A faster motion grammar can shorten a catalogue B enter, which only moves its lead-in earlier.
@@ -679,6 +692,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | backdrop-swap | 2 s | 0 s | — | at ≤ scene − release − 0.8 s (release 0.3–1 s, default 0.5) |
 | app-stage | 2 s | 0 s | scene − 1.2 s | — |
 | phone-stage | 2 s | 0 s | scene − 1.2 s | — |
+| growth-line | 2 s | 0 s | — | at ≤ scene − draw − 0.6 s (draw 0.8–3 s, default min(1.6, 0.45 × scene)) |
 
 ## Example
 
