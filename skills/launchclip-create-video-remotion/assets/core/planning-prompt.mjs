@@ -577,8 +577,8 @@ export function subjectEffectsReference() {
     ...section('Getting the subject', [
       '1. Probe the recording before planning: `launchclip subject probe assets/recording.mp4 --json`. Read `usable` (and `reasons` when it is false), `framing` (close-up, medium or wide) and `headroom`. Plan subject effects only when `usable` is true.',
       '2. Plan the storyboard. Subject effects are timed on the edited timeline like every other scene.',
-      '3. Matte the source range each subject scene covers, padded by about 0.5 s: `launchclip subject matte assets/recording.mp4 --range <in>-<out> --project .`. The matte, its framing data and the room plate are filed under `assets/subject/`, and `base.subject` (default `"auto"`) picks them up. With `base.trim` or `base.edl`, map timeline seconds back to source seconds first.',
-      '4. `launchclip story validate`, `launchclip layout-check` and `launchclip finish` read the filed mattes. `launchclip make` runs all of this for you.',
+      '3. Matte the source range each subject scene covers, padded by about 0.5 s: `launchclip subject matte assets/recording.mp4 --range <in>-<out> --project .`. The matte, its framing data, the room plate and the traced outline (`contours.json`, which doodle-outline draws from) are filed under `assets/subject/`, and `base.subject` (default `"auto"`) picks them up. With `base.trim` or `base.edl`, map timeline seconds back to source seconds first.',
+      '4. `launchclip story validate`, `launchclip layout-check` and `launchclip finish` read the filed mattes. `launchclip make` runs all of this for you; `launchclip fx <video> <module>` does it for one effect on a clip.',
       '',
       'The models download on first use (`launchclip subject setup` fetches them up front; `launchclip doctor` reports them). Mattes take about 0.2 s a frame at 1080×1920 on an Apple-silicon Mac, so matte only the ranges you use.'
     ]),
@@ -586,9 +586,11 @@ export function subjectEffectsReference() {
       '- `scene.layer: "behind"`: the scene draws behind the presenter, so their head and body cover it. masthead and dolly-zoom are behind by default.',
       '- No layer (front): the scene draws over the presenter, as every footage-led overlay always has.',
       '- `"split"`: modules that draw on both sides of the presenter (feed-frame: its backdrop behind them, its feed chrome in front).',
-      '- `base.subject: "off"` turns the subject off; `{"mattes": [...]}` lists mattes explicitly (`src`, `in`, `out`, `info`, `plate`).',
+      '- `base.subject: "off"` turns the subject off; `{"mattes": [...]}` lists mattes explicitly (`src`, `in`, `out`, `info`, `plate`, `contours`).',
       '',
-      'Both renderers stack the base recording, behind scenes, the cut-out presenter, front scenes, then captions. A punch-in moves (and blurs) the presenter and the room together.'
+      'Both renderers stack the base recording, behind scenes, the cut-out presenter, front scenes, then captions. A punch-in moves (and blurs) the presenter and the room together.',
+      '',
+      '`launchclip export` keeps that depth for editors: FCPXML (Final Cut Pro), Premiere XML and OpenTimelineIO stack behind overlays, a subject track (the mattes, transcoded to ProRes 4444 and placed through the base\'s cuts), front overlays and captions above the base. A split scene exports as two clips, its behind and front parts. EDL has one video track, so it carries only the base. A scene that sets `subjectCamera`, `room` or `subjectStyle` exports its static layering, with a warning in `EXPORT.json`; `--overlays none` exports no subject track.'
     ]),
     ...section('Rules', subjectLines(ready).slice(1).map((line) => `- ${line}`)),
     ...section('Modules', [
