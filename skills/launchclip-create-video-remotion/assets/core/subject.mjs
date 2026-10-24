@@ -24,10 +24,10 @@ const GRID_COLUMNS = 96;
 // at least this share of the largest component.
 const PERSON_MIN_AREA = 0.02;
 const PERSON_MIN_SHARE = 0.25;
-// Head height (fraction of frame height) at or above which the shot is a
-// close-up, and at or above which it is medium.
-const CLOSE_UP_HEAD = 0.2;
-const MEDIUM_HEAD = 0.1;
+// Framing counts head heights of frame below the chin, so it reads the same
+// in 9:16 and 16:9: fewer than this is a close-up, more than WIDE_HEADS wide.
+const CLOSE_UP_HEADS = 1.5;
+const WIDE_HEADS = 4;
 // Usability floors.
 const MIN_COVERAGE = 0.04;
 const MIN_STABILITY = 0.7;
@@ -53,11 +53,15 @@ export function maskStats(alpha, width, height, { threshold = MASK_THRESHOLD } =
   return { coverage: round(coverage), people, body, head };
 }
 
-/** Framing from a head box (fractions): close-up, medium or wide. */
+/**
+ * Framing from a head box (fractions): close-up (face and shoulders), medium
+ * (chest or waist up) or wide (most of the body, the room around it).
+ */
 export function classifyFraming(head) {
-  if (!head) return null;
-  if (head.h >= CLOSE_UP_HEAD) return "close-up";
-  if (head.h >= MEDIUM_HEAD) return "medium";
+  if (!head || !(head.h > 0)) return null;
+  const below = Math.max(0, 1 - (head.y + head.h / 2)) / head.h;
+  if (below < CLOSE_UP_HEADS) return "close-up";
+  if (below <= WIDE_HEADS) return "medium";
   return "wide";
 }
 
@@ -136,6 +140,7 @@ export function validateSubjectInfo(info) {
   const range = info.range;
   if (!isObject(range) || !finite(range.in) || !finite(range.out) || range.in < 0 || range.out <= range.in) errors.push("range must be {in, out} source seconds with out > in");
   if (!nonEmpty(info.matte)) errors.push("matte must be the matte video's file name");
+  if (info.matte_size !== undefined && !(isObject(info.matte_size) && finite(info.matte_size.width) && info.matte_size.width > 0 && finite(info.matte_size.height) && info.matte_size.height > 0)) errors.push("matte_size must be {width, height} in pixels");
   summaryErrors(info, "", errors);
   if (!Array.isArray(info.frames) || !info.frames.length) errors.push("frames must be a non-empty list");
   else {
@@ -223,22 +228,21 @@ function gridBox(component, { columns, rows }) {
   return box(left, top, right, bottom);
 }
 
-// The head: walk down the person's rows from the top until the silhouette
-// widens past the head (the shoulders). Rows are measured on the full mask,
-// inside the body box's columns.
+// The head: the silhouette's rows from the top, measured inside the body
+// box's columns. The head's width is taken from the upper quarter of the
+// window (the 80th percentile span, so hair wisps do not count); the head
+// ends at the first row that is half as wide again (the shoulders), and is
+// never taller than HEAD_ASPECT head widths.
+const HEAD_ASPECT = 1.6;
 function headBox(alpha, width, height, threshold, body) {
   const x0 = Math.max(0, Math.floor((body.x - body.w / 2) * width));
   const x1 = Math.min(width, Math.ceil((body.x + body.w / 2) * width));
   const top = Math.max(0, Math.floor((body.y - body.h / 2) * height));
   const bottom = Math.min(height, Math.ceil((body.y + body.h / 2) * height));
   const minRows = Math.max(2, Math.round(height * 0.03));
-  const maxRows = Math.max(minRows, Math.round((bottom - top) * 0.45));
-  let headWidth = 0;
-  let headLeft = Infinity;
-  let headRight = -Infinity;
-  let end = top + maxRows;
-  let found = false;
-  for (let y = top; y < bottom && y < top + maxRows; y += 1) {
+  const windowRows = Math.max(minRows, Math.round((bottom - top) * 0.6));
+  const rows = [];
+  for (let y = top; y < bottom && y < top + windowRows; y += 1) {
     let left = -1;
     let right = -1;
     for (let x = x0; x < x1; x += 1) {
@@ -247,21 +251,25 @@ function headBox(alpha, width, height, threshold, body) {
         right = x;
       }
     }
-    if (left < 0) continue;
-    const span = right - left + 1;
-    if (y - top >= minRows && headWidth > 0 && span > headWidth * 1.6) {
-      end = y;
-      found = true;
-      break;
-    }
-    if (span > headWidth) headWidth = span;
-    if (left < headLeft) headLeft = left;
-    if (right > headRight) headRight = right;
+    rows.push(left < 0 ? null : { y, left, right, span: right - left + 1 });
+  }
+  const upper = rows.slice(0, Math.max(minRows, Math.round(rows.length / 4))).filter(Boolean).map((row) => row.span).sort((a, b) => a - b);
+  if (!upper.length) return null;
+  const headWidth = upper[Math.min(upper.length - 1, Math.floor(upper.length * 0.8))];
+  const maxHeight = Math.max(minRows, Math.round(headWidth * HEAD_ASPECT));
+  let headLeft = Infinity;
+  let headRight = -Infinity;
+  let end = top;
+  for (const row of rows) {
+    if (!row) continue;
+    if (row.y - top >= maxHeight) break;
+    if (row.y - top >= minRows && row.span > headWidth * 1.5) break;
+    if (row.left < headLeft) headLeft = row.left;
+    if (row.right > headRight) headRight = row.right;
+    end = row.y + 1;
   }
   if (!Number.isFinite(headLeft)) return null;
-  // Without a shoulder line (a tight close-up), the head is the top of the body box.
-  const headBottom = found ? end : Math.min(bottom, top + maxRows);
-  return box(headLeft / width, top / height, (headRight + 1) / width, headBottom / height);
+  return box(headLeft / width, top / height, (headRight + 1) / width, end / height);
 }
 
 function box(left, top, right, bottom) {

@@ -60,10 +60,15 @@ test("maskStats rejects a mask of the wrong size", () => {
   assert.throws(() => maskStats(new Uint8Array(10), W, H), /180×320/);
 });
 
-test("classifyFraming reads the head height", () => {
-  assert.equal(classifyFraming({ x: 0.5, y: 0.3, w: 0.4, h: 0.25 }), "close-up");
-  assert.equal(classifyFraming({ x: 0.5, y: 0.3, w: 0.2, h: 0.14 }), "medium");
-  assert.equal(classifyFraming({ x: 0.5, y: 0.3, w: 0.1, h: 0.06 }), "wide");
+test("classifyFraming counts head heights below the chin, in any aspect", () => {
+  // Chin at 0.7 with a 0.3 head: one head below → close-up.
+  assert.equal(classifyFraming({ x: 0.5, y: 0.55, w: 0.3, h: 0.3 }), "close-up");
+  // A 16:9 waist-up shot: chin at 0.45, head 0.28 → about two heads below.
+  assert.equal(classifyFraming({ x: 0.5, y: 0.31, w: 0.16, h: 0.28 }), "medium");
+  // The same person cropped 9:16: chin at 0.45, head 0.2 → under three heads.
+  assert.equal(classifyFraming({ x: 0.5, y: 0.35, w: 0.4, h: 0.2 }), "medium");
+  // A small figure with the room around it.
+  assert.equal(classifyFraming({ x: 0.5, y: 0.3, w: 0.1, h: 0.08 }), "wide");
   assert.equal(classifyFraming(null), null);
 });
 
