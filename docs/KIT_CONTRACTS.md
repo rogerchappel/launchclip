@@ -1125,7 +1125,21 @@ conventions apply (`createFootageBase`, `at` from the scene start, hits).
 - **Face rule.** The head box follows the base camera (`cameraOps`) at
   every frame, so pans, punch-ins and framed windows move it.
 
-## Product demo (demo autopilot)
+## Catalogue F (`kit/core/catalog-f.mjs`)
+
+The style-gated creative set around the presenter
+([SUBJECT_EFFECTS_RFC.md](SUBJECT_EFFECTS_RFC.md) §6.3). Same view shape as
+catalogue E; the HyperFrames emitter and Remotion component are catalogue E's
+`emitParts` and `PartsModule`. Each module declares `mood` tags, so the
+planner favours it when the art direction asks for that feel, and style
+packs can prefer or avoid it.
+
+| Module | Layer | Needs the subject | Params | Events | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `glass-word` | behind | yes | `word` ≤ 10, `tint` clear/primary/accent, `turn` −35–35°, `sweep`, `at` | `reveal`, `sweep` | Centred on the head. Static CSS perspective on a wrapper; the face is near-clear with bright rims (nothing glows behind the glyphs, since a clear face shows it); the sweep is a clipped band moving one way while its text copy moves the other |
+| `orbit-cards` | split | yes | `items` 3–6 `{image?, text? ≤ 40}` (real, supplied), `speed` 8–60 °/s, `at` | `orbit` | A tilted ring round the chest, kept above the caption band; each card is drawn in both parts and per-frame sets show it only in the part for its side of the ring (near cards larger) |
+
+
 
 `launchclip demo record` (`src/demo/`) records a SaaS app's key flows in
 Chromium and writes, per flow, `demo/<flow>.mp4` and `demo/<flow>.actions.json`

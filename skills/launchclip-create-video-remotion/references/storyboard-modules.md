@@ -110,6 +110,8 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 | turns from the problem to the product ("so we built", "that's why", "enter"): the room gives way to a brand backdrop [footage-led] (needs the subject) | backdrop-swap |
 | talks about posting, going viral or "this exact video": the frame becomes a feed window they break out of [footage-led] (needs the subject) | feed-frame |
 | reveals how the video or result was made, or a process finishing ("made with", "it transcribes, cuts…"): the frame pulls back into an app window while real steps tick [footage-led] | pull-back |
+| names the one idea or the brand in a premium or tech piece: one glass word on the wall behind their head [footage-led] (needs the subject) | glass-word |
+| lists many things or shows social proof ("all these tools", "people keep telling me"), with real items in the assets or brief: cards circle them [footage-led] (needs the subject) | orbit-cards |
 | says "all you need to do is", "three steps" or runs through a process: rows tick as each is said, beside the presenter (no rect: it places itself above their head or on their chest) [footage-led] | checklist |
 | gives a growth result ("doubled", "took off in week three"): a line kicks up behind their head [footage-led] (needs the subject) | growth-line |
 | turns on a contrast or jumps between takes ("but", "or you can", "instead"): rush into the cut, burst out of the next take [footage-led] | zoom-through |
@@ -647,6 +649,24 @@ params:
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: draw, takeoff, pill
 
+### glass-word (keeps captions, behind the presenter, needs the subject)
+Footage-led, behind the presenter: one big word of extruded clear glass stands on the wall at head height, turned in perspective, and a light sweeps across it; the head covers the middle letters. For naming the one idea or a brand in a premium, tech look.
+params:
+- word: one word ≤ 10 (uppercased)
+- tint: clear (default) | primary | accent
+- turn: degrees the word turns away (−35–35, default −18)
+- sweep: boolean (default true)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: reveal, sweep
+
+### orbit-cards (keeps captions, needs the subject)
+Footage-led, around the presenter: 3–6 real items (screenshots, posts, logos, quotes the user supplied) on cards whip in and circle the presenter's chest, passing behind them on the far side and in front on the near. For social proof or "all these tools". Never invent items.
+params:
+- items: [{image?: assets/ image, text?: ≤ 40}] 3–6, each real
+- speed: degrees per second (8–60, default 26)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: orbit
+
 ## Timing rules
 
 Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core/modules.mjs; `launchclip module fit <module>` prints the same rules with the window for a given `--duration`). `at` values are seconds from the scene start: the first beat no earlier than the lead-in, the last no later than the lead-out before the scene end. A faster motion grammar can shorten a catalogue B enter, which only moves its lead-in earlier.
@@ -694,6 +714,8 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | app-stage | 2 s | 0 s | scene − 1.2 s | — |
 | phone-stage | 2 s | 0 s | scene − 1.2 s | — |
 | growth-line | 2 s | 0 s | — | at ≤ scene − draw − 0.6 s (draw 0.8–3 s, default min(1.6, 0.45 × scene)) |
+| glass-word | 1.8 s | 0 s | scene − 1.1 s | — |
+| orbit-cards | 2 s | 0 s | scene − 1.2 s | — |
 
 ## Example
 

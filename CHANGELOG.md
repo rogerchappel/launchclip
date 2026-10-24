@@ -79,6 +79,10 @@ The detailed list follows.
   - `pull-back`: the video shrinks into an app window while real steps tick
     off and a counter reaches 100%.
 - layout-check's face rule follows punch-ins and pans.
+- A creative set for bolder styles: `glass-word` (one clear glass word on
+  the wall behind your head, with a light sweep) and `orbit-cards` (your
+  real screenshots, posts or quotes circling you, passing behind and in
+  front).
 - Checklists in footage place themselves beside you (above your head, or on
   your chest when there's no headroom), at a size that stays readable.
 - `growth-line`: a line chart draws behind your head and kicks up into a
