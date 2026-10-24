@@ -849,8 +849,10 @@ test("finish notes in one line the SFX families that fall back to the kit", asyn
 });
 
 // The subject gate (RFC §9): a matte range that collapses is not used, and
-// its subject scenes fall back instead of shipping a broken cut-out.
-test("runFinish drops a collapsing matte's subject scenes to their fallback", async () => {
+// its subject scenes fall back instead of shipping a broken cut-out. The
+// footage base's sound stage probes the recording, so it needs ffprobe.
+test("runFinish drops a collapsing matte's subject scenes to their fallback", async (t) => {
+  try { await execFileAsync("ffprobe", ["-version"]); } catch { t.skip("ffprobe is unavailable"); return; }
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-subject-"));
   try {
     await cp(path.join(ROOT, "examples/story/subject"), project, { recursive: true });
