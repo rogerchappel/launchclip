@@ -66,7 +66,7 @@ export function createOverlayRenderer(options = {}) {
       if (!bundle) throw new Error("overlay renderer: call prepare() first");
       const propsFile = path.join(workDir, "props", `${entry.key}.json`);
       await mkdir(path.dirname(propsFile), { recursive: true });
-      await writeFile(propsFile, `${JSON.stringify({ story, sceneId: entry.sceneId, loop: entry.loop, plate: entry.plate })}\n`);
+      await writeFile(propsFile, `${JSON.stringify({ story, sceneId: entry.sceneId, loop: entry.loop, plate: entry.plate, ...(entry.part ? { part: entry.part } : {}) })}\n`);
       if (mode === "png") { await rm(outFile, { recursive: true, force: true }); await mkdir(outFile, { recursive: true }); }
       else await mkdir(path.dirname(outFile), { recursive: true });
       const result = await remotion(overlayRenderArgs({ bundle, propsFile, outFile, mode, concurrency }), workDir);

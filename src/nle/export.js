@@ -7,7 +7,11 @@
 //           SFX cues (AUDIO-MANIFEST.json → sfx_manifest), the mix, captions,
 //           the finished render; probed with ffprobe
 //   render  each overlay scene as an alpha clip (overlays.js), unless
-//           --overlays none; unchanged renders are reused
+//           --overlays none (a split scene renders its behind and front parts
+//           as two clips); unchanged renders are reused
+//   subject the presenter mattes the layered scenes need (VP9 alpha WebM),
+//           transcoded to ProRes 4444 (or PNG frames) so editors read their
+//           alpha; unchanged copies are reused
 //   build   the timeline model (timeline.js)
 //   write   <name>.fcpxml / <name>.xml / <name>.edl / <name>.otio, captions.srt,
 //           timeline.json and EXPORT.json into <out>/<name>/, with every media
@@ -17,16 +21,17 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { constants, existsSync } from "node:fs";
-import { copyFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { captionChunksFrom, chunkWords, narrationWords } from "../../kit/core/captions.mjs";
 import { resolveStory, storyBase, validateStory } from "../../kit/core/story.mjs";
+import { subjectSegments } from "../../kit/core/subject-layer.mjs";
 import { VERSION } from "../doctor.js";
 import { narrationFile, readStoryEdl } from "../story_loader.js";
 import { writeEdl, writeSrt } from "./edl.js";
 import { writeFcpxml } from "./fcpxml.js";
-import { createOverlayRenderer } from "./overlays.js";
+import { createOverlayRenderer, sequencePattern } from "./overlays.js";
 import { writeOtio } from "./otio.js";
 import { parseRate } from "./time.js";
 import { OVERLAY_MODES, buildTimeline, checkTimeline, overlayPlan, timelineSummary } from "./timeline.js";
@@ -62,6 +67,7 @@ function defaultAdapters() {
     probe: (file) => probeMedia(file),
     overlayRenderer: () => createOverlayRenderer(),
     makePlate: (file, options) => makePlate(file, options),
+    transcodeMatte: (source, outFile, options) => transcodeMatte(source, outFile, options),
     xmllint: (file, dtd) => execFileAsync("xmllint", ["--noout", "--dtdvalid", dtd, file], { maxBuffer: 1 << 24 }),
     otioCheck: (files) => otioPythonCheck(files),
     log: () => {}
@@ -143,8 +149,49 @@ export async function runExport(projectPath, options = {}, adapterOverrides = {}
     notes.push("--overlays none: the finished render is the one picture clip above V1");
   }
 
+  // ---- subject mattes
+  const subjectReport = plan.subject ? { mattes: [], track: null, clips: 0, static: plan.subject.scenes.filter((scene) => scene.animated.length).map((scene) => scene.sceneId) } : null;
+  if (plan.subject && mode !== "none") {
+    media.subject = { mattes: {} };
+    const sources = [...new Set(subjectSegments(story, plan.subject.windows).map((segment) => segment.src))];
+    const cacheFile = path.join(mediaDir, "subject", ".renders.json");
+    const cache = (await readOptionalJson(cacheFile)) ?? {};
+    for (const src of sources) {
+      const source = path.resolve(project, src);
+      if (!existsSync(source)) { warnings.push(`subject matte ${src} was not found`); continue; }
+      const stem = path.basename(src).replace(/\.[^.]+$/, "");
+      const outFile = path.join(mediaDir, "subject", mode === "png" ? stem : `${stem}.mov`);
+      const info = await stat(source);
+      const key = hashValue({ src, size: info.size, mtime: Math.round(info.mtimeMs), mode, version: VERSION });
+      if (!options.force && cache[src]?.key === key && existsSync(outFile)) {
+        media.subject.mattes[src] = cache[src].render;
+        subjectReport.mattes.push({ src, status: "cached", file: rel(exportDir, outFile) });
+        continue;
+      }
+      adapters.log(`transcoding subject matte ${src} (${mode})`);
+      await mkdir(path.dirname(outFile), { recursive: true });
+      const render = await adapters.transcodeMatte(source, outFile, { mode });
+      if (render.kind === "mov") {
+        const probed = await adapters.probe(outFile);
+        Object.assign(render, { frames: probed.frames ?? Math.floor(probed.duration * rate.num / rate.den + 1e-6), width: probed.width, height: probed.height, pix_fmt: probed.pixFmt ?? null });
+        if (probed.pixFmt && !hasAlpha(probed.pixFmt)) warnings.push(`subject matte ${src} transcoded without alpha (${probed.pixFmt})`);
+      }
+      media.subject.mattes[src] = render;
+      cache[src] = { key, render };
+      subjectReport.mattes.push({ src, status: "transcoded", file: rel(exportDir, outFile), frames: render.frames });
+    }
+    await mkdir(path.dirname(cacheFile), { recursive: true });
+    await writeFile(cacheFile, `${JSON.stringify(cache, null, 2)}\n`);
+  }
+
   // ---- timeline
   const timeline = buildTimeline(story, media, { name, rate, overlays: mode, plan });
+  if (subjectReport) {
+    const track = timeline.tracks.find((entry) => entry.layer === "subject");
+    subjectReport.track = track?.id ?? null;
+    subjectReport.clips = track?.clips.length ?? 0;
+    if (formats.includes("edl")) notes.push("the EDL carries V1 only, so the presenter's depth (behind overlays, the subject track, front overlays) is left out; use fcpxml, premiere or otio for it");
+  }
   warnings.push(...timeline.warnings);
   const problems = checkTimeline(timeline);
   if (problems.length) throw new Error(`the timeline model is inconsistent:\n- ${problems.join("\n- ")}`);
@@ -215,6 +262,7 @@ export async function runExport(projectPath, options = {}, adapterOverrides = {}
     name,
     formats,
     overlays: { mode, renderer: mode === "none" ? null : "remotion", clips: overlayReport, cameras: plan.cameras.map((camera) => camera.sceneId) },
+    ...(subjectReport ? { subject: subjectReport } : {}),
     rate: { num: rate.num, den: rate.den, fps: rate.label, drop_frame: rate.dropFrame },
     duration_frames: timeline.duration,
     files,
@@ -378,6 +426,23 @@ export async function makePlate(file, { color, width, height, rate, duration }) 
   await mkdir(path.dirname(file), { recursive: true });
   const frames = Math.ceil(duration * rate.num / rate.den);
   await execFileAsync("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", `color=c=0x${color.slice(1)}:s=${width}x${height}:r=${rate.num}/${rate.den}`, "-frames:v", String(frames), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-tune", "stillimage", "-crf", "18", file], { maxBuffer: 1 << 24 });
+}
+
+/**
+ * A presenter matte (VP9 WebM with alpha) as ProRes 4444 with alpha, or a PNG
+ * sequence for --overlays png. libvpx-vp9 must decode it: ffmpeg's native VP9
+ * decoder drops the alpha plane.
+ */
+export async function transcodeMatte(source, outFile, { mode = "prores4444" } = {}) {
+  const decode = ["-y", "-v", "error", "-c:v", "libvpx-vp9", "-i", source, "-an"];
+  if (mode === "png") {
+    await rm(outFile, { recursive: true, force: true });
+    await mkdir(outFile, { recursive: true });
+    await execFileAsync("ffmpeg", [...decode, "-c:v", "png", "-pix_fmt", "rgba", "-start_number", "0", path.join(outFile, "frame-%05d.png")], { maxBuffer: 1 << 24 });
+    return { kind: "png-sequence", source: outFile, ...(await sequencePattern(outFile)) };
+  }
+  await execFileAsync("ffmpeg", [...decode, "-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le", "-alpha_bits", "16", "-vendor", "apl0", outFile], { maxBuffer: 1 << 24 });
+  return { kind: "mov", source: outFile };
 }
 
 // When the Python OpenTimelineIO package is installed, read the .otio (and the
