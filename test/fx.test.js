@@ -68,6 +68,20 @@ test("fx refuses an unknown module, a word anchor without --until, and a scene t
   await assert.rejects(runFx(video, "masthead", { at: 0, for: 2, params: {} }, adapters([])), /does not fit this clip.*word/);
 });
 
+test("fx checks the scene again against the measured framing before it renders", async (t) => {
+  const dir = await clip(t);
+  const calls = [];
+  const tight = adapters(calls);
+  const matte = tight.matte;
+  // A close-up: the head fills the top of the frame, so a masthead has no room.
+  tight.matte = async (file, range) => {
+    const result = await matte(file, range);
+    return { ...result, info: { ...result.info, framing: "close-up", head: { x: 0.5, y: 0.2, w: 0.3, h: 0.3 } } };
+  };
+  await assert.rejects(runFx(path.join(dir, "founder.mp4"), "masthead", { at: 0.2, for: 3, params: { word: "Ledgerly" } }, tight), /how you're framed.*needs headroom/s);
+  assert.equal(calls.some((call) => call.finish), false, "nothing rendered");
+});
+
 test("fx helpers: times, params and the canvas", async () => {
   assert.equal(parseFxTime("2.5", "--at"), 2.5);
   assert.equal(parseFxTime("word:try#2", "--at"), "word:try#2");

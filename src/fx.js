@@ -95,6 +95,17 @@ export async function runFx(video, module, options = {}, adapters = {}) {
     }
   }
 
+  // With the presenter measured, the module checks itself again against the
+  // real framing (a masthead needs headroom; a dolly zoom, a medium shot).
+  if (ranges.length) {
+    try {
+      const measured = (await readProjectStory(project)).resolved;
+      resolveModule(measured.scenes[0], measured);
+    } catch (error) {
+      throw new Error(`the ${module} scene does not fit how you're framed in this clip: ${String(error?.message ?? error)}`);
+    }
+  }
+
   log(`fx: rendering ${project} (${options.renderer ?? "default renderer"}, ${options.quality ?? "draft"})`);
   const run = adapters.finish ?? (await import("./finish.js")).runFinish;
   const finish = await run(project, { quality: options.quality ?? "draft", music: options.music ?? "none", ...(options.renderer ? { renderer: options.renderer } : {}) }, { notice: log });
