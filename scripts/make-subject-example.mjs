@@ -4,12 +4,13 @@
 //   node scripts/make-subject-example.mjs [--out examples/story/subject]
 //
 // Writes, deterministically (no models, no network):
-//   assets/recording.mp4                  6 s 720x1280 30 fps: a striped "room"
-//                                         and a swaying presenter silhouette
+//   assets/recording.mp4                  6 s 720x1280 30 fps: a still striped
+//                                         "room" and a swaying presenter silhouette
 //   assets/subject/0.000-6.000.webm       the same frames with the presenter's
 //                                         exact alpha (VP9, yuva420p)
 //   assets/subject/0.000-6.000.json       launchclip.subject.v1 for the range,
 //                                         measured from that alpha
+//   assets/subject/0.000-6.000.plate.jpg  the room alone (the exact plate)
 //
 // The matte is exact, so renderer parity measures the compilers, not a
 // segmentation model. storyboard.json is authored by hand.
@@ -41,10 +42,11 @@ function presenter(x, y, index) {
   return Math.max(0, Math.min(1, Math.max(head, neck, torso) / 3));
 }
 
-// The room: warm stripes and a cool panel, drifting slowly so a frozen frame shows.
-function room(x, y, index) {
-  const drift = index * 0.6;
-  const stripe = Math.floor((x + y * 0.35 + drift) / 64) % 2;
+// The room: warm stripes and a cool panel. It holds still, as a real room
+// does, so the plate matches it on every frame; the presenter's sway shows
+// a frozen frame.
+function room(x, y) {
+  const stripe = Math.floor((x + y * 0.35) / 64) % 2;
   const panel = x > 470 && x < 690 && y > 160 && y < 620;
   if (panel) return [40, 92, 150];
   const shade = 1 - y / H * 0.45;
@@ -79,7 +81,7 @@ for (let index = 0; index < FRAMES; index += 1) {
   for (let y = 0; y < H; y += 1) {
     for (let x = 0; x < W; x += 1) {
       const a = presenter(x + 0.5, y + 0.5, index);
-      const bg = room(x, y, index);
+      const bg = room(x, y);
       const fg = person(y);
       const i = y * W + x;
       for (let c = 0; c < 3; c += 1) {
@@ -97,9 +99,16 @@ for (let index = 0; index < FRAMES; index += 1) {
 await recording.close();
 await matte.close();
 
+const plate = Buffer.alloc(W * H * 3);
+for (let y = 0; y < H; y += 1) for (let x = 0; x < W; x += 1) plate.set(room(x, y), (y * W + x) * 3);
+const plateWriter = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', `${W}x${H}`, '-i', 'pipe:0', '-frames:v', '1', '-q:v', '2', path.join(out, 'assets/subject/0.000-6.000.plate.jpg')], {stdio: ['pipe', 'ignore', 'inherit']});
+plateWriter.stdin.end(plate);
+const [plateCode] = await once(plateWriter, 'close');
+if (plateCode !== 0) throw new Error('ffmpeg failed writing the plate');
+
 const sha256 = createHash('sha256').update(await readFile(recordingFile)).digest('hex');
-const info = {schema: SUBJECT_SCHEMA, source: {sha256, width: W, height: H, fps: FPS, duration: DURATION}, model: 'synthetic', range: {in: 0, out: DURATION}, matte: '0.000-6.000.webm', matte_size: {width: W, height: H}, ...summarizeSamples(frames), frames};
+const info = {schema: SUBJECT_SCHEMA, source: {sha256, width: W, height: H, fps: FPS, duration: DURATION}, model: 'synthetic', range: {in: 0, out: DURATION}, matte: '0.000-6.000.webm', matte_size: {width: W, height: H}, plate: '0.000-6.000.plate.jpg', plate_size: {width: W, height: H}, plate_seen: 1, ...summarizeSamples(frames), frames};
 const {ok, errors} = validateSubjectInfo(info);
 if (!ok) throw new Error(`subject.json failed its schema: ${errors.join('; ')}`);
 await writeFile(path.join(out, 'assets/subject/0.000-6.000.json'), `${JSON.stringify(info)}\n`);
-console.log(`wrote ${path.relative(ROOT, out)}: recording.mp4, subject/0.000-6.000.{webm,json} (${info.framing}, head ${JSON.stringify(info.head)})`);
+console.log(`wrote ${path.relative(ROOT, out)}: recording.mp4, subject/0.000-6.000.{webm,json,plate.jpg} (${info.framing}, head ${JSON.stringify(info.head)})`);
