@@ -52,9 +52,12 @@ export const USAGE = Object.freeze([
   ["cinematic-check", "cinematic-check <project> [--renderer hyperframes|remotion] [--video renders/draft.mp4] [--audio-manifest AUDIO-MANIFEST.json] [--music-volume 0.32] [--expect-audio] [--critique qa/critic.json]"],
   ["layout-check", "layout-check <project> [--profile shorts|landscape] [--json]"],
   ["module fit", "module fit <module> [--params params.json] [--aspect 16:9|9:16] [--story storyboard.json] [--brand brand.json] [--duration 4] [--json]"],
+  ["subject setup", "subject setup [--model modnet-fused|modnet|mediapipe-selfie|u2net-human]", {comment: "download and verify the segmentation models"}],
+  ["subject probe", "subject probe <video> [--model mediapipe-selfie] [--cache .launchclip/subject] [--force] [--no-download] [--json]", {comment: "framing summary: people, head, headroom, usable"}],
+  ["subject matte", "subject matte <video> --range <in>-<out> [--project <story-project>] [--model modnet-fused] [--smooth 0-0.9] [--cache .launchclip/subject] [--force] [--no-download] [--json]", {comment: "alpha matte.webm + subject.json for one source range"}],
   ["finish", "finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--voice kokoro|elevenlabs|supplied|test] [--music synth|elevenlabs|none] [--music-regenerate] [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] [--scene s3[,s4] | --preview-scene s3] [--force] [--json]"],
   ["finish", "finish <candidate-project> --candidate <id> [--into <project>] [--kind opening|transition] [--boundary s3] [--comparison id] [--at 0.4,1.2,2.6] [--music synth|none] [--renderer remotion|hyperframes]", {comment: "cheap rendered candidate: no paid calls, receipt in <project>/qa/rendered-candidates.json"}],
-  ["make", "make \"<prompt>\" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--style <name|path>] [--model provider:model] [--voice kokoro|elevenlabs] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--out <project-dir>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--json]"],
+  ["make", "make \"<prompt>\" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--style <name|path>] [--model provider:model] [--voice kokoro|elevenlabs] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--out <project-dir>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--no-subject] [--json]"],
   ["make", "make \"<prompt>\" --repo <app-repo> [--approve-demo] [--demo-plan DEMO-PLAN.json] [--start \"npm run dev\"] [--url http://localhost:3000] [--allow-host <host>] [--redemo]"],
   ["voice", "voice <project | --text \"...\"> [--voice kokoro|elevenlabs|test|<voice id>] [--provider kokoro|elevenlabs|test] [--speed 1.2] [--out NARRATION.json] [--json]"],
   ["export", "export <project> --format fcpxml|premiere|edl|otio|all [--overlays prores4444|png|none] [--out exports/] [--fps 24|25|29.97|30|60] [--name name] [--absolute] [--force] [--json]"],
@@ -141,6 +144,9 @@ export const SUMMARIES = Object.freeze({
   "layout-check": "Check a storyboard's declared geometry: safe zone, collisions, caption band (at rest and through camera moves), text size.",
   module: "Fit one module's params to the frame.",
   "module fit": "Measure one module's params against the frame and report what fits.",
+  "subject setup": "Download and verify the local person segmentation models the subject stage uses.",
+  "subject probe": "Sample a recording and report whether one person can be cut out, and how they are framed.",
+  "subject matte": "Cut the person out of one source range: a cached alpha WebM and per-frame head and body boxes.",
   finish: "Storyboard to mastered video in one command: voice, music, SFX, render, master and gates. --candidate renders a draft candidate with no paid calls (synth or no music, a cached or free voice, else the test voice; no evidence or gates) and records it in the rendered-candidate receipt.",
   make: "Prompt plus an optional assets folder to a finished video, headless: classify the assets, route the lane deterministically, write the script and storyboard with an API model (repair loop), then finish and an optional vision critic. Writes MAKE.json with routing, costs, timings and gates. --repo runs demo autopilot first: it records the app's key flows into assets/demo and edits the approved ones in as product-demo scenes.",
   voice: "Generate the narration (NARRATION.json and the voice track) for a project or a text.",
@@ -172,7 +178,7 @@ export const SUMMARIES = Object.freeze({
   direct: "Direct a talking-head or TTS video from a creative prompt."
 });
 
-export const USAGE_GROUPS = Object.freeze(["skills", "style", "story", "sfx", "module", "demo"]);
+export const USAGE_GROUPS = Object.freeze(["skills", "style", "story", "sfx", "module", "subject", "demo"]);
 const GROUPS = new Set(USAGE_GROUPS);
 const COMMENT_COLUMN = 52;
 

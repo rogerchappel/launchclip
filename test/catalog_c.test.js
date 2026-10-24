@@ -11,7 +11,7 @@ import {EMITTERS, cameraGsap} from '../kit/hyperframes/catalog-c.mjs';
 import {knownModules, resolveModule} from '../kit/core/modules.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const IDS = ['punch-in', 'footage-callout', 'lower-third', 'emphasis-caption'];
+const IDS = ['punch-in', 'footage-callout', 'lower-third', 'emphasis-caption', 'masthead', 'dolly-zoom'];
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
 const format = {width: 1080, height: 1920, fps: 30, duration: 30};
 const ctx = (overrides = {}) => ({id: 'scene', start: 2, duration: 3, format, brand, aspect: '9:16', ...overrides});
@@ -21,7 +21,9 @@ const PARAMS = {
   'punch-in': {scale: 1.15, at: 0.4},
   'footage-callout': {text: 'Recorded in one take', label: 'Raw footage', point: {x: 0.56, y: 0.45}},
   'lower-third': {name: 'Ada Park', title: 'Founder, LaunchClip'},
-  'emphasis-caption': {text: 'Try it'}
+  'emphasis-caption': {text: 'Try it'},
+  masthead: {word: 'focus'},
+  'dolly-zoom': {}
 };
 
 // Real paused GSAP timeline on plain objects, fed the emitted code.
@@ -230,7 +232,7 @@ test('emphasis-caption: hides captions, pops words on a stagger, outlined for co
 
 test('landscape canvases keep catalogue C boxes in the title-safe zone', () => {
   const wide = {format: {width: 1920, height: 1080, fps: 30}, aspect: '16:9'};
-  for (const id of IDS.filter(id => id !== 'punch-in')) {
+  for (const id of IDS.filter(id => id !== 'punch-in' && id !== 'dolly-zoom')) {
     const model = resolve(id, id === 'footage-callout' ? {text: 'Here', point: {x: 0.6, y: 0.5}} : PARAMS[id], wide);
     const r = model.rect;
     assert.ok(r.x >= 96 - 1e-6 && r.x + r.width <= 1824 + 1e-6 && r.y >= 54 - 1e-6, `${id} ${JSON.stringify(r)}`);
@@ -244,4 +246,95 @@ test('resolveModule passes the story base to punch-in and catalogue C models car
   assert.deepEqual(model.camera.focus, {x: 432, y: 576});
   assert.equal(model.sceneId, 'p');
   assert.equal(model.track, 6);
+});
+
+test('punch-in steps: punch in, further in and back out on successive words', () => {
+  const model = resolve('punch-in', {steps: [{at: 0.2, scale: 1.12}, {at: 1.0, scale: 1.3}, {at: 1.8, scale: 1.06}], release: 0.4}, {duration: 3});
+  const {samples, steps} = model.camera;
+  const scaleAt = (t) => samples.reduce((best, s) => (Math.abs(s.t - t) < Math.abs(best.t - t) ? s : best)).scale;
+  assert.deepEqual(steps.map((step) => step.at), [2.2, 3, 3.8]);
+  assert.ok(Math.abs(scaleAt(2.9) - 1.12) < 0.01, `first step settles at 1.12 (${scaleAt(2.9)})`);
+  assert.ok(Math.abs(scaleAt(3.7) - 1.3) < 0.01, `second step settles at 1.3 (${scaleAt(3.7)})`);
+  assert.ok(Math.abs(scaleAt(4.5) - 1.06) < 0.01, `third step settles at 1.06 (${scaleAt(4.5)})`);
+  assert.deepEqual(samples.at(-1), {t: 5, scale: 1, x: 0, y: 0});
+  assert.deepEqual(model.events.map((event) => event.name), ['punch', 'step-1', 'step-2', 'release']);
+  assert.equal(model.events.find((event) => event.name === 'step-2').cue, 'whoosh-soft', 'a zoom-out step gets the soft whoosh');
+  assert.equal(model.camera.scale, 1.3);
+});
+
+test('punch-in steps: strict validation', () => {
+  const r = (params) => () => resolve('punch-in', params, {duration: 3});
+  assert.throws(r({steps: [{at: 0.2, scale: 1.1}], at: 0.2}), /replaces at and scale/);
+  assert.throws(r({steps: []}), /1–4 steps/);
+  assert.throws(r({steps: [{at: 0.2, scale: 1.1}, {at: 0.3, scale: 1.2}]}), /at least 0\.3 s after/);
+  assert.throws(r({steps: [{at: 0.2, scale: 1.1}, {at: 0.8, scale: 1.11}]}), /differ from the step before it/);
+  assert.throws(r({steps: [{at: 0.2, scale: 1.02}]}), /must zoom in/);
+  assert.throws(r({steps: [{at: 0.2, scale: 1.5}]}), /params\.steps\[0\]\.scale/);
+});
+
+test('punch-in blur: velocity-shaped, zero once settled and at the end', () => {
+  const model = resolve('punch-in', {scale: 1.2, at: 0.5, blur: true});
+  const {samples} = model.camera;
+  const moving = samples.filter((s) => s.t > 2.5 && s.t < 2.6);
+  assert.ok(moving.some((s) => s.blur > 1), `blur while the zoom moves (${moving.map((s) => s.blur)})`);
+  assert.ok(samples.every((s) => s.blur <= 14 + 1e-9), 'capped at 14 px at 1080');
+  const settled = samples.filter((s) => s.t > 3.5 && s.t < 4.4);
+  assert.ok(settled.every((s) => s.blur === 0), 'no blur once settled');
+  assert.equal(samples.at(-1).blur, 0);
+  const ops = cameraOps([model]);
+  assert.ok(ops.some((op) => /^blur\(/.test(op.props.filter ?? '')));
+  assert.equal(ops.at(-1).props.filter, 'none');
+  // A room filter rides along in every blurred sample.
+  const withRoom = cameraOps([model], {roomFilterAt: () => 'brightness(0.6)'});
+  assert.ok(withRoom.some((op) => /^brightness\(0\.6\) blur\(/.test(op.props.filter ?? '')));
+  assert.equal(withRoom.at(-1).props.filter, 'brightness(0.6)');
+  // Without blur, samples carry no filter at all.
+  assert.ok(resolve('punch-in', {scale: 1.2, at: 0.5}).camera.samples.every((s) => s.blur === undefined));
+  assert.ok(cameraGsap([model]).some((line) => /filter/.test(line)));
+});
+
+const head = (x, y, width, height) => ({subject: {available: true, framing: 'medium', head: {x, y, width, height}, plate: {src: 'assets/subject/a.plate.jpg', fit: 'cover', focus: {x: 0.5, y: 0.5}}, placement: 'measured'}});
+
+test('masthead: one big word whose baseline sits on the head, behind the subject', () => {
+  const model = resolve('masthead', {word: 'focus', kicker: 'issue 01'}, head(400, 600, 280, 360));
+  assert.equal(model.layer, 'behind');
+  assert.equal(model.content.word, 'FOCUS');
+  assert.equal(model.content.placement, 'measured');
+  const baseline = model.rect.y + model.content.kickerH + model.content.lineH;
+  assert.ok(Math.abs(baseline - (600 + 360 * 0.35)) < 1, `baseline ${baseline}`);
+  assert.ok(model.content.covered > 0.2 && model.content.covered < 0.8, `the head covers part of the letters (${model.content.covered})`);
+  assert.ok(model.rect.y >= model.safe.y - 1e-6, 'inside the safe zone');
+  assert.deepEqual(model.events.map((event) => event.name), ['title']);
+  assert.equal(model.content.letters.length, 5);
+});
+
+test('masthead: shrinks into the headroom, and refuses a head with none', () => {
+  const roomy = resolve('masthead', {word: 'scale'}, head(400, 700, 280, 360));
+  const tight = resolve('masthead', {word: 'scale'}, head(400, 360, 280, 360));
+  assert.ok(tight.content.size < roomy.content.size);
+  assert.throws(() => resolve('masthead', {word: 'scale'}, head(400, 200, 280, 360)), /needs headroom/);
+  assert.throws(() => resolve('masthead', {word: 'two words'}), /must be one word/);
+  assert.equal(resolve('masthead', {word: 'edit'}).content.placement, 'default', 'without a matte summary it uses the default head');
+});
+
+test('dolly-zoom: scales the room plate, holds the subject still, needs room', () => {
+  const model = resolve('dolly-zoom', {scale: 1.4, at: 0.2, move: 1.4}, {...head(400, 500, 280, 360), duration: 3});
+  assert.equal(model.layer, 'behind');
+  assert.ok(model.subjectCamera.samples.every((s) => s.scale === 1 && s.x === 0 && s.y === 0));
+  assert.equal(model.content.plate.src, 'assets/subject/a.plate.jpg');
+  assert.deepEqual(model.content.origin, {x: 540, y: 680});
+  const ops = catalogCTimeline(model);
+  const room = (t) => frameState(ops, t).get('scene-room');
+  assert.equal(room(2.1).scaleX, 1);
+  assert.ok(Math.abs(room(3.65).scaleX - 1.4) < 1e-6);
+  assert.ok(Math.abs(room(4.99).scaleX - 1) < 0.02, 'eased back before the scene ends');
+  assert.throws(() => resolve('dolly-zoom', {}, {subject: {framing: 'close-up', head: null}}), /needs room around the presenter/);
+  assert.throws(() => resolve('dolly-zoom', {direction: 'pull', release: 0.5}, head(400, 500, 280, 360)), /applies to a push only/);
+  const pull = resolve('dolly-zoom', {direction: 'pull'}, head(400, 500, 280, 360));
+  assert.equal(pull.content.from, 1.3);
+  assert.equal(pull.content.to, 1);
+  // Without a plate yet (before matting) it draws nothing rather than failing.
+  const bare = resolve('dolly-zoom', {});
+  assert.equal(bare.content.plate, null);
+  assert.deepEqual(catalogCView(bare).children, []);
 });

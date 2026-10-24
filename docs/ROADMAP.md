@@ -37,6 +37,7 @@ Guardrails:
 
 ### Also next
 
+- **Subject-aware effects:** graphics that sit behind you in a talking-head recording (your product name behind your head, your app filling the wall behind you, a dolly zoom), chosen by the art director like any other module. Design: [SUBJECT_EFFECTS_RFC.md](SUBJECT_EFFECTS_RFC.md).
 - **Smarter asset understanding:** recognise what's in your screenshots and recordings (a pricing page, a dashboard, an onboarding flow) and place them where the story needs them.
 - **Built-in critic by default:** a vision model reviews the video the way a human editor would, as part of `launchclip make`.
 - **Faster first run:** smaller downloads and pre-warmed rendering, so the first video arrives sooner.

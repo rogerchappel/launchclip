@@ -1,0 +1,6 @@
+{
+  "project": "examples/story/subject",
+  "sceneId": "push",
+  "times": [0.95, 1.05, 1.75, 2.5],
+  "threshold": { "ssim": 0.97 }
+}

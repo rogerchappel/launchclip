@@ -551,7 +551,7 @@ export function paletteDistance(a, b) {
   return round(a.reduce((sum, entry) => sum + entry.weight * Math.min(...b.map((other) => colorDistance(entry.hex, other.hex))), 0) / total, 4);
 }
 
-const GRAMMAR_SHOT = Object.freeze({ snappy: [0.6, 1.8], playful: [1.4, 3.5], editorial: [2.5, 6], smooth: [3.5, 8], documentary: [4.5, 12] });
+const GRAMMAR_SHOT = Object.freeze({ snappy: [0.6, 1.8], playful: [1.4, 3.5], editorial: [2.5, 6], smooth: [3.5, 8], documentary: [4.5, 12], cinematic: [3.5, 9] });
 
 /**
  * Compare a render's measured stats with a pack's reference stats (or, when

@@ -27,10 +27,11 @@ function story(extra = {}) {
   };
 }
 
-test("ambient core is plain ESM that imports only motion.mjs", async () => {
+test("ambient core is plain ESM that imports only motion.mjs and grammar.mjs", async () => {
   const source = await readFile(path.join(ROOT, "kit/core/ambient.mjs"), "utf8");
   const imports = [...source.matchAll(/^import .* from ['"]([^'"]+)['"]/gm)].map((match) => match[1]);
-  assert.deepEqual(imports, ["./motion.mjs"]);
+  // grammar.mjs itself imports only motion.mjs.
+  assert.deepEqual(imports, ["./motion.mjs", "./grammar.mjs"]);
   assert.doesNotMatch(source, /\brequire\(|Date\.now|performance\.now|Math\.random/);
 });
 

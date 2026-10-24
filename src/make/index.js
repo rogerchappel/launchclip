@@ -1,8 +1,8 @@
 // launchclip make "<prompt>" [--assets dir]: a prompt and an optional folder
 // of assets to a finished video, headless.
 //
-//   inventory → demo (--repo: demo autopilot) → route → prepare (base edit | voiceover prep | script + voice)
-//     → storyboard (planner + repair loop) → finish → critic → MAKE.json
+//   inventory → demo (--repo: demo autopilot) → route → prepare (base edit + presenter probe | voiceover prep | script + voice)
+//     → storyboard (planner + repair loop) → subject (matte the planned ranges) → finish → critic → MAKE.json
 //
 // Every stage is resumable: ASSETS.json entries are reused while a file's size
 // and mtime match, the script and storyboard while their inputs hash the same
@@ -26,6 +26,10 @@ import { routeLane } from "./routing.js";
 import { createMakeClient, selectMakeModel } from "./models.js";
 import { needsResize, targetWords, writeScript } from "./script.js";
 import { runHeadlessCritic } from "./critic.js";
+import { readProjectStory } from "../story_loader.js";
+import { plannedSubjectRanges } from "../subject/plan.js";
+import { fileProjectMatte } from "../subject/project.js";
+import { describeSource, runSubjectMatte, runSubjectProbe } from "../subject/stage.js";
 import { DemoReviewNeeded, demoManifestLines, stageDemo } from "./demo.js";
 
 export const MAKE_VERSION = "launchclip.make.v1";
@@ -62,9 +66,11 @@ export function slugify(prompt) {
 /**
  * options: {assets, aspect, duration, style, model, voice, music, renderer,
  *   quality, out, replan, critic (true|false|undefined = auto), maxRepairs, cwd,
- *   repo, approveDemo, redemo, start, url, allowHost, demoPlan}
+ *   repo, approveDemo, redemo, start, url, allowHost, demoPlan,
+ *   subject (false: no presenter probe or subject effects)}
  * adapters: {env, client ({client, provider, model, vision}), transcribe,
- *   inventory, voiceProvider, normalizeVoice, prepareRecording, finish
+ *   inventory, voiceProvider, normalizeVoice, prepareRecording,
+ *   subject ({probe(src, options), matte(src, range, options)}), finish
  *   (runFinish replacement or adapters for it: finishAdapters), notice, now, clock}
  * Returns the MAKE.json report. Throws only on bad options; stage failures
  * are reported with status "failed" and a next step.
@@ -122,6 +128,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     ["route", stageRoute],
     ["prepare", stagePrepare],
     ["storyboard", stageStoryboard],
+    ["subject", stageSubject],
     ["finish", stageFinish],
     ["critic", stageCritic]
   ];
@@ -279,7 +286,33 @@ async function prepareFootage(ctx) {
   ctx.audio = { words: MAKE_PATHS.words };
   report.script = { source: "recording", words: words.length, note: "footage-led: the recording's own words are the narration; no script pass" };
   state.prepare = { lane: "footage-led", base: ctx.base.src };
+  ctx.subject = await probeFootageSubject(ctx);
   return { status: "done" };
+}
+
+// The presenter probe (docs/SUBJECT_EFFECTS_RFC.md §4.3): before planning, so
+// the planner knows the framing and whether subject effects are possible. A
+// missing runtime or model never fails make; it only means no subject effects.
+async function probeFootageSubject(ctx) {
+  const { project, report, adapters, options } = ctx;
+  if (options.subject === false) {
+    report.subject = { status: "off", reason: "--no-subject" };
+    return null;
+  }
+  const src = path.join(project, ctx.base.src);
+  try {
+    const probe = adapters.subject?.probe ?? runSubjectProbe;
+    const { probe: result, cached } = await probe(src, { cacheDir: path.join(project, ".launchclip", "subject"), log: ctx.say });
+    const summary = { usable: result.usable, reasons: result.reasons, framing: result.framing, headroom: result.headroom, head: result.head, people: result.people };
+    report.subject = { status: result.usable ? "usable" : "unusable", ...summary, cached: Boolean(cached), mattes: [] };
+    if (!result.usable) report.notices.push(`subject: no subject effects (${result.reasons.join("; ")})`);
+    return { src: ctx.base.src, probe: summary };
+  } catch (error) {
+    const reason = String(error?.message ?? error).split("\n")[0];
+    report.subject = { status: "unavailable", reason };
+    report.warnings.push(`presenter probe skipped (${reason}); planning without subject effects. Run launchclip doctor`);
+    return null;
+  }
 }
 
 // Voiceover-motion: the supplied voiceover is prepared (pauses tightened,
@@ -380,7 +413,8 @@ async function stageStoryboard(ctx) {
   await writeFile(path.join(project, MAKE_PATHS.brief), brief);
   const lane = routing.lane;
   const fixedAudio = { ...ctx.audio };
-  const planHash = hashValue({ brief, lane, format: ctx.format, brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 1 });
+  const subject = ctx.subject?.probe ?? null;
+  const planHash = hashValue({ brief, lane, format: ctx.format, brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 1, ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}) });
   const storyFile = path.join(project, MAKE_PATHS.story);
   if (!options.replan && state.plan?.hash === planHash && existsSync(storyFile)) {
     report.repairs = state.plan.repairs ?? null;
@@ -405,6 +439,7 @@ async function stageStoryboard(ctx) {
     client: ctx.model.client,
     audio: fixedAudio,
     base: lane === "footage-led" ? ctx.base.src : null,
+    ...(lane === "footage-led" && subject ? { subject } : {}),
     style: style?.pack ?? null,
     maxRepairs,
     extraCheck: (story) => assetErrors(story, allowed)
@@ -447,6 +482,33 @@ export function finalizeStory(storyboard, ctx) {
   }
   story.meta = { ...(story.meta ?? {}), made_by: "launchclip make", prompt: ctx.text };
   return story;
+}
+
+// Matte exactly the source ranges the planned subject scenes cover (padded),
+// filed in the project so base.subject "auto" picks them up. A failed matte
+// is a warning: its scenes render, without the presenter in front.
+async function stageSubject(ctx) {
+  const { project, report, adapters } = ctx;
+  if (ctx.routing.lane !== "footage-led") return { status: "skipped", reason: "not footage-led" };
+  if (!ctx.subject?.probe?.usable) return { status: "skipped", reason: report.subject?.reason ?? report.subject?.reasons?.join("; ") ?? "no usable presenter cut-out" };
+  const loaded = await readProjectStory(project);
+  const src = path.join(project, ctx.subject.src);
+  const source = await (adapters.subject?.describe ?? describeSource)(src);
+  const ranges = plannedSubjectRanges(loaded.resolved, { sourceDuration: source.duration });
+  if (!ranges.length) return { status: "skipped", reason: "the storyboard uses no subject effects" };
+  const matte = adapters.subject?.matte ?? runSubjectMatte;
+  ctx.say(`subject: matting ${ranges.map((range) => `${range.in}–${range.out} s`).join(", ")} of ${ctx.subject.src} (local, about 0.2 s a frame)`);
+  for (const range of ranges) {
+    try {
+      const result = await matte(src, range, { source, cacheDir: path.join(project, ".launchclip", "subject"), log: ctx.say });
+      const entry = await fileProjectMatte(project, src, result);
+      report.subject.mattes.push({ in: entry.in, out: entry.out, src: entry.src, plate: entry.plate ?? null, cached: Boolean(result.cached), seconds: result.seconds ?? 0, usable: result.info.usable });
+      if (!result.info.usable) report.warnings.push(`the matte for ${entry.in}–${entry.out} s is unreliable (${result.info.reasons.join("; ")}); its subject scenes may show artefacts`);
+    } catch (error) {
+      report.warnings.push(`matting ${range.in}–${range.out} s failed (${String(error?.message ?? error).split("\n")[0]}); those subject scenes render without the presenter in front`);
+    }
+  }
+  return report.subject.mattes.length ? { status: "done" } : { status: "skipped", reason: "every matte failed (see the warnings); subject scenes render without the presenter in front" };
 }
 
 async function stageFinish(ctx) {
@@ -615,6 +677,7 @@ function nextStepFor(stage, error, ctx) {
     case "inventory": return `Check the --assets folder and that ffmpeg/ffprobe are installed (launchclip doctor). (${message})`;
     case "prepare": return `Fix the inputs (${message}) and run the same launchclip make command again; finished steps are reused.`;
     case "storyboard": return `The model's storyboard did not pass the checks; see ${path.join(project, MAKE_PATHS.plan)} and storyboard.rejected.json. Run launchclip make again with --replan (or a stronger --model).`;
+    case "subject": return `Check the presenter cut-out (launchclip doctor; launchclip subject probe ${path.join(project, ctx.subject?.src ?? MAKE_PATHS.base)}), or run launchclip make again with --no-subject. (${message})`;
     case "finish": return `See ${path.join(project, "finish.json")}; fix the failing stage and run launchclip finish ${project} (or launchclip make again; finished stages are reused).`;
     default: return `Run launchclip make again after fixing: ${message}`;
   }
@@ -631,6 +694,10 @@ export function formatMakeSummary(report) {
     lines.push(`  ${name.padEnd(10)} ${String(stage.status).padEnd(8)} ${String(report.timings?.[name] ?? 0).padStart(7)}s  ${stage.error ? stage.error.split("\n")[0] : stage.reason ?? ""}`.trimEnd());
   }
   if (report.repairs) lines.push(`storyboard: ${report.repairs.attempts?.length ?? "?"} attempt(s), ${report.repairs.used} repair pass(es)`);
+  if (report.subject) {
+    const detail = report.subject.status === "usable" ? `${report.subject.framing ?? "?"} framing, ${report.subject.mattes?.length ?? 0} matte(s)` : report.subject.reason ?? report.subject.reasons?.join("; ") ?? "";
+    lines.push(`subject: ${report.subject.status}${detail ? ` (${detail})` : ""}`);
+  }
   if (report.gates) {
     lines.push("gates:");
     for (const [name, gate] of Object.entries(report.gates)) lines.push(`  ${name.padEnd(17)} ${gate.status}${gate.verdict ? ` (${gate.verdict})` : ""}${gate.error ? `  ${gate.error}` : ""}`);

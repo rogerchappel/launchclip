@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { applyProjectStyle } from "./story_style.js";
+import { readStorySubject } from "./subject/project.js";
 
 // kit/core/story.mjs is the canonical storyboard.json implementation (see
 // docs/KIT_CONTRACTS.md). It is loaded lazily so the HyperFrames path keeps
@@ -59,7 +60,9 @@ export async function readProjectStory(projectDir, { storyModule } = {}) {
   ]);
   const words = Array.isArray(narration) ? narration : Array.isArray(narration?.words) ? narration.words : [];
   const edl = await readStoryEdl(project, story);
-  const resolved = module.resolveStory(story, { words, beats: beats ?? null, edl });
+  // base.subject "auto": the mattes filed in assets/subject/mattes.json.
+  const subject = await readStorySubject(project, story);
+  const resolved = module.resolveStory(story, { words, beats: beats ?? null, edl, subject });
   return { file: storyFile, story, resolved, format: module.storyFormat(resolved), module, style: styled.style };
 }
 

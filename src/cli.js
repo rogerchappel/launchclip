@@ -15,9 +15,10 @@ import { bundledSkillPath, installBundledSkills, listBundledSkills } from "./ski
 import { prepareRecording, recordingOptions, writeBrollPlan } from "./recording_workflow.js";
 import { runStoryCommand } from "./story_cli.js";
 import { commandHelp, helpText, USAGE_GROUPS, wantsHelp } from "./cli_usage.js";
+import { parseSubjectInvocation } from "./subject/cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "story", "finish", "make", "voice", "export", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "skills", "style", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "make", "voice", "export", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -47,12 +48,13 @@ export async function runCli(argv, io = {}) {
   const storyInvocation = command === "story" ? parseStoryInvocation(firstArg, rest) : null;
   const sfxInvocation = command === "sfx" ? parseSfxInvocation(firstArg, rest) : null;
   const moduleInvocation = command === "module" ? parseModuleInvocation(firstArg, rest) : null;
+  const subjectInvocation = command === "subject" ? parseSubjectInvocation(firstArg, rest) : null;
   // launchclip voice takes a project or only flags (--text "...").
   const voiceInvocation = command === "voice" ? (firstArg && !firstArg.startsWith("--") ? { project: firstArg, flagArgs: rest } : { project: null, flagArgs: firstArg ? [firstArg, ...rest] : rest }) : null;
   // launchclip demo record|approve|scene <path> [flags]; plain `demo <repo>` is the packet lane.
   const demoTarget = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const demoInvocation = command === "demo" && ["record", "approve", "scene", "doctor", "shots"].includes(firstArg) ? { action: firstArg, target: demoTarget, flagArgs: demoTarget ? rest.slice(1) : rest } : null;
-  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
+  const flags = parseFlags(styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? rest);
   const tracker = createCostTracker({ fetch: baseFetch });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
@@ -96,6 +98,14 @@ export async function runCli(argv, io = {}) {
       const report = await runModuleFit(moduleInvocation.name, flags);
       if (!flags.json) {
         stdout.write(formatModuleFit(report));
+        return;
+      }
+      result = report;
+    } else if (command === "subject") {
+      const { runSubjectCommand, formatSubjectReport } = await import("./subject/cli.js");
+      const report = await runSubjectCommand(subjectInvocation.action, subjectInvocation.media, flags, { log: (line) => stderr.write(`${line}\n`) });
+      if (!flags.json) {
+        stdout.write(formatSubjectReport(report));
         return;
       }
       result = report;
@@ -157,7 +167,8 @@ export async function runCli(argv, io = {}) {
         start: flags.start,
         url: flags.url,
         allowHost: flags["allow-host"],
-        demoPlan: flags["demo-plan"]
+        demoPlan: flags["demo-plan"],
+        ...(flags["no-subject"] ? { subject: false } : {})
       }, { notice: (line) => stderr.write(`${line}\n`), ...productionAdapters.make });
       // The tracked HTTP costs (actual usage, cache pricing included) join make's own estimates.
       report.api_costs = tracker.summary();
@@ -351,7 +362,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "redemo") {
+    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "redemo" || name === "no-download" || name === "no-subject") {
       flags[name] = true;
       continue;
     }

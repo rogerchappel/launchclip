@@ -1382,6 +1382,24 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip module fit <module> [--params params.json] [--aspect 16:9|9:16] [--story storyboard.json] [--brand brand.json] [--duration 4] [--json]
   ```
 
+- `subject setup`: Download and verify the local person segmentation models the subject stage uses.
+
+  ```text
+  launchclip subject setup [--model modnet-fused|modnet|mediapipe-selfie|u2net-human] # download and verify the segmentation models
+  ```
+
+- `subject probe`: Sample a recording and report whether one person can be cut out, and how they are framed.
+
+  ```text
+  launchclip subject probe <video> [--model mediapipe-selfie] [--cache .launchclip/subject] [--force] [--no-download] [--json] # framing summary: people, head, headroom, usable
+  ```
+
+- `subject matte`: Cut the person out of one source range: a cached alpha WebM and per-frame head and body boxes.
+
+  ```text
+  launchclip subject matte <video> --range <in>-<out> [--project <story-project>] [--model modnet-fused] [--smooth 0-0.9] [--cache .launchclip/subject] [--force] [--no-download] [--json] # alpha matte.webm + subject.json for one source range
+  ```
+
 - `finish`: Storyboard to mastered video in one command: voice, music, SFX, render, master and gates. --candidate renders a draft candidate with no paid calls (synth or no music, a cached or free voice, else the test voice; no evidence or gates) and records it in the rendered-candidate receipt.
 
   ```text
@@ -1392,7 +1410,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 - `make`: Prompt plus an optional assets folder to a finished video, headless: classify the assets, route the lane deterministically, write the script and storyboard with an API model (repair loop), then finish and an optional vision critic. Writes MAKE.json with routing, costs, timings and gates. --repo runs demo autopilot first: it records the app's key flows into assets/demo and edits the approved ones in as product-demo scenes.
 
   ```text
-  launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--style <name|path>] [--model provider:model] [--voice kokoro|elevenlabs] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--out <project-dir>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--json]
+  launchclip make "<prompt>" [--assets <dir>] [--aspect 16:9|9:16|1:1] [--duration <seconds>] [--style <name|path>] [--model provider:model] [--voice kokoro|elevenlabs] [--music synth|elevenlabs|none] [--renderer remotion|hyperframes] [--quality draft|high] [--out <project-dir>] [--replan] [--critic | --no-critic] [--max-repairs 4] [--no-subject] [--json]
   launchclip make "<prompt>" --repo <app-repo> [--approve-demo] [--demo-plan DEMO-PLAN.json] [--start "npm run dev"] [--url http://localhost:3000] [--allow-host <host>] [--redemo]
   ```
 

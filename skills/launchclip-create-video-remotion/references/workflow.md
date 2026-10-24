@@ -448,7 +448,10 @@ for a quieter treatment:
   product editorial), `snappy` (punchy, energetic launches: expo-out, short,
   slight overshoot), `smooth` (calm, premium, elegant: sine/power2, long, no
   overshoot), `playful` (fun, friendly, for kids: back/elastic, springy, bigger
-  staggers) or `documentary` (serious, archival, news: slow power1). One
+  staggers), `documentary` (serious, archival, news: slow power1) or
+  `cinematic` (film-like: every entrance and move eases slow → fast → slow
+  into its resting state, and settled scenes keep a slow push-in, recorded
+  product clips included, so no frame is ever fully still). One
   grammar keeps every entrance, exit, pop, stagger, transition and camera move
   in the same voice; override single roles with `{base, ease, duration,
   stagger}` only when the brief asks for it.

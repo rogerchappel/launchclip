@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
-import {PRODUCT_DEMO_TIMING, cameraAt, cameraKeys, cameraTransform, mapBox, productDemoParams, productDemoTimeline, productDemoView, throughCamera, zoomScale} from '../kit/core/catalog-d.mjs';
+import {PRODUCT_DEMO_TIMING, cameraAt, cameraKeys, cameraTransform, mapBox, productDemoParams, productDemoTimeline, productDemoView, pushTransform, throughCamera, zoomScale} from '../kit/core/catalog-d.mjs';
 import {knownModules, moduleTiming, resolveModule} from '../kit/core/modules.mjs';
 import {resolveStory, validateStory} from '../kit/core/story.mjs';
 import {emitProductDemo} from '../kit/hyperframes/catalog-d.mjs';
@@ -221,6 +221,24 @@ test('the product-demo model: rect, camera samples, events and the shared view',
   const camOps = ops.filter(op => op.target === 'demo-cam');
   assert.deepEqual(camOps.map(op => op.props), ops.filter(op => op.target === 'demo-media' && op.type === 'set' && op.props.scaleX !== undefined).map(op => op.props), 'video and overlay share the camera');
   assert.deepEqual(moduleTiming('product-demo').minDuration, PRODUCT_DEMO_TIMING.minDuration);
+});
+
+test('a cinematic story pushes the clip in slowly under the zooms, so no rest frame holds still', async () => {
+  const {story} = await fixture();
+  const plain = resolveStory(story), cinematic = resolveStory({...story, motion: {grammar: 'cinematic'}});
+  const base = resolveModule(plain.scenes[0], plain), pushed = resolveModule(cinematic.scenes[0], cinematic);
+  assert.equal(base.content.push, undefined);
+  assert.equal(pushed.content.push, 0.04);
+  const ratio = pushed.content.samples.map((sample, i) => sample.scale / base.content.samples[i].scale);
+  assert.ok(Math.abs(ratio[0] - 1) < 1e-4 && Math.abs(ratio.at(-1) - 1.04) < 1e-4, `${ratio[0]} … ${ratio.at(-1)}`);
+  for (let i = 1; i < ratio.length; i++) assert.ok(ratio[i] > ratio[i - 1] - 1e-5, 'the push only grows');
+  // Every frame moves: no two consecutive samples are equal.
+  for (let i = 1; i < pushed.content.samples.length; i++) assert.notDeepEqual({...pushed.content.samples[i], t: 0}, {...pushed.content.samples[i - 1], t: 0});
+  // The push is about the canvas centre: the centre stays put at rest.
+  assert.deepEqual(pushTransform({scale: 1, x: 0, y: 0}, 1.04, {width: 1920, height: 1080}), {scale: 1.04, x: -38.4, y: -21.6});
+  // Ambient drift off for the scene keeps the clip as recorded.
+  const still = resolveStory({...story, motion: {grammar: 'cinematic'}, scenes: story.scenes.map(scene => ({...scene, ambient: {drift: false}}))});
+  assert.equal(resolveModule(still.scenes[0], still).content.push, undefined);
 });
 
 test('product-demo rejects remote media, unordered actions and a full frame of the wrong aspect', async () => {

@@ -28,9 +28,9 @@ export function emitCatalogC(model) {
  * GSAP calls that move the base: every camera in `models`, as tl.set calls on
  * `selector` (default the compiler's root base videos, ".lc-base-media").
  */
-export function cameraGsap(models, selector = '.lc-base-media') {
+export function cameraGsap(models, selector = '.lc-base-media', options = {}) {
   const from = JSON.stringify(`#${BASE_CAMERA}`), to = JSON.stringify(selector);
-  return opsToGsap(cameraOps(models)).map(line => line.replace(from, to));
+  return opsToGsap(cameraOps(models, options)).map(line => line.replace(from, to));
 }
 
 export const EMITTERS = {
@@ -38,4 +38,6 @@ export const EMITTERS = {
   'footage-callout': emitCatalogC,
   'lower-third': emitCatalogC,
   'emphasis-caption': emitCatalogC,
+  'masthead': emitCatalogC,
+  'dolly-zoom': emitCatalogC,
 };

@@ -1,7 +1,8 @@
 // Frame-pure ambient motion, shared by the HyperFrames compiler (as GSAP
 // fromTo calls on the master timeline) and the Remotion StoryComposition
 // (evaluated per frame), so both renderers move the same layers by the same
-// amounts with the same eases. Plain ESM; imports only ./motion.mjs.
+// amounts with the same eases. Plain ESM; imports only ./motion.mjs and
+// ./grammar.mjs.
 // Canonical copy: kit/core/ambient.mjs. Contract: docs/KIT_CONTRACTS.md,
 // "Ambient motion".
 //
@@ -24,6 +25,7 @@
 // absolute time and the story, so seeking in any order gives the same pixels.
 
 import { getEase } from './motion.mjs';
+import { resolveGrammar } from './grammar.mjs';
 
 export const AMBIENT_LEVELS = Object.freeze(['off', 'subtle', 'standard', 'lively']);
 
@@ -78,7 +80,8 @@ export function ambientErrors(value, path = 'ambient') {
 /**
  * Effective ambient settings for one scene → {level, background, drift}.
  * Precedence: scene.ambient ← story.ambient ← defaults. The default level
- * follows the scene's energy; the footage-led lane (whose base already moves)
+ * is the motion grammar's hold level when it has one (cinematic: lively),
+ * else it follows the scene's energy; the footage-led lane (whose base already moves)
  * defaults to no background field and drifts overlays only (track ≥ 1, not
  * full-frame inserts). Level "off" turns both layers off.
  */
@@ -86,13 +89,20 @@ export function sceneAmbient(story, scene) {
   const base = ambientObject(story?.ambient);
   const own = ambientObject(scene?.ambient);
   const footage = story?.lane === 'footage-led';
-  const level = own.level ?? base.level ?? levelForEnergy(scene?.energy);
+  const level = own.level ?? base.level ?? grammarHoldLevel(story) ?? levelForEnergy(scene?.energy);
   if (level === 'off' || !AMBIENT_PRESETS[level]) return { level: 'off', background: false, drift: false };
   const track = Number.isInteger(scene?.track) ? scene.track : 0;
   const background = own.background ?? base.background ?? !footage;
   let drift = own.drift ?? base.drift ?? true;
   if (footage && (track === 0 || scene?.insert === true) && own.drift !== true) drift = false;
   return { level, background: Boolean(background), drift: Boolean(drift) };
+}
+
+// The motion grammar's hold level (null for grammars without one, or an
+// invalid grammar, which validateStory reports).
+function grammarHoldLevel(story) {
+  if (!story?.motion?.grammar) return null;
+  try { return resolveGrammar(story).hold?.level ?? null; } catch { return null; }
 }
 
 /**
@@ -316,12 +326,13 @@ function intersects(a, b) {
 /**
  * Whether a scene's content may drift: its ambient drift is on, it resolved to
  * a real module (not a placeholder), and its content is not full-frame decor
- * (a punch-in camera) or a root <video> (media-window video: HyperFrames lifts
+ * (a punch-in camera), a module that moves on its own (layout.drift false:
+ * photo-scene's Ken Burns) or a root <video> (media-window video: HyperFrames lifts
  * the video out of the scene layer, so it would not follow the wrapper).
  */
 export function driftEligible(story, scene, model) {
   if (!model || model.placeholder || !sceneAmbient(story, scene).drift) return false;
-  if (model.camera || model.layout?.role === 'decor') return false;
+  if (model.camera || model.layout?.role === 'decor' || model.layout?.drift === false) return false;
   if (scene?.module === 'media-window' && scene?.params?.media?.kind === 'video') return false;
   return validRect(model.layout?.rect ?? model.rect);
 }

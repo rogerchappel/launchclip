@@ -1,0 +1,5 @@
+{
+  "project": "examples/story/subject",
+  "sceneId": "word",
+  "threshold": { "ssim": 0.97 }
+}
