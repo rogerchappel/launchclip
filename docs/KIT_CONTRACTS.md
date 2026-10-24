@@ -1094,6 +1094,7 @@ conventions apply (`createFootageBase`, `at` from the scene start, hits).
 | `backdrop-swap` | behind | yes | `backdrop` media (default a brand gradient), `title`, `scale` 0.6–0.95, `release`, `at` | `swap`, `release` | `subjectCamera` shrinks the presenter about the canvas centre and keeps the frame's bottom edge |
 | `app-stage` | behind | yes | `media` (required), `title`, `at` | `stage` | The window runs from the safe top to 70% down the head (at least 45% of the safe zone); needs 320 px above the head |
 | `phone-stage` | front | no | `media` (required), `side` auto/left/right, `pan`, `at` | `phone` | A base camera (scale 1.2) pans the room away from the phone; the phone floats |
+| `growth-line` | behind | yes | `points` 3–10 `{value, label?}`, `mode` illustration/data, `source` (required for data), `takeoff`, `pill` ≤ 16, `draw` 0.8–3 s, `at` | `draw`, `takeoff`, `pill` | The chart spans the safe width down to 75% of the head (at least 260 px); the line and spike draw by `strokeDashoffset`; dots only fade (scaling an SVG circle pivots differently in GSAP and CSS) |
 
 - **View.** `catalogEView(model)` → `{front, behind, media, overlay}`. The
   emitter's main html is the module's own layer (behind for a behind module,

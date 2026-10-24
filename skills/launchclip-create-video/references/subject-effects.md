@@ -41,6 +41,7 @@ Both renderers stack the base recording, behind scenes, the cut-out presenter, f
 | backdrop-swap | behind | yes | 9:16, 16:9 | launch, premium, bold | turns from the problem to the product ("so we built", "that's why", "enter"): the room gives way to a brand backdrop |
 | app-stage | behind | yes | 9:16, 16:9 | launch, editorial | shows or describes the product on screen ("here's the dashboard", "this is the app"), with a screenshot or recording in the assets: the UI fills the top, their head over its edge |
 | phone-stage | front | no | 9:16, 16:9 | launch, playful | shows the product on a phone or a mobile flow, with a recording or screenshot in the assets (a demo-autopilot flow fits) |
+| growth-line | behind | yes | 9:16, 16:9 | bold, launch, editorial | gives a growth result ("doubled", "took off in week three"): a line kicks up behind their head |
 
 ### masthead (keeps captions, behind the presenter, needs the subject)
 Footage-led, behind the presenter: one huge word (a product name or the one idea) rises in letter by letter at the top of the frame, and the presenter's head covers its lower part like a magazine cover. Needs headroom: medium or wide shots.
@@ -111,6 +112,18 @@ params:
 - pan: boolean: pan the room away (default true)
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: phone
+
+### growth-line (keeps captions, behind the presenter, needs the subject)
+Footage-led, behind the presenter: a line chart draws itself across the top of the frame behind their head and kicks up at the take-off point into a glowing spike with a labelled pill. For growth results ("doubled", "took off in week three"). Illustration by default; real figures need a source.
+params:
+- points: [{value, label? ≤ 6}] 3–10 (the shape; labels sit along the top)
+- mode: illustration (default) | data (needs source)
+- source: ≤ 48, required for data
+- takeoff: index of the point the spike starts from (default: before the biggest rise)
+- pill: label ≤ 16 above the end, e.g. "Scale" (optional)
+- draw: seconds the line takes (0.8–3)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: draw, takeoff, pill
 
 ### punch-in (keeps captions)
 Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay). Steps punch in, further in or back out on successive words; blur adds a few frames of zoom blur on each move.

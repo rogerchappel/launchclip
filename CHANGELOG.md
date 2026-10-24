@@ -79,6 +79,9 @@ The detailed list follows.
   - `pull-back`: the video shrinks into an app window while real steps tick
     off and a counter reaches 100%.
 - layout-check's face rule follows punch-ins and pans.
+- `growth-line`: a line chart draws behind your head and kicks up into a
+  glowing spike with a label, for "it doubled" moments (real figures need
+  a source).
 - `zoom-through` hides a cut in your edit: the frame rushes into it with
   zoom blur and bursts out of the next take. It finds the cut itself.
 - `launchclip make` uses them on footage: it checks the presenter's

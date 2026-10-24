@@ -15,13 +15,14 @@ const format = {width: 1080, height: 1920, fps: 30, duration: 30};
 const subject = {available: true, framing: 'medium', head: {x: 420, y: 560, width: 240, height: 300}, body: {x: 200, y: 560, width: 680, height: 1360}, headroom: 0.29, plate: null, placement: 'measured'};
 const ctx = (overrides = {}) => ({id: 'scene', start: 2, duration: 4, format, brand, aspect: '9:16', subject, ...overrides});
 const resolve = (id, params, overrides) => ({...MODULES[id].resolve(params, ctx(overrides)), module: id});
-const IDS = ['feed-frame', 'pull-back', 'backdrop-swap', 'app-stage', 'phone-stage'];
+const IDS = ['feed-frame', 'pull-back', 'backdrop-swap', 'app-stage', 'phone-stage', 'growth-line'];
 const PARAMS = {
   'feed-frame': {handle: '@ada', caption: 'Built in a weekend'},
   'pull-back': {steps: ['Transcribe', 'Cut', 'Caption'], title: 'launch.mp4'},
   'backdrop-swap': {title: 'Meet Ledgerly'},
   'app-stage': {media: {src: 'assets/app.png'}, title: 'Ledgerly'},
-  'phone-stage': {media: {src: 'assets/demo/flow.mp4', sourceStart: 1.5}}
+  'phone-stage': {media: {src: 'assets/demo/flow.mp4', sourceStart: 1.5}},
+  'growth-line': {points: [{value: 2}, {value: 3}, {value: 2.5}, {value: 3}, {value: 9}, {value: 14}], pill: 'Scale'}
 };
 
 test('catalogue E is registered in the module registry, HyperFrames and Remotion', () => {
@@ -32,7 +33,7 @@ test('catalogue E is registered in the module registry, HyperFrames and Remotion
 });
 
 test('every module resolves with its layer, events and a full view', () => {
-  const layers = {'feed-frame': 'split', 'pull-back': 'front', 'backdrop-swap': 'behind', 'app-stage': 'behind', 'phone-stage': 'front'};
+  const layers = {'feed-frame': 'split', 'pull-back': 'front', 'backdrop-swap': 'behind', 'app-stage': 'behind', 'phone-stage': 'front', 'growth-line': 'behind'};
   for (const id of IDS) {
     const model = resolve(id, PARAMS[id]);
     assert.equal(model.layer ?? 'front', layers[id], id);
@@ -151,4 +152,23 @@ test('the story compiler draws feed-frame behind and in front of the subject', a
   const matte = z(/<video id="lc-subject-0"[^>]*z-index:(\d+)/);
   const front = z(/id="lc-scene-feed"[^>]*style="z-index:(\d+)/);
   assert.ok(behind < matte && matte < front, `behind ${behind} < subject ${matte} < front ${front}`);
+});
+
+test('growth-line: draws behind the head, kicks up at the biggest rise, honest about data', () => {
+  const model = resolve('growth-line', PARAMS['growth-line']);
+  assert.equal(model.layer, 'behind');
+  assert.equal(model.content.takeoff, 3, 'the spike starts before the biggest rise');
+  assert.ok(model.content.bottom >= 560 + 300 * 0.75 - 1, 'the chart reaches behind the head');
+  const ys = model.content.xy.map((pt) => pt.y);
+  assert.ok(ys.at(-1) < ys[0], 'higher values draw higher');
+  const ops = catalogETimeline(model);
+  const offset = (t) => frameState(ops, t).get('scene-line').strokeDashoffset;
+  assert.equal(offset(2.05), 1);
+  assert.equal(offset(model.content.endAt + 0.01), 0);
+  assert.deepEqual(model.events.map((event) => event.name), ['draw', 'takeoff', 'pill']);
+  assert.throws(() => resolve('growth-line', {points: [{value: 1}, {value: 2}, {value: 3}], mode: 'data'}), /params\.source is required/);
+  assert.equal(resolve('growth-line', {points: [{value: 1}, {value: 2}, {value: 3}], mode: 'data', source: 'Stripe dashboard'}).content.source, 'Stripe dashboard');
+  assert.throws(() => resolve('growth-line', {points: [{value: 1}, {value: 2}]}), /params\.points/);
+  const high = resolve('growth-line', PARAMS['growth-line'], {subject: {...subject, head: {x: 420, y: 300, width: 240, height: 120}}});
+  assert.ok(high.content.bottom - high.content.top >= 260 - 1e-6, 'a high head still gets a 260 px chart, behind the presenter');
 });

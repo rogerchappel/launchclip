@@ -71,3 +71,4 @@ export const PullBack = typed('pull-back');
 export const BackdropSwap = typed('backdrop-swap');
 export const AppStage = typed('app-stage');
 export const PhoneStage = typed('phone-stage');
+export const GrowthLine = typed('growth-line');

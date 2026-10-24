@@ -27,7 +27,7 @@ test("every known module appears in the prompt for every tier", () => {
   const modules = knownModules();
   assert.ok(modules.length >= 25, `expected the full registry, got ${modules.length}`);
   const needsSubject = new Set(moduleCatalogue().filter((module) => module.needs?.includes("subject")).map((module) => module.id));
-  assert.deepEqual([...needsSubject].sort(), ["app-stage", "backdrop-swap", "dolly-zoom", "feed-frame", "masthead"]);
+  assert.deepEqual([...needsSubject].sort(), ["app-stage", "backdrop-swap", "dolly-zoom", "feed-frame", "growth-line", "masthead"]);
   const subject = { usable: true, reasons: [], framing: "medium", headroom: 0.2, head: { x: 0.5, y: 0.3, w: 0.2, h: 0.15 } };
   for (const tier of PLANNER_TIERS) {
     const prompt = planningPrompt({ tier, lane: "motion", format: portrait });

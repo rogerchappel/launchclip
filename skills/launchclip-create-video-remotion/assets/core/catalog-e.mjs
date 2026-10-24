@@ -11,6 +11,8 @@
 //                  presenter's head rises over its edge (behind)
 //   phone-stage    a phone beside the presenter plays a real recording while
 //                  the room pans away from it (front)
+//   growth-line    a line chart draws behind the presenter's head and kicks
+//                  up into a glowing spike (behind)
 //
 // Same conventions as catalogue C (createFootageBase, absolute times, `at`
 // from the scene start, hits timing events). The view is
@@ -571,6 +573,123 @@ function phoneStageTimeline(model, ops) {
 }
 
 // ---------------------------------------------------------------------------
+// growth-line (behind): a line chart draws itself across the top of the frame
+// behind the presenter's head, then kicks up at the take-off point into a
+// glowing spike with a labelled pill. Illustration by default; real figures
+// need a source.
+
+function resolveGrowthLine(params, ctx) {
+  const b = createFootageBase('growth-line', params, ctx, {allowed: ['points', 'mode', 'source', 'takeoff', 'pill', 'at', 'draw'], required: ['points'], minDuration: CATALOG_E_TIMING['growth-line'].minDuration});
+  const {check, u, canvas, safe, colors, end, duration, portrait} = b;
+  const p = b.params;
+  check.arr(p.points, 'params.points', 3, 10);
+  const points = p.points.map((point, i) => {
+    check.obj(point, `params.points[${i}]`, ['label', 'value'], ['value']);
+    return {label: point.label === undefined ? null : check.str(point.label, `params.points[${i}].label`, 6), value: check.num(point.value, `params.points[${i}].value`, -1e12, 1e12)};
+  });
+  const mode = p.mode === undefined ? 'illustration' : check.oneOf(p.mode, 'params.mode', ['illustration', 'data']);
+  const source = p.source === undefined ? null : check.str(p.source, 'params.source', 48);
+  if (mode === 'data' && !source) check.fail('params.source', 'is required for real figures (mode "data"); use mode "illustration" for a shape');
+  // Take-off: the point before the biggest rise, unless given.
+  let takeoff = 0, rise = -Infinity;
+  for (let i = 1; i < points.length; i++) if (points[i].value - points[i - 1].value > rise) { rise = points[i].value - points[i - 1].value; takeoff = i - 1; }
+  if (p.takeoff !== undefined) takeoff = check.int(p.takeoff, 'params.takeoff', 0, points.length - 2);
+  const pill = p.pill === undefined ? null : check.str(p.pill, 'params.pill', 16).toUpperCase();
+  const draw = p.draw === undefined ? Math.min(1.6, r2(duration * 0.45)) : check.num(p.draw, 'params.draw', 0.8, 3);
+  const t0 = b.timeOf('draw', p.at, 'params.at', 0.1, {min: 0, max: duration - draw - CATALOG_E_TIMING['growth-line'].hold});
+  const head = headRect(ctx, canvas, portrait);
+  // The chart spans the safe width, from under the label row to 75% down the
+  // head (at least 260 px), so the line passes behind the presenter.
+  const labelSize = r2(Math.max(b.min.meta, u(28)));
+  const pillH = pill ? r2(u(64)) : 0;
+  const top = r2(safe.y + labelSize * 1.6 + pillH + u(20));
+  const bottom = r2(Math.min(safe.y + safe.height, Math.max(head.y + head.height * 0.75, top + u(260))));
+  const left = r2(safe.x + safe.width * 0.04), right = r2(safe.x + safe.width * 0.96);
+  const values = points.map(point => point.value);
+  const lo = Math.min(...values), hi = Math.max(...values);
+  const span = hi - lo || 1;
+  const xy = points.map((point, i) => ({x: r2(left + (right - left) * i / (points.length - 1)), y: r2(bottom - (bottom - top) * (0.08 + 0.84 * (point.value - lo) / span))}));
+  const path = pts => pts.map((pt, i) => `${i ? 'L' : 'M'}${pt.x} ${pt.y}`).join(' ');
+  const spike = xy.slice(takeoff);
+  const area = `${path(spike)} L${spike.at(-1).x} ${bottom} L${spike[0].x} ${bottom} Z`;
+  // The line reaches each point in proportion to its x; the spike is drawn after the take-off point.
+  const reach = i => rt(t0 + draw * (xy[i].x - left) / (right - left));
+  const spikeAt = reach(takeoff);
+  const endAt = rt(t0 + draw);
+  const pillAt = rt(endAt + 0.1);
+  const exitStart = rt(end - 0.35);
+  if (pill && textWidth(pill, labelSize * 1.3, 'body', 0.08) > safe.width * 0.5) check.fail('params.pill', 'is too long; shorten it');
+  b.events.push({id: `${b.id}-draw`, name: 'draw', time: t0, endTime: endAt, role: 'emphasis', cue: 'riser'});
+  b.events.push({id: `${b.id}-takeoff`, name: 'takeoff', time: spikeAt, endTime: endAt, role: 'emphasis', cue: 'whoosh'});
+  if (pill) b.events.push({id: `${b.id}-pill`, name: 'pill', time: pillAt, endTime: rt(pillAt + 0.4), role: 'payoff', cue: 'pop'});
+  b.model.layer = 'behind';
+  const content = {points, mode, source, takeoff, pill, draw, t0, spikeAt, endAt, pillAt, exitStart, xy, line: path(xy), spike: path(spike), area, top, bottom, left, right, labelSize, pillH,
+    stroke: r2(u(7)), spikeStroke: r2(u(10)), dot: r2(u(9)), ink: colors.paper, accent: colors.primary, grid: '#ffffff26', shadow: '0 2px 10px #00000099',
+    reach: points.map((_, i) => reach(i))};
+  const rect = {x: r2(safe.x), y: r2(safe.y), width: r2(safe.width), height: r2(bottom - safe.y)};
+  return b.finish(content, {rect, role: 'decor', minTextPx: null,
+    motion: {enterEnd: pill ? rt(pillAt + 0.4) : endAt, exitStart, exitTo: {opacity: 0}}});
+}
+
+function growthLineView(model) {
+  const {id, fonts, canvas} = model;
+  const c = model.content, u = model.unit;
+  const W = canvas.width, H = canvas.height;
+  const svgKids = [
+    el('defs', null, null, [el('linearGradient', `${id}-grad`, null, [
+      el('stop', null, null, [], {offset: '0%', stopColor: c.accent, stopOpacity: 0.55}),
+      el('stop', null, null, [], {offset: '100%', stopColor: c.accent, stopOpacity: 0})
+    ], {x1: 0, y1: 0, x2: 0, y2: 1})]),
+    ...c.xy.map((pt, i) => el('line', `${id}-gridline-${i}`, {opacity: 0}, [], {x1: pt.x, y1: c.top - u * 10, x2: pt.x, y2: c.bottom, stroke: c.grid, strokeWidth: u * 2})),
+    el('path', `${id}-area`, {opacity: 0}, [], {d: c.area, fill: `url(#${id}-grad)`}),
+    el('path', `${id}-line`, {strokeDasharray: 1, strokeDashoffset: 1}, [], {d: c.line, stroke: c.ink, strokeWidth: c.stroke, strokeLinecap: 'round', strokeLinejoin: 'round', pathLength: 1, fill: 'none'}),
+    el('path', `${id}-spike`, {strokeDasharray: 1, strokeDashoffset: 1, filter: `drop-shadow(0 0 ${8 * u}px ${c.accent})`}, [], {d: c.spike, stroke: c.accent, strokeWidth: c.spikeStroke, strokeLinecap: 'round', strokeLinejoin: 'round', pathLength: 1, fill: 'none'}),
+    ...c.xy.map((pt, i) => el('circle', `${id}-dot-${i}`, {opacity: 0}, [], {cx: pt.x, cy: pt.y, r: c.dot, fill: i > c.takeoff ? c.accent : c.ink}))
+  ];
+  const end = c.xy.at(-1);
+  if (c.pill) svgKids.push(el('line', `${id}-guide`, {opacity: 0}, [], {x1: end.x, y1: c.top - c.pillH * 0.2, x2: end.x, y2: end.y - c.dot * 2, stroke: c.accent, strokeWidth: u * 3, strokeDasharray: `${u * 8} ${u * 8}`}));
+  const kids = [el('svg', null, {position: 'absolute', left: 0, top: 0, overflow: 'visible', filter: 'drop-shadow(0 2px 10px #00000099)'}, svgKids, {width: W, height: H, viewBox: `0 0 ${W} ${H}`, fill: 'none'})];
+  const labelY = c.top - c.pillH - c.labelSize * 1.6 - u * 10;
+  c.points.forEach((point, i) => {
+    if (!point.label) return;
+    kids.push(el('div', `${id}-label-${i}`, abs(c.xy[i].x - c.labelSize * 3, labelY, c.labelSize * 6, undefined, {textAlign: 'center', fontFamily: fonts.meta, fontSize: c.labelSize, letterSpacing: '0.08em', color: c.ink, opacity: 0, textShadow: c.shadow}), [point.label]));
+  });
+  if (c.pill) {
+    const size = r2(c.labelSize * 1.3);
+    const width = r2(textWidth(`${c.pill} ↗`, size, 'body', 0.08) + u * 44);
+    const x = r2(Math.min(c.right + u * 12 - width, Math.max(c.left, end.x - width / 2)));
+    kids.push(el('div', `${id}-pill`, abs(x, c.top - c.pillH - u * 4, width, c.pillH * 0.86, {boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: c.pillH, background: c.accent, color: model.theme.ink,
+      fontFamily: fonts.body, fontWeight: 800, fontSize: size, letterSpacing: '0.08em', whiteSpace: 'nowrap', opacity: 0, transformOrigin: '50% 100%', transform: transformString({scaleX: 0.6, scaleY: 0.6})}), [`${c.pill} ↗`]));
+  }
+  if (c.source) kids.push(el('div', `${id}-source`, abs(c.left, c.bottom + u * 8, c.right - c.left, undefined, {fontFamily: fonts.meta, fontSize: c.labelSize * 0.8, color: c.ink, opacity: 0, textShadow: c.shadow}), [`Source: ${c.source}`]));
+  return {behind: el('div', `${id}-chart`, abs(0, 0, W, H, {opacity: 1}), kids)};
+}
+
+function growthLineTimeline(model, ops) {
+  const {id, start} = model;
+  const c = model.content;
+  const fadeIn = (target, at, dur = 0.3) => { set(ops, target, start, {opacity: 0}); tw(ops, target, at, dur, 'power1.out', {opacity: 0}, {opacity: 1}); };
+  c.xy.forEach((_, i) => fadeIn(`${id}-gridline-${i}`, rt(Math.max(start, c.t0 - 0.2) + i * 0.03), 0.4));
+  c.points.forEach((point, i) => { if (point.label) fadeIn(`${id}-label-${i}`, rt(Math.max(start, c.t0 - 0.2) + i * 0.03), 0.4); });
+  set(ops, `${id}-line`, start, {strokeDashoffset: 1});
+  tw(ops, `${id}-line`, c.t0, c.draw, 'none', {strokeDashoffset: 1}, {strokeDashoffset: 0});
+  set(ops, `${id}-spike`, start, {strokeDashoffset: 1});
+  tw(ops, `${id}-spike`, c.spikeAt, rt(c.endAt - c.spikeAt), 'none', {strokeDashoffset: 1}, {strokeDashoffset: 0});
+  fadeIn(`${id}-area`, c.spikeAt, rt(Math.max(0.2, c.endAt - c.spikeAt)));
+  // Dots fade in as the line reaches them (scaling an SVG circle pivots
+  // differently in GSAP and CSS, so they only fade).
+  c.xy.forEach((_, i) => fadeIn(`${id}-dot-${i}`, c.reach[i], 0.2));
+  if (c.pill) {
+    fadeIn(`${id}-guide`, c.pillAt, 0.3);
+    set(ops, `${id}-pill`, start, {opacity: 0, scaleX: 0.6, scaleY: 0.6});
+    tw(ops, `${id}-pill`, c.pillAt, 0.4, 'back.out(1.8)', {opacity: 0, scaleX: 0.6, scaleY: 0.6}, {opacity: 1, scaleX: 1, scaleY: 1});
+  }
+  if (c.source) fadeIn(`${id}-source`, c.endAt, 0.4);
+  set(ops, `${id}-chart`, start, {opacity: 1});
+  tw(ops, `${id}-chart`, c.exitStart, 0.35, 'power1.in', {opacity: 1}, {opacity: 0});
+}
+
+// ---------------------------------------------------------------------------
 // Registry
 
 export const CATALOG_E_TIMING = Object.freeze({
@@ -578,14 +697,16 @@ export const CATALOG_E_TIMING = Object.freeze({
   'pull-back': Object.freeze({minDuration: 3, work: 1.6}),
   'backdrop-swap': Object.freeze({minDuration: 2, hold: 0.8}),
   'app-stage': Object.freeze({minDuration: 2, leadOut: 1.2}),
-  'phone-stage': Object.freeze({minDuration: 2, leadOut: 1.2})
+  'phone-stage': Object.freeze({minDuration: 2, leadOut: 1.2}),
+  'growth-line': Object.freeze({minDuration: 2, hold: 0.6})
 });
 const TIMING_E = {
   'feed-frame': {minDuration: 2, leadIn: 0, leadOut: null, gaps: [], rules: ['at ≤ scene − release − 1 s (release 0.3–1 s, default 0.5)']},
   'pull-back': {minDuration: 3, leadIn: 0, leadOut: null, gaps: [], rules: ['at ≤ scene − release − 1.6 s (release 0.3–1.2 s, default 0.6); at least 0.3 s per step']},
   'backdrop-swap': {minDuration: 2, leadIn: 0, leadOut: null, gaps: [], rules: ['at ≤ scene − release − 0.8 s (release 0.3–1 s, default 0.5)']},
   'app-stage': {minDuration: 2, leadIn: 0, leadOut: 1.2, gaps: [], rules: []},
-  'phone-stage': {minDuration: 2, leadIn: 0, leadOut: 1.2, gaps: [], rules: []}
+  'phone-stage': {minDuration: 2, leadIn: 0, leadOut: 1.2, gaps: [], rules: []},
+  'growth-line': {minDuration: 2, leadIn: 0, leadOut: null, gaps: [], rules: ['at ≤ scene − draw − 0.6 s (draw 0.8–3 s, default min(1.6, 0.45 × scene))']}
 };
 
 const mediaParam = '{src: assets/ image or video (a demo-autopilot flow: assets/demo/<flow>.mp4), sourceStart?: seconds (video), fit?: cover|contain}';
@@ -609,7 +730,11 @@ const DEFINITIONS = [
   {id: 'phone-stage', describe: 'Footage-led: a phone springs in beside the presenter\'s head and plays a real screen recording or screenshot (a demo-autopilot flow fits), floating gently while the room pans away from it. For showing the app on a phone while explaining it.',
     params: {media: `${mediaParam} (required)`, side: 'auto|left|right (default: the side with more room)', pan: 'boolean: pan the room away (default true)', at},
     events: ['phone'], aspects: ['9:16', '16:9'], mood: ['launch', 'playful'],
-    resolve: resolvePhoneStage, view: phoneStageView, timeline: phoneStageTimeline}
+    resolve: resolvePhoneStage, view: phoneStageView, timeline: phoneStageTimeline},
+  {id: 'growth-line', describe: 'Footage-led, behind the presenter: a line chart draws itself across the top of the frame behind their head and kicks up at the take-off point into a glowing spike with a labelled pill. For growth results ("doubled", "took off in week three"). Illustration by default; real figures need a source.',
+    params: {points: '[{value, label? ≤ 6}] 3–10 (the shape; labels sit along the top)', mode: 'illustration (default) | data (needs source)', source: '≤ 48, required for data', takeoff: 'index of the point the spike starts from (default: before the biggest rise)', pill: 'label ≤ 16 above the end, e.g. "Scale" (optional)', draw: 'seconds the line takes (0.8–3)', at},
+    events: ['draw', 'takeoff', 'pill'], needs: ['subject'], layer: 'behind', aspects: ['9:16', '16:9'], mood: ['bold', 'launch', 'editorial'],
+    resolve: resolveGrowthLine, view: growthLineView, timeline: growthLineTimeline}
 ];
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: TIMING_E[def.id], resolve: def.resolve,
