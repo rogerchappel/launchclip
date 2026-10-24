@@ -350,8 +350,12 @@ async function listFiles(root) {
     for (const entry of entries) {
       if (entry.name.startsWith(".")) continue;
       const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) { if (depth < 4) await walk(full, depth + 1); }
-      else if (entry.isFile()) out.push(full);
+      // Symlinks count as what they point to (footage is often linked, not
+      // copied); a broken link is skipped. The depth limit stops link loops.
+      const kind = entry.isSymbolicLink() ? await stat(full).catch(() => null) : entry;
+      if (!kind) continue;
+      if (kind.isDirectory()) { if (depth < 4) await walk(full, depth + 1); }
+      else if (kind.isFile()) out.push(full);
     }
   };
   await walk(root, 0);

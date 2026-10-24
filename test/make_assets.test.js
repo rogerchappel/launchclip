@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -108,4 +108,23 @@ test("speech, flatness and transcript helpers", () => {
   assert.equal(isUiLike({ flat_ratio: 0.9, edge_ratio: 0.03 }), false, "a soft, flat set is not UI");
   assert.equal(isUiLike({ flat_ratio: 0.7, edge_ratio: 0.14 }), true);
   assert.deepEqual(wordsFromTranscript({ segments: [{ words: [{ word: " Hi", start: 0.1, end: 0.3 }] }] }), [{ text: "Hi", start: 0.1, end: 0.3 }]);
+});
+
+test("inventory follows symlinks to files and folders, and skips broken ones", { timeout: 60_000 }, async (t) => {
+  if (!(await ffmpegAvailable())) { t.skip("ffmpeg is unavailable"); return; }
+  const real = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-assets-real-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-assets-links-"));
+  try {
+    await ff("-f", "lavfi", "-i", "testsrc=s=1600x900", "-frames:v", "1", path.join(real, "home.png"));
+    await mkdir(path.join(real, "shots"));
+    await ff("-f", "lavfi", "-i", "testsrc=s=1600x900", "-frames:v", "1", path.join(real, "shots", "pricing.png"));
+    await symlink(path.join(real, "home.png"), path.join(dir, "home.png"));
+    await symlink(path.join(real, "shots"), path.join(dir, "shots"));
+    await symlink(path.join(real, "missing.mp4"), path.join(dir, "missing.mp4"));
+    const inventory = await inventoryAssets(dir, { transcribe: async () => null });
+    assert.deepEqual(inventory.entries.map((entry) => entry.path).sort(), ["home.png", "shots/pricing.png"]);
+  } finally {
+    await rm(real, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true });
+  }
 });
