@@ -54,7 +54,20 @@
     ],
     "avoid": [
       "kinetic-words",
-      "count-up"
+      "count-up",
+      "masthead",
+      "dolly-zoom",
+      "feed-frame",
+      "backdrop-swap",
+      "app-stage",
+      "phone-stage",
+      "pull-back",
+      "glass-word",
+      "orbit-cards",
+      "proof-wall",
+      "scrapbook",
+      "doodle-outline",
+      "zoom-through"
     ],
     "params": {
       "date-card": {

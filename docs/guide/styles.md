@@ -6,13 +6,13 @@ Every LaunchClip video follows a **style pack**: your colours and fonts, how thi
 
 ### 1. Start from a built-in style
 
-| Style | Feel |
-|---|---|
-| `editorial-dark` | Calm, premium, gold on near-black, serif headlines |
-| `bold-creator` | Loud creator energy, thick outlined captions, snappy cuts |
-| `minimal-tech` | Light, clean, blue accents, smooth camera glides |
-| `warm-documentary` | Warm tones, a serif voice, slow and restrained |
-| `neon-explainer` | Violet and cyan, playful motion, glowing captions |
+| Style | Feel | Effects round you on camera |
+|---|---|---|
+| `editorial-dark` | Calm, premium, gold on near-black, serif headlines | Your name behind your head, your app on a phone, the room swapped for your product; no playful set |
+| `bold-creator` | Loud creator energy, thick outlined captions, snappy cuts | Scrapbook stickers, cards circling you, a doodled outline |
+| `minimal-tech` | Light, clean, blue accents, smooth camera glides | The same as `editorial-dark` |
+| `warm-documentary` | Warm tones, a serif voice, slow and restrained | Only gentle punch-ins and a growth line |
+| `neon-explainer` | Violet and cyan, playful motion, glowing captions | No preference |
 
 Tell your agent: *"Use the bold-creator style."* Or set `"style": "bold-creator"` in a storyboard.
 

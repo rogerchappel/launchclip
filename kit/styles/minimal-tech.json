@@ -52,10 +52,16 @@
       "status-rack",
       "process-steps",
       "trend-chart",
-      "focus-flow"
+      "focus-flow",
+      "masthead",
+      "phone-stage",
+      "backdrop-swap"
     ],
     "avoid": [
-      "archive-card"
+      "archive-card",
+      "orbit-cards",
+      "scrapbook",
+      "doodle-outline"
     ],
     "params": {
       "checklist": {

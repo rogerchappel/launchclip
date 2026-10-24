@@ -50,7 +50,10 @@
       "kinetic-words",
       "count-up",
       "cta",
-      "emphasis-caption"
+      "emphasis-caption",
+      "scrapbook",
+      "orbit-cards",
+      "doodle-outline"
     ],
     "avoid": [
       "excerpt-window",
