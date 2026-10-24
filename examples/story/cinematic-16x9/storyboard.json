@@ -1,0 +1,299 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Pulseboard cinematic promo (16:9)",
+  "lane": "voiceover-motion",
+  "format": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "duration": 31,
+    "platform": "youtube"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#10132a",
+      "primary": "#7c70ff",
+      "accent": "#22c3ee",
+      "ink": "#10132a",
+      "paper": "#f4f2ff"
+    },
+    "fonts": {
+      "display": "space-grotesk",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "audio": {
+    "narration": {
+      "provider": "kokoro",
+      "speed": 0.95,
+      "text": "Pulseboard. Launch analytics for small teams. Every launch starts with a blank page and a deadline. Pulseboard gives it a plan. Connect your sources, set a goal, and invite the team. Start a project, add a cover and a brief, and it's live in seconds. Every visit and every signup, in one calm view. Conversion is up thirty one percent this month. Pulseboard. Download it on the App Store."
+    },
+    "words": "NARRATION.json"
+  },
+  "overlays": [
+    {
+      "type": "captions",
+      "style": "word-highlight"
+    }
+  ],
+  "ending": {
+    "loop": false
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "brand-lockup",
+      "start": 0,
+      "end": "word:every",
+      "energy": 1,
+      "params": {
+        "mark": "assets/brand/mark.png",
+        "wordmark": {
+          "src": "assets/brand/wordmark.png",
+          "ratio": 7.557
+        },
+        "tint": "paper",
+        "eyebrow": "Launch analytics",
+        "headline": "Launch analytics for small teams"
+      },
+      "hits": [
+        {
+          "at": "word:launch",
+          "event": "headline",
+          "cue": "whoosh-soft"
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "module": "photo-scene",
+      "start": "word:every",
+      "end": "word:pulseboard#2",
+      "energy": 0,
+      "in": {
+        "type": "pan",
+        "dur": 1.2,
+        "direction": "right"
+      },
+      "params": {
+        "media": "assets/photos/dawn-ridge.jpg",
+        "move": "push-in",
+        "zoom": 0.1,
+        "focus": {
+          "x": 0.63,
+          "y": 0.5
+        },
+        "title": "Mountains at dawn",
+        "lines": [
+          {
+            "text": "Every launch starts",
+            "at": 0.25
+          },
+          {
+            "text": "with a deadline",
+            "at": 2.1,
+            "emphasis": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "s3",
+      "module": "checklist",
+      "start": "word:pulseboard#2",
+      "end": "word:start",
+      "energy": 1,
+      "in": {
+        "type": "pan",
+        "dur": 1.2,
+        "direction": "right"
+      },
+      "params": {
+        "title": "Pulseboard gives it a plan",
+        "rows": [
+          {
+            "label": "Connect your sources",
+            "status": "done",
+            "at": 2.1
+          },
+          {
+            "label": "Set a goal",
+            "status": "done",
+            "at": 3.4
+          },
+          {
+            "label": "Invite the team",
+            "status": "done",
+            "at": 4.4
+          }
+        ]
+      }
+    },
+    {
+      "id": "s4",
+      "module": "product-demo",
+      "start": "word:start",
+      "end": "word:every#3",
+      "energy": 2,
+      "in": {
+        "type": "pan",
+        "dur": 1.2,
+        "direction": "down"
+      },
+      "params": {
+        "media": {
+          "src": "assets/demo/create-project.mp4",
+          "sourceStart": 4.2
+        },
+        "viewport": {
+          "width": 1920,
+          "height": 1080
+        },
+        "actions": [
+          {
+            "at": 0.948,
+            "type": "click",
+            "box": {
+              "x": 346,
+              "y": 430,
+              "width": 181.4,
+              "height": 50
+            },
+            "label": "Cover image"
+          },
+          {
+            "at": 2.682,
+            "type": "click",
+            "box": {
+              "x": 333,
+              "y": 523,
+              "width": 590,
+              "height": 51
+            },
+            "label": "Attach a brief"
+          },
+          {
+            "at": 4.434,
+            "type": "click",
+            "box": {
+              "x": 333,
+              "y": 600,
+              "width": 148.4,
+              "height": 48
+            },
+            "label": "Create project",
+            "navigates": true
+          }
+        ],
+        "callouts": [
+          {
+            "at": 0.348,
+            "text": "Drop in a cover",
+            "box": {
+              "x": 346,
+              "y": 430,
+              "width": 181.4,
+              "height": 50
+            }
+          },
+          {
+            "at": 3.6,
+            "text": "Live in one click",
+            "box": {
+              "x": 333,
+              "y": 600,
+              "width": 148.4,
+              "height": 48
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "s5",
+      "module": "media-window",
+      "start": "word:every#3",
+      "end": "word:conversion",
+      "energy": 1,
+      "in": {
+        "type": "pan",
+        "dur": 1.2,
+        "direction": "right"
+      },
+      "params": {
+        "title": "One calm view",
+        "media": {
+          "kind": "image",
+          "src": "assets/media/dashboard.png"
+        }
+      }
+    },
+    {
+      "id": "s6",
+      "module": "metric",
+      "start": "word:conversion",
+      "end": "word:pulseboard#3",
+      "energy": "build",
+      "in": {
+        "type": "pan",
+        "dur": 1.2,
+        "direction": "right"
+      },
+      "params": {
+        "title": "Conversion this month",
+        "metric": {
+          "mode": "illustration",
+          "unit": "conversion",
+          "format": "percent",
+          "values": [
+            {
+              "value": 12,
+              "at": 0.4
+            },
+            {
+              "value": 31,
+              "at": 1.6
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "s7",
+      "module": "brand-lockup",
+      "start": "word:pulseboard#3",
+      "end": 31,
+      "energy": 3,
+      "in": {
+        "type": "pull",
+        "dur": 1.2
+      },
+      "params": {
+        "variant": "end",
+        "mark": "assets/brand/mark.png",
+        "wordmark": {
+          "src": "assets/brand/wordmark.png",
+          "ratio": 7.557
+        },
+        "tint": "paper",
+        "badge": "assets/brand/store-badge.svg",
+        "url": "pulseboard.example"
+      },
+      "hits": [
+        {
+          "at": "word:download",
+          "event": "badge",
+          "cue": "pop"
+        }
+      ]
+    }
+  ],
+  "motion": {
+    "grammar": "cinematic"
+  },
+  "camera": {
+    "mode": "world"
+  },
+  "notes": "Sample story for the cinematic grammar, brand-lockup and photo-scene. Pulseboard, its logo, the store badge, the photo and the data are made up; the photo is generated."
+}

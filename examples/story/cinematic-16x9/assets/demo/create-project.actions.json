@@ -1,0 +1,178 @@
+{
+  "schema": "launchclip.demo-actions.v1",
+  "flow": {
+    "id": "create-project",
+    "title": "Create a project",
+    "goal": "Create a project and see it on the dashboard"
+  },
+  "video": "create-project.mp4",
+  "viewport": {
+    "width": 1920,
+    "height": 1080,
+    "deviceScaleFactor": 1
+  },
+  "frame": {
+    "width": 1920,
+    "height": 1080
+  },
+  "fps": 30,
+  "duration": 12.355,
+  "frames": 406,
+  "recorded_at": "2026-10-23T21:32:06.204Z",
+  "actions": [
+    {
+      "index": 0,
+      "type": "goto",
+      "path": "/projects/new",
+      "label": null,
+      "url": "http://127.0.0.1:4392/projects/new",
+      "start": 0,
+      "end": 0,
+      "box": null,
+      "callout": null
+    },
+    {
+      "index": 1,
+      "type": "type",
+      "selector": null,
+      "text": "Project name",
+      "label": "Project name",
+      "start": 0.765,
+      "end": 3.306,
+      "box": {
+        "x": 333,
+        "y": 205,
+        "width": 590,
+        "height": 50
+      },
+      "callout": null,
+      "at": 1.411,
+      "keys": [
+        1.685,
+        1.796,
+        1.899,
+        1.978,
+        2.06,
+        2.148,
+        2.223,
+        2.357,
+        2.458,
+        2.545,
+        2.616,
+        2.713,
+        2.784
+      ],
+      "value": "Autumn launch",
+      "chars": 13,
+      "url": "http://127.0.0.1:4392/projects/new"
+    },
+    {
+      "index": 2,
+      "type": "click",
+      "selector": null,
+      "text": "Activation",
+      "label": "Activation",
+      "start": 3.352,
+      "end": 4.471,
+      "box": {
+        "x": 734.3,
+        "y": 304,
+        "width": 188.7,
+        "height": 54
+      },
+      "callout": null,
+      "at": 3.918,
+      "url": "http://127.0.0.1:4392/projects/new"
+    },
+    {
+      "index": 3,
+      "type": "click",
+      "selector": null,
+      "text": "Add a cover image",
+      "label": "Cover image",
+      "start": 4.498,
+      "end": 6.32,
+      "box": {
+        "x": 346,
+        "y": 430,
+        "width": 181.4,
+        "height": 50
+      },
+      "callout": "Drop in a cover",
+      "step": "upload",
+      "file": "autumn-cover.png",
+      "at": 5.148,
+      "via": "chooser",
+      "url": "http://127.0.0.1:4392/projects/new"
+    },
+    {
+      "index": 4,
+      "type": "click",
+      "selector": "#brief",
+      "text": null,
+      "label": "Attach a brief",
+      "start": 6.346,
+      "end": 8.053,
+      "box": {
+        "x": 333,
+        "y": 523,
+        "width": 590,
+        "height": 51
+      },
+      "callout": null,
+      "step": "upload",
+      "file": "autumn-brief.pdf",
+      "at": 6.882,
+      "via": "chooser",
+      "url": "http://127.0.0.1:4392/projects/new"
+    },
+    {
+      "index": 5,
+      "type": "click",
+      "selector": null,
+      "text": "Create project",
+      "label": "Create project",
+      "start": 8.081,
+      "end": 9.171,
+      "box": {
+        "x": 333,
+        "y": 600,
+        "width": 148.4,
+        "height": 48
+      },
+      "callout": "Live in one click",
+      "at": 8.634,
+      "url": "http://127.0.0.1:4392/dashboard"
+    },
+    {
+      "index": 6,
+      "type": "wait-for",
+      "selector": null,
+      "text": "Autumn launch",
+      "label": "Autumn launch",
+      "start": 9.171,
+      "end": 9.649,
+      "box": {
+        "x": 345,
+        "y": 395.8,
+        "width": 116.7,
+        "height": 18
+      },
+      "callout": null,
+      "at": 9.198,
+      "url": "http://127.0.0.1:4392/dashboard"
+    },
+    {
+      "index": 7,
+      "type": "pause",
+      "selector": null,
+      "text": null,
+      "label": null,
+      "start": 9.649,
+      "end": 11.453,
+      "box": null,
+      "callout": null,
+      "url": "http://127.0.0.1:4392/dashboard"
+    }
+  ]
+}

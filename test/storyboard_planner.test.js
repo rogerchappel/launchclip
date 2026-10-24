@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { knownModules } from "../kit/core/modules.mjs";
+import { catalogModules, knownModules } from "../kit/core/modules.mjs";
 import { DEFAULT_BRAND } from "../kit/core/planning-prompt.mjs";
 import { AnthropicPlannerClient, STORYBOARD_ENVELOPE_SCHEMA, bareModelId, checkStoryboard, createPlannerClient, extractStoryboard, planStoryboard } from "../src/storyboard_planner.js";
 import { planStoryCommand } from "../src/story_cli.js";
@@ -76,7 +76,12 @@ test("success on the first attempt: prompt from the registry, envelope schema, d
   assert.equal(client.calls.length, 1);
   const [request] = client.calls;
   assert.deepEqual(request.schema, STORYBOARD_ENVELOPE_SCHEMA);
-  for (const id of knownModules()) assert.match(request.instructions, new RegExp(`### ${id} \\(`));
+  // Subject modules are offered only to a footage-led story with a usable presenter.
+  const needsSubject = new Set(Object.entries(catalogModules()).filter(([, definition]) => definition.needs?.includes("subject")).map(([id]) => id));
+  for (const id of knownModules()) {
+    if (needsSubject.has(id)) assert.doesNotMatch(request.instructions, new RegExp(`### ${id} \\(`));
+    else assert.match(request.instructions, new RegExp(`### ${id} \\(`));
+  }
   assert.match(request.instructions, /coffee@0\.5/);
   assert.match(request.input, /Explain why hot coffee cools/);
   assert.match(request.input, /Phrase hints/);

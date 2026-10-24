@@ -33,6 +33,88 @@ The detailed list follows.
 
 ### Added
 
+- The subject stage, the first step towards subject-aware effects
+  ([RFC](docs/SUBJECT_EFFECTS_RFC.md)): `launchclip subject probe` reports
+  whether one person can be cut out of a recording and how they are framed,
+  and `launchclip subject matte --range` writes a cached alpha WebM of the
+  person plus per-frame head and body boxes.
+  - Runs locally in Node through the optional `onnxruntime-node`. The
+    Apache-2.0 models download on first use (or with `launchclip subject
+    setup`) into `~/.launchclip/models`, checked by sha256.
+  - Mattes use MODNet's edges with holes filled from MediaPipe; the probe
+    uses MediaPipe alone. `launchclip doctor` reports both.
+- Scenes can sit behind the presenter in footage-led stories: `layer:
+  "behind"` draws a scene under the cut-out subject, so their head covers it
+  (both renderers, held to renderer parity).
+  - `launchclip subject matte --project <dir>` files a matte in the project;
+    `base.subject` (default `"auto"`) picks it up, or lists `mattes`
+    explicitly, or turns the subject `"off"`.
+  - Modules can also move the subject on its own (`subjectCamera`), hide,
+    dim or blur the room around it (`room`), or draw on both sides of it
+    (`split`). The first modules that use these arrive with the effects.
+  - layout-check fails a front scene that covers the presenter's face for
+    more than 0.3 s.
+- The first subject effects, which the art director picks when the
+  presenter can be cut out:
+  - `masthead`: one huge word (a product name, the one idea) rises in
+    behind the presenter's head, like a magazine cover.
+  - `dolly-zoom`: the room pushes in or falls away while the presenter holds
+    still. Matting a range now also builds a plate of the room without the
+    presenter, which the dolly zooms.
+  - `punch-in` gains `steps` (in, further in, back out on successive words)
+    and `blur` (a few frames of zoom blur on each move).
+  - The planner sees the presenter's framing and offers these only when the
+    cut-out works; both create-video skills get a generated
+    `subject-effects.md`.
+- Five product moments around the presenter, which the art director picks
+  from what you say:
+  - `app-stage`: your product UI slides over the top of the frame and your
+    head rises over its edge.
+  - `phone-stage`: a phone beside you plays your screen recording or a
+    demo-autopilot flow while the room pans away.
+  - `backdrop-swap`: the room gives way to your brand colours or a product
+    shot, and you glide down in front of it.
+  - `feed-frame`: the video springs into a feed window and you break out
+    over its edges (counts only when you give them).
+  - `pull-back`: the video shrinks into an app window while real steps tick
+    off and a counter reaches 100%.
+- layout-check's face rule follows punch-ins and pans.
+- `launchclip make` uses them on footage: it checks the presenter's
+  framing after the base edit, plans with it, and cuts out only the stretches
+  its subject effects cover. A missing model or a failed cut-out is a
+  warning, never a failed video; `--no-subject` turns it off.
+- A `photo-scene` module: one full-bleed `assets/` photo or video with a slow
+  Ken Burns move (`push-in`, `pull-out` or a pan; `zoom` and `focus` set
+  it).
+  - The move is linear over the whole scene and keeps the canvas covered on
+    every frame; the photo bleeds past the edges for a world camera's drift.
+  - It takes an optional `scrim` and 1–3 short kinetic text `lines`. It keeps
+    captions, so the lines sit above the caption band.
+- A `brand-lockup` module for title and end cards built from the brand's
+  artwork: a logo `mark` image beside or above a `wordmark` image (its
+  `ratio` sets the width), with an optional `eyebrow` and `headline`.
+  - `variant: "end"` stacks them over a `badge` image (such as an app-store
+    badge) and a `url` pill.
+  - `tint` / `markTint` recolour a dark wordmark or mark to paper (or any
+    brand role or hex) on dark backgrounds.
+  - A soft `glow` blooms behind the mark and keeps widening. `shine` sweeps
+    light across the card as the mark lands at 0 s, then glints across the
+    lockup once it has landed. An opener passes the motion gate's hook rule
+    even with no headline and a dark brand colour.
+  - It hides captions.
+- A `cinematic` motion grammar (`"motion": {"grammar": "cinematic"}`).
+  Every entrance, transition and camera move eases slow → fast → slow into
+  its resting state (`power2.inOut`, enter 0.7 s, camera 1.3 s, no
+  overshoot), and settled scenes keep moving:
+  - editorial panels take the full 0.7 s to arrive (the other grammars cap
+    them at 0.36 s);
+  - every scene defaults to the `lively` hold drift;
+  - `product-demo` lays a 4% push-in over its zooms, so a recorded clip never
+    holds still between actions, and its fades follow the grammar;
+  - the world camera drifts and breathes more.
+
+  Art directions that say "cinematic", "filmic" or "Ken Burns" now suggest
+  it, instead of `smooth` or `documentary`.
 - `launchclip demo doctor <repo>` checks a demo recipe before recording.
   - **Without `--plan` (survey):** it reads the repo and recommends the
     cheapest setup rung (a plan, a test session, or fixtures). It reports what

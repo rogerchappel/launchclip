@@ -32,9 +32,12 @@ test("doctor reports package, tool, and credential readiness without exposing se
     nodeVersion: "v21.9.0",
     env: { OPENAI_API_KEY: "do-not-print-this" },
     commandAvailable: async (command) => command === "ffmpeg",
-    fileAvailable: async () => true
+    fileAvailable: async () => true,
+    subjectStatus: async () => ({ available: false, required_for_rendering: false, runtime: true, model: "modnet", model_installed: false })
   });
   assert.equal(report.status, "not-ready");
+  assert.equal(report.tools.subject.available, false);
+  assert.equal(report.tools.subject.required_for_rendering, false);
   assert.equal(report.runtime.supported, false);
   assert.equal(report.tools.ffmpeg.available, true);
   assert.equal(report.tools.ffprobe.available, false);

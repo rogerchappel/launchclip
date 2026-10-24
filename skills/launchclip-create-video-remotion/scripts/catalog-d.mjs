@@ -1,6 +1,7 @@
-// Catalogue D: product-demo, a recorded product flow (demo autopilot,
-// src/demo/record.js) edited by its own action log. Contract:
-// docs/KIT_CONTRACTS.md ("Product demo").
+// Catalogue D: full-frame media modules. product-demo, a recorded product
+// flow (demo autopilot, src/demo/record.js) edited by its own action log
+// (docs/KIT_CONTRACTS.md, "Product demo"), and photo-scene, a full-bleed photo
+// or clip with a Ken Burns move (kit/core/catalog-d-photo-scene.mjs).
 //
 //   product-demo   the flow's clip in a window (or full bleed), a camera that
 //                  zooms to each clicked or typed-into element's bounding box,
@@ -18,28 +19,48 @@
 //
 // Camera. Zooms are pure functions of time: cameraKeys() turns the actions
 // into keyframes {t, s, f} (scale and the canvas point to centre), cameraAt()
-// eases between them (log-space scale, easeInOutCubic), and cameraTransform()
-// turns a state into {scale, x, y} for a transform about the canvas origin,
-// clamped so the zoomed video never pulls away from the canvas edge it
-// already covers. One sample per frame becomes a tl.set-style op on both the
+// eases between them (log-space scale, easeInOutSine, the focus kept inside
+// the clamp), and cameraTransform() turns a state into {scale, x, y} for a
+// transform about the canvas origin, clamped so the zoomed video never pulls
+// away from the canvas edge it already covers. A grammar with
+// hold.mediaPush (cinematic) lays a slow push-in about the canvas centre over
+// the whole scene (pushTransform), so the clip never holds still between
+// actions. One sample per frame becomes a tl.set-style op on both the
 // video and the overlay's camera layer, so seeking is safe and both renderers
 // read the same numbers.
 
 import {contrastRatio, fitText, r2, rt, textWidth} from './catalog-b-base.mjs';
 import {abs, el, sampleTime, set, tw} from './catalog-b-view.mjs';
 import {createFootageBase} from './catalog-c.mjs';
-import {grammarTweens} from './grammar.mjs';
+import {grammarDuration, grammarTweens} from './grammar.mjs';
+import {photoScene} from './catalog-d-photo-scene.mjs';
+
+export {PHOTO_SCENE_TIMING, kenBurnsAt, photoSceneTimeline, photoSceneView} from './catalog-d-photo-scene.mjs';
 
 export const PRODUCT_DEMO_TIMING = Object.freeze({
   minDuration: 2,
   leadOut: 0.2,
-  zoomLead: 0.5,
-  zoomIn: 0.6,
-  pan: 0.55,
+  // The camera starts zoomLead before an action and settles `settle` before
+  // it, so the click lands on a still frame.
+  zoomLead: 1.2,
+  zoomIn: 0.8,
+  settle: 0.4,
+  // A move between targets takes pan..panMax s by its on-screen distance.
+  pan: 0.6,
+  panMax: 1.1,
+  // No camera move is shorter than this, however close the actions are, and
+  // actions closer than `cluster` share one shot that frames them all.
+  minMove: 0.45,
+  cluster: 0.8,
   hold: 1.1,
-  zoomOut: 0.7,
+  zoomOut: 0.9,
   merge: 2.2,
+  // After a click that changes the page, the camera, outline and callout
+  // leave this soon: what they framed is gone.
+  navLeave: 0.2,
   callout: 2.2,
+  // A click's callout shows this long before the click.
+  calloutLead: 0.6,
   fade: 0.3
 });
 const T = PRODUCT_DEMO_TIMING;
@@ -47,7 +68,9 @@ const ACTION_TYPES = ['click', 'type', 'focus'];
 const FRAMES = ['window', 'full'];
 const ZOOM_FILL = 0.5;
 
-const ease = p => (p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2);
+// easeInOutSine: still at both ends, and at most 1.6× the average speed
+// (easeInOutCubic peaks at 3×, which reads as a lurch mid-zoom).
+const ease = p => (1 - Math.cos(Math.PI * p)) / 2;
 
 // ---------------------------------------------------------------------------
 // Zoom math (pure; unit-tested in test/product_demo.test.js)
@@ -80,66 +103,172 @@ export function cameraTransform({s, f}, rect, canvas) {
   return {scale: Math.round(s * 1e5) / 1e5, x: r2(x) || 0, y: r2(y) || 0};
 }
 
+const sameBox = (a, b) => Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1 && Math.abs(a.width - b.width) < 1 && Math.abs(a.height - b.height) < 1;
+const same = (a, b) => Math.abs(a.s - b.s) < 1e-6 && Math.abs(a.f.x - b.f.x) < 1e-6 && Math.abs(a.f.y - b.f.y) < 1e-6;
+
 /**
- * Keyframes for a list of zoom targets [{at, until, s, f}] (absolute seconds,
- * sorted): {t, s, f} with identity {s: 1, f: centre} outside the shots.
- * Targets closer than T.merge after the previous hold pan within one shot;
- * every shot zooms out by `end` (compressed when the scene ends first).
+ * A move from target a to b: its length (longer for a longer on-screen
+ * travel) and, when the two are far apart at their zoom, the scale to pull
+ * back to halfway, so the move reads as a dolly rather than a whip pan.
  */
-export function cameraKeys(targets, {start, end, centre}) {
-  const keys = [{t: start, s: 1, f: {...centre}}];
-  const shots = [];
+function moveBetween(a, b, canvas) {
+  const span = Math.max(Math.abs(b.f.x - a.f.x) / canvas.width, Math.abs(b.f.y - a.f.y) / canvas.height);
+  const d = T.pan + (T.panMax - T.pan) * Math.min(1, span * Math.max(a.s, b.s));
+  // Pull back at most 60% of the way to 1 (in log scale): deeper reads as a zoom-out and back.
+  const low = Math.min(a.s, b.s), dip = Math.max(low ** 0.4, Math.min(low, 0.7 / Math.max(span, 1e-6)));
+  return {d, dip: dip < low - 0.02 ? Math.round(dip * 1e4) / 1e4 : null};
+}
+
+/**
+ * Targets closer than T.cluster to the previous one merge into one target
+ * that frames them all: the first one's time, the last one's until and
+ * navigation, the centre of their foci and a scale no closer than any of
+ * them, pulled back so their foci stay in the middle 60% of the canvas.
+ */
+function clusterTargets(targets, canvas) {
+  const groups = [];
   for (const target of targets) {
-    const last = shots.at(-1);
-    const holdEnd = Math.max(target.at + T.hold, (target.until ?? target.at) + 0.4);
-    if (last && target.at - last.holdEnd < T.merge) { last.targets.push(target); last.holdEnd = holdEnd; }
-    else shots.push({targets: [target], holdEnd});
+    const group = groups.at(-1);
+    if (group && target.at - group.at(-1).at < T.cluster) group.push(target);
+    else groups.push([target]);
   }
-  for (const shot of shots) {
-    const first = shot.targets[0];
-    const inStart = Math.max(keys.at(-1).t, start, first.at - T.zoomLead);
-    const arrive = Math.min(first.at, inStart + T.zoomIn);
-    if (arrive - inStart < 0.15 || arrive >= end - 0.3) continue;
-    keys.push({t: rt(inStart), s: 1, f: {...centre}});
-    keys.push({t: rt(arrive), s: first.s, f: {...first.f}});
-    let previous = first;
-    for (const target of shot.targets.slice(1)) {
-      const panEnd = Math.min(target.at, end - 0.4);
-      const panStart = Math.max(keys.at(-1).t, panEnd - T.pan);
-      if (panEnd - panStart < 0.1) continue;
-      keys.push({t: rt(panStart), s: previous.s, f: {...previous.f}});
-      keys.push({t: rt(panEnd), s: target.s, f: {...target.f}});
-      previous = target;
+  return groups.map(group => {
+    if (group.length === 1) return group[0];
+    const xs = group.map(t => t.f.x), ys = group.map(t => t.f.y), last = group.at(-1);
+    const dx = Math.max(...xs) - Math.min(...xs), dy = Math.max(...ys) - Math.min(...ys);
+    const s = Math.max(1, Math.min(...group.map(t => t.s), (0.6 * canvas.width) / Math.max(dx, 1), (0.6 * canvas.height) / Math.max(dy, 1)));
+    return {at: group[0].at, until: Math.max(...group.map(t => t.until ?? t.at)), navigates: Boolean(last.navigates), s: Math.round(s * 1e4) / 1e4,
+      f: {x: r2((Math.max(...xs) + Math.min(...xs)) / 2), y: r2((Math.max(...ys) + Math.min(...ys)) / 2)}};
+  });
+}
+
+/**
+ * Keyframes for a list of zoom targets [{at, until?, navigates?, s, f}]
+ * (absolute seconds, sorted): {t, s, f, dip?} with identity {s: 1, f: centre}
+ * outside the shots; `dip` on a key pulls the move into it back to that
+ * scale halfway. Each zoom starts T.zoomLead before its action and settles
+ * T.settle before it. The camera stays on a target for T.hold (through any
+ * typing), or T.navLeave after a click that navigates, then moves straight to
+ * the next target, unless the gap is long (T.merge, or room to zoom out and
+ * back in after a navigation): then it zooms out and back in. Close actions
+ * squeeze moves, never below T.minMove, so a move may land just after its
+ * action. Every shot zooms out by `end` when there is room (otherwise it
+ * holds and the scene's fade covers it).
+ */
+export function cameraKeys(targets, {start, end, centre, canvas = {width: centre.x * 2, height: centre.y * 2}}) {
+  const wide = {s: 1, f: centre};
+  const keys = [{t: start, s: 1, f: {...centre}}];
+  const key = (t, state, dip) => keys.push({t: rt(t), s: state.s, f: {...state.f}, ...(dip ? {dip} : {})});
+  const leaveOf = target => (target.navigates ? target.at + T.navLeave : Math.max(target.at + T.hold, (target.until ?? target.at) + 0.4));
+  let shot = null;
+  const zoomOut = from => {
+    const outStart = Math.max(keys.at(-1).t, Math.min(from, end - T.zoomOut));
+    if (end - outStart < T.minMove) return;
+    if (outStart > keys.at(-1).t) key(outStart, shot);
+    key(Math.min(end, outStart + T.zoomOut), wide);
+    shot = null;
+  };
+  for (const target of clusterTargets(targets, canvas)) {
+    const arrive = target.at - T.settle;
+    if (target.at > end - 0.3) break;
+    if (target.s <= 1.02) {
+      // A cluster too spread out to zoom into: be wide by the time it starts.
+      if (shot) zoomOut(Math.max(shot.at + 0.1, Math.min(leaveOf(shot), arrive - T.zoomOut)));
+      continue;
     }
-    const outEnd = Math.min(end, shot.holdEnd + T.zoomOut);
-    const outStart = Math.max(keys.at(-1).t, Math.min(shot.holdEnd, outEnd - 0.35));
-    keys.push({t: rt(outStart), s: previous.s, f: {...previous.f}});
-    keys.push({t: rt(outEnd), s: 1, f: {...centre}});
+    if (shot && arrive - leaveOf(shot) >= (shot.navigates ? T.zoomOut + T.zoomIn + 0.2 : T.merge)) zoomOut(leaveOf(shot));
+    if (shot) {
+      const {d, dip} = moveBetween(shot, target, canvas);
+      // After a navigation the move fills the gap (up to panMax + 0.3 s) and pulls all the way out.
+      const length = shot.navigates ? Math.min(T.panMax + 0.3, Math.max(d, arrive - leaveOf(shot))) : d;
+      const moveStart = Math.max(keys.at(-1).t, shot.at + 0.1, arrive - length);
+      // Rather than whip across, a tight move may land just after its action.
+      const moveEnd = Math.max(arrive, moveStart + T.minMove, Math.min(moveStart + length, target.at + 0.15));
+      if (moveEnd > end - 0.3) break;
+      // A squeezed move pulls back less, so it never whips the scale.
+      const pull = shot.navigates ? 1 : dip;
+      const low = Math.min(shot.s, target.s), squeeze = Math.min(1, (moveEnd - moveStart) / Math.max(d, length));
+      if (moveStart > keys.at(-1).t) key(moveStart, shot);
+      key(moveEnd, target, pull && Math.round(low * (pull / low) ** squeeze * 1e4) / 1e4);
+    } else {
+      const inStart = Math.max(keys.at(-1).t, target.at - T.zoomLead);
+      const inEnd = Math.max(arrive, inStart + T.minMove);
+      if (inEnd > end - 0.3) break;
+      if (inStart > keys.at(-1).t) key(inStart, wide);
+      key(inEnd, target);
+    }
+    shot = target;
   }
+  if (shot) zoomOut(leaveOf(shot));
   return keys;
 }
 
-/** Camera state at absolute time t: {s, f}, eased between keyframes. */
-export function cameraAt(keys, t) {
+// The focus range on one axis that cameraTransform leaves unclamped at scale s.
+function focusRange(s, pos, size, full) {
+  const a = -s * pos, b = full - s * (pos + size);
+  return [(full / 2 - Math.max(a, b)) / s, (full / 2 - Math.min(a, b)) / s];
+}
+const toUnit = (s, value, pos, size, full) => {
+  const [lo, hi] = focusRange(s, pos, size, full);
+  return hi - lo < 1e-6 ? 0.5 : Math.min(1, Math.max(0, (value - lo) / (hi - lo)));
+};
+const fromUnit = (s, unit, pos, size, full) => {
+  const [lo, hi] = focusRange(s, pos, size, full);
+  return lo + unit * (hi - lo);
+};
+
+/**
+ * Camera state at absolute time t: {s, f}, eased between keyframes
+ * (easeInOutSine; scale in log space, dipping when the key asks). With
+ * `view` ({rect, canvas}) the focus travels inside the range cameraTransform
+ * allows at each scale, so a move never stops dead against the clamp.
+ */
+export function cameraAt(keys, t, view) {
   if (t <= keys[0].t) return {s: keys[0].s, f: {...keys[0].f}};
   for (let i = 1; i < keys.length; i++) {
     const a = keys[i - 1], b = keys[i];
     if (t > b.t) continue;
     const span = b.t - a.t;
     const p = span <= 0 ? 1 : ease((t - a.t) / span);
-    return {s: Math.exp(Math.log(a.s) * (1 - p) + Math.log(b.s) * p), f: {x: a.f.x + (b.f.x - a.f.x) * p, y: a.f.y + (b.f.y - a.f.y) * p}};
+    let logS = Math.log(a.s) * (1 - p) + Math.log(b.s) * p;
+    if (b.dip) logS -= Math.max(0, (Math.log(a.s) + Math.log(b.s)) / 2 - Math.log(b.dip)) * Math.sin(Math.PI * p);
+    const s = Math.max(1, Math.exp(logS));
+    if (!view) return {s, f: {x: a.f.x + (b.f.x - a.f.x) * p, y: a.f.y + (b.f.y - a.f.y) * p}};
+    const {rect, canvas} = view;
+    const axis = (k, pos, size, full) => fromUnit(s, toUnit(a.s, a.f[k], pos, size, full) * (1 - p) + toUnit(b.s, b.f[k], pos, size, full) * p, pos, size, full);
+    return {s, f: {x: axis('x', rect.x, rect.width, canvas.width), y: axis('y', rect.y, rect.height, canvas.height)}};
   }
   const last = keys.at(-1);
   return {s: last.s, f: {...last.f}};
 }
 
-/** One camera sample per frame from start to end: [{t, scale, x, y}]. */
-export function cameraSamples(keys, {start, end, fps, rect, canvas}) {
+/** When the camera starts to leave `state` at or after t (null when it never does). */
+export function cameraLeaves(keys, state, t) {
+  for (let i = 0; i + 1 < keys.length; i++) if (keys[i].t >= t - 1e-6 && same(keys[i], state) && !same(keys[i + 1], state)) return keys[i].t;
+  return null;
+}
+
+/**
+ * A camera transform pushed in about the canvas centre by k (≥ 1): the rest
+ * push a grammar with hold.mediaPush (cinematic) lays over the zooms, so the
+ * clip keeps moving while nothing on screen does.
+ */
+export function pushTransform(cam, k, canvas) {
+  if (!(k > 1)) return cam;
+  const cx = canvas.width / 2, cy = canvas.height / 2;
+  return {scale: Math.round(cam.scale * k * 1e5) / 1e5, x: r2(k * cam.x + (1 - k) * cx) || 0, y: r2(k * cam.y + (1 - k) * cy) || 0};
+}
+
+/** The rest push factor at absolute time t: 1 → 1 + push, linear over [start, end]. */
+export const pushAt = (push, t, start, end) => (push > 0 && end > start ? 1 + push * Math.min(1, Math.max(0, (t - start) / (end - start))) : 1);
+
+/** One camera sample per frame from start to end: [{t, scale, x, y}] (push: the rest push, 0 = none). */
+export function cameraSamples(keys, {start, end, fps, rect, canvas, push = 0}) {
   const out = [];
   const first = Math.ceil(start * fps - 1e-6), last = Math.floor(end * fps + 1e-6);
   for (let frame = first; frame <= last; frame++) {
     const t = frame / fps;
-    out.push({t: rt(t), ...cameraTransform(cameraAt(keys, t), rect, canvas)});
+    out.push({t: rt(t), ...pushTransform(cameraTransform(cameraAt(keys, t, {rect, canvas}), rect, canvas), pushAt(push, t, start, end), canvas)});
   }
   return out;
 }
@@ -153,14 +282,18 @@ export const throughCamera = (point, cam) => ({x: point.x * cam.scale + cam.x, y
 /**
  * A demo/<flow>.actions.json record → product-demo params for a scene that
  * shows the clip from `sourceStart` for `duration` seconds. Actions outside
- * the window are dropped; times become scene-relative.
+ * the window are dropped; times become scene-relative. A click or typing
+ * that leaves the page on another URL than before it is marked navigates.
  */
 export function productDemoParams(record, {src, sourceStart = 0, duration, frame, zoom, title} = {}) {
   const window = duration ?? record.duration - sourceStart;
   const rel = t => Math.round((t - sourceStart) * 1000) / 1000;
   const actions = [];
   const callouts = [];
+  let url = null;
   for (const action of record.actions ?? []) {
+    const before = url;
+    url = action.url ?? url;
     const at = rel(action.at ?? action.start);
     if (!ACTION_TYPES.includes(action.type) && !(action.callout && action.box)) continue;
     if (at < 0 || at > window - T.leadOut) continue;
@@ -171,10 +304,14 @@ export function productDemoParams(record, {src, sourceStart = 0, duration, frame
         entry.until = entry.keys.at(-1) ?? at;
       }
       if (action.label) entry.label = String(action.label).slice(0, 40);
+      if (before && action.url && action.url !== before) entry.navigates = true;
       actions.push(entry);
     }
     if (action.callout && action.box && callouts.length < 4) {
-      const cAt = Math.min(rel(action.end ?? action.at ?? action.start) - 0.25, window - 1.2);
+      // A click's or typing's callout shows as the cursor reaches the element;
+      // anything else's once it has appeared.
+      const lead = ACTION_TYPES.includes(action.type) ? Math.max(0, at - T.calloutLead) : rel(action.end ?? action.at ?? action.start) - 0.25;
+      const cAt = Math.min(lead, window - 1.2);
       if (cAt >= 0) callouts.push({at: Math.round(cAt * 1000) / 1000, text: String(action.callout).slice(0, 42), box: action.box});
     }
   }
@@ -238,7 +375,7 @@ function resolveProductDemo(params, ctx) {
   let previousAt = -Infinity;
   const actions = p.actions.map((action, index) => {
     const path = `params.actions[${index}]`;
-    check.obj(action, path, ['at', 'type', 'box', 'keys', 'until', 'label']);
+    check.obj(action, path, ['at', 'type', 'box', 'keys', 'until', 'label', 'navigates']);
     const at = check.num(action.at, `${path}.at`, 0, duration - T.leadOut);
     if (at < previousAt) check.fail(`${path}.at`, 'must not be earlier than the previous action');
     previousAt = at;
@@ -248,14 +385,17 @@ function resolveProductDemo(params, ctx) {
     const keys = action.keys === undefined ? [] : check.arr(action.keys, `${path}.keys`, 0, 40).map((value, k) => check.num(value, `${path}.keys[${k}]`, 0, 3600)).filter(value => value <= duration).map(value => rt(start + value));
     const until = action.until === undefined ? null : rt(start + Math.min(check.num(action.until, `${path}.until`, at, 3600), duration));
     const label = action.label === undefined ? null : check.str(action.label, `${path}.label`, 40);
+    const navigates = action.navigates === undefined ? false : check.bool(action.navigates, `${path}.navigates`);
     const s = zoomScale(canvasBox, canvas, {max: zoomMax});
     const f = {x: r2(canvasBox.x + canvasBox.width / 2), y: r2(canvasBox.y + canvasBox.height / 2)};
-    return {index, type, at: rt(start + at), until, keys, label, box: canvasBox, s, f};
+    return {index, type, at: rt(start + at), until, keys, label, navigates, box: canvasBox, s, f};
   });
 
-  const keys = cameraKeys(zoomMax > 1 ? actions.filter(action => action.s > 1.02) : [], {start, end, centre});
-  const samples = cameraSamples(keys, {start, end, fps, rect, canvas});
-  const camAt = t => cameraTransform(cameraAt(keys, t), rect, canvas);
+  const keys = cameraKeys(zoomMax > 1 ? actions.filter(action => action.s > 1.02) : [], {start, end, centre, canvas});
+  // A grammar that keeps rest frames moving (cinematic hold.mediaPush) pushes the clip in slowly over the scene.
+  const push = ctx?.ambient?.drift === false ? 0 : Number(ctx?.grammar?.hold?.mediaPush) || 0;
+  const samples = cameraSamples(keys, {start, end, fps, rect, canvas, push});
+  const camAt = t => pushTransform(cameraTransform(cameraAt(keys, t, {rect, canvas}), rect, canvas), pushAt(push, t, start, end), canvas);
 
   // Callouts: pills beside their anchor as seen through the camera.
   const callouts = [];
@@ -272,13 +412,21 @@ function resolveProductDemo(params, ctx) {
       const text = check.str(callout.text, `${path}.text`, 42);
       const anchor = mapBox(box(check, callout.box, `${path}.box`, viewport), rect, viewport);
       const wanted = callout.duration === undefined ? T.callout : check.num(callout.duration, `${path}.duration`, 0.8, 6);
-      const until = rt(Math.min(at + wanted, end - T.leadOut));
-      if (until - at < 0.8) check.fail(`${path}.at`, `leaves ${r2(until - at)} s on screen before the scene ends; it needs 0.8 s`);
+      if (Math.min(at + wanted, end - T.leadOut) - at < 0.8) check.fail(`${path}.at`, `leaves ${r2(Math.min(at + wanted, end - T.leadOut) - at)} s on screen before the scene ends; it needs 0.8 s`);
+      // The action it points at: the first one on the same element from just
+      // before the callout to 1.5 s after it. The callout leaves with that
+      // element: when the click navigates, or when the camera moves off it.
+      const owner = actions.find(action => action.at >= at - 0.3 && action.at <= at + 1.5 && sameBox(action.box, anchor));
+      let until = Math.min(at + wanted, end - T.leadOut);
+      if (owner?.navigates) until = Math.min(until, owner.at + T.navLeave);
+      const leaves = owner && cameraLeaves(keys, owner, owner.at - T.zoomLead);
+      if (leaves !== null && leaves !== undefined && leaves > at) until = Math.min(until, leaves + 0.1);
+      until = rt(Math.max(until, Math.min(at + 0.5, end - T.leadOut)));
       const fit = fitText(check, `${path}.text`, text, {family: 'body', width: safe.width - u(80), preferred: Math.max(b.min.key, u(46)), min: b.min.key, maxLines: 1});
       const padX = u(30), padY = u(18);
       const width = r2(textWidth(text, fit.size, 'body') + padX * 2), height = r2(fit.size * 1.2 + padY * 2);
-      // Where the anchor will be once the camera settles (0.45 s in).
-      const cam = camAt(Math.min(at + 0.45, until));
+      // Where the anchor will be once the camera settles on it (0.45 s in, or the action's moment).
+      const cam = camAt(owner ? Math.min(Math.max(owner.at, at), until) : Math.min(at + 0.45, until));
       const tl = throughCamera(anchor, cam), br = throughCamera({x: anchor.x + anchor.width, y: anchor.y + anchor.height}, cam);
       const seen = {x: tl.x, y: tl.y, width: br.x - tl.x, height: br.y - tl.y};
       const gap = u(28);
@@ -296,7 +444,7 @@ function resolveProductDemo(params, ctx) {
     if (action.type === 'click') b.events.push({id: `${b.id}-click-${action.index}`, name: `click-${action.index}`, time: action.at, endTime: rt(action.at + 0.12), role: 'action', cue: 'click'});
     action.keys.forEach((time, k) => b.events.push({id: `${b.id}-key-${action.index}-${k}`, name: `key-${action.index}-${k}`, time, endTime: rt(time + 0.08), role: 'beat', cue: 'keystroke-soft'}));
   }
-  for (let k = 1; k + 1 < keys.length; k++) {
+  for (let k = 0; k + 1 < keys.length; k++) {
     if (keys[k].s === 1 && keys[k + 1].s >= 1.3) b.events.push({id: `${b.id}-zoom-${k}`, name: `zoom-${k}`, time: keys[k].t, endTime: keys[k + 1].t, role: 'move', cue: 'whoosh-soft'});
   }
   for (const callout of callouts) b.events.push({id: `${b.id}-callout-${callout.index}`, name: `callout-${callout.index}`, time: callout.at, endTime: rt(callout.at + 0.4), role: 'emphasis', cue: 'pop'});
@@ -304,10 +452,12 @@ function resolveProductDemo(params, ctx) {
   b.model.camera = null;
   const content = {media, viewport, frame, title, rect, radius, shadow: frame === 'full' ? 'none' : `0 ${u(30)}px ${u(80)}px #00000080`,
     accent: colors.accent, stroke: r2(Math.max(3, 4 * unit)), pad: u(10),
-    actions: actions.map(({index, type, at, until, label, box: canvasBox, s}) => ({index, type, at, until, label, box: canvasBox, s})),
-    keys, samples, callouts};
+    actions: actions.map(({index, type, at, until, label, navigates, box: canvasBox, s}) => ({index, type, at, until, label, navigates, box: canvasBox, s})),
+    keys, samples, callouts, ...(push ? {push} : {})};
+  // The clip fades in and out over T.fade, scaled by the grammar (cinematic: 0.75 s, on its ease-in-out).
+  const fadeIn = grammarDuration(ctx?.grammar, 'enter', T.fade, {min: 0.2, max: 0.8}), fadeOut = grammarDuration(ctx?.grammar, 'exit', T.fade, {min: 0.2, max: 0.8});
   return b.finish(content, {rect, role: 'media', minTextPx: callouts.length ? Math.min(...callouts.map(c => c.size)) : null,
-    motion: {enterEnd: rt(start + T.fade), exitStart: rt(end - T.fade), enterFrom: {opacity: 0}, exitTo: {opacity: 0}}});
+    motion: {enterEnd: rt(start + fadeIn), exitStart: rt(end - fadeOut), enterFrom: {opacity: 0}, exitTo: {opacity: 0}, enterEase: 'power2.out', exitEase: 'power2.in'}});
 }
 
 // ---------------------------------------------------------------------------
@@ -340,8 +490,8 @@ export function productDemoTimeline(model) {
   const ops = [];
   for (const target of [`${id}-media`, `${id}-overlay`]) {
     set(ops, target, start, {opacity: 0});
-    tw(ops, target, start, m.enterDuration, 'power2.out', {opacity: 0}, {opacity: 1});
-    tw(ops, target, m.exitStart, m.exitDuration, 'power2.in', {opacity: 1}, {opacity: 0});
+    tw(ops, target, start, m.enterDuration, m.enterEase, {opacity: 0}, {opacity: 1});
+    tw(ops, target, m.exitStart, m.exitDuration, m.exitEase, {opacity: 1}, {opacity: 0});
     set(ops, target, end, {opacity: 0});
   }
   let previous = null;
@@ -354,16 +504,22 @@ export function productDemoTimeline(model) {
   }
   for (const action of c.actions.filter(entry => entry.type !== 'focus')) {
     const target = `${id}-hl-${action.index}`;
-    const out = rt(Math.min(end - 0.05, Math.max(action.at + 0.9, (action.until ?? action.at) + 0.3)));
+    // A click that navigates: the outline shows as the cursor settles and
+    // goes with the page it was drawn on.
+    const inAt = rt(Math.max(start, action.navigates ? action.at - 0.3 : action.at));
+    const fade = action.navigates ? 0.12 : 0.35;
+    const out = rt(Math.min(end - 0.05, action.navigates ? action.at + T.navLeave - fade : Math.max(action.at + 0.9, (action.until ?? action.at) + 0.3)));
     set(ops, target, start, {opacity: 0, scaleX: 1.12, scaleY: 1.12});
-    tw(ops, target, action.at, 0.28, 'power3.out', {opacity: 0, scaleX: 1.12, scaleY: 1.12}, {opacity: 1, scaleX: 1, scaleY: 1});
-    tw(ops, target, out, Math.max(0.04, Math.min(0.35, end - out)), 'power2.in', {opacity: 1, scaleX: 1, scaleY: 1}, {opacity: 0, scaleX: 1, scaleY: 1});
+    tw(ops, target, inAt, Math.max(0.04, Math.min(0.28, out - inAt)), 'power3.out', {opacity: 0, scaleX: 1.12, scaleY: 1.12}, {opacity: 1, scaleX: 1, scaleY: 1});
+    tw(ops, target, out, Math.max(0.04, Math.min(fade, end - out)), 'power2.in', {opacity: 1, scaleX: 1, scaleY: 1}, {opacity: 0, scaleX: 1, scaleY: 1});
   }
   for (const callout of c.callouts) {
     const target = `${id}-callout-${callout.index}`;
     set(ops, target, start, {opacity: 0, y: model.unit * 18, scaleX: 0.9, scaleY: 0.9});
     tw(ops, target, callout.at, 0.4, 'back.out(1.7)', {opacity: 0, y: model.unit * 18, scaleX: 0.9, scaleY: 0.9}, {opacity: 1, y: 0, scaleX: 1, scaleY: 1});
-    tw(ops, target, rt(callout.until - 0.25), 0.25, 'power2.in', {opacity: 1, y: 0, scaleX: 1, scaleY: 1}, {opacity: 0, y: 0, scaleX: 0.96, scaleY: 0.96});
+    // A short callout (cut at a navigation) fades once it has popped in.
+    const fadeAt = rt(Math.max(callout.at + 0.4, callout.until - 0.25));
+    tw(ops, target, fadeAt, Math.max(0.1, rt(callout.until - fadeAt)), 'power2.in', {opacity: 1, y: 0, scaleX: 1, scaleY: 1}, {opacity: 0, y: 0, scaleX: 0.96, scaleY: 0.96});
   }
   if (model.grammar) grammarTweens(ops, model.grammar, {roles: ['emphasis']});
   return ops;
@@ -374,8 +530,8 @@ const DEFINITIONS = [
     params: {
       media: '{src: "assets/demo/<flow>.mp4", sourceStart: seconds into the clip (default 0)}',
       viewport: '{width, height} of the recording in CSS px (default 1920×1080; from <flow>.actions.json)',
-      actions: '[{at (s from scene start), type: click|type|focus, box: {x, y, width, height} viewport px, keys?: [s], until?: s, label?}] ≤ 24 — build with productDemoParams(<flow>.actions.json)',
-      callouts: '[{at, text ≤ 42 chars, box (the element it points at), duration? 0.8–6 s (default 2.2)}] ≤ 4, not overlapping',
+      actions: '[{at (s from scene start), type: click|type|focus, box: {x, y, width, height} viewport px, keys?: [s], until?: s, label?, navigates?: true when it changes the page}] ≤ 24 — build with productDemoParams(<flow>.actions.json)',
+      callouts: '[{at, text ≤ 42 chars, box (the element it points at), duration? 0.8–6 s (default 2.2)}] ≤ 4, not overlapping; one on an action\'s box ends when that action navigates or the camera leaves it',
       frame: 'window|full (full needs the canvas aspect; default window)',
       zoom: 'false, or {max: 1–2.5 (default 1.8)}',
       title: 'string ≤ 48 (optional, for logs)'
@@ -385,7 +541,10 @@ const DEFINITIONS = [
 
 const TIMING_D = {
   'product-demo': {minDuration: T.minDuration, leadIn: 0, leadOut: T.leadOut, gaps: [],
-    rules: [`actions[].at: in order; zooms lead each action by ${T.zoomLead} s, hold ${T.hold} s, and merge into one shot when the next action comes within ${T.merge} s`, `callouts[].at ≤ scene − 1 s; each shows ${T.callout} s by default and must not overlap the next`]}
+    rules: [`actions[].at: in order; zooms start ${T.zoomLead} s before each action and settle ${T.settle} s before it, hold ${T.hold} s (${T.navLeave} s after a click that navigates), and pan to the next action unless the gap is over ${T.merge} s`, `callouts[].at ≤ scene − 1 s; each shows ${T.callout} s by default, must not overlap the next, and ends when its action navigates or the camera leaves it`]}
 };
 
-export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: TIMING_D[def.id], resolve: resolveProductDemo}]));
+export const MODULES = {
+  ...Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: TIMING_D[def.id], resolve: resolveProductDemo}])),
+  [photoScene.id]: {describe: photoScene.describe, params: photoScene.params, events: photoScene.events, timing: photoScene.timing, resolve: photoScene.resolve}
+};

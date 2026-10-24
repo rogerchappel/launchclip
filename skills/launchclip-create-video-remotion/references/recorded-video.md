@@ -235,6 +235,15 @@ overlays, punch-ins and full-frame inserts:
 recording, its edit plan, three punch-ins, two callouts, a lower-third, an
 insert, an emphasis caption and captions.
 
+## Subject effects
+
+When the recording has one presenter and the treatment calls for depth (the
+product name behind their head, a dolly zoom on a realisation), run
+`launchclip subject probe` before planning and follow
+[subject-effects.md](subject-effects.md). Plan subject effects only when the
+probe says `usable`; one or two in a 30–60 s piece is plenty. Without a usable
+probe, keep every scene in front.
+
 ## B-roll capture and placement
 
 Editing also writes `broll-plan.json` and `BROLL.md`. For an already clean video:

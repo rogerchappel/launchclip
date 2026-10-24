@@ -14,7 +14,7 @@ kit/
     style.mjs           style pack v2: validate, applyStyle, palette roles, v1 upgrade
     captions.mjs        word chunking, caption presets (plan, frame-pure evaluator, GSAP runtime)
     motion.mjs          frame-pure easing, tracks, stagger, count-up, springs
-    grammar.mjs         motion grammars (editorial, snappy, smooth, playful, documentary)
+    grammar.mjs         motion grammars (editorial, snappy, smooth, playful, documentary, cinematic)
     transitions.mjs     typed transitions and scene render windows
     camera-world.mjs    world layout, camera path, parallax and motion blur
     ambient.mjs         frame-pure ambient motion: background field, hold drift
@@ -119,6 +119,7 @@ move in a story.
 | `smooth` | power2.out / sine.in | sine.inOut / sine.inOut | power2.out | 0.50, 0.36, 0.70, 1.1 | 0 | 1.25× | glide | subtle |
 | `playful` | back.out(1.7) / back.in(1.4) | back.inOut(1.4) / back.inOut(1.6) | elastic.out(1, 0.5) | 0.42, 0.26, 0.50, 0.75 | 0.20 | 1.6× | bounce (anticipates), whip back.inOut(1.2) | lively |
 | `documentary` | power1.out / power1.in | power1.inOut / power1.inOut | power1.out | 0.60, 0.45, 0.80, 1.3 | 0 | 1.3× | drift, whip power2.inOut | subtle |
+| `cinematic` | power2.inOut / power2.in | power2.inOut / power2.inOut | power2.inOut | 0.70, 0.45, 0.90, 1.3 | 0 | 1.4× | glide (drift 14 px, 12 s, breathe 0.8%), whip power3.inOut, move blur 0.25 | lively |
 
 Each preset also has `defaultTransition` (`{cuts, world}`, planner guidance)
 and `camera` (`{style, drift, driftPeriod, breathe, whip, anticipation}`:
@@ -127,9 +128,33 @@ breathing-scale amplitude, the whip-pan ease). `overshoot` is the measured
 peak overshoot of the enter and emphasis eases; `stagger` multiplies every
 module's default stagger.
 
+Two preset settings are not overridable, and `{base: "cinematic", …}`
+inherits them:
+
+- `panelEnter`: the longest an editorial panel's shell may take to arrive.
+  It's 0.36 s for every grammar but cinematic (0.8 s), so cinematic panels
+  take the grammar's full 0.7 s.
+- `hold`: what a settled scene does while it rests. It's `null` for every
+  grammar but cinematic, which has `{level: "lively", mediaPush: 0.04}`:
+  - `level` is the ambient level a scene gets when neither the scene nor the
+    story sets one, instead of the energy default.
+  - `mediaPush` is a linear push-in about the canvas centre (4% over the
+    scene) that `product-demo` lays over its zooms. The recorded clip then
+    moves on every frame. A scene with ambient `{"drift": false}` keeps the
+    clip as recorded.
+
+Cinematic exists because the other grammars arrive on `.out` curves, which
+start at full speed. Measured on a 16:9 voiceover story with `smooth` and the
+world camera:
+- camera pans were already slow → fast → slow (`sine.inOut`);
+- editorial panels arrived in at most 0.36 s on `power2.out`;
+- the rest drift moved under 0.1 px a frame;
+- the recorded `product-demo` clip held fully still on 17% of its rest
+  frames.
+
 ```js
 export const GRAMMARS, GRAMMAR_NAMES, DEFAULT_GRAMMAR;   // "editorial"
-export function resolveGrammar(story)                   // → {id, base, custom, ease, duration, overshoot, stagger, defaultTransition, camera, ambient}
+export function resolveGrammar(story)                   // → {id, base, custom, ease, duration, overshoot, stagger, defaultTransition, camera, ambient, panelEnter, hold}
 export function grammarErrors(value, path)              // validation messages (story.mjs mirrors them, import-free)
 export function isEditorialGrammar(grammar)
 export function easeRole(name)                          // "enter" (.out) | "exit" (.in) | "move" (.inOut) | "emphasis" (back/elastic/bounce .out) | null (linear, steps)
@@ -523,7 +548,7 @@ Once a module's enter animation settles, nothing on a plate moves until the
 next event, so between beats a story reads as a slideshow and fails the
 cinematic motion gate (median frame-change energy, flow velocity p90). The
 ambient layer keeps settled frames alive. It is plain ESM that imports only
-`./motion.mjs`, and every value is a pure function of absolute time and the
+`./motion.mjs` and `./grammar.mjs`, and every value is a pure function of absolute time and the
 story. The HyperFrames compiler turns it into GSAP; `StoryComposition`
 evaluates the same functions per frame.
 
@@ -536,8 +561,10 @@ evaluates the same functions per frame.
 ```
 
 - Precedence: `scene.ambient` ← `story.ambient` ← defaults.
-- The default level follows the scene's `energy`: 0 → `subtle`; 1, 2 and
-  `"build"` → `standard`; 3 → `lively`. A missing energy → `standard`.
+- The default level is the motion grammar's `hold.level` when it has one
+  (`cinematic`: `lively`). Otherwise it follows the scene's `energy`: 0 →
+  `subtle`; 1, 2 and `"build"` → `standard`; 3 → `lively`. A missing energy
+  → `standard`.
 - `background` defaults to true, except in the `footage-led` lane, where the
   base already moves. There the field is off and only overlays drift (track
   ≥ 1, not `insert` plates), unless a scene sets `drift: true` explicitly.
@@ -871,10 +898,12 @@ full-canvas root. `layout.rect` is the occupied box.
 
 | Module | Params | Events (cue) | Notes |
 |---|---|---|---|
-| `punch-in` | `scale` 1.06–1.25 (1.12), `at`, `focus {x,y}` (base.focus, else 0.5/0.42), `release` 0.3–2 s | `punch` (whoosh), `release` | Camera only; layout role `decor`; ≥ 0.8 s |
+| `punch-in` | `scale` 1.06–1.25 (1.12), `at`, `focus {x,y}` (base.focus, else 0.5/0.42), `release` 0.3–2 s; or `steps [{at, scale}]` 1–4 (scale 1–1.35, the first ≥ 1.06, ≥ 0.3 s apart) instead of `at`/`scale`; `blur` true (14 px at 1080) or 2–30 px | `punch` (whoosh), `step-<i>` (whoosh, or whoosh-soft stepping out), `release` | Camera only; layout role `decor`; ≥ 0.8 s. Blur is velocity-shaped (`motionBlurPx` of the frame edge's speed), 0 once settled; samples carry `blur` |
 | `footage-callout` | `text` ≤ 42, `label` ≤ 24, `point {x,y}` 0.04–0.96, `side` auto/above/below/left/right, `tone` primary/paper/dark, `tilt` −6–6°, `at` | `point` (tick), `sticker` (pop) | The sticker sits inside the safe zone, above the caption band, and never covers the point. The leader line runs from the point to the rotated sticker edge. ≥ 1.5 s |
 | `lower-third` | `name` ≤ 32, `title` ≤ 48, `align` left/center, `tone` dark/primary, `at` | `name` (whoosh), `title` | Bottom edge on the caption-band gap; ≥ 2 s |
 | `emphasis-caption` | `text` 1–3 words ≤ 24, `color` (≥ 3:1 on the bg outline), `position` center/upper/lower, `stagger`, `at` | `pop` (impact), `word-<i>` | `hidesCaptions`; 88% of the safe width; ≥ 0.8 s |
+| `masthead` | `word` one word ≤ 12 (uppercased), `kicker` ≤ 32, `color` (paper default), `stagger` 0–0.12, `at` | `title` (whoosh) | Layer `behind`, needs the subject. Baseline at 35% down `ctx.subject.head` (or a default medium head), letters up to 90% of the safe width, shrunk into the headroom; fails below 150 px. `content.covered` is the share of cap height the head covers; ≥ 1.5 s |
+| `dolly-zoom` | `direction` push/pull, `scale` 1.12–1.6 (1.3), `move` 1–2.5 s, `release` 0.3–1 s (push), `at` | `move` (riser), `release` | Layer `behind`, needs the subject. Scales the matte's room plate (`ctx.subject.plate`) about the head centre; `subjectCamera` holds the presenter at identity. Fails on a close-up; without a plate it draws nothing; ≥ 1.8 s |
 
 `callout` stays the editorial text card, so the anchored sticker is
 `footage-callout`.
@@ -894,9 +923,10 @@ With `s ≥ 1`, the scaled frame always covers the canvas. The spring
 (`PUNCH_SPRING`) is integrated per frame by `springValue`, so every sample is a
 pure function of time.
 
-`cameraOps(models)` merges every camera into one op list on `BASE_CAMERA`:
-identity at 0, then one `set` per sample at `t − SAMPLE_LEAD`, applied in start
-order. When cameras overlap, the later one wins, and `cameraOverlaps()` makes
+`cameraOps(models, {roomFilterAt?})` merges every camera into one op list on
+`BASE_CAMERA`: identity at 0, then one `set` per sample at `t − SAMPLE_LEAD`,
+applied in start order. A sample with `blur` also sets `filter` (`blur(px)`,
+prefixed by `roomFilterAt(t)` so a room treatment survives it, or `none`). When cameras overlap, the later one wins, and `cameraOverlaps()` makes
 the compiler warn.
 
 ### Compilers
@@ -937,6 +967,150 @@ The example is `examples/story/footage/`; regenerate its recording with
   `parity` job runs on ubuntu: five fixtures that between them draw every
   default registry font, at the settle and mid-hold times, plus two stills of
   `examples/story/minimal`, with one shared Remotion bundle.
+
+## Subject layer (`kit/core/subject-layer.mjs`)
+
+Depth against the cut-out presenter in the footage-led lane
+([SUBJECT_EFFECTS_RFC.md](SUBJECT_EFFECTS_RFC.md) §5). The mattes come from
+the subject stage (`launchclip subject matte`, `src/subject/`).
+
+### Story fields (`kit/core/story.mjs`)
+
+```json
+"base": { "src": "assets/recording.mp4",
+          "subject": { "mattes": [{ "src": "assets/subject/0.000-6.000.webm", "in": 0, "out": 6, "info": "assets/subject/0.000-6.000.json" }] } }
+```
+
+- `base.subject` is `"auto"` (the default), `"off"`, or `{mattes}`: alpha
+  `.webm` files under `assets/` for source ranges `[in, out]` of the base, in
+  source order without overlap. `info` is the range's `subject.json`
+  (`launchclip.subject.v1`), which layout-check needs.
+- `"auto"` takes the mattes filed for this base in
+  `assets/subject/mattes.json` (`launchclip.subject-mattes.v1`, written by
+  `launchclip subject matte --project <dir>`). Every story reader passes them
+  to `resolveStory(story, {subject})`, which writes them into the resolved
+  copy as `{mattes}`; an explicit list or `"off"` is never replaced.
+- `scenes[i].layer` is `front` (default), `behind` or `split`. A non-front
+  layer needs the footage-led lane, is invalid on an insert, and needs a
+  subject (`base.subject` not `"off"`).
+- `storyBase()` adds `subject: {mode: "auto"|"off"|"mattes", mattes}`.
+
+### Model fields
+
+Modules may set, all optional (`subjectModelErrors()`; `resolveModule`
+rejects bad values):
+
+- `layer`: the module's default layer (a scene's `layer` wins).
+- `parts`: `{behind, front}` for split modules. HyperFrames emitters return the
+  behind half as `out.behind = {html, css?, motion?}` beside their usual
+  (front) output; Remotion components are rendered twice with `model.part`
+  set to `"behind"` or `"front"`. A `split` scene whose model has no parts
+  renders in front, with a warning.
+- `subjectCamera`: `{samples: [{t, scale, x, y}]}`, one per frame like
+  `model.camera`, moving the subject only.
+- `room`: `{hide?, dim? (0–1), blur? (px, ≤ 40)}` for the scene window,
+  applied to the base videos only.
+- Catalogue definitions may declare `needs: ["subject"]`, `layer`, `aspects`
+  and `mood`; `moduleCatalogue()` carries them, `planningPrompt({subject})`
+  lists subject modules only for a footage-led story with a usable probe,
+  and `suggestModuleMoods(artDirection)` favours modules by mood.
+
+### What modules know (`subjectContext`)
+
+`resolveModule` passes `ctx.subject = subjectContext(story, scene.start)`:
+`{available, framing, head, body, headroom, plate, placement}`. `head` and
+`body` are canvas rects mapped from the covering matte's `summary` (filled by
+`resolveStory(story, {subject})` from each matte's `info`; the loader's
+`readStorySubject` reads them); `plate` is `{src, fit, focus}`; `placement` is
+`"measured"` with a summary head, else `"default"`.
+
+### Room plate
+
+`launchclip subject matte` also writes `plate.jpg` (short edge ≤ 1080): the
+average of every pixel the matte calls room (alpha < 8), with what the
+presenter always covered filled by a push-pull pyramid (`src/subject/plate.js`).
+Mattes may name it as `plate`; filed mattes carry it.
+- `framesFace`: the module frames the face on purpose; layout-check's face
+  rule skips it.
+
+### Compositing
+
+Bottom to top: base (room treatment, base cameras), behind scenes and split
+behind parts, the subject, every other scene and split front parts, captions.
+
+- `needsSubject(scene, model)`: a non-front layer, a `subjectCamera` or a
+  `room`. The subject is mounted only while such a scene runs
+  (`subjectWindows`), so a story with no such scene compiles byte for byte as
+  without `base.subject`.
+- `subjectSegments(story, windows)`: each base segment ∩ each matte's range ∩
+  each window, frame-snapped: `{index, src, start, end, duration, mediaStart}`
+  (`mediaStart` is seconds into the matte file).
+- `subjectCameraOps(models)`: ops on `SUBJECT_CAMERA`. The subject follows the
+  base cameras; while a `subjectCamera` runs, its samples replace them.
+- `roomChanges(models)` / `roomStateAt(models, t)`: `{opacity, filter}`, the
+  later-starting room winning an overlap.
+
+**HyperFrames.** With a subject, the base audio stays on track 3, the matte
+clips take track 4 (`<video class="clip lc-subject-media">`, same fit and
+focus as the base) and scenes start at track 5. Behind scenes stack from
+z-index 10; the subject sits at `10 × (scenes + 1)`, front scenes above it.
+The subject camera is `tl.set(".lc-subject-media", …)`; room changes are
+`tl.set(".lc-base-media", {opacity, filter}, t)`. A `sceneFilter` compile keeps
+the subject for the filtered scenes.
+
+**Remotion.** `StoryComposition` renders `BaseLayer` (with `rooms`), the
+behind scenes, `SubjectLayer` (`<OffthreadVideo transparent>` per clip in a
+wrapper moved by `subjectCameraAt`), then the front scenes. `ModuleReview`
+draws a behind module under its matte.
+
+### Face rule (`checkSubjectFace`, `src/layout_check.js`)
+
+With `{mattes}` that carry `info`, `headLocator(story, infos)` maps each
+frame's head box through the base's trims, fit and focus onto the canvas. A
+front-layer element covering at least 25% of the head for more than 0.3 s is
+a `subject-face` error. Behind scenes, captions, decor (punch-in) and
+`framesFace` modules are exempt.
+
+### Parity
+
+`examples/story/subject` (regenerate with
+`node scripts/make-subject-example.mjs`) is a synthetic presenter with an
+exact matte. `test/fixtures/parity-footage/s-subject-behind.json` (module)
+and `s-subject-story.json` (story) hold it to SSIM ≥ 0.97.
+
+## Catalogue E (`kit/core/catalog-e.mjs`)
+
+Product moments around the presenter
+([SUBJECT_EFFECTS_RFC.md](SUBJECT_EFFECTS_RFC.md) §6.1). Emitters live in
+`kit/hyperframes/catalog-e.mjs`, components in
+`kit/remotion/catalog/CatalogE.tsx` and `registry-e.ts`. Catalogue C's
+conventions apply (`createFootageBase`, `at` from the scene start, hits).
+
+| Module | Layer | Needs the subject | Params | Events | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `feed-frame` | split | yes | `handle`, `caption` ≤ 60, `counts` (supplied strings only), `follow`, `scale` 0.55–0.85, `release`, `at` | `frame`, `chrome`, `release` | Framed base; the hole crops at eye level so the presenter breaks out; `hidesCaptions`, `framesFace`; 9:16 |
+| `pull-back` | front | no | `steps` 1–4 (required), `title`, `label`, `scale` 0.3–0.75 (default: fits the steps), `release`, `at` | `pull`, `step-<i>`, `done` | Framed base; steps tick with a filled check, the counter reaches 100% (per-frame text sets); `hidesCaptions`, `framesFace` |
+| `backdrop-swap` | behind | yes | `backdrop` media (default a brand gradient), `title`, `scale` 0.6–0.95, `release`, `at` | `swap`, `release` | `subjectCamera` shrinks the presenter about the canvas centre and keeps the frame's bottom edge |
+| `app-stage` | behind | yes | `media` (required), `title`, `at` | `stage` | The window runs from the safe top to 70% down the head (at least 45% of the safe zone); needs 320 px above the head |
+| `phone-stage` | front | no | `media` (required), `side` auto/left/right, `pan`, `at` | `phone` | A base camera (scale 1.2) pans the room away from the phone; the phone floats |
+
+- **View.** `catalogEView(model)` → `{front, behind, media, overlay}`. The
+  emitter's main html is the module's own layer (behind for a behind module,
+  else front). A video `media` is appended for the compiler to hoist, with
+  `overlay` hoisted one z-index above it; an image stays in the scene layer.
+  A split module returns its behind tree as `out.behind`; its Remotion
+  component draws the part `model.part` names.
+- **Media follows its container.** `mirror()` copies a container's ops onto
+  its media and overlay pieces, which share its transform origin in canvas
+  coordinates, so a hoisted `<video>` moves with its panel or phone.
+- **Framed base.** `framedCamera` springs the base into a window (scale below
+  1, toward the window's centre). The hole is a box in the base's own
+  coordinates with a huge `box-shadow`, set to the same transform on every
+  camera sample (`sampleTime`), so it matches the base exactly in both
+  renderers; it fades in over 0.3 s and out over the release.
+- `media` params are `{src: assets/ image or video, sourceStart?, fit?}`.
+- **Face rule.** The head box follows the base camera (`cameraOps`) at
+  every frame, so pans, punch-ins and framed windows move it.
 
 ## Product demo (demo autopilot)
 
@@ -1004,30 +1178,46 @@ field.
 ### Catalogue D (`kit/core/catalog-d.mjs`)
 
 `product-demo` params: `media {src, sourceStart}`, `viewport`, `actions [{at,
-type, box, keys?, until?, label?}]` (≤ 24, in order), `callouts [{at, text, box,
-duration?}]` (≤ 4, not overlapping), `frame: window|full`, `zoom: false | {max}`,
-`title`. `productDemoParams(record, {src, sourceStart, duration})` builds them
-from an action log, converting to scene-relative times and dropping actions
-outside the window.
+type, box, keys?, until?, label?, navigates?}]` (≤ 24, in order), `callouts
+[{at, text, box, duration?}]` (≤ 4, not overlapping), `frame: window|full`,
+`zoom: false | {max}`, `title`. `productDemoParams(record, {src, sourceStart,
+duration})` builds them from an action log, converting to scene-relative times
+and dropping actions outside the window. A click or typing whose `url` in the
+log differs from the one before it gets `navigates: true`. A click's or
+typing's callout starts 0.6 s before the action, as the cursor reaches the
+element; any other callout 0.25 s before its step's end.
 
 - **Rect:** `window` fits the recording's aspect in the safe zone (captions may
   sit over its bottom edge), and `full` fills the canvas, which needs the same
   aspect.
 - **Camera:** each click or type target zooms so its box fills at most half the
-  canvas (1 to `zoom.max`, default 1.8). Zooms lead the action by 0.5 s, land on
-  it, hold 1.1 s (or until 0.4 s after the last keystroke), and zoom out over
-  0.7 s. A target within 2.2 s of the previous hold pans inside the same shot.
-  `cameraKeys` gives `{t, s, f}` keyframes, `cameraAt` eases between them (scale
-  in log space), and `cameraTransform` maps a state to `{scale, x, y}` about the
-  canvas origin. That transform is clamped per axis, so a video already covering
-  the canvas keeps covering it and a smaller one stays on screen. One sample per
-  frame becomes `set` ops on `<id>-media` (the video, whose transform-origin is
-  the canvas origin in its local space) and on `<id>-cam` (the overlay's camera
+  canvas (1 to `zoom.max`, default 1.8). A zoom starts 1.2 s before the action
+  and settles 0.4 s before it, so the click lands on a still frame. The camera
+  holds 1.1 s (or until 0.4 s after the last keystroke; 0.2 s after a click
+  that navigates), then moves straight to the next target in 0.6–1.1 s by
+  on-screen distance, pulling back partway when the targets are far apart (all
+  the way out after a navigation). After a gap of over 2.2 s (or, after a
+  navigation, room for both) it zooms out over 0.9 s and back in instead. No
+  move is shorter than 0.45 s: actions closer than 0.8 s share one shot that
+  frames them all (wide when they are spread out), and a squeezed move may land
+  up to 0.15 s after its action. `cameraKeys` gives `{t, s, f, dip?}`
+  keyframes, `cameraAt` eases between them (easeInOutSine; scale in log space,
+  pulled back to `dip` halfway; given `{rect, canvas}`, the focus travels inside
+  the range the clamp allows, so moves never stop dead at an edge), and
+  `cameraTransform` maps a state to `{scale, x, y}` about the canvas origin.
+  That transform is clamped per axis, so a video already covering the canvas
+  keeps covering it and a smaller one stays on screen. One sample per frame
+  becomes `set` ops on `<id>-media` (the video, whose transform-origin is the
+  canvas origin in its local space) and on `<id>-cam` (the overlay's camera
   layer).
 - **Overlay:** `<id>-overlay` holds the camera layer, with an accent outline
-  (`<id>-hl-<i>`) around each clicked or typed-into box, and callout pills
-  (`<id>-callout-<i>`, brand primary, at least the key text size) placed below or
-  above the anchor as the camera will show it 0.45 s in. Pills are not scaled.
+  (`<id>-hl-<i>`) around each clicked or typed-into box (for a click that
+  navigates, from 0.3 s before the click to 0.2 s after it), and callout pills
+  (`<id>-callout-<i>`, brand primary, at least the key text size) placed below
+  or above the anchor as the camera shows it at its action (or 0.45 s in). A
+  callout on an action's box, from 0.3 s before to 1.5 s after the callout,
+  ends when that action navigates or the camera leaves the element. Pills are
+  not scaled.
 - **Events:** `click-<i>` → `click`, `key-<i>-<k>` → `keystroke-soft`, `zoom-<k>`
   → `whoosh-soft` (zooms of at least 1.3×), `callout-<i>` → `pop`. `finish` binds
   these as module-event SFX, merging same-kind cues closer than 0.12 s.
@@ -1038,3 +1228,119 @@ outside the window.
   `sourceStart`, then the overlay.
 - **Parity:** `test/fixtures/parity/d-product-demo.json`, a recorded
   `examples/demo-app` sign-in flow, held to SSIM ≥ 0.97.
+
+## Brand lockup (catalogue B, `kit/core/catalog-b-brand-lockup.mjs`)
+
+`brand-lockup` builds title and end cards from the brand's own artwork instead
+of set type. It hides captions, like `hook-title` and `cta`.
+
+```json
+{ "module": "brand-lockup", "params": {
+  "mark": "assets/brand/mark.png",
+  "wordmark": { "src": "assets/brand/wordmark.png", "ratio": 7.56 },
+  "tint": "paper", "eyebrow": "Launch analytics", "headline": "Launch analytics for small teams" } }
+{ "module": "brand-lockup", "params": { "variant": "end",
+  "mark": "assets/brand/mark.png", "wordmark": { "src": "assets/brand/wordmark.png", "ratio": 7.56 }, "tint": "paper",
+  "badge": "assets/brand/store-badge.svg", "url": "pulseboard.example" } }
+```
+
+- **Variants:**
+  - `variant: "title"` (default) puts the mark beside the wordmark (`layout:
+    "row"`, the wordmark at 62% of the mark's height) or above it (`"stack"`).
+    It takes an optional `eyebrow` (small caps above) and `headline` (display
+    type, at most two lines, below).
+  - `variant: "end"` stacks the mark over the wordmark, then an optional
+    `headline`, a `badge` image (`{src, ratio}`, ratio 3 by default, the shape
+    of an app-store badge) and a `url` pill in `brand.colors.primary`.
+    `badge` and `url` are end-only.
+- **Images:** `mark` (square) and `wordmark` (wide) are `assets/` images; one
+  of them is required.
+  - Images aren't read at resolve time, so a wordmark's width comes from
+    `ratio` (width ÷ height, default 4). `object-fit: contain` keeps a wrong
+    ratio from distorting it.
+  - The lockup shrinks to 86% of the frame width (62% on the end card) and
+    fails with a param error when the mark would drop below 72 px.
+- **Tint:** `tint` (wordmark) and `markTint` (mark) recolour every opaque
+  pixel and keep its alpha. They take `paper`, `ink`, `primary`, `accent` or a
+  `#rrggbb`, so a dark wordmark reads on a dark background. Both renderers draw
+  the tint as an SVG `feColorMatrix` filter in the view tree.
+- **Motion:** the mark lands first, at 0 s (`at` moves it), and it is the
+  hook. The wordmark, eyebrow, headline, badge and URL follow, `stagger` apart
+  (0.35 s, scaled by the grammar).
+  - A hit on one beat (`hits: [{event: "badge", at: "word:download"}]`) moves
+    the default beats after it.
+  - Each element fades and rises over 0.6 s, the mark scaling up from 0.6,
+    on the grammar's enter ease.
+  - The wordmark slides out from behind its left edge.
+  - `glow` (`primary` by default, `accent`, or `false`) is a soft light that
+    blooms behind the lockup with the mark. It then keeps widening linearly
+    until the scene ends, so the card never holds still.
+  - `shine` (default `true`) is two soft bands of paper-coloured light,
+    screened over the card and faded at both ends:
+    - a sweep crosses the whole card as the first beat lands;
+    - a glint crosses the mark and wordmark once they have landed (when the
+      scene is long enough).
+
+    The sweep makes the opening move at once whatever the brand colours. A
+    slow → fast → slow entrance and a soft glow alone stay under the motion
+    gate's burst threshold for the first 0.35 s, more so with a dark primary.
+    The glint is a second distinct hook event, so an opener with no headline
+    passes the hook rule. Measured: a 3.4 s cinematic opener (mark, tinted
+    wordmark on a 0.25 s hit, eyebrow, no headline, primary `#1f4a3a`) gives
+    bursts at 0.20 s and 1.47 s, and every gate passes.
+  - The URL pill gets one ring pulse once it lands.
+- **Events:** `mark`, `wordmark`, `eyebrow`, `headline`, `badge`, `url`, `shine`.
+- **Compilers:** the catalogue B emitter and `CatalogBModule`
+  (`kit/remotion/catalog/BrandLockup.tsx`) draw the same tree and ops.
+
+## Photo scene (catalogue D, `kit/core/catalog-d-photo-scene.mjs`)
+
+`photo-scene` fills the frame with one photo or video clip from `assets/` and
+moves it slowly (Ken Burns), with an optional scrim and 1–3 short kinetic text
+lines. It keeps captions: the lines sit in the lower safe zone, above the
+caption band.
+
+```json
+{ "module": "photo-scene", "params": {
+  "media": "assets/photos/dawn-ridge.jpg", "move": "push-in", "zoom": 0.1, "focus": { "x": 0.63, "y": 0.5 },
+  "lines": [{ "text": "Every launch starts" }, { "text": "with a deadline", "emphasis": true }] } }
+```
+
+- **`media`:** an `assets/` image (`.jpg`, `.png`, `.webp`, `.svg`) or video
+  (`.mp4`, `.webm`, `.mov`), or `{src, kind?, sourceStart?}`. It is drawn with
+  `object-fit: cover`. The photo and scrim bleed 64 px (at 1080) past every
+  canvas edge, so a world camera's drift never shows their edge.
+- **`move`:** `push-in` (default), `pull-out`, `pan-left`, `pan-right`,
+  `pan-up` or `pan-down`, linear over the whole scene. The frame never settles
+  still and the canvas stays covered on every frame:
+  - a push or pull scales between 1 and `1 + zoom` (default 0.08, range
+    0.02–0.25) about the `focus` point (fractions, 0.15–0.85, default the
+    centre);
+  - a pan travels at scale `1 + zoom`, within 90% of the overscan on that
+    side.
+
+  `kenBurnsAt(move, p, {zoom, focus, canvas})` is the pure function behind it.
+  One sample per frame becomes a set op on the photo, as with `product-demo`'s
+  camera.
+- **`lines`:** `[{text ≤ 40, at?, emphasis?}]` or strings, one line each. The
+  first line is set larger (96 px preferred, then 72). They rise and fade in
+  at `at`, by default 0.35 s and then 0.45 s apart (the gap scales with the
+  grammar's stagger), on the grammar's enter ease. `emphasis` colours a line
+  `brand.colors.primary`. `align` is `left` (default) or `center`.
+- **`scrim`:** a `brand.colors.bg` gradient: `bottom` (the default with lines),
+  `left`, `full` (the default when centred) or `none` (the default without
+  lines; an error with lines).
+- **Ambient:** the module moves on its own, so its `layout.drift` is false and
+  the ambient hold drift (`driftEligible`) leaves it alone.
+- **Layout:** `role: "text"` with the text block's rect, or `decor` without
+  lines.
+- **Events:** `enter`, `line-<i>`.
+- **Compilers:**
+  - For an image, HyperFrames gets one clip that holds the photo and its
+    overlay in the scene layer, so it travels with a world camera.
+  - A video is root media. The emitter returns `{html: <video>, overlay}`,
+    and the story compiler hoists both, the overlay one z-index above, as for
+    `product-demo`. Root media stays put under a world camera.
+  - Remotion (`kit/remotion/catalog/PhotoScene.tsx`) draws an `<Img>` or an
+    `<OffthreadVideo>` trimmed to `sourceStart`, then the overlay, from the
+    same tree and ops.

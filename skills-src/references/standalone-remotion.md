@@ -431,7 +431,7 @@ export default function SignalLabel({ scene, params }) {
 ## Motion grammar and world camera
 
 `motion.grammar` (`editorial` default, `snappy`, `smooth`, `playful`,
-`documentary`) sets the eases, durations and staggers of module entrances and
+`documentary`, `cinematic`) sets the eases, durations and staggers of module entrances and
 exits, pops and typed transitions; it reaches the components through the
 resolved models (`resolveModule`), so custom components should read
 `model.motion.enterEase`/`exitEase` rather than hard-coding eases. A world

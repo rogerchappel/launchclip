@@ -17,7 +17,7 @@ export const STORY_CAMERA_TRANSITIONS = ["pan", "pull", "orbit", "whip-pan"];
 export const STORY_CAMERA_MODES = ["cuts", "world"];
 export const STORY_CAMERA_LAYOUTS = ["row", "column", "grid", "path", "auto"];
 // story.motion.grammar presets (kit/core/grammar.mjs GRAMMAR_NAMES).
-export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "documentary"];
+export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "documentary", "cinematic"];
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
 // Caption presets (kit/core/captions.mjs CAPTION_PRESETS; kept in step by test/caption_presets.test.js).
@@ -295,6 +295,16 @@ export function validateStory(story, { modules } = {}) {
       if (scene.insert !== true && track === 0) err(`${path} sits on track 0, which is the base in the footage-led lane; set track to 1 or higher for an overlay, or insert: true for a full-frame insert`);
     }
 
+    // Depth against the cut-out subject (docs/SUBJECT_EFFECTS_RFC.md §5.2).
+    if (scene.layer !== undefined) {
+      if (!SCENE_LAYERS.includes(scene.layer)) err(`${path}.layer must be one of ${SCENE_LAYERS.join(", ")}`);
+      else if (scene.layer !== "front") {
+        if (story.lane !== "footage-led") err(`${path}.layer "${scene.layer}" needs the footage-led lane: the subject is the person in the base recording`);
+        else if (scene.insert === true) err(`${path}.layer: an insert covers the whole frame, so it cannot sit behind the subject`);
+        else if (subjectMode(story.base) === "off") err(`${path}.layer "${scene.layer}" needs the subject, but base.subject is "off"`);
+      }
+    }
+
     if (scene.energy !== undefined && !(scene.energy === "build" || (Number.isInteger(scene.energy) && scene.energy >= 0 && scene.energy <= 3))) {
       err(`${path}.energy must be 0, 1, 2, 3 or "build"`);
     }
@@ -508,9 +518,22 @@ function validateCaptionOptions(overlay, path, err) {
  * overlay start/end) replaced by seconds, scenes sorted by start, plus
  * `resolved: {duration, fps, frames}`.
  */
-export function resolveStory(story, { words = [], beats = null, edl = null } = {}) {
+export function resolveStory(story, { words = [], beats = null, edl = null, subject = null } = {}) {
   if (!isObject(story)) throw new Error("story must be a JSON object");
   const copy = JSON.parse(JSON.stringify(story));
+  // base.subject "auto" → the project's cached mattes for this base (subject:
+  // [{src, in, out, info?, plate?, summary?}], from the loader's
+  // assets/subject/mattes.json). Explicit mattes only take each matching
+  // entry's summary (the framing modules place themselves by).
+  if (Array.isArray(subject) && subject.length && copy.base != null && subjectMode(copy.base) === "auto") {
+    if (typeof copy.base === "string") copy.base = { src: copy.base };
+    copy.base.subject = { mattes: subject.map((matte) => ({ ...matte })).sort((a, b) => a.in - b.in) };
+  } else if (Array.isArray(subject) && isObject(copy.base) && subjectMode(copy.base) === "mattes") {
+    for (const matte of copy.base.subject.mattes) {
+      const entry = subject.find((item) => item.src === matte?.src);
+      if (entry?.summary && matte && matte.summary === undefined) matte.summary = entry.summary;
+    }
+  }
   // base.edl → base.trim from the edit-recording plan's kept segments.
   if (isObject(copy.base) && typeof copy.base.edl === "string" && edl != null && copy.base.trim === undefined) copy.base.trim = edlTrim(edl, "base.edl");
   const context = { words, beats };
@@ -701,7 +724,10 @@ function validateAmbient(value, path, err) {
 // Footage-led base
 
 export const BASE_FITS = ["cover", "contain"];
-const BASE_KEYS = new Set(["src", "source", "start", "trim", "volume", "fit", "focus", "edl"]);
+const BASE_KEYS = new Set(["src", "source", "start", "trim", "volume", "fit", "focus", "edl", "subject"]);
+export const SCENE_LAYERS = ["front", "behind", "split"];
+export const SUBJECT_MODES = ["auto", "off"];
+const MATTE_KEYS = new Set(["src", "in", "out", "info", "plate", "summary"]);
 const VIDEO_FILE = /\.(mp4|m4v|mov|webm)$/i;
 
 function validateBase(base, { err, warn, duration, resolved }) {
@@ -710,7 +736,7 @@ function validateBase(base, { err, warn, duration, resolved }) {
     return;
   }
   if (!isObject(base)) { err("base must be null, an assets/ video path or an object with src"); return; }
-  for (const key of Object.keys(base)) if (!BASE_KEYS.has(key)) err(`base.${key} is not supported (allowed: src, start, trim, volume, fit, focus, edl)`);
+  for (const key of Object.keys(base)) if (!BASE_KEYS.has(key)) err(`base.${key} is not supported (allowed: src, start, trim, volume, fit, focus, edl, subject)`);
   if (base.src !== undefined && base.source !== undefined) err("base.src and base.source name the same file; keep base.src");
   const src = base.src ?? base.source;
   const srcPath = base.src !== undefined || base.source === undefined ? "base.src" : "base.source";
@@ -723,6 +749,7 @@ function validateBase(base, { err, warn, duration, resolved }) {
     if (!isObject(base.focus) || Object.keys(base.focus).some((key) => key !== "x" && key !== "y")) err("base.focus must be {x, y} with fractions between 0 and 1");
     else for (const axis of ["x", "y"]) if (!(typeof base.focus[axis] === "number" && base.focus[axis] >= 0 && base.focus[axis] <= 1)) err(`base.focus.${axis} must be a fraction between 0 and 1`);
   }
+  if (base.subject !== undefined) validateSubject(base.subject, err);
   if (base.edl !== undefined) {
     if (projectPath(base.edl, "base.edl", err) && !/\.json$/i.test(base.edl)) err(`base.edl must point at an edit-recording plan (edit-plan.json); got ${JSON.stringify(base.edl)}`);
     if (base.trim !== undefined && !resolved) err("base.trim and base.edl both set the cuts; keep one (resolveStory fills trim from edl)");
@@ -759,12 +786,46 @@ export function edlTrim(plan, label = "edl") {
   });
 }
 
+// base.subject: "auto" (default: the project's cached mattes, filled in by
+// resolveStory's `subject` option), "off", or explicit {mattes: [{src, in,
+// out, info?}]}: alpha videos under assets/ for source ranges of the base.
+function validateSubject(subject, err) {
+  if (typeof subject === "string") {
+    if (!SUBJECT_MODES.includes(subject)) err(`base.subject must be ${SUBJECT_MODES.map((mode) => `"${mode}"`).join(" or ")}, or {mattes: [...]}`);
+    return;
+  }
+  if (!isObject(subject) || Object.keys(subject).some((key) => key !== "mattes")) { err('base.subject must be "auto", "off" or {mattes: [{src, in, out, info?}]}'); return; }
+  if (!Array.isArray(subject.mattes)) { err("base.subject.mattes must be a list of {src, in, out, info?}"); return; }
+  let previousOut = -Infinity;
+  subject.mattes.forEach((matte, index) => {
+    const path = `base.subject.mattes[${index}]`;
+    if (!isObject(matte)) { err(`${path} must be {src, in, out, info?}`); return; }
+    for (const key of Object.keys(matte)) if (!MATTE_KEYS.has(key)) err(`${path}.${key} is not supported (allowed: src, in, out, info, plate)`);
+    if (matte.plate !== undefined && assetPath(matte.plate, `${path}.plate`, err) && !/\.(jpe?g|png|webp)$/i.test(matte.plate)) err(`${path}.plate must be the range's plate image (.jpg, .png or .webp)`);
+    if (matte.summary !== undefined && !isObject(matte.summary)) err(`${path}.summary must be an object (resolveStory fills it from info)`);
+    if (assetPath(matte.src, `${path}.src`, err) && !/\.webm$/i.test(matte.src)) err(`${path}.src must be an alpha .webm (launchclip subject matte writes one)`);
+    if (matte.info !== undefined && assetPath(matte.info, `${path}.info`, err) && !/\.json$/i.test(matte.info)) err(`${path}.info must be the matte's subject.json`);
+    const valid = typeof matte.in === "number" && typeof matte.out === "number" && matte.in >= 0 && matte.out > matte.in;
+    if (!valid) { err(`${path} needs in and out source seconds with out > in`); return; }
+    if (matte.in < previousOut - EPS) err(`${path} overlaps the matte before it; keep mattes in source order without overlap`);
+    previousOut = matte.out;
+  });
+}
+
+/** "off", "auto" or "mattes" for a story's base (any form). */
+export function subjectMode(base) {
+  const subject = isObject(base) ? base.subject : undefined;
+  if (subject === "off") return "off";
+  if (isObject(subject) && Array.isArray(subject.mattes)) return "mattes";
+  return "auto";
+}
+
 /**
  * The footage-led base of a resolved story, normalised for the compilers, or
  * null. Timeline time maps to trimmed base time: trim ranges play back to back
  * from timeline 0. Boundaries snap to the frame grid so both renderers cut on
  * the same frame.
- * → {src, fit, focus: {x, y}, volume, segments: [{index, start, end, duration, sourceStart}], length}
+ * → {src, fit, focus: {x, y}, volume, subject: {mode, mattes: [{src, in, out, info?}]}, segments: [{index, start, end, duration, sourceStart}], length}
  */
 export function storyBase(story) {
   const raw = story?.base;
@@ -792,6 +853,7 @@ export function storyBase(story) {
     fit: BASE_FITS.includes(base.fit) ? base.fit : "cover",
     focus: { x: Number(base.focus?.x ?? 0.5), y: Number(base.focus?.y ?? 0.5) },
     volume: typeof base.volume === "number" ? base.volume : 1,
+    subject: { mode: subjectMode(base), mattes: subjectMode(base) === "mattes" ? base.subject.mattes.map((matte) => ({ src: matte.src, in: Number(matte.in), out: Number(matte.out), ...(matte.info ? { info: matte.info } : {}), ...(matte.plate ? { plate: matte.plate } : {}), ...(isObject(matte.summary) ? { summary: matte.summary } : {}) })) : [] },
     segments,
     length: segments.length ? segments[segments.length - 1].end : 0
   };

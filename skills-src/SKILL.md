@@ -22,6 +22,9 @@ Read a reference when its step comes up, not all at once.
 - [references/storyboard-modules.md](references/storyboard-modules.md): every
   module, its params and events, transitions, grammar and camera, anchors and
   the safe-zone and caption rules.
+- [references/subject-effects.md](references/subject-effects.md): effects that
+  use the presenter cut out of a recording (a word behind their head, a dolly
+  zoom): probing and matting the recording, the behind layer and its rules.
 - [references/shorts-delivery.md](references/shorts-delivery.md): the
   delivery floor for portrait videos of 60 seconds or less: default
   word-highlight captions, the Shorts safe zone, −14 LUFS / −1 dBTP mastering,
