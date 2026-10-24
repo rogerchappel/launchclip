@@ -390,3 +390,21 @@ test('zoom-through: no cut in the edit means a fake cut mid-scene; strict valida
   const faced = resolve('zoom-through', {}, {subject: {head: {x: 400, y: 500, width: 280, height: 300}}});
   assert.deepEqual(faced.camera.focus, {x: 540, y: 710});
 });
+
+// A real 16:9 close-up (headroom 0.0987): a short word sits inside the head's
+// column, so the head hides most of it. resolve refuses it; a word that
+// reaches past the head resolves, and layout-check's 60% rule judges each letter.
+test('masthead: refuses a word the measured head mostly hides', async () => {
+  const {checkBehindText, subjectCoverShare} = await import('../kit/core/subject-layer.mjs');
+  const W = 1920, H = 1080, h = {x: 0.5037, y: 0.3421, w: 0.2185, h: 0.4868};
+  const box = {x: (h.x - h.w / 2) * W, y: (h.y - h.h / 2) * H, width: h.w * W, height: h.h * H};
+  const wide = {format: {width: W, height: H, fps: 30, duration: 10}, aspect: '16:9', subject: {available: true, framing: 'close-up', head: box, placement: 'measured'}};
+  assert.throws(() => resolve('masthead', {word: 'ai'}, wide), /params\.word is mostly hidden behind the presenter's head: 2 of 2 letters keep under 60% visible .*Raise or shrink it: set params\.baseline lower/);
+  const long = resolve('masthead', {word: 'launchclip'}, wide);
+  const glyphs = MODULES.masthead.glyphs(long);
+  assert.ok(glyphs.some((glyph) => 1 - subjectCoverShare(glyph, {head: box}) < 0.6), 'its middle letters still fail the 60% rule');
+  const [finding] = checkBehindText({texts: [{id: 's', module: 'masthead', glyphs, times: [1]}], subjectAt: () => ({head: box, body: null})});
+  assert.equal(finding.rule, 'subject-text');
+  // Without a measured head there is nothing to judge against.
+  assert.doesNotThrow(() => resolve('masthead', {word: 'ai'}));
+});

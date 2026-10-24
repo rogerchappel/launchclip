@@ -43,6 +43,7 @@ import {grammarEase, grammarStagger, grammarTweens} from './grammar.mjs';
 import {CATALOG_B_STYLE, contrastRatio, fitText, glyphBoxes, makeCheck, mixColor, r2, rt, textWidth} from './catalog-b-base.mjs';
 import {abs, el, sampleTime, set, svgRoot, transformString, tw} from './catalog-b-view.mjs';
 import {profileGeometry} from './layout-check.mjs';
+import {subjectCoverShare} from './subject.mjs';
 
 export const BASE_CAMERA = 'lc-base-camera';
 export const CAMERA_IDENTITY = Object.freeze({x: 0, y: 0, scaleX: 1, scaleY: 1});
@@ -565,6 +566,7 @@ const DEFAULT_HEAD = {portrait: {x: 0.4, y: 0.26, w: 0.2, h: 0.12}, landscape: {
 // rule (60% of each glyph visible) a margin for the head's motion.
 const MASTHEAD_BASELINE = 0.35;
 const MASTHEAD_COVER = 0.3;
+const MASTHEAD_VISIBLE = 0.6;
 const CAP = 0.72;
 // The ink sits this far above the bottom of the 0.9 line box.
 const MASTHEAD_DESCENT = 0.05;
@@ -626,8 +628,19 @@ function resolveMasthead(params, ctx) {
   const exitStart = rt(Math.max(settle, end - 0.35));
   const content = {word, kicker, color, size, lineH, kickerSize, kickerH, letters, stagger, rise: r2(size * 0.32), covered, baseline: r2(depth / head.height), placement: head.measured ? 'measured' : 'default',
     head: {x: r2(head.x), y: r2(head.y), width: r2(head.width), height: r2(head.height)}, shadow: `0 ${u(8)}px ${u(30)}px #00000080`};
-  return b.finish(content, {rect, role: 'hero', minTextPx: size,
+  const model = b.finish(content, {rect, role: 'hero', minTextPx: size,
     motion: {enterEnd: settle, exitStart, exitTo: {opacity: 0, y: -u(30)}, origin: {x: r2(rect.x + rect.width / 2), y: r2(rect.y + rect.height / 2)}}});
+  // A measured head that hides most of the word (more than half its letters
+  // under MASTHEAD_VISIBLE clear) fails here, so a re-resolve against the
+  // real framing refuses it early; layout-check's behind-text rule checks
+  // every letter at every frame it samples.
+  if (head.measured) {
+    const subject = {head, body: ctx.subject?.body ?? null};
+    const visible = mastheadGlyphs(model).map(glyph => 1 - subjectCoverShare(glyph, subject));
+    const hidden = visible.filter(share => share < MASTHEAD_VISIBLE - 1e-6).length;
+    if (hidden * 2 > visible.length) check.fail('params.word', `is mostly hidden behind the presenter's head: ${hidden} of ${visible.length} letters keep under ${Math.round(MASTHEAD_VISIBLE * 100)}% visible (the least ${Math.round(Math.min(...visible) * 100)}%). Raise or shrink it: set params.baseline lower (now ${content.baseline}), ${kicker ? 'drop the kicker, ' : ''}use a longer word that reaches past the head, or use it on a shot with more headroom`);
+  }
+  return model;
 }
 
 function mastheadView(model) {
