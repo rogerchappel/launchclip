@@ -15,6 +15,12 @@ before writing the storyboard:
 - For presenter footage, inspect representative frames across the full take and
   record the approximate face box, gaze direction, and usable negative space in
   `SOURCE.md`. Treat that region as a presenter-safe area, not as background.
+- For a recording with one presenter, run `launchclip subject probe <video>
+  --json` and record `usable` (with `reasons` when false), `framing` and
+  `headroom` in `SOURCE.md`. Plan subject effects only when it is usable, and
+  skip the ones that need headroom on a close-up (see `subject-effects.md`).
+  When the `launchclip` CLI is not installed, there are no subject effects;
+  carry on with the rest of the library.
 - Record the measured cut rate, hold pattern, first meaningful motion, and the
   visual registers used: presenter, typography, UI/proof, diagram, spatial
   transition, or full-frame reset.
