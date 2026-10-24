@@ -9,6 +9,11 @@
   leaves an ordinary project you can keep editing. A new guide, [Effects
   around you on camera](docs/guide/effects.md), covers every effect and how
   LaunchClip picks them.
+- `launchclip story plan --base` probes the presenter first, as `make` and
+  the skills do, so the prompt offers subject effects only when the cut-out
+  works (`--no-subject` skips it). A test now plans the footage fixture
+  through the CLI and the skill's documented steps and checks they offer the
+  same effects and land on the same choices.
 
 ## 0.2.0 - 2026-10-23
 

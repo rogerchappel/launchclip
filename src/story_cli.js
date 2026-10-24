@@ -188,6 +188,19 @@ export async function planStoryCommand(flags = {}, adapters = {}) {
   const modelSpec = flags.model ?? process.env.LAUNCHCLIP_PLANNER_MODEL ?? null;
   const client = adapters.client ?? createPlannerClient(modelSpec, adapters.clientOptions ?? {}).client;
   const maxRepairs = flags["max-repairs"] === undefined ? undefined : Number(flags["max-repairs"]);
+  // Footage-led: probe the presenter so the prompt offers subject effects only
+  // when the cut-out works (as make and the skills do). A missing model or
+  // runtime is a warning; --no-subject skips it.
+  let subject = null;
+  if (lane === "footage-led" && flags.base && !flags["no-subject"]) {
+    try {
+      const probe = adapters.subjectProbe ?? (await import("./subject/stage.js")).runSubjectProbe;
+      const { probe: result } = await probe(path.resolve(outDir, String(flags.base)), { cacheDir: path.join(outDir, ".launchclip", "subject") });
+      subject = { usable: result.usable, reasons: result.reasons, framing: result.framing, headroom: result.headroom, head: result.head, people: result.people };
+    } catch (error) {
+      warnings.push(`presenter probe skipped (${String(error?.message ?? error).split("\n")[0]}); planning without subject effects. Run launchclip doctor`);
+    }
+  }
   const report = await planStoryboard({
     brief,
     words: words?.list ?? null,
@@ -200,6 +213,7 @@ export async function planStoryCommand(flags = {}, adapters = {}) {
     audio,
     base: flags.base ? String(flags.base) : null,
     style: style?.pack ?? null,
+    subject,
     ...(maxRepairs === undefined ? {} : { maxRepairs })
   });
   const reportFile = path.join(outDir, ".launchclip", "storyboard-plan.json");
@@ -211,6 +225,7 @@ export async function planStoryCommand(flags = {}, adapters = {}) {
     tier: report.tier,
     lane: report.lane,
     style: style ? { name: style.name, source: style.source, file: style.file } : null,
+    subject: subject ? { usable: subject.usable, framing: subject.framing, ...(subject.usable ? {} : { reasons: subject.reasons }) } : null,
     model: report.model,
     out: report.status === "passed" ? out : null,
     report: reportFile,
