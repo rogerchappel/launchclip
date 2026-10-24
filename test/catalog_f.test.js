@@ -14,7 +14,7 @@ const ctx = (overrides = {}) => ({id: 'scene', start: 1, duration: 4, format: {w
 const resolve = (id, params, overrides) => ({...MODULES[id].resolve(params, ctx(overrides)), module: id});
 const ITEMS = [{text: 'Saved me ten hours a week'}, {image: 'assets/app.png'}, {text: 'Shipped in a day'}, {text: 'The edit I wanted'}];
 
-const IDS = ['glass-word', 'orbit-cards'];
+const IDS = ['glass-word', 'orbit-cards', 'proof-wall', 'scrapbook'];
 
 test('catalogue F is registered in the module registry, HyperFrames and Remotion', () => {
   for (const id of IDS) assert.ok(knownModules().includes(id), id);
@@ -61,4 +61,39 @@ test('orbit-cards: real items only, and each card shows in exactly one part', ()
   const out = EMITTERS['orbit-cards'](model);
   assert.match(out.behind.html, /id="scene-far-0"/);
   assert.match(out.html, /id="scene-near-0"/);
+});
+
+const PROOF = [
+  {text: 'The launch video tool I wanted', source: 'Product Hunt'},
+  {text: 'Shipped in a day', source: '@ada'},
+  {image: 'assets/app.png', source: 'Dashboard'},
+  {text: 'Ten hours saved every week', source: 'Ledgerly'}
+];
+
+test('proof-wall: real items with sources pin one by one, the hero swipes its key word', () => {
+  const model = resolve('proof-wall', {items: PROOF, hero: {text: 'Everyone is talking about it', highlight: 'talking', source: 'Launch notes'}});
+  assert.equal(model.layer, 'split', 'the hero lands in front');
+  assert.ok(model.content.hero.rect.y >= 560 + 300, 'on the chest, under the face');
+  assert.equal(resolve('proof-wall', {items: PROOF}).layer, 'behind', 'without a hero it all sits behind');
+  const times = model.content.cards.map((card) => card.time);
+  assert.ok(times.every((time, i) => i === 0 || time > times[i - 1]), 'cards pin in turn');
+  assert.ok(model.content.hero.time > times.at(-1), 'the hero lands last');
+  const ops = catalogFTimeline(model);
+  assert.equal(frameState(ops, model.content.hero.swipeAt + 0.4).get('scene-mark').scaleX, 1);
+  assert.throws(() => resolve('proof-wall', {items: [{text: 'Great tool'}, ...PROOF.slice(1)]}), /source.*is required/);
+  assert.throws(() => resolve('proof-wall', {items: PROOF, hero: {text: 'Loved it', highlight: 'hated', source: 'x'}}), /must be a part of params\.hero\.text/);
+});
+
+test('scrapbook: paper boils on threes, the presenter is a sticker, letters land above the head', () => {
+  const model = resolve('scrapbook', {word: '3x', sub: 'faster edits'});
+  assert.equal(model.layer, 'split');
+  assert.deepEqual(model.subjectStyle, {outline: 12, color: '#ffffff', shadow: true});
+  assert.ok(Math.abs(model.subjectCamera.samples.find((s) => s.t >= 2.6).scale - 0.82) < 0.02, 'the sticker settles smaller');
+  const ops = catalogFTimeline(model);
+  const shown = (t) => [0, 1, 2].filter((v) => frameState(ops, t).get(`scene-boil-${v}`).opacity === 1);
+  assert.equal(shown(2).length, 1, 'one variant at a time');
+  assert.notDeepEqual(shown(2), shown(2 + 0.1), 'the variants take turns');
+  const settledHeadTop = 960 + (560 - 960) * 0.82 + 960 * 0.18;
+  assert.ok(model.rect.y + model.rect.height <= settledHeadTop, 'the letters sit above where the head ends up');
+  assert.throws(() => resolve('scrapbook', {word: 'a b'}), /must be one word/);
 });

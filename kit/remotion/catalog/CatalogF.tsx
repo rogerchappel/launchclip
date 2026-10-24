@@ -17,3 +17,5 @@ const typed = (id: string): React.FC<{model: any}> => {
 
 export const GlassWord = typed('glass-word');
 export const OrbitCards = typed('orbit-cards');
+export const ProofWall = typed('proof-wall');
+export const Scrapbook = typed('scrapbook');
