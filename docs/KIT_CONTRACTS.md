@@ -1090,6 +1090,46 @@ behind scenes, `SubjectLayer` (`<OffthreadVideo transparent>` per clip in a
 wrapper moved by `subjectCameraAt`), then the front scenes. `ModuleReview`
 draws a behind module under its matte.
 
+### NLE export (`launchclip export`, `src/nle/`)
+
+`launchclip export` keeps the same stack as editor tracks, so an editor keeps
+text behind the head. Bottom to top:
+
+1. V1, the base footage (its trim segments).
+2. `Behind subject <track>`: behind scenes and the behind parts of split scenes.
+3. `Subject (presenter cut-out)`: the matte clips.
+4. `Overlays <track>` (and `Inserts`): every other scene and the front parts
+   of split scenes.
+5. Captions.
+
+- `overlayPlan(story)` gives a behind scene's clip `layer: "behind"` and turns
+  a split scene into two clips, `<id>-behind` and `<id>-front`, with `part`
+  set. `SceneOverlay` takes the `part` prop and renders only that part. With
+  any layered scene the plan also has `subject: {windows, scenes}`. Each scene
+  entry lists `animated`, the `subjectCamera`, `room` and `subjectStyle`
+  fields it sets.
+- The subject track is `subjectSegments(story, subject.windows)`: one clip for
+  each base segment ∩ matte range ∩ window. Each clip's in point is
+  `mediaStart`, so it shows the matte of the source frame the base shows,
+  across cuts. The mattes are VP9 alpha WebM, which editors don't read with
+  alpha. Export transcodes each matte it uses to ProRes 4444
+  (`yuva444p10le`), or to PNG frames with `--overlays png`, into
+  `media/subject/`, and reuses a copy while the matte is unchanged. libvpx-vp9
+  has to decode it, because ffmpeg's native VP9 decoder drops alpha.
+- Limits. The export carries the static layering only. A scene that sets
+  `subjectCamera`, `room` or `subjectStyle` gets a warning, and
+  `EXPORT.json` lists it under `subject.static`. To get those effects,
+  re-create them in the editor with keyframes or effects, or use the finished
+  render. The subject clips use the base's spatial conform, and base cameras
+  (punch-in) stay markers, as before. The EDL has one video track, so it
+  carries only V1, and the report notes that the depth is left out.
+  `--overlays none` exports no subject track.
+- A story with no layered scene (no `behind` or `split` layer, no
+  `subjectCamera`, `room` or `subjectStyle`) gets no subject plan. Its
+  exports are byte for byte the same as before.
+- `EXPORT.json` adds `subject: {mattes: [{src, status, file, frames?}],
+  track, clips, static}` when there is a subject plan.
+
 ### Face rule (`checkSubjectFace`, `src/layout_check.js`)
 
 With `{mattes}` that carry `info`, `headLocator(story, infos)` maps each
