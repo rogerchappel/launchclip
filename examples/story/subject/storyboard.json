@@ -1,0 +1,45 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Subject example: a word behind the presenter",
+  "lane": "footage-led",
+  "format": { "width": 1080, "height": 1920, "fps": 30, "duration": 6, "platform": "youtube-shorts" },
+  "brand": {
+    "colors": { "bg": "#06070d", "primary": "#fdb022", "accent": "#46d4ff", "ink": "#06070d", "paper": "#f2eee6" },
+    "fonts": { "display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono" }
+  },
+  "base": {
+    "src": "assets/recording.mp4",
+    "fit": "cover",
+    "volume": 0,
+    "subject": {
+      "mattes": [{ "src": "assets/subject/0.000-6.000.webm", "in": 0, "out": 6, "info": "assets/subject/0.000-6.000.json" }]
+    }
+  },
+  "scenes": [
+    {
+      "id": "word",
+      "module": "emphasis-caption",
+      "track": 1,
+      "layer": "behind",
+      "start": 0.5,
+      "end": 4.5,
+      "params": { "text": "FOCUS", "position": "upper" }
+    },
+    {
+      "id": "name",
+      "module": "lower-third",
+      "track": 2,
+      "start": 1,
+      "end": 5,
+      "params": { "name": "Ada Park", "title": "Founder, LaunchClip" }
+    },
+    {
+      "id": "push",
+      "module": "punch-in",
+      "track": 3,
+      "start": 2.6,
+      "end": 4.2,
+      "params": { "at": 0.3, "scale": 1.12 }
+    }
+  ]
+}
