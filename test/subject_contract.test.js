@@ -62,3 +62,13 @@ test('resolveStory fills an auto subject from the project mattes, never an expli
   const explicit = {src: 'assets/subject/x.webm', in: 1, out: 2};
   assert.deepEqual(resolveStory(story({base: {src: 'assets/recording.mp4', subject: {mattes: [explicit]}}}), {subject: [MATTE]}).base.subject.mattes, [explicit]);
 });
+
+test('mattes accept a plate, and explicit mattes take summaries from the loader', () => {
+  const plated = {...MATTE, plate: 'assets/subject/0.000-6.000.plate.jpg'};
+  assert.equal(errors(story({base: {src: 'assets/recording.mp4', subject: {mattes: [plated]}}})), '');
+  assert.match(errors(story({base: {src: 'assets/recording.mp4', subject: {mattes: [{...MATTE, plate: 'assets/p.gif'}]}}})), /plate must be the range's plate image/);
+  const summary = {framing: 'medium', head: {x: 0.5, y: 0.3, w: 0.2, h: 0.2}};
+  const resolved = resolveStory(story({base: {src: 'assets/recording.mp4', subject: {mattes: [plated]}}}), {subject: [{...plated, summary}]});
+  assert.deepEqual(resolved.base.subject.mattes[0].summary, summary);
+  assert.deepEqual(storyBase(resolved).subject.mattes[0].plate, plated.plate);
+});

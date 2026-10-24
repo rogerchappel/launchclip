@@ -4,7 +4,7 @@
 // cached matte and its subject.json to <dir>/assets/subject/<in>-<out>.{webm,json}
 // and records it in assets/subject/mattes.json:
 //   {schema: "launchclip.subject-mattes.v1",
-//    mattes: [{base: "assets/recording.mp4", src, in, out, info}]}
+//    mattes: [{base: "assets/recording.mp4", src, in, out, info, plate?}]}
 // Every reader of a story (readProjectStory, story commands, layout-check,
 // finish) passes the entries for its base to resolveStory as `subject`.
 
@@ -16,13 +16,28 @@ import { rangeDirName } from "./stage.js";
 export const MATTES_SCHEMA = "launchclip.subject-mattes.v1";
 export const MATTES_MANIFEST = "assets/subject/mattes.json";
 
-/** The project's mattes for this story's base when base.subject is "auto", else null. */
+/**
+ * The mattes resolveStory needs for this story's base: for "auto", the ones
+ * filed in the project; for explicit mattes, those. Each carries `summary`
+ * (framing, head, body, headroom, source size) read from its info file, so
+ * modules can place themselves around the presenter. Null for "off" or none.
+ */
 export async function readStorySubject(project, story) {
   const base = story?.base;
-  if (base === undefined || base === null || subjectMode(base) !== "auto") return null;
+  if (base === undefined || base === null) return null;
+  const mode = subjectMode(base);
+  if (mode === "off") return null;
   const src = typeof base === "string" ? base : base.src ?? base.source;
-  const manifest = await readManifest(project);
-  const entries = manifest.mattes.filter((entry) => entry.base === src).map(({ src: file, in: from, out, info }) => ({ src: file, in: from, out, ...(info ? { info } : {}) }));
+  const entries = mode === "mattes"
+    ? base.subject.mattes.map((matte) => ({ ...matte }))
+    : (await readManifest(project)).mattes.filter((entry) => entry.base === src).map(({ src: file, in: from, out, info, plate }) => ({ src: file, in: from, out, ...(info ? { info } : {}), ...(plate ? { plate } : {}) }));
+  for (const entry of entries) {
+    if (!entry.info || entry.summary) continue;
+    try {
+      const info = JSON.parse(await readFile(path.join(path.resolve(project), entry.info), "utf8"));
+      entry.summary = { source: { width: info.source.width, height: info.source.height }, framing: info.framing, head: info.head, body: info.body, headroom: info.headroom };
+    } catch { /* a missing info file only costs the summary; layout-check reports it */ }
+  }
   return entries.length ? entries : null;
 }
 
@@ -40,8 +55,10 @@ export async function fileProjectMatte(project, video, result) {
   const info = `assets/subject/${name}.json`;
   await mkdir(path.join(root, "assets/subject"), { recursive: true });
   await copyFile(result.matte, path.join(root, src));
-  await writeFile(path.join(root, info), `${JSON.stringify({ ...result.info, matte: `${name}.webm` })}\n`);
-  const entry = { base, src, in: result.info.range.in, out: result.info.range.out, info };
+  const plate = result.plate && result.info.plate ? `assets/subject/${name}.plate.jpg` : null;
+  if (plate) await copyFile(result.plate, path.join(root, plate));
+  await writeFile(path.join(root, info), `${JSON.stringify({ ...result.info, matte: `${name}.webm`, ...(plate ? { plate: `${name}.plate.jpg` } : {}) })}\n`);
+  const entry = { base, src, in: result.info.range.in, out: result.info.range.out, info, ...(plate ? { plate } : {}) };
   const manifest = await readManifest(root);
   const kept = manifest.mattes.filter((other) => other.base !== base || other.out <= entry.in || other.in >= entry.out);
   const mattes = [...kept, entry].sort((a, b) => a.base.localeCompare(b.base) || a.in - b.in);

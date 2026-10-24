@@ -140,6 +140,9 @@ export function validateSubjectInfo(info) {
   const range = info.range;
   if (!isObject(range) || !finite(range.in) || !finite(range.out) || range.in < 0 || range.out <= range.in) errors.push("range must be {in, out} source seconds with out > in");
   if (!nonEmpty(info.matte)) errors.push("matte must be the matte video's file name");
+  if (info.plate !== undefined && !nonEmpty(info.plate)) errors.push("plate must be the plate image's file name");
+  if (info.plate_size !== undefined && !(isObject(info.plate_size) && finite(info.plate_size.width) && info.plate_size.width > 0 && finite(info.plate_size.height) && info.plate_size.height > 0)) errors.push("plate_size must be {width, height} in pixels");
+  if (info.plate_seen !== undefined && !fraction(info.plate_seen)) errors.push("plate_seen must be between 0 and 1");
   if (info.matte_size !== undefined && !(isObject(info.matte_size) && finite(info.matte_size.width) && info.matte_size.width > 0 && finite(info.matte_size.height) && info.matte_size.height > 0)) errors.push("matte_size must be {width, height} in pixels");
   summaryErrors(info, "", errors);
   if (!Array.isArray(info.frames) || !info.frames.length) errors.push("frames must be a non-empty list");

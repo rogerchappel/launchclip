@@ -10,7 +10,8 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { SUBJECT_PROBE_SCHEMA, SUBJECT_SCHEMA, maskStats, summarizeSamples, validateSubjectInfo, validateSubjectProbe } from "../../kit/core/subject.mjs";
 import { probeMedia } from "../media_trim.js";
-import { openMatteWriter, readFrames, withAlpha } from "./frames.js";
+import { openMatteWriter, readFrames, withAlpha, writeImage } from "./frames.js";
+import { createPlateAccumulator } from "./plate.js";
 import { DEFAULT_PROBE_MODEL, DEFAULT_SUBJECT_MODEL, sha256File, subjectPipeline } from "./models.js";
 import { createSubjectSegmenter } from "./segment.js";
 
@@ -83,7 +84,8 @@ export async function runSubjectProbe(src, options = {}) {
 
 /**
  * Matte one source range. range: {in, out} source seconds.
- * → {info, dir, matte, subject, cached, seconds}
+ * → {info, dir, matte, plate, subject, cached, seconds}
+ * plate.jpg is the room without the presenter (src/subject/plate.js).
  */
 export async function runSubjectMatte(src, range, options = {}) {
   const modelId = options.model ?? DEFAULT_SUBJECT_MODEL;
@@ -93,9 +95,11 @@ export async function runSubjectMatte(src, range, options = {}) {
   const dir = path.join(subjectCacheEntry(source, modelId, options.cacheDir ?? defaultCacheDir()), "ranges", rangeDirName(checked));
   const matte = path.join(dir, "matte.webm");
   const subject = path.join(dir, "subject.json");
+  const plate = path.join(dir, "plate.jpg");
   if (!options.force) {
     const cached = await readValid(subject, validateSubjectInfo);
-    if (cached) return { info: cached, dir, matte, subject, cached: true, seconds: 0 };
+    // Ranges matted before plates existed are redone once.
+    if (cached?.plate) return { info: cached, dir, matte, plate, subject, cached: true, seconds: 0 };
   }
   await mkdir(dir, { recursive: true });
   const began = Date.now();
@@ -106,11 +110,13 @@ export async function runSubjectMatte(src, range, options = {}) {
   const partial = path.join(dir, "matte.partial.webm");
   const writer = openMatteWriter(partial, { width, height, fps, ffmpeg: options.ffmpeg });
   const frames = [];
+  const room = createPlateAccumulator(width, height);
   try {
     let index = 0;
     for await (const frame of readFrames(src, { start: checked.in, duration: checked.out - checked.in, width, height, ffmpeg: options.ffmpeg })) {
       const alpha = await segmenter.segment(frame, width, height);
       await writer.write(withAlpha(frame, alpha));
+      room.add(frame, alpha);
       frames.push({ t: round(checked.in + index / fps, 4), ...maskStats(downscale(alpha, width, height, stats), stats.width, stats.height) });
       index += 1;
       options.onFrame?.(index);
@@ -125,9 +131,12 @@ export async function runSubjectMatte(src, range, options = {}) {
   }
   if (!frames.length) throw new Error(`No frames decoded from ${src} between ${checked.in} and ${checked.out} s`);
   await rename(partial, matte);
-  const info = { schema: SUBJECT_SCHEMA, source, model: modelId, range: checked, matte: "matte.webm", matte_size: { width, height }, ...summarizeSamples(frames), frames };
+  const still = room.finish();
+  await writeImage(plate, still.rgb, { width: still.width, height: still.height, ffmpeg: options.ffmpeg });
+  const info = { schema: SUBJECT_SCHEMA, source, model: modelId, range: checked, matte: "matte.webm", matte_size: { width, height },
+    plate: "plate.jpg", plate_size: { width: still.width, height: still.height }, plate_seen: still.seen, ...summarizeSamples(frames), frames };
   await writeChecked(subject, info, validateSubjectInfo);
-  return { info, dir, matte, subject, cached: false, seconds: round((Date.now() - began) / 1000, 2) };
+  return { info, dir, matte, plate, subject, cached: false, seconds: round((Date.now() - began) / 1000, 2) };
 }
 
 /** Parse "4-10.5" or "4:10.5" into {in, out}. */
