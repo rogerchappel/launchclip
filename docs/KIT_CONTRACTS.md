@@ -1016,6 +1016,17 @@ rejects bad values):
   lists subject modules only for a footage-led story with a usable probe,
   and `suggestModuleMoods(artDirection)` favours modules by mood.
 
+### Footage checklist
+
+In a footage-led story whose covering matte has a summary (`placement:
+"measured"`), a `checklist` without `params.rect` is placed beside the
+presenter: above the head when the safe zone has room, else on the chest
+above the caption band. It keeps its derived layout and shrinks to fit, but
+never below the scale where its body and secondary text meet the profile's
+minimums. `model.subjectPlacement` is `"above-head"`, `"chest"`, or `"none"`
+(no room: the derived rect stays, and layout-check's face rule reports any
+clash). Stories without a measured subject are unchanged.
+
 ### What modules know (`subjectContext`)
 
 `resolveModule` passes `ctx.subject = subjectContext(story, scene.start)`:

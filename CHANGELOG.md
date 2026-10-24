@@ -50,6 +50,8 @@
   - `pull-back`: the video shrinks into an app window while real steps tick
     off and a counter reaches 100%.
 - layout-check's face rule follows punch-ins and pans.
+- Checklists in footage place themselves beside you (above your head, or on
+  your chest when there's no headroom), at a size that stays readable.
 - `growth-line`: a line chart draws behind your head and kicks up into a
   glowing spike with a label, for "it doubled" moments (real figures need
   a source).
