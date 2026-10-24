@@ -1,0 +1,5 @@
+{
+  "project": "examples/story/subject-creative",
+  "sceneId": "proof",
+  "threshold": { "ssim": 0.97 }
+}
