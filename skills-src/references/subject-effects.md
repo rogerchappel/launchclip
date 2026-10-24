@@ -45,6 +45,8 @@ Both renderers stack the base recording, behind scenes, the cut-out presenter, f
 | growth-line | behind | yes | 9:16, 16:9 | bold, launch, editorial | gives a growth result ("doubled", "took off in week three"): a line kicks up behind their head |
 | glass-word | behind | yes | 9:16, 16:9 | premium, cinematic | names the one idea or the brand in a premium or tech piece: one glass word on the wall behind their head |
 | orbit-cards | split | yes | 9:16, 16:9 | bold, playful | lists many things or shows social proof ("all these tools", "people keep telling me"), with real items in the assets or brief: cards circle them |
+| proof-wall | split | yes | 9:16, 16:9 | bold, editorial, launch | "everyone is talking about it", press, reviews or a launch buzz, with real quotes and sources in the brief: proof pins to the wall behind them |
+| scrapbook | split | yes | 9:16, 16:9 | playful | calls out a number or claim in a playful, handmade beat ("100%", "3X", "$0", "free") |
 
 ### masthead (keeps captions, behind the presenter, needs the subject)
 Footage-led, behind the presenter: one huge word (a product name or the one idea) rises in letter by letter at the top of the frame, and the presenter's head covers its lower part like a magazine cover. Needs headroom: medium or wide shots.
@@ -145,6 +147,23 @@ params:
 - speed: degrees per second (8–60, default 26)
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: orbit
+
+### proof-wall (keeps captions, needs the subject)
+Footage-led, around the presenter: real proof pins itself to the wall behind them a card every few frames (quotes and headlines with their source, screenshots), then an optional hero card lands in front, on their chest, with a highlighter swipe on its key word. For "everyone is talking about it" or press and reviews. Never invent items.
+params:
+- items: [{text? ≤ 70 with source ≤ 32, image?: assets/ image, source?}] 3–8, each real
+- hero: {text ≤ 48, highlight (a part of text), source} (optional)
+- every: seconds between cards (0.05–0.4, default 0.1)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: pin, hero
+
+### scrapbook (keeps captions, needs the subject)
+Footage-led, playful: paper and boiling crayon scribbles replace the room, the presenter slaps in as a paper sticker with a white border, and ransom-note letters land above their head with a marker ring and an optional line under them. For a number or claim ("100%", "3X", "$0", "FREE") in a handmade, creator-diary beat.
+params:
+- word: one word, number or claim ≤ 8 chars
+- sub: a short line under it ≤ 20 (optional)
+- at: seconds from scene start (optional; else a matching hit, else a default)
+events: slap, letter-<i>
 
 ### punch-in (keeps captions)
 Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay). Steps punch in, further in or back out on successive words; blur adds a few frames of zoom blur on each move.

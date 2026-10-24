@@ -1044,6 +1044,10 @@ presenter always covered filled by a push-pull pyramid (`src/subject/plate.js`).
 Mattes may name it as `plate`; filed mattes carry it.
 - `framesFace`: the module frames the face on purpose; layout-check's face
   rule skips it.
+- `subjectStyle`: `{outline? (0–24 px), color? (#rrggbb), shadow?}` for the
+  scene window: eight zero-blur drop-shadows round the matte's alpha make a
+  solid outline, plus an optional soft shadow (`subjectFilterAt`,
+  `subjectFilterChanges`). A blurred subject camera sample carries it.
 
 ### Compositing
 
@@ -1137,6 +1141,8 @@ packs can prefer or avoid it.
 | Module | Layer | Needs the subject | Params | Events | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `glass-word` | behind | yes | `word` ≤ 10, `tint` clear/primary/accent, `turn` −35–35°, `sweep`, `at` | `reveal`, `sweep` | Centred on the head. Static CSS perspective on a wrapper; the face is near-clear with bright rims (nothing glows behind the glyphs, since a clear face shows it); the sweep is a clipped band moving one way while its text copy moves the other |
+| `proof-wall` | behind (split with a hero) | yes | `items` 3–8 `{text? ≤ 70 + source, image?, source?}` (real; quotes need a source), `hero` `{text ≤ 48, highlight, source}`, `every` 0.05–0.4 s, `at` | `pin`, `hero` | Cards on a jittered grid behind the head; the hero lands in front on the chest; its highlighter is a span round the word (z-index −1 in the card's stacking context), so each renderer's text layout places it |
+| `scrapbook` | split | yes | `word` ≤ 8 (one word, number or claim), `sub` ≤ 20, `at` | `slap`, `letter-<i>` | Paper and scribbles behind (three jittered variants take turns every third frame); `subjectStyle` outline and shadow; `subjectCamera` slaps to 1.12 and settles at 0.82; letters on alternating chips above where the head settles, with a marker ring |
 | `orbit-cards` | split | yes | `items` 3–6 `{image?, text? ≤ 40}` (real, supplied), `speed` 8–60 °/s, `at` | `orbit` | A tilted ring round the chest, kept above the caption band; each card is drawn in both parts and per-frame sets show it only in the part for its side of the ring (near cards larger) |
 
 

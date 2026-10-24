@@ -82,7 +82,9 @@ The detailed list follows.
 - A creative set for bolder styles: `glass-word` (one clear glass word on
   the wall behind your head, with a light sweep) and `orbit-cards` (your
   real screenshots, posts or quotes circling you, passing behind and in
-  front).
+  front), `proof-wall` (your real quotes and screenshots pin to the wall
+  behind you, then a hero quote lands with a highlighter) and `scrapbook`
+  (paper, boiling scribbles, you as a sticker, ransom-note letters).
 - Checklists in footage place themselves beside you (above your head, or on
   your chest when there's no headroom), at a size that stays readable.
 - `growth-line`: a line chart draws behind your head and kicks up into a
