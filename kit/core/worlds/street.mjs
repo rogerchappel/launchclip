@@ -1,4 +1,5 @@
-// Street worlds: city street. A side-on street: sky and a distant skyline at the back, facades
+// Street worlds: city street, shopfronts, crossing, alley, rooftop and
+// skyline. A side-on street: sky and a distant skyline at the back, facades
 // along the pavement in the middle, the road and kerb-side furniture in
 // front. Night lights the windows, shop glass, street lamps and neon; dusk
 // rakes warm light across the facades.
@@ -208,6 +209,332 @@ const cityStreet = {
   }
 };
 
+const shopfronts = {
+  group: 'street', label: 'Shopfronts',
+  describe: 'a row of shopfronts up close: striped awnings, glowing windows, sign boards and neon shapes, with a sandwich board and planters',
+  geo(k) {
+    const g = street(k, {base: 0.76});
+    g.quiet = quietTop(k, k.portrait ? 0.14 : 0.16, [mixColor(k.pal.brick, k.pal.g('#c9b79c'), 0.5), k.pal.g('#c9b79c')]);
+    return g;
+  },
+  back(k, g) {
+    const {pal} = k;
+    const {x0, w} = span(k);
+    return [k.p.rect(x0, -2, w, g.baseY, pal.g('#b9a993'), {stroke: false})];
+  },
+  mid(k, g) {
+    const {W, H, u, pal} = k;
+    const {x0, x1} = span(k);
+    const colors = facadeColors(k);
+    const out = [];
+    const sw = (k.portrait ? 0.56 : 0.36) * W;
+    let x = x0, i = 0;
+    while (x < x1) {
+      out.push(facade(k, x, sw, g.baseY, H * 1.2, {color: colors[(i * 2 + 1) % colors.length], ground: 'shop', awning: [pal.primary, pal.accent, pal.primaryShade][i % 3], sign: i % 2 ? 'neon' : 'board', floors: 1}));
+      x += sw; i++;
+    }
+    out.push(pavementRoad(k, g));
+    return out;
+  },
+  front(k, g) {
+    const {W, u, p, pal} = k;
+    const out = [];
+    // Sandwich board and planters.
+    const bx = W * (k.portrait ? 0.78 : 0.62), by = g.groundY + 20 * u;
+    out.push(p.shadow(bx, by, 60 * u, 8 * u));
+    out.push(p.poly([[bx - 50 * u, by], [bx - 26 * u, by - 150 * u], [bx + 26 * u, by - 150 * u], [bx + 50 * u, by]], pal.ink, {}));
+    out.push(p.poly([[bx - 40 * u, by - 14 * u], [bx - 22 * u, by - 138 * u], [bx + 22 * u, by - 138 * u], [bx + 40 * u, by - 14 * u]], menuBoard(k), {}));
+    for (let i = 0; i < 3; i++) out.push(p.line(bx - 20 * u, by - (110 - i * 30) * u, bx + 18 * u, by - (110 - i * 30) * u, '#f4f0e6', 3, {opacity: 0.7}));
+    for (const fx of k.portrait ? [0.12] : [0.1, 0.9]) {
+      const px = W * fx;
+      out.push(p.rect(px - 70 * u, g.groundY - 60 * u, 140 * u, 70 * u, pal.woodShade, {rx: 4 * u}));
+      out.push(tree(k, px, g.groundY - 56 * u, 150 * u, {kind: 'bush'}));
+    }
+    out.push(lampPost(k, W * (k.portrait ? 0.4 : 0.38), g.kerbY + 4 * u, 3.6 * (k.ppm * STREET_SCALE)));
+    return out;
+  }
+};
+
+const menuBoard = k => k.pal.g('#2a2e33');
+
+const crossing = {
+  group: 'street', label: 'Crossing',
+  describe: 'a pedestrian crossing: zebra stripes across the road, a traffic light, a crossing signal, buildings behind and cars waiting',
+  geo(k) {
+    const g = street(k, {base: 0.64});
+    g.quiet = quietTop(k, k.portrait ? 0.14 : 0.2, [k.pal.skyTop, k.pal.skyMid]);
+    return g;
+  },
+  back(k, g) {
+    const {pal, u} = k;
+    return [
+      sky(k, g.baseY - 160 * u, {}),
+      skyline(k, g.baseY - 40 * u, {minH: k.H * 0.16, maxH: k.H * 0.36, color: pal.farther, windows: 0.4}),
+      haze(k, g.baseY - k.H * 0.4, g.baseY, {alpha: 0.7})
+    ];
+  },
+  mid(k, g) {
+    const {u, H, pal} = k;
+    const {x0, x1} = span(k);
+    const colors = facadeColors(k);
+    const out = [];
+    let x = x0, i = 0;
+    while (x < x1) {
+      const w = 300 * u * (0.9 + 0.4 * ((i * 41) % 10) / 10);
+      out.push(facade(k, x, w, g.baseY, H * 0.3 + ((i * 29) % 5) * 30 * u, {color: colors[(i + 2) % colors.length], ground: i % 2 ? 'shop' : 'lobby', awning: i % 4 === 1 ? pal.primary : pal.accent, sign: null, glass: i % 3 === 0}));
+      x += w; i++;
+    }
+    out.push(pavementRoad(k, g, {crossing: true}));
+    return out;
+  },
+  front(k, g) {
+    const {W, H, u, p, pal} = k;
+    const out = [];
+    // Zebra stripes: wide bars across the road, in perspective.
+    const top = g.kerbY + 20 * u, bottom = H;
+    const n = 7;
+    for (let i = 0; i < n; i++) {
+      const cx = W * 0.5 + (i - (n - 1) / 2) * 110 * u;
+      const spread = 1.7;
+      out.push(p.poly([[cx - 34 * u, top], [cx + 34 * u, top], [W * 0.5 + (cx + 34 * u - W * 0.5) * spread, bottom], [W * 0.5 + (cx - 34 * u - W * 0.5) * spread, bottom]], pal.line, {opacity: 0.95}));
+    }
+    // Traffic light and crossing signal.
+    const tx = W * (k.portrait ? 0.86 : 0.8), ty = g.kerbY - 3.4 * (k.ppm * STREET_SCALE);
+    out.push(p.rect(tx - 7 * u, ty, 14 * u, g.kerbY - ty, pal.ink, {}));
+    out.push(p.rect(tx - 34 * u, ty - 20 * u, 68 * u, 190 * u, pal.ink, {rx: 12 * u}));
+    const lights = [['#ff4a3c', false], ['#ffc23c', false], ['#3cf07c', true]];
+    lights.forEach(([c, on], i) => {
+      const ly = ty + 18 * u + i * 56 * u;
+      if (on) out.push(p.glow(tx, ly, 90 * u, c, k.time === 'day' ? 0.25 : 0.55));
+      out.push(p.circle(tx, ly, 20 * u, on ? c : mixColor('#000000', c, 0.65), {glow: on}));
+    });
+    const sx = W * (k.portrait ? 0.14 : 0.2), sy = g.kerbY - 2.4 * (k.ppm * STREET_SCALE);
+    out.push(p.rect(sx - 6 * u, sy, 12 * u, g.kerbY - sy, pal.ink, {}));
+    out.push(p.rect(sx - 30 * u, sy - 10 * u, 60 * u, 80 * u, pal.ink, {rx: 8 * u}));
+    out.push(p.glow(sx, sy + 30 * u, 60 * u, '#ffffff', k.time === 'day' ? 0.15 : 0.4));
+    // A walking figure glyph in the signal (simple strokes).
+    out.push(p.circle(sx, sy + 10 * u, 6 * u, '#e9fff1', {glow: true}));
+    out.push(p.stroke(`M${f(sx)} ${f(sy + 18 * u)}L${f(sx - 2 * u)} ${f(sy + 40 * u)}M${f(sx - 2 * u)} ${f(sy + 40 * u)}L${f(sx - 12 * u)} ${f(sy + 58 * u)}M${f(sx - 2 * u)} ${f(sy + 40 * u)}L${f(sx + 10 * u)} ${f(sy + 58 * u)}M${f(sx - 12 * u)} ${f(sy + 30 * u)}L${f(sx + 12 * u)} ${f(sy + 26 * u)}`, '#e9fff1', 4, {glow: true}));
+    if (!k.portrait) out.push(car(k, -k.ov * 0.5, g.anchors.road.y, 3.6 * (k.ppm * STREET_SCALE) * 1.1, {color: pal.primary, facing: 1}));
+    out.push(car(k, W * (k.portrait ? 0.7 : 0.86), g.anchors.road.y + 10 * u, 3.6 * (k.ppm * STREET_SCALE) * 1.1, {color: pal.g('#d8dde4'), facing: -1}));
+    return out;
+  }
+};
+
+const alley = {
+  group: 'street', label: 'Alley',
+  describe: 'a narrow back alley: brick walls closing in, fire escapes, string lights, a dumpster, wet ground and a glowing sign at the end',
+  light: {night: {color: '#ff9ad6', intensity: 0.45}},
+  geo(k) {
+    const {W, H, u} = k;
+    const ppm = k.ppm * STREET_SCALE;
+    const groundY = Math.round(H * 0.86);
+    const g = {groundY, vanishY: H * 0.6, anchors: {ground: {y: groundY, x0: W * 0.22, x1: W * 0.78, ppm}}};
+    g.quiet = {x: Math.round(W * 0.3), y: Math.round(H * 0.06), width: Math.round(W * 0.4), height: Math.round(H * (k.portrait ? 0.14 : 0.18)), under: [k.pal.skyTop, k.pal.skyMid]};
+    void u;
+    return g;
+  },
+  back(k, g) {
+    const {W, H, u, p, pal} = k;
+    const out = [sky(k, g.vanishY, {clouds: false})];
+    // The far end: a lit building face.
+    const ex = W * 0.38, ew = W * 0.24, ey = H * 0.28;
+    const endC = mixColor('#000000', pal.brick, 0.25);
+    out.push(p.rect(ex, ey, ew, g.vanishY + 40 * u - ey, endC, {}));
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) {
+      const lit = k.time === 'night' ? p.rnd() < 0.6 : k.time === 'dusk' && p.rnd() < 0.3;
+      out.push(p.rect(ex + 20 * u + c * ew / 3, ey + 24 * u + r * 56 * u, ew / 3 - 40 * u, 36 * u, lit ? pal.lit : mixColor('#000000', endC, 0.3), {glow: lit, stroke: false}));
+    }
+    out.push(neonTube(k, `M${f(W * 0.44)} ${f(H * 0.53)}H${f(W * 0.55)}M${f(W * 0.52)} ${f(H * 0.5)}L${f(W * 0.555)} ${f(H * 0.53)}L${f(W * 0.52)} ${f(H * 0.56)}`, pal.neonB, 6));
+    out.push(neonTube(k, `M${f(W * 0.45)} ${f(H * 0.47)}A${f(16 * u)} ${f(16 * u)} 0 1 1 ${f(W * 0.45 + 0.1)} ${f(H * 0.47 + 0.1)}`, pal.neonA, 5));
+    if (k.time !== 'day') out.push(p.glow(W * 0.5, H * 0.53, 260 * u, pal.neonB, 0.3));
+    out.push(haze(k, H * 0.35, g.vanishY + 60 * u, {alpha: 1.3}));
+    return out;
+  },
+  mid(k, g) {
+    const {W, H, u, p, pal} = k;
+    const out = [];
+    // Ground: wet tarmac running to the end.
+    out.push(p.poly([[W * 0.38, g.vanishY + 40 * u], [W * 0.62, g.vanishY + 40 * u], [W + k.ov, H], [-k.ov, H]], p.lin([[0, mixColor('#000000', pal.asphalt, 0.2)], [1, pal.asphalt]], 0, g.vanishY, 0, H), {stroke: false}));
+    if (k.d.n >= 1) out.push(p.ellipse(W * 0.5, H * 0.92, W * 0.16, 18 * u, k.time === 'day' ? pal.skyMid : pal.neonB, {opacity: k.time === 'day' ? 0.35 : 0.35, glow: k.time !== 'day'}));
+    // Walls closing in on both sides.
+    for (const side of [-1, 1]) {
+      const near = side < 0 ? -k.ov : W + k.ov, far = side < 0 ? W * 0.38 : W * 0.62;
+      const wallC = side < 0 ? pal.brick : mixColor('#000000', pal.brick, 0.15);
+      out.push(p.poly([[near, -2], [far, H * 0.24], [far, g.vanishY + 40 * u], [near, H + 2]], wallC, {}));
+      if (k.d.n >= 1 || k.d.outline) for (let i = 1; i < 14; i++) {
+        const t = i / 14;
+        out.push(p.line(near, -2 + (H + 4) * t, far, H * 0.24 + (g.vanishY + 40 * u - H * 0.24) * t, mixColor('#000000', wallC, 0.3), 1.4, {opacity: 0.6}));
+      }
+      // Windows and a fire escape on each wall.
+      for (const t of [0.25, 0.55]) {
+        const xA = near + (far - near) * t, xB = near + (far - near) * (t + 0.14);
+        const topA = -2 + (H * 0.24 + 2) * t + H * 0.12 * (1 - t), topB = -2 + (H * 0.24 + 2) * (t + 0.14) + H * 0.12 * (1 - t - 0.14);
+        const hA = H * 0.2 * (1 - t * 0.6), hB = H * 0.2 * (1 - (t + 0.14) * 0.6);
+        const lit = k.time !== 'day' && p.rnd() < 0.7;
+        out.push(p.poly([[xA, topA], [xB, topB], [xB, topB + hB], [xA, topA + hA]], lit ? pal.lit : mixColor('#000000', wallC, 0.4), {glow: lit}));
+        const fy = topA + hA + 12 * u, fyB = topB + hB + 12 * u;
+        out.push(p.poly([[xA - side * 10 * u, fy], [xB - side * 10 * u, fyB], [xB + side * 30 * u, fyB + 10 * u], [xA + side * 50 * u, fy + 14 * u]], null, {stroke: pal.ink, sw: 2}));
+        out.push(p.line(xA, fy, xB, fyB, pal.ink, 4));
+        for (let s = 0; s <= 4; s++) out.push(p.line(xA + (xB - xA) * s / 4, fy + (fyB - fy) * s / 4, xA + (xB - xA) * s / 4, fy + (fyB - fy) * s / 4 - 40 * u, pal.ink, 2));
+      }
+    }
+    // String lights across the alley.
+    for (const [ly, sag] of [[0.14, 0.08], [0.26, 0.05]]) {
+      const y0 = H * ly, x0 = W * 0.08 + W * ly * 0.4, x1 = W * 0.92 - W * ly * 0.4;
+      out.push(p.stroke(`M${f(x0)} ${f(y0)}Q${f(W / 2)} ${f(y0 + H * sag * 2)} ${f(x1)} ${f(y0)}`, pal.ink, 2));
+      for (let i = 1; i < 12; i++) {
+        const t = i / 12, bx = (1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * (W / 2) + t * t * x1, by = (1 - t) * (1 - t) * y0 + 2 * (1 - t) * t * (y0 + H * sag * 2) + t * t * y0;
+        const on = k.time !== 'day';
+        if (on) out.push(p.glow(bx, by + 6 * u, 26 * u, pal.lampWarm, 0.6));
+        out.push(p.circle(bx, by + 6 * u, 5 * u, on ? pal.lamp : pal.cream, {glow: on}));
+      }
+    }
+    return out;
+  },
+  front(k, g) {
+    const {W, u, p, pal} = k;
+    const x = W * (k.portrait ? 0.62 : 0.72), w = 1.6 * (k.ppm * STREET_SCALE), h = 1.1 * (k.ppm * STREET_SCALE);
+    return [
+      p.shadow(x + w / 2, g.groundY, w * 0.6, 12 * u),
+      p.rect(x, g.groundY - h, w, h, pal.g('#3e6b55'), {rx: 4 * u}),
+      p.rect(x - 8 * u, g.groundY - h - 16 * u, w + 16 * u, 20 * u, pal.g('#2f5442'), {rx: 4 * u}),
+      p.line(x + w * 0.25, g.groundY - h * 0.6, x + w * 0.75, g.groundY - h * 0.6, pal.g('#2f5442'), 6),
+      ...[0.15, 0.85].map(t => p.circle(x + w * t, g.groundY, 12 * u, pal.black, {})),
+      p.shade(x, g.groundY - h, w, h, 'right', 0.3)
+    ];
+  },
+  fx(k) {
+    return k.time === 'night' ? [] : rays(k, k.W * 0.5, 0, {angle: 95, spread: 20, count: 3, alpha: 0.1});
+  }
+};
+
+const rooftop = {
+  group: 'street', label: 'Rooftop',
+  describe: 'a city rooftop: a parapet and gravel deck, a water tower and vents, string lights, and the skyline under a big sky',
+  geo(k) {
+    const {W, H, portrait} = k;
+  const ppm = k.ppm * STREET_SCALE;
+    const deckY = Math.round(H * (portrait ? 0.7 : 0.66));
+    const groundY = Math.round(H * (portrait ? 0.82 : 0.8));
+    const g = {deckY, groundY, anchors: {ground: {y: groundY, x0: W * 0.04, x1: W * 0.96, ppm}, parapet: {y: Math.round(H * 0.9), x0: W * 0.04, x1: W * 0.96, ppm, layer: 'front'}}};
+    g.quiet = quietTop(k, portrait ? 0.2 : 0.24, [k.pal.skyTop, k.pal.skyMid]);
+    return g;
+  },
+  back(k, g) {
+    const {pal, u} = k;
+    return [
+      sky(k, g.deckY - 40 * u, {}),
+      skyline(k, g.deckY + 10 * u, {minH: k.H * 0.12, maxH: k.H * 0.3, color: pal.farther, windows: 0.5, minW: 50, maxW: 120}),
+      haze(k, g.deckY - k.H * 0.3, g.deckY, {alpha: 0.6}),
+      skyline(k, g.deckY + 10 * u, {minH: k.H * 0.06, maxH: k.H * 0.18, color: pal.far, windows: 0.6, minW: 80, maxW: 180})
+    ];
+  },
+  mid(k, g) {
+    const {W, H, u, p, pal} = k;
+    const {x0, w} = span(k);
+    const out = [p.rect(x0, g.deckY, w, H - g.deckY, p.lin([[0, mixColor('#000000', pal.concrete, 0.25)], [1, pal.concrete]], 0, g.deckY, 0, H), {stroke: false})];
+    if (k.d.n >= 1) for (let i = 0; i < 120; i++) out.push(p.circle(x0 + p.rnd() * w, g.deckY + p.rnd() * (H - g.deckY), p.rnd(1, 2.4) * u, pal.concreteShade, {stroke: false, opacity: 0.6}));
+    // Water tower.
+    const tx = W * (k.portrait ? 0.78 : 0.82), tb = g.deckY + 10 * u, th = 2.6 * (k.ppm * STREET_SCALE) * 0.8, tw = 1.5 * (k.ppm * STREET_SCALE) * 0.8;
+    for (const lx of [-0.4, -0.1, 0.2, 0.4]) out.push(p.line(tx + tw * lx, tb, tx + tw * lx * 0.8, tb - th * 0.45, pal.woodShade, 6));
+    out.push(p.line(tx - tw * 0.4, tb - th * 0.2, tx + tw * 0.4, tb - th * 0.3, pal.woodShade, 4));
+    out.push(p.rect(tx - tw / 2, tb - th, tw, th * 0.56, pal.wood, {rx: 6 * u}));
+    for (let i = 1; i < 4; i++) out.push(p.line(tx - tw / 2, tb - th + th * 0.56 * i / 4, tx + tw / 2, tb - th + th * 0.56 * i / 4, pal.woodShade, 3));
+    out.push(p.poly([[tx - tw * 0.58, tb - th], [tx + tw * 0.58, tb - th], [tx, tb - th - tw * 0.4]], pal.metalShade, {}));
+    out.push(p.shade(tx - tw / 2, tb - th, tw, th * 0.56, 'right', 0.3));
+    // Vents and an AC unit.
+    const ax = W * (k.portrait ? 0.08 : 0.08);
+    out.push(p.rect(ax, g.deckY - 60 * u, 200 * u, 110 * u, pal.metal, {rx: 6 * u}));
+    out.push(p.circle(ax + 60 * u, g.deckY - 6 * u, 36 * u, pal.metalShade, {}));
+    for (let i = 0; i < 5; i++) out.push(p.line(ax + 120 * u, g.deckY - 40 * u + i * 16 * u, ax + 180 * u, g.deckY - 40 * u + i * 16 * u, pal.metalShade, 3));
+    // String lights between poles.
+    const p0 = W * 0.06, p1 = W * 0.94, py = H * (k.portrait ? 0.46 : 0.36);
+    for (const px of [p0, p1]) out.push(p.line(px, py, px, g.groundY, pal.ink, 5));
+    out.push(p.stroke(`M${f(p0)} ${f(py)}Q${f(W / 2)} ${f(py + 130 * u)} ${f(p1)} ${f(py)}`, pal.ink, 2));
+    for (let i = 1; i < 16; i++) {
+      const t = i / 16, bx = (1 - t) * (1 - t) * p0 + 2 * (1 - t) * t * W / 2 + t * t * p1, by = (1 - t) * (1 - t) * py + 2 * (1 - t) * t * (py + 130 * u) + t * t * py;
+      const on = k.time !== 'day';
+      if (on) out.push(p.glow(bx, by + 8 * u, 34 * u, pal.lampWarm, 0.6));
+      out.push(p.circle(bx, by + 8 * u, 6 * u, on ? pal.lamp : pal.cream, {glow: on}));
+    }
+    return out;
+  },
+  front(k, g) {
+    const {W, H, u, p, pal} = k;
+    const {x0, w} = span(k);
+    const py = g.anchors.parapet.y;
+    const out = [p.rect(x0, py, w, H - py + 4, mixColor('#000000', pal.brick, 0.1), {})];
+    out.push(p.rect(x0, py - 14 * u, w, 18 * u, pal.concrete, {}));
+    // Planters with plants on the parapet.
+    for (const fx of k.portrait ? [0.85] : [0.12, 0.88]) {
+      out.push(p.rect(W * fx - 80 * u, py - 60 * u, 160 * u, 50 * u, pal.woodShade, {rx: 4 * u}));
+      out.push(tree(k, W * fx, py - 58 * u, 120 * u, {kind: 'bush'}));
+    }
+    return out;
+  }
+};
+
+const skylineWorld = {
+  group: 'street', label: 'Skyline',
+  describe: 'a panoramic city skyline in three depths over a river, with reflections, a bridge and a big open sky',
+  geo(k) {
+    const {W, H, portrait} = k;
+  const ppm = k.ppm * STREET_SCALE;
+    const waterY = Math.round(H * (portrait ? 0.66 : 0.68));
+    const groundY = Math.round(H * (portrait ? 0.9 : 0.9));
+    const g = {waterY, groundY, anchors: {ground: {y: groundY, x0: W * 0.04, x1: W * 0.96, ppm}}};
+    g.quiet = quietTop(k, portrait ? 0.22 : 0.26, [k.pal.skyTop, k.pal.skyMid]);
+    return g;
+  },
+  back(k, g) {
+    const {pal, u, H} = k;
+    return [
+      sky(k, g.waterY, {}),
+      skyline(k, g.waterY, {minH: H * 0.18, maxH: H * 0.4, color: pal.farther, windows: 0.5, minW: 50, maxW: 110}),
+      haze(k, g.waterY - H * 0.36, g.waterY, {alpha: 0.8}),
+      skyline(k, g.waterY, {minH: H * 0.12, maxH: H * 0.3, color: pal.far, windows: 0.7, minW: 70, maxW: 150, gap: 10}),
+      void u
+    ];
+  },
+  mid(k, g) {
+    const {W, H, u, p, pal, time} = k;
+    const {x0, w} = span(k);
+    const water = time === 'night' ? '#0b1430' : time === 'dusk' ? mixColor('#7a3f5e', pal.skyLow, 0.5) : mixColor(pal.water, pal.skyLow, 0.6);
+    const out = [p.rect(x0, g.waterY, w, H - g.waterY, p.lin([[0, mixColor('#ffffff', water, 0.08)], [1, mixColor('#000000', water, 0.3)]], 0, g.waterY, 0, H), {stroke: false})];
+    // Reflections: broken streaks of light under the skyline.
+    const streak = time === 'day' ? '#ffffff' : pal.lit;
+    for (let i = 0; i < 60; i++) {
+      const y = g.waterY + p.rnd(0.03, 0.5) * (H - g.waterY);
+      out.push(p.rect(x0 + p.rnd() * w, y, p.rnd(20, 70) * u, 3 * u, streak, {glow: time !== 'day', stroke: false, opacity: p.rnd(0.2, time === 'day' ? 0.35 : 0.8)}));
+    }
+    if (time !== 'day') {
+      const b = skyBody(k, g.waterY);
+      out.push(p.rect(b.x - 30 * u, g.waterY + 10 * u, 60 * u, (H - g.waterY) * 0.6, p.lin([[0, time === 'dusk' ? '#ffcf8a' : '#e8eeff', 0.5], [1, '#ffffff', 0]], 0, g.waterY, 0, H, {force: true, glow: true}), {glow: true, blend: 'screen'}));
+    }
+    // A suspension bridge.
+    const by = g.waterY - 30 * u, bx0 = W * (k.portrait ? -0.1 : 0.04), bx1 = W * (k.portrait ? 1.1 : 0.62);
+    const c = mixColor('#000000', pal.far, 0.3);
+    out.push(p.rect(bx0, by, bx1 - bx0, 14 * u, c, {}));
+    for (const t of [0.25, 0.75]) {
+      const tx = bx0 + (bx1 - bx0) * t;
+      out.push(p.rect(tx - 10 * u, by - 200 * u, 20 * u, 240 * u, c, {}));
+    }
+    const t1 = bx0 + (bx1 - bx0) * 0.25, t2 = bx0 + (bx1 - bx0) * 0.75;
+    out.push(p.stroke(`M${f(bx0)} ${f(by - 40 * u)}Q${f((bx0 + t1) / 2)} ${f(by - 60 * u)} ${f(t1)} ${f(by - 200 * u)}Q${f((t1 + t2) / 2)} ${f(by + 30 * u)} ${f(t2)} ${f(by - 200 * u)}Q${f((t2 + bx1) / 2)} ${f(by - 60 * u)} ${f(bx1)} ${f(by - 40 * u)}`, c, 4));
+    if (time !== 'day') for (let i = 0; i < 18; i++) out.push(p.circle(bx0 + (bx1 - bx0) * i / 17, by - 4 * u, 3 * u, pal.lamp, {glow: true}));
+    // The near embankment where people stand.
+    out.push(p.rect(x0, g.groundY - 30 * u, w, H - g.groundY + 40 * u, pal.concreteShade, {}));
+    out.push(p.rect(x0, g.groundY - 40 * u, w, 14 * u, pal.concrete, {}));
+    for (let x = x0; x < x0 + w; x += 120 * u) out.push(p.line(x, g.groundY - 40 * u, x, g.groundY - 120 * u, pal.ink, 4));
+    out.push(p.line(x0, g.groundY - 120 * u, x0 + w, g.groundY - 120 * u, pal.ink, 5));
+    return out;
+  },
+  front(k, g) {
+    return [lampPost(k, k.W * (k.portrait ? 0.86 : 0.9), g.groundY - 30 * k.u, 3.4 * (k.ppm * STREET_SCALE))];
+  }
+};
+
 export const STREET = {
-  'city-street': cityStreet
+  'city-street': cityStreet, shopfronts, crossing, alley, rooftop, skyline: skylineWorld
 };
