@@ -117,11 +117,11 @@ export const funnelChart = {
 const WATERFALL_VARIANTS = Object.freeze(['bridge', 'floating']);
 
 function waterfallResolve(params, ctx) {
-  const b = createHBase('waterfall', params, ctx, {allowed: ['start', 'steps', 'total', 'title', 'source', 'format', 'at'], required: ['start', 'steps'], variants: WATERFALL_VARIANTS});
+  const b = createHBase('waterfall', params, ctx, {allowed: ['opening', 'steps', 'total', 'title', 'source', 'format', 'at'], required: ['opening', 'steps'], variants: WATERFALL_VARIANTS});
   const {check, u, rect} = b;
   const p = b.params;
-  check.obj(p.start, 'params.start', ['label', 'value'], ['label', 'value']);
-  const first = {label: check.str(p.start.label, 'params.start.label', 16), value: check.num(p.start.value, 'params.start.value', -1e12, 1e12)};
+  check.obj(p.opening, 'params.opening', ['label', 'value'], ['label', 'value']);
+  const first = {label: check.str(p.opening.label, 'params.opening.label', 16), value: check.num(p.opening.value, 'params.opening.value', -1e12, 1e12)};
   check.arr(p.steps, 'params.steps', 1, 8);
   const steps = p.steps.map((s, i) => {
     check.obj(s, `params.steps[${i}]`, ['label', 'delta'], ['label', 'delta']);
@@ -140,7 +140,7 @@ function waterfallResolve(params, ctx) {
   const tb = titleBlock(b, {title: p.title, source: p.source});
   const W = rect.width, n = cols.length;
   const colors = {total: b.colors.paper, up: b.colors.primary, down: b.colors.accent};
-  const pathOf = i => (i === 0 ? 'params.start.label' : i === n - 1 ? 'params.total' : `params.steps[${i - 1}].label`);
+  const pathOf = i => (i === 0 ? 'params.opening.label' : i === n - 1 ? 'params.total' : `params.steps[${i - 1}].label`);
   const {buildAt, buildEnd} = buildTimes(b, p, 0.28 * n + 0.6);
   const starts = stagger(buildAt, n, 0.28 * (n - 1), 0.28);
   // Columns when every label fits its slot; otherwise rows (bars run sideways).
@@ -227,7 +227,7 @@ function waterfallTimeline(model, ops) {
 export const waterfall = {
   id: 'waterfall',
   describe: 'A waterfall (bridge) chart: a starting total, each gain or loss stepping from the last level, and the resulting total; gains in primary, losses in accent.',
-  params: {start: '{label ≤ 16, value}', steps: '[{label ≤ 16, delta (+ or −)}] 1–8', total: 'end column label ≤ 16 (default "Total")', format: FORMAT_PARAM, ...COMMON},
+  params: {opening: '{label ≤ 16, value}, the starting total', steps: '[{label ≤ 16, delta (+ or −)}] 1–8', total: 'end column label ≤ 16 (default "Total")', format: FORMAT_PARAM, ...COMMON},
   events: ['build'], timing: TIMING, variants: WATERFALL_VARIANTS,
   resolve: waterfallResolve, view: waterfallView, timeline: waterfallTimeline
 };

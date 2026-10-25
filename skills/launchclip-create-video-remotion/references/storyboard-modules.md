@@ -984,7 +984,7 @@ events: build
 ### waterfall (keeps captions)
 A waterfall (bridge) chart: a starting total, each gain or loss stepping from the last level, and the resulting total; gains in primary, losses in accent.
 params:
-- start: {label ≤ 16, value}
+- opening: {label ≤ 16, value}, the starting total
 - steps: [{label ≤ 16, delta (+ or −)}] 1–8
 - total: end column label ≤ 16 (default "Total")
 - format: {style?: "number" | "currency" | "percent" | "unit", currency? (ISO code, "USD"), unit? ("km", "ms", "users"), decimals? 0–3, compact? (12.4K, 3.1M), separator? (thousands commas, default true), prefix?, suffix?}

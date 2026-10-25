@@ -33,7 +33,7 @@
         "end": 4,
         "params": {
           "title": "Monthly render minutes",
-          "start": {
+          "opening": {
             "label": "September",
             "value": 4200
           },

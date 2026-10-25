@@ -149,3 +149,14 @@ test('blur and clip props become CSS for GSAP and for Remotion alike', () => {
   assert.throws(() => cssProps({clipR: 10}), /all of clipT/);
   assert.ok(catalogHView(resolve('area-chart')).children.length > 0);
 });
+
+test('every catalogue H parity fixture is a valid story that resolves', async () => {
+  const {validateStory} = await import('../kit/core/story.mjs');
+  const {resolveModule} = await import('../kit/core/modules.mjs');
+  const {elementFixtures} = await import('../scripts/element-parity.mjs');
+  for (const {name, fixture} of elementFixtures()) {
+    const result = validateStory(fixture.story, {modules: knownModules()});
+    assert.deepEqual(result.errors, [], name);
+    assert.ok(resolveModule(fixture.story.scenes[0], fixture.story), name);
+  }
+});
