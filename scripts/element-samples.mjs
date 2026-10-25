@@ -22,5 +22,22 @@ export const SAMPLES = Object.freeze({
   'slot-roll': {prefix: 'Made for', items: ['founders', 'devrel', 'marketers', 'teachers', 'creators'], final: 'creators'},
   'countdown': {from: 3, end: 'Live', label: 'Launch in'},
   'percent-fill': {value: 72, label: 'of the backlog cleared', sub: 'Sprint 14'},
+  'device-frame': {title: 'Your launch video, ready', url: 'launchclip.dev/studio', caption: 'Every format from one story'},
+  'window-chrome': {title: 'launchclip — zsh', lines: ['launchclip story plan brief.md', 'launchclip finish --format 9:16', 'Rendered out/launch-9x16.mp4'], caption: 'Three commands to a Short'},
+  'polaroid': {caption: 'Launch day, 2026', icon: 'rocket'},
+  'sticker': {text: 'New', icon: 'sparkle'},
+  'torn-paper': {kicker: 'Note to self', text: 'Ship the video the same day as the feature.'},
+  'tape-note': {title: 'Remember the captions', text: 'Most people watch on mute, so every line is on screen.', icon: 'message'},
+  'badge': {text: 'Free', sub: 'Open source', icon: 'star'},
+  'ribbon': {text: 'Now in beta'},
+  'speech-bubble': {text: 'Wait, it made all three formats?', name: 'Maya'},
+  'tooltip': {title: 'New', text: 'Drop a recording here to cut it'},
+  'callout-arrow': {text: 'Your brand colours'},
   'comparison-table': {title: 'How LaunchClip compares', columns: ['LaunchClip', 'Editor', 'Templates'], rows: [{label: 'One prompt to video', values: [true, false, false]}, {label: 'Your brand, every scene', values: [true, true, false]}, {label: 'Captions from the voice', values: [true, false, true]}, {label: 'Time to first cut', values: ['12 min', '2 days', '3 h']}, {label: 'Open source', values: [true, false, null]}], highlight: 0}
 });
+
+/** Extra parity cases beyond one per variant: {name, module, variant, shape, params}. */
+export const EXTRA_SAMPLES = Object.freeze([
+  {name: 'device-frame-laptop-image', module: 'device-frame', variant: 'dark', shape: 'landscape', params: {device: 'laptop', image: 'assets/testsrc.png', caption: 'A real screenshot in the frame'}},
+  {name: 'speech-bubble-thought', module: 'speech-bubble', variant: 'comic', shape: 'portrait', params: {text: 'What if the video made itself?', type: 'thought', tail: 'bottom-right'}}
+]);

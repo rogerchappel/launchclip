@@ -2212,9 +2212,35 @@ counting text is precomputed per frame, reels and flaps are tweens.
 | `countdown` | digits, ring, clock | `from`, `to`, `step` (fits the scene), `end`, `tone` | start, zero | Each tick sets the number and punches it in; the ring depletes and the clock's bar drains linearly; `end` replaces zero. The label sits above the count |
 | `percent-fill` | liquid, battery, bar | `value`, `max` (100), `format`, `span`, `tone` | fill | Liquid rises in a round flask under a sliding wave; a battery or bar fills; the figure counts and takes the fill's ink when it sits on the fill |
 
+### Boxes and frames (`catalog-h-frames.mjs`, `catalog-h-paper.mjs`, `catalog-h-callouts.mjs`)
+
+Handmade shapes (torn edges, tape ends, starbursts, shields) are static
+clip-path polygons. Torn edges come from a seed of the element's own text
+(`seeded`, `tornPolygon`), so the same note always tears the same way. Speech
+and thought outlines are SVG: a stroked layer under a filled layer of the
+same shapes, so a cloud's bumps and a tail read as one outlined shape. Images
+are project-local `assets/` paths. Without one, a device frame draws a mock
+screen in the brand (nav, cards and a chart, or a phone's card stack) and a
+polaroid a brand gradient with an icon, so nothing shows empty.
+
+| Module | Variants | Params (beyond at, rect) | Events | Motion |
+| --- | --- | --- | --- | --- |
+| `device-frame` | clay, dark, outline | `device` browser/phone/laptop/tablet (default phone in 9:16, browser in 16:9), `image`, `fit`, `title`, `url`, `caption` | show | The device rises and settles (a phone untilts), the screen wipes on top to bottom, mock blocks rise in turn |
+| `window-chrome` | mac, minimal, terminal | `lines` 1–8 or `image`, `title`, `stagger`, `caption` | show, line-&lt;i&gt; | Lines rise in turn; terminal lines type on after a `$` prompt (a linear clip wipe at about 28 characters a second) and a block cursor blinks once the last is typed |
+| `polaroid` | single, stack, pinned | `image` (or `icon` on a brand gradient), `caption`, `tilt` | show | Drops in with back.out and untilts; the photo develops from dark; stack fans two frames behind; pinned drops a pin |
+| `sticker` | die-cut, round, burst | `text` ≤ 24, `icon`, `tone`, `tilt`, `size` | slap | Slaps on from 1.7× and +18° with back.out(2.2), then a shine sweeps across inside its shape |
+| `torn-paper` | note, strip, scrap | `text` ≤ 140, `kicker`, `tilt` | show | The sheet lands (its drop shadow follows the torn edge), then the words wipe on |
+| `tape-note` | corners, top, sides | `title`, `text`, `icon`, `tone` (tape), `tilt` | show | The note drops, then each strip of tape presses down |
+| `badge` | starburst, circle, shield | `text` ≤ 14, `sub`, `icon`, `tone`, `tilt` | stamp | Spins in from −140° and scale 0 with back.out(1.8) |
+| `ribbon` | banner, flag, tag | `text` ≤ 32, `tone`, `tilt` | unfurl | Unfurls from its centre (scale and a clip together); banner tails fold out behind |
+| `speech-bubble` | rounded, comic, chat | `text` ≤ 120, `type` speech/thought, `tail` bottom-left/bottom-right/left/right, `name` | pop | Pops from its tail point with back.out(1.9); thought clouds trail three puffs toward the tail |
+| `tooltip` | dark, light, brand | `text`, `title`, `target` (canvas px) | show | A dot lands on the target with a looping pulse ring; the box rises above it, or below when the rect has no room above |
+| `callout-arrow` | curve, straight, sketch | `text`, `target`, `from` (canvas px), `circle`, `tone` | point | The label pops, the shaft draws on, the head flicks, a ring draws round the target; sketch adds an echo stroke and an italic note |
+
 ### Tools
 
-- `scripts/element-samples.mjs`: sample params for every module.
+- `scripts/element-samples.mjs`: sample params for every module, plus
+  `EXTRA_SAMPLES` (cases beyond one per variant, such as a framed screenshot).
 - `node scripts/element-sheet.mjs`: a contact sheet of every variant (the
   frame-pure state Remotion draws), or `--parity qa/parity` for the
   HyperFrames stills of a parity run with their SSIM.
