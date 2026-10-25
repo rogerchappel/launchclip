@@ -176,6 +176,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | explains one control or spot in the product ("hover", "click here", "tap"): a dot lands on it and a tooltip rises beside it | tooltip |
 | announces or names something in a few words ("announcing", "introducing", "say hello to"): a title built by the style's text effect, with a kicker and sub-line | motion-title |
 | lists six or more features, tools or integrations ("works with", "everything you need", "all the features"): a grid of icons that pop in with labels | icon-grid |
+| names countries or where something happens ("in 40 countries", "across Europe", "from Brazil to Japan"): a world map that zooms and fills the countries the brief names | map-highlight |
 | states one real percentage of a whole ("87% of renders", "nine in ten"): a ring fills while it counts | progress-ring |
 
 ## Modules
@@ -1365,6 +1366,19 @@ params:
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build
 
+### map-highlight (keeps captions)
+A world map that fades in, zooms to the highlighted countries when they sit close together, then fills them one by one with label pills: plain fills, pins that drop on each, or a glow.
+params:
+- highlight: [country | {country (name, common alias or ISO numeric code), label? ≤ 24, value? ≤ 12, color?}] 1–8
+- focus: "auto" (zoom when the countries are close; default) | "world"
+- tone: primary | accent | paper | #rrggbb
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: map lands: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, zoom, highlight-<i>
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
 params:
@@ -1494,6 +1508,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | callout-arrow | 2 s | 0.5 s | scene − 0.65 s | the callout lands at at |
 | motion-title | 2 s | 0.5 s | scene − 0.65 s | the build ends before the exit; long text with a character effect compresses its stagger to 1.4 s |
 | icon-grid | 2 s | 0.5 s | scene − 0.65 s | icons pop 0.12 s apart (closer for many) from at |
+| map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35; highlights follow 0.12–0.35 s apart |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |

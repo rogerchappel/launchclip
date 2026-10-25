@@ -2724,6 +2724,7 @@ components are in `kit/remotion/catalog/CatalogH.tsx` and `registry-h.ts`.
 | `sankey` | ribbons, lines | `flows` 2–14 `{from, to, value}` | build | Nodes in up to four columns (longest path); ribbons as wide as each flow draw column by column |
 | `heatmap` | squares, circles, rounded | `rows` 1–10, `columns` 2–14, `values`, `showValues`, `low`, `high`, `tone` | build | Cells pop in a diagonal wave, shaded panel → tone |
 | `leaderboard` | bars, rows, cards | `entries` 3–8 `{label, value, detail?, icon?}`, `sort`, `highlight` | build, highlight | Rows slide in from last place to first with rank badges and counting values |
+| `map-highlight` | fill, pins, glow | `highlight` 1–8 (country name, alias or ISO numeric code, or `{country, label?, value?, color?}`), `focus` auto/world, `tone` | build, zoom, highlight-&lt;i&gt; | The world (Natural Earth 1:110m, Equal Earth, `kit/core/world-110m.mjs` from `scripts/vendor-world.mjs`) fades in; when the countries' bounds cover little of it, it zooms (up to 8×) to fill the area with them; each country fills in turn with a label pill beside it (above, below, right or left, clear of the others); pins drop, or the fill glows |
 | `comparison-table` | grid, striped, cards | `columns` 2–4, `rows` 2–8 `{label, values: true/false/null/string}`, `highlight` | build, highlight | Headers pop, rows land with ticks and crosses, the pick column is outlined |
 
 ### Counters (`catalog-h-numbers.mjs`)
