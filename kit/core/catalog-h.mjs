@@ -5,13 +5,16 @@
 //   charts    catalog-h-charts.mjs (bar-chart, stacked-bar, pie-chart,
 //             area-chart, scatter-plot, radar-chart, sparkline, progress-ring)
 //             and catalog-h-flows.mjs (funnel-chart, waterfall, sankey,
-//             heatmap, leaderboard, comparison-table)
+//             heatmap, leaderboard, comparison-table), catalog-h-map.mjs
+//             (map-highlight, on kit/core/world-110m.mjs)
 //   numbers   catalog-h-numbers.mjs (odometer, flip-clock, ticker-tape,
 //             slot-roll, countdown, percent-fill)
 //   frames    catalog-h-frames.mjs (device-frame, window-chrome),
 //             catalog-h-paper.mjs (polaroid, sticker, torn-paper, tape-note,
 //             badge, ribbon) and catalog-h-callouts.mjs (speech-bubble,
 //             tooltip, callout-arrow)
+//   titles    catalog-h-text.mjs (motion-title: the 24 named text effects)
+//   icons     catalog-h-icons.mjs (icon-grid, stroke or duotone)
 //
 // Every module exports its VARIANTS (the default first); helpers, the series
 // palette, number formats and the extra op props (blur, clip) are in
@@ -26,9 +29,12 @@ import {NUMBERS} from './catalog-h-numbers.mjs';
 import {FRAMES} from './catalog-h-frames.mjs';
 import {PAPER} from './catalog-h-paper.mjs';
 import {CALLOUTS} from './catalog-h-callouts.mjs';
+import {TEXT} from './catalog-h-text.mjs';
+import {ICON_MODULES} from './catalog-h-icons.mjs';
+import {MAPS} from './catalog-h-map.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
-const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS];
+const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS];
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, aspects: ASPECTS, variants: def.variants}]));
 /** Each module's designed variants, the default (its original look) first. */

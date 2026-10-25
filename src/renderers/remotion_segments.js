@@ -19,7 +19,7 @@
 // shadows, glows) one level apart depending on what the tab drew before a
 // frame, so frames right where a segment starts can differ from a single-pass
 // render by that much (mezzanine SSIM ≥ 0.9999).
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir, readdir, rename, rm, stat, utimes } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -77,6 +77,22 @@ export function deliveryArgs(input, output, quality = "draft") {
   return ["-y", "-hide_banner", "-loglevel", "error", "-i", path.resolve(input), "-fps_mode", "passthrough", "-c:v", "libx264", "-pix_fmt", "yuv420p", ...(x264Preset ? ["-preset", x264Preset] : []), "-video_track_timescale", "90000", "-crf", String(crf), "-an", "-map_metadata", "-1", path.resolve(output)];
 }
 
+// Remotion keeps its webpack cache under the package.json nearest the CLI's
+// cwd, and a bundle that finds a cache for another config there deletes the
+// whole remotion-production-<version> folder first. Two projects bundling at
+// once (parallel finishes, the media tests) then delete the cache under each
+// other (ENOTEMPTY). Each project bundles from a root of its own instead: its
+// renders share a warm cache and never clear another project's.
+export function remotionRoot(project) {
+  const key = createHash("sha256").update(path.resolve(project)).digest("hex").slice(0, 16);
+  const root = path.join(os.tmpdir(), "launchclip-remotion-roots", key);
+  if (!existsSync(path.join(root, "package.json"))) {
+    mkdirSync(root, { recursive: true });
+    writeFileSync(path.join(root, "package.json"), `${JSON.stringify({ name: `launchclip-remotion-${key}`, private: true })}\n`);
+  }
+  return root;
+}
+
 // Bundles are cached outside the project (the project is the bundle's public
 // dir, linked rather than copied, so a bundle inside it would link to itself).
 // The key covers the kit sources, the entry and the font files the bundle
@@ -94,7 +110,7 @@ async function cachedBundle({ entry, project, kitHash, bundleRoot }) {
   await mkdir(root, { recursive: true });
   const temporary = path.join(root, `${key}.${process.pid}.${Date.now()}`);
   const { bundle } = await import("@remotion/bundler");
-  await bundle({ entryPoint: path.resolve(entry), publicDir: path.resolve(project), symlinkPublicDir: true, outDir: temporary, enableCaching: true, onProgress: () => {} });
+  await bundle({ entryPoint: path.resolve(entry), publicDir: path.resolve(project), symlinkPublicDir: true, outDir: temporary, enableCaching: true, rootDir: remotionRoot(project), onProgress: () => {} });
   await rm(dir, { recursive: true, force: true });
   await rename(temporary, dir);
   await pruneBundles(root, dir);

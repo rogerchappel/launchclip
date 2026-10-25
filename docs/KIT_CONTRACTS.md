@@ -2030,6 +2030,23 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   out every shape from the rig and hands each to a pen (`shape`, `ellipse`,
   `line`, `limb`, `strand`, `ground`, `within`, `defs?`), which decides how it
   is drawn.
+- The eight drawing styles (`DRAWING_STYLES`, in this order):
+  | Style | File | Look |
+  |---|---|---|
+  | `flat` | `style-flat.mjs` | flat fills and a dark outline (the default) |
+  | `line` | `style-line.mjs` | single-weight line art: one ink, paper fills, dark hair and clothes inked in |
+  | `outlined` | `style-outlined.mjs` | comic ink: a heavy outline and a hard cel shadow away from the key light |
+  | `paper` | `style-paper.mjs` | cut paper: hand-cut edges, offset shadows, a fine grain, no outlines |
+  | `soft-shade` | `style-soft-shade.mjs` | gradients from the lit side to the shade, no hard outline |
+  | `stick` | `style-stick.mjs` | a stick figure: coloured lines, a round head with the character's own hair and face |
+  | `lifelike` | `style-lifelike.mjs` | realistic proportions (`real.mjs`), detailed faces, hair and hands, layered shading (`real-pen.mjs`) |
+  | `cinematic` | `style-cinematic.mjs` | lifelike lit by the scene's light: warm highlights, cool shadows, a rim light, falloff and a cast shadow |
+
+  The first five are pens over the toon body; `stick` and the realistic
+  pair are their own bodies with the same joints and part ids, and they
+  paint the toon hair, headwear and outfit details on a scaled frame, so
+  every rig option draws in every style. Each style has a parity fixture
+  (`test/fixtures/parity/characters-style-<style>.json`).
 - `style-flat.mjs`: the drawing style "flat" (flat fills, a dark outline):
   the toon body with the flat pen. `test/character_styles.test.js` pins its
   output, so flat casts look the same in existing videos.
@@ -2127,6 +2144,10 @@ the story through `story.cast` (the style merge fills it).
   dialogue story the same way (the same cached per-line takes `finish`
   uses), writes NARRATION.json with `lines` and each word's `speaker`, and
   reports the measured duration with one row per line.
+- `node scripts/cast-styles.mjs [--out qa/cast-styles] [--styles …] [--sets …]
+  [--seed …] [--set …] [--ids …]` renders one sheet per drawing style: a
+  line-up of a cast in poses, face close-ups in expressions, and the cast
+  acting in a few sets (frame-pure state from the modules' own op list).
 - `launchclip cast sheet <project>` (`src/cast.js`) renders every character
   in every pose and expression the scenes and the direction map use, with the
   modules' own view tree, to `qa/cast-sheet.png` (+ `qa/cast-sheet.json`:
@@ -2513,23 +2534,39 @@ caption band.
 
 ## Icon set (`kit/core/icons.mjs`)
 
-One in-repo family of line icons ([VIDEO_QUALITY_RFC.md](VIDEO_QUALITY_RFC.md)
-§8), drawn for LaunchClip as original geometry (no third-party paths).
+One family of line icons ([VIDEO_QUALITY_RFC.md](VIDEO_QUALITY_RFC.md) §8):
+LaunchClip's own 173, drawn as original geometry, plus the Lucide set (ISC,
+1,903 icons, `kit/core/icons-lucide.mjs`, vendored by
+`node scripts/vendor-lucide.mjs <unpacked lucide-static package>`; see
+THIRD_PARTY_NOTICES.md). 1,935 names in all: 141 Lucide names match LaunchClip's own, which keep them.
 
 - Every icon is SVG path data in a 24-unit box (`ICON_BOX`), stroked at
-  `ICON_STROKE` (2 units) with round caps and joins, never filled, with a
-  2-unit margin. Boxes use a 1.5–2 unit corner radius.
+  `ICON_STROKE` (2 units) with round caps and joins, with a 2-unit margin.
+  Lucide uses the same grammar, so the two sets mix. The vendor script turns
+  Lucide's circles, rects, lines and polygons into path data; the few dots
+  Lucide fills are a separate solid layer (`ICON_SOLIDS`).
+- When a Lucide name matches one of LaunchClip's own, LaunchClip's drawing
+  keeps the name, so every existing name looks as it did. `ICON_SOURCES`
+  says which set each name draws from; `ICON_NAMES` lists LaunchClip's first.
+- Styles (`ICON_STYLES`): `stroke` (the default) and `duotone`. Duotone lays a
+  tint (`tint`, default the icon colour, at `tintOpacity`, default 0.28) under
+  the icon's closed shapes (`closedPath(d)`: each run from an absolute `M`
+  that ends in `Z`); an icon with no closed shape draws as stroke only.
 - Names are stable kebab-case ids (`shield`, `rocket`, `code`, `bolt`,
   `calendar`, `chart-up`, `users`, `lock`, `check`, …). Add icons, never
   rename or remove one. `ICON_NAMES` lists them in contact-sheet order.
 - `iconPath(name)` returns the path data and throws on an unknown name with
   close matches; `isIcon(name)` tests one.
-- `iconNode(name, {id?, x, y, size, color, stroke?, style?})` returns a view
-  node (an `<svg>` holding one `<path>`), so both renderers draw icons through
-  the shared view tree. Modules tint icons from brand colours; the stroke is
+- `iconNode(name, {id?, x, y, size, color, stroke?, style?, mode?, tint?,
+  tintOpacity?})` returns a view node (an `<svg>` of `<path>`s: the tint, the
+  stroke, then any solid dots), so both renderers draw icons through the
+  shared view tree. Modules tint icons from brand colours; the stroke is
   in box units, so the weight scales with the size.
-- `node scripts/icon-sheet.mjs out.png` renders every icon at 96 px and 24 px
-  for a check by eye (`--html`, `--color`, `--bg`).
+- `node scripts/icon-sheet.mjs out.png` renders every icon for a check by eye
+  (`--html`, `--color`, `--bg`, `--mode duotone`, `--source launchclip|lucide`,
+  `--cols`, `--cell`).
+- `icon-grid` (catalogue H) shows 2–12 icons in a stroke, duotone or tiles
+  variant.
 
 ## Catalogue G (`kit/core/catalog-g.mjs`)
 
@@ -2705,6 +2742,7 @@ components are in `kit/remotion/catalog/CatalogH.tsx` and `registry-h.ts`.
 | `sankey` | ribbons, lines | `flows` 2–14 `{from, to, value}` | build | Nodes in up to four columns (longest path); ribbons as wide as each flow draw column by column |
 | `heatmap` | squares, circles, rounded | `rows` 1–10, `columns` 2–14, `values`, `showValues`, `low`, `high`, `tone` | build | Cells pop in a diagonal wave, shaded panel → tone |
 | `leaderboard` | bars, rows, cards | `entries` 3–8 `{label, value, detail?, icon?}`, `sort`, `highlight` | build, highlight | Rows slide in from last place to first with rank badges and counting values |
+| `map-highlight` | fill, pins, glow | `highlight` 1–8 (country name, alias or ISO numeric code, or `{country, label?, value?, color?}`), `focus` auto/world, `tone` | build, zoom, highlight-&lt;i&gt; | The world (Natural Earth 1:110m, Equal Earth, `kit/core/world-110m.mjs` from `scripts/vendor-world.mjs`) fades in; when the countries' bounds cover little of it, it zooms (up to 8×) to fill the area with them; each country fills in turn with a label pill beside it (above, below, right or left, clear of the others); pins drop, or the fill glows |
 | `comparison-table` | grid, striped, cards | `columns` 2–4, `rows` 2–8 `{label, values: true/false/null/string}`, `highlight` | build, highlight | Headers pop, rows land with ticks and crosses, the pick column is outlined |
 
 ### Counters (`catalog-h-numbers.mjs`)
@@ -2745,6 +2783,31 @@ polaroid a brand gradient with an icon, so nothing shows empty.
 | `speech-bubble` | rounded, comic, chat | `text` ≤ 120, `type` speech/thought, `tail` bottom-left/bottom-right/left/right, `name` | pop | Pops from its tail point with back.out(1.9); thought clouds trail three puffs toward the tail |
 | `tooltip` | dark, light, brand | `text`, `title`, `target` (canvas px) | show | A dot lands on the target with a looping pulse ring; the box rises above it, or below when the rect has no room above |
 | `callout-arrow` | curve, straight, sketch | `text`, `target`, `from` (canvas px), `circle`, `tone` | point | The label pops, the shaft draws on, the head flicks, a ring draws round the target; sketch adds an echo stroke and an italic note |
+
+### Motion titles (`catalog-h-text.mjs`)
+
+`motion-title` is a caption-independent title (it hides captions). Its
+variants are the 24 named text-animation effects of the HyperFrames
+vocabulary (`hyperframes-animation`, `adapters/animate-text.md`), so a seeded
+style picks one text entrance for the whole video. Before this, only
+kinetic-words' `scale` and `rise` existed outside captions. The effects are
+built from their names and descriptions; no upstream spec is vendored.
+Lines are wrapped with the conservative advance model; each line is a row of
+inline-block word spans (character spans inside them), so the browser lays
+out the same DOM in both renderers.
+
+| Unit | Effects | Motion (stagger per unit) |
+| --- | --- | --- |
+| character (7) | soft-blur-in, per-character-rise, typewriter, bottom-up-letters, top-down-letters, stagger-from-center, stagger-from-edges | 32 ms stagger, compressed to fit 1.4 s; typewriter steps whole letters with no interpolation; bottom-up and top-down rise through a masked row; the stagger effects order by distance from the centre or the edges |
+| word (8) | per-word-crossfade, spring-scale-in, shared-axis-y, blur-out-up, kinetic-center-build, short-slide-right, short-slide-down, depth-parallax-words | 110 ms stagger; spring uses elastic.out; blur-out-up fades in, holds, and blurs out upward just before the exit; depth-parallax alternates words from in front of and behind the page |
+| line (2) | mask-reveal-up, line-by-line-slide | 140 ms stagger; mask-reveal rises through its row's clip |
+| element (7) | micro-scale-fade, shimmer-sweep, fade-through, shared-axis-z, scale-down-fade, focus-blur-resolve, shared-axis-x | The whole block; shimmer-sweep passes a 15% band of a lighter copy across the text (a moving clip-path) |
+
+Params: `text` ≤ 90 (≤ 16 words), `kicker`, `sub`, `highlight` (1–3 whole
+words in the tone colour), `align` (center, left), `plate` (a brand-colour
+plate), `tone`, `speed` (0.5–2), `at`. Event `title`. The build must end
+before the exit; long text fails naming the effect, so lengthen the scene,
+shorten the text or raise `speed`.
 
 ### Tools
 

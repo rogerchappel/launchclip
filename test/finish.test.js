@@ -67,6 +67,15 @@ function fakeAdapters({ renderError } = {}) {
       if (bed) await touch(path.join(outDir, "music", "bed.wav"));
       return {};
     },
+    // The real renderer decodes the bank files: the fake kit above writes
+    // none, and a user library in ~/.launchclip/sfx must not decide the test.
+    async renderTyping(schedule, banks, { out }) {
+      count("renderTyping");
+      await touch(out, `typing ${schedule.length}`);
+      const keystrokes = schedule.map((entry) => ({ at: entry.at, kind: entry.kind, shot: entry.shot }));
+      const counts = keystrokes.reduce((acc, entry) => ({ ...acc, [entry.kind]: (acc[entry.kind] ?? 0) + 1 }), {});
+      return { file: out, keystrokes, counts };
+    },
     async buildMix(options) {
       count("buildMix");
       adapters.lastMix = options;
