@@ -18,6 +18,7 @@
 import { CAPTION_PRESET_NAMES } from './captions.mjs';
 import { FONT_REGISTRY, fontFamilyName, registeredFamily } from './fonts.mjs';
 import { CADENCE_PROFILE_SCHEMA, validateProfile } from './profiles.mjs';
+import { DRAWING_STYLES } from './characters/cues.mjs';
 
 export const STYLE_SCHEMA = 'launchclip.style.v3';
 export const STYLE_V2_SCHEMA = 'launchclip.style.v2';
@@ -424,12 +425,12 @@ function validateV3Fields(pack, { err, warn, modules }) {
   }
   if (pack.profile !== undefined) for (const message of cadenceProfileErrors(pack.profile)) err(message);
   if (pack.cast !== undefined) {
-    // The characters kit (kit/core/characters/) fills the cast in; only its shape is checked here.
+    // The characters kit (kit/core/characters/) fills the cast in; its shape and drawing style are checked here.
     const c = pack.cast;
     if (!isObject(c)) err('cast must be {drawing_style, colors, characters}');
     else {
       for (const key of Object.keys(c)) if (!['drawing_style', 'colors', 'characters'].includes(key)) err(`cast.${key} is not supported (drawing_style, colors, characters)`);
-      if (c.drawing_style !== undefined && !(nonEmpty(c.drawing_style) && NAME.test(c.drawing_style))) err('cast.drawing_style must be a drawing style name');
+      if (c.drawing_style !== undefined && !DRAWING_STYLES.includes(c.drawing_style)) err(`cast.drawing_style must be one of the kit's drawing styles (${DRAWING_STYLES.join(', ')})`);
       if (c.colors !== undefined) {
         if (!isObject(c.colors)) err('cast.colors must be {slot: brand role or hex}');
         else for (const [slot, value] of Object.entries(c.colors)) if (!isColorRef(value)) err(`cast.colors.${slot} must be a brand role or a hex colour`);
