@@ -1225,6 +1225,24 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip profile measure <folder> --rights own|licensed|public-statistics (--id <new-id> | --replace <shipped-id>) [--out profile.json] [--title "…"] [--fps 1]
   ```
 
+- `cast list`: List the starter characters, and the story's cast when given a project.
+
+  ```text
+  launchclip cast list [project|storyboard.json]
+  ```
+
+- `cast show`: Show one character's rig params, colours and voice.
+
+  ```text
+  launchclip cast show <id> [--story storyboard.json]
+  ```
+
+- `cast sheet`: Render every character in every pose and expression the story uses to qa/cast-sheet.png.
+
+  ```text
+  launchclip cast sheet <project|storyboard.json> [--ids maya,theo] [--out qa/cast-sheet.png] [--report qa/cast-sheet.json]
+  ```
+
 - `intake`: Write a production workspace from a source (repository, product, topic or voiceover).
 
   ```text

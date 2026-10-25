@@ -26,6 +26,9 @@ export const USAGE = Object.freeze([
   ["profile list", "profile list", {comment: "the shipped cadence profiles"}],
   ["profile show", "profile show <id|profile.json>"],
   ["profile measure", "profile measure <folder> --rights own|licensed|public-statistics (--id <new-id> | --replace <shipped-id>) [--out profile.json] [--title \"…\"] [--fps 1]"],
+  ["cast list", "cast list [project|storyboard.json]"],
+  ["cast show", "cast show <id> [--story storyboard.json]"],
+  ["cast sheet", "cast sheet <project|storyboard.json> [--ids maya,theo] [--out qa/cast-sheet.png] [--report qa/cast-sheet.json]"],
   ["intake", "intake <source> [--profile standard|cinematic] [--kind repository|product|topic|voiceover] [--resource path] [--assets path] [--style auto|family|name|path] [--style-root .launchclip/styles] [--style-file frame.md] [--style-reference path|url] [--reference url] [--voiceover audio|video] [--transcript text] [--presenter video] [--heygen-avatar video] [--aspect 9:16|16:9] [--duration 60] [--model gpt-5.6] [--reasoning xhigh] [--pro] [--out <workspace>]"],
   ["edit-recording", "edit-recording <media> --out <directory> [--recording-transcript word-timed.json] [--silence-duration 0.8] [--silence-padding 0.15] [--retake-window 90] [--retake-decisions semantic.json|--retake-model local-model] [--min-repeat-words 6] [--recording-model base.en] [--consensus-model small.en|none] [--consensus-transcript word-timed.json] [--keep-fillers] [--no-audio-silence] [--audio-silence-duration 0.4] [--audio-silence-padding 0.08] [--audio-threshold-db -35] [--qa-model local-model|--qa-decisions reviews.json] [--qa-attempts 3] [--qa-recording-model base.en] [--no-trim-silence] [--enhance light|podcast|off] [--voice-isolation none|elevenlabs] [--aspect 16:9|9:16|1:1]"],
   ["broll-plan", "broll-plan <word-timed.json> --out <directory> [--aspect 16:9|9:16|1:1] [--duration seconds]"],
@@ -122,6 +125,10 @@ export const SUMMARIES = Object.freeze({
   "profile list": "List the shipped cadence profiles with their format, aspects, duration range and provenance (seed or measured).",
   "profile show": "Show one cadence profile (a shipped id or a profile file), validated.",
   "profile measure": "Measure a folder of reference videos into a cadence profile. Only statistics are kept, never frames, audio or text; --rights says what right you have to analyse them. --replace writes over a shipped profile and refreshes kit/profiles/PROVENANCE.md.",
+  cast: "Browse the built-in character cast and a story's cast; render a story's cast sheet.",
+  "cast list": "List the starter characters, and the story's cast when given a project.",
+  "cast show": "Show one character's rig params, colours and voice.",
+  "cast sheet": "Render every character in every pose and expression the story uses to qa/cast-sheet.png.",
   intake: "Write a production workspace from a source (repository, product, topic or voiceover).",
   "edit-recording": "Edit a raw recording: trim silence, drop retakes and fillers, QA the joins, then clean up the voice audio (--enhance light by default; --voice-isolation elevenlabs is opt-in and paid).",
   "broll-plan": "Plan b-roll inserts from a word-timed transcript.",
@@ -189,7 +196,7 @@ export const SUMMARIES = Object.freeze({
   direct: "Direct a talking-head or TTS video from a creative prompt."
 });
 
-export const USAGE_GROUPS = Object.freeze(["skills", "style", "profile", "story", "sfx", "module", "subject", "demo"]);
+export const USAGE_GROUPS = Object.freeze(["skills", "style", "profile", "cast", "story", "sfx", "module", "subject", "demo"]);
 const GROUPS = new Set(USAGE_GROUPS);
 const COMMENT_COLUMN = 52;
 
