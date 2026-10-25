@@ -44,8 +44,10 @@ const EPS = 1e-6;
 // style: a style pack (src/story_style.js merges it before validation);
 // motion, camera, ambient, layout: style-driven settings, carried through as data;
 // frame: the brand frame (kit/core/style.mjs brandFrameErrors has its full shape);
-// cast: the story's characters (kit/core/characters/cues.mjs validates it).
-const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters"]);
+// cast: the story's characters (kit/core/characters/cues.mjs validates it);
+// variants: {<module>: <variant>}, each module's designed look for the whole
+// video (a style pack's variants; each module checks its own names).
+const TOP_LEVEL = new Set(["variants", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -259,6 +261,14 @@ export function validateStory(story, { modules } = {}) {
 
   // ambient: the ambient-motion control (kit/core/ambient.mjs).
   validateAmbient(story.ambient, "ambient", err);
+
+  // variants: one designed variant per module (docs/SEEDED_STYLES_RFC.md §3.2).
+  if (story.variants !== undefined && story.variants !== null) {
+    if (!isObject(story.variants)) err("variants must be {<module>: <variant name>}");
+    else for (const [key, value] of Object.entries(story.variants)) {
+      if (!/^[a-z][a-z0-9-]*$/.test(key) || typeof value !== "string" || !/^[a-z][a-z0-9-]*$/.test(value)) err(`variants.${key} must be a variant name (lowercase kebab-case)`);
+    }
+  }
 
   // frame: the brand frame the compilers draw around scenes (RFC §9.2).
   validateFrame(story.frame, { err, warn, scenes: Array.isArray(story.scenes) ? story.scenes : [] });

@@ -732,9 +732,11 @@ params:
 - sub: sub-line ≤ 64 (optional)
 - tone: word colour: paper (default) | primary | accent
 - at: word time
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: icon, word, sub
+variants: stacked (default), side-icon, banner, marker
 
 ### icon-row (keeps captions)
 Two to five icons from the icon set, each with a short label, that pop in one by one on their words: a row, or a list when the labels are long or the room is narrow. For lists of features, steps or audiences.
@@ -744,9 +746,11 @@ params:
 - layout: auto (default) | row | list
 - stagger: seconds between pops (default 0.18)
 - at: first pop time
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: item-<i>
+variants: tiles (default), pills, orbit, list
 
 ### section-card (keeps captions)
 A section opener in the brand frame: a kicker ("Part 2", "The fix"), a rule that draws out and a big section title, with an optional chapter number or icon. For the start of each section of a longer video.
@@ -756,9 +760,11 @@ params:
 - number: chapter number 1–99 (optional)
 - icon: icon name (optional; not with number)
 - at: title time
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: kicker, title
+variants: centered (default), split, tab, frame
 
 ### object-card (keeps captions)
 A simple illustrated object built from the icon set and brand shapes (boat, box, calendar, laptop, rocket, smartphone, chart, shield, mail, trophy, lightbulb, globe, team, gift), with a caption and an optional label. For naming a product, a deliverable or an idea as a thing ("it ships in a box", "your calendar, handled").
@@ -767,6 +773,7 @@ params:
 - caption: string ≤ 48
 - label: string ≤ 24 (optional, uppercased)
 - at: object time
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: object, caption
@@ -781,6 +788,7 @@ params:
 - count: boolean (default true when the value starts with a number)
 - tone: value colour: primary (default) | accent | paper
 - at: count start
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: count, hit
@@ -794,6 +802,7 @@ params:
 - source: where it was said ≤ 60 (optional)
 - highlight: a phrase from the quote (optional)
 - at: quote time
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: quote, author, highlight
@@ -807,6 +816,7 @@ params:
 - source: where it comes from ≤ 60 (required)
 - highlightAt: seconds from scene start (optional; default after the lines)
 - at: first line time
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: lines, highlight
@@ -819,6 +829,7 @@ params:
 - mode: before-after (default) | columns
 - stagger: seconds between items (default 0.16)
 - at: left panel time
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: left, right
@@ -831,6 +842,7 @@ params:
 - direction: auto (default) | vertical | horizontal
 - stagger: seconds between steps (default 0.45)
 - at: first step time
+- variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: step-<i>

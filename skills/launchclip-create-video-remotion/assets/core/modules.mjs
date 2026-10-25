@@ -46,6 +46,17 @@ export function knownModules() {
   return [...EDITORIAL_KINDS, ...Object.keys(catalogModules())];
 }
 
+/**
+ * Every module's designed variants, {<module>: [names]} with the default (the
+ * module's original look) first (docs/SEEDED_STYLES_RFC.md §3.2). A style's
+ * variants (story.variants) and a scene's params.variant name one of these.
+ */
+export function moduleVariants() {
+  const out = {};
+  for (const [id, definition] of Object.entries(catalogModules())) if (Array.isArray(definition.variants) && definition.variants.length > 1) out[id] = [...definition.variants];
+  return out;
+}
+
 export function isEditorialKind(id) {
   return EDITORIAL_KINDS.includes(id);
 }
@@ -470,7 +481,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!definition) throw new Error(`module "${module}" is not a known module`);
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
-  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null }); }
+  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, variants: story?.variants ?? null }); }
   catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });

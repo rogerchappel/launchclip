@@ -273,7 +273,8 @@ export function moduleCatalogue() {
       ...(definition.needs ? { needs: [...definition.needs] } : {}),
       ...(definition.layer ? { layer: definition.layer } : {}),
       ...(definition.aspects ? { aspects: [...definition.aspects] } : {}),
-      ...(definition.mood ? { mood: [...definition.mood] } : {})
+      ...(definition.mood ? { mood: [...definition.mood] } : {}),
+      ...(Array.isArray(definition.variants) && definition.variants.length > 1 ? { variants: [...definition.variants] } : {})
     };
   });
 }
@@ -385,6 +386,8 @@ function moduleLines(tier, modules = moduleCatalogue()) {
     lines.push('params:');
     for (const param of params) lines.push(`- ${param.name}: ${param.text}${param.tuning ? ' [guided and bespoke tiers only]' : ''}`);
     if (module.events.length) lines.push(`events: ${module.events.join(', ')}`);
+    // The style's story.variants picks one per module; set params.variant only to break from it.
+    if (module.variants) lines.push(`variants: ${module.variants.map((name, i) => (i ? name : `${name} (default)`)).join(', ')}`);
     lines.push('');
   }
   if (tier === 'bespoke') lines.push('### custom (bespoke tier only)', 'A project module at scene.source (project-relative path, no params schema). Pure function of absolute time; must obey the safe zone; falls back to the nearest catalogue module when it fails a gate.', '');

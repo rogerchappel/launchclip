@@ -1,0 +1,98 @@
+// Module variants (docs/SEEDED_STYLES_RFC.md §3.2, phase 3): each module's
+// designed looks, chosen by story.variants (a style's) or params.variant.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {MODULES, VARIANTS, catalogGTimeline, catalogGView} from '../kit/core/catalog-g.mjs';
+import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {moduleVariants, resolveModule} from '../kit/core/modules.mjs';
+import {validateStory} from '../kit/core/story.mjs';
+import {BRAND, SAMPLES} from '../scripts/variant-sheet.mjs';
+
+const FORMATS = {'9:16': {width: 1080, height: 1920, fps: 30, duration: 10}, '16:9': {width: 1920, height: 1080, fps: 30, duration: 10}};
+const story = (aspect, extra = {}) => ({schema: 'launchclip.story.v1', lane: 'motion', format: FORMATS[aspect], brand: BRAND, scenes: [], ...extra});
+const scene = (module, params = {}) => ({id: 's1', module, start: 1, end: 5, params: {...SAMPLES[module], ...params}});
+const resolve = (module, params, aspect = '9:16', extra) => resolveModule(scene(module, params), story(aspect, extra), {track: 2});
+const inside = (a, b) => a.x >= b.x - 0.01 && a.y >= b.y - 0.01 && a.x + a.width <= b.x + b.width + 0.01 && a.y + a.height <= b.y + b.height + 0.01;
+const WITH_VARIANTS = Object.keys(SAMPLES).filter(module => VARIANTS[module]?.length > 1);
+
+test('modules with variants have at least three, the default first, listed by moduleVariants', () => {
+  assert.ok(WITH_VARIANTS.length >= 3);
+  const listed = moduleVariants();
+  for (const module of WITH_VARIANTS) {
+    assert.ok(VARIANTS[module].length >= 3, module);
+    assert.equal(new Set(VARIANTS[module]).size, VARIANTS[module].length, `${module} names are unique`);
+    assert.deepEqual(listed[module], VARIANTS[module]);
+    assert.deepEqual(MODULES[module].variants, VARIANTS[module]);
+    assert.match(MODULES[module].params.variant, /VARIANTS/);
+  }
+});
+
+test('the default variant is the original render: naming it changes nothing', () => {
+  for (const module of WITH_VARIANTS) for (const aspect of ['9:16', '16:9']) {
+    const plain = resolve(module, {}, aspect), named = resolve(module, {variant: VARIANTS[module][0]}, aspect);
+    assert.equal(plain.variant, VARIANTS[module][0]);
+    assert.deepEqual(catalogGView(named), catalogGView(plain), `${module} ${aspect}`);
+    assert.deepEqual(catalogGTimeline(named), catalogGTimeline(plain), `${module} ${aspect}`);
+  }
+});
+
+test('the style picks the variant; a scene\'s params.variant wins', () => {
+  const module = 'concept-card';
+  assert.equal(resolve(module, {}, '9:16', {variants: {[module]: 'banner'}}).variant, 'banner');
+  assert.equal(resolve(module, {variant: 'marker'}, '9:16', {variants: {[module]: 'banner'}}).variant, 'marker');
+  // Another module's entry does not leak.
+  assert.equal(resolve('icon-row', {}, '9:16', {variants: {[module]: 'banner'}}).variant, 'tiles');
+});
+
+test('an unknown variant name fails with the list of names', () => {
+  assert.throws(() => resolve('concept-card', {variant: 'sparkly'}), /params\.variant must be one of stacked, side-icon, banner, marker \(the concept-card variants\); got "sparkly"/);
+  assert.throws(() => resolve('icon-row', {}, '9:16', {variants: {'icon-row': 'grid'}}), /style variants\.icon-row must be one of tiles, pills, orbit, list/);
+});
+
+test('story.variants is validated as {module: name}', () => {
+  const ok = {...story('9:16', {variants: {'concept-card': 'banner'}}), scenes: [scene('concept-card')]};
+  assert.equal(validateStory(ok).errors.length, 0, JSON.stringify(validateStory(ok).errors));
+  const bad = {...ok, variants: {'concept-card': 3}};
+  assert.ok(validateStory(bad).errors.some(error => /variants\.concept-card must be a variant name/.test(error)));
+  assert.ok(validateStory({...ok, variants: ['banner']}).errors.some(error => /variants must be/.test(error)));
+});
+
+test('every variant fits its box at both aspects, on a plate and over footage, with legible text', () => {
+  for (const module of WITH_VARIANTS) for (const variant of VARIANTS[module]) for (const aspect of ['9:16', '16:9']) {
+    const label = `${module}/${variant} ${aspect}`;
+    const model = resolve(module, {variant}, aspect);
+    assert.equal(model.variant, variant, label);
+    assert.ok(model.content.layout.height <= model.rect.height + 0.01, `${label} fits the plate`);
+    assert.ok(model.minTextPx >= (aspect === '9:16' ? 44 : 32), `${label} text ${model.minTextPx}`);
+    const card = resolve(module, {variant, surface: 'card'}, aspect, {lane: 'footage-led', base: {src: 'assets/recording.mp4'}});
+    assert.ok(inside(card.rect, card.safe), `${label} card inside the safe zone`);
+  }
+});
+
+test('every variant draws its own shape where it has room, and shows all of it by the hold', () => {
+  for (const module of WITH_VARIANTS) for (const variant of VARIANTS[module]) for (const aspect of ['9:16', '16:9']) {
+    const model = resolve(module, {variant}, aspect);
+    const ops = catalogGTimeline(model);
+    const hold = frameState(ops, model.motion.exitStart - 0.05);
+    for (const [id, props] of hold) {
+      if (id === model.id) continue;
+      if (props.opacity !== undefined) assert.ok(props.opacity >= 0.45, `${module}/${variant} ${aspect} ${id} opacity ${props.opacity}`);
+      for (const key of ['scaleX', 'scaleY']) if (props[key] !== undefined) assert.equal(props[key], 1, `${module}/${variant} ${aspect} ${id} ${key}`);
+    }
+    // Before the first beat nothing of the content shows.
+    const before = frameState(ops, model.start);
+    assert.ok([...before].filter(([id]) => id !== model.id).every(([, props]) => props.opacity === undefined || props.opacity === 0 || props.scaleX === 0 || props.scaleY === 0), `${module}/${variant} ${aspect} starts hidden`);
+  }
+  // Variants are different looks, not one layout renamed.
+  for (const module of WITH_VARIANTS) {
+    const views = VARIANTS[module].map(variant => JSON.stringify(catalogGView(resolve(module, {variant}))));
+    assert.equal(new Set(views).size, views.length, `${module} variants draw differently`);
+  }
+});
+
+test('a variant that has no room falls back to the original look instead of failing', () => {
+  const rect = {x: 140, y: 400, width: 800, height: 210};
+  const model = resolve('concept-card', {variant: 'banner', rect, surface: 'plate', sub: undefined}, '9:16');
+  assert.equal(model.variant, 'banner');
+  assert.ok(model.content.layout.height <= rect.height + 0.01);
+});
