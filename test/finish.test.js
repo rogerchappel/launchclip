@@ -373,7 +373,7 @@ test("runFinish compiles HyperFrames projects before rendering them", async () =
     assert.equal(adapters.calls.compile, 1);
     assert.equal(adapters.lastRender.project, path.join(project, PATHS.hyperframes));
     assert.equal(adapters.lastEvidence.stillsProject, path.join(project, PATHS.hyperframes));
-    assert.match(report.gates.critic.next_step, /compiled index\.html/);
+    assert.match(report.gates.critic.next_step, /launchclip cinematic-check .* --renderer hyperframes /);
   } finally {
     await rm(project, { recursive: true, force: true });
   }

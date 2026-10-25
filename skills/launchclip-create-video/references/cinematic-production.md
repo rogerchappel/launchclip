@@ -394,6 +394,11 @@ launchclip cinematic-check <project> \
   --audio-manifest AUDIO-MANIFEST.json
 ```
 
+On a storyboard project with no hand-authored `index.html`, the HyperFrames
+lint and check run on the composition `launchclip finish` compiled into
+`.launchclip/finish/hyperframes`, so run `finish` first; a hand-authored
+HyperFrames project is checked where it stands.
+
 Omit the two audio flags only when audio is intentionally absent. The audio
 gate estimates the voice-to-music margin from the music gain the mix used: it
 reads `music.volume` from `AUDIO-MANIFEST.json` (which `launchclip finish`
