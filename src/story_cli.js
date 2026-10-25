@@ -85,7 +85,12 @@ export async function checkStoryDirection({ story, resolved = null, words = null
   if (check.ok && resolved && words?.length) {
     measures = directionMeasures(map, resolved, { words });
     if (profileDoc) bands = compareMeasures(measures, profileDoc);
-    for (const band of bands) if (band.status !== "inside") warnings.push(`cadence: ${band.detail} (profile ${profileDoc.id})`);
+    // The attention-reset ceiling is structural (long form): an error, fixed by launchclip story long-form.
+    for (const band of bands) {
+      if (band.status === "inside") continue;
+      if (band.measure === "longest_without_reset_seconds") errors.push(`cadence: ${band.detail} (profile ${profileDoc.id}); change the layout, make a line an insert or add a section card in the longest run (launchclip story long-form places them)`);
+      else warnings.push(`cadence: ${band.detail} (profile ${profileDoc.id})`);
+    }
     for (const line of measures.missed) warnings.push(`direction: words [${line.words.join(", ")}] (${line.intent}) call for a visual but play on the ${line.treatment === "face" ? "presenter" : "camera"} alone: a missed opportunity unless the why says otherwise`);
   }
   return {

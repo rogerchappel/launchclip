@@ -11,7 +11,7 @@
 //
 // Pure ESM; imports only kit/core siblings. Canonical copy: kit/core/cadence.mjs.
 
-import { storyBase } from './story.mjs';
+import { storyBase, storySections } from './story.mjs';
 import { isSubjectEffect } from './modules.mjs';
 
 // Modules that move the camera or the room without drawing a graphic: they
@@ -19,6 +19,8 @@ import { isSubjectEffect } from './modules.mjs';
 export const CAMERA_ONLY_MODULES = Object.freeze(['punch-in', 'zoom-through', 'dolly-zoom']);
 // Changes closer than this are one visual change.
 const MERGE_SECONDS = 0.25;
+// Modules that reset attention wherever they play (long form, RFC §10.2).
+export const RESET_MODULES = Object.freeze(['section-card']);
 
 const finite = (value) => typeof value === 'number' && Number.isFinite(value);
 
@@ -89,6 +91,7 @@ export function storyboardMeasures(story, { sections = null, face = null } = {})
   const holds = scenes.filter(isGraphicScene).map((scene) => Math.min(duration, scene.end) - Math.max(0, scene.start)).filter((value) => value > 0);
   const subject = unionIntervals(scenes.filter((scene) => isSubjectEffect(scene)).map((scene) => clip([scene.start, scene.end], duration)));
   const minutes = duration / 60;
+  const resets = resetTimes(story, scenes, { sections, inserts, duration });
   return {
     duration_seconds: round(duration),
     lane: story?.lane ?? null,
@@ -100,12 +103,15 @@ export function storyboardMeasures(story, { sections = null, face = null } = {})
     shot_seconds: distribution(shots),
     text_hold_seconds: holds.length ? distribution(holds) : null,
     layout_changes_per_min: round(layoutChanges(sections, inserts, duration) / minutes, 2),
+    longest_without_reset_seconds: round(resetGaps(resets, duration).reduce((max, [a, b]) => Math.max(max, b - a), 0)),
+    reset_times: resets.map((t) => round(t)),
     subject_effect_share: footage ? round(total(subject) / duration, 4) : null,
     intervals: {
       graphic: graphic.map(roundPair),
       undressed: undressed.map(roundPair),
       face: faceIntervals.map(roundPair),
-      inserts: inserts.map(roundPair)
+      inserts: inserts.map(roundPair),
+      unreset: resetGaps(resets, duration).map(roundPair)
     }
   };
 }
@@ -118,6 +124,43 @@ function visualChanges(scenes, duration) {
   times.sort((a, b) => a - b);
   const out = [];
   for (const t of times) if (!out.length || t - out.at(-1) > MERGE_SECONDS) out.push(t);
+  return out;
+}
+
+/**
+ * Attention resets (long form): an insert starting, a section card starting
+ * (insert or not), and a change of layout, from the story's footage sections
+ * and the direction map's section layouts. → sorted times, merged within
+ * MERGE_SECONDS.
+ */
+export function resetTimes(story, scenes, { sections = null, inserts = [], duration }) {
+  const times = [];
+  for (const [a] of inserts) times.push(a);
+  for (const scene of scenes) if (RESET_MODULES.includes(scene.module)) times.push(scene.start);
+  const layouts = (list) => {
+    const sorted = list.filter((entry) => finite(Number(entry?.start))).map((entry) => ({ start: Number(entry.start), end: Number(entry.end), layout: entry.layout ?? 'full' })).sort((a, b) => a.start - b.start);
+    let previous = 'full', clock = 0;
+    for (const entry of sorted) {
+      if (entry.start > clock + 1e-6 && previous !== 'full') { times.push(clock); previous = 'full'; }
+      if (entry.layout !== previous) times.push(entry.start);
+      previous = entry.layout;
+      clock = finite(entry.end) ? entry.end : entry.start;
+    }
+    if (previous !== 'full' && clock < duration - 1e-6) times.push(clock);
+  };
+  if (Array.isArray(sections)) layouts(sections);
+  layouts(storySections(story));
+  times.sort((a, b) => a - b);
+  const out = [];
+  for (const t of times) if (t > MERGE_SECONDS && t < duration - MERGE_SECONDS && (!out.length || t - out.at(-1) > MERGE_SECONDS)) out.push(t);
+  return out;
+}
+
+/** The runs between resets: [[0, r1], [r1, r2], …, [rn, duration]]. */
+export function resetGaps(resets, duration) {
+  const edges = [0, ...resets, duration];
+  const out = [];
+  for (let i = 1; i < edges.length; i += 1) if (edges[i] > edges[i - 1]) out.push([edges[i - 1], edges[i]]);
   return out;
 }
 

@@ -33,6 +33,7 @@ The profile follows the story's lane, aspect, duration and platform (a direction
 | text_hold_seconds | how long a graphic holds on screen | p10 and p90 |
 | caption_words_on_screen | caption words visible at once | p90 (a ceiling) |
 | layout_changes_per_min | switches between full, split, framed, stacked and insert layouts | p90 (a ceiling) |
+| longest_without_reset_seconds | longest stretch with no attention reset (a layout change, an insert or a section card); long form plans a reset every p50 | p90 (a ceiling) |
 | subject_effect_share | share of the runtime with a presenter (subject) effect | p90 (a ceiling) |
 | flow_velocity_p90 | 90th-percentile optical-flow velocity of the render | p10 (a floor) |
 | hold_ratio | share of near-static frames | p90 (a ceiling) |
@@ -165,6 +166,7 @@ A presenter-led video of 5–30 minutes in 16:9, structured in chapters.
 | text_hold_seconds | 1.2 | 3 | 8 |
 | caption_words_on_screen | — | 3 | 7 |
 | layout_changes_per_min | — | 1.5 | 4 |
+| longest_without_reset_seconds | — | 60 | 120 |
 | subject_effect_share | — | 10% | 30% |
 | flow_velocity_p90 | 0 | 1.1 | 6 |
 | hold_ratio | — | — | 100% |

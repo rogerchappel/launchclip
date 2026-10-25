@@ -52,7 +52,7 @@ YouTube long form: footage-led, 300–1800 s, 16:9 or 1:1.
 
 - Provenance: seed
 - References: 0
-- Note: Seed ranges, not measured: set conservatively wide from the RFC placeholders and the current gate floors until a reference set is measured with launchclip profile measure. Treat the bands as guard rails, not targets to tune to.
+- Note: Seed ranges, not measured: set conservatively wide from the RFC placeholders and the current gate floors until a reference set is measured with launchclip profile measure. Treat the bands as guard rails, not targets to tune to. The attention-reset interval (a reset about every minute, never more than two) is a seed from the long-form RFC row, not a measurement.
 
 ## youtube-talking-head-launch
 

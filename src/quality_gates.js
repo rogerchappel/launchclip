@@ -24,7 +24,7 @@ import { directionFileFor } from "./story_cli.js";
 import { TRACK_FILE, readStoryTrack } from "./subject/project.js";
 
 // The measures the coverage gate fails on; the rest of the band is reported.
-export const COVERAGE_GATE_MEASURES = Object.freeze(["coverage", "face_time", "longest_undressed_seconds"]);
+export const COVERAGE_GATE_MEASURES = Object.freeze(["coverage", "face_time", "longest_undressed_seconds", "longest_without_reset_seconds"]);
 export const PROTOTYPE_WINDOW = Object.freeze({ min: 20, max: 30 });
 
 /** The direction map beside the project's storyboard, or null. */
@@ -60,8 +60,8 @@ export async function directionGate({ project, resolved, words, direction }) {
 }
 
 /**
- * Coverage: coverage, face time and the longest undressed run against the
- * profile band, measured exactly from the resolved storyboard (and the
+ * Coverage: coverage, face time, the longest undressed run and (long form)
+ * the longest run without an attention reset against the profile band, measured exactly from the resolved storyboard (and the
  * direction map's sections and lines when there is one). Other measures in
  * the band are reported and never fail the gate.
  */
@@ -82,7 +82,8 @@ export function coverageGate({ resolved, words, map, profile, face = null }) {
       first_visual_seconds: measures.first_visual_seconds,
       visual_changes_per_min: measures.visual_changes_per_min,
       layout_changes_per_min: measures.layout_changes_per_min,
-      subject_effect_share: measures.subject_effect_share
+      subject_effect_share: measures.subject_effect_share,
+      ...(profile.measures?.longest_without_reset_seconds ? { longest_without_reset_seconds: measures.longest_without_reset_seconds, resets: measures.reset_times?.length ?? 0 } : {})
     },
     bands: bands.map(({ measure, status, value, band, target }) => ({ measure, status, value, band, target })),
     errors: failing.map((band) => band.detail),
@@ -105,6 +106,13 @@ export function qualityFindings(measures, profile) {
   if (limit != null) {
     for (const [start, end] of measures.intervals?.undressed ?? []) {
       if (end - start > limit + 1e-6) findings.push({ category: "sparseness", severity: "major", at: start, message: `${round(end - start)} s with no graphic (${start}–${end} s); ${profile.id} allows at most ${limit} s` });
+    }
+  }
+  // Long form: a run with no layout change, insert or section card past the ceiling.
+  const resetLimit = profile?.measures?.longest_without_reset_seconds?.p90;
+  if (resetLimit != null) {
+    for (const [start, end] of measures.intervals?.unreset ?? []) {
+      if (end - start > resetLimit + 1e-6) findings.push({ category: "sparseness", severity: "major", at: start, message: `${round(end - start)} s with no attention reset (${start}–${end} s); ${profile.id} resets at least every ${resetLimit} s: change the layout, make a line an insert, or run launchclip story long-form` });
     }
   }
   return findings;

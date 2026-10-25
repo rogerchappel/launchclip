@@ -46,6 +46,7 @@ export const PROFILE_MEASURES = Object.freeze({
   text_hold_seconds: { unit: 's', check: 'band', stat: 'p50', describe: 'how long a graphic holds on screen' },
   caption_words_on_screen: { unit: 'words', check: 'max', describe: 'caption words visible at once' },
   layout_changes_per_min: { unit: '/min', check: 'max', describe: 'switches between full, split, framed, stacked and insert layouts' },
+  longest_without_reset_seconds: { unit: 's', check: 'max', describe: 'longest stretch with no attention reset (a layout change, an insert or a section card); long form plans a reset every p50' },
   subject_effect_share: { unit: 'share', check: 'max', describe: 'share of the runtime with a presenter (subject) effect' },
   flow_velocity_p90: { unit: 'px/s', check: 'min', describe: '90th-percentile optical-flow velocity of the render' },
   hold_ratio: { unit: 'share', check: 'max', describe: 'share of near-static frames' },
@@ -62,7 +63,7 @@ export const PROFILE_MEASURES = Object.freeze({
 // The measures the motion gate reads (src/cinematic_check.js).
 export const MOTION_MEASURES = Object.freeze(['flow_velocity_p90', 'hold_ratio', 'motion_bursts_per_min', 'change_energy_p50', 'first_motion_seconds', 'hook_events']);
 // The measures the coverage gate reads from the storyboard and direction map.
-export const COVERAGE_MEASURES = Object.freeze(['coverage', 'face_time', 'longest_undressed_seconds', 'first_visual_seconds', 'subject_effect_share']);
+export const COVERAGE_MEASURES = Object.freeze(['coverage', 'face_time', 'longest_undressed_seconds', 'first_visual_seconds', 'subject_effect_share', 'longest_without_reset_seconds']);
 
 const TOP = new Set(['schema', 'id', 'title', 'description', 'format', 'match', 'duration_seconds', 'references', 'provenance', 'measures', 'notes']);
 const MATCH = new Set(['lanes', 'aspects', 'platforms', 'cast', 'demo']);
