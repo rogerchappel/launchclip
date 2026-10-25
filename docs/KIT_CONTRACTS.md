@@ -424,8 +424,10 @@ saved pack is what renders, so a new version changes only rerolls.
   `SEED_SOUND_PALETTES`, `SEED_MUSIC_GENRES`) hold what the kits draw today.
   Backgrounds are weighted towards subtle patterns and textures
   (`SEED_BACKGROUND_KINDS` is `[kind, weight]`; flat is rare), each with a
-  `fade`, and most non-glass panels get a quiet `fill` (`SEED_PANEL_FILLS`,
-  `PANEL_FILL_CHANCE`). `sound` holds a palette, a music genre, bpm inside the
+  `fade` and params drawn inside `SEED_BACKGROUND_PARAMS` (the backgrounds
+  kit's well-reading subranges; patterned kinds also get a `color` role), and
+  most non-glass panels get a quiet `fill` (`SEED_PANEL_FILLS`,
+  `PANEL_FILL_CHANCE`; intensity and amount in the low quarter). `sound` holds a palette, a music genre, bpm inside the
   tone's range, key and progression, ambience `auto` and the tone's SFX
   density. The background, variant, character, world and sound kits widen
   these lists. `cast.members` are 2–4 people drawn from the rig's options (never a

@@ -48,6 +48,37 @@ export const SEED_PANEL_TREATMENTS = Object.freeze(['solid', 'glass', 'paper']);
 export const SEED_BACKGROUND_KINDS = Object.freeze([['texture', 3], ['grain-gradient', 3], ['dot-grid', 2], ['topographic', 2], ['halftone', 2], ['mesh', 2], ['gradient', 2], ['geometric', 1], ['stripes', 1], ['paper', 1], ['blobs', 1], ['flat', 1]].map(Object.freeze));
 // Fills inside cards and footage panels: quiet textures only.
 export const SEED_PANEL_FILLS = Object.freeze(['texture', 'grain-gradient', 'dot-grid', 'halftone', 'topographic']);
+// Per-kind param subranges that read well (from the backgrounds kit; every
+// value inside kit/core/backgrounds.mjs BACKGROUND_PARAMS is contrast-safe).
+// Panel fills take the low quarter of intensity and amount, so card text
+// stays calm. `color` applies to the patterned kinds.
+export const SEED_BACKGROUND_PARAMS = Object.freeze({
+  texture: { amount: [0.3, 0.8], scale: [0.8, 1.4] },
+  'grain-gradient': { angle: [0, 360], intensity: [0.25, 0.7], grain: [0.2, 0.6] },
+  gradient: { angle: [0, 360], intensity: [0.25, 0.7] },
+  'dot-grid': { scale: [0.7, 1.5], density: [0.2, 0.7], intensity: [0.3, 0.7] },
+  topographic: { density: [0.3, 0.8], scale: [0.8, 1.4], intensity: [0.3, 0.6] },
+  halftone: { angle: [0, 360], scale: [0.7, 1.4], intensity: [0.3, 0.7] },
+  mesh: { intensity: [0.3, 0.7], scale: [0.7, 1.6] },
+  geometric: { density: [0.3, 0.7], scale: [0.8, 1.5], intensity: [0.3, 0.6] },
+  stripes: { angle: [0, 180], scale: [0.8, 1.6], density: [0.2, 0.45], intensity: [0.2, 0.5] },
+  paper: { grain: [0.3, 0.7], intensity: [0.2, 0.6] }
+});
+const PATTERNED = new Set(['texture', 'dot-grid', 'topographic', 'halftone', 'mesh', 'geometric', 'stripes']);
+const CALM_PARAMS = new Set(['intensity', 'amount']);
+
+/** Seeded params for a background kind (a panel fill keeps intensity low). */
+function drawBackgroundParams(s, kind, { fill = false } = {}) {
+  const params = {};
+  for (const [name, [lo, hi]] of Object.entries(SEED_BACKGROUND_PARAMS[kind] ?? {})) {
+    const top = fill && CALM_PARAMS.has(name) ? lo + (hi - lo) * 0.25 : hi;
+    params[name] = name === 'angle' ? Math.round(s.range(lo, top)) : round(s.range(lo, top), 2);
+  }
+  const color = s.pick(['primary', 'accent', 'paper']);
+  if (PATTERNED.has(kind)) params.color = color;
+  return params;
+}
+
 export const SEED_FADES = Object.freeze(['none', 'center', 'top', 'bottom', 'left', 'right']);
 export const PANEL_FILL_CHANCE = 0.6;
 export const SEED_SOUND_PALETTES = STYLE_SOUND_PALETTES;
@@ -537,11 +568,13 @@ function buildPack(hex, toneName, t, fixed, attempt) {
   const drawn = weighted(surface, SEED_BACKGROUND_KINDS);
   const fade = surface.pick(SEED_FADES);
   const kind = backgroundFixed.kind ?? drawn;
-  const background = { kind, params: backgroundFixed.params ?? (kind === 'blobs' ? {} : { fade }) };
+  const drawnParams = drawBackgroundParams(draw('background-params'), kind);
+  const background = { kind, params: backgroundFixed.params ?? (kind === 'blobs' ? {} : { ...drawnParams, fade }) };
   const fillStream = draw('panel-fill');
   const fillKind = fillStream.pick(SEED_PANEL_FILLS);
   const fillFade = fillStream.pick(SEED_FADES);
-  if (panelFixed.fill === undefined && panel.treatment !== 'glass' && fillStream.chance(PANEL_FILL_CHANCE)) panel.fill = { kind: fillKind, params: { fade: fillFade } };
+  const fillParams = drawBackgroundParams(fillStream, fillKind, { fill: true });
+  if (panelFixed.fill === undefined && panel.treatment !== 'glass' && fillStream.chance(PANEL_FILL_CHANCE)) panel.fill = { kind: fillKind, params: { ...fillParams, fade: fillFade } };
   else if (panelFixed.fill) panel.fill = panelFixed.fill;
   let level = motion.pick(t.ambient);
   if (kind === 'blobs' && level === 'off') level = 'subtle';
