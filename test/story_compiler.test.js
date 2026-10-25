@@ -90,6 +90,7 @@ test("compiles the minimal story into a HyperFrames project that follows the run
     const clone = html.match(/<div id="lc-scene-s1-loop"[\s\S]*?<\/section><\/div><\/div>/)[0];
     assert.doesNotMatch(clone, /class="clip|data-start=|data-track-index=/);
     assert.match(html, /tl\.fromTo\(loopTl, \{ time: 0 \}, \{ time: 0,/);
+    assert.match(html, /loopTl\.render\(0, true, true\);/, "the held clone's first state is rendered (GSAP skips a set at an unmoved playhead)");
 
     // Brand fonts: role stacks with fallbacks.
     assert.match(html, /--lc-font-display: 'Anton', 'STIX Two Math', sans-serif;/);
@@ -317,5 +318,21 @@ test("fonts outside the registry use frozen assets/fonts files, else warn and ke
     assert.match(frozen.html, /@font-face \{ font-family: 'Poppins'; src: url\("assets\/fonts\/poppins-700\.woff2"\) format\("woff2"\); font-weight: 700;/);
   } finally {
     await rm(source, { recursive: true, force: true });
+  }
+});
+
+test("character emitters leave GSAP no CSS transform to overwrite (hyperframes lint)", async () => {
+  const dir = path.join(ROOT, "examples/story/characters-16x9");
+  const out = await tempDir("launchclip-hf-lint-cast-");
+  try {
+    const { readProjectStory } = await import("../src/story_loader.js");
+    const { resolved } = await readProjectStory(dir);
+    await compileStoryToHyperFrames(resolved, { projectDir: out, sourceDir: dir });
+    // The example's screen scene still trips overlapping_clips_same_track, so lint exits 1.
+    const { stdout } = await run(process.execPath, [HYPERFRAMES_CLI, "lint", "--json", out], { cwd: out }).catch((error) => error);
+    const codes = parseOutput(stdout).findings.filter((finding) => finding.severity === "error").map((finding) => finding.code);
+    assert.deepEqual(codes.filter((code) => code === "gsap_css_transform_conflict" || code === "gsap_exit_missing_hard_kill"), [], stdout);
+  } finally {
+    await rm(out, { recursive: true, force: true });
   }
 });

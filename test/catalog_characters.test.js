@@ -156,3 +156,24 @@ test('an actor reaches as far as its widest pose: a point runs toward its facing
   assert.ok(maya.reach.top > 0 && maya.reach.bottom <= 1080);
   assert.ok(theo.reach.left > maya.x);
 });
+
+test('HyperFrames: GSAP owns the rig transforms (no CSS transform for it to overwrite), set to the same values first', async () => {
+  const {gsapOwnedTransforms, transformProps} = await import('../kit/hyperframes/catalog-characters.mjs');
+  const model = resolve(desk());
+  const ops = charactersTimeline(model);
+  const owned = gsapOwnedTransforms(charactersView(model), ops, model.start);
+  const {html, motion} = EMITTERS['cast-scene'](model);
+  const moved = new Set(ops.filter(op => ['x', 'y', 'rotation', 'scale', 'scaleX', 'scaleY'].some(key => key in (op.props ?? {...op.from, ...op.to}))).map(op => op.target));
+  assert.ok(moved.has('desk-c0-arm-l') && moved.has('desk-c0-body'));
+  for (const id of moved) {
+    const tag = html.match(new RegExp(`<div id="${id}"[^>]*>`))?.[0];
+    if (tag) assert.doesNotMatch(tag, /transform:/, id);
+  }
+  // Each taken-off transform comes back as a set at the scene start, before the scene's own ops.
+  const first = owned.ops.findIndex(op => !(op.type === 'set' && op.time === model.start && 'scaleX' in op.props && 'rotation' in op.props && 'x' in op.props));
+  assert.ok(first > 10, 'the transform sets lead the op list');
+  assert.match(motion, /^tl\.set\("#desk-c0-body", \{"x":0,"y":140,"rotation":0,"scaleX":1,"scaleY":1\}, 0\);/, "the seated body, as its CSS had it");
+  assert.deepEqual(transformProps('translate(4px, -2.5px) rotate(12deg) scale(1, 0.96)'), {x: 4, y: -2.5, rotation: 12, scaleX: 1, scaleY: 0.96});
+  assert.deepEqual(transformProps('scale(0.6)'), {x: 0, y: 0, rotation: 0, scaleX: 0.6, scaleY: 0.6});
+  assert.throws(() => transformProps('skewX(4deg)'), /unsupported transform/);
+});

@@ -302,7 +302,10 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     motion.push(...toggle(`#${outer}`, loop.start, loop.end + 1, D));
     motion.push(...loop.tweens.map((tw) => tweenCode(`#${inner}`, tw)));
     if (out.motion) {
-      motion.push(`{\nconst loopTl = gsap.timeline({ paused: true });\n((tl) => {\n${out.motion}\n})(loopTl);\ntl.fromTo(loopTl, { time: ${num(entry.scene.start)} }, { time: ${num(entry.scene.start)}, duration: ${num(Math.max(0.001, loop.end - loop.start + TOGGLE_LEAD))}, ease: 'none', immediateRender: false }, ${num(Math.max(0, loop.start - TOGGLE_LEAD))});\n}`);
+      // The hold never moves loopTl's playhead, and GSAP does not render a
+      // tl.set at a playhead that has not moved (a scene at 0 s), so the
+      // clone's first state is rendered once here.
+      motion.push(`{\nconst loopTl = gsap.timeline({ paused: true });\n((tl) => {\n${out.motion}\n})(loopTl);\nloopTl.render(${num(entry.scene.start)}, true, true);\ntl.fromTo(loopTl, { time: ${num(entry.scene.start)} }, { time: ${num(entry.scene.start)}, duration: ${num(Math.max(0.001, loop.end - loop.start + TOGGLE_LEAD))}, ease: 'none', immediateRender: false }, ${num(Math.max(0, loop.start - TOGGLE_LEAD))});\n}`);
     }
     z += 10;
   }
