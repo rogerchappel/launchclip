@@ -236,7 +236,11 @@ export function rise(ops, model, target, time, {distance = RISE.y, duration = 0.
 export function bob(ops, target, from, until, amplitude, period = 1.4) {
   let t = from, up = true;
   while (t + period / 2 <= until) {
-    tw(ops, target, rt(t), period / 2, 'sine.inOut', {y: up ? 0 : -amplitude}, {y: up ? -amplitude : 0});
+    // Each half ends where the next starts in floating point too (107.79 + 0.7
+    // is 108.49000000000001, which HyperFrames' lint reads as an overlap).
+    const start = rt(t), next = rt(t + period / 2);
+    const duration = start + period / 2 > next ? Number((next - start - 1e-6).toFixed(6)) : period / 2;
+    tw(ops, target, start, duration, 'sine.inOut', {y: up ? 0 : -amplitude}, {y: up ? -amplitude : 0});
     t += period / 2;
     up = !up;
   }

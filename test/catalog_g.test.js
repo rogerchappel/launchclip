@@ -215,3 +215,14 @@ test('every card lands with its first content: no empty box at the entrance', ()
     assert.ok(showing(late, late.motion.enterStart + 0.4), `${id} lands with its first beat`);
   }
 });
+
+test('the hero bob chains end to start in floating point too (no overlap for HyperFrames lint)', async () => {
+  const {bob} = await import('../kit/core/catalog-g-base.mjs');
+  const ops = [];
+  bob(ops, 'hero', 107.09, 112, 6);
+  assert.ok(ops.length > 4);
+  for (let i = 1; i < ops.length; i++) {
+    assert.ok(ops[i - 1].start + ops[i - 1].duration <= ops[i].start, `${ops[i - 1].start} + ${ops[i - 1].duration} overlaps ${ops[i].start}`);
+    assert.ok(Math.abs(ops[i - 1].duration - 0.7) < 1e-5);
+  }
+});
