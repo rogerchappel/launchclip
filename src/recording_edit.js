@@ -1,4 +1,9 @@
 export const RECORDING_EDIT_VERSION = "launchclip.recording-edit.v1";
+/** Cut reasons that remove spoken source words; handles and repairs must not restore them. */
+export const REJECTED_SPEECH_REASONS = Object.freeze(["semantic-retake", "semantic-restart", "repeated-take", "filler", "false-start"]);
+/** A word-level restart restates within a sentence, so its restatement follows closely. */
+export const RESTART_GAP_SECONDS = 3;
+export const RESTART_MAX_WORDS = 12;
 
 /** Normalize timestamped Whisper and Scribe output without inventing timing. */
 export function normalizeRecordingTranscript(transcript) {
@@ -46,7 +51,8 @@ export function planRecordingEdit(transcript, options = {}) {
       }
     }
     for (let index = 0; index < words.length - 1; index++) {
-      const initial = index === 0 || /[.!?][\"']?$/.test(words[index - 1].word) || words[index].start - words[index - 1].end >= 0.6;
+      // A clause comma also starts a launch: "so, but however, but whatever".
+      const initial = index === 0 || /[.!?,;:][\"']?$/.test(words[index - 1].word) || words[index].start - words[index - 1].end >= 0.6;
       if (!initial || token(words[index].word) !== "but") continue;
       // A repeated initial connective abandons the first launch; a normal
       // contrast such as 'but we can ship' remains grammatical speech.
@@ -84,6 +90,50 @@ export function planRecordingEdit(transcript, options = {}) {
       rejected.add(index);
     }
     explicitCuts.push({ start: words[first].start, end: words[last].end, reason: "semantic-retake" });
+  }
+
+  // Word-level restarts inside a sentence use the same original indexes. They
+  // may clean a retained semantic take, but never remove their own restatement.
+  const semanticRestarts = options.semanticRestarts ?? [];
+  if (!Array.isArray(semanticRestarts)) throw new Error("semanticRestarts must be an array");
+  const restatements = new Set();
+  for (const decision of semanticRestarts) {
+    checkRestart(decision, words);
+    for (let index = decision.later.first_word; index <= decision.later.last_word; index++) restatements.add(index);
+  }
+  for (const decision of semanticRestarts) {
+    const { first_word: first, last_word: last } = decision.earlier;
+    for (let index = first; index <= last; index++) {
+      if (restatements.has(index)) throw new Error("Semantic restart decisions conflict with a retained restatement");
+      rejected.add(index);
+    }
+    explicitCuts.push({ start: words[first].start, end: words[last].end, reason: "semantic-restart" });
+  }
+  for (const index of restatements) protectedLater.add(index);
+
+  // Lexical in-sentence restarts: a short exact run (fewer than minRepeatWords)
+  // immediately restated word for word, with the restatement continuing.
+  if (takePolicy === "last") {
+    const sentenceEnd = (index) => /[.!?]["']?$/.test(words[index].word);
+    for (let index = 0; index < words.length; index++) {
+      for (let size = Math.min(5, Math.floor(minimum) - 1); size >= 2; size--) {
+        const next = index + 2 * size;
+        if (next >= words.length) continue;
+        const span = Array.from({ length: 2 * size }, (_, offset) => index + offset);
+        // A restatement may itself restart; the final copy always survives.
+        if (span.some((position) => rejected.has(position))) continue;
+        const earlier = span.slice(0, size).map((position) => token(words[position].word));
+        const later = span.slice(size).map((position) => token(words[position].word));
+        if (earlier.some((value) => !value) || new Set(earlier).size < 2 || earlier.some((value, offset) => value !== later[offset])) continue;
+        // The abandoned run sits inside one sentence, and the restatement goes on.
+        if (span.slice(0, size).some(sentenceEnd) || span.slice(1, size).some((position) => words[position].start - words[position - 1].end >= 0.6)) continue;
+        if (words[index + size].start - words[index + size - 1].end > 2 || sentenceEnd(next - 1) || words[next].start - words[next - 1].end >= 0.6) continue;
+        for (let position = index; position < index + size; position++) rejected.add(position);
+        explicitCuts.push({ start: words[index].start, end: words[index + size - 1].end, reason: "false-start" });
+        index += size - 1;
+        break;
+      }
+    }
   }
 
   const phrases = [];
@@ -181,7 +231,23 @@ export function planRecordingEdit(transcript, options = {}) {
   return { schema_version: RECORDING_EDIT_VERSION, source_duration_seconds: duration, duration_seconds: clock, kept_segments, removed_segments, words: remapped, text: remapped.map((word) => word.word).join(" ") };
 }
 
-function cutPriority(reason) { return { "semantic-retake": 4, "repeated-take": 3, "false-start": 2, filler: 1 }[reason] ?? 0; }
+function cutPriority(reason) { return { "semantic-retake": 5, "semantic-restart": 4, "repeated-take": 3, "false-start": 2, filler: 1 }[reason] ?? 0; }
+/** Structural rules shared with semantic validation; semantic judgement stays with the decision. */
+export function checkRestart(decision, words) {
+  for (const range of [decision?.earlier, decision?.later]) {
+    if (!Number.isInteger(range?.first_word) || !Number.isInteger(range?.last_word) || range.first_word < 0 || range.last_word < range.first_word || range.last_word >= words.length) throw new Error("Semantic restart requires valid inclusive word-index ranges");
+  }
+  const { earlier, later } = decision;
+  if (earlier.last_word >= later.first_word) throw new Error("Semantic restart must keep a strictly later restatement");
+  if (decision.later_complete !== true || typeof decision.explanation !== "string" || !decision.explanation.trim()) throw new Error("Semantic restart requires a complete explained restatement");
+  const earlierCount = earlier.last_word - earlier.first_word + 1;
+  if (earlierCount > RESTART_MAX_WORDS) throw new Error(`Semantic restart covers more than ${RESTART_MAX_WORDS} words; use a passage retake`);
+  if (later.last_word - later.first_word < 1) throw new Error("Semantic restart restatement needs at least two words");
+  for (let index = earlier.last_word + 1; index < later.first_word; index++) {
+    if (!/^(?:um+|uh+|erm|er)$/.test(token(words[index].word))) throw new Error("Semantic restart must be followed immediately by its restatement");
+  }
+  if (words[later.first_word].start - words[earlier.last_word].end > RESTART_GAP_SECONDS) throw new Error("Semantic restart restatement is not within the sentence restart window");
+}
 function token(word) { return word.toLowerCase().replace(/[^\p{L}\p{N}]/gu, ""); }
 function isRetake(left, right, minimum) {
   // Require an anchored passage, not a few common words scattered in two lines.

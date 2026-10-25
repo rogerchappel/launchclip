@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { normalizeRecordingTranscript } from "./recording_edit.js";
+import { normalizeRecordingTranscript, REJECTED_SPEECH_REASONS } from "./recording_edit.js";
 
 const KINDS = new Set(["broken-sentence", "missing-context", "orphan-fragment", "unintended-repetition", "unclear-audio", "transcription-variation", "source-delivery"]);
 
@@ -167,7 +167,7 @@ export function recordingAcousticIssues(plan, acoustic) {
     const offset = segment.start_seconds - segment.source_start_seconds;
     const first = normalizeRecordingTranscript(plan.words).find((word) => word.start >= segment.start_seconds - 1e-6 && word.end <= segment.end_seconds + 1e-6);
     if (!first || Math.abs(first.start - (start + offset)) > 1e-6 || Math.abs(first.end - (end + offset)) > 1e-6) throw new Error("Ambiguous word span does not match a retained timed word");
-    if (!(plan.removed_segments ?? []).some((cut) => ["semantic-retake", "repeated-take", "filler", "false-start"].includes(cut.reason) && Math.abs(cut.source_end_seconds - keep) <= 1e-6)) throw new Error("Ambiguous word span requires an adjacent rejected cut");
+    if (!(plan.removed_segments ?? []).some((cut) => REJECTED_SPEECH_REASONS.includes(cut.reason) && Math.abs(cut.source_end_seconds - keep) <= 1e-6)) throw new Error("Ambiguous word span requires an adjacent rejected cut");
     return { kind: "unconfirmed-boundary", segment_index: index, edge: "start",
       at_seconds: start + offset, source_word_boundary_seconds: start,
       source_keep_boundary_seconds: keep, proven: false,
