@@ -4,10 +4,10 @@
 //
 //   npm run test:media
 //   npm run test:media -- --test-name-pattern=remotion
-import {spawnSync} from 'node:child_process';
 import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {runTests} from './test.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const TEST = path.join(ROOT, 'test');
@@ -20,11 +20,6 @@ export function mediaTestFiles(dir = TEST) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const files = mediaTestFiles();
-  const result = spawnSync(process.execPath, ['--test', ...process.argv.slice(2), ...files], {
-    cwd: ROOT,
-    stdio: 'inherit',
-    env: {...process.env, LAUNCHCLIP_MEDIA_TESTS: '1'}
-  });
-  process.exit(result.status ?? 1);
+  process.chdir(ROOT);
+  process.exit(runTests([...process.argv.slice(2), ...mediaTestFiles()], {...process.env, LAUNCHCLIP_MEDIA_TESTS: '1'}));
 }

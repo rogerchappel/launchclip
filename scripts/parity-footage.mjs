@@ -28,6 +28,7 @@ import {createRequire} from 'node:module';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {promisify} from 'node:util';
+import {bundleForRun} from './remotion-bundle.mjs';
 import {readProjectStory} from '../src/story_loader.js';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
 import {resolveModule} from '../kit/core/modules.mjs';
@@ -66,8 +67,7 @@ async function hyperframesStills(story, project, sceneFilter, times, dir) {
 const bundles = new Map();
 async function remotionBundle(publicDir) {
   if (!bundles.has(publicDir)) {
-    const {bundle} = await import('@remotion/bundler');
-    bundles.set(publicDir, await bundle({entryPoint: ENTRY, publicDir, onProgress: () => {}}));
+    bundles.set(publicDir, await bundleForRun({entryPoint: ENTRY, publicDir, onProgress: () => {}}));
   }
   return bundles.get(publicDir);
 }

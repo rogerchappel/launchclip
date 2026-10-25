@@ -266,6 +266,7 @@ test("each sample renders a real Remotion still through ModuleReview", { skip: m
     }
   } finally {
     await rm(dir, { recursive: true, force: true });
+    await rm(serveUrl, { recursive: true, force: true });
   }
 });
 

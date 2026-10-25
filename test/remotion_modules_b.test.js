@@ -107,6 +107,7 @@ test("every batch B kind renders a real Remotion still", { skip: mediaSkip(), ti
     assert.deepEqual([...rendered].sort(), Object.keys(KINDS).sort());
   } finally {
     await rm(out, { recursive: true, force: true });
+    await rm(serveUrl, { recursive: true, force: true });
   }
 });
 
