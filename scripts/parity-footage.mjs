@@ -4,9 +4,12 @@
 //   node scripts/parity-footage.mjs [fixture.json ...] [--out .tmp/parity-footage]
 //
 // A fixture is {project, sceneId?, mode?: "module"|"story", times?: [seconds],
-// threshold?: {ssim}}. `project` is a storyboard project (relative to the repo
-// root) holding storyboard.json, NARRATION.json, base.edl and assets/; it is
-// resolved exactly as the CLI does (story_loader.readProjectStory).
+// threshold?: {ssim}, patch?: {...}, files?: {path: text}}. `project` is a
+// storyboard project (relative to the repo root) holding storyboard.json,
+// NARRATION.json, base.edl and assets/; it is resolved exactly as the CLI does
+// (story_loader.readProjectStory). With `patch` (top-level storyboard keys,
+// for example a brand `frame`) or `files` (extra text files such as an SVG
+// logo), a copy of the project in the output directory is used instead.
 //
 // - module: the scene over the footage. HyperFrames compiles the story with
 //   sceneFilter (absolute times, base videos and that scene's camera, no
@@ -20,7 +23,7 @@
 // public dir is the project, so staticFile() finds assets/ and captions.
 // Writes report.json and side-by-side PNGs (HyperFrames left, Remotion right).
 import {execFile} from 'node:child_process';
-import {mkdir, readdir, readFile, rm, writeFile} from 'node:fs/promises';
+import {cp, mkdir, readdir, readFile, rm, writeFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -93,14 +96,29 @@ async function sideBySide(a, b, file) {
   await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', a, '-i', b, '-filter_complex', '[0][1]hstack=inputs=2,scale=iw/2:-1', file]);
 }
 
+// A copy of the fixture's project with its storyboard patched and extra files written.
+async function patchedProject(source, fixture, dir) {
+  const copy = path.join(dir, 'project');
+  await rm(copy, {recursive: true, force: true});
+  await cp(source, copy, {recursive: true});
+  const storyFile = path.join(copy, 'storyboard.json');
+  await writeFile(storyFile, `${JSON.stringify({...JSON.parse(await readFile(storyFile, 'utf8')), ...(fixture.patch ?? {})}, null, 2)}\n`);
+  for (const [name, text] of Object.entries(fixture.files ?? {})) {
+    await mkdir(path.dirname(path.join(copy, name)), {recursive: true});
+    await writeFile(path.join(copy, name), text);
+  }
+  return copy;
+}
+
 export async function verifyFixture(file, {out = path.join(ROOT, '.tmp/parity-footage')} = {}) {
   const fixture = JSON.parse(await readFile(file, 'utf8'));
-  const project = path.resolve(ROOT, fixture.project);
+  const dir = path.join(out, path.basename(file, '.json'));
+  await mkdir(dir, {recursive: true});
+  const source = path.resolve(ROOT, fixture.project);
+  const project = fixture.patch || fixture.files ? await patchedProject(source, fixture, dir) : source;
   const {resolved: story} = await readProjectStory(project);
   const fps = story.resolved.fps;
   const mode = fixture.mode ?? (fixture.sceneId ? 'module' : 'story');
-  const dir = path.join(out, path.basename(file, '.json'));
-  await mkdir(dir, {recursive: true});
   let times, hf, rmFiles, label;
   if (mode === 'module') {
     const scene = story.scenes.find(entry => entry.id === fixture.sceneId);

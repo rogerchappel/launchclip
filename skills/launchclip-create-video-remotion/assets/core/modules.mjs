@@ -19,6 +19,7 @@ import { MODULES as CATALOG_G } from './catalog-g.mjs';
 import { storyBase } from './story.mjs';
 import { isEditorialGrammar, resolveGrammar } from './grammar.mjs';
 import { profileGeometry } from './layout-check.mjs';
+import { brandFrameSafe, intersectRects } from './brand-frame.mjs';
 import { sceneAmbient } from './ambient.mjs';
 import { subjectContext, subjectModelErrors } from './subject-layer.mjs';
 import { layoutAt } from './footage-layout.mjs';
@@ -160,6 +161,15 @@ export function resolveModule(scene, story, { track, end } = {}) {
     // Subject fields (layer parts, subjectCamera, room): kit/core/subject-layer.mjs.
     const problems = subjectModelErrors(model);
     if (problems.length) throw new Error(problems.join('; '));
+    // Brand frame (kit/core/brand-frame.mjs): the area a module may use
+    // without colliding with the frame, as model.frame.safe; inside a footage
+    // layout's panel (layoutAt(...).safe) it is that panel's safe area
+    // narrowed to the frame's.
+    const frameSafe = story?.frame ? brandFrameSafe(story) : null;
+    if (frameSafe) {
+      const panel = Number.isFinite(Number(scene?.start)) ? layoutAt(story, Number(scene.start))?.safe ?? null : null;
+      model.frame = { ...(model.frame && typeof model.frame === 'object' ? model.frame : {}), safe: intersectRects(panel ?? model.frame?.safe, frameSafe) };
+    }
     return model;
   } catch (error) {
     throw new Error(`${where}: ${error.message}${rectFitHint(scene, story, error.message, { end: finalEnd })}`);

@@ -12,6 +12,8 @@
 //   no TransitionSeries, so story times stay authoritative;
 // - one root <Audio> for audio.mix (or the voice);
 // - <WordCaptions> from captions.json or chunked NARRATION words;
+// - <BrandFrame> (kit/core/brand-frame.mjs): kicker, section labels and the
+//   progress line over every scene, under the captions;
 // - the loop ending (the loop_to scene's first state over the final window);
 // - ambient motion (kit/core/ambient.mjs): the background field inside every
 //   track-0 plate and the hold-drift wrapper around each scene's content,
@@ -53,6 +55,7 @@ import { moduleComponent } from "./modules";
 import { baseCameraOps, cameraStyle } from "./catalog/CatalogC";
 import { Placeholder } from "./Placeholder";
 import { WordCaptions } from "./captions/WordCaptions";
+import { BrandFrame } from "./frame/BrandFrame";
 import { SceneStartFrame } from "./clock";
 import { ensureFonts } from "./fonts";
 
@@ -359,6 +362,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
           ) : null}
         </CameraWorld>
         {layers.filter((layer: any) => !layer.entry.plate).map(sceneLayer)}
+        <BrandFrame story={story} />
         {overlay && Array.isArray(__captions) && __captions.length ? (
           <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} />
         ) : null}
@@ -387,6 +391,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
           <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate background={background} freeze field={fieldFor(loop.scene)}>{loop.render()}</SceneLayer>
         </Sequence>
       ) : null}
+      <BrandFrame story={story} />
       {overlay && Array.isArray(__captions) && __captions.length ? (
         <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} />
       ) : null}
