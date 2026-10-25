@@ -523,10 +523,15 @@ export function applyStyle(story, pack, options = {}) {
   }
 
   // Motion grammar, camera, ambient, layout: pass-through data filled per key.
+  // A story's motion holds only the grammar (story.mjs validateMotion), so
+  // other motion keys a pack carries (a reference draft's
+  // transition_preference) stay in the pack for the planner.
   for (const key of ['motion', 'camera', 'ambient', 'layout']) {
     if (!isObject(pack[key])) continue;
-    if (out[key] === undefined) { out[key] = clone(pack[key]); applied.push(key); }
-    else if (isObject(out[key])) fill(out[key], pack[key], key);
+    const source = key === 'motion' ? (pack.motion.grammar === undefined ? null : { grammar: pack.motion.grammar }) : pack[key];
+    if (!source) continue;
+    if (out[key] === undefined) { out[key] = clone(source); applied.push(key); }
+    else if (isObject(out[key])) fill(out[key], source, key);
   }
 
   // Polish dial (v3): the ambient level when neither the pack nor the story sets one.
@@ -827,6 +832,7 @@ export function stylePromptLines(pack, { lane, story } = {}) {
   }
   if (isObject(pack.brand_frame) && pack.brand_frame.enabled !== false) lines.push('The pack draws a brand frame (kicker, section labels, progress line) around every scene: do not author kickers or brand labels as scenes. Name sections with "frame": {"labels": [{"scene": "<id>", "label": "<2-4 words>"}]}.');
   const grammar = typeof pack.motion?.grammar === 'string' ? pack.motion.grammar : pack.motion?.grammar?.base;
+  if (Array.isArray(pack.motion?.transition_preference) && pack.motion.transition_preference.length) lines.push(`Preferred transitions: ${pack.motion.transition_preference.join(', ')}.`);
   if (grammar) lines.push(`Motion grammar: ${grammar}${grammar === 'snappy' ? ' (short scenes, fast push/whip transitions)' : grammar === 'smooth' || grammar === 'documentary' || grammar === 'cinematic' ? ' (longer holds, fades and slow pushes)' : ''}.`);
   if (pack.ambient?.level) lines.push(`Ambient motion level: ${pack.ambient.level}.`);
   if (pack.sound?.sfx_density) lines.push(`SFX density: ${pack.sound.sfx_density}${pack.sound.sfx_density === 'low' ? ' (cue only the biggest hits)' : pack.sound.sfx_density === 'high' ? ' (cue most hits)' : ''}.`);
