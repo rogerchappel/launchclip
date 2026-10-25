@@ -123,7 +123,9 @@ restarts can remain. Defaults: 0.8s silence threshold, 0.15s speech handles,
 while still removing retakes. Dimensions and playback speed are preserved.
 
 The command uses installed local Whisper (`base.en`, configurable with
-`--recording-model`); the first run may download model weights. Supplied JSON
+`--recording-model`) and a second local model, `small.en`
+(`--consensus-model`, or `none`), merged word by word for timing; the first run
+may download model weights. Supplied JSON
 accepts flat words, `{words}`, or Whisper segments containing word arrays.
 Plain text and segment-only times cannot drive cuts. No paid provider is called.
 Outputs include `base-edit.mp4`, source/edited transcripts, remapped words,
