@@ -130,3 +130,22 @@ test('the starter cast includes white men and women, children and a teen', () =>
   assert.equal(starterCharacter('max').params.age, 'teen');
   assert.deepEqual(generateCast({seed: 'x', set: 'kids', count: 12}).filter(m => ['oliver', 'hannah', 'ben', 'lily', 'kofi', 'max'].includes(m.id)), [], 'generated ids never reuse a starter id');
 });
+
+test('the newer sets: 1–3 characters in both orientations, every style, inside the canvas and the safe zone', async () => {
+  const {SETS, SEATED_SETS, SET_INFO} = await import('../kit/core/characters/sets.mjs');
+  const {castPlacement} = await import('../kit/core/characters/placement.mjs');
+  const fresh = ['kitchen-counter', 'sofa', 'podium', 'stage', 'car', 'park-bench', 'video-call', 'standing-desk'];
+  for (const name of fresh) {
+    assert.ok(SETS.includes(name) && SET_INFO[name].describe, name);
+    assert.equal(SEATED_SETS.includes(name), SET_INFO[name].seated, `${name} seated flag`);
+  }
+  const ids = ['maya', 'theo', 'grace'];
+  for (const portrait of [false, true]) for (const name of fresh) for (const style of DRAWING_STYLES) for (const n of [1, 2, 3]) {
+    const format = portrait ? {width: 1080, height: 1920, platform: 'youtube-shorts'} : {width: 1920, height: 1080};
+    const story = {format: {...format, fps: 30, duration: 4}, brand: {colors: palette}, cast: {style, characters: ids.map(id => ({id}))}, scenes: [{id: 's', module: 'cast-scene', start: 0, end: 4, params: {set: name, cast: ids.slice(0, n).map(id => ({id}))}}]};
+    const model = resolveModule(story.scenes[0], story);
+    assert.equal(model.content.actors.length, n);
+    const findings = castPlacement(story, [model]).filter(f => /off the canvas/.test(f.detail));
+    assert.deepEqual(findings, [], `${name} ${style} ${n} ${portrait ? 'portrait' : 'landscape'}`);
+  }
+});

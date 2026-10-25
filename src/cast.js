@@ -15,6 +15,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { STARTER_CAST } from "../kit/core/characters/cast.mjs";
 import { castPlacement } from "../kit/core/characters/placement.mjs";
+import { SEATED_SETS } from "../kit/core/characters/sets.mjs";
 import { KOKORO_VOICES, castConsistency, castMember, resolveStoryCast, validateCastCues } from "../kit/core/characters/cues.mjs";
 import { EXPRESSIONS, POSES } from "../kit/core/characters/rig.mjs";
 import { sceneJoints } from "../kit/core/characters/acting.mjs";
@@ -59,7 +60,7 @@ export function castUsage(story, direction = null) {
   for (const scene of Array.isArray(story?.scenes) ? story.scenes : []) {
     if (!CAST_MODULES.includes(scene?.module)) continue;
     const params = scene.params ?? {};
-    const seated = ["desk-laptop", "meeting"].includes(params.set);
+    const seated = SEATED_SETS.includes(params.set);
     const actors = scene.module === "cast-scene" ? (Array.isArray(params.cast) ? params.cast : []) : [{ ...params, id: params.character }];
     for (const actor of actors) {
       note(actor?.id, actor?.pose ?? (seated ? "sit" : "stand"), actor?.expression ?? "neutral");

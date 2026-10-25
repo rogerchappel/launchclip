@@ -3,7 +3,8 @@
 // docs/KIT_CONTRACTS.md ("Character modules").
 //
 //   cast-scene       one to three characters in a set (desk-laptop, phone,
-//                    meeting, screen), directed by cues: named poses and
+//                    meeting, screen, kitchen-counter, sofa, podium, stage,
+//                    car, park-bench, video-call, standing-desk), directed by cues: named poses and
 //                    expressions at times or narration words, mouths moving
 //                    on their spoken words
 //   character-cameo  one character beside a card, or alone on a panel (for
@@ -28,7 +29,7 @@ import {lightErrors, normalizeLight} from './characters/light.mjs';
 import {characterView} from './characters/view.mjs';
 import {drawingBounds} from './characters/bounds.mjs';
 import {ACTING, actingOps, sceneJoints, speechChanges} from './characters/acting.mjs';
-import {SETS, SET_INFO, layoutSet, phoneProp} from './characters/sets.mjs';
+import {SEATED_SETS, SETS, SET_INFO, layoutSet, phoneProp} from './characters/sets.mjs';
 import {castMember, resolveStoryCast} from './characters/cues.mjs';
 
 export const CHARACTER_TIMING = Object.freeze({
@@ -69,7 +70,7 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light})
   const cues = raw.cues === undefined ? [] : check.arr(raw.cues, `${path}.cues`, 0, 24);
   const fitsSet = (value, where) => {
     if (value === 'walk' && seated) check.fail(where, `walk does not fit the seated set ${setName}`);
-    if (value === 'sit' && !seated && member.params.mobility !== 'wheelchair') check.fail(where, `sit needs a seated set (desk-laptop or meeting)`);
+    if (value === 'sit' && !seated && member.params.mobility !== 'wheelchair') check.fail(where, `sit needs a seated set (${SEATED_SETS.join(', ')})`);
   };
   fitsSet(pose, `${path}.pose`);
   cues.map((cue, i) => {
@@ -373,7 +374,7 @@ function cameoTimeline(model, ops) {
 
 const DEFINITIONS = {
   'cast-scene': {resolve: resolveCastScene, view: castSceneView, timeline: castSceneTimeline,
-    describe: 'One to three animated characters in a set (desk-laptop, phone, meeting, screen), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.',
+    describe: 'One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.',
     params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id, position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`, light: '{dir?: degrees the key light comes from (0 right, 90 above, 180 left), color?: hex, intensity?: 0–1} (default: the world\'s light, else a soft key from the upper left); shaded drawing styles follow it'},
     events: ['<character>-cue-<i>']},
   'character-cameo': {resolve: resolveCameo, view: cameoView, timeline: cameoTimeline,
