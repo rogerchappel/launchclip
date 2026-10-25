@@ -71,3 +71,14 @@ test('cast-scene and character-cameo take a light, and reject a bad one', () => 
   const cameo = resolveModule({id: 'c', module: 'character-cameo', start: 0, end: 4, params: {character: 'theo', light: {color: '#a0c0ff'}}}, story);
   assert.equal(cameo.content.actors[0].light.color, '#a0c0ff');
 });
+
+test('cast-styles: a sheet for every style builds from the same cast', async () => {
+  const {sheetCast, styleSheetHtml} = await import('../scripts/cast-styles.mjs');
+  const cast = sheetCast({seed: 'abc', set: 'family'});
+  assert.equal(cast.length, 8);
+  for (const style of DRAWING_STYLES) {
+    const html = styleSheetHtml(style, cast, {sets: ['phone', 'video-call']});
+    assert.match(html, new RegExp(`Drawing style: ${style}`));
+    assert.ok(!/undefined|NaN/.test(html), `${style} sheet draws cleanly`);
+  }
+});

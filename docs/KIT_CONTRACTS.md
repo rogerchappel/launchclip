@@ -1708,6 +1708,23 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   out every shape from the rig and hands each to a pen (`shape`, `ellipse`,
   `line`, `limb`, `strand`, `ground`, `within`, `defs?`), which decides how it
   is drawn.
+- The eight drawing styles (`DRAWING_STYLES`, in this order):
+  | Style | File | Look |
+  |---|---|---|
+  | `flat` | `style-flat.mjs` | flat fills and a dark outline (the default) |
+  | `line` | `style-line.mjs` | single-weight line art: one ink, paper fills, dark hair and clothes inked in |
+  | `outlined` | `style-outlined.mjs` | comic ink: a heavy outline and a hard cel shadow away from the key light |
+  | `paper` | `style-paper.mjs` | cut paper: hand-cut edges, offset shadows, a fine grain, no outlines |
+  | `soft-shade` | `style-soft-shade.mjs` | gradients from the lit side to the shade, no hard outline |
+  | `stick` | `style-stick.mjs` | a stick figure: coloured lines, a round head with the character's own hair and face |
+  | `lifelike` | `style-lifelike.mjs` | realistic proportions (`real.mjs`), detailed faces, hair and hands, layered shading (`real-pen.mjs`) |
+  | `cinematic` | `style-cinematic.mjs` | lifelike lit by the scene's light: warm highlights, cool shadows, a rim light, falloff and a cast shadow |
+
+  The first five are pens over the toon body; `stick` and the realistic
+  pair are their own bodies with the same joints and part ids, and they
+  paint the toon hair, headwear and outfit details on a scaled frame, so
+  every rig option draws in every style. Each style has a parity fixture
+  (`test/fixtures/parity/characters-style-<style>.json`).
 - `style-flat.mjs`: the drawing style "flat" (flat fills, a dark outline):
   the toon body with the flat pen. `test/character_styles.test.js` pins its
   output, so flat casts look the same in existing videos.
@@ -1805,6 +1822,10 @@ the story through `story.cast` (the style merge fills it).
   dialogue story the same way (the same cached per-line takes `finish`
   uses), writes NARRATION.json with `lines` and each word's `speaker`, and
   reports the measured duration with one row per line.
+- `node scripts/cast-styles.mjs [--out qa/cast-styles] [--styles …] [--sets …]
+  [--seed …] [--set …] [--ids …]` renders one sheet per drawing style: a
+  line-up of a cast in poses, face close-ups in expressions, and the cast
+  acting in a few sets (frame-pure state from the modules' own op list).
 - `launchclip cast sheet <project>` (`src/cast.js`) renders every character
   in every pose and expression the scenes and the direction map use, with the
   modules' own view tree, to `qa/cast-sheet.png` (+ `qa/cast-sheet.json`:
