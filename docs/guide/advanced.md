@@ -488,13 +488,13 @@ draft a pack from them and measure later renders against it:
 launchclip style create my-channel --from-reference ep1.mp4 ep2.mp4
 launchclip story plan --brief brief.md --style my-channel
 launchclip style check ./episode-3 --against my-channel
-launchclip style upgrade ai-news   # v1 pack → v2
+launchclip style upgrade ai-news   # v1 or v2 pack → v3
 ```
 
-Captions have 14 presets shared by both renderers (`word-highlight`,
+Captions have 15 presets shared by both renderers (`word-highlight`,
 `karaoke-fill`, `pop-word`, `bounce`, `typewriter`, `box-highlight`,
 `underline-sweep`, `kinetic-stack`, `minimal-line`, `glow`, `outline-heavy`,
-`split-color`, `lower-band`, `bubble`), chosen with
+`split-color`, `lower-band`, `bubble`, `quiet-accent`), chosen with
 `{"type": "captions", "preset": "<name>"}` or by the style pack.
 
 Every planned shot carries semantic visual objects, continuity handoffs, and

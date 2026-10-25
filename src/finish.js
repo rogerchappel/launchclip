@@ -34,6 +34,10 @@ import { validateStory } from "./story_cli.js";
 import { hasExactFile, readStoryEdl } from "./story_loader.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
+import { styleAdherence, styleProfile } from "./style_adherence.js";
+import { analyzeReference } from "./style_reference.js";
+import { resolveStyleV2 } from "./style_store.js";
+import { storyStyleRequest } from "../kit/core/style.mjs";
 import { hyperframesInvocation } from "./toolchain.js";
 import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
 import { normalizeLoudness, parseLoudnormJson } from "./voice/supplied.js";
@@ -87,6 +91,7 @@ export const PATHS = Object.freeze({
   segments: SEGMENTS_DIR,
   sceneStills: "qa/finish/scenes",
   audio: "qa/finish/audio.json",
+  style: "qa/style-check.json",
   report: "finish.json"
 });
 
@@ -418,7 +423,10 @@ function defaultAdapters() {
       return buildEvidence(project, options);
     },
     motion: (video, out, options) => writeMotionReport(video, out, options),
-    audio: (video, manifest, options) => analyzeProductionAudio(video, manifest, options)
+    audio: (video, manifest, options) => analyzeProductionAudio(video, manifest, options),
+    // The style gate's measurements (loudness has its own gate, so no audio pass).
+    styleReference: (video) => analyzeReference(video, {}, { audio: async () => ({ output: {} }) }),
+    resolveStyle: (request, options) => resolveStyleV2(request, options)
   };
 }
 
@@ -942,6 +950,7 @@ const STAGES = [
         audio_manifest: await fileHash(path.join(ctx.project, PATHS.audioManifest)),
         layout: ctx.layout,
         story: ctx.resolved,
+        style: ctx.style?.file ? await fileHash(ctx.style.file) : ctx.style?.name ?? null,
         version: VERSION
       });
       return { inputHash, outputs: [PATHS.gates] };
@@ -1024,7 +1033,8 @@ async function defaultSideBySide(left, right, output) {
 
 // The renderer-neutral gates cinematic-check runs, minus the critic: layout
 // (geometric, from the validate stage), loudness (master), motion and audio
-// analysis of the final MP4, and the temporal evidence manifest.
+// analysis of the final MP4, the temporal evidence manifest, and (when the
+// story names a style) style adherence (src/style_adherence.js).
 async function runGates(ctx) {
   const format = storyFormat(ctx.resolved);
   const duration = Number(ctx.resolved.resolved?.duration ?? format.duration);
@@ -1073,6 +1083,20 @@ async function runGates(ctx) {
     }
   } catch (error) {
     gates.temporal_evidence = { status: "failed", error: error.message };
+  }
+
+  // Style (RFC §9.5): when the story names a style, the render must follow it.
+  if (ctx.style) {
+    try {
+      const request = storyStyleRequest(ctx.story ?? ctx.resolved)?.name ?? ctx.style.name;
+      const { pack } = await ctx.adapters.resolveStyle(ctx.style.file ?? request, { projectDir: ctx.project });
+      const measured = await ctx.adapters.styleReference(ctx.out);
+      const check = styleAdherence({ story: ctx.resolved, pack, measured, profile: await styleProfile(pack) });
+      await writeJson(path.join(ctx.project, PATHS.style), { style: ctx.style.name, video: rel(ctx.project, ctx.out), ...check });
+      gates.style = { status: check.status, style: ctx.style.name, report: PATHS.style, findings: check.checks.filter((entry) => !entry.ok).map((entry) => `${entry.severity}: ${entry.check}: ${entry.detail}`).slice(0, 12) };
+    } catch (error) {
+      gates.style = { status: "failed", style: ctx.style.name, error: error.message };
+    }
   }
 
   gates.critic = {

@@ -420,6 +420,28 @@ layout mix and caption treatment in `reference_stats.layout_mix` and
 `reference_stats.captions`, plus a `reference-report.md`. `compareToStyle(measured, pack)` reports drift for
 `launchclip style check`.
 
+### Style adherence (`src/style_adherence.js`)
+
+`styleAdherence({story, pack, measured, profile})` → `{status, checks:
+[{check, severity, ok, expected, measured, detail}]}`; an `error` check that
+fails fails it, a `warning` (heuristic) only reports:
+
+| Check | Severity | Passes when |
+|---|---|---|
+| `palette` | error (footage-led: warning) | the render's clusters and the style's palette are within 0.12 both ways (`paletteDistance`; brand colours only: bg, paper and primary must show); footage-led: a cluster within 0.15 of the brand primary |
+| `captions` | error | the story's captions use `packCaptionsFor(pack, lane).preset` |
+| `caption case` | warning | the case measured from the render's text band matches the preset's |
+| `layout mix` | warning | the measured mix is within 0.35 (total variation) of `reference_stats.layout_mix` |
+| `cadence: <measure>` | error | the render's median shot, cuts per minute and layout changes per minute pass the profile's own band rules (`compareMeasures`: band, max or min per measure); with no profile, the reference pacing (error) or the grammar's shot range (warning) |
+| `brand frame` | error (`"frame": false`: warning) | the style has no frame, or the story draws one (a kicker, a section label or a progress line) |
+
+`styleProfile(pack)` is the inline profile, or a shipped one by id
+(`src/profile_store.js` `resolveProfile`). `launchclip style check` adds `checks` (and
+takes its status from them) when the project has a storyboard, merging the
+checked style into it; `finish` runs the same checks as its `style` gate
+whenever the story names a style (`qa/style-check.json`, gate `style` in
+`qa/finish/gates.json`; a failed check makes the run `needs-repair`).
+
 ## Caption presets (`kit/core/captions.mjs`)
 
 The captions overlay is `{type: "captions", preset | style, src?, hide?,
