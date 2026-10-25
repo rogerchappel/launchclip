@@ -30,6 +30,7 @@ import {OUTSIDE} from './outside.mjs';
 import {PROPS, PROP_IDS, placeProps, propEntry} from './props.mjs';
 
 export {WORLD_TIMES, DETAIL_LEVELS, STYLE_DETAIL, PROPS, PROP_IDS, worldPalette};
+export {TOPIC_FIT, suggestWorld} from './fit.mjs';
 
 /** World definitions keyed by kind, in group order (inside, street, outside). */
 export const WORLDS = Object.freeze({...INSIDE, ...STREET, ...OUTSIDE});

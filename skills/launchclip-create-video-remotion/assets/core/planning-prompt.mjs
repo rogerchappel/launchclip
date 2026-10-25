@@ -20,6 +20,7 @@ import { CAPTION_PRESETS } from './captions.mjs';
 import { PROFILE_MEASURES, profilePromptLines } from './profiles.mjs';
 import { DIRECTION_INTENTS, DIRECTION_LAYOUTS, DIRECTION_SCHEMA, DIRECTION_TREATMENTS, INTENT_RULES, NARRATIVE_BEATS, VISUAL_INTENTS, intentHints } from './direction.mjs';
 import { LONG_FORM_SECONDS, longFormLines } from './long-form.mjs';
+import { WORLD_KINDS, WORLD_TIMES } from './worlds/index.mjs';
 
 export const PLANNER_TIERS = Object.freeze(['structured', 'guided', 'bespoke']);
 
@@ -110,6 +111,7 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'lower-third', lanes: ['footage-led'], when: 'introduces the speaker or a guest by name and title', patterns: ['\\b(my name is|founder|co-founder|ceo|cto|engineer at|host of|joining me)\\b'] },
   { module: 'emphasis-caption', lanes: ['footage-led'], when: 'one to three spoken words that deserve a big on-screen pop', patterns: ['\\b(never|always|free|instantly|zero|ten times|10x)\\b'] },
   { module: 'cast-scene', lanes: ['motion', 'voiceover-motion'], intents: ['problem', 'turn', 'personal', 'product'], beats: ['setup', 'problem', 'attempt', 'turn', 'resolution'], when: 'tells a story with people ("meet Maya, a…", "imagine you\'re…", someone stuck or frustrated, then the product fixes it): animated characters from story.cast act it out in a set, with poses and expressions cued to words; the screen set plays a real capture', patterns: ['\\b(imagine you\'re|picture this|meet [a-z]+, an?)\\b', '\\b(frustrat\\w*|struggl\\w*|stuck|gave up|again and again|hours? (lost|wasted))\\b'] },
+  { module: 'world', lanes: ['motion', 'voiceover-motion'], intents: ['personal', 'product', 'problem'], when: 'puts the story in a place and no photo or clip of it is supplied (an office, a kitchen, a city street at night, a park at dusk, a beach, space): a drawn environment at day, dusk or night as the plate, with characters, cards or captions on higher tracks over it; story.world sets the video-wide place', patterns: ['\\b(in (the|a|her|his|their|my|your) (office|kitchen|living room|classroom|cafe|café|workshop|studio|gym|park|street|city|forest|mountains))\\b', '\\b(late at night|at night|at sunset|downtown|on the beach|on the rooftop|in space)\\b'] },
   { module: 'character-cameo', intents: ['problem', 'personal'], when: 'gives the viewer\'s situation a face for one beat ("if you\'re a…", "your customer", "someone like you"): one animated character beside a card or on a panel', patterns: ['\\bif you\'re an?\\b', '\\b(your (customers?|users?|team)|someone like you)\\b'] },
   { module: 'callout', lanes: ['motion', 'voiceover-motion'], when: 'a short note, tip or warning card', patterns: ['\\b(note|remember|important|tip|warning)\\b'] },
   // Catalogue H charts: data from the brief or assets only, never invented.
@@ -369,8 +371,17 @@ function contractLines() {
     'in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus; camera moves (pan, whip-pan, orbit, pull, world push) are under "Motion grammar and camera".',
     'overlays: [captions]. ending: {loop_to: "<first scene id>"} for a seamless loop (Shorts). For no loop, set ending {loop: false} (or loop_to: null, or omit ending without a looping style pack); the last scene then holds settled to the final frame (ending.final "hold", the default), or use final "fade" to fade it fully to the background by the final frame, or "exit" to play its own exit. ending accepts only loop_to, in, loop and final.',
     ...ambientLines(),
+    ...worldLines(),
     'Recorded product flows (assets/demo/<flow>.mp4 with demo/<flow>.actions.json, from launchclip demo record) play in product-demo scenes. Copy the params the asset inventory gives for each flow (media, viewport, actions, callouts) unchanged: the zooms, outlines and SFX are timed from the real action log, so never invent or move action boxes or times. Time the scene to the clip window (media.sourceStart plus the scene length must stay inside the clip); you may shorten a scene from the end, and drop actions after it.',
     'Vary the modules: a 20–40 s piece uses at least four different modules and never the same module three times in a row.'
+  ];
+}
+
+// Worlds (kit/core/worlds/): the video-wide place for world scenes.
+function worldLines() {
+  return [
+    `world? (optional): {kind: ${WORLD_KINDS.join(' | ')}, time?: ${WORLD_TIMES.join(' | ')}, props?: [prop ids]}. The default for every world scene; a style may set it. Pick the place that fits the topic (cooking → kitchen or cafe, fitness → gym or park, developer tools → home-desk or server-room) and the time the story is set at.`,
+    'A world scene is a plate on track 0. Put characters (cast-scene, character-cameo), cards or text on track 1 over it, and set its scrim ("auto") when text sits on top, so the text keeps 4.5:1.'
   ];
 }
 

@@ -1942,9 +1942,10 @@ scene fails to resolve on an unknown one.
   `{layers: {back, mid, front, fx}, defs, anchors, quiet, light, palette,
   props, overscan, detail}`; `worldLight(kind, time)`; `drawProp(…)` for prop
   sheets; `storyWorldErrors`; `worldCatalogue()`.
-- 22 worlds in three groups. Inside: office, home-desk, kitchen, living-room, classroom, cafe, workshop, server-room, studio, gym.
-  Street: city-street, shopfronts, crossing, alley, rooftop, skyline.
-  Outside: park, beach, mountains, forest, space, abstract-stage. Each has `geo` (floor or
+- 22 worlds in three groups. Inside: office, home-desk, kitchen,
+  living-room, classroom, cafe, workshop, server-room, studio, gym. Street:
+  city-street, shopfronts, crossing, alley, rooftop, skyline. Outside: park,
+  beach, mountains, forest, space, abstract-stage. Each has `geo` (floor or
   ground line, anchors, quiet area), `back`, `mid`, `front` and optional
   `fx`; a world never draws text.
 - Layers: back (sky or wall), mid (the room or street), front (foreground
@@ -1994,6 +1995,11 @@ scene fails to resolve on an unknown one.
   gradient that is strongest over the area and clear beyond it. The model
   carries it as `content.scrim` (with `on` when `params.scrim` asks) and
   the quiet area as `content.quiet`; put text inside it.
+- `fit.mjs`: **the topic fit table** (`TOPIC_FIT`: topic, prompt words,
+  the worlds that fit, best first, and the props that dress them) and
+  `suggestWorld(prompt)` → `{kind, time, props, topic, worlds}` or null
+  (whole-word matching; night and dusk from time words). Art direction
+  chooses from a row; the seed varies among its worlds.
 - `view.mjs`: the layer divs (`<scene>-back|mid|front|fx`).
 
 **Camera.** `params.camera` moves the back, mid and front layers at the
