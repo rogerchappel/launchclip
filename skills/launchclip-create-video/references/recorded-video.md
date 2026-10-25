@@ -627,5 +627,8 @@ Confirm the original is unchanged. Preview the completed treatment for final
 export approval unless the user has already authorized that export. Deliver the
 encoded media, editable project, direction/resource/audio manifests and review
 findings; disclose missing captures, proxy-only output or author-only review.
-Do not require human take selection or generate fake concept/story receipts:
-`cinematic-check` belongs to the new-story cinematic workflow, not this route.
+Do not require human take selection or generate fake concept/story receipts.
+When you run `cinematic-check` on this route, it sees a footage-led story over
+an existing recording (`lane: "footage-led"` with `base.src` or `base.edl`) and
+reports the `concepts` and `story` gates as `not-required`; the rest of the
+gate (narration, verification, motion, audio, critic) still applies.

@@ -65,6 +65,12 @@ and the winner in `CONCEPTS.json`. Do not choose by taste after scoring.
 `cinematic-check` validates it. Missing required fields fail the `concepts`
 gate; the rest are warnings in its report (`receipt_warnings`).
 
+`CONCEPTS.json` and `STORY.json` are required for new stories only: motion and
+character stories. A footage-led story over an existing recording
+(`lane: "footage-led"` with `base.src` or `base.edl`) preserves the recorded
+story, so both gates report `not-required` when the files are absent; a file
+that is present is still validated.
+
 | field | required | notes |
 | --- | --- | --- |
 | `schema_version` | warn | `"launchclip.concepts.v1"` |

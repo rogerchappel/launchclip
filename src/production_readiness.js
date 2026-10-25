@@ -5,14 +5,18 @@ const STRUCTURAL_MOTION_CATEGORIES = new Set(["duration", "dimensions", "frames"
 // receipts (optional): {concepts, story} schema results ({ok, errors,
 // warnings}) from src/cinematic_receipts.js. A present receipt with errors
 // fails its gate; warnings are reported but do not.
+// options.creativeReceipts: false when the story preserves an existing
+// recording (cinematic-check's recordedStory): CONCEPTS.json and STORY.json
+// are then not required, though a present one is still validated.
 export function assessCinematicReadiness({ concepts, story, narration, plan, verification, motion, audio, critique, assembly, receipts = {} } = {}, options = {}) {
   const blockers = [];
   const repairFindings = [];
-  for (const [id, value, message] of [
-    ["concepts", concepts, "Selected concept tournament receipt is missing."],
-    ["story", story, "Approved retention-story receipt is missing."],
-    ["narration", narration, "Measured cinematic narration receipt is missing."]
-  ]) if (!value) blockers.push(blocker(`${id}-missing`, id, message));
+  const creative = options.creativeReceipts !== false;
+  for (const [id, value, message, required] of [
+    ["concepts", concepts, "Selected concept tournament receipt is missing.", creative],
+    ["story", story, "Approved retention-story receipt is missing.", creative],
+    ["narration", narration, "Measured cinematic narration receipt is missing.", true]
+  ]) if (!value && required) blockers.push(blocker(`${id}-missing`, id, message));
   const file = { concepts: "CONCEPTS.json", story: "STORY.json" };
   const receiptOk = {};
   for (const id of ["concepts", "story"]) {
@@ -83,8 +87,8 @@ export function assessCinematicReadiness({ concepts, story, narration, plan, ver
   if (!plan) blockers.push(blocker("plan-missing", "plan", "Production plan is missing."));
 
   const gates = {
-    concepts: receiptGate(concepts, receipts?.concepts, receiptOk.concepts),
-    story: receiptGate(story, receipts?.story, receiptOk.story),
+    concepts: receiptGate(concepts, receipts?.concepts, receiptOk.concepts, creative),
+    story: receiptGate(story, receipts?.story, receiptOk.story, creative),
     narration: gate(Boolean(narration), narration ? "present" : "missing", 0),
     plan: gate(Boolean(plan), plan ? "present" : "missing", 0),
     verification: gate(verificationOk, verification?.status ?? "missing", verification?.failed?.length ?? 0),
@@ -125,7 +129,8 @@ function motionInstruction(category, message) {
   return `Replan material object, camera, and transition developments to resolve this measured motion failure: ${message ?? category}.`;
 }
 
-function receiptGate(value, check, valid) {
+function receiptGate(value, check, valid, required = true) {
+  if (!value && !required) return gate(true, "not-required", 0);
   const entry = gate(Boolean(value) && valid, !value ? "missing" : !check ? "present" : valid ? "valid" : "invalid", check ? check.errors.length : 0);
   if (value && check) {
     entry.errors = check.errors;

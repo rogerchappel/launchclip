@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { checkCinematicProject } from "../src/cinematic_check.js";
+import { checkCinematicProject, recordedStory } from "../src/cinematic_check.js";
 import { conceptTotal, validateConceptsReceipt, validateStoryReceipt } from "../src/cinematic_receipts.js";
 import { SUBSCRIPTION_CANDIDATE_RECEIPT_VERSION, SUBSCRIPTION_TEMPORAL_EVIDENCE_VERSION, buildTemporalEvidenceSchedule } from "../src/cinematic_evidence.js";
 import * as storyModule from "./fixtures/story-stub.mjs";
@@ -233,6 +233,41 @@ test("enforces phase-2 evidence for a story marked phase 2 using story boundarie
   assert.equal(result.cinematic_contract.status, "passed");
   assert.equal(result.status, "ready");
   assert.equal(result.cinematic_contract.temporal_entry_count, schedule.entries.length * 2);
+});
+
+test("a footage-led story over an existing recording does not need CONCEPTS.json or STORY.json", async () => {
+  const project = await storyProjectFixture();
+  await rm(path.join(project, "CONCEPTS.json"));
+  const adapters = passingAdapters();
+  adapters.storyModule = storyModule;
+  // A footage-led story gets its cadence profile's motion bands, not the explainer's.
+  adapters.writeMotionReport = async () => ({ quality: { ok: true, findings: [] } });
+  await writeFile(path.join(project, "edit-plan.json"), JSON.stringify({ segments: [] }));
+  for (const base of [{ src: "assets/recording.mp4" }, { src: "assets/recording.mp4", edl: "edit-plan.json" }]) {
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify({ ...storyboard(), lane: "footage-led", base }));
+    const result = await checkCinematicProject(project, { expectAudio: true }, adapters);
+    assert.equal(result.status, "ready", JSON.stringify(result.blockers));
+    assert.deepEqual([result.gates.concepts.status, result.gates.story.status], ["not-required", "not-required"]);
+  }
+  // A receipt that is present is still validated.
+  await writeFile(path.join(project, "CONCEPTS.json"), JSON.stringify({ schema_version: "launchclip.concepts.v1" }));
+  const invalid = await checkCinematicProject(project, { expectAudio: true }, adapters);
+  assert.ok(invalid.blockers.some((entry) => entry.id === "concepts-invalid"));
+  await rm(path.join(project, "CONCEPTS.json"));
+  // Motion and character stories are new stories: both receipts stay required.
+  await writeFile(path.join(project, "storyboard.json"), JSON.stringify({ ...storyboard(), lane: "motion" }));
+  const motion = await checkCinematicProject(project, { expectAudio: true }, adapters);
+  assert.deepEqual(motion.blockers.map((entry) => entry.id), ["concepts-missing", "story-missing"]);
+});
+
+test("recordedStory is a footage-led lane with base.src or base.edl", () => {
+  assert.equal(recordedStory({ lane: "footage-led", base: { src: "a.mp4" } }), true);
+  assert.equal(recordedStory({ lane: "footage-led", base: "a.mp4" }), true);
+  assert.equal(recordedStory({ lane: "footage-led", base: { edl: "edit-plan.json" } }), true);
+  assert.equal(recordedStory({ lane: "footage-led" }), false);
+  assert.equal(recordedStory({ lane: "motion", base: { src: "a.mp4" } }), false);
+  assert.equal(recordedStory({ lane: "voiceover-motion", cast: [{ id: "ada" }] }), false);
+  assert.equal(recordedStory(null), false);
 });
 
 // Minimal valid creative receipts (launchclip.concepts.v1 / launchclip.story-receipt.v1).

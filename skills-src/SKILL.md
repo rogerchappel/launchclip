@@ -56,5 +56,6 @@ The planning artifacts `cinematic-check` expects for a new story:
 `NARRATION.json`, `STORYBOARD.md`, `storyboard.json`, `DESIGN.md`,
 `SOURCE.md`, `AUDIO-MANIFEST.json`, `QUALITY.md`,
 `qa/rendered-candidates.json`, `qa/temporal-evidence/manifest.json` and, from
-the gate itself, `CINEMATIC-READINESS.json`. Each is described in
+the gate itself, `CINEMATIC-READINESS.json` (a footage-led treatment of an
+existing recording needs no `CONCEPTS.json` or `STORY.json`). Each is described in
 [references/workflow.md](references/workflow.md).
