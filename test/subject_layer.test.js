@@ -203,3 +203,45 @@ test('checkBehindText: the worst glyph under 60% visible, once per element', () 
   assert.match(findings[0].detail, /covers 100% of "B" in "AB" at 2 s; behind-layer letters need 60% of each glyph visible\. Raise it\./);
   assert.deepEqual(checkBehindText({texts, subjectAt: () => null}), [], 'no matte, no finding');
 });
+
+test('base.crop: validated, normalised to fractions, drawn in one box that the face track maps through', async () => {
+  const {validateStory, baseMediaBox, baseMediaStyle} = await import('../kit/core/story.mjs');
+  const story = (base) => ({schema: 'launchclip.story.v1', lane: 'footage-led', format: {width: 1920, height: 1080, fps: 30, duration: 4}, brand: {colors: {bg: '#000000', primary: '#ffffff'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}}, base: {src: 'assets/raw.mp4', ...base}, scenes: [{id: 'lt', module: 'lower-third', track: 1, start: 0, end: 2, params: {name: 'Ada'}}]});
+  const errors = (base) => validateStory(story(base)).errors.join('\n');
+  assert.equal(errors({crop: {right: 80}, size: {width: 1360, height: 720}}), '');
+  assert.equal(errors({crop: {right: 0.06}}), '');
+  assert.match(errors({crop: {middle: 0.1}}), /base\.crop\.middle is not supported/);
+  assert.match(errors({crop: {right: 80.5}}), /whole number/);
+  assert.match(errors({crop: {left: 0.3, right: 0.3}}), /more than half the recording's width/);
+  assert.match(validateStory({...story({crop: {right: 80}}), resolved: {duration: 4, fps: 30}}).errors.join('\n'), /size is unknown/);
+  // Pixels become fractions with the size: base.size, else the track's source size (resolveStory fills base.size).
+  const cropped = storyBase(story({crop: {right: 80}, size: {width: 1360, height: 720}}));
+  assert.deepEqual(cropped.crop, {left: 0, right: 80 / 1360, top: 0, bottom: 0});
+  const tracked = resolveStory(story({crop: {right: 80}}), {track: {source: {width: 1360, height: 720}, fps: 10, frames: [{t: 0, head: {x: 0.47, y: 0.3, w: 0.1, h: 0.2}}]}});
+  assert.deepEqual(tracked.base.size, {width: 1360, height: 720});
+  assert.equal(storyBase(story({crop: {right: 80}})).crop, null, 'pixels without a size draw uncropped');
+  // The crop rect (1280x720) covers the 1920x1080 canvas: the whole recording is 2040 px wide, the bar falls off the right.
+  const canvas = {width: 1920, height: 1080};
+  assert.deepEqual(baseMediaBox(cropped, canvas), {x: 0, y: 0, width: 2040, height: 1080, clip: {top: 0, right: 120, bottom: 0, left: 0}, origin: {x: 960, y: 540}});
+  assert.equal(baseMediaStyle(cropped, canvas).clipPath, 'inset(0px 120px 0px 0px)');
+  assert.deepEqual(baseMediaStyle(storyBase(story({})), canvas), {left: 0, top: 0, width: 1920, height: 1080, objectFit: 'cover', objectPosition: '50% 50%', transformOrigin: '50% 50%'});
+  // A head at x 0.47 of the 1360-px recording lands where the cropped recording puts it.
+  const head = sourceBoxToCanvas({x: 0.47, y: 0.3, w: 0.1, h: 0.2}, cropped, {width: 1360, height: 720}, canvas);
+  assert.equal(Math.round(head.x + head.width / 2), Math.round(0.47 * 2040));
+});
+
+test('base.crop: both compilers draw the base and the mattes in the crop box', async () => {
+  const {readFileSync} = await import('node:fs');
+  const {compileStoryToHyperFrames} = await import('../kit/hyperframes/story-compiler.mjs');
+  const {readProjectStory} = await import('../src/story_loader.js');
+  const dir = new URL('../examples/story/layouts-wide/', import.meta.url).pathname;
+  const {resolved} = await readProjectStory(dir);
+  const cropped = {...resolved, base: {...resolved.base, crop: {left: 0.08, right: 0.04, top: 0.05}}};
+  const {html} = await compileStoryToHyperFrames(cropped, {write: false, sourceDir: dir});
+  const media = [...html.matchAll(/<video id="lc-(?:base|subject)-\d+"[^>]*style="([^"]*)"/g)].map((match) => match[1]);
+  assert.ok(media.length >= 2);
+  for (const style of media) assert.match(style, /clip-path:inset\(.*px\);transform-origin:\d+(\.\d+)?px \d+(\.\d+)?px/);
+  assert.equal(new Set(media.map((style) => style.replace(/;z-index:\d+$/, ''))).size, 1, 'base and mattes share one box');
+  const source = readFileSync(new URL('../kit/remotion/StoryComposition.tsx', import.meta.url), 'utf8');
+  assert.equal((source.match(/baseMediaStyle\(base, \{ width, height \}\)/g) ?? []).length, 2, 'Remotion BaseLayer and SubjectLayer');
+});

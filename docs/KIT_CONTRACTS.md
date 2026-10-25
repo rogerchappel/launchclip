@@ -967,7 +967,7 @@ the same storyboard contract, compilers and parity rules as the motion lanes.
 ```json
 "base": { "src": "assets/recording.mp4", "start": 0, "trim": [[0, 8], [10, 22]],
           "volume": 1, "fit": "cover", "focus": { "x": 0.5, "y": 0.36 },
-          "edl": "recording/edit-plan.json" }
+          "crop": { "right": 80 }, "edl": "recording/edit-plan.json" }
 ```
 
 - `src` (required): an `assets/` video (`.mp4`, `.m4v`, `.mov` or `.webm`). The
@@ -985,6 +985,28 @@ the same storyboard contract, compilers and parity rules as the motion lanes.
   (default) or `contain`. `focus` (fractions) is the `object-position`; under
   `cover` that source point lands on the same canvas point, so it is also the
   default punch-in focus.
+- `crop` (`{left?, right?, top?, bottom?}`) cuts the recording's edges off
+  before it is fitted, for example a black bar on one side of a raw screen
+  recording, with no re-encode. A value under 1 is a fraction of the
+  recording's width or height; 1 or more is source pixels. Pixels need the
+  recording's size: `size` (`{width, height}`), which `readProjectStory`
+  probes and `resolveStory` takes from the subject track when it is missing.
+  Each axis keeps at least half the recording. `storyBase` returns `crop` as
+  fractions (null without one, or for pixels with no known size) and `size`.
+  - `baseMediaBox(base, canvas, source?)` is where the recording draws: the
+    whole recording as a box, sized and placed so that its crop rect is
+    fitted (`fit`, `focus`) exactly as an uncropped recording would be, and
+    clipped to the crop rect. `baseMediaStyle` turns it into CSS (`left`,
+    `top`, `width`, `height`, `object-fit: fill`, `clip-path: inset(…)`, and a
+    `transform-origin` at the canvas centre, so punch-in and layout cameras
+    move the footage exactly as before).
+  - Both compilers draw the base videos and the subject mattes in this box,
+    so the mattes stay aligned. Room plates (`ctx.subject.plate`, dolly-zoom)
+    draw in it too. `sourceBoxToCanvas` maps through it, so the face track,
+    the face rule (layout-check), the layout reframe and module placement
+    all see the cropped picture.
+  - Without `crop`, both compilers emit exactly the markup they did before.
+    The NLE export warns that the crop is not carried.
 - Narration words (`audio.words`) are on the edited timeline, as edit-recording
   writes them.
 - `audio.mix` is the music/SFX bed under the recording, at `audio.mix_volume`
@@ -993,7 +1015,7 @@ the same storyboard contract, compilers and parity rules as the motion lanes.
   the voice.
 
 Exports: `storyBase(resolvedStory)` returns
-`{src, fit, focus, volume, segments: [{index, start, end, duration, sourceStart}], length}` or
+`{src, fit, focus, volume, crop, size, segments: [{index, start, end, duration, sourceStart}], length}` or
 `null`. Segment boundaries snap to the frame grid, so both renderers cut on the
 same frame. `edlTrim(plan)` returns `[[in, out], …]`.
 

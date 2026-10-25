@@ -37,7 +37,7 @@ import { getEase } from "../core/motion.mjs";
 // @ts-ignore plain ESM from kit/core
 import { captionChunksFrom, captionMoveHide, captionsOverlayOf, chunkWords, narrationWords } from "../core/captions.mjs";
 // @ts-ignore plain ESM from kit/core
-import { storyBase } from "../core/story.mjs";
+import { baseMediaStyle, storyBase } from "../core/story.mjs";
 // @ts-ignore plain ESM from kit/core
 import { backgroundFieldTiles, backgroundLayer, blurAt, cameraPlan, captionDipWindows, containerTransform, opsStateAt, overlayOps, placementTransform, sceneObjectLookup } from "../core/camera-world.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -221,7 +221,8 @@ export const BaseLayer: React.FC<{ base: any; cameraOps: any[]; offset?: number;
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const t = offset + frame / fps;
-  const style: React.CSSProperties = { position: "absolute", left: 0, top: 0, width, height, objectFit: base.fit, objectPosition: `${base.focus.x * 100}% ${base.focus.y * 100}%` };
+  const { transformOrigin, ...media } = baseMediaStyle(base, { width, height });
+  const style: React.CSSProperties = { position: "absolute", ...media } as React.CSSProperties;
   const shift = Math.round(offset * fps);
   const room = rooms.length ? roomStateAt(rooms, t) : null;
   const camera = cameraStyle(cameraOps, t);
@@ -246,7 +247,8 @@ export const SubjectLayer: React.FC<{ base: any; clips: any[]; ops: any[]; offse
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const t = offset + frame / fps;
-  const style: React.CSSProperties = { position: "absolute", left: 0, top: 0, width, height, objectFit: base.fit, objectPosition: `${base.focus.x * 100}% ${base.focus.y * 100}%` };
+  const { transformOrigin, ...media } = baseMediaStyle(base, { width, height });
+  const style: React.CSSProperties = { position: "absolute", ...media } as React.CSSProperties;
   const shift = Math.round(offset * fps);
   return (
     <AbsoluteFill style={{ transformOrigin: "50% 50%", ...subjectLayerStyle(ops, styles, t) }}>

@@ -212,7 +212,10 @@ overlays, punch-ins and full-frame inserts:
   ranges played back to back). Timeline time is edited time, so the
   `words.json` timings from the edit drive `word:` anchors and captions. Point
   `src` at the original recording when you use `edl` or `trim`. If you use
-  `base-edit.mp4`, which is already cut, leave both out.
+  `base-edit.mp4`, which is already cut, leave both out. If the recording has
+  a black bar or junk on an edge, set `base.crop` (`{"right": 80}` in source
+  pixels, or fractions under 1) instead of re-encoding it. The mattes, the
+  face track and the layouts follow the crop.
 - **Overlays** sit on track 1 or higher; same-track scenes still cannot overlap.
   **Inserts** (`insert: true`, track 0) cover the picture with any catalogue
   module while the recording's audio keeps playing. Which lines get overlays
