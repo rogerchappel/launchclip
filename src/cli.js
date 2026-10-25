@@ -183,6 +183,7 @@ export async function runCli(argv, io = {}) {
         aspect: flags.aspect,
         duration: flags.duration,
         style: flags.style,
+        seed: flags.seed,
         model: flags.model,
         voice: flags.voice,
         music: flags.music,
@@ -346,6 +347,12 @@ async function runStyleCommand(action, name, flags) {
     return createStyleFromReferences(required(name, "style name"), flags, { root });
   }
   if (action === "upgrade") return upgradeStylePack(required(name, "style name"), { root });
+  if (action === "generate" || action === "reroll" || action === "keep") {
+    const { styleGenerateCommand, styleKeepCommand, styleRerollCommand } = await import("./style_seed_store.js");
+    if (action === "generate") return styleGenerateCommand(flags);
+    if (action === "reroll") return styleRerollCommand(name, flags);
+    return styleKeepCommand(required(name, "project path"), flags);
+  }
   if (action === "check") return checkStyleCommand(required(name, "project path"), flags, { root });
   if (action === "create" || action === "save") {
     const result = await createStylePack(required(name, "style name"), { from: flags.from, root, force: Boolean(flags.force) });
@@ -380,9 +387,9 @@ function parseCastInvocation(action, rest) {
 }
 
 function parseStyleInvocation(action, rest) {
-  if (!action) throw new Error("Missing style action; use create, save, list, show, upgrade or check");
-  if (!new Set(["create", "save", "list", "show", "upgrade", "check"]).has(action)) throw new Error(`Unknown style action: ${action}`);
-  const takesName = action !== "list";
+  if (!action) throw new Error("Missing style action; use create, save, list, show, upgrade, check, generate, reroll or keep");
+  if (!new Set(["create", "save", "list", "show", "upgrade", "check", "generate", "reroll", "keep"]).has(action)) throw new Error(`Unknown style action: ${action}`);
+  const takesName = action !== "list" && action !== "generate";
   const hasName = takesName && rest[0] && !rest[0].startsWith("--");
   const flagArgs = hasName ? rest.slice(1) : rest;
   // --from-reference a.mp4 b.mp4 / --from-images x.png y.png take several files.
@@ -411,7 +418,7 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "no-direction" || name === "prototype" || name === "refresh-free-vision-models") {
+    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "no-direction" || name === "prototype" || name === "refresh-free-vision-models") {
       flags[name] = true;
       continue;
     }

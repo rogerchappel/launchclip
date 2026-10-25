@@ -147,7 +147,7 @@ test("v1 packs upgrade to v2 and still load", async () => {
     const upgraded = JSON.parse(await readFile(path.join(cwd, ".launchclip", "styles", "ai-news", "style.json"), "utf8"));
     assert.equal(upgraded.schema, STYLE_SCHEMA);
     assert.deepEqual(upgraded.brand.colors, { bg: "#0a0a12", paper: "#f4f4f4", ink: "#0a0a12", primary: "#ff6a00", accent: "#00c2ff" });
-    assert.deepEqual(upgraded.brand.fonts, { display: "anton", body: "inter" });
+    assert.deepEqual(upgraded.brand.fonts, { display: "bebas-neue", body: "inter" });
     assert.equal(upgraded.motion.grammar, "snappy");
     assert.equal(upgraded.captions.preset, "word-highlight");
     assert.equal(upgraded.sound.sfx_density, "high");
@@ -197,8 +197,12 @@ test("palette roles, contrast and nearest fonts", () => {
   const fixed = assignPaletteRoles([{ hex: "#202020", weight: 0.9 }, { hex: "#303030", weight: 0.1 }]);
   assert.ok(contrastRatio(fixed.colors.paper, fixed.colors.bg) >= 4.5, "text is pushed to readable contrast");
   assert.ok(fixed.notes.length > 0);
-  assert.equal(nearestBundledFont("Bebas Neue"), "Anton");
-  assert.equal(nearestBundledFont("Playfair Display"), "Instrument Serif");
+  assert.equal(nearestBundledFont("Bebas Neue"), "Bebas Neue", "a bundled family is itself");
+  assert.equal(nearestBundledFont("League Gothic"), "Oswald");
+  assert.equal(nearestBundledFont("Playfair Display"), "Playfair Display");
+  assert.equal(nearestBundledFont("Didot"), "Playfair Display");
+  assert.equal(nearestBundledFont("Recoleta"), "Fraunces");
+  assert.equal(nearestBundledFont("Poppins"), "Outfit");
   assert.equal(nearestBundledFont("Space Grotesk"), "Space Grotesk");
   assert.equal(nearestBundledFont("Comic Unknown", "meta"), "JetBrains Mono");
 });

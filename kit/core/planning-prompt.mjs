@@ -113,7 +113,18 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'cast-scene', lanes: ['motion', 'voiceover-motion'], intents: ['problem', 'turn', 'personal', 'product'], beats: ['setup', 'problem', 'attempt', 'turn', 'resolution'], when: 'tells a story with people ("meet Maya, a…", "imagine you\'re…", someone stuck or frustrated, then the product fixes it): animated characters from story.cast act it out in a set, with poses and expressions cued to words; the screen set plays a real capture', patterns: ['\\b(imagine you\'re|picture this|meet [a-z]+, an?)\\b', '\\b(frustrat\\w*|struggl\\w*|stuck|gave up|again and again|hours? (lost|wasted))\\b'] },
   { module: 'world', lanes: ['motion', 'voiceover-motion'], intents: ['personal', 'product', 'problem'], when: 'puts the story in a place and no photo or clip of it is supplied (an office, a kitchen, a city street at night, a park at dusk, a beach, space): a drawn environment at day, dusk or night as the plate, with characters, cards or captions on higher tracks over it; story.world sets the video-wide place', patterns: ['\\b(in (the|a|her|his|their|my|your) (office|kitchen|living room|classroom|cafe|café|workshop|studio|gym|park|street|city|forest|mountains))\\b', '\\b(late at night|at night|at sunset|downtown|on the beach|on the rooftop|in space)\\b'] },
   { module: 'character-cameo', intents: ['problem', 'personal'], when: 'gives the viewer\'s situation a face for one beat ("if you\'re a…", "your customer", "someone like you"): one animated character beside a card or on a panel', patterns: ['\\bif you\'re an?\\b', '\\b(your (customers?|users?|team)|someone like you)\\b'] },
-  { module: 'callout', lanes: ['motion', 'voiceover-motion'], when: 'a short note, tip or warning card', patterns: ['\\b(note|remember|important|tip|warning)\\b'] }
+  { module: 'callout', lanes: ['motion', 'voiceover-motion'], when: 'a short note, tip or warning card', patterns: ['\\b(note|remember|important|tip|warning)\\b'] },
+  // Catalogue H charts: data from the brief or assets only, never invented.
+  { module: 'bar-chart', intents: ['number'], when: 'compares a few real values side by side ("by platform", "per region", "each month"): bars grow to their values, one can stay lit', patterns: ['\\b(by|per|across|for each) (platform|channel|region|country|month|quarter|team|plan|format)\\b'] },
+  { module: 'pie-chart', intents: ['number'], when: 'splits a whole into shares ("half of", "a third", "the split", "breakdown"): a donut or pie sweeps on with its legend', patterns: ['\\b(half|a third|a quarter) of\\b', '\\b(split|breakdown|share of|mix of)\\b'] },
+  { module: 'area-chart', intents: ['number'], when: 'shows a real series over time ("every month since", "over the year"): the area reveals left to right', patterns: ['\\b(every|each) (week|month|quarter|year) since\\b', '\\bover the (last|past)? ?(year|months|weeks)\\b'] },
+  { module: 'funnel-chart', intents: ['number'], when: 'walks a conversion path ("of those", "signed up", "drop-off", "funnel"): stages narrow with the rate between them', patterns: ['\\b(funnel|conversion|drop-?off|of those)\\b'] },
+  { module: 'waterfall', intents: ['number'], when: 'explains how a total changed through gains and losses ("we gained… but lost…", "net"): steps from the start to the new total', patterns: ['\\b(net (change|gain|loss)|gained .* lost|lost .* gained)\\b'] },
+  { module: 'sankey', intents: ['number', 'process'], when: 'shows where something flows ("where the money goes", "how traffic splits"): ribbons from sources to destinations', patterns: ['\\bwhere (the|our|your) \\w+ (goes|go|comes? from)\\b', '\\b(flows? (into|from)|splits? (into|between))\\b'] },
+  { module: 'heatmap', intents: ['number'], when: 'shows when or where activity peaks across two dimensions ("busiest day and hour"): cells shade in a wave', patterns: ['\\b(busiest|peak|quietest) (day|hour|time)s?\\b', '\\bheat ?map\\b'] },
+  { module: 'leaderboard', intents: ['number', 'proof'], when: 'ranks things ("top five", "the most popular", "number one"): rows land from last place to first', patterns: ['\\btop (three|five|ten|3|5|10)\\b', '\\b(most popular|ranked|ranking|leaderboard|number one)\\b'] },
+  { module: 'comparison-table', intents: ['claim'], when: 'compares products feature by feature ("unlike X, it…", "the only one that"): a table of ticks and crosses with the pick outlined', patterns: ['\\bunlike (other|most)\\b', '\\bthe only (one|tool|app) (that|with)\\b', '\\bfeature (by feature|comparison)\\b'] },
+  { module: 'progress-ring', intents: ['number'], when: 'states one real percentage of a whole ("87% of renders", "nine in ten"): a ring fills while it counts', patterns: ['\\b\\d{1,3}\\s?% of\\b', '\\b(nine|eight|seven) (in|out of) ten\\b'] }
 ].map((row) => Object.freeze({ ...row, patterns: Object.freeze(row.patterns) })));
 
 /** The registry module a phrase-table row maps to (its fallback when the module is planned). */
@@ -275,7 +286,8 @@ export function moduleCatalogue() {
       ...(definition.needs ? { needs: [...definition.needs] } : {}),
       ...(definition.layer ? { layer: definition.layer } : {}),
       ...(definition.aspects ? { aspects: [...definition.aspects] } : {}),
-      ...(definition.mood ? { mood: [...definition.mood] } : {})
+      ...(definition.mood ? { mood: [...definition.mood] } : {}),
+      ...(Array.isArray(definition.variants) && definition.variants.length > 1 ? { variants: [...definition.variants] } : {})
     };
   });
 }
@@ -396,6 +408,8 @@ function moduleLines(tier, modules = moduleCatalogue()) {
     lines.push('params:');
     for (const param of params) lines.push(`- ${param.name}: ${param.text}${param.tuning ? ' [guided and bespoke tiers only]' : ''}`);
     if (module.events.length) lines.push(`events: ${module.events.join(', ')}`);
+    // The style's story.variants picks one per module; set params.variant only to break from it.
+    if (module.variants) lines.push(`variants: ${module.variants.map((name, i) => (i ? name : `${name} (default)`)).join(', ')}`);
     lines.push('');
   }
   if (tier === 'bespoke') lines.push('### custom (bespoke tier only)', 'A project module at scene.source (project-relative path, no params schema). Pure function of absolute time; must obey the safe zone; falls back to the nearest catalogue module when it fails a gate.', '');
