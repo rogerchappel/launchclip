@@ -13,6 +13,7 @@ import { resolveStory } from "../kit/core/story.mjs";
 import { styleAdherence, styleProfile } from "../src/style_adherence.js";
 import { checkStyleCommand, createStyleFromReferences } from "../src/style_commands.js";
 import { PATHS, runFinish } from "../src/finish.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const MINIMAL = path.join(ROOT, "examples/story/minimal");
@@ -131,7 +132,7 @@ function makeVideo(file, shots, { width = 360, height = 640 } = {}) {
   execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", ...inputs, "-filter_complex", filters.join(";"), "-map", "[out]", "-c:v", "libx264", "-crf", "12", "-pix_fmt", "yuv420p", file]);
 }
 
-test("two stories in one style pass style check against each other (RFC §13 phase 6)", { skip: hasFfmpeg ? false : "ffmpeg is not installed", timeout: 180_000 }, async () => {
+test("two stories in one style pass style check against each other (RFC §13 phase 6)", { skip: mediaSkip(hasFfmpeg ? false : "ffmpeg is not installed"), timeout: 180_000 }, async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-style-pair-"));
   try {
     const colors = ["0xffcc00", "0x33ccff"];

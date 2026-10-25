@@ -9,10 +9,11 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { chooseFile, cursorPath, encodeFrames, findChromium, fixtureResponse, loadPlaywright, locate, prepareContext, sessionState, recorderAvailability, seededRandom, typingDelays, uploadTarget } from "../src/demo/record.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const hasFfmpeg = spawnSync("ffmpeg", ["-version"]).status === 0;
 const available = await recorderAvailability();
-const needsBrowser = { skip: !available.ok && `recorder unavailable: ${available.reasons.join("; ")}`, timeout: 60000 };
+const needsBrowser = { skip: mediaSkip(!available.ok && `recorder unavailable: ${available.reasons.join("; ")}`), timeout: 60000 };
 
 async function withPage(t, html) {
   const browser = await available.chromium.launch({ executablePath: available.executablePath, headless: true });

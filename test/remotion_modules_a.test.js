@@ -10,6 +10,7 @@ import {fileURLToPath} from 'node:url';
 import {resolveEditorialModule} from '../kit/core/editorial-core.mjs';
 import {editorialSpecFromScene, mixHex, brandTheme} from '../scripts/parity-scene.mjs';
 import {sampleTimes} from '../scripts/parity.mjs';
+import {mediaSkip} from './helpers/media.js';
 
 const require = createRequire(import.meta.url);
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -56,7 +57,7 @@ test('scene specs follow the brand-to-module defaults', () => {
   }
 });
 
-test('every registry-a kind renders through a real remotion still', {timeout: 600_000}, async t => {
+test('every registry-a kind renders through a real remotion still', {skip: mediaSkip(), timeout: 600_000}, async t => {
   const work = await mkdtemp(path.join(os.tmpdir(), 'launchclip-remotion-a-'));
   try {
     const bundle = path.join(work, 'bundle');

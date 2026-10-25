@@ -12,6 +12,7 @@ import { promisify } from "node:util";
 import { narrationWords } from "../kit/core/captions.mjs";
 import { concatArgs, concatList, defaultSegmentTools, muxArgs, planSegments, renderWithSegments } from "../src/render_segments.js";
 import { resolveStory } from "../src/story.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -197,7 +198,7 @@ async function probeDuration(file, stream) {
   return Number(String(stdout).trim());
 }
 
-test("FFmpeg: the mux keeps the last frame (B-frames, fractional rate) and the audio ends with the video", async (t) => {
+test("FFmpeg: the mux keeps the last frame (B-frames, fractional rate) and the audio ends with the video", { skip: mediaSkip() }, async (t) => {
   const missing = await ffmpegMissing();
   if (missing) { t.skip(`FFmpeg is unavailable: ${missing}`); return; }
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-mux-"));
@@ -229,7 +230,7 @@ test("FFmpeg: the mux keeps the last frame (B-frames, fractional rate) and the a
   }
 });
 
-test("FFmpeg: the join stamps every frame on its slot, whatever the segments' container durations say", async (t) => {
+test("FFmpeg: the join stamps every frame on its slot, whatever the segments' container durations say", { skip: mediaSkip() }, async (t) => {
   const missing = await ffmpegMissing();
   if (missing) { t.skip(`FFmpeg is unavailable: ${missing}`); return; }
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-join-"));

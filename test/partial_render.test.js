@@ -11,6 +11,7 @@ import { narrationWords } from "../kit/core/captions.mjs";
 import { renderWithSegments } from "../src/render_segments.js";
 import { getRenderer } from "../src/renderers/index.js";
 import { resolveStory } from "../src/story.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -70,7 +71,7 @@ async function storyOf(project, mutate) {
   return resolveStory(story, { words });
 }
 
-test("a Remotion partial render (cached segments + re-rendered ones) equals a fresh full render", { timeout: 900_000 }, async (t) => {
+test("a Remotion partial render (cached segments + re-rendered ones) equals a fresh full render", { skip: mediaSkip(), timeout: 900_000 }, async (t) => {
   const missing = await toolsMissing();
   if (missing) { t.skip(`Chrome Headless Shell or FFmpeg is unavailable: ${missing}`); return; }
   const work = await mkdtemp(path.join(os.tmpdir(), "launchclip-partial-"));

@@ -12,6 +12,7 @@ import { runHeadlessCritic } from "../src/make/critic.js";
 import { assetErrors, audioEnhancementFeature, formatMakeSummary, runMake, slugify } from "../src/make/index.js";
 import { selectMakeModel } from "../src/make/models.js";
 import { testVoiceTimings } from "../src/voice/index.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const run = promisify(execFile);
 const PROMPT = "A 6-second launch video for a fictional SaaS called Ledgerly that reconciles Stripe payouts automatically";
@@ -310,7 +311,7 @@ async function chromeAvailable() {
   }
 }
 
-test("end to end: make renders a real Remotion draft with a fake model, the test voice and the synth bed", { timeout: 900_000 }, async (t) => {
+test("end to end: make renders a real Remotion draft with a fake model, the test voice and the synth bed", { skip: mediaSkip(), timeout: 900_000 }, async (t) => {
   const missing = process.env.LAUNCHCLIP_SKIP_REMOTION === "1" ? "LAUNCHCLIP_SKIP_REMOTION=1" : await chromeAvailable();
   if (missing) { t.skip(`Chrome Headless Shell or FFmpeg is unavailable: ${missing}`); return; }
   const assets = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-e2e-in-"));

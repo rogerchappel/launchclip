@@ -37,6 +37,42 @@ jobs:
       - if: matrix.package_smoke
         run: npm run package:smoke
 
+  # The whole suite with the media tests (test/helpers/media.js): real Remotion
+  # and HyperFrames renders, FFmpeg chains and Playwright recordings, which the
+  # default npm test above skips. FFmpeg is installed here, so the tests that
+  # skip without it run too. Split across two runners. Locally: npm run
+  # test:media (media files only) or npm run test:all (everything).
+  media:
+    name: Full suite with media ${{ matrix.shard }}/2 on ubuntu-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install FFmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
+      - run: npm ci
+      - name: Cache headless Chrome builds
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/hyperframes
+            node_modules/.remotion
+          key: media-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Ensure headless Chrome for both renderers
+        run: |
+          npx hyperframes browser ensure
+          npx remotion browser ensure
+      - name: Full suite with media tests
+        run: npm run test:all -- --test-shard=${{ matrix.shard }}/2
+
   # Cross-OS renderer parity: the bundled fonts must make HyperFrames and
   # Remotion draw the same text on Linux as on macOS. Five representative
   # fixtures (every default registry font) plus full-frame stills of

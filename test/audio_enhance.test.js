@@ -8,9 +8,10 @@ import { audioEnhancementAvailable, cleanFilters, ENHANCE_PRESETS, enhanceRecord
 import { classifyFrames, detectHum, estimateLag, measureVoice } from "../src/audio_metrics.js";
 import { readWav, writeWav } from "../src/voice/words.js";
 import { addNoise, syntheticVoice } from "./helpers/synthetic_voice.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const hasFfmpeg = (() => { try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); return true; } catch { return false; } })();
-const ffmpegOnly = { skip: hasFfmpeg ? false : "ffmpeg is not installed" };
+const ffmpegOnly = { skip: mediaSkip(hasFfmpeg ? false : "ffmpeg is not installed") };
 const RATE = 48000;
 
 async function fixture(name, samples) {

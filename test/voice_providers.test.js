@@ -11,6 +11,7 @@ import {
 import * as kokoro from "../src/voice/kokoro.js";
 import * as elevenlabs from "../src/voice/elevenlabs.js";
 import * as supplied from "../src/voice/supplied.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const hasFfmpeg = (() => { try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); return true; } catch { return false; } })();
 
@@ -241,7 +242,7 @@ const kokoroReady = await (async () => {
   return kokoro.isKokoroModelCached();
 })();
 
-test("real Kokoro synthesis produces aligned words", { skip: kokoroReady ? false : "kokoro-js or the Kokoro model is not cached", timeout: 180_000 }, async (t) => {
+test("real Kokoro synthesis produces aligned words", { skip: mediaSkip(kokoroReady ? false : "kokoro-js or the Kokoro model is not cached"), timeout: 180_000 }, async (t) => {
   const directory = await tempDir(t);
   const provider = kokoro.create({ log: () => {} });
   const result = await provider.synthesize({ text: "Hot coffee cools fast at first, then it crawls.", outFile: path.join(directory, "k.wav") });

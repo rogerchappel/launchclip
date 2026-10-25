@@ -27,6 +27,7 @@ import {
   summarizeParity,
   thresholdsFor
 } from "../src/renderer_eval.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const format = { duration: 6, fps: 30, width: 1080, height: 1920 };
 const boundaries = [
@@ -280,7 +281,7 @@ async function chromeAvailable() {
   }
 }
 
-test("eval:renderers renders examples/story/minimal with both renderers and matches them", { timeout: 600_000 }, async (t) => {
+test("eval:renderers renders examples/story/minimal with both renderers and matches them", { skip: mediaSkip(), timeout: 600_000 }, async (t) => {
   const missing = await chromeAvailable();
   if (missing) { t.skip(`Chrome Headless Shell is unavailable: ${missing}`); return; }
   try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); } catch { t.skip("FFmpeg is unavailable"); return; }

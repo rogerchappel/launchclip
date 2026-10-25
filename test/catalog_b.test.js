@@ -5,13 +5,13 @@ import {existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {runInNewContext} from 'node:vm';
 import {createRequire} from 'node:module';
-import gsap from 'gsap';
 import {MODULES, catalogBTimeline, catalogBView, contrastRatio, formatNumber, mixColor, parseExpression, sampleIndex} from '../kit/core/catalog-b.mjs';
 import {createBase} from '../kit/core/catalog-b-base.mjs';
-import {frameState, loopValue, propsToStyle, transformString} from '../kit/core/catalog-b-view.mjs';
+import {loopValue, propsToStyle, transformString} from '../kit/core/catalog-b-view.mjs';
 import {EMITTERS, opsToGsap, renderNode} from '../kit/hyperframes/catalog-b.mjs';
+import {assertMatchesFrameState} from './helpers/frame_state.js';
+import {mediaSkip} from './helpers/media.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const FIXTURES = join(ROOT, 'test/fixtures/parity');
@@ -108,41 +108,6 @@ test('sampleIndex follows the tl.set lead rule', () => {
 
 // ---------------------------------------------------------------------------
 // Ops, frameState and GSAP: the same op list must render the same values
-
-/** Run emitted GSAP code against a real paused GSAP timeline on plain objects. */
-export function gsapHarness(motion) {
-  const targets = new Map();
-  const target = selector => {
-    if (!targets.has(selector)) targets.set(selector, {});
-    return targets.get(selector);
-  };
-  const real = gsap.timeline({paused: true});
-  const tl = {
-    set: (selector, vars, position) => real.set(target(selector), vars, position),
-    fromTo: (selector, from, to, position) => real.fromTo(target(selector), from, to, position),
-    to: () => { throw new Error('emitters must use fromTo with explicit from values'); }
-  };
-  runInNewContext(motion, {tl});
-  return {seek: t => { real.seek(t, false); return targets; }, targets};
-}
-const GSAP_KEYS = {text: 'textContent'};
-export function assertMatchesFrameState(ops, motion, times, label = '') {
-  const harness = gsapHarness(motion);
-  for (const t of times) {
-    const objects = harness.seek(t);
-    const state = frameState(ops, t);
-    for (const [id, props] of state) {
-      const object = objects.get(`#${id}`);
-      if (!object) continue;
-      for (const [key, value] of Object.entries(props)) {
-        const actual = object[GSAP_KEYS[key] ?? key];
-        if (actual === undefined) continue; // not touched by GSAP yet: the static view holds it
-        if (typeof value === 'number') assert.ok(Math.abs(actual - value) < 1e-3, `${label} ${id}.${key} at ${t}: gsap ${actual} vs frameState ${value}`);
-        else assert.equal(String(actual), value, `${label} ${id}.${key} at ${t}`);
-      }
-    }
-  }
-}
 
 test('op list → GSAP code is seek-safe and matches frameState in any seek order', () => {
   const ops = [
@@ -328,7 +293,7 @@ test('function-chart: emitter output is seek-safe and matches the Remotion evalu
   assert.ok((out.motion.match(/tl\.set\("#s3-probe"/g) ?? []).length >= model.content.probe.samples.length);
 });
 
-test('function-chart: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not installed'}, () => {
+test('function-chart: real Remotion still', {skip: mediaSkip(!CHROME && 'Remotion Chrome is not installed')}, () => {
   assert.ok(remotionStill('function-chart', 16) > 20000);
 });
 
@@ -382,7 +347,7 @@ test('gauge-compare: emitter output is seek-safe and matches the Remotion evalua
   assert.match(EMITTERS['gauge-compare'](model).html, /id="s2-gap-bracket"/);
 });
 
-test('gauge-compare: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not installed'}, () => {
+test('gauge-compare: real Remotion still', {skip: mediaSkip(!CHROME && 'Remotion Chrome is not installed')}, () => {
   assert.ok(remotionStill('gauge-compare', 10.2) > 20000);
 });
 
@@ -427,7 +392,7 @@ test('flow-compare: emitter loops are seek-safe repeats that match the Remotion 
   assert.match(out.motion, /tl\.fromTo\("#flow-top-belt", \{"x":-320\}, \{"x":0,"duration":[\d.]+,"ease":"none","repeat":\d+,"immediateRender":false\}/);
 });
 
-test('flow-compare: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not installed'}, () => {
+test('flow-compare: real Remotion still', {skip: mediaSkip(!CHROME && 'Remotion Chrome is not installed')}, () => {
   assert.ok(remotionStill('flow-compare', 3) > 20000);
 });
 
@@ -467,7 +432,7 @@ test('process-steps: emitter output is seek-safe and matches the Remotion evalua
   assertEmitter(loadFixture('process-steps').model);
 });
 
-test('process-steps: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not installed'}, () => {
+test('process-steps: real Remotion still', {skip: mediaSkip(!CHROME && 'Remotion Chrome is not installed')}, () => {
   assert.ok(remotionStill('process-steps', 3.3) > 20000);
 });
 
@@ -508,7 +473,7 @@ test('archive-card: emitter output is seek-safe and matches the Remotion evaluat
   assertEmitter(loadFixture('archive-card').model);
 });
 
-test('archive-card: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not installed'}, () => {
+test('archive-card: real Remotion still', {skip: mediaSkip(!CHROME && 'Remotion Chrome is not installed')}, () => {
   assert.ok(remotionStill('archive-card', 3) > 20000);
 });
 
@@ -549,7 +514,7 @@ test('logo-row: emitter output is seek-safe and matches the Remotion evaluator',
   assert.match(EMITTERS['logo-row'](model).html, /<img src="assets\/logos\/orbit\.svg"/);
 });
 
-test('logo-row: real Remotion still', {skip: !CHROME && 'Remotion Chrome is not installed'}, () => {
+test('logo-row: real Remotion still', {skip: mediaSkip(!CHROME && 'Remotion Chrome is not installed')}, () => {
   assert.ok(remotionStill('logo-row', 2) > 20000);
 });
 

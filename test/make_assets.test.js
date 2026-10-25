@@ -7,6 +7,7 @@ import test from "node:test";
 import { promisify } from "node:util";
 import { flatRatio, inventoryAssets, isUiLike, speechFromSilence, wordsFromTranscript } from "../src/make/assets.js";
 import { createTestVoiceProvider } from "../src/voice/index.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const run = promisify(execFile);
 
@@ -41,7 +42,7 @@ async function fakeTranscribe(file) {
   return { text: words.map((word) => word.word).join(""), segments: [{ words }] };
 }
 
-test("inventory classifies a logo, a UI-like silent clip, a speech clip and a voiceover", { timeout: 120_000 }, async (t) => {
+test("inventory classifies a logo, a UI-like silent clip, a speech clip and a voiceover", { skip: mediaSkip(), timeout: 120_000 }, async (t) => {
   if (!(await ffmpegAvailable())) { t.skip("ffmpeg is unavailable"); return; }
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-assets-"));
   try {

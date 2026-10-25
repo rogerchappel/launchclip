@@ -8,6 +8,8 @@
   },
   "scripts": {
     "test": "node --test",
+    "test:media": "node ./scripts/media-tests.mjs",
+    "test:all": "LAUNCHCLIP_MEDIA_TESTS=1 node --test",
     "smoke": "node ./scripts/smoke.js",
     "check": "npm test && npm run typecheck && npm run smoke",
     "typecheck": "tsc -p tsconfig.json",

@@ -11,6 +11,7 @@ import { checkCinematicProject, resolveMusicMix } from "../src/cinematic_check.j
 import { evaluateAudioQuality } from "../src/render_audio_analysis.js";
 import { PATHS, bindCues, buildFinishCopy, chooseBed, defaultCueFor, formatFinishSummary, kitCue, musicSpec, runFinish, stageDecision } from "../src/finish.js";
 import { createTestVoiceProvider, getVoiceProvider, listVoiceProviders, registerVoiceProvider, testVoiceTimings } from "../src/voice/index.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -804,7 +805,7 @@ async function chromeAvailable() {
   }
 }
 
-test("end to end: examples/story/minimal with the test voice through remotion", { timeout: 900_000 }, async (t) => {
+test("end to end: examples/story/minimal with the test voice through remotion", { skip: mediaSkip(), timeout: 900_000 }, async (t) => {
   const missing = process.env.LAUNCHCLIP_SKIP_REMOTION === "1" ? "LAUNCHCLIP_SKIP_REMOTION=1" : await chromeAvailable();
   if (missing) { t.skip(`Chrome Headless Shell or FFmpeg is unavailable: ${missing}`); return; }
   const project = await narratedProject();

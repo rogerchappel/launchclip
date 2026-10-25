@@ -11,6 +11,7 @@ import { CATALOG_A_IDS, MODULES, ANIMATED_PROPS, contrastRatio, cssFromProps, in
 import { EMITTERS } from "../kit/hyperframes/catalog-a.mjs";
 import { getEase } from "../kit/core/motion.mjs";
 import { SAFE_ZONE_PROFILES } from "../kit/core/layout-check.mjs";
+import { mediaSkip } from "./helpers/media.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const BRAND = { colors: { bg: "#06070d", primary: "#fdb022", accent: "#46d4ff", ink: "#06070d", paper: "#f2eee6" }, fonts: { display: "anton", body: "space-grotesk", meta: "jetbrains-mono" } };
@@ -235,7 +236,7 @@ test("a params.rect outside the safe zone is rejected and one inside is used", (
 
 const ENTRY = path.join(ROOT, "test", "fixtures", "parity-entry-cat-a", "entry.tsx");
 
-test("each sample renders a real Remotion still through ModuleReview", { timeout: 600_000 }, async (t) => {
+test("each sample renders a real Remotion still through ModuleReview", { skip: mediaSkip(), timeout: 600_000 }, async (t) => {
   let renderer;
   try {
     renderer = await import("@remotion/renderer");

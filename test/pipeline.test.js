@@ -7,6 +7,7 @@ import test from "node:test";
 import { promisify } from "node:util";
 import { analyzeRender, initWorkspace, planVideo, renderDryRun, renderVideo, runDemo, runPacket, submitReview, validateWorkspace, writeCaptions, writeReview } from "../src/pipeline.js";
 import { REQUIRED_SFX_FILES } from "../src/sfx.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -490,7 +491,7 @@ test("plans and renders punchy social-ready UGC preview", async (t) => {
   }
 });
 
-test("renders punchy social-ready UGC preview with Remotion", async (t) => {
+test("renders punchy social-ready UGC preview with Remotion", { skip: mediaSkip() }, async (t) => {
   if (!(await hasCommand("ffmpeg")) || !(await hasCommand("npx"))) {
     t.skip("ffmpeg or npx is not installed");
     return;
@@ -525,7 +526,7 @@ test("renders punchy social-ready UGC preview with Remotion", async (t) => {
   }
 });
 
-test("renders premium product short sample with local manifest assets", async (t) => {
+test("renders premium product short sample with local manifest assets", { skip: mediaSkip() }, async (t) => {
   if (!(await hasCommand("ffmpeg")) || !(await hasCommand("npx"))) {
     t.skip("ffmpeg or npx is not installed");
     return;
@@ -674,7 +675,7 @@ test("hyperframes render provider rejects dry-run mode", async () => {
   }
 });
 
-test("fits local-say voiceover before the video ends", async (t) => {
+test("fits local-say voiceover before the video ends", { skip: mediaSkip() }, async (t) => {
   if (!(await hasCommand("ffmpeg")) || !(await hasCommand("ffprobe")) || !(await hasCommand("say"))) {
     t.skip("ffmpeg, ffprobe, or say is not installed");
     return;
@@ -726,7 +727,7 @@ test("ElevenLabs render voiceover requires an API key", async (t) => {
   }
 });
 
-test("renders a local uploadable video when ffmpeg is available", async (t) => {
+test("renders a local uploadable video when ffmpeg is available", { skip: mediaSkip() }, async (t) => {
   if (!(await hasCommand("ffmpeg"))) {
     t.skip("ffmpeg is not installed");
     return;
