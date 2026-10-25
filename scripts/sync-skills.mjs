@@ -32,7 +32,8 @@
 //
 // The renderer-neutral scripts are maintained in
 // skills/launchclip-create-video/scripts/ and copied into the Remotion skill.
-// kit/core/*.mjs is canonical for its files and is copied into both skills.
+// kit/core/*.mjs (and kit/core/<folder>/*.mjs) is canonical for its files and
+// is copied into both skills.
 // kit/hyperframes/*.mjs (the HyperFrames emitters, including
 // editorial-ui-modules.mjs, and the story compiler) is canonical too: both
 // skills get copies whose ../core/ imports are rewritten to ./.
@@ -175,7 +176,9 @@ export function planOutputs({ root = ROOT } = {}) {
   const srcRoot = path.join(root, 'skills-src');
   const files = new Map();
   const managedDirs = [];
-  const kitCore = listFiles(path.join(root, 'kit/core')).filter((file) => !file.includes(path.sep) && file.endsWith('.mjs'));
+  // kit/core/*.mjs plus its subfolders of modules (kit/core/characters/),
+  // copied with their folder so relative imports keep working.
+  const kitCore = listFiles(path.join(root, 'kit/core')).filter((file) => file.endsWith('.mjs') && file.split(path.sep).length <= 2).map((file) => file.split(path.sep).join('/'));
   const kitRemotion = listFiles(path.join(root, 'kit/remotion'));
   const kitHyperframes = listFiles(path.join(root, 'kit/hyperframes')).filter((file) => !file.includes(path.sep) && file.endsWith('.mjs'));
   const hyperframesScripts = path.join(root, 'skills/launchclip-create-video/scripts');
