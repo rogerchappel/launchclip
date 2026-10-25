@@ -86,6 +86,21 @@ launchclip style upgrade my-channel
 - **Cast (`cast`):** the drawing style and colours of your characters, and which characters appear by default, so a series keeps the same people.
 - **Brand frame (`brand_frame`):** your logo and a short kicker label with an underline, section labels and an optional progress line, drawn around every scene so the whole video hangs together. Name the kicker and sections per video with `"frame": { "kicker": { "label": "Inside Ship Mode" }, "labels": [{ "scene": "how", "label": "How it works" }] }`, or turn it off for one video with `"frame": false`.
 
+## Turn the dials
+
+Every style has four dials, each from 0 to 1:
+
+- `energy`: shorter shots, quicker transitions and livelier motion as it rises.
+- `density`: how much of the video carries a graphic, and how long your face holds without one.
+- `playfulness`: from serious to playful vocabulary and mood.
+- `polish`: how much ambient motion, texture and blur.
+
+```json
+"dials": { "energy": 0.8, "density": 0.6, "playfulness": 0.3, "polish": 0.7 }
+```
+
+Put them in the style, or turn them for one video with `"style": { "name": "my-channel", "dials": { "energy": 0.3 } }`. The dials move your video within the pacing measured from strong videos of the same kind; they can't push it outside that range, so turning them never produces something that doesn't work.
+
 ## Full motion graphics or minimal editorial
 
 The same tool makes both. A motion-graphics explainer is built entirely from animated scenes. A minimal editorial video keeps your footage in front, with light captions and a few callouts. Say which you want in your prompt (*"keep it minimal, mostly my talking head with a few callouts"*), or let LaunchClip decide from what you give it.

@@ -165,7 +165,15 @@ export function validateStory(story, { modules } = {}) {
     if (isObject(style)) {
       if (!nonEmpty(style.name)) err("style.name must name a style pack or a path to its style.json");
       for (const key of ["intro", "outro", "loop"]) if (style[key] !== undefined && typeof style[key] !== "boolean") err(`style.${key} must be true or false`);
-    } else if (!nonEmpty(style)) err("style must be a style pack name, a path to a style.json, or {name, intro?, outro?, loop?}");
+      // dials (kit/core/style.mjs styleDials): this story's turn of the style's dials.
+      if (style.dials !== undefined) {
+        if (!isObject(style.dials)) err("style.dials must be {energy?, density?, playfulness?, polish?}, each 0-1");
+        else for (const [key, value] of Object.entries(style.dials)) {
+          if (!["energy", "density", "playfulness", "polish"].includes(key)) err(`style.dials.${key} is not a dial (energy, density, playfulness, polish)`);
+          else if (!(typeof value === "number" && value >= 0 && value <= 1)) err(`style.dials.${key} must be a number from 0 to 1`);
+        }
+      }
+    } else if (!nonEmpty(style)) err("style must be a style pack name, a path to a style.json, or {name, intro?, outro?, loop?, dials?}");
   }
 
   if (!STORY_LANES.includes(story.lane)) err(`lane must be one of ${STORY_LANES.join(", ")}`);
