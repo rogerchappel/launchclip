@@ -8,6 +8,10 @@
 //             heatmap, leaderboard, comparison-table)
 //   numbers   catalog-h-numbers.mjs (odometer, flip-clock, ticker-tape,
 //             slot-roll, countdown, percent-fill)
+//   frames    catalog-h-frames.mjs (device-frame, window-chrome),
+//             catalog-h-paper.mjs (polaroid, sticker, torn-paper, tape-note,
+//             badge, ribbon) and catalog-h-callouts.mjs (speech-bubble,
+//             tooltip, callout-arrow)
 //
 // Every module exports its VARIANTS (the default first); helpers, the series
 // palette, number formats and the extra op props (blur, clip) are in
@@ -19,9 +23,12 @@ import {clipCss} from './catalog-h-base.mjs';
 import {CHARTS} from './catalog-h-charts.mjs';
 import {FLOWS} from './catalog-h-flows.mjs';
 import {NUMBERS} from './catalog-h-numbers.mjs';
+import {FRAMES} from './catalog-h-frames.mjs';
+import {PAPER} from './catalog-h-paper.mjs';
+import {CALLOUTS} from './catalog-h-callouts.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
-const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS];
+const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS];
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, aspects: ASPECTS, variants: def.variants}]));
 /** Each module's designed variants, the default (its original look) first. */
