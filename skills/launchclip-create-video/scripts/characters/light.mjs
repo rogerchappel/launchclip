@@ -11,6 +11,10 @@
 //     color      #rrggbb, the light's tint (default a soft warm white)
 //     intensity  0..1: 0 is flat ambient light, 1 a hard key (default 0.55)
 //
+// `dir` may also be a vector {x, y}, as worlds (kit/core/worlds/ worldLight)
+// give it: a unit vector in screen space (y down) pointing from the light
+// toward the subject, so shadows fall along it. It is turned into degrees.
+//
 // Imports nothing.
 
 export const DEFAULT_LIGHT = Object.freeze({dir: 125, color: '#fff1dc', intensity: 0.55});
@@ -23,7 +27,8 @@ export function lightErrors(light, path = 'light') {
   if (!isObj(light)) return [`${path} must be {dir?, color?, intensity?}`];
   const errors = [];
   for (const key of Object.keys(light)) if (!['dir', 'color', 'intensity'].includes(key)) errors.push(`${path}.${key} is not supported (allowed: dir, color, intensity)`);
-  if (light.dir !== undefined && !(Number.isFinite(light.dir) && light.dir >= -360 && light.dir <= 360)) errors.push(`${path}.dir must be degrees (0 = from the right, 90 = from above, 180 = from the left)`);
+  const vector = isObj(light.dir) && Number.isFinite(light.dir.x) && Number.isFinite(light.dir.y) && Math.hypot(light.dir.x, light.dir.y) > 1e-6;
+  if (light.dir !== undefined && !vector && !(Number.isFinite(light.dir) && light.dir >= -360 && light.dir <= 360)) errors.push(`${path}.dir must be degrees (0 = from the right, 90 = from above, 180 = from the left) or a vector {x, y} from the light toward the subject`);
   if (light.color !== undefined && !(typeof light.color === 'string' && HEX6.test(light.color))) errors.push(`${path}.color must be a six-digit hex`);
   if (light.intensity !== undefined && !(Number.isFinite(light.intensity) && light.intensity >= 0 && light.intensity <= 1)) errors.push(`${path}.intensity must be 0 to 1`);
   return errors;
@@ -37,7 +42,8 @@ export function lightErrors(light, path = 'light') {
 export function normalizeLight(light = null, path = 'light') {
   const errors = lightErrors(light, path);
   if (errors.length) throw new Error(errors.join('; '));
-  const dir = (((light?.dir ?? DEFAULT_LIGHT.dir) % 360) + 360) % 360;
+  const raw = isObj(light?.dir) ? Math.atan2(light.dir.y, -light.dir.x) * 180 / Math.PI : light?.dir ?? DEFAULT_LIGHT.dir;
+  const dir = Math.round(((((raw % 360) + 360) % 360)) * 100) / 100;
   const rad = dir * Math.PI / 180;
   const r4 = value => Math.round(value * 10000) / 10000;
   return {dir, color: (light?.color ?? DEFAULT_LIGHT.color).toLowerCase(), intensity: light?.intensity ?? DEFAULT_LIGHT.intensity, x: r4(Math.cos(rad)), y: r4(-Math.sin(rad))};

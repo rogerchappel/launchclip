@@ -1212,6 +1212,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: show
+variants: clay (default), dark, outline
 
 ### window-chrome (keeps captions)
 An app window with title-bar chrome around lines of text (rising in) or an image; the terminal variant types each line on after a prompt and leaves a blinking cursor.
@@ -1225,6 +1226,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: show, line-<i>
+variants: mac (default), minimal, terminal
 
 ### polaroid (keeps captions)
 An instant photo drops in, tilts to rest and develops from dark, with a handwritten-style caption; single, a stack of three, or pinned.
@@ -1237,6 +1239,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: show
+variants: single (default), stack, pinned
 
 ### sticker (keeps captions)
 A die-cut sticker slaps on with a white edge and a shine sweep: a label with an optional icon, a round sticker, or a starburst.
@@ -1250,6 +1253,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: slap
+variants: die-cut (default), round, burst
 
 ### torn-paper (keeps captions)
 A scrap of torn paper lands with a shadow that follows its ragged edge, and its words wipe on: a lined note, a torn headline strip in the brand colour, or a scrap torn on every side.
@@ -1261,6 +1265,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: show
+variants: note (default), strip, scrap
 
 ### tape-note (keeps captions)
 A paper note drops onto the frame and strips of translucent tape press it down (two corners, the top, or both sides); a title, optional body and icon.
@@ -1274,6 +1279,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: show
+variants: corners (default), top, sides
 
 ### badge (keeps captions)
 A badge spins in and stamps down: a starburst, a seal with a dashed ring, or a shield, with a word (NEW, FREE, V2) and an optional sub-line and icon.
@@ -1287,6 +1293,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: stamp
+variants: starburst (default), circle, shield
 
 ### ribbon (keeps captions)
 A ribbon unfurls from its centre with a word or short line: a banner with folded tails, a flag with a notched end, or a price-tag shape.
@@ -1298,6 +1305,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: unfurl
+variants: banner (default), flag, tag
 
 ### speech-bubble (keeps captions)
 A speech or thought bubble pops out of its tail with the line inside: a soft rounded bubble, a bold comic bubble with an ink outline, or a chat message; optional speaker name.
@@ -1310,6 +1318,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: pop
+variants: rounded (default), comic, chat
 
 ### tooltip (keeps captions)
 A tooltip points at a spot on screen: a pulsing dot lands on the target and a box with an arrow rises beside it (above, or below when there is no room); dark, light or brand.
@@ -1321,6 +1330,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: show
+variants: dark (default), light, brand
 
 ### callout-arrow (keeps captions)
 A label and an arrow that draws on from it to a point on screen, then rings the target: a curved arrow from a pill, a straight one, or a hand-drawn sketch with an italic note.
@@ -1334,6 +1344,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: point
+variants: curve (default), straight, sketch
 
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
@@ -1341,7 +1352,7 @@ params:
 - set: desk-laptop | phone | meeting | screen | kitchen-counter | sofa | podium | stage | car | park-bench | video-call | standing-desk
 - screen: {src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)
 - cast: [{id, position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: stand, point, wave, slump, type, think, cheer, shrug, walk, sit; expressions: neutral, happy, delighted, frustrated, confused, surprised, focused
-- light: {dir?: degrees the key light comes from (0 right, 90 above, 180 left), color?: hex, intensity?: 0–1} (default: the world's light, else a soft key from the upper left); shaded drawing styles follow it
+- light: {dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world's light, else a soft key from the upper left); shaded drawing styles follow it
 events: <character>-cue-<i>
 
 ### character-cameo (keeps captions)

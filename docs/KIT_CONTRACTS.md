@@ -2017,7 +2017,8 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   output, so flat casts look the same in existing videos.
 - `light.mjs`: the key light `{dir, color, intensity}` (`dir` in degrees the
   light comes from: 0 right, 90 above, 180 left; default 125, a soft warm key
-  high on the left). Shaded styles follow it. `cast-scene` and
+  high on the left; or a world's vector `{x, y}` from the light toward the
+  subject, as `worldLight` returns it). Shaded styles follow it. `cast-scene` and
   `character-cameo` take `params.light`, else the story's or world's
   `ctx.light`; each actor carries the resolved light as `actors[i].light`.
 - `view.mjs`: GSAP animates SVG transforms through the transform attribute
