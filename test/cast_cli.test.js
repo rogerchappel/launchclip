@@ -4,9 +4,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { castGate, castList, castShow, castSheetHtml, castUsage, runCastCommand } from "../src/cast.js";
 import { dialogueRequests, dialogueText, synthesizeDialogue } from "../src/voice/dialogue.js";
 import { createTestVoiceProvider } from "../src/voice/index.js";
@@ -15,6 +17,7 @@ import { USAGE } from "../src/cli_usage.js";
 import { checkStoryDirection } from "../src/story_cli.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const execFileAsync = promisify(execFile);
 const EXAMPLE = path.join(ROOT, "examples/story/characters-16x9");
 const example = () => JSON.parse(readFileSync(path.join(EXAMPLE, "storyboard.json"), "utf8"));
 const exampleWords = () => JSON.parse(readFileSync(path.join(EXAMPLE, "NARRATION.json"), "utf8")).words;
@@ -73,13 +76,19 @@ test("the example story validates, resolves its dialogue mouths and passes the g
   assert.equal(story.cast.characters.length, 2);
 });
 
-test("dialogue: each line in its speaker's voice, joined with speakers on every word", async () => {
+test("dialogue: each line goes to its speaker's voice", () => {
   const story = example();
   const requests = dialogueRequests(story);
   assert.deepEqual(requests.map((entry) => [entry.speaker, entry.request.voice]), [["narrator", "bf_emma"], ["narrator", "bf_emma"], ["maya", "af_heart"], ["theo", "am_michael"], ["narrator", "bf_emma"], ["maya", "af_heart"]]);
   assert.match(dialogueText(story), /^Every launch, Maya[\s\S]*with the launch!$/);
   assert.throws(() => dialogueRequests({ ...story, audio: { narration: { lines: [{ speaker: "zed", text: "Hi." }] } } }), /not in the story cast/);
   assert.equal(dialogueRequests(story, { provider: "test" })[2].request.voice, "bf_emma", "only Kokoro takes a character's Kokoro voice; others keep the narration voice");
+});
+
+// Joining the lines into one take runs ffmpeg, which the CI test jobs lack.
+test("dialogue: the lines join into one take with each word's speaker", async (t) => {
+  try { await execFileAsync("ffmpeg", ["-version"]); } catch { t.skip("ffmpeg is unavailable"); return; }
+  const story = example();
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-dialogue-"));
   try {
     const provider = createTestVoiceProvider();
