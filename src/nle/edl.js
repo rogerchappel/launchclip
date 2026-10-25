@@ -54,7 +54,7 @@ export function writeEdl(timeline, options = {}) {
   }
   if (cursor < timeline.duration) push("BL", "V", 0, timeline.duration - cursor, cursor, timeline.duration);
   for (const marker of timeline.markers) {
-    lines.push(`* LOC: ${rec(marker.frame)} ${marker.kind === "hit" ? "YELLOW" : marker.kind === "camera" ? "PURPLE" : "BLUE"}   ${marker.name.replace(/\s+/g, "_")}`);
+    lines.push(`* LOC: ${rec(marker.frame)} ${marker.kind === "hit" ? "YELLOW" : marker.kind === "camera" ? "PURPLE" : marker.kind === "chapter" ? "GREEN" : "BLUE"}   ${marker.name.replace(/\s+/g, "_")}`);
   }
   const others = timeline.tracks.filter((track) => track.id !== "V1" && track.clips.some((item) => !item.linked));
   if (others.length) warnings.push(`the EDL carries V1 only; ${others.map((track) => track.id).join(", ")} are left out (use fcpxml or premiere for overlays, music and SFX)`);

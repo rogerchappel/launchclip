@@ -59,7 +59,7 @@ export function writeOtio(timeline, options = {}) {
     }
     return { OTIO_SCHEMA: "Track.1", metadata: { launchclip: compact({ id: track.id, role: track.role, layer: track.layer }) }, name: `${track.id} ${track.name}`, source_range: null, effects: [], markers: [], enabled: track.enabled !== false, children, kind: track.kind === "audio" ? "Audio" : "Video" };
   };
-  const colors = { scene: "BLUE", hit: "YELLOW", camera: "PURPLE" };
+  const colors = { chapter: "GREEN", scene: "BLUE", hit: "YELLOW", camera: "PURPLE" };
   const doc = {
     OTIO_SCHEMA: "Timeline.1",
     metadata: {
@@ -81,7 +81,7 @@ export function writeOtio(timeline, options = {}) {
       name: "tracks",
       source_range: null,
       effects: [],
-      markers: timeline.markers.map((marker) => ({ OTIO_SCHEMA: "Marker.2", metadata: { launchclip: compact({ kind: marker.kind, scene: marker.sceneId }) }, name: marker.name, color: colors[marker.kind] ?? "RED", marked_range: range(marker.frame, 0), comment: marker.note ?? "" })),
+      markers: timeline.markers.map((marker) => ({ OTIO_SCHEMA: "Marker.2", metadata: { launchclip: compact({ kind: marker.kind, scene: marker.sceneId, chapter: marker.chapterId }) }, name: marker.name, color: colors[marker.kind] ?? "RED", marked_range: range(marker.frame, 0), comment: marker.note ?? "" })),
       enabled: true,
       children: [...timeline.tracks.filter((track) => track.kind === "video"), ...timeline.tracks.filter((track) => track.kind === "audio")].map(trackJson)
     }

@@ -140,7 +140,8 @@ export function writeFcpxml(timeline, options = {}) {
     }
     return element("asset-clip", clipAttributes(entry.clip, entry.track, { lane: entry.lane, offset: entry.offset }), [volume(entry.clip, `${indent}  `)].filter(Boolean), indent);
   };
-  const markerLine = ({ marker, start }, indent) => element("marker", { start: t(start), duration: t(1), value: marker.name, note: marker.note || undefined }, null, indent);
+  // Chapters are chapter markers (Final Cut and Compressor carry them into the export's chapters).
+  const markerLine = ({ marker, start }, indent) => element(marker.kind === "chapter" ? "chapter-marker" : "marker", { start: t(start), duration: t(1), value: marker.name, note: marker.note || undefined, ...(marker.kind === "chapter" ? { posterOffset: t(0) } : {}) }, null, indent);
   const spineLines = spine.map((item) => {
     const indent = "                        ";
     const children = [];
@@ -203,7 +204,7 @@ export function readFcpxml(xml) {
     for (const nested of item.children) {
       if (nested.name === "asset-clip") out.clips.push(clipTiming(nested, toTimeline(nested.attributes.offset), Number(nested.attributes.lane ?? 0)));
       else if (nested.name === "caption") out.captions.push({ start: toTimeline(nested.attributes.offset), duration: frames(nested.attributes.duration), text: findAll(nested, "text-style").map((node) => node.text).join("").trim(), lane: Number(nested.attributes.lane ?? 0) });
-      else if (nested.name === "marker") out.markers.push({ frame: toTimeline(nested.attributes.start), name: nested.attributes.value });
+      else if (nested.name === "marker" || nested.name === "chapter-marker") out.markers.push({ frame: toTimeline(nested.attributes.start), name: nested.attributes.value, ...(nested.name === "chapter-marker" ? { chapter: true } : {}) });
     }
   }
   return out;

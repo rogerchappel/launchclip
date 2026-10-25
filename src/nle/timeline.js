@@ -25,12 +25,12 @@
 //   last    the reference mix (disabled), or the only audio when the project
 //           supplies a premixed track and no stems
 //   ST1     captions, one subtitle per caption chunk
-//   markers scene starts, hits and camera moves
+//   markers chapter starts (long form), scene starts, hits and camera moves
 //
 // buildTimeline() is pure: the export command (export.js) probes media and
 // renders overlays, then passes their descriptions in `media`.
 import { resolveModule } from "../../kit/core/modules.mjs";
-import { storyBase, storyHits } from "../../kit/core/story.mjs";
+import { storyBase, storyChapters, storyHits } from "../../kit/core/story.mjs";
 import { needsSubject, sceneLayerOf, subjectSegments, subjectWindows } from "../../kit/core/subject-layer.mjs";
 import { sceneWindows } from "../../kit/core/transitions.mjs";
 import { framesToSeconds, framesToTimecode, parseRate, secondsToFrames } from "./time.js";
@@ -336,6 +336,7 @@ export function buildTimeline(story, media = {}, options = {}) {
 
   // ---- markers
   const markers = [];
+  for (const chapter of storyChapters(story)) markers.push({ frame: f(chapter.start), name: chapter.title, note: `chapter ${chapter.index + 1} · ${chapter.id}`, kind: "chapter", chapterId: chapter.id });
   for (const scene of story.scenes) markers.push({ frame: f(scene.start), name: scene.id, note: `scene ${scene.id} · ${scene.module}${(scene.track ?? 0) ? ` · track ${scene.track}` : ""}`, kind: "scene", sceneId: scene.id });
   for (const hit of storyHits(story)) markers.push({ frame: f(hit.at), name: `${hit.scene_id}: ${hit.event}`, note: hit.cue ? `hit · cue ${hit.cue}` : "hit", kind: "hit", sceneId: hit.scene_id });
   for (const camera of plan.cameras) {
@@ -431,7 +432,7 @@ function countKinds(markers) {
 }
 
 function kindOrder(kind) {
-  return kind === "scene" ? 0 : kind === "camera" ? 1 : 2;
+  return kind === "chapter" ? -1 : kind === "scene" ? 0 : kind === "camera" ? 1 : 2;
 }
 
 function baseName(file) {

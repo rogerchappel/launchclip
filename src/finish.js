@@ -31,6 +31,8 @@ import { PARTIAL_RENDERERS, SEGMENTS_DIR, renderWithSegments, sceneStills } from
 import { getRenderer, resolveRendererName } from "./renderers/index.js";
 import { remotionInvocation } from "./renderers/remotion.js";
 import { deriveBoundaries, resolveStory, storyBase, storyFormat } from "./story.js";
+import { storyChapters } from "../kit/core/story.mjs";
+import { ffmetadataChapters, youtubeChapterProblems, youtubeChapters } from "../kit/core/long-form.mjs";
 import { validateStory } from "./story_cli.js";
 import { hasExactFile, readStoryEdl } from "./story_loader.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
@@ -94,6 +96,8 @@ export const PATHS = Object.freeze({
   sceneStills: "qa/finish/scenes",
   audio: "qa/finish/audio.json",
   style: "qa/style-check.json",
+  chapters: "renders/chapters.txt",
+  chaptersMeta: ".launchclip/finish/chapters.ffmetadata",
   report: "finish.json"
 });
 
@@ -383,7 +387,7 @@ function captionsOverlay(story) {
 // ---------------------------------------------------------------------------
 // Default adapters (each can be replaced in tests)
 
-function defaultAdapters() {
+export function defaultAdapters() {
   return {
     now: () => performance.now(),
     clock: () => new Date().toISOString(),
@@ -415,6 +419,9 @@ function defaultAdapters() {
     async master(input, output, target) {
       const { masterLoudness } = await import(SCRIPT.master);
       return masterLoudness(input, output, target);
+    },
+    async muxChapters(input, metadata, output) {
+      await execFileAsync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", input, "-f", "ffmetadata", "-i", metadata, "-map", "0", "-map_metadata", "1", "-map_chapters", "1", "-c", "copy", "-movflags", "+faststart", output], { maxBuffer: 1 << 24 });
     },
     async hasAudio(file) {
       const { stdout } = await execFileAsync("ffprobe", ["-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", file]);
@@ -930,20 +937,17 @@ const STAGES = [
   {
     name: "master",
     async plan(ctx) {
-      return { inputHash: hashValue({ raw: await fileHash(ctx.raw), target: LOUDNESS_TARGET, script: await fileHash(SCRIPT.master) }), outputs: [rel(ctx.project, ctx.out)] };
+      const chapters = deliveryChapters(ctx);
+      return { inputHash: hashValue({ raw: await fileHash(ctx.raw), target: LOUDNESS_TARGET, script: await fileHash(SCRIPT.master), chapters: chapters.length ? chapters : undefined }), outputs: [rel(ctx.project, ctx.out), ...(chapters.length ? [PATHS.chapters] : [])] };
     },
     async run(ctx) {
       await mkdir(path.dirname(ctx.out), { recursive: true });
-      if (!(await ctx.adapters.hasAudio(ctx.raw))) {
-        await copyFile(ctx.raw, ctx.out);
-        return { mastered: false, reason: "the render has no audio stream", output: rel(ctx.project, ctx.out) };
-      }
-      // Master to a temporary file so a failed pass never leaves a half-written deliverable.
-      const temporary = path.join(path.dirname(ctx.out), `.${path.basename(ctx.out, path.extname(ctx.out))}.mastering${path.extname(ctx.out) || ".mp4"}`);
-      const result = await ctx.adapters.master(ctx.raw, temporary, { lufs: LOUDNESS_TARGET.lufs, tp: LOUDNESS_TARGET.tp });
-      await rename(temporary, ctx.out);
-      if (!result.compliant) ctx.warnings.push(`mastered loudness is ${result.output?.integrated_lufs} LUFS / ${result.output?.true_peak_dbtp} dBTP; target ${LOUDNESS_TARGET.lufs} LUFS, ≤ ${LOUDNESS_TARGET.tp} dBTP`);
-      return { mastered: true, output: rel(ctx.project, ctx.out), loudness: result };
+      const details = await masterDelivery(ctx);
+      const chapters = await writeChapters(ctx);
+      return chapters ? { ...details, chapters } : details;
+    },
+    restore(ctx, details) {
+      ctx.chapters = details.chapters ?? null;
     }
   },
   {
@@ -992,6 +996,49 @@ const STAGES = [
     }
   }
 ];
+
+// ---------------------------------------------------------------------------
+// Master: loudness, then the chapters (long form, RFC §10.2)
+
+async function masterDelivery(ctx) {
+  if (!(await ctx.adapters.hasAudio(ctx.raw))) {
+    await copyFile(ctx.raw, ctx.out);
+    return { mastered: false, reason: "the render has no audio stream", output: rel(ctx.project, ctx.out) };
+  }
+  // Master to a temporary file so a failed pass never leaves a half-written deliverable.
+  const temporary = path.join(path.dirname(ctx.out), `.${path.basename(ctx.out, path.extname(ctx.out))}.mastering${path.extname(ctx.out) || ".mp4"}`);
+  const result = await ctx.adapters.master(ctx.raw, temporary, { lufs: LOUDNESS_TARGET.lufs, tp: LOUDNESS_TARGET.tp });
+  await rename(temporary, ctx.out);
+  if (!result.compliant) ctx.warnings.push(`mastered loudness is ${result.output?.integrated_lufs} LUFS / ${result.output?.true_peak_dbtp} dBTP; target ${LOUDNESS_TARGET.lufs} LUFS, ≤ ${LOUDNESS_TARGET.tp} dBTP`);
+  return { mastered: true, output: rel(ctx.project, ctx.out), loudness: result };
+}
+
+/** The story's chapters for delivery ([] for a prototype, a candidate or a preview). */
+export function deliveryChapters(ctx) {
+  if (ctx.prototype || ctx.candidate || !ctx.resolved) return [];
+  return storyChapters(ctx.resolved).map(({ id, title, start, end }) => ({ id, title, start, end }));
+}
+
+// renders/chapters.txt (the YouTube description's chapter list) and the
+// chapters muxed into the delivery MP4 (stream copy).
+async function writeChapters(ctx) {
+  const chapters = deliveryChapters(ctx);
+  if (!chapters.length) return null;
+  const duration = Number(ctx.resolved.resolved?.duration ?? ctx.resolved.format?.duration);
+  const text = path.join(ctx.project, PATHS.chapters);
+  await mkdir(path.dirname(text), { recursive: true });
+  await writeFile(text, youtubeChapters(chapters));
+  const meta = path.join(ctx.project, PATHS.chaptersMeta);
+  await mkdir(path.dirname(meta), { recursive: true });
+  await writeFile(meta, ffmetadataChapters(chapters, { duration, title: ctx.resolved.title ?? null }));
+  const temporary = path.join(path.dirname(ctx.out), `.${path.basename(ctx.out, path.extname(ctx.out))}.chapters${path.extname(ctx.out) || ".mp4"}`);
+  await ctx.adapters.muxChapters(ctx.out, meta, temporary);
+  await rename(temporary, ctx.out);
+  const problems = youtubeChapterProblems(chapters, duration);
+  if (problems.length) ctx.warnings.push(`chapters: YouTube would not show them (${problems.join("; ")})`);
+  ctx.chapters = { file: PATHS.chapters, list: chapters, youtube: problems.length ? "ignored" : "ok", problems };
+  return ctx.chapters;
+}
 
 // ---------------------------------------------------------------------------
 // Render: the segment cache (src/render_segments.js)
@@ -1211,6 +1258,7 @@ function buildReport(ctx, stages, { seconds, failed }) {
     ...(ctx.candidate ? { candidate: { id: ctx.candidate, ...(ctx.candidateReceipt ?? {}) } } : {}),
     ...(ctx.prototype ? { prototype: { cut: ctx.prototype.cut ?? null, duration: ctx.prototype.duration ?? null } } : {}),
     ...(ctx.options.scenes?.length ? { scenes: ctx.options.scenes, scene_stills: render?.details?.scene_stills ?? [] } : {}),
+    ...(ctx.chapters ? { chapters: ctx.chapters } : {}),
     seconds,
     stages,
     gates,
@@ -1237,6 +1285,7 @@ export function formatFinishSummary(report) {
     if (segments) lines.push(`            ${segmentSummary(segments)}`);
   }
   if (report.preview) lines.push(`preview: ${report.preview.output}`);
+  if (report.chapters) lines.push(`chapters: ${report.chapters.list.length} in ${report.chapters.file} and the MP4${report.chapters.problems.length ? ` (YouTube would not show them: ${report.chapters.problems.join("; ")})` : ""}`);
   if (report.candidate?.receipt) lines.push(`candidate ${report.candidate.id} (${report.candidate.comparison}): ${report.candidate.artifacts.join(", ")} -> ${report.candidate.receipt}`);
   for (const still of report.scene_stills ?? []) lines.push(`scene ${still.scene} @${still.seconds}s: ${still.compare ?? still.after}${still.compare ? " (before | after)" : ""}`);
   const gates = Object.entries(report.gates ?? {});
