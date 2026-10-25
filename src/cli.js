@@ -18,7 +18,7 @@ import { commandHelp, helpText, USAGE_GROUPS, wantsHelp } from "./cli_usage.js";
 import { parseSubjectInvocation } from "./subject/cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "skills", "style", "profile", "cast", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "make", "fx", "voice", "export", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "skills", "style", "profile", "cast", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "make", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -229,6 +229,9 @@ export async function runCli(argv, io = {}) {
       stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatExportSummary(report));
       if (report.status === "failed") throw new Error(`launchclip export wrote ${report.export_dir} but its validation failed: ${Object.entries(report.validation).filter(([, entry]) => entry.status === "failed").map(([key]) => key).join(", ")}`);
       return;
+    } else if (command === "cutdown") {
+      const { runCutdown } = await import("./cutdown.js");
+      result = await runCutdown(required(firstArg, "story project path"), flags, productionAdapters.cutdown ?? {});
     } else if (command === "init") {
       result = await initWorkspace(required(firstArg, "repo path"), flags);
     } else if (command === "demo" && firstArg === "doctor") {

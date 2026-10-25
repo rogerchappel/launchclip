@@ -7,6 +7,7 @@ import test from "node:test";
 import { promisify } from "node:util";
 import { directionJson } from "../kit/core/direction.mjs";
 import { ffmetadataChapters, structureLongForm } from "../kit/core/long-form.mjs";
+import { runCutdown } from "../src/cutdown.js";
 import { PATHS, defaultAdapters, runFinish } from "../src/finish.js";
 import { longFormFixture } from "./helpers/long_form.js";
 import { mediaSkip } from "./helpers/media.js";
@@ -122,6 +123,26 @@ test("a 10-minute fixture renders by chapter: one chapter re-renders, the master
     assert.equal((await probe(report.final, ["-show_chapters"])).chapters.length, structured.chapters.length);
     const alone = await probe(path.join(project, report.chapter.output), ["-show_entries", "format=duration"]);
     assert.ok(Math.abs(Number(alone.format.duration) - (c3.end - c3.start)) < 0.1, `chapter file lasts ${alone.format.duration} s`);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("a Short cut from the 10-minute fixture finishes and passes the Shorts profile", { skip: mediaSkip(hasFfmpeg ? false : "ffmpeg not installed"), timeout: 600_000 }, async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-long-form-cutdown-"));
+  try {
+    await longFormProject(project);
+    const cut = await runCutdown(project, { to: "shorts", section: "c2" });
+    assert.equal(cut.profile.status, "passed", JSON.stringify(cut.profile));
+    const report = await runFinish(cut.out, { renderer: "remotion" }, chapterAdapters());
+    assert.ok(["ready-for-review", "needs-repair"].includes(report.status), JSON.stringify(report.stages.filter((stage) => stage.error)));
+    assert.equal(report.gates.coverage.profile, "short-talking-head");
+    assert.equal(report.gates.coverage.status, "passed", JSON.stringify(report.gates.coverage.errors));
+    assert.equal(report.gates.direction.status, "passed", JSON.stringify(report.gates.direction.errors));
+    assert.equal(await frameCount(report.final), Math.round(cut.duration * 30));
+    assert.equal(report.chapters, undefined, "a Short has no chapters");
+    const { streams } = await probe(report.final, ["-show_streams"]);
+    assert.ok(streams.some((stream) => stream.codec_type === "audio"), "the base's sound plays under the Short");
   } finally {
     await rm(project, { recursive: true, force: true });
   }
