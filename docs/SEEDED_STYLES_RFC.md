@@ -142,9 +142,25 @@ code (SVG and CSS, deterministic, no network):
 | Sets | 4 | 12+ | adds kitchen counter, sofa, podium, stage, car, park bench, video call, standing desk |
 | Character sets (new) | one starter cast | 10+ themed sets, each a generator rather than a fixed list: office team, startup founders, family, kids, seniors, students, chefs, medical, athletes, creators, city crowd | a set fixes the wardrobe and props; the seed varies the people |
 | Characters | 1 style, ~24 members | a range of drawing styles from simple to rich: stick figure, line, flat (today), outlined, paper cut-out, soft-shade, lifelike (realistic proportions, layered shading, detailed hair and hands) and cinematic (lifelike plus rim light, depth of field, cast shadows matched to the world's light); rig options with enough range for thousands of distinct casts (builds, heights, skin tones, hair, facial hair, glasses, headwear, outfits, accessories, mobility aids) | casts are generated from the options, not picked from a fixed list; consistency gate per style |
-| Backgrounds | 6 kinds | 12+: plus dot grid, mesh, stripes, topographic lines, halftone, light rays | |
+| Backgrounds | 6 kinds | 17+: plus dot grid, mesh, stripes, topographic lines, halftone, light rays, and subtle patterns: repeating icon tiles, seeded icon scatter, a tiled brand mark, line motifs (plus, chevron, wave, hatch) and textures (noise, paper, canvas, linen). Panels can take any background as a clipped `fill`, so a split-layout panel is never a flat block | |
 | Frames and layouts | split, full, panels | plus device frames (browser, phone, laptop), polaroid, sticker, torn paper, TV and window frames | |
 | Fonts | 11 | 25+ OFL families in curated pairings | |
+
+Sound has the same problem. The licence-free synth kit has about 7 effect
+families (whoosh, impact, riser, tick, pop, shimmer, subdrop, plus keystrokes)
+with a few variants each, and the synth music bed is a single chord
+progression. The pack gains a `sound` block, and the sound libraries grow too:
+
+| Library | Today | Target | Notes |
+|---|---|---|---|
+| Sonic palettes (new) | one | 10+: cinematic deep, glassy digital, organic wood and paper, playful cartoon, lo-fi tape, retro 8-bit, warm analog, crisp minimal, documentary natural, neon synthwave | a palette sets the timbre of every effect, so a whoosh in "organic" and a whoosh in "8-bit" are different sounds; each palette defines filters, envelopes, pitch ranges and saturation over the synth graph |
+| Effect families | ~7 + keys | 25+: plus swipe, slide, snap, thud, chime, ding, ping, glitch, tape stop, page turn, pen scribble, camera shutter, cash, notification, error buzz, success, boing, sparkle, footstep, door | each family is parameterised so the seed draws fresh variants within the palette |
+| Ambience beds (new) | none | one per world and time: office hum, cafe murmur, street traffic, night crickets, rain, beach waves, wind, server-room fans, crowd | quiet under narration (ducked); follows `world {kind, time}` |
+| Music beds | 1 progression | genres (ambient, lo-fi, house, synthwave, acoustic pluck, cinematic pulse, chiptune, jazz-hop, orchestral-lite), each with several progressions, instruments, tempos and keys | still synth and licence-free; the seed picks within the tone's genres; ElevenLabs stays opt-in only |
+
+```json
+"sound": { "palette": "organic", "music": { "genre": "lo-fi", "bpm": 84, "key": "D", "progression": 2 }, "ambience": "auto", "sfx_density": 0.5 }
+```
 
 A fit table maps prompt topics to worlds and props (cooking → kitchen, cafe;
 fitness → park, gym; dev tools → home desk, server room), which art
@@ -185,6 +201,7 @@ against this contract.
 | 3 | Module variants: designed variants for catalogue G cards and the editorial modules, chosen through `style.variants` | Each variant has a parity fixture; the default variant matches today's render |
 | 4 | Characters: stick figure, line, outlined, paper, soft-shade, lifelike and cinematic beside flat; themed character sets; a wider rig option range; casts generated from options; 8 more sets | A cast sheet per style; the consistency gate holds in every style |
 | 5 | Worlds and props (`kit/core/worlds/`): 20 layered inside, street and outside environments with day, dusk and night lighting, 60 props, the topic fit table, a `world` module | A contact sheet per world; parity fixtures; props render in every drawing style |
+| 5b | Sound (`src/sfx/`, the synth audio kit, the synth music bed): sonic palettes, 25+ effect families, ambience beds per world and time, music genres | An audition sheet per palette; the loudness and audio gates hold; with no `sound` block the mix is unchanged |
 | 6 | Integration: art-direction constraints in the skills and pipeline, the seed picking phase 2–5 options; a gallery script renders one short story with 12 seeds side by side | A reviewer can't find two of the 12 that look like the same brand, and each fits the prompt |
 
 ## 6. Open questions
