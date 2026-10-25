@@ -15,6 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildTemporalEvidenceSchedule, parseDeclaredSequenceBoundaries } from '../../../src/cinematic_evidence.js';
+import { remotionRoot } from '../../../src/renderers/remotion_segments.js';
 
 const HYPERFRAMES_VERSION = '0.7.58';
 const REMOTION_VERSION = '4.0.536';
@@ -35,11 +36,13 @@ function hyperframes(args) {
   return execFileSync('npx', ['--yes', `hyperframes@${HYPERFRAMES_VERSION}`, ...args], { stdio: 'ignore' });
 }
 
-function remotion(args) {
-  if (COMMANDS.remotion) return execFileSync(COMMANDS.remotion[0], [...COMMANDS.remotion.slice(1), ...args], { stdio: 'ignore' });
+// options: execFileSync options, e.g. {cwd} for a bundle.
+function remotion(args, options = {}) {
+  const run = (command, argv) => execFileSync(command, argv, { stdio: 'ignore', ...options });
+  if (COMMANDS.remotion) return run(COMMANDS.remotion[0], [...COMMANDS.remotion.slice(1), ...args]);
   const bin = process.env.REMOTION_BIN;
-  if (bin) return execFileSync(bin, args, { stdio: 'ignore' });
-  return execFileSync('npx', ['--yes', `@remotion/cli@${REMOTION_VERSION}`, ...args], { stdio: 'ignore' });
+  if (bin) return run(bin, args);
+  return run('npx', ['--yes', `@remotion/cli@${REMOTION_VERSION}`, ...args]);
 }
 
 function attr(html, name) {
@@ -160,7 +163,8 @@ function remotionStills(project, schedule, out, story, entry, frames) {
   // Bundle once outside the project (the project is the public dir), then take every still from the bundle.
   const bundle = mkdtempSync(path.join(os.tmpdir(), 'launchclip-remotion-bundle-'));
   try {
-    remotion(['bundle', remotionEntry(project, entry), '--public-dir', project, '--out-dir', bundle, '--log', 'warn']);
+    // From the project's own Remotion root (src/renderers/remotion_segments.js remotionRoot), so the bundle never clears another project's webpack cache.
+    remotion(['bundle', remotionEntry(project, entry), '--public-dir', project, '--out-dir', bundle, '--log', 'warn'], { cwd: remotionRoot(project) });
     const byTime = new Map();
     for (const at of schedule.timestamps) {
       const output = path.join(out, `.still-${String(byTime.size).padStart(3, '0')}.png`);

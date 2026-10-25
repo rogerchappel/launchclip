@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -8,7 +9,7 @@ import test from "node:test";
 import { buildEvidence, contactSheetLayout, detectRenderer as detectEvidenceRenderer, remotionStillArgs } from "../skills/launchclip-create-video/scripts/build-evidence.mjs";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "../src/cinematic_evidence.js";
 import { detectRenderer, getRenderer, resolveRendererName } from "../src/renderers/index.js";
-import { COMPOSITION_ID, frameAt } from "../src/renderers/remotion.js";
+import { COMPOSITION_ID, frameAt, remotionRoot } from "../src/renderers/remotion.js";
 import * as storyModule from "./fixtures/story-stub.mjs";
 import { mediaSkip } from "./helpers/media.js";
 
@@ -131,6 +132,11 @@ test("remotion adapter resolves the story and builds render, still and preview i
   await adapter.still(project, 5, path.join(project, "late.png"));
 
   assert.ok(calls.every((call) => call.command === process.execPath && call.args[0] === REMOTION_CLI));
+  // Each project bundles from its own Remotion root (its own webpack cache).
+  const root = remotionRoot(project);
+  assert.ok(calls.every((call) => call.options.cwd === root));
+  assert.ok(existsSync(path.join(root, "package.json")));
+  assert.notEqual(remotionRoot(path.join(project, "other")), root);
   assert.deepEqual(calls[0].args.slice(1), ["render", FIXTURE_ENTRY, COMPOSITION_ID, path.join(project, "renders", "draft.mp4"), ...shared, "--codec", "h264", "--crf", "28", "--x264-preset", "veryfast"]);
   assert.deepEqual(calls[1].args.slice(1), ["render", FIXTURE_ENTRY, COMPOSITION_ID, path.join(project, "renders", "final.mp4"), ...shared, "--codec", "h264", "--concurrency", "4"]);
   assert.deepEqual(calls[2].args.slice(1), ["still", FIXTURE_ENTRY, COMPOSITION_ID, path.join(project, "still.png"), ...shared, "--frame=37"]);
