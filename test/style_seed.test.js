@@ -44,6 +44,10 @@ test("50 seeds give 50 valid, readable, pairwise distinct packs", () => {
   };
   for (const pack of packs) {
     inRange(pack.background.kind, pack.background.params, pack.name);
+    for (const surface of [pack.background, pack.layouts.panel.fill].filter(Boolean)) {
+      if (["mesh", "texture"].includes(surface.kind)) assert.equal(surface.params.color, undefined, `${pack.name} ${surface.kind} takes no color`);
+      if (surface.kind === "texture") assert.ok(["noise", "fibre", "canvas", "linen"].includes(surface.params.type));
+    }
     if (pack.layouts.panel.fill) inRange(pack.layouts.panel.fill.kind, pack.layouts.panel.fill.params, pack.name, { fill: true });
     if (pack.layouts.panel.fill) assert.notEqual(pack.layouts.panel.fill.kind, "blobs");
     assert.equal(pack.ambient.background, pack.background.kind === "blobs");
