@@ -90,3 +90,18 @@ test('cast-styles: a sheet for every style builds from the same cast', async () 
     assert.ok(!/undefined|NaN/.test(html), `${style} sheet draws cleanly`);
   }
 });
+
+test('stick-classic: black and white only (ink lines, paper head), coloured stick unchanged beside it', () => {
+  assert.ok(DRAWING_STYLES.includes('stick') && DRAWING_STYLES.includes('stick-classic'));
+  for (const id of ['maya', 'kwame', 'fatima', 'nia']) {
+    const {params} = starterCharacter(id);
+    const {colors} = characterLook(params, {style: 'stick-classic'});
+    const joints = poseJoints('wave', {geometry: styleGeometry('stick-classic', params)});
+    const json = JSON.stringify(drawCharacter('stick-classic', params, colors, {id: 'k', joints, expression: 'happy', expressions: ['happy'], static: true}));
+    const hexes = new Set(json.match(/#[0-9a-f]{6}/gi).map(hex => hex.toLowerCase()));
+    for (const hex of hexes) {
+      const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+      assert.ok(Math.max(r, g, b) - Math.min(r, g, b) <= 16, `${id}: ${hex} is a grey, not a colour`);
+    }
+  }
+});

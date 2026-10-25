@@ -18,7 +18,7 @@ import {STYLE as line} from './style-line.mjs';
 import {STYLE as outlined} from './style-outlined.mjs';
 import {STYLE as paper} from './style-paper.mjs';
 import {STYLE as softShade} from './style-soft-shade.mjs';
-import {STYLE as stick} from './style-stick.mjs';
+import {STYLE as stick, STYLE_CLASSIC as stickClassic} from './style-stick.mjs';
 import {STYLE as lifelike} from './style-lifelike.mjs';
 import {STYLE as cinematic} from './style-cinematic.mjs';
 
@@ -30,6 +30,7 @@ const STYLES = {
   paper,
   'soft-shade': softShade,
   stick,
+  'stick-classic': stickClassic,
   lifelike,
   cinematic
 };

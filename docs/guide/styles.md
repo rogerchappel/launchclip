@@ -102,9 +102,10 @@ launchclip style upgrade my-channel
 - **Layouts for your footage (`layouts`):** which layout each kind of line or section prefers (for example lists beside you on the right with `"list": "split-right"`), and how panels look: `solid`, `glass` or `paper`, with a corner radius.
 - **Vocabulary (`vocabulary`):** the tint of icons, whether illustrated objects are allowed, and which modules each kind of line reaches for.
 - **Pacing profile (`profile`):** the cadence your videos aim for, either a built-in profile such as `short-talking-head` or one measured from your own videos.
-- **Cast (`cast`):** the drawing style and colours of your characters, and which characters appear by default, so a series keeps the same people. Eight drawing styles share one rig, so any cast works in any of them:
+- **Cast (`cast`):** the drawing style and colours of your characters, and which characters appear by default, so a series keeps the same people. Nine drawing styles share one rig, so any cast works in any of them:
   - `flat`: flat fills and a dark outline (the default).
-  - `stick`: a stick figure.
+  - `stick`: a stick figure, coloured by the character's clothes.
+  - `stick-classic`: the classic black-and-white stick figure.
   - `line`: single-weight line art.
   - `outlined`: comic ink with a hard cel shadow.
   - `paper`: cut paper.
