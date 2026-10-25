@@ -298,8 +298,9 @@ async function subjectView(projectDir, resolved, warnings = []) {
 
 // The face rule (docs/SUBJECT_EFFECTS_RFC.md §9): with base.subject mattes
 // or a whole-video track, a front-layer element may not cover the presenter's head for more than
-// 0.3 s. Behind-layer scenes, captions, decor (punch-in) and modules that set
-// model.framesFace are exempt.
+// 0.3 s. Behind-layer scenes, captions, decor (punch-in), modules that set
+// model.framesFace and inserts (they replace the whole picture, so no face is
+// on screen) are exempt.
 export async function subjectFaceFindings(projectDir, resolved, elements, warnings = []) {
   const view = await subjectView(projectDir, resolved, warnings);
   if (!view) return [];
@@ -307,9 +308,10 @@ export async function subjectFaceFindings(projectDir, resolved, elements, warnin
     const model = view.models.get(scene.id) ?? null;
     return [scene.id, { layer: sceneLayerOf(scene, model).layer, framesFace: Boolean(model?.framesFace) }];
   }));
+  const inserts = new Set(resolved.scenes.filter((scene) => scene.insert === true).map((scene) => scene.id));
   const headAt = (t) => view.at(t)?.head ?? null;
   const candidates = elements
-    .filter((element) => element.id !== "base" && element.rect && element.role !== "caption" && element.role !== "decor")
+    .filter((element) => element.id !== "base" && element.rect && element.role !== "caption" && element.role !== "decor" && !inserts.has(element.id))
     .map((element) => ({ ...element, layer: depth.get(element.id)?.layer ?? "front", framesFace: depth.get(element.id)?.framesFace ?? false }));
   const fps = Number(resolved.resolved?.fps ?? resolved.format?.fps ?? 30);
   return checkSubjectFace({ elements: candidates, headAt, step: 1 / fps });

@@ -96,3 +96,16 @@ test('without the matte info the rule is skipped with a note', async () => {
   assert.deepEqual(faceFindings(report), []);
   assert.ok(report.warnings.some((warning) => /has no info/.test(warning)), report.warnings.join('\n'));
 });
+
+test('a full-frame insert over the face passes the face rule; the same card in front fails', async () => {
+  // An insert replaces the whole picture, so no face is on screen to cover.
+  const scene = {id: 'card', module: 'concept-card', track: 5, start: 2, end: 4.5, params: {text: 'Ship it', icon: 'rocket', rect: {x: 560, y: 300, width: 800, height: 520}}};
+  const inFront = story();
+  inFront.scenes = [...inFront.scenes.filter((entry) => entry.id !== 'word'), scene];
+  const front = await checkLayoutProject(PROJECT, {story: inFront});
+  assert.deepEqual(faceFindings(front).map((finding) => finding.ids[0]), ['card']);
+  const asInsert = story();
+  asInsert.scenes = [...asInsert.scenes.filter((entry) => entry.id !== 'word'), {...scene, insert: true, track: 0}];
+  const insert = await checkLayoutProject(PROJECT, {story: asInsert});
+  assert.deepEqual(faceFindings(insert), [], JSON.stringify(faceFindings(insert)));
+});
