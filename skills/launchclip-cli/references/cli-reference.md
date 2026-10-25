@@ -1174,7 +1174,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 
   ```text
   launchclip style create <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]
-  launchclip style create <name> --from-reference a.mp4 [b.mp4 ...] [--from-images x.png ...] [--font-hint "Display, Body"] [--root .launchclip/styles] [--force]
+  launchclip style create <name> --from-reference a.mp4 [b.mp4 ...] [--from-images x.png ...] [--font-hint "Display, Body"] [--format footage-led|motion|demo-led] [--rights own|licensed|public-statistics] [--root .launchclip/styles] [--force]
   ```
 
 - `style save`: Save a style pack from a video or style directory.

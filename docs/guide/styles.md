@@ -18,7 +18,7 @@ Tell your agent: *"Use the bold-creator style."* Or set `"style": "bold-creator"
 
 ### 2. Match a video you already like
 
-Point LaunchClip at one or more of your previous videos, and it drafts a style from them: palette, pacing, how much motion there is, caption position and loudness.
+Point LaunchClip at one or more of your previous videos, and it drafts a style from them: palette, pacing, how much motion there is, caption position, size and case, how often you sit beside a panel rather than full frame, and loudness. It also measures a pacing profile from them (shot lengths and how often the picture changes), so new videos aim for the rhythm of your own best ones. Three or more references give a truer range than one.
 
 ```bash
 launchclip style create my-channel --from-reference episode-12.mp4 episode-13.mp4

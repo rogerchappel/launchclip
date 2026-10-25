@@ -7,8 +7,9 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { colorDistance } from "../kit/core/style.mjs";
-import { boundariesFromGrayFrames, compareToStyle, detectCaptions, draftStyleFromReferences, grammarFromPacing, kmeansColors, paletteClusters } from "../src/style_reference.js";
+import { colorDistance, STYLE_SCHEMA, validateStylePack } from "../kit/core/style.mjs";
+import { validateProfile } from "../kit/core/profiles.mjs";
+import { boundariesFromGrayFrames, captionCase, captionsFromDetection, compareToStyle, detectCaptions, detectLayouts, draftStyleFromReferences, grammarFromPacing, kmeansColors, layoutsFromDetection, paletteClusters, profileFromReferences } from "../src/style_reference.js";
 import { checkStyleCommand, createStyleFromReferences } from "../src/style_commands.js";
 
 const hasFfmpeg = spawnSync("ffmpeg", ["-version"]).status === 0;
@@ -99,7 +100,15 @@ test("drafts a pack from synthetic reference videos: palette, pacing, report, no
     assert.equal(pack.references[0].name, "fast.mp4");
     assert.match(pack.references[0].sha256, /^[0-9a-f]{64}$/);
     const report = await readFile(fastResult.report, "utf8");
-    for (const heading of ["## Palette", "## Pacing → motion grammar", "## Energy → ambient", "## Captions (approximate)", "## Sound", "## Fonts"]) assert.ok(report.includes(heading), heading);
+    for (const heading of ["## Palette", "## Pacing → motion grammar", "## Energy → ambient", "## Captions (approximate)", "## Layouts (approximate)", "## Cadence profile", "## Sound", "## Fonts"]) assert.ok(report.includes(heading), heading);
+    assert.equal(pack.schema, STYLE_SCHEMA);
+    assert.deepEqual(validateStylePack(pack).errors, []);
+    assert.deepEqual(validateProfile(pack.profile).errors, []);
+    assert.equal(pack.profile.references, 1);
+    assert.ok(Math.abs(pack.profile.measures.shot_seconds.p50 - 0.75) < 0.3, JSON.stringify(pack.profile.measures.shot_seconds));
+    assert.ok(pack.profile.measures.visual_changes_per_min.p50 > 30);
+    assert.equal(pack.reference_stats.layout_mix.full, 1, "flat synthetic shots with boxes are full-frame");
+    assert.equal(fastResult.inferred.profile.id, "fast-cuts-references");
     assert.match(report, /confidence/);
 
     const slowResult = await createStyleFromReferences("slow-cuts", { "from-reference": slow }, { root: path.join(dir, "styles"), cwd: dir });
@@ -128,4 +137,67 @@ test("compareToStyle without reference stats falls back to palette and grammar",
   assert.equal(result.status, "drift");
   assert.ok(result.metrics.find((metric) => metric.metric === "palette distance").ok);
   assert.equal(draftStyleFromReferences("x", [{ kind: "image", name: "a.png", sha256: "0".repeat(64), width: 1, height: 1, palette: measured.palette }]).pack.motion.grammar, "editorial");
+});
+
+// 160x90 RGB frames: footage-like noise on one side, a flat panel on the other.
+function layoutFrame(kind, seed) {
+  const w = 160, h = 90, data = Buffer.alloc(w * h * 3);
+  let state = seed * 9973 + 17;
+  const noise = () => { state = (state * 1103515245 + 12345) % 2147483648; return state % 200; };
+  for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) {
+    const border = x < 13 || x >= 147 || y < 8 || y >= 82;
+    const flat = kind === "split-right" ? x >= 88 : kind === "split-left" ? x < 72 : kind === "framed" ? border : false;
+    const v = flat ? 40 : 30 + noise();
+    const i = (y * w + x) * 3;
+    data[i] = v; data[i + 1] = flat ? 60 : v; data[i + 2] = flat ? 120 : v;
+  }
+  return { width: w, height: h, data };
+}
+
+test("layout mix from persistent flat panels beside footage", () => {
+  const kinds = ["full", "full", "split-right", "split-right", "split-right", "full", "framed", "framed", "split-left", "full"];
+  const result = detectLayouts(kinds.map((kind, i) => layoutFrame(kind, i + 1)));
+  assert.deepEqual(result.frames, [...kinds.slice(0, 8), "full", "full"], "a one-sample panel is not a layout");
+  assert.deepEqual(result.mix, { full: 0.5, "split-right": 0.3, framed: 0.2 });
+  assert.equal(result.changes, 4);
+  const drafted = layoutsFromDetection([result]);
+  assert.equal(drafted.layouts.by_intent.list, "split-right");
+  assert.equal(drafted.layouts.by_intent.product, "framed");
+  assert.equal(layoutsFromDetection([null]).mix, null);
+});
+
+test("caption case from the shape of the text rows, and the quiet preset for sentence case", () => {
+  // Edge density per row: capitals are as dense at the top of the line as in the middle; lowercase is not.
+  const band = { y0: 0, y1: 40 };
+  const rows = (top) => Float64Array.from({ length: 40 }, (_, y) => (y < 10 || y >= 30 ? 0 : y < 15 ? top : 0.4));
+  assert.equal(captionCase([rows(0.4), rows(0.38)], band).case, "upper");
+  assert.equal(captionCase([rows(0.1), rows(0.12)], band).case, "as-is");
+  assert.equal(captionCase([rows(0.26)], band).case, null);
+  assert.equal(captionCase([Float64Array.from({ length: 40 })], band).case, null);
+  const sentence = { position: "bottom", confidence: 0.5, text_height_fraction: 0.03, highlight: "#ffcc00", case: "as-is", case_ratio: 0.2 };
+  assert.equal(captionsFromDetection([sentence], []).captions.preset, "quiet-accent");
+  assert.equal(captionsFromDetection([{ ...sentence, highlight: null }], []).captions.preset, "minimal-line");
+  assert.equal(captionsFromDetection([{ ...sentence, case: "upper" }], []).captions.preset, "word-highlight");
+  assert.deepEqual(captionsFromDetection([sentence], []).treatment, { position: "bottom", case: "as-is", highlight: true, size: 0.71, preset: "quiet-accent" });
+});
+
+test("a cadence profile from references: shots pooled, changes per 30 s window", () => {
+  const reference = (boundaries, duration, layouts) => ({ kind: "video", name: "r.mp4", width: 1920, height: 1080, duration_seconds: duration, pacing: { duration_seconds: duration, boundaries }, layouts });
+  const profile = profileFromReferences("mine", [
+    reference([2, 4, 6, 8, 30, 32, 34, 50], 60, { frames: ["full"], changes: 3 }),
+    reference([5, 10, 15], 20, { frames: ["full"], changes: 1 }),
+    { kind: "image", name: "still.png", width: 10, height: 10 }
+  ]);
+  assert.deepEqual(validateProfile(profile), { ok: true, errors: [], warnings: [] });
+  assert.equal(profile.id, "mine-references");
+  assert.equal(profile.format, "footage-led");
+  assert.equal(profile.references, 2);
+  assert.deepEqual(profile.provenance.sources.map((source) => [source.id, source.rights]), [["ref-01", "own"], ["ref-02", "own"]]);
+  assert.deepEqual(profile.duration_seconds, [20, 61]);
+  assert.equal(profileFromReferences("x", [reference([1], 10, null)], { format: "motion", rights: "licensed" }).provenance.sources[0].rights, "licensed");
+  assert.deepEqual(Object.keys(profile.measures), ["shot_seconds", "visual_changes_per_min", "layout_changes_per_min"]);
+  assert.equal(profile.measures.shot_seconds.p50, 5, "the median of 13 pooled shots (six of 2 s, four of 5 s, 10, 16, 22)");
+  assert.deepEqual(profile.measures.layout_changes_per_min, { p10: 3, p50: 3, p90: 3 });
+  for (const range of Object.values(profile.measures)) assert.ok(range.p10 <= range.p50 && range.p50 <= range.p90);
+  assert.equal(profileFromReferences("none", [{ kind: "image" }]), null);
 });

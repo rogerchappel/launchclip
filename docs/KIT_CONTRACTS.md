@@ -400,11 +400,24 @@ second pass without the dominant colour and a third over saturated pixels);
 pacing (hard cuts from `analyzeRenderMotion` plus `structuralBoundaries`: share
 of content pixels that changed between t ± 0.5 s at 10 fps, and settle-after
 jumps); activity (1 − hold ratio); captions (`detectCaptions`: text-like
-edge rows per band, approximate); sound (`analyzeProductionAudio`: loudness,
-silence ratio, transients). `draftStyleFromReferences` maps them to a v2 pack
-(`assignPaletteRoles`, `grammarFromPacing`, `ambientFromEnergy`,
-`soundFromAudio`, `captionsFromDetection`, `fontsFromReference`) plus a
-`reference-report.md`. `compareToStyle(measured, pack)` reports drift for
+edge rows per band, approximate, with the text case from how dense the top
+quarter of the text rows is against the middle, `captionCase`); layouts
+(`detectLayouts`: per sample, a flat side beside edge-dense footage is
+`split-left`/`split-right`, a flat border round it `framed`, else `full`; a
+panel counts only when a neighbouring sample shows it); sound
+(`analyzeProductionAudio`: loudness, silence ratio, transients).
+`draftStyleFromReferences` maps them to a v3 pack (`assignPaletteRoles`,
+`grammarFromPacing`, `ambientFromEnergy`, `soundFromAudio`,
+`captionsFromDetection`: sentence case picks `quiet-accent` with a highlight
+or `minimal-line` without; `layoutsFromDetection`: a split on ≥ 15% of
+frames becomes `layouts.by_intent.list`; `fontsFromReference`) with
+`profileFromReferences` as its `profile` (a valid `launchclip.cadence-profile.v1`,
+`provenance.kind: "measured"`, one source per reference with `--rights`
+(default `own`), `format` from `--format` (default `footage-led`):
+`shot_seconds` pooled over every shot, `visual_changes_per_min` per 30 s
+window, `layout_changes_per_min` per reference, each p10/p50/p90), the
+layout mix and caption treatment in `reference_stats.layout_mix` and
+`reference_stats.captions`, plus a `reference-report.md`. `compareToStyle(measured, pack)` reports drift for
 `launchclip style check`.
 
 ## Caption presets (`kit/core/captions.mjs`)

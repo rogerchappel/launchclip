@@ -1,5 +1,5 @@
 // Mimic a reference: measure one or more reference videos (and/or still
-// images) and draft a launchclip.style.v2 pack plus reference-report.md that
+// images) and draft a launchclip.style.v3 pack plus reference-report.md that
 // explains every inferred value and its confidence.
 //
 //   launchclip style create <name> --from-reference a.mp4 [b.mp4 ...] [--from-images x.png ...]
@@ -14,7 +14,12 @@
 // - energy: frame-difference activity (1 - hold ratio) → ambient level;
 // - captions (approximate): text-like edge density per horizontal band →
 //   position, text height → size, the most saturated colour in the band →
-//   highlight colour;
+//   highlight colour, the shape of the text rows → case (upper or sentence);
+// - layouts (approximate): persistent flat panel regions beside textured
+//   footage → full / split-left / split-right / framed per sampled frame, the
+//   layout mix and layout changes;
+// - cadence profile: shot lengths, visual changes and layout changes per
+//   minute as p10/p50/p90 over the references (launchclip.cadence-profile.v1);
 // - sound: integrated loudness, silence ratio and transient rate
 //   (src/render_audio_analysis.js) → SFX density and music presence;
 // - fonts: never read or copied; a nearest bundled family is suggested from
@@ -26,7 +31,7 @@ import { createHash } from "node:crypto";
 import { createReadStream, existsSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
-import { assignPaletteRoles, colorDistance, contrastRatio, hexToHsl, nearestBundledFont, rgbToHex, STYLE_SCHEMA } from "../kit/core/style.mjs";
+import { assignPaletteRoles, CADENCE_PROFILE_SCHEMA, colorDistance, contrastRatio, hexToHsl, nearestBundledFont, rgbToHex, STYLE_SCHEMA, STYLE_V3_DEFAULTS } from "../kit/core/style.mjs";
 import { FONT_REGISTRY } from "../kit/core/fonts.mjs";
 import { analyzeRenderMotion } from "./render_motion_analysis.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
@@ -232,6 +237,7 @@ export function detectCaptions(frames) {
     if (s > 0.55 && l > 0.35 && l < 0.8) vivid.push(rgb);
   }
   const highlight = vivid.length > total * 0.002 ? kmeansColors(vivid, { k: 3 })[0]?.hex ?? null : null;
+  const textCase = captionCase(rowEdges, best);
   const position = best.position;
   const confidence = Math.round(Math.min(0.75, 0.25 + best.score * 8 + (scores.filter((band) => band !== best).every((band) => band.score < best.score * 0.6) ? 0.15 : 0)) * 100) / 100;
   return {
@@ -239,10 +245,82 @@ export function detectCaptions(frames) {
     text_height_fraction: Math.round(textHeightFraction * 1000) / 1000,
     bright_ratio: total ? Math.round((bright / total) * 1000) / 1000 : 0,
     highlight,
+    case: textCase.case,
+    case_ratio: textCase.ratio,
     confidence,
     bands: scores.map(({ position: p, from, to, mean, present, change, score }) => ({ position: p, from, to, edge_density: round(mean, 4), present: round(present, 3), change: round(change, 4), score: round(score, 5) })),
     notes: []
   };
+}
+
+/**
+ * Case of the caption text from the shape of its rows: lowercase text has
+ * sparse ascender rows above a dense x-height core, while capitals are about
+ * as dense at the top of the line as in the middle. ratio = edge density of
+ * the top quarter of the text rows over the middle half, median over frames.
+ * → {case: "upper" | "as-is" | null, ratio}
+ */
+export function captionCase(rowEdges, band) {
+  const ratios = [];
+  for (const rows of rowEdges) {
+    const text = [];
+    for (let y = band.y0; y < band.y1; y += 1) if (rows[y] > 0.08) text.push(rows[y]);
+    if (text.length < 8) continue;
+    const quarter = Math.max(1, Math.floor(text.length / 4));
+    const top = text.slice(0, quarter);
+    const middle = text.slice(quarter, text.length - quarter);
+    const avg = (list) => list.reduce((a, b) => a + b, 0) / list.length;
+    if (middle.length) ratios.push(avg(top) / avg(middle));
+  }
+  if (!ratios.length) return { case: null, ratio: null };
+  const ratio = ratios.sort((a, b) => a - b)[Math.floor(ratios.length / 2)];
+  return { case: ratio >= 0.75 ? 'upper' : ratio <= 0.55 ? 'as-is' : null, ratio: round(ratio, 3) };
+}
+
+// ---------------------------------------------------------------------------
+// Layouts
+
+/**
+ * Footage layouts per sampled frame (RFC §7.1, approximate): a split is a
+ * flat side (low luma spread and few edges, about 40-50% of the width) beside
+ * a textured side; framed is a flat border around a textured centre; else
+ * full. A panel counts only when a neighbouring sample shows the same layout
+ * (panels hold for a section; a flat frame for one sample is a cut or a
+ * fade). → {frames: [layout], mix: {layout: share}, changes, notes}
+ */
+export function detectLayouts(frames) {
+  if (!frames.length) return { frames: [], mix: {}, changes: 0, notes: ['no frames'] };
+  const stats = (frame, x0, x1, y0, y1) => {
+    let sum = 0, sq = 0, edges = 0, n = 0;
+    for (let y = y0; y < y1; y += 1) for (let x = x0; x < x1; x += 1) {
+      const v = lumaAt(frame, x, y);
+      sum += v; sq += v * v; n += 1;
+      if (x > x0 && Math.abs(v - lumaAt(frame, x - 1, y)) > 30) edges += 1;
+    }
+    const mean = sum / Math.max(1, n);
+    return { std: Math.sqrt(Math.max(0, sq / Math.max(1, n) - mean * mean)), edges: edges / Math.max(1, n) };
+  };
+  const flat = (part) => part.std < 14 && part.edges < 0.02;
+  // Footage is textured edge to edge; a flat-filled graphic is not, however much contrast it has.
+  const textured = (part) => part.edges > 0.08;
+  const raw = frames.map((frame) => {
+    const { width: w, height: h } = frame;
+    const left = stats(frame, 0, Math.round(w * 0.42), 0, h), right = stats(frame, Math.round(w * 0.58), w, 0, h);
+    if (flat(left) && textured(right)) return 'split-left';
+    if (flat(right) && textured(left)) return 'split-right';
+    const b = Math.max(1, Math.round(Math.min(w, h) * 0.08));
+    const border = [stats(frame, 0, w, 0, b), stats(frame, 0, w, h - b, h), stats(frame, 0, b, b, h - b), stats(frame, w - b, w, b, h - b)];
+    const centre = stats(frame, Math.round(w * 0.2), Math.round(w * 0.8), Math.round(h * 0.2), Math.round(h * 0.8));
+    if (border.every(flat) && textured(centre)) return 'framed';
+    return 'full';
+  });
+  const layouts = raw.map((layout, i) => (layout === 'full' || raw[i - 1] === layout || raw[i + 1] === layout ? layout : 'full'));
+  const counts = {};
+  for (const layout of layouts) counts[layout] = (counts[layout] ?? 0) + 1;
+  const mix = Object.fromEntries(Object.entries(counts).map(([layout, count]) => [layout, round(count / layouts.length, 4)]));
+  let changes = 0;
+  for (let i = 1; i < layouts.length; i += 1) if (layouts[i] !== layouts[i - 1]) changes += 1;
+  return { frames: layouts, mix, changes, notes: [] };
 }
 
 // ---------------------------------------------------------------------------
@@ -260,6 +338,7 @@ export async function analyzeReference(file, options = {}, adapters = {}) {
   const { info, frames } = await sampleFrames(resolved, { count: options.frames ?? 24, image }, run);
   const palette = paletteClusters(pixelsFromFrames(frames), { k: 8 });
   const captions = image ? null : detectCaptions(frames);
+  const layouts = image ? null : detectLayouts(frames);
   let pacing = null, energy = null, sound = null;
   if (!image) {
     const motion = await (adapters.motion ?? ((video) => analyzeRenderMotion(video)))(resolved);
@@ -299,7 +378,7 @@ export async function analyzeReference(file, options = {}, adapters = {}) {
       };
     } else sound = { audio: false };
   }
-  return { file: resolved, name: path.basename(resolved), sha256: await sha256(resolved), kind: image ? "image" : "video", width: info.width, height: info.height, duration_seconds: round(info.duration, 3), palette, captions, pacing, energy, sound };
+  return { file: resolved, name: path.basename(resolved), sha256: await sha256(resolved), kind: image ? "image" : "video", width: info.width, height: info.height, duration_seconds: round(info.duration, 3), palette, captions, layouts, pacing, energy, sound };
 }
 
 // ---------------------------------------------------------------------------
@@ -429,14 +508,98 @@ export function captionsFromDetection(detections, palette) {
   const heightFraction = mean(found.map((entry) => entry.text_height_fraction));
   const size = heightFraction ? Math.max(0.5, Math.min(2, round((heightFraction * 1920) / 74 / 1.1, 2))) : 1;
   const highlight = found.map((entry) => entry.highlight).find(Boolean) ?? null;
-  const preset = highlight ? (size >= 1.15 ? 'outline-heavy' : 'word-highlight') : size < 0.8 ? 'minimal-line' : 'word-highlight';
+  // Case: a majority of the references that could tell (sentence case picks the quiet presets).
+  const cases = found.map((entry) => entry.case).filter(Boolean);
+  const textCase = cases.length ? (cases.filter((value) => value === 'as-is').length > cases.length / 2 ? 'as-is' : cases.filter((value) => value === 'upper').length > cases.length / 2 ? 'upper' : null) : null;
+  const preset = textCase === 'as-is'
+    ? (highlight ? 'quiet-accent' : 'minimal-line')
+    : highlight ? (size >= 1.15 ? 'outline-heavy' : 'word-highlight') : size < 0.8 ? 'minimal-line' : 'word-highlight';
   const captions = { preset, position: position === 'bottom' ? 'auto' : position, ...(Math.abs(size - 1) > 0.08 ? { size } : {}) };
-  const notes = [`text-like band: ${position} (confidence ${mean(found.map((entry) => entry.confidence)).toFixed(2)})`, `text height ≈ ${heightFraction ? (heightFraction * 100).toFixed(1) : '?'}% of the frame → size ×${size}`];
+  const notes = [`text-like band: ${position} (confidence ${mean(found.map((entry) => entry.confidence)).toFixed(2)})`, `text height ≈ ${heightFraction ? (heightFraction * 100).toFixed(1) : '?'}% of the frame → size ×${size}`, `case: ${textCase === 'as-is' ? 'sentence case' : textCase === 'upper' ? 'capitals' : 'not clear'} (top-of-line row density ${found.map((entry) => entry.case_ratio).filter(Number.isFinite).map((value) => value.toFixed(2)).join(', ') || '?'} of the middle; capitals ≥ 0.75, sentence case ≤ 0.55)`];
   if (highlight) {
     const nearest = palette.map((entry) => entry.hex).sort((a, b) => colorDistance(a, highlight) - colorDistance(b, highlight))[0];
     notes.push(`highlight colour ≈ ${highlight}${nearest ? ` (nearest palette colour ${nearest})` : ''}`);
   } else notes.push('no saturated highlight colour found in the band');
-  return { captions, highlight, confidence: round(Math.min(0.6, mean(found.map((entry) => entry.confidence))), 2), notes };
+  const treatment = { position, case: textCase, highlight: Boolean(highlight), size, preset };
+  return { captions, highlight, treatment, confidence: round(Math.min(0.6, mean(found.map((entry) => entry.confidence))), 2), notes };
+}
+
+/**
+ * The layout mix over the references (each weighs the same) and the layouts
+ * it suggests: a split used for at least 15% of the frames becomes the
+ * preferred layout for list lines. → {mix, layouts, confidence, notes}
+ */
+export function layoutsFromDetection(detections) {
+  const found = detections.filter((entry) => entry?.frames?.length);
+  const layouts = structuredClone(STYLE_V3_DEFAULTS.layouts);
+  if (!found.length) return { mix: null, layouts, confidence: 0.2, notes: ['no video reference: no layout mix'] };
+  const sums = {};
+  for (const entry of found) for (const [layout, share] of Object.entries(entry.mix)) sums[layout] = (sums[layout] ?? 0) + share;
+  const mix = Object.fromEntries(Object.entries(sums).map(([layout, sum]) => [layout, round(sum / found.length, 4)]));
+  const splits = Object.entries(mix).filter(([layout]) => layout.startsWith('split-')).sort((a, b) => b[1] - a[1]);
+  const notes = [`layout mix: ${Object.entries(mix).sort((a, b) => b[1] - a[1]).map(([layout, share]) => `${layout} ${Math.round(share * 100)}%`).join(', ')}`];
+  if (splits[0] && splits[0][1] >= 0.15) { layouts.by_intent.list = splits[0][0]; notes.push(`lists prefer ${splits[0][0]} (the most used split)`); }
+  if ((mix.framed ?? 0) >= 0.15) { layouts.by_intent.product = 'framed'; notes.push('product lines prefer framed'); }
+  return { mix, layouts, confidence: 0.3, notes };
+}
+
+const percentiles = (values) => {
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const q = (p) => { const at = (sorted.length - 1) * p; const lo = Math.floor(at), hi = Math.ceil(at); return round(sorted[lo] + (sorted[hi] - sorted[lo]) * (at - lo), 3); };
+  return { p10: q(0.1), p50: q(0.5), p90: q(0.9) };
+};
+
+/**
+ * A cadence profile (launchclip.cadence-profile.v1, RFC §5.1) measured from
+ * the video references: shot lengths pooled over every shot; visual changes
+ * and layout changes per minute, one value per 30 s window (or per reference
+ * when shorter). Only measurements are kept, and the result is a valid
+ * profile (kit/core/profiles.mjs validateProfile): `format` is the kind of
+ * video measured (footage-led by default), `rights` the references' rights
+ * (own by default: a channel's own videos). → profile or null (no video).
+ */
+export function profileFromReferences(name, references, { format = 'footage-led', rights = 'own', now = () => new Date().toISOString() } = {}) {
+  const videos = references.filter((entry) => entry.kind === 'video' && entry.pacing);
+  if (!videos.length) return null;
+  const shots = [], changes = [], layoutChanges = [];
+  for (const entry of videos) {
+    const duration = Number(entry.pacing.duration_seconds ?? entry.duration_seconds) || 0;
+    if (!(duration > 0)) continue;
+    const edges = [0, ...(entry.pacing.boundaries ?? []), duration];
+    for (let i = 1; i < edges.length; i += 1) if (edges[i] > edges[i - 1]) shots.push(edges[i] - edges[i - 1]);
+    const windows = Math.max(1, Math.floor(duration / 30));
+    const span = duration / windows;
+    for (let w = 0; w < windows; w += 1) {
+      const count = (entry.pacing.boundaries ?? []).filter((time) => time >= w * span && time < (w + 1) * span).length;
+      changes.push((count / span) * 60);
+    }
+    if (entry.layouts?.frames?.length) layoutChanges.push((entry.layouts.changes / duration) * 60);
+  }
+  const measures = {};
+  const add = (key, values) => { const range = percentiles(values); if (range) measures[key] = range; };
+  add('shot_seconds', shots);
+  add('visual_changes_per_min', changes);
+  add('layout_changes_per_min', layoutChanges);
+  if (!Object.keys(measures).length) return null;
+  const durations = videos.map((entry) => Number(entry.duration_seconds)).filter(Number.isFinite);
+  const measuredAt = now();
+  return {
+    schema: CADENCE_PROFILE_SCHEMA,
+    id: `${name.toLowerCase().replace(/[^a-z0-9-]+/g, '-')}-references`,
+    title: `${name} (from references)`,
+    format,
+    duration_seconds: [Math.floor(Math.min(...durations)), Math.ceil(Math.max(...durations)) + 1],
+    references: videos.length,
+    provenance: {
+      kind: 'measured',
+      tool: 'launchclip style create --from-reference',
+      measured_at: measuredAt,
+      note: `Measured from ${videos.length} reference video${videos.length === 1 ? '' : 's'} (${rights}). Only statistics are stored.`,
+      sources: videos.map((entry, index) => ({ id: `ref-${String(index + 1).padStart(2, '0')}`, title: entry.name, rights, ...(entry.sha256 ? { sha256: entry.sha256 } : {}), ...(Number.isFinite(entry.duration_seconds) ? { duration_seconds: entry.duration_seconds } : {}), ...(entry.width ? { width: entry.width, height: entry.height } : {}), measured_at: measuredAt }))
+    },
+    measures
+  };
 }
 
 /** Bundled fonts by role from measured text weight, or from user hints. */
@@ -455,9 +618,11 @@ export function fontsFromReference(detections, hints = []) {
 const slug = (family) => FONT_REGISTRY[family]?.slug ?? String(family).toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
 /**
- * Draft a v2 pack from analysed references. → {pack, report (markdown), inferred}
+ * Draft a v3 pack from analysed references: palette, fonts, grammar, ambient,
+ * captions, sound, the layout mix and a measured cadence profile.
+ * → {pack, report (markdown), inferred}
  */
-export function draftStyleFromReferences(name, references, { fontHints = [] } = {}) {
+export function draftStyleFromReferences(name, references, { fontHints = [], format, rights } = {}) {
   const videos = references.filter((entry) => entry.kind === 'video');
   const palette = combinePalettes(references.map((entry) => entry.palette));
   const roles = assignPaletteRoles(palette);
@@ -472,6 +637,8 @@ export function draftStyleFromReferences(name, references, { fontHints = [] } = 
   const ambient = ambientFromEnergy(energyStats);
   const sound = soundFromAudio(videos.map((entry) => entry.sound));
   const captions = captionsFromDetection(videos.map((entry) => entry.captions), palette);
+  const layouts = layoutsFromDetection(videos.map((entry) => entry.layouts));
+  const profile = profileFromReferences(name, references, { ...(format ? { format } : {}), ...(rights ? { rights } : {}) });
   const fonts = fontsFromReference(videos.map((entry) => entry.captions), fontHints);
   const colors = { ...roles.colors };
   if (captions.highlight && contrastRatio(captions.highlight, colors.bg) >= 3 && colorDistance(captions.highlight, colors.primary) > 0.12) captions.notes.push(`caption highlight ${captions.highlight} differs from primary ${colors.primary}; set captions.colors.active to use it`);
@@ -485,23 +652,30 @@ export function draftStyleFromReferences(name, references, { fontHints = [] } = 
     captions: captions.captions,
     sound: { sfx_density: sound.sfx_density, ...(sound.music ? { music: sound.music } : {}) },
     modules: { prefer: [], avoid: [], params: {} },
+    layouts: layouts.layouts,
+    vocabulary: structuredClone(STYLE_V3_DEFAULTS.vocabulary),
+    ...(profile ? { profile } : {}),
+    brand_frame: structuredClone(STYLE_V3_DEFAULTS.brand_frame),
+    dials: structuredClone(STYLE_V3_DEFAULTS.dials),
     references: references.map((entry) => ({ name: entry.name, sha256: entry.sha256, kind: entry.kind, width: entry.width, height: entry.height, duration_seconds: entry.duration_seconds })),
     reference_stats: {
       palette: palette.slice(0, 8),
       ...(pacingStats ? { pacing: pacingStats } : {}),
       ...(energyStats ? { energy: energyStats } : {}),
-      ...(sound.stats ? { sound: sound.stats } : {})
+      ...(sound.stats ? { sound: sound.stats } : {}),
+      ...(layouts.mix ? { layout_mix: layouts.mix } : {}),
+      ...(captions.treatment ? { captions: captions.treatment } : {})
     },
     created_at: new Date().toISOString()
   };
-  const inferred = { palette: roles, grammar, ambient, sound, captions, fonts };
+  const inferred = { palette: roles, grammar, ambient, sound, captions, fonts, layouts, profile };
   return { pack, inferred, report: referenceReport(pack, references, inferred) };
 }
 
 const pct = (value) => `${Math.round(value * 100)}%`;
 
 export function referenceReport(pack, references, inferred) {
-  const { palette, grammar, ambient, sound, captions, fonts } = inferred;
+  const { palette, grammar, ambient, sound, captions, fonts, layouts, profile } = inferred;
   const lines = [
     `# Reference report: ${pack.name}`,
     '',
@@ -534,7 +708,13 @@ export function referenceReport(pack, references, inferred) {
   lines.push('', '## Energy → ambient', '');
   if (pack.reference_stats.energy) lines.push(`Activity (share of frames that are not holds) ${pack.reference_stats.energy.activity}; ${pack.reference_stats.energy.bursts_per_minute} motion bursts/min.`, '', `- ambient.level: **${ambient.level}** (confidence ${ambient.confidence.toFixed(2)}).`);
   else lines.push('No video reference: subtle (confidence 0.20).');
-  lines.push('', '## Captions (approximate)', '', 'Bottom-band text heuristics: text-like rows are runs of dense, strong horizontal luminance edges; a band whose text changes between samples scores as captions. Position, size and highlight colour are estimates; case and font are not detected.', '', `- captions: \`${JSON.stringify(pack.captions)}\` (confidence ${captions.confidence.toFixed(2)}).`, ...captions.notes.map((note) => `- ${note}`));
+  lines.push('', '## Captions (approximate)', '', 'Bottom-band text heuristics: text-like rows are runs of dense, strong horizontal luminance edges; a band whose text changes between samples scores as captions. Position, size, highlight colour and case (from how dense the top of the text line is) are estimates; the font is not detected.', '', `- captions: \`${JSON.stringify(pack.captions)}\` (confidence ${captions.confidence.toFixed(2)}).`, ...captions.notes.map((note) => `- ${note}`));
+  lines.push('', '## Layouts (approximate)', '', 'Per sampled frame: a flat side (low luma spread, few edges) beside textured footage is a split, a flat border round a textured centre is framed, anything else is full; a panel counts only when a neighbouring sample shows it too.', '');
+  if (layouts?.mix) lines.push(`- layouts: \`${JSON.stringify(pack.layouts)}\` (confidence ${layouts.confidence.toFixed(2)}).`, ...layouts.notes.map((note) => `- ${note}`));
+  else lines.push('- No video reference: no layout mix.');
+  lines.push('', '## Cadence profile', '');
+  if (profile) lines.push(`Measured from ${profile.references} video reference${profile.references === 1 ? '' : 's'} as p10 / p50 / p90 (\`profile\` in style.json; the dials move targets inside these bands). With fewer than three references the bands are narrow: add more of your best videos to widen them.`, '', '| Measure | p10 | p50 | p90 |', '| --- | --- | --- | --- |', ...Object.entries(profile.measures).map(([key, range]) => `| ${key} | ${range.p10} | ${range.p50} | ${range.p90} |`));
+  else lines.push('No video reference: no profile; pick a shipped one by id in `profile`.');
   lines.push('', '## Sound', '', `- sound.sfx_density: **${pack.sound.sfx_density}** (confidence ${sound.confidence.toFixed(2)}).`, ...sound.notes.map((note) => `- ${note}`), `- music: ${pack.sound.music ? 'a bed is suggested; set provider and prompt hints to taste' : 'not inferred'}. Tempo (bpm) is not measured.`);
   lines.push('', '## Fonts', '', `- brand.fonts: \`${JSON.stringify(pack.brand.fonts)}\` (confidence ${fonts.confidence.toFixed(2)}).`, ...fonts.notes.map((note) => `- ${note}`));
   lines.push('', '## Next steps', '', '- Review the palette roles and fonts above; edit style.json by hand where the confidence is low.', `- Render a storyboard with \`"style": "${pack.name}"\` and run \`launchclip style check <project> --against ${pack.name}\` to measure drift against these reference statistics.`, '');

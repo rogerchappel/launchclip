@@ -8,7 +8,7 @@ import { resolveStyleV2, writeStyleV2 } from "./style_store.js";
 
 const list = (value) => (value === undefined || value === true ? [] : Array.isArray(value) ? value : [value]).map(String);
 
-/** Draft a v2 pack from reference videos and images; writes style.json and reference-report.md. */
+/** Draft a v3 pack (with a measured cadence profile, layout mix and caption treatment) from reference videos and images; writes style.json and reference-report.md. */
 export async function createStyleFromReferences(name, flags = {}, { root, cwd = process.cwd() } = {}, adapters = {}) {
   const videos = list(flags["from-reference"]).map((file) => path.resolve(cwd, file));
   const images = list(flags["from-images"]).map((file) => path.resolve(cwd, file));
@@ -18,7 +18,7 @@ export async function createStyleFromReferences(name, flags = {}, { root, cwd = 
   for (const file of videos) references.push(await analyzeReference(file, {}, adapters));
   for (const file of images) references.push(await analyzeReference(file, { image: true }, adapters));
   const fontHints = list(flags["font-hint"]).flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
-  const { pack, report, inferred } = draftStyleFromReferences(name, references, { fontHints });
+  const { pack, report, inferred } = draftStyleFromReferences(name, references, { fontHints, ...(flags.format && flags.format !== true ? { format: String(flags.format) } : {}), ...(flags.rights && flags.rights !== true ? { rights: String(flags.rights) } : {}) });
   const written = await writeStyleV2(pack, { root, cwd, force: Boolean(flags.force), files: { "reference-report.md": report } });
   return {
     stage: "style",
@@ -34,7 +34,11 @@ export async function createStyleFromReferences(name, flags = {}, { root, cwd = 
       ambient: inferred.ambient.level,
       captions: pack.captions,
       sfx_density: pack.sound.sfx_density,
-      fonts: pack.brand.fonts
+      fonts: pack.brand.fonts,
+      layout_mix: pack.reference_stats.layout_mix ?? null,
+      layouts: pack.layouts,
+      caption_treatment: pack.reference_stats.captions ?? null,
+      profile: pack.profile ?? null
     },
     report: path.join(written.path, "reference-report.md"),
     warnings: written.warnings
