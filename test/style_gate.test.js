@@ -10,7 +10,8 @@ import test from "node:test";
 
 import { applyStyle, STYLE_V3_DEFAULTS } from "../kit/core/style.mjs";
 import { resolveStory } from "../kit/core/story.mjs";
-import { storyCadence, styleAdherence, styleProfile } from "../src/style_adherence.js";
+import { primaryShare, primaryUses, storyCadence, styleAdherence, styleProfile } from "../src/style_adherence.js";
+import { vividHues } from "../src/style_reference.js";
 import { checkStyleCommand, createStyleFromReferences } from "../src/style_commands.js";
 import { PATHS, runFinish } from "../src/finish.js";
 import { mediaSkip } from "./helpers/media.js";
@@ -55,7 +56,9 @@ test("each check fails the way it should", async () => {
   const story = await STORY();
   assert.deepEqual(failing(styleAdherence({ story, pack: PACK, measured: { ...MEASURED, palette: [{ hex: "#ff00ff", weight: 1 }] } })), ["error:palette"]);
   assert.deepEqual(failing(styleAdherence({ story: await STORY({ overlays: [{ type: "captions", style: "glow" }] }), pack: PACK, measured: MEASURED })), ["error:captions"]);
-  assert.deepEqual(failing(styleAdherence({ story, pack: PACK, measured: { ...MEASURED, captions: { case: "as-is" } } })), ["warning:caption case"]);
+  // The case the storyboard's captions draw is checked, not a guess from the pixels.
+  assert.deepEqual(failing(styleAdherence({ story: await STORY({ overlays: [{ type: "captions", case: "as-is" }] }), pack: PACK, measured: MEASURED })), ["warning:caption case"]);
+  assert.deepEqual(failing(styleAdherence({ story, pack: PACK, measured: { ...MEASURED, captions: { case: "as-is" } } })), [], "a misread caption band does not warn on our own render");
   assert.deepEqual(failing(styleAdherence({ story, pack: PACK, measured: { ...MEASURED, layouts: { ...MEASURED.layouts, mix: { "split-left": 1 } } } })), ["warning:layout mix"]);
   // Without a storyboard (cadence: null) the render's pixel pacing is gated.
   const slow = styleAdherence({ story, pack: PACK, measured: { ...MEASURED, pacing: { duration_seconds: 60, shot_seconds: { median: 12 }, cut_rate_per_minute: 5 } }, cadence: null });
@@ -81,6 +84,44 @@ test("footage-led renders only need the brand primary to show; without a profile
   assert.equal(await styleProfile(PACK), PACK.profile);
   assert.equal(await styleProfile({ profile: "no-such-profile" }), null);
   assert.equal((await styleProfile({ profile: "short-talking-head" })).id, "short-talking-head", "a shipped profile by id");
+});
+
+test("caption case and brand primary come from the storyboard; pixel guesses are notes when unsure", async () => {
+  // QA: "caption case looks upper-case" fired on sentence-case quiet-accent captions,
+  // and "no colour near the brand primary" on a render with orange icons, kicker and accents.
+  const footage = { lane: "footage-led", style: "channel", brand: { colors: PACK.brand.colors }, base: { src: "base.mp4" }, overlays: [{ type: "captions", preset: "quiet-accent", colors: { accent: "primary" } }], frame: { kicker: { label: "Channel" } }, scenes: [{ id: "a", module: "icon-row", start: 1, end: 4 }], format: { width: 1920, height: 1080, fps: 30, duration: 10 }, resolved: { duration: 10, fps: 30 } };
+  const pack = { ...PACK, profile: undefined, reference_stats: { captions: { case: "as-is" } } };
+  const sparse = { palette: [{ hex: "#3a2a20", weight: 0.95 }, { hex: "#6b5a50", weight: 0.05 }], captions: { position: "bottom", case: "upper", confidence: 0.3 }, vivid: { share: 0.01, hues: new Array(24).fill(0) } };
+  const result = styleAdherence({ story: footage, pack, measured: sparse, cadence: null });
+  const palette = result.checks.find((entry) => entry.check === "palette");
+  assert.equal(palette.ok, true, palette.detail);
+  assert.deepEqual(palette.measured, ["captions accent word", "kicker underline", "1 graphic scene"]);
+  const textCase = result.checks.find((entry) => entry.check === "caption case");
+  assert.equal(textCase.ok, true, textCase.detail);
+  assert.equal(textCase.measured, "as-is", "quiet-accent draws sentence case");
+
+  // A storyboard that draws nothing in the primary, and pixels that show none of it, warns.
+  const plain = { ...footage, overlays: [{ type: "captions", preset: "quiet-accent", colors: { accent: "paper" } }], frame: { kicker: { label: "Channel", underline: false } }, scenes: [{ id: "p", module: "punch-in", start: 1, end: 3 }] };
+  assert.deepEqual(failing(styleAdherence({ story: plain, pack, measured: sparse, cadence: null })).filter((entry) => entry.includes("palette")), ["warning:palette"]);
+  // ...but a few percent of the frame in the primary's hue (icons, a kicker) counts.
+  const hues = new Array(24).fill(0); hues[3] = 0.012;
+  assert.equal(primaryShare({ vivid: { hues } }, "#ffcc00"), 0.012, "#ffcc00 is in the 45–60° bin");
+  assert.equal(styleAdherence({ story: plain, pack, measured: { ...sparse, vivid: { share: 0.02, hues } }, cadence: null }).checks.find((entry) => entry.check === "palette").ok, true);
+
+  // Without a storyboard, a low-confidence case reading is a note, and the primary check too.
+  const pixelsOnly = styleAdherence({ story: null, pack: { ...pack, captions: { preset: "quiet-accent" } }, measured: { ...sparse, pacing: null } });
+  assert.equal(pixelsOnly.checks.find((entry) => entry.check === "caption case").severity, "note");
+  assert.equal(styleAdherence({ story: null, pack, measured: { ...sparse, captions: { ...sparse.captions, confidence: 0.7 } } }).checks.find((entry) => entry.check === "caption case").severity, "warning");
+  assert.deepEqual(primaryUses(null, "#ffcc00"), []);
+});
+
+test("vivid hues see a small accent k-means folds away", () => {
+  const width = 100, height = 10;
+  const data = Buffer.alloc(width * height * 3, 30);
+  for (let i = 0; i < 20; i += 1) { const at = (i * 50) * 3; data[at] = 251; data[at + 1] = 99; data[at + 2] = 2; }
+  const { share, hues } = vividHues([{ width, height, data }], { step: 1 });
+  assert.equal(share, 0.02);
+  assert.equal(hues[1], 0.02, "#fb6302 sits at 23°, the 15–30° bin");
 });
 
 test("our own renders take cadence from the storyboard, not a cut detector", async () => {
