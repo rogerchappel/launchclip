@@ -143,13 +143,27 @@ function checkedRange(start, end, duration) { if (![start, end].every(Number.isF
 function bound(value, maximum, label) { if (!Number.isFinite(value) || value < 0 || value > maximum) throw new Error(`${label} exceeds the bounded repair policy`); return value; }
 function overlaps(left, right) { return left.start < right.end - EPSILON && left.end > right.start + EPSILON; }
 function text(value) { return String(value).toLowerCase().replace(/[^\p{L}\p{N}]/gu, ""); }
+// The removed ranges between the repaired keeps. Each gap keeps the prior
+// cuts inside it as they were (clipped to the gap), so a rejected take's own
+// boundaries survive a repair elsewhere (audio_analysis spans and QA cite
+// them); only the parts no prior cut covered become "qa-speech-edge".
 function complement(keeps, duration, priorCuts) {
   const removed = [];
+  const cuts = [...priorCuts].sort((a, b) => a.source_start_seconds - b.source_start_seconds);
   let cursor = 0;
   for (const keep of [...keeps, { source_start_seconds: duration, source_end_seconds: duration }]) {
-    if (keep.source_start_seconds > cursor + EPSILON) {
-      const protectedReason = priorCuts.find((cut) => PROTECTED_REASONS.has(cut.reason) && overlaps({ start: cursor, end: keep.source_start_seconds }, { start: cut.source_start_seconds, end: cut.source_end_seconds }))?.reason;
-      removed.push({ source_start_seconds: cursor, source_end_seconds: keep.source_start_seconds, reason: protectedReason ?? priorCuts.find((cut) => overlaps({ start: cursor, end: keep.source_start_seconds }, { start: cut.source_start_seconds, end: cut.source_end_seconds }))?.reason ?? "qa-speech-edge" });
+    const end = keep.source_start_seconds;
+    if (end > cursor + EPSILON) {
+      let at = cursor;
+      for (const cut of cuts) {
+        const from = Math.max(cut.source_start_seconds, at);
+        const to = Math.min(cut.source_end_seconds, end);
+        if (to <= from + EPSILON) continue;
+        if (from > at + EPSILON) removed.push({ source_start_seconds: at, source_end_seconds: from, reason: "qa-speech-edge" });
+        removed.push({ ...cut, source_start_seconds: from, source_end_seconds: to });
+        at = to;
+      }
+      if (end > at + EPSILON) removed.push({ source_start_seconds: at, source_end_seconds: end, reason: "qa-speech-edge" });
     }
     cursor = keep.source_end_seconds;
   }
