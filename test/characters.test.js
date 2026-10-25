@@ -22,7 +22,7 @@ test('rig params normalise to a fixed shape and reject unknown parts', () => {
   assert.equal(params.colors.top, 'primary', 'clothes default to brand roles');
   assert.equal(normalizeRigParams({skin: 'tan', hair: {style: 'long'}, outfit: {top: 'dress'}}).outfit.bottom, 'skirt');
   assert.deepEqual(normalizeRigParams({skin: 'tan', hair: {style: 'long'}, accessories: ['glasses', 'beard', 'glasses']}).accessories, ['beard', 'glasses']);
-  assert.throws(() => normalizeRigParams({skin: 'tan', hair: {style: 'mohawk'}}), /hair\.style must be one of/);
+  assert.throws(() => normalizeRigParams({skin: 'tan', hair: {style: 'mullet'}}), /hair\.style must be one of/);
   assert.throws(() => normalizeRigParams({skin: 'green', hair: {style: 'long'}}), /skin must be a skin tone/);
   assert.throws(() => normalizeRigParams({skin: 'tan', hair: {style: 'long'}, wings: true}), /wings is not a rig param/);
   assert.throws(() => normalizeRigParams({skin: 'tan', hair: {style: 'headscarf'}, accessories: ['earrings']}), /under a headscarf/);
@@ -34,19 +34,19 @@ test('the starter cast: about two dozen valid characters with stable, unique ids
   assert.ok(STARTER_CAST.length >= 24);
   assert.equal(new Set(STARTER_IDS).size, STARTER_IDS.length);
   for (const id of STARTER_IDS) assert.match(id, /^[a-z][a-z0-9-]*$/);
-  const all = STARTER_IDS.map(id => starterCharacter(id).params);
+  const all = STARTER_IDS.slice(0, 24).map(id => starterCharacter(id).params);
   const kinds = key => new Set(all.map(p => (typeof p[key] === 'object' ? JSON.stringify(p[key].style ?? p[key].top) : p[key])));
   assert.ok(kinds('skin').size >= 7, 'skin tones across the range');
-  assert.equal(kinds('build').size, BUILDS.length, 'every build');
+  assert.equal(kinds('build').size, 5, 'every original build');
   assert.ok(new Set(all.map(p => p.hair.style)).size >= 12, 'hair styles and textures');
-  assert.equal(new Set(all.map(p => p.outfit.top)).size, TOPS.length, 'every top');
+  assert.equal(new Set(all.map(p => p.outfit.top)).size, 6, 'every original top');
   for (const accessory of ['glasses', 'hearing-aid', 'beard']) assert.ok(all.some(p => p.accessories.includes(accessory)), accessory);
   assert.ok(all.some(p => p.hair.style === 'headscarf'));
   assert.ok(all.some(p => ['grey', 'silver'].includes(p.hair.color)), 'older characters');
   for (const entry of STARTER_CAST) assert.ok(!/\b(he|she|him|her|his|hers)\b/i.test(entry.summary), `${entry.id}: summaries stay neutral`);
   // The first ids are part of the contract: they never change.
   assert.deepEqual(STARTER_IDS.slice(0, 6), ['maya', 'theo', 'amara', 'kenji', 'fatima', 'diego']);
-  assert.ok(Object.keys(SKIN_TONES).length === 8 && HAIR_STYLES.length >= 15 && ACCESSORIES.length >= 8);
+  assert.ok(Object.keys(SKIN_TONES).length >= 16 && HAIR_STYLES.length >= 26 && ACCESSORIES.length >= 20 && BUILDS.length >= 8 && TOPS.length >= 17);
 });
 
 test('brand roles dress the cast; a cast mapping overrides them', () => {

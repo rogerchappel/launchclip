@@ -269,8 +269,10 @@ A style pack is `.launchclip/styles/<name>/style.json`:
  camera?: {mode, ...}, ambient?: {level: off|subtle|standard|lively, ...},
  captions?: {preset, ...caption options,
              lanes?: {motion | voiceover-motion | footage-led: {preset, ...options}}},
- sound?: {sfx_library?: path, sfx_density?: low|normal|high,
-          music?: {provider?, prompt_hints?, bpm_range?: [min, max], energy_curve?}},
+ sound?: {sfx_library?: path, sfx_density?: low|normal|high | 0-1,
+          palette?: <sound palette id>, ambience?: auto|none|<bed id>,
+          music?: {provider?, prompt_hints?, bpm_range?: [min, max], energy_curve?,
+                   genre?, bpm?, key?, progression?: index}},
  modules?: {prefer?: [id], avoid?: [id], params?: {<module>: {param: default}}},
  layout?: {safe_profile?: shorts|landscape, title_case?: boolean},
  intro?: {module, params, duration}, outro?: {module, params, duration},
@@ -278,10 +280,19 @@ A style pack is `.launchclip/styles/<name>/style.json`:
  reference_stats?: {palette, pacing, energy, sound},
  // v3 (docs/VIDEO_QUALITY_RFC.md §9):
  layouts?: {by_intent?: {<intent>: layout}, by_section?: {<section>: layout},
-            panel?: {treatment?: solid|glass|paper, radius?: 0-120 px}},
- vocabulary?: {icon_tint?: role|hex, illustration?: boolean, prefer?: {<intent>: [module id]}},
+            panel?: {treatment?: solid|glass|paper|outline|soft-shadow, radius?: 0-120 px,
+                     fill?: {kind: <background kind, not blobs>, params?}}},
+ vocabulary?: {icon_tint?: role|hex, icon_stroke?: 1-3, icon_style?: outline|duotone,
+               illustration?: boolean | flat|flat-shadow|line, prefer?: {<intent>: [module id]}},
  profile?: "<shipped profile id>" | <launchclip.cadence-profile.v1 profile>,
- cast?: {drawing_style?, colors?: {<rig slot>: role|hex}, characters?: [id]},
+ cast?: {drawing_style?, colors?: {<rig slot>: role|hex}, characters?: [id],
+         set?: <character set id>, members?: [<story cast entry>]},   // ≤8 members
+ // seeded styles (docs/SEEDED_STYLES_RFC.md §3.1):
+ generated?: {seed: 8 hex, generator: "launchclip.style-seed.v1", tone?, at?: ISO date,
+              constraints?, theme?, scheme?, pairing?, redraws?},
+ background?: {kind: <slug>, params?: {fade?: none|center|top|bottom|left|right, ...}},
+ variants?: {<module>: <variant>},
+ world?: {kind: <world id>, time?: day|dusk|night},
  brand_frame?: false | {enabled?, logo?: path, color?: role|hex,
                 kicker?: boolean | {label?: ≤40 chars, underline?, logo?: boolean, position?: top-left|top-right|bottom-left|bottom-right, color?},
                 sections?: boolean | {position?, color?},
@@ -300,6 +311,18 @@ A style pack is `.launchclip/styles/<name>/style.json`:
   an inline profile that must pass `kit/core/profiles.mjs` `validateProfile`
   (`cadenceProfileErrors`). `cast` is shape-checked only (the characters kit
   fills it).
+- The seeded-style fields are shape-checked: `background.kind` outside
+  `STYLE_BACKGROUND_KINDS`, a `variants` module the catalogue does not list
+  (when `modules` is passed) and unknown `generated` keys are warnings, so the
+  kits that draw them can grow first. `cast.members` entries are checked as
+  story cast entries (`storyCastErrors`). `STYLE_BACKGROUND_KINDS` mirrors
+  `kit/core/backgrounds.mjs`; the sound palette and genre lists mirror
+  `kit/core/sound/options.mjs` (names outside them warn).
+- `applyStyle` fills `story.background`, `story.panel` (the pack's
+  `layouts.panel` whole, `fill` included; not the default panel an upgraded
+  v2 pack carries, so v2 packs render as before) and `story.world` when the
+  story has none, and `story.variants` per module (the story's entries win).
+  The renderers read those story fields; `cast.members` stay in the pack.
 - `brandFrameErrors(frame, where)` checks `brand_frame` and the story's
   `frame` (the same shape, plus `labels`).
 - `upgradeV2Pack(pack, {render})` → `{pack, notes}` fills the v3 fields from
@@ -360,6 +383,77 @@ scene ends: `hold` by default, `fade` or `exit`; modules.mjs `storyFinal`); intr
   `warm-documentary`, `neon-explainer`; each validates, passes the contrast
   check (`checkPackContrast`: paper/bg 4.5:1, primary and accent/bg 3:1,
   ink/primary 3:1) and merges into every golden story without param errors.
+
+### Seeded styles (`kit/core/style-seed.mjs`)
+
+With no style or brand, `make` and `story plan` generate a pack from a seed
+(docs/SEEDED_STYLES_RFC.md). `generateStyle({seed, tone?, constraints?, at?})`
+→ a valid `launchclip.style.v3` pack named `seed-<hex>` with a `generated`
+block. One seed, tone and constraint set always give the same pack (`at` only
+stamps the provenance); `GENERATOR_VERSION` versions the mapping, and a
+saved pack is what renders, so a new version changes only rerolls.
+
+- Every dimension draws from its own stream (`seededRandom` from
+  `ambient.mjs`, seeded with the seed hashed with the dimension's name), so
+  pinning one constraint never reshuffles another.
+- Constraints (`CONSTRAINT_KEYS`): `tone` (`TONES`), `theme`
+  (`dark|light|tinted`), `world` (id or `{kind, time}`), `drawing_style`,
+  `character_set`, `background` (kind or `{kind, params}`) and `panel`
+  (treatment or `{treatment, radius}`). Art direction chooses them; the seed
+  picks among what fits. They pass through to `world`, `cast.drawing_style`,
+  `cast.set`, `background` and `layouts.panel`, and are recorded in
+  `generated.constraints`.
+- Palette: a harmony scheme (`PALETTE_SCHEMES`) in OKLCH, lightness ranges by
+  theme, chroma by tone, then each role moved in lightness until
+  `paletteContrast` passes (`PALETTE_CONTRAST`: paper/bg, ink/primary and
+  ink/paper 4.5:1; primary/bg, accent/bg and ink/accent 3:1). Primary and
+  accent sit at least 30° apart unless the scheme is monochrome. Out-of-gamut
+  colours lose chroma, never lightness or hue (`oklchToHex`).
+- Type: `FONT_PAIRINGS` (display, body, meta, case, weight, tones) over the
+  bundled fonts; a tone narrows the table to its pairings. Title case sets
+  `layout.title_case`.
+- Tone (`TONE_TABLE`, §3.3) narrows the grammars, themes, ambient levels,
+  chroma, SFX density, music hints and the dials' centres (the seed adds up to
+  ±0.12). `toneFromText(prompt)` reads tone words (`TONE_WORDS`). The grammar
+  picks the transition preference and caption preset; the world camera only
+  for playful, snappy, smooth and cinematic; light themes keep the
+  stroke-free caption presets.
+- The option lists (`SEED_PANEL_TREATMENTS`, `SEED_BACKGROUND_KINDS`,
+  `SEED_ICON_STYLES`, `SEED_ILLUSTRATIONS`, `SEED_DRAWING_STYLES`,
+  `SEED_CHARACTER_SETS`, `SEED_WORLDS`, `SEED_MODULE_VARIANTS`,
+  `SEED_SOUND_PALETTES`, `SEED_MUSIC_GENRES`) hold what the kits draw today.
+  Backgrounds are weighted towards subtle patterns and textures
+  (`SEED_BACKGROUND_KINDS` is `[kind, weight]`; flat is rare), each with a
+  `fade` and params drawn inside `SEED_BACKGROUND_PARAMS` (the backgrounds
+  kit's well-reading subranges; the kinds that take one also get a `color` role, and texture a `type`), and
+  most non-glass panels get a quiet `fill` (`SEED_PANEL_FILLS`,
+  `PANEL_FILL_CHANCE`; intensity and amount in the low quarter). `sound` holds a palette, a music genre, bpm inside the
+  tone's range, key and progression, ambience `auto` and the tone's SFX
+  density. The background, variant, character, world and sound kits widen
+  these lists. `cast.members` are 2–4 people drawn from the rig's options (never a
+  starter id, which would pull in that starter's params).
+- The brand frame is off (a generated style has no brand name); its kicker
+  position, sections and progress line are still drawn, for when it is
+  turned on.
+- Distance (§3.6): `styleFingerprint(pack)` (palette in OKLab, theme, fonts,
+  panel, grammar, caption preset), `fingerprintKey`, `styleDistance(a, b)`
+  (0–1: palette half, the four categories an eighth each) and
+  `nearestStarter(pack)` against `AVOID_LOOKS` (the five starters, which
+  `test/style_seed.test.js` checks against `kit/styles`, and the renderers'
+  fallback look). A candidate under `MIN_STARTER_DISTANCE` (0.3) overall or
+  `MIN_PALETTE_DISTANCE` (0.06) in palette is redrawn from the next seed state
+  (`generated.redraws`).
+- `styleSummary(pack)` → `seed 7f3a91c2 (dark, playful, Unbounded / Inter)`;
+  `seedSummaryLine(pack)` is the line make and story plan print.
+- Projects (`src/style_seed_store.js`): `make` and `story plan` call
+  `generateProjectStyle` when no `--style`, brand.json or logo is given (or
+  `--seed` is), save `.launchclip/styles/seed-<hex>/style.json`, and reuse
+  the generated style the storyboard already names (`projectSeedStyle`).
+  `adoptStyleLook(story, pack)` sets the pack's brand, motion grammar and
+  caption preset on the planned storyboard and names the style.
+  `style reroll` keeps `generated.constraints` (a new `--tone` replaces the
+  old) and writes `.launchclip/styles/previous.json` for one `--undo`;
+  `style keep` copies the pack to `~/.launchclip/styles/<name>`.
 
 ### Brand frame (`kit/core/brand-frame.mjs`)
 
@@ -1666,15 +1760,23 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
 
 | Module | Params | Events | Notes |
 | --- | --- | --- | --- |
-| `cast-scene` | `set` desk-laptop/phone/meeting/screen, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?}], says?: [{from, to, words?}], holds?: phone}` | `<character>-cue-<i>` | Fills the frame and fades in place. Seated sets (desk-laptop, meeting) seat the cast and refuse `walk`; standing sets refuse `sit`. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
-| `character-cameo` | `character`, `pose?`, `expression?`, `facing?`, `cues?`, `says?`, `side` left/right, `card?` `{kicker? ≤ 32, title ≤ 64, body? ≤ 140}`, `panel?` | `<character>-cue-<i>` | One character beside a card (landscape: a column; portrait: under the card), or alone on a panel. `sit` is refused. Placed in the safe zone narrowed to the brand frame's safe area (`createBase(..., {frameSafe: true})`); `rect?` (guided and bespoke tiers) places it inside that |
+| `cast-scene` | `set` desk-laptop/phone/meeting/screen, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?}], says?: [{from, to, words?}], holds?: phone}`, `light?` `{dir?, color?, intensity?}` | `<character>-cue-<i>` | Fills the frame and fades in place. Seated sets (desk-laptop, meeting) seat the cast and refuse `walk`; standing sets refuse `sit`. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
+| `character-cameo` | `character`, `pose?`, `expression?`, `facing?`, `cues?`, `says?`, `side` left/right, `card?` `{kicker? ≤ 32, title ≤ 64, body? ≤ 140}`, `panel?`, `light?` | `<character>-cue-<i>` | One character beside a card (landscape: a column; portrait: under the card), or alone on a panel. `sit` is refused. Placed in the safe zone narrowed to the brand frame's safe area (`createBase(..., {frameSafe: true})`); `rect?` (guided and bespoke tiers) places it inside that |
 
 ### The kit (`kit/core/characters/`)
 
-- `rig.mjs`: rig params `{build, height, skin, hair: {style, color}, outfit:
-  {top, bottom}, accessories, colors: {top, bottom, shoes, accent}}`
-  (`normalizeRigParams` fixes the key order, so equal characters serialise
-  identically), body measurements (`rigGeometry`), the named poses
+- `rig.mjs`: rig params `{build, height, age?, skin, hair: {style, color},
+  outfit: {top, bottom, over?}, accessories, headwear?, mobility?, colors:
+  {top, bottom, shoes, accent}}` (`normalizeRigParams` fixes the key order, so
+  equal characters serialise identically; the optional fields appear only
+  when set, so older characters keep their identity). The range: 8 builds, 5
+  heights, 4 ages (child, teen, adult, senior), 16 skin tones, 26 hair styles,
+  17 tops, 5 bottoms, 3 layers (apron, vest, hi-vis), 4 kinds of glasses, 6
+  kinds of facial hair, jewellery, ties, scarves, stethoscopes, bags, 14
+  headwear (faith headwear among them) and 6 mobility aids (wheelchair, cane,
+  white cane, forearm crutch, prosthetic leg or arm). A wheelchair seats the
+  character in any set; a cane or crutch keeps its arm at rest
+  (`acting.mjs sceneJoints`). body measurements (`rigGeometry`), the named poses
   (`stand point wave slump type think cheer shrug walk sit`) as joint angles,
   and the named expressions (`neutral happy delighted frustrated confused
   surprised focused`) as face parts. Positive arm and leg angles swing a limb
@@ -1685,9 +1787,29 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   colour mapping.
 - `cast.mjs`: the starter cast (24 characters). Ids are stable and never
   change once shipped.
-- `style-flat.mjs`: the drawing style "flat" (flat fills, a dark outline).
-  A drawing style is a function of (params, colours, joints, expressions);
-  another style can be added beside it without touching the rig.
+- `generate.mjs`: `generateCast({seed, set, count, palette})` → story cast
+  entries, always the same for the same inputs. `CHARACTER_SETS` (office-team,
+  startup-founders, family, kids, seniors, students, chefs, medical,
+  athletes, creators, city-crowd) fix the wardrobe, age mix and props; the
+  seed varies the people (skin tones spread across the range, no two members
+  alike). `castFromStyle(pack.cast)` turns a style pack's `{drawing_style,
+  set, members}` into `story.cast`.
+- `styles.mjs`: the drawing styles (`DRAWING_STYLES`, flat first) and
+  `drawCharacter(style, params, colours, options)`, `styleHeight`,
+  `styleGeometry`. Every style draws the same rig, poses, expressions and
+  part ids, so any cast works in any style and acting.mjs animates them all.
+- `toon.mjs`: the toon body shared by the cartoon styles: one builder lays
+  out every shape from the rig and hands each to a pen (`shape`, `ellipse`,
+  `line`, `limb`, `strand`, `ground`, `within`, `defs?`), which decides how it
+  is drawn.
+- `style-flat.mjs`: the drawing style "flat" (flat fills, a dark outline):
+  the toon body with the flat pen. `test/character_styles.test.js` pins its
+  output, so flat casts look the same in existing videos.
+- `light.mjs`: the key light `{dir, color, intensity}` (`dir` in degrees the
+  light comes from: 0 right, 90 above, 180 left; default 125, a soft warm key
+  high on the left). Shaded styles follow it. `cast-scene` and
+  `character-cameo` take `params.light`, else the story's or world's
+  `ctx.light`; each actor carries the resolved light as `actors[i].light`.
 - `view.mjs`: GSAP animates SVG transforms through the transform attribute
   with its own origin rules, so every joint is a zero-size HTML div (an outer
   div places the pivot, an inner div with the joint's id carries the CSS
@@ -2238,6 +2360,51 @@ panel and its first content land together.
 | `compare` | claim | `left` / `right` `{title ≤ 24, items: [≤ 40] 1–4, icon?}`, `mode` before-after/columns, `stagger` (0.16), `at` | `left`, `right` (whoosh) | Two panels side by side when the items fit two lines per column, else stacked. In before-after mode the left side is muted with crosses, an arrow pops, and the right panel has a primary edge and ticks; in columns mode both panels are neutral, with dots |
 | `timeline` | process | `steps` 2–6 `{label ≤ 28, detail? ≤ 40, icon?, at?}`, `title` ≤ 48, `direction` auto/vertical/horizontal, `stagger` (0.45), `at` | `step-<i>` (pop-soft) | Numbered or icon nodes pop on their steps; a primary line runs on to each node over the 0.35 s before it lands (scaleX or scaleY of a bar over the track). Vertical by default in 9:16 (box at most 760 px wide), across in 16:9 when the labels fit |
 
+### Variants
+
+Each module has designed variants ([SEEDED_STYLES_RFC.md](SEEDED_STYLES_RFC.md)
+§3.2): looks that differ in layout, shape language and entrance, over the same
+params, so one storyboard renders in any variant. The first variant is the
+module's original look and its default; it renders exactly as before variants
+existed.
+
+- `VARIANTS` (`kit/core/catalog-g.mjs`) maps each module to its names, and each
+  module definition carries `variants`. `moduleVariants()` in
+  `kit/core/modules.mjs` lists every module that has more than one, for the
+  style generator.
+- The variant comes from a scene's `params.variant`, else the story's
+  `variants` (`{"<module>": "<variant>"}`, which a style pack fills), else the
+  default. An unknown name fails with the module's list of names:
+  `params.variant must be one of stacked, side-icon, banner, marker (the
+  concept-card variants); got "sparkly"`.
+- A variant that has no room for its own shape (a short overlay, a small rect)
+  falls back to the default layout rather than failing; `model.variant` still
+  names the one asked for and `content.layout.mode` the one drawn.
+- Shapes with text on them use `solidFill` (primary when its best text colour
+  reaches the contrast floor, else the panel), and tints behind text use
+  `tintBehind` (the strongest tint that keeps 4.5:1), so a variant reads on any
+  palette.
+
+| Module | Variants (default first) |
+| --- | --- |
+| `concept-card` | `stacked` (icon over the word); `side-icon` (a solid icon tile, or a bar with no icon, beside the word, a rule that draws and the sub-line; the tile slides and turns in); `banner` (the word on a brand band with a notched end that wipes in, the icon on a disc over its start); `marker` (a big left-set word, a highlighter band that sweeps under each line, the icon spinning in above) |
+| `icon-row` | `tiles` (tinted tiles in a row or a list); `pills` (capsules with the icon on a solid disc, one row when every label fits a line, else a column; they slide in and the discs pop); `orbit` (nodes on a dashed ring around a hub, flying out from its centre, labels outside the ring; in 16:9 the title stands to its left); `list` (numbered rows between rules that draw, the icon at the row end) |
+| `section-card` | `centered` (head, kicker, a rule and the title, centred); `split` (a big chapter number or icon, a vertical rule that grows, the kicker and title set left); `tab` (number · kicker on a solid tab that drops in, the title rising line by line over a full-width rule); `frame` (corner brackets that close in on the kicker and title, the number or icon on a disc over the foot) |
+| `object-card` | `stage` (the illustration over its caption); `polaroid` (the illustration in a dark photo on a paper print that drops in turning and settles 3° askew, the caption on its strip in ink); `split` (a panel that wipes open, the illustration left, the label and a display-face caption right); `spotlight` (a primary glow that opens behind an illustration dropping in on a bounce, a label pill and a display-face caption) |
+| `stat-card` | `giant` (the figure big over its label); `ring` (the figure inside a ring that sweeps, with the count, to the share a percentage states or all the way round; label beside it in 16:9); `bar` (the figure over a bar that fills with the count, set left); `ticker` (a tile per digit, each rolling through its slot of the count, zero-padded, then flipping on the hit; other characters stand between the tiles) |
+| `quote-card` | `mark` (a quote mark over the words); `pull` (a primary bar that draws down the left of a larger quote, an initial on a disc in the byline); `bubble` (the quote in a speech bubble that pops from its tail, which points at the byline); `centered` (a big mark that drops in over the quote set in the display face, a rule and the name). In these, a highlight that fits on one line sweeps in on a marker behind the words; a longer one wraps with its marker shown from the start |
+| `excerpt` | `window` (a panel, lines sliding in, a marker sweep); `terminal` (a window bar with three dots and the title, line numbers in a gutter, a cursor stepping down to a prompt row as the lines show; marked lines get a primary gutter arrow while the rest dim); `document` (no panel: the lines set large beside a primary rule that draws down, marked lines underlined by a sweep, the source as a footnote under a short rule); `stack` (each line on its own chip, dropping in turned; marked chips get a primary outline and edge bar while the rest dim) |
+| `compare` | `panels` (two panels with an arrow between); `split` (two tinted halves, across in 16:9 and over each other in 9:16, sliding in from their sides; a divider draws and a disc with an arrow, or VS in columns mode, pops on the seam); `table` (the two titles over aligned rows, a cross or tick per cell, rules drawing as each pair reveals; the after column tinted); `cards` (a title pill per side over a card per item, dealt in from the sides; the before side dashed and muted, the after side edged in primary; two columns in 16:9, one after the other in 9:16) |
+| `timeline` | `rail` (numbered nodes on a line); `milestones` (diamonds that spin in on a centre line that runs on, the labels alternating above and below in 16:9, left and right in 9:16); `cards` (a card per step with a number or icon badge, chevrons between, flipping in); `stairs` (solid blocks that rise a step at a time, growing up with the labels on top in 16:9 and out to the right with the labels inside in 9:16) |
+
+`node scripts/variant-sheet.mjs [--modules …] [--gates]` builds a story per
+aspect with a scene per variant, writes a contact sheet of settled stills
+(`qa/variants/sheet-9x16.png`, `sheet-16x9.png`) and, with `--gates`, runs
+`launchclip layout-check` and `hyperframes lint` and `check` on it (no errors,
+no `content_overlap` or `clipped_text`). `node scripts/variant-fixtures.mjs`
+writes a parity fixture per non-default variant
+(`test/fixtures/parity/g-<module>-<variant>.json`, alternating 9:16 and 16:9).
+
 **Honesty rules.** `stat-card` and `excerpt` refuse a missing source, or a source that is a placeholder (`source`, `TBD`, `n/a`, `example`, `illustrative`, …). `quote-card` refuses a generic attribution (`Anonymous`, `a customer`, `our users`, …) and a highlight that is not in the quote. `excerpt` refuses placeholder text (`lorem ipsum`, `TODO`) and shows lines exactly as supplied.
 
 Phrase rows in `PHRASE_MODULE_TABLE` carry an `intents` list (names from
@@ -2246,3 +2413,72 @@ the phrase hints agree. `section-card` has none; it is chosen at section starts.
 Parity fixtures: `test/fixtures/parity/g-*.json` (motion lane, both aspects)
 and `test/fixtures/parity-footage/g-*.json` (`examples/story/vocabulary`:
 overlays and inserts over a recording).
+
+## Catalogue H (`kit/core/catalog-h.mjs`)
+
+The element library: charts, counters, frames and motion titles at the scale
+of a UI component kit, every element drawn in both renderers from one view
+tree (`catalogHView`) and one renderer-neutral op list (`catalogHTimeline`),
+under catalogue B's conventions (root enter and exit, `at` from the scene
+start, hits that time events of the same name, frame-pure per-frame text
+samples). Module code lives in `catalog-h-<group>.mjs` beside a shared base
+(`catalog-h-base.mjs`: variants, palette, number formats, data rows) and view
+helpers (`catalog-h-view.mjs`). Emitters are in `kit/hyperframes/catalog-h.mjs`;
+components are in `kit/remotion/catalog/CatalogH.tsx` and `registry-h.ts`.
+
+- **Variants.** Every module exports its `VARIANTS` (`VARIANTS[id]` from
+  `catalog-h.mjs`, also `MODULES[id].variants`), the default first.
+  `params.variant` wins, then the style's choice (`ctx.variants[id]`, from
+  `story.variants`, [SEEDED_STYLES_RFC.md](SEEDED_STYLES_RFC.md) §3.2), then
+  the first. A variant changes layout, shapes and entrances, never the params;
+  an unknown name fails naming the module's variants.
+- **Fit before failing.** A layout that does not fit falls back to one that
+  does rather than failing a seeded variant: columns turn into rows when their
+  labels do not fit their slots (bar-chart, stacked-bar, waterfall).
+- **Palette.** Marks use the brand roles; extra series come from
+  `seriesColors(colors, n)` (primary, accent, paper, then blends), each at
+  least 3:1 on `bg`. Text on a filled shape takes `inkOn` (ink, paper or bg,
+  whichever reads best).
+- **Number formats** (`numberFormat`, `params.format`): `{style: number |
+  currency | percent | unit, currency (USD, EUR, GBP, JPY, AUD, …), unit,
+  decimals 0–3, compact (12.4K, 3.1M; whole numbers below 1,000 keep no
+  decimals), separator (default true), prefix, suffix}`. Deterministic text,
+  no locale lookup, so both renderers show the same characters.
+- **Extra op props.** `blur` (px, a CSS blur filter) and `clipT`/`clipR`/
+  `clipB`/`clipL` (percent insets of a clip-path; an op that sets one sets all
+  four). `cssProps` writes them as the `filter` and `clip-path` strings GSAP
+  tweens number by number; `catalogHStyle` applies the same values in
+  Remotion. Nothing stays blurred or clipped once a build settles.
+- **Data.** Charts take their data from params only, and the planner is told
+  to use figures from the brief or assets, never invented ones.
+
+### Charts (`catalog-h-charts.mjs`, `catalog-h-flows.mjs`)
+
+| Module | Variants | Params (beyond title, source, at, format, rect) | Events | Build |
+| --- | --- | --- | --- | --- |
+| `bar-chart` | columns, bars, lollipop, blocks | `data` 2–10 `{label, value, color?}`, `max`, `tone`, `highlight`, `highlightAt` | build, highlight | Bars grow (scale, or a clip for blocks) with 0.09 s stagger; values ride the bar ends and count; the highlight dims the others |
+| `stacked-bar` | columns, bars | `categories` 2–7, `series` 2–5 `{label, values, color?}`, `totals` | build | Each category builds series by series; legend and totals pop |
+| `pie-chart` | donut, pie, half | `data` 2–6, `percent`, `center` `{value?, label?}` or false, `highlight` | build, highlight | Slices sweep as one continuous turn (each slice linear over its share of an eased sweep); the centre counts to the total |
+| `area-chart` | gradient, line, steps | `labels` 3–16, `series` 1–3 `{values, label?, color?}`, `min`, `max` | build | The plot reveals left to right through a clip; the end value lands |
+| `scatter-plot` | dots, bubbles, rings | `points` 3–60 `{x, y, size?, label?, color?}`, `xLabel`, `yLabel`, `x`/`y` `{min, max}`, `trend`, `tone`, `highlight` | build, highlight | Axes draw, points pop in x order, the least-squares line draws, the highlight gets a label chip |
+| `radar-chart` | polygon, circles, dots | `axes` 3–8, `series` 1–3, `max` | build | The grid lands, each shape grows from the centre |
+| `sparkline` | line, area, bars | `values` 4–60, `label`, `value`, `delta` (or false), `tone` | build | A KPI card: the value counts along the trend, the line reveals, the delta chip pops |
+| `progress-ring` | ring, thick, segmented, half | `value`, `max` (100), `label`, `sub`, `tone` | build | The arc draws to the fraction (or segments light) while the centre counts |
+| `funnel-chart` | tapered, bars, steps | `stages` 2–6, `rates`, `tone` | build | Stages widen in top to bottom; the step-to-step rate pops between them |
+| `waterfall` | bridge, floating | `opening` `{label, value}`, `steps` 1–8 `{label, delta}`, `total` | build | Each step grows from the last level (gains primary, losses accent); bridge draws the connectors |
+| `sankey` | ribbons, lines | `flows` 2–14 `{from, to, value}` | build | Nodes in up to four columns (longest path); ribbons as wide as each flow draw column by column |
+| `heatmap` | squares, circles, rounded | `rows` 1–10, `columns` 2–14, `values`, `showValues`, `low`, `high`, `tone` | build | Cells pop in a diagonal wave, shaded panel → tone |
+| `leaderboard` | bars, rows, cards | `entries` 3–8 `{label, value, detail?, icon?}`, `sort`, `highlight` | build, highlight | Rows slide in from last place to first with rank badges and counting values |
+| `comparison-table` | grid, striped, cards | `columns` 2–4, `rows` 2–8 `{label, values: true/false/null/string}`, `highlight` | build, highlight | Headers pop, rows land with ticks and crosses, the pick column is outlined |
+
+### Tools
+
+- `scripts/element-samples.mjs`: sample params for every module.
+- `node scripts/element-sheet.mjs`: a contact sheet of every variant (the
+  frame-pure state Remotion draws), or `--parity qa/parity` for the
+  HyperFrames stills of a parity run with their SSIM.
+- `node scripts/element-parity.mjs fixtures | run`: writes
+  `test/fixtures/parity/h-<module>-<variant>-<portrait|landscape>.json` (every
+  variant in portrait, the default in landscape) and renders them with one
+  Remotion bundle. The fixtures also run in `LAUNCHCLIP_PARITY=1 node --test
+  test/parity.test.js`.

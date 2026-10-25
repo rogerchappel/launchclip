@@ -22,8 +22,9 @@
 import {createBase, fitText, r2, rt} from './catalog-b-base.mjs';
 import {abs, el, svgRoot, tw, set} from './catalog-b-view.mjs';
 import {media, mediaNode} from './catalog-e.mjs';
-import {EXPRESSIONS, POSES, rigGeometry} from './characters/rig.mjs';
-import {drawFlat, drawnHeight} from './characters/style-flat.mjs';
+import {EXPRESSIONS, HELD_AIDS, POSES} from './characters/rig.mjs';
+import {drawCharacter, styleGeometry, styleHeight} from './characters/styles.mjs';
+import {lightErrors, normalizeLight} from './characters/light.mjs';
 import {characterView} from './characters/view.mjs';
 import {drawingBounds} from './characters/bounds.mjs';
 import {ACTING, actingOps, sceneJoints, speechChanges} from './characters/acting.mjs';
@@ -44,7 +45,17 @@ const ACTOR_KEYS = ['id', 'position', 'pose', 'expression', 'facing', 'cues', 's
 // ---------------------------------------------------------------------------
 // Shared: actors
 
-function resolveActor(b, raw, path, {cast, seated, slot, setName, enter}) {
+/**
+ * The scene's key light (characters/light.mjs): params.light, else the
+ * story's or world's light (ctx.light), else the default soft key.
+ */
+function sceneLight(b, value, fallback) {
+  const errors = lightErrors(value, 'params.light');
+  if (errors.length) b.check.fail('params.light', errors.join('; ').replace(/^params\.light /, ''));
+  return normalizeLight(value ?? (lightErrors(fallback).length ? null : fallback ?? null));
+}
+
+function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light}) {
   const {check} = b;
   check.obj(raw, path, ACTOR_KEYS, ['id']);
   let member;
@@ -58,7 +69,7 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter}) {
   const cues = raw.cues === undefined ? [] : check.arr(raw.cues, `${path}.cues`, 0, 24);
   const fitsSet = (value, where) => {
     if (value === 'walk' && seated) check.fail(where, `walk does not fit the seated set ${setName}`);
-    if (value === 'sit' && !seated) check.fail(where, `sit needs a seated set (desk-laptop or meeting)`);
+    if (value === 'sit' && !seated && member.params.mobility !== 'wheelchair') check.fail(where, `sit needs a seated set (desk-laptop or meeting)`);
   };
   fitsSet(pose, `${path}.pose`);
   cues.map((cue, i) => {
@@ -93,19 +104,19 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter}) {
     return {from: rt(b.start + from), to: rt(b.start + to), words};
   });
   const expressions = [...new Set(states.map(state => state.expression))];
-  const geometry = rigGeometry(member.params);
+  const geometry = styleGeometry(member.style, member.params);
   return {id: member.id, name: member.name, voice: member.voice, look: member.look, fingerprint: member.fingerprint, params: member.params, colors: member.colors, style: member.style,
-    facing, holds, seated, states, expressions, speech: speechChanges(says), says, height: drawnHeight(member.params), geometry, enter};
+    facing, holds, seated, states, expressions, speech: speechChanges(says), says, height: styleHeight(member.style, member.params), geometry, enter, light};
 }
 
-// A held phone sits in the hand away from the facing side.
-const actorProps = actor => actor.holds === 'phone' ? {[actor.facing === 'left' ? 'r' : 'l']: phoneProp(actor.colors, 98)} : null;
+// A held phone sits in the hand away from the facing side (in the facing hand when the other holds a cane).
+const actorProps = actor => actor.holds === 'phone' ? {[(actor.facing === 'left') !== HELD_AIDS.includes(actor.params.mobility) ? 'r' : 'l']: phoneProp(actor.colors, 98)} : null;
 
 function actorNode(model, actor, index) {
   const cid = `${model.id}-c${index}`;
   const first = actor.states[0];
   const joints = sceneJoints(first.pose, {...actor, geometry: actor.geometry});
-  const drawing = drawFlat(actor.params, actor.colors, {id: cid, joints, expression: first.expression, expressions: actor.expressions, props: actorProps(actor)});
+  const drawing = drawCharacter(actor.style, actor.params, actor.colors, {id: cid, joints, expression: first.expression, expressions: actor.expressions, props: actorProps(actor), light: actor.light, facing: actor.facing});
   return characterView(drawing, {id: cid, x: actor.x, y: actor.floor, scale: actor.scale});
 }
 
@@ -130,7 +141,7 @@ export function actorReach(actor) {
   for (const pose of new Set(actor.states.map(state => state.pose))) {
     const joints = sceneJoints(pose, {...actor, geometry: actor.geometry});
     for (const j of [joints, gesturePeak(joints)].filter(Boolean)) {
-      const b = drawingBounds(drawFlat(actor.params, actor.colors, {id: 'reach', joints: j, expression: 'neutral', expressions: ['neutral'], props: actorProps(actor)}));
+      const b = drawingBounds(drawCharacter(actor.style, actor.params, actor.colors, {id: 'reach', joints: j, expression: 'neutral', expressions: ['neutral'], props: actorProps(actor), light: actor.light, facing: actor.facing}));
       out.left = Math.min(out.left, actor.x + b.left * actor.scale);
       out.right = Math.max(out.right, actor.x + b.right * actor.scale);
       out.top = Math.min(out.top, actor.floor + b.top * actor.scale);
@@ -210,7 +221,7 @@ function castSlots(b, entries, cast) {
 }
 
 function resolveCastScene(params, ctx) {
-  const b = createBase('cast-scene', params, ctx, {allowed: ['set', 'screen', 'cast'], required: ['set', 'cast'], hidesCaptions: false});
+  const b = createBase('cast-scene', params, ctx, {allowed: ['set', 'screen', 'cast', 'light'], required: ['set', 'cast'], hidesCaptions: false});
   const {check, canvas} = b;
   const p = b.params;
   const setName = check.oneOf(p.set, 'params.set', SETS);
@@ -225,13 +236,14 @@ function resolveCastScene(params, ctx) {
   if (new Set(ids).size !== ids.length) check.fail('params.cast', 'names a character twice');
   // Heights first (the set scales to the tallest), then the layout.
   const heights = p.cast.map((entry, i) => {
-    try { return drawnHeight(castMember(cast, entry?.id, `params.cast[${i}].id`).params); } catch { return 1000; }
+    try { const member = castMember(cast, entry?.id, `params.cast[${i}].id`); return styleHeight(member.style, member.params); } catch { return 1000; }
   });
   const layout = layoutSet(setName, {canvas, colors: b.colors, count: p.cast.length, heights, screen: Boolean(screen), unit: b.unit});
   const slotOf = castSlots(b, p.cast, cast);
+  const light = sceneLight(b, p.light, ctx.light);
   const actors = p.cast.map((raw, i) => {
     const slot = layout.slots[slotOf[i]];
-    const actor = resolveActor(b, raw, `params.cast[${i}]`, {cast, seated: layout.seated, slot, setName, enter: b.start});
+    const actor = resolveActor(b, raw, `params.cast[${i}]`, {cast, seated: layout.seated, slot, setName, enter: b.start, light});
     // The phone set: the first character holds the phone unless someone else is given it.
     if (setName === 'phone' && i === 0 && !p.cast.some(entry => entry?.holds !== undefined)) actor.holds = 'phone';
     const placed = {...actor, position: POSITION_NAMES[p.cast.length][slotOf[i]], x: slot.x, floor: slot.floor, scale: slot.scale};
@@ -284,7 +296,7 @@ function castSceneTimeline(model, ops) {
 function resolveCameo(params, ctx) {
   // The cameo keeps inside a brand frame's safe area (its card kicker would
   // otherwise sit on the frame's kicker); params.rect places it within that.
-  const b = createBase('character-cameo', params, ctx, {allowed: ['character', ...ACTOR_KEYS.filter(key => key !== 'id'), 'side', 'card', 'panel'], required: ['character'], frameSafe: true});
+  const b = createBase('character-cameo', params, ctx, {allowed: ['character', ...ACTOR_KEYS.filter(key => key !== 'id'), 'side', 'card', 'panel', 'light'], required: ['character'], frameSafe: true});
   const {check, rect, u, portrait} = b;
   const p = b.params;
   let cast;
@@ -302,7 +314,7 @@ function resolveCameo(params, ctx) {
   const area = !card ? {...rect}
     : portrait ? {x: rect.x, y: r2(rect.y + rect.height * 0.34), width: rect.width, height: r2(rect.height * 0.66)}
       : {x: side === 'left' ? rect.x : r2(rect.x + rect.width * 0.64), y: rect.y, width: r2(rect.width * 0.36), height: rect.height};
-  const probe = resolveActor(b, actorRaw, 'params', {cast, seated: false, slot: {facing: facingDefault}, setName: 'cameo', enter: b.start});
+  const probe = resolveActor(b, actorRaw, 'params', {cast, seated: false, slot: {facing: facingDefault}, setName: 'cameo', enter: b.start, light: sceneLight(b, p.light, ctx.light)});
   const pad = u(10);
   // Sized to its tallest pose: a wave or a cheer reaches above the head.
   const tallest = Math.max(probe.height, -actorReach({...probe, x: 0, floor: 0, scale: 1}).top);
@@ -362,11 +374,11 @@ function cameoTimeline(model, ops) {
 const DEFINITIONS = {
   'cast-scene': {resolve: resolveCastScene, view: castSceneView, timeline: castSceneTimeline,
     describe: 'One to three animated characters in a set (desk-laptop, phone, meeting, screen), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.',
-    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id, position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`},
+    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id, position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`, light: '{dir?: degrees the key light comes from (0 right, 90 above, 180 left), color?: hex, intensity?: 0–1} (default: the world\'s light, else a soft key from the upper left); shaded drawing styles follow it'},
     events: ['<character>-cue-<i>']},
   'character-cameo': {resolve: resolveCameo, view: cameoView, timeline: cameoTimeline,
     describe: 'One animated character beside a card (kicker, title, body) or alone on a panel, for a beat in a footage-led or explainer video.',
-    params: {character: 'a cast or starter character id', pose: POSES.filter(p => p !== 'sit').join(' | '), expression: EXPRESSIONS.join(' | '), facing: 'left | right', cues: '[{at, pose?, expression?}]', says: '[{from, to}] | "auto"', side: 'left | right (where the character stands)', card: '{kicker?, title ≤ 64, body? ≤ 140}', panel: 'boolean (default: true without a card)', rect: '{x, y, width, height} canvas px inside the safe zone (and the brand frame\'s safe area), at least half its width and 35% of its height; default: the whole safe area'},
+    params: {character: 'a cast or starter character id', pose: POSES.filter(p => p !== 'sit').join(' | '), expression: EXPRESSIONS.join(' | '), facing: 'left | right', cues: '[{at, pose?, expression?}]', says: '[{from, to}] | "auto"', side: 'left | right (where the character stands)', card: '{kicker?, title ≤ 64, body? ≤ 140}', panel: 'boolean (default: true without a card)', rect: '{x, y, width, height} canvas px inside the safe zone (and the brand frame\'s safe area), at least half its width and 35% of its height; default: the whole safe area', light: '{dir?, color?, intensity?} the key light (as cast-scene)'},
     events: ['<character>-cue-<i>']}
 };
 

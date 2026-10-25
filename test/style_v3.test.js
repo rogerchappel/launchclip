@@ -39,13 +39,13 @@ test("validates the v3 fields", () => {
     layouts: { by_intent: { list: "diagonal" }, panel: { treatment: "chrome", radius: 500 } },
     vocabulary: { icon_tint: "pink", illustration: "yes", prefer: { claim: "concept-card" } },
     profile: { schema: "launchclip.cadence-profile.v1", id: "x", format: "footage-led", duration_seconds: [1, 2], references: 0, provenance: { kind: "seed", note: "n", sources: [] }, measures: { coverage: { p10: 0.8, p50: 0.5 } } },
-    cast: { drawing_style: "outlined", colors: { fill: "teal" }, characters: ["../x"] },
+    cast: { drawing_style: "oil-paint", colors: { fill: "teal" }, characters: ["../x"] },
     brand_frame: { kicker: { label: "x".repeat(41), position: "middle" }, progress: { thickness: 40 }, show: "never" },
     dials: { energy: 2, chaos: 0.5 },
     captions: { lanes: { podcast: {}, "footage-led": { preset: "sparkle" } } }
   });
   assert.equal(bad.ok, false);
-  for (const pattern of [/layouts\.panel\.treatment/, /layouts\.panel\.radius/, /vocabulary\.icon_tint/, /vocabulary\.illustration/, /vocabulary\.prefer\.claim/, /must not decrease/, /cast\.drawing_style must be one of the kit's drawing styles \(flat\)/, /cast\.colors\.fill/, /cast\.characters/, /kicker\.label/, /kicker\.position/, /progress\.thickness/, /show/, /dials\.energy/, /dials\.chaos/, /lanes\.podcast/, /lanes\.footage-led\.preset/]) {
+  for (const pattern of [/layouts\.panel\.treatment/, /layouts\.panel\.radius/, /vocabulary\.icon_tint/, /vocabulary\.illustration/, /vocabulary\.prefer\.claim/, /must not decrease/, /cast\.drawing_style must be one of the kit's drawing styles \(flat[,)]/, /cast\.colors\.fill/, /cast\.characters/, /kicker\.label/, /kicker\.position/, /progress\.thickness/, /show/, /dials\.energy/, /dials\.chaos/, /lanes\.podcast/, /lanes\.footage-led\.preset/]) {
     assert.ok(bad.errors.some((error) => pattern.test(error)), `${pattern} in ${bad.errors.join("; ")}`);
   }
   assert.match(bad.warnings.join(" "), /layouts\.by_intent\.list "diagonal"/, "an unknown layout name is a warning");
