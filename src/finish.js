@@ -37,7 +37,7 @@ import { validateStory } from "./story_cli.js";
 import { hasExactFile, readStoryEdl } from "./story_loader.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
-import { styleAdherence, styleProfile } from "./style_adherence.js";
+import { storyCadence, styleAdherence, styleProfile } from "./style_adherence.js";
 import { analyzeReference } from "./style_reference.js";
 import { resolveStyleV2 } from "./style_store.js";
 import { storyStyleRequest } from "../kit/core/style.mjs";
@@ -1223,7 +1223,9 @@ async function runGates(ctx) {
       const request = storyStyleRequest(ctx.story ?? ctx.resolved)?.name ?? ctx.style.name;
       const { pack } = await ctx.adapters.resolveStyle(ctx.style.file ?? request, { projectDir: ctx.project });
       const measured = await ctx.adapters.styleReference(ctx.out);
-      const check = styleAdherence({ story: ctx.resolved, pack, measured, profile: await styleProfile(pack) });
+      // Cadence from the storyboard (and the direction map's sections), as the coverage gate counts it.
+      const { map } = await readProjectDirection(ctx.project);
+      const check = styleAdherence({ story: ctx.resolved, pack, measured, profile: await styleProfile(pack), cadence: storyCadence(ctx.resolved, { map, words: ctx.words ?? [] }) });
       await writeJson(path.join(ctx.project, PATHS.style), { style: ctx.style.name, video: rel(ctx.project, ctx.out), ...check });
       gates.style = { status: check.status, style: ctx.style.name, report: PATHS.style, findings: check.checks.filter((entry) => !entry.ok).map((entry) => `${entry.severity}: ${entry.check}: ${entry.detail}`).slice(0, 12) };
     } catch (error) {

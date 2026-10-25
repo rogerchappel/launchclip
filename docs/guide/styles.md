@@ -30,7 +30,7 @@ You get `.launchclip/styles/my-channel/style.json` plus a short report explainin
 launchclip style check ./my-video --against my-channel
 ```
 
-When a video names a style, `launchclip finish` runs this check for you and won't call the video ready until it passes: the colours, the caption look, the pacing within your style's range and the brand frame all have to match. The report is in `qa/style-check.json`.
+When a video names a style, `launchclip finish` runs this check for you and won't call the video ready until it passes: the colours, the caption look, the pacing within your style's range and the brand frame all have to match. The pacing is counted from your storyboard (every graphic that appears or leaves, every camera move and layout change), not guessed from the pixels. The report is in `qa/style-check.json`.
 
 ### 3. Write your own
 

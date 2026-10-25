@@ -65,7 +65,7 @@ export async function readProjectStory(projectDir, { storyModule } = {}) {
   // The whole-video head track, assets/subject/track.json.
   const track = await readStoryTrack(project, story);
   const resolved = module.resolveStory(story, { words, beats: beats ?? null, edl, subject, track });
-  return { file: storyFile, story, resolved, format: module.storyFormat(resolved), module, style: styled.style };
+  return { file: storyFile, story, resolved, words, format: module.storyFormat(resolved), module, style: styled.style };
 }
 
 // Footage-led: the edit-recording plan named by base.edl (project-relative),
