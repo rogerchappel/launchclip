@@ -103,6 +103,10 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 | sets a scene or mood with a real photo or clip (assets/… image or video, full bleed) [motion, voiceover-motion] | photo-scene |
 | names the brand on a title or end card, with its logo and wordmark images (and an app-store badge or URL on the end card) | brand-lockup |
 | calls to action, or the loop ending | cta |
+| names a claim, a problem or a turn in a few words ("the problem is", "here's the thing", "too slow"): a big word or phrase with an icon and a sub-line (on a card beside the presenter, or full frame) | concept-card |
+| lists two to five things, features, steps or audiences ("X, Y and Z", "three things"): an icon per item that pops on its word | icon-row |
+| opens a new section or chapter ("part two", "first, the problem", "chapter", "let's start with"): the brand frame's kicker and the section title (usually an insert) | section-card |
+| talks about a thing the product is or makes (a box, a launch, a calendar, a laptop, an inbox): a simple illustrated object with a caption | object-card |
 | names the product or the one idea the video is about ("meet X", "this is X", "it's called X"): one word behind the presenter's head [footage-led] (needs the subject) | masthead |
 | lands a realisation, reveal or turn ("that's when", "it hit me", "everything changed"): the room moves, the presenter holds [footage-led] (needs the subject) | dolly-zoom |
 | shows or describes the product on screen ("here's the dashboard", "this is the app"), with a screenshot or recording in the assets: the UI fills the top, their head over its edge [footage-led] (needs the subject) | app-stage |
@@ -696,6 +700,53 @@ params:
 - at: seconds from scene start (optional; else a matching hit, else a default)
 events: trace, doodle-<i>
 
+### concept-card (keeps captions)
+A big word or short phrase (≤ 3 words) with an icon from the icon set and a sub-line, on a brand card beside the presenter or full frame. For naming a claim, a problem or a turn ("Security first", "Too slow", "Now: one click").
+params:
+- text: word or phrase ≤ 28, ≤ 3 words
+- icon: icon name from kit/core/icons.mjs (optional)
+- sub: sub-line ≤ 64 (optional)
+- tone: word colour: paper (default) | primary | accent
+- at: word time
+- surface: card | plate (default: card over footage, plate on a plate or insert)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
+events: icon, word, sub
+
+### icon-row (keeps captions)
+Two to five icons from the icon set, each with a short label, that pop in one by one on their words: a row, or a list when the labels are long or the room is narrow. For lists of features, steps or audiences.
+params:
+- items: [{icon: icon name, label ≤ 24, at?}] 2–5
+- title: string ≤ 48 (optional)
+- layout: auto (default) | row | list
+- stagger: seconds between pops (default 0.18)
+- at: first pop time
+- surface: card | plate (default: card over footage, plate on a plate or insert)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
+events: item-<i>
+
+### section-card (keeps captions)
+A section opener in the brand frame: a kicker ("Part 2", "The fix"), a rule that draws out and a big section title, with an optional chapter number or icon. For the start of each section of a longer video.
+params:
+- title: section title ≤ 48
+- kicker: string ≤ 28 (optional, uppercased)
+- number: chapter number 1–99 (optional)
+- icon: icon name (optional; not with number)
+- at: title time
+- surface: card | plate (default: card over footage, plate on a plate or insert)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
+events: kicker, title
+
+### object-card (keeps captions)
+A simple illustrated object built from the icon set and brand shapes (boat, box, calendar, laptop, rocket, smartphone, chart, shield, mail, trophy, lightbulb, globe, team, gift), with a caption and an optional label. For naming a product, a deliverable or an idea as a thing ("it ships in a box", "your calendar, handled").
+params:
+- object: boat | box | calendar | laptop | rocket | smartphone | chart | shield | mail | trophy | lightbulb | globe | team | gift
+- caption: string ≤ 48
+- label: string ≤ 24 (optional, uppercased)
+- at: object time
+- surface: card | plate (default: card over footage, plate on a plate or insert)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
+events: object, caption
+
 ## Timing rules
 
 Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core/modules.mjs; `launchclip module fit <module>` prints the same rules with the window for a given `--duration`). `at` values are seconds from the scene start: the first beat no earlier than the lead-in, the last no later than the lead-out before the scene end. A faster motion grammar can shorten a catalogue B enter, which only moves its lead-in earlier.
@@ -748,6 +799,10 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | proof-wall | 2 s | 0 s | scene − 1.2 s | at ≤ scene − 1.2 s − every × items |
 | scrapbook | 2 s | 0 s | scene − 1.4 s | — |
 | doodle-outline | 1.5 s | 0 s | scene − 0.9 s | — |
+| concept-card | 2 s | 0.5 s | scene − 0.65 s | the icon pops 0.15 s before the word; the sub-line follows it by 0.35 s |
+| icon-row | 2 s | 0.5 s | scene − 0.65 s | items pop in order; with no at, the first pops at 0.6 s and the rest follow by stagger (default 0.18 s) |
+| section-card | 2 s | 0.5 s | scene − 0.65 s | the kicker and rule land 0.25 s before the title |
+| object-card | 2 s | 0.5 s | scene − 0.65 s | the caption follows the object by 0.25 s; accents pop from 0.35 s after it |
 
 ## Example
 

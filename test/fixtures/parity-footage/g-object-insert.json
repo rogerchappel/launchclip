@@ -1,0 +1,5 @@
+{
+  "project": "examples/story/vocabulary",
+  "sceneId": "object-insert",
+  "threshold": { "ssim": 0.97 }
+}
