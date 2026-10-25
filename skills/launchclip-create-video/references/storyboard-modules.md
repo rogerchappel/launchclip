@@ -777,6 +777,7 @@ params:
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: object, caption
+variants: stage (default), polaroid, split, spotlight
 
 ### stat-card (keeps captions)
 One real figure, big, that counts up to its value and lands, with a label and its source line ("Source: …", required). For a number the script states: a result, a price, a count. Never for a made-up or illustrative figure.
@@ -792,6 +793,7 @@ params:
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: count, hit
+variants: giant (default), ring, bar, ticker
 
 ### quote-card (keeps captions)
 A real quote with its attribution: a quote mark, the words (one phrase can light up on a marker), then "— Name" and their role or where it was said. For a customer, press or expert line the user supplied. Never invent a quote or attribute one to "a customer".
@@ -806,6 +808,7 @@ params:
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: quote, author, highlight
+variants: mark (default), pull, bubble, centered
 
 ### excerpt (keeps captions)
 A real excerpt in a window: 1–8 lines of code or text exactly as written in the source (README, docs, an article, a commit), revealed line by line; marked lines get a highlight sweep while the rest dim. The source line is required. Never paraphrase or invent lines.
