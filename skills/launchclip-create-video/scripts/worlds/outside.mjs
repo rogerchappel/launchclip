@@ -1,4 +1,5 @@
-// Outside worlds: park, beach, mountains and forest. Open skies carry the time of day (a high sun, a low warm sun, or
+// Outside worlds: park, beach, mountains, forest, space and an abstract
+// stage. Open skies carry the time of day (a high sun, a low warm sun, or
 // moon and stars); the land is layered far to near so a camera move shows
 // depth, with haze between the layers at standard and rich detail.
 
@@ -324,8 +325,138 @@ function fern(k, x, y, s) {
   return out;
 }
 
+const space = {
+  group: 'outside', label: 'Space',
+  describe: 'outer space: a starfield and nebula, a ringed planet, a moon surface with craters in front; day is lit by a near star, dusk an amber nebula, night deep and still',
+  light: {day: {dir: {x: 0.7, y: 0.7}, color: '#fff6e0', intensity: 0.9}, dusk: {dir: {x: 0.9, y: 0.42}, color: '#ffb47a', intensity: 0.6}, night: {dir: {x: -0.5, y: 0.86}, color: '#9fb8ff', intensity: 0.35}},
+  geo(k) {
+    const g = land(k, {horizon: 0.74, ground: 0.88, quiet: 0.24});
+    g.quiet = {...g.quiet, under: [spaceSky(k)[0], spaceSky(k)[1]]};
+    return g;
+  },
+  back(k, g) {
+    const {W, H, u, p, pal, time} = k;
+    const {x0, w} = span(k);
+    const [top, low] = spaceSky(k);
+    const out = [p.rect(x0, -2, w, H + 4, p.lin([[0, top], [1, low]], 0, 0, 0, H, {force: true}), {stroke: false})];
+    // Nebula clouds in the brand colours.
+    out.push(p.glow(W * 0.72, H * 0.3, W * 0.4, time === 'dusk' ? '#ff9a52' : pal.brand.primary, 0.22, {soft: true}));
+    out.push(p.glow(W * 0.3, H * 0.5, W * 0.32, pal.brand.accent, time === 'night' ? 0.14 : 0.2, {soft: true}));
+    out.push(...starField(k, 0, g.horizonY));
+    if (time === 'day') {
+      out.push(p.glow(W * 0.12, H * 0.14, 420 * u, '#fff6dc', 0.7));
+      out.push(p.circle(W * 0.12, H * 0.14, 70 * u, '#fffaf0', {glow: true}));
+    }
+    // A ringed planet.
+    const px = W * (k.portrait ? 0.62 : 0.7), py = H * (k.portrait ? 0.32 : 0.36), r = (k.portrait ? 180 : 150) * u;
+    const planetC = pal.g(mixColor(pal.brand.accent, '#6d7fbf', 0.4));
+    out.push(p.ellipse(px, py, r * 2, r * 0.42, 'none', {stroke: mixColor('#ffffff', planetC, 0.4), sw: 6, opacity: 0.7}));
+    out.push(p.circle(px, py, r, p.rad([[0, mixColor('#ffffff', planetC, 0.3)], [1, mixColor('#000000', planetC, 0.4)]], px - r * 0.4, py - r * 0.4, r * 1.6), {}));
+    if (k.d.n >= 1) for (const [dy, a] of [[-0.3, 0.2], [0.1, 0.15], [0.42, 0.2]]) out.push(p.ellipse(px, py + r * dy, r * Math.sqrt(1 - dy * dy) * 0.98, r * 0.06, '#ffffff', {opacity: a, stroke: false}));
+    out.push(p.path(`M${f(px - r * 2)} ${f(py)}A${f(r * 2)} ${f(r * 0.42)} 0 0 0 ${f(px + r * 2)} ${f(py)}`, null, {stroke: mixColor('#ffffff', planetC, 0.5), sw: 6}));
+    // A small far moon.
+    out.push(p.circle(W * 0.24, H * 0.24, 34 * u, pal.g('#c9ccd8'), {}));
+    return out;
+  },
+  mid(k, g) {
+    const {W, H, u, p, pal} = k;
+    const {x0, x1, w} = span(k);
+    const ground = pal.g('#8c8a96');
+    const out = [p.path(`M${f(x0)} ${f(g.horizonY + 40 * u)}Q${f(W * 0.3)} ${f(g.horizonY - 30 * u)} ${f(W * 0.6)} ${f(g.horizonY + 20 * u)}T${f(x1)} ${f(g.horizonY)}L${f(x1)} ${f(H)}L${f(x0)} ${f(H)}Z`, p.lin([[0, mixColor('#ffffff', ground, 0.1)], [1, mixColor('#000000', ground, 0.45)]], 0, g.horizonY, 0, H), {})];
+    for (let i = 0; i < 9; i++) {
+      const cx = x0 + p.rnd() * w, cy = g.horizonY + 40 * u + p.rnd() * (H - g.horizonY - 60 * u), r = p.rnd(20, 70) * u * (0.6 + (cy - g.horizonY) / (H - g.horizonY));
+      out.push(p.ellipse(cx, cy, r, r * 0.3, mixColor('#000000', ground, 0.3), {}));
+      out.push(p.ellipse(cx + r * 0.1, cy + r * 0.06, r * 0.8, r * 0.2, mixColor('#000000', ground, 0.12), {stroke: false}));
+    }
+    return out;
+  },
+  front(k, g) {
+    const {W, u, p, pal} = k;
+    // A flag on a pole and a rock.
+    const fx = W * (k.portrait ? 0.84 : 0.86), fy = g.groundY;
+    return [
+      p.line(fx, fy, fx, fy - 2.2 * g.ppm, pal.metalLight, 5),
+      p.path(pts([[fx, fy - 2.2 * g.ppm], [fx + 120 * u, fy - 2.2 * g.ppm + 20 * u], [fx, fy - 2.2 * g.ppm + 60 * u]]), pal.primary, {}),
+      p.ellipse(W * 0.1, k.H - 30 * u, 160 * u, 60 * u, pal.g('#6c6a76'), {})
+    ];
+  }
+};
+
+function spaceSky(k) {
+  const c = k.pal.brand.primary;
+  if (k.time === 'day') return [mixColor(c, '#0b1640', 0.2), mixColor(c, '#24356e', 0.15)];
+  if (k.time === 'dusk') return [mixColor(c, '#1a0f2e', 0.15), mixColor('#ff8a4c', '#3a1f3e', 0.35)];
+  return [mixColor(c, '#03040c', 0.08), mixColor(c, '#0a0f24', 0.1)];
+}
+
+const abstractStage = {
+  group: 'outside', label: 'Abstract stage',
+  describe: 'an abstract stage: a backdrop of brand-colour shapes, a round platform and spotlights; day is a bright studio, dusk warm, night dark with spot beams',
+  geo(k) {
+    const {W, H, portrait} = k;
+    const floorY = Math.round(H * (portrait ? 0.7 : 0.66));
+    const groundY = Math.round(H * (portrait ? 0.82 : 0.84));
+    const g = {floorY, groundY, anchors: {ground: {y: groundY, x0: W * 0.2, x1: W * 0.8, ppm: k.ppm}, floor: {y: Math.round(floorY + 20 * k.u), x0: W * 0.06, x1: W * 0.94, ppm: k.ppm * 0.8, layer: 'mid'}}};
+    g.quiet = {x: Math.round(W * 0.14), y: Math.round(H * 0.1), width: Math.round(W * 0.72), height: Math.round(H * (portrait ? 0.2 : 0.3)), under: [stageBack(k), mixColor(k.pal.primary, stageBack(k), 0.25)]};
+    return g;
+  },
+  back(k, g) {
+    const {W, H, u, p, pal, time} = k;
+    const {x0, w} = span(k);
+    const bc = stageBack(k);
+    const out = [p.rect(x0, -2, w, g.floorY + 4, p.rad([[0, mixColor('#ffffff', bc, time === 'night' ? 0.06 : 0.25)], [1, bc]], W / 2, g.floorY * 0.6, W * 0.8), {stroke: false})];
+    // Big soft brand shapes.
+    out.push(p.circle(W * 0.18, H * 0.2, 220 * u, pal.primary, {opacity: 0.22, stroke: false}));
+    out.push(p.circle(W * 0.86, H * 0.5, 300 * u, pal.accent, {opacity: 0.18, stroke: false}));
+    out.push(p.rect(W * 0.62, H * 0.06, 260 * u, 260 * u, pal.primary, {opacity: 0.12, rx: 40 * u, stroke: false, transform: `rotate(18 ${f(W * 0.62)} ${f(H * 0.06)})`}));
+    if (k.d.n >= 1) for (let i = 0; i < 6; i++) out.push(p.line(x0, H * (0.1 + i * 0.1), x0 + w, H * (0.1 + i * 0.1) - 200 * u, '#ffffff', 1.5, {opacity: 0.05}));
+    return out;
+  },
+  mid(k, g) {
+    const {W, H, u, p, pal, time} = k;
+    const {x0, w} = span(k);
+    const fc = mixColor('#000000', stageBack(k), 0.25);
+    const out = [p.rect(x0, g.floorY, w, H - g.floorY, p.lin([[0, mixColor('#ffffff', fc, 0.06)], [1, mixColor('#000000', fc, 0.3)]], 0, g.floorY, 0, H), {stroke: false})];
+    // The platform.
+    const cx = W / 2, cy = g.groundY, rx = W * (k.portrait ? 0.42 : 0.3), ry = 70 * u;
+    out.push(p.ellipse(cx, cy + 30 * u, rx, ry, mixColor('#000000', pal.primary, 0.4), {}));
+    out.push(p.rect(cx - rx, cy, rx * 2, 30 * u, mixColor('#000000', pal.primary, 0.4), {stroke: false}));
+    out.push(p.ellipse(cx, cy, rx, ry, p.rad([[0, mixColor('#ffffff', pal.primary, 0.3)], [1, pal.primary]], cx, cy - ry * 0.3, rx), {}));
+    out.push(p.ellipse(cx, cy, rx * 0.8, ry * 0.8, 'none', {stroke: mixColor('#ffffff', pal.primary, 0.4), sw: 2}));
+    // Spotlights from above.
+    const on = time !== 'day';
+    for (const sx of [0.24, 0.76]) {
+      const lx = W * sx, ly = 0;
+      if (on || k.d.n >= 1) {
+        const beam = p.lin([[0, '#fff6e0', on ? 0.4 : 0.14], [1, '#fff6e0', 0]], lx, ly, cx, cy, {force: true, glow: true});
+        out.push(p.path(pts([[lx - 20 * u, ly], [lx + 20 * u, ly], [cx + (sx < 0.5 ? -rx * 0.1 : rx * 0.9), cy], [cx + (sx < 0.5 ? -rx * 0.9 : rx * 0.1), cy]]), beam, {glow: true, blend: 'screen'}));
+      }
+      out.push(p.rect(lx - 26 * u, -10 * u, 52 * u, 40 * u, pal.ink, {rx: 8 * u}));
+    }
+    out.push(p.pool(cx, cy, rx * 0.9, ry * 0.9, '#fff6e0', on ? 0.4 : 0.2));
+    return out;
+  },
+  front(k) {
+    const {W, H, u, p, pal} = k;
+    // Two low footlight boxes.
+    const out = [];
+    for (const fx of [0.08, 0.92]) {
+      out.push(p.rect(W * fx - 60 * u, H - 70 * u, 120 * u, 60 * u, pal.ink, {rx: 8 * u}));
+      if (k.time !== 'day') out.push(p.glow(W * fx, H - 70 * u, 140 * u, pal.lamp, 0.4));
+    }
+    return out;
+  }
+};
+
+const stageBack = k => {
+  const c = k.pal.brand.primary, bg = k.pal.brand.bg;
+  if (k.time === 'day') return mixColor(c, '#eef0f4', 0.12);
+  if (k.time === 'dusk') return mixColor('#ff8a4c', mixColor(c, '#3a2340', 0.2), 0.2);
+  return mixColor(c, mixColor(bg, '#0a0c16', 0.5), 0.12);
+};
+
 export const OUTSIDE = {
-  park, beach, mountains, forest
+  park, beach, mountains, forest, space, 'abstract-stage': abstractStage
 };
 
 // Re-exported for props that draw a bench or a cloud.
