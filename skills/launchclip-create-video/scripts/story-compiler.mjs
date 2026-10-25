@@ -387,7 +387,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     const chunks = await loadCaptionChunks(story, overlay, sourceDir, warnings);
     if (chunks?.length) {
       for (const range of overlay.hide ?? []) hide.push([Number(range[0]), Number(range[1])]);
-      const captionsPlan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide });
+      const captionsPlan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide, zones: layout?.captions });
       // Camera moves that sweep panels through the band dip the captions out
       // (captions.hide_during_moves, camera-world.mjs captionDipWindows).
       const dips = captionDipTweens(captionDipWindows(plan, captionMoveHide(overlay)));

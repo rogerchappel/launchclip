@@ -23,6 +23,7 @@ import { DIRECTION_LANES, directionMeasures, draftDirectionMap, validateDirectio
 import { isLongForm, structureLongForm } from "../kit/core/long-form.mjs";
 import { compareMeasures } from "../kit/core/profiles.mjs";
 import { checkLayout, elementsFromEditorialLayout, elementsFromStory } from "../kit/core/layout-check.mjs";
+import { captionZones } from "../kit/core/footage-layout.mjs";
 import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, directionPrompt, planningPrompt, suggestModules } from "../kit/core/planning-prompt.mjs";
 import { applyStyle } from "../kit/core/style.mjs";
 import { createStructuredClient, parseModelRoute } from "./model_provider.js";
@@ -314,7 +315,8 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
           ...(model.layout.minTextPx !== undefined ? { minTextPx: model.layout.minTextPx } : {}),
           hidesCaptions: model.hidesCaptions === true || model.layout.hidesCaptions === true
         });
-      }
+      },
+      captionZones: resolved.base ? captionZones(resolved) : []
     });
     const report = checkLayout({ canvas, elements, duration: Number(resolved.resolved?.duration) || undefined });
     layout.findings = report.findings;

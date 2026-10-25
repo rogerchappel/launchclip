@@ -287,8 +287,11 @@ export function elementsFromEditorialLayout(layout, { id, role = "text", start, 
 
 // Builds elements for a resolved story. `moduleLayout(scene, story)` returns the
 // scene's elements (or nothing to skip it), so this file never imports module
-// code. A captions overlay becomes one caption element over the delivery band.
-export function elementsFromStory(resolvedStory, { moduleLayout, profile, captionBand } = {}) {
+// code. A captions overlay becomes one caption element over the delivery band,
+// and one more per footage layout caption zone (captionZones: [{section, start,
+// end, rect}], kit/core/footage-layout.mjs), where the captions sit on the
+// presenter's side instead of the band.
+export function elementsFromStory(resolvedStory, { moduleLayout, profile, captionBand, captionZones = [] } = {}) {
   if (!resolvedStory || !Array.isArray(resolvedStory.scenes)) throw new Error("story must have scenes");
   if (typeof moduleLayout !== "function") throw new Error("moduleLayout callback is required");
   const format = resolvedStory.format ?? {};
@@ -316,14 +319,14 @@ export function elementsFromStory(resolvedStory, { moduleLayout, profile, captio
       ...(Array.isArray(overlay.hide) ? overlay.hide : []),
       ...resolvedStory.scenes.filter((scene) => scene.hides_captions === true).map((scene) => [Number(scene.start), Number(scene.end)])
     ];
-    elements.push({
-      id: index ? `captions-${index + 1}` : "captions",
-      role: "caption",
-      rect: band,
-      start: Number(overlay.start ?? 0),
-      end: Number(overlay.end ?? duration),
-      ...(hide.length ? { hide } : {})
-    });
+    const id = index ? `captions-${index + 1}` : "captions";
+    const start = Number(overlay.start ?? 0), end = Number(overlay.end ?? duration);
+    const zones = overlay.rect ? [] : captionZones.filter((zone) => zone?.rect && zone.end > start && zone.start < end);
+    const bandHide = [...hide, ...zones.map((zone) => [zone.start, zone.end])];
+    elements.push({ id, role: "caption", rect: band, start, end, ...(bandHide.length ? { hide: bandHide } : {}) });
+    for (const zone of zones) {
+      elements.push({ id: `${id}@${zone.section}`, role: "caption", rect: zone.rect, start: Math.max(start, zone.start), end: Math.min(end, zone.end), ...(hide.length ? { hide } : {}) });
+    }
   });
   return elements;
 }

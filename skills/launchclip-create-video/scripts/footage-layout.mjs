@@ -21,13 +21,21 @@
 // reports it, so evidence and boundary checks see it). Both compilers set the
 // same props on the same frames (layoutOps), so the renderers agree.
 //
+// Captions sit on the presenter's side (captionZone): in a split, framed or
+// stacked section the caption band narrows to the presenter's window, a
+// gutter in from its edges, and moves into the window when it would fall
+// outside it; full and insert keep the band. Each caption line takes the
+// zone of the section it is mostly spoken in, so a line never crosses the
+// seam between the panel and the footage.
+//
 // Stacking: base, behind scenes, the subject, the layout frame, every other
 // scene, captions. A section's `room` dims ("dim") or hides ("replace") the
 // recording behind the cut-out presenter where a matte covers it.
 //
 // Canonical copy: kit/core/footage-layout.mjs.
 
-import { profileGeometry } from "./layout-check.mjs";
+import { captionsOverlayOf } from "./captions.mjs";
+import { captionBandAt, profileGeometry } from "./layout-check.mjs";
 import { sourceTimeAt, subjectContext } from "./subject-layer.mjs";
 import { SECTION_ROOMS, layoutSpans, storyBase, storySections } from "./story.mjs";
 
@@ -75,12 +83,15 @@ export function layoutGeometry(layout, side, canvas) {
 /**
  * The panel's safe area: the graphics area inside the profile's safe zone,
  * a gutter in from the presenter's window and, with captions, above the
- * caption band. The brand frame and modules place themselves inside it.
+ * caption band where it runs under the panel (captionBand: the layout's
+ * caption zone, else the profile's band). The brand frame and modules place
+ * themselves inside it.
  * → rect | null
  */
-export function panelSafeArea(panel, canvas, { captions = true } = {}) {
+export function panelSafeArea(panel, canvas, { captions = true, captionBand: band } = {}) {
   if (!panel) return null;
-  const { safeZone, captionBand } = profileGeometry(canvas);
+  const { safeZone, captionBand: profileBand } = profileGeometry(canvas);
+  const captionBand = band ?? profileBand;
   const gutter = Math.round(0.04 * Math.min(canvas.width, canvas.height));
   const x0 = Math.max(panel.x + gutter, safeZone.x), x1 = Math.min(panel.x + panel.width - gutter, safeZone.x + safeZone.width);
   const y0 = Math.max(panel.y + gutter, safeZone.y);
@@ -103,13 +114,53 @@ export function layoutAt(story, t) {
   const canvas = { width: Number(story.format?.width), height: Number(story.format?.height) };
   const geometry = layoutGeometry(section.layout, section.side, canvas);
   const captions = (story.overlays ?? []).some((overlay) => overlay?.type === "captions");
-  return { section: section.id, layout: section.layout, side: section.side, presenter: geometry.window, panel: geometry.panel, safe: panelSafeArea(geometry.panel, canvas, { captions }), color: section.panel };
+  const captionBand = captionZone(section.layout, section.side, canvas, storyCaptionBand(story, canvas)) ?? undefined;
+  return { section: section.id, layout: section.layout, side: section.side, presenter: geometry.window, panel: geometry.panel, safe: panelSafeArea(geometry.panel, canvas, { captions, captionBand }), color: section.panel };
+}
+
+/**
+ * Where the captions sit in a layout: on the presenter's side. The caption
+ * band (px) narrows to the presenter's window, a gutter in from its edges,
+ * and moves up or down into the window when it would fall outside it; the
+ * captions wrap within it. → rect, or null where the band is unchanged
+ * (full, insert, or a window the band already sits inside).
+ */
+export function captionZone(layout, side, canvas, band) {
+  if (!band || layout === "full" || layout === "insert" || !layout) return null;
+  const { window: win } = layoutGeometry(layout, side, canvas);
+  const gutter = Math.round(0.04 * Math.min(canvas.width, canvas.height));
+  const x0 = Math.max(win.x + gutter, band.x), x1 = Math.min(win.x + win.width - gutter, band.x + band.width);
+  const top = win.y + gutter, bottom = win.y + win.height - gutter - band.height;
+  if (!(x1 - x0 > 0) || bottom < top) return null;
+  const y = Math.min(Math.max(band.y, top), bottom);
+  if (Math.abs(x0 - band.x) < EPS && Math.abs(x1 - band.x - band.width) < EPS && Math.abs(y - band.y) < EPS) return null;
+  return { x: round6(x0), y: round6(y), width: round6(x1 - x0), height: round6(band.height) };
+}
+
+/**
+ * The caption zones of a story's sections: [{section, start, end, rect}]
+ * (px; sections whose band is unchanged are left out). Both compilers hand
+ * them to captionPlan (ctx.zones) and the layout check checks the captions
+ * there.
+ */
+export function captionZones(story) {
+  const canvas = { width: Number(story?.format?.width), height: Number(story?.format?.height) };
+  if (!(canvas.width > 0 && canvas.height > 0)) return [];
+  const band = storyCaptionBand(story, canvas);
+  return storySections(story)
+    .map((section) => ({ section: section.id, start: section.start, end: section.end, rect: captionZone(section.layout, section.side, canvas, band) }))
+    .filter((zone) => zone.rect);
+}
+
+// The captions overlay's band (px) at its position.
+function storyCaptionBand(story, canvas) {
+  return captionBandAt(profileGeometry(canvas).captionBand, canvas, captionsOverlayOf(story)?.position);
 }
 
 /**
  * The layout plan of a resolved story, or null when it has no sections (so
  * every other story compiles exactly as before).
- * → {sections, ops: [{time, state}], boundaries, rooms: [{start, end, room}], canvas}
+ * → {sections, ops: [{time, state}], boundaries, rooms: [{start, end, room}], canvas, captions (captionZones)}
  * Each state is {window, radius, panel (#hex), ring, ringColor, camera:
  * {scale, x, y}, hidden}: the frame element and the base camera at that time.
  * ops hold a state at 0, every frame of each layout-shift, and each cut; a
@@ -142,7 +193,7 @@ export function layoutPlan(story) {
     if (!matteCovers(story, section.start, section.end, fps)) { warnings.push(`section ${section.id}: room "${section.room}" needs a matte over ${section.start}–${section.end} s (run: launchclip subject matte <recording> --range <in>-<out> --project <dir>); the room is kept`); continue; }
     rooms.push({ sceneId: `layout:${section.id}`, start: section.start, end: section.end, room: { ...SECTION_ROOMS[section.room] } });
   }
-  return { sections, spans, ops, boundaries: layoutSpans(story).boundaries, rooms, warnings, canvas };
+  return { sections, spans, ops, boundaries: layoutSpans(story).boundaries, rooms, warnings, canvas, captions: captionZones(story) };
 }
 
 /** The layout state (frame element and camera) at timeline t. */

@@ -18,6 +18,8 @@ export type WordCaptionsProps = {
   hide?: Array<[number, number]>;
   /** Camera-move windows ({start, end}) where the captions dip out (camera-world.mjs captionDipWindows). */
   dips?: Array<{ start: number; end: number }>;
+  /** Footage layout caption zones ({start, end, rect}, kit/core/footage-layout.mjs captionZones): lines spoken in a split sit on the presenter's side. */
+  zones?: Array<{ start: number; end: number; rect: { x: number; y: number; width: number; height: number } }>;
   /** The story's captions overlay ({type: "captions", preset|style, ...options}). */
   overlay?: any;
   /** The resolved story (brand colours and fonts, scene hits for auto emphasis). */
@@ -35,15 +37,15 @@ function renderNode(node: PlanNode, index: Map<string, any>, t: number): React.R
     ...(node.children ?? []).map((child) => renderNode(child, index, t)));
 }
 
-export const WordCaptions: React.FC<WordCaptionsProps> = ({ chunks, hide = [], dips = [], overlay, story, idle = CAPTION_DEFAULT_COLORS.idle, active = CAPTION_DEFAULT_COLORS.active, spoken, fontFamily }) => {
+export const WordCaptions: React.FC<WordCaptionsProps> = ({ chunks, hide = [], dips = [], zones, overlay, story, idle = CAPTION_DEFAULT_COLORS.idle, active = CAPTION_DEFAULT_COLORS.active, spoken, fontFamily }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const t = frame / fps;
-  const key = JSON.stringify({ chunks: chunks.length, overlay, brand: story?.brand, hits: story?.scenes?.map((scene: any) => scene?.hits ?? null), hide, idle, active, spoken, fontFamily, width, height });
+  const key = JSON.stringify({ chunks: chunks.length, overlay, brand: story?.brand, hits: story?.scenes?.map((scene: any) => scene?.hits ?? null), hide, zones, idle, active, spoken, fontFamily, width, height });
   const plan = React.useMemo(() => {
     const brand = story?.brand ?? { colors: { paper: idle, primary: active }, fonts: {} };
     const own = overlay ?? { type: "captions", style: "word-highlight", colors: spoken ? { spoken } : undefined };
-    return captionPlan(chunks, own, { brand, format: { width, height }, story, hide, fonts: fontFamily && !story ? { display: fontFamily } : undefined });
+    return captionPlan(chunks, own, { brand, format: { width, height }, story, hide, zones, fonts: fontFamily && !story ? { display: fontFamily } : undefined });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chunks, key]);
   const index = React.useMemo(() => indexCaptionTweens(plan.tweens), [plan]);
