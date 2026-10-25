@@ -46,12 +46,16 @@ function shapePoints(node) {
   return [];
 }
 
+const UNDRAWN = new Set(['defs', 'clipPath', 'mask', 'linearGradient', 'radialGradient', 'pattern']);
+
 /** {left, top, right, bottom} of a drawing in rig units. */
 export function drawingBounds(drawing) {
   const out = {left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity};
   const walk = (node, m) => {
     if (!node || typeof node !== 'object') return;
     if (node.style?.opacity === 0 || node.attrs?.opacity === 0) return;
+    // Paint servers and clips draw nothing themselves.
+    if (UNDRAWN.has(node.tag)) return;
     let here = m;
     if (node.tag === 'joint') {
       const {pivot, transform: t} = node;

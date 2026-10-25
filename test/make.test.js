@@ -160,6 +160,46 @@ test("make runs the motion lane end to end with a fake model, the test voice and
   }
 });
 
+test("a bare-prompt make uses a seeded style, keeps it on reruns, and --seed picks the look", async () => {
+  const assets = await assetsDir();
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-seed-"));
+  try {
+    const { model } = fakeModel();
+    const notices = [];
+    // No logo and no brand.json: nothing says what the video should look like.
+    const inventory = async (dir) => { const base = await fakeInventory(dir); return { ...base, entries: base.entries.filter((entry) => entry.role !== "logo") }; };
+    const adapters = { env: {}, client: model, inventory, finish: fakeFinish([]), notice: (line) => notices.push(line), clock: () => "2026-10-26T00:00:00.000Z" };
+    const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd, out: "bare" }, adapters);
+    assert.equal(report.status, "ready-for-review", JSON.stringify(report.stages));
+    assert.equal(report.style.source, "generated");
+    assert.match(report.style.name, /^seed-[0-9a-f]{8}$/);
+    const project = path.join(cwd, "bare");
+    const pack = JSON.parse(await readFile(path.join(project, ".launchclip", "styles", report.style.name, "style.json"), "utf8"));
+    assert.equal(pack.generated.seed, report.style.seed);
+    assert.equal(pack.generated.tone, "energetic", "the prompt's launch wording sets the tone");
+    assert.match(report.style.summary, new RegExp(`^seed ${report.style.seed} \\(`));
+    assert.ok(notices.includes(`style: ${report.style.summary}. Reroll with launchclip style reroll`), notices.join("\n"));
+    const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
+    assert.equal(story.style, report.style.name);
+    assert.deepEqual(story.brand, pack.brand);
+    assert.equal(story.motion.grammar, pack.motion.grammar, "the pack's grammar wins over the planner's");
+    assert.deepEqual(story.overlays.find((overlay) => overlay.type === "captions").preset, pack.captions.preset);
+
+    // A rerun keeps the project's look.
+    const again = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd, out: "bare" }, adapters);
+    assert.equal(again.style.name, report.style.name);
+    assert.equal(again.stages.storyboard.status, "cached");
+
+    // --seed picks exactly that look; --style and --seed together are refused.
+    const seeded = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd, out: "seeded", seed: "7f3a91c2" }, adapters);
+    assert.equal(seeded.style.name, "seed-7f3a91c2");
+    await assert.rejects(runMake(PROMPT, { assets, voice: "test", cwd, seed: "7f3a91c2", style: "editorial-dark" }, adapters), /--seed or --style, not both/);
+  } finally {
+    await rm(assets, { recursive: true, force: true });
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test("make routes footage to footage-led and uses the base edit's output and words", async () => {
   const assets = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-footage-"));
   const out = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-out-"));
