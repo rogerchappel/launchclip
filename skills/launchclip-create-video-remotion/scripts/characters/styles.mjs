@@ -17,13 +17,15 @@ import {drawFlat, drawnHeight} from './style-flat.mjs';
 import {STYLE as line} from './style-line.mjs';
 import {STYLE as outlined} from './style-outlined.mjs';
 import {STYLE as paper} from './style-paper.mjs';
+import {STYLE as softShade} from './style-soft-shade.mjs';
 
 // In order from the default to the newest; flat stays first.
 const STYLES = {
   flat: {draw: drawFlat, height: drawnHeight, geometry: rigGeometry, describe: 'flat fills, a dark outline and a friendly simple face (the default)'},
   line,
   outlined,
-  paper
+  paper,
+  'soft-shade': softShade
 };
 
 export const DRAWING_STYLES = Object.freeze(Object.keys(STYLES));

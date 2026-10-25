@@ -128,7 +128,7 @@ export function torsoPath(g) {
   return `M${-S + r} ${-T}L${S - r} ${-T}Q${S} ${-T} ${S} ${-T + r}C${S + belly * 0.4} ${r1(-T * 0.62)} ${W + belly * 0.5} ${r1(-T * 0.3)} ${H} ${-8}L${H} 14Q${H} 22 ${H - 10} 22L${-H + 10} 22Q${-H} 22 ${-H} 14L${-H} -8C${-W - belly * 0.5} ${r1(-T * 0.3)} ${-S - belly * 0.4} ${r1(-T * 0.62)} ${-S} ${-T + r}Q${-S} ${-T} ${-S + r} ${-T}Z`;
 }
 
-function outfit(ctx) {
+export function outfit(ctx) {
   const {g, p, P} = ctx;
   const T = g.torso;
   const top = p.outfit.top;
@@ -192,7 +192,7 @@ export function headShape(g) {
   return `M0 ${r1(cy - ry)}C${r1(rx * 0.62)} ${r1(cy - ry)} ${rx} ${r1(cy - ry * 0.55)} ${rx} ${r1(cy - ry * 0.05)}C${rx} ${r1(cy + ry * 0.55)} ${r1(rx * 0.55)} ${r1(cy + ry)} 0 ${r1(cy + ry)}C${r1(-rx * 0.55)} ${r1(cy + ry)} ${-rx} ${r1(cy + ry * 0.55)} ${-rx} ${r1(cy - ry * 0.05)}C${-rx} ${r1(cy - ry * 0.55)} ${r1(-rx * 0.62)} ${r1(cy - ry)} 0 ${r1(cy - ry)}Z`;
 }
 
-function ears(ctx) {
+export function ears(ctx) {
   const {g, p, P} = ctx;
   if (p.hair.style === 'headscarf') return [];
   const {rx, cy} = g.head;
@@ -209,7 +209,7 @@ function ears(ctx) {
 const hairFill = (ctx, d, extra) => ctx.P.shape(d, 'hair', extra);
 
 /** Hair behind the head and body (drawn before the torso). */
-function hairBack(ctx) {
+export function hairBack(ctx) {
   const {g, p, P} = ctx;
   const {rx, ry, cy} = g.head;
   const style = p.hair.style;
@@ -238,7 +238,7 @@ function hairBack(ctx) {
 }
 
 /** Hair over the head (drawn after the face). */
-function hairFront(ctx) {
+export function hairFront(ctx) {
   const {g, p, P} = ctx;
   const {rx, ry, cy} = g.head;
   const top = cy - ry;
@@ -315,7 +315,7 @@ const MOUTHS = {
 };
 const mouthShape = (name, P) => (MOUTHS[name] ?? MOUTHS.soft)(P);
 
-function face(ctx, name) {
+export function face(ctx, name) {
   const {g, p, P} = ctx;
   const {cy} = g.head;
   const parts = expressionParts(name);
@@ -336,7 +336,7 @@ function face(ctx, name) {
   ]);
 }
 
-function facial(ctx) {
+export function facial(ctx) {
   const {g, p, P} = ctx;
   const {rx, ry, cy} = g.head;
   const out = [];
@@ -352,7 +352,7 @@ function facial(ctx) {
   return out;
 }
 
-function glasses(ctx) {
+export function glasses(ctx) {
   const {g, p, P} = ctx;
   const cy = g.head.cy + 10;
   const frame = {stroke: 'outline', width: 5.5, fillOpacity: 0.18};
@@ -428,9 +428,11 @@ export function drawToon(params, colors, {id, joints, expression = 'neutral', ex
   const breath = joint(ctx, 'breath', 0, 0, {}, torsoKids);
   const torso = joint(ctx, 'torso', 0, g.hipY, {rotation: joints.lean, scaleY: joints.squash}, [breath]);
   const body = joint(ctx, 'body', 0, 0, {y: joints.bodyY}, [leg(ctx, 'l'), leg(ctx, 'r'), ...pelvis(ctx), ...skirt(ctx), torso]);
-  const defs = P.defs ? P.defs() : [];
+  const ground = P.ground();
   const chair = params.mobility === 'wheelchair' ? wheelchair(ctx) : [];
-  return group([...defs, ...P.ground(), ...chair, body]);
+  // Defs last: the pen gathers gradients while drawing every other part.
+  const defs = P.defs ? P.defs() : [];
+  return group([...defs, ...ground, ...chair, body]);
 }
 
 /**
