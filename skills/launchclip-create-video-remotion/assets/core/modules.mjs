@@ -15,6 +15,7 @@ import { MODULES as CATALOG_C } from './catalog-c.mjs';
 import { MODULES as CATALOG_D } from './catalog-d.mjs';
 import { MODULES as CATALOG_E } from './catalog-e.mjs';
 import { MODULES as CATALOG_F } from './catalog-f.mjs';
+import { MODULES as CATALOG_G } from './catalog-g.mjs';
 import { storyBase } from './story.mjs';
 import { isEditorialGrammar, resolveGrammar } from './grammar.mjs';
 import { profileGeometry } from './layout-check.mjs';
@@ -24,10 +25,10 @@ import { subjectContext, subjectModelErrors } from './subject-layer.mjs';
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
 
-/** Every catalogue module definition, keyed by id (catalogue A, then B, C, D, E and F). */
+/** Every catalogue module definition, keyed by id (catalogue A, then B, C, D, E, F and G). */
 export function catalogModules() {
   const merged = {};
-  for (const [label, table] of [['catalog-a', CATALOG_A], ['catalog-b', CATALOG_B], ['catalog-c', CATALOG_C], ['catalog-d', CATALOG_D], ['catalog-e', CATALOG_E], ['catalog-f', CATALOG_F]]) {
+  for (const [label, table] of [['catalog-a', CATALOG_A], ['catalog-b', CATALOG_B], ['catalog-c', CATALOG_C], ['catalog-d', CATALOG_D], ['catalog-e', CATALOG_E], ['catalog-f', CATALOG_F], ['catalog-g', CATALOG_G]]) {
     for (const [id, definition] of Object.entries(table ?? {})) {
       if (EDITORIAL_KINDS.includes(id)) throw new Error(`${label} module "${id}" collides with an editorial kind`);
       if (merged[id]) throw new Error(`${label} module "${id}" is defined twice`);
@@ -437,7 +438,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!definition) throw new Error(`module "${module}" is not a known module`);
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
-  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), lane: story?.lane ?? null, grammar, ambient: sceneAmbient(story, scene) }); }
+  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), lane: story?.lane ?? null, insert: scene.insert === true, grammar, ambient: sceneAmbient(story, scene) }); }
   catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });

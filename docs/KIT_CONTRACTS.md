@@ -1562,3 +1562,54 @@ One in-repo family of line icons ([VIDEO_QUALITY_RFC.md](VIDEO_QUALITY_RFC.md)
   in box units, so the weight scales with the size.
 - `node scripts/icon-sheet.mjs out.png` renders every icon at 96 px and 24 px
   for a check by eye (`--html`, `--color`, `--bg`).
+
+## Catalogue G (`kit/core/catalog-g.mjs`)
+
+The visual vocabulary ([VIDEO_QUALITY_RFC.md](VIDEO_QUALITY_RFC.md) §8):
+cards chosen by intent that draw on the icon set. Module code lives in
+`catalog-g-<group>.mjs` beside a shared base, `catalog-g-base.mjs`. Emitters
+are in `kit/hyperframes/catalog-g.mjs`; components are in
+`kit/remotion/catalog/CatalogG.tsx` and `registry-g.ts`. Catalogue B's
+conventions apply: one static view tree (`catalogGView`), one
+renderer-neutral op list (`catalogGTimeline`), the root enter and exit, `at`
+measured from the scene start, and hits that time events of the same name.
+Each module declares `aspects` (`9:16`, `16:9`) and `mood` tags.
+
+### Placement (`createCardBase`)
+
+| Where | When | Surface (default) | Box |
+| --- | --- | --- | --- |
+| `plate` | motion lanes, or a footage-led scene with `insert: true` | `plate` (no card) | The safe zone above the caption band; content centred and scaled up to fill it |
+| `below` / `above` (9:16), `right` / `left` then `below` / `above` (16:9) | a footage-led overlay | `card` (opaque `bg`, `border` edge, radius 32) | The first region clear of the presenter's head (`ctx.subject.head`, else catalogue C's default head) that fits; the card takes its content's height |
+| `panel` | `ctx.layout.safe` is set (a footage layout's graphics panel) | `plate` | That panel |
+| `rect` | `params.rect` | as above | That rect (at least 360 × 200 px, inside the safe zone) |
+
+- `ctx.frame.safe` (a brand frame's safe area), when present, narrows the
+  safe zone. `ctx.insert` is `scene.insert === true` (set by `resolveModule`).
+- `params.surface` (`card` | `plate`) overrides the default surface.
+- When nothing fits beside the presenter, resolution fails ("…do not fit
+  beside the presenter…; shorten it, or make the scene an insert") instead of
+  covering the face.
+- Each module measures layout variants, largest first: plates try scales
+  1.5–0.68 and overlays try 1–0.68, then a compact variant with the icon or
+  object beside the text. Measured heights are conservative (catalogue B's
+  advance model). The view lays content out in flex columns and rows, so real
+  text heights set the spacing identically in both renderers.
+- `model.placement` names the region and `model.surface` the surface. Key
+  text is at least 44 px at 1080; labels and kickers are at least the meta
+  floor (26 px).
+
+### Modules
+
+| Module | For intent | Params | Events (cue) | Notes |
+| --- | --- | --- | --- | --- |
+| `concept-card` | claim, problem, turn | `text` ≤ 28 (≤ 3 words), `icon`, `sub` ≤ 64, `tone` paper/primary/accent, `at` | `icon` (pop-soft), `word` (whoosh), `sub` | The icon (primary) stacks above the word; in a short room it moves onto a tinted tile left of the text |
+| `icon-row` | list, process | `items` 2–5 `{icon, label ≤ 24, at?}`, `title` ≤ 48, `layout` auto/row/list, `stagger` (0.18), `at` | `item-<i>` (pop) | Items pop in order on tinted tiles; `auto` takes a row while the labels fit two lines per cell and the height fits, else a list |
+| `section-card` | section starts | `title` ≤ 48, `kicker` ≤ 28 (uppercased), `number` 1–99 or `icon`, `at` | `kicker`, `title` (whoosh) | The number or icon pops and the kicker rises as a primary rule draws out (scaleX), 0.25 s before the title |
+| `object-card` | product, claim | `object` (`boat`, `box`, `calendar`, `laptop`, `rocket`, `smartphone`, `chart`, `shield`, `mail`, `trophy`, `lightbulb`, `globe`, `team`, `gift`), `caption` ≤ 48, `label` ≤ 24, `at` | `object` (pop), `caption` | Composed in a 240-unit stage from brand shapes (disc, panel, ground shadow, waves, rays) plus a hero icon and accent icons (`OBJECTS` in `catalog-g-cards.mjs`); the hero bobs while it holds |
+
+Phrase rows in `PHRASE_MODULE_TABLE` carry an `intents` list (the direction
+map's intent names), so the intent classifier and the phrase hints agree.
+Parity fixtures: `test/fixtures/parity/g-*.json` (motion lane, both aspects)
+and `test/fixtures/parity-footage/g-*.json` (`examples/story/vocabulary`:
+overlays and inserts over a recording).

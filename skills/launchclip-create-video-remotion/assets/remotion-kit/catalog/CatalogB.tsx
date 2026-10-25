@@ -13,10 +13,10 @@ import {catalogBView, catalogBTimeline} from '../../core/catalog-b.mjs';
 // @ts-ignore plain ESM core module
 import {frameState, propsToStyle} from '../../core/catalog-b-view.mjs';
 
-type ViewNode = {tag: string; id?: string; style?: Record<string, unknown>; attrs?: Record<string, unknown>; children?: Array<ViewNode | string>};
-type FrameProps = Record<string, number | string>;
+export type ViewNode = {tag: string; id?: string; style?: Record<string, unknown>; attrs?: Record<string, unknown>; children?: Array<ViewNode | string>};
+export type FrameProps = Record<string, number | string>;
 
-function renderNode(node: ViewNode | string, state: Map<string, FrameProps>, key: string | number): React.ReactNode {
+export function renderNode(node: ViewNode | string, state: Map<string, FrameProps>, key: string | number): React.ReactNode {
   if (typeof node === 'string') return node;
   const props = node.id ? state.get(node.id) : undefined;
   const style = props ? {...(node.style ?? {}), ...propsToStyle(props)} : node.style;
