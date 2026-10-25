@@ -45,7 +45,7 @@ test("validates the v3 fields", () => {
     captions: { lanes: { podcast: {}, "footage-led": { preset: "sparkle" } } }
   });
   assert.equal(bad.ok, false);
-  for (const pattern of [/layouts\.panel\.treatment/, /layouts\.panel\.radius/, /vocabulary\.icon_tint/, /vocabulary\.illustration/, /vocabulary\.prefer\.claim/, /must not decrease/, /cast\.drawing_style must be one of the kit's drawing styles \(flat\)/, /cast\.colors\.fill/, /cast\.characters/, /kicker\.label/, /kicker\.position/, /progress\.thickness/, /show/, /dials\.energy/, /dials\.chaos/, /lanes\.podcast/, /lanes\.footage-led\.preset/]) {
+  for (const pattern of [/layouts\.panel\.treatment/, /layouts\.panel\.radius/, /vocabulary\.icon_tint/, /vocabulary\.illustration/, /vocabulary\.prefer\.claim/, /must not decrease/, /cast\.drawing_style must be one of the kit's drawing styles \(flat[,)]/, /cast\.colors\.fill/, /cast\.characters/, /kicker\.label/, /kicker\.position/, /progress\.thickness/, /show/, /dials\.energy/, /dials\.chaos/, /lanes\.podcast/, /lanes\.footage-led\.preset/]) {
     assert.ok(bad.errors.some((error) => pattern.test(error)), `${pattern} in ${bad.errors.join("; ")}`);
   }
   assert.match(bad.warnings.join(" "), /layouts\.by_intent\.list "diagonal"/, "an unknown layout name is a warning");
