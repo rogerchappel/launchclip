@@ -1608,8 +1608,9 @@ Each module declares `aspects` (`9:16`, `16:9`) and `mood` tags.
 | `section-card` | section starts | `title` ≤ 48, `kicker` ≤ 28 (uppercased), `number` 1–99 or `icon`, `at` | `kicker`, `title` (whoosh) | The number or icon pops and the kicker rises as a primary rule draws out (scaleX), 0.25 s before the title |
 | `object-card` | product, claim | `object` (`boat`, `box`, `calendar`, `laptop`, `rocket`, `smartphone`, `chart`, `shield`, `mail`, `trophy`, `lightbulb`, `globe`, `team`, `gift`), `caption` ≤ 48, `label` ≤ 24, `at` | `object` (pop), `caption` | Composed in a 240-unit stage from brand shapes (disc, panel, ground shadow, waves, rays) plus a hero icon and accent icons (`OBJECTS` in `catalog-g-cards.mjs`); the hero bobs while it holds |
 
-Phrase rows in `PHRASE_MODULE_TABLE` carry an `intents` list (the direction
-map's intent names), so the intent classifier and the phrase hints agree.
+Phrase rows in `PHRASE_MODULE_TABLE` carry an `intents` list (names from
+`DIRECTION_INTENTS` in `kit/core/direction.mjs`), so the intent classifier and
+the phrase hints agree. `section-card` has none; it is chosen at section starts.
 Parity fixtures: `test/fixtures/parity/g-*.json` (motion lane, both aspects)
 and `test/fixtures/parity-footage/g-*.json` (`examples/story/vocabulary`:
 overlays and inserts over a recording).

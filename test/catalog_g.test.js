@@ -152,6 +152,9 @@ test('the phrase table suggests each card for its intent', async () => {
   };
   for (const [id, sentence] of Object.entries(lines)) {
     for (const lane of ['motion', 'footage-led']) assert.ok(suggestModules(sentence, {lane})[0]?.modules.includes(id), `${id} in ${lane}`);
-    assert.ok(PHRASE_MODULE_TABLE.find(row => row.module === id).intents.length, `${id} names its intents`);
+    if (id !== 'section-card') assert.ok(PHRASE_MODULE_TABLE.find(row => row.module === id).intents.length, `${id} names its intents`);
   }
+  // Row intents are the direction map's intents (section-card is picked at section starts, not by intent).
+  const {DIRECTION_INTENTS} = await import('../kit/core/direction.mjs');
+  for (const row of PHRASE_MODULE_TABLE.filter(entry => entry.intents)) for (const intent of row.intents) assert.ok(DIRECTION_INTENTS.includes(intent), `${row.module}: ${intent}`);
 });
