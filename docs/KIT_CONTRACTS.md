@@ -445,6 +445,15 @@ saved pack is what renders, so a new version changes only rerolls.
   (`generated.redraws`).
 - `styleSummary(pack)` → `seed 7f3a91c2 (dark, playful, Unbounded / Inter)`;
   `seedSummaryLine(pack)` is the line make and story plan print.
+- Projects (`src/style_seed_store.js`): `make` and `story plan` call
+  `generateProjectStyle` when no `--style`, brand.json or logo is given (or
+  `--seed` is), save `.launchclip/styles/seed-<hex>/style.json`, and reuse
+  the generated style the storyboard already names (`projectSeedStyle`).
+  `adoptStyleLook(story, pack)` sets the pack's brand, motion grammar and
+  caption preset on the planned storyboard and names the style.
+  `style reroll` keeps `generated.constraints` (a new `--tone` replaces the
+  old) and writes `.launchclip/styles/previous.json` for one `--undo`;
+  `style keep` copies the pack to `~/.launchclip/styles/<name>`.
 
 ### Brand frame (`kit/core/brand-frame.mjs`)
 
