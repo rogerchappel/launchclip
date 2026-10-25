@@ -273,7 +273,7 @@ export function kitVariants({ palette = null, seed = DEFAULT_KIT_SEED, families 
     }
     const { intent, variants } = FAMILY_BUILDERS[family];
     for (let variant = 1; variant <= variants; variant++) {
-      const spec = familySpec(family, timbre, rng(`${seed}|${timbre.id}|${family}|${variant}`));
+      const spec = familySpec(family, timbre, rng(`${seed}|${timbre.id}|${family}|${variant}`), rng(`${seed}|${timbre.id}|kit`));
       entries.push({ name: variantFileName(family, variant).replace(/\.wav$/, ''), family, variant, duration: spec.duration, intent, spec });
     }
   }
