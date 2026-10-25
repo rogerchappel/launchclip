@@ -11,7 +11,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { cinematicMotionExpectations } from "../src/cinematic_check.js";
 import { evaluateMotionQuality } from "../src/render_motion_analysis.js";
-import { coverageGate, directionGate, faceGate, prototypeCut, qualityFindings, readFaceData, toTimeline } from "../src/quality_gates.js";
+import { coverageGate, directionGate, faceGate, prototypeCut, prototypeScope, qualityFindings, readFaceData, toTimeline } from "../src/quality_gates.js";
 import { CRITIC_CATEGORIES, MAKE_CRITIC_SCHEMA, runHeadlessCritic, toolingFindings } from "../src/make/critic.js";
 import { shippedProfiles } from "../src/profile_store.js";
 import { runStoryCommand } from "../src/story_cli.js";
@@ -164,4 +164,41 @@ test("the prototype cut lands between 20 and 30 s at a sentence end", async () =
   assert.ok(cut.story.scenes.every((scene) => scene.end <= 22.8 && scene.id !== "late"));
   assert.equal(cut.story.ending, undefined);
   assert.equal(prototypeCut(story, await words()), null, "a 20 s story needs no prototype");
+});
+
+test("prototypeScope keeps the lines and scenes inside the prototype window", () => {
+  const list = Array.from({ length: 10 }, (_, i) => ({ text: `w${i}.`, start: i * 4, end: i * 4 + 1 }));
+  const full = { scenes: [{ id: "a", start: 0, end: 8 }, { id: "b", start: 8, end: 20 }, { id: "c", start: 24, end: 30 }, { id: "d", start: 30, end: 36 }] };
+  const story = { scenes: full.scenes.slice(0, 2) };
+  const direction = (late) => ({
+    schema: "launchclip.direction-map.v1",
+    sections: [
+      { id: "s1", lines: [{ words: [0, 1], intent: "hook", treatment: "dress", scenes: ["a"] }, { words: [2, 4], intent: "claim", treatment: "dress", scenes: ["b"] }] },
+      { id: "s2", end: 40, lines: [late, { words: [7, 9], intent: "claim", treatment: "dress", scenes: ["d"] }] },
+      { id: "s3", lines: [{ words: [10, 11], intent: "cta", treatment: "dress", scenes: ["d"] }] }
+    ]
+  });
+  // A dressed line whose scenes all come after the cut ends the window before it.
+  const after = prototypeScope({ map: direction({ words: [5, 6], intent: "claim", treatment: "dress", scenes: ["c"] }), words: list, cut: 22, story, full });
+  assert.deepEqual(after.map.sections.map((section) => section.id), ["s1"]);
+  assert.equal(after.words.length, 5);
+  assert.equal(after.lines, 2);
+  // A line straddling the cut keeps the scenes the window shows and its words before the cut.
+  const straddle = prototypeScope({ map: direction({ words: [5, 6], intent: "claim", treatment: "dress", scenes: ["b", "c"] }), words: list, cut: 22, story, full });
+  assert.deepEqual(straddle.map.sections.map((section) => section.id), ["s1", "s2"]);
+  assert.deepEqual(straddle.map.sections[1].lines, [{ words: [5, 5], intent: "claim", treatment: "dress", scenes: ["b"] }]);
+  assert.equal(straddle.map.sections[1].end, 22);
+  assert.equal(straddle.words.length, 6);
+  // A scene in neither story is kept, so validation still reports the typo.
+  const typo = prototypeScope({ map: direction({ words: [5, 6], intent: "claim", treatment: "dress", scenes: ["zzz"] }), words: list, cut: 22, story, full });
+  assert.deepEqual(typo.map.sections[1].lines[0].scenes, ["zzz"]);
+});
+
+test("in a prototype, the whole-video share bands are advisory; run lengths still fail", async () => {
+  const thin = await sparse();
+  const gate = coverageGate({ resolved: thin.story, words: await words(), map: thin.direction, profile: profile("short-talking-head"), prototype: true });
+  assert.match(gate.advisory.join("\n"), /coverage 0% is below the profile band/);
+  assert.doesNotMatch(gate.errors.join("\n"), /coverage 0%/);
+  assert.match(gate.errors.join("\n"), /longest_undressed_seconds 20 s is above the profile band/);
+  assert.equal(gate.status, "failed");
 });

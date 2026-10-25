@@ -601,8 +601,10 @@ repaired state.
 the whole: `launchclip finish <project> --prototype` renders the first 20–30 s
 (cut at a sentence end) with the full style, layouts and sound to
 `renders/prototype.mp4`, and runs the coverage, direction and face gates on
-that opening. Show it to the user and stop for review; render the whole video
-only once the opening is right.
+that opening: only the direction-map lines and scenes inside it are checked,
+and the whole-video shares (coverage, face time) are reported as `advisory`
+rather than failing it. Show it to the user and stop for review; render the
+whole video only once the opening is right.
 
 **Draft and final.** `launchclip finish` defaults to `--quality draft`,
 which writes `renders/draft.mp4`: the same resolution, frame rate, timing,
