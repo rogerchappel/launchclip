@@ -12,9 +12,13 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { RATE, attack, decay, fmt, glide, layer, noise, rng } from './sound/dsp.mjs';
+import { FAMILY_BUILDERS, familySpec } from './sound/families.mjs';
+import { palette as paletteTimbre } from './sound/palettes.mjs';
+import { AMBIENCE_BEDS, HISTORIC_SFX_FAMILIES, SFX_FAMILY_NAMES, SOUND_PALETTES } from './sound/options.mjs';
+import { ambienceSpec } from './sound/ambience.mjs';
 
 const run = promisify(execFile);
-const RATE = 48000;
 
 // ---------------------------------------------------------------------------
 // SFX kit. Every cue is built from layers: each layer is one aevalsrc source
@@ -26,21 +30,8 @@ const RATE = 48000;
 // Families have several variants. Variant 1 keeps the historic file name
 // (<family>.wav); further variants are <family>-<n>.wav.
 
-const noise = (k) => `(2*random(${k})-1)`;
-const seedPrefix = (seeds) => `if(eq(n,0),${seeds.map(([k, value]) => `st(${k},${value})`).join('+')},0)*0+`;
-const fmt = (value) => Number(value.toFixed(6)).toString();
-// A sine whose frequency glides exponentially from f0 to f1 with time constant tau.
-const glide = (f0, f1, tau) => `sin(2*PI*(${fmt(f1)}*t+${fmt((f0 - f1) * tau)}*(1-exp(-t/${fmt(tau)}))))`;
-const attack = (seconds) => `min(t/${fmt(seconds)},1)`;
-const decay = (seconds) => `exp(-t/${fmt(seconds)})`;
-
-/** A layer: expression for L (and optionally R), filters, gain, delay in seconds. */
-function layer(left, { right = left, filter = 'anull', gain = 1, delay = 0, seed = 1 } = {}) {
-  const vars = [...new Set([...`${left}|${right}`.matchAll(/random\((\d)\)/g)].map((match) => Number(match[1])))];
-  const prefixL = vars.length ? seedPrefix(vars.map((k) => [k, seed * 7919 + k * 104729])) : '';
-  const prefixR = vars.length ? seedPrefix(vars.map((k) => [k, seed * 7919 + k * 104729 + 15485863])) : '';
-  return { expr: [`${prefixL}${left}`, `${prefixR}${right}`], filter, gain, delay };
-}
+// The expression helpers (noise, glide, envelopes, layer) live in
+// sound/dsp.mjs, shared with the palette families.
 
 function keystroke({ seed, click, leaf, thock, body, bottom, plate, clickGain = 0.9, thockGain = 0.85, bottomGain = 0.45, duration = 0.11, rattle = null }) {
   const layers = [
@@ -246,6 +237,41 @@ export const SFX = Object.freeze(Object.fromEntries(['whoosh', 'impact', 'riser'
   return [family, { duration: spec.duration, intent: SFX_FAMILIES[family].intent, expr: spec.layers.flatMap((entry) => entry.expr), layers: spec.layers, master: spec.master }];
 })));
 
+// Palette kits. With a palette, every family (historic and new) is drawn in
+// that palette's timbre from the seed: (family, palette, seed) → fresh but
+// in-character variants under the same file names. With no palette the
+// historic families keep their fixed sounds above, and the newer families
+// render in the neutral "default" timbre.
+export const DEFAULT_KIT_SEED = 'launchclip';
+
+/**
+ * The kit's files: [{name, family, variant, duration, intent, spec}].
+ * palette: a SOUND_PALETTES id or null; seed: the variant seed;
+ * families: the families to render (default: every family with a palette,
+ * the historic kit without one).
+ */
+export function kitVariants({ palette = null, seed = DEFAULT_KIT_SEED, families = null } = {}) {
+  if (palette && !SOUND_PALETTES.includes(palette)) throw new Error(`Unknown sound palette "${palette}". Palettes: ${SOUND_PALETTES.join(', ')}`);
+  const wanted = families ?? (palette ? SFX_FAMILY_NAMES : HISTORIC_SFX_FAMILIES);
+  const unknown = wanted.filter((family) => !SFX_FAMILY_NAMES.includes(family));
+  if (unknown.length) throw new Error(`Unknown SFX famil${unknown.length === 1 ? 'y' : 'ies'} ${unknown.join(', ')}. Families: ${SFX_FAMILY_NAMES.join(', ')}`);
+  const timbre = paletteTimbre(palette ?? 'default');
+  const entries = [];
+  for (const family of SFX_FAMILY_NAMES) {
+    if (!wanted.includes(family)) continue;
+    if (!palette && SFX_FAMILIES[family]) {
+      entries.push(...SFX_VARIANTS.filter((entry) => entry.family === family));
+      continue;
+    }
+    const { intent, variants } = FAMILY_BUILDERS[family];
+    for (let variant = 1; variant <= variants; variant++) {
+      const spec = familySpec(family, timbre, rng(`${seed}|${timbre.id}|${family}|${variant}`));
+      entries.push({ name: variantFileName(family, variant).replace(/\.wav$/, ''), family, variant, duration: spec.duration, intent, spec });
+    }
+  }
+  return entries;
+}
+
 const KEYS = { C: 130.81, D: 146.83, E: 164.81, F: 174.61, G: 196, A: 110 };
 // i - VI - III - VII in a minor key, written as semitone offsets from the tonic.
 const PROGRESSION = [[0, 3, 7, 10], [-4, 0, 3, 7], [3, 7, 10, 14], [-2, 2, 5, 10]];
@@ -289,15 +315,36 @@ async function peakNormalize(input, output, peakDb) {
   return peakDb;
 }
 
-/** The filter graph that sums a cue's layers into [out]. */
+/**
+ * The filter graph that sums a cue's layers into [out]. A cue with a room
+ * (spec.space) takes one more input, its impulse response, and mixes a
+ * convolution reverb under the dry sound.
+ */
 export function cueGraph(spec) {
   const parts = spec.layers.map((entry, index) => {
     const delay = Math.round(entry.delay * RATE);
     return `[${index}]${entry.filter},volume=${entry.gain}${delay > 0 ? `,adelay=${delay}S:all=1` : ''}[l${index}]`;
   });
   const fadeStart = Math.max(0, spec.duration - spec.fade);
-  parts.push(`${spec.layers.map((_, index) => `[l${index}]`).join('')}amix=inputs=${spec.layers.length}:normalize=0,${spec.master},atrim=0:${spec.duration},afade=t=out:st=${fadeStart.toFixed(4)}:d=${spec.fade.toFixed(4)}[out]`);
+  const sum = `${spec.layers.map((_, index) => `[l${index}]`).join('')}amix=inputs=${spec.layers.length}:normalize=0,${spec.master}`;
+  const tail = `atrim=0:${spec.duration},afade=t=out:st=${fadeStart.toFixed(4)}:d=${spec.fade.toFixed(4)}[out]`;
+  if (!spec.space) {
+    parts.push(`${sum},${tail}`);
+    return parts.join(';');
+  }
+  const ir = spec.layers.length;
+  parts.push(`${sum},asplit=2[dry][send]`);
+  parts.push(`[${ir}]highpass=f=180,lowpass=f=${spec.space.tone}[ir]`);
+  parts.push(`[send][ir]afir=irnorm=2,volume=${fmt(spec.space.mix * 0.5)}[wet]`);
+  parts.push(`[dry][wet]amix=inputs=2:normalize=0:duration=first,${tail}`);
   return parts.join(';');
+}
+
+/** The aevalsrc of a room's impulse response: decorrelated noise with an RT60 of `seconds`. */
+export function roomImpulse(space, seed = 1) {
+  const tau = fmt(space.seconds / 6.9);
+  const room = layer(`${noise(0)}*exp(-t/${tau})*min(t/0.004,1)`, { right: `${noise(1)}*exp(-t/${tau})*min(t/0.004,1)`, seed });
+  return `aevalsrc=exprs='${room.expr.join('|')}':s=${RATE}:d=${fmt(space.seconds)}`;
 }
 
 async function synthCue(entry, directory) {
@@ -305,10 +352,73 @@ async function synthCue(entry, directory) {
   const raw = path.join(directory, `.${entry.name}.raw.wav`);
   const output = path.join(directory, `${entry.name}.wav`);
   const inputs = spec.layers.flatMap((layerSpec) => ['-f', 'lavfi', '-i', `aevalsrc=exprs='${layerSpec.expr.join('|')}':s=${RATE}:d=${spec.duration}`]);
+  if (spec.space) inputs.push('-f', 'lavfi', '-i', roomImpulse(spec.space, entry.variant * 31 + entry.name.length));
   await ffmpeg([...inputs, '-filter_complex', cueGraph(spec), '-map', '[out]', '-ac', '2', raw]);
   await peakNormalize(raw, output, -3);
   await run('rm', ['-f', raw]);
   return { name: entry.name, family: entry.family, variant: entry.variant, file: output, duration_seconds: spec.duration, intent: entry.intent };
+}
+
+/** Integrated loudness (LUFS) of a file, by ebur128. */
+async function measureLufs(file) {
+  const { stderr } = await run('ffmpeg', ['-hide_banner', '-nostats', '-i', file, '-af', 'ebur128', '-f', 'null', '-'], { maxBuffer: 1 << 26 });
+  const value = Number(stderr.slice(stderr.lastIndexOf('Summary:')).match(/I:\s*(-?[\d.]+) LUFS/)?.[1]);
+  return Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Bring a file to `lufs` integrated loudness as 16-bit stereo. A plain gain
+ * (no limiter: its look-ahead would shift a loop and click at the seam).
+ */
+async function loudnessNormalize(input, output, lufs) {
+  const measured = await measureLufs(input);
+  const gain = measured === null ? 0 : lufs - measured;
+  await ffmpeg(['-i', input, '-af', `volume=${gain.toFixed(2)}dB`, '-ar', String(RATE), '-ac', '2', '-c:a', 'pcm_s16le', output]);
+  return { measured, gain };
+}
+
+// Ambience beds play far under narration; they are normalised to this
+// loudness so every bed sits at the same level in the mix.
+export const AMBIENCE_LUFS = -26;
+
+/**
+ * The filter graph of an ambience bed: layers summed (plus the room), then
+ * the overhang past `seconds` cross-faded (equal power) over the head, so
+ * the file loops seamlessly.
+ */
+export function ambienceGraph(spec) {
+  const L = spec.seconds;
+  const X = spec.crossfade;
+  const parts = spec.layers.map((entry, index) => `[${index}]${entry.filter},volume=${entry.gain}[l${index}]`);
+  const sum = `${spec.layers.map((_, index) => `[l${index}]`).join('')}amix=inputs=${spec.layers.length}:normalize=0,${spec.master}`;
+  if (spec.space) {
+    const ir = spec.layers.length;
+    parts.push(`${sum},asplit=2[dry][send]`, `[${ir}]highpass=f=180,lowpass=f=${spec.space.tone}[ir]`, `[send][ir]afir=irnorm=2,volume=${fmt(spec.space.mix * 0.5)}[wet]`, '[dry][wet]amix=inputs=2:normalize=0:duration=first[sum]');
+  } else parts.push(`${sum}[sum]`);
+  parts.push(
+    '[sum]asplit=3[a][b][c]',
+    `[a]atrim=0:${X},asetpts=PTS-STARTPTS,afade=t=in:d=${X}:curve=qsin[head]`,
+    `[b]atrim=${L}:${L + X},asetpts=PTS-STARTPTS,afade=t=out:d=${X}:curve=qsin[over]`,
+    '[head][over]amix=inputs=2:normalize=0[joined]',
+    `[c]atrim=${X}:${L},asetpts=PTS-STARTPTS[body]`,
+    '[joined][body]concat=n=2:v=0:a=1[out]'
+  );
+  return parts.join(';');
+}
+
+/** Render one ambience bed loop to <directory>/<name>.wav. */
+export async function synthAmbience(name, directory, { seed = DEFAULT_KIT_SEED } = {}) {
+  const spec = ambienceSpec(name, seed);
+  await mkdir(directory, { recursive: true });
+  const raw = path.join(directory, `.${name}.raw.wav`);
+  const output = path.join(directory, `${name}.wav`);
+  const length = spec.seconds + spec.crossfade;
+  const inputs = spec.layers.flatMap((entry) => ['-f', 'lavfi', '-i', `aevalsrc=exprs='${entry.expr.join('|')}':s=${RATE}:d=${length}`]);
+  if (spec.space) inputs.push('-f', 'lavfi', '-i', roomImpulse(spec.space, name.length * 17));
+  await ffmpeg([...inputs, '-filter_complex', ambienceGraph(spec), '-map', '[out]', '-ac', '2', '-c:a', 'pcm_f32le', raw]);
+  const level = await loudnessNormalize(raw, output, AMBIENCE_LUFS);
+  await run('rm', ['-f', raw]);
+  return { name, file: output, loop_seconds: spec.seconds, lufs: AMBIENCE_LUFS, measured_lufs: level.measured, seed };
 }
 
 async function synthBed(directory, options) {
@@ -328,18 +438,45 @@ async function synthBed(directory, options) {
   return { file: output, bpm: options.bpm, beat_seconds: beat, beats, downbeats: beats.filter((_, i) => i % 4 === 0), kick_from: options.kickFrom, kick_to: options.kickTo };
 }
 
+/** Run async jobs with at most `limit` at a time; results keep their order. */
+async function pool(items, limit, job) {
+  const results = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await job(items[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+const list = (value) => value?.split(',').map((name) => name.trim()).filter(Boolean);
+
 async function main(argv) {
   const [outDir, ...rest] = argv;
-  if (!outDir) throw new Error('usage: synth-audio-kit.mjs <out-dir> [--bed seconds] [--bpm N] [--kick-from s] [--kick-to s] [--key A]');
+  if (!outDir) throw new Error('usage: synth-audio-kit.mjs <out-dir> [--palette <id>] [--seed <s>] [--only a,b] [--with a,b] [--bed seconds] [--bpm N] [--kick-from s] [--kick-to s] [--key A]');
   const flag = (name) => { const index = rest.indexOf(name); return index >= 0 ? rest[index + 1] : undefined; };
   const sfxDir = path.join(outDir, 'sfx');
   await mkdir(sfxDir, { recursive: true });
-  const only = flag('--only')?.split(',').map((name) => name.trim()).filter(Boolean);
-  const cues = [];
-  for (const entry of SFX_VARIANTS) if (!only || only.includes(entry.family)) cues.push(await synthCue(entry, sfxDir));
-  const families = {};
-  for (const cue of cues) (families[cue.family] ??= []).push(path.basename(cue.file));
-  const kit = { schema_version: 'launchclip.synth-audio-kit.v1', license: 'Original procedural synthesis; no third-party samples.', sample_rate: RATE, sfx: cues, families, music: null };
+  const palette = flag('--palette') ?? null;
+  const seed = flag('--seed') ?? DEFAULT_KIT_SEED;
+  // --only picks families from the full list; --with adds families to the default set.
+  const only = list(flag('--only'));
+  const extra = list(flag('--with')) ?? [];
+  const families = only ?? (extra.length ? [...new Set([...(palette ? SFX_FAMILY_NAMES : HISTORIC_SFX_FAMILIES), ...extra])] : null);
+  const entries = kitVariants({ palette, seed, families });
+  const cues = await pool(entries, 6, (entry) => synthCue(entry, sfxDir));
+  const kitFamilies = {};
+  for (const cue of cues) (kitFamilies[cue.family] ??= []).push(path.basename(cue.file));
+  const kit = { schema_version: 'launchclip.synth-audio-kit.v1', license: 'Original procedural synthesis; no third-party samples.', sample_rate: RATE, ...(palette ? { palette, seed } : {}), sfx: cues, families: kitFamilies, music: null };
+  const ambience = flag('--ambience');
+  if (ambience && ambience !== 'none') {
+    if (!AMBIENCE_BEDS.includes(ambience)) throw new Error(`Unknown ambience bed "${ambience}". Beds: ${AMBIENCE_BEDS.join(', ')}`);
+    const bed = await synthAmbience(ambience, path.join(outDir, 'ambience'), { seed });
+    kit.ambience = { name: bed.name, file: bed.file, loop_seconds: bed.loop_seconds, lufs: bed.lufs };
+  }
   if (flag('--bed')) {
     const seconds = Number(flag('--bed'));
     const musicDir = path.join(outDir, 'music');
