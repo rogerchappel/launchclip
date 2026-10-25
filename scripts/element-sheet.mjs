@@ -96,8 +96,10 @@ async function main(argv) {
           const dir = path.join(opts.parity, `${opts.prefix}${id}-${variant}-${aspect === '9:16' ? 'portrait' : 'landscape'}`);
           let report = null;
           try { report = JSON.parse(await readFile(path.join(dir, 'report.json'), 'utf8')); } catch { /* not rendered */ }
-          const still = report?.samples?.find(s => s.name === 'mid-hold') ?? report?.samples?.at(-2);
-          tiles.push({name: `${name}${report ? ` · ssim ${report.minSsim.toFixed(3)}` : ' · not rendered'}`, width: width * scale, html: still ? `<img src="${pathToFileURL(path.join(dir, still.hyperframes)).href}" style="width:${width * scale}px;height:${TILE_H}px">` : ''});
+          // Only variants the run rendered (every variant in portrait, the default in landscape).
+          if (!report) continue;
+          const still = report.samples.find(s => s.name === 'mid-hold') ?? report.samples.at(-2);
+          tiles.push({name: `${name} · ssim ${report.minSsim.toFixed(3)}`, width: width * scale, html: `<img src="${pathToFileURL(path.join(dir, still.hyperframes)).href}" style="width:${width * scale}px;height:${TILE_H}px">`});
           continue;
         }
         let body;
