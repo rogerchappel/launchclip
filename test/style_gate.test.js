@@ -10,7 +10,7 @@ import test from "node:test";
 
 import { applyStyle, STYLE_V3_DEFAULTS } from "../kit/core/style.mjs";
 import { resolveStory } from "../kit/core/story.mjs";
-import { styleAdherence, styleProfile } from "../src/style_adherence.js";
+import { storyCadence, styleAdherence, styleProfile } from "../src/style_adherence.js";
 import { checkStyleCommand, createStyleFromReferences } from "../src/style_commands.js";
 import { PATHS, runFinish } from "../src/finish.js";
 import { mediaSkip } from "./helpers/media.js";
@@ -57,10 +57,15 @@ test("each check fails the way it should", async () => {
   assert.deepEqual(failing(styleAdherence({ story: await STORY({ overlays: [{ type: "captions", style: "glow" }] }), pack: PACK, measured: MEASURED })), ["error:captions"]);
   assert.deepEqual(failing(styleAdherence({ story, pack: PACK, measured: { ...MEASURED, captions: { case: "as-is" } } })), ["warning:caption case"]);
   assert.deepEqual(failing(styleAdherence({ story, pack: PACK, measured: { ...MEASURED, layouts: { ...MEASURED.layouts, mix: { "split-left": 1 } } } })), ["warning:layout mix"]);
-  const slow = styleAdherence({ story, pack: PACK, measured: { ...MEASURED, pacing: { duration_seconds: 60, shot_seconds: { median: 12 }, cut_rate_per_minute: 5 } } });
+  // Without a storyboard (cadence: null) the render's pixel pacing is gated.
+  const slow = styleAdherence({ story, pack: PACK, measured: { ...MEASURED, pacing: { duration_seconds: 60, shot_seconds: { median: 12 }, cut_rate_per_minute: 5 } }, cadence: null });
   assert.equal(slow.status, "failed");
   assert.deepEqual(failing(slow), ["error:cadence: shot_seconds", "error:cadence: visual_changes_per_min"]);
-  assert.match(slow.checks.find((entry) => entry.check === "cadence: shot_seconds").detail, /shot_seconds 12 s is above the profile band \(1\.5 s–6 s.*channel-references/);
+  assert.match(slow.checks.find((entry) => entry.check === "cadence: shot_seconds").detail, /shot_seconds 12 s is above the profile band \(1\.5 s–6 s.*channel-references; measured from the render/);
+  // A storyboard that holds a shot too long fails from its own numbers.
+  const held = styleAdherence({ story, pack: PACK, measured: MEASURED, cadence: { shot_seconds: { p50: 12 }, visual_changes_per_min: 5, layout_changes_per_min: 0 } });
+  assert.deepEqual(failing(held), ["error:cadence: shot_seconds", "error:cadence: visual_changes_per_min"]);
+  assert.match(held.checks.find((entry) => entry.check === "cadence: shot_seconds").detail, /from the storyboard/);
   assert.deepEqual(failing(styleAdherence({ story: await STORY({ frame: { kicker: false, sections: false } }), pack: PACK, measured: MEASURED })), ["error:brand frame"]);
   assert.deepEqual(failing(styleAdherence({ story: await STORY({ frame: false }), pack: PACK, measured: MEASURED })), ["warning:brand frame"]);
 });
@@ -76,6 +81,29 @@ test("footage-led renders only need the brand primary to show; without a profile
   assert.equal(await styleProfile(PACK), PACK.profile);
   assert.equal(await styleProfile({ profile: "no-such-profile" }), null);
   assert.equal((await styleProfile({ profile: "short-talking-head" })).id, "short-talking-head", "a shipped profile by id");
+});
+
+test("our own renders take cadence from the storyboard, not a cut detector", async () => {
+  // QA: a footage render whose graphics change every few seconds measured
+  // 2–5 changes a minute and 15 s shots from ffmpeg scene scores, and failed.
+  const story = await STORY();
+  const sparsePixels = { ...MEASURED, pacing: { duration_seconds: 60, shot_seconds: { median: 15 }, cut_rate_per_minute: 2.6 } };
+  const result = styleAdherence({ story, pack: PACK, measured: sparsePixels });
+  assert.equal(result.status, "passed", JSON.stringify(result.checks, null, 2));
+  const shot = result.checks.find((entry) => entry.check === "cadence: shot_seconds");
+  assert.equal(shot.measured, 3, "the storyboard's 3 s scenes");
+  assert.match(shot.detail, /from the storyboard/);
+  assert.equal(result.checks.find((entry) => entry.check === "cadence: visual_changes_per_min").measured, 10);
+
+  // Scene starts and ends, camera moves and layout changes all count, as the coverage gate counts them.
+  const cadence = storyCadence({ lane: "footage-led", base: { src: "base.mp4" }, format: { width: 1920, height: 1080, fps: 30, duration: 60 }, resolved: { duration: 60, fps: 30 }, sections: [{ id: "s1", start: 20, end: 40, layout: "split-right" }], scenes: [
+    { id: "a", module: "concept-card", start: 2, end: 6 },
+    { id: "b", module: "punch-in", start: 10, end: 12 },
+    { id: "c", module: "icon-row", start: 22, end: 30 }
+  ] });
+  assert.equal(cadence.visual_changes_per_min, 6, "2, 6, 10, 12, 22, 30");
+  assert.equal(cadence.layout_changes_per_min, 2, "into the split at 20 s and out at 40 s");
+  assert.equal(storyCadence({ scenes: [] }), null, "an unresolved story has no storyboard cadence");
 });
 
 test("finish runs the style gate when the story names a style", async () => {
@@ -108,9 +136,14 @@ test("finish runs the style gate when the story names a style", async () => {
     assert.equal(written.style, "channel");
     assert.ok(written.checks.some((entry) => entry.check === "brand frame" && entry.ok));
 
-    // A slow render drifts out of the band: the gate fails and finish asks for a repair.
+    // Sparse pixel pacing alone does not fail our own render: the storyboard says what changes.
     adapters.styleReference = async () => ({ ...MEASURED, pacing: { duration_seconds: 60, shot_seconds: { median: 14 }, cut_rate_per_minute: 4 } });
     await writeFile(path.join(project, ".launchclip/styles/channel/style.json"), JSON.stringify({ ...PACK, description: "edited" }));
+    assert.equal((await runFinish(project, { renderer: "remotion" }, adapters)).gates.style.status, "passed");
+
+    // A storyboard slower than the style's band drifts: the gate fails and finish asks for a repair.
+    const brisk = { ...PACK.profile, measures: { shot_seconds: { p10: 0.5, p50: 1, p90: 2 }, visual_changes_per_min: { p10: 30, p50: 40, p90: 60 } } };
+    await writeFile(path.join(project, ".launchclip/styles/channel/style.json"), JSON.stringify({ ...PACK, profile: brisk }));
     const slow = await runFinish(project, { renderer: "remotion" }, adapters);
     assert.equal(slow.gates.style.status, "failed");
     assert.ok(slow.gates.style.findings.some((line) => /error: cadence: shot_seconds/.test(line)));
