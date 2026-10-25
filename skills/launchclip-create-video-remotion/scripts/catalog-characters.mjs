@@ -282,7 +282,9 @@ function castSceneTimeline(model, ops) {
 // character-cameo
 
 function resolveCameo(params, ctx) {
-  const b = createBase('character-cameo', params, ctx, {allowed: ['character', ...ACTOR_KEYS.filter(key => key !== 'id'), 'side', 'card', 'panel'], required: ['character']});
+  // The cameo keeps inside a brand frame's safe area (its card kicker would
+  // otherwise sit on the frame's kicker); params.rect places it within that.
+  const b = createBase('character-cameo', params, ctx, {allowed: ['character', ...ACTOR_KEYS.filter(key => key !== 'id'), 'side', 'card', 'panel'], required: ['character'], frameSafe: true});
   const {check, rect, u, portrait} = b;
   const p = b.params;
   let cast;
@@ -364,7 +366,7 @@ const DEFINITIONS = {
     events: ['<character>-cue-<i>']},
   'character-cameo': {resolve: resolveCameo, view: cameoView, timeline: cameoTimeline,
     describe: 'One animated character beside a card (kicker, title, body) or alone on a panel, for a beat in a footage-led or explainer video.',
-    params: {character: 'a cast or starter character id', pose: POSES.filter(p => p !== 'sit').join(' | '), expression: EXPRESSIONS.join(' | '), facing: 'left | right', cues: '[{at, pose?, expression?}]', says: '[{from, to}] | "auto"', side: 'left | right (where the character stands)', card: '{kicker?, title ≤ 64, body? ≤ 140}', panel: 'boolean (default: true without a card)'},
+    params: {character: 'a cast or starter character id', pose: POSES.filter(p => p !== 'sit').join(' | '), expression: EXPRESSIONS.join(' | '), facing: 'left | right', cues: '[{at, pose?, expression?}]', says: '[{from, to}] | "auto"', side: 'left | right (where the character stands)', card: '{kicker?, title ≤ 64, body? ≤ 140}', panel: 'boolean (default: true without a card)', rect: '{x, y, width, height} canvas px inside the safe zone (and the brand frame\'s safe area), at least half its width and 35% of its height; default: the whole safe area'},
     events: ['<character>-cue-<i>']}
 };
 

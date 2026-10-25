@@ -312,7 +312,7 @@ function fontStack(name, role, check, path) {
   return registryStack(name, role);
 }
 
-export function createBase(moduleId, params, ctx, {allowed, required = [], hidesCaptions = false}) {
+export function createBase(moduleId, params, ctx, {allowed, required = [], hidesCaptions = false, frameSafe = false}) {
   if (!ctx || typeof ctx !== 'object') throw new Error(`${moduleId}: ctx is required`);
   const id = ctx.id;
   if (typeof id !== 'string' || !/^[a-z][a-z0-9_-]{0,59}$/.test(id)) throw new Error(`${moduleId}: ctx.id must be a lowercase DOM-safe id`);
@@ -369,7 +369,16 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
   // Round inward to 0.01 px so the rect never pokes outside the zone.
   const up = v => Math.ceil(v * 100 - 1e-6) / 100, down = v => Math.floor(v * 100 + 1e-6) / 100;
   const sx = up(zone.x), sy = up(zone.y);
-  const safe = {x: sx, y: sy, width: r2(down(zone.x + zone.width) - sx), height: r2(down(bottom) - sy)};
+  let safe = {x: sx, y: sy, width: r2(down(zone.x + zone.width) - sx), height: r2(down(bottom) - sy)};
+  // frameSafe: the module keeps inside a brand frame's safe area too
+  // (ctx.frame.safe, kit/core/brand-frame.mjs), for its default rect and for
+  // params.rect.
+  const frame = frameSafe ? ctx?.frame?.safe : null;
+  if (frame && ['x', 'y', 'width', 'height'].every(key => Number.isFinite(frame[key]))) {
+    const fx = Math.max(safe.x, up(frame.x)), fy = Math.max(safe.y, up(frame.y));
+    const fw = r2(Math.min(safe.x + safe.width, down(frame.x + frame.width)) - fx), fh = r2(Math.min(safe.y + safe.height, down(frame.y + frame.height)) - fy);
+    if (fw > 0 && fh > 0) safe = {x: fx, y: fy, width: fw, height: fh};
+  }
   let rect = {...safe};
   if (params.rect !== undefined) {
     check.obj(params.rect, 'params.rect', ['x', 'y', 'width', 'height'], ['x', 'y', 'width', 'height']);

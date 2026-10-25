@@ -855,6 +855,7 @@ params:
 - side: left | right (where the character stands)
 - card: {kicker?, title ≤ 64, body? ≤ 140}
 - panel: boolean (default: true without a card)
+- rect: {x, y, width, height} canvas px inside the safe zone (and the brand frame's safe area), at least half its width and 35% of its height; default: the whole safe area [guided and bespoke tiers only]
 events: <character>-cue-<i>
 
 ## Timing rules
