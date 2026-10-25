@@ -593,6 +593,21 @@ counts, brand claims, or facts from a style reference. Inspect the complete fram
 and its transitions, not just isolated widget screenshots.
 
 
+## Designed variants
+
+`checklist`, `step-rail`, `metric` and `callout` each have four looks. Set one
+with `"variant"` in the spec, or leave it out and let the style's
+`variants` choose:
+
+- **`panel`** (default): the original panel. It rises into place.
+- **`flat`**: no border, corners or shadow. An accent bar sits inset on the title, with round checks and accent dividers. It slides in from the left.
+- **`outline`**: an accent outline with a soft halo and round corners, and the title in the accent text colour. It scales up from the centre.
+- **`banner`**: the title on a solid accent band, with tinted square checks. It drops in from above.
+
+A variant never changes the content's size, wrap or timing, so the same spec
+fits the same rect in every variant. A spec `motion` still replaces the
+variant's entrance. An unknown name fails with the list of variants.
+
 ## Optional palette tokens
 
 Supply a common `theme` to use the same geometry with a different palette. The

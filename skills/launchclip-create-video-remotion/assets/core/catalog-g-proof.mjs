@@ -4,9 +4,9 @@
 // attribution, and an excerpt shows the supplied lines verbatim with their
 // source. Same shape and layout approach as catalog-g-cards.mjs.
 
-import {fitText, r2, rt} from './catalog-b-base.mjs';
+import {fitText, r2, rt, textWidth} from './catalog-b-base.mjs';
 import {abs, el, sampleTime, set, tw} from './catalog-b-view.mjs';
-import {CARD_PARAMS, after, cardTiming, column, createCardBase, flow, flowText, iconParam, pick, pop, rise} from './catalog-g-base.mjs';
+import {CARD_PARAMS, after, cardTiming, column, createCardBase, flow, flowText, iconParam, pick, pop, rise, row, solidFill, tintBehind, wrapWords} from './catalog-g-base.mjs';
 import {iconNode} from './icons.mjs';
 
 const hidden = {opacity: 0};
@@ -41,8 +41,27 @@ const formatFigure = (figure, n) => {
   return `${figure.prefix}${text}${figure.suffix}`;
 };
 
+// Variants: giant (the figure big over its label, the original), ring (the
+// figure inside a ring that sweeps to the share it states, or all the way),
+// bar (the figure over a bar that fills with the count) and ticker (each digit
+// on its own tile, rolling with the count).
+export const STAT_VARIANTS = Object.freeze(['giant', 'ring', 'bar', 'ticker']);
+
+/** The share a figure states, 0–1: a percentage up to 100, else null. */
+export function figureShare(figure) {
+  return figure && figure.suffix.trim().startsWith('%') && !figure.prefix.trim() && figure.number <= 100 ? figure.number / 100 : null;
+}
+
+/** "1,240" at n → the digits of n (same decimals), zero-padded into the value's digit slots. */
+function tickerText(value, figure, n) {
+  const slots = value.replace(/[^\d]/g, '').length;
+  const digits = n.toFixed(figure.decimals).replace(/[^\d]/g, '').padStart(slots, '0').slice(-slots);
+  let i = 0;
+  return [...value].map(char => (/\d/.test(char) ? digits[i++] : char)).join('');
+}
+
 function resolveStat(params, ctx) {
-  const b = createCardBase('stat-card', params, ctx, {allowed: ['value', 'label', 'source', 'icon', 'count', 'tone', 'at'], required: ['value', 'label', 'source']});
+  const b = createCardBase('stat-card', params, ctx, {allowed: ['value', 'label', 'source', 'icon', 'count', 'tone', 'at'], required: ['value', 'label', 'source'], variants: STAT_VARIANTS});
   const {check, u, portrait, theme, fps} = b;
   const p = b.params;
   const value = check.str(p.value, 'params.value', 12);
@@ -56,12 +75,14 @@ function resolveStat(params, ctx) {
   const tone = p.tone === undefined ? 'primary' : check.oneOf(p.tone, 'params.tone', ['primary', 'accent', 'paper']);
   const valueColor = b.resolveColor(tone, 'params.tone', 'primary');
   const sourceText = `Source: ${source}`;
+  const fitLabel = (width, k, preferred = 50, maxLines = 2) => fitText(check, 'params.label', label, {family: 'body', width, preferred: Math.max(b.min.key, u(preferred * Math.max(1, k * 0.9))), min: b.min.key, maxLines});
+  const fitSource = (width, k) => fitText(check, 'params.source', sourceText, {family: 'meta', width, preferred: u(28 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 2});
   const variant = (width, k) => {
     const mode = 'stack';
     const iconSize = glyph ? u(110 * k) : 0, iconGap = glyph ? u(20 * k) : 0;
     const big = fitText(check, 'params.value', value, {family: 'display', width, preferred: u((portrait ? 250 : 230) * k), min: u(96), maxLines: 1});
     const lab = fitText(check, 'params.label', label, {family: 'body', width, preferred: u(50 * Math.max(1, k * 0.9)), min: b.min.key, maxLines: 2});
-    const src = fitText(check, 'params.source', sourceText, {family: 'meta', width, preferred: u(28 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 2});
+    const src = fitSource(width, k);
     const labelGap = u(14 * k), sourceGap = u(22 * k);
     return {mode, iconSize, iconGap, value: big, label: lab, source: src, labelGap, sourceGap,
       height: r2(iconSize + iconGap + big.size * 1.0 + labelGap + lab.lines * lab.size * 1.2 + sourceGap + src.lines * src.size * 1.3)};
@@ -76,30 +97,70 @@ function resolveStat(params, ctx) {
     const textH = r2(lab.lines * lab.size * 1.2 + sourceGap + src.lines * src.size * 1.3);
     return {mode: 'inline', iconSize: 0, iconGap: 0, value: big, label: lab, source: src, labelGap: 0, sourceGap, gap, valueW, textW, height: r2(Math.max(big.size, textH))};
   };
-  const measure = (width, maxHeight) => pick([...[...b.scales, 0.55].map(k => () => variant(width, k)), ...[1, 0.8].map(k => () => inline(width, k))], maxHeight);
-  const box = b.place(measure, {maxWidth: u(portrait ? 900 : 1100)});
+  // ring: the figure inside a ring; the label and source under it (9:16) or
+  // beside it (16:9).
+  const ring = (width, k) => {
+    const beside = !portrait;
+    const d = r2(Math.min(u((portrait ? 520 : 560) * k), beside ? width * 0.45 : width)), stroke = r2(d * 0.07);
+    const big = fitText(check, 'params.value', value, {family: 'display', width: r2(d * 0.62), preferred: r2(d * 0.3), min: u(80), maxLines: 1});
+    const textW = beside ? r2(width - d - u(64 * k)) : width;
+    if (textW < u(320)) return null;
+    const lab = fitLabel(textW, k, beside ? 58 : 50, beside ? 3 : 2), src = fitSource(textW, k), labelGap = u(30 * k), sourceGap = u(18 * k);
+    const textH = r2(lab.lines * lab.size * 1.2 + sourceGap + src.lines * src.size * 1.3);
+    return {mode: 'ring', beside, d, stroke, value: big, label: lab, source: src, labelGap, sourceGap, textW, gap: u(64 * k), textH, height: r2(beside ? Math.max(d, textH) : d + labelGap + textH)};
+  };
+  // bar: the figure, a bar under it, then the label and source.
+  const bar = (width, k) => {
+    const big = fitText(check, 'params.value', value, {family: 'display', width, preferred: u((portrait ? 230 : 220) * k), min: u(96), maxLines: 1});
+    const lab = fitLabel(width, k), src = fitSource(width, k);
+    const barH = u(34 * k), barGap = u(24 * k), labelGap = u(26 * k), sourceGap = u(16 * k);
+    return {mode: 'bar', value: big, label: lab, source: src, barH, barGap, labelGap, sourceGap,
+      height: r2(big.size * 1.0 + barGap + barH + labelGap + lab.lines * lab.size * 1.2 + sourceGap + src.lines * src.size * 1.3)};
+  };
+  // ticker: a tile per digit (other characters stand between them).
+  const ticker = (width, k) => {
+    const chars = [...value], digits = chars.filter(char => /\d/.test(char)).length;
+    // A tile is 0.78 em wide with 0.1 em between; another character, set at
+    // 0.8 em, takes its own width (symbols like % or $ up to a full em).
+    const otherEm = chars.filter(char => !/\d/.test(char)).reduce((sum, char) => sum + 0.8 * (/[%$€£¥×#&@+]/.test(char) ? 1.1 : textWidth(char, 1, 'display')) + 0.1, 0);
+    const size = r2(Math.min(u((portrait ? 210 : 220) * k), width / (digits * 0.88 + otherEm)));
+    if (size < u(96)) return null;
+    const lab = fitLabel(width, k), src = fitSource(width, k), labelGap = u(30 * k), sourceGap = u(16 * k);
+    const tileH = r2(size * 1.18);
+    return {mode: 'ticker', size, tileW: r2(size * 0.78), tileH, gapW: r2(size * 0.1), value: {size, lines: 1}, label: lab, source: src, labelGap, sourceGap,
+      height: r2(tileH + labelGap + lab.lines * lab.size * 1.2 + sourceGap + src.lines * src.size * 1.3)};
+  };
+  const shaped = {ring, bar, ticker}[b.variant];
+  const measure = (width, maxHeight) => pick([...(shaped ? b.scales.map(k => () => shaped(width, k)) : []), ...[...b.scales, 0.55].map(k => () => variant(width, k)), ...[1, 0.8].map(k => () => inline(width, k))], maxHeight);
+  const box = b.place(measure, {maxWidth: u(portrait ? 900 : b.variant === 'ring' ? 1400 : 1100)});
   const L = box.layout;
   const t0 = b.timeOf('count', p.at, 'params.at', 0.1);
   const countFor = count ? 0.9 : 0;
   const hitAt = after(b, t0, countFor);
   const samples = [];
+  const format = L.mode === 'ticker' ? (n => tickerText(value, figure, n)) : (n => formatFigure(figure, n));
   if (count) {
     for (let f = Math.ceil(t0 * fps - 1e-6); f / fps < hitAt - 1e-6; f++) {
       const q = Math.min(1, Math.max(0, (f / fps - t0) / countFor));
-      samples.push({t: rt(f / fps), text: formatFigure(figure, figure.number * (1 - (1 - q) ** 3))});
+      samples.push({t: rt(f / fps), text: format(figure.number * (1 - (1 - q) ** 3))});
     }
     samples.push({t: hitAt, text: value});
   }
   const labelAt = after(b, t0, 0.2), sourceAt = after(b, hitAt, 0.1);
   b.events.push({id: `${b.id}-count`, name: 'count', time: t0, endTime: hitAt, role: 'count', ...(count ? {cue: 'riser'} : {})});
   b.events.push({id: `${b.id}-hit`, name: 'hit', time: hitAt, endTime: rt(hitAt + 0.3), role: 'hit', cue: 'impact'});
-  return b.finish({box: {x: box.x, y: box.y, width: box.width}, layout: L, value, label, source, sourceText, icon: L.mode === 'inline' ? null : glyph, count, start: count ? formatFigure(figure, 0) : value, samples,
-    valueColor, labelColor: theme.foreground, sourceColor: theme.muted, iconColor: b.colors.primary, t0, hitAt, labelAt, sourceAt}, {minTextPx: Math.min(L.value.size, L.label.size)});
+  const content = {box: {x: box.x, y: box.y, width: box.width}, layout: L, value, label, source, sourceText, icon: L.mode === 'stack' ? glyph : null, count, start: count ? format(0) : value, samples,
+    valueColor, labelColor: theme.foreground, sourceColor: theme.muted, iconColor: b.colors.primary, t0, hitAt, labelAt, sourceAt};
+  // The share the ring or bar fills: the percentage it states, else all of it.
+  if (L.mode === 'ring' || L.mode === 'bar') Object.assign(content, {share: figureShare(figure) ?? 1, track: theme.border, fill: valueColor});
+  if (L.mode === 'ticker') Object.assign(content, {tileFill: theme.panel, tileEdge: theme.border, tileInk: valueColor, chars: [...value].map(char => /\d/.test(char))});
+  return b.finish(content, {minTextPx: Math.min(L.value.size, L.label.size)});
 }
 
 function statView(model) {
   const {id, fonts} = model;
   const c = model.content, L = c.layout, B = c.box;
+  if (STAT_VIEWS[L.mode]) return STAT_VIEWS[L.mode](model);
   if (L.mode === 'inline') {
     return [el('div', null, abs(B.x, B.y, B.width, L.height, {display: 'flex', alignItems: 'center', gap: L.gap}), [
       flowText(`${id}-value`, L.valueW, {...hidden, fontFamily: fonts.display, fontSize: L.value.size, lineHeight: '1', color: c.valueColor, textAlign: 'right', whiteSpace: 'nowrap', transformOrigin: '100% 60%'}, c.start),
@@ -117,14 +178,91 @@ function statView(model) {
   ].filter(Boolean))];
 }
 
+const statText = (model, width, align, top = 0) => {
+  const {id, fonts} = model;
+  const c = model.content, L = c.layout;
+  return [
+    flowText(`${id}-label`, width, {...hidden, marginTop: top, fontFamily: fonts.body, fontWeight: 600, fontSize: L.label.size, lineHeight: '1.2', color: c.labelColor, textAlign: align}, c.label),
+    flowText(`${id}-source`, width, {...hidden, marginTop: L.sourceGap, fontFamily: fonts.meta, fontSize: L.source.size, lineHeight: '1.3', color: c.sourceColor, textAlign: align}, c.sourceText)
+  ];
+};
+
+const STAT_VIEWS = {
+  ring(model) {
+    const {id, fonts} = model;
+    const c = model.content, L = c.layout, B = c.box;
+    const r = r2((L.d - L.stroke) / 2), half = r2(L.d / 2);
+    // pathLength 1 makes the dash offset the unswept share of the ring.
+    const circle = (key, color, extra) => el('circle', key, extra?.style ?? null, [], {cx: half, cy: half, r, stroke: color, strokeWidth: L.stroke, fill: 'none', ...extra?.attrs});
+    const dial = flow(null, L.d, L.d, {}, [
+      el('svg', null, abs(0, 0, L.d, L.d, {overflow: 'visible'}), [
+        circle(null, c.track),
+        circle(`${id}-arc`, c.fill, {style: {strokeDasharray: 1, strokeDashoffset: 1}, attrs: {pathLength: 1, strokeLinecap: 'round', transform: `rotate(-90 ${half} ${half})`}})
+      ], {width: L.d, height: L.d, viewBox: `0 0 ${L.d} ${L.d}`, fill: 'none'}),
+      el('div', `${id}-value`, abs(0, 0, L.d, L.d, {...hidden, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: 0, fontFamily: fonts.display, fontSize: L.value.size, lineHeight: '1', color: c.valueColor, whiteSpace: 'nowrap', transformOrigin: '50% 50%'}), [c.start])
+    ]);
+    if (L.beside) return [row(B.x, B.y, B.width, L.height, [dial, flow(null, L.textW, undefined, {display: 'flex', flexDirection: 'column'}, statText(model, L.textW, 'left'))], {gap: L.gap})];
+    return [column(B.x, B.y, B.width, L.height, [dial, ...statText(model, B.width, 'center', L.labelGap)])];
+  },
+  bar(model) {
+    const {id, fonts, unit} = model;
+    const c = model.content, L = c.layout, B = c.box;
+    return [column(B.x, B.y, B.width, L.height, [
+      flowText(`${id}-value`, B.width, {...hidden, fontFamily: fonts.display, fontSize: L.value.size, lineHeight: '1', color: c.valueColor, whiteSpace: 'nowrap', transformOrigin: '0% 60%'}, c.start),
+      flow(null, B.width, L.barH, {marginTop: L.barGap, borderRadius: r2(L.barH / 2), background: c.track}, [
+        el('div', `${id}-fill`, abs(0, 0, r2(B.width * c.share), L.barH, {borderRadius: r2(L.barH / 2), background: c.fill, transformOrigin: '0% 50%', transform: 'scale(0, 1)'}))
+      ]),
+      ...statText(model, B.width, 'left', L.labelGap)
+    ], {align: 'start'})];
+  },
+  ticker(model) {
+    const {id, fonts, unit} = model;
+    const c = model.content, L = c.layout, B = c.box;
+    const tiles = [...c.value].map((char, i) => (c.chars[i]
+      ? flow(`${id}-tile-${i}`, L.tileW, L.tileH, {...hidden, boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: r2(L.size * 0.12), background: c.tileFill,
+        border: `${r2(2 * unit)}px solid ${c.tileEdge}`, transformOrigin: '50% 50%'}, [el('div', `${id}-digit-${i}`, {margin: 0, fontFamily: fonts.display, fontSize: L.size, lineHeight: '1', color: c.tileInk}, [c.start[i]])])
+      : flow(`${id}-tile-${i}`, undefined, L.tileH, {...hidden, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: fonts.display, fontSize: r2(L.size * 0.8), lineHeight: '1', color: c.tileInk, whiteSpace: 'nowrap'}, [char])));
+    return [column(B.x, B.y, B.width, L.height, [
+      flow(null, B.width, L.tileH, {display: 'flex', justifyContent: 'center', alignItems: 'center', gap: L.gapW}, tiles),
+      ...statText(model, B.width, 'center', L.labelGap)
+    ])];
+  }
+};
+
 function statTimeline(model, ops) {
-  const {id} = model;
-  const c = model.content;
-  if (c.icon) pop(ops, model, `${id}-icon`, rt(Math.max(model.start, c.t0 - 0.15)));
-  rise(ops, model, `${id}-value`, rt(Math.max(model.start, c.t0 - 0.1)), {distance: 20, duration: 0.35});
-  for (const s of c.samples) set(ops, `${id}-value`, sampleTime(s.t), {text: s.text});
-  // The hit: a short pulse when the count lands.
-  tw(ops, `${id}-value`, c.hitAt, 0.4, 'back.out(2.2)', {scaleX: 1.08, scaleY: 1.08}, {scaleX: 1, scaleY: 1});
+  const {id, start, unit} = model;
+  const c = model.content, mode = c.layout.mode;
+  const countFor = Math.max(0.3, c.hitAt - c.t0);
+  if (mode === 'ring') {
+    set(ops, `${id}-arc`, start, {strokeDashoffset: 1});
+    tw(ops, `${id}-arc`, c.t0, countFor, 'power3.out', {strokeDashoffset: 1}, {strokeDashoffset: r2((1 - c.share) * 1000) / 1000});
+    pop(ops, model, `${id}-value`, rt(Math.max(start, c.t0 - 0.1)), {scale: 0.7, duration: 0.45});
+    for (const s_ of c.samples) set(ops, `${id}-value`, sampleTime(s_.t), {text: s_.text});
+    tw(ops, `${id}-value`, c.hitAt, 0.4, 'back.out(2.2)', {scaleX: 1.08, scaleY: 1.08}, {scaleX: 1, scaleY: 1});
+  } else if (mode === 'bar') {
+    rise(ops, model, `${id}-value`, rt(Math.max(start, c.t0 - 0.1)), {distance: 20, duration: 0.35});
+    for (const s_ of c.samples) set(ops, `${id}-value`, sampleTime(s_.t), {text: s_.text});
+    set(ops, `${id}-fill`, start, {scaleX: 0, scaleY: 1});
+    tw(ops, `${id}-fill`, c.t0, countFor, 'power3.out', {scaleX: 0}, {scaleX: 1});
+    tw(ops, `${id}-value`, c.hitAt, 0.4, 'back.out(2.2)', {scaleX: 1.06, scaleY: 1.06}, {scaleX: 1, scaleY: 1});
+  } else if (mode === 'ticker') {
+    [...c.value].forEach((char, i) => {
+      const at = rt(Math.max(start, c.t0 - 0.12 + i * 0.04));
+      set(ops, `${id}-tile-${i}`, start, {opacity: 0, x: 0, y: r2(36 * unit), scaleX: 1, scaleY: 1});
+      tw(ops, `${id}-tile-${i}`, at, 0.4, 'power3.out', {opacity: 0, y: r2(36 * unit)}, {opacity: 1, y: 0});
+      if (!c.chars[i]) return;
+      // Each digit tile shows its slot of the count, then flips once on the hit.
+      let last = c.start[i];
+      for (const s_ of c.samples) if (s_.text[i] !== last) { set(ops, `${id}-digit-${i}`, sampleTime(s_.t), {text: s_.text[i]}); last = s_.text[i]; }
+      tw(ops, `${id}-tile-${i}`, rt(c.hitAt + i * 0.03), 0.4, 'back.out(2)', {scaleY: 0.82}, {scaleY: 1});
+    });
+  } else {
+    if (c.icon) pop(ops, model, `${id}-icon`, rt(Math.max(model.start, c.t0 - 0.15)));
+    rise(ops, model, `${id}-value`, rt(Math.max(model.start, c.t0 - 0.1)), {distance: 20, duration: 0.35});
+    for (const s of c.samples) set(ops, `${id}-value`, sampleTime(s.t), {text: s.text});
+    // The hit: a short pulse when the count lands.
+    tw(ops, `${id}-value`, c.hitAt, 0.4, 'back.out(2.2)', {scaleX: 1.08, scaleY: 1.08}, {scaleX: 1, scaleY: 1});
+  }
   rise(ops, model, `${id}-label`, c.labelAt, {distance: 16});
   rise(ops, model, `${id}-source`, c.sourceAt, {distance: 10});
 }
@@ -136,14 +274,22 @@ export const statCard = {
   events: ['count', 'hit'],
   timing: cardTiming(['the count runs 0.9 s from at and hits on the exact value']),
   mood: ['editorial', 'launch', 'bold'],
+  variants: STAT_VARIANTS,
   resolve: resolveStat, view: statView, timeline: statTimeline
 };
 
 // ---------------------------------------------------------------------------
 // quote-card: a real quote with a named attribution.
 
+// Variants: mark (a quote mark over the words, the original), pull (a primary
+// bar that draws down the left of a larger quote, an initial on a disc in the
+// byline), bubble (the quote in a speech bubble that pops from its tail at
+// the byline) and centered (a big mark that drops in over the quote set in
+// the display face, a rule and the name).
+export const QUOTE_VARIANTS = Object.freeze(['mark', 'pull', 'bubble', 'centered']);
+
 function resolveQuote(params, ctx) {
-  const b = createCardBase('quote-card', params, ctx, {allowed: ['quote', 'author', 'role', 'source', 'highlight', 'at'], required: ['quote', 'author']});
+  const b = createCardBase('quote-card', params, ctx, {allowed: ['quote', 'author', 'role', 'source', 'highlight', 'at'], required: ['quote', 'author'], variants: QUOTE_VARIANTS});
   const {check, u, portrait, theme, colors} = b;
   const p = b.params;
   const quote = check.str(p.quote, 'params.quote', 180).replace(/^["“”']+|["“”']+$/g, '');
@@ -161,11 +307,43 @@ function resolveQuote(params, ctx) {
     const name = fitText(check, 'params.author', `— ${author}`, {family: 'body', width, preferred: u(46 * Math.max(1, k * 0.9)), min: b.min.key, maxLines: 1});
     const sub = meta ? fitText(check, 'params.role', meta, {family: 'meta', width, preferred: u(28 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 2}) : null;
     const nameGap = u(30 * k), subGap = u(8);
-    return {mark, markGap, text, name, sub, nameGap, subGap,
+    return {mode: 'mark', mark, markGap, text, name, sub, nameGap, subGap,
       height: r2(mark + markGap + text.lines * text.size * 1.3 + nameGap + name.size * 1.2 + (sub ? subGap + sub.lines * sub.size * 1.3 : 0))};
   };
-  const measure = (width, maxHeight) => pick([...b.scales, 0.6].map(k => () => variant(width, k)), maxHeight);
-  const box = b.place(measure, {maxWidth: u(portrait ? 900 : 1300)});
+  const fitQuote = (width, k, family, preferred, maxLines) => fitText(check, 'params.quote', quote, {family, width, preferred: Math.max(b.min.key, u(preferred * k)), min: b.min.key, maxLines});
+  const fitName = (width, k) => fitText(check, 'params.author', author, {family: 'body', width, preferred: Math.max(b.min.key, u(44 * Math.max(1, k * 0.9))), min: b.min.key, maxLines: 1});
+  const fitMeta = (width, k) => (meta ? fitText(check, 'params.role', meta, {family: 'meta', width, preferred: u(28 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 2}) : null);
+  // The attribution row: an initial on a disc, the name and the meta line.
+  const measureByline = (width, k) => {
+    const avatar = u(96 * k), gap = u(24 * k), textW = r2(width - avatar - gap);
+    const name = fitName(textW, k), sub = fitMeta(textW, k), subGap = u(6);
+    return {avatar, gap, textW, name, sub, subGap, height: r2(Math.max(avatar, name.size * 1.2 + (sub ? subGap + sub.lines * sub.size * 1.3 : 0)))};
+  };
+  // pull: a primary bar down the left, a larger quote, then the byline.
+  const pull = (width, k) => {
+    const bar = u(10), barGap = u(44 * k), textW = r2(width - bar - barGap);
+    const text = fitQuote(textW, k, 'body', portrait ? 66 : 62, portrait ? 7 : 5), by = measureByline(textW, k), byGap = u(40 * k);
+    const quoteH = r2(text.lines * text.size * 1.28);
+    return {mode: 'pull', bar, barGap, textW, text, by, byGap, quoteH, height: r2(quoteH + byGap + by.height)};
+  };
+  // bubble: the quote in a speech bubble whose tail points at the byline.
+  const bubble = (width, k) => {
+    const pad = u(48 * k), tail = u(44 * k), inner = r2(width - pad * 2);
+    const text = fitQuote(inner, k, 'body', portrait ? 58 : 56, portrait ? 7 : 5), by = measureByline(width, k);
+    const bubbleH = r2(pad * 2 + text.lines * text.size * 1.3), byGap = r2(tail * 0.9 + u(22 * k));
+    return {mode: 'bubble', pad, tail, inner, text, by, bubbleH, byGap, height: r2(bubbleH + byGap + by.height)};
+  };
+  // centered: a big mark, the quote centred in the display face, a rule and the name.
+  const centered = (width, k) => {
+    const mark = u(120 * k), markGap = u(14 * k);
+    const text = fitQuote(width, k, 'display', portrait ? 76 : 72, portrait ? 7 : 4);
+    const name = fitName(width, k), sub = fitMeta(width, k), ruleGap = u(30 * k), rule = u(5), nameGap = u(22 * k), subGap = u(6);
+    return {mode: 'centered', mark, markGap, text, name, sub, ruleGap, rule, nameGap, subGap,
+      height: r2(mark + markGap + text.lines * text.size * 1.12 + ruleGap + rule + nameGap + name.size * 1.2 + (sub ? subGap + sub.lines * sub.size * 1.3 : 0))};
+  };
+  const shaped = {pull, bubble, centered}[b.variant];
+  const measure = (width, maxHeight) => pick([...(shaped ? b.scales.map(k => () => shaped(width, k)) : []), ...[...b.scales, 0.6].map(k => () => variant(width, k))], maxHeight);
+  const box = b.place(measure, {maxWidth: u(portrait ? 900 : b.variant === 'mark' ? 1300 : 1400)});
   const L = box.layout;
   const t0 = b.timeOf('quote', p.at, 'params.at', 0.15);
   const authorAt = after(b, t0, 0.45);
@@ -177,14 +355,93 @@ function resolveQuote(params, ctx) {
     b.events.push({id: `${b.id}-highlight`, name: 'highlight', time: highlightAt, endTime: rt(highlightAt + 0.4), role: 'emphasis', cue: 'tick'});
   }
   const [before, after_] = highlight ? [quote.slice(0, quote.indexOf(highlight)), quote.slice(quote.indexOf(highlight) + highlight.length)] : [quote, ''];
-  return b.finish({box: {x: box.x, y: box.y, width: box.width}, layout: L, quote, author, meta, highlight, parts: [before, highlight, after_],
-    markColor, textColor: theme.foreground, nameColor: colors.primary, metaColor: theme.muted, highlightFill: colors.primary, highlightInk: theme.surface, t0, authorAt, highlightAt},
-  {minTextPx: Math.min(L.text.size, L.name.size)});
+  const content = {box: {x: box.x, y: box.y, width: box.width}, layout: L, quote, author, meta, highlight, parts: [before, highlight, after_],
+    markColor, textColor: theme.foreground, nameColor: colors.primary, metaColor: theme.muted, highlightFill: colors.primary, highlightInk: theme.surface, t0, authorAt, highlightAt};
+  if (L.mode !== 'mark') {
+    const solid = solidFill(b, 'primary', 4.5), quoteW = L.mode === 'pull' ? L.textW : L.mode === 'bubble' ? L.inner : box.width;
+    // A highlight that fits on one line sweeps in on a marker; a longer one
+    // wraps with its marker shown from the start.
+    const family = L.mode === 'centered' ? 'display' : 'body';
+    Object.assign(content, {initial: [...author.replace(/^[—–-]\s*/, '')][0].toUpperCase(), avatarFill: solid.fill, avatarInk: solid.ink, highlightFill: solid.fill, highlightInk: solid.ink,
+      sweep: Boolean(highlight) && textWidth(highlight, L.text.size, family) <= quoteW, panel: theme.panel, border: theme.border, ruleColor: colors.primary});
+  }
+  return b.finish(content, {minTextPx: Math.min(L.text.size, (L.name ?? L.by.name).size)});
 }
+
+/** The quote's words, the highlight in a span: a marker that sweeps in behind it, or (wrapping) a static one. */
+function quoteWords(model, width, style, align) {
+  const {id, unit} = model;
+  const c = model.content;
+  const [before, words, rest] = c.parts;
+  if (!c.highlight) return flowText(`${id}-quote`, width, {...hidden, ...style, textAlign: align}, c.quote);
+  const mark = c.sweep
+    ? el('span', null, {position: 'relative', display: 'inline-block', whiteSpace: 'nowrap', color: c.highlightInk}, [
+      el('span', `${id}-highlight`, abs(r2(-6 * unit), 0, `calc(100% + ${r2(12 * unit)}px)`, '100%', {borderRadius: r2(6 * unit), background: c.highlightFill, transformOrigin: '0% 50%', transform: 'scale(0, 1)'})),
+      el('span', null, {position: 'relative'}, [words])
+    ])
+    : el('span', `${id}-highlight`, {color: c.highlightInk, background: c.highlightFill, borderRadius: r2(6 * unit), boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone'}, [words]);
+  return el('div', `${id}-quote`, {...hidden, position: 'relative', flex: 'none', width, margin: 0, whiteSpace: 'normal', overflowWrap: 'break-word', ...style, textAlign: align}, [before, mark, rest]);
+}
+
+/** The byline: an initial on a disc, the name and the meta line. */
+function byline(model, by, align = 'left') {
+  const {id, fonts} = model;
+  const c = model.content;
+  return [
+    flow(`${id}-avatar`, by.avatar, by.avatar, {...hidden, borderRadius: '50%', background: c.avatarFill, display: 'flex', alignItems: 'center', justifyContent: 'center', transformOrigin: '50% 50%'}, [
+      el('div', null, {margin: 0, fontFamily: fonts.display, fontSize: r2(by.avatar * 0.5), lineHeight: '1', color: c.avatarInk}, [c.initial])
+    ]),
+    flow(`${id}-author`, by.textW, undefined, {...hidden, display: 'flex', flexDirection: 'column', gap: by.subGap}, [
+      flowText(null, by.textW, {fontFamily: fonts.body, fontWeight: 650, fontSize: by.name.size, lineHeight: '1.2', color: c.textColor, textAlign: align}, c.author),
+      c.meta ? flowText(null, by.textW, {fontFamily: fonts.meta, fontSize: by.sub.size, lineHeight: '1.3', color: c.metaColor, textAlign: align}, c.meta) : null
+    ].filter(Boolean))
+  ];
+}
+
+const QUOTE_VIEWS = {
+  pull(model) {
+    const {id, fonts} = model;
+    const c = model.content, L = c.layout, B = c.box;
+    return [row(B.x, B.y, B.width, L.height, [
+      flow(`${id}-mark`, L.bar, L.height, {borderRadius: L.bar, background: c.ruleColor, transformOrigin: '50% 0%', transform: 'scale(1, 0)'}, []),
+      flow(null, L.textW, undefined, {display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}, [
+        quoteWords(model, L.textW, {fontFamily: fonts.body, fontWeight: 600, fontSize: L.text.size, lineHeight: '1.28', color: c.textColor}, 'left'),
+        flow(null, L.textW, L.by.height, {marginTop: L.byGap, display: 'flex', alignItems: 'center', gap: L.by.gap}, byline(model, L.by))
+      ])
+    ], {gap: L.barGap})];
+  },
+  bubble(model) {
+    const {id, fonts, unit} = model;
+    const c = model.content, L = c.layout, B = c.box;
+    const edge = r2(2 * unit), t = L.tail;
+    const bubble = el('div', `${id}-mark`, abs(0, 0, B.width, L.bubbleH, {transformOrigin: `${r2(L.by.avatar / 2)}px 100%`}), [
+      el('div', null, abs(r2(L.by.avatar / 2 - t / 2), r2(L.bubbleH - t / 2 - edge), t, t, {boxSizing: 'border-box', background: c.panel, borderRight: `${edge}px solid ${c.border}`, borderBottom: `${edge}px solid ${c.border}`, transform: 'rotate(45deg)'})),
+      el('div', null, abs(0, 0, B.width, L.bubbleH, {boxSizing: 'border-box', borderRadius: r2(36 * unit), background: c.panel, border: `${edge}px solid ${c.border}`, borderBottomColor: 'transparent'})),
+      el('div', null, abs(r2(L.tail * 1.4), r2(L.bubbleH - edge * 2), r2(B.width - L.tail * 1.4 - 36 * unit), edge, {background: c.border})),
+      el('div', null, abs(L.pad, 0, L.inner, L.bubbleH, {display: 'flex', alignItems: 'center'}), [
+        quoteWords(model, L.inner, {fontFamily: fonts.body, fontWeight: 500, fontSize: L.text.size, lineHeight: '1.3', color: c.textColor}, 'left')
+      ])
+    ]);
+    const by = el('div', null, abs(0, r2(L.bubbleH + L.byGap), B.width, L.by.height, {display: 'flex', alignItems: 'center', gap: L.by.gap}), byline(model, L.by));
+    return [el('div', null, abs(B.x, B.y, B.width, L.height), [bubble, by])];
+  },
+  centered(model) {
+    const {id, fonts, unit} = model;
+    const c = model.content, L = c.layout, B = c.box;
+    return [column(B.x, B.y, B.width, L.height, [
+      flow(`${id}-mark`, L.mark, L.mark, {...hidden, marginBottom: L.markGap, transformOrigin: '50% 50%'}, [iconNode('quote', {size: L.mark, color: c.markColor})]),
+      quoteWords(model, B.width, {fontFamily: fonts.display, fontSize: L.text.size, lineHeight: '1.12', color: c.textColor, transformOrigin: '50% 50%'}, 'center'),
+      flow(`${id}-rule`, r2(Math.min(B.width * 0.2, 120 * unit)), L.rule, {marginTop: L.ruleGap, borderRadius: L.rule, background: c.ruleColor, transformOrigin: '50% 50%', transform: 'scale(0, 1)'}, []),
+      flowText(`${id}-author`, B.width, {...hidden, marginTop: L.nameGap, fontFamily: fonts.body, fontWeight: 650, fontSize: L.name.size, lineHeight: '1.2', color: c.nameColor, textAlign: 'center'}, c.author),
+      c.meta ? flowText(`${id}-meta`, B.width, {...hidden, marginTop: L.subGap, fontFamily: fonts.meta, fontSize: L.sub.size, lineHeight: '1.3', color: c.metaColor, textAlign: 'center'}, c.meta) : null
+    ].filter(Boolean))];
+  }
+};
 
 function quoteView(model) {
   const {id, fonts, unit} = model;
   const c = model.content, L = c.layout, B = c.box;
+  if (QUOTE_VIEWS[L.mode]) return QUOTE_VIEWS[L.mode](model);
   const textStyle = {fontFamily: fonts.body, fontWeight: 500, fontSize: L.text.size, lineHeight: '1.3', color: c.textColor};
   const quoteText = [flowText(null, B.width, textStyle, c.quote)];
   if (c.highlight) {
@@ -206,8 +463,35 @@ function quoteView(model) {
 }
 
 function quoteTimeline(model, ops) {
-  const {id} = model;
-  const c = model.content;
+  const {id, start, unit} = model;
+  const c = model.content, mode = c.layout.mode;
+  if (QUOTE_VIEWS[mode]) {
+    if (mode === 'pull') {
+      set(ops, `${id}-mark`, start, {scaleX: 1, scaleY: 0});
+      tw(ops, `${id}-mark`, rt(Math.max(start, c.t0 - 0.15)), 0.6, 'power3.out', {scaleY: 0}, {scaleY: 1});
+      set(ops, `${id}-quote`, start, {opacity: 0, x: r2(40 * unit), y: 0});
+      tw(ops, `${id}-quote`, c.t0, 0.55, 'power3.out', {opacity: 0, x: r2(40 * unit)}, {opacity: 1, x: 0});
+    } else if (mode === 'bubble') {
+      set(ops, `${id}-mark`, start, {opacity: 0, x: 0, y: 0, scaleX: 0.6, scaleY: 0.6});
+      tw(ops, `${id}-mark`, rt(Math.max(start, c.t0 - 0.15)), 0.55, 'back.out(1.5)', {opacity: 0, scaleX: 0.6, scaleY: 0.6}, {opacity: 1, scaleX: 1, scaleY: 1});
+      rise(ops, model, `${id}-quote`, rt(c.t0 + 0.1), {distance: 12, duration: 0.45});
+    } else {
+      set(ops, `${id}-mark`, start, {opacity: 0, x: 0, y: r2(-40 * unit), rotation: -20});
+      tw(ops, `${id}-mark`, rt(Math.max(start, c.t0 - 0.15)), 0.55, 'back.out(1.6)', {opacity: 0, y: r2(-40 * unit), rotation: -20}, {opacity: 1, y: 0, rotation: 0});
+      set(ops, `${id}-quote`, start, {opacity: 0, x: 0, y: 0, scaleX: 0.95, scaleY: 0.95});
+      tw(ops, `${id}-quote`, c.t0, 0.6, 'power3.out', {opacity: 0, scaleX: 0.95, scaleY: 0.95}, {opacity: 1, scaleX: 1, scaleY: 1});
+      set(ops, `${id}-rule`, start, {scaleX: 0, scaleY: 1});
+      tw(ops, `${id}-rule`, rt(c.authorAt - 0.1), 0.45, 'power3.out', {scaleX: 0}, {scaleX: 1});
+    }
+    if (mode !== 'centered') pop(ops, model, `${id}-avatar`, rt(c.authorAt - 0.08), {scale: 0.4});
+    rise(ops, model, `${id}-author`, c.authorAt, {distance: 14});
+    if (c.meta && mode === 'centered') rise(ops, model, `${id}-meta`, c.authorAt, {distance: 10});
+    if (c.highlight && c.sweep) {
+      set(ops, `${id}-highlight`, start, {scaleX: 0, scaleY: 1});
+      tw(ops, `${id}-highlight`, c.highlightAt, 0.45, 'power3.out', {scaleX: 0}, {scaleX: 1});
+    }
+    return;
+  }
   pop(ops, model, `${id}-mark`, rt(Math.max(model.start, c.t0 - 0.15)), {scale: 0.5});
   rise(ops, model, `${id}-quote`, c.t0, {distance: 24, duration: 0.5});
   rise(ops, model, `${id}-author`, c.authorAt, {distance: 14});
@@ -225,16 +509,26 @@ export const quoteCard = {
   events: ['quote', 'author', 'highlight'],
   timing: cardTiming(['the author follows the quote by 0.45 s; the highlight lands 0.35 s after the author (or on a highlight hit)']),
   mood: ['editorial', 'launch'],
+  variants: QUOTE_VARIANTS,
   resolve: resolveQuote, view: quoteView, timeline: quoteTimeline
 };
 
 // ---------------------------------------------------------------------------
 // excerpt: real lines of code or text with highlights, in a window.
 
+// Variants: window (a panel, lines sliding in, a marker sweep, the original),
+// terminal (a window bar with three dots, line numbers in a gutter and a
+// cursor that steps down the lines; marked lines get a primary gutter arrow),
+// document (no panel: lines set large beside a drawn rule, marked lines
+// underlined by a sweep, the source as a footnote) and stack (each line on
+// its own chip, dropping in; marked chips light up in primary while the rest
+// dim).
+export const EXCERPT_VARIANTS = Object.freeze(['window', 'terminal', 'document', 'stack']);
+
 const PLACEHOLDER_TEXT = /lorem ipsum|dolor sit amet|\b(todo|tbd|placeholder)\b/i;
 
 function resolveExcerpt(params, ctx) {
-  const b = createCardBase('excerpt', params, ctx, {allowed: ['lines', 'type', 'title', 'source', 'highlightAt', 'at'], required: ['lines', 'source']});
+  const b = createCardBase('excerpt', params, ctx, {allowed: ['lines', 'type', 'title', 'source', 'highlightAt', 'at'], required: ['lines', 'source'], variants: EXCERPT_VARIANTS});
   const {check, u, portrait, theme, colors, start} = b;
   const p = b.params;
   const kind = p.type === undefined ? 'text' : check.oneOf(p.type, 'params.type', ['text', 'code']);
@@ -262,10 +556,50 @@ function resolveExcerpt(params, ctx) {
     const src = fitText(check, 'params.source', sourceText, {family: 'meta', width, preferred: u(28 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 2});
     const sourceGap = u(20 * k);
     const panelH = r2(padY * 2 + headH + bodyH);
-    return {padX, padY, inner: r2(inner), head, headH, size, lineH, rows, bodyH, panelH, source: src, sourceGap, height: r2(panelH + sourceGap + src.lines * src.size * 1.3)};
+    return {mode: 'window', padX, padY, inner: r2(inner), head, headH, size, lineH, rows, bodyH, panelH, source: src, sourceGap, height: r2(panelH + sourceGap + src.lines * src.size * 1.3)};
   };
-  const measure = (width, maxHeight) => pick([...b.scales.filter(k => k <= 1.25), 0.6].map(k => () => variant(width, k)), maxHeight);
-  const box = b.place(measure, {maxWidth: u(portrait ? 940 : 1640)});
+  const fitLines = (width, k, preferred) => {
+    const sizes = lines.map(line => (line.text ? fitText(check, `params.lines[${line.index}].text`, line.text.trim(), {family, width, preferred: Math.max(b.min.key, u(preferred * k)), min: b.min.key, maxLines: kind === 'code' ? 1 : 2}) : null));
+    const size = Math.min(...sizes.filter(Boolean).map(f => f.size));
+    return {size, rows: sizes.map(f => (f ? f.lines : 1))};
+  };
+  const fitSource = (width, k) => fitText(check, 'params.source', sourceText, {family: 'meta', width, preferred: u(28 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 2});
+  // terminal: a bar with dots (and the title), a gutter of line numbers.
+  const terminal = (width, k) => {
+    const padX = u(32 * Math.min(1, k)), padY = u(26 * Math.min(1, k)), barH = u(64 * Math.min(1.2, k)), gutter = u(64 * Math.min(1.2, k));
+    const inner = r2(width - padX * 2 - gutter);
+    const head = title ? fitText(check, 'params.title', title, {family: 'meta', width: r2(width - u(200)), preferred: u(28 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 1}) : null;
+    const {size, rows} = fitLines(inner - u(30), k, kind === 'code' ? 42 : 46);
+    const lineH = r2(size * (kind === 'code' ? 1.45 : 1.35)), bodyH = r2(rows.reduce((sum, n) => sum + n * lineH, 0));
+    // One more row under the lines: the prompt the cursor ends on.
+    const src = fitSource(width, k), sourceGap = u(20 * k), panelH = r2(barH + padY * 2 + bodyH + lineH);
+    return {mode: 'terminal', padX, padY, barH, gutter, inner, head, size, lineH, rows, bodyH, panelH, source: src, sourceGap, height: r2(panelH + sourceGap + src.lines * src.size * 1.3)};
+  };
+  // document: a rule down the left, the lines large, the source as a footnote.
+  const document_ = (width, k) => {
+    const rule = u(8), ruleGap = u(40 * k), inner = r2(width - rule - ruleGap);
+    const head = title ? fitText(check, 'params.title', title, {family: 'meta', width: inner, preferred: u(30 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 1}) : null;
+    const headH = head ? r2(head.size * 1.3 + u(26 * k)) : 0;
+    const {size, rows} = fitLines(inner, k, kind === 'code' ? 50 : 60);
+    const lineH = r2(size * (kind === 'code' ? 1.5 : 1.42)), bodyH = r2(rows.reduce((sum, n) => sum + n * lineH, 0));
+    const src = fitSource(inner, k), sourceGap = u(34 * k);
+    const blockH = r2(headH + bodyH);
+    return {mode: 'document', rule, ruleGap, inner, head, headH, size, lineH, rows, bodyH, blockH, source: src, sourceGap, height: r2(blockH + sourceGap + u(2) + u(14) + src.lines * src.size * 1.3)};
+  };
+  // stack: each line on a chip.
+  const stack = (width, k) => {
+    const padX = u(28 * Math.min(1, k)), padY = u(14 * Math.min(1, k)), gap = u(14 * k);
+    const head = title ? fitText(check, 'params.title', title, {family: 'meta', width, preferred: u(30 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 1}) : null;
+    const headH = head ? r2(head.size * 1.3 + u(20 * k)) : 0;
+    const {size, rows} = fitLines(r2(width - padX * 2), k, kind === 'code' ? 42 : 46);
+    const lineH = r2(size * 1.3), chips = rows.map(n => r2(n * lineH + padY * 2));
+    const src = fitSource(width, k), sourceGap = u(22 * k);
+    const bodyH = r2(chips.reduce((sum, h) => sum + h, 0) + gap * (chips.length - 1));
+    return {mode: 'stack', padX, padY, gap, head, headH, size, lineH, rows, chips, bodyH, source: src, sourceGap, height: r2(headH + bodyH + sourceGap + src.lines * src.size * 1.3)};
+  };
+  const shaped = {terminal, document: document_, stack}[b.variant];
+  const measure = (width, maxHeight) => pick([...(shaped ? b.scales.filter(k => k <= 1.25).map(k => () => shaped(width, k)) : []), ...[...b.scales.filter(k => k <= 1.25), 0.6].map(k => () => variant(width, k))], maxHeight);
+  const box = b.place(measure, {maxWidth: u(portrait ? 940 : b.variant === 'document' ? 1500 : 1640)});
   const L = box.layout;
   const t0 = b.timeOf('lines', p.at, 'params.at', 0.05);
   const step = Math.min(0.12, 0.6 / lines.length);
@@ -277,14 +611,145 @@ function resolveExcerpt(params, ctx) {
     highlightAt = b.timeOf('highlight', p.highlightAt, 'params.highlightAt', Math.min(t0 - start + step * lines.length + 0.5, b.lastEvent));
     b.events.push({id: `${b.id}-highlight`, name: 'highlight', time: highlightAt, endTime: rt(highlightAt + 0.45), role: 'emphasis', cue: 'tick'});
   } else if (p.highlightAt !== undefined) check.fail('params.highlightAt', 'needs a line with highlight: true');
-  return b.finish({box: {x: box.x, y: box.y, width: box.width}, layout: L, kind, lines: shown, title, source, sourceText, marked,
-    panel: theme.panel, border: theme.border, textColor: theme.foreground, dimColor: theme.muted, titleColor: theme.muted, sourceColor: theme.muted, mark: colors.primary, t0, highlightAt},
-  {minTextPx: L.size});
+  const content = {box: {x: box.x, y: box.y, width: box.width}, layout: L, kind, lines: shown, title, source, sourceText, marked,
+    panel: theme.panel, border: theme.border, textColor: theme.foreground, dimColor: theme.muted, titleColor: theme.muted, sourceColor: theme.muted, mark: colors.primary, t0, highlightAt};
+  if (L.mode === 'terminal') Object.assign(content, {dots: [colors.primary, colors.accent, theme.muted], cursor: colors.accent});
+  return b.finish(content, {minTextPx: L.size});
 }
+
+const lineText = (model, line, h, width, extra = {}) => {
+  const {fonts} = model;
+  const c = model.content, L = c.layout;
+  return el('div', null, abs(0, 0, width, h, {display: 'flex', alignItems: 'center', margin: 0, fontFamily: c.kind === 'code' ? fonts.meta : fonts.body, fontWeight: c.kind === 'code' ? 400 : 500, fontSize: L.size,
+    lineHeight: `${r2(L.lineH / L.size)}`, color: c.textColor, whiteSpace: c.kind === 'code' ? 'pre' : 'normal', overflowWrap: 'break-word', ...extra}), [line.text || ' ']);
+};
+const sourceLine = (model, width, extra = {}) => {
+  const {id, fonts} = model;
+  const c = model.content, L = c.layout;
+  return flowText(`${id}-source`, width, {...hidden, marginTop: L.sourceGap, fontFamily: fonts.meta, fontSize: L.source.size, lineHeight: '1.3', color: c.sourceColor, ...extra}, c.sourceText);
+};
+
+const EXCERPT_VIEWS = {
+  terminal(model) {
+    const {id, fonts, unit} = model;
+    const c = model.content, L = c.layout, B = c.box;
+    const dot = r2(16 * unit);
+    const bar = [
+      el('div', null, abs(0, 0, B.width, L.barH, {borderBottom: `${r2(2 * unit)}px solid ${c.border}`})),
+      ...c.dots.map((color, i) => el('div', null, abs(r2(L.padX + i * dot * 1.9), r2((L.barH - dot) / 2), dot, dot, {borderRadius: '50%', background: color}))),
+      c.title ? el('div', null, abs(r2(L.padX + dot * 6.5), 0, r2(B.width - L.padX * 2 - dot * 6.5), L.barH, {display: 'flex', alignItems: 'center', margin: 0, fontFamily: fonts.meta, fontSize: L.head.size, lineHeight: '1.3', color: c.titleColor, whiteSpace: 'nowrap', overflow: 'hidden'}), [c.title]) : null
+    ].filter(Boolean);
+    let y = L.barH + L.padY;
+    const rows = c.lines.map((line, i) => {
+      const h = r2(L.rows[i] * L.lineH), top = r2(y);
+      y += h;
+      return el('div', `${id}-line-${line.index}`, abs(L.padX, top, r2(B.width - L.padX * 2), h, {...hidden}), [
+        el('div', null, abs(0, 0, r2(L.gutter - 16 * unit), r2(L.lineH), {display: 'flex', alignItems: 'center', justifyContent: 'flex-end', margin: 0, fontFamily: fonts.meta, fontSize: r2(L.size * 0.72), lineHeight: '1', color: c.dimColor}), [String(line.index + 1)]),
+        line.highlight ? el('div', `${id}-mark-${line.index}`, abs(L.gutter, 0, r2(24 * unit), r2(L.lineH), {display: 'flex', alignItems: 'center', margin: 0, fontFamily: fonts.meta, fontSize: L.size, lineHeight: '1', color: c.mark}), ['›']) : null,
+        el('div', null, abs(r2(L.gutter + 30 * unit), 0, r2(L.inner - 30 * unit), h), [lineText(model, line, h, r2(L.inner - 30 * unit))])
+      ].filter(Boolean));
+    });
+    const cursorH = r2(L.lineH * 0.78);
+    const cursor = el('div', `${id}-cursor`, abs(r2(L.padX + L.gutter + 30 * unit), r2(L.barH + L.padY + (L.lineH - cursorH) / 2), r2(L.size * 0.55), cursorH, {background: c.cursor}));
+    return [column(B.x, B.y, B.width, L.height, [
+      flow(`${id}-panel`, B.width, L.panelH, {boxSizing: 'border-box', borderRadius: r2(18 * unit), background: c.panel, border: `${r2(2 * unit)}px solid ${c.border}`}, [...bar, ...rows, cursor]),
+      sourceLine(model, B.width)
+    ], {align: 'start'})];
+  },
+  document(model) {
+    const {id, fonts, unit} = model;
+    const c = model.content, L = c.layout, B = c.box;
+    let y = L.headH;
+    const rows = c.lines.map((line, i) => {
+      const h = r2(L.rows[i] * L.lineH), top = r2(y);
+      y += h;
+      return el('div', `${id}-line-${line.index}`, abs(0, top, L.inner, h, {...hidden}), [
+        line.highlight ? el('div', `${id}-mark-${line.index}`, abs(0, r2(h - 8 * unit), L.inner, r2(6 * unit), {borderRadius: r2(3 * unit), background: c.mark, transformOrigin: '0% 50%', transform: 'scale(0, 1)'})) : null,
+        lineText(model, line, h, L.inner)
+      ].filter(Boolean));
+    });
+    const head = c.title ? [el('div', null, abs(0, 0, L.inner, undefined, {margin: 0, fontFamily: fonts.meta, fontSize: L.head.size, lineHeight: '1.3', letterSpacing: '0.08em', color: c.titleColor, whiteSpace: 'nowrap', overflow: 'hidden'}), [c.title])] : [];
+    const textX = r2(L.rule + L.ruleGap);
+    return [el('div', null, abs(B.x, B.y, B.width, L.height), [
+      el('div', `${id}-rule`, abs(0, 0, L.rule, L.blockH, {borderRadius: L.rule, background: c.mark, transformOrigin: '50% 0%', transform: 'scale(1, 0)'})),
+      el('div', null, abs(textX, 0, L.inner, L.blockH), [...head, ...rows]),
+      el('div', null, abs(textX, r2(L.blockH + L.sourceGap), L.inner, undefined, {display: 'flex', flexDirection: 'column'}), [
+        flow(null, r2(Math.min(L.inner * 0.25, 140 * unit)), r2(2 * unit), {background: c.border, marginBottom: r2(14 * unit)}, []),
+        flowText(`${id}-source`, L.inner, {...hidden, fontFamily: fonts.meta, fontSize: L.source.size, lineHeight: '1.3', color: c.sourceColor}, c.sourceText)
+      ])
+    ])];
+  },
+  stack(model) {
+    const {id, fonts, unit} = model;
+    const c = model.content, L = c.layout, B = c.box;
+    const chips = c.lines.map((line, i) => flow(`${id}-line-${line.index}`, B.width, L.chips[i], {...hidden, boxSizing: 'border-box', borderRadius: r2(14 * unit), background: c.panel, border: `${r2(2 * unit)}px solid ${c.border}`, marginTop: i ? L.gap : 0, transformOrigin: '50% 50%'}, [
+      // A marked chip gets a primary outline and an edge bar.
+      line.highlight ? el('div', `${id}-mark-${line.index}`, abs(r2(-2 * unit), r2(-2 * unit), r2(B.width), L.chips[i], {boxSizing: 'border-box', borderRadius: r2(14 * unit), border: `${r2(3 * unit)}px solid ${c.mark}`, opacity: 0})) : null,
+      line.highlight ? el('div', `${id}-edge-${line.index}`, abs(r2(10 * unit), L.padY, r2(6 * unit), r2(L.chips[i] - L.padY * 2), {borderRadius: r2(3 * unit), background: c.mark, transformOrigin: '50% 50%', transform: 'scale(1, 0)'})) : null,
+      el('div', null, abs(L.padX, L.padY, r2(B.width - L.padX * 2), r2(L.chips[i] - L.padY * 2)), [lineText(model, line, r2(L.chips[i] - L.padY * 2), r2(B.width - L.padX * 2))])
+    ].filter(Boolean)));
+    const head = c.title ? flowText(null, B.width, {marginBottom: r2(L.headH - L.head.size * 1.3), fontFamily: fonts.meta, fontSize: L.head.size, lineHeight: '1.3', letterSpacing: '0.08em', color: c.titleColor}, c.title) : null;
+    return [column(B.x, B.y, B.width, L.height, [head, ...chips, sourceLine(model, B.width)].filter(Boolean), {align: 'start'})];
+  }
+};
+
+const EXCERPT_TIMELINES = {
+  terminal(model, ops) {
+    const {id, start} = model;
+    const c = model.content, L = c.layout;
+    let y = 0;
+    const tops = c.lines.map((_, i) => { const top = y; y += L.rows[i] * L.lineH; return r2(top); });
+    tops.push(r2(y));
+    set(ops, `${id}-cursor`, start, {opacity: 0, x: 0, y: 0});
+    tw(ops, `${id}-cursor`, rt(Math.max(start, c.t0 - 0.1)), 0.1, 'none', {opacity: 0}, {opacity: 1});
+    c.lines.forEach((line, i) => {
+      set(ops, `${id}-line-${line.index}`, start, {opacity: 0});
+      tw(ops, `${id}-line-${line.index}`, line.time, 0.18, 'power1.out', {opacity: 0}, {opacity: 1});
+      // As a line shows, the cursor steps down to the row under it (the last
+      // ends on the prompt row).
+      tw(ops, `${id}-cursor`, line.time, 0.1, 'power2.out', {y: tops[i]}, {y: tops[i + 1]});
+    });
+    if (c.marked) for (const line of c.lines) {
+      if (line.highlight) pop(ops, model, `${id}-mark-${line.index}`, c.highlightAt, {scale: 0.3, duration: 0.4});
+      else tw(ops, `${id}-line-${line.index}`, c.highlightAt, 0.35, 'power1.out', {opacity: 1}, {opacity: 0.45});
+    }
+  },
+  document(model, ops) {
+    const {id, start} = model;
+    const c = model.content;
+    set(ops, `${id}-rule`, start, {scaleX: 1, scaleY: 0});
+    tw(ops, `${id}-rule`, rt(Math.max(start, c.t0 - 0.1)), 0.7, 'power3.out', {scaleY: 0}, {scaleY: 1});
+    for (const line of c.lines) {
+      rise(ops, model, `${id}-line-${line.index}`, line.time, {distance: 18, duration: 0.45});
+      if (c.marked && line.highlight) {
+        set(ops, `${id}-mark-${line.index}`, start, {scaleX: 0, scaleY: 1});
+        tw(ops, `${id}-mark-${line.index}`, c.highlightAt, 0.5, 'power3.inOut', {scaleX: 0}, {scaleX: 1});
+      } else if (c.marked) tw(ops, `${id}-line-${line.index}`, c.highlightAt, 0.35, 'power1.out', {opacity: 1}, {opacity: 0.5});
+    }
+  },
+  stack(model, ops) {
+    const {id, start, unit} = model;
+    const c = model.content;
+    for (const line of c.lines) {
+      const target = `${id}-line-${line.index}`;
+      set(ops, target, start, {opacity: 0, x: 0, y: r2(-28 * unit), rotation: -2});
+      tw(ops, target, line.time, 0.45, 'back.out(1.4)', {opacity: 0, y: r2(-28 * unit), rotation: -2}, {opacity: 1, y: 0, rotation: 0});
+      if (!c.marked) continue;
+      if (line.highlight) {
+        set(ops, `${id}-mark-${line.index}`, start, {opacity: 0});
+        tw(ops, `${id}-mark-${line.index}`, c.highlightAt, 0.3, 'power2.out', {opacity: 0}, {opacity: 1});
+        set(ops, `${id}-edge-${line.index}`, start, {scaleX: 1, scaleY: 0});
+        tw(ops, `${id}-edge-${line.index}`, c.highlightAt, 0.4, 'power3.out', {scaleY: 0}, {scaleY: 1});
+        tw(ops, target, c.highlightAt, 0.4, 'back.out(2)', {scaleX: 0.96, scaleY: 0.96}, {scaleX: 1, scaleY: 1});
+      } else tw(ops, target, c.highlightAt, 0.35, 'power1.out', {opacity: 1}, {opacity: 0.45});
+    }
+  }
+};
 
 function excerptView(model) {
   const {id, fonts, unit} = model;
   const c = model.content, L = c.layout, B = c.box;
+  if (EXCERPT_VIEWS[L.mode]) return EXCERPT_VIEWS[L.mode](model);
   const family = c.kind === 'code' ? fonts.meta : fonts.body;
   let y = L.padY + L.headH;
   const rows = c.lines.map((line, i) => {
@@ -311,6 +776,11 @@ function excerptView(model) {
 function excerptTimeline(model, ops) {
   const {id} = model;
   const c = model.content;
+  if (EXCERPT_TIMELINES[c.layout.mode]) {
+    EXCERPT_TIMELINES[c.layout.mode](model, ops);
+    rise(ops, model, `${id}-source`, rt(c.t0 + 0.3), {distance: 10});
+    return;
+  }
   for (const line of c.lines) {
     const target = `${id}-line-${line.index}`;
     set(ops, target, model.start, {opacity: 0, x: r2(-14 * model.unit), y: 0});
@@ -333,5 +803,6 @@ export const excerpt = {
   events: ['lines', 'highlight'],
   timing: cardTiming(['lines reveal from at, one every min(0.12, 0.6 / lines) s; the highlight follows 0.5 s after the last']),
   mood: ['editorial', 'launch'],
+  variants: EXCERPT_VARIANTS,
   resolve: resolveExcerpt, view: excerptView, timeline: excerptTimeline
 };

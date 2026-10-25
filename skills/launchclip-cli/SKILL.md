@@ -190,6 +190,18 @@ style create <name> --from-reference a.mp4 [b.mp4 ...]`, review its
 <project> --against <name>`. Upgrade v1 packs with `launchclip style upgrade
 <name>`.
 
+With no style and no brand (no `--style`, brand.json or logo), `make` and
+`story plan` generate a seeded style, save it as
+`.launchclip/styles/seed-<hex>/style.json`, name it in the storyboard and
+print one line (`style: seed 7f3a91c2 (dark, playful, Unbounded / Inter)`).
+The project then keeps it. `--seed <hex>` makes a given look again.
+`launchclip style reroll [<project>] [--tone <tone>] [--undo]` is "a different
+look": it keeps the art-direction constraints and changes the seed. Run
+`launchclip finish` to render it. `launchclip style keep <project> --as
+<name>` saves a look to `~/.launchclip/styles/<name>`. `launchclip style
+generate [--seed] [--tone] [--theme] [--world] … [--out | --project]` writes a
+pack directly.
+
 Style management is local and makes no model calls. Do not overwrite a pack
 unless the user explicitly authorizes `--force`. Keep `.launchclip/styles/**`
 in source control when the visual identity should be shared; leave generated

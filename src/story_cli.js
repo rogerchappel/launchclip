@@ -14,6 +14,7 @@ import { readStoryEdl } from "./story_loader.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
 import { resolveStyleV2 } from "./style_store.js";
+import { constraintFlags, generateProjectStyle, projectSeedStyle, promptTone, adoptStyleLook } from "./style_seed_store.js";
 import { DIRECTION_FILE, DIRECTION_LANES, directionJson, directionMeasures, validateDirection } from "../kit/core/direction.mjs";
 import { compareMeasures } from "../kit/core/profiles.mjs";
 import { profileForStory } from "./profile_store.js";
@@ -258,8 +259,18 @@ export async function planStoryCommand(flags = {}, adapters = {}) {
   const warnings = [];
   // --style <name|path>: plan for a channel style pack (its preferences,
   // avoid list and caption preset go into the prompt; the storyboard names it).
-  const style = flags.style && flags.style !== true ? await resolveStyleV2(String(flags.style), { projectDir: outDir }) : null;
+  if (flags.seed && flags.style) throw new Error("--seed generates a style; pass --seed or --style, not both");
+  let style = flags.style && flags.style !== true ? await resolveStyleV2(String(flags.style), { projectDir: outDir }) : null;
   if (style) warnings.push(...style.warnings);
+  // No style and no brand: a seeded style (docs/SEEDED_STYLES_RFC.md §4),
+  // reused when the storyboard already names one; --seed picks a look.
+  let generated = null;
+  if (!style && (flags.seed || !flags.brand)) {
+    const existing = flags.seed ? null : await projectSeedStyle(outDir, { storyFile: out });
+    generated = existing ?? await generateProjectStyle(outDir, { seed: flags.seed && flags.seed !== true ? String(flags.seed) : undefined, tone: promptTone(brief, flags.tone && flags.tone !== true ? String(flags.tone) : null), constraints: constraintFlags(flags), ...(adapters.clock ? { clock: adapters.clock } : {}) });
+    style = { name: generated.name, pack: generated.pack, file: generated.file, source: existing ? "project" : "generated", warnings: [] };
+    (adapters.notice ?? ((line) => process.stderr.write(`${line}\n`)))(generated.line);
+  }
   const brand = flags.brand ? await readJson(path.resolve(String(flags.brand)), "brand.json") : style ? undefined : DEFAULT_BRAND;
   const audio = {};
   if (words) {
@@ -315,7 +326,7 @@ export async function planStoryCommand(flags = {}, adapters = {}) {
     status: report.status,
     tier: report.tier,
     lane: report.lane,
-    style: style ? { name: style.name, source: style.source, file: style.file } : null,
+    style: style ? { name: style.name, source: style.source, file: style.file, ...(generated ? { seed: style.pack.generated.seed, summary: generated.summary } : {}) } : null,
     subject: subject ? { usable: subject.usable, framing: subject.framing, ...(subject.usable ? {} : { reasons: subject.reasons }) } : null,
     profile: report.profile,
     direction: report.direction ? { out: path.join(outDir, DIRECTION_FILE), source: report.direction_source, attempts: report.direction_attempts.length, ...(report.cadence ? { coverage: report.cadence.coverage, face_time: report.cadence.face_time, longest_undressed_seconds: report.cadence.longest_undressed_seconds } : {}) } : null,
@@ -330,7 +341,7 @@ export async function planStoryCommand(flags = {}, adapters = {}) {
     warnings: [...warnings, ...report.warnings]
   };
   if (report.status === "passed") {
-    await writeJson(out, report.storyboard);
+    await writeJson(out, generated ? adoptStyleLook(report.storyboard, style.pack) : report.storyboard);
     if (report.direction) await writeFile(path.join(outDir, DIRECTION_FILE), directionJson(report.direction));
     return summary;
   }

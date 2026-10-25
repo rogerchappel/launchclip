@@ -15,7 +15,7 @@
 // Times are absolute seconds. Imports only sibling kit/core files.
 
 import {set, tw} from '../catalog-b-view.mjs';
-import {poseJoints} from './rig.mjs';
+import {HELD_AIDS, poseJoints} from './rig.mjs';
 
 export const ACTING = Object.freeze({poseTween: 0.45, poseEase: 'power2.inOut', faceFade: 0.16, breath: 1.7, sway: 2.6, swayDeg: 1.4, blinkEvery: 3.4, blinkDown: 0.06, blinkUp: 0.09});
 
@@ -53,12 +53,24 @@ function phase(id) {
 /**
  * Joint values for a pose in a scene, with a held prop's arm. holds: 'phone'
  * puts the other arm (not the facing one) in front of the chest whenever the
- * pose leaves that arm at rest.
+ * pose leaves that arm at rest. params.mobility: a wheelchair seats the lower
+ * body in any set; a cane or crutch keeps its arm (away from the facing
+ * side) at rest, so the aid stays on the floor.
  */
-export function sceneJoints(pose, {facing, seated, geometry, holds = null}) {
-  const j = poseJoints(pose, {facing, seated, geometry});
-  if (holds === 'phone') {
+export function sceneJoints(pose, {facing, seated, geometry, holds = null, params = null}) {
+  const aid = HELD_AIDS.includes(params?.mobility);
+  const j = poseJoints(pose, {facing, seated: seated || params?.mobility === 'wheelchair', geometry});
+  if (aid) {
+    // A cane or crutch stays in the hand away from the facing side, at rest.
     const side = facing === 'left' ? 'R' : 'L';
+    j[`arm${side}`] = 8;
+    j[`fore${side}`] = 2;
+    j[`finger${side}`] = 0;
+    if (j.gesture && (j.gesture.joint === 'fore' || j.gesture.joint === `fore${side}`)) j.gesture = null;
+  }
+  if (holds === 'phone') {
+    // With a cane in the other hand, the phone goes in the facing hand.
+    const side = (facing === 'left') !== aid ? 'R' : 'L';
     const rest = Math.abs(j[`arm${side}`]) <= 20 && j[`fore${side}`] > -60 && j[`fore${side}`] < 60;
     if (rest || pose === 'type') {
       j[`arm${side}`] = 16;
