@@ -24,8 +24,9 @@ import {EXPRESSIONS, HAIR_STYLES, POSES, normalizeRigParams, rigFingerprint} fro
 import {STARTER_IDS, characterLook, starterCharacter} from './cast.mjs';
 import {BRAND_ROLES, isColorName} from './palette.mjs';
 import {SEATED_SETS, SETS} from './sets.mjs';
+import {DRAWING_STYLES} from './styles.mjs';
 
-export const DRAWING_STYLES = Object.freeze(['flat']);
+export {DRAWING_STYLES};
 export const KOKORO_VOICES = Object.freeze([
   'af_alloy', 'af_aoede', 'af_bella', 'af_heart', 'af_jessica', 'af_kore', 'af_nicole', 'af_nova', 'af_river', 'af_sarah', 'af_sky',
   'am_adam', 'am_echo', 'am_eric', 'am_fenrir', 'am_liam', 'am_michael', 'am_onyx', 'am_puck', 'am_santa',
