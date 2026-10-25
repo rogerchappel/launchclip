@@ -1708,7 +1708,10 @@ the story through `story.cast` (the style merge fills it).
   a local Kokoro voice id) or, for `"narrator"`, in `audio.narration.voice`;
   the takes are joined with a 0.3 s pause and every word keeps its `speaker`
   in NARRATION.json. A cast entry's `says: "auto"` resolves to that
-  character's own words in the scene.
+  character's own words in the scene. `launchclip voice <project>` voices a
+  dialogue story the same way (the same cached per-line takes `finish`
+  uses), writes NARRATION.json with `lines` and each word's `speaker`, and
+  reports the measured duration with one row per line.
 - `launchclip cast sheet <project>` (`src/cast.js`) renders every character
   in every pose and expression the scenes and the direction map use, with the
   modules' own view tree, to `qa/cast-sheet.png` (+ `qa/cast-sheet.json`:

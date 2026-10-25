@@ -71,7 +71,7 @@ test("launchclip voice --text needs no project; --voice takes a provider or a vo
     // A voice id is passed through as the voice (the provider still comes from --provider).
     const report = await runVoiceCommand(null, { text: TEXT, provider: "test", voice: "alto", out }, { env });
     assert.equal(report.request.voice, "alto");
-    await assert.rejects(runVoiceCommand(null, {}, { env }), /needs a project with audio.narration.text, or --text/);
+    await assert.rejects(runVoiceCommand(null, {}, { env }), /needs a project with audio.narration.text \(or dialogue lines\), or --text/);
     await assert.rejects(runVoiceCommand(null, { text: TEXT, provider: "nope" }, { env }), /Unknown voice provider/);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -111,3 +111,42 @@ test("finish synthesises from the cached take launchclip voice measured", async 
     await rm(project, { recursive: true, force: true });
   }
 });
+
+// Joining dialogue lines runs ffmpeg, which the CI test jobs lack.
+test("launchclip voice voices a dialogue story line by line, with each word's speaker", async (t) => {
+  const { execFile } = await import("node:child_process");
+  try { await new Promise((resolve, reject) => execFile("ffmpeg", ["-version"], (error) => error ? reject(error) : resolve())); } catch { t.skip("ffmpeg is unavailable"); return; }
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-voice-dialogue-"));
+  try {
+    const story = JSON.parse(await readFile(path.join(ROOT, "examples/story/characters-16x9/storyboard.json"), "utf8"));
+    story.audio.narration.provider = "test";
+    story.audio.narration.lines = story.audio.narration.lines.slice(1, 4);
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story));
+    const { createTestVoiceProvider } = await import("../src/voice/index.js");
+    const requests = [];
+    const voiceProvider = () => { const real = createTestVoiceProvider(); return { name: "test", synthesize: (request) => { requests.push(request); return real.synthesize(request); } }; };
+    const io = capture();
+    await runCli(["voice", project], { ...io, productionAdapters: { voice: { voiceProvider } } });
+    assert.match(io.out, /^voice: test dialogue \(narrator:bf_emma, maya:bf_emma, theo:bf_emma\)/);
+    assert.match(io.out, /lines: 3/);
+    assert.match(io.out, / 2 .* maya +word:not +Not again/);
+    assert.equal(requests.length, 3, "one take per line");
+    const narration = JSON.parse(await readFile(path.join(project, "NARRATION.json"), "utf8"));
+    assert.equal(narration.schema_version, "launchclip.narration.v1");
+    assert.deepEqual([...new Set(narration.words.map((word) => word.speaker))], ["narrator", "maya", "theo"]);
+    assert.deepEqual(narration.lines.map((line) => line.speaker), ["narrator", "maya", "theo"]);
+    assert.equal(narration.lines[1].text, "Not again. Three hours, gone.");
+    assert.ok(existsSync(path.join(project, "assets/audio/narration.wav")));
+    const again = await runVoiceCommand(project, {}, { voiceProvider });
+    assert.equal(again.cached, true);
+    assert.equal(again.duration_seconds, narration.duration_seconds);
+    assert.ok(again.duration_seconds >= narration.lines.at(-1).end - 0.001);
+    // Speed reaches every line, and is a new set of takes.
+    const faster = await runVoiceCommand(project, { speed: "1.5" }, { voiceProvider });
+    assert.equal(faster.cached, false);
+    assert.ok(faster.duration_seconds < again.duration_seconds);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+

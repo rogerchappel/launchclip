@@ -49,7 +49,7 @@ import { collectTyping, renderTypingTrack, typingSchedule } from "./sfx/typing.j
 import { getMusicProvider, parseMusicSpec, resolveMusicChoice, MUSIC_FLAG_VALUES } from "./music/index.js";
 import { lockDecision, musicBrief, readMusicLock, writeMusicLock } from "./music/lock.js";
 import { narrationCacheKey, narrationDocument, narrationRequest, synthesizeNarration, voiceCacheDir } from "./voice/narrate.js";
-import { dialogueRequests, dialogueText, synthesizeDialogue } from "./voice/dialogue.js";
+import { dialogueDocument, dialogueRequests, synthesizeDialogue } from "./voice/dialogue.js";
 import { CANDIDATE_OUTPUT, candidateAudio, FREE_VOICE_PROVIDERS, recordCandidate } from "./candidate_receipt.js";
 import { analyzeBeatsFile, beatsDocument, gridFromBpm, transformGrid } from "./music/beats.js";
 import { BEAT_SYNC_SCHEMA, chooseAlignment, keyMoments, momentReport, snapStory, summarizeMoments, syncStrategy } from "./music/beat_sync.js";
@@ -626,7 +626,7 @@ const STAGES = [
       if (request.dialogue) {
         const take = await synthesizeDialogue(request.dialogue, { outFile, cacheDir: voiceCacheDir(ctx.project), voiceProvider: ctx.adapters.voiceProvider, normalizeVoice: ctx.adapters.normalizeVoice });
         const first = request.dialogue[0].request;
-        await writeJson(path.join(ctx.project, PATHS.words), { ...narrationDocument({ ...first, voice: null, text: dialogueText(ctx.copy) }, take), lines: take.lines });
+        await writeJson(path.join(ctx.project, PATHS.words), dialogueDocument(ctx.copy, request.dialogue, take));
         const details = { provider: first.provider, voice: null, voices: [...new Set(take.lines.map((line) => `${line.speaker}:${line.voice}`))], speed: first.speed, duration_seconds: take.duration, word_count: take.words.length, voice_file: PATHS.voice, words_file: PATHS.words, cached_take: take.cached };
         STAGES[0].restore(ctx, details);
         return details;
