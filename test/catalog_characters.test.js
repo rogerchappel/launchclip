@@ -1,0 +1,120 @@
+// Character modules (kit/core/catalog-characters.mjs): cast-scene and
+// character-cameo, in the registry and both renderers.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+import {runInNewContext} from 'node:vm';
+import gsap from 'gsap';
+import {MODULES, charactersTimeline, charactersView} from '../kit/core/catalog-characters.mjs';
+import {frameState} from '../kit/core/catalog-b-view.mjs';
+import {EMITTERS} from '../kit/hyperframes/catalog-characters.mjs';
+import {knownModules, resolveModule} from '../kit/core/modules.mjs';
+import {resolveStory, validateStory} from '../kit/core/story.mjs';
+import {castConsistency} from '../kit/core/characters/cues.mjs';
+
+const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
+const story = (scenes, extra = {}) => ({schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1920, height: 1080, fps: 30, duration: 8}, brand, cast: {characters: [{id: 'maya'}, {id: 'theo'}]}, scenes, ...extra});
+const desk = (params = {}) => ({id: 'desk', module: 'cast-scene', start: 0, end: 6, params: {set: 'desk-laptop', cast: [
+  {id: 'maya', pose: 'type', expression: 'focused', cues: [{at: 2, pose: 'slump', expression: 'frustrated'}, {at: 4, pose: 'cheer', expression: 'delighted'}], says: [{from: 0.5, to: 1.5}]},
+  {id: 'theo', cues: [{at: 3, pose: 'point', expression: 'happy'}]}], ...params}});
+const resolve = (scene, extra) => { const s = story([scene], extra); return resolveModule(scene, s); };
+
+test('character modules are registered in the module registry, HyperFrames and Remotion', () => {
+  const ids = ['cast-scene', 'character-cameo'];
+  for (const id of ids) assert.ok(knownModules().includes(id), id);
+  assert.deepEqual(Object.keys(EMITTERS).sort(), ids);
+  const registry = readFileSync(fileURLToPath(new URL('../kit/remotion/catalog/registry-characters.ts', import.meta.url)), 'utf8');
+  for (const id of ids) assert.match(registry, new RegExp(`'${id}': \\w+`));
+  assert.match(readFileSync(fileURLToPath(new URL('../kit/remotion/modules/index.ts', import.meta.url)), 'utf8'), /registry-characters/);
+  for (const id of ids) assert.ok(MODULES[id].timing.minDuration >= 2 && MODULES[id].describe.length > 20);
+});
+
+test('cast-scene: seated set, cues in order, actors carry their cast identity', () => {
+  const model = resolve(desk());
+  assert.equal(model.content.set, 'desk-laptop');
+  assert.equal(model.content.seated, true);
+  const [mayaActor, theoActor] = model.content.actors;
+  assert.deepEqual(mayaActor.states.map(s => [s.time, s.pose, s.expression]), [[0, 'type', 'focused'], [2, 'slump', 'frustrated'], [4, 'cheer', 'delighted']]);
+  assert.equal(theoActor.states[0].pose, 'sit', 'a seated set seats an actor with no pose');
+  assert.ok(mayaActor.x < theoActor.x);
+  assert.ok(mayaActor.speech.length > 4);
+  assert.deepEqual(model.events.filter(e => e.name.includes('cue')).map(e => e.name), ['maya-cue-0', 'theo-cue-0', 'maya-cue-1']);
+  assert.deepEqual(castConsistency(story([desk()]), [model]), []);
+});
+
+test('cast-scene refuses invented screens, wrong poses for the set and unknown characters', () => {
+  assert.throws(() => resolve({...desk(), params: {set: 'screen', cast: [{id: 'maya'}]}}), /params\.screen is required .*never invents a UI/);
+  assert.throws(() => resolve(desk({screen: {src: 'assets/app.png'}})), /not used by the desk-laptop set/);
+  assert.throws(() => resolve({...desk(), params: {set: 'screen', screen: {src: 'https://example.com/a.png'}, cast: [{id: 'maya'}]}}), /project-local assets/);
+  assert.throws(() => resolve(desk({cast: [{id: 'maya', pose: 'walk'}]})), /walk does not fit the seated set/);
+  assert.throws(() => resolve({...desk(), params: {set: 'phone', cast: [{id: 'maya', pose: 'sit'}]}}), /sit needs a seated set/);
+  assert.throws(() => resolve(desk({cast: [{id: 'kwame'}]})), /"kwame" is not in the story cast/);
+  assert.throws(() => resolve(desk({cast: [{id: 'maya'}, {id: 'maya'}]})), /names a character twice/);
+  assert.throws(() => resolve(desk({cast: [{id: 'maya', cues: [{at: 'word:again', pose: 'slump'}]}]})), /word anchor that was not resolved/);
+  assert.throws(() => resolve(desk({cast: [{id: 'maya', cues: [{at: 5.9, pose: 'slump'}]}]})), /cues\[0\]\.at must be between 0 and 5\.55/);
+  assert.throws(() => resolve(desk({cast: [{id: 'maya', cues: [{at: 1, pose: 'slump'}, {at: 1.2, pose: 'think'}]}]})), /closer than 0\.45 s/);
+  assert.throws(() => resolve(desk({cast: [{id: 'maya'}, {id: 'theo'}, {id: 'maya'}, {id: 'theo'}]})), /params\.cast must be an array of 1–3/);
+});
+
+test('cast-scene with a real capture: the screen media sits between the set and the cast', () => {
+  const scene = {id: 'demo', module: 'cast-scene', start: 1, end: 5, params: {set: 'screen', screen: {src: 'assets/demo/sign-in.mp4'}, cast: [{id: 'maya', pose: 'point', expression: 'happy'}]}};
+  const model = resolve(scene);
+  const view = charactersView(model);
+  assert.equal(view.media.tag, 'video');
+  assert.equal(view.media.attrs.src, 'assets/demo/sign-in.mp4');
+  assert.equal(view.overlay.id, 'demo-overlay');
+  const out = EMITTERS['cast-scene'](model);
+  assert.match(out.html, /<video id="demo-media"[^>]*data-media-start="0"/);
+  assert.match(out.overlay, /id="demo-overlay"/);
+  const state = frameState(charactersTimeline(model), 3);
+  for (const id of ['demo', 'demo-media', 'demo-overlay']) assert.equal(state.get(id).opacity, 1, `${id} fades in with the scene`);
+  assert.equal(model.content.actors[0].facing, 'left', 'the cast faces the screen');
+});
+
+test('the op list renders the same through GSAP as through frameState', () => {
+  const model = resolve(desk());
+  const ops = charactersTimeline(model);
+  const {motion} = EMITTERS['cast-scene'](model);
+  assert.doesNotMatch(motion, /onUpdate|Math\.random|Date/);
+  const targets = new Map();
+  const real = gsap.timeline({paused: true});
+  const target = selector => { if (!targets.has(selector)) targets.set(selector, {}); return targets.get(selector); };
+  runInNewContext(motion, {tl: {set: (s, v, p) => real.set(target(s), v, p), fromTo: (s, f, t, p) => real.fromTo(target(s), f, t, p)}});
+  for (const t of [0.3, 1.1, 2.2, 2.31, 3.05, 4.2, 5.0, 1.7, 0.05]) {
+    real.seek(t, false);
+    for (const [id, props] of frameState(ops, t)) {
+      const object = targets.get(`#${id}`);
+      for (const [key, value] of Object.entries(props)) {
+        if (object?.[key] === undefined) continue;
+        assert.ok(Math.abs(object[key] - value) < 1e-3, `${id}.${key} at ${t}: gsap ${object[key]} vs frameState ${value}`);
+      }
+    }
+  }
+});
+
+test('character-cameo: a card beside one character; sit is refused', () => {
+  const scene = {id: 'cameo', module: 'character-cameo', start: 0, end: 4, params: {character: 'kwame', pose: 'wave', expression: 'happy', card: {kicker: 'Step two', title: 'Connect your repo'}}};
+  const model = resolveModule(scene, {...story([scene]), cast: undefined, format: {width: 1080, height: 1920, fps: 30, duration: 4}});
+  assert.equal(model.content.actors[0].id, 'kwame');
+  assert.ok(model.content.cardBox.titleSize >= 44);
+  assert.equal(model.content.panel, null, 'no panel behind a character with a card');
+  assert.match(EMITTERS['character-cameo'](model).html, /Connect your repo/);
+  assert.throws(() => resolveModule({...scene, params: {character: 'kwame', pose: 'sit'}}, {...story([scene]), cast: undefined}), /sit needs a seated set/);
+  assert.throws(() => resolveModule({...scene, params: {character: 'nobody'}}, {...story([scene]), cast: undefined}), /params\.character "nobody" is not a starter/);
+});
+
+test('story: cast is a story field; word anchors in cues and lines resolve to scene seconds', () => {
+  const scene = {id: 'desk', module: 'cast-scene', start: 'word:Every', end: 6, params: {set: 'desk-laptop', cast: [
+    {id: 'maya', pose: 'type', cues: [{at: 'word:again', pose: 'slump', expression: 'frustrated'}], says: [{from: 'word:It', to: 'word:again'}]}]}};
+  const s = story([scene]);
+  const result = validateStory(s);
+  assert.ok(!result.warnings.some(w => /cast is not a story/.test(w)), 'cast is a known story field');
+  const words = ['Every', 'morning', 'It', 'broke', 'again'].map((text, i) => ({text, start: 0.5 + i * 0.5, end: 0.9 + i * 0.5}));
+  const resolved = resolveStory(s, {words});
+  const actor = resolved.scenes[0].params.cast[0];
+  assert.equal(actor.cues[0].at, 2, '"again" starts 2 s after the scene start');
+  assert.deepEqual(actor.says[0], {from: 1, to: 2.4, words: [[1, 1.4], [1.5, 1.9], [2, 2.4]]});
+  const model = resolveModule(resolved.scenes[0], resolved);
+  assert.equal(model.content.actors[0].states[1].time, 2.5);
+});

@@ -1492,6 +1492,97 @@ conventions apply (`createFootageBase`, `at` from the scene start, hits).
 - **Face rule.** The head box follows the base camera (`cameraOps`) at
   every frame, so pans, punch-ins and framed windows move it.
 
+## Character modules (`kit/core/catalog-characters.mjs`)
+
+Animated characters drawn in code ([VIDEO_QUALITY_RFC.md](VIDEO_QUALITY_RFC.md)
+§10.5, §6.3). Same view shape as catalogue E (`{front, media, overlay}`); the
+HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
+`PartsModule`.
+
+| Module | Params | Events | Notes |
+| --- | --- | --- | --- |
+| `cast-scene` | `set` desk-laptop/phone/meeting/screen, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `cast` 1–3 `{id, pose?, expression?, facing?, cues?: [{at, pose?, expression?}], says?: [{from, to, words?}], holds?: phone}` | `<character>-cue-<i>` | Fills the frame and fades in place. Seated sets (desk-laptop, meeting) seat the cast and refuse `walk`; standing sets refuse `sit`. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
+| `character-cameo` | `character`, `pose?`, `expression?`, `facing?`, `cues?`, `says?`, `side` left/right, `card?` `{kicker? ≤ 32, title ≤ 64, body? ≤ 140}`, `panel?` | `<character>-cue-<i>` | One character beside a card (landscape: a column; portrait: under the card), or alone on a panel. `sit` is refused |
+
+### The kit (`kit/core/characters/`)
+
+- `rig.mjs`: rig params `{build, height, skin, hair: {style, color}, outfit:
+  {top, bottom}, accessories, colors: {top, bottom, shoes, accent}}`
+  (`normalizeRigParams` fixes the key order, so equal characters serialise
+  identically), body measurements (`rigGeometry`), the named poses
+  (`stand point wave slump type think cheer shrug walk sit`) as joint angles,
+  and the named expressions (`neutral happy delighted frustrated confused
+  surprised focused`) as face parts. Positive arm and leg angles swing a limb
+  away from the body on its own side.
+- `palette.mjs`: skin tones, hair colours, clothing neutrals and brand roles.
+  A colour slot is a palette name, a brand role (`primary accent paper ink
+  bg`) or a hex. Roles come from the story brand, overridden by the cast's
+  colour mapping.
+- `cast.mjs`: the starter cast (24 characters). Ids are stable and never
+  change once shipped.
+- `style-flat.mjs`: the drawing style "flat" (flat fills, a dark outline).
+  A drawing style is a function of (params, colours, joints, expressions);
+  another style can be added beside it without touching the rig.
+- `view.mjs`: GSAP animates SVG transforms through the transform attribute
+  with its own origin rules, so every joint is a zero-size HTML div (an outer
+  div places the pivot, an inner div with the joint's id carries the CSS
+  transform about `0px 0px`); runs of shapes become overflow-visible SVGs in
+  drawing order.
+- `acting.mjs`: one actor's states → ops. A pose change tweens every joint
+  over 0.45 s (`power2.inOut`); gestures loop whole cycles while a pose holds
+  and end on the pose; breathing, a head sway and blinks run on their own
+  groups; expressions crossfade over 0.16 s; mouths open on spoken words (two
+  flaps on a long word, a steady rhythm when a range has no word timings).
+- `sets.mjs`: the room, furniture and slots for each set.
+- `cues.mjs`: story casts, direction-map cues and the consistency check.
+
+Part ids for character `i` of scene `S` (`C = S-c<i>`): `C-body`, `C-torso`,
+`C-breath`, `C-head`/`C-hb` (head and the hair behind it), `C-headidle`,
+`C-arm-l|r`, `C-fore-l|r`, `C-fingerwrap-l|r`, `C-leg-l|r`, `C-shin-l|r`,
+`C-face-<expression>`, `C-eyes-<expression>`, `C-mouth-<expression>`,
+`C-open-<expression>`.
+
+### Story cast (`story.cast`)
+
+```json
+{ "style": "flat", "colors": { "primary": "teal" },
+  "characters": [ { "id": "maya", "voice": "af_heart" },
+                  { "id": "sam", "from": "theo", "hair": { "style": "curly" } },
+                  { "id": "riley", "skin": "deep", "hair": { "style": "locs", "color": "black" } } ] }
+```
+
+An id (or `from`) naming a starter starts from its params; the fields given
+override them. Other ids need their own skin and hair. When the cast lists
+characters, scenes may only use those; without a cast, scenes may use any
+starter. Scenes name characters by id and never carry params, so a
+character cannot change inside a story. `storyCastErrors(cast)` and
+`resolveStoryCast(story)` validate it; a style pack's cast mapping reaches
+the story through `story.cast` (the style merge fills it).
+
+### Cues and anchors
+
+- Scene params: `cues[].at` and `says[].from/to` are seconds from the scene
+  start, or story time anchors (`"word:again"`). `resolveStory`
+  (`resolveCastAnchors`) turns anchors into scene seconds and gives each
+  spoken range the timing of its words, so mouths move on the voice.
+- Narrative direction-map lines (RFC §6.3) carry `cast: [{id, pose?,
+  expression?, at?}]` and `set`. `validateCastCues(line, cast)` → error
+  strings: unknown characters, poses, expressions or sets, malformed `at`,
+  `walk` in a seated set, `sit` in a standing one. `resolveCastCues(line,
+  {words})` → `[{id, pose?, expression?, time, word}]`; `at` is
+  `"word:<text>[#n]"` (searched in the line's words first), `start`, `end` or
+  a word index. `sceneCastCues(map, sceneId, {words, start})` gathers a
+  scene's cues as params.
+- `castConsistency(story, models)` → findings when a scene's character is
+  drawn from different params or colours than the story cast, or differs
+  between scenes.
+
+### Parity
+
+`test/fixtures/parity/characters-*.json` (every set, both orientations, a
+screen with a video and with an image, a cameo with a card) through
+`scripts/parity.mjs`.
+
 ## Catalogue F (`kit/core/catalog-f.mjs`)
 
 The style-gated creative set around the presenter

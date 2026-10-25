@@ -43,8 +43,9 @@ const NUMERIC = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/;
 const EPS = 1e-6;
 // style: a style pack (src/story_style.js merges it before validation);
 // motion, camera, ambient, layout: style-driven settings, carried through as data;
-// frame: the brand frame (kit/core/style.mjs brandFrameErrors has its full shape).
-const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame"]);
+// frame: the brand frame (kit/core/style.mjs brandFrameErrors has its full shape);
+// cast: the story's characters (kit/core/characters/cues.mjs validates it).
+const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -565,6 +566,7 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
     if (Array.isArray(scene.hits)) scene.hits.forEach((hit, h) => {
       if (isObject(hit) && hit.at !== undefined) hit.at = resolve(hit.at, `${path}.hits[${h}].at`);
     });
+    if (CAST_MODULES.includes(scene.module)) scene.params = resolveCastAnchors(scene, (value, at) => resolve(value, `${path}.${at}`), words);
   });
   if (Array.isArray(copy.overlays)) copy.overlays.forEach((overlay, index) => {
     if (!isObject(overlay)) return;
@@ -590,6 +592,48 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
   // where no matte covers the time.
   if (isObject(track) && Array.isArray(track.frames) && copy.base != null && subjectMode(copy.base) !== "off") copy.resolved.subjectTrack = track;
   return copy;
+}
+
+// Character scenes (kit/core/catalog-characters.mjs): cue `at` and spoken
+// `says` ranges may be time anchors; they resolve to seconds from the scene
+// start, and a spoken range gains the timing of each narration word in it
+// (`words: [[start, end], ...]`), so a mouth opens on the voice's words.
+export const CAST_MODULES = Object.freeze(["cast-scene", "character-cameo"]);
+
+/** A character scene's params with anchors resolved. resolve(anchor, path) → seconds. */
+export function resolveCastAnchors(scene, resolve, words = []) {
+  if (!isObject(scene) || !isObject(scene.params)) return scene?.params;
+  const start = Number(scene.start);
+  const rel = (value, path) => (typeof value === "string" ? Math.round((resolve(value, path) - start) * 1000) / 1000 : value);
+  const actor = (entry, path) => {
+    if (!isObject(entry)) return entry;
+    const out = { ...entry };
+    if (Array.isArray(entry.cues)) out.cues = entry.cues.map((cue, i) => (isObject(cue) && cue.at !== undefined ? { ...cue, at: rel(cue.at, `${path}.cues[${i}].at`) } : cue));
+    // says "auto": the character's own words in a dialogue (words carry a speaker).
+    if (entry.says === "auto") {
+      const id = entry.id ?? entry.character;
+      const end = Number(scene.end);
+      out.says = words.filter((word) => word.speaker === id && word.start >= start - EPS && word.start < end - EPS)
+        .map((word) => ({ from: Math.round((word.start - start) * 1000) / 1000, to: Math.round((word.end - start) * 1000) / 1000, words: [[Math.round((word.start - start) * 1000) / 1000, Math.round((word.end - start) * 1000) / 1000]] }));
+    }
+    if (Array.isArray(entry.says)) out.says = entry.says.map((range, i) => {
+      if (!isObject(range)) return range;
+      const anchored = typeof range.from === "string" || typeof range.to === "string";
+      const from = rel(range.from, `${path}.says[${i}].from`), to = rel(range.to, `${path}.says[${i}].to`);
+      if (!anchored) return { ...range };
+      // `to` names the last spoken word: the range runs to that word's end.
+      const last = words.find((word) => Math.abs(Number(word.start) - (start + to)) < 1e-6);
+      const end = last ? Math.round((Number(last.end) - start) * 1000) / 1000 : to;
+      const spoken = words.filter((word) => word.start >= start + from - EPS && word.start <= start + to + EPS)
+        .map((word) => [Math.round((word.start - start) * 1000) / 1000, Math.round((word.end - start) * 1000) / 1000]);
+      return { ...range, from, to: end, words: spoken };
+    });
+    return out;
+  };
+  const params = { ...scene.params };
+  if (Array.isArray(params.cast)) params.cast = params.cast.map((entry, i) => actor(entry, `params.cast[${i}]`));
+  if (scene.module === "character-cameo") Object.assign(params, actor(params, "params"));
+  return params;
 }
 
 /**
