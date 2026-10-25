@@ -46,6 +46,51 @@ polish; 0-1, moving targets inside the profile band only).
 - Check the merged result with `launchclip story validate storyboard.json`; its
   `style.applied` list shows every value the pack filled.
 
+### No style given: a seeded style
+
+When the user names no style and gives no brand (no colours, logo, fonts or
+reference video), do not fall back to the default look: every bare-prompt
+video would then look alike. In the brief step, do the art direction and let
+a seed vary the look inside it (docs/SEEDED_STYLES_RFC.md):
+
+1. Choose what fits the prompt and write it in `BRIEF.md` under "Style" as
+   constraints: `tone` (calm, serious, warm, energetic, playful, premium,
+   technical), and only where the content calls for it `theme` (dark, light,
+   tinted), `world`, `drawing_style`, `character_set`, `background` and
+   `panel`. A cooking video might be warm and light; a security explainer
+   serious and dark. Leave out what does not matter, so the seed has room.
+2. Generate the pack into the project from those constraints (the seed is
+   random unless the user gives one):
+
+   ```bash
+   launchclip style generate --project <project> --tone warm --theme light
+   ```
+
+   It writes `.launchclip/styles/seed-<hex>/style.json` and prints one line,
+   such as `style: seed 7f3a91c2 (light, smooth, Fraunces / DM Sans)`. Pass
+   that line on to the user, and record the seed and constraints in
+   `BRIEF.md`.
+3. Use it like any pack: `"style": "seed-<hex>"` in `storyboard.json`, no
+   `brand`, captions as `{"type": "captions"}`, and no `motion.grammar`
+   unless this video needs an exception. In a hand-authored composition,
+   carry the pack's palette, fonts, panel treatment and grammar into
+   `DESIGN.md`.
+
+From then on it is the project's style: re-renders and edits keep it.
+
+- "Give me a different look" (or "another style", "reroll") means
+  `launchclip style reroll <project>`: a new seed with the same constraints,
+  written into `storyboard.json`. Then render again. `--tone <tone>` changes
+  the tone too, and `--undo` goes back once.
+- "I like this look" means `launchclip style keep <project> --as <name>`,
+  which saves it to `~/.launchclip/styles/<name>` for `"style": "<name>"` in
+  later videos.
+- A seed the user quotes (`7f3a91c2`) is the same look again:
+  `launchclip style generate --project <project> --seed 7f3a91c2`.
+- Without the launchclip CLI, the skill's `scripts/style-seed.mjs` holds the
+  same generator: `generateStyle({seed, tone, constraints})` returns the pack
+  to save at `.launchclip/styles/<name>/style.json`.
+
 Captions come from presets shared by both renderers: `word-highlight`,
 `karaoke-fill`, `pop-word`, `bounce`, `typewriter`, `box-highlight`,
 `underline-sweep`, `kinetic-stack`, `minimal-line`, `glow`, `outline-heavy`,

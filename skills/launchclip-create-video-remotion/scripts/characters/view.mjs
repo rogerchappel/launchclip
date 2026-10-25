@@ -22,10 +22,17 @@ const hasJoint = node => node && typeof node === 'object' && (node.tag === 'join
 
 function staticTransform(attr) {
   if (!attr) return null;
-  const translate = /translate\((-?[\d.]+)[ ,]+(-?[\d.]+)\)/.exec(attr);
-  const mirror = /scale\(-1[ ,]+1\)/.test(attr);
-  if (!translate && !mirror) throw new Error(`character view: unsupported group transform ${attr}`);
-  return `${translate ? `translate(${translate[1]}px, ${translate[2]}px)` : ''}${mirror ? ' scale(-1, 1)' : ''}`.trim();
+  // translate, rotate and scale, in order, as the matching CSS functions.
+  const parts = [];
+  for (const [, fn, args] of String(attr).matchAll(/(\w+)\(([^)]*)\)/g)) {
+    const v = args.trim().split(/[\s,]+/).map(Number);
+    if (fn === 'translate') parts.push(`translate(${v[0]}px, ${v[1] ?? 0}px)`);
+    else if (fn === 'scale') parts.push(`scale(${v[0]}, ${v[1] ?? v[0]})`);
+    else if (fn === 'rotate' && v.length === 1) parts.push(`rotate(${v[0]}deg)`);
+    else throw new Error(`character view: unsupported group transform ${attr}`);
+  }
+  if (!parts.length) throw new Error(`character view: unsupported group transform ${attr}`);
+  return parts.join(' ');
 }
 
 function convertList(children) {

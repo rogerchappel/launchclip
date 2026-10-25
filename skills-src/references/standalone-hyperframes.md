@@ -291,9 +291,12 @@ do it, and the compiler warns when a story still carries an unresolved `edl`.
 
 Text renders only from bundled font files, never from Google Fonts or the
 host's installed fonts. `scripts/fonts.mjs` is the registry: Anton, Archivo
-Black, Bricolage Grotesque, Inter, Instrument Serif, JetBrains Mono, Space
-Grotesk, STIX Two Math, STIX Two Text, Syne and Unbounded, each from a pinned
-`@fontsource` package (OFL-1.1, latin subset). The compiler:
+Black, Bebas Neue, Big Shoulders Display, Bricolage Grotesque, DM Sans, DM
+Serif Display, Fira Code, Fraunces, Instrument Serif, Inter, JetBrains Mono,
+Lexend, Manrope, Oswald, Outfit, Playfair Display, Plus Jakarta Sans, Sora,
+Space Grotesk, STIX Two Math, STIX Two Text, Syne, Unbounded and Young Serif,
+each from a pinned `@fontsource` package (OFL-1.1, latin subset). The
+compiler:
 
 - loads every role default (display Anton, body Inter, meta JetBrains Mono,
   maths STIX Two Text, quote serif Instrument Serif), STIX Two Math as the
@@ -312,12 +315,21 @@ first and then next to the storyboard project. Outside the LaunchClip repo,
 install the exact packages once in the project:
 
 ```bash
-npm install --save-exact @fontsource/anton@5.3.0 @fontsource/archivo-black@5.3.0 \
-  @fontsource/instrument-serif@5.3.0 @fontsource/stix-two-math@5.3.0 \
-  @fontsource-variable/bricolage-grotesque@5.3.0 @fontsource-variable/inter@5.3.0 \
-  @fontsource-variable/jetbrains-mono@5.3.0 @fontsource-variable/space-grotesk@5.3.0 \
+npm install --save-exact @fontsource-variable/big-shoulders-display@5.3.0 \
+  @fontsource-variable/bricolage-grotesque@5.3.0 \
+  @fontsource-variable/dm-sans@5.3.0 @fontsource-variable/fira-code@5.3.0 \
+  @fontsource-variable/fraunces@5.3.0 @fontsource-variable/inter@5.3.0 \
+  @fontsource-variable/jetbrains-mono@5.3.0 @fontsource-variable/lexend@5.3.0 \
+  @fontsource-variable/manrope@5.3.0 @fontsource-variable/oswald@5.3.0 \
+  @fontsource-variable/outfit@5.3.0 \
+  @fontsource-variable/playfair-display@5.3.0 \
+  @fontsource-variable/plus-jakarta-sans@5.3.0 @fontsource-variable/sora@5.3.0 \
+  @fontsource-variable/space-grotesk@5.3.0 \
   @fontsource-variable/stix-two-text@5.3.0 @fontsource-variable/syne@5.3.0 \
-  @fontsource-variable/unbounded@5.3.0
+  @fontsource-variable/unbounded@5.3.0 @fontsource/anton@5.3.0 \
+  @fontsource/archivo-black@5.3.0 @fontsource/bebas-neue@5.3.0 \
+  @fontsource/dm-serif-display@5.3.0 @fontsource/instrument-serif@5.3.0 \
+  @fontsource/stix-two-math@5.3.0 @fontsource/young-serif@5.3.0
 ```
 
 A compile warning `font file … is not installed` means that step is missing.

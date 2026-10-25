@@ -36,15 +36,29 @@ const entry = (family, pkg, generic, faces, [upper, lower]) => Object.freeze({ f
 export const FONT_REGISTRY = Object.freeze({
   'Anton': entry('Anton', '@fontsource/anton', 'sans-serif', fixed('anton', '400'), [0.46, 0.46]),
   'Archivo Black': entry('Archivo Black', '@fontsource/archivo-black', 'sans-serif', fixed('archivo-black', '400'), [0.76, 0.61]),
+  'Bebas Neue': entry('Bebas Neue', '@fontsource/bebas-neue', 'sans-serif', fixed('bebas-neue', '400'), [0.38, 0.38]),
+  'Big Shoulders Display': entry('Big Shoulders Display', '@fontsource-variable/big-shoulders-display', 'sans-serif', variable('big-shoulders-display', '100 900'), [0.39, 0.36]),
   'Bricolage Grotesque': entry('Bricolage Grotesque', '@fontsource-variable/bricolage-grotesque', 'sans-serif', variable('bricolage-grotesque', '200 800'), [0.64, 0.56]),
+  'DM Sans': entry('DM Sans', '@fontsource-variable/dm-sans', 'sans-serif', variable('dm-sans', '100 900'), [0.64, 0.54]),
+  'DM Serif Display': entry('DM Serif Display', '@fontsource/dm-serif-display', 'serif', fixed('dm-serif-display', '400'), [0.59, 0.5]),
+  'Fira Code': entry('Fira Code', '@fontsource-variable/fira-code', 'monospace', variable('fira-code', '300 700'), [0.6, 0.6]),
+  'Fraunces': entry('Fraunces', '@fontsource-variable/fraunces', 'serif', variable('fraunces', '100 900'), [0.71, 0.56]),
   'Instrument Serif': entry('Instrument Serif', '@fontsource/instrument-serif', 'serif', fixed('instrument-serif', '400', ['normal', 'italic']), [0.47, 0.39]),
   'Inter': entry('Inter', '@fontsource-variable/inter', 'sans-serif', variable('inter', '100 900'), [0.68, 0.56]),
   'JetBrains Mono': entry('JetBrains Mono', '@fontsource-variable/jetbrains-mono', 'monospace', variable('jetbrains-mono', '100 800'), [0.6, 0.6]),
+  'Lexend': entry('Lexend', '@fontsource-variable/lexend', 'sans-serif', variable('lexend', '100 900'), [0.7, 0.57]),
+  'Manrope': entry('Manrope', '@fontsource-variable/manrope', 'sans-serif', variable('manrope', '200 800'), [0.63, 0.54]),
+  'Oswald': entry('Oswald', '@fontsource-variable/oswald', 'sans-serif', variable('oswald', '200 700'), [0.52, 0.44]),
+  'Outfit': entry('Outfit', '@fontsource-variable/outfit', 'sans-serif', variable('outfit', '100 900'), [0.65, 0.51]),
+  'Playfair Display': entry('Playfair Display', '@fontsource-variable/playfair-display', 'serif', variable('playfair-display', '400 900'), [0.65, 0.51]),
+  'Plus Jakarta Sans': entry('Plus Jakarta Sans', '@fontsource-variable/plus-jakarta-sans', 'sans-serif', variable('plus-jakarta-sans', '200 800'), [0.66, 0.55]),
+  'Sora': entry('Sora', '@fontsource-variable/sora', 'sans-serif', variable('sora', '100 800'), [0.71, 0.58]),
   'Space Grotesk': entry('Space Grotesk', '@fontsource-variable/space-grotesk', 'sans-serif', variable('space-grotesk', '300 700'), [0.61, 0.56]),
   'STIX Two Math': entry('STIX Two Math', '@fontsource/stix-two-math', 'serif', fixed('stix-two-math', '400'), [0.65, 0.47]),
   'STIX Two Text': entry('STIX Two Text', '@fontsource-variable/stix-two-text', 'serif', variable('stix-two-text', '400 700', ['normal', 'italic']), [0.68, 0.52]),
   'Syne': entry('Syne', '@fontsource-variable/syne', 'sans-serif', variable('syne', '400 800'), [0.76, 0.61]),
-  'Unbounded': entry('Unbounded', '@fontsource-variable/unbounded', 'sans-serif', variable('unbounded', '200 900'), [0.86, 0.73])
+  'Unbounded': entry('Unbounded', '@fontsource-variable/unbounded', 'sans-serif', variable('unbounded', '200 900'), [0.86, 0.73]),
+  'Young Serif': entry('Young Serif', '@fontsource/young-serif', 'serif', fixed('young-serif', '400'), [0.75, 0.56])
 });
 
 /**

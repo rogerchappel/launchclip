@@ -1,5 +1,6 @@
 // `launchclip cast`, the cast consistency gate and dialogue voices
 // (src/cast.js, src/voice/dialogue.js).
+import {STARTER_CAST} from '../kit/core/characters/cast.mjs';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
@@ -25,7 +26,7 @@ const exampleWords = () => JSON.parse(readFileSync(path.join(EXAMPLE, "NARRATION
 
 test("cast list and show: the starter cast, a story cast, one character's params and voice", async () => {
   const list = await castList();
-  assert.equal(list.starter.length, 24);
+  assert.equal(list.starter.length, STARTER_CAST.length);
   assert.equal(list.story.length, 0);
   const withStory = await castList(EXAMPLE);
   assert.deepEqual(withStory.story.map((row) => row.id), ["maya", "theo"]);

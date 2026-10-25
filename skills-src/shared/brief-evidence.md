@@ -6,8 +6,9 @@ artifacts specified in `references/recorded-video.md`, without concept/story
 tournament receipts:
 
 - `BRIEF.md`: source, audience, promise, CTA, destination, aspect, duration,
-  language, interaction mode, cost mode, supplied assets, permissions, and
-  constraints
+  language, interaction mode, cost mode, supplied assets, permissions,
+  constraints, and the style: the named pack or brand, or the seed and the
+  art-direction constraints it was generated from
 - `EVIDENCE.md`: factual claims and their source locations; label inference,
   opinion, and unverified claims explicitly
 - `CONCEPTS.json` (`launchclip.concepts.v1`): five distinct treatments,
