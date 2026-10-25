@@ -18,4 +18,7 @@ export const EMITTERS = {
   'icon-row': emitCatalogG,
   'section-card': emitCatalogG,
   'object-card': emitCatalogG,
+  'stat-card': emitCatalogG,
+  'quote-card': emitCatalogG,
+  'excerpt': emitCatalogG,
 };
