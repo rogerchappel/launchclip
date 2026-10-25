@@ -608,6 +608,8 @@ const short = (hash) => hash.slice(0, 12);
  *   project, story (resolved), renderer (name), adapter (renderer adapter),
  *   quality, output (where the joined, muxed video goes),
  *   scenes: scene ids whose segments re-render even when cached,
+ *   range: [startFrame, endFrame) whose segments re-render even when cached
+ *     (finish --chapter: every segment in the chapter, with scenes or not),
  *   previewScene: render only the segments that show this scene,
  *   renderWhole(output): renders the whole video (renderers without frame ranges),
  *   tools: defaultSegmentTools() overrides, now: clock (ms),
@@ -623,6 +625,8 @@ export async function renderWithSegments(options) {
   const dir = path.join(cacheRoot, renderer);
   const started = now();
   const forced = new Set(options.scenes ?? []);
+  const range = Array.isArray(options.range) ? options.range : null;
+  const inRange = (segment) => Boolean(range) && segment.startFrame < range[1] && segment.endFrame > range[0];
   const plan = planSegments(story);
   if (options.previewScene && !plan.segments.some((segment) => segment.scenes.includes(options.previewScene))) {
     throw new Error(`scene "${options.previewScene}" is not on screen in the resolved story`);
@@ -633,14 +637,14 @@ export async function renderWithSegments(options) {
   const index = await readIndex(dir);
   const seconds = { plan: round3((now() - started) / 1000) };
 
-  if (!partial) return renderWhole({ ...options, tools, now, dir, index, plan, inputs, forced, started, seconds });
+  if (!partial) return renderWhole({ ...options, tools, now, dir, index, plan, inputs, forced: range ? new Set([...forced, "range"]) : forced, started, seconds });
 
   const encoder = typeof adapter.segmentEncoder === "function" ? adapter.segmentEncoder() : adapter.segmentEncoder ?? null;
   const hashed = hashSegments(story, plan, inputs, { encoder });
   const scope = options.previewScene ? contiguous(hashed, segmentsForScenes(hashed, [options.previewScene])) : hashed;
   const entries = scope.map((segment) => {
     const file = segmentFile(dir, segment.hash);
-    const force = segment.scenes.some((id) => forced.has(id));
+    const force = segment.scenes.some((id) => forced.has(id)) || inRange(segment);
     return { segment, file, status: force ? "forced" : existsSync(file) ? "reused" : "rendered" };
   });
 
