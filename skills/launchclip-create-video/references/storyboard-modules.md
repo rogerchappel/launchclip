@@ -1399,7 +1399,7 @@ params:
 - set: desk-laptop | phone | meeting | screen | kitchen-counter | sofa | podium | stage | car | park-bench | video-call | standing-desk
 - screen: {src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)
 - cast: [{id, position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: stand, point, wave, slump, type, think, cheer, shrug, walk, sit; expressions: neutral, happy, delighted, frustrated, confused, surprised, focused
-- light: {dir?: degrees the key light comes from (0 right, 90 above, 180 left), color?: hex, intensity?: 0–1} (default: the world's light, else a soft key from the upper left); shaded drawing styles follow it
+- light: {dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world's light, else a soft key from the upper left); shaded drawing styles follow it
 events: <character>-cue-<i>
 
 ### character-cameo (keeps captions)

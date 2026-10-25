@@ -54,7 +54,7 @@ test('light: defaults, validation and the direction vector', () => {
   assert.equal(normalizeLight({dir: -90}).dir, 270, 'from below');
   assert.deepEqual(lightErrors({dir: 'left', color: 'white', intensity: 2, glow: 1}), [
     'light.glow is not supported (allowed: dir, color, intensity)',
-    'light.dir must be degrees (0 = from the right, 90 = from above, 180 = from the left)',
+    'light.dir must be degrees (0 = from the right, 90 = from above, 180 = from the left) or a vector {x, y} from the light toward the subject',
     'light.color must be a six-digit hex',
     'light.intensity must be 0 to 1'
   ]);
@@ -70,6 +70,14 @@ test('cast-scene and character-cameo take a light, and reject a bad one', () => 
   assert.throws(() => resolveModule(scene({light: {dir: 30, bright: true}}), story), /params\.light.*bright is not supported/);
   const cameo = resolveModule({id: 'c', module: 'character-cameo', start: 0, end: 4, params: {character: 'theo', light: {color: '#a0c0ff'}}}, story);
   assert.equal(cameo.content.actors[0].light.color, '#a0c0ff');
+});
+
+test('light: a world\'s vector dir (light toward subject, y down) becomes degrees', () => {
+  const sun = normalizeLight({dir: {x: 0.55, y: 0.83}, color: '#fff4e0', intensity: 0.9});
+  assert.ok(sun.dir > 120 && sun.dir < 127, `upper-left sun: ${sun.dir}`);
+  assert.ok(sun.x < 0 && sun.y < 0, 'toward the light is up and left');
+  assert.equal(normalizeLight({dir: {x: -1, y: 0}}).dir, 0, 'light from the right');
+  assert.deepEqual(lightErrors({dir: {x: 0, y: 0}}).length, 1);
 });
 
 test('cast-styles: a sheet for every style builds from the same cast', async () => {
