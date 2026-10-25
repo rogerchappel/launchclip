@@ -12,6 +12,7 @@ import { dialogueRequests, dialogueText, synthesizeDialogue } from "../src/voice
 import { createTestVoiceProvider } from "../src/voice/index.js";
 import { resolveStory, validateStory } from "../kit/core/story.mjs";
 import { USAGE } from "../src/cli_usage.js";
+import { checkStoryDirection } from "../src/story_cli.js";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const EXAMPLE = path.join(ROOT, "examples/story/characters-16x9");
@@ -115,6 +116,25 @@ test("cast sheet renders a PNG with Chromium", { timeout: 120_000 }, async (t) =
     assert.equal(report.schema, "launchclip.cast-sheet.v1");
     assert.deepEqual(report.characters.map((row) => row.id), ["maya", "theo"]);
     assert.ok(readFileSync(result.png).length > 20_000);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("story validate checks a narrative map's cast cues with the character kit", async () => {
+  const story = example();
+  const words = exampleWords();
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-direction-"));
+  try {
+    const map = JSON.parse(readFileSync(path.join(EXAMPLE, "DIRECTION.json"), "utf8"));
+    const ok = await checkStoryDirection({ story, resolved: resolveStory(story, { words }), words, storyDir: EXAMPLE });
+    assert.deepEqual(ok.errors, []);
+    map.sections[1].lines[0].cast[0].pose = "moonwalk";
+    map.sections[1].lines[0].set = "garage";
+    await writeFile(path.join(dir, "DIRECTION.json"), JSON.stringify(map));
+    const bad = await checkStoryDirection({ story, resolved: resolveStory(story, { words }), words, storyDir: dir });
+    assert.match(bad.errors.join("\n"), /pose "moonwalk"/);
+    assert.match(bad.errors.join("\n"), /set "garage"/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -2,6 +2,7 @@ import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { deriveBoundaries, resolveStory, storyFormat, storyHits, validateStory as validateStoryShape } from "./story.js";
 import { knownModules, resolveModule, subjectDensityWarnings } from "../kit/core/modules.mjs";
+import { validateCastCues } from "../kit/core/characters/cues.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 import { getRenderer } from "./renderers/index.js";
 import { remotionInvocation, COMPOSITION_ID } from "./renderers/remotion.js";
@@ -74,7 +75,8 @@ export async function checkStoryDirection({ story, resolved = null, words = null
   const map = await readJson(file, DIRECTION_FILE);
   try { picked = profileForStory(resolved ?? story, { direction: map, style }); profileDoc = picked.profile; }
   catch (error) { errors.push(`direction: ${error.message}`); }
-  const check = validateDirection(map, { words: words ?? [], story: resolved, lane: story?.lane, cast: story?.cast ?? map.cast ?? null });
+  // Narrative lines' cast and set cues: the character kit's check (kit/core/characters/cues.mjs).
+  const check = validateDirection(map, { words: words ?? [], story: resolved, lane: story?.lane, cast: story?.cast ?? map.cast ?? null, validateCast: validateCastCues });
   errors.push(...check.errors.map((entry) => `direction: ${entry}`));
   warnings.push(...check.warnings.map((entry) => `direction: ${entry}`));
   if (!words) warnings.push("direction: no narration words, so the map's lines were not checked against them");

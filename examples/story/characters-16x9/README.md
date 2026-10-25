@@ -16,6 +16,9 @@ the close is a cameo beside a card.
   in every shot.
 - **Sets:** `desk-laptop` (twice), `phone`, `screen` (playing
   `assets/demo/create-project.mp4`), then a `character-cameo`.
+- **Narrative map:** `DIRECTION.json` gives each line a story beat (setup,
+  problem, turn, resolution, cta), its set and who acts; it lands inside the
+  `story-characters` profile's bands.
 - **Acting:** poses and expressions are cued to narration words
   (`"at": "word:breaks."`), so a resynthesised voice keeps them in time.
 - **Dialogue:** `audio.narration.lines` gives each line a speaker. The
