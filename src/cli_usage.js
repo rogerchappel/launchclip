@@ -18,7 +18,7 @@ export const USAGE = Object.freeze([
   ["skills install", "skills install --agent codex|claude [--skill launchclip-create-video|launchclip-create-video-remotion|launchclip-cli|all] [--force]"],
   ["style create", "style create <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]"],
   ["style save", "style save <name> --from <video-or-style-directory> [--root .launchclip/styles] [--force]"],
-  ["style create", "style create <name> --from-reference a.mp4 [b.mp4 ...] [--from-images x.png ...] [--font-hint \"Display, Body\"] [--root .launchclip/styles] [--force]"],
+  ["style create", "style create <name> --from-reference a.mp4 [b.mp4 ...] [--from-images x.png ...] [--font-hint \"Display, Body\"] [--format footage-led|motion|demo-led] [--rights own|licensed|public-statistics] [--root .launchclip/styles] [--force]"],
   ["style list", "style list [--root .launchclip/styles]"],
   ["style show", "style show <name|path> [--root .launchclip/styles]"],
   ["style upgrade", "style upgrade <name> [--root .launchclip/styles]"],
