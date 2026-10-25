@@ -21,7 +21,7 @@ export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "docu
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
 // Caption presets (kit/core/captions.mjs CAPTION_PRESETS; kept in step by test/caption_presets.test.js).
-export const STORY_CAPTION_PRESETS = ["word-highlight", "karaoke-fill", "pop-word", "bounce", "typewriter", "box-highlight", "underline-sweep", "kinetic-stack", "minimal-line", "glow", "outline-heavy", "split-color", "lower-band", "bubble"];
+export const STORY_CAPTION_PRESETS = ["word-highlight", "karaoke-fill", "pop-word", "bounce", "typewriter", "box-highlight", "underline-sweep", "kinetic-stack", "minimal-line", "glow", "outline-heavy", "split-color", "lower-band", "bubble", "quiet-accent"];
 const CAPTION_OPTION_ENUMS = { position: ["bottom", "middle", "top", "auto"], case: ["as-is", "upper", "title"], font: ["display", "body", "meta"], entrance: ["pop", "fade", "slide-up", "slide-left", "scale", "none"], exit: ["fade-up", "fade", "slide-down", "shrink", "none"] };
 const CAPTION_COLOR_KEYS = ["idle", "active", "spoken", "accent", "box", "boxText", "plate", "band", "bandEdge", "chip"];
 // audio.narration.provider: voice providers `launchclip finish` can synthesise with.
@@ -42,8 +42,9 @@ const BEAT_ANCHOR = new RegExp(`^(beat|downbeat):(\\d+)${OFFSET}$`);
 const NUMERIC = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/;
 const EPS = 1e-6;
 // style: a style pack (src/story_style.js merges it before validation);
-// motion, camera, ambient, layout: style-driven settings, carried through as data.
-const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections"]);
+// motion, camera, ambient, layout: style-driven settings, carried through as data;
+// frame: the brand frame (kit/core/style.mjs brandFrameErrors has its full shape).
+const TOP_LEVEL = new Set(["schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -235,6 +236,9 @@ export function validateStory(story, { modules } = {}) {
 
   // ambient: the ambient-motion control (kit/core/ambient.mjs).
   validateAmbient(story.ambient, "ambient", err);
+
+  // frame: the brand frame the compilers draw around scenes (RFC §9.2).
+  validateFrame(story.frame, { err, warn, scenes: Array.isArray(story.scenes) ? story.scenes : [] });
 
   // base: the footage-led recording (see validateBase).
   if (story.base !== undefined && story.base !== null) validateBase(story.base, { err, warn, duration, resolved: isObject(story.resolved) });
@@ -694,6 +698,24 @@ function validateMotion(motion, err) {
 }
 
 // → the effective camera mode ("cuts" | "world") for the transition rules.
+// The brand frame's own shape is checked by kit/core/style.mjs
+// brandFrameErrors (story.mjs has no imports); here only what a story adds:
+// it is an object or false, and its section labels point at real scenes.
+const FRAME_KEYS = ["enabled", "logo", "kicker", "sections", "progress", "show", "labels", "color"];
+function validateFrame(frame, { err, warn, scenes }) {
+  if (frame === undefined || frame === false) return;
+  if (!isObject(frame)) { err("frame must be the brand frame object or false"); return; }
+  for (const key of Object.keys(frame)) if (!FRAME_KEYS.includes(key)) err(`frame.${key} is not a brand frame field (${FRAME_KEYS.join(", ")})`);
+  if (frame.labels === undefined) return;
+  if (!Array.isArray(frame.labels)) { err("frame.labels must be a list of {start | scene, label}"); return; }
+  const ids = new Set(scenes.map((scene) => scene?.id));
+  frame.labels.forEach((entry, i) => {
+    if (!isObject(entry) || !nonEmpty(entry.label) || entry.label.length > 40) err(`frame.labels[${i}].label must be 1-40 characters`);
+    else if ((typeof entry.start === "number") === (typeof entry.scene === "string")) err(`frame.labels[${i}] needs exactly one of start (seconds) or scene (a scene id)`);
+    else if (typeof entry.scene === "string" && !ids.has(entry.scene)) warn(`frame.labels[${i}].scene "${entry.scene}" is not a scene id; the label is skipped`);
+  });
+}
+
 function validateCamera(camera, { err, warn, lane }) {
   if (camera === undefined || camera === null) return "cuts";
   if (!isObject(camera)) { err("camera must be an object {mode, layout?, spacing?, parallax?, blur?}"); return "cuts"; }

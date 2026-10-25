@@ -1195,7 +1195,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip style show <name|path> [--root .launchclip/styles]
   ```
 
-- `style upgrade`: Upgrade a v1 style pack to v2 on disk.
+- `style upgrade`: Upgrade a v1 or v2 style pack to v3 on disk.
 
   ```text
   launchclip style upgrade <name> [--root .launchclip/styles]

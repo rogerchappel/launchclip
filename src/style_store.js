@@ -3,7 +3,7 @@ import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writ
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { STYLE_SCHEMA, upgradeV1Pack, validateStylePack } from "../kit/core/style.mjs";
+import { STYLE_SCHEMA, STYLE_V2_SCHEMA, upgradeV1Pack, upgradeV2Pack, validateStylePack } from "../kit/core/style.mjs";
 
 export const STYLE_PACK_SCHEMA_VERSION = "launchclip.style-pack.v1";
 export const STYLE_PACK_V2_SCHEMA = STYLE_SCHEMA;
@@ -114,7 +114,7 @@ export async function loadStylePack(location, options = {}) {
     } catch (error) {
       throw new Error(`Invalid style manifest ${manifestPath}: ${error.message}`);
     }
-    if (manifest.schema === STYLE_SCHEMA) {
+    if (manifest.schema === STYLE_SCHEMA || manifest.schema === STYLE_V2_SCHEMA) {
       return { name: validateStyleName(manifest.name ?? path.basename(packPath)), path: packPath, manifest, pack: manifest, specification: styleSpecification(manifest), specification_path: findExisting(packPath, SPECIFICATION_CANDIDATES), caption_skin_path: findExisting(packPath, ["caption-skin.html"]), fonts: [] };
     }
     if (manifest.schema_version !== STYLE_PACK_SCHEMA_VERSION) throw new Error(`Unsupported style manifest schema: ${manifest.schema_version ?? manifest.schema ?? "missing"}`);
@@ -167,7 +167,7 @@ export async function listStylePacks(options = {}) {
   for (const entry of entries) {
     try {
       const pack = await loadStylePack(path.join(root, entry.name));
-      packs.push({ name: pack.name, path: pack.path, schema: pack.pack ? STYLE_SCHEMA : STYLE_PACK_SCHEMA_VERSION, description: pack.pack?.description ?? null, specification: pack.specification_path, fonts: pack.fonts.length });
+      packs.push({ name: pack.name, path: pack.path, schema: pack.pack ? pack.pack.schema : STYLE_PACK_SCHEMA_VERSION, description: pack.pack?.description ?? null, specification: pack.specification_path, fonts: pack.fonts.length });
     } catch (error) {
       packs.push({ name: entry.name, path: path.join(root, entry.name), error: error.message });
     }
@@ -176,7 +176,8 @@ export async function listStylePacks(options = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Style pack v2 (kit/core/style.mjs): resolution, loading, writing, upgrade.
+// Style pack v3 (kit/core/style.mjs): resolution, loading, writing, upgrade.
+// The *V2 names are kept from v2; they load v2 and v3 packs alike.
 
 /** ~/.launchclip/styles, or $LAUNCHCLIP_HOME/styles. */
 export function homeStyleRoot(options = {}) {
@@ -196,8 +197,9 @@ export async function listBuiltinStyles() {
 }
 
 /**
- * Load a v2 pack from a style.json file or a pack directory. A v1 pack is
- * upgraded in memory (with a warning) so older packs keep working.
+ * Load a pack from a style.json file or a pack directory, as v3. A v1 pack is
+ * upgraded in memory (with a warning), and a v2 pack is upgraded in memory to
+ * v3 with the brand frame off, so it renders as before (with a warning).
  * → {name, file, dir, pack, source, upgraded, warnings}
  */
 export async function loadStyleV2(location, { source = "path" } = {}) {
@@ -220,7 +222,13 @@ export async function loadStyleV2(location, { source = "path" } = {}) {
     const draft = upgradeV1Pack({ name: v1.name, specification: v1.specification, audio: audioFile ? await readFile(audioFile, "utf8") : "", captionSkin: v1.caption_skin_path });
     pack = draft.pack;
     upgraded = true;
-    warnings.push(`style ${v1.name} is a v1 pack, upgraded in memory; run launchclip style upgrade ${v1.name} to save it as v2`);
+    warnings.push(`style ${v1.name} is a v1 pack, upgraded in memory; run launchclip style upgrade ${v1.name} to save it as v3`);
+  } else if (data.schema === STYLE_V2_SCHEMA) {
+    const first = validateStylePack(data);
+    if (!first.ok) throw new Error(`Style pack ${file} is invalid:\n- ${first.errors.join("\n- ")}`);
+    pack = upgradeV2Pack(data, { render: "same" }).pack;
+    upgraded = true;
+    warnings.push(`style ${data.name} is a v2 pack, loaded as v3 with the brand frame off; run launchclip style upgrade ${data.name} to save it as v3`);
   }
   const validation = validateStylePack(pack);
   if (!validation.ok) throw new Error(`Style pack ${file} is invalid:\n- ${validation.errors.join("\n- ")}`);
@@ -251,7 +259,7 @@ export async function resolveStyleV2(request, options = {}) {
   throw new Error(`Style pack "${value}" was not found in ${candidates.slice(0, 2).map(([candidate]) => path.dirname(candidate)).join(" or ")}, and is not a built-in style (${builtins})`);
 }
 
-/** Write a v2 pack to <root>/<name>/style.json (plus extra text files such as reference-report.md). */
+/** Write a v3 pack to <root>/<name>/style.json (plus extra text files such as reference-report.md). */
 export async function writeStyleV2(pack, options = {}) {
   const name = validateStyleName(pack?.name);
   const validation = validateStylePack(pack);
@@ -270,16 +278,25 @@ export async function writeStyleV2(pack, options = {}) {
 }
 
 /**
- * launchclip style upgrade <name>: convert a v1 pack (frame.md, caption skin,
- * audio notes) to style.json v2 in place. The v1 manifest is kept as
- * style.v1.json and every v1 file stays in the pack.
+ * launchclip style upgrade <name>: convert a v2 pack to v3 in place (the
+ * brand frame on, footage-led captions quiet-accent; the v2 file is kept as
+ * style.v2.json), or a v1 pack (frame.md, caption skin, audio notes) to
+ * style.json v3 (the v1 manifest kept as style.v1.json, every v1 file kept).
  */
 export async function upgradeStylePack(name, options = {}) {
   const dir = stylePackPath(name, options);
   if (!existsSync(dir)) throw new Error(`Style pack does not exist: ${name}`);
   const manifestFile = path.join(dir, "style.json");
   const current = existsSync(manifestFile) ? JSON.parse(await readFile(manifestFile, "utf8")) : null;
-  if (current?.schema === STYLE_SCHEMA) return { stage: "style", action: "upgrade", status: "unchanged", name, path: dir, notes: ["already a launchclip.style.v2 pack"] };
+  if (current?.schema === STYLE_SCHEMA) return { stage: "style", action: "upgrade", status: "unchanged", name, path: dir, notes: [`already a ${STYLE_SCHEMA} pack`] };
+  if (current?.schema === STYLE_V2_SCHEMA) {
+    const { pack, notes } = upgradeV2Pack(current);
+    const validation = validateStylePack(pack);
+    if (!validation.ok) throw new Error(`Upgraded pack is invalid:\n- ${validation.errors.join("\n- ")}`);
+    await writeFile(path.join(dir, "style.v2.json"), `${JSON.stringify(current, null, 2)}\n`);
+    await writeFile(manifestFile, `${JSON.stringify(pack, null, 2)}\n`);
+    return { stage: "style", action: "upgrade", status: "upgraded", name, path: dir, notes, kept: ["style.v2.json"], warnings: validation.warnings };
+  }
   const v1 = await loadStylePack(dir);
   const audioFile = findExisting(dir, OPTIONAL_TEXT_FILES);
   const { pack, notes } = upgradeV1Pack({ name: v1.name, specification: v1.specification, audio: audioFile ? await readFile(audioFile, "utf8") : "", captionSkin: v1.caption_skin_path });

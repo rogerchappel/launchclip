@@ -319,9 +319,11 @@ function safeZoneLines(format) {
   ];
 }
 
-function captionLines() {
+const FOOTAGE_CAPTIONS = 'In the footage-led lane write {"type": "captions"} with no style or preset: the default is the quiet sentence-case quiet-accent preset with one accent word per line; name word-highlight only when the brief asks for loud captions.';
+
+function captionLines(lane) {
   return [
-    `Captions are one overlay: {"type": "captions", "style": ${STORY_CAPTION_STYLES.map((value) => JSON.stringify(value)).join(' | ')}}. Use "word-highlight" whenever there is a voice.`,
+    `Captions are one overlay: {"type": "captions", "style": ${STORY_CAPTION_STYLES.map((value) => JSON.stringify(value)).join(' | ')}}. ${lane === 'footage-led' ? FOOTAGE_CAPTIONS : lane ? 'Use "word-highlight" whenever there is a voice.' : `Use "word-highlight" whenever there is a voice, except in the footage-led lane. ${FOOTAGE_CAPTIONS}`}`,
     `A caption preset may replace style: {"type": "captions", "preset": "<name>"}, one of ${Object.keys(CAPTION_PRESETS).join(', ')}. With a style pack, write {"type": "captions"} and let the pack choose the preset.`,
     'Modules marked "hides captions" hide them while on screen; every other module keeps them visible, so its content stays above the caption band.',
     'On-screen copy is shorter than the narration; never put a whole sentence on screen.'
@@ -648,7 +650,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
       `format: ${format ? JSON.stringify(format) : '(given in the request)'}`,
       `brand: ${JSON.stringify(brand ?? DEFAULT_BRAND)}`
     ]),
-    ...(style ? section('Style pack (keep the channel consistent)', stylePromptLines(style).map((line) => `- ${line}`)) : []),
+    ...(style ? section('Style pack (keep the channel consistent)', stylePromptLines(style, { lane }).map((line) => `- ${line}`)) : []),
     ...section('Contract', contractLines().map((line) => `- ${line}`)),
     ...section('Lane rules', laneRules(lane, profile).map((line) => `- ${line}`)),
     ...(profile ? section(`Cadence profile (${profile.id})`, cadenceLines(profile).map((line) => `- ${line}`)) : []),
@@ -657,7 +659,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...section(`Tier rules (${tier})`, tierRules(tier).map((line) => `- ${line}`)),
     ...section('Time anchors', anchorLines().map((line) => `- ${line}`)),
     ...section('Safe zone', safeZoneLines(format).map((line) => `- ${line}`)),
-    ...section('Captions', captionLines().map((line) => `- ${line}`)),
+    ...section('Captions', captionLines(lane).map((line) => `- ${line}`)),
     ...(lane === 'footage-led' ? section('Presenter (subject)', subjectLines(subject, { profile }).map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Footage layouts (sections)', layoutLines({ format })) : []),
     ...section('Phrase → module', ['Pick the module from what the line says:', '', '| The script… | Module |', '| --- | --- |', ...phraseLines({ subject: lane === 'footage-led' ? Boolean(subject?.usable) : false })]),

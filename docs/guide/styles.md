@@ -36,7 +36,7 @@ A style pack is a small JSON file. Anything you leave out falls back to sensible
 
 ```json
 {
-  "schema": "launchclip.style.v2",
+  "schema": "launchclip.style.v3",
   "name": "my-channel",
   "brand": {
     "colors": { "bg": "#0b0d12", "primary": "#ffa630", "accent": "#5cc8ff", "ink": "#0b0d12", "paper": "#f2eee6" },
@@ -52,6 +52,12 @@ A style pack is a small JSON file. Anything you leave out falls back to sensible
 
 Save it as `.launchclip/styles/<name>/style.json` in your project (or `~/.launchclip/styles/<name>/` to use it everywhere).
 
+Older `launchclip.style.v2` packs keep working and look exactly as they did. To pick up the brand frame and the quieter footage captions, upgrade one in place (the old file is kept as `style.v2.json`):
+
+```bash
+launchclip style upgrade my-channel
+```
+
 ## What you can control
 
 - **Colours and fonts:** your brand palette. Fonts come from a bundled set (Anton, Archivo Black, Bricolage Grotesque, Inter, Instrument Serif, JetBrains Mono, Space Grotesk, STIX Two, Syne, Unbounded), so videos render the same on any machine.
@@ -66,13 +72,19 @@ Save it as `.launchclip/styles/<name>/style.json` in your project (or `~/.launch
   - `cuts`: classic scene changes.
   - `world`: scenes laid out on one canvas, and the camera pans, pushes, orbits and whip-pans between them, with depth and motion blur.
 - **Ambient motion (`ambient.level`):** `off`, `subtle`, `standard` or `lively`. Gentle drifting light and a slow push keep frames from ever sitting dead still.
-- **Captions (`captions.preset`):** `word-highlight`, `karaoke-fill`, `pop-word`, `bounce`, `typewriter`, `box-highlight`, `underline-sweep`, `kinetic-stack`, `minimal-line`, `glow`, `outline-heavy`, `split-color`, `lower-band` and `bubble`. Each one also takes options for position, words per line, case, emphasis words, colours, outline and shadow.
+- **Captions (`captions.preset`):** `word-highlight`, `karaoke-fill`, `pop-word`, `bounce`, `typewriter`, `box-highlight`, `underline-sweep`, `kinetic-stack`, `minimal-line`, `glow`, `outline-heavy`, `split-color`, `lower-band`, `bubble` and `quiet-accent`. Each one also takes options for position, words per line, case, emphasis words, colours, outline and shadow.
+- **Captions per kind of video (`captions.lanes`):** a different caption look for talking-head footage than for motion graphics, for example `"lanes": { "footage-led": { "preset": "quiet-accent" } }`. Footage with no style at all already gets `quiet-accent`: calm sentence-case lines with one word picked out in your accent colour. Ask for `word-highlight` when you want the loud look.
 - **Sound (`sound`):**
   - effect density: `low`, `normal` or `high`;
   - music hints such as tempo range and mood;
   - your own sound-effect library (see [Sound](sound.md)).
 - **Modules:** the visual building blocks the video prefers or avoids, with your default settings for each.
 - **Intro, outro and looping:** a recurring opener or end card, and whether Shorts loop back to the hook.
+- **Layouts for your footage (`layouts`):** which layout each kind of line or section prefers (for example lists beside you on the right with `"list": "split-right"`), and how panels look: `solid`, `glass` or `paper`, with a corner radius.
+- **Vocabulary (`vocabulary`):** the tint of icons, whether illustrated objects are allowed, and which modules each kind of line reaches for.
+- **Pacing profile (`profile`):** the cadence your videos aim for, either a built-in profile such as `short-talking-head` or one measured from your own videos.
+- **Cast (`cast`):** the drawing style and colours of your characters, and which characters appear by default, so a series keeps the same people.
+- **Brand frame (`brand_frame`):** your logo and a short kicker label with an underline, section labels and an optional progress line, drawn around every scene so the whole video hangs together. Name the kicker and sections per video with `"frame": { "kicker": { "label": "Inside Ship Mode" }, "labels": [{ "scene": "how", "label": "How it works" }] }`, or turn it off for one video with `"frame": false`.
 
 ## Full motion graphics or minimal editorial
 

@@ -1,5 +1,5 @@
 {
-  "schema": "launchclip.style.v2",
+  "schema": "launchclip.style.v3",
   "name": "editorial-dark",
   "description": "Magazine-like explainers: near-black paper, warm gold accents, a literary serif display face, quiet captions and sparse sound.",
   "brand": {
@@ -27,7 +27,12 @@
   },
   "captions": {
     "preset": "minimal-line",
-    "position": "auto"
+    "position": "auto",
+    "lanes": {
+      "footage-led": {
+        "preset": "quiet-accent"
+      }
+    }
   },
   "sound": {
     "sfx_density": "low",
@@ -72,6 +77,61 @@
   },
   "layout": {
     "title_case": false
+  },
+  "layouts": {
+    "by_intent": {
+      "list": "split-right",
+      "quote": "framed",
+      "proof": "framed"
+    },
+    "by_section": {
+      "hook": "full"
+    },
+    "panel": {
+      "treatment": "solid",
+      "radius": 12
+    }
+  },
+  "vocabulary": {
+    "icon_tint": "primary",
+    "illustration": false,
+    "prefer": {
+      "quote": [
+        "excerpt-window"
+      ],
+      "number": [
+        "count-up",
+        "metric"
+      ],
+      "claim": [
+        "kinetic-words"
+      ]
+    }
+  },
+  "cast": {
+    "drawing_style": "flat",
+    "colors": {
+      "fill": "primary",
+      "accent": "accent",
+      "line": "paper"
+    }
+  },
+  "brand_frame": {
+    "enabled": true,
+    "kicker": {
+      "underline": true,
+      "position": "top-left",
+      "logo": true
+    },
+    "sections": true,
+    "progress": false,
+    "show": "always"
+  },
+  "dials": {
+    "energy": 0.35,
+    "density": 0.5,
+    "playfulness": 0.2,
+    "polish": 0.8
   },
   "loop": true
 }

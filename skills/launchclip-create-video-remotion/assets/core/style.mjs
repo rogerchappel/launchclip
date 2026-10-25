@@ -1,8 +1,12 @@
-// Style pack v2 (launchclip.style.v2): a channel's reusable look and feel —
+// Style pack v3 (launchclip.style.v3): a channel's reusable look and feel —
 // palette and bundled fonts, motion grammar, camera, ambient motion, caption
 // preset, sound density and music hints, module preferences and defaults,
-// layout rules, an optional intro/outro and loop — merged into a storyboard by
-// applyStyle(). Explicit story values always win; the pack fills gaps.
+// layout rules, an optional intro/outro and loop (all from v2), plus footage
+// layout rules, vocabulary choices, a cadence profile, a cast, the brand
+// frame, caption defaults per lane and the four dials (docs/VIDEO_QUALITY_RFC.md
+// §9) — merged into a storyboard by applyStyle(). Explicit story values
+// always win; the pack fills gaps. v2 packs still load: upgradeV2Pack() fills
+// the v3 fields in memory.
 //
 // Pure ESM that imports only its kit/core siblings, so the merge is identical
 // in the CLI, the renderer adapters, the eval and the skills. File lookup
@@ -13,8 +17,10 @@
 
 import { CAPTION_PRESET_NAMES } from './captions.mjs';
 import { FONT_REGISTRY, fontFamilyName, registeredFamily } from './fonts.mjs';
+import { CADENCE_PROFILE_SCHEMA, validateProfile } from './profiles.mjs';
 
-export const STYLE_SCHEMA = 'launchclip.style.v2';
+export const STYLE_SCHEMA = 'launchclip.style.v3';
+export const STYLE_V2_SCHEMA = 'launchclip.style.v2';
 export const STYLE_V1_SCHEMA = 'launchclip.style-pack.v1';
 export const STYLE_SFX_DENSITIES = Object.freeze(['low', 'normal', 'high']);
 export const STYLE_AMBIENT_LEVELS = Object.freeze(['off', 'subtle', 'standard', 'lively']);
@@ -23,6 +29,16 @@ export const STYLE_COLOR_ROLES = Object.freeze(['bg', 'paper', 'ink', 'primary',
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 const TOP = new Set(['schema', 'name', 'description', 'brand', 'motion', 'camera', 'ambient', 'captions', 'sound', 'modules', 'layout', 'intro', 'outro', 'loop', 'references', 'reference_stats', 'notes', 'created_at', 'upgraded_from']);
+// v3 fields (docs/VIDEO_QUALITY_RFC.md §9.1–9.3).
+const TOP_V3 = new Set(['layouts', 'vocabulary', 'profile', 'cast', 'brand_frame', 'dials']);
+// Footage layouts (RFC §7.1). The layouts session owns their geometry; a
+// style only names them, so an unknown name is a warning, not an error.
+export const STYLE_LAYOUTS = Object.freeze(['full', 'split-left', 'split-right', 'framed', 'stacked', 'insert']);
+export const STYLE_PANEL_TREATMENTS = Object.freeze(['solid', 'glass', 'paper']);
+export const STYLE_DIALS = Object.freeze(['energy', 'density', 'playfulness', 'polish']);
+export const STYLE_CAPTION_LANES = Object.freeze(['motion', 'voiceover-motion', 'footage-led']);
+export const STYLE_FRAME_POSITIONS = Object.freeze(['top-left', 'top-right', 'bottom-left', 'bottom-right']);
+export { CADENCE_PROFILE_SCHEMA };
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const nonEmpty = (value) => typeof value === 'string' && value.trim().length > 0;
@@ -198,9 +214,13 @@ export function validateStylePack(pack, { modules } = {}) {
   const warnings = [];
   const err = (message) => errors.push(message);
   if (!isObject(pack)) return { ok: false, errors: ['style pack must be a JSON object'], warnings };
-  if (pack.schema !== STYLE_SCHEMA) err(pack.schema === STYLE_V1_SCHEMA || pack.schema_version === STYLE_V1_SCHEMA ? `this is a v1 style pack; run launchclip style upgrade ${pack.name ?? '<name>'}` : `schema must be "${STYLE_SCHEMA}"`);
+  const v2 = pack.schema === STYLE_V2_SCHEMA;
+  if (pack.schema !== STYLE_SCHEMA && !v2) err(pack.schema === STYLE_V1_SCHEMA || pack.schema_version === STYLE_V1_SCHEMA ? `this is a v1 style pack; run launchclip style upgrade ${pack.name ?? '<name>'}` : `schema must be "${STYLE_SCHEMA}" (or "${STYLE_V2_SCHEMA}", upgraded on load)`);
   if (!nonEmpty(pack.name) || !NAME.test(pack.name)) err('name must be 1-64 letters, numbers, hyphens or underscores');
-  for (const key of Object.keys(pack)) if (!TOP.has(key)) warnings.push(`${key} is not a style pack v2 field and is ignored`);
+  for (const key of Object.keys(pack)) {
+    if (TOP_V3.has(key)) { if (v2) warnings.push(`${key} is a style v3 field; set schema to "${STYLE_SCHEMA}" (run launchclip style upgrade ${pack.name ?? '<name>'})`); }
+    else if (!TOP.has(key)) warnings.push(`${key} is not a style pack field and is ignored`);
+  }
   if (pack.description !== undefined && typeof pack.description !== 'string') err('description must be a string');
   if (pack.brand !== undefined) {
     if (!isObject(pack.brand)) err('brand must be an object with colors and fonts');
@@ -240,7 +260,17 @@ export function validateStylePack(pack, { modules } = {}) {
   }
   if (pack.captions !== undefined) {
     if (!isObject(pack.captions)) err('captions must be an object');
-    else if (pack.captions.preset !== undefined && pack.captions.preset !== 'none' && !CAPTION_PRESET_NAMES.includes(pack.captions.preset)) err(`captions.preset must be one of ${CAPTION_PRESET_NAMES.join(', ')} or "none"`);
+    else {
+      if (pack.captions.preset !== undefined && pack.captions.preset !== 'none' && !CAPTION_PRESET_NAMES.includes(pack.captions.preset)) err(`captions.preset must be one of ${CAPTION_PRESET_NAMES.join(', ')} or "none"`);
+      if (pack.captions.lanes !== undefined) {
+        if (!isObject(pack.captions.lanes)) err('captions.lanes must be {lane: {preset, ...options}}');
+        else for (const [lane, entry] of Object.entries(pack.captions.lanes)) {
+          if (!STYLE_CAPTION_LANES.includes(lane)) err(`captions.lanes.${lane} is not a lane (${STYLE_CAPTION_LANES.join(', ')})`);
+          else if (!isObject(entry)) err(`captions.lanes.${lane} must be an object of caption options`);
+          else if (entry.preset !== undefined && entry.preset !== 'none' && !CAPTION_PRESET_NAMES.includes(entry.preset)) err(`captions.lanes.${lane}.preset must be one of ${CAPTION_PRESET_NAMES.join(', ')} or "none"`);
+        }
+      }
+    }
   }
   if (pack.sound !== undefined) {
     const sound = pack.sound;
@@ -292,7 +322,131 @@ export function validateStylePack(pack, { modules } = {}) {
   }
   if (pack.loop !== undefined && typeof pack.loop !== 'boolean') err('loop must be true or false');
   if (pack.references !== undefined && !Array.isArray(pack.references)) err('references must be a list');
+  validateV3Fields(pack, { err, warn: (message) => warnings.push(message), modules });
   return { ok: errors.length === 0, errors, warnings };
+}
+
+const isColorRef = (value) => typeof value === 'string' && (HEX.test(value) || STYLE_COLOR_ROLES.includes(value));
+const isUnit = (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+
+/**
+ * A style's cadence profile: a shipped profile id (src/profile_store.js
+ * resolves it), or an inline measured profile, which must be a valid
+ * launchclip.cadence-profile.v1 (kit/core/profiles.mjs validateProfile).
+ * → error messages
+ */
+export function cadenceProfileErrors(profile, where = 'profile') {
+  if (typeof profile === 'string') return NAME.test(profile) ? [] : [`${where} must be a profile id or a measured profile object`];
+  if (!isObject(profile)) return [`${where} must be a profile id or a measured profile object`];
+  return validateProfile(profile).errors.map((message) => `${where}: ${message}`);
+}
+
+/** The brand frame's shape (RFC §9.2), shared by style.brand_frame and story.frame. → error messages */
+export function brandFrameErrors(frame, where = 'brand_frame') {
+  if (frame === false) return [];
+  if (!isObject(frame)) return [`${where} must be an object (or false)`];
+  const errors = [];
+  const keys = new Set(['enabled', 'logo', 'kicker', 'sections', 'progress', 'show', 'labels', 'color']);
+  for (const key of Object.keys(frame)) if (!keys.has(key)) errors.push(`${where}.${key} is not a brand frame field (${[...keys].join(', ')})`);
+  if (frame.enabled !== undefined && typeof frame.enabled !== 'boolean') errors.push(`${where}.enabled must be true or false`);
+  if (frame.logo !== undefined && frame.logo !== null && !nonEmpty(frame.logo)) errors.push(`${where}.logo must be an image path in the project (assets/...)`);
+  if (frame.color !== undefined && !isColorRef(frame.color)) errors.push(`${where}.color must be a brand role or a hex colour`);
+  const part = (name, allowed) => {
+    const value = frame[name];
+    if (value === undefined || typeof value === 'boolean') return;
+    if (!isObject(value)) { errors.push(`${where}.${name} must be true, false or an object`); return; }
+    for (const key of Object.keys(value)) if (!allowed.includes(key)) errors.push(`${where}.${name}.${key} is not supported (${allowed.join(', ')})`);
+    if (value.position !== undefined && !STYLE_FRAME_POSITIONS.includes(value.position) && !(name === 'progress' && ['top', 'bottom'].includes(value.position))) errors.push(`${where}.${name}.position must be one of ${name === 'progress' ? 'top, bottom' : STYLE_FRAME_POSITIONS.join(', ')}`);
+    if (value.color !== undefined && !isColorRef(value.color)) errors.push(`${where}.${name}.color must be a brand role or a hex colour`);
+  };
+  part('kicker', ['label', 'underline', 'position', 'color', 'logo']);
+  part('sections', ['position', 'color']);
+  part('progress', ['position', 'color', 'thickness']);
+  if (isObject(frame.kicker)) {
+    if (frame.kicker.label !== undefined && !(nonEmpty(frame.kicker.label) && frame.kicker.label.length <= 40)) errors.push(`${where}.kicker.label must be 1-40 characters`);
+    if (frame.kicker.underline !== undefined && typeof frame.kicker.underline !== 'boolean') errors.push(`${where}.kicker.underline must be true or false`);
+    if (frame.kicker.logo !== undefined && typeof frame.kicker.logo !== 'boolean') errors.push(`${where}.kicker.logo must be true or false (show the frame logo in the kicker)`);
+  }
+  if (isObject(frame.progress) && frame.progress.thickness !== undefined && !(typeof frame.progress.thickness === 'number' && frame.progress.thickness >= 2 && frame.progress.thickness <= 16)) errors.push(`${where}.progress.thickness must be 2-16 px`);
+  if (frame.show !== undefined && !['always', 'scenes'].includes(frame.show)) errors.push(`${where}.show must be always or scenes`);
+  if (frame.labels !== undefined) {
+    if (!Array.isArray(frame.labels)) errors.push(`${where}.labels must be a list of {start | scene, label}`);
+    else frame.labels.forEach((entry, i) => {
+      if (!isObject(entry) || !(nonEmpty(entry.label) && entry.label.length <= 40)) errors.push(`${where}.labels[${i}].label must be 1-40 characters`);
+      else if ((typeof entry.start === 'number') === (typeof entry.scene === 'string')) errors.push(`${where}.labels[${i}] needs exactly one of start (seconds) or scene (a scene id)`);
+      else if (typeof entry.start === 'number' && !(entry.start >= 0)) errors.push(`${where}.labels[${i}].start must be seconds ≥ 0`);
+    });
+  }
+  return errors;
+}
+
+function validateV3Fields(pack, { err, warn, modules }) {
+  const known = modules == null ? null : new Set(modules instanceof Set ? [...modules] : modules);
+  const layoutName = (value, where) => {
+    if (!nonEmpty(value)) err(`${where} must be a layout name`);
+    else if (!STYLE_LAYOUTS.includes(value)) warn(`${where} "${value}" is not one of ${STYLE_LAYOUTS.join(', ')}`);
+  };
+  if (pack.layouts !== undefined) {
+    const l = pack.layouts;
+    if (!isObject(l)) err('layouts must be {by_intent, by_section, panel}');
+    else {
+      for (const key of Object.keys(l)) if (!['by_intent', 'by_section', 'panel'].includes(key)) err(`layouts.${key} is not supported (by_intent, by_section, panel)`);
+      for (const key of ['by_intent', 'by_section']) {
+        if (l[key] === undefined) continue;
+        if (!isObject(l[key])) err(`layouts.${key} must be {name: layout}`);
+        else for (const [name, value] of Object.entries(l[key])) layoutName(value, `layouts.${key}.${name}`);
+      }
+      if (l.panel !== undefined) {
+        if (!isObject(l.panel)) err('layouts.panel must be {treatment, radius}');
+        else {
+          if (l.panel.treatment !== undefined && !STYLE_PANEL_TREATMENTS.includes(l.panel.treatment)) err(`layouts.panel.treatment must be one of ${STYLE_PANEL_TREATMENTS.join(', ')}`);
+          if (l.panel.radius !== undefined && !(typeof l.panel.radius === 'number' && l.panel.radius >= 0 && l.panel.radius <= 120)) err('layouts.panel.radius must be 0-120 px');
+        }
+      }
+    }
+  }
+  if (pack.vocabulary !== undefined) {
+    const v = pack.vocabulary;
+    if (!isObject(v)) err('vocabulary must be {icon_tint, illustration, prefer}');
+    else {
+      for (const key of Object.keys(v)) if (!['icon_tint', 'illustration', 'prefer'].includes(key)) err(`vocabulary.${key} is not supported (icon_tint, illustration, prefer)`);
+      if (v.icon_tint !== undefined && !isColorRef(v.icon_tint)) err('vocabulary.icon_tint must be a brand role or a hex colour');
+      if (v.illustration !== undefined && typeof v.illustration !== 'boolean') err('vocabulary.illustration must be true or false');
+      if (v.prefer !== undefined) {
+        if (!isObject(v.prefer)) err('vocabulary.prefer must be {intent: [module ids]}');
+        else for (const [intent, ids] of Object.entries(v.prefer)) {
+          if (!Array.isArray(ids) || !ids.every(nonEmpty)) err(`vocabulary.prefer.${intent} must be a list of module ids`);
+          else if (known) for (const id of ids) if (!known.has(id)) warn(`vocabulary.prefer.${intent}: "${id}" is not a known module`);
+        }
+      }
+    }
+  }
+  if (pack.profile !== undefined) for (const message of cadenceProfileErrors(pack.profile)) err(message);
+  if (pack.cast !== undefined) {
+    // The characters kit (kit/core/characters/) fills the cast in; only its shape is checked here.
+    const c = pack.cast;
+    if (!isObject(c)) err('cast must be {drawing_style, colors, characters}');
+    else {
+      for (const key of Object.keys(c)) if (!['drawing_style', 'colors', 'characters'].includes(key)) err(`cast.${key} is not supported (drawing_style, colors, characters)`);
+      if (c.drawing_style !== undefined && !(nonEmpty(c.drawing_style) && NAME.test(c.drawing_style))) err('cast.drawing_style must be a drawing style name');
+      if (c.colors !== undefined) {
+        if (!isObject(c.colors)) err('cast.colors must be {slot: brand role or hex}');
+        else for (const [slot, value] of Object.entries(c.colors)) if (!isColorRef(value)) err(`cast.colors.${slot} must be a brand role or a hex colour`);
+      }
+      if (c.characters !== undefined && !(Array.isArray(c.characters) && c.characters.every((id) => nonEmpty(id) && NAME.test(id)))) err('cast.characters must be a list of character ids');
+    }
+  }
+  if (pack.brand_frame !== undefined) {
+    for (const message of brandFrameErrors(pack.brand_frame)) err(message);
+    if (isObject(pack.brand_frame) && pack.brand_frame.labels !== undefined) warn('brand_frame.labels belong to a story (story.frame.labels); a style\'s labels are ignored');
+  }
+  if (pack.dials !== undefined) {
+    if (!isObject(pack.dials)) err(`dials must be {${STYLE_DIALS.join(', ')}}, each 0-1`);
+    else for (const [key, value] of Object.entries(pack.dials)) {
+      if (!STYLE_DIALS.includes(key)) err(`dials.${key} is not a dial (${STYLE_DIALS.join(', ')})`);
+      else if (!isUnit(value)) err(`dials.${key} must be a number from 0 to 1`);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -304,6 +458,15 @@ export function storyStyleRequest(story) {
   if (typeof value === 'string' && value.trim()) return { name: value.trim(), intro: false, outro: false, loop: null };
   if (isObject(value) && nonEmpty(value.name)) return { name: value.name.trim(), intro: value.intro === true, outro: value.outro === true, loop: typeof value.loop === 'boolean' ? value.loop : null };
   return null;
+}
+
+/** A pack's caption defaults for a lane: captions without lanes, then captions.lanes[lane] on top. Null when the pack has none. */
+export function packCaptionsFor(pack, lane) {
+  if (!isObject(pack?.captions)) return null;
+  const { lanes, ...base } = pack.captions;
+  const own = isObject(lanes) && isObject(lanes[lane]) ? lanes[lane] : {};
+  const merged = { ...base, ...own };
+  return Object.keys(merged).length ? merged : null;
 }
 
 function usesAnchors(story) {
@@ -366,17 +529,19 @@ export function applyStyle(story, pack, options = {}) {
     else if (isObject(out[key])) fill(out[key], pack[key], key);
   }
 
-  // Captions: the pack's preset and options fill the story's captions overlay
+  // Captions: the pack's preset and options, with its defaults for the
+  // story's lane on top (v3 captions.lanes), fill the story's captions overlay
   // (added when the story declares no overlays at all).
-  if (isObject(pack.captions) && pack.captions.preset !== 'none') {
+  const captions = packCaptionsFor(pack, out.lane);
+  if (captions && captions.preset !== 'none') {
     if (out.overlays === undefined) {
-      out.overlays = [{ type: 'captions', ...clone(pack.captions) }];
+      out.overlays = [{ type: 'captions', ...clone(captions) }];
       applied.push('overlays[0] (captions)');
     } else if (Array.isArray(out.overlays)) {
       const index = out.overlays.findIndex((entry) => entry?.type === 'captions');
       const overlay = index >= 0 ? out.overlays[index] : null;
       if (overlay && overlay.style !== 'none' && overlay.preset !== 'none') {
-        for (const [key, value] of Object.entries(pack.captions)) {
+        for (const [key, value] of Object.entries(captions)) {
           if (key === 'preset') {
             if (overlay.preset === undefined && overlay.style === undefined) { overlay.preset = value; applied.push(`overlays[${index}].preset`); }
           } else if (overlay[key] === undefined) { overlay[key] = clone(value); applied.push(`overlays[${index}].${key}`); }
@@ -391,6 +556,14 @@ export function applyStyle(story, pack, options = {}) {
     if (pack.sound.sfx_density !== undefined && out.audio.sfx_density === undefined) { out.audio.sfx_density = pack.sound.sfx_density; applied.push('audio.sfx_density'); }
     if (pack.sound.sfx_library !== undefined && out.audio.sfx_library === undefined) { out.audio.sfx_library = pack.sound.sfx_library; applied.push('audio.sfx_library'); }
     if (isObject(pack.sound.music) && out.audio.music_hints === undefined) { out.audio.music_hints = clone(pack.sound.music); applied.push('audio.music_hints'); }
+  }
+
+  // Brand frame (v3): the story's frame, filled per key; a story with
+  // "frame": false keeps none.
+  if (isObject(pack.brand_frame) && pack.brand_frame.enabled !== false && out.frame !== false) {
+    const { labels, ...frame } = pack.brand_frame;
+    if (out.frame === undefined) { out.frame = clone(frame); applied.push('frame'); }
+    else if (isObject(out.frame)) fill(out.frame, frame, 'frame');
   }
 
   // Module param defaults, per scene.
@@ -453,10 +626,50 @@ export function applyStyle(story, pack, options = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// v1 → v2 and prompt text
+// v2 → v3
+
+/** Defaults the v3 fields take when a pack leaves them out (and what an upgrade writes). */
+export const STYLE_V3_DEFAULTS = Object.freeze({
+  layouts: Object.freeze({ by_intent: Object.freeze({}), by_section: Object.freeze({}), panel: Object.freeze({ treatment: 'solid', radius: 24 }) }),
+  vocabulary: Object.freeze({ icon_tint: 'primary', illustration: true, prefer: Object.freeze({}) }),
+  brand_frame: Object.freeze({ enabled: true, kicker: Object.freeze({ underline: true, position: 'top-left', logo: true }), sections: true, progress: false, show: 'always' }),
+  caption_lanes: Object.freeze({ 'footage-led': Object.freeze({ preset: 'quiet-accent' }) }),
+  dials: Object.freeze({ energy: 0.5, density: 0.5, playfulness: 0.5, polish: 0.5 })
+});
 
 /**
- * Draft a v2 pack from a v1 pack (frame.md / DESIGN.md text, optional audio
+ * A v3 pack from a v2 pack. The v3 fields the pack lacks are filled from
+ * STYLE_V3_DEFAULTS; the pack's own values are kept. With render: "same" (how
+ * a v2 pack is upgraded on load) the brand frame is off and no lane caption
+ * default is added, so a v2 pack renders exactly as before; the written
+ * upgrade (launchclip style upgrade) turns both on. A v3 pack is returned as
+ * it is. → {pack, notes: []}
+ */
+export function upgradeV2Pack(pack, { render = 'new' } = {}) {
+  if (!isObject(pack)) throw new Error('style pack must be a JSON object');
+  if (pack.schema === STYLE_SCHEMA) return { pack, notes: [] };
+  if (pack.schema !== STYLE_V2_SCHEMA) throw new Error(`upgradeV2Pack needs a "${STYLE_V2_SCHEMA}" pack`);
+  const same = render === 'same';
+  const out = { ...clone(pack), schema: STYLE_SCHEMA, upgraded_from: pack.upgraded_from ?? STYLE_V2_SCHEMA };
+  const notes = [];
+  const fill = (key, value, note) => { if (out[key] === undefined) { out[key] = clone(value); notes.push(note); } };
+  fill('layouts', STYLE_V3_DEFAULTS.layouts, 'layouts: no layout preferences; solid panels with a 24 px radius');
+  fill('vocabulary', STYLE_V3_DEFAULTS.vocabulary, 'vocabulary: icons tinted primary, illustration on');
+  fill('dials', STYLE_V3_DEFAULTS.dials, 'dials: all at 0.5 (the middle of the profile band)');
+  if (same) fill('brand_frame', { enabled: false }, 'brand_frame: off (a v2 pack loaded as v3 renders as before; run launchclip style upgrade to turn it on)');
+  else fill('brand_frame', STYLE_V3_DEFAULTS.brand_frame, 'brand_frame: kicker with underline top left, section labels on, no progress line');
+  if (!same && out.captions?.preset === undefined && out.captions?.lanes === undefined) {
+    out.captions = { ...(isObject(out.captions) ? out.captions : {}), lanes: clone(STYLE_V3_DEFAULTS.caption_lanes) };
+    notes.push('captions.lanes: footage-led stories use the quiet-accent preset');
+  }
+  return { pack: out, notes };
+}
+
+// ---------------------------------------------------------------------------
+// v1 → v3 and prompt text
+
+/**
+ * Draft a v3 pack from a v1 pack (frame.md / DESIGN.md text, optional audio
  * notes and caption skin). Hex colours and font names are read from the
  * specification; anything not found is left to the merge defaults.
  * → {pack, notes: []}
@@ -499,6 +712,10 @@ export function upgradeV1Pack({ name, specification = '', audio = '', captionSki
     motion: { grammar },
     captions: { preset: captionSkin ? 'word-highlight' : 'minimal-line' },
     sound: { sfx_density: /no sfx|minimal sound|sparse/i.test(audio) ? 'low' : /lots of sfx|dense|punchy/i.test(audio) ? 'high' : 'normal', ...(audio.trim() ? { music: { prompt_hints: [audio.trim().split('\n').find((line) => line.trim())?.trim().slice(0, 200)].filter(Boolean) } } : {}) },
+    layouts: clone(STYLE_V3_DEFAULTS.layouts),
+    vocabulary: clone(STYLE_V3_DEFAULTS.vocabulary),
+    brand_frame: clone(STYLE_V3_DEFAULTS.brand_frame),
+    dials: clone(STYLE_V3_DEFAULTS.dials),
     upgraded_from: STYLE_V1_SCHEMA
   };
   notes.push(`motion.grammar: ${grammar} (from the specification's wording)`);
@@ -506,14 +723,24 @@ export function upgradeV1Pack({ name, specification = '', audio = '', captionSki
   return { pack, notes: [...notes, ...assigned.notes] };
 }
 
-/** Planner prompt lines for a style pack (preferences, avoid list, caption preset). */
-export function stylePromptLines(pack) {
+/** Planner prompt lines for a style pack (preferences, avoid list, caption preset, v3 layouts, vocabulary, frame and cast). */
+export function stylePromptLines(pack, { lane } = {}) {
   if (!isObject(pack)) return [];
   const lines = [`style pack: ${pack.name}${pack.description ? ` — ${pack.description}` : ''}`];
   lines.push('Set "style": "' + pack.name + '" at the top level. The pack fills brand, captions, motion, camera, ambient and sound; do not restate them unless the brief demands an exception.');
   if (pack.modules?.prefer?.length) lines.push(`Prefer these modules where the script allows: ${pack.modules.prefer.join(', ')}.`);
   if (pack.modules?.avoid?.length) lines.push(`Avoid these modules: ${pack.modules.avoid.join(', ')}.`);
-  if (pack.captions?.preset) lines.push(`Captions use the ${pack.captions.preset} preset: write {"type": "captions"} without a style or preset.`);
+  const captions = packCaptionsFor(pack, lane);
+  if (captions?.preset) lines.push(`Captions use the ${captions.preset} preset${pack.captions?.lanes?.[lane]?.preset ? ` (the pack's ${lane} default)` : ''}: write {"type": "captions"} without a style or preset.`);
+  const layouts = pack.layouts;
+  const named = (map) => Object.entries(map ?? {}).map(([key, value]) => `${key} → ${value}`).join(', ');
+  if (lane === 'footage-led' && (named(layouts?.by_intent) || named(layouts?.by_section))) lines.push(`Preferred footage layouts: ${[named(layouts.by_intent) && `by intent ${named(layouts.by_intent)}`, named(layouts.by_section) && `by section ${named(layouts.by_section)}`].filter(Boolean).join('; ')}.`);
+  if (layouts?.panel) lines.push(`Panels: ${layouts.panel.treatment ?? 'solid'}${layouts.panel.radius !== undefined ? `, ${layouts.panel.radius} px corners` : ''}.`);
+  const vocabulary = pack.vocabulary;
+  if (Object.keys(vocabulary?.prefer ?? {}).length) lines.push(`Preferred modules by intent: ${Object.entries(vocabulary.prefer).map(([intent, ids]) => `${intent} → ${ids.join(' or ')}`).join('; ')}.`);
+  if (vocabulary?.illustration === false) lines.push('No illustrated objects: use icons, type and real media only.');
+  if (pack.cast?.characters?.length) lines.push(`Default cast: ${pack.cast.characters.join(', ')}${pack.cast.drawing_style ? ` (${pack.cast.drawing_style})` : ''}; reuse them rather than inventing characters.`);
+  if (isObject(pack.brand_frame) && pack.brand_frame.enabled !== false) lines.push('The pack draws a brand frame (kicker, section labels, progress line) around every scene: do not author kickers or brand labels as scenes. Name sections with "frame": {"labels": [{"scene": "<id>", "label": "<2-4 words>"}]}.');
   const grammar = typeof pack.motion?.grammar === 'string' ? pack.motion.grammar : pack.motion?.grammar?.base;
   if (grammar) lines.push(`Motion grammar: ${grammar}${grammar === 'snappy' ? ' (short scenes, fast push/whip transitions)' : grammar === 'smooth' || grammar === 'documentary' || grammar === 'cinematic' ? ' (longer holds, fades and slow pushes)' : ''}.`);
   if (pack.ambient?.level) lines.push(`Ambient motion level: ${pack.ambient.level}.`);
