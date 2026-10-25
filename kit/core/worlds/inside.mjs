@@ -1,4 +1,5 @@
-// Inside worlds: office, home desk, kitchen, living room, classroom, cafe, workshop, server room, studio and gym.
+// Inside worlds: office, home desk, kitchen, living room, classroom, cafe,
+// workshop, server room, studio and gym.
 //
 // Each world is {group, label, describe, geo, back, mid, front, fx?}:
 // geo(k) lays the room out once (floor line, anchors for props and
