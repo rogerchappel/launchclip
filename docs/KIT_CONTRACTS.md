@@ -1577,6 +1577,24 @@ the story through `story.cast` (the style merge fills it).
   drawn from different params or colours than the story cast, or differs
   between scenes.
 
+### Dialogue, the cast sheet and the gate
+
+- `audio.narration.lines: [{speaker, text}]` (`src/voice/dialogue.js`): each
+  line is synthesised in its speaker's cast voice (`story.cast.characters[].voice`,
+  a local Kokoro voice id) or, for `"narrator"`, in `audio.narration.voice`;
+  the takes are joined with a 0.3 s pause and every word keeps its `speaker`
+  in NARRATION.json. A cast entry's `says: "auto"` resolves to that
+  character's own words in the scene.
+- `launchclip cast sheet <project>` (`src/cast.js`) renders every character
+  in every pose and expression the scenes and the direction map use, with the
+  modules' own view tree, to `qa/cast-sheet.png` (+ `qa/cast-sheet.json`:
+  poses, expressions, voice and fingerprint per character).
+- `launchclip finish` runs `castGate(resolved, {direction})` in its validate
+  stage and reports `gates.cast`: the story cast is valid, every character
+  scene resolves, the direction map's cast cues resolve, each character is
+  identical in every scene, and voices are local Kokoro voices. A failure
+  stops finish before rendering.
+
 ### Parity
 
 `test/fixtures/parity/characters-*.json` (every set, both orientations, a

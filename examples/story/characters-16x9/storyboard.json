@@ -1,0 +1,256 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Maya's demo video: a two-character story",
+  "lane": "voiceover-motion",
+  "format": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "duration": 23.5,
+    "platform": "youtube"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#14122b",
+      "primary": "#6d5dfc",
+      "accent": "#ffb547",
+      "ink": "#14122b",
+      "paper": "#f6f3ee"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "cast": {
+    "style": "flat",
+    "characters": [
+      {
+        "id": "maya",
+        "voice": "af_heart"
+      },
+      {
+        "id": "theo",
+        "voice": "am_michael"
+      }
+    ]
+  },
+  "audio": {
+    "words": "NARRATION.json",
+    "narration": {
+      "lines": [
+        {
+          "speaker": "narrator",
+          "text": "Every launch, Maya rebuilds the demo video by hand."
+        },
+        {
+          "speaker": "narrator",
+          "text": "And every time, it breaks."
+        },
+        {
+          "speaker": "maya",
+          "text": "Not again. Three hours, gone."
+        },
+        {
+          "speaker": "theo",
+          "text": "Try Pulseboard. It records the product flow for you."
+        },
+        {
+          "speaker": "narrator",
+          "text": "Every release gets a fresh demo. No rebuilds."
+        },
+        {
+          "speaker": "maya",
+          "text": "Ship the video with the launch!"
+        }
+      ],
+      "provider": "kokoro",
+      "voice": "bf_emma"
+    }
+  },
+  "scenes": [
+    {
+      "id": "desk-fail",
+      "module": "cast-scene",
+      "start": 0,
+      "end": "word:Not-0.25",
+      "params": {
+        "set": "desk-laptop",
+        "cast": [
+          {
+            "id": "maya",
+            "pose": "type",
+            "expression": "focused",
+            "cues": [
+              {
+                "at": "word:breaks.",
+                "pose": "slump",
+                "expression": "frustrated"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "phone-turn",
+      "module": "cast-scene",
+      "start": "word:Not-0.25",
+      "end": "word:It#2-0.2",
+      "in": {
+        "type": "fade",
+        "dur": 0.35
+      },
+      "params": {
+        "set": "phone",
+        "cast": [
+          {
+            "id": "maya",
+            "pose": "slump",
+            "expression": "frustrated",
+            "says": "auto",
+            "cues": [
+              {
+                "at": "word:Three",
+                "pose": "shrug",
+                "expression": "confused"
+              },
+              {
+                "at": "word:Pulseboard.",
+                "pose": "stand",
+                "expression": "surprised"
+              }
+            ]
+          },
+          {
+            "id": "theo",
+            "pose": "stand",
+            "expression": "neutral",
+            "holds": "phone",
+            "says": "auto",
+            "cues": [
+              {
+                "at": "word:Try",
+                "pose": "wave",
+                "expression": "happy"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "screen-fix",
+      "module": "cast-scene",
+      "start": "word:It#2-0.2",
+      "end": "word:Every#3-0.25",
+      "in": {
+        "type": "fade",
+        "dur": 0.35
+      },
+      "params": {
+        "set": "screen",
+        "screen": {
+          "src": "assets/demo/create-project.mp4",
+          "sourceStart": 0.5
+        },
+        "cast": [
+          {
+            "id": "theo",
+            "pose": "point",
+            "expression": "happy",
+            "says": "auto"
+          },
+          {
+            "id": "maya",
+            "pose": "think",
+            "expression": "focused",
+            "cues": [
+              {
+                "at": "word:flow",
+                "pose": "point",
+                "expression": "delighted"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "desk-win",
+      "module": "cast-scene",
+      "start": "word:Every#3-0.25",
+      "end": "word:Ship-0.25",
+      "in": {
+        "type": "fade",
+        "dur": 0.35
+      },
+      "params": {
+        "set": "desk-laptop",
+        "cast": [
+          {
+            "id": "maya",
+            "pose": "type",
+            "expression": "happy",
+            "cues": [
+              {
+                "at": "word:rebuilds#2",
+                "pose": "cheer",
+                "expression": "delighted"
+              }
+            ]
+          },
+          {
+            "id": "theo",
+            "pose": "sit",
+            "expression": "happy",
+            "cues": [
+              {
+                "at": "word:demo#2",
+                "pose": "shrug"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "close",
+      "module": "character-cameo",
+      "start": "word:Ship-0.25",
+      "end": 22.5,
+      "in": {
+        "type": "fade",
+        "dur": 0.35
+      },
+      "params": {
+        "character": "maya",
+        "pose": "wave",
+        "expression": "delighted",
+        "side": "left",
+        "card": {
+          "kicker": "Pulseboard",
+          "title": "Ship the video with the launch",
+          "body": "A fresh product demo, recorded from every release."
+        },
+        "cues": [
+          {
+            "at": "word:launch#2",
+            "pose": "cheer"
+          }
+        ],
+        "says": "auto"
+      }
+    }
+  ],
+  "overlays": [
+    {
+      "type": "captions",
+      "style": "word-highlight"
+    }
+  ],
+  "ending": {
+    "final": "hold"
+  }
+}
