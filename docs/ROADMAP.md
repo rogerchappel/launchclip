@@ -23,6 +23,7 @@ LaunchClip's goal: **a SaaS founder points it at their product and gets a launch
   - Pacing and density are measured from strong reference videos, per format: Shorts, long form, your own footage and motion graphics.
   - Every line of the story gets a visual decision, and footage gets split-screen layouts and a much larger visual vocabulary.
   - Styles carry your brand frame and a few simple dials, and a draft that's sparse or off-style fails its checks before you see it.
+  - Fully animated stories get the same treatment once the animated characters below arrive: a cast directed line by line, inside the same checks.
 - **Smarter asset understanding:** recognise what's in your screenshots and recordings (a pricing page, a dashboard, an onboarding flow) and place them where the story needs them.
 - **Built-in critic by default:** a vision model reviews the video the way a human editor would, as part of `launchclip make`.
 - **Faster first run:** smaller downloads and pre-warmed rendering, so the first video arrives sooner.
