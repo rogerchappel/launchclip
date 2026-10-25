@@ -4,7 +4,7 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { copyFile, mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { validateTimeline } from "../motion-engine/schema.js";
@@ -162,23 +162,27 @@ export function parseWords(raw) {
 async function transcribeWithWhisper(media) {
   const outputDir = await mkdtemp(path.join(tmpdir(), "launchclip-whisper-"));
   try {
-    await execFileAsync(
-      "whisper",
-      [media, "--model", "base", "--word_timestamps", "True", "--output_format", "json", "--output_dir", outputDir],
-      { maxBuffer: 1024 * 1024 * 32 }
-    );
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      throw new Error(
-        "whisper CLI not found. Install it (pipx install openai-whisper) or pass --words path/to/words.json from another transcriber."
+    try {
+      await execFileAsync(
+        "whisper",
+        [media, "--model", "base", "--word_timestamps", "True", "--output_format", "json", "--output_dir", outputDir],
+        { maxBuffer: 1024 * 1024 * 32 }
       );
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        throw new Error(
+          "whisper CLI not found. Install it (pipx install openai-whisper) or pass --words path/to/words.json from another transcriber."
+        );
+      }
+      throw error;
     }
-    throw error;
+    const files = await readdir(outputDir);
+    const jsonFile = files.find((file) => file.endsWith(".json"));
+    if (!jsonFile) throw new Error("whisper produced no JSON output");
+    return parseWords(await readFile(path.join(outputDir, jsonFile), "utf8"));
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
   }
-  const files = await readdir(outputDir);
-  const jsonFile = files.find((file) => file.endsWith(".json"));
-  if (!jsonFile) throw new Error("whisper produced no JSON output");
-  return parseWords(await readFile(path.join(outputDir, jsonFile), "utf8"));
 }
 
 async function probeDuration(media) {
