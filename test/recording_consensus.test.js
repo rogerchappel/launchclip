@@ -133,7 +133,7 @@ test("edit-recording transcribes with both local models by default and keeps the
     probe: async () => ({ format: { duration: 4 }, streams: [{ codec_type: "video" }, { codec_type: "audio" }] }),
     transcribe: async (_input, options) => { models.push(options.model); return { words: options.model === "small.en" ? said(0.1) : said(0) }; },
     measureFrameLevels: async () => ({ step_seconds: 0.01, levels_db: Array(400).fill(-30) }),
-    analyzeRecordingAudio: async () => ({ schema_version: "launchclip.recording-audio.v1", source_duration_seconds: 4, threshold_db: -40, silence_intervals: [{ start_seconds: 0, end_seconds: 0.9 }, { start_seconds: 3.1, end_seconds: 4 }], waveform: [] }),
+    analyzeRecordingAudio: async (_input, options) => ({ frame_levels_supplied: options.frameLevels?.levels_db.length, schema_version: "launchclip.recording-audio.v1", source_duration_seconds: 4, threshold_db: -40, silence_intervals: [{ start_seconds: 0, end_seconds: 0.9 }, { start_seconds: 3.1, end_seconds: 4 }], waveform: [] }),
     transcribeRendered: async () => ({ words: renderedPlan.words }),
     analyzeRecordingJoins: async () => ({ checked: true, issues: [] }),
     identifyRecordingCoherence: async (plan, actual, options) => ({ evidence_hash: recordingQaEvidenceHash(plan, actual, options.mediaSha256, options.sourceTranscript, options.acoustic), coverage_complete: true, findings: [], transcript_resolutions: [], acoustic_resolutions: [] }),
@@ -142,6 +142,7 @@ test("edit-recording transcribes with both local models by default and keeps the
   const result = await prepareRecording(input, { ...recordingOptions({ out: path.join(directory, "edit"), enhance: "off" }) }, adapters);
   assert.deepEqual(models, ["base.en", "small.en"]);
   assert.deepEqual(result.transcript_consensus, { models: ["base.en", "small.en"], agreed_words: 5, disagreements: 1 });
+  assert.equal(JSON.parse(await readFile(result.files.audio_analysis, "utf8")).frame_levels_supplied, 400);
   const inputs = JSON.parse(await readFile(result.files.consensus_inputs, "utf8"));
   assert.equal(inputs.transcripts.length, 2);
   const plan = JSON.parse(await readFile(result.files.edit_plan, "utf8"));

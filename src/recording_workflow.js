@@ -92,8 +92,12 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
   const session = await readQaSession(directory, candidateHash);
   let consensusInputs = null;
   let transcript;
-  if (session && (consensus || !options.transcript)) transcript = await readSessionTranscript(files.source_transcript, session);
-  else {
+  // The 10ms source levels break timing ties and prove rejected-word tails.
+  const levels = consensus ? await (adapters.measureFrameLevels ?? measureFrameLevels)(input, { durationSeconds }) : null;
+  if (session && (consensus || !options.transcript)) {
+    transcript = await readSessionTranscript(files.source_transcript, session);
+    if (consensus) consensusInputs = JSON.parse(await readFile(files.consensus_inputs, "utf8"));
+  } else {
     const primary = options.transcript ? JSON.parse(await readFile(path.resolve(options.transcript), "utf8")) : await (adapters.transcribe ?? transcribeRecording)(input, options);
     if (!consensus) transcript = primary;
     else {
@@ -101,7 +105,6 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
         ? JSON.parse(await readFile(path.resolve(options.consensusTranscript), "utf8"))
         : await (adapters.transcribe ?? transcribeRecording)(input, { ...options, model: consensusModel });
       const models = [options.transcript ? "supplied-transcript" : options.model ?? "base.en", options.consensusTranscript ? "supplied-consensus-transcript" : consensusModel];
-      const levels = await (adapters.measureFrameLevels ?? measureFrameLevels)(input, { durationSeconds });
       transcript = mergeConsensusTranscripts(primary, secondary, { models, levels });
       consensusInputs = { schema_version: "launchclip.recording-consensus-inputs.v1", models, transcripts: [primary, secondary] };
     }
@@ -116,16 +119,18 @@ export async function prepareRecording(inputPath, options = {}, adapters = {}) {
   const basePlan = agreement ? { ...editPlan, transcript_consensus: { models: agreement.models, tolerance_seconds: agreement.tolerance_seconds, disagreements: agreement.disagreements } } : editPlan;
   const audio = policy.audioSilence
     ? await (adapters.analyzeRecordingAudio ?? analyzeRecordingAudio)(input, {
-        durationSeconds, boundaryPlan: basePlan, silenceDuration: policy.audioSilenceDuration,
+        durationSeconds, boundaryPlan: basePlan, silenceDuration: policy.audioSilenceDuration, ...(levels ? { frameLevels: levels } : {}),
         silencePadding: policy.audioSilencePadding,
         ...(policy.audioThresholdDb == null ? {} : { thresholdDb: policy.audioThresholdDb })
       })
     : { status: "disabled", source_duration_seconds: durationSeconds };
-  let plan = policy.audioSilence ? refineRecordingEditPlan(basePlan, audio, { silencePadding: policy.audioSilencePadding }) : basePlan;
+  // Each recogniser's own words are the independent alignment for a guarded tail contraction.
+  const independentWords = consensusInputs ? consensusInputs.models.flatMap((model, index) => normalizeRecordingTranscript(consensusInputs.transcripts[index]).map((word) => ({ ...word, model }))) : [];
+  let plan = policy.audioSilence ? refineRecordingEditPlan(basePlan, audio, { silencePadding: policy.audioSilencePadding, independentWords }) : basePlan;
   await readCaptureTracker(files, { text: plan.text, words: plan.words, duration_seconds: plan.duration_seconds }, { durationSeconds: plan.duration_seconds, aspect: options.aspect ?? "16:9" });
   await mkdir(directory, { recursive: true });
   await writeJson(files.source_transcript, transcript);
-  if (consensusInputs) await writeJson(files.consensus_inputs, consensusInputs);
+  if (consensusInputs && !session) await writeJson(files.consensus_inputs, consensusInputs);
   const qa = await runRecordingQa(input, plan, {
     directory, requestHash: candidateHash, sourceTranscript: transcript,
     maxAttempts: options.qaAttempts ?? 3, model: options.qaModel, baseUrl: options.qaBaseUrl,
