@@ -115,6 +115,7 @@ test("a storyboard style is merged in the shared read path (validate, loader)", 
     source.style = "neon-explainer";
     await writeFile(path.join(dir, "storyboard.json"), JSON.stringify(source));
     await writeFile(path.join(dir, "NARRATION.json"), await readFile(path.join(EXPLAINER, "NARRATION.json")));
+    await writeFile(path.join(dir, "DIRECTION.json"), await readFile(path.join(EXPLAINER, "DIRECTION.json")));
     const validation = await runStoryCommand("validate", path.join(dir, "storyboard.json"), {});
     assert.equal(validation.status, "passed", validation.errors.join("; "));
     assert.equal(validation.style.name, "neon-explainer");

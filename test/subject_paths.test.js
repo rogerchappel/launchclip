@@ -51,6 +51,8 @@ function recordedClient(prompts, response = RESPONSE) {
   return {
     provider: "openai",
     async runStructured(request) {
+      // The direction-map call gets no map, so story plan drafts one from the storyboard.
+      if (request.schemaName === "launchclip_direction") return { model: "recorded", value: { direction_json: "" }, usage: { input_tokens: 1, output_tokens: 1 } };
       prompts.push(request.instructions);
       return { model: "recorded", value: { storyboard_json: JSON.stringify(response) }, usage: { input_tokens: 1, output_tokens: 1 } };
     }
@@ -96,6 +98,7 @@ test("the recorded plan lands on the same modules and matte ranges through eithe
   // Skill: the agent writes the same storyboard by hand, then runs the documented checks.
   const skill = await project(t);
   await writeFile(path.join(skill, "storyboard.json"), `${JSON.stringify(RESPONSE, null, 2)}\n`);
+  await writeFile(path.join(skill, "DIRECTION.json"), await readFile(path.join(cli, "DIRECTION.json")));
   const checked = await runStoryCommand("validate", path.join(skill, "storyboard.json"), {});
   assert.equal(checked.status, "passed", JSON.stringify(checked.errors));
   const [a, b] = await Promise.all([readProjectStory(cli), readProjectStory(skill)]);

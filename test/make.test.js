@@ -41,11 +41,14 @@ function storyboard({ duration, media = "assets/ui.mp4", width = 1920, height = 
 // references a file that is not in the manifest (a repair), then a valid board.
 function fakeModel({ vision = false } = {}) {
   const calls = [];
+  const directionCalls = [];
   const usage = { input_tokens: 4000, output_tokens: 800, total_tokens: 4800 };
   let boards = 0;
   const client = {
     provider: "openai",
     async runStructured(request) {
+      // The direction-map call returns no map, so make drafts DIRECTION.json from the storyboard.
+      if (request.schemaName === "launchclip_direction") { directionCalls.push(request); return { model: "gpt-5.6-luna", value: { direction_json: "" }, usage }; }
       calls.push(request);
       if (request.schemaName === "launchclip_make_script") return { model: "gpt-5.6-luna", value: { title: "Ledgerly", narration: NARRATION }, usage };
       if (request.schemaName === "launchclip_storyboard") {
@@ -59,7 +62,7 @@ function fakeModel({ vision = false } = {}) {
       throw new Error(`unexpected schema ${request.schemaName}`);
     }
   };
-  return { calls, model: { client, provider: "openai", model: "gpt-5.6-luna", spec: "openai:gpt-5.6-luna", vision } };
+  return { calls, directionCalls, model: { client, provider: "openai", model: "gpt-5.6-luna", spec: "openai:gpt-5.6-luna", vision } };
 }
 
 async function assetsDir() {
@@ -120,9 +123,11 @@ test("make runs the motion lane end to end with a fake model, the test voice and
     assert.equal(report.gates.critic.status, "pending");
     assert.equal(report.final, "renders/draft.mp4");
     assert.ok(report.costs.estimated_usd > 0);
-    assert.equal(report.costs.items.length, 3, "script + plan + one repair");
+    assert.deepEqual(report.costs.items.map((item) => item.stage), ["script", "direction-0", "direction-repair-1", "storyboard-plan-0", "storyboard-repair-1"], "script, the direction map (and its repair), plan and one repair");
+    assert.equal(report.profile.id, "short-motion");
+    assert.equal(report.direction.source, "drafted");
     assert.ok(notices.some((line) => /PAID call to openai gpt-5\.6-luna \(script pass/.test(line)));
-    for (const file of ["MAKE.json", "ASSETS.json", "BRIEF.md", "SCRIPT.json", "NARRATION.json", "storyboard.json", "assets/ui.mp4", "assets/logo.png"]) assert.ok(existsSync(path.join(project, file)), file);
+    for (const file of ["MAKE.json", "ASSETS.json", "BRIEF.md", "SCRIPT.json", "NARRATION.json", "storyboard.json", "DIRECTION.json", "assets/ui.mp4", "assets/logo.png"]) assert.ok(existsSync(path.join(project, file)), file);
     const story = JSON.parse(await readFile(path.join(project, "storyboard.json"), "utf8"));
     assert.deepEqual(story.audio.narration, { text: NARRATION, provider: "test" });
     assert.equal(story.lane, "motion");
@@ -172,6 +177,7 @@ test("make routes footage to footage-led and uses the base edit's output and wor
     const client = {
       provider: "openai",
       async runStructured(request) {
+        if (request.schemaName === "launchclip_direction") return { model: "gpt-5.6-luna", value: { direction_json: "" }, usage: { input_tokens: 1, output_tokens: 1 } };
         assert.equal(request.schemaName, "launchclip_storyboard", "footage-led has no script pass");
         assert.match(request.input, /base: "assets\/base-edit\.mp4"/);
         const board = { schema: "launchclip.story.v1", lane: "footage-led", format: { width: 1080, height: 1920, fps: 30, duration: 4.4 }, brand: DEFAULT_BRAND, audio: { words: "NARRATION.json" }, base: "assets/base-edit.mp4",
