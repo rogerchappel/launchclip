@@ -840,8 +840,8 @@ choose the plate's background and the card surface once per video. A style
 pack carries them as `background` and `layouts.panel`; `applyStyle` merges
 them into the story as `story.background` and `story.panel`, and the
 renderers read only the story. Both files are plain ESM: `backgrounds.mjs`
-imports only `./ambient.mjs` and `./panels.mjs`, and `panels.mjs` imports
-nothing.
+imports only `./ambient.mjs`, `./panels.mjs` and `./icons.mjs`, and
+`panels.mjs` imports nothing.
 
 ### `story.background`
 
@@ -863,11 +863,39 @@ nothing.
 | `topographic` | density, scale, intensity, speed, color | contours drift and turn ±1° |
 | `halftone` | angle 0–360 (135), scale, intensity, speed, color | the screen sways |
 | `light-rays` | angle −60–60 (0), density, intensity, speed, color | the rays swing ±3° |
+| `icon-pattern` | icons, scale, spacing 0.5–2 (1), rotation −45–45 (0), offset 0–1 (0.5), opacity 0.02–0.12 (0.06), stroke 1–3 (1.75), speed, color | the tile sways |
+| `icon-scatter` | icons, scale, density, jitter 0–1 (0.5), opacity, stroke, speed, color | the scatter drifts |
+| `logo-pattern` | scale, spacing, offset, opacity, speed | the tile sways |
+| `motif` | shape, scale, weight 0.5–3 (1.5), opacity 0.02–0.2 (0.08), angle 0–180 (45, hatch only), speed, color | the motif sways |
+| `texture` | type, amount 0–1 (0.5), scale | still |
 
 `color` is `primary`, `accent` or `paper` (each kind has its own default).
 Density, intensity and grain default to 0.5 unless the table says otherwise.
-`validateStory` checks the kinds and ranges (`STORY_BACKGROUND_PARAMS`, kept in
-step with `BACKGROUND_PARAMS` by test), and so does `backgroundErrors(value)`.
+Option params:
+
+- **`fade`** (every kind but blobs): `none` (the default), `center`, `top`,
+  `bottom`, `left` or `right`. The fade names the area to keep calm: the
+  field container takes a mask that is transparent there and opaque away from
+  it (`fieldStyle(plan)`), so the content area stays quiet. A fade never
+  raises a tone, so the gate checks the pattern's peak.
+- **`shape`** (`motif`): `plus`, `circle`, `chevron`, `wave`, `hatch` or
+  `crosshatch`.
+- **`type`** (`texture`): `noise`, `fibre`, `canvas` or `linen`.
+- **`icons`** (`icon-pattern`, `icon-scatter`): `"auto"` (the default) or 1–8
+  icon names from `kit/core/icons.mjs`. `patternIcons(story, icons)` resolves
+  `"auto"` to the icons the scenes name, at most 6, else
+  `DEFAULT_PATTERN_ICONS`.
+- **`logo-pattern`** tiles the brand frame's `frame.logo` file. It draws
+  nothing without one. The layer's SVG names the file as `LOGO_SRC`, and
+  `layerSvg(layer, resolve)` swaps in each renderer's URL (`staticFile` in
+  Remotion). The logo keeps its own colours, so the white and black extremes
+  at its opacity both count as tones.
+
+Icons and motifs are drawn as SVG tiles (a data-URI `background-image`), the
+scatter as one inline SVG. `validateStory` checks the kinds, ranges and
+options (`STORY_BACKGROUND_PARAMS` and `STORY_BACKGROUND_OPTIONS`, kept in step
+with `BACKGROUND_PARAMS` and `BACKGROUND_OPTIONS` by test), and so does
+`backgroundErrors(value)`, which also checks icon names.
 
 - **Colour.** Every layer takes its colour from the palette. Each colour a
   layer lays over `bg` is clamped (`safeAlpha`) so text in `paper`, the
@@ -912,7 +940,7 @@ order: translate, then rotate, then scale.
 ### `story.panel`
 
 ```json
-{ "panel": { "treatment": "soft-shadow", "radius": 18 } }
+{ "panel": { "treatment": "soft-shadow", "radius": 18, "fill": { "kind": "icon-pattern", "params": { "opacity": 0.08, "fade": "center" } } } }
 ```
 
 `treatment` is one of `solid`, `glass`, `paper`, `outline` and `soft-shadow`.
@@ -936,13 +964,32 @@ Catalogue G's `cardSurface` (the card behind `surface: "card"` modules, which
 is the default over footage) draws it in both renderers. Without
 `story.panel`, the card is today's card.
 
+`fill` (optional) is a background `{kind, params}`, any kind but blobs
+(`panelFillErrors`). It is drawn by the same layer renderer and clipped to
+the panel. `panelFillPlan(story, {width, height, bg})` lays it on the panel's
+colour, at the canvas's px scale.
+
+- **Footage-layout panels** (split, framed, stacked, insert): `#lc-layout-fill`
+  in HyperFrames and `LayoutFill` in Remotion sit just above the layout frame.
+  They cover the canvas, clipped by `layoutFillClip(state, canvas)`: an
+  even-odd `clip-path` of the canvas minus the presenter's rounded window. The
+  clip is set on the same frames as the frame element (the layout ops), so a
+  `layout-shift` carries the pattern with the panel. The pattern moves with
+  the ambient level, like the plate's.
+- **Catalogue G cards** hold the fill still (`cardFillStyles`, at t = 0, with
+  inline SVG as a data URI) in an `overflow: hidden` box with the card's
+  radius and the fill's fade. A logo pattern needs a resolved file URL, so it
+  draws only in layout panels.
+
 ### Contrast gate
 
 `layout-check` adds `background-contrast` errors from
 `backgroundContrastFindings`. It checks, on every background tone:
 
-- text in paper, on the plain background and on the story's panel fill
-  composited over each tone, at 4.5:1;
+- text in paper, on the plain background and on the story's panel surface
+  composited over each tone, at 4.5:1. A `panel.fill` adds its own tones on
+  top of each panel tone. A story with a panel fill and no background kind is
+  checked on its panel too;
 - caption words in their idle colour at 3:1, the large-type floor. Captions
   with a 4 px or wider outline, a plate, a band or chips behind them are
   exempt.
@@ -950,15 +997,21 @@ is the default over footage) draws it in both renderers. Without
 ### Fixtures and sheet
 
 - `test/fixtures/parity-backgrounds/` holds one story fixture per kind
-  (`bg-<kind>`) and one per treatment on a dark and a light palette
-  (`panel-<treatment>-<theme>`, over `mesh`). Each fixture is
-  `{project, times, patch}`; `patch` replaces top-level storyboard keys.
+  (`bg-<kind>`; every motif shape and texture type; a faded icon pattern on a
+  light palette). It also holds one per treatment on a dark and a light
+  palette (`panel-<treatment>-<theme>`, over `mesh`), card fills
+  (`panel-fill-card-*`) and a split-layout panel fill (`layout-panel-fill`,
+  on `examples/story/layouts-wide`). Each fixture is
+  `{project, times, patch, files?}`: `patch` replaces top-level storyboard
+  keys, and `files` writes small files (a logo) into the copy.
   - `node scripts/parity-backgrounds.mjs [--only …]` renders them through
     both renderers.
   - `LAUNCHCLIP_PARITY=1 node --test test/parity.test.js` renders them too.
   - Every sample must reach SSIM 0.97.
 - `node scripts/background-sheet.mjs` renders a still of every kind on a
-  light and a dark palette into `qa/background-sheet/sheet.png`.
+  light and a dark palette into `qa/background-sheet/sheet.png`. It also
+  writes split-layout panel fills (an icon pattern and a linen texture, on
+  both palettes) to `panels.png`.
 
 ## World camera (`kit/core/camera-world.mjs`)
 
