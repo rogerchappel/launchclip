@@ -1765,10 +1765,18 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
 
 ### The kit (`kit/core/characters/`)
 
-- `rig.mjs`: rig params `{build, height, skin, hair: {style, color}, outfit:
-  {top, bottom}, accessories, colors: {top, bottom, shoes, accent}}`
-  (`normalizeRigParams` fixes the key order, so equal characters serialise
-  identically), body measurements (`rigGeometry`), the named poses
+- `rig.mjs`: rig params `{build, height, age?, skin, hair: {style, color},
+  outfit: {top, bottom, over?}, accessories, headwear?, mobility?, colors:
+  {top, bottom, shoes, accent}}` (`normalizeRigParams` fixes the key order, so
+  equal characters serialise identically; the optional fields appear only
+  when set, so older characters keep their identity). The range: 8 builds, 5
+  heights, 4 ages (child, teen, adult, senior), 16 skin tones, 26 hair styles,
+  17 tops, 5 bottoms, 3 layers (apron, vest, hi-vis), 4 kinds of glasses, 6
+  kinds of facial hair, jewellery, ties, scarves, stethoscopes, bags, 14
+  headwear (faith headwear among them) and 6 mobility aids (wheelchair, cane,
+  white cane, forearm crutch, prosthetic leg or arm). A wheelchair seats the
+  character in any set; a cane or crutch keeps its arm at rest
+  (`acting.mjs sceneJoints`). body measurements (`rigGeometry`), the named poses
   (`stand point wave slump type think cheer shrug walk sit`) as joint angles,
   and the named expressions (`neutral happy delighted frustrated confused
   surprised focused`) as face parts. Positive arm and leg angles swing a limb
@@ -1779,6 +1787,13 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   colour mapping.
 - `cast.mjs`: the starter cast (24 characters). Ids are stable and never
   change once shipped.
+- `generate.mjs`: `generateCast({seed, set, count, palette})` → story cast
+  entries, always the same for the same inputs. `CHARACTER_SETS` (office-team,
+  startup-founders, family, kids, seniors, students, chefs, medical,
+  athletes, creators, city-crowd) fix the wardrobe, age mix and props; the
+  seed varies the people (skin tones spread across the range, no two members
+  alike). `castFromStyle(pack.cast)` turns a style pack's `{drawing_style,
+  set, members}` into `story.cast`.
 - `styles.mjs`: the drawing styles (`DRAWING_STYLES`, flat first) and
   `drawCharacter(style, params, colours, options)`, `styleHeight`,
   `styleGeometry`. Every style draws the same rig, poses, expressions and

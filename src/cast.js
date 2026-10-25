@@ -16,7 +16,8 @@ import path from "node:path";
 import { STARTER_CAST } from "../kit/core/characters/cast.mjs";
 import { castPlacement } from "../kit/core/characters/placement.mjs";
 import { KOKORO_VOICES, castConsistency, castMember, resolveStoryCast, validateCastCues } from "../kit/core/characters/cues.mjs";
-import { EXPRESSIONS, POSES, poseJoints } from "../kit/core/characters/rig.mjs";
+import { EXPRESSIONS, POSES } from "../kit/core/characters/rig.mjs";
+import { sceneJoints } from "../kit/core/characters/acting.mjs";
 import { drawCharacter, styleGeometry, styleHeight } from "../kit/core/characters/styles.mjs";
 import { characterView } from "../kit/core/characters/view.mjs";
 import { CAST_MODULES } from "../kit/core/story.mjs";
@@ -100,8 +101,8 @@ const CELL = { width: 300, height: 420, face: 190 };
 
 function cellNode(member, pose, expression, id, { face = false } = {}) {
   const geometry = styleGeometry(member.style, member.params);
-  const joints = poseJoints(pose, { geometry, seated: pose === "sit" });
-  const drawing = drawCharacter(member.style, member.params, member.colors, { id, joints, expression, expressions: [expression] });
+  const joints = sceneJoints(pose, { facing: "right", geometry, seated: pose === "sit", params: member.params });
+  const drawing = drawCharacter(member.style, member.params, member.colors, { id, joints, expression, expressions: [expression], facing: "right" });
   if (face) {
     const headY = geometry.hipY - geometry.torso - geometry.neck + geometry.head.cy;
     const scale = (CELL.face * 0.34) / geometry.head.ry;
