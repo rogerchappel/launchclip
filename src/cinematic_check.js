@@ -112,7 +112,7 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
       critique,
       assembly: { fallback_count: 0, fallbacks: [], provenance: "subscription-agent-authored" },
       receipts: { concepts: conceptsCheck, story: storyCheck }
-    }),
+    }, { creativeReceipts: !recordedStory(storyboard?.story) }),
     profile: { id: profile.id, lane: profile.lane },
     project,
     video,
@@ -137,6 +137,18 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
     receipt_warnings: [...(conceptsCheck?.warnings ?? []).map((message) => `CONCEPTS.json: ${message}`), ...(storyCheck?.warnings ?? []).map((message) => `STORY.json: ${message}`)],
     ...(phase2Evidence ? { cinematic_contract: phase2Evidence.summary } : {})
   };
+}
+
+/**
+ * A footage-led story over an existing recording (base.src or base.edl): the
+ * recorded story is preserved, so it has no concept tournament or retention
+ * story of its own and CONCEPTS.json and STORY.json are not required.
+ * Motion and character stories are new stories and still need both.
+ */
+export function recordedStory(story) {
+  if (story?.lane !== "footage-led") return false;
+  const base = typeof story.base === "string" ? { src: story.base } : story.base;
+  return Boolean(base && typeof base === "object" && [base.src, base.source, base.edl].some((value) => typeof value === "string" && value));
 }
 
 // ---------------------------------------------------------------------------
