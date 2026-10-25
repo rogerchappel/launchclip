@@ -220,6 +220,9 @@ export function validateStory(story, { modules } = {}) {
       else validateMusic(audio.music, { err, warn });
     }
     if (audio.sfx !== undefined && audio.sfx !== null && !["auto", "none"].includes(audio.sfx) && audio.sfx !== false) err("audio.sfx must be \"auto\", \"none\" or false");
+    // audio.sound: a story-level sound block over the style's (palette, music, ambience, sfx_density;
+    // kit/core/sound/options.mjs). finish warns about values it does not know.
+    if (audio.sound !== undefined && audio.sound !== null && !isObject(audio.sound)) err("audio.sound must be an object: {palette, music: {genre, bpm, key, progression}, ambience, sfx_density}");
     // audio.narration: text that `launchclip finish` synthesises into audio.voice and audio.words.
     if (audio.narration !== undefined && audio.narration !== null) {
       const narration = audio.narration;
