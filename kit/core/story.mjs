@@ -518,7 +518,7 @@ function validateCaptionOptions(overlay, path, err) {
  * overlay start/end) replaced by seconds, scenes sorted by start, plus
  * `resolved: {duration, fps, frames}`.
  */
-export function resolveStory(story, { words = [], beats = null, edl = null, subject = null } = {}) {
+export function resolveStory(story, { words = [], beats = null, edl = null, subject = null, track = null } = {}) {
   if (!isObject(story)) throw new Error("story must be a JSON object");
   const copy = JSON.parse(JSON.stringify(story));
   // base.subject "auto" → the project's cached mattes for this base (subject:
@@ -566,6 +566,10 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
     .map((entry) => entry.scene);
   const format = storyFormat(copy);
   copy.resolved = { duration: format.duration, fps: format.fps, frames: Math.round(format.duration * format.fps) };
+  // The whole-video head track (the loader's readStoryTrack): {source, fps,
+  // frames: [{t, head, body}]}, which subjectContext and the face rule read
+  // where no matte covers the time.
+  if (isObject(track) && Array.isArray(track.frames) && copy.base != null && subjectMode(copy.base) !== "off") copy.resolved.subjectTrack = track;
   return copy;
 }
 

@@ -32,7 +32,7 @@ import { remotionInvocation } from "./renderers/remotion.js";
 import { deriveBoundaries, resolveStory, storyFormat } from "./story.js";
 import { validateStory } from "./story_cli.js";
 import { hasExactFile, readStoryEdl } from "./story_loader.js";
-import { readStorySubject } from "./subject/project.js";
+import { readStorySubject, readStoryTrack } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
 import { hyperframesInvocation } from "./toolchain.js";
 import { getVoiceProvider, listVoiceProviders } from "./voice/index.js";
@@ -635,6 +635,8 @@ const STAGES = [
       ctx.edl = await readStoryEdl(ctx.project, ctx.copy);
       // base.subject "auto": the mattes filed in assets/subject/mattes.json.
       ctx.subject = await readStorySubject(ctx.project, ctx.copy);
+      // The whole-video head track (assets/subject/track.json).
+      ctx.track = await readStoryTrack(ctx.project, ctx.copy);
       // The subject gate: a matte range whose cut-out is unstable or
       // collapses is not used; its scenes fall back (cinematic_check.js).
       ctx.subjectGate = await subjectMatteGate(ctx.project, ctx.subject);
@@ -642,14 +644,14 @@ const STAGES = [
         const failed = ctx.subjectGate.ranges.filter((range) => !range.ok);
         const kept = ctx.subject.filter((matte) => !failed.some((range) => range.src === matte.src));
         for (const range of failed) ctx.warnings.push(`subject gate: the matte for ${range.in}–${range.out} s is not used (${range.reasons.join("; ")})`);
-        const withAll = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject });
+        const withAll = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject, track: ctx.track });
         const fallback = applySubjectFallback(ctx.copy, withAll, { failed, kept });
         ctx.copy = fallback.story;
         ctx.subject = kept.length ? kept : null;
         ctx.subjectGate = { ...ctx.subjectGate, status: "fallback", changes: fallback.changes };
         ctx.warnings.push(...subjectFallbackLines(fallback.changes).map((line) => `subject gate: ${line}`));
       }
-      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject });
+      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject, track: ctx.track });
       const second = validateStory(resolved);
       if (!second.ok) throw new Error(`resolved storyboard is invalid:\n- ${second.errors.join("\n- ")}`);
       ctx.warnings.push(...second.warnings);
@@ -859,7 +861,7 @@ const STAGES = [
   {
     name: "render",
     async plan(ctx) {
-      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null });
+      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null });
       ctx.resolved = resolved;
       await writeResolvedCopy(ctx);
       const assets = {};

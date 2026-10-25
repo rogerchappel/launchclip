@@ -423,7 +423,7 @@ function resolveModuleInner(scene, story, { track, end }) {
     // Footage checklist: with a measured presenter and no rect, the card sits
     // above their head when there is headroom, else over their chest, clear
     // of the face and the caption band (docs/SUBJECT_EFFECTS_RFC.md §6.2).
-    const placement = module === 'checklist' && params.rect === undefined && story?.lane === 'footage-led' ? footageChecklistRect(model, subjectContext(story, start), format) : null;
+    const placement = module === 'checklist' && params.rect === undefined && story?.lane === 'footage-led' ? footageChecklistRect(model, subjectContext(story, start, { end: start + duration }), format) : null;
     if (placement?.rect) model = resolveSpec({ ...spec, rect: placement.rect });
     if (placement) model.subjectPlacement = placement.where;
     // Footage checklist rows type in on their at word (RFC §6.2).
@@ -435,7 +435,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!definition) throw new Error(`module "${module}" is not a known module`);
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
-  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start), lane: story?.lane ?? null, grammar, ambient: sceneAmbient(story, scene) }); }
+  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), lane: story?.lane ?? null, grammar, ambient: sceneAmbient(story, scene) }); }
   catch (error) { throw new Error(`module "${module}" params: ${error.message}`); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });
