@@ -107,8 +107,9 @@ export async function checkStoryDirection({ story, resolved = null, words = null
 // launchclip story plan --brief brief.md [...] (see planStoryCommand)
 // Without --narration, audio.words is read relative to the story file when it exists.
 export async function runStoryCommand(action, storyPath, flags = {}, adapters = {}) {
-  if (!new Set(["validate", "resolve", "compile", "plan"]).has(action)) throw new Error(`Unknown story action: ${action}; use validate, resolve, compile or plan`);
+  if (!new Set(["validate", "resolve", "compile", "plan", "long-form"]).has(action)) throw new Error(`Unknown story action: ${action}; use validate, resolve, compile, plan or long-form`);
   if (action === "compile") return compileStoryCommand(storyPath, flags);
+  if (action === "long-form") return (await import("./long_form.js")).runLongFormCommand(storyPath, flags);
   if (action === "plan") return planStoryCommand(flags, adapters);
   const file = path.resolve(storyPath);
   const styled = await applyProjectStyle(await readJson(file, "story.json"), { projectDir: path.dirname(file) });

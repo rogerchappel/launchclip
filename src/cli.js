@@ -329,11 +329,11 @@ function parseSfxInvocation(action, rest) {
 }
 
 function parseStoryInvocation(action, rest) {
-  if (!action) throw new Error("Missing story action; use validate, resolve, compile or plan");
-  if (!new Set(["validate", "resolve", "compile", "plan"]).has(action)) throw new Error(`Unknown story action: ${action}`);
+  if (!action) throw new Error("Missing story action; use validate, resolve, compile, plan or long-form");
+  if (!new Set(["validate", "resolve", "compile", "plan", "long-form"]).has(action)) throw new Error(`Unknown story action: ${action}`);
   if (action === "plan") return { action, file: null, flagArgs: rest };
   const file = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
-  return { action, file: required(file, action === "compile" ? "story project path" : "story.json path"), flagArgs: rest.slice(1) };
+  return { action, file: required(file, action === "compile" || action === "long-form" ? "story project path" : "story.json path"), flagArgs: rest.slice(1) };
 }
 
 async function runStyleCommand(action, name, flags) {

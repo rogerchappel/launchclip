@@ -20,6 +20,7 @@
 import { STORY_LANES, resolveStory, validateStory } from "../kit/core/story.mjs";
 import { isEditorialKind, knownModules, formatAspect, resolveModule, subjectDensityWarnings } from "../kit/core/modules.mjs";
 import { DIRECTION_LANES, directionMeasures, draftDirectionMap, validateDirection } from "../kit/core/direction.mjs";
+import { isLongForm, structureLongForm } from "../kit/core/long-form.mjs";
 import { compareMeasures } from "../kit/core/profiles.mjs";
 import { checkLayout, elementsFromEditorialLayout, elementsFromStory } from "../kit/core/layout-check.mjs";
 import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, directionPrompt, planningPrompt, suggestModules } from "../kit/core/planning-prompt.mjs";
@@ -178,6 +179,27 @@ export async function planStoryboard(options = {}) {
     }
   }
 
+  // Long form (RFC §10.2): chapters from the map's sections, an opening
+  // promise, section cards and the progress line, placed deterministically
+  // on the passing plan; kept only when the structured story passes too.
+  let longForm = null;
+  if (last?.ok && last.storyboard && (options.longForm ?? isLongForm(last.storyboard, profile)) && options.longForm !== false) {
+    try {
+      const structured = structureLongForm(last.storyboard, { words: wordList, map: direction });
+      const checked = checkStoryboard(structured.story, { words: wordList, beats, tier, style, direction: structured.map, profile, bandErrors: false });
+      longForm = { chapters: structured.chapters, added: structured.added, changed: structured.changed, warnings: structured.warnings };
+      if (checked.ok) {
+        last = { ...checked, warnings: [...last.warnings, ...structured.warnings.map((entry) => `long form: ${entry}`), ...checked.warnings.filter((entry) => !last.warnings.includes(entry))] };
+        if (direction) direction = structured.map;
+      } else {
+        longForm.rejected = checked.errors.slice(0, 12);
+        last.warnings = [...last.warnings, `long form: the chapter structure failed the checks and was left out (${checked.errors.slice(0, 3).join("; ")}); run launchclip story long-form after fixing them`];
+      }
+    } catch (error) {
+      last.warnings = [...last.warnings, `long form: ${message(error)}`];
+    }
+  }
+
   const allAttempts = [...directionPlan.attempts, ...attempts];
   const totals = allAttempts.reduce((sum, entry) => ({
     input_tokens: sum.input_tokens + entry.usage.input_tokens,
@@ -205,6 +227,7 @@ export async function planStoryboard(options = {}) {
     direction_attempts: directionPlan.attempts,
     profile: profile?.id ?? null,
     cadence: last?.cadence ?? null,
+    long_form: longForm,
     usage: totals,
     cost: {
       estimated_usd: Math.round(priced.reduce((sum, entry) => sum + entry.cost_usd, 0) * 1e8) / 1e8,

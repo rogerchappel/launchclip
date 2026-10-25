@@ -19,6 +19,7 @@ import { stylePromptLines } from './style.mjs';
 import { CAPTION_PRESETS } from './captions.mjs';
 import { PROFILE_MEASURES, profilePromptLines } from './profiles.mjs';
 import { DIRECTION_INTENTS, DIRECTION_LAYOUTS, DIRECTION_SCHEMA, DIRECTION_TREATMENTS, INTENT_RULES, NARRATIVE_BEATS, VISUAL_INTENTS, intentHints } from './direction.mjs';
+import { LONG_FORM_SECONDS, longFormLines } from './long-form.mjs';
 
 export const PLANNER_TIERS = Object.freeze(['structured', 'guided', 'bespoke']);
 
@@ -540,6 +541,7 @@ export function directionPrompt({ lane, format, profile = null, words, subject =
     ...section('Contract', directionContractLines({ lane }).map((line) => `- ${line}`)),
     ...section('Intent rules (first match wins)', intentRuleLines()),
     ...(profile ? section(`Cadence profile (${profile.id})`, [...cadenceLines(profile).map((line) => `- ${line}`), '- Coverage comes from the treatments: plan enough dress and insert lines to land near the coverage target, and no run of face or camera lines longer than the undressed limit.']) : []),
+    ...(profile?.id === 'youtube-long-form' || Number(format?.duration) >= LONG_FORM_SECONDS ? section('Long form', longFormLines().map((line) => `- ${line}`)) : []),
     ...(lane === 'footage-led' ? section('Presenter', [subject?.usable ? `The presenter can be cut out (${subject.framing ?? 'unknown'} framing): split and framed layouts and behind-the-presenter scenes are available.` : 'No presenter cut-out: use full and insert layouts, or split on the base camera.']) : []),
     ...section('Narration lines (suggested intents)', ['Keep these lines unless two belong together or one holds two ideas; keep the word ranges exact.', '', ...hints.map((hint) => `- [${hint.words[0]}, ${hint.words[1]}] ${hint.intent}: "${hint.text.slice(0, 200)}" (${round2(hint.start)}–${round2(hint.end)} s)`)]),
     ...section('Example', [JSON.stringify(exampleDirection())])
@@ -587,6 +589,7 @@ export function directionMapReference() {
     ...section('Narrative maps', [
       `A story told by characters uses story beats as sections (\`beat\`: ${NARRATIVE_BEATS.join(', ')}), and each line says who acts: \`cast: [{id, pose, expression, at: "word:<text>"}]\` and a \`set\`. Cast cues name characters from the story's cast and poses, expressions and sets from the character kit; validation checks them when the kit is present.`
     ]),
+    ...section('Long form', [...longFormLines().map((line) => `- ${line}`), '- `launchclip story long-form <project>` then writes `chapters` into storyboard.json (and section titles into the map); `launchclip finish` writes `renders/chapters.txt` for the YouTube description and puts the chapters in the MP4 and the NLE exports.']),
     ...section('Required', [
       '- `story validate` requires `DIRECTION.json` in the footage-led, motion and voiceover-motion lanes when the story has narration words (`audio.words`); without words a missing map is a warning.',
       '- `launchclip finish` gates coverage, direction and face against the profile.'

@@ -43,6 +43,13 @@ Write `DIRECTION.json` (launchclip.direction-map.v1) beside `storyboard.json` be
 
 A story told by characters uses story beats as sections (`beat`: setup, problem, attempt, turn, resolution, cta), and each line says who acts: `cast: [{id, pose, expression, at: "word:<text>"}]` and a `set`. Cast cues name characters from the story's cast and poses, expressions and sets from the character kit; validation checks them when the kit is present.
 
+## Long form
+
+- Long form (5 min and up, or the youtube-long-form profile): each section is a chapter. Give every section a short `title` (2–5 words, the chapter name viewers see in the YouTube chapter list) and make each one at least 10 s; aim for 3–10 chapters, a new one every 1–3 minutes.
+- The first section opens with the hook line and the promise: say what the video will cover. The structure pass adds an "In this video" icon-row of the chapters after the hook line, a section-card insert at each later chapter start, and a progress line with chapter ticks in the brand frame (`launchclip story long-form`; the headless planner runs it).
+- Leave the first 2–3 s of each chapter free of other scenes so its section card has room; a planned scene in the way starts later or the card shortens.
+- `launchclip story long-form <project>` then writes `chapters` into storyboard.json (and section titles into the map); `launchclip finish` writes `renders/chapters.txt` for the YouTube description and puts the chapters in the MP4 and the NLE exports.
+
 ## Required
 
 - `story validate` requires `DIRECTION.json` in the footage-led, motion and voiceover-motion lanes when the story has narration words (`audio.words`); without words a missing map is a warning.
