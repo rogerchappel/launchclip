@@ -19,7 +19,9 @@ import { CAPTION_PRESET_NAMES } from './captions.mjs';
 import { FONT_REGISTRY, fontFamilyName, registeredFamily } from './fonts.mjs';
 import { CADENCE_PROFILE_SCHEMA, validateProfile } from './profiles.mjs';
 import { DRAWING_STYLES, storyCastErrors } from './characters/cues.mjs';
-import { CHARACTER_SET_NAMES } from './characters/generate.mjs';
+import { CHARACTER_SET_NAMES, castFromStyle } from './characters/generate.mjs';
+import { BACKGROUND_FADES, BACKGROUND_KINDS, backgroundErrors, panelFillErrors } from './backgrounds.mjs';
+import { PANEL_RADIUS, PANEL_TREATMENTS } from './panels.mjs';
 import { soundProblems } from './sound/options.mjs';
 import { WORLD_TIMES, storyWorldErrors } from './worlds/index.mjs';
 
@@ -38,13 +40,14 @@ const TOP_V3 = new Set(['layouts', 'vocabulary', 'profile', 'cast', 'brand_frame
 // Footage layouts (RFC §7.1). The layouts session owns their geometry; a
 // style only names them, so an unknown name is a warning, not an error.
 export const STYLE_LAYOUTS = Object.freeze(['full', 'split-left', 'split-right', 'framed', 'stacked', 'insert']);
-export const STYLE_PANEL_TREATMENTS = Object.freeze(['solid', 'glass', 'paper', 'outline', 'soft-shadow']);
+export const STYLE_PANEL_TREATMENTS = PANEL_TREATMENTS;
 // Seeded-style fields (docs/SEEDED_STYLES_RFC.md §3.1–3.2). The kits that
 // draw them (backgrounds, module variants, characters, worlds) own the full
 // lists; a value outside these is a warning, so a kit can grow first.
-// Mirrors kit/core/backgrounds.mjs BACKGROUND_KINDS (blobs is today's ambient field).
-export const STYLE_BACKGROUND_KINDS = Object.freeze(['flat', 'gradient', 'grain-gradient', 'paper', 'geometric', 'blobs', 'dot-grid', 'mesh', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'logo-pattern', 'motif', 'texture']);
-export const STYLE_BACKGROUND_FADES = Object.freeze(['none', 'center', 'top', 'bottom', 'left', 'right']);
+// The backgrounds kit's kinds and fades (blobs is the ambient field); a pack's
+// background and panel fill are checked by its backgroundErrors and panelFillErrors.
+export const STYLE_BACKGROUND_KINDS = BACKGROUND_KINDS;
+export const STYLE_BACKGROUND_FADES = BACKGROUND_FADES;
 // The sound block's names (palette, ambience, genre, key, progression) are
 // checked by kit/core/sound/options.mjs soundProblems, the same check finish uses.
 export const STYLE_ICON_STYLES = Object.freeze(['outline', 'duotone']);
@@ -428,15 +431,8 @@ function validateV3Fields(pack, { err, warn, modules }) {
         if (!isObject(l.panel)) err('layouts.panel must be {treatment, radius, fill}');
         else {
           for (const key of Object.keys(l.panel)) if (!['treatment', 'radius', 'fill'].includes(key)) err(`layouts.panel.${key} is not supported (treatment, radius, fill)`);
-          if (l.panel.fill !== undefined) {
-            const f = l.panel.fill;
-            if (!isObject(f) || !(nonEmpty(f.kind) && SLUG.test(f.kind)) || f.kind === 'blobs') err('layouts.panel.fill must be {kind, params} with a background kind other than blobs');
-            else {
-              if (!STYLE_BACKGROUND_KINDS.includes(f.kind)) warn(`layouts.panel.fill.kind "${f.kind}" is not one of ${STYLE_BACKGROUND_KINDS.join(', ')}`);
-              if (f.params !== undefined && !isObject(f.params)) err('layouts.panel.fill.params must be an object');
-              else if (f.params?.fade !== undefined && !STYLE_BACKGROUND_FADES.includes(f.params.fade)) err(`layouts.panel.fill.params.fade must be one of ${STYLE_BACKGROUND_FADES.join(', ')}`);
-            }
-          }
+          for (const message of panelFillErrors(l.panel.fill, 'layouts.panel.fill')) err(message);
+          if (typeof l.panel.radius === 'number' && l.panel.radius > PANEL_RADIUS.max && l.panel.radius <= 120) warn(`layouts.panel.radius ${l.panel.radius} px: story panels draw at most ${PANEL_RADIUS.max} px, so the story gets ${PANEL_RADIUS.max}`);
           if (l.panel.treatment !== undefined && !STYLE_PANEL_TREATMENTS.includes(l.panel.treatment)) err(`layouts.panel.treatment must be one of ${STYLE_PANEL_TREATMENTS.join(', ')}`);
           if (l.panel.radius !== undefined && !(typeof l.panel.radius === 'number' && l.panel.radius >= 0 && l.panel.radius <= 120)) err('layouts.panel.radius must be 0-120 px');
         }
@@ -518,17 +514,7 @@ function seededFieldErrors(pack, { err, warn, known }) {
       if (g.constraints !== undefined && !isObject(g.constraints)) err('generated.constraints must be an object');
     }
   }
-  if (pack.background !== undefined) {
-    const b = pack.background;
-    if (!isObject(b)) err('background must be {kind, params}');
-    else {
-      for (const key of Object.keys(b)) if (!['kind', 'params'].includes(key)) err(`background.${key} is not supported (kind, params)`);
-      if (!(nonEmpty(b.kind) && SLUG.test(b.kind))) err('background.kind must be a background kind (a lowercase slug)');
-      else if (!STYLE_BACKGROUND_KINDS.includes(b.kind)) warn(`background.kind "${b.kind}" is not one of ${STYLE_BACKGROUND_KINDS.join(', ')}`);
-      if (b.params !== undefined && !isObject(b.params)) err('background.params must be an object');
-      else if (b.params?.fade !== undefined && !(b.kind !== 'blobs' && STYLE_BACKGROUND_FADES.includes(b.params.fade))) err(`background.params.fade must be one of ${STYLE_BACKGROUND_FADES.join(', ')} (not on blobs)`);
-    }
-  }
+  for (const message of backgroundErrors(pack.background, 'background')) err(message);
   if (pack.variants !== undefined) {
     if (!isObject(pack.variants)) err('variants must be {module: variant}');
     else for (const [id, variant] of Object.entries(pack.variants)) {
@@ -661,9 +647,18 @@ export function applyStyle(story, pack, options = {}) {
   // layouts.panel, fill included) and world whole when the story has none;
   // variants per module, the story's own entries winning. The default panel an
   // upgraded v2 pack carries is not filled, so it renders as before.
-  const panel = JSON.stringify(pack.layouts?.panel) === JSON.stringify(STYLE_V3_DEFAULTS.layouts.panel) ? null : pack.layouts?.panel;
+  const packPanel = JSON.stringify(pack.layouts?.panel) === JSON.stringify(STYLE_V3_DEFAULTS.layouts.panel) ? null : pack.layouts?.panel;
+  const panel = isObject(packPanel) && typeof packPanel.radius === 'number' && packPanel.radius > PANEL_RADIUS.max ? { ...packPanel, radius: PANEL_RADIUS.max } : packPanel;
   for (const [key, source] of [['background', pack.background], ['panel', panel], ['world', pack.world]]) {
     if (isObject(source) && out[key] === undefined) { out[key] = clone(source); applied.push(key); }
+  }
+  // Cast (the characters kit's castFromStyle): the pack's people and drawing
+  // style when the story has no cast; only the drawing style when it lists
+  // characters but names no style.
+  if (isObject(pack.cast) && (pack.cast.members?.length || pack.cast.characters?.length || pack.cast.drawing_style)) {
+    const cast = castFromStyle(pack.cast);
+    if (out.cast === undefined && cast.characters.length) { out.cast = cast; applied.push('cast'); }
+    else if (isObject(out.cast) && out.cast.style === undefined && pack.cast.drawing_style) { out.cast.style = cast.style; applied.push('cast.style'); }
   }
   if (isObject(pack.variants) && Object.keys(pack.variants).length && out.variants !== null) {
     if (!isObject(out.variants)) out.variants = {};

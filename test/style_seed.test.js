@@ -204,9 +204,13 @@ test("validation accepts the seeded fields and rejects bad shapes", () => {
     world: { kind: "", time: "noon" }
   });
   const text = bad.errors.join("\n");
-  for (const pattern of [/generated\.seed/, /generated\.generator/, /generated\.tone/, /generated\.at/, /layouts\.panel\.treatment/, /layouts\.panel\.fill/, /layouts\.panel\.glow/, /sound\.palette/, /sound\.music\.bpm/, /sound\.music\.key/, /sound\.music\.progression/, /sound\.ambience/, /sound\.sfx_density/, /background\.kind/, /background\.params/, /background\.angle/, /vocabulary\.icon_stroke/, /vocabulary\.icon_style/, /vocabulary\.illustration/, /variants\.concept-card/, /cast\.set/, /cast\.members\[0\]/, /world\.kind/, /world\.time/]) assert.match(text, pattern);
+  for (const pattern of [/generated\.seed/, /generated\.generator/, /generated\.tone/, /generated\.at/, /layouts\.panel\.treatment/, /layouts\.panel\.fill/, /layouts\.panel\.glow/, /sound\.palette/, /sound\.music\.bpm/, /sound\.music\.key/, /sound\.music\.progression/, /sound\.ambience/, /sound\.sfx_density/, /background\.kind/, /vocabulary\.icon_stroke/, /vocabulary\.icon_style/, /vocabulary\.illustration/, /variants\.concept-card/, /cast\.set/, /cast\.members\[0\]/, /world\.kind/, /world\.time/]) assert.match(text, pattern);
   assert.match(bad.warnings.join("\n"), /generated\.extra/);
-  assert.match(validateStylePack({ ...base, background: { kind: "plaid" } }).warnings.join("\n"), /background\.kind "plaid"/);
+  // The backgrounds kit's own check: unknown kinds, params and keys are errors.
+  assert.match(validateStylePack({ ...base, background: { kind: "plaid" } }).errors.join("\n"), /background\.kind must be one of/);
+  const params = validateStylePack({ ...base, background: { kind: "mesh", params: { color: "accent", intensity: 3 }, angle: 3 } }).errors.join("\n");
+  for (const pattern of [/background\.params\.color is not supported for mesh/, /background\.params\.intensity must be a number/, /background\.angle is not supported/]) assert.match(params, pattern);
+  assert.match(validateStylePack({ ...base, layouts: { panel: { treatment: "solid", radius: 80 } } }).warnings.join("\n"), /at most 48 px/);
   assert.match(validateStylePack({ ...base, background: { kind: "blobs", params: { fade: "top" } } }).errors.join("\n"), /fade/);
   assert.equal(contrastRatio("#000000", "#ffffff") > 20, true);
 });
@@ -221,6 +225,11 @@ test("applyStyle hands the seeded fields to the story; the story's own values wi
   assert.equal(out.variants["concept-card"], "stacked");
   assert.equal(out.variants["icon-row"], pack.variants["icon-row"]);
   for (const key of ["background", "panel", "world", "variants.icon-row"]) assert.ok(applied.includes(key), key);
+  assert.deepEqual(out.cast, { style: pack.cast.drawing_style, characters: pack.cast.members });
+  assert.ok(applied.includes("cast"));
+  const listed = applyStyle({ ...story, cast: { characters: [{ id: "maya" }] } }, pack).story;
+  assert.deepEqual(listed.cast, { characters: [{ id: "maya" }], style: pack.cast.drawing_style }, "a story's own people stay; only the drawing style fills");
+  assert.equal(applyStyle({ ...story, panel: undefined }, { ...pack, layouts: { panel: { treatment: "solid", radius: 80 } } }).story.panel.radius, 48);
   const own = applyStyle({ ...story, background: { kind: "flat" }, panel: { treatment: "solid" } }, pack).story;
   assert.deepEqual(own.background, { kind: "flat" });
   assert.deepEqual(own.panel, { treatment: "solid" });

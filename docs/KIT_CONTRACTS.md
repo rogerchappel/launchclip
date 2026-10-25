@@ -346,16 +346,20 @@ A style pack is `.launchclip/styles/<name>/style.json`:
   (when `modules` is passed) and unknown `generated` keys are warnings, so the
   kits that draw them can grow first. `cast.members` entries are checked as
   story cast entries (`storyCastErrors`) and `cast.set` against the
-  characters kit's `CHARACTER_SET_NAMES`. `STYLE_BACKGROUND_KINDS` mirrors
-  `kit/core/backgrounds.mjs`. `sound` goes through the sound kit's
+  characters kit's `CHARACTER_SET_NAMES`. `background` and
+  `layouts.panel.fill` go through the backgrounds kit's `backgroundErrors` and
+  `panelFillErrors`; a panel radius over the story's 48 px warns. `sound` goes through the sound kit's
   `soundProblems` (palette, ambience, genre, key, bpm, progression,
   `sfx_density` as low/normal/high or 0–1) and `world` through the worlds
   kit's `storyWorldErrors`, the same checks finish and the story use.
 - `applyStyle` fills `story.background`, `story.panel` (the pack's
   `layouts.panel` whole, `fill` included; not the default panel an upgraded
   v2 pack carries, so v2 packs render as before) and `story.world` when the
-  story has none, and `story.variants` per module (the story's entries win).
-  The renderers read those story fields; `cast.members` stay in the pack.
+  story has none (a panel radius over 48 px is clamped to it), `story.variants`
+  per module (the story's entries win), and `story.cast` from the
+  characters kit's `castFromStyle(pack.cast)` — `{style, characters}` — when
+  the story has no cast; a story that lists characters without a style gets
+  only `cast.style`. The renderers read those story fields.
 - `brandFrameErrors(frame, where)` checks `brand_frame` and the story's
   `frame` (the same shape, plus `labels`).
 - `upgradeV2Pack(pack, {render})` → `{pack, notes}` fills the v3 fields from
