@@ -635,3 +635,19 @@ test("text fit scales with the brand family width from the font registry", () =>
   const poppins = resolve("hook-title", params, { brand: { ...BRAND, fonts: { ...BRAND.fonts, display: "poppins" } } });
   assert.equal(poppins.content.size, anton.content.size, "a family outside the registry keeps the role calibration");
 });
+
+test("HyperFrames: GSAP owns animated transforms (none in the stylesheet) and an exit at the clip end is hard-killed", () => {
+  const model = resolve("hook-title", HOOK);
+  const { css, motion } = EMITTERS["hook-title"](model);
+  const animated = new Set(model.animations.map((a) => a.node));
+  for (const node of animated) {
+    const id = node === "root" ? model.id : `${model.id}-${node}`;
+    const rule = css.match(new RegExp(`#${id}\\{([^}]*)\\}`))?.[1] ?? "";
+    assert.doesNotMatch(rule, /(^|;)transform:/, id);
+    assert.match(motion, new RegExp(`tl\\.set\\("#${id}", \\{[^}]*\\}, ${model.start}\\);`), `${id} starts from a tl.set`);
+  }
+  const end = model.start + model.duration;
+  const exits = model.animations.filter((a) => Math.abs(a.start + a.duration - end) < 1e-3);
+  assert.ok(exits.length > 0, "the sample exits at its clip end");
+  for (const a of exits) assert.match(motion, new RegExp(`tl\\.set\\("#${a.node === "root" ? model.id : `${model.id}-${a.node}`}", \\{[^}]*"force3D":false\\}, ${end}\\);`));
+});

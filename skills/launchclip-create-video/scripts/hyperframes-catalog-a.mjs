@@ -7,7 +7,11 @@
 // with immediateRender:false and explicit endpoints taken from the model
 // (whose tweens never overlap per prop and chain end-to-start), discrete text
 // uses tl.set frames like the editorial textFrames, and nothing uses
-// onUpdate, proxies or call().
+// onUpdate, proxies or call(). That tl.set owns an animated node's
+// transform, so the stylesheet leaves it out (a CSS transform GSAP then
+// overwrites is HyperFrames' gsap_css_transform_conflict), and an exit that
+// ends on the clip's end is pinned there by a tl.set of its end state (the
+// hard kill gsap_exit_missing_hard_kill asks for).
 import {gsapText} from './motion.mjs';
 import {CTA_ICONS, animatedNodes, cssFromProps, initialNodeProps, nodeId} from './catalog-a.mjs';
 
@@ -29,7 +33,7 @@ function gsapVars(props) {
 function stylesheet(model) {
   let css = '';
   for (const [node, style] of Object.entries(model.styles)) {
-    const initial = cssFromProps(initialNodeProps(model, node));
+    const {transform, ...initial} = cssFromProps(initialNodeProps(model, node));
     css += `#${nodeId(model, node)}{${declarations({...style, ...initial})}}`;
   }
   for (const [name, style] of Object.entries(model.classes ?? {})) css += `#${model.id} .a-${name}{${declarations(style)}}`;
@@ -44,6 +48,10 @@ function timeline(model) {
   for (const a of model.animations) {
     const to = {...gsapVars(a.to), duration: a.duration, ease: a.ease, immediateRender: false, force3D: false};
     lines.push(`tl.fromTo(${js(`#${nodeId(model, a.node)}`)}, ${js(gsapVars(a.from))}, ${js(to)}, ${a.start});`);
+  }
+  const end = Math.round((model.start + model.duration) * 1e4) / 1e4;
+  for (const a of model.animations) {
+    if (Math.abs(a.start + a.duration - end) < 1e-3) lines.push(`tl.set(${js(`#${nodeId(model, a.node)}`)}, ${js({...gsapVars(a.to), force3D: false})}, ${end});`);
   }
   for (const entry of model.texts ?? []) {
     const selector = js(`#${nodeId(model, entry.node)}`);
