@@ -28,7 +28,10 @@ export const CARD_PARAMS = Object.freeze({
   rect: '{x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane)'
 });
 export const at = 'seconds from scene start (optional; else a matching hit, else a default)';
-export const cardTiming = (rules = []) => timingRules({rules});
+// Beats may start with the scene: the card's first content enters with it.
+export const cardTiming = (rules = []) => ({...timingRules({rules}), leadIn: 0});
+// The card enters this long before its first beat, so the box never shows empty.
+const ENTER_LEAD = 0.15;
 
 /**
  * createBase plus placement. Returns the createBase object with
@@ -115,6 +118,24 @@ export function createCardBase(moduleId, params, ctx, {allowed, required = []}) 
       : `do not fit the safe zone (they need at least ${Math.round(least)} px); shorten them`);
   };
   b.model.content = null;
+  // Beats may fall from the scene start (catalogue B's default floor is the
+  // end of the enter).
+  const timeOf = b.timeOf;
+  b.timeOf = (name, value, path, fallback, {min = 0, max} = {}) => timeOf(name, value, path, fallback, {min, max});
+  // The panel and its first content land together: when the first beat comes
+  // later (an explicit `at` or a hit), the enter waits for it.
+  const finish = b.finish;
+  b.finish = (content, options) => {
+    const m = b.motion;
+    const first = Math.min(...b.events.filter(event => event.name !== 'enter').map(event => event.time));
+    const enterStart = rt(Math.min(Math.max(b.start, first - ENTER_LEAD), m.exitStart - m.enterDuration));
+    if (Number.isFinite(first) && enterStart > m.enterStart) {
+      m.enterStart = enterStart;
+      m.enterEnd = rt(enterStart + m.enterDuration);
+      b.events.find(event => event.name === 'enter').time = m.enterEnd;
+    }
+    return finish(content, options);
+  };
   return b;
 }
 

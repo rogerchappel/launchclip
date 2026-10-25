@@ -48,7 +48,7 @@ function resolveCompare(params, ctx) {
   };
   const box = b.place(measure, {maxWidth: u(portrait ? 940 : 1500)});
   const L = box.layout;
-  const leftAt = b.timeOf('left', p.at, 'params.at', 0.5);
+  const leftAt = b.timeOf('left', p.at, 'params.at', 0.05);
   const rightAt = b.timeOf('right', undefined, 'params.at', Math.min(leftAt - b.start + 0.25 + stagger * sides[0].items.length, b.lastEvent));
   const placed = sides.map((s, i) => ({...s, index: i, time: i ? rightAt : leftAt, items: s.items.map((text, j) => ({index: j, text, time: rt((i ? rightAt : leftAt) + 0.2 + j * stagger)}))}));
   b.events.push({id: `${b.id}-left`, name: 'left', time: leftAt, endTime: rt(leftAt + 0.5), role: 'title'});
@@ -156,7 +156,7 @@ function resolveTimeline(params, ctx) {
   // A vertical list reads as one block nearer the middle of a 9:16 frame.
   const box = b.place(measure, {maxWidth: u(portrait && directionIn !== 'horizontal' ? 760 : portrait ? 900 : 1600)});
   const L = box.layout;
-  const first = b.timeOf('step-0', p.at, 'params.at', 0.55);
+  const first = b.timeOf('step-0', p.at, 'params.at', 0.05);
   const placed = steps.map(step => {
     const time = step.at === undefined ? b.timeOf(`step-${step.index}`, undefined, `params.steps[${step.index}].at`, Math.min(first - start + step.index * stagger, b.lastEvent)) : b.timeOf(`step-${step.index}`, step.at, `params.steps[${step.index}].at`, 0);
     b.events.push({id: `${id}-step-${step.index}`, name: `step-${step.index}`, time, endTime: rt(time + 0.45), role: 'emphasis', cue: 'pop-soft'});
@@ -228,7 +228,7 @@ export const timeline = {
   describe: 'Two to six steps along a line: numbered (or icon) nodes that pop as each step is said while a primary line runs on to them, with a label and optional detail. Vertical in 9:16, across in 16:9 when the labels fit. For a process, a history or a roadmap.',
   params: {steps: '[{label ≤ 28, detail? ≤ 40, icon?, at?}] 2–6', title: 'string ≤ 48 (optional)', direction: 'auto (default) | vertical | horizontal', stagger: 'seconds between steps (default 0.45)', at: 'first step time', ...CARD_PARAMS},
   events: ['step-<i>'],
-  timing: cardTiming(['steps land in order; with no at, the first lands at 0.55 s and the rest follow by stagger (default 0.45 s)']),
+  timing: cardTiming(['steps land in order; with no at, the first lands at 0.05 s and the rest follow by stagger (default 0.45 s)']),
   mood: ['editorial', 'launch'],
   resolve: resolveTimeline, view: timelineView, timeline: timelineTimeline
 };

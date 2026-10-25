@@ -190,3 +190,28 @@ test('in a panel or rect, a list fills the room and its title reads at 4.5:1', a
   assert.ok(contrastRatio(model.content.titleColor, brand.colors.bg) >= 4.5, 'title contrast');
   assert.notEqual(model.content.titleColor, model.theme.muted);
 });
+
+test('every card lands with its first content: no empty box at the entrance', () => {
+  const all = {...SAMPLES,
+    'stat-card': {value: '87%', label: 'ship weekly', source: 'Ledgerly survey, 2026'},
+    'quote-card': {quote: 'It turned a four-hour edit into a coffee break.', author: 'Ada Park'},
+    excerpt: {lines: ['Ship it this week'], source: 'README'},
+    compare: {left: {title: 'Before', items: ['A week']}, right: {title: 'After', items: ['A day']}},
+    timeline: {steps: [{label: 'Record'}, {label: 'Post'}]}};
+  // Content other than the root (and the bars that draw out) is showing while the root is still entering.
+  const showing = (model, t) => [...frameState(catalogGTimeline(model), t)].some(([target, props]) => target !== model.id && !/-(rule|progress)$/.test(target) && props.opacity > 0.3);
+  for (const [id, params] of Object.entries(all)) {
+    const model = resolve(id, params);
+    assert.equal(model.motion.enterStart, model.start, `${id} enters with the scene`);
+    assert.ok(showing(model, model.start + 0.25), `${id} shows content 0.25 s in`);
+    assert.equal(MODULES[id].timing.leadIn, 0, `${id} beats may start with the scene`);
+    // A first beat at 0 is allowed; a late one moves the enter to meet it.
+    assert.doesNotThrow(() => resolve(id, {...params, at: 0}), id);
+    const late = resolve(id, {...params, at: 1.5});
+    const first = Math.min(...late.events.filter(event => event.name !== 'enter').map(event => event.time));
+    assert.ok(first > late.start + 1, id);
+    assert.equal(late.motion.enterStart, Math.round((first - 0.15) * 1e4) / 1e4, `${id} waits for its first beat`);
+    assert.ok(!showing(late, late.start + 1), `${id} shows nothing before its enter`);
+    assert.ok(showing(late, late.motion.enterStart + 0.4), `${id} lands with its first beat`);
+  }
+});

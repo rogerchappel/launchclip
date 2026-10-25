@@ -910,15 +910,15 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | proof-wall | 2 s | 0 s | scene − 1.2 s | at ≤ scene − 1.2 s − every × items |
 | scrapbook | 2 s | 0 s | scene − 1.4 s | — |
 | doodle-outline | 1.5 s | 0 s | scene − 0.9 s | — |
-| concept-card | 2 s | 0.5 s | scene − 0.65 s | the icon pops 0.15 s before the word; the sub-line follows it by 0.35 s |
-| icon-row | 2 s | 0.5 s | scene − 0.65 s | items pop in order; with no at, the first pops at 0.6 s and the rest follow by stagger (default 0.18 s) |
-| section-card | 2 s | 0.5 s | scene − 0.65 s | the kicker and rule land 0.25 s before the title |
-| object-card | 2 s | 0.5 s | scene − 0.65 s | the caption follows the object by 0.25 s; accents pop from 0.35 s after it |
-| stat-card | 2 s | 0.5 s | scene − 0.65 s | the count runs 0.9 s from at and hits on the exact value |
-| quote-card | 2 s | 0.5 s | scene − 0.65 s | the author follows the quote by 0.45 s; the highlight lands 0.35 s after the author (or on a highlight hit) |
-| excerpt | 2 s | 0.5 s | scene − 0.65 s | lines reveal from at, one every min(0.12, 0.6 / lines) s; the highlight follows 0.5 s after the last |
-| compare | 2 s | 0.5 s | scene − 0.65 s | the right panel lands 0.25 s plus stagger × left items after the left (or on a right hit) |
-| timeline | 2 s | 0.5 s | scene − 0.65 s | steps land in order; with no at, the first lands at 0.55 s and the rest follow by stagger (default 0.45 s) |
+| concept-card | 2 s | 0 s | scene − 0.65 s | with no at, the word lands at 0.05 s; the icon pops up to 0.15 s before it and the sub-line follows it by 0.35 s |
+| icon-row | 2 s | 0 s | scene − 0.65 s | items pop in order; with no at, the first pops at 0.05 s and the rest follow by stagger (default 0.18 s) |
+| section-card | 2 s | 0 s | scene − 0.65 s | the kicker and rule land up to 0.25 s before the title (with no at, at 0.25 s) |
+| object-card | 2 s | 0 s | scene − 0.65 s | with no at, the object pops at 0.05 s; the caption follows it by 0.25 s and accents pop from 0.35 s after it |
+| stat-card | 2 s | 0 s | scene − 0.65 s | the count runs 0.9 s from at and hits on the exact value |
+| quote-card | 2 s | 0 s | scene − 0.65 s | the author follows the quote by 0.45 s; the highlight lands 0.35 s after the author (or on a highlight hit) |
+| excerpt | 2 s | 0 s | scene − 0.65 s | lines reveal from at, one every min(0.12, 0.6 / lines) s; the highlight follows 0.5 s after the last |
+| compare | 2 s | 0 s | scene − 0.65 s | the right panel lands 0.25 s plus stagger × left items after the left (or on a right hit) |
+| timeline | 2 s | 0 s | scene − 0.65 s | steps land in order; with no at, the first lands at 0.05 s and the rest follow by stagger (default 0.45 s) |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 
