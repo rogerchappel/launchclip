@@ -195,10 +195,18 @@ test('HyperFrames: GSAP owns the rig transforms (no CSS transform for it to over
     const tag = html.match(new RegExp(`<div id="${id}"[^>]*>`))?.[0];
     if (tag) assert.doesNotMatch(tag, /transform:/, id);
   }
-  // Each taken-off transform comes back as a set at the scene start, before the scene's own ops.
-  const first = owned.ops.findIndex(op => !(op.type === 'set' && op.time === model.start && 'scaleX' in op.props && 'rotation' in op.props && 'x' in op.props));
-  assert.ok(first > 10, 'the transform sets lead the op list');
-  assert.match(motion, /^tl\.set\("#desk-c0-body", \{"x":0,"y":140,"rotation":0,"scaleX":1,"scaleY":1\}, 0\);/, "the seated body, as its CSS had it");
+  // Each taken-off transform is written at the scene start, by the scene's own set or a leading one.
+  const css = new Map();
+  const walk = node => { if (node?.style?.transform && moved.has(node.id)) css.set(node.id, node.style.transform); (node?.children ?? []).forEach(walk); };
+  Object.values(charactersView(model)).forEach(walk);
+  assert.ok(css.size > 10);
+  for (const [id, transform] of css) {
+    for (const [key, value] of Object.entries(transformProps(transform))) {
+      if (value === (key.startsWith('scale') ? 1 : 0)) continue;
+      assert.ok(owned.ops.some(op => op.type === 'set' && op.target === id && op.time === model.start && op.props[key] === value), `${id} ${key}`);
+    }
+  }
+  assert.match(motion, /tl\.set\("#desk-c0-body", \{"y":140\}, 0\);/, "the seated body, as its CSS had it");
   assert.deepEqual(transformProps('translate(4px, -2.5px) rotate(12deg) scale(1, 0.96)'), {x: 4, y: -2.5, rotation: 12, scaleX: 1, scaleY: 0.96});
   assert.deepEqual(transformProps('scale(0.6)'), {x: 0, y: 0, rotation: 0, scaleX: 0.6, scaleY: 0.6});
   assert.throws(() => transformProps('skewX(4deg)'), /unsupported transform/);

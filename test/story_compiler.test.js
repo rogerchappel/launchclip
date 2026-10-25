@@ -114,6 +114,27 @@ test("the compiled minimal project passes hyperframes lint", async () => {
   }
 });
 
+// The catalogue views carry their initial transforms as CSS; GSAP must own
+// every one it moves (gsap_css_transform_conflict fails strict lint, and so
+// cinematic-check's verification).
+test("compiled catalogue stories leave GSAP no CSS transform to overwrite", async () => {
+  const { readProjectStory } = await import("../src/story_loader.js");
+  for (const id of ["footage", "promo-16x9", "explainer-9x16"]) {
+    const dir = path.join(ROOT, "examples/story", id);
+    const out = await tempDir(`launchclip-hf-lint-${id}-`);
+    try {
+      await compileStoryToHyperFrames((await readProjectStory(dir)).resolved, { projectDir: out, sourceDir: dir });
+      // Lint exits 1 on its other findings; only this one is under test here.
+      const stdout = await run(process.execPath, [HYPERFRAMES_CLI, "lint", "--json", out], { cwd: out }).then(({ stdout }) => stdout, (error) => error.stdout);
+      const report = parseOutput(stdout);
+      assert.ok(Array.isArray(report?.findings), `${id}: ${stdout}`);
+      assert.deepEqual(report.findings.filter((finding) => finding.code === "gsap_css_transform_conflict"), [], id);
+    } finally {
+      await rm(out, { recursive: true, force: true });
+    }
+  }
+});
+
 test("sceneFilter compiles one scene on the background, like ModuleReview", async () => {
   const story = await minimalStory();
   const { html, boundaries, warnings } = await compileStoryToHyperFrames(story, { sourceDir: MINIMAL, sceneFilter: "s2", write: false });

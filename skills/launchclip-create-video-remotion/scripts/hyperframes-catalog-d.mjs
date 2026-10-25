@@ -8,16 +8,16 @@
 // one z-index above it, so it is drawn over the video it annotates.
 
 import {photoSceneTimeline, photoSceneView, productDemoTimeline, productDemoView} from './catalog-d.mjs';
-import {opsToGsap, renderNode} from './hyperframes-catalog-b.mjs';
+import {gsapOwnedTransforms, opsToGsap, renderNode} from './hyperframes-catalog-b.mjs';
 
 /** {html: the <video>, overlay: the annotation layer, css, motion, events, layout}. */
 export function emitProductDemo(model) {
-  const view = productDemoView(model);
+  const {view, ops} = gsapOwnedTransforms(productDemoView(model), productDemoTimeline(model), model.start);
   const timed = (track, extra = '') => `class="clip" data-start="${model.start}" data-duration="${model.duration}" data-track-index="${track}"${extra}`;
   const html = renderNode(view.media, `${timed(model.track)} data-media-start="${model.content.media.sourceStart}" data-module="product-demo"`);
   const overlay = renderNode(view.overlay, timed(model.track + 1, ' data-layout-allow-occlusion="true" data-module="product-demo"'));
   const css = `#${model.id}-overlay{pointer-events:none}`;
-  const motion = opsToGsap(productDemoTimeline(model)).join('\n');
+  const motion = opsToGsap(ops).join('\n');
   return {html, overlay, css, motion, events: model.events.map(event => ({...event})), layout: {...model.layout}};
 }
 
@@ -27,10 +27,10 @@ export function emitProductDemo(model) {
  * scene layer with its overlay, so it also follows a world camera.
  */
 export function emitPhotoScene(model) {
-  const view = photoSceneView(model);
+  const {view, ops} = gsapOwnedTransforms(photoSceneView(model), photoSceneTimeline(model), model.start);
   const timed = (track, extra = '') => `class="clip" data-start="${model.start}" data-duration="${model.duration}" data-track-index="${track}"${extra}`;
   const css = `#${model.id}-overlay{pointer-events:none}`;
-  const motion = opsToGsap(photoSceneTimeline(model)).join('\n');
+  const motion = opsToGsap(ops).join('\n');
   const out = {css, motion, events: model.events.map(event => ({...event})), layout: {...model.layout}};
   if (model.content.media.kind === 'video') {
     return {...out, html: renderNode(view.media, `${timed(model.track)} data-media-start="${model.content.media.sourceStart}" data-module="photo-scene"`),
