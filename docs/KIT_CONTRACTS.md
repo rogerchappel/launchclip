@@ -1254,6 +1254,87 @@ planner prompt's presenter section states the same budget.
 exact matte. `test/fixtures/parity-footage/s-subject-behind.json` (module)
 and `s-subject-story.json` (story) hold it to SSIM ≥ 0.97.
 
+## Footage layouts (`kit/core/footage-layout.mjs`)
+
+A section of a footage-led story holds one layout, and the scenes inside it
+render within it (docs/VIDEO_QUALITY_RFC.md §7.1).
+
+### Story field
+
+The contract adds one top-level field, `sections`. A scene field was the
+other option, but it would need a layout on every scene, and a layout belongs
+to a stretch of the recording, not to one scene.
+
+```json
+"sections": [
+  { "id": "steps", "start": "word:three", "end": 9.5, "layout": "split-left" },
+  { "id": "proof", "start": 9.5, "end": 14, "layout": "framed", "side": "right", "room": "dim", "transition": { "type": "layout-shift", "dur": 0.5 } }
+]
+```
+
+| Layout | Presenter | Panel (graphics area) |
+| --- | --- | --- |
+| `full` | full frame (also every time outside a section) | none; overlays only |
+| `split-left` | reframed into the left 46% (16:9) or 50% (9:16) | the right side |
+| `split-right` | reframed into the right side | the left side |
+| `framed` | inset in a rounded frame with a ring; `side` left/right (16:9, default left) or top/bottom (9:16, default top) | the rest of the canvas |
+| `stacked` | 9:16 only: the bottom half (`side: "top"` for the top) | the other half |
+| `insert` | hidden; the base audio keeps playing | the full canvas |
+
+- The contract lives in `kit/core/story.mjs`, which stays import-free: `validateSections`, `storySections` and `layoutSpans`. `footage-layout.mjs` re-exports them. `validateSections` (called by `validateStory`) checks the following:
+  - the lane is footage-led;
+  - ids are unique;
+  - the layout and `side` are known, and `stacked` is used only in portrait;
+  - `panel` is a brand role (bg (default), primary, accent, paper or ink) or a `#rrggbb` colour;
+  - `ring` is 0–24 px (default 6 for framed, else 0);
+  - `room` is keep, dim or replace, and `zoom` is 1–1.6;
+  - `transition` is `{type: "layout-shift" | "cut", dur ≤ 2}`;
+  - sections are in order, without overlap.
+- `resolveStory` resolves section anchors like scene times.
+- `storySections(story)` normalises the sections and snaps them to frames.
+
+### Geometry and the frame element
+
+- `layoutGeometry(layout, side, canvas)` → `{window, radius, panel}`. The window is where the presenter shows.
+- `panelSafeArea(panel, canvas, {captions})` is the panel inside the profile's safe zone. It sits a gutter (4% of the short edge) in from the window and, when the story has captions, above the caption band.
+- `layoutAt(story, t)` → `{section, layout, side, presenter, panel, safe, color}`, or null outside sections. `resolveModule` passes it to catalogue modules as `ctx.layout`.
+  - The brand frame (style v3) and modules place themselves in `safe`.
+  - A footage-led checklist without `rect` inside a section with a panel fits `safe`, never below its legal text scale (`subjectPlacement: "panel"`).
+- The panel is one element in both renderers: `#lc-layout-frame` in HyperFrames, `LayoutFrame` (`kit/remotion/LayoutFrame.tsx`) in Remotion.
+  - It's a box at the window, styled by `layoutFrameStyle(state, canvas)`.
+  - Its `box-shadow` is the ring in the brand primary, then a spread of twice the canvas in the panel colour, so it paints everything outside the window.
+  - It sits above the subject layer and under every front scene. In HyperFrames that is z-index `subjectZ + 5`, or 5 without a subject.
+  - Behind scenes stay under the subject, so a panel covers them.
+
+### Plan, camera and transitions
+
+`layoutPlan(story)` is null without sections, so other stories compile byte for byte as before. Otherwise it returns `{sections, spans, ops, boundaries, rooms, warnings, canvas}`.
+
+- **Spans.** `layoutSpans(story)` gives the sections plus `full` gaps, back to back. Each span carries the shift that brings it in. A span shifts when its layout, side, panel, ring or zoom differs from the span before it; two adjacent sections that differ only in where the head sits cut.
+- **States.** Each span has a state `{window, radius, panel, ring, ringColor, camera, hidden}`. The camera is the base camera that reframes the presenter:
+  - The head is measured over the section by `subjectContext` (the matte, else the whole-video track, else the canvas centre at 35% height).
+  - The camera moves the head to the window's horizontal centre, at its height in the frame.
+  - It's scaled 1× (`zoom`) or, for framed, to fit the frame, and clamped so the footage still covers the window.
+  - `insert` keeps the previous camera.
+- **Ops.** `ops` hold a state at 0, every frame of each shift, and each cut. `layoutStateAt(plan, t)` is the last op at or before t, and both compilers set the same values on the same frames.
+- **`layout-shift`.** Between two different states, a layout-shift (default 0.5 s, cubic in-out, at most the span's length) interpolates the window, radius, ring and camera.
+  - The panel takes the incoming colour, or keeps the outgoing one when shifting back to full.
+  - `cut` jumps.
+- **Boundaries.** Each shift is a boundary `{boundary_id: "<id>-layout" | "<id>-layout-out", kind: "ordinary", type: "layout-shift", start_seconds, duration_seconds, from_id, to_id}`.
+  - `deriveBoundaries` appends them (from `layoutSpans`), so the evidence schedule samples shifts.
+  - HyperFrames also writes one hidden `.lc-layout-boundary` marker per shift with the `data-launchclip-transition-*` attributes.
+- **Cameras.** `withLayoutCameras(models, plan, {fps, duration})` composes the reframe into every module camera and subject camera: a sample becomes layout ∘ sample, so a punch-in zooms inside the reframe. Where no module camera runs, it adds one `layout` model with the layout camera at each op time and on the frame after each module camera ends.
+  - Both compilers, `subjectCameraOps` and layout-check's subject view use it.
+  - The face rule follows the reframed head, and sees no head while `insert` holds.
+- **Rooms.** A section's `room` (`dim` → `{dim: 0.55}`, `replace` → `{hide: true}`) becomes a room model for the section window. It needs a matte over every frame of the section; otherwise it's dropped with a plan warning that HyperFrames reports. It mounts the subject like a scene's room, and `plannedSubjectWindows` (so `make`) mattes it.
+- **Module reviews.** A module review (sceneFilter, ModuleReview) has no layout.
+
+### Parity
+
+There are two examples, `examples/story/layouts-wide` (16:9: full, split-left, framed with the room dimmed, split-right on a paper panel) and `examples/story/layouts-tall` (9:16: full, stacked, framed with the room replaced, insert, back to full). Each has a synthetic presenter, an exact matte and a track: `node scripts/make-subject-example.mjs --out <dir> [--aspect 16:9] --duration 10 --track`.
+
+`test/fixtures/parity-footage/s-layout-wide.json` and `s-layout-tall.json` hold both renderers to SSIM ≥ 0.97 at frame-exact times, mid-shift and settled (0.994 minimum when added).
+
 ## Catalogue E (`kit/core/catalog-e.mjs`)
 
 Product moments around the presenter

@@ -457,6 +457,15 @@ presenter placement afterward when the explanation continues. Choose run length
 from the content rather than a fixed duration or transition quota. Review the
 full sequence for distracting crop oscillation as well as individual cards.
 
+Write each run into `storyboard.json` as a `sections` entry with its
+`layout` (`full`, `split-left`, `split-right`, `framed`, `stacked` for 9:16,
+or `insert`; see "Footage layouts (sections)" in `storyboard-modules.md`). Both
+renderers reframe the presenter with the base camera, draw the brand panel
+and animate each change as a `layout-shift`, so the run's crop is the
+section's, not a per-module transform. Place the section's scenes in its
+panel, and run `launchclip subject track` first so the reframe centres the
+real head.
+
 For each aspect ratio define a separate readable layout. In 16:9 protect the
 face, gestures and useful negative space; in 9:16 inspect the actual crop and
 reserve caption/platform UI areas. Do not shrink a landscape scene into
