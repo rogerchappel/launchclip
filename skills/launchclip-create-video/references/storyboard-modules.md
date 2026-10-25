@@ -1122,6 +1122,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: count, landed
+variants: plain (default), tiles, mechanical
 
 ### flip-clock (keeps captions)
 Split-flap cards flip through 2–10 values (a date, a time, a score, a year), each changed card falling on its hinge; classic, brand or light cards.
@@ -1134,6 +1135,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: flip, flip-<n>
+variants: classic (default), brand, light
 
 ### ticker-tape (keeps captions)
 A scrolling ticker band of items, with optional values and ▲/▼ changes, looping seamlessly; brand band, minimal rules or an LED board, with an optional tag and title.
@@ -1147,6 +1149,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: roll
+variants: band (default), minimal, led
 
 ### slot-roll (keeps captions)
 A slot-machine reel of words spins (motion-blurred) and lands on the final one; a boxed window, inline in a sentence ("Built for ___"), or a stack showing its neighbours.
@@ -1162,6 +1165,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: spin, land
+variants: window (default), inline, stack
 
 ### countdown (keeps captions)
 A countdown from N to zero (or to `to`), each number punching in on its tick, then an optional end word; big digits, a depleting ring, or an mm:ss clock with a draining bar.
@@ -1177,6 +1181,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: start, zero
+variants: digits (default), ring, clock
 
 ### percent-fill (keeps captions)
 A shape fills to a share while the figure counts: a round flask of rising liquid with a sliding wave, a battery, or a thick bar.
@@ -1192,6 +1197,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: fill
+variants: liquid (default), battery, bar
 
 ### device-frame (keeps captions)
 A browser, phone, laptop or tablet frame rises in and its screen wipes on: a project image, or a mock screen in the brand (blocks, cards and a chart) with an optional title.
