@@ -15,7 +15,7 @@
 // <out-dir>/ambience/<bed>.wav, and <out-dir>/AUDIO-KIT.json (+ BEATS.json
 // when a bed is made).
 import { execFile } from 'node:child_process';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -312,8 +312,27 @@ export function bedExpressions({ seconds, bpm = 100, key = 'A', kickFrom = 0, ki
   return { pad, kick, hat, beat };
 }
 
+// The reverb sends normalise the impulse response by its L2 norm: afir=irnorm=2
+// from FFmpeg 7. FFmpeg 6 (Ubuntu 24.04's apt build) has no irnorm; its
+// gtype=2 (gn: 1/sqrt of the summed squares) is the same L2 normalisation.
+let afirIrnorm;
+async function portableGraph(graph) {
+  if (!graph.includes('afir=irnorm=2')) return graph;
+  afirIrnorm ??= run('ffmpeg', ['-hide_banner', '-h', 'filter=afir']).then(({ stdout }) => /\birnorm\b/.test(stdout), () => true);
+  return (await afirIrnorm) ? graph : graph.replaceAll('afir=irnorm=2', 'afir=gtype=2');
+}
+
 async function ffmpeg(args) {
-  await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { maxBuffer: 1 << 26 });
+  const portable = await Promise.all(args.map(async (arg, index) => {
+    if (args[index - 1] === '-filter_complex') return portableGraph(arg);
+    if (args[index - 1] === '-filter_complex_script') {
+      const graph = await readFile(arg, 'utf8');
+      const rewritten = await portableGraph(graph);
+      if (rewritten !== graph) await writeFile(arg, rewritten);
+    }
+    return arg;
+  }));
+  await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...portable], { maxBuffer: 1 << 26 });
 }
 
 async function peakNormalize(input, output, peakDb) {
