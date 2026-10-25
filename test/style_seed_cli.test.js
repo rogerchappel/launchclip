@@ -9,7 +9,7 @@ import test from "node:test";
 
 import { generateStyle } from "../kit/core/style-seed.mjs";
 import { runCli } from "../src/cli.js";
-import { generateProjectStyle, styleKeepCommand, styleRerollCommand } from "../src/style_seed_store.js";
+import { generateProjectStyle, promptConstraints, styleKeepCommand, styleRerollCommand } from "../src/style_seed_store.js";
 import { planStoryCommand } from "../src/story_cli.js";
 import { resolveStyleV2 } from "../src/style_store.js";
 
@@ -149,4 +149,12 @@ test("story plan with no style or brand plans for a seeded style and names it", 
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("a prompt's topic picks the fitting worlds; no topic keeps the neutral ones", () => {
+  assert.deepEqual(promptConstraints("A cooking video about fresh pasta").world, ["kitchen", "cafe"]);
+  assert.equal(promptConstraints("Our quarterly numbers").world, undefined);
+  assert.equal(promptConstraints("A cooking video", { world: "park" }).world, "park", "art direction's world wins");
+  const pack = generateStyle({ seed: "7f3a91c2", constraints: promptConstraints("A cooking video about fresh pasta") });
+  assert.ok(["kitchen", "cafe"].includes(pack.world.kind));
 });
