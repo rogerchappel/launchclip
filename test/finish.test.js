@@ -959,6 +959,45 @@ test("runFinish drops a collapsing matte's subject scenes to their fallback", as
   }
 });
 
+test("finish --prototype gates only the direction lines and scenes inside the window", async () => {
+  // Narration that runs past the cut with no sentence end inside 20–30 s, so the cut is s2's end (24 s).
+  const project = await narratedProject({ mutate: (story) => {
+    story.format.duration = 45;
+    story.audio.narration.text = `${NARRATION} ${Array(100).fill("and").join(" ")} done.`;
+    const [metric, checklist] = story.scenes;
+    story.scenes = [{ ...metric, start: 0, end: 12 }, { ...checklist, start: 12, end: 24 }, { ...metric, id: "s3", start: 24, end: 45 }];
+    delete story.ending;
+    return story;
+  } });
+  try {
+    await rm(path.join(project, "DIRECTION.json"), { force: true });
+    const first = await runFinish(project, { renderer: "remotion", prototype: true }, fakeAdapters());
+    assert.equal(first.prototype.cut, 24);
+    const words = JSON.parse(await readFile(path.join(project, "NARRATION.json"), "utf8")).words;
+    const late = words.findIndex((word) => word.start >= 24);
+    assert.ok(late > 0, "the narration runs past the cut");
+    // The map covers the whole story; s3 starts after the cut.
+    const line = (range, scenes) => ({ words: range, intent: "claim", treatment: "dress", scenes });
+    await writeFile(path.join(project, "DIRECTION.json"), JSON.stringify({
+      schema: "launchclip.direction-map.v1",
+      sections: [
+        { id: "open", lines: [line([0, late - 1], ["s1", "s2"])] },
+        { id: "rest", lines: [line([late, words.length - 1], ["s3"])] }
+      ]
+    }));
+    const report = await runFinish(project, { renderer: "remotion", prototype: true }, fakeAdapters());
+    assert.equal(report.gates.direction.status, "passed", JSON.stringify(report.gates.direction));
+    assert.equal(report.gates.direction.scope, "prototype: the opening 24 s");
+    assert.equal(report.gates.direction.lines, 1);
+    // The whole run still checks every line.
+    const whole = await runFinish(project, { renderer: "remotion" }, fakeAdapters());
+    assert.equal(whole.gates.direction.status, "passed", JSON.stringify(whole.gates.direction));
+    assert.equal(whole.gates.direction.lines, 2);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
 test("finish --prototype renders only the opening 20–30 s, cut at a scene end, and gates it", async () => {
   const project = await narratedProject({ mutate: (story) => {
     story.format.duration = 45;
@@ -979,6 +1018,7 @@ test("finish --prototype renders only the opening 20–30 s, cut at a scene end,
     assert.equal(report.gates.coverage.scope, "prototype: the opening 24 s");
     assert.ok(report.next_steps.some((step) => /Review the prototype \(renders\/prototype\.mp4, the opening 24 s of 45 s\)/.test(step)));
     await assert.rejects(runFinish(project, { renderer: "remotion", prototype: true, candidate: "a" }, fakeAdapters()), /--prototype or --candidate/);
+
   } finally {
     await rm(project, { recursive: true, force: true });
   }

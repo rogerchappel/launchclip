@@ -23,7 +23,7 @@ import { chunkWords, narrationWords } from "../kit/core/captions.mjs";
 import { resolveModule } from "../kit/core/modules.mjs";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
-import { coverageGate, directionGate, faceGate, gateProfile, prototypeCut, readFaceData, readProjectDirection } from "./quality_gates.js";
+import { coverageGate, directionGate, faceGate, gateProfile, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
@@ -33,7 +33,7 @@ import { remotionInvocation } from "./renderers/remotion.js";
 import { deriveBoundaries, resolveStory, storyBase, storyFormat } from "./story.js";
 import { storyChapters } from "../kit/core/story.mjs";
 import { ffmetadataChapters, youtubeChapterProblems, youtubeChapters } from "../kit/core/long-form.mjs";
-import { validateStory } from "./story_cli.js";
+import { directionFileFor, validateStory } from "./story_cli.js";
 import { hasExactFile, readStoryEdl } from "./story_loader.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
@@ -997,6 +997,8 @@ const STAGES = [
         video: await fileHash(ctx.out),
         evidence: await fileHash(path.join(ctx.project, PATHS.evidence)),
         audio_manifest: await fileHash(path.join(ctx.project, PATHS.audioManifest)),
+        // The direction and coverage gates read the map.
+        direction: await fileHash(directionFileFor(path.join(ctx.project, "storyboard.json"))),
         layout: ctx.layout,
         story: ctx.resolved,
         style: ctx.style?.file ? await fileHash(ctx.style.file) : ctx.style?.name ?? null,
@@ -1072,6 +1074,7 @@ function applyPrototype(ctx) {
     return;
   }
   ctx.copy = cut.story;
+  ctx.fullResolved = ctx.resolved;
   ctx.resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject });
   ctx.boundaries = deriveBoundaries(ctx.resolved);
   ctx.prototype = { requested: true, cut: cut.cut, duration: cut.duration };
@@ -1237,13 +1240,18 @@ async function runGates(ctx) {
   // The quality gates (VIDEO_QUALITY_RFC §11.2): the direction map, coverage
   // against the cadence profile, and the face rule over whatever face data exists.
   try {
-    const direction = await readProjectDirection(ctx.project);
-    const { profile } = gateProfile(ctx.resolved, { direction: direction.map, style: await stylePack(ctx), project: ctx.project });
-    gates.direction = await directionGate({ project: ctx.project, resolved: ctx.resolved, words: ctx.words ?? [], direction });
+    const read = await readProjectDirection(ctx.project);
+    const { profile } = gateProfile(ctx.resolved, { direction: read.map, style: await stylePack(ctx), project: ctx.project });
+    // --prototype: the gates judge the opening it renders, so the map and the
+    // narration are cut to the lines and scenes inside the window.
+    const prototype = Boolean(ctx.prototype?.cut);
+    const scope = prototype ? prototypeScope({ map: read.map, words: ctx.words ?? [], cut: ctx.prototype.cut, story: ctx.resolved, full: ctx.fullResolved }) : { map: read.map, words: ctx.words ?? [] };
+    const direction = { ...read, map: scope.map };
+    gates.direction = await directionGate({ project: ctx.project, resolved: ctx.resolved, words: scope.words, direction });
     const face = storyBase(ctx.resolved) ? await readFaceData(ctx.project, ctx.resolved) : null;
-    gates.coverage = coverageGate({ resolved: ctx.resolved, words: ctx.words ?? [], map: gates.direction.status === "passed" ? direction.map : null, profile, face: face?.intervals ?? null });
-    if (storyBase(ctx.resolved)) gates.face = await faceGate({ project: ctx.project, resolved: ctx.resolved, layout: ctx.layout, profile });
-    if (ctx.prototype?.cut) for (const name of ["coverage", "face"]) if (gates[name]) gates[name].scope = `prototype: the opening ${ctx.prototype.cut} s`;
+    gates.coverage = coverageGate({ resolved: ctx.resolved, words: scope.words, map: gates.direction.status === "passed" ? direction.map : null, profile, face: face?.intervals ?? null, prototype });
+    if (storyBase(ctx.resolved)) gates.face = await faceGate({ project: ctx.project, resolved: ctx.resolved, layout: ctx.layout, profile, prototype });
+    if (prototype) for (const name of ["direction", "coverage", "face"]) if (gates[name]) gates[name].scope = `prototype: the opening ${ctx.prototype.cut} s`;
   } catch (error) {
     gates.direction ??= { status: "failed", error: error.message };
   }

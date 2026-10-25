@@ -8,6 +8,8 @@
 //   qualityFindings(measures, profile) → critic-style findings
 //     (missed-opportunity, sparseness) the headless critic carries
 //   prototypeCut(resolved, words, {min, max}) → {cut, story} | null
+//   prototypeScope({map, words, cut, story, full}) → the map and words
+//     inside the prototype window, for the gates above
 //
 // ctx: {project, resolved, words, layout, style}. Every gate reads only the
 // project; none renders or calls a model.
@@ -26,6 +28,10 @@ import { TRACK_FILE, readStoryTrack } from "./subject/project.js";
 // The measures the coverage gate fails on; the rest of the band is reported.
 export const COVERAGE_GATE_MEASURES = Object.freeze(["coverage", "face_time", "longest_undressed_seconds", "longest_without_reset_seconds"]);
 export const PROTOTYPE_WINDOW = Object.freeze({ min: 20, max: 30 });
+// Whole-video shares: in a prototype they describe the opening only, so their
+// bands are reported (advisory) but do not fail a gate. Run lengths and the
+// face rule are local and still do.
+export const PROTOTYPE_ADVISORY_MEASURES = Object.freeze(["coverage", "face_time"]);
 
 /** The direction map beside the project's storyboard, or null. */
 export async function readProjectDirection(project) {
@@ -65,11 +71,13 @@ export async function directionGate({ project, resolved, words, direction }) {
  * direction map's sections and lines when there is one). Other measures in
  * the band are reported and never fail the gate.
  */
-export function coverageGate({ resolved, words, map, profile, face = null }) {
+export function coverageGate({ resolved, words, map, profile, face = null, prototype = false }) {
   if (!profile) return { status: "skipped", reason: "no cadence profile fits this story" };
   const measures = map && words?.length ? directionMeasures(map, resolved, { words, face }) : storyboardMeasures(resolved, { face });
   const bands = compareMeasures(measures, profile);
-  const failing = bands.filter((band) => band.status !== "inside" && COVERAGE_GATE_MEASURES.includes(band.measure));
+  const outside = bands.filter((band) => band.status !== "inside" && COVERAGE_GATE_MEASURES.includes(band.measure));
+  const advisory = prototype ? outside.filter((band) => PROTOTYPE_ADVISORY_MEASURES.includes(band.measure)) : [];
+  const failing = outside.filter((band) => !advisory.includes(band));
   const findings = qualityFindings(measures, profile);
   return {
     status: failing.length ? "failed" : "passed",
@@ -87,6 +95,7 @@ export function coverageGate({ resolved, words, map, profile, face = null }) {
     },
     bands: bands.map(({ measure, status, value, band, target }) => ({ measure, status, value, band, target })),
     errors: failing.map((band) => band.detail),
+    ...(advisory.length ? { advisory: advisory.map((band) => band.detail) } : {}),
     findings
   };
 }
@@ -124,13 +133,16 @@ export function qualityFindings(measures, profile) {
  * data exists: a whole-video track, else the presenter probe, else the base
  * itself (the face is taken to be visible wherever the base shows).
  */
-export async function faceGate({ project, resolved, layout, profile }) {
+export async function faceGate({ project, resolved, layout, profile, prototype = false }) {
   if (!storyBase(resolved)) return { status: "skipped", reason: "no presenter: not footage-led" };
   const data = await readFaceData(project, resolved);
   const measures = storyboardMeasures(resolved, { face: data.intervals });
-  const findings = (layout?.findings ?? []).filter((finding) => finding.rule === "subject-face");
+  // A prototype is gated on its window: layout ran on the whole story.
+  const duration = Number(resolved?.resolved?.duration ?? resolved?.format?.duration);
+  const findings = (layout?.findings ?? []).filter((finding) => finding.rule === "subject-face" && !(prototype && Number(finding.at) >= duration));
   const band = profile?.measures?.face_time ? compareMeasures({ face_time: measures.face_time }, profile)[0] : null;
-  const errors = [...findings.map((finding) => `${finding.ids.join(", ")} @${finding.at}s: ${finding.detail}`), ...(band && band.status !== "inside" ? [band.detail] : [])];
+  const outside = band && band.status !== "inside" ? [band.detail] : [];
+  const errors = [...findings.map((finding) => `${finding.ids.join(", ")} @${finding.at}s: ${finding.detail}`), ...(prototype ? [] : outside)];
   return {
     status: errors.length ? "failed" : "passed",
     source: data.source,
@@ -138,6 +150,7 @@ export async function faceGate({ project, resolved, layout, profile }) {
     ...(band ? { band: band.band, target: band.target } : {}),
     findings: findings.slice(0, 12),
     errors: errors.slice(0, 12),
+    ...(prototype && outside.length ? { advisory: outside } : {}),
     ...(data.note ? { note: data.note } : {})
   };
 }
@@ -224,6 +237,45 @@ export function prototypeCut(resolved, words = [], { min = PROTOTYPE_WINDOW.min,
   if (story.resolved) story.resolved = { ...story.resolved, duration: cut };
   delete story.ending;
   return { cut, duration, story };
+}
+
+/**
+ * The direction map and narration inside a prototype window, so the gates
+ * judge the opening the prototype renders rather than the whole story. cut:
+ * the window's end (s); story: the trimmed story; full: the whole resolved
+ * story. Words starting before the cut are kept (a prefix, so line indexes
+ * stay valid); lines starting inside the window are kept and clamped to those
+ * words, naming only scenes the window shows (a name in neither story stays,
+ * so validation still reports it). A dressed or inserted line whose scenes all
+ * fall after the cut ends the window. Sections left with no lines are dropped.
+ * → {map, words, lines}
+ */
+export function prototypeScope({ map, words = [], cut, story, full = story }) {
+  const list = Array.isArray(words) ? words : [];
+  let count = list.findIndex((word) => !(Number(word?.start) < cut - 1e-6));
+  if (count < 0) count = list.length;
+  if (!map || !Array.isArray(map.sections)) return { map, words: list.slice(0, count), lines: 0 };
+  const shown = new Set((story?.scenes ?? []).map((scene) => scene.id));
+  const known = new Set((full?.scenes ?? []).map((scene) => scene.id));
+  const sections = [];
+  let lines = 0;
+  for (const section of map.sections) {
+    if (Number.isFinite(section?.start) && section.start >= cut) break;
+    const kept = [];
+    for (const line of Array.isArray(section?.lines) ? section.lines : []) {
+      const range = line?.words;
+      if (!Array.isArray(range) || !(range[0] < count)) break;
+      const named = Array.isArray(line.scenes) ? line.scenes.filter((id) => shown.has(id) || !known.has(id)) : line.scenes;
+      if (Array.isArray(line.scenes) && line.scenes.length && !named.length && (line.treatment === "dress" || line.treatment === "insert")) { count = range[0]; break; }
+      kept.push({ ...line, words: [range[0], Math.min(range[1], count - 1)], ...(named !== undefined ? { scenes: named } : {}) });
+    }
+    if (kept.length) {
+      sections.push({ ...section, lines: kept, ...(Number.isFinite(section.end) && section.end > cut ? { end: cut } : {}) });
+      lines += kept.length;
+    }
+    if (kept.length < (section?.lines?.length ?? 0)) break;
+  }
+  return { map: { ...map, sections }, words: list.slice(0, count), lines };
 }
 
 function round(value, places = 3) {
