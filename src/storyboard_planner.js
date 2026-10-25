@@ -185,9 +185,9 @@ export async function planStoryboard(options = {}) {
   let longForm = null;
   if (last?.ok && last.storyboard && (options.longForm ?? isLongForm(last.storyboard, profile)) && options.longForm !== false) {
     try {
-      const structured = structureLongForm(last.storyboard, { words: wordList, map: direction });
+      const structured = structureLongForm(last.storyboard, { words: wordList, map: direction, profile });
       const checked = checkStoryboard(structured.story, { words: wordList, beats, tier, style, direction: structured.map, profile, bandErrors: false });
-      longForm = { chapters: structured.chapters, added: structured.added, changed: structured.changed, warnings: structured.warnings };
+      longForm = { chapters: structured.chapters, added: structured.added, changed: structured.changed, resets: structured.resets, warnings: structured.warnings };
       if (checked.ok) {
         last = { ...checked, warnings: [...last.warnings, ...structured.warnings.map((entry) => `long form: ${entry}`), ...checked.warnings.filter((entry) => !last.warnings.includes(entry))] };
         if (direction) direction = structured.map;

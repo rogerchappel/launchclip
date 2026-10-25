@@ -4,12 +4,16 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { brandFramePlan } from "../kit/core/brand-frame.mjs";
+import { storyboardMeasures } from "../kit/core/cadence.mjs";
 import { validateDirection } from "../kit/core/direction.mjs";
 import { PROMISE_ID, chaptersFromMap, ffmetadataChapters, sectionCardId, structureLongForm, youtubeChapterProblems, youtubeChapters, youtubeTimestamp } from "../kit/core/long-form.mjs";
 import { directionPrompt } from "../kit/core/planning-prompt.mjs";
 import { resolveStory, storyChapters, validateStory } from "../kit/core/story.mjs";
 import { brandFrameErrors } from "../kit/core/style.mjs";
 import { runCli } from "../src/cli.js";
+import { profileForStory } from "../src/profile_store.js";
+import { coverageGate } from "../src/quality_gates.js";
+import { runStoryCommand } from "../src/story_cli.js";
 import { buildTimeline } from "../src/nle/timeline.js";
 import { readFcpxml, validateFcpxml, writeFcpxml } from "../src/nle/fcpxml.js";
 import { checkStoryboard, planStoryboard } from "../src/storyboard_planner.js";
@@ -214,3 +218,81 @@ test("NLE exports carry the chapters as markers (FCPXML chapter markers)", () =>
 });
 
 const fcpxmlText = (written) => (typeof written === "string" ? written : written.xml ?? written.fcpxml);
+
+test("attention resets: the measure counts inserts, section cards and layout changes", () => {
+  const story = { schema: "launchclip.story.v1", lane: "footage-led", format: { width: 1920, height: 1080, fps: 30, duration: 300 }, brand: {}, base: { src: "assets/r.mp4" }, scenes: [
+    { id: "i", module: "concept-card", insert: true, start: 40, end: 44, params: { text: "x" } },
+    { id: "o", module: "concept-card", track: 1, start: 60, end: 64, params: { text: "x" } },
+    { id: "c", module: "section-card", insert: true, start: 150, end: 152.6, params: { title: "x" } }
+  ], sections: [{ id: "s", start: 200, end: 220, layout: "split-right" }] };
+  const measures = storyboardMeasures(story);
+  assert.deepEqual(measures.reset_times, [40, 150, 200, 220]);
+  assert.equal(measures.longest_without_reset_seconds, 110);
+  assert.deepEqual(measures.intervals.unreset.at(-1), [220, 300]);
+  // A direction map's section layouts count too.
+  const mapped = storyboardMeasures(story, { sections: [{ start: 0, end: 100, layout: "full" }, { start: 100, end: 300, layout: "framed" }] });
+  assert.deepEqual(mapped.reset_times, [40, 100, 150, 200, 220]);
+});
+
+test("attention resets: the pass makes overlay cards inserts, else changes the layout", () => {
+  const { story, map, words } = longFormFixture();
+  const profile = { id: "youtube-long-form", measures: { longest_without_reset_seconds: { p50: 60, p90: 120 } } };
+  const result = structureLongForm(story, { words, map, profile });
+  assert.deepEqual(result.resets.sections, []);
+  assert.equal(result.resets.promoted.length, 6);
+  assert.ok(result.resets.longest <= 60, `longest run ${result.resets.longest} s`);
+  for (const id of result.resets.promoted) {
+    const scene = result.story.scenes.find((entry) => entry.id === id);
+    assert.equal(scene.insert, true);
+    assert.equal(scene.track, undefined);
+    const line = result.map.sections.flatMap((section) => section.lines).find((entry) => entry.scenes?.includes(id));
+    assert.equal(line.treatment, "insert");
+  }
+  const resolved = resolveStory(result.story, { words });
+  assert.equal(storyboardMeasures(resolved).longest_without_reset_seconds, result.resets.longest);
+  assert.equal(checkStoryboard(result.story, { words, direction: result.map, tier: "guided" }).ok, true);
+  // Chapter 2 has no cards: a layout change resets it instead.
+  const c2 = map.sections[1];
+  const bare = JSON.parse(JSON.stringify(map));
+  for (const line of bare.sections[1].lines) Object.assign(line, { treatment: "face", scenes: undefined, why: "held" });
+  const ids = new Set(c2.lines.flatMap((line) => line.scenes ?? []));
+  const plain = { ...story, scenes: story.scenes.filter((scene) => !ids.has(scene.id)) };
+  const layout = structureLongForm(plain, { words, map: bare, profile });
+  assert.deepEqual(layout.resets.sections, ["reset-1"]);
+  const section = layout.story.sections[0];
+  assert.equal(section.layout, "split-right");
+  assert.ok(section.end - section.start <= 20);
+  assert.equal(checkStoryboard(layout.story, { words, direction: layout.map, tier: "guided" }).ok, true);
+  assert.ok(layout.resets.longest <= 60);
+  // Off by option, and not for a story with no presenter.
+  assert.equal(structureLongForm(story, { words, map, resets: false }).resets, null);
+});
+
+test("attention resets: the coverage gate and story validate check the ceiling", async () => {
+  const { story, map, words } = longFormFixture();
+  const { profile } = profileForStory(story, { direction: map });
+  assert.equal(profile.id, "youtube-long-form");
+  const resolved = resolveStory(story, { words });
+  const gate = coverageGate({ resolved, words, map, profile });
+  assert.equal(gate.status, "failed");
+  assert.ok(gate.errors.some((error) => /longest_without_reset_seconds 600 s is above the profile band/.test(error)), gate.errors.join("\n"));
+  assert.ok(gate.findings.some((finding) => finding.category === "sparseness" && /no attention reset/.test(finding.message)));
+  const structured = structureLongForm(story, { words, map, profile });
+  const passed = coverageGate({ resolved: resolveStory(structured.story, { words }), words, map: structured.map, profile });
+  assert.equal(passed.bands.find((band) => band.measure === "longest_without_reset_seconds").status, "inside");
+  assert.ok(passed.measures.resets >= 10);
+
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-resets-"));
+  try {
+    await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story));
+    await writeFile(path.join(project, "DIRECTION.json"), JSON.stringify(map));
+    await writeFile(path.join(project, "NARRATION.json"), JSON.stringify({ words }));
+    const before = await runStoryCommand("validate", path.join(project, "storyboard.json"));
+    assert.ok(before.errors.some((error) => /longest_without_reset_seconds .*\(launchclip story long-form places them\)/.test(error)), before.errors.join("\n"));
+    await runCli(["story", "long-form", project], { stdout: { write() {} } });
+    const after = await runStoryCommand("validate", path.join(project, "storyboard.json"));
+    assert.deepEqual(after.errors, []);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});

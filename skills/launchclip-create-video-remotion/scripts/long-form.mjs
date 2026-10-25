@@ -17,7 +17,7 @@
 // Pure ESM; imports only kit/core siblings. Canonical copy: kit/core/long-form.mjs.
 
 import { CHAPTER_MIN_COUNT, CHAPTER_MIN_SECONDS, resolveStory, storyBase, storyChapters } from './story.mjs';
-import { isGraphicScene } from './cadence.mjs';
+import { isGraphicScene, resetGaps, resetTimes } from './cadence.mjs';
 import { narrationWords, segmentLines } from './direction.mjs';
 
 // A story this long (or planned to the long-form profile) gets the pass.
@@ -32,6 +32,14 @@ export const PROMISE_SECONDS = 4.5;
 export const PROMISE_MIN_SECONDS = 3;
 export const PROMISE_LATEST_SECONDS = 45;
 export const PROMISE_ID = 'promise';
+// Attention resets (RFC §10.2): planned every `p50` of the profile's
+// longest_without_reset_seconds, never more than its p90 apart.
+export const RESET_DEFAULT = Object.freeze({ p50: 60, p90: 120 });
+// Overlays that can play full frame as an insert instead (catalogue G cards
+// place themselves on a plate when they are inserts).
+export const INSERT_READY_MODULES = Object.freeze(['concept-card', 'icon-row', 'object-card', 'stat-card', 'quote-card', 'excerpt', 'compare', 'timeline']);
+// A layout-change reset holds this long (it ends before the next reset).
+export const RESET_LAYOUT_SECONDS = 20;
 // A scene the pass moves keeps at least this much of itself.
 const KEEP_SECONDS = 1;
 const GAP = 0.05;
@@ -111,10 +119,16 @@ function slug(value) {
  * card; a card with no room is skipped with a warning. Running it again
  * replaces what it added. The map gains section titles and names the new
  * scenes on the lines they cover.
- * options: {words, map, resolved (the story resolved, else resolved here),
- *   promise: true, cards: true, frame: true, cardSeconds, kicker(chapter, n)}
+ *   - attention resets (footage-led): wherever a run with no layout change,
+ *     insert or section card is longer than the reset target, an overlay
+ *     card near the target time becomes an insert, else a `reset-n` footage
+ *     section switches the layout for up to 20 s.
+ * options: {words, map, profile (its longest_without_reset_seconds sets the
+ *   reset target, p50, and ceiling, p90), promise: true, cards: true,
+ *   resets: true, frame: true, cardSeconds, kicker(chapter, n), icon(chapter)}
  * → {story, map, chapters, added: [{id, module, start, end, kind}],
- *    changed: [{id, start, end, was}], warnings}
+ *    changed: [{id, start, end, was}], resets: {target, ceiling, times,
+ *    longest, promoted: [ids], sections: [ids]}, warnings}
  */
 export function structureLongForm(story, options = {}) {
   const { words = [], map = null } = options;
@@ -237,6 +251,8 @@ export function structureLongForm(story, options = {}) {
     }
   }
 
+  const resets = options.resets !== false && footage ? planResets({ out, scenes, raw, mapOut, lines, duration, profile: options.profile, warnings }) : null;
+
   if (options.frame !== false && chapters.length > 1) {
     if (out.frame === false) warnings.push('frame: false, so there is no progress line; chapters still export');
     else {
@@ -248,7 +264,84 @@ export function structureLongForm(story, options = {}) {
   }
 
   out.scenes.sort((a, b) => (Number(a.start) - Number(b.start)) || 0);
-  return { story: out, map: mapOut, chapters: storyChapters(resolveStory(out, { words: list })), added, changed, warnings };
+  return { story: out, map: mapOut, chapters: storyChapters(resolveStory(out, { words: list })), added, changed, resets, warnings };
+}
+
+/** The reset target and ceiling for a profile: {p50, p90}. */
+export function resetBand(profile) {
+  const band = profile?.measures?.longest_without_reset_seconds;
+  return { p50: band?.p50 ?? band?.p90 ?? RESET_DEFAULT.p50, p90: band?.p90 ?? RESET_DEFAULT.p90 };
+}
+
+// Plan attention resets into the long runs (mutates out, scenes, raw and the map).
+function planResets({ out, scenes, raw, mapOut, lines, duration, profile, warnings }) {
+  const band = resetBand(profile);
+  const portrait = Number(out.format?.height) > Number(out.format?.width);
+  const mapSections = () => (mapOut?.sections ?? []).map((section) => {
+    const own = lines.filter((entry) => entry.section === section);
+    return { start: own[0]?.start ?? section.start, end: own.at(-1)?.end ?? section.end, layout: section.layout ?? 'full' };
+  });
+  const current = () => {
+    const inserts = scenes.filter((scene) => scene.insert === true).map((scene) => [scene.start, scene.end]).sort((a, b) => a[0] - b[0]);
+    return resetTimes(out, scenes, { sections: mapSections(), inserts, duration });
+  };
+  const promoted = [];
+  const added = [];
+  let times = current();
+  for (const [a, b] of resetGaps(times, duration)) {
+    const span = b - a;
+    if (span <= band.p50 + 1e-6) continue;
+    const count = Math.ceil(span / band.p50) - 1;
+    for (let i = 1; i <= count; i += 1) {
+      const want = a + (span * i) / (count + 1);
+      const reach = Math.min(band.p50 / 3, span / (count + 1) / 2);
+      const chosen = promoteNear(want, reach, { scenes, raw }) ?? null;
+      if (chosen) {
+        promoted.push(chosen.id);
+        for (const { line } of lines) if (Array.isArray(line.scenes) && line.scenes.includes(chosen.id) && line.treatment === 'dress') line.treatment = 'insert';
+        continue;
+      }
+      const section = layoutReset(out, want, { span: Math.min(RESET_LAYOUT_SECONDS, span / (count + 1) - 1), portrait, scenes });
+      if (section) added.push(section.id);
+      else warnings.push(`attention reset: nothing to reset at ${round(want)} s (no overlay card to make an insert, no room for a layout change); add an insert or a layout change between ${round(a)} and ${round(b)} s`);
+    }
+  }
+  times = current();
+  const longest = resetGaps(times, duration).reduce((max, [a, b]) => Math.max(max, b - a), 0);
+  if (longest > band.p90 + 1e-6) warnings.push(`attention reset: ${round(longest)} s with no reset is still past the ${band.p90} s ceiling`);
+  return { target: band.p50, ceiling: band.p90, times: times.map((t) => round(t)), longest: round(longest), promoted, sections: added };
+}
+
+// The overlay card nearest `want` (within `reach`) that can become an insert:
+// an insert-ready catalogue card of 1.5–10 s with nothing else on screen.
+function promoteNear(want, reach, { scenes, raw }) {
+  const candidates = scenes.filter((scene) => INSERT_READY_MODULES.includes(scene.module) && scene.insert !== true && (scene.track ?? 0) >= 1
+    && scene.end - scene.start >= 1.5 && scene.end - scene.start <= 10 && Math.abs(scene.start - want) <= reach
+    && !scenes.some((other) => other !== scene && other.start < scene.end && other.end > scene.start && ((other.track ?? 0) === 0 || isGraphicScene(other))));
+  candidates.sort((x, y) => Math.abs(x.start - want) - Math.abs(y.start - want));
+  const scene = candidates[0];
+  if (!scene) return null;
+  const target = raw.get(scene.id);
+  if (!target) return null;
+  delete target.track; delete scene.track;
+  target.insert = true; scene.insert = true;
+  if (target.in === undefined) target.in = { type: 'fade', dur: 0.25 };
+  return scene;
+}
+
+// A footage section that switches the layout at `want` (split beside a panel
+// in landscape, stacked in portrait) where no section, insert or card is.
+function layoutReset(out, want, { span, portrait, scenes }) {
+  if (!(span >= 4)) return null;
+  const sections = Array.isArray(out.sections) ? out.sections : [];
+  const start = round(want), end = round(want + span);
+  const clash = sections.some((section) => Number(section.start) < end && Number(section.end) > start)
+    || scenes.some((scene) => scene.insert === true && scene.start < end && scene.end > start);
+  if (clash) return null;
+  const id = `reset-${sections.filter((section) => String(section.id).startsWith('reset-')).length + 1}`;
+  const section = { id, start, end, layout: portrait ? 'stacked' : 'split-right' };
+  out.sections = [...sections, section].sort((a, b) => Number(a.start) - Number(b.start));
+  return section;
 }
 
 // Each map line with its times and section.
@@ -308,7 +401,8 @@ export function longFormLines() {
   return [
     `Long form (${LONG_FORM_SECONDS / 60} min and up, or the youtube-long-form profile): each section is a chapter. Give every section a short \`title\` (2–5 words, the chapter name viewers see in the YouTube chapter list) and make each one at least ${CHAPTER_MIN_SECONDS} s; aim for 3–10 chapters, a new one every 1–3 minutes.`,
     'The first section opens with the hook line and the promise: say what the video will cover. The structure pass adds an "In this video" icon-row of the chapters after the hook line, a section-card insert at each later chapter start, and a progress line with chapter ticks in the brand frame (`launchclip story long-form`; the headless planner runs it).',
-    'Leave the first 2–3 s of each chapter free of other scenes so its section card has room; a planned scene in the way starts later or the card shortens.'
+    'Leave the first 2–3 s of each chapter free of other scenes so its section card has room; a planned scene in the way starts later or the card shortens.',
+    'Attention resets: plan a layout change (a section with another layout), an insert line or a section card about every minute (the profile\'s longest_without_reset_seconds p50), never more than its p90 apart. Where a run is longer, the structure pass turns an overlay card near the right time into an insert, else switches the layout for up to 20 s.'
   ];
 }
 

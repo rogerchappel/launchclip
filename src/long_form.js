@@ -15,6 +15,7 @@ import { directionJson } from "../kit/core/direction.mjs";
 import { structureLongForm, youtubeChapterProblems, youtubeChapters } from "../kit/core/long-form.mjs";
 import { resolveStory, storyChapters, validateStory } from "../kit/core/story.mjs";
 import { directionFileFor } from "./story_cli.js";
+import { profileForStory } from "./profile_store.js";
 
 /** The storyboard file a project path or storyboard path names. */
 export async function storyFileOf(target) {
@@ -38,7 +39,9 @@ export async function runLongFormCommand(target, flags = {}) {
   const mapFile = directionFileFor(storyFile);
   const map = existsSync(mapFile) ? JSON.parse(await readFile(mapFile, "utf8")) : null;
   if (!map && !Array.isArray(story.chapters)) throw new Error(`story long-form makes chapters from the direction map's sections; write ${path.relative(process.cwd(), mapFile) || mapFile} first (references/direction-map.md), or give the story "chapters"`);
-  const result = structureLongForm(story, { words, map });
+  let profile = null;
+  try { profile = profileForStory(story, { direction: map, projectDir: storyDir }).profile; } catch { profile = null; }
+  const result = structureLongForm(story, { words, map, profile });
   const check = validateStory(result.story);
   if (!check.ok) throw new Error(`the structured story is invalid:\n- ${check.errors.join("\n- ")}`);
   const duration = Number(result.story.format?.duration);
@@ -60,15 +63,7 @@ export async function runLongFormCommand(target, flags = {}) {
     youtube_problems: youtubeChapterProblems(chapters, duration),
     added: result.added,
     changed: result.changed,
+    resets: result.resets,
     warnings: [...result.warnings, ...check.warnings]
   };
-}
-
-export function formatLongFormSummary(result) {
-  const lines = [`story long-form: ${result.status} ${result.story}`, `${result.chapters.length} chapters:`, ...result.youtube.map((line) => `  ${line}`)];
-  if (result.youtube_problems.length) lines.push(`YouTube would not show these chapters: ${result.youtube_problems.join("; ")}`);
-  for (const entry of result.added) lines.push(`added ${entry.kind} ${entry.id} (${entry.module}) ${entry.start}–${entry.end} s`);
-  for (const entry of result.changed) lines.push(`moved ${entry.id} to ${entry.start}–${entry.end} s (was ${entry.was.join("–")} s)`);
-  for (const warning of result.warnings) lines.push(`warning: ${warning}`);
-  return lines.join("\n");
 }
