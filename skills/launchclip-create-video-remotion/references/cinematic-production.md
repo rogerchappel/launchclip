@@ -372,6 +372,27 @@ an actionable `message`, and a non-empty `evidence_ids` array. Add timing or
 sequence identifiers when known; do not invent them when the evidence cannot
 localize the defect.
 
+Use one of these categories: `narrative`, `composition`, `typography`,
+`motion`, `asset`, `timing`, `audio`, `mount`, `factual`, and the density and
+style ones:
+
+- `missed-opportunity`: a line whose intent calls for a visual (in
+  `DIRECTION.json`: a claim, number, list, process, product, proof, quote,
+  the hook or the call to action) has none on screen.
+- `sparseness`: a run with no designed graphic longer than the cadence
+  profile allows (`longest_undressed_seconds` in
+  [profiles.md](profiles.md)).
+- `brand-consistency`: a scene that breaks the style (palette, type, caption
+  treatment) or drops the brand frame the other scenes carry.
+- `acting` (character stories): a pose or expression that does not match its
+  line, or a character that holds still while the story moves.
+- `character-consistency` (character stories): a character that looks
+  different between shots.
+
+Judge sparseness against the format, not a fixed share: `launchclip finish`
+reports the coverage gate's measured missed opportunities and undressed runs in
+`qa/finish/gates.json`, so start from those and look for more.
+
 Use `repair` or `replan` and actionable findings when it is not ready. Then run
 the model-free local gate from a LaunchClip checkout or installed CLI:
 

@@ -23,13 +23,14 @@ import { chunkWords, narrationWords } from "../kit/core/captions.mjs";
 import { resolveModule } from "../kit/core/modules.mjs";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
 import { applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
+import { coverageGate, directionGate, faceGate, gateProfile, prototypeCut, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
 import { PARTIAL_RENDERERS, SEGMENTS_DIR, renderWithSegments, sceneStills } from "./render_segments.js";
 import { getRenderer, resolveRendererName } from "./renderers/index.js";
 import { remotionInvocation } from "./renderers/remotion.js";
-import { deriveBoundaries, resolveStory, storyFormat } from "./story.js";
+import { deriveBoundaries, resolveStory, storyBase, storyFormat } from "./story.js";
 import { validateStory } from "./story_cli.js";
 import { hasExactFile, readStoryEdl } from "./story_loader.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
@@ -478,7 +479,11 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
   }
   const candidate = options.candidate != null && options.candidate !== false ? String(options.candidate) : null;
   const iteration = iterationOptions(story, options);
-  const out = projectFile(project, options.out ?? (candidate ? CANDIDATE_OUTPUT : quality === "high" ? "renders/final.mp4" : "renders/draft.mp4"));
+  // --prototype: render only the opening 20–30 s (RFC §11.1), to its own file.
+  const prototype = Boolean(options.prototype);
+  if (prototype && candidate) throw new Error("use --prototype or --candidate, not both");
+  if (prototype && (iterationOptions(story, options).scenes.length || options.previewScene)) throw new Error("--prototype renders the opening; drop --scene and --preview-scene");
+  const out = projectFile(project, options.out ?? (candidate ? CANDIDATE_OUTPUT : prototype ? `renders/prototype${quality === "high" ? "-high" : ""}.mp4` : quality === "high" ? "renders/final.mp4" : "renders/draft.mp4"));
   const started = adapters.now();
   const ctx = {
     project,
@@ -492,7 +497,8 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
     rendererName,
     quality,
     out,
-    raw: path.join(project, ".launchclip", "finish", `render-${quality}.mp4`),
+    raw: path.join(project, ".launchclip", "finish", `render-${prototype ? "prototype-" : ""}${quality}.mp4`),
+    prototype: prototype ? { requested: true } : null,
     state: await readState(project),
     warnings: [...(styled.style?.warnings ?? []), ...candidateNotes],
     candidate,
@@ -688,8 +694,9 @@ const STAGES = [
       const layout = await checkLayoutProject(ctx.project, { story: ctx.copy, words: ctx.words ?? [], beats: ctx.beats ?? undefined });
       ctx.layout = { status: layout.status, profile: layout.profile, errors: layout.errors, elements: layout.elements, warnings: layout.warnings, findings: layout.findings };
       ctx.warnings.push(...layout.warnings.map((message) => `layout: ${message}`));
+      if (ctx.prototype) applyPrototype(ctx);
       await writeResolvedCopy(ctx);
-      const details = { scenes: resolved.scenes.length, boundaries: ctx.boundaries.length, words: ctx.words?.length ?? 0, subject: ctx.subjectGate, cast: ctx.castGate, layout: { status: layout.status, profile: layout.profile, errors: layout.errors, warnings: layout.findings.filter((finding) => finding.severity !== "error").length } };
+      const details = { scenes: ctx.resolved.scenes.length, boundaries: ctx.boundaries.length, words: ctx.words?.length ?? 0, subject: ctx.subjectGate, cast: ctx.castGate, layout: { status: layout.status, profile: layout.profile, errors: layout.errors, warnings: layout.findings.filter((finding) => finding.severity !== "error").length } };
       if (layout.status === "failed") {
         const lines = layout.findings.filter((finding) => finding.severity === "error").slice(0, 8).map((finding) => `${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail ?? ""}`.trim());
         const error = new Error(`layout check failed (${layout.errors} error${layout.errors === 1 ? "" : "s"}):\n- ${lines.join("\n- ")}`);
@@ -989,6 +996,21 @@ const STAGES = [
 // ---------------------------------------------------------------------------
 // Render: the segment cache (src/render_segments.js)
 
+// --prototype: trim the resolved story to its opening cut. The later stages
+// (sound, render, master, evidence, gates) all work on the trimmed copy.
+function applyPrototype(ctx) {
+  const cut = prototypeCut(ctx.resolved, ctx.words ?? []);
+  if (!cut) {
+    ctx.prototype = { requested: true, cut: null, duration: Number(ctx.resolved.resolved?.duration) };
+    ctx.warnings.push(`--prototype: the story is ${ctx.prototype.duration} s, so the prototype is the whole video`);
+    return;
+  }
+  ctx.copy = cut.story;
+  ctx.resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject });
+  ctx.boundaries = deriveBoundaries(ctx.resolved);
+  ctx.prototype = { requested: true, cut: cut.cut, duration: cut.duration };
+}
+
 /** --scene / --preview-scene → {scenes: [ids], previewScene: id|null}, checked against the story. */
 export function iterationOptions(story, options = {}) {
   const list = (value) => (Array.isArray(value) ? value : value == null || value === false ? [] : [value]).flatMap((item) => String(item).split(",")).map((item) => item.trim()).filter(Boolean);
@@ -1076,8 +1098,11 @@ async function runGates(ctx) {
       : { status: master.loudness?.compliant ? "passed" : "failed", target: master.loudness?.target, output: master.loudness?.output };
 
   try {
-    const motion = await ctx.adapters.motion(ctx.out, path.join(ctx.project, PATHS.motion), { expected: cinematicMotionExpectations({ duration, width: format.width, height: format.height }).expected });
-    gates.motion = { status: motion?.quality?.ok ? "passed" : "failed", report: PATHS.motion, findings: (motion?.quality?.findings ?? []).slice(0, 12) };
+    // The motion floors are the cadence profile's bands (a locked-off talking
+    // head barely moves; a motion explainer must).
+    const { profile } = gateProfile(ctx.resolved, { direction: (await readProjectDirection(ctx.project)).map, style: await stylePack(ctx), project: ctx.project });
+    const motion = await ctx.adapters.motion(ctx.out, path.join(ctx.project, PATHS.motion), { expected: cinematicMotionExpectations({ duration, width: format.width, height: format.height, profile }).expected });
+    gates.motion = { status: motion?.quality?.ok ? "passed" : "failed", report: PATHS.motion, ...(profile ? { profile: profile.id } : {}), findings: (motion?.quality?.findings ?? []).slice(0, 12) };
   } catch (error) {
     gates.motion = { status: "failed", error: error.message };
   }
@@ -1120,6 +1145,20 @@ async function runGates(ctx) {
     }
   }
 
+  // The quality gates (VIDEO_QUALITY_RFC §11.2): the direction map, coverage
+  // against the cadence profile, and the face rule over whatever face data exists.
+  try {
+    const direction = await readProjectDirection(ctx.project);
+    const { profile } = gateProfile(ctx.resolved, { direction: direction.map, style: await stylePack(ctx), project: ctx.project });
+    gates.direction = await directionGate({ project: ctx.project, resolved: ctx.resolved, words: ctx.words ?? [], direction });
+    const face = storyBase(ctx.resolved) ? await readFaceData(ctx.project, ctx.resolved) : null;
+    gates.coverage = coverageGate({ resolved: ctx.resolved, words: ctx.words ?? [], map: gates.direction.status === "passed" ? direction.map : null, profile, face: face?.intervals ?? null });
+    if (storyBase(ctx.resolved)) gates.face = await faceGate({ project: ctx.project, resolved: ctx.resolved, layout: ctx.layout, profile });
+    if (ctx.prototype?.cut) for (const name of ["coverage", "face"]) if (gates[name]) gates[name].scope = `prototype: the opening ${ctx.prototype.cut} s`;
+  } catch (error) {
+    gates.direction ??= { status: "failed", error: error.message };
+  }
+
   gates.critic = {
     status: "pending",
     reason: "finish does not produce critic receipts",
@@ -1129,10 +1168,21 @@ async function runGates(ctx) {
   return gates;
 }
 
+// The story's style pack (for its cadence profile), resolved once per run.
+async function stylePack(ctx) {
+  if (!ctx.style) return null;
+  if (ctx.stylePack !== undefined) return ctx.stylePack;
+  try {
+    const request = storyStyleRequest(ctx.story ?? ctx.resolved)?.name ?? ctx.style.name;
+    ctx.stylePack = (await ctx.adapters.resolveStyle(ctx.style.file ?? request, { projectDir: ctx.project })).pack ?? null;
+  } catch { ctx.stylePack = null; }
+  return ctx.stylePack;
+}
+
 function buildReport(ctx, stages, { seconds, failed }) {
   const gates = ctx.gates ?? {};
   const gateStatuses = Object.values(gates).map((gate) => gate.status);
-  const status = failed ? "failed" : ctx.preview ? "preview" : ctx.candidate ? "candidate" : gateStatuses.includes("failed") ? "needs-repair" : "ready-for-review";
+  const status = failed ? "failed" : ctx.preview ? "preview" : ctx.candidate ? "candidate" : ctx.prototype ? "prototype" : gateStatuses.includes("failed") ? "needs-repair" : "ready-for-review";
   const nextSteps = [];
   const render = stages.find((stage) => stage.name === "render");
   if (failed) {
@@ -1143,6 +1193,7 @@ function buildReport(ctx, stages, { seconds, failed }) {
     if (gates.critic?.next_step) nextSteps.push(gates.critic.next_step);
   }
   if (!failed && ctx.candidateReceipt) nextSteps.push(`Score candidate ${ctx.candidate} (0-10 per field) in ${ctx.candidateReceipt.receipt} from its frames, then set selected_candidate_id (highest mean, ties by candidate_order), selection_rationale and a rejection_reason for each loser.`);
+  if (!failed && ctx.prototype) nextSteps.push(`Review the prototype (${rel(ctx.project, ctx.out)}${ctx.prototype.cut ? `, the opening ${ctx.prototype.cut} s of ${ctx.prototype.duration} s` : ""}) for style, layout, density and sound; when it is right, run launchclip finish ${ctx.project} for the whole video.`);
   if (!failed && ctx.preview) nextSteps.push(`Look at ${rel(ctx.project, ctx.preview.output)}; when it is right, run launchclip finish ${ctx.project} --scene ${ctx.preview.scene} to re-render it into the final.`);
   return {
     schema_version: FINISH_REPORT_VERSION,
@@ -1158,6 +1209,7 @@ function buildReport(ctx, stages, { seconds, failed }) {
     output: ctx.out,
     ...(ctx.preview ? { preview: { scene: ctx.preview.scene, output: ctx.preview.output } } : {}),
     ...(ctx.candidate ? { candidate: { id: ctx.candidate, ...(ctx.candidateReceipt ?? {}) } } : {}),
+    ...(ctx.prototype ? { prototype: { cut: ctx.prototype.cut ?? null, duration: ctx.prototype.duration ?? null } } : {}),
     ...(ctx.options.scenes?.length ? { scenes: ctx.options.scenes, scene_stills: render?.details?.scene_stills ?? [] } : {}),
     seconds,
     stages,

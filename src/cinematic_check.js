@@ -12,6 +12,7 @@ import {
 import { assessCinematicReadiness } from "./production_readiness.js";
 import { validateConceptsReceipt, validateStoryReceipt } from "./cinematic_receipts.js";
 import { resolveProductionProfile } from "./production_profiles.js";
+import { profileForStory } from "./profile_store.js";
 import { analyzeProductionAudio, evaluateAudioQuality } from "./render_audio_analysis.js";
 import { writeMotionReport } from "./render_motion_analysis.js";
 import { getRenderer, resolveRendererName } from "./renderers/index.js";
@@ -46,7 +47,13 @@ export async function checkCinematicProject(projectPath, options = {}, adapters 
     : await verifyProject(project, qaDir, rendererAdapter(rendererName, adapters, storyModule));
   await writeJson(path.join(qaDir, "verification.json"), verification);
 
-  const { profile, expected } = cinematicMotionExpectations({ duration, width, height });
+  // The story's cadence profile sets the motion bands (a talking head is not
+  // held to a motion explainer's floors).
+  let cadence = null;
+  if (storyboard) {
+    try { cadence = profileForStory(storyboard.resolved ?? storyboard.story).profile; } catch { cadence = null; }
+  }
+  const { profile, expected } = cinematicMotionExpectations({ duration, width, height, profile: cadence });
   const motionPath = path.join(qaDir, "motion.json");
   const motion = await (adapters.writeMotionReport ?? writeMotionReport)(video, motionPath, { expected }, adapters.motion);
 
@@ -289,24 +296,39 @@ function mixResult(volume, source, manifest) {
 
 // The motion gate's expectations for a rendered cinematic MP4, shared with
 // the renderer eval (src/renderer_eval.js) so both judge motion the same way.
-export function cinematicMotionExpectations({ duration, width, height }) {
+/**
+ * The motion gate's expectations. The floors and ceilings come from the
+ * story's cadence profile (kit/core/profiles.mjs) when one is given: its
+ * flow_velocity_p90 and motion_bursts_per_min floors (p10), hold_ratio and
+ * first_motion_seconds ceilings (p90), change_energy_p50 floor and
+ * hook_events floor. A locked-off talking head barely moves, so the
+ * footage-led profiles hold far lower floors than the motion ones. Without a
+ * profile the fixed cinematic floors apply (they equal the motion profiles').
+ */
+export function cinematicMotionExpectations({ duration, width, height, profile: cadence = null }) {
   const orientation = height > width ? "portrait" : width > height ? "landscape" : "square";
   const profile = resolveProductionProfile("cinematic", { aspect: { orientation }, durationSeconds: duration });
+  const band = (name, key, fallback) => {
+    const value = cadence?.measures?.[name]?.[key];
+    return Number.isFinite(value) ? value : fallback;
+  };
   return {
     profile,
+    cadence: cadence ? { id: cadence.id, provenance: cadence.provenance?.kind ?? null } : null,
     expected: {
       duration_seconds: duration,
       width,
       height,
       duration_tolerance_seconds: .15,
-      maximum_hold_ratio: .8,
-      minimum_bursts_per_minute: 20,
-      minimum_change_energy_p50: .35,
-      minimum_change_energy_p50_by_family: { "developing-card": .15 },
-      minimum_flow_velocity_p90: 2,
-      maximum_first_motion_seconds: .35,
+      maximum_hold_ratio: band("hold_ratio", "p90", .8),
+      minimum_bursts_per_minute: band("motion_bursts_per_min", "p10", 20),
+      minimum_change_energy_p50: band("change_energy_p50", "p10", .35),
+      // The developing-card family's lower floor applies only under the fixed floors.
+      minimum_change_energy_p50_by_family: cadence?.measures?.change_energy_p50 ? {} : { "developing-card": .15 },
+      minimum_flow_velocity_p90: band("flow_velocity_p90", "p10", 2),
+      maximum_first_motion_seconds: band("first_motion_seconds", "p90", .35),
       hook_window_seconds: profile.craft.hook_window_seconds,
-      minimum_hook_events: profile.craft.minimum_hook_material_changes
+      minimum_hook_events: Math.min(profile.craft.minimum_hook_material_changes, band("hook_events", "p10", profile.craft.minimum_hook_material_changes))
     }
   };
 }

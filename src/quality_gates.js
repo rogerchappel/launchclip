@@ -1,0 +1,224 @@
+// The quality gates `finish` adds (docs/VIDEO_QUALITY_RFC.md §11.2): the
+// direction map, coverage against the cadence profile, and the face rule,
+// plus the opening cut `finish --prototype` renders (§11.1).
+//
+//   directionGate(ctx)  → {status, file, errors, …}
+//   coverageGate(ctx)   → {status, profile, measures, bands, findings}
+//   faceGate(ctx)       → {status, source, face_time, findings}
+//   qualityFindings(measures, profile) → critic-style findings
+//     (missed-opportunity, sparseness) the headless critic carries
+//   prototypeCut(resolved, words, {min, max}) → {cut, story} | null
+//
+// ctx: {project, resolved, words, layout, style}. Every gate reads only the
+// project; none renders or calls a model.
+import { existsSync } from "node:fs";
+import { readFile, readdir } from "node:fs/promises";
+import path from "node:path";
+import { DIRECTION_LANES, directionMeasures, validateDirection } from "../kit/core/direction.mjs";
+import { storyboardMeasures, unionIntervals } from "../kit/core/cadence.mjs";
+import { compareMeasures } from "../kit/core/profiles.mjs";
+import { storyBase } from "../kit/core/story.mjs";
+import { faceIntervalsFromProbe } from "./cadence_measures.js";
+import { profileForStory } from "./profile_store.js";
+import { directionFileFor } from "./story_cli.js";
+import { TRACK_FILE, readStoryTrack } from "./subject/project.js";
+
+// The measures the coverage gate fails on; the rest of the band is reported.
+export const COVERAGE_GATE_MEASURES = Object.freeze(["coverage", "face_time", "longest_undressed_seconds"]);
+export const PROTOTYPE_WINDOW = Object.freeze({ min: 20, max: 30 });
+
+/** The direction map beside the project's storyboard, or null. */
+export async function readProjectDirection(project) {
+  const file = directionFileFor(path.join(project, "storyboard.json"));
+  if (!existsSync(file)) return { file, map: null };
+  return { file, map: JSON.parse(await readFile(file, "utf8")) };
+}
+
+/** The profile a project's story is gated against (the map's, the style's, else the lane's). */
+export function gateProfile(resolved, { direction = null, style = null, project } = {}) {
+  try { return profileForStory(resolved, { direction, style, projectDir: project }); }
+  catch (error) { return { profile: null, reason: error.message }; }
+}
+
+/**
+ * Direction: every line covered by the map and the scenes it names exist
+ * (validateDirection against the resolved story). A narrated story in a
+ * direction lane fails without a map; a story with no narration skips.
+ */
+export async function directionGate({ project, resolved, words, direction }) {
+  const lane = resolved?.lane;
+  if (!DIRECTION_LANES.includes(lane)) return { status: "skipped", reason: `the ${lane} lane has no direction map` };
+  const { file, map } = direction ?? await readProjectDirection(project);
+  const rel = path.relative(project, file);
+  if (!map) {
+    if (words?.length) return { status: "failed", file: rel, errors: [`${rel} is missing: a narrated ${lane} story needs a direction map (references/direction-map.md)`] };
+    return { status: "skipped", reason: `no ${rel} and no narration words` };
+  }
+  const check = validateDirection(map, { words: words ?? [], story: resolved, cast: resolved?.cast ?? map.cast ?? null });
+  const lines = (map.sections ?? []).reduce((sum, section) => sum + (section.lines?.length ?? 0), 0);
+  return { status: check.ok ? "passed" : "failed", file: rel, lines, errors: check.errors.slice(0, 20), warnings: check.warnings.slice(0, 20) };
+}
+
+/**
+ * Coverage: coverage, face time and the longest undressed run against the
+ * profile band, measured exactly from the resolved storyboard (and the
+ * direction map's sections and lines when there is one). Other measures in
+ * the band are reported and never fail the gate.
+ */
+export function coverageGate({ resolved, words, map, profile, face = null }) {
+  if (!profile) return { status: "skipped", reason: "no cadence profile fits this story" };
+  const measures = map && words?.length ? directionMeasures(map, resolved, { words, face }) : storyboardMeasures(resolved, { face });
+  const bands = compareMeasures(measures, profile);
+  const failing = bands.filter((band) => band.status !== "inside" && COVERAGE_GATE_MEASURES.includes(band.measure));
+  const findings = qualityFindings(measures, profile);
+  return {
+    status: failing.length ? "failed" : "passed",
+    profile: profile.id,
+    provenance: profile.provenance?.kind ?? null,
+    measures: {
+      coverage: measures.coverage,
+      face_time: measures.face_time,
+      longest_undressed_seconds: measures.longest_undressed_seconds,
+      first_visual_seconds: measures.first_visual_seconds,
+      visual_changes_per_min: measures.visual_changes_per_min,
+      layout_changes_per_min: measures.layout_changes_per_min,
+      subject_effect_share: measures.subject_effect_share
+    },
+    bands: bands.map(({ measure, status, value, band, target }) => ({ measure, status, value, band, target })),
+    errors: failing.map((band) => band.detail),
+    findings
+  };
+}
+
+/**
+ * Findings the map and the profile prove without looking at pixels, in the
+ * critic's shape: a visual line held on the face or the camera alone is a
+ * missed opportunity; an undressed run past the profile's ceiling is
+ * sparseness.
+ */
+export function qualityFindings(measures, profile) {
+  const findings = [];
+  for (const line of measures.missed ?? []) {
+    findings.push({ category: "missed-opportunity", severity: "major", at: line.start, words: line.words, message: `${line.intent} line (words ${line.words.join("–")}, ${line.start}–${line.end} s) calls for a visual but plays on the ${line.treatment === "face" ? "presenter" : "camera"} alone; dress it, or say in the map why the face carries it` });
+  }
+  const limit = profile?.measures?.longest_undressed_seconds?.p90;
+  if (limit != null) {
+    for (const [start, end] of measures.intervals?.undressed ?? []) {
+      if (end - start > limit + 1e-6) findings.push({ category: "sparseness", severity: "major", at: start, message: `${round(end - start)} s with no graphic (${start}–${end} s); ${profile.id} allows at most ${limit} s` });
+    }
+  }
+  return findings;
+}
+
+/**
+ * Face: the face rule (no front scene over the face for more than 0.3 s,
+ * from layout-check) and face time against the profile, over whatever face
+ * data exists: a whole-video track, else the presenter probe, else the base
+ * itself (the face is taken to be visible wherever the base shows).
+ */
+export async function faceGate({ project, resolved, layout, profile }) {
+  if (!storyBase(resolved)) return { status: "skipped", reason: "no presenter: not footage-led" };
+  const data = await readFaceData(project, resolved);
+  const measures = storyboardMeasures(resolved, { face: data.intervals });
+  const findings = (layout?.findings ?? []).filter((finding) => finding.rule === "subject-face");
+  const band = profile?.measures?.face_time ? compareMeasures({ face_time: measures.face_time }, profile)[0] : null;
+  const errors = [...findings.map((finding) => `${finding.ids.join(", ")} @${finding.at}s: ${finding.detail}`), ...(band && band.status !== "inside" ? [band.detail] : [])];
+  return {
+    status: errors.length ? "failed" : "passed",
+    source: data.source,
+    face_time: measures.face_time,
+    ...(band ? { band: band.band, target: band.target } : {}),
+    findings: findings.slice(0, 12),
+    errors: errors.slice(0, 12),
+    ...(data.note ? { note: data.note } : {})
+  };
+}
+
+/**
+ * Face-visible intervals on the edited timeline. → {source, intervals | null, note?}
+ * The whole-video track (`launchclip subject track --project`, filed as
+ * assets/subject/track.json for this base) wins; else the presenter probe
+ * cached in .launchclip/subject/<entry>/probe.json; else none.
+ */
+export async function readFaceData(project, resolved) {
+  let track = null;
+  try { track = await readStoryTrack(project, resolved); }
+  catch { track = null; /* an invalid track falls through to the probe; layout-check reports it */ }
+  if (track?.frames?.length) {
+    const step = 1 / (Number(track.fps) > 0 ? Number(track.fps) : 10);
+    const samples = track.frames.map((frame) => ({ t: frame.t, head: frame.head }));
+    const last = samples.at(-1).t + step;
+    return { source: TRACK_FILE, intervals: toTimeline(faceIntervalsFromProbe({ samples, source: { duration: last } }), resolved) };
+  }
+  const probe = await newestProbe(project);
+  if (probe) return { source: probe.rel, intervals: toTimeline(faceIntervalsFromProbe(probe.probe), resolved), note: "face time from the presenter probe (about one frame a second); a whole-video track (launchclip subject track --project) is finer" };
+  return { source: "storyboard", intervals: null, note: "no face data: the face is taken to be visible wherever the base shows" };
+}
+
+async function newestProbe(project) {
+  const root = path.join(project, ".launchclip", "subject");
+  if (!existsSync(root)) return null;
+  let best = null;
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const file = path.join(root, entry.name, "probe.json");
+    if (!existsSync(file)) continue;
+    try {
+      const probe = JSON.parse(await readFile(file, "utf8"));
+      if (!best || String(probe.created_at ?? "") > String(best.probe.created_at ?? "")) best = { probe, rel: path.relative(project, file) };
+    } catch { /* skip */ }
+  }
+  return best;
+}
+
+// Source-time intervals → edited-timeline intervals through base.trim (the
+// kept source ranges played back to back). Without a trim, source time is
+// timeline time.
+export function toTimeline(intervals, resolved) {
+  const trim = resolved?.base?.trim ?? storyBase(resolved)?.trim;
+  if (!Array.isArray(trim) || !trim.length) return intervals;
+  const out = [];
+  let offset = 0;
+  for (const [a, b] of trim) {
+    for (const { start, end } of intervals) {
+      const from = Math.max(a, start), to = Math.min(b, end);
+      if (to > from) out.push([offset + from - a, offset + to - a]);
+    }
+    offset += b - a;
+  }
+  return unionIntervals(out).map(([start, end]) => ({ start, end }));
+}
+
+// ---------------------------------------------------------------------------
+// Prototype (RFC §11.1)
+
+/**
+ * The opening cut for `finish --prototype`: a cut between min and max seconds
+ * at the end of a narration sentence (else a scene end, else max), and the
+ * resolved story trimmed to it: later scenes dropped, the rest clamped, no
+ * loop ending. A story no longer than max needs no prototype (null).
+ */
+export function prototypeCut(resolved, words = [], { min = PROTOTYPE_WINDOW.min, max = PROTOTYPE_WINDOW.max } = {}) {
+  const duration = Number(resolved?.resolved?.duration ?? resolved?.format?.duration);
+  if (!(duration > max)) return null;
+  const target = (min + max) / 2;
+  const candidates = [];
+  for (const word of words ?? []) if (/[.!?]["”']?$/.test(String(word?.text ?? "")) && Number(word.end) >= min && Number(word.end) <= max) candidates.push(Number(word.end) + 0.2);
+  if (!candidates.length) for (const scene of resolved.scenes ?? []) if ((scene.track ?? 0) === 0 && Number(scene.end) >= min && Number(scene.end) <= max) candidates.push(Number(scene.end));
+  const cut = round(candidates.length ? candidates.sort((a, b) => Math.abs(a - target) - Math.abs(b - target))[0] : max);
+  const story = JSON.parse(JSON.stringify(resolved));
+  story.scenes = story.scenes.filter((scene) => Number(scene.start) < cut - 0.05).map((scene) => {
+    const end = Math.min(Number(scene.end), cut);
+    const hits = Array.isArray(scene.hits) ? scene.hits.filter((hit) => !Number.isFinite(Number(hit.at)) || Number(hit.at) <= end) : scene.hits;
+    return { ...scene, end, ...(hits ? { hits } : {}) };
+  });
+  story.format = { ...story.format, duration: cut };
+  if (story.resolved) story.resolved = { ...story.resolved, duration: cut };
+  delete story.ending;
+  return { cut, duration, story };
+}
+
+function round(value, places = 3) {
+  const factor = 10 ** places;
+  return Math.round(value * factor) / factor;
+}
