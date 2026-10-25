@@ -223,7 +223,17 @@ export function validateStory(story, { modules } = {}) {
       const narration = audio.narration;
       if (!isObject(narration)) err("audio.narration must be an object with text, and optional provider, voice and speed");
       else {
-        if (typeof narration.text !== "string" || !narration.text.trim()) err("audio.narration.text must be a non-empty string");
+        // Dialogue (src/voice/dialogue.js): lines [{speaker, text}], each in
+        // its speaker's voice; text is then optional.
+        if (narration.lines !== undefined) {
+          if (!Array.isArray(narration.lines) || !narration.lines.length || narration.lines.length > 200) err("audio.narration.lines must be an array of 1–200 {speaker, text} lines");
+          else narration.lines.forEach((line, i) => {
+            if (!isObject(line) || !nonEmpty(line.text)) err(`audio.narration.lines[${i}] must be {speaker, text} with non-empty text`);
+            else if (line.speaker !== undefined && !(typeof line.speaker === "string" && /^[a-z][a-z0-9-]{0,23}$/.test(line.speaker))) err(`audio.narration.lines[${i}].speaker must be a cast id or "narrator"`);
+          });
+        }
+        if (narration.lines !== undefined && narration.text === undefined) { /* dialogue only */ }
+        else if (typeof narration.text !== "string" || !narration.text.trim()) err("audio.narration.text must be a non-empty string");
         else if (narration.text.length > 4000) err(`audio.narration.text must be at most 4000 characters; got ${narration.text.length}`);
         if (narration.provider !== undefined && !STORY_VOICE_PROVIDERS.includes(narration.provider)) err(`audio.narration.provider must be one of ${STORY_VOICE_PROVIDERS.join(", ")}`);
         if (narration.voice !== undefined && !nonEmpty(narration.voice)) err("audio.narration.voice must be a non-empty string");
