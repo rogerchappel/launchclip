@@ -2237,6 +2237,31 @@ polaroid a brand gradient with an icon, so nothing shows empty.
 | `tooltip` | dark, light, brand | `text`, `title`, `target` (canvas px) | show | A dot lands on the target with a looping pulse ring; the box rises above it, or below when the rect has no room above |
 | `callout-arrow` | curve, straight, sketch | `text`, `target`, `from` (canvas px), `circle`, `tone` | point | The label pops, the shaft draws on, the head flicks, a ring draws round the target; sketch adds an echo stroke and an italic note |
 
+### Motion titles (`catalog-h-text.mjs`)
+
+`motion-title` is a caption-independent title (it hides captions). Its
+variants are the 24 named text-animation effects of the HyperFrames
+vocabulary (`hyperframes-animation`, `adapters/animate-text.md`), so a seeded
+style picks one text entrance for the whole video. Before this, only
+kinetic-words' `scale` and `rise` existed outside captions. The effects are
+built from their names and descriptions; no upstream spec is vendored.
+Lines are wrapped with the conservative advance model; each line is a row of
+inline-block word spans (character spans inside them), so the browser lays
+out the same DOM in both renderers.
+
+| Unit | Effects | Motion (stagger per unit) |
+| --- | --- | --- |
+| character (7) | soft-blur-in, per-character-rise, typewriter, bottom-up-letters, top-down-letters, stagger-from-center, stagger-from-edges | 32 ms stagger, compressed to fit 1.4 s; typewriter steps whole letters with no interpolation; bottom-up and top-down rise through a masked row; the stagger effects order by distance from the centre or the edges |
+| word (8) | per-word-crossfade, spring-scale-in, shared-axis-y, blur-out-up, kinetic-center-build, short-slide-right, short-slide-down, depth-parallax-words | 110 ms stagger; spring uses elastic.out; blur-out-up fades in, holds, and blurs out upward just before the exit; depth-parallax alternates words from in front of and behind the page |
+| line (2) | mask-reveal-up, line-by-line-slide | 140 ms stagger; mask-reveal rises through its row's clip |
+| element (7) | micro-scale-fade, shimmer-sweep, fade-through, shared-axis-z, scale-down-fade, focus-blur-resolve, shared-axis-x | The whole block; shimmer-sweep passes a 15% band of a lighter copy across the text (a moving clip-path) |
+
+Params: `text` ≤ 90 (≤ 16 words), `kicker`, `sub`, `highlight` (1–3 whole
+words in the tone colour), `align` (center, left), `plate` (a brand-colour
+plate), `tone`, `speed` (0.5–2), `at`. Event `title`. The build must end
+before the exit; long text fails naming the effect, so lengthen the scene,
+shorten the text or raise `speed`.
+
 ### Tools
 
 - `scripts/element-samples.mjs`: sample params for every module, plus
