@@ -157,12 +157,6 @@
         },
         "cast": [
           {
-            "id": "theo",
-            "pose": "point",
-            "expression": "happy",
-            "says": "auto"
-          },
-          {
             "id": "maya",
             "pose": "think",
             "expression": "focused",
@@ -173,6 +167,12 @@
                 "expression": "delighted"
               }
             ]
+          },
+          {
+            "id": "theo",
+            "pose": "point",
+            "expression": "happy",
+            "says": "auto"
           }
         ]
       }

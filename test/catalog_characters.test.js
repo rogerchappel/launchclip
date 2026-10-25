@@ -11,7 +11,7 @@ import {frameState} from '../kit/core/catalog-b-view.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-characters.mjs';
 import {knownModules, resolveModule} from '../kit/core/modules.mjs';
 import {resolveStory, validateStory} from '../kit/core/story.mjs';
-import {castConsistency} from '../kit/core/characters/cues.mjs';
+import {castConsistency, storyCastErrors} from '../kit/core/characters/cues.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
 const story = (scenes, extra = {}) => ({schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1920, height: 1080, fps: 30, duration: 8}, brand, cast: {characters: [{id: 'maya'}, {id: 'theo'}]}, scenes, ...extra});
@@ -125,4 +125,34 @@ test('story: cast is a story field; word anchors in cues and lines resolve to sc
   assert.deepEqual(actor.says[0], {from: 1, to: 2.4, words: [[1, 1.4], [1.5, 1.9], [2, 2.4]]});
   const model = resolveModule(resolved.scenes[0], resolved);
   assert.equal(model.content.actors[0].states[1].time, 2.5);
+});
+
+const phone = (cast, extra = {}) => ({id: 'talk', module: 'cast-scene', start: 0, end: 4, params: {set: 'phone', cast}, ...extra});
+const sides = model => Object.fromEntries(model.content.actors.map(actor => [actor.id, [actor.position, actor.facing]]));
+
+test('cast-scene placement: position wins over list order, then the story cast position; facing defaults inward', () => {
+  // List order alone: first on the left, both facing inward.
+  assert.deepEqual(sides(resolve(phone([{id: 'maya'}, {id: 'theo'}]))), {maya: ['left', 'right'], theo: ['right', 'left']});
+  // An explicit position puts the first-listed character on the right, still facing inward.
+  assert.deepEqual(sides(resolve(phone([{id: 'maya', position: 'right'}, {id: 'theo'}]))), {maya: ['right', 'left'], theo: ['left', 'right']});
+  // A story cast position keeps a character's side whatever the list order.
+  const placed = {cast: {characters: [{id: 'maya', position: 'right'}, {id: 'theo', position: 'left'}]}};
+  assert.deepEqual(sides(resolve(phone([{id: 'maya'}, {id: 'theo'}]), placed)), {maya: ['right', 'left'], theo: ['left', 'right']});
+  assert.deepEqual(sides(resolve(phone([{id: 'theo'}, {id: 'maya'}]), placed)), {maya: ['right', 'left'], theo: ['left', 'right']});
+  // A scene position beats the story cast's; three characters take centre; "center" is accepted.
+  assert.deepEqual(sides(resolve(phone([{id: 'maya', position: 'left'}, {id: 'theo'}]), placed)), {maya: ['left', 'right'], theo: ['right', 'left']});
+  const trio = resolve(phone([{id: 'maya', position: 'center'}, {id: 'theo'}, {id: 'kwame'}]), {cast: {characters: [{id: 'maya'}, {id: 'theo'}, {id: 'kwame'}]}});
+  assert.deepEqual(trio.content.actors.map(actor => actor.position), ['centre', 'left', 'right']);
+  assert.throws(() => resolve(phone([{id: 'maya', position: 'centre'}, {id: 'theo'}])), /does not fit 2 characters \(positions: left, right\)/);
+  assert.throws(() => resolve(phone([{id: 'maya', position: 'left'}, {id: 'theo', position: 'left'}])), /left is already taken by params.cast\[0\]/);
+  assert.match(storyCastErrors({characters: [{id: 'maya', position: 'middle'}]}).join(), /position must be left, centre or right/);
+});
+
+test('an actor reaches as far as its widest pose: a point runs toward its facing side', () => {
+  const [maya, theo] = resolve(phone([{id: 'maya', pose: 'stand', cues: [{at: 1, pose: 'point'}]}, {id: 'theo'}])).content.actors;
+  const standing = resolve(phone([{id: 'maya'}, {id: 'theo'}])).content.actors[0];
+  assert.ok(maya.reach.right > standing.reach.right + 150, 'the pointing arm reaches right, toward theo');
+  assert.ok(Math.abs(maya.reach.left - standing.reach.left) < 2, 'the other side barely moves (the point leans in)');
+  assert.ok(maya.reach.top > 0 && maya.reach.bottom <= 1080);
+  assert.ok(theo.reach.left > maya.x);
 });

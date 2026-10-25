@@ -13,6 +13,7 @@ import { castGate, castList, castShow, castSheetHtml, castUsage, runCastCommand 
 import { DIALOGUE_GAP, dialogueGaps, dialogueLayout, dialogueRequests, dialogueText, synthesizeDialogue } from "../src/voice/dialogue.js";
 import { createTestVoiceProvider } from "../src/voice/index.js";
 import { resolveStory, validateStory } from "../kit/core/story.mjs";
+import { resolveModule } from "../kit/core/modules.mjs";
 import { USAGE } from "../src/cli_usage.js";
 import { checkStoryDirection } from "../src/story_cli.js";
 
@@ -183,4 +184,30 @@ test("story validate checks a narrative map's cast cues with the character kit",
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("the cast gate fails a limb off the canvas or out of the safe zone, and a couple swapping sides", async () => {
+  const { castPlacement } = await import("../kit/core/characters/placement.mjs");
+  const brand = example().brand;
+  const short = (scenes) => ({ schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 8 }, brand, cast: { characters: [{ id: "maya" }, { id: "theo" }] }, scenes });
+  const phone = (id, start, cast) => ({ id, module: "cast-scene", start, end: start + 4, params: { set: "phone", cast } });
+  // Facing outward, a point on the right-hand character runs off a 9:16 canvas.
+  const outward = short([phone("a", 0, [{ id: "theo" }, { id: "maya", facing: "right", cues: [{ at: 1, pose: "point" }] }])]);
+  const off = castGate(resolveStory(outward, { words: [] }));
+  assert.equal(off.status, "failed");
+  assert.match(off.findings.map((f) => f.detail).join("\n"), /maya in a reaches off the canvas \(x \d+; canvas 1080x1920\) in stand, point facing right/);
+  // Inward (the default) it stays on the canvas.
+  const inward = short([phone("a", 0, [{ id: "theo" }, { id: "maya", cues: [{ at: 1, pose: "point" }] }])]);
+  assert.deepEqual(castGate(resolveStory(inward, { words: [] })).findings, []);
+  // A phone held in the outer hand, arms spread: on the canvas, under the Shorts UI rail.
+  const shrug = short([phone("a", 0, [{ id: "theo" }, { id: "maya", holds: "phone", pose: "shrug" }])]);
+  assert.match(castGate(resolveStory(shrug, { words: [] })).findings.map((f) => f.detail).join(), /maya in a reaches out of the safe zone right to x \d+ \(safe to 940\) in shrug facing left holding a phone/);
+  // Reordering the cast list swaps the couple between shots.
+  const swap = short([phone("a", 0, [{ id: "maya" }, { id: "theo" }]), phone("b", 4, [{ id: "theo", holds: "phone" }, { id: "maya" }])]);
+  assert.match(castGate(resolveStory(swap, { words: [] })).findings.map((f) => f.detail).join(), /theo and maya swap sides between a and b|maya and theo swap sides between a and b/);
+  // With positions the order no longer matters; explicit positions in both scenes allow a deliberate swap.
+  const kept = short([phone("a", 0, [{ id: "maya" }, { id: "theo" }]), phone("b", 4, [{ id: "theo", holds: "phone", position: "right" }, { id: "maya", position: "left" }])]);
+  assert.deepEqual(castGate(resolveStory(kept, { words: [] })).findings, []);
+  const meant = short([phone("a", 0, [{ id: "maya", position: "left" }, { id: "theo", position: "right" }]), phone("b", 4, [{ id: "maya", position: "right" }, { id: "theo", position: "left" }])]);
+  assert.deepEqual(castPlacement(resolveStory(meant, { words: [] }), [meant.scenes[0], meant.scenes[1]].map((scene) => resolveModule(scene, meant))), []);
 });

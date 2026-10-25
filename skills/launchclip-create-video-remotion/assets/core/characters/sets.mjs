@@ -162,7 +162,7 @@ export function layoutSet(name, {canvas, colors, count, heights, screen = false,
     } else {
       screenRect = {x: r1(W * 0.07), y: r1(H * 0.1), width: r1(W * 0.52), height: r1(W * 0.52 * 9 / 16)};
       const scale = scaleFor(standShare * 0.92);
-      const xs = spread(W * (count === 1 ? 0.78 : 0.7), W * 0.9);
+      const xs = spread(W * (count === 1 ? 0.78 : 0.7), W * 0.88);
       slots = xs.map((x, i) => ({x, floor, scale, facing: 'left', index: i}));
     }
     back.push(...screenFrame(screenRect, s, c, {stand: false}));

@@ -14,6 +14,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { STARTER_CAST } from "../kit/core/characters/cast.mjs";
+import { castPlacement } from "../kit/core/characters/placement.mjs";
 import { KOKORO_VOICES, castConsistency, castMember, resolveStoryCast, validateCastCues } from "../kit/core/characters/cues.mjs";
 import { EXPRESSIONS, POSES, poseJoints, rigGeometry } from "../kit/core/characters/rig.mjs";
 import { drawFlat, drawnHeight } from "../kit/core/characters/style-flat.mjs";
@@ -190,7 +191,9 @@ export async function runCastCommand(action, name, flags = {}) {
  * The cast consistency gate for a resolved story: the story cast is valid,
  * every character scene resolves, the direction map's cast cues name real
  * characters, poses, expressions and sets, each character is drawn from the
- * same params in every scene, and a speaking character's voice is a known
+ * same params in every scene, every limb and prop stays on the canvas and in
+ * the safe zone, characters keep their sides between shots
+ * (characters/placement.mjs), and a speaking character's voice is a known
  * local Kokoro voice. → {status: "passed" | "failed" | "skipped", findings, characters}
  */
 export function castGate(story, { direction = null } = {}) {
@@ -206,6 +209,8 @@ export function castGate(story, { direction = null } = {}) {
   }
   if (resolved) {
     findings.push(...castConsistency(story, models));
+    // Every limb and prop on the canvas and in the safe zone; sides kept between shots.
+    findings.push(...castPlacement(story, models));
     for (const { line, path: where } of lines) for (const detail of validateCastCues(line, resolved, { path: where })) findings.push({ scene: null, id: null, detail });
     for (const member of resolved.members.values()) {
       if (member.voice && /^[ab][fm]_/.test(member.voice) && !KOKORO_VOICES.includes(member.voice)) findings.push({ scene: null, id: member.id, detail: `${member.id}'s voice ${member.voice} is not a local Kokoro voice (${KOKORO_VOICES.join(", ")})` });
