@@ -1100,7 +1100,7 @@ async function runGates(ctx) {
   try {
     // The motion floors are the cadence profile's bands (a locked-off talking
     // head barely moves; a motion explainer must).
-    const { profile } = gateProfile(ctx.resolved, { direction: (await readProjectDirection(ctx.project)).map, style: ctx.style?.pack ?? null, project: ctx.project });
+    const { profile } = gateProfile(ctx.resolved, { direction: (await readProjectDirection(ctx.project)).map, style: await stylePack(ctx), project: ctx.project });
     const motion = await ctx.adapters.motion(ctx.out, path.join(ctx.project, PATHS.motion), { expected: cinematicMotionExpectations({ duration, width: format.width, height: format.height, profile }).expected });
     gates.motion = { status: motion?.quality?.ok ? "passed" : "failed", report: PATHS.motion, ...(profile ? { profile: profile.id } : {}), findings: (motion?.quality?.findings ?? []).slice(0, 12) };
   } catch (error) {
@@ -1149,7 +1149,7 @@ async function runGates(ctx) {
   // against the cadence profile, and the face rule over whatever face data exists.
   try {
     const direction = await readProjectDirection(ctx.project);
-    const { profile } = gateProfile(ctx.resolved, { direction: direction.map, style: ctx.style?.pack ?? ctx.story.style ?? null, project: ctx.project });
+    const { profile } = gateProfile(ctx.resolved, { direction: direction.map, style: await stylePack(ctx), project: ctx.project });
     gates.direction = await directionGate({ project: ctx.project, resolved: ctx.resolved, words: ctx.words ?? [], direction });
     const face = storyBase(ctx.resolved) ? await readFaceData(ctx.project, ctx.resolved) : null;
     gates.coverage = coverageGate({ resolved: ctx.resolved, words: ctx.words ?? [], map: gates.direction.status === "passed" ? direction.map : null, profile, face: face?.intervals ?? null });
@@ -1166,6 +1166,17 @@ async function runGates(ctx) {
       + (ctx.rendererName === "hyperframes" && !hasExactFile(ctx.project, "index.html") ? ` (HyperFrames checks need the compiled index.html; finish compiled it to ${PATHS.hyperframes})` : "")
   };
   return gates;
+}
+
+// The story's style pack (for its cadence profile), resolved once per run.
+async function stylePack(ctx) {
+  if (!ctx.style) return null;
+  if (ctx.stylePack !== undefined) return ctx.stylePack;
+  try {
+    const request = storyStyleRequest(ctx.story ?? ctx.resolved)?.name ?? ctx.style.name;
+    ctx.stylePack = (await ctx.adapters.resolveStyle(ctx.style.file ?? request, { projectDir: ctx.project })).pack ?? null;
+  } catch { ctx.stylePack = null; }
+  return ctx.stylePack;
 }
 
 function buildReport(ctx, stages, { seconds, failed }) {
