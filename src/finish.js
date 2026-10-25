@@ -75,6 +75,7 @@ export const PATHS = Object.freeze({
   copy: ".launchclip/finish/storyboard.json",
   resolved: ".launchclip/finish/story.resolved.json",
   hyperframes: COMPILED_HYPERFRAMES,
+  hyperframesPreview: ".launchclip/finish/hyperframes-preview",
   voice: "assets/audio/narration.wav",
   words: "NARRATION.json",
   captions: "assets/captions/captions.json",
@@ -1123,20 +1124,24 @@ export function previewPath(sceneId) {
 }
 
 // Remotion renders through the segment cache; HyperFrames renders whole
-// videos, cached by hash; an adapter without renderSegments (a custom or
-// injected Remotion adapter) renders the whole story directly.
+// videos, cached by hash, and a --preview-scene without a cached whole
+// render compiles and renders only that scene's window; an adapter without
+// renderSegments (a custom or injected Remotion adapter) renders the whole
+// story directly.
 async function renderStory(ctx, adapter, { output, scenes = [], previewScene = null, range = null }) {
   const common = { project: ctx.project, story: ctx.resolved, renderer: ctx.rendererName, adapter, quality: ctx.quality, output, scenes, previewScene, range, tools: ctx.adapters.segmentTools, now: ctx.adapters.now };
   if (ctx.rendererName === "hyperframes") {
+    const compileAndRender = async (dir, file, extra = {}) => {
+      const hfDir = path.join(ctx.project, dir);
+      const compiled = await ctx.adapters.compileHyperFrames(ctx.resolved, { projectDir: hfDir, sourceDir: ctx.project, ...extra });
+      ctx.compiledPlaceholders = (compiled?.warnings ?? []).filter((message) => /rendering a placeholder$/.test(message));
+      ctx.warnings.push(...(compiled?.warnings ?? []).filter((message) => !ctx.warnings.includes(message)).map((message) => `hyperframes: ${message}`));
+      await adapter.render(hfDir, file, { quality: ctx.quality });
+    };
     return renderWithSegments({
       ...common,
-      renderWhole: async (file) => {
-        const hfDir = path.join(ctx.project, PATHS.hyperframes);
-        const compiled = await ctx.adapters.compileHyperFrames(ctx.resolved, { projectDir: hfDir, sourceDir: ctx.project });
-        ctx.compiledPlaceholders = (compiled?.warnings ?? []).filter((message) => /rendering a placeholder$/.test(message));
-        ctx.warnings.push(...(compiled?.warnings ?? []).filter((message) => !ctx.warnings.includes(message)).map((message) => `hyperframes: ${message}`));
-        await adapter.render(hfDir, file, { quality: ctx.quality });
-      }
+      renderWhole: (file) => compileAndRender(PATHS.hyperframes, file),
+      renderWindow: (file, { start, end }) => compileAndRender(PATHS.hyperframesPreview, file, { window: [start, end] })
     });
   }
   if (PARTIAL_RENDERERS.includes(ctx.rendererName) && typeof adapter.renderSegments === "function") return renderWithSegments(common);
@@ -1360,6 +1365,7 @@ function buildReport(ctx, stages, { seconds, failed }) {
 
 /** "10 segments: 8 reused, 2 rendered (~11.3s saved)" */
 export function segmentSummary(segments) {
+  if (segments.mode === "window") return `scene window only (frames ${segments.frames.start}–${segments.frames.end}; ${segments.renderer} has no frame range, so the preview compiles just that stretch)`;
   if (segments.mode === "whole") return `whole-video cache (${segments.renderer} has no frame range): ${segments.reused ? `reused${segments.seconds_saved ? ` (~${segments.seconds_saved}s saved)` : ""}` : "rendered"}`;
   const forced = segments.forced ? `, ${segments.forced} forced by --scene or --chapter` : "";
   return `${segments.segments} segments: ${segments.reused} reused, ${segments.rendered} rendered${forced}${segments.reused ? ` (~${segments.seconds_saved}s saved)` : ""}`;

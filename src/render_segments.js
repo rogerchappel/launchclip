@@ -30,7 +30,8 @@
 // frames through, the mux is limited by frame count, and the joined, encoded
 // and final files must each hold the story's frame count.
 // HyperFrames' CLI has no frame range, so it renders whole videos, cached by
-// the hash of the whole timeline.
+// the hash of the whole timeline; a one-scene preview renders a composition
+// of just that scene's window instead (renderSceneWindow).
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -648,6 +649,8 @@ const short = (hash) => hash.slice(0, 12);
  *     (finish --chapter: every segment in the chapter, with scenes or not),
  *   previewScene: render only the segments that show this scene,
  *   renderWhole(output): renders the whole video (renderers without frame ranges),
+ *   renderWindow(output, {start, end, frames}): renders only that stretch
+ *     (renderers without frame ranges; previewScene with no cached whole render),
  *   tools: defaultSegmentTools() overrides, now: clock (ms),
  *   cacheRoot: default <project>/.launchclip/finish/segments
  * Returns the stage details: {mode, renderer, segments, reused, rendered,
@@ -822,8 +825,11 @@ export async function renderVerifiedSegments({ project, adapter, tools, work, st
   return results;
 }
 
-// HyperFrames (no frame range): whole renders, cached by the whole timeline's hash.
-async function renderWhole({ project, story, renderer, quality, output, previewScene, renderWhole: render, tools, now, dir, index, plan, inputs, forced, started, seconds }) {
+// HyperFrames (no frame range): whole renders, cached by the whole timeline's
+// hash. A preview of one scene cuts the cached whole render when there is
+// one, else renders only the scene's window (renderWindow: a composition of
+// just that stretch, windowComposition in kit/hyperframes/story-compiler.mjs).
+async function renderWhole({ project, story, renderer, quality, output, previewScene, renderWhole: render, renderWindow, tools, now, dir, index, plan, inputs, forced, started, seconds }) {
   if (typeof render !== "function") throw new Error(`renderer "${renderer}" cannot render frame ranges and no whole-video renderer was given`);
   const segments = hashSegments(story, plan, inputs, { encoder: null });
   const soundtrack = storySoundtrack(story);
@@ -836,6 +842,9 @@ async function renderWhole({ project, story, renderer, quality, output, previewS
   });
   const file = segmentFile(dir, hash);
   const status = forced.size ? "forced" : existsSync(file) ? "reused" : "rendered";
+  if (previewScene && status !== "reused" && typeof renderWindow === "function") {
+    return renderSceneWindow({ project, renderer, output, previewScene, renderWindow, tools, now, plan, segments, started, seconds });
+  }
   const renderStarted = now();
   let took = null;
   if (status !== "reused") {
@@ -864,7 +873,7 @@ async function renderWhole({ project, story, renderer, quality, output, previewS
   return {
     mode: "whole",
     renderer,
-    note: `${renderer} renders whole videos (its CLI has no frame range); partial rendering is Remotion-only`,
+    note: `${renderer} renders whole videos (its CLI has no frame range); partial rendering is Remotion-only, and a --preview-scene renders only its scene's window`,
     segments: 1,
     reused: status === "reused" ? 1 : 0,
     rendered: status === "reused" ? 0 : 1,
@@ -874,6 +883,41 @@ async function renderWhole({ project, story, renderer, quality, output, previewS
     seconds_saved: status === "reused" && Number.isFinite(record?.seconds) ? round3(record.seconds) : 0,
     cache: rel(project, dir),
     plan: [{ id: "whole", kind: "whole", frames: [0, plan.frames], scenes: index.segments[hash].scenes, hash: short(hash), status, seconds: took == null ? null : round3(took) }]
+  };
+}
+
+// --preview-scene without a cached whole render: render the scene's window
+// alone (not cached: the next whole render replaces it).
+async function renderSceneWindow({ project, renderer, output, previewScene, renderWindow, tools, now, plan, segments, started, seconds }) {
+  const scope = contiguous(segments, segmentsForScenes(segments, [previewScene]));
+  const frames = { start: scope[0].startFrame, end: scope.at(-1).endFrame, count: scope.at(-1).endFrame - scope[0].startFrame };
+  const out = path.resolve(output);
+  await mkdir(path.dirname(out), { recursive: true });
+  const renderStarted = now();
+  const temporary = `${out}.partial.mp4`;
+  await renderWindow(temporary, { start: frames.start / plan.fps, end: frames.end / plan.fps, frames: [frames.start, frames.end] });
+  if (!existsSync(temporary)) throw new Error(`${renderer} render did not write ${rel(project, temporary)}`);
+  const count = await tools.countFrames(temporary);
+  if (Number.isFinite(count) && count !== frames.count) {
+    await rm(temporary, { force: true });
+    throw new Error(`render stage failed: the preview of scene "${previewScene}" has ${count} frames; its window has ${frames.count} (frames ${frames.start}–${frames.end} at ${plan.fps} fps)`);
+  }
+  await rename(temporary, out);
+  seconds.render = round3((now() - renderStarted) / 1000);
+  seconds.total = round3((now() - started) / 1000);
+  return {
+    mode: "window",
+    renderer,
+    note: `${renderer} rendered only the window of scene "${previewScene}" (frames ${frames.start}–${frames.end})`,
+    segments: 1,
+    reused: 0,
+    rendered: 1,
+    forced: 0,
+    frames,
+    seconds,
+    seconds_saved: 0,
+    cache: null,
+    plan: [{ id: "window", kind: "window", frames: [frames.start, frames.end], scenes: [...new Set(scope.flatMap((segment) => segment.scenes))], hash: null, status: "rendered", seconds: seconds.render }]
   };
 }
 

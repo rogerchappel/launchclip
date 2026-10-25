@@ -558,9 +558,14 @@ audio, loudness, layout and evidence gates. It never rewrites
 has reviewed `qa/critic-sheets/`.
 
 `--scene s3` and `--preview-scene s3` work with HyperFrames too, but its CLI
-has no frame range: finish renders the whole video (cached by the hash of the
-whole timeline, so an unchanged story is never rendered twice), and a preview
-is cut from that render. Partial rendering is Remotion-only for now.
+has no frame range, so `--scene` re-renders the whole video (cached by the
+hash of the whole timeline, so an unchanged story is never rendered twice).
+`--preview-scene` cuts the preview from that cached render when the story is
+unchanged since it; otherwise it compiles only the scene's window (a
+composition of that stretch, in `.launchclip/finish/hyperframes-preview/`,
+whose frames match the whole render's) and renders that, so a preview takes
+seconds rather than a whole render. Partial rendering into the final is
+Remotion-only.
 
 #### Narration: `audio.narration`, `launchclip voice`, then word anchors
 

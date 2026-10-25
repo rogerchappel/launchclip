@@ -62,12 +62,16 @@ export function hyperframesEmitters() {
  *   sceneFilter  scene id, id array or predicate: compile only those scenes on
  *                the background, without transitions, captions, audio or loop
  *                (the HyperFrames twin of the Remotion ModuleReview composition)
+ *   window       [start, end] seconds: compile only that stretch of the
+ *                story, as a composition from 0 whose every frame is the
+ *                whole composition's frame at the same story time
+ *                (finish --preview-scene; windowComposition)
  *   write        false to return {html, files} without touching the disk
  *   copyAssets   false to skip copying sourceDir/assets into projectDir
  * → {html, files: [relative paths written], warnings, boundaries, compositionId}
  */
 export async function compileStoryToHyperFrames(story, options = {}) {
-  const { projectDir, sceneFilter, write = true, copyAssets = true } = options;
+  const { projectDir, sceneFilter, window: span, write = true, copyAssets = true } = options;
   const sourceDir = options.sourceDir ?? projectDir;
   if (write && !projectDir) throw new Error('compileStoryToHyperFrames needs options.projectDir');
   const warnings = [];
@@ -404,7 +408,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   warnings.push(...fontCss.warnings);
   const capIdle = colors.paper ?? CAPTION_DEFAULT_COLORS.idle;
   const capActive = colors.primary ?? CAPTION_DEFAULT_COLORS.active;
-  const html = `<!doctype html>
+  let html = `<!doctype html>
 <html lang="${attr(story.format.language ?? 'en')}">
 <head>
   <meta charset="UTF-8">
@@ -451,6 +455,7 @@ ${motion.join('\n').split('\n').map((line) => `      ${line}`).join('\n')}
 </body>
 </html>
 `.replace(/\n\s*\n(?=\s*<)/g, '\n');
+  if (span) html = windowComposition(html, span);
 
   const files = [];
   if (write) {
@@ -464,6 +469,49 @@ ${motion.join('\n').split('\n').map((line) => `      ${line}`).join('\n')}
     files.push('index.html');
   }
   return { html, files, warnings, boundaries, compositionId: COMPOSITION_ID };
+}
+
+/**
+ * The stretch [start, end] seconds of a compiled story as its own composition
+ * from 0. HyperFrames' render has no frame range, so a preview of one scene
+ * renders this instead of the whole video: every clip's timing moves back by
+ * start (a clip straddling the start keeps its tail, and media plays from the
+ * matching offset), clips wholly outside the stretch are taken off the
+ * timeline and hidden, and the registered timeline scrubs the story's own
+ * timeline from start to end, so frame n here is the whole composition's
+ * frame at start + n / fps.
+ */
+export function windowComposition(html, [start, end]) {
+  const length = Number(end) - Number(start);
+  if (!(Number(start) >= 0 && length > 0)) throw new Error(`windowComposition needs 0 <= start < end; got [${start}, ${end}]`);
+  const shift = (tag) => {
+    const get = (name) => { const match = tag.match(new RegExp(`\\s${name}="([^"]*)"`)); return match ? Number(match[1]) : null; };
+    const set = (source, name, value) => source.replace(new RegExp(`(\\s${name}=")[^"]*(")`), `$1${num(value)}$2`);
+    // Rounded down, so the frame count is not rounded up a frame (71 / 30 s is 2.3666…, not 2.3667).
+    if (/\sid="launchclip-root"/.test(tag)) return tag.replace(/(\sdata-duration=")[^"]*(")/, `$1${Math.floor(length * 1e4 + 1e-6) / 1e4}$2`);
+    const from = get('data-start') - start;
+    const duration = get('data-duration');
+    const to = duration == null ? length : from + duration;
+    if (to <= 0 || from >= length) {
+      // Off the timeline: no longer a clip, and never shown.
+      let hidden = tag.replace(/\sdata-(?:start|duration|media-start)="[^"]*"/g, '').replace(/(\sclass=")([^"]*)"/, (_all, head, names) => `${head}${names.split(/\s+/).filter((name) => name !== 'clip').join(' ')}"`);
+      hidden = /\sstyle="/.test(hidden) ? hidden.replace(/\sstyle="/, ' style="display:none !important;') : hidden.replace(/^<([a-z0-9-]+)/i, '<$1 style="display:none !important"');
+      return hidden;
+    }
+    const cut = Math.max(0, -from);
+    let out = set(tag, 'data-start', Math.max(0, from));
+    if (duration != null) out = set(out, 'data-duration', Math.min(to, length) - Math.max(0, from));
+    if (cut > 0 && get('data-media-start') != null) out = set(out, 'data-media-start', get('data-media-start') + cut);
+    return out;
+  };
+  const registration = `window.__timelines["${COMPOSITION_ID}"] = tl;`;
+  if (!html.includes(registration)) throw new Error('windowComposition: the story timeline registration was not found');
+  return html
+    .replace(/<[a-z][a-z0-9-]*\s[^>]*\sdata-start="[^"]*"[^>]*>/gi, shift)
+    .replace(registration, `// window ${num(start)}–${num(end)} s of the story (windowComposition)
+      const lcWindow = gsap.timeline({ paused: true });
+      lcWindow.add(tl.tweenFromTo(${num(start)}, ${num(end)}, { duration: ${num(length)}, ease: 'none', immediateRender: false }), 0);
+      window.__timelines["${COMPOSITION_ID}"] = lcWindow;`);
 }
 
 // World camera containers. #lc-world-bg is the background depth layer (world

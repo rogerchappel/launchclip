@@ -18,6 +18,7 @@ import {
   storySoundtrack
 } from "../src/render_segments.js";
 import { resolveStory } from "../src/story.js";
+import { segmentSummary } from "../src/finish.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const EXPLAINER = path.join(ROOT, "examples/story/explainer-9x16");
@@ -380,6 +381,15 @@ test("renderers without frame ranges render whole videos, cached by the whole ti
     assert.deepEqual(preview.frames, { start: 132, end: 351, count: 219 });
     assert.deepEqual(log.at(-1), ["trim", 132, 351]);
     assert.equal(renders, 3, "the preview cuts the cached whole render");
+    // With no whole render cached, a preview renders only the scene's window.
+    const windows = [];
+    const { story: changed } = await explainer((s) => { s.scenes[0].params.words[0].text = "Small"; });
+    const alone = await renderWithSegments({ ...options, story: changed, previewScene: "s2", output: path.join(project, "renders/scene-s2.mp4"), renderWindow: async (file, span) => { windows.push(span); await writeFile(file, "window"); } });
+    assert.equal(renders, 3, "no whole render");
+    assert.deepEqual(windows, [{ start: 4.4, end: 11.7, frames: [132, 351] }]);
+    assert.deepEqual([alone.mode, alone.frames], ["window", { start: 132, end: 351, count: 219 }]);
+    assert.equal(await readFile(path.join(project, "renders/scene-s2.mp4"), "utf8"), "window");
+    assert.match(segmentSummary(alone), /scene window only \(frames 132–351/);
   } finally {
     await rm(project, { recursive: true, force: true });
   }
