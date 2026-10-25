@@ -103,8 +103,9 @@ export function numberFormat(check, raw, path = 'params.format', {decimals: fall
   const decimals = f.decimals === undefined ? fallbackDecimals : check.int(f.decimals, `${path}.decimals`, 0, 3);
   const compact = f.compact === undefined ? false : check.bool(f.compact, `${path}.compact`);
   const separator = f.separator === undefined ? true : check.bool(f.separator, `${path}.separator`);
-  const prefix = f.prefix === undefined ? '' : check.str(f.prefix, `${path}.prefix`, 4);
-  const suffix = f.suffix === undefined ? '' : check.str(f.suffix, `${path}.suffix`, 6);
+  // Affixes keep their spaces (" / 5"), so they are checked but not trimmed.
+  const prefix = f.prefix === undefined ? '' : (check.str(f.prefix, `${path}.prefix`, 4), f.prefix);
+  const suffix = f.suffix === undefined ? '' : (check.str(f.suffix, `${path}.suffix`, 6), f.suffix);
   const format = value => {
     let v = Math.abs(value), tail = '';
     if (compact) for (const [size, letter] of COMPACT) if (v >= size) { v /= size; tail = letter; break; }
