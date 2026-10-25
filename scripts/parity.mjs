@@ -326,7 +326,10 @@ export async function runParity(fixturePath, {out, times, entry, compiler = 'aut
  * transitions, plates and every module together.
  *   → {project, threshold, minSsim, pass, samples:[{name, time, ssim, psnr, pass, …}], outDir}
  */
-export async function runStoryParity(projectDir, {times = [1, 3.2], out, threshold = DEFAULT_THRESHOLD.ssim, keep = false} = {}) {
+// patch: top-level storyboard.json keys to replace in the copy (a background
+// fixture's background, panel or brand, say).
+// files: {relative path: text} written into the copy (a fixture's logo, say).
+export async function runStoryParity(projectDir, {times = [1, 3.2], out, threshold = DEFAULT_THRESHOLD.ssim, keep = false, patch = null, files = null} = {}) {
   const {getRenderer} = await import(pathToFileURL(path.join(ROOT, 'src', 'renderers', 'index.js')).href);
   const {compileStoryToHyperFrames} = await import(pathToFileURL(STORY_COMPILER).href);
   const {readProjectStory} = await import(pathToFileURL(path.join(ROOT, 'src', 'story_loader.js')).href);
@@ -339,6 +342,16 @@ export async function runStoryParity(projectDir, {times = [1, 3.2], out, thresho
     // Work on a copy: the Remotion adapter writes .launchclip/ into the project.
     const project = path.join(workDir, 'project');
     await must('copy project', 'cp', ['-R', source, project]);
+    for (const [name, text] of Object.entries(files ?? {})) {
+      const file = path.join(project, name);
+      if (!file.startsWith(project + path.sep)) throw new Error(`fixture file ${name} is outside the project`);
+      await mkdir(path.dirname(file), {recursive: true});
+      await writeFile(file, text);
+    }
+    if (patch) {
+      const file = path.join(project, 'storyboard.json');
+      await writeFile(file, `${JSON.stringify({...JSON.parse(await readFile(file, 'utf8')), ...patch}, null, 2)}\n`);
+    }
     const loaded = await readProjectStory(project);
     const hfDir = path.join(workDir, 'hyperframes');
     const compiled = await compileStoryToHyperFrames(loaded.resolved, {projectDir: hfDir, sourceDir: project});

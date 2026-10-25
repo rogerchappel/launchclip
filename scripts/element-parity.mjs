@@ -15,7 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {MODULES, VARIANTS} from '../kit/core/catalog-h.mjs';
-import {SAMPLES} from './element-samples.mjs';
+import {EXTRA_SAMPLES, SAMPLES} from './element-samples.mjs';
 import {BRAND, SCENE} from './element-sheet.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -24,14 +24,14 @@ const FORMATS = {portrait: {width: 1080, height: 1920, fps: 30, duration: SCENE,
 
 export function fixtureName(id, variant, shape) { return `h-${id}-${variant}-${shape}`; }
 
-/** {name, fixture} for every module variant (portrait) and default (landscape). */
+const fixture = (name, id, variant, shape, params) => ({name, fixture: {story: {schema: 'launchclip.story.v1', title: `Catalogue H parity: ${name}`, lane: 'motion', format: FORMATS[shape], brand: BRAND, base: null,
+  scenes: [{id: 'el', module: id, start: 0, end: SCENE, params: {...params, variant}}]}, sceneId: 'el', threshold: {ssim: 0.97}}});
+
+/** {name, fixture} for every module variant (portrait), default (landscape) and extra case. */
 export function elementFixtures(ids = Object.keys(MODULES)) {
   const out = [];
-  for (const id of ids) for (const [i, variant] of VARIANTS[id].entries()) for (const shape of i === 0 ? ['portrait', 'landscape'] : ['portrait']) {
-    const name = fixtureName(id, variant, shape);
-    out.push({name, fixture: {story: {schema: 'launchclip.story.v1', title: `Catalogue H parity: ${name}`, lane: 'motion', format: FORMATS[shape], brand: BRAND, base: null,
-      scenes: [{id: 'el', module: id, start: 0, end: SCENE, params: {...SAMPLES[id], variant}}]}, sceneId: 'el', threshold: {ssim: 0.97}}});
-  }
+  for (const id of ids) for (const [i, variant] of VARIANTS[id].entries()) for (const shape of i === 0 ? ['portrait', 'landscape'] : ['portrait']) out.push(fixture(fixtureName(id, variant, shape), id, variant, shape, SAMPLES[id]));
+  for (const extra of EXTRA_SAMPLES) if (ids.includes(extra.module) && MODULES[extra.module]) out.push(fixture(`h-${extra.name}`, extra.module, extra.variant, extra.shape, extra.params));
   return out;
 }
 
@@ -55,7 +55,8 @@ async function main(argv) {
   }
   if (opts.command !== 'run') throw new Error('usage: element-parity.mjs fixtures|run [--modules a,b] [--out dir]');
   const {DEFAULT_ENTRY, bundleRemotion, runParity} = await import('./parity.mjs');
-  const files = (await readdir(FIXTURES)).filter(file => ids.some(id => file.startsWith(`h-${id}-`) && VARIANTS[id].some(v => file === `${fixtureName(id, v, 'portrait')}.json` || file === `${fixtureName(id, v, 'landscape')}.json`))).sort();
+  const names = new Set(elementFixtures(ids).map(entry => `${entry.name}.json`));
+  const files = (await readdir(FIXTURES)).filter(file => names.has(file)).sort();
   const work = await mkdtemp(path.join(os.tmpdir(), 'launchclip-element-parity-'));
   const rows = [];
   try {

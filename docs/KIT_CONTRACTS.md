@@ -971,6 +971,186 @@ export function driftPlan({rect, level, start, end, canvas, bounds, minTextPx, m
 export function driftStateAt(drift, t) / driftStyle(drift, t) / driftGsap(drift) / driftExtent(rect, drift)
 ```
 
+## Backgrounds and panels (`kit/core/backgrounds.mjs`, `kit/core/panels.mjs`)
+
+Seeded styles ([SEEDED_STYLES_RFC.md](SEEDED_STYLES_RFC.md) §3.2, phase 2)
+choose the plate's background and the card surface once per video. A style
+pack carries them as `background` and `layouts.panel`; `applyStyle` merges
+them into the story as `story.background` and `story.panel`, and the
+renderers read only the story. Both files are plain ESM: `backgrounds.mjs`
+imports only `./ambient.mjs`, `./panels.mjs` and `./icons.mjs`, and
+`panels.mjs` imports nothing.
+
+### `story.background`
+
+```json
+{ "background": { "kind": "dot-grid", "params": { "scale": 1.2, "density": 0.4, "color": "paper" } } }
+```
+
+| Kind | Params (range, default) | Motion |
+|---|---|---|
+| `flat` | none | still |
+| `gradient` | angle 0–360 (160), intensity 0–1 (0.5), speed 0–2 (1), color | the gradient turns ±5° |
+| `grain-gradient` | gradient's, plus grain 0–1 (0.4) | the gradient turns; the grain is still |
+| `paper` | grain 0–1 (0.5), intensity 0–1 (0.4) | still |
+| `geometric` | density, scale 0.5–2 (1), intensity, speed, color | two depths of outlined shapes drift and turn |
+| `blobs` | none | today's ambient field; the default when `background` is absent |
+| `dot-grid` | scale, density, intensity, speed, color | the grid sways by half a cell |
+| `mesh` | intensity, scale, speed | four corner washes drift and breathe |
+| `stripes` | angle 0–180 (45), scale, density 0.15–0.6 (0.35), intensity (0.35), speed, color | the bands sway across |
+| `topographic` | density, scale, intensity, speed, color | contours drift and turn ±1° |
+| `halftone` | angle 0–360 (135), scale, intensity, speed, color | the screen sways |
+| `light-rays` | angle −60–60 (0), density, intensity, speed, color | the rays swing ±3° |
+| `icon-pattern` | icons, scale, spacing 0.5–2 (1), rotation −45–45 (0), offset 0–1 (0.5), opacity 0.02–0.12 (0.06), stroke 1–3 (1.75), speed, color | the tile sways |
+| `icon-scatter` | icons, scale, density, jitter 0–1 (0.5), opacity, stroke, speed, color | the scatter drifts |
+| `logo-pattern` | scale, spacing, offset, opacity, speed | the tile sways |
+| `motif` | shape, scale, weight 0.5–3 (1.5), opacity 0.02–0.2 (0.08), angle 0–180 (45, hatch only), speed, color | the motif sways |
+| `texture` | type, amount 0–1 (0.5), scale | still |
+
+`color` is `primary`, `accent` or `paper` (each kind has its own default).
+Density, intensity and grain default to 0.5 unless the table says otherwise.
+Option params:
+
+- **`fade`** (every kind but blobs): `none` (the default), `center`, `top`,
+  `bottom`, `left` or `right`. The fade names the area to keep calm: the
+  field container takes a mask that is transparent there and opaque away from
+  it (`fieldStyle(plan)`), so the content area stays quiet. A fade never
+  raises a tone, so the gate checks the pattern's peak.
+- **`shape`** (`motif`): `plus`, `circle`, `chevron`, `wave`, `hatch` or
+  `crosshatch`.
+- **`type`** (`texture`): `noise`, `fibre`, `canvas` or `linen`.
+- **`icons`** (`icon-pattern`, `icon-scatter`): `"auto"` (the default) or 1–8
+  icon names from `kit/core/icons.mjs`. `patternIcons(story, icons)` resolves
+  `"auto"` to the icons the scenes name, at most 6, else
+  `DEFAULT_PATTERN_ICONS`.
+- **`logo-pattern`** tiles the brand frame's `frame.logo` file. It draws
+  nothing without one. The layer's SVG names the file as `LOGO_SRC`, and
+  `layerSvg(layer, resolve)` swaps in each renderer's URL (`staticFile` in
+  Remotion). The logo keeps its own colours, so the white and black extremes
+  at its opacity both count as tones.
+
+Icons and motifs are drawn as SVG tiles (a data-URI `background-image`), the
+scatter as one inline SVG. `validateStory` checks the kinds, ranges and
+options (`STORY_BACKGROUND_PARAMS` and `STORY_BACKGROUND_OPTIONS`, kept in step
+with `BACKGROUND_PARAMS` and `BACKGROUND_OPTIONS` by test), and so does
+`backgroundErrors(value)`, which also checks icon names.
+
+- **Colour.** Every layer takes its colour from the palette. Each colour a
+  layer lays over `bg` is clamped (`safeAlpha`) so text in `paper`, the
+  modules' foreground, keeps 4.5:1 on it, or bg's own ratio when that is
+  already lower. Grain is clamped at both extremes, toward white and toward
+  black. `backgroundPlan(story).tones` lists every colour text can sit on.
+- **Motion** obeys the ambient level, which is story-wide (`fieldLevel`). Level
+  off draws the background still; subtle, standard and lively scale its speed
+  by 0.6, 1 and 1.4, and `params.speed` scales it again (0 keeps it still).
+  Every layer axis is an ambient wave axis, so GSAP plays it as half-period
+  `sine.inOut` tweens (`layerTweens`, through `axisSegments`), and Remotion
+  evaluates the same cosine per frame (`layerStateAt`).
+- **Where it draws.** It draws wherever the field draws today: inside every
+  track-0 plate (`.lc-ambient-field` holding `.lc-bg-layer` divs in
+  HyperFrames; `BackgroundField` in `SceneLayer` in Remotion), and in loop
+  clones. `sceneBackground(story, scene)` decides whether a plate draws it.
+  For blobs that is the field's own rule. Any other kind draws at every level
+  unless `ambient.background` is false or the lane is footage-led. In world
+  camera mode the background sits fixed to the screen under the camera, and
+  the depth layer drops its glows.
+- **No background** (or `kind: "blobs"`) leaves the render byte for byte as
+  before: `backgroundPlan` returns null, and the compilers draw
+  `ambientField`. Segment digests (`src/render_segments.js`) gain a
+  `background` key only when a kind is set.
+
+```js
+export const BACKGROUND_KINDS, BACKGROUND_PARAMS, BACKGROUND_COLORS
+export function backgroundErrors(value, path?)       // → string[]
+export function storyBackground(story)               // → {kind, params} with defaults filled; blobs when absent
+export function sceneBackground(story, scene)        // → boolean: does this plate draw it
+export function backgroundPlan(story)                // → {kind, level, params, colors, layers, tones} | null (blobs)
+export function backgroundTones(story)               // → ["#rrggbb", ...] text can sit on
+export function layerStateAt(layer, t) / layerTransform(state) / layerStyle(layer, t) / layerCss(layer, t) / layerTweens(layer, from, to)
+export function backgroundContrastFindings(story, {captions}) // the layout gate's findings
+```
+
+A layer is `{id, box: {x, y, width, height}, style, svg, axes}`: inline CSS in
+camelCase, optional SVG markup, and wave axes on `x`, `y` (px), `rotation`
+(degrees) and `scale`. The transform pivots on the box centre in GSAP's 2D
+order: translate, then rotate, then scale.
+
+### `story.panel`
+
+```json
+{ "panel": { "treatment": "soft-shadow", "radius": 18, "fill": { "kind": "icon-pattern", "params": { "opacity": 0.08, "fade": "center" } } } }
+```
+
+`treatment` is one of `solid`, `glass`, `paper`, `outline` and `soft-shadow`.
+`radius` runs from 0 to 48 px at a 1080 px short side; the default is 32.
+`panelSurfaceStyle(treatment, {colors, unit, border, radius})` returns the
+surface CSS. Every treatment follows the theme: `panelTheme(colors)` reads
+light or dark from `bg`, and the shadows, borders and glass tint change with
+it. Text keeps the module's own colour, and each fill (`panelFill`) stays on
+the background's side of the contrast.
+
+| Treatment | Surface |
+|---|---|
+| `solid` | an opaque bg card with a thin border and drop shadow (today's card) |
+| `glass` | a translucent card with an 18 px backdrop blur and a hairline border |
+| `paper` | a sheet a shade off bg, with a crisp edge shadow |
+| `outline` | a 3 px primary border over a 35% bg wash, no shadow |
+| `soft-shadow` | an opaque card with no border, lifted by a wide soft shadow |
+
+`resolveModule` copies `storyPanel(story)` onto the model as `model.panel`.
+Catalogue G's `cardSurface` (the card behind `surface: "card"` modules, which
+is the default over footage) draws it in both renderers. Without
+`story.panel`, the card is today's card.
+
+`fill` (optional) is a background `{kind, params}`, any kind but blobs
+(`panelFillErrors`). It is drawn by the same layer renderer and clipped to
+the panel. `panelFillPlan(story, {width, height, bg})` lays it on the panel's
+colour, at the canvas's px scale.
+
+- **Footage-layout panels** (split, framed, stacked, insert): `#lc-layout-fill`
+  in HyperFrames and `LayoutFill` in Remotion sit just above the layout frame.
+  They cover the canvas, clipped by `layoutFillClip(state, canvas)`: an
+  even-odd `clip-path` of the canvas minus the presenter's rounded window. The
+  clip is set on the same frames as the frame element (the layout ops), so a
+  `layout-shift` carries the pattern with the panel. The pattern moves with
+  the ambient level, like the plate's.
+- **Catalogue G cards** hold the fill still (`cardFillStyles`, at t = 0, with
+  inline SVG as a data URI) in an `overflow: hidden` box with the card's
+  radius and the fill's fade. A logo pattern needs a resolved file URL, so it
+  draws only in layout panels.
+
+### Contrast gate
+
+`layout-check` adds `background-contrast` errors from
+`backgroundContrastFindings`. It checks, on every background tone:
+
+- text in paper, on the plain background and on the story's panel surface
+  composited over each tone, at 4.5:1. A `panel.fill` adds its own tones on
+  top of each panel tone. A story with a panel fill and no background kind is
+  checked on its panel too;
+- caption words in their idle colour at 3:1, the large-type floor. Captions
+  with a 4 px or wider outline, a plate, a band or chips behind them are
+  exempt.
+
+### Fixtures and sheet
+
+- `test/fixtures/parity-backgrounds/` holds one story fixture per kind
+  (`bg-<kind>`; every motif shape and texture type; a faded icon pattern on a
+  light palette). It also holds one per treatment on a dark and a light
+  palette (`panel-<treatment>-<theme>`, over `mesh`), card fills
+  (`panel-fill-card-*`) and a split-layout panel fill (`layout-panel-fill`,
+  on `examples/story/layouts-wide`). Each fixture is
+  `{project, times, patch, files?}`: `patch` replaces top-level storyboard
+  keys, and `files` writes small files (a logo) into the copy.
+  - `node scripts/parity-backgrounds.mjs [--only …]` renders them through
+    both renderers.
+  - `LAUNCHCLIP_PARITY=1 node --test test/parity.test.js` renders them too.
+  - Every sample must reach SSIM 0.97.
+- `node scripts/background-sheet.mjs` renders a still of every kind on a
+  light and a dark palette into `qa/background-sheet/sheet.png`. It also
+  writes split-layout panel fills (an icon pattern and a linen texture, on
+  both palettes) to `panels.png`.
+
 ## World camera (`kit/core/camera-world.mjs`)
 
 ```json
@@ -1804,7 +1984,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
 
 | Module | Params | Events | Notes |
 | --- | --- | --- | --- |
-| `cast-scene` | `set` desk-laptop/phone/meeting/screen, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?}], says?: [{from, to, words?}], holds?: phone}`, `light?` `{dir?, color?, intensity?}` | `<character>-cue-<i>` | Fills the frame and fades in place. Seated sets (desk-laptop, meeting) seat the cast and refuse `walk`; standing sets refuse `sit`. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
+| `cast-scene` | `set` desk-laptop/phone/meeting/screen/kitchen-counter/sofa/podium/stage/car/park-bench/video-call/standing-desk, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?}], says?: [{from, to, words?}], holds?: phone}`, `light?` `{dir?, color?, intensity?}` | `<character>-cue-<i>` | Fills the frame and fades in place. Seated sets (desk-laptop, meeting, sofa, car, park-bench, video-call) seat the cast and refuse `walk`; standing sets refuse `sit` (except for a wheelchair user). In `podium` the first character speaks at the lectern; in `car` the first drives; `video-call` gives each character a tile (a row in landscape, a column in portrait) and masks everything outside the tiles. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
 | `character-cameo` | `character`, `pose?`, `expression?`, `facing?`, `cues?`, `says?`, `side` left/right, `card?` `{kicker? ≤ 32, title ≤ 64, body? ≤ 140}`, `panel?`, `light?` | `<character>-cue-<i>` | One character beside a card (landscape: a column; portrait: under the card), or alone on a panel. `sit` is refused. Placed in the safe zone narrowed to the brand frame's safe area (`createBase(..., {frameSafe: true})`); `rect?` (guided and bespoke tiers) places it inside that |
 
 ### The kit (`kit/core/characters/`)
@@ -1865,7 +2045,9 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   groups; expressions crossfade over 0.16 s; mouths open on spoken words (two
   flaps on a long word, a steady rhythm when a range has no word timings).
 - `sets.mjs`: the room, furniture and slots for each set (left to right; a
-  slot faces the middle of the frame).
+  slot faces the middle of the frame): desk-laptop, phone, meeting, screen,
+  kitchen-counter, sofa, podium, stage, car, park-bench, video-call and
+  standing-desk.
 - `cues.mjs`: story casts, direction-map cues and the consistency check.
 - `bounds.mjs`: `drawingBounds(drawing)`, the box a drawing reaches with its
   joints applied. `actorReach(actor)` (catalog-characters.mjs) unions it
@@ -2535,9 +2717,35 @@ counting text is precomputed per frame, reels and flaps are tweens.
 | `countdown` | digits, ring, clock | `from`, `to`, `step` (fits the scene), `end`, `tone` | start, zero | Each tick sets the number and punches it in; the ring depletes and the clock's bar drains linearly; `end` replaces zero. The label sits above the count |
 | `percent-fill` | liquid, battery, bar | `value`, `max` (100), `format`, `span`, `tone` | fill | Liquid rises in a round flask under a sliding wave; a battery or bar fills; the figure counts and takes the fill's ink when it sits on the fill |
 
+### Boxes and frames (`catalog-h-frames.mjs`, `catalog-h-paper.mjs`, `catalog-h-callouts.mjs`)
+
+Handmade shapes (torn edges, tape ends, starbursts, shields) are static
+clip-path polygons. Torn edges come from a seed of the element's own text
+(`seeded`, `tornPolygon`), so the same note always tears the same way. Speech
+and thought outlines are SVG: a stroked layer under a filled layer of the
+same shapes, so a cloud's bumps and a tail read as one outlined shape. Images
+are project-local `assets/` paths. Without one, a device frame draws a mock
+screen in the brand (nav, cards and a chart, or a phone's card stack) and a
+polaroid a brand gradient with an icon, so nothing shows empty.
+
+| Module | Variants | Params (beyond at, rect) | Events | Motion |
+| --- | --- | --- | --- | --- |
+| `device-frame` | clay, dark, outline | `device` browser/phone/laptop/tablet (default phone in 9:16, browser in 16:9), `image`, `fit`, `title`, `url`, `caption` | show | The device rises and settles (a phone untilts), the screen wipes on top to bottom, mock blocks rise in turn |
+| `window-chrome` | mac, minimal, terminal | `lines` 1–8 or `image`, `title`, `stagger`, `caption` | show, line-&lt;i&gt; | Lines rise in turn; terminal lines type on after a `$` prompt (a linear clip wipe at about 28 characters a second) and a block cursor blinks once the last is typed |
+| `polaroid` | single, stack, pinned | `image` (or `icon` on a brand gradient), `caption`, `tilt` | show | Drops in with back.out and untilts; the photo develops from dark; stack fans two frames behind; pinned drops a pin |
+| `sticker` | die-cut, round, burst | `text` ≤ 24, `icon`, `tone`, `tilt`, `size` | slap | Slaps on from 1.7× and +18° with back.out(2.2), then a shine sweeps across inside its shape |
+| `torn-paper` | note, strip, scrap | `text` ≤ 140, `kicker`, `tilt` | show | The sheet lands (its drop shadow follows the torn edge), then the words wipe on |
+| `tape-note` | corners, top, sides | `title`, `text`, `icon`, `tone` (tape), `tilt` | show | The note drops, then each strip of tape presses down |
+| `badge` | starburst, circle, shield | `text` ≤ 14, `sub`, `icon`, `tone`, `tilt` | stamp | Spins in from −140° and scale 0 with back.out(1.8) |
+| `ribbon` | banner, flag, tag | `text` ≤ 32, `tone`, `tilt` | unfurl | Unfurls from its centre (scale and a clip together); banner tails fold out behind |
+| `speech-bubble` | rounded, comic, chat | `text` ≤ 120, `type` speech/thought, `tail` bottom-left/bottom-right/left/right, `name` | pop | Pops from its tail point with back.out(1.9); thought clouds trail three puffs toward the tail |
+| `tooltip` | dark, light, brand | `text`, `title`, `target` (canvas px) | show | A dot lands on the target with a looping pulse ring; the box rises above it, or below when the rect has no room above |
+| `callout-arrow` | curve, straight, sketch | `text`, `target`, `from` (canvas px), `circle`, `tone` | point | The label pops, the shaft draws on, the head flicks, a ring draws round the target; sketch adds an echo stroke and an italic note |
+
 ### Tools
 
-- `scripts/element-samples.mjs`: sample params for every module.
+- `scripts/element-samples.mjs`: sample params for every module, plus
+  `EXTRA_SAMPLES` (cases beyond one per variant, such as a framed screenshot).
 - `node scripts/element-sheet.mjs`: a contact sheet of every variant (the
   frame-pure state Remotion draws), or `--parity qa/parity` for the
   HyperFrames stills of a parity run with their SSIM.

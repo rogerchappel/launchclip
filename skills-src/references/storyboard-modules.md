@@ -167,6 +167,13 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | counts down to a moment ("in 3, 2, 1", "launches in", "doors open"): each number punches in, then the end word | countdown |
 | turns a date, year or time over ("from 2024 to 2026", "at midnight"): split-flap cards flip to the new value | flip-clock |
 | names who or what it is for among several ("for founders, teachers or creators", "whatever you make"): a reel of words spins and lands on one | slot-roll |
+| shows the product on a device ("on your phone", "in the browser", "on any laptop"): a browser, phone, laptop or tablet frame with a screenshot from the assets (or a brand mock screen) | device-frame |
+| runs real commands or shows real lines in a terminal or app window ("run", "type", "one command"): the lines type on in a window | window-chrome |
+| voices what someone says or thinks ("they asked", "you're thinking", "what if"): a speech or thought bubble pops from its tail | speech-bubble |
+| stamps one short label on the moment ("new", "free", "beta", "sale"): a die-cut, round or starburst sticker slaps on | sticker |
+| awards or certifies something ("award-winning", "certified", "open source", "version 2"): a badge spins in and stamps down | badge |
+| points at one thing on screen ("see this", "right here", "this button"): an arrow draws from a label to the spot and rings it | callout-arrow |
+| explains one control or spot in the product ("hover", "click here", "tap"): a dot lands on it and a tooltip rises beside it | tooltip |
 | states one real percentage of a whole ("87% of renders", "nine in ten"): a ring fills while it counts | progress-ring |
 
 ## Modules
@@ -1192,10 +1199,157 @@ params:
 events: fill
 variants: liquid (default), battery, bar
 
-### cast-scene (keeps captions)
-One to three animated characters in a set (desk-laptop, phone, meeting, screen), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
+### device-frame (keeps captions)
+A browser, phone, laptop or tablet frame rises in and its screen wipes on: a project image, or a mock screen in the brand (blocks, cards and a chart) with an optional title.
 params:
-- set: desk-laptop | phone | meeting | screen
+- device: "browser" | "phone" | "laptop" | "tablet" (default phone in 9:16, browser in 16:9)
+- image: assets/… screenshot (optional; else a mock screen)
+- fit: "cover" | "contain"
+- title: string ≤ 48 on the mock screen (optional)
+- url: string ≤ 60 in the browser bar (optional)
+- caption: string ≤ 80 under the frame (optional)
+- at: lands: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: show
+variants: clay (default), dark, outline
+
+### window-chrome (keeps captions)
+An app window with title-bar chrome around lines of text (rising in) or an image; the terminal variant types each line on after a prompt and leaves a blinking cursor.
+params:
+- lines: [string ≤ 64] 1–8 (or image)
+- image: assets/… image (or lines)
+- title: string ≤ 40 in the title bar (optional)
+- stagger: seconds between lines (default fits the scene, ≤ 0.32)
+- caption: string ≤ 80 under the window (optional)
+- at: lands: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: show, line-<i>
+variants: mac (default), minimal, terminal
+
+### polaroid (keeps captions)
+An instant photo drops in, tilts to rest and develops from dark, with a handwritten-style caption; single, a stack of three, or pinned.
+params:
+- image: assets/… photo (optional; else a brand gradient with an icon)
+- icon: icon for the placeholder photo (default "image")
+- caption: string ≤ 40 (optional)
+- tilt: degrees −20–20 (default −4)
+- at: drops: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: show
+variants: single (default), stack, pinned
+
+### sticker (keeps captions)
+A die-cut sticker slaps on with a white edge and a shine sweep: a label with an optional icon, a round sticker, or a starburst.
+params:
+- text: string ≤ 24 (uppercased; or icon)
+- icon: icon name (optional)
+- tone: fill (primary | accent | paper | #rrggbb; default primary)
+- tilt: degrees −20–20 (default −8)
+- size: scale 0.5–1.5
+- at: slap: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: slap
+variants: die-cut (default), round, burst
+
+### torn-paper (keeps captions)
+A scrap of torn paper lands with a shadow that follows its ragged edge, and its words wipe on: a lined note, a torn headline strip in the brand colour, or a scrap torn on every side.
+params:
+- text: string ≤ 140, required
+- kicker: string ≤ 28 above the text (optional)
+- tilt: degrees −20–20
+- at: lands: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: show
+variants: note (default), strip, scrap
+
+### tape-note (keeps captions)
+A paper note drops onto the frame and strips of translucent tape press it down (two corners, the top, or both sides); a title, optional body and icon.
+params:
+- title: string ≤ 48, required
+- text: string ≤ 120 (optional)
+- icon: icon name (optional)
+- tone: tape colour (primary | accent | paper | #rrggbb; default accent)
+- tilt: degrees −20–20 (default 2)
+- at: lands: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: show
+variants: corners (default), top, sides
+
+### badge (keeps captions)
+A badge spins in and stamps down: a starburst, a seal with a dashed ring, or a shield, with a word (NEW, FREE, V2) and an optional sub-line and icon.
+params:
+- text: string ≤ 14, required (uppercased)
+- sub: string ≤ 20 (optional)
+- icon: icon name (optional)
+- tone: fill (primary | accent | paper | #rrggbb; default primary)
+- tilt: degrees −20–20 (default −10)
+- at: stamp: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: stamp
+variants: starburst (default), circle, shield
+
+### ribbon (keeps captions)
+A ribbon unfurls from its centre with a word or short line: a banner with folded tails, a flag with a notched end, or a price-tag shape.
+params:
+- text: string ≤ 32, required (uppercased)
+- tone: fill (primary | accent | paper | #rrggbb; default primary)
+- tilt: degrees −20–20
+- at: unfurls: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: unfurl
+variants: banner (default), flag, tag
+
+### speech-bubble (keeps captions)
+A speech or thought bubble pops out of its tail with the line inside: a soft rounded bubble, a bold comic bubble with an ink outline, or a chat message; optional speaker name.
+params:
+- text: string ≤ 120, required
+- type: "speech" | "thought"
+- tail: "bottom-left" | "bottom-right" | "left" | "right" (default bottom-left)
+- name: speaker ≤ 24 (optional)
+- at: pops: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: pop
+variants: rounded (default), comic, chat
+
+### tooltip (keeps captions)
+A tooltip points at a spot on screen: a pulsing dot lands on the target and a box with an arrow rises beside it (above, or below when there is no room); dark, light or brand.
+params:
+- text: string ≤ 70, required
+- title: string ≤ 28 (optional)
+- target: {x, y} canvas px the tooltip points at (default the centre, a little low)
+- at: shows: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: show
+variants: dark (default), light, brand
+
+### callout-arrow (keeps captions)
+A label and an arrow that draws on from it to a point on screen, then rings the target: a curved arrow from a pill, a straight one, or a hand-drawn sketch with an italic note.
+params:
+- text: string ≤ 40, required
+- target: {x, y} canvas px the arrow points at (default lower right)
+- from: {x, y} canvas px where the label sits (default upper left)
+- circle: boolean: ring the target (default true)
+- tone: primary | accent | paper | #rrggbb
+- at: points: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: point
+variants: curve (default), straight, sketch
+
+### cast-scene (keeps captions)
+One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk), acting on cues: named poses and expressions at times or narration words, mouths moving on their lines. The screen set plays a real capture.
+params:
+- set: desk-laptop | phone | meeting | screen | kitchen-counter | sofa | podium | stage | car | park-bench | video-call | standing-desk
 - screen: {src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)
 - cast: [{id, position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: inward), cues?: [{at, pose?, expression?}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: stand, point, wave, slump, type, think, cheer, shrug, walk, sit; expressions: neutral, happy, delighted, frustrated, confused, surprised, focused
 - light: {dir?: degrees the key light comes from (0 right, 90 above, 180 left), color?: hex, intensity?: 0–1} (default: the world's light, else a soft key from the upper left); shaded drawing styles follow it
@@ -1308,6 +1462,17 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | slot-roll | 2 s | 0.5 s | scene − 0.65 s | the count or roll runs from at and lands before the exit |
 | countdown | 2 s | 0.5 s | scene − 0.65 s | the count or roll runs from at and lands before the exit |
 | percent-fill | 2 s | 0.5 s | scene − 0.65 s | the count or roll runs from at and lands before the exit |
+| device-frame | 2 s | 0.5 s | scene − 0.65 s | the frame lands at at, its screen fills 0.3 s later |
+| window-chrome | 2 s | 0.5 s | scene − 0.65 s | the frame lands at at, its screen fills 0.3 s later |
+| polaroid | 2 s | 0.5 s | scene − 0.65 s | the element lands at at |
+| sticker | 2 s | 0.5 s | scene − 0.65 s | the element lands at at |
+| torn-paper | 2 s | 0.5 s | scene − 0.65 s | the element lands at at |
+| tape-note | 2 s | 0.5 s | scene − 0.65 s | the element lands at at |
+| badge | 2 s | 0.5 s | scene − 0.65 s | the element lands at at |
+| ribbon | 2 s | 0.5 s | scene − 0.65 s | the element lands at at |
+| speech-bubble | 2 s | 0.5 s | scene − 0.65 s | the callout lands at at |
+| tooltip | 2 s | 0.5 s | scene − 0.65 s | the callout lands at at |
+| callout-arrow | 2 s | 0.5 s | scene − 0.65 s | the callout lands at at |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | world | 2 s | 0 s | scene − 0 s | a world fills the frame for the whole scene; its camera move runs from the scene start to its end; put characters, cards and captions on higher tracks over it |

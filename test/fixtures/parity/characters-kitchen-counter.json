@@ -1,0 +1,77 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Character parity: cast-scene kitchen-counter (portrait), soft-shade",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "platform": "youtube-shorts",
+      "fps": 30,
+      "duration": 4
+    },
+    "brand": {
+      "colors": {
+        "bg": "#06070d",
+        "primary": "#fdb022",
+        "accent": "#46d4ff",
+        "ink": "#06070d",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "cast": {
+      "style": "soft-shade",
+      "characters": [
+        {
+          "id": "oliver"
+        },
+        {
+          "id": "amara"
+        }
+      ]
+    },
+    "scenes": [
+      {
+        "id": "set",
+        "module": "cast-scene",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "set": "kitchen-counter",
+          "cast": [
+            {
+              "id": "oliver",
+              "expression": "happy",
+              "pose": "point",
+              "cues": [
+                {
+                  "at": 1.5,
+                  "pose": "wave"
+                },
+                {
+                  "at": 2.6,
+                  "expression": "delighted"
+                }
+              ]
+            },
+            {
+              "id": "amara",
+              "expression": "happy",
+              "pose": "stand"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "sceneId": "set",
+  "threshold": {
+    "ssim": 0.97
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "project": "examples/story/minimal",
+  "times": [
+    1.2,
+    5.5
+  ],
+  "describe": "logo-pattern: the brand frame logo tiled in offset rows",
+  "files": {
+    "assets/bg-logo.svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" viewBox=\"0 0 64 64\"><rect x=\"6\" y=\"6\" width=\"52\" height=\"52\" rx=\"14\" fill=\"#fdb022\"/><path d=\"M20 44V20h8l8 14 8-14h0v24\" fill=\"none\" stroke=\"#06070d\" stroke-width=\"6\" stroke-linejoin=\"round\"/></svg>\n"
+  },
+  "patch": {
+    "frame": {
+      "logo": "assets/bg-logo.svg",
+      "kicker": {
+        "logo": false,
+        "label": "Minimal"
+      }
+    },
+    "background": {
+      "kind": "logo-pattern",
+      "params": {
+        "opacity": 0.1
+      }
+    }
+  }
+}

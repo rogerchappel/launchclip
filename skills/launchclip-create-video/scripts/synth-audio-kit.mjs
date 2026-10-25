@@ -273,7 +273,7 @@ export function kitVariants({ palette = null, seed = DEFAULT_KIT_SEED, families 
     }
     const { intent, variants } = FAMILY_BUILDERS[family];
     for (let variant = 1; variant <= variants; variant++) {
-      const spec = familySpec(family, timbre, rng(`${seed}|${timbre.id}|${family}|${variant}`));
+      const spec = familySpec(family, timbre, rng(`${seed}|${timbre.id}|${family}|${variant}`), rng(`${seed}|${timbre.id}|kit`));
       entries.push({ name: variantFileName(family, variant).replace(/\.wav$/, ''), family, variant, duration: spec.duration, intent, spec });
     }
   }
@@ -484,7 +484,9 @@ export function genreGraph(bed, { seconds, kickFrom, kickTo, gains }) {
     }
   });
   if (bed.crackle > 0) {
-    parts.push(`aevalsrc=exprs='gt(random(0),0.9992)*(2*random(1)-1)|gt(random(2),0.9992)*(2*random(3)-1)':s=${RATE}:d=${fmt(seconds)},highpass=f=1500,lowpass=f=6000,volume=${fmt(bed.crackle * 40)}[crackle]`);
+    // Faded like the bed: unseeded random() can fire on the very first sample.
+    const fade = roleEnvelope('always', { seconds, kickFrom, kickTo, beat: bed.beat });
+    parts.push(`aevalsrc=exprs='${fade}*gt(random(0),0.9992)*(2*random(1)-1)|${fade}*gt(random(2),0.9992)*(2*random(3)-1)':s=${RATE}:d=${fmt(seconds)},highpass=f=1500,lowpass=f=6000,volume=${fmt(bed.crackle * 40)}[crackle]`);
     dry.push('[crackle]');
   }
   let inputs = dry.join('');

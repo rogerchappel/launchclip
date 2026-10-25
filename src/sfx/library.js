@@ -16,6 +16,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { densityValue } from "../../kit/core/sound/options.mjs";
 
 export const LIBRARY_SCHEMA = "launchclip.sfx-library.v1";
 export const LIBRARY_FILE = "library.json";
@@ -172,21 +173,36 @@ export function eventKey(storyId, cue) {
 }
 
 /**
- * Thin optional cues for a density. "normal" and "high" keep every cue;
- * "low" keeps hits and drops about half of the optional cues (module events,
- * transitions, word ticks) by a deterministic hash of their event key.
+ * A density (low, normal, high, or a style pack's sound.sfx_density from 0
+ * to 1) → a number in [0, 1]. low is 0.25, normal 0.6, high 1. Throws on
+ * anything else.
  */
-export function applyDensity(cues, density = "normal", storyId = "") {
-  const level = density ?? "normal";
-  if (!SFX_DENSITIES.includes(level)) throw new Error(`sfx density must be one of ${SFX_DENSITIES.join(", ")}; got ${density}`);
-  if (level !== "low") return cues;
-  return cues.filter((cue) => !cue.optional || unitHash(`density|${eventKey(storyId, cue)}`) < 0.5);
+export function densityAmount(density = "normal") {
+  const value = densityValue(density ?? "normal");
+  if (value === null) throw new Error(`sfx density must be one of ${SFX_DENSITIES.join(", ")} or a number from 0 to 1; got ${density}`);
+  return value;
 }
 
-/** Typing-track tuning per density. */
+/**
+ * Thin cues for a density. "normal" and "high" (0.6 and above) keep every
+ * cue; "low" (0.25) keeps hits and drops about half of the optional cues
+ * (module events, transitions, word ticks) by a deterministic hash of their
+ * event key. In between, the share of optional cues kept scales linearly;
+ * below 0.25 the hits thin too, down to about a third at 0.
+ */
+export function applyDensity(cues, density = "normal", storyId = "") {
+  const value = densityAmount(density);
+  if (value >= 0.6) return cues;
+  const keepOptional = value >= 0.25 ? 0.5 + ((value - 0.25) / 0.35) * 0.5 : 0.5 * (0.4 + (0.6 * value) / 0.25);
+  const keepHits = value >= 0.25 ? 1 : 0.35 + (0.65 * value) / 0.25;
+  return cues.filter((cue) => (cue.optional ? unitHash(`density|${eventKey(storyId, cue)}`) < keepOptional : keepHits >= 1 || unitHash(`density-hit|${eventKey(storyId, cue)}`) < keepHits));
+}
+
+/** Typing-track tuning per density (numbers map to the nearest word: below 0.4 low, 0.85 and above high). */
 export function densityTyping(density = "normal") {
-  if (density === "low") return { maxRate: 15, words: false };
-  if (density === "high") return { maxRate: 30, words: true };
+  const value = densityAmount(density);
+  if (value < 0.4) return { maxRate: 15, words: false };
+  if (value >= 0.85) return { maxRate: 30, words: true };
   return { maxRate: 25, words: true };
 }
 

@@ -44,6 +44,7 @@ import { captionChunksFrom, chunkWords, narrationWords, visibleChunks } from "..
 import { cameraOps } from "../kit/core/catalog-c.mjs";
 import { backgroundFieldTiles, backgroundLayer, blurAt, cameraPlan, containerState, objectRectFromModel, opsStateAt, overlayOps } from "../kit/core/camera-world.mjs";
 import { ambientField, blobStateAt } from "../kit/core/ambient.mjs";
+import { backgroundPlan } from "../kit/core/backgrounds.mjs";
 import { allFontFaces } from "../kit/core/fonts.mjs";
 import { resolveModule } from "../kit/core/modules.mjs";
 import { storyBase } from "../kit/core/story.mjs";
@@ -346,7 +347,10 @@ export function globalSettings(story, { models = sceneModels(story), base = null
     // The ambient background field is seeded from the title and takes its
     // default level from the dominant scene energy, so it varies with fields
     // that are otherwise outside the hash.
-    ambient: ambientField(story)
+    ambient: backgroundPlan(story) ? null : ambientField(story),
+    // A background kind (kit/core/backgrounds.mjs) replaces the field; keyed
+    // only when set, so stories without one keep their digests.
+    ...(backgroundPlan(story) ? { background: backgroundPlan(story) } : {})
   };
 }
 
@@ -426,10 +430,11 @@ export function segmentCamera(story, models, fps) {
   const plan = cameraPlan(story, { windows: sceneWindows(story), objects });
   if (!plan) return null;
   // The depth layer is the tiled ambient field when there is one, else glows.
-  const field = plan.background ? ambientField(story) : null;
+  const field = plan.background && !backgroundPlan(story) ? ambientField(story) : null;
   const blobs = new Map((field?.blobs ?? []).map((blob) => [blob.id, blob]));
   const tiles = backgroundFieldTiles(plan, field);
-  const glows = plan.background && !tiles.length ? backgroundLayer(plan, story.brand).glows : [];
+  // A background kind in world mode sits fixed under the camera, in place of the glows.
+  const glows = plan.background && !tiles.length && !(plan.mode === "world" && backgroundPlan(story)) ? backgroundLayer(plan, story.brand).glows : [];
   const r4 = (value) => Math.round(value * 1e4) / 1e4;
   const state = (t) => {
     const c = containerState(plan, t);

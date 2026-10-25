@@ -1,0 +1,27 @@
+{
+  "describe": "split-layout panels (footage-led) filled with an icon pattern",
+  "project": "examples/story/layouts-wide",
+  "times": [
+    3.5,
+    6.2,
+    8.5
+  ],
+  "patch": {
+    "panel": {
+      "treatment": "solid",
+      "fill": {
+        "kind": "icon-pattern",
+        "params": {
+          "icons": [
+            "rocket",
+            "chart-up",
+            "users",
+            "sparkle",
+            "shield"
+          ],
+          "opacity": 0.08
+        }
+      }
+    }
+  }
+}

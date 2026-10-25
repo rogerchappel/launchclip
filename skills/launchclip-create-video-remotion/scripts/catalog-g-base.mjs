@@ -21,6 +21,7 @@ import {contrastRatio, createBase, mixColor, r2, rt, textWidth, timingRules} fro
 import {abs, el, set, tw} from './catalog-b-view.mjs';
 import {headRect} from './catalog-c.mjs';
 import {iconNode, iconPath} from './icons.mjs';
+import {panelSurfaceStyle} from './panels.mjs';
 
 export const CARD_SURFACES = Object.freeze(['card', 'plate']);
 export const CARD_PARAMS = Object.freeze({
@@ -186,10 +187,21 @@ export function spread(layout, maxHeight, gaps) {
   return out;
 }
 
-/** The opaque brand card behind a module's content (null on a plate). */
+/**
+ * The brand card behind a module's content (null on a plate). With a story
+ * panel (model.panel, kit/core/panels.mjs) it takes that treatment and
+ * radius; without one it is today's opaque card.
+ */
 export function cardSurface(model) {
   if (model.surface !== 'card') return null;
   const {theme, unit: u, rect} = model;
+  if (model.panel) {
+    const {treatment, radius, fill} = model.panel;
+    const surface = panelSurfaceStyle(treatment, {colors: theme, unit: u, border: theme.border, radius: radius ?? 32});
+    // A panel fill (model.panel.fill, kit/core/backgrounds.mjs cardFillStyles): still pattern layers clipped to the card.
+    const inner = fill ? [el('div', null, abs(0, 0, rect.width, rect.height, {overflow: 'hidden', borderRadius: surface.borderRadius, ...fill.mask}), fill.styles.map(style => el('div', null, style)))] : [];
+    return el('div', null, abs(0, 0, rect.width, rect.height, surface), inner);
+  }
   return el('div', null, abs(0, 0, rect.width, rect.height, {boxSizing: 'border-box', borderRadius: r2(32 * u), background: theme.bg,
     border: `${r2(2 * u)}px solid ${theme.border}`, boxShadow: `0 ${r2(18 * u)}px ${r2(48 * u)}px #00000073`}));
 }

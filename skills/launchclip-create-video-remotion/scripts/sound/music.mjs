@@ -401,14 +401,14 @@ const RECIPES = {
     ],
     build(c) {
       const comp = c.r.pick([[0, 6, 11], [2, 7, 14], [0, 10]]);
-      const swing = c.r.range(0.7, 1);
+      const swing = c.r.range(0.55, 0.8);
       return {
         stems: [
           stem('keys', c.r.pick(['epiano', 'piano']), c.chordNotes({ hits: comp, length: 4, vel: 0.4 }), { level: -20, filter: 'lowpass=f=3600', send: 0.45 }),
           stem('bass', 'upright-bass', c.bassNotes({ pattern: [[0, 4], [4, 4, 'fifth'], [8, 4, 'octave'], [12, 4, c.r.pick(['fifth', 'root'])]], vel: 0.7 }), { role: 'bass', level: -21, filter: 'lowpass=f=800' }),
           stem('kick', 'soft-kick', c.drumNotes({ steps: [0, 10], vel: 0.85, accent: [0] }), { role: 'drums', level: -21, filter: 'lowpass=f=900' }),
-          stem('snare', 'snare', c.drumNotes({ steps: [4, 12], vel: 0.5 }), { role: 'drums', level: -26, filter: 'highpass=f=200,lowpass=f=5000', send: 0.35 }),
-          stem('brush', 'brush', c.drumNotes({ steps: [0, 2, 4, 6, 8, 10, 12, 14], vel: 0.3, swing, accent: [4, 12] }), { role: 'drums', level: -31, filter: 'bandpass=f=4500:width_type=q:w=0.6,lowpass=f=8000' })
+          stem('snare', 'snare', c.drumNotes({ steps: [4, 12], vel: 0.5 }), { role: 'drums', level: -25, filter: 'highpass=f=200,lowpass=f=5000', send: 0.35 }),
+          stem('brush', 'brush', c.drumNotes({ steps: [0, 2, 4, 6, 8, 10, 12, 14], vel: 0.3, swing, accent: [0, 4, 8, 12] }), { role: 'drums', level: -33, filter: 'bandpass=f=4500:width_type=q:w=0.6,lowpass=f=8000' })
         ],
         master: 'vibrato=f=0.45:d=0.008,lowpass=f=7500,highpass=f=35',
         room: { seconds: 1.3, tone: 3200, mix: 0.3 },

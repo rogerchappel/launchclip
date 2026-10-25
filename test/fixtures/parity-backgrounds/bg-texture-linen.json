@@ -1,0 +1,31 @@
+{
+  "project": "examples/story/minimal",
+  "times": [
+    1.2,
+    5.5
+  ],
+  "describe": "texture linen on a light palette",
+  "patch": {
+    "brand": {
+      "colors": {
+        "bg": "#f5f1e8",
+        "primary": "#c2410c",
+        "accent": "#0e7490",
+        "ink": "#f5f1e8",
+        "paper": "#1c1917"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "background": {
+      "kind": "texture",
+      "params": {
+        "type": "linen",
+        "amount": 0.8
+      }
+    }
+  }
+}
