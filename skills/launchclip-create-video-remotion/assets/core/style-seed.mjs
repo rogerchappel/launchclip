@@ -79,7 +79,29 @@ export const FONT_PAIRINGS = Object.freeze([
   { id: 'instrument-inter', display: 'instrument-serif', body: 'inter', case: 'title', weight: 400, tones: ['premium', 'calm', 'warm', 'serious'] },
   { id: 'instrument-space', display: 'instrument-serif', body: 'space-grotesk', case: 'title', weight: 400, tones: ['premium', 'warm'] },
   { id: 'stix-space', display: 'stix-two-text', body: 'space-grotesk', case: 'title', weight: 600, tones: ['serious', 'calm', 'premium'] },
-  { id: 'stix-bricolage', display: 'stix-two-text', body: 'bricolage-grotesque', case: 'title', weight: 600, tones: ['warm', 'serious'] }
+  { id: 'stix-bricolage', display: 'stix-two-text', body: 'bricolage-grotesque', case: 'title', weight: 600, tones: ['warm', 'serious'] },
+  { id: 'anton-manrope', display: 'anton', body: 'manrope', case: 'upper', weight: 400, tones: ['energetic', 'serious'] },
+  { id: 'bebas-dm', display: 'bebas-neue', body: 'dm-sans', case: 'upper', weight: 400, tones: ['energetic', 'technical', 'serious'] },
+  { id: 'bebas-manrope', display: 'bebas-neue', body: 'manrope', case: 'upper', weight: 400, tones: ['energetic', 'playful'] },
+  { id: 'oswald-jakarta', display: 'oswald', body: 'plus-jakarta-sans', case: 'upper', weight: 600, tones: ['energetic', 'serious'] },
+  { id: 'oswald-dm', display: 'oswald', body: 'dm-sans', case: 'upper', weight: 600, tones: ['technical', 'serious'] },
+  { id: 'shoulders-outfit', display: 'big-shoulders-display', body: 'outfit', case: 'upper', weight: 800, tones: ['energetic', 'playful'] },
+  { id: 'shoulders-manrope', display: 'big-shoulders-display', body: 'manrope', case: 'upper', weight: 800, tones: ['technical', 'energetic'], meta: 'fira-code' },
+  { id: 'fraunces-dm', display: 'fraunces', body: 'dm-sans', case: 'title', weight: 600, tones: ['warm', 'playful', 'calm'] },
+  { id: 'fraunces-manrope', display: 'fraunces', body: 'manrope', case: 'title', weight: 700, tones: ['warm', 'premium'] },
+  { id: 'playfair-dm', display: 'playfair-display', body: 'dm-sans', case: 'title', weight: 700, tones: ['premium', 'serious'] },
+  { id: 'playfair-lexend', display: 'playfair-display', body: 'lexend', case: 'title', weight: 600, tones: ['premium', 'calm'] },
+  { id: 'dmserif-jakarta', display: 'dm-serif-display', body: 'plus-jakarta-sans', case: 'title', weight: 400, tones: ['premium', 'warm', 'calm'] },
+  { id: 'dmserif-outfit', display: 'dm-serif-display', body: 'outfit', case: 'title', weight: 400, tones: ['calm', 'warm'] },
+  { id: 'young-dm', display: 'young-serif', body: 'dm-sans', case: 'title', weight: 400, tones: ['warm', 'playful'] },
+  { id: 'young-lexend', display: 'young-serif', body: 'lexend', case: 'title', weight: 400, tones: ['warm', 'calm'] },
+  { id: 'sora-dm', display: 'sora', body: 'dm-sans', case: 'title', weight: 700, tones: ['technical', 'calm'], meta: 'fira-code' },
+  { id: 'lexend-manrope', display: 'lexend', body: 'manrope', case: 'title', weight: 700, tones: ['technical', 'playful'] },
+  { id: 'outfit-sora', display: 'outfit', body: 'sora', case: 'title', weight: 800, tones: ['playful', 'energetic'] },
+  { id: 'jakarta-dm', display: 'plus-jakarta-sans', body: 'dm-sans', case: 'title', weight: 800, tones: ['technical', 'calm', 'premium'], meta: 'fira-code' },
+  { id: 'unbounded-outfit', display: 'unbounded', body: 'outfit', case: 'title', weight: 700, tones: ['playful'] },
+  { id: 'syne-dm', display: 'syne', body: 'dm-sans', case: 'title', weight: 700, tones: ['premium', 'technical'] },
+  { id: 'space-fira', display: 'space-grotesk', body: 'inter', case: 'title', weight: 700, tones: ['technical'], meta: 'fira-code' }
 ].map((entry) => Object.freeze({ meta: 'jetbrains-mono', ...entry, tones: Object.freeze(entry.tones) })));
 
 // Tone → the families it narrows to (§3.3). `null` (no tone words) leaves
